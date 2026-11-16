@@ -188,7 +188,7 @@ component BlockView
         box width="100%" height=1 margin-top=remv(0.6) margin-bottom=remv(1.1) background-color=th.rule
       if b.kind == "table"
         column width="100%" margin-bottom=remv(1.1) testId=`reader-block-${b.id}` box-sizing="border-box"
-          column width="100%" box-sizing="border-box" border-radius=th.radiusControl border-width=1 border-style="solid" border-color=th.rule
+          column width="100%" box-sizing="border-box"
             for r in b.rows key=r.id
               row width="100%"
                 for cell, ci in r.cells key=ci
@@ -472,7 +472,7 @@ component ReaderBody
       // the desk is writing a new version
       if rdoc.revising
         row testId="reader-revising" position="absolute" left=16 right=16 top="calc(env(safe-area-inset-top) + 8px)" z-index=5
-          align-items="center" gap=10 padding="10px 14px" box-sizing="border-box" border-radius=th.radiusPill
+          align-items="center" gap=10 padding="10px 14px" box-sizing="border-box" border-radius=th.radiusCard
           backgroundMaterial=(th.material2 == "glass" ? "glass" : "none")
           background-color=(th.material2 == "glass" ? "transparent" : th.paper)
           box-shadow=th.shadow2
@@ -485,7 +485,7 @@ component ReaderBody
       // the prompt is aimed at this document or one block of it
       if raim.address == address
         row testId="reader-aim" position="absolute" left=16 right=16 bottom="calc(env(safe-area-inset-bottom) + 8px + 56px + 10px)" z-index=6
-          align-items="center" gap=8 padding="8px 8px 8px 14px" box-sizing="border-box" border-radius=th.radiusPill
+          align-items="center" gap=8 padding="8px 8px 8px 14px" box-sizing="border-box" border-radius=th.radiusCard
           background-color=th.paper2 box-shadow=th.shadow2
           text (raim.blockId == "" ? "Asking about this document" : `Asking about “${raim.label}”`) font-family=th.fontUi font-size=13 color=th.fg flex=1 min-width=0 line-clamp=1
           button press=clearAim testId="reader-aim-clear" appearance="none" aria-label="Clear" width=32 height=32

@@ -229,13 +229,19 @@ component ChoiceWord
         transition=`color ${th.motionFastMs}ms ease`
       box width=20 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
 
-// Deprecated name: use ChoiceWord. Draws the same.
+// Deprecated name, kept so pages that use it take the new look without edits (use ChoiceWord for a set, Btn for an action). It draws an action
+// word: the accent when not selected (an action, or a choice not taken), full strength with the short accent rule when selected (a chosen mode).
 component ChipFace
+  inject
+    th: Theme
   props
     label: string
     selected: bool
   view
-    ChoiceWord(label=label, selected=selected)
+    column align-items="flex-start" justify-content="center" min-height=44 gap=3 flex-shrink=0 padding="0px 12px 0px 0px"
+      text label font-family=th.fontUi font-size=15 font-weight=600 color=(selected ? th.fg : th.accent)
+        transition=`color ${th.motionFastMs}ms ease`
+      box width=20 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
 
 // A set of a few words side by side (Front page and My edition, Light and Dark and System): the track is a plain row, no box. Each face is a
 // SegmentFace in a button with `flex=1 min-width=0`; the chosen one is full strength with its rule centred beneath it. The capsule track is

@@ -4,7 +4,7 @@
 // testIds: reader-import, reader-list, reader-row-<id>, reader-empty, reader-note, doc-find, doc-read, doc-queue, doc-toc,
 // doc-chapter-<n>, doc-prev, doc-next, doc-mode, doc-block-<n>, doc-hit-<n>, doc-remove, doc-frame, page-title on every page.
 use Theme, PageList, ShelfListing, ShelfDocInfo, ShelfChapter, ShelfFind, ShelfFollowInfo, ShelfBlock from "@choir/autoradio"
-use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, ListGroup, ListRow, ChipFace, SegmentedTrack, SegmentFace, EmptyState from "./ui.contract"
+use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, ListGroup, ListRow, ChipFace, Btn, SegmentedTrack, SegmentFace, EmptyState from "./ui.contract"
 
 component BooksPage
   inject
@@ -24,11 +24,11 @@ component BooksPage
         Emerge(delay=th.staggerMs)
           EmptyState(message="Nothing here yet", detail=lbList.message, testId="reader-empty")
             button press=lbImport testId="reader-import" appearance="none" aria-label="Add an EPUB or PDF"
-              ChipFace(label="Add an EPUB or PDF", selected=true)
+              Btn(label="Add an EPUB or PDF", primary=true, wide=true)
       if lbList.status == "ready"
         Emerge(delay=th.staggerMs)
           button press=lbImport testId="reader-import" appearance="none" aria-label="Add an EPUB or PDF"
-            ChipFace(label="Add an EPUB or PDF", selected=true)
+            Btn(label="Add an EPUB or PDF", primary=true, wide=true)
         Emerge(delay=(2 * th.staggerMs))
           ListGroup(testId="reader-list")
             for r, i in lbList.rows key=r.id
@@ -69,7 +69,7 @@ component DocActions
   view
     row flex-wrap="wrap" gap=8 width="100%" align-items="center"
       button press=ldRead testId="doc-read" appearance="none" aria-label="Read aloud from here"
-        ChipFace(label="Read aloud", selected=true)
+        Btn(label="Read aloud", primary=true, wide=false)
       button press=ldQueue testId="doc-queue" appearance="none" aria-label="Add to queue"
         ChipFace(label="Add to queue", selected=false)
       button press=ldTocToggle testId="doc-toc" appearance="none" aria-label="Contents"
@@ -89,7 +89,7 @@ component DocFind
     column width="100%" gap=8
       row gap=8 align-items="center" width="100%"
         input type="search" value=ldFindDraft input=ldEditFind submit=ldDoFind placeholder="Find in this document" aria-label="Find in this document" testId="doc-find"
-          enterkeyhint="search" flex=1 min-width=0 font-family=th.fontUi font-size=16 color=th.fg padding="10px 4px"
+          enterkeyhint="search" flex=1 min-width=0 font-family=th.fontUi font-size=16 color=th.fg padding="10px 0px"
         if ldFind != ""
           button press=ldClearFind testId="doc-find-clear" appearance="none" aria-label="Clear the search"
             ChipFace(label="Clear", selected=false)
