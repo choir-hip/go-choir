@@ -1,0 +1,84 @@
+{
+ "name": "16_remove_and_clear",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "listener",
+   "id": "b",
+   "op": "remove",
+   "op_id": "o1"
+  },
+  {
+   "base_version": 3,
+   "by": "listener",
+   "op": "clear",
+   "op_id": "o2"
+  }
+ ],
+ "results": [
+  {
+   "applied": true,
+   "op_id": "o1",
+   "version": 3
+  },
+  {
+   "applied": true,
+   "op_id": "o2",
+   "version": 4
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   },
+   {
+    "est_seconds": 30,
+    "id": "c",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of c",
+    "title": "T c"
+   }
+  ],
+  "on_air": "a",
+  "position_seconds": 7,
+  "version": 2
+ },
+ "want": {
+  "applied_ops": [
+   "o1",
+   "o2"
+  ],
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "words of a",
+    "title": "T a"
+   }
+  ],
+  "on_air": "a",
+  "position_seconds": 7,
+  "version": 4
+ }
+}

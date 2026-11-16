@@ -1,0 +1,152 @@
+{
+ "name": "04_aired_backwards_refused",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "h",
+   "op": "aired",
+   "op_id": "o1",
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "h",
+   "op": "aired",
+   "op_id": "o2",
+   "state": "skipped"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "o3",
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-16T12:00:00Z",
+    "last_block": 4,
+    "outcome": "finished"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "o4",
+   "state": "heard"
+  }
+ ],
+ "results": [
+  {
+   "applied": false,
+   "dropped": "bad_transition",
+   "op_id": "o1",
+   "version": 10
+  },
+  {
+   "applied": false,
+   "dropped": "bad_transition",
+   "op_id": "o2",
+   "version": 10
+  },
+  {
+   "applied": false,
+   "dropped": "bad_transition",
+   "op_id": "o3",
+   "version": 10
+  },
+  {
+   "applied": true,
+   "op_id": "o4",
+   "version": 11
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 3,
+     "outcome": "finished"
+    },
+    "est_seconds": 30,
+    "id": "h",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of h",
+    "title": "T h"
+   },
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "on_air": "a",
+  "position_seconds": 4.5,
+  "version": 10
+ },
+ "want": {
+  "applied_ops": [
+   "o4"
+  ],
+  "entries": [
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 3,
+     "outcome": "finished"
+    },
+    "est_seconds": 30,
+    "id": "h",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of h",
+    "title": "T h"
+   },
+   {
+    "ended": {
+     "at": "2026-11-16T12:00:00Z",
+     "last_block": 4,
+     "outcome": "finished"
+    },
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 11
+ }
+}
