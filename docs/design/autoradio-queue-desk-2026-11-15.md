@@ -90,8 +90,9 @@ a `url` 1024, other strings 128 to 256. A malformed snapshot is `400` naming
 the field; a well formed one over a size bound is answered without the queue and
 the desk says so (a listener's words are not refused because their queue is
 long). The body bound rises from 80 KB to 256 KB, the sum of the part maxima, so
-a queue within its bounds always fits; `page.text` stays at 48 KB. The reference
-page has the arithmetic.
+a queue of ordinary text within its bounds fits; `page.text` stays at 48 KB. The
+phone sends at most the first 50 upcoming entries. The reference page has the
+arithmetic.
 
 ### Response: the `queue_ops` event
 
@@ -149,7 +150,8 @@ night. Tonight's slice therefore does the conservative thing and says so:
   only when the listener asked to change the order, to end with the request's
   own fence line (`<<<AR... queue>>>` with the request's token, given to it
   verbatim) and a JSON array of ops. The stream cut starts the ops only at that
-  exact line; any other `<<<` the model writes is speech. The cut and the rules
+  exact line, at the start of a line, with a `[` (or `{`) after it; any other `<<<` the
+  model writes, and the line merely echoed in a sentence, is speech. The cut and the rules
   exist only on turns that carry a queue: the desk's system prompt is unchanged.
 - The server validates every op through the **queue module** (below), which is
   the single place the rules live: unknown ids dropped, indexes clamped, an

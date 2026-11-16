@@ -10,7 +10,8 @@ import (
 // The queue the Autoradio desk edits (docs/design/autoradio-queue-desk-2026-11-15.md).
 // The failure list, written before the code:
 //
-//  1. a hostile snapshot: more than 100 upcoming entries, a bad or duplicated
+//  1. a hostile snapshot: more than MaxUpcoming (50) upcoming entries (well
+//     formed but too large, which the route answers without the queue), a bad or duplicated
 //     entry id (the current entry's id included), an over-long string, an
 //     unknown item kind, an item missing the field its kind needs, a negative
 //     or NaN position, a negative version: each refused with the field named;
@@ -38,7 +39,11 @@ import (
 //     the array is tolerated;
 // 12. the stream cut: the fence split across deltas at any byte, speech before
 //     it passes through whole, a lone "<" in speech is not lost, a fence that is
-//     not `queue` yields no ops, nothing is spoken from after the fence.
+//     not `queue` yields no ops, nothing is spoken from after the fence;
+// 13. the fence counts only at the start of a line and only when a "[" is the
+//     next thing after it: the exact line quoted mid-sentence, or at a line
+//     start with words after it, is speech, whole, at every chunk size;
+// 14. text after the ops array does not cost the ops: the array's ops stand.
 
 func story(route, title string) Item { return Item{Kind: "story", Route: route, Title: title} }
 
@@ -361,7 +366,7 @@ func TestOpsMarshalToThePhonesShape(t *testing.T) {
 }
 
 func TestCutSplitsSpeechFromOpsAtAnyByte(t *testing.T) {
-	whole := "Okay, the long read is next. " + FenceLine("AR1234") + "\n[{\"op\":\"move\",\"id\":\"q14\",\"to_index\":0,\"reason\":\"r\"}]"
+	whole := "Okay, the long read is next.\n" + FenceLine("AR1234") + "\n[{\"op\":\"move\",\"id\":\"q14\",\"to_index\":0,\"reason\":\"r\"}]"
 	for cut1 := 0; cut1 <= len(whole); cut1++ {
 		for _, cut2 := range []int{cut1, min(cut1+1, len(whole)), min(cut1+3, len(whole)), len(whole)} {
 			c := NewCut("AR1234")
@@ -370,7 +375,7 @@ func TestCutSplitsSpeechFromOpsAtAnyByte(t *testing.T) {
 			speech.WriteString(c.Push(whole[cut1:cut2]))
 			speech.WriteString(c.Push(whole[cut2:]))
 			speech.WriteString(c.Flush())
-			if speech.String() != "Okay, the long read is next. " {
+			if speech.String() != "Okay, the long read is next.\n" {
 				t.Fatalf("cuts %d,%d: speech %q", cut1, cut2, speech.String())
 			}
 			if !c.Fenced() || !strings.HasPrefix(strings.TrimSpace(c.Ops()), `[{"op":"move"`) {
@@ -385,15 +390,19 @@ func TestCutSplitsSpeechFromOpsAtAnyByte(t *testing.T) {
 // with another token, a fence cut short at the end of the stream.
 func TestCutPassesEverythingButTheExactFenceThrough(t *testing.T) {
 	for name, text := range map[string]string{
-		"lone bracket":     "Is 3 < 4? Yes <",
-		"quoted":           "The sign says: <<< keep left. That is all.",
-		"page fence":       "The page is fenced as <<<AR1234 page>>> and the text follows.",
-		"end queue":        "Closing with <<<AR1234 end queue>>> is not it.",
-		"other token":      "Fine. <<<AR9999 queue>>> [{\"op\":\"clear\"}]",
-		"no space":         "Fine. <<<AR1234queue>>> [] ",
-		"upper":            "Fine. <<<AR1234 QUEUE>>> [] ",
-		"unterminated":     "Fine. <<<AR1234 queue",
-		"trailing partial": "Fine. <<<AR12",
+		"lone bracket":                     "Is 3 < 4? Yes <",
+		"quoted":                           "The sign says: <<< keep left. That is all.",
+		"page fence":                       "The page is fenced as <<<AR1234 page>>> and the text follows.",
+		"end queue":                        "Closing with <<<AR1234 end queue>>> is not it.",
+		"other token":                      "Fine. <<<AR9999 queue>>> [{\"op\":\"clear\"}]",
+		"no space":                         "Fine. <<<AR1234queue>>> [] ",
+		"upper":                            "Fine. <<<AR1234 QUEUE>>> [] ",
+		"unterminated":                     "Fine. <<<AR1234 queue",
+		"trailing partial":                 "Fine. <<<AR12",
+		"echo mid-sentence":                "To move it I would end with " + FenceLine("AR1234") + " and then the ops. The long read is next.",
+		"echo at line start, words after":  "Intro.\n" + FenceLine("AR1234") + " and then the ops.",
+		"echo at line start, a lone fence": "Intro.\n" + FenceLine("AR1234"),
+		"echo twice then a real one":       "A " + FenceLine("AR1234") + " b\n" + FenceLine("AR1234") + " c",
 	} {
 		for _, chunk := range []int{1, 2, 5, 1000} {
 			c := NewCut("AR1234")
@@ -406,6 +415,33 @@ func TestCutPassesEverythingButTheExactFenceThrough(t *testing.T) {
 				t.Errorf("%s (chunk %d): speech %q fenced=%t ops=%q", name, chunk, got.String(), c.Fenced(), c.Ops())
 			}
 		}
+	}
+}
+
+func TestCutTakesTheFenceAtTheStartOfTheStreamAndAfterBlankSpace(t *testing.T) {
+	for name, text := range map[string]string{
+		"stream start":  FenceLine("AR1234") + `[{"op":"clear","reason":"r"}]`,
+		"spaces then [": "Ok.\n" + FenceLine("AR1234") + " \n\n  [{\"op\":\"clear\",\"reason\":\"r\"}]",
+	} {
+		for _, chunk := range []int{1, 3, 1000} {
+			c := NewCut("AR1234")
+			var got strings.Builder
+			for i := 0; i < len(text); i += chunk {
+				got.WriteString(c.Push(text[i:min(i+chunk, len(text))]))
+			}
+			got.WriteString(c.Flush())
+			if !c.Fenced() || !strings.Contains(c.Ops(), `"op":"clear"`) || strings.Contains(got.String(), "<<<") || strings.Contains(got.String(), "clear") {
+				t.Errorf("%s (chunk %d): speech %q fenced=%t ops=%q", name, chunk, got.String(), c.Fenced(), c.Ops())
+			}
+		}
+	}
+}
+
+func TestTextAfterTheArrayDoesNotCostTheOps(t *testing.T) {
+	d := New(snap3(), nil)
+	drops := d.ApplyJSON(`[{"op":"remove","id":"q13","reason":"r"}] and that is all, ` + strings.Repeat("x", 5000))
+	if len(d.Ops()) != 1 || len(drops) != 1 || len(drops[0]) > 200 {
+		t.Fatalf("ops %+v drops %v", d.Ops(), drops)
 	}
 }
 

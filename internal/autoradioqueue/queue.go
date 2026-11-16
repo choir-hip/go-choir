@@ -183,7 +183,7 @@ func validateItem(where string, it Item) error {
 	case "audio":
 		return need("url", it.URL)
 	}
-	return fmt.Errorf("%s.kind %q is not story, page, document or audio", where, it.Kind)
+	return fmt.Errorf("%s.kind %q is not story, page, document or audio", where, oneLineBounded(it.Kind, 80))
 }
 
 // ValidateCandidates checks the stories the desk may add.
@@ -259,10 +259,8 @@ func (d *Desk) Ops() []Op { return append([]Op(nil), d.ops...) }
 // BaseVersion is the version every op is against.
 func (d *Desk) BaseVersion() int64 { return d.base }
 
-var lineSeparators = strings.NewReplacer("\u2028", " ", "\u2029", " ")
-
 func oneLineBounded(s string, max int) string {
-	s = strings.Join(strings.Fields(lineSeparators.Replace(s)), " ")
+	s = strings.Join(strings.Fields(s), " ")
 	if len(s) <= max {
 		return s
 	}
@@ -462,7 +460,8 @@ func (d *Desk) ApplyJSON(text string) (drops []string) {
 		return []string{"the ops were not a JSON array: " + oneLineBounded(err.Error(), 120)}
 	}
 	if dec.More() {
-		return []string{"text after the JSON array was ignored"}
+		// text after the array does not cost its ops; the tail is only logged
+		drops = append(drops, "text after the JSON array was ignored: "+oneLineBounded(text[dec.InputOffset():], 80))
 	}
 	for i, raw := range raws {
 		if i >= maxAttempts {
@@ -513,21 +512,49 @@ func (d *Desk) applyOne(m modelOp) error {
 // Cut separates the model's spoken reply from the queue ops it appends after
 // the request's fence line. The fence is exactly "<<<" + token + " queue>>>"
 // (the route puts that line in the request and tells the model to end with it),
-// so text the model quotes from the page, or any other "<<<", is speech and
-// passes through unchanged. It reads the stream as it arrives and holds back
-// only a suffix that could still become the fence; nothing else is delayed.
+// and it counts only when it starts a line and the next thing after it, past
+// blank space, is "[" (the ops array) or "{" (a malformed one, never read aloud). Anything else is speech, released whole:
+// text the model quotes from the page, any other "<<<", and the exact line
+// itself when the model merely echoes it in a sentence. It reads the stream as
+// it arrives and holds back only what could still become the fence, plus the
+// blank space after a fence, until the next byte decides.
 type Cut struct {
-	fence   string
-	pending string
-	fenced  bool
-	ops     strings.Builder
+	fence     string
+	pending   string
+	lineStart bool // the byte before pending is a newline, or the stream just began
+	fenced    bool
+	ops       strings.Builder
 }
 
 // FenceLine is the line the model ends its reply with for a token.
 func FenceLine(token string) string { return "<<<" + token + " queue>>>" }
 
 // NewCut reads a stream for the fence of token.
-func NewCut(token string) *Cut { return &Cut{fence: FenceLine(token)} }
+func NewCut(token string) *Cut { return &Cut{fence: FenceLine(token), lineStart: true} }
+
+// findFence is the index in pending of a fence that starts a line, or -1.
+func (c *Cut) findFence() int {
+	for from := 0; from < len(c.pending); {
+		k := strings.Index(c.pending[from:], c.fence)
+		if k < 0 {
+			return -1
+		}
+		p := from + k
+		if (p == 0 && c.lineStart) || (p > 0 && c.pending[p-1] == '\n') {
+			return p
+		}
+		from = p + 1
+	}
+	return -1
+}
+
+// emit returns out as speech and remembers whether it ended a line.
+func (c *Cut) emit(out string) string {
+	if out != "" {
+		c.lineStart = out[len(out)-1] == '\n'
+	}
+	return out
+}
 
 // Push takes the next delta and returns the speech in it that is certain.
 func (c *Cut) Push(delta string) string {
@@ -536,26 +563,45 @@ func (c *Cut) Push(delta string) string {
 		return ""
 	}
 	c.pending += delta
-	if i := strings.Index(c.pending, c.fence); i >= 0 {
-		speech := c.pending[:i]
-		c.ops.WriteString(c.pending[i+len(c.fence):])
-		c.pending, c.fenced = "", true
-		return speech
+	var out strings.Builder
+	for {
+		i := c.findFence()
+		if i < 0 {
+			break
+		}
+		rest := c.pending[i+len(c.fence):]
+		next := strings.TrimLeft(rest, " \t\r\n")
+		switch {
+		case next == "":
+			// the fence, and nothing yet to say what it is: hold it
+			out.WriteString(c.emit(c.pending[:i]))
+			c.pending = c.pending[i:]
+			return out.String()
+		case next[0] == '[' || next[0] == '{': // an object is a malformed array: dropped and said, never read aloud
+			out.WriteString(c.emit(c.pending[:i]))
+			c.ops.WriteString(next)
+			c.pending, c.fenced = "", true
+			return out.String()
+		}
+		// an echo, not an ops fence: speech through the fence, then scan on
+		out.WriteString(c.emit(c.pending[:i+len(c.fence)]))
+		c.pending = c.pending[i+len(c.fence):]
 	}
 	keep := 0
 	for k := min(len(c.fence)-1, len(c.pending)); k > 0; k-- {
-		if strings.HasSuffix(c.pending, c.fence[:k]) {
+		at := len(c.pending) - k
+		if strings.HasSuffix(c.pending, c.fence[:k]) && ((at == 0 && c.lineStart) || (at > 0 && c.pending[at-1] == '\n')) {
 			keep = k
 			break
 		}
 	}
-	out := c.pending[:len(c.pending)-keep]
+	out.WriteString(c.emit(c.pending[:len(c.pending)-keep]))
 	c.pending = c.pending[len(c.pending)-keep:]
-	return out
+	return out.String()
 }
 
 // Flush ends the stream and returns any speech still held (a start of the
-// fence that never completed is speech).
+// fence that never completed, or a fence with no array after it, is speech).
 func (c *Cut) Flush() string {
 	out := c.pending
 	c.pending = ""
