@@ -140,6 +140,16 @@ extension AutoradioModule {
                 }
                 return
             }
+            // Text, Markdown and code in Files open in Texture, the way choir.news does it (Kit/FilesInTexture.swift).
+            if let address = args["address"] as? String, let t = FilesInTexture.current, FilesInTexture.opensInTexture(address) {
+                Task { [weak self] in
+                    guard let self else { return }
+                    do { let d = try await t.open(address: address); self.pages.open(d.address, title: d.title) }
+                    catch { BarTracker.shared.say("\(FilePath.name(FilePath.fromAddress(address)?.path ?? address)) could not be opened. \(FilesService.say(error))"); self.touch(["barState"], now: true) }
+                    DispatchQueue.main.async { self.touch(["openPages"], now: true); reply(self.pageList()) }
+                }
+                return
+            }
             pages.open(args["address"] as? String ?? "", title: args["title"] as? String); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList())
         }
         handle("pageClose") { [unowned self] args, reply in pages.close(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }

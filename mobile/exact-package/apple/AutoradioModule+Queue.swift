@@ -49,7 +49,10 @@ extension AutoradioModule {
                 guard let self else { return }
                 // An audio file in Files is a run sheet entry like everything else: brought to disk, then placed (kind "file", ref its address).
                 var found = QueueRequest.entry(kind: kind, ref: ref, title: title)
-                if found == nil, kind == "file" { found = await FilesInReader.current?.audioEntry(address: ref) }
+                if found == nil, kind == "file", let a = await FilesInReader.current?.audioEntry(address: ref) {
+                    found = a.entry
+                    RunSheetPlayer.shared.localFiles[a.entry.id] = a.local          // the phone's own copy: kept here, never posted
+                }
                 if let entry = found {
                     switch mode {
                     case "now":

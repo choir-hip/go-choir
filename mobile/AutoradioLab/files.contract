@@ -6,7 +6,7 @@
 // files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
 use Theme, FileListing, FileInfo, FileRow from "@choir/autoradio"
 use PageScroll, Card, RowRule, PlainList from "./ui.contract"
-use Chip, ChoiceChip, NoPreview, ImageViewer, VideoViewer, AudioViewer, TextViewer, CsvViewer from "./viewers.contract"
+use Chip, ChoiceChip, NoPreview, ImageViewer, VideoViewer, AudioViewer, CsvViewer from "./viewers.contract"
 
 component FilePage
   inject
@@ -33,7 +33,7 @@ component FilePage
     else if fvInfo.kind == "csv"
       CsvViewer()
     else if fvInfo.kind == "markdown" or fvInfo.kind == "text" or fvInfo.kind == "code"
-      TextViewer()
+      NoPreview(address=address, title=title, message="Text and Markdown open in Texture.")
     else
       NoPreview(address=address, title=title, message="There is no viewer for this kind of file yet, so it cannot be previewed here.")
 

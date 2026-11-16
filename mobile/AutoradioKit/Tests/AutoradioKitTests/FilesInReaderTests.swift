@@ -99,18 +99,60 @@ final class FilesInReaderTests: XCTestCase {
                 hay += (try? String(contentsOf: f, encoding: .utf8)) ?? ""
             }
         }
-        for gone in ["PdfViewer", "EpubViewer", "viewer-pdf", "pdf-frame", "epub-text", "fileChapter", "filePages", "FilePages", "FileChapter", "fvChapter", "fvPages", "Find in this PDF"] {
+        for gone in ["PdfViewer", "EpubViewer", "viewer-pdf", "pdf-frame", "epub-text", "fileChapter", "filePages", "FilePages", "FileChapter", "fvChapter", "fvPages", "Find in this PDF", "TextViewer", "viewer-text", "text-share"] {
             XCTAssertFalse(hay.contains(gone), "\(gone) is a symbol of the deleted Files viewer")
         }
     }
 
-    func test7_AnAudioFileInFilesBecomesARunSheetEntry() async throws {
-        let found = await reader.audioEntry(address: "file:/Media/Tone 440.wav")
-        let e = try XCTUnwrap(found)
-        XCTAssertEqual(e.kind, .episode); XCTAssertEqual(e.title, "Tone 440"); XCTAssertNotNil(e.audioSpec?.url)
+    func test7_AnAudioFileInFilesIsARunSheetEntryNamedByItsFilesPathAndNeverByTheDeviceCopy() async throws {
+        let got = await reader.audioEntry(address: "file:/Media/Tone 440.wav")
+        let (e, local) = try XCTUnwrap(got)
+        XCTAssertEqual(e.kind, .episode); XCTAssertEqual(e.title, "Tone 440"); XCTAssertEqual(e.source?.ref, "file:/Media/Tone 440.wav"); XCTAssertNil(e.source?.url)
         let none = await reader.audioEntry(address: "file:/Documents/Key list.txt")
         XCTAssertNil(none)
-        let player = await MainActor.run { RunSheetPlayer(store: RunSheetStore()) }
-        await MainActor.run { player.queue(e); XCTAssertEqual(player.store.ahead(limit: 5).map(\.id), [e.id]) }
+        let eng = await MainActor.run { FakeEngine() }
+        let (posted, started): ([RunSheetOp], [String]) = await MainActor.run {
+            let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = eng
+            p.localFiles[e.id] = local
+            p.playNow(e)
+            return (s.pending, [])
+        }
+        _ = started
+        XCTAssertEqual(posted.count, 1)
+        let json = String(decoding: try JSONEncoder().encode(posted[0]), as: UTF8.self)
+        XCTAssertFalse(json.contains("file://")); XCTAssertFalse(json.contains(tmp.path)); XCTAssertFalse(json.contains(local.path))
+        XCTAssertTrue(json.contains("Media") && json.contains("Tone 440.wav"), "it names the file by its Files path")
+        // after a relaunch the phone's copy is not remembered: the Files path is resolved again (and fetched if the copy is gone)
+        let resolved = XCTestExpectation(description: "resolved")
+        let engine2 = await MainActor.run { FakeEngine() }
+        let url = local
+        await MainActor.run {
+            let p2 = RunSheetPlayer(store: RunSheetStore()); p2.engine = engine2
+            p2.fileResolver = { addr in XCTAssertEqual(addr, "file:/Media/Tone 440.wav"); resolved.fulfill(); return url }
+            p2.playNow(e)
+        }
+        await fulfillment(of: [resolved], timeout: 5)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let log = await MainActor.run { engine2.log }
+        XCTAssertTrue(log.contains { $0.hasPrefix("remote:") }, "\(log)")
+    }
+
+    func test8_NoOpTheStorePostsEverNamesAPlaceOnThePhone() async {
+        await MainActor.run {
+            let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
+            let bad = RunSheetEntry.webPage(url: URL(string: "file:///var/mobile/Containers/x.html")!, title: "x")
+            XCTAssertEqual(s.place(bad, at: .end).dropped, "local_path", "a file URL is refused before it is applied or posted")
+            var home = RunSheetEntry.paperStory(route: "r", title: "T"); home.title = NSHomeDirectory() + "/Documents/a"
+            XCTAssertEqual(s.place(home, at: .end).dropped, "local_path")
+            // every kind of thing the listener can place leaves nothing local in what is posted
+            p.playNow(.paperStory(route: "a", title: "A")); p.queue(.webPage(url: URL(string: "https://x.test/p")!, title: "P")); p.queue(.book(id: "abc", title: "B", at: 3))
+            p.queue(.readAloud(address: "mail:m1", title: "M")); p.queue(.audio(RunSheetAudio(url: URL(string: "https://x.test/a.mp3")!, title: "T", show: "S")))
+            p.queue(.filesAudio(address: "file:/Media/a.wav", title: "A"))
+            XCTAssertGreaterThanOrEqual(s.pending.count, 6)
+            for op in s.pending {
+                let j = String(decoding: (try? JSONEncoder().encode(op)) ?? Data(), as: UTF8.self)
+                XCTAssertFalse(j.contains("file://"), j); XCTAssertFalse(j.contains(NSHomeDirectory()), j); XCTAssertFalse(j.contains(FileManager.default.temporaryDirectory.path), j)
+            }
+        }
     }
 }

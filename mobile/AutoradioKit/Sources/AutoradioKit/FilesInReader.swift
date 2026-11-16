@@ -43,11 +43,18 @@ public struct FilesInReader: Sendable {
         return lib.adopt(id: doc.id, origin: path, etag: tag) ?? doc
     }
 
-    /// An audio file in Files as a run sheet entry (brought to disk first); nil for anything else or a file that cannot be had.
-    public func audioEntry(address: String) async -> RunSheetEntry? {
+    /// An audio file in Files as a run sheet entry, and the phone's own copy of it (kept locally by entry id, never posted); nil for anything
+    /// else or a file that cannot be had.
+    public func audioEntry(address: String) async -> (entry: RunSheetEntry, local: URL)? {
+        guard let url = await audioURL(address: address) else { return nil }
+        let name = (FilePath.name(FilePath.fromAddress(address)?.path ?? address) as NSString).deletingPathExtension
+        return (.filesAudio(address: address, title: name), url)
+    }
+
+    /// The phone's copy of the audio file at the Files address, brought to disk again when it is gone.
+    public func audioURL(address: String) async -> URL? {
         let i = await files.open(address: address)
         guard i.status == "ready", i.kind == "audio", !i.local.isEmpty else { return nil }
-        let name = (i.name as NSString).deletingPathExtension
-        return .audio(RunSheetAudio(url: URL(fileURLWithPath: i.local), title: name, show: "Files"))
+        return URL(fileURLWithPath: i.local)
     }
 }

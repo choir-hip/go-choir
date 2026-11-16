@@ -54,10 +54,14 @@ extension AutoradioModule {
             }
         }
 
-        // Open the approval page in the browser, only on the configured Choir host (same scheme, host and port), over https.
+        // Open the approval page in the app's own web view like any web link (SourceLink: http and https are in-app; mailto, tel, sms and
+        // facetime go to the system; anything else is refused), only on the configured Choir host (same scheme, host and port), over https.
         handle("mailOpenReview") { [weak self] args, reply in
             if let u = URL(string: args["url"] as? String ?? ""), u.scheme == "https", RemoteHost.allows(u) {
-                DispatchQueue.main.async { UIApplication.shared.open(u) }
+                DispatchQueue.main.async { [weak self] in
+                    self?.barWebURL = u.absoluteString; EmbeddedPage.shared.opened(u.absoluteString)
+                    self?.touch(["queueView", "barState"], now: true)
+                }
                 reply(["status": "opened", "message": ""])
             } else {
                 reply(["status": "refused", "message": "That link is not on your computer's address."])

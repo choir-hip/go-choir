@@ -59,6 +59,17 @@ extension RunSheetEntry {
                              source: RunSheetSource(ref: "episode:" + (a.episodeId ?? a.url.absoluteString), label: cleanTitle(a.show), url: a.url.absoluteString, start: a.start))
     }
 
+    /// An audio file in Files. The entry names the file by its Files path (`file:<path>`), never by where the phone keeps a copy: that is a device
+    /// path and goes nowhere. The phone finds its own copy again from the path (`RunSheetPlayer.fileResolver`).
+    public static func filesAudio(address: String, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {
+        RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .episode, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: address, label: "Files"))
+    }
+    /// The Files address of an audio file this entry plays.
+    public var filesAddress: String? {
+        guard kind == .episode || kind == .clip, let r = source?.ref, r.hasPrefix("file:") else { return nil }
+        return r
+    }
+
     /// The route of a paper story this entry reads in full.
     public var paperRoute: String? {
         guard kind == .page, let r = source?.ref, r.hasPrefix("pub:") else { return nil }

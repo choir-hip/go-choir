@@ -65,7 +65,7 @@ extension RunSheetPlayer {
         }
         q.upcoming = store.ahead(limit: Int.max).filter { $0.kind != .transition }.prefix(Self.upNextLimit).enumerated().map { i, e in
             var r = QueueRow(); r.i = i; r.title = e.displayTitle; r.kind = e.kindWord; r.id = e.id
-            if let a = e.audioSpec { r.detail = a.show }
+            if let a = e.audioSpec { r.detail = a.show } else if e.filesAddress != nil { r.detail = e.source?.label ?? "Files" }
             if store.isStale(e) { r.note = "Written for other neighbours" }
             r.by = e.byWords
             return r

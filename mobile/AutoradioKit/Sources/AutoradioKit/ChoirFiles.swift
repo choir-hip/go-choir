@@ -281,7 +281,6 @@ public struct FileInfo: Codable, Sendable, Equatable {
     public var src: String
     /// The disk path behind `src`, for the share sheet.
     public var local: String
-    public var text: String
     public var truncated: Bool
     public var rows: [CsvRow]
     /// Pixel size of an image (0 when unknown): the pinch-and-pan viewer fits it to its frame.
@@ -289,7 +288,7 @@ public struct FileInfo: Codable, Sendable, Equatable {
     public var height: Double
 
     public static let empty = FileInfo(address: "", path: "", folder: "/", name: "", kind: "other", kindLabel: "File", size: 0, sizeLabel: "", modifiedLabel: "",
-                                       mime: "", status: "loading", message: "", src: "", local: "", text: "", truncated: false, rows: [], width: 0, height: 0)
+                                       mime: "", status: "loading", message: "", src: "", local: "", truncated: false, rows: [], width: 0, height: 0)
 }
 
 // MARK: Labels
@@ -706,7 +705,7 @@ public final class FilesService: @unchecked Sendable {
         return i
     }
 
-    static func say(_ error: Error) -> String {
+    public static func say(_ error: Error) -> String {
         if let e = error as? FilesError { return e.description }
         if let e = error as? ChoirError {
             switch e {
@@ -776,8 +775,9 @@ public final class FilesService: @unchecked Sendable {
         if entry.isDirectory { return info(entry, status: "folder") }
         let kind = entry.kind
         var out = info(entry, status: "ready")
-        // A PDF or an e-book is a Reader document: it is not fetched, parsed or shown here (`FilesInReader` opens it in Reader).
-        if kind == .other || kind == .pdf || kind == .epub { recents.touch(entry); return out }
+        // A PDF or an e-book is a Reader document and text, Markdown and code are Texture documents: they are not fetched, parsed or shown here
+        // (`FilesInReader` and `FilesInTexture` open them).
+        if kind == .other || kind == .pdf || kind == .epub || kind == .markdown || kind == .text || kind == .code { recents.touch(entry); return out }
         let cap = FileTypes.maxBytes(kind)
         if entry.size > cap {
             out.status = "toolarge"; out.message = FilesError.tooLarge(entry.size).description; return out
@@ -794,9 +794,6 @@ public final class FilesService: @unchecked Sendable {
             out.local = dest.path
             out.src = appPrefix + "/" + key + "/" + name
             switch kind {
-            case .markdown, .text, .code:
-                let (s, cut) = Self.readText(dest, limit: 120_000)
-                out.text = s; out.truncated = cut
             case .csv:
                 let (s, cut) = Self.readText(dest, limit: 256_000)
                 let sep: Character = (entry.name as NSString).pathExtension.lowercased() == "tsv" ? "\t" : ","

@@ -385,6 +385,7 @@ enum TextureDemo {
             return Data("{}".utf8)                                   // restore
         case ("revisions", 4): return fx("texture-rev-" + parts[3])
         case ("lifecycle", _): return Data("{}".utf8)                // cancel
+        case ("files", 4): return Data(#"{"doc_id":"demo-notes"}"#.utf8)   // POST /api/texture/files/open: demo opens the notes document
         default: return nil
         }
     }

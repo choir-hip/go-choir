@@ -231,7 +231,7 @@ final class FilesServiceTests: XCTestCase {
 
     func testOpenTextImageCsv() async throws {
         let md = await service.open(address: "file:/Documents/Harbor notes.md")
-        XCTAssertEqual(md.status, "ready"); XCTAssertEqual(md.kind, "markdown"); XCTAssertTrue(md.text.hasPrefix("# Harbor notes"))
+        XCTAssertEqual(md.status, "ready"); XCTAssertEqual(md.kind, "markdown"); XCTAssertEqual(md.src, "", "Files shows no text: it opens in Texture")
         let png = await service.open(address: "file:/Pictures/Harbor test card.png")
         XCTAssertEqual(png.kind, "image"); XCTAssertEqual(png.width, 640); XCTAssertEqual(png.height, 400)
         XCTAssertTrue(png.src.hasPrefix("app:/cache/files/") && png.src.hasSuffix("/Harbor-test-card.png"), png.src)
@@ -282,11 +282,11 @@ final class FilesServiceTests: XCTestCase {
 
     // failure 4: a changed file is a different cache entry
     func testCacheKeyChangesWithTheFile() async throws {
-        let a = await service.open(address: "file:/Documents/Key list.txt")
-        let tmpFile = tmp.appendingPathComponent("new.txt"); try Data("changed\n".utf8).write(to: tmpFile)
-        _ = await service.upload(from: tmpFile, name: "Key list.txt", into: "/Documents")
-        let b = await service.open(address: "file:/Documents/Key list.txt")
-        XCTAssertNotEqual(a.src, b.src); XCTAssertEqual(b.text, "changed\n")
+        let a = await service.open(address: "file:/Documents/Budget 2026.csv")
+        let tmpFile = tmp.appendingPathComponent("new.csv"); try Data("a,b\n1,2\n".utf8).write(to: tmpFile)
+        _ = await service.upload(from: tmpFile, name: "Budget 2026.csv", into: "/Documents")
+        let b = await service.open(address: "file:/Documents/Budget 2026.csv")
+        XCTAssertNotEqual(a.src, b.src); XCTAssertEqual(b.rows.first?.cells, ["a", "b"])
     }
 
     // failures 2, 11, 12

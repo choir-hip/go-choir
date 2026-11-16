@@ -144,32 +144,6 @@ component AudioViewer
               Chip(label="Add to queue", active=false, testId="audio-queue", press=queueLater("file", fvInfo.address, fvInfo.name))
               Chip(label="Share", active=false, testId="audio-share", press=fvShare(fvInfo.name, fvInfo.src))
 
-// ---------------------------------------------------------------- plain text, Markdown and code
-component TextViewer
-  inject
-    th: Theme
-    fvInfo: FileInfo
-    fvShare: action
-    listen: action
-  view
-    PageScroll(id="text")
-      text fvInfo.name role="heading" aria-level=1 testId="page-title" font-size="-exact-title1" font-weight=700 font-family=th.fontHead
-      text `${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      row gap=8 align-items="center"
-        Chip(label="Share", active=false, testId="text-share", press=fvShare(fvInfo.name, fvInfo.src))
-        if fvInfo.kind != "code"
-          Chip(label="Listen", active=false, testId="text-listen", press=listen(fvInfo.address, fvInfo.name, fvInfo.text))
-      if fvInfo.kind == "markdown"
-        text fvInfo.text markup="markdown" testId="text-body" font-family=th.fontText font-size="-exact-body" line-height=1.6 color=th.fg
-      else if fvInfo.kind == "code"
-        Card(level=1, testId="code-card", minHeight=0)
-          column padding=14
-            text fvInfo.text testId="text-body" white-space="pre-wrap" font-family=th.fontMono font-size="-exact-footnote" line-height=1.5 color=th.fg
-      else
-        text fvInfo.text testId="text-body" white-space="pre-wrap" font-family=th.fontText font-size="-exact-body" line-height=1.6 color=th.fg
-      if fvInfo.truncated
-        text "Showing the start of this file." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-
 // ---------------------------------------------------------------- table (CSV, TSV)
 component CsvViewer
   inject

@@ -124,6 +124,8 @@ public struct RouteSheetPoster: RunSheetPoster {
             }
             _ = run(RunSheetOp(opId: mintOpId(), by: .phone, op: .remove, id: last.id, reason: "ahead_full: a listener's placement took the last place"), remote: false)
         }
+        // Nothing the phone posts names a place on the phone: a `file://` address, the phone's home or its temporary folder.
+        if !remote, Self.namesDevicePath(op) { return RunSheetResult(opId: op.opId, applied: false, dropped: "local_path", version: sheet.version) }
         if op.op == .previous || op.op == .clear, !remote { op.baseVersion = sheet.version }
         let (next, result) = sheet.applying(op)
         guard result.applied else { return result }
@@ -133,6 +135,13 @@ public struct RouteSheetPoster: RunSheetPoster {
         onChange?()
         if !remote { flush() }
         return result
+    }
+
+    static func namesDevicePath(_ op: RunSheetOp) -> Bool {
+        guard let d = try? JSONEncoder().encode(op), let raw = String(data: d, encoding: .utf8) else { return false }
+        let s = raw.replacingOccurrences(of: "\\/", with: "/")          // JSON writes a slash as \/
+        let home = NSHomeDirectory(), tmp = FileManager.default.temporaryDirectory.path
+        return s.contains("file://") || (home.count > 4 && s.contains(home)) || (tmp.count > 4 && s.contains(tmp)) || s.contains("/private/var/") || s.contains("/var/mobile/")
     }
 
     public func mintOpId() -> String { RunSheetEntry.mintId("p-") }

@@ -76,6 +76,10 @@ extension PlaybackEngine {
     public var spokenPaused: () -> Bool = { false }
     /// Fetches a page's text; replaceable for tests.
     public var pageText: (URL, String) async -> (title: String, paragraphs: [String])? = { await PageText.fetch($0, title: $1) }
+    /// Where the phone keeps its own copy of an audio file from Files, by entry id: never posted. After a relaunch it is empty and `fileResolver` finds the file again.
+    public var localFiles: [String: URL] = [:]
+    /// Finds (downloading when the copy is gone) the phone's copy of the file at a Files address.
+    public var fileResolver: ((String) async -> URL?)?
     /// The phone's opening of this listening, and what became of desk entries the sheet did not take (id, reason).
     public private(set) var currentOpeningId: String?
     public internal(set) var droppedFromDesk: [(id: String, reason: String)] = []
@@ -323,7 +327,13 @@ extension PlaybackEngine {
                 ok = await engine.speak(documentID: doc, entry: entry, paragraphs: blocks)
             } else if my == generation { message = "Could not open \u{201C}\(entry.displayTitle)\u{201D} to read." }
         case .clip, .episode:
-            guard let a = entry.audioSpec else { break }
+            var spec = entry.audioSpec
+            if spec == nil, let address = entry.filesAddress {
+                let url: URL?
+                if let known = localFiles[entry.id] { url = known } else { url = await fileResolver?(address) }
+                if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.title, show: entry.source?.label ?? "Files") }
+            }
+            guard let a = spec else { break }
             if entry.kind == .clip, let id = entry.source?.clipId, !(await preflight(id)) { if my == generation { finish(entry.id, played: false) }; return }
             guard my == generation else { return }
             audio = a

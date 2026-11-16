@@ -20,7 +20,10 @@ extension AutoradioModule {
         pageSources.register(FilesPageSource(service: service))
         // One way to open a document: a PDF or an e-book in Files opens in Reader. A page left in the pile for such a file by an earlier build is closed.
         FilesInReader.current = FilesInReader(files: service)
-        for p in pages.list() where FilesInReader.opensInReader(p.address) { pages.close(p.address) }
+        FilesInTexture.current = FilesInTexture(files: service)
+        // The run sheet finds its own copy of an audio file from Files again from the Files path (after a relaunch, downloading it if need be).
+        Task { @MainActor in RunSheetPlayer.shared.fileResolver = { await FilesInReader.current?.audioURL(address: $0) } }
+        for p in pages.list() where FilesInReader.opensInReader(p.address) || FilesInTexture.opensInTexture(p.address) { pages.close(p.address) }
 
         func str(_ args: [String: Any], _ k: String) -> String { args[k] as? String ?? "" }
         func num(_ args: [String: Any], _ k: String) -> Int { (args[k] as? NSNumber)?.intValue ?? Int(args[k] as? String ?? "") ?? 0 }
