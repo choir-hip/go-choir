@@ -694,7 +694,7 @@
     return crashGuard;
   }
 
-  // Arm: judge which other pages are alive (Web Locks, else a heartbeat), then
+  // Arm: judge which other pages are alive (Web Locks), then
   // announce this one and begin its boot. Async and idempotent; nothing mounts
   // before loadDesktopState has awaited it. This page's own markers are never
   // dead to itself (nonce), so arming early cannot make it hold its own windows.
