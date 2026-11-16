@@ -2,6 +2,7 @@ package podcastworker
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -169,6 +170,13 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 		res, err := e.Transcribe(ctx, next.EnclosureURL)
 		if err == nil {
 			err = b.PutTranscript(ctx, next.EpisodeID, e.Engine(), res)
+		}
+		if err != nil && errors.Is(err, ErrLowDisk) && ctx.Err() == nil {
+			// Not the episode's fault: wait, as when idle, and say so.
+			cfg.Logf("podcast-worker: download refused, the episode stays pending: %v", err)
+			cfg.Sleep(ctx, idle)
+			idle = min(idle*2, cfg.MaxIdle)
+			continue
 		}
 		mu.Lock()
 		stats.wall += cfg.Now().Sub(started)

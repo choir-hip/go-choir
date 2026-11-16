@@ -57,6 +57,7 @@ func main() {
 	model := fs.String("model", "", "parakeet GGUF model (the 110M q8_0)")
 	vad := fs.String("vad-model", "", "silero VAD GGUF")
 	threads := fs.Int("threads", 4, "model threads")
+	minFreeGB := fs.Float64("min-free-gb", 15, "refuse to start a download when the work directory's filesystem has less than this many GiB free")
 	workDir := fs.String("work-dir", "", "scratch directory for downloads (default: the system temp)")
 	intakeEvery := fs.Duration("intake-every", 30*time.Minute, "serve: how often the feeds are polled")
 	if err := fs.Parse(os.Args[2:]); err != nil {
@@ -88,7 +89,7 @@ func main() {
 		var stop context.CancelFunc
 		ctx, stop = signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
-		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes}
+		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
 		cfg := podcastworker.ServeConfig{
 			Since: time.Duration(*sinceHours) * time.Hour, ListLimit: *maxEpisodes, IntakeEvery: *intakeEvery,
 			Intake: func(ctx context.Context) error { return intake(ctx, client, *feeds, *perFeed) },
@@ -111,7 +112,7 @@ func main() {
 		if *model == "" || *vad == "" {
 			log.Fatal("transcribe needs --model and --vad-model")
 		}
-		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes}
+		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
 		if err := transcribe(ctx, client, t, time.Duration(*sinceHours)*time.Hour, *maxEpisodes); err != nil {
 			log.Fatalf("transcribe: %v", err)
 		}

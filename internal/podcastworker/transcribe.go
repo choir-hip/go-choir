@@ -3,6 +3,7 @@ package podcastworker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,6 +47,15 @@ func FetchFeed(ctx context.Context, client *http.Client, feedURL, show string) (
 	return ParseFeed(feedURL, resp.Body, show)
 }
 
+// DefaultMinFreeBytes is the free space the worker insists on before it starts
+// a download: 15 GiB. The worker runs on a shared host; a manner, not a limit
+// on model calls. The downloaded audio is deleted as soon as the episode's
+// transcription ends, whatever its outcome.
+const DefaultMinFreeBytes = 15 << 30
+
+// ErrLowDisk is the refusal to start a download for lack of free space.
+var ErrLowDisk = errors.New("not enough free disk space to start a download")
+
 // Transcriber turns an enclosure URL into timed segments with ffmpeg and
 // parakeet.cpp's CLI.
 type Transcriber struct {
@@ -56,6 +66,38 @@ type Transcriber struct {
 	// 0 means all of it.
 	MaxMinutes int
 	HTTP       *http.Client
+	// MinFreeBytes is the free space the filesystem of WorkDir must have before
+	// a download starts (0 means DefaultMinFreeBytes; a negative value turns the
+	// check off for a test). FreeBytes reads it; a test replaces it.
+	MinFreeBytes int64
+	FreeBytes    func(dir string) (uint64, error)
+}
+
+// checkDisk refuses when the work directory's filesystem is short of space.
+func (t *Transcriber) checkDisk() error {
+	min := t.MinFreeBytes
+	if min < 0 {
+		return nil
+	}
+	if min == 0 {
+		min = DefaultMinFreeBytes
+	}
+	dir := t.WorkDir
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	free := t.FreeBytes
+	if free == nil {
+		free = freeBytes
+	}
+	got, err := free(dir)
+	if err != nil {
+		return fmt.Errorf("read the free space of %s: %w", dir, err)
+	}
+	if got < uint64(min) {
+		return fmt.Errorf("%w: %.1f GiB free in %s, %.1f GiB needed", ErrLowDisk, float64(got)/(1<<30), dir, float64(min)/(1<<30))
+	}
+	return nil
 }
 
 // Engine names the engine and model for the transcript's record.
@@ -81,6 +123,9 @@ type Result struct {
 // Transcribe downloads the enclosure, converts it to 16 kHz mono and runs
 // the model.
 func (t *Transcriber) Transcribe(ctx context.Context, enclosureURL string) (Result, error) {
+	if err := t.checkDisk(); err != nil {
+		return Result{}, err
+	}
 	dir, err := os.MkdirTemp(t.WorkDir, "episode-")
 	if err != nil {
 		return Result{}, err
