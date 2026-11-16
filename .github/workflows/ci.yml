@@ -970,6 +970,12 @@ jobs:
           tests/uses.spec.js tests/settings.spec.js tests/context-menu-slot.spec.js
           --reporter=line
 
+      # The crash guard's pure module under node (no browser): a hold must not
+      # depend on a test that never runs. Its Playwright spec runs in the
+      # package-modularity job, which has Chromium.
+      - name: Crash guard unit tests
+        run: cd frontend && node --test tests/crash-guard.test.mjs
+
   # The package modularity gate (docs/design/modularity-check-build-2026-11-04.md):
   # the SDK surface against its lock (a change needs the bump its kind needs),
   # and every first-party package's smoke contract in a shell built from this
@@ -1076,6 +1082,25 @@ jobs:
           CHOIR_MODULARITY_RECEIPT: ${{ runner.temp }}/modularity/modularity-receipt.json
           CHOIR_MODULARITY_BASE: ${{ steps.lockbase.outputs.base }}
         run: cd frontend && pnpm exec playwright test tests/package-modularity.spec.js --reporter=line --output="$RUNNER_TEMP/modularity/results"
+
+      # The crash guard in a real page (tests/crash-guard.spec.js): a built
+      # shell served by vite preview on :4173 (the spec's baseURL) against the
+      # spec's own mocked backend; no computer. Chromium is installed above.
+      - name: Crash guard browser spec
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          pnpm build
+          pnpm exec vite preview --host localhost --port 4173 --strictPort > "$RUNNER_TEMP/crash-guard-preview.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:4173/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://localhost:4173/ >/dev/null
+          pnpm exec playwright test tests/crash-guard.spec.js --reporter=line --output="$RUNNER_TEMP/crash-guard/results"
 
       - name: Upload the modularity receipt
         if: ${{ !cancelled() }}
