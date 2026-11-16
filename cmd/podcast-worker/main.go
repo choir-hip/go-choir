@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -138,7 +137,7 @@ func intake(ctx context.Context, c *podcastworker.Client, path string, perFeed i
 		log.Printf("reported feeds unavailable (the operator's list alone is polled): %v", err)
 	}
 	feeds := podcastworker.MergeFeeds(seed, reported)
-	httpc := &http.Client{Timeout: 60 * time.Second}
+	httpc := podcastworker.SafeClient(60 * time.Second)
 	var all []podcastworker.Episode
 	for _, f := range feeds {
 		eps, err := podcastworker.FetchFeed(ctx, httpc, f.URL, f.Show)
@@ -169,7 +168,7 @@ func priority(ctx context.Context, c *podcastworker.Client, handled map[string]b
 	if err != nil {
 		return err
 	}
-	httpc := &http.Client{Timeout: 60 * time.Second}
+	httpc := podcastworker.SafeClient(60 * time.Second)
 	for _, f := range feeds {
 		for _, w := range f.Wanted {
 			key := f.FeedURL + "\x00" + w.GUID

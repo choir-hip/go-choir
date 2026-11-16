@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	userAgent = "choir-podcast-worker/1"
+	feedFetchDeadline = 60 * time.Second
+	userAgent         = "choir-podcast-worker/1"
 	// maxDownload bounds one enclosure; a news episode is tens of MB.
 	maxDownload = 600 << 20
 	// wavBytesPerSecond is 16 kHz, mono, 16-bit.
@@ -27,6 +28,9 @@ const (
 
 // FetchFeed downloads and parses one feed.
 func FetchFeed(ctx context.Context, client *http.Client, feedURL, show string) ([]Episode, error) {
+	// One slow feed cannot hold the poll: each fetch has its own deadline.
+	ctx, cancel := context.WithTimeout(ctx, feedFetchDeadline)
+	defer cancel()
 	u, err := url.Parse(feedURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("feed %q is not an http(s) URL", feedURL)
@@ -71,6 +75,16 @@ type Transcriber struct {
 	// check off for a test). FreeBytes reads it; a test replaces it.
 	MinFreeBytes int64
 	FreeBytes    func(dir string) (uint64, error)
+}
+
+// httpClient is the guarded client every outside fetch goes through, unless a
+// test supplies one.
+func (t *Transcriber) httpClient() *http.Client {
+	if t.HTTP != nil {
+		return t.HTTP
+	}
+	t.HTTP = SafeClient(30 * time.Minute)
+	return t.HTTP
 }
 
 // checkDisk refuses when the work directory's filesystem is short of space.
@@ -132,20 +146,20 @@ func (t *Transcriber) Transcribe(ctx context.Context, enclosureURL string) (Resu
 	}
 	defer os.RemoveAll(dir)
 	src := filepath.Join(dir, "in.audio")
-	client := t.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Minute}
-	}
+	client := t.httpClient()
 	before := ProbeLength(ctx, client, enclosureURL)
 	if err := t.download(ctx, enclosureURL, src); err != nil {
 		return Result{}, err
+	}
+	if head, err := readHead(src, 512); err == nil && looksLikePlaylist(head) {
+		return Result{}, errors.New("the download is a playlist, not audio: refused")
 	}
 	// The length of the file as downloaded: an ad-stitched episode differs
 	// from its feed's duration and from the next download, and a clip is valid
 	// only for this file, so the phone checks its own length against this one.
 	fileSeconds := probeSeconds(ctx, t.FFmpeg, src)
 	wav := filepath.Join(dir, "in.wav")
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", src}
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-protocol_whitelist", "file", "-i", src}
 	if t.MaxMinutes > 0 {
 		args = append(args, "-t", fmt.Sprint(t.MaxMinutes*60))
 	}
@@ -188,10 +202,7 @@ func (t *Transcriber) download(ctx context.Context, rawURL, dst string) error {
 		return err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	client := t.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Minute}
-	}
+	client := t.httpClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
@@ -250,7 +261,7 @@ var durationRe = regexp.MustCompile(`Duration: (\d+):(\d+):(\d+(?:\.\d+)?)`)
 // probeSeconds reads a file's duration from `ffmpeg -i`, which prints it on
 // stderr and exits with an error for lack of an output. 0 means unknown.
 func probeSeconds(ctx context.Context, ffmpeg, path string) float64 {
-	out, _ := exec.CommandContext(ctx, ffmpeg, "-nostdin", "-hide_banner", "-i", path).CombinedOutput()
+	out, _ := exec.CommandContext(ctx, ffmpeg, "-nostdin", "-hide_banner", "-protocol_whitelist", "file", "-i", path).CombinedOutput()
 	m := durationRe.FindSubmatch(out)
 	if m == nil {
 		return 0
@@ -259,6 +270,20 @@ func probeSeconds(ctx context.Context, ffmpeg, path string) float64 {
 	mi, _ := strconv.ParseFloat(string(m[2]), 64)
 	sec, _ := strconv.ParseFloat(string(m[3]), 64)
 	return h*3600 + mi*60 + sec
+}
+
+func readHead(path string, n int) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	buf := make([]byte, n)
+	m, err := io.ReadFull(f, buf)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	return buf[:m], nil
 }
 
 func tail(b []byte) string {

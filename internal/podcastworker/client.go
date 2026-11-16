@@ -27,6 +27,9 @@ func NewClient(base, apiKey string) (*Client, error) {
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return nil, fmt.Errorf("server %q is not an http(s) URL", base)
 	}
+	if u.Scheme == "http" && !isLoopbackHost(u.Hostname()) {
+		return nil, fmt.Errorf("server %q: the operator key is never sent over cleartext to a host that is not this machine", base)
+	}
 	apiKey = strings.TrimSpace(apiKey)
 	if apiKey == "" {
 		return nil, fmt.Errorf("the API key file is empty")
