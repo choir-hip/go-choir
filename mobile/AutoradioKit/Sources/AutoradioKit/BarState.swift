@@ -160,6 +160,11 @@ public final class BarTracker: @unchecked Sendable {
         }
     }
 
+    /// A plain line from the app itself (not an engine event): it holds the bar for the error window like any other.
+    public func say(_ line: String, now: Date = Date()) {
+        lock.lock(); errorAt = now; errorText = line; lock.unlock()
+    }
+
     static func plain(stage: String, message m: String) -> String {
         if m.contains("not signed in") { return "Sign in to talk to your computer." }
         if m.contains("429") { return "Your computer is busy right now. Try again in a moment." }

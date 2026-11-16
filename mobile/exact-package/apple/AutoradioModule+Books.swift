@@ -18,6 +18,14 @@ extension AutoradioModule {
         Task { @MainActor in ShelfPlayback.register() }
         SearchProviders.register(name: "books") { q in lib.hits(query: q) }
         pageSources.register(BooksPageSource(lib: lib))
+        // lane autoradio-joins: a .pdf or .epub typed in the bar is imported, then its page opens; a failure is said in the bar's line.
+        BarURL.importDocument = { [weak self] url in
+            Task { [weak self] in
+                await BarDocumentImport.run(url: url, importer: { try await ReaderShelf.importFrom(url: $0).id },
+                    open: { address in self?.pages.open(address, title: lib.doc(ShelfAddress.parse(address)?.id ?? "")?.title ?? "Document") },
+                    say: { line in BarTracker.shared.say(line); self?.touch(["barState"], now: true) })
+            }
+        }
 
         // The PDF page view is the Files viewer's: an iframe on a path under app:/cache/files. The reader's copy stays in Application Support
         // (the cache may be emptied); a clone is made in the cache the first time the PDF is shown.

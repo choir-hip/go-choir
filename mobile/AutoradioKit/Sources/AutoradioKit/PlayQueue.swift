@@ -242,6 +242,20 @@ public enum BarURL {
     }
 }
 
+/// A .pdf or .epub typed into the bar: import it into the Reader, then open its page; if it fails say why in the bar's own line.
+public enum BarDocumentImport {
+    public static func name(of url: URL) -> String { url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent }
+    public static func failureLine(_ error: Error, url: URL) -> String {
+        let why = (error as? ShelfError)?.description ?? ShelfError.unreadable("").description
+        return "\(name(of: url)) was not added. \(why)"
+    }
+    /// `importer` returns the new document's id. Nothing opens on a failure.
+    public static func run(url: URL, importer: (URL) async throws -> String, open: @MainActor (String) -> Void, say: (String) -> Void) async {
+        do { let id = try await importer(url); await open(ShelfAddress.address(id)) }
+        catch { say(failureLine(error, url: url)) }
+    }
+}
+
 // MARK: Reading a page
 
 public enum PageText {
