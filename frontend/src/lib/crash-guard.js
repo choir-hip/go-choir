@@ -35,7 +35,7 @@ function emptyState() {
 const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? { ...v } : {});
 
 /**
- * pageId: a nonce new on every page load. A page is "alive" when its lock or
+ * pageId: a nonce new on every page load. A page is "alive" when its Web Lock
  * lock (named by pageId) says so; every other page's markers are deaths.
  * Pending entries are keyed by window and page, so one page's proof or close
  * never deletes another page's marker.
