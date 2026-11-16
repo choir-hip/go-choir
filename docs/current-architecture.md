@@ -1,1003 +1,184 @@
-# Choir Current Architecture
+# Choir: what exists today
 
-**Last updated:** 2026-10-14 (terminology and status rows refreshed in the docs prune; section bodies still carry the 2026-09-23 desk-RLM rectification rewrite and older text) — rewritten for the desk-RLM rectification
-(`docs/archive/desk-rlm-rectification-plan-2026-09-23.md`). The prior revision
-(2026-07-24, stale-bannered 2026-09-22) described the Super/CoSuper/Researcher
-hierarchy and `update_coagent` as the agent-to-agent primitive; that model is
-superseded. The working mission set is the R-sequence in `ACTIVE.md`.
+Not doctrine
+([choir-doctrine.md](choir-doctrine.md)), not vision, not roadmap ([roadmap-2026-10-31.md](roadmap-2026-10-31.md)),
+not the live work ([ACTIVE.md](ACTIVE.md)). It says what is built and what has been seen working.
 
-This is the current architecture memo for Choir. It is meant to be the first
-document read before changing `texture`, desk routing, workers, Trace, the data stores,
-`vmctl`, publication, or appagent behavior. For current vocabulary and project
-direction, read [semantic-registry.md](semantic-registry.md) and
-[choir-doctrine.md](choir-doctrine.md). For the current common platform/default
-computer OS, desktop shell, and app catalog state, read
-[platform-os-app-state.md](platform-os-app-state.md). For the supervision
-surface, read
-[texture-live-supervision-architecture.md](texture-live-supervision-architecture.md).
+Status words, exactly these. **proven**: seen working on staging or on the device; the proof is cited. **built**: code
+exists and tests pass; not seen working end to end. **partial**: works in a narrower form than its name; the narrowing is
+said. **specified**: a design doc exists, no code. **idea**: the owner has said it, no design. **unknown**: the row says
+what would settle it. A name, a comment or a design doc never raises a status.
 
-## Document Contract
+**How this file is kept true.** Every landing that changes a status edits this file in the same change. Every section
+carries "checked" (the date someone read the code or proof). A row with no proof cited is built at most.
 
-This document tracks the architecture that the current repo and staging system
-actually implement, plus explicitly labeled active hardening where the code
-already has a partial substrate. It should not be used as a speculative product
-roadmap. Sections labeled target-only are not current-state claims.
+## Read this first (the facts most often gotten wrong)
 
-Every claim in this document belongs to exactly one of three states, and the
-tags below make that explicit (this repairs heresy H020, mixed current/target
-onboarding):
+1. There is no single play queue on the phone. Four lists decide what plays next, and skip consults them in a fixed order (section 6).
+2. There is no Autoradio desk that runs cells. The `autoradio` package desk is a manifest (verbs Report, Done; owns nothing). Its two server routes are one streamed model call each, no tools, no cell, no Texture document (sections 2, 5).
+3. An on-device language model runs in the phone app today (Qwen3-0.6B through llama.cpp), but it answers only from the reader's saved stories. It is not given the deck, the queue or the play history (section 6).
+4. The phone's voice turns call the computer's `/api/autoradio/turns` with the queue and 40 candidate stories. The DJ's stretch comes from `/api/autoradio/programme`. If no stretch segment arrives within 8 seconds, one front-page story plays.
+5. Texture writes one piece at a time. Research is read-only on the world. Engineering mutates only inside capsules. Management admits engineering.
+6. Prompts are embedded yaml, seeded to disk per computer; a per-owner override file exists, but its write route is refused on deployed computers (section 3, 8).
+7. Every Jev call goes through one job (`internal/agentcore/jev_job.go`); `scripts/check-jev-entry` fails a second path.
+8. Podcast clips are matched by an operator's hand. The automatic matcher was removed on 2026-11-16 (CI refused it).
+9. Nothing on the phone has been heard by the owner as of the overnight report: sound, voice and clips on the device are unproven.
+10. `sourcecycled`, World Wire and Universal Wire are retired names; Dolt and Store B are deleted (2026-10-30).
 
-- **Live** — implemented and running in this repo/staging now.
-- **Target** — decided direction, not yet (fully) implemented. Where an owner
-  decision exists, it is cited.
-- **Retired** — a former design or vocabulary that still has code/doc residue
-  but must not receive new work.
+## 1. The layers (owner, 2026-11-16)
 
-Untagged prose inside a tagged section inherits the section's tag.
+```
+  listener's voice
+    |  on-device models        hear, decide, answer at once         partial   (section 6)
+    v
+  Autoradio desk               composes a program, writes for voice  partial   (turns + programme routes; no cell)
+    |   from Textures, podcasts, clips, mail, answers
+    v
+  Texture                      writes one piece at a time, to read   proven    (ordinary prompt path)
+    |
+    v
+  research / management / engineering behind it                     proven (research), partial (engineering, section 8)
+```
 
-Intended-but-unbuilt architecture belongs here as an explicitly labeled
-**Target** claim, not in a parallel roadmap document.
+The owner's picture: on-device models answer a voice prompt at once with the deck, queue and play history as context, then
+the desk takes over. Today: the on-device layer answers from saved stories only (partial); the deck/queue/history context is
+**idea**; the desk is a server fast turn plus a stretch writer. Mail and podcast notes in the program: **specified**
+(DJ design slice 3, slice 7; the route drops those kinds). Checked 2026-11-16.
 
-When this document says "current," it should be backed by one of:
+## 2. Desks (checked 2026-11-16)
 
-- code in this repository;
-- current canonical docs that reflect landed code;
-- staging evidence on `https://choir.news`;
-- a precise note that the behavior is code-present but not yet staging-proven.
+Registered by the desk registry (`internal/deskmanifest/manifest.go`); app desks by install events folded from
+`internal/appdesk/required.json` (image-required) and `firstparty.json` (reserved first-party slugs).
 
-If code, staging, and this document disagree, code/staging evidence wins and
-this document should be fixed.
-When older browser/Trace/continuation language appears here, read it as
-implementation or evidence residue. Current doctrine is Source Viewer before
-explicit Web Lens inspection, Trace as evidence rather than a user app, and
-`continuation-level` as transitional residue only.
+| Desk | Kind | Owns | Model role | Status | Where |
+|---|---|---|---|---|---|
+| management | system desk, runs Go cells | coherence, admits engineering | `management` | proven (ordinary path, 2026-11-09) | `deskmanifest` |
+| texture | system desk, document custodian | Texture documents and revisions | `texture` | proven | `internal/textureowner`, `textureprompts` |
+| research | system desk plus children `research_web`, `research_texture` | evidence (read-only on the world) | `research` | proven (78 s cited v2 on d@e, ACTIVE 2026-11-09) | `deskmanifest` |
+| engineering | system desk, capsule-bound | capsule mutation | `engineering` | partial (section 8) | `internal/capsule` |
+| prompt router (conductor) | System 1 question, not a cell desk | route records | Jev (System 1) | proven | `internal/promptroute` |
+| autoradio | package desk, image-required, manifest only | nothing (`owned_object_kinds: []`) | `autoradio`, `autoradio_programme` (River then Bedrock Haiku 5.5; reasoning off / low) | partial: two routes, no cell | `internal/appdesk/required.json`, `agentcore/api_autoradio*.go` |
+| mail | package desk, not required, handler plus drill | mail access via lease | n/a | built (drill `mail-reader-drill`); live use unknown: settle by a Mail lease record on d@e | `appdesk/firstparty.json`, `internal/maildesk` |
 
-## Current Product/Subsystem Status
+Stale: the comment in `internal/appdesk/required.go` (line 29) says the required set is management, research, engineering,
+Texture and the router; the file holds only `autoradio`.
 
-| Subsystem | Status | Current authority boundary |
-| --- | --- | --- |
-| Automatic computer | **Live accepted persistent substrate and generic durable-work kernel** | Stable computers, audited ComputerVersion construction, lifecycle, canonical artifact/subject/work/update reducers, restart reconstruction, native settlement/cancellation, and signed no-SSH inspection are accepted at deployed commit `4ffcae3a`. Effects remain OFF; rejected self-development work is preserved branch evidence only. |
-| Document channel (M1) | **Live** | Owner input to a lifecycle-bound Texture document is a canonical document revision event; the `tell`/`correct`/`roster`/`LifecycleOwnerInstruction` side channel is deleted (deployed `3b780ed2`, 2026-09-23). |
-| Engineering desk carrier | **Live, partial** | The engineering desk runs yaegi Go cells via `capsule_go_eval`; staged `choir.*` intents reduce through the reducer. The desk agent is not yet a persistent root RLM and the document has no live `AuthorAppAgent` writer — see the supervision gap below. |
-| Choir CLI | **Accepted lifecycle read/control client** | Submit/read/trajectory/search/Wire/API-key/current-computer commands exist. `lifecycle snapshot` and durable cursor replay matched desktop/browser state in staging acceptance. The CLI does not implement `/goal`; self-development controls exist only in rejected evidence. |
-| Web desktop | **Live** | `frontend/src/lib/apps/registry.ts` is the executable app inventory; this memo and `platform-os-app-state.md` classify behavior and gaps. |
-| macOS desktop | **Builds and launches locally (ad hoc); not distributed** | Wails window onto the server: proxies the platform shell / computer surface from `CHOIR_BACKEND` (no embedded UI), native passkey bridge. Launched on darwin/arm64 2026-10-14 (`cmd/desktop/build.sh`); live WebSocket channel and distribution signing are open ([desktop-sync-and-local-vms-2026-10-14.md](reports/desktop-sync-and-local-vms-2026-10-14.md)). |
-| Choir Base / File Provider | **Substantial tested substrate, product wiring incomplete** | Append-only journal, tree/blob, sync, and API helpers exist. No deployed product service currently owns the API, and Base is not canonical app-state authority. |
-| Autopaper | **Live (2026-10-13)** | The designated paper computer publishes in public from its source schedules (re-engineering Cut 2); design of record `autopaper-sw-design-2026-10-09.md`. Renamed from the World Wire and Universal Wire; code identifiers still carry the old names (rename TODO there, section 9). |
-| `corpusd` | **Code-present and deployment-wired** | Service/store writer and sanitized public API boundary for Autopaper publication; platform-computer agents remain semantic owners. |
-| `sourcecycled` | **Deleted 2026-10-13 (Cut 2 unit 2b)** | Captures and source schedules are the only ingestion path; see item 6 below. |
-| Capsules | **Live accepted construction substrate; later self-development candidate rejected** | Audited ComputerVersion construction proved guest-local isolation and lifecycle. Additional namespaces/cgroup/seccomp/Landlock/capability/updater work on the rejected branch remains source evidence only; no self-development effect is authorized. |
-| Features/package adoption | **Forbidden as authority; exact residue remains historical** | AppChangePackage/AppAdoption cannot authorize self-development. Rejected-branch deletion is not silently claimed as canonical-main state and no successor may revive it as fallback authority. |
+## 3. The ordinary prompt path (checked 2026-11-16)
 
-`/goal <definition.md>` is an external compatible-harness invocation. Choir's
-CLI, prompt bar, and runtime do not implement an end-to-end Definition runner.
+- **Prompt bar** (`/api/prompt-bar`, `internal/textureowner/prompt_bar.go`). A router asks Jev one typed question `route` over the default (Texture) plus package desks that declare what they accept; it takes the top candidate only at probability 0.6 or more, otherwise the default with up to three one-tap choices (`promptroute.Theta`). A second question, `input_class`, picks edit, comment, request, ask_story or add_source. Status: proven (ACTIVE 2026-11-09 and ledger).
+- **ask_story** (`POST /api/autopaper/ask`) opens a story on the paper. Lane `origin/lane/texture-fast-v1` (2 commits, tip `b9bf2ad9c`, not landed) deletes it so the bar has one way to open a Texture. Until it lands, ask_story is live.
+- **Texture's turn**: the Texture desk writes a revision (v1, then research-informed versions); research children read the web or Texture and report through the ledger; a report wakes Texture. How exactly messages wake Texture (`desk_app_wake.go`, dispatcher order oldest-due-first per ACTIVE 2026-10-21): unknown here; settle by reading a run's wake events in a trace.
+- **Prompts**: embedded yaml in `internal/promptstore/defaults/` (conductor, core, engineering, management, research) and `internal/textureprompts/texture.yaml`; `Store.ensureDefaults` writes them to `PromptRoot/defaults/*.md` at runtime; an owner override file `PromptRoot/<owner>/<role>` wins when present (`Store.Load`). Overlays (`internal/runtimeprompts/overlays/*.yaml`) are generated into the stable prefix, not editable. Autoradio prompts: `internal/appdesk/firstparty_prompts/autoradio*.md`.
+- **Model policy** per computer: a policy file at the platform version (`# platform-policy-version: 4`) is rewritten at load unless it carries `# owner-edited`; owner overlays live in owner files under `System/model-policy-overlays` (`internal/modelpolicy`). The reasoning rule is per role, never toggled in a lineage.
 
-## Ontology
+## 4. Autopaper (checked 2026-11-16)
 
-The core ontology is maintained in this document,
-[choir-doctrine.md](choir-doctrine.md), and
-[runtime-invariants.md](runtime-invariants.md). The historical TLA+ specs
-were removed 2026-10-12 (git history keeps them).
+| Part | Status | Detail and proof |
+|---|---|---|
+| Paper computer publishes hourly in public | proven | Overnight report 2026-11-16: published every hour; Devin fast model carried 81 to 100 percent of calls |
+| Stories open and publish from source schedules and captures | proven | design `autopaper-sw-design-2026-10-09.md`; no `sourcecycled` |
+| Jev, one entry point | proven | `internal/agentcore/jev_job.go`, gate `scripts/check-jev-entry`; gateway hour summaries show `failures=0` (ledger C104 settled true 2026-11-16) |
+| Search providers | partial | Per the overnight report, five paid providers out of quota, search runs on two. Which two: unknown; settle by `status-hourly` search section (itself reported wrong, problem `status-hourly-reports-zero-search-answers...-2026-11-16`) |
+| Podcast clips | partial | Worker `cmd/podcast-worker` records and transcribes; ranking tool `internal/podcastmatch` with no model; **a human-run agent approves matches**; the worker runs on a Mac session and stops when it ends. `GET /api/platform/podcast-clips` served 26 clips for 11 stories on 2026-11-16. Automatic matching: removed (CI run 43804540972) |
+| Headline "failed search" stories | known defect | problem `paper-publishes-stories-whose-headline-is-a-failed-search-2026-11-16` |
+| Hourly status | built | `scripts/status-hourly` (paper usage plus storage, one line); its search count is wrong |
 
-**Live:** the actor runtime is fully wired and is the *only* execution
-substrate — the `dispatchActor` hook panics if nil, with no legacy fallback
-path; cold-start, coagent wake, cancel, park-resume, and the tool loop all run
-through the actor; warm delivery is a Go channel, not DB polling (H030
-repaired). The live business-logic layer (tool loops, texture state machine,
-wire synthesis, run memory) lives in `internal/agentcore`,
-`internal/textureowner`, and `internal/coagentowner`, with the actor runtime
-substrate in `internal/actorruntime` and `internal/actor`. **Retired (residue
-still in tree):** parent/child run control and RunContinuations are named
-heresies (H001–H008). They have no current execution assignment and must
-receive no new callers; any future mutation requires explicit active-Definition
-authority.
+## 5. Autoradio server (checked 2026-11-16)
 
-| Term | Meaning |
+| Part | Status | Proof and where |
+|---|---|---|
+| `POST /api/autoradio/turns` | proven | Contract `docs/reference/AUTORADIO-TURNS.md` (its line-3 status is stale). Staging 2026-11-11: first speech median 1.37 s over 10 asks, all answered by the Bedrock fallback (ledger C51). Code `agentcore/api_autoradio.go` |
+| Turns: queue ops | proven on d@e | 2026-11-16 03:30Z: "put the long read next" moved the right entry 3 of 3; "what's coming up" changed nothing (overnight report) |
+| `POST /api/autoradio/programme` | proven | ledger C98 settled true 2026-11-15; clips: 3 of 15 segments on d@e 2026-11-16 (`prove-programme-clips.py`) |
+| Queue package | built | `internal/autoradioqueue`: structure, bounds, reducer, stream cut; driven from model JSON, not from a cell |
+| River model | unknown | Not registered on the gateway as of 2026-11-15 (RIVER.md section 5; owner act). Settle by a gateway log of a `river` call |
+| Forecast claims per segment | proven | agent `autoradio-dj`, `p_heard`, `caused_by` (C95, C98) |
+| Not built (from `design/autoradio-dj-programme-2026-11-11.md`) | specified | slice 3 mail headers; slice 4 air log and `/api/autoradio/heard`; slice 5 hand-offs and the `go` cell with Cast and Ask; slice 6 station and write-ahead; slice 7 podcast notes. Learning engine settlement (outcomes, lessons, trust): no route |
+| Not built (from `design/autoradio-queue-desk-2026-11-15.md` section 6) | specified | the `autoradio.queue` cell module; `queue` on the programme route; a server copy of the queue; claims for reorders |
+
+## 6. Autoradio phone app (checked 2026-11-16)
+
+Code `mobile/AutoradioKit` on `origin/lane/autoradio-qa` (not on main). Installed build: tip `3f11437d3`, installed
+2026-11-16 08:40Z; Kit suite 862 tests, 0 failures; rollback build `1ec3b7b1c`; lab profile expires 2026-11-17 21:49Z (overnight
+report). Everything below is **built** unless marked; none of it has been heard by the owner as of that report.
+
+**What plays next, in the order skip and end-of-item consult.**
+1. `PlayQueue` (`PlayQueue.swift`): the explicit queue of stories, pages, documents, audio and clips; the DJ's ops and the reader's taps edit it. Its own comment says it is "the only thing that decides what plays next"; the code does not bear that out.
+2. The player's text queue (`LiveAudio.swift` `dequeue()`): texts queued behind the current one (mail's "Read it to me").
+3. The DJ stretch: segments of the programme document; `next()` goes to the next segment, and does nothing on the last.
+4. The paper list snapshot: the order the story came from (the paper's article stack); autoplay and next/previous use it when there is no stretch.
+5. The deck of pages (the card stack): what the reader swipes; separate from play order.
+Fallback: no stretch segment within 8 seconds (or no candidates, 404/503) gives one front-page story; a stretch that ends asks the route once more with cause `extend`.
+
+**Voice: exactly which models, and what runs.** Default configuration `ChoirApp.listenerConfiguration`:
+
+| Job | Default | On-device model | Measured on the owner's phone |
+|---|---|---|---|
+| Speech start and end | energy detector (`energy-vad`), turn policy from Mike's engine (`Voice/TurnPolicy`) | none by default; Silero VAD (about 1 MB) is registered and in setup's ladder | Silero 0.6 ms per 256 ms hop, 106 MB (A16, before the 2026-11-15 ruling) |
+| Transcription | Apple's recogniser (`apple-speech`) | Parakeet EOU 120M / TDT 0.6B registered, setup ladder | EOU first load 34 s, RTF 0.035, 149 MB (A16, same caveat) |
+| Quick decisions | the computer's Jev route, one call per turn with every question (`choir-system1`) | Qwen3-0.6B one-token scorer exists (`llama-qwen3-0.6b`) and is not the default | none; ledger C37 and C38 (scorer speed and Jev agreement) were never settled |
+| First spoken answer | holder `saved-answer`: 2 to 3 sentences from the reader's saved stories and books using Qwen3-0.6B Q8 (639 MB, llama.cpp b12259); with no passage above a relevance floor, one holding line and the model is not called; `NO_ANSWER` is allowed | **Qwen3-0.6B, yes** | none recorded. Whether the model is downloaded on the owner's phone: unknown; settle by the trace event `localWarm` or voice setup's record |
+| Speaking voice | catalog default neural voice (Kokoro 82M, "Heart"), system voice while the model is missing | Kokoro; Pocket TTS and Phonon registered | the owner saw a neural voice load and speak via Settings (problem record 2026-11-15, QA round 1); the default was the system voice then |
+| Not in the default path | LFM3-Audio, Smart Turn, wake word, speaker check | registered or sketched only | none; `ON-DEVICE-MODELS.md` sections 1 to 7 are relayed, unverified |
+
+What the on-device language model is given: the system prompt, the page in front (title, kind, text) and the recent lines
+(`LocalAck`), or numbered passages from saved stories (`SavedAnswerHolder`). It is not given the deck, the queue or the play
+history. Plain spoken commands (skip, back, pause, play, "play this next", "add this to the queue", "clear the queue") are matched
+by words, whole utterance only, with no model (`QueueVoice.swift`). Anything else goes to the server turn with the queue.
+Owner ruling 2026-11-15: models under 100 MB may be bundled, larger ones download at onboarding.
+
+**Reader and podcast apps**: built. Podcast lists shows, opens episodes, streams (13 s elapsed of 5.5 min seen in the simulator); the Reader imports books and documents and read-aloud works on the demo sample only.
+**Never heard on a device**: sound, voice and clips; a stretch with clips while signed in; the Reader with the owner's own book; opening a file from another app; captions fetched on the device; hands-free (never spoken to).
+
+## 7. Web desktop (checked 2026-11-16)
+
+Every app is a package (`frontend/src/packages/*`: audio, autopaper, browser, calendar, files, image, mail, podcast, prompt-bar,
+pulse, reader, settings, slides, texture, video and others; the registry has no static rows). Status: proven for the shell and
+Texture (staging). Crash guard (`frontend/src/lib/crash-guard.js`, landed `a43cf5013`): proven in Chromium and WebKit on
+staging, ledger C110 settled true 2026-11-16. A computer serves its own frontend build some minutes after a deploy, so a
+fresh deploy is not immediately what a computer shows: unknown how long; settle by timing one deploy on d@e
+(`docs/memo-per-computer-frontend-2026-08-13.md`).
+
+## 8. Self-development (checked 2026-11-16)
+
+| Part | Status | Detail |
+|---|---|---|
+| Engineering in capsules, builds, apply, rollback | proven (older) | S2 closed 2026-10-05 on a disposable computer; no-reboot apply, six refusal fences, rollback (ACTIVE "Current Mission", `s2-station-terminal-2026-10-05`). Not re-proven after the modular architecture; ACTIVE says self-development was paused 2026-11-04 until wave W8: unknown whether it resumed; settle by one apply on d@e |
+| Host-built release for one computer | built | `scripts/selfdev-promote`, `internal/hostbuild`; staging proof not found for the current build |
+| Prompt-only change on one computer, no platform deploy | partial | The override file and loader exist (section 3). The write route `/api/prompts/<role>` accepts PUT/POST only if `RUNTIME_ENABLE_TEST_APIS` is on (`apihandler/routes.go` line 94); default false, and no nix, script or workflow I read sets it. GET works on deployed computers. Other ways to write the file (the Files app, an engineering capsule) into `PromptRoot`: unknown; settle by writing one on d@e. Model policy overlays are owner files (`System/model-policy-overlays`) and so are changeable without a deploy: built, unproven |
+
+## 9. Operations (checked 2026-11-16; one line each)
+
+- Node B: the staging host (`choir.news`), runs vmctl, gateway, corpusd; disk headroom is the recurring risk (`scripts/status-storage`).
+- Staging is the acceptance environment; verify the deployed commit with `GET https://choir.news/health`.
+- Build VMs: `ssh choir-agents` for builds; one Mac build at a time through the lock (CLAUDE.md).
+- Deploy and expedite: `.github/scripts/node-b-ci-deploy` lists paths that expedite; `Ring-Expedite` trailer on every non-docs landing.
+- Landing: `scripts/land`; gates include `check-jev-entry`, `check-desk-names`, `check-switch-registry`.
+- Review seats: Gemini 4 Hydrogen and DeepSeek v4.1 flash through OMP (CLAUDE.md "Review").
+- Lanes: `lane new <name> --base origin/main` ([reference/LANE.md](reference/LANE.md)); never a bare `git worktree add`.
+- Calibration: `docs/calibration/claude-ledger.md`; proofs cited here come from it.
+
+## 10. Words that mean two things today
+
+| Word | Meanings |
 |---|---|
-| **desk** | a persistent root-RLM actor bound to a profile and a channel; runs yaegi Go cells in a subprocess; never terminates while its subject is live. The four desks are `management`, `engineering`, `research`, `texture`. |
-| **root RLM** | the desk's cell loop is the actor; sub-RLMs are per-assignment runs the desk casts. |
-| **actor** | an agent as a durable actor: goroutine + mailbox while resident; idempotent update log + compacted memory snapshot while passivated. Actors never "complete" — they passivate and re-warm. |
-| **activation** | one residency: wake → work (possibly hours, many compactions) → passivate. Bounded by budgets and eviction. |
-| **semantic act** | the desk-to-desk communication primitive: in-cell `choir.*` functions (`Cast`, `Report`, `Ask`, `Precommit`, `Resolve`, `Cancel`, `Escalate`, `Note`, plus engineering's `Complete`/`Freeze`/`Verify`). One transport/provenance envelope, two record semantics (operational vs epistemic). |
-| **cast** | async admission between actors. *Owner-cast* (owner revision admits work — kept) and *delegated cast* (a desk's staged `choir.Cast` admits work — new admission authority). |
-| **commitment** | a typed claim with resolver and deadline on the ledger; resolves to an outcome; accrues to the desk's score. |
-| **assignment** | the durable work record a cast opens. The fate saga (freeze/revoke/destroy/record) survives as host machinery. |
-| **mailbox** | the in-memory delivery vehicle for a resident actor. Never the truth — always rebuildable from the log. |
-| **sweep** | the recovery rule: any non-resident agent with unprocessed backlog is activation-eligible. Covers boot, crash windows, post-eviction re-wake. |
-| **trajectory** | the causality object: durable record with kind, subject refs, and an explicit settlement rule (data, not code). Replaces parent/child trees as the control model. |
-| **work item** | a durable assignment on a trajectory: objective, authority envelope, fingerprint-deduped. |
-| **settlement** | a trajectory's goal closure, earned by its rule. Replaces root-run completion as liveness truth. |
-| **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
-| **authority envelope** | a code-enforced profile boundary. Management orchestrates but cannot mutate directly; engineering effects are capsule-broker verbs; research has read/search plus message authority. |
-| **capsule** | an ephemeral guest-local effect chamber. The accepted live boundaries are audited ComputerVersion construction and the generic durable-work kernel; no current Definition authorizes capsule, updater, checkpoint, or route effects. |
-| **computer event / acceptance** | the canonical per-ComputerID causal and state-transition record. A frozen bundle remains inert until an authorized acceptance event; updater, checkpoint, and route are projections, not alternate promotion authorities. |
-| **conjecture / hyperthesis / assertion** | the epistemic vocabulary: a claim under test with a named blind edge and scope; an assertion is a supported conjecture with receipts; heresy is a circulating claim whose proof died. |
-
-Retired vocabulary: **"continuation"** (named two unrelated mechanisms; both
-are replaced — work items and warm steering). **Parent/child as control**
-(provenance-only edge remains). **"Channel"** unqualified — say *mailbox* for
-delivery, *document/trajectory channel* for the product surface, *Go channel*
-for the primitive. **"Autoputer" as product ontology** — the product object is a
-persistent computer (code/service rename deferred). **`super`/`cosuper`/
-`researcher` as live role names** — the live profile values are
-`management`/`engineering`/`research`; `update_coagent` and `assign_co_super`
-are deleted for the four desks; `actuator=tools` is retired in favor of the
-yaegi-cell carrier. Durable vocabulary (`co_super_assignment_*` event kinds,
-OG kinds, SQL tables, the `choir:co-super-assignment:v3` identity seed) remains
-old pending the stratum-B migration — renaming the identity seed breaks replay.
-
-The self-improvement frame (one promotion discipline at every grain):
-
-| Level | Scope | Candidate | Verifier | Acceptance / application |
-|---|---|---|---|---|
-| 1. Improvement in the small | Texture media content | draft revision | citation checks, review, rubrics | revision becomes current |
-| 2. Self-development | Choir's own guest code and typed state | frozen capsule effect bundle at a base event head | independent read-only capsule plus declared receipts | acceptance event → guest materialization → checkpoint → vmctl route projection |
-| 3. Meta-learning | the conjecture discipline itself | docs branch / one-mission trial | did action/evidence/scope/stopping change | owner-ratified doctrine/Definition update |
-
-Same five-tuple at every level: `(CLAIM, TEST, HYPERTHESIS_EDGE, ΔO, SCOPE)`.
-Level N changes are admitted by gates at level N+1 — self-reference without
-gates is the named anti-pattern.
-
-## Current Reality
-
-Choir is a durable learning control system over versioned artifacts. The web
-desktop is the current general-purpose projection of that substrate, not the
-whole ontology. Read [choir-doctrine.md](choir-doctrine.md) for the higher-level
-frame and [semantic-registry.md](semantic-registry.md) for current vocabulary.
-
-The Automatic Computer already exists in deployed form: a web desktop, backend
-services, appagents, and NixOS-on-NixOS VM infrastructure. A native macOS app
-(Wails v3) wraps the web desktop with `ASWebAuthenticationSession` for passkey
-auth, transparent title bar, and cloud-mode-by-default. See
-[cmd/desktop/README.md](../cmd/desktop/README.md).
-The product object is a persistent user **computer**, not a disposable autoputer.
-The current work is not to invent the product from scratch. The current work is
-to stabilize the deployed system around the right causal model.
-
-Choir is not retired chat and not a generic coding-agent runner. The visible
-product is a web desktop with apps. Some apps grow into appagents; most apps can
-remain plain display/control surfaces. The hidden product machinery is a dark
-factory of desks, sub-RLMs, capsules, events, evidence, artifacts, document
-versions, checkpoints, projections, and eventually publications, radio
-traversals, and citation/economic state.
-
-The operating stance is staging-first. Meaningful claims about vmctl, gateway
-credentials, live model/search calls, lifecycle, event acceptance,
-materialization, checkpoint/route projection, rollback, auth/session renewal,
-and Choir-in-Choir require commit, push, CI, deployment, exact staging build
-identity, and product-path proof on `https://choir.news`. Local development
-remains useful for focused unit shaping, but local proof does not establish
-product readiness.
-
-This staging-first rule applies to platform behavior and shared runtime claims.
-The self-development target is one long-lived, reconstructible computer:
-engineering work executes only inside a capability-bound guest capsule; the
-resulting effect bundle is independently verified and remains inert until an
-external, ComputerID-scoped approval appends an acceptance event. A root guest
-updater then stages and health-checks the release, publishes a reconstruction
-checkpoint, and asks vmctl to project the accepted checkpoint into the route.
-No candidate VM, mutable branch, host daemon, AppAdoption/lineage record, raw
-vmctl, SSH, or internal API is part of that product path.
-
-The current platform architecture is stable source and reconstructible
-computers. Read [computer-ontology.md](computer-ontology.md) before changing
-events, source lineage, guest releases, checkpoints, routes, or lifecycle. The
-short version is:
-
-```text
-platform substrate changes -> GitHub main -> CI -> NixOS deploy
-computer semantic change   -> canonical event -> guest materialization
-served checkpoint change   -> applied event -> ComputerVersion -> vmctl route CAS
-cross-computer sharing      -> typed publication protocol, separate from self-development
-new-user default image     -> official platform construction inputs
-private public surface     -> selected route projection, not whole-computer exposure
-```
-
-The current cloud vocabulary matters for source/news work:
-
-- the **Choir Community Cloud** is the public/shared deployment;
-- a **Private Choir Cloud** is a customer-controlled NixOS host or host cluster
-  with platform computer(s), many user computers, private source systems, and
-  optional publication/subscription links;
-- **Wire** is the reusable source-to-Texture substrate;
-- **Autopaper** (formerly the World Wire) is platform-level work in the Community Cloud, not a
-  user-computer feature;
-- personalization is user-computer work over accessible public/private corpora.
-
-## Service Topology
-
-The current codebase/deployable topology is one product split across a small
-number of host services and per-computer runtimes:
-
-```text
-browser
-  -> Caddy edge
-    -> auth service for WebAuthn/session lifecycle
-    -> proxy service for authenticated product API routing
-      -> user's resolved computer runtime
-    -> platform publication read routes where safe
-
-host services
-  -> vmctl owns computer lifecycle, warmness, hibernation, and reclaim policy
-  -> gateway owns provider credentials and provider request mediation
-  -> corpusd owns platform/public publication ledger writes
-  -> maild owns email ingress/drafts/notifications where configured
-
-platform computer runtime
-  -> cloud-level desks and source/publication agents where present
-  -> cloud-owned Wire artifacts, editions, indexes, and agent notebooks
-  -> cloud-owned source/publication state that is semantic product state
-
-per-user computer runtime
-  -> owner revision on a bound document is the input event
-  -> app surfaces project durable state
-  -> appagents own canonical semantic artifacts when needed
-  -> desk actors and capsule-scoped sub-RLMs create evidence; capsule effects remain inert candidates
-  -> guest SQLite (state.db) owns private computer product state, rebuilt from the tape by replay
-```
-
-Important boundary rules:
-
-- Caddy is edge/static routing infrastructure, not semantic authority.
-- The browser talks to product APIs, not raw agent, prompt, event, vmctl, database,
-  provider, or platform-internal mutation endpoints.
-- `auth`, `proxy`, `gateway`, `vmctl`, `corpusd`, and `maild`
-  are host/platform or sidecar services in the current codebase. They should
-  stay narrow and should not become private document, appagent, or user-computer
-  semantic owners.
-- The per-user computer runtime is where private Texture, appagent, Trace, run
-  memory, app state, source metadata, canonical event projections, and inert
-  capsule-proposal metadata live.
-- Platform-level semantic work, such as Autopaper article/edition Textures and
-  public source synthesis, should be scoped to platform computer authority even
-  when host daemons perform serving, lifecycle, or adapter work.
-- Provider secrets stay in the gateway/platform boundary. Per-computer model
-  policy chooses among platform-declared capabilities without copying secrets
-  into user state.
-- VM/computer lifecycle state is product-facing only through redacted,
-  authenticated product APIs. Browser-public raw `vmctl` is not a product
-  surface.
-- Platform publication receives selected public/private projections. It never
-  gains write authority over the live private source document.
-
-This topology supersedes older architecture sketches that described a generic
-local-first multiagent runtime, shared scheduler, or broad autoputer-owned "OS
-layer" as the product ontology. The product object is the persistent computer;
-`autoputer` remains an implementation/service name.
-
-Run acceptance records are historical evidence projections. Self-development
-acceptance remains separately defined by canonical computer events, frozen
-capsule bundles, verifier/materialization receipts, checkpoints, route
-certificates, and a future owner-ratified Definition's deployed gate.
-
-Per-user runtime/control product tables and Texture tables live in one
-SQLite database (`state.db`) on the user computer's own disk. It is a
-projection of the computer's tape, rebuilt by replay; a lost disk was rebuilt
-from the host alone on 2026-10-30. Host auth/session state remains host-owned,
-in the control database. (The earlier embedded Dolt workspace was deleted in
-the 2026-10-30 data system cutover.)
-
-Runtime model selection is policy-driven. Provider secrets and the platform
-model catalog are platform-owned, but the effective model policy for a user
-computer is computer-owned durable state. The platform may ship default role
-mappings, such as ChatGPT for a foreground role or Fireworks-hosted DeepSeek/Kimi
-for another, but those mappings are not architectural boundaries. Any configured
-model may serve a desk, verifier, or future production role when its declared
-capabilities match the current turn. Text-only models can run orchestration,
-research, coding, writing, and text/code/evidence verification. Multimodal
-models are required only for turns that actually need screenshots, images,
-video frames, uploaded files, or other media input. The target architecture is
-a hierarchy of platform catalog -> platform defaults -> per-computer policy ->
-per-run/task override -> modality requirement, with owner and management-desk
-edits flowing through product state rather than Node B config patches.
-
-Platform publication now has a first service boundary. A host-side `corpusd`
-service writes to the graph database on the host's PostgreSQL and owns
-platform-visible publication, route, artifact manifest/blob, retrieval source/
-span, citation edge, provenance, consent/review, verifier, and rollback rows.
-The browser never talks to a database. A signed-in user calls the proxy product API to
-publish a Texture; the proxy reads the head revision and the full revision chain
-from the user's resolved computer and submits the public projection plus a
-canonical `version_history` manifest — per-revision content/citations/typed
-provenance and a content-addressed hash chain — to `corpusd`. A published
-Texture IS its full versioned history, not only the head projection; the
-manifest is the signable spine a reader/verifier can independently replay and
-check. Public published snapshots now resolve through the Svelte Choir
-shell and Texture app at the current `/pub/texture/...` compatibility route
-(`texture-cutover-allow:` public route shim; deletion receipt:
-`texture-hard-cutover-v0`): signed-out visitors get a guest read-only Texture
-surface, signed-in users can create private derivatives and proposals, and proxy
-read APIs fetch sanitized publication bundles from internal-only `corpusd`
-endpoints. Platform services still never gain write access to the live private
-document.
-
-For the current contract covering external source ingestion, source cleaning,
-Texture source metadata, transclusion, publication policy, and export, read
-[source-external-data-publication.md](source-external-data-publication.md).
-
-## Implemented Foundations And Active Hardening
-
-This section separates code-present foundations from remaining hardening. It is
-not a backlog of things that do not exist.
-
-Code-present/current foundations:
-
-1. Public and signed-out desktop surfaces exist, and mutable paths are expected
-   to cross an auth boundary before continuing through an owned computer. Treat
-   individual public/auth-on-mutation journeys as staging-proof-sensitive.
-2. Prompt bar, Texture documents/revisions/history/export, durable
-   runs/trajectories, Trace projections, computer events, guest-local capsules,
-   self-development operations, checkpoints, and route projections form the
-   current source-level product surface. Effects remain default-off; no current
-   Definition authorizes deployed self-development activation.
-3. Texture already has deterministic backend coverage for document creation,
-   revisions, user edits, delegated update integration, stale-result protection,
-   source entities, source repairs, attachments, diagnosis, import, export,
-   blame, diff, and history.
-4. URL/content ingestion, content items, podcast routes, Web Lens/browser-session
-   implementation state, PDF, EPUB, image, audio, video, and
-   ContentViewer-style source surfaces exist at varying quality levels. Current
-   app state is tracked in
-   [platform-os-app-state.md](platform-os-app-state.md).
-5. Platform publication has `corpusd`, proxy publish/read APIs, public
-   `/pub/texture/...` compatibility routes (`texture-cutover-allow:` public
-   route shim; deletion receipt: `texture-hard-cutover-v0`), sanitized
-   publication bundles, export, retrieval search, proposal delivery state, and
-   private-derivative/proposal flows.
-6. The source substrate is captures: the source schedule
-   (`internal/agentcore/source_schedule.go`) polls registry sources
-   (`internal/sources`) into shared block-document captures in the graph database
-   behind `corpusd` (`internal/sourcegraph`, `internal/sourcefetch`), and
-   research reads pages into captures with `choir.Read`. The sourcecycled
-   daemon, `internal/cycle` and research's `source_search` were deleted in
-   Cut 2 unit 2b. Texture can still render legacy
-   `source_service_item:<id>` refs, but there is not yet a user-facing Wire
-   app over an edition Texture, subscription/event stream, or newsletter
-   pipeline.
-
-Active hardening:
-
-1. Keep public desktop and auth-on-mutation verified on staging as the source
-   system changes land.
-2. Make Texture/desk/owner edit flows smoother, more observable, and less
-   dependent on timing luck, while preserving the two writer classes
-   (`AuthorUser` owner edits with immediate canonical-head CAS; `AuthorAppAgent`
-   Texture as sole agent writer) and the machine-verifiable revision contract.
-3. Turn source/Wire from substrate into a prominent Wire product surface with
-   real edition Textures, userland personalization, and later newsletter and
-   radio-queue projections.
-4. Harden publication UX and review: retraction, supersession, route
-   management, richer review evidence, export polish, and proposal
-   inbox/acceptance flows.
-5. Deepen Pretext-based responsive rendering and transclusion for published
-   `texture`, computational essays, evidence reports, and web content.
-6. Add richer citation mechanics.
-
-Target-only direction:
-
-1. CHIPS and citation/compute economics.
-2. Choir Base/File Provider sync and native desktop surfaces.
-3. Radio, voice input/output, watch-first screenless control, and native mobile
-   radio/control apps.
-
-Later layers should shape today's data model, but they should not be built in a
-way that weakens the existing Texture/source/publication contract.
-
-## Product Loop
-
-The current intended core loop is:
-
-```text
-owner revision -> texture desk -> management desk -> engineering desk (cast)
-  -> capsule-bound sub-RLM cells -> commitment ledger -> texture revisions
-```
-
-Then:
-
-```text
-selected private versions/artifacts -> publication -> citation graph
-```
-
-Then:
-
-```text
-citations + compute accounting -> CHIPS economics
-```
-
-## Texture Contract
-
-`texture` is the first appagent and the version-native control plane. It replaces
-retired chat as the main surface for multiagent work.
-
-The target shape of `texture` is hypermedia, not flat text. A `texture` should be
-able to become a computational essay or owner-readable campaign/report packet:
-prose plus typed snippets for images, audio, podcasts, video, web captures,
-PDF/EPUB excerpts, code diffs, interactive graphics, animations, Trace excerpts,
-run-acceptance records, app-change packages, candidate demo videos, sources,
-and nested Textures. Those snippets are durable artifact references with layout
-intent, provenance, and expansion targets, not pasted browser-local state.
-
-Pretext is the preferred layout primitive for this direction: use it for
-accurate multiline text measurement, responsive text flow, rich inline
-measurement, magazine-style columns, and text wrapping around embedded objects.
-Pretext should not become the Texture data model or a replacement for app
-ownership. Choir owns the semantic block/snippet model; Pretext helps render
-that model with stable responsive geometry.
-
-Every embedded snippet should have two forms:
-
-- an inline or embedded form that reads naturally in the Texture flow;
-- an expanded form that opens the owning desktop app/window without losing the
-  reader's place in the Texture.
-
-For example, an embedded video expands into the Video app, a podcast excerpt
-expands into Podcast, a PDF source excerpt expands into PDF, an image expands
-into Image, trace evidence expands into an evidence artifact or Super Console
-diagnosis path, and an embedded Texture expands into another Texture window. This
-preserves app boundaries while making Texture the composition and reentry surface.
-
-The multi-window desktop is part of the reading model. Sources, demos, and
-media should be worth opening because opening them does not destroy the current
-reading context. A user reading a computational essay can click through a
-source, inspect an animation or candidate demo, play a clip, or compare another
-Texture in a new window, then return to the same place in the essay.
-
-The canonical example is an article that is also a computational essay. The
-user should be able to ask Choir to make an article that combines argument,
-sources, interactive graphics, animations, multimedia clips, generated or
-uploaded media, and reviewable evidence. The generated Texture should not flatten
-those materials into links at the bottom. It should arrange them as readable
-snippets in the essay, with sources and media tempting enough to open because
-the desktop preserves context. Clicking a source opens Source Viewer by default;
-explicit live/original inspection opens Web Lens; clicking a graphic opens the
-owning interactive app or viewer; clicking a nested argument opens another
-Texture; clicking a candidate demo opens the review/approval context. This is one
-reason Texture must stay a composition surface over typed artifacts instead of
-becoming a monolithic media app.
-
-Not every app is an appagent. Apps can be simple desktop surfaces. An app becomes
-an appagent when it needs durable domain ownership, prompts, or dynamic agentic
-UI. Likely sequence: `texture` first, then source/Web Lens ownership if it needs
-durable domain agency, then mail, then calendar.
-Trace is no longer a product app direction. Trace remains evidence: structured
-events, unified logs, run bundles, acceptance records, and diagnosis artifacts.
-Humans should not be expected to browse a retired Trace app to debug Choir.
-
-A `texture` version is a canonical document state:
-
-- `v0` is the initial user input. For prompt-bar flow this is the raw owner
-  prompt; for direct Texture editing this is the user-authored document body.
-- `v1` is Texture's first response to `v0`, created through the Texture edit
-  path. It may be a draft/seed, an acknowledgement, a work-state revision, a
-  blocker, or a substantive edit depending on the request.
-- `v2+` are user edits and later Texture-authored revisions.
-
-Owner input is the document revision itself (M1): the owner edit is the
-canonical `AuthorUser` head-CAS event, and no separate tell/instruction channel
-exists. Texture owns `v1` and every subsequent agent-authored version
-(`AuthorAppAgent`). Every revision is a monotonic, self-contained snapshot of
-current semantic state; owner edits remain immediate `AuthorUser` head-CAS
-versions at any time, and prior versions are never required context for acting
-on the current head.
-
-For existing user-authored Texture documents, the current user revision is
-already canonical document state. A follow-up owner request should not force a
-trivial cleanup patch before Texture can delegate, wait, or reason. If Texture
-needs background work, the next revision should honestly represent that work
-state instead of hiding it in Trace.
-
-The target Texture loop is deliberately small:
-
-```text
-owner revision (v0) -> Texture writes v1 response
-  -> Texture casts/reports to desks through semantic acts when needed
-  -> desks reply with durable reports/evidence and resolved commitments
-  -> Texture wakes and writes the next version
-```
-
-The complexity should live in durable desk-to-desk communication and evidence,
-not in prompt taxonomies, conductor-authored drafts, tool-choice classifiers, or
-hidden workflow state machines.
-
-Desks do not send patches to `texture`. That mixes concerns. Desks emit
-reports: findings, evidence, source references, artifact refs, branch/commit
-refs, preview refs, test results, questions, constraints, or proposal summaries.
-The `texture` appagent/writer decides whether and how those reports become a new
-document version.
-
-For candidate coding work and human approval, the default owner-review artifact
-should be video-first when the behavior is visual or temporal. A candidate
-approval Texture should embed a short demo video when available, then provide the
-summary, package/diff refs, verifier status, rollback path, risks, and links to
-evidence bundles or run acceptance. Diffs and logs are still important, but
-they should not be the only human proof for interactive product behavior.
-
-The first implementation can create a new `texture` revision after each meaningful
-desk report. That policy should be isolated so it can later debounce, batch, or
-delay revisions when the user is not attending the latest version. Correctness
-must not depend on the debounce policy.
-
-The UI should show current document state for each version, not a temporal feed
-of agent status updates. A single user prompt may produce many versions: tens
-now, hundreds soon, eventually thousands.
-
-## Machine-Verifiable Texture
-
-The hardest near-term problem is verification. The core behavior should be
-testable without real providers, browsers, or timing luck.
-
-Required deterministic tests:
-
-- Prompt creation produces one document with `v0` owner prompt/user input and a
-  started Texture writer run.
-- Texture creates `v1` through the same Texture edit path used for later appagent
-  revisions; no other agent can create appagent-authored document text.
-- Owner-triggered work that cannot complete immediately produces an honest
-  acknowledgement/work-state revision instead of a trivial instruction cleanup.
-- User edits always create user-authored versions.
-- Desk reports are durably attached to the document trajectory.
-- A `texture` revision records which desk reports it consumed, skipped, or left
-  pending.
-- A stale desk result cannot overwrite or erase a later user-authored version.
-- User edits redirect future synthesis.
-- Unified logs/evidence can explain owner revision -> texture -> desk
-  report -> version during development/debugging.
-
-Browser/e2e tests should verify integration, but the product contract should be
-proven by deterministic backend/API tests with fake providers, fake workers, and
-a fake clock.
-
-## Desk Roles
-
-Four desks are persistent root RLMs. Each runs yaegi Go cells in a killable
-subprocess and exposes a desk-specific `choir` module surface. Sub-RLMs are
-per-assignment runs a desk casts.
-
-`texture` is the sole *agent* writer (`AuthorAppAgent`) for canonical document
-versions and the delegated controller for the trajectory; the owner is the
-separate `AuthorUser` writer class with immediate canonical-head CAS. Texture
-synthesizes owner edits and material desk reports into durable, idea-level
-state; judges that state against the objective; and sends revised direction to
-management or research. One Texture actor may write many versions between owner
-reads. A semantic-changing Texture turn produces exactly one new version;
-wait/block/no-change turns produce none.
-
-`management` is exactly one per computer: the whole-computer coherence,
-error-correction, and resource-arbitration authority — not a concurrency
-limiter. It sees every document's state, holds delegated `Cast` admission into
-engineering, inspects evidence, requests verification, and escalates to the
-owner. It cannot mutate the document or the computer directly.
-
-`engineering` performs mutation only through capsule-bound sub-RLM cells. Its
-effect verbs are `Complete`/`Freeze`/`Verify`; implementation-slot shell,
-filesystem, and build effects occur only through a capability-bound guest-local
-capsule broker. Neither the desk nor its sub-RLMs receive direct core-VM
-mutation or host authority.
-
-`research` reads local files and the web, then asserts findings/evidence through
-`Report`. Its production registry excludes bash, raw database access, writable files,
-capsule commit, acceptance, route, and host authority. Its current read-only
-scope cannot message — a policy redesign is needed for full message authority.
-
-`app` means a user-facing desktop surface. An app does not have to be an
-appagent.
-
-`appagent` means a user-facing app with durable domain ownership, usually because
-it needs prompts, dynamic behavior, or canonical state. Appagents mutate their
-own typed app state through product APIs. They do not get broad shell or
-arbitrary filesystem mutation by default.
-
-**Target (owner re-visioning 2026-07-31):** `appagent` is not desktop-bound.
-An appagent is a durable entity that (a) has its own subapi, (b) can access
-shared system resources under explicit auth, and (c) is a projection of the
-audit log. Agents — external agents such as codex, other Choir threads, and the
-owner — drive the operating computer through the Choir api/cli; multiple agent
-threads and the logged-in owner observe or interact with the same computer
-given credentials. The web desktop is one projection of the substrate, not the
-ontology. Supervision advances a texture to a new version per semantic state
-update; the tape (command digests, `ReducerSeq`, replay cursor, signed
-`computerevent` chain) is primary, and the object graph, checkpoints,
-snapshots, and UI surfaces are materialized projections maintained by
-deterministic reducers. See
-[why-texture](why-texture-2026-06-15.md) and the
-[vision re-visioning](archive/vision-choir-category-texture-transclusion-v0.md).
-
-Every desktop app that has user-visible view state must participate in the
-shared app-state protocol. The shell owns a universal `app_context` persistence
-path for each window: apps hydrate from the context they receive, emit typed
-context/state changes back to the shell, and the shell saves that state through
-the server-backed desktop API. Folder selection, selected document/message,
-reader position, media source identity, proposal review selection, and similar
-view state must not live only in browser component variables. Per-app code can
-define the shape of its typed context, but persistence and reload semantics must
-use the universal shell/API path.
-
-`worker VM`, `background computer`, and `candidate VM` are obsolete product
-concepts. Their product authority is retired, but canonical-main code residue
-remains unclaimed pending inventory; rejected-branch deletion is not a landed
-claim. Generic delegated agents remain durable runs/trajectories and may perform
-effects only through a separately accepted capsule path.
-
-`processor`, `reconciler`, and `conductor` are deferred roles: processor and
-reconciler were Autopaper (World Wire) roles and were deleted by the 2026-10-05
-rearchitecture; conductor is superseded by the four desks. This paragraph is
-kept only as history of the rectification scope.
-
-### Supervision Boundary And Current Gap
-
-Supervision is not a separate protocol-health layer or actor hierarchy. Texture
-is the delegated supervisory control loop: it maintains the current semantic
-state, receives material desk reports as the trajectory advances, writes a new
-immutable version when that state changes, and sends revised direction back to
-management or research. Management supervises execution and verification;
-engineering sub-RLMs return capability-bounded work and evidence. The owner may
-read only occasionally and can correct the current head without approving every
-intermediate version. The durable-work kernel, semantic acts, trajectories,
-work items, Trace, settlement queries, and canonical events are substrate, not
-another supervisor.
-
-The complete bidirectional product loop is not currently accepted live
-behavior. The engineering-bound document has no live `AuthorAppAgent` writer:
-owner revisions trigger host reconcile and open the assignment directly, but
-nothing writes a revision back, so the owner sees only their own last edit.
-Effects also remain OFF, and no current goal file authorizes
-capsule/self-development effects. The desk-RLM rectification sequence (R0–R5 in
-`ACTIVE.md`, planned in
-[desk-rlm-rectification-plan-2026-09-23.md](archive/desk-rlm-rectification-plan-2026-09-23.md))
-closes this gap: persistent root desks, the semantic-act surface, delegated
-cast, the commitment ledger, and Texture's editorial projection of the ledger
-into revisions. The bounded supervision contract it must satisfy —
-computer-scoped arrival ordinals, FIFO among non-expired requests, request
-expiry and assignment deadlines, retryable admission refusal, and N concurrent
-assignments under an admission-ledger overcommit factor — is carried in the
-rectification plan and the supervision architecture doc.
-
-## Computer Model
-
-The product noun is **computer**. A computer is a persistent user-owned
-machine-world composed from VM/runtime state, SQLite app state, source/build
-state, content blobs, artifact provenance, and route identity. See
-[computer-ontology.md](computer-ontology.md).
-
-The implementation may back a computer with a Firecracker VM, NixOS image,
-host-process fallback, worktree, or later substrate. The user-facing object is
-still the computer.
-
-VM-backed computer realizations follow a typed warmness policy, not a single
-idle timeout. Ordinary primary computers stay warm while capacity allows;
-configured always-on primary computers have an explicit protected/resume lane.
-Delegated agents are durable runs, not worker computers, and speculative
-self-development effects are inert bundles, not hibernating computers.
-
-`computer`:
-
-- The durable user-facing object identified by stable ComputerID plus canonical
-  event chain.
-- Hosts visible desktop/apps and typed guest-store (SQLite) state through a replaceable
-  realization.
-- May diverge from the platform baseline.
-- Is reconstructed from immutable events, receipts, releases, checkpoints, and
-  artifacts without model/tool/network rerun.
-- Is not edited directly by a desk, a repair console, or host tools.
-
-`realization`:
-
-- Replaceable VM/OS/runtime machine state serving one ComputerID.
-- May be stopped, restarted, or reconstructed; it is never a speculative
-  candidate or semantic authority.
-- Contains root-owned guest updater and credential services outside agent and
-  capsule processes.
-
-`capsule_effect_bundle`:
-
-- The only self-development candidate.
-- Frozen, content-addressed effects from one capability-bound capsule at an
-  exact base event head.
-- Remains inert until independent verification and scoped acceptance.
-- Is discarded, rejected, applied, or retained as audit; it is never a VM,
-  desktop, mutable branch, package, lineage record, or route.
-
-`worker_vm`, `background_computer`, `candidate_vm`, and `candidate_computer` as
-forked machine/computer concepts are retired. Their lifecycle, controller,
-tool, profile, prompt, API, configuration, and fallback code is deleted. Generic
-delegated agents are durable runs/trajectories and use capsules for effects.
-
-`platform_vm_pool`:
-
-- A platform-level pool for public/unauthenticated and shared serving work.
-- Needed during the publication pass so published `texture` artifacts can be
-  served without hydrating a user's private active computer.
-- Can host publication readers, public previews, cached renderers, and other
-  platform-visible app surfaces.
-- Is infrastructure for public serving, not a user or speculative computer.
-
-## Public Identity And Routing
-
-Public viewing and mutation authority are separate.
-
-```text
-choir.news              -> public platform computer surface
-choir.news/:handle      -> public user-selected handle surface
-custom-domain.example     -> verified alias to a selected public surface
-```
-
-Handles are chosen product identities, not privileged account names. A user may
-have multiple accounts during testing, and no account receives a special route
-because of who owns it. Custom domains are a roadmap value proposition: after a
-domain owner proves control, the domain can serve the same published personal
-desktop/newspaper surface that would otherwise live under `choir.news/:handle`.
-
-Anonymous users may inspect public surfaces. Mutation requires authentication
-and an explicit target computer plus scoped authority. Self-development then
-uses proposal, event acceptance, guest materialization, checkpoint, and route
-projection; it never mutates the platform computer anonymously.
-
-This section is the current authority for the public-identity roadmap target.
-
-### Routing Invariants
-
-- **Route-over-ComputerVersion (H031):** no product route resolves to a VM or
-  desktop instance identity. Routes point at `ComputerVersion = (CodeRef,
-  ArtifactProgramRef)` records. Audited construction completed the production
-  D-ROUTE cutover and proved 150 route/ownership/version/disk joins after
-  restart. Backend, device, geometry, and disk receipts remain separate
-  realization evidence. The removed direct-file resolver is historical; any
-  regression or further route mutation requires separate promoted authority.
-- **Timeout hardening (I3):** `vmctl.Client` and `DefaultVmctlTimeout` default to
-  60s, `internal/server/server.go` sets `ReadTimeout`/`WriteTimeout` defaults to
-  120s, and staging `/api/universal-wire/stories` returns a fast 504 within
-  60s for an induced vmctl resolve failure. Bounded path is proven.
-
-## Self-Development And Platform Paths
-
-Computer-local self-development targets one explicit stable `ComputerID`.
-Engineering work executes only in a guest-local capability-bound capsule and
-freezes as an immutable effect bundle. Independent verification and external
-scoped approval append an acceptance event. A root guest updater atomically
-stages, restarts, and health-checks the guest release; only an applied event
-advances effective state. Constructor checkpoint publication and vmctl route
-CAS are subsequent projections with separate receipts.
-
-Rejection preserves the proposal and trajectory without applying it. Rollback
-selects a prior applied event/checkpoint, rematerializes through the updater,
-and retains every event. Concurrent causal observations may append, but any
-changed desired/effective state projection makes an acceptance or rollback
-request stale and refuses it.
-
-Agents do not patch or restart the core VM directly (the Super Console/zot
-repair session was removed 2026-10-22, `docs/problems/remove-zot-2026-10-22.md`).
-Diagnosis and control use supported public APIs/CLI and event/receipt
-inspection. Host access, SSH, raw vmctl, candidate VM, mutable branch,
-AppChangePackage/AppAdoption/lineage, and internal APIs are not repair or
-self-development fallbacks.
-
-Platform source changes remain GitHub main → CI → NixOS deploy → staging proof.
-Shared source/app/publication packages use separate sharing protocols. Neither
-deployment nor package import appends a computer acceptance event merely by
-moving bytes.
-
-## State Placement
-
-Host PostgreSQL plus guest SQLite (data system cutover, 2026-10-30; design:
-[design/choir-data-system-frame-2026-10-30.md](design/choir-data-system-frame-2026-10-30.md)).
-Dolt, Store A, Store B, projection bases, legacy pins and checkpoint JSON are
-deleted.
-
-- **Host PostgreSQL, control database:** accounts, computers, sessions, key
-  escrow, mail, and the host side of the tape receipts (`computer_event_heads`,
-  append/idempotency, key-history, mode, lifecycle, route slots). corpusd
-  mechanically performs authenticated head and platform-control CAS. vmctl
-  alone actuates route-slot CAS. Neither chooses or appends semantic events.
-- **Host PostgreSQL, graph database:** the Autopaper object graph and shared
-  publications.
-- **Guest SQLite (`state.db`):** one database per computer on its own disk,
-  materializing accepted effective app state from the tape. It is never the
-  sole durable event copy or an alternate head/promotion authority. Every
-  capsule sees only its private overlay and broker-approved typed operations,
-  not raw store access. The host keeps no projection bases: a guest recovers
-  from its own sealed snapshots plus the tape tail.
-- **The tape:** each computer's events are appended to the host (pinned, then
-  compare-and-swapped, finalized only after the host's receipt verifies).
-  Sealed tape segments live in the host's platform artifacts. Files sync to
-  the host's file CAS every two minutes when changed. Aged `choir.event`
-  trace/unread kinds leave the working store by a tape op (telemetry
-  retirement, on by default).
-
-The trusted guest `ComputerEventAppender` is the sole semantic writer for one
-ComputerID. Runtime EventRecord, Trace, trajectories, actor logs, run memory,
-reducers, status, checkpoints, routes, and vmctl are projections or actuators.
-Desk reports fate-share the exact guest-store mutation with event CAS; other
-accepted state changes advance desired and effective heads through the declared
-updater state machine.
-
-The guest store materializes desktop/app graph, appagent state, Texture
-versions, prompts/policies, typed findings, local trajectory indexes, and
-publication staging metadata. The canonical causal envelope and immutable
-payload/receipt artifacts remain externally pinned. It has no candidate
-branch, tag-promotion, or destructive-reset authority.
-
-Per-realization filesystems hold release slots, working projections, uploads,
-large media, and caches. Source/build effects and accepted artifacts are pinned
-by digest; runtime caches and opaque machine accidents are not semantic state.
-Texture content remains guest-store (SQLite) authority with optional filesystem
-aliases.
-
-The graph database (the Autopaper object graph) also holds publications, public routes, source/retrieval/
-citation/provenance objects, and public review/control records. Narrow event
-control tables are semantically separate from those objects and from route
-slots. They do not create a third store or grant corpusd semantic authorship.
-
-Two additional stores are code-present but narrower than product authority:
-
-- `internal/actorruntime` maintains a separate SQLite update/snapshot log for
-  durable actor recovery and replay. It is not canonical Texture, trajectory,
-  work-item, route, or promotion truth.
-- Choir Base (`internal/base` and `internal/desktop/fileprovider`) maintains an
-  append-only journal, derived tree, and content-addressed blobs for sync and
-  materialization. Its API helpers are tested but not owned by a deployed
-  product service. Base must not become a competing canonical app-state store
-  without a fresh Definition and explicit reconciliation with the guest store,
-  source/build state, blob state, and `ArtifactProgramRef`.
-
-Do not keep the whole filesystem in git. Source files under a repo belong to the
-source/build ledger. Uploaded files and generated media belong to a
-content-addressed blob ledger with guest-store/artifact metadata. Runtime caches and
-temporary files are machine state unless converted into typed artifacts.
-
-## Messaging And Routing
-
-Use hot-path delivery for live work:
-
-```text
-sender runtime -> channel/queue/transport/relay -> receiver runtime
-```
-
-Use durable records for important handoffs, recovery, replay, audit, and
-provenance:
-
-```text
-append durable handoff -> deliver hot-path payload -> commit effects/events -> ack
-```
-
-Do not implement cross-VM routing as:
-
-```text
-sender writes platform DB -> receiver polls platform DB -> receiver acts
-```
-
-The database is the ledger. It is not the network.
-
-The durable-actor model makes this concrete in the current actor adapter:
-within one runtime, **the database remembers, Go delivers** — sends durably
-append to an idempotent update log, then deliver into a Go-channel mailbox,
-activating the recipient if cold; nothing polls. Across VMs, the
-transactional outbox carries the same semantics over HTTP (at-least-once
-visibility, exactly-once ledger effects). Both protocols are model-checked:
-`specs/actor_protocol.tla`, `specs/actor_protocol_xvm.tla`. The desk-RLM
-target carries the same semantics through the in-cell `choir.*` semantic acts:
-a staged act commits through the reducer, then wakes the recipient desk.
-`channel_messages` + per-turn inbox polling is legacy deletion residue and must
-receive no new callers.
-
-#### Record-native desk delivery (S0m)
-
-The five-kind desk acts (`precommit`, `report`, `resolve`, `disagreement`,
-`ask`) are **record-native**: the commitment record is the single authored
-artifact. An addressed act mints the record and derives its delivery packet
-atomically in one reduce transaction (`CommitLifecycleAct`) — the record is
-the delivery; no channel envelope follows it. `Addressee` is the delivery
-authority. A packet delivery failure therefore degrades to an open, aging
-commitment record (a scored failure), never a silently lost envelope. The
-`channel_message` row is retained only as an ephemeral wake hint to the
-recipient mailbox — it is never persisted as the delivery vehicle and is a
-no-op on `texture:*` targets. Channel mail addressed to `texture:*` rejects
-at reduce time (authority layer), not as a durable dead letter. `choir.ReportPacket` mints
-record-native packets for lifecycle-bound desks (`choir.Message` was deleted, MA1.1);
-the envelope carrier is retired. The retired raw-messaging surface
-(`Message`/`Outcome`/`Spawn` envelope paths, `EscalateActions`,
-controls-inside-`ApplyTexture`) is refused, not bypassed.
-
-## Provider Neutrality
-
-No LLM provider, search provider, or auth-specific model gateway should be
-required by the product architecture. Z.AI, ChatGPT auth, Fireworks, Bedrock, and
-future providers are adapters. Stored records should capture provider/model
-attribution when available, but product behavior should not require one provider.
-
-Model policy is a runtime object, not a deployment decision. The platform model
-catalog records capabilities such as context window, output ceiling, tool use,
-and input modalities. A computer-owned policy chooses defaults for roles and may
-request provider-specific options such as reasoning effort or an explicit
-`max_tokens` budget. The ordinary case should rely on provider defaults where
-that provider behaves better without an explicit maximum; Fireworks-hosted
-DeepSeek V4 Flash/Pro, for example, are text-only models that remain valid for
-coding, research, orchestration, and text-only verification, while Kimi K2.6 or
-another multimodal model is required only when a turn actually includes image or
-media input.
-
-## Publication Sequence
-
-Publication should be forward-compatible without deciding the whole economic
-model now.
-
-Start with private `texture` version history. A publication is an immutable event
-over selected private version/artifact refs. The local VM can continue to
-accumulate unpublished versions after publication.
-
-Reasonable sequence:
-
-1. Manual publish of one selected version/snapshot.
-2. Publish selected ranges or all versions up to version N.
-3. Add redaction/projection before publication.
-4. Add editions: later local versions can become later public versions.
-5. Add collaboration submissions where an author approves or denies proposed
-   changes.
-6. Add paywalls, delayed retired release windows, subscriptions, or author-gated access.
-7. Add CHIPS-mediated incentives and citation economics.
-
-This preserves the purity option of publishing every version without forcing it
-as the first behavior.
-
-## UI And Desktop Principles
-
-The UI should be easy to change. The desktop is the demo of the Automatic
-Computer, not a fixed visual doctrine.
-
-The root product should show the real desktop to signed-out visitors. Login is a
-mutation boundary, not a prerequisite for viewing. Prompt-bar input, file writes,
-LLM-backed actions, capsule-proposal creation, publication, and scoped acceptance
-should trigger auth when needed while preserving the user's current intent.
-
-The prompt bar should react optimistically to user input. Simple version: show a
-loading toast. Better version: animate or expand the prompt into the new `texture`
-window when it opens.
-
-All apps should eventually support true fullscreen, not only maximized windows.
-
-Web Lens currently still carries browser-session implementation names and
-frontend iframe behavior. The product ontology is narrower: durable web-derived
-sources should default to Source Viewer/reader artifacts, and Web Lens is an
-explicit live/original inspection surface reached from a source object. Backend
-browsing work can support Web Lens, source acquisition, and capsule-proposal
-inspection, but it should not reintroduce a manual general browser as the
-primary source-gathering workflow.
-
-Trace should stay out of the default `texture` writing UI and should not remain a
-human-facing product app. Relevant evidence should be available as unified logs,
-run bundles, acceptance records, and diagnosis artifacts that Texture or Super
-Console can open or summarize. The document surface should remain conservative
-and clean for writing, research, publishing, and reading.
-
-## Browser Tooling
-
-Do not replace Playwright just to replace Playwright. Keep it for current e2e and
-auth-profile testing until a replacement is clearly better.
-
-Backend-browser candidates such as Kuri, Lightpanda, or Obscura may be useful
-later for content ingestion, backend browsing, and agent loops. That exploration
-is deferred until the texture verification loop is stable.
-
-## Pretext
-
-Pretext is relevant later as a text rendering/transclusion layer for live
-documents, published `texture`, and embedded web/media content. It should not become
-a blocker for the current verification work.
-
-## What Not To Collapse
-
-Future coding agents should not simplify Choir into:
-
-- retired chat plus a task runner
-- one global agent with tools
-- one active computer that mutable workers freely edit
-- desks patching `texture` text directly
-- the graph database (Autopaper object graph) as a global polling bus
-- provider-specific product behavior
-- publication as a flat export with no version/provenance model
-
-The invariant is simpler:
-
-```text
-versioned living documents + persistent desk RLMs + capsule-scoped effects +
-canonical events + durable provenance + publication/citation readiness
-```
+| queue | the phone's `PlayQueue` (explicit entries); the player's text queue; the paper's list order; ACTIVE.md's "one play queue" means PlayQueue only |
+| deck | the swipeable stack of pages in the app; "the deck" in the owner's voice picture is also what the on-device model should see |
+| programme / program | a DJ stretch (segments from `/programme`); also the document the player is reading (`ProgrammeDocument`), which can be one article |
+| station | one listener's Autoradio (queue plus stretches; one per user); "live station" in ACTIVE.md is a work station |
+| host / DJ | the model voice that writes stretches and turn answers (agent `autoradio-dj`); "host" in ops is Node B, the platform host |
+| desk | a package desk (manifest); a system desk that runs cells; "the Autoradio desk" is the first kind with no cell; a "desk" in the phone code is `ChoirDesk`, the stage that sends a turn to the computer |
+| holder | the phone's first spoken answer stage (`saved-answer`, `local-ack`); not the holdlock package |
+| System 1 | Jev decisions; also the phone's decision stage, which can be Jev or Qwen |
+
+## 11. Known wrong or stale claims in prominent docs (checked 2026-11-16)
+
+- `docs/ACTIVE.md` lines 17 to 18: "one play queue the DJ can edit". Four lists (section 6). Line 48: "Autoradio waits behind both" contradicts lines 12 to 30.
+- `docs/reference/AUTORADIO-TURNS.md` line 3: "not deployed". Deployed and proved (C50, C51).
+- `docs/design/autoradio-dj-programme-2026-11-11.md` line 3: "design, nothing built". Slices 1 and 2 are built and proved.
+- `internal/appdesk/required.go` line 29: required set listed as five packages; the file holds one.
+- `docs/current-architecture.md` line 7 (old text): "R-sequence in ACTIVE.md" does not exist; the file never mentions Autoradio.
+- `docs/platform-os-app-state.md` lines 24 to 30: 18 registered apps; registry now loads packages. Line 3 says it is stale.
+- `README.md` lines 148 and 161: embedded Dolt; deleted 2026-10-30.
+- `mobile/README.md` line 183: default configuration lists choir-front, choir-desk and button to talk; the code uses the hands-free listener configuration with holder `saved-answer`. Line 368: "Desk contract (not implemented)" while `ChoirDesk.swift` exists.
+- `docs/reference/ON-DEVICE-MODELS.md` line 13: "everything else is untested on any phone"; true for measurement, but it does not say Qwen3-0.6B, Silero and Parakeet are wired into the app.

@@ -17,6 +17,11 @@ wins unless this file carries a newer, explicitly promoted update.
   shared graph of published objects is **the Autopaper object graph**.
 - The roadmap is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md); the
   live station is [docs/ACTIVE.md](docs/ACTIVE.md).
+- **What exists today is [docs/current-architecture.md](docs/current-architecture.md)**
+  (owner, 2026-11-16). Read it before saying what the system does; a name, a
+  comment or a design doc is not evidence that a thing is built. A landing
+  that changes a row's status edits that file in the same change. Fewer,
+  truer docs: update or delete an existing doc before adding one.
 
 ## Desks
 
