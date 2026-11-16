@@ -94,7 +94,13 @@
    "talking": "bool",
    "signedIn": "bool",
    "handsFree": "bool",
-   "progress": "number"
+   "progress": "number",
+   "question": "string",
+   "answerText": "string",
+   "answerLabel": "string",
+   "answerState": "string",
+   "answerNote": "string",
+   "canRetry": "bool"
   },
   "DemoInfo": {
    "on": "bool"
@@ -228,7 +234,13 @@
      "talking": false,
      "signedIn": false,
      "handsFree": false,
-     "progress": 0
+     "progress": 0,
+     "question": "",
+     "answerText": "",
+     "answerLabel": "",
+     "answerState": "",
+     "answerNote": "",
+     "canRetry": false
     }
    }
   },

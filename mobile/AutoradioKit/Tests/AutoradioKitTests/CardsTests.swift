@@ -180,7 +180,7 @@ final class CardsTests: XCTestCase {
     // Launcher: places, search, recents, undo
     func testPlacesHaveOneShortLine() {
         let rows = Places.rows(topStory: "A very long headline " + String(repeating: "x", count: 90) + "\nsecond line", extra: ["mail": "3 unread"])
-        XCTAssertEqual(rows.map(\.slug), ["paper", "textures", "files", "mail", "activity", "settings"])
+        XCTAssertEqual(rows.map(\.slug), ["paper", "textures", "files", "mail", "podcasts", "activity", "settings"])
         XCTAssertLessThanOrEqual(rows[0].line.count, 60)
         XCTAssertFalse(rows[0].line.contains("\n"))
         XCTAssertEqual(rows[3].line, "3 unread")

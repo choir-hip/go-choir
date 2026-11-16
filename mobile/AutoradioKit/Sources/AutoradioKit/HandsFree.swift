@@ -46,6 +46,10 @@ struct HandsFreeState {
     var needQuiet = false
     /// Speech heard in the open session, in ms (what `ListeningVisibility` calls sustained).
     var speechMs = 0
+    /// The open session's audio (only while a voice model listens), the verdict on whose voice it is, and whether a check is running.
+    var samples: [Float] = []
+    var speakerCall: SpeakerCall = .unknown
+    var speakerPending = false
 
     static var voiceConfig: VoiceConfig {
         var c = VoiceConfig.defaults
@@ -64,13 +68,15 @@ extension TurnEngine {
 
     /// One microphone frame in a voice session.
     public func ingestHandsFree(_ f: AudioFrame) async {
+        // Three minutes with no turn from the reader: voice turns itself off, silently (HandsFreeSwitch).
+        if HandsFreeSwitch.shared.expireIfIdle() { await handsFreeSet(false) }
         guard hf.enabled else { return }        // off: the microphone is closed, nothing is looked at
         lastFrameT = f.t
         if !hf.ready { await hfPrepare() }
         let startMs = hf.nowMs
         hf.nowMs += max(1, Int((f.duration * 1000).rounded()))
         let endMs = hf.nowMs
-        if let s = hf.session { s.append(f) } else {
+        if let s = hf.session { s.append(f); hfKeepAudio(f) } else {
             preroll.append(f)
             var total = preroll.reduce(0.0) { $0 + $1.duration }
             while total > limits.prerollSeconds, preroll.count > 1 { total -= preroll.removeFirst().duration }
@@ -107,9 +113,29 @@ extension TurnEngine {
     /// meant for the radio: sustained speech with words (`ListeningVisibility`). Voice activity alone shows nothing.
     func hfUpdateVisibility() {
         let words = max(0, hf.lastWords.count - hf.wordBase)
-        let show = hf.session != nil && ListeningVisibility.visible(handsFree: hf.enabled, speechMs: hf.speechMs, words: words, addressed: false, notATurn: false)
+        // The reader's learned voice: after about a second of speech the turn is judged (off this actor). Another voice never shows the
+        // listening state; the reader's own voice is the missing "addressed" evidence once there is a word.
+        let gate = env.speakerGate
+        if hf.session != nil, hf.speakerCall == .unknown, !hf.speakerPending, hf.speechMs >= 1200, hf.samples.count >= 16_000, gate.learned, gate.canListen {
+            hf.speakerPending = true
+            let (gen, samples) = (hf.generation, hf.samples)
+            Task { [weak self] in let c = await gate.judge(samples); await self?.hfSpeakerCall(c, generation: gen) }
+        }
+        let show = hf.session != nil && hf.speakerCall != .mismatch
+            && ListeningVisibility.visible(handsFree: hf.enabled, speechMs: hf.speechMs, words: words, addressed: hf.speakerCall == .match && words >= 1, notATurn: false)
         if show { if pipeline == nil, turn == nil { setPhase(.capturing) } }
         else if phase == .capturing, pipeline == nil, turn == nil { setPhase(.playing) }
+    }
+
+    func hfKeepAudio(_ f: AudioFrame) {
+        guard env.speakerGate.canListen, f.sampleRate == busSampleRate, hf.samples.count < SpeakerGate.maxSamples else { return }
+        hf.samples.append(contentsOf: f.samples.prefix(SpeakerGate.maxSamples - hf.samples.count))
+    }
+
+    func hfSpeakerCall(_ c: SpeakerCall, generation: Int) {
+        guard generation == hf.generation, hf.session != nil else { return }
+        hf.speakerCall = c; hf.speakerPending = false
+        if c == .mismatch { env.log.emit(.note("hands-free: another voice, not shown and not sent")); hfUpdateVisibility() }
     }
 
     func hfNewPolicy() -> TurnPolicy {
@@ -155,7 +181,8 @@ extension TurnEngine {
         let s: TranscriptionSession
         do { s = try await env.log.timed("transcriber.begin") { try await tr.begin() } }
         catch { env.log.emit(.error(stage: "transcriber", message: "\(error); this turn has no transcript")); s = EmptyTranscription() }
-        for f in preroll { s.append(f) }
+        hf.samples = []; hf.speakerCall = .unknown; hf.speakerPending = false
+        for f in preroll { s.append(f); hfKeepAudio(f) }
         preroll = []
         hf.session = s
         hf.generation += 1
@@ -171,6 +198,7 @@ extension TurnEngine {
         if cancel { hf.session?.cancel() }
         hf.session = nil
         hf.speechMs = 0
+        hf.samples = []; hf.speakerCall = .unknown; hf.speakerPending = false
         hf.generation += 1
         hf.wordBase = 0
         hf.lastWords = []
@@ -229,6 +257,7 @@ extension TurnEngine {
     /// The policy says the turn is over: the session's final text becomes the turn.
     func hfCommit() async {
         guard let session = hf.session else { await hfFeed(.turnDiscarded); return }
+        let (samples, heardCall) = (hf.samples, hf.speakerCall)
         let transcriber = hf.transcriber
         hfEndSession(cancel: false)
         let text = ((try? await env.log.timed("transcribe") { try await session.finish() }) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -240,12 +269,25 @@ extension TurnEngine {
             await hfFeed(.turnDiscarded)                                                  // H2
             return
         }
+        // Whose voice: with a learned voice, a turn that does not sound like the reader (a TV) is dropped here and never sent.
+        var call = heardCall
+        let gate = env.speakerGate
+        if call == .unknown, gate.learned, gate.canListen { call = await gate.judge(samples) }
+        if call == .mismatch {
+            env.log.emit(.notATurn(reason: "another voice: \"\(text)\""))
+            hf.cut = nil
+            await setLevelTo(.play, reason: .resume)
+            await hfFeed(.turnDiscarded)
+            return
+        }
         let id = "turn-" + UUID().uuidString.prefix(8).lowercased()
         let t = Turn(id: id, config: config, transcriber: transcriber, yield: yield, session: session, firstEventIndex: env.log.count)
+        t.speakerSamples = samples
         t.cut = hf.cut
         hf.cut = nil
         t.addressed = true; t.speechSeen = true
         hf.answerTurnID = id
+        HandsFreeSwitch.shared.readerSpoke()            // a turn that was sent: the three minutes start again
         await hfFeed(.turnCommitted(turnId: id, text: text))
         await runTurn(t, transcript: text)
     }

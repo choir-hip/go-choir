@@ -6,6 +6,7 @@ extension StageRegistry {
         r.register(.programme, ChoirFrontProgramme.self) { ChoirFrontProgramme($0) }
         r.register(.programme, RadioProgramme.self) { RadioProgramme($0) }
         r.register(.desk, ChoirDeskStage.self) { ChoirDeskStage($0) }
+        r.register(.holder, SavedAnswerHolder.self) { SavedAnswerHolder($0) }
         r.register(.desk, AutoradioDeskStage.self) { AutoradioDeskStage($0) }
     }
 
@@ -16,7 +17,7 @@ extension StageRegistry {
         var c = LabConfiguration(name: "listener", stages: [
             .micSource: .init(id: "builtin"), .addressing: .init(id: "open"), .speechBounds: .init(id: "energy-vad", params: ["hangoverSeconds": .number(0.25)]),
             .speakerCheck: .init(id: "none"), .transcriber: .init(id: "apple-speech"), .yieldPolicy: .init(id: "dip-then-pause"),
-            .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: "local-ack"), .voice: voice,
+            .system1: .init(id: ChoirSystem1.stageID), .holder: .init(id: SavedAnswerHolder.stageID), .voice: voice,
             .desk: .init(id: AutoradioDeskStage.stageID), .programme: .init(id: RadioProgramme.stageID),
         ])
         c.audioPolicy = .alwaysTalking          // hands-free: voice processing for the whole session, so the radio's voice is cancelled from the microphone
@@ -176,6 +177,8 @@ public final class ChoirApp: @unchecked Sendable {
         do {
             let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
             lock.lock(); stories = list; lock.unlock()
+            // The headlines and deks the phone now holds are part of what it can answer from first.
+            SavedCorpus.shared.setSource("front") { list.filter { !$0.dek.isEmpty }.map { SavedCorpus.Document(id: "front:" + $0.route, title: $0.title, address: "pub:" + $0.route, text: $0.dek) } }
             if list.isEmpty { say("The front page is empty right now.") }
         } catch { say(Self.plain(stage: "programme", message: "\(error)")) }
         onChange?()
@@ -218,7 +221,13 @@ public final class ChoirApp: @unchecked Sendable {
     /// Play a story from the paper. The list it came from (the paper's stack) is taken now, so next, previous and autoplay follow it.
     public func play(route: String) async {
         let title = lock.withLock { stories.first { $0.route == route }?.title } ?? FrontOrder.shared.stories.first { $0.route == route }?.title ?? ""
-        await MainActor.run { PlayQueue.shared.playNow(.story(route: route, title: title)) }       // the one queue decides; it comes back to `playStoryDirect`
+        // The one queue decides; it comes back to `playStoryDirect`. Waits for the story to start, as `play(route:)` always did.
+        await MainActor.run {
+            let q = PlayQueue.shared
+            if !((q.engine as? ChoirPlaybackEngine)?.app === self) { q.engine = ChoirPlaybackEngine(app: self) }
+            q.playNow(.story(route: route, title: title))
+        }
+        await PlayQueue.shared.settle()
     }
 
     /// The queue's story engine: what `play(route:)` was before the queue.
@@ -343,7 +352,9 @@ public final class ChoirApp: @unchecked Sendable {
         // The queue first: what the reader queued by hand plays before the paper's list and before the DJ's stretch.
         let queueText = documentID.hasPrefix("text:q")
         let turnOpenQ = runtime.snapshot().phase != "playing"
-        if anyPlayed, !p.userPaused, (queueText || currentStoryRoute() != nil || documentID.hasPrefix("radio:")) {
+        let hasUp = await MainActor.run { PlayQueue.shared.hasUpcoming }
+        let queueWants = queueText || hasUp
+        if anyPlayed, !p.userPaused, queueWants {
             if turnOpenQ { lock.lock(); pendingQueueEnd = documentID; lock.unlock(); return }
             if await queueAdvance(documentID: documentID) { return }
         }

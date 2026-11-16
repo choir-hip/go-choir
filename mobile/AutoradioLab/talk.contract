@@ -1,0 +1,52 @@
+// The conversation (conversation:). Lane autoradio-talk. Every question the reader asked, typed or spoken, newest first, with what came
+// back: the answer the phone gave first from the reader's saved stories (marked as such), the full answer from the computer, or a plain
+// failure with a way to ask again. One entry per question; the bar's answer card opens this page. testIds: conversation-row-<id>,
+// conversation-retry-<id>, conversation-empty.
+use Theme, ThemeExtras, ConversationInfo, ConversationRow from "@choir/autoradio"
+use ToolScroll, Card, Btn from "./ui.contract"
+use ScreenTitle, SectionLabel, Hairline from "./settings.contract"
+
+component ConversationPage
+  inject
+    th: Theme
+    tx: ThemeExtras
+    cv: ConversationInfo
+  props
+    address: string
+    title: string
+  view
+    ToolScroll(id="conversation")
+      ScreenTitle(label="Conversation", back=false)
+      if cv.empty
+        text "Nothing asked yet. Type in the bar, or turn the voice on and ask." testId="conversation-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
+      for r in cv.rows key=r.id
+        ConversationEntryCard(r=r)
+
+component ConversationEntryCard
+  inject
+    th: Theme
+    tx: ThemeExtras
+    answerRetry: action
+  props
+    r: ConversationRow
+  view
+    Card(level=1, testId=`conversation-row-${r.id}`, minHeight=0)
+      column width="100%" gap=8 box-sizing="border-box" padding="12px 16px"
+        text r.question font-family=th.fontUi font-size=tx.sizeLabel font-weight=700 color=th.fg
+        if r.answer != ""
+          text r.answer font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg
+        if r.first != "" and r.answer == ""
+          text "FROM YOUR SAVED STORIES" font-family=th.fontUi font-size=9 font-weight=700 letter-spacing=0.8 color=th.muted
+          if r.firstSource != ""
+            text r.firstSource font-family=th.fontUi font-size=tx.sizeMeta font-weight=600 color=th.fg
+          text r.first font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg
+        if r.first != "" and r.answer != ""
+          text "FIRST HEARD, FROM YOUR SAVED STORIES" font-family=th.fontUi font-size=9 font-weight=700 letter-spacing=0.8 color=th.muted
+          text r.first font-family=th.fontRead font-size=tx.sizeMeta line-height=1.4 color=th.muted
+        if r.status == "asking"
+          text "Looking…" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+        if r.note != ""
+          text r.note font-family=th.fontUi font-size=tx.sizeMeta color=th.danger
+        if r.canRetry
+          button press=answerRetry(r.id) testId=`conversation-retry-${r.id}` appearance="none"
+            Btn(label="Try again", primary=false, wide=false)

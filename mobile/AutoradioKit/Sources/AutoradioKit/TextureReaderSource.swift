@@ -54,6 +54,8 @@ public final class ReaderStore: @unchecked Sendable {
         cache[address] = nil; recency.removeAll { $0 == address }
     }
     public var cachedCount: Int { lock.lock(); defer { lock.unlock() }; return cache.count }
+    /// Every document the session holds that has its text (the saved stories the phone can answer from).
+    public func readyDocuments() -> [ReaderDoc] { lock.lock(); defer { lock.unlock() }; return cache.values.filter { $0.status == "ready" } }
     private func use(_ address: String) { recency.removeAll { $0 == address }; recency.append(address) }
 
     /// The document at an address, from the cache unless `force`. A request for an address already being fetched waits for that fetch.

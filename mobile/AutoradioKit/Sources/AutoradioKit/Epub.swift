@@ -191,6 +191,47 @@ private final class OpfParser: NSObject, XMLParserDelegate {
     }
 }
 
+// The table of contents: an EPUB 3 nav document (<nav epub:type="toc"> anchors) or an EPUB 2 NCX (navPoint, navLabel/text, content src).
+// Titles are keyed by the target file's path (fragment dropped); the first title for a file wins.
+private final class TocParser: NSObject, XMLParserDelegate {
+    let base: String
+    var titles: [String: String] = [:]
+    // nav
+    private var inNav = false, navDone = false, anchorHref: String? = nil, anchorText = ""
+    // ncx
+    private var labelText = "", inLabel = false, pendingLabel = ""
+    init(base: String) { self.base = base }
+    private func add(_ href: String, _ title: String) {
+        let t = title.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        guard !t.isEmpty, !href.isEmpty else { return }
+        let path = Epub.resolve(base, href)
+        if titles[path] == nil { titles[path] = t }
+    }
+    func parser(_ p: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes a: [String: String]) {
+        switch Epub.local(name) {
+        case "nav":
+            let type = (a["epub:type"] ?? a["type"] ?? "")
+            if !navDone, type.isEmpty || type.contains("toc") { inNav = true }
+        case "a": if inNav { anchorHref = a["href"]; anchorText = "" }
+        case "navlabel": inLabel = true; labelText = ""
+        case "content": if let src = a["src"] { add(src, pendingLabel) }
+        default: break
+        }
+    }
+    func parser(_ p: XMLParser, foundCharacters s: String) {
+        if anchorHref != nil { anchorText += s }
+        if inLabel { labelText += s }
+    }
+    func parser(_ p: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        switch Epub.local(name) {
+        case "nav": if inNav { inNav = false; navDone = true }
+        case "a": if let h = anchorHref { add(h, anchorText); anchorHref = nil }
+        case "navlabel": inLabel = false; pendingLabel = labelText
+        default: break
+        }
+    }
+}
+
 // MARK: XHTML to blocks
 
 final class XhtmlBlocks: NSObject, XMLParserDelegate {
@@ -362,6 +403,15 @@ public enum Epub {
         guard ox.parse() || !op.spine.isEmpty else { throw EpubError.corrupt("the package file") }
         let base = opfPath.split(separator: "/").dropLast().joined(separator: "/")
 
+        // Chapter titles from the book's own contents (nav or NCX), when it has them.
+        var toc: [String: String] = [:]
+        for item in op.manifest.values where item.props.split(separator: " ").contains("nav") || item.type.contains("ncx") {
+            let path = resolve(base, item.href)
+            guard let e = find(path), let raw = try? Zip.read(data, e) else { continue }
+            let tp = TocParser(base: path.split(separator: "/").dropLast().joined(separator: "/"))
+            let tx = XMLParser(data: Data(cleanXHTML(String(decoding: raw, as: UTF8.self)).utf8)); tx.delegate = tp; tx.parse()
+            for (k, v) in tp.titles where toc[k] == nil { toc[k] = v }
+        }
         var warnings: [String] = []
         var chapters: [EpubChapter] = []
         let readable = op.spine.compactMap { ref -> (String, OpfParser.Item)? in
@@ -379,7 +429,7 @@ public enum Epub {
             if !px.parse() { warnings.append("\(path) is not well formed; showing what could be read") }
             if h.blocks.isEmpty { continue }
             let headTitle = h.blocks.first(where: { $0.kind == "heading" })?.text
-            let t = (headTitle ?? (h.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Chapter \(chapters.count + 1)" : h.title.trimmingCharacters(in: .whitespacesAndNewlines)))
+            let t = (toc[path] ?? headTitle ?? (h.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Chapter \(chapters.count + 1)" : h.title.trimmingCharacters(in: .whitespacesAndNewlines)))
                 .replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "*", with: "").replacingOccurrences(of: "`", with: "")
             chapters.append(EpubChapter(id: id, href: path, title: t, blocks: h.blocks))
         }

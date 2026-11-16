@@ -32,6 +32,16 @@ public struct BarInfo: Codable, Sendable, Equatable {
     public var handsFree = false
     /// 0...1 along the current programme; the hairline rule on the bar's lower edge.
     public var progress = 0.0
+    /// The conversation card (Conversation.swift): what the reader asked, what came back, and where it came from. Empty `answerState`:
+    /// no card. working (heard, nothing yet) | first (from saved stories, the full answer is on its way) | full | failed.
+    public var question = ""
+    public var answerText = ""
+    /// "From your saved stories: From the paper's story on X" when the answer shown is the phone's first answer; empty for the full one.
+    public var answerLabel = ""
+    public var answerState = ""
+    /// Plain words about a failure or a cut-off answer.
+    public var answerNote = ""
+    public var canRetry = false
     public init() {}
 }
 
@@ -180,6 +190,30 @@ public final class BarTracker: @unchecked Sendable {
     // MARK: Views
 
     public func barInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, now: Date = Date()) -> BarInfo {
+        var b = baseInfo(player: p, snapshot: s, now: now)
+        Self.decorate(&b, with: Conversation.shared.visible())
+        return b
+    }
+
+    /// The conversation card for the entry on show (nil: none).
+    static func decorate(_ b: inout BarInfo, with e: ConversationEntry?) {
+        guard let e else { return }
+        b.question = e.question
+        let saved = e.firstSource.isEmpty ? e.first : e.firstSource + ": " + e.first
+        switch e.status {
+        case "failed":
+            b.answerState = "failed"; b.answerNote = e.note; b.canRetry = true
+        case "answered", "answering":
+            if !e.answer.isEmpty { b.answerState = "full"; b.answerText = e.answer }
+            else { b.answerState = "first"; b.answerText = saved; b.answerLabel = "From your saved stories" }
+            b.answerNote = e.note; b.canRetry = e.status == "answered" && !e.note.isEmpty
+        default:   // asking
+            if e.first.isEmpty { b.answerState = "working" }
+            else { b.answerState = "first"; b.answerText = saved; b.answerLabel = "From your saved stories" }
+        }
+    }
+
+    func baseInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, now: Date = Date()) -> BarInfo {
         lock.lock(); defer { lock.unlock() }
         var b = BarInfo()
         b.signedIn = p.signedIn; b.playing = p.playing; b.handsFree = HandsFreeSwitch.shared.isOn

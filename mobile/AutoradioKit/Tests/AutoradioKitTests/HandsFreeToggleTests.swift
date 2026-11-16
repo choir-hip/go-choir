@@ -25,32 +25,49 @@ final class HandsFreeToggleTests: XCTestCase {
         XCTAssertFalse(ListeningVisibility.visible(handsFree: false, speechMs: 5000, words: 9, addressed: true, notATurn: false))
     }
 
-    // ---- T1, T2, T3: the stored state ----
-    func suite() -> UserDefaults {
-        let name = "hf-test-\(UUID().uuidString)"
-        let d = UserDefaults(suiteName: name)!
-        d.removePersistentDomain(forName: name)
-        return d
+    // ---- T1, T2, T3, T8, T9: when it is on (owner, 2026-11-15) ----
+    final class TestClock: @unchecked Sendable { var t = Date(timeIntervalSince1970: 1_000_000) }
+    func make(_ c: TestClock) -> HandsFreeSwitch { HandsFreeSwitch(now: { c.t }) }
+    func testFreshLaunchIsUndecidedAndOff() {
+        let s = HandsFreeSwitch(); XCTAssertFalse(s.decided); XCTAssertFalse(s.isOn)
     }
-    func testFreshInstallIsUndecidedAndOff() {
-        let s = HandsFreeSwitch(defaults: suite())
-        XCTAssertFalse(s.decided); XCTAssertFalse(s.isOn)
+    func testAppOpenWithMicrophoneTurnsItOnAndDeclinedLeavesItOff() {
+        let c = TestClock(); let a = make(c), b = make(c)
+        a.appOpened(micGranted: true); b.appOpened(micGranted: false)
+        XCTAssertTrue(a.isOn); XCTAssertFalse(b.isOn)
+        b.decideFirstRun(micGranted: true)
+        XCTAssertFalse(b.isOn, "a later grant turns nothing on until the app is opened again")
     }
-    func testGrantedMicrophoneDefaultsOnAndSurvivesALaunch() {
-        let d = suite()
-        HandsFreeSwitch(defaults: d).decideFirstRun(micGranted: true)
-        let again = HandsFreeSwitch(defaults: d)
-        XCTAssertTrue(again.decided); XCTAssertTrue(again.isOn)
-        again.set(false)
-        XCTAssertFalse(HandsFreeSwitch(defaults: d).isOn, "the reader's choice is kept")
+    func testNothingIsKeptAcrossLaunches() {
+        let c = TestClock(); let a = make(c); a.appOpened(micGranted: true); a.set(false)
+        XCTAssertFalse(make(c).isOn, "a new launch starts undecided, whatever the last one did")
     }
-    func testDeclinedMicrophoneDefaultsOffAndALaterGrantDoesNotTurnItOn() {
-        let d = suite()
-        let s = HandsFreeSwitch(defaults: d)
-        s.decideFirstRun(micGranted: false)
-        XCTAssertTrue(s.decided); XCTAssertFalse(s.isOn)
-        s.decideFirstRun(micGranted: true)
-        XCTAssertFalse(s.isOn)
+    func testThreeMinutesWithNoTurnTurnsItOffSilently() {
+        let c = TestClock(); let s = make(c); s.appOpened(micGranted: true)
+        let told = Locked<Int>(0)
+        s.onChange = { told.write { $0 += 1 } }
+        c.t.addTimeInterval(179); XCTAssertFalse(s.expireIfIdle()); XCTAssertTrue(s.isOn)
+        c.t.addTimeInterval(2); XCTAssertTrue(s.expireIfIdle()); XCTAssertFalse(s.isOn)
+        XCTAssertEqual(told.value, 1, "the bar re-reads; nothing is said")
+        XCTAssertFalse(s.expireIfIdle())
+    }
+    func testATurnResetsTheTimerAndPlayingOrPausingDoesNot() {
+        let c = TestClock(); let s = make(c); s.appOpened(micGranted: true)
+        c.t.addTimeInterval(170); s.readerSpoke()
+        c.t.addTimeInterval(170); XCTAssertFalse(s.expireIfIdle(), "170 s since the turn")
+        // Playing or pausing never reaches the switch: there is no call for it, so only a turn can reset it.
+        c.t.addTimeInterval(20); XCTAssertTrue(s.expireIfIdle())
+    }
+    func testTurnedOffByHandStaysOffUntilTheNextAppOpen() {
+        let c = TestClock(); let s = make(c); s.appOpened(micGranted: true)
+        s.set(false); c.t.addTimeInterval(10); XCTAssertFalse(s.isOn)
+        s.decideFirstRun(micGranted: true); XCTAssertFalse(s.isOn)
+        s.appOpened(micGranted: true); XCTAssertTrue(s.isOn, "a new foreground session")
+    }
+    func testTheMicButtonTurnsItOnAtAnyTimeAndRestartsTheTimer() {
+        let c = TestClock(); let s = make(c); s.appOpened(micGranted: false)
+        c.t.addTimeInterval(1000); s.set(true); c.t.addTimeInterval(100)
+        XCTAssertFalse(s.expireIfIdle()); XCTAssertTrue(s.isOn)
     }
 
     // ---- the engine ----

@@ -106,6 +106,11 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
         }
         if !turn.programmeID.isEmpty, turn.programmeID.utf8.count <= 128 { b["programme"] = turn.programmeID }
         if !history.isEmpty { b["history"] = history.map { ["role": $0.role, "text": $0.text] } }
+        // The queue and the stories the DJ may add (docs/design/autoradio-queue-desk-2026-11-15.md; `/api/autoradio/turns` only).
+        if let q = turn.queue, let obj = (try? JSONSerialization.jsonObject(with: q)) as? [String: Any], q.count <= 100_000 { b["queue"] = obj }
+        let cands = turn.candidates.prefix(40).filter { !$0.route.isEmpty && $0.route.utf8.count <= 512 }
+            .map { ["route": $0.route, "title": String(decoding: Array($0.title.utf8.prefix(300)), as: UTF8.self)] }
+        if !cands.isEmpty { b["candidates"] = cands }
         return b
     }
 
@@ -172,6 +177,9 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
                             let t = obj["timings_ms"] as? [String: Any]
                             deliver(.done(status: obj["status"] as? String ?? "completed", sentences: obj["sentences"] as? Int ?? sentences,
                                           serverFirstSentenceMs: (t?["first_sentence"] as? NSNumber)?.doubleValue, serverDoneMs: (t?["done"] as? NSNumber)?.doubleValue))
+                        case "queue_ops":
+                            deliver(.queueOps(json: Data(e.data.utf8)))             // handed to the queue lane's apply, unread
+                            continue
                         default: continue                                    // handoff (reserved), anything unknown
                         }
                         if sawDone { return }
