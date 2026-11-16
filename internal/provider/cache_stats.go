@@ -19,6 +19,9 @@ type CacheStats struct {
 	// provider that does not report one does not read as a 0% hit rate.
 	InputTokens       int64 `json:"input_tokens"`
 	CachedInputTokens int64 `json:"cached_input_tokens"`
+	// NoUsageCalls counts streamed calls that ended with no usage report, so
+	// their spend is unknown (log reason stream_usage_missing).
+	NoUsageCalls int64 `json:"no_usage_calls"`
 }
 
 // HitRate is cached over input tokens of the calls that reported a cache.
@@ -75,4 +78,13 @@ func chatGPTSessionHeadersEnabled() bool {
 		return false
 	}
 	return true
+}
+
+// recordNoStreamUsage counts one streamed call that ended with no usage.
+func recordNoStreamUsage(providerName string) {
+	cacheStats.mu.Lock()
+	defer cacheStats.mu.Unlock()
+	s := cacheStats.by[providerName]
+	s.NoUsageCalls++
+	cacheStats.by[providerName] = s
 }

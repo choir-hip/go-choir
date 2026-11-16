@@ -1,6 +1,6 @@
 # River calls log zero tokens, so River's spend reads zero and its budget cannot trip
 
-Date: 2026-11-16. Status: open.
+Date: 2026-11-16. Status: fixed in code 2026-11-16 (lane/river-usage); deployed proof pending.
 
 ## Problem
 
@@ -37,3 +37,14 @@ captured response).
   48 s stretch went to a provider that does not stream" (the call that was
   timed predates the registration; a streamed programme call today still took
   about 60 s end to end, because the route returns one long text).
+
+## Resolution (2026-11-16)
+
+Confirmed from code: no streamed chat-completions request set
+`stream_options.include_usage`; the reader was already correct. River's docs
+(<https://docs.river.ai/guides/inference/>) say usage on a stream arrives in a
+last empty-choices chunk only with that option. Second cause found:
+`scripts/status-paper-usage` keyed prices by the bare model id, but the log
+carries `deepseek-ai/DeepSeek-V4.1-Flash-1017`, so River calls read "unpriced"
+even with tokens. Both fixed; a stream ending with no usage now logs
+`stream_usage_missing` and counts in `no_usage_calls`.
