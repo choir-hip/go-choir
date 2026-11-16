@@ -514,6 +514,20 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         start(at: at)
     }
 
+    /// Say no more than the block being spoken now: what follows it in this document is cut off. A block is whole sentences, so no word is cut.
+    public func endAfterCurrentBlock() {
+        st.write { s in
+            let keep = s.blockIndex + 1
+            guard keep < s.document.blocks.count else { return }
+            s.document.blocks = Array(s.document.blocks.prefix(keep))
+            s.document.segments = s.document.segments.compactMap { seg in
+                guard seg.firstBlock < keep else { return nil }
+                var x = seg; x.blockCount = min(x.blockCount, keep - x.firstBlock); x.unitServerBlocks = Array(x.unitServerBlocks.prefix(x.blockCount)); return x
+            }
+        }
+        onChange?()
+    }
+
     /// Add a segment to the end of the programme being played, if `documentID` is still the document it was made for (a late segment of an
     /// older stretch is refused). Playback is not disturbed; when the programme had run dry and the listener has not paused, it carries on
     /// with the new segment. False: refused, or the segment was already there.

@@ -5,7 +5,7 @@ import Foundation
 /// replace these when station L1 is deployed.
 enum DemoStretch {
     static let segments: [[String: Any]] = [
-        ["kind": "ident", "title": "Autoradio", "text": "This is Autoradio. Here is what is on the paper this morning."],
+        ["kind": "ident", "title": "Autoradio", "text": "This is Autoradio. Here is what is on the paper."],
         ["kind": "story", "title": "A barrier for the harbour, and the power to run it",
          "text": "The harbor council has approved a tide barrier. The paper's story on the vote says work could start by spring.\n\nThe same week, a regional grid added its largest battery yet, which matters for the barrier's pumps in a storm.",
          "cites": [["ref": "pub:demo-harbor-barrier", "role": "subject", "label": "The harbor council approves a tide barrier"],
@@ -13,7 +13,7 @@ enum DemoStretch {
         ["kind": "headlines", "title": "Also on the paper",
          "text": "Also on the paper. City libraries extend their evening hours. The river festival returns with a quieter schedule.",
          "cites": [["ref": "pub:demo-ev-charging", "role": "mentioned", "label": "City libraries extend their evening hours"]]],
-        ["kind": "bridge", "text": "That is all for this stretch. More soon."],
+        ["kind": "bridge", "text": "That is all for now. More soon."],
     ]
 
     static var sse: String {

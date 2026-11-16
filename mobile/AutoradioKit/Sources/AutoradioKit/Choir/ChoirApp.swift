@@ -154,6 +154,7 @@ public final class ChoirApp: @unchecked Sendable {
                 return ProgrammeRouteFeed(source: me.stretchSource?() ?? RouteStretchSource(baseURL: me.frontBaseURL()))
             }
             me.writer = w
+            w.admit = { op, cause in RunSheetPlayer.shared.admitDesk(op, cause: cause) }
             w.onNotice = { n in RunSheetPlayer.shared.deskNotice = n }
             w.onWriting = { on in RunSheetPlayer.shared.deskWriting = on }
             p.aheadChanged = { [weak w] in w?.checkAhead() }

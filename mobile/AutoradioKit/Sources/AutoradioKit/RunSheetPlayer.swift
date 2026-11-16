@@ -30,6 +30,8 @@ import Foundation
     func spokenPosition() -> (block: Int, seconds: Double)
     /// Silence the spoken entry (something else is starting, or it was skipped).
     func stopSpoken()
+    /// The spoken entry says no more than the block it is on (the rest is replaced): whole sentences, no word cut.
+    func endSpokenAfterCurrentBlock()
     /// Play remote audio from `start` (seconds) and stop at `end` when there is one.
     func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool
     func pauseRemote()
@@ -51,6 +53,7 @@ extension PlaybackEngine {
     public func restartSpoken() {}
     public func spokenPosition() -> (block: Int, seconds: Double) { (0, 0) }
     public func stopSpoken() {}
+    public func endSpokenAfterCurrentBlock() {}
 }
 
 @MainActor public final class RunSheetPlayer {
@@ -70,6 +73,9 @@ extension PlaybackEngine {
     public var spokenPaused: () -> Bool = { false }
     /// Fetches a page's text; replaceable for tests.
     public var pageText: (URL, String) async -> (title: String, paragraphs: [String])? = { await PageText.fetch($0, title: $1) }
+    /// The phone's opening of this listening, and what became of desk entries the sheet did not take (id, reason).
+    public private(set) var currentOpeningId: String?
+    public internal(set) var droppedFromDesk: [(id: String, reason: String)] = []
     /// Called before every start of playback this player makes (the opening, play now, next, previous, an audio entry, a restart after a pause):
     /// the host makes sure the audio session is claimed and active and the engine is up (`ensureReady`). The reason names the entry kind.
     public var sessionReady: ((String) async -> Void)?
@@ -122,7 +128,9 @@ extension PlaybackEngine {
     /// The opening: placed by the phone, on air at once. The radio is wanted from now on.
     /// What the desk and the phone wrote for an earlier listening is not played now (it may be a day old): it is taken off. What the listener
     /// placed themselves stays.
+    func setOpeningForTest(_ id: String) { currentOpeningId = id }
     public func open(_ entry: RunSheetEntry) {
+        currentOpeningId = entry.id
         wants = false                                // nothing ahead is aired while the sheet is being cleaned: the opening goes first
         for e in store.ahead(limit: Int.max) where e.placedBy != .listener { store.remove(id: e.id) }
         store.place(entry, at: .now, by: .phone)
@@ -189,8 +197,46 @@ extension PlaybackEngine {
     }
 
     private func advance() {
-        guard let first = store.ahead(limit: 1).first else { aheadChanged?(); return }
+        guard let first = nextToAir() else { aheadChanged?(); return }
         store.airedOnAir(first.id)                    // the store's change starts it
+    }
+
+    /// The first entry ahead that should be aired. A transition is written for the two entries it sits between: it plays only when the entry
+    /// just before it was heard to its end (not skipped past) and the entry after it is the one it was written for; otherwise it is dropped.
+    func nextToAir() -> RunSheetEntry? {
+        while let first = store.ahead(limit: 1).first {
+            guard first.kind == .transition else { return first }
+            let ahead = store.ahead(limit: 2)
+            let prev = store.heard(limit: 1).first
+            let after = ahead.count > 1 ? ahead[1] : nil
+            let ok = prev?.state == .heard && (first.between.map { prev?.id == $0.after && after?.id == $0.before } ?? true) && after != nil
+            if ok { return first }
+            droppedFromDesk.append((first.id, "transition_orphaned"))
+            store.remove(id: first.id)
+        }
+        return nil
+    }
+
+    /// A desk op about to be applied. Where the phone's opening is the same job as the desk's: before it began, the desk's replaces it; while
+    /// it is on air it finishes the block it is on and the desk's follows it; once it was heard (or skipped) the desk's is not a second greeting
+    /// and is dropped. Only for the opening write (`cause: open`).
+    public func admitDesk(_ op: RunSheetOp, cause: String) -> RunSheetOp? {
+        guard cause == "open", op.op == .place, var e = op.entry, e.kind == .opening, e.placedBy == .desk,
+              let pid = currentOpeningId, let phone = store.entry(pid) else { return op }
+        var o = op
+        switch phone.state {
+        case .heard, .skipped:
+            droppedFromDesk.append((e.id, "opening_already_heard"))
+            return nil
+        case .ahead:
+            store.remove(id: pid)
+            o.at = .next
+        case .onAir:
+            engine?.endSpokenAfterCurrentBlock()
+            o.at = .next
+        }
+        e.title = "Opening"; o.entry = e
+        return o
     }
 
     // MARK: Reacting to the store
@@ -218,7 +264,7 @@ extension PlaybackEngine {
             playingId = nil; playingDocument = nil; audio = nil; paused = false; generation += 1; pendingEnd = nil
             engine?.stopRemote(); engine?.stopSpoken()
         }
-        if wants, !spokenPaused(), !turnOpen(), let first = store.ahead(limit: 1).first { store.airedOnAir(first.id); again = true }
+        if wants, !spokenPaused(), !turnOpen(), let first = nextToAir() { store.airedOnAir(first.id); again = true }
     }
 
     private func changed() { onChange?() }

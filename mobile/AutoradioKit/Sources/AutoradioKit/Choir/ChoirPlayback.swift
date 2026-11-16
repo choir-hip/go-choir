@@ -28,6 +28,8 @@ import Foundation
         app.runtime.player.start(at: 0)
     }
 
+    public func endSpokenAfterCurrentBlock() { app.runtime.player.endAfterCurrentBlock() }
+
     public func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool {
         stopSpoken()                                    // the programme's voice stops (the listener's pause is not touched)
         return await remote.play(url: url, title: title, show: show, start: start, end: end, rate: BarTracker.shared.speed, generation: player.generation)

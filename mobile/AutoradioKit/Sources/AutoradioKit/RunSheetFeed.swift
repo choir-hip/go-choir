@@ -98,7 +98,8 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         for c in s.cites where !c.ref.isEmpty && !cites.contains(where: { $0.ref == c.ref }) {
             cites.append(RunSheetCite(ref: c.ref, role: RunSheetRole(rawValue: c.role) ?? .mentioned, label: SegmentPrep.label(c.label)))
         }
-        let title = SegmentPrep.title(s.title, kind: s.kind)
+        // The listener's words: an opening is "Opening"; a transition is the station speaking between two entries and has no title of its own.
+        let title = kind == .opening ? "Opening" : (kind == .transition ? "" : SegmentPrep.title(s.title, kind: s.kind))
         var e = RunSheetEntry(id: entryID(s.segmentID), kind: kind, placedBy: .desk, title: title, text: text, cites: cites.isEmpty ? nil : cites,
                               estSeconds: RunSheetEntry.estimateSeconds(words: text))
         if let p = cites.first(where: { $0.ref.hasPrefix("pub:") }) { e.source = RunSheetSource(ref: p.ref, label: p.label) }
@@ -130,6 +131,8 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     public var onNotice: ((String?) -> Void)?
     /// Told when a write starts and ends (the host shows "the desk is writing what comes next").
     public var onWriting: ((Bool) -> Void)?
+    /// Sees each desk op before it is applied (the player decides about a second opening); nil drops it.
+    public var admit: ((RunSheetOp, String) -> RunSheetOp?)?
     public var noticeWords: ((Error?) -> String?) = { RunSheetWriter.plainWords($0) }
     public var clock: () -> Date = { Date() }
     private var task: Task<Void, Never>?
@@ -180,7 +183,10 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                     case .ops(let ops):
                         if first == nil { first = self.clock() }
                         received += ops.count
-                        for op in ops where self.store.applyFromDesk(op).applied { added += 1 }
+                        for op in ops {
+                            guard let admitted = self.admit?(op, cause) ?? (self.admit == nil ? op : nil) else { continue }
+                            if self.store.applyFromDesk(admitted).applied { added += 1 }
+                        }
                     case .done: break
                     case .error(let m): if added == 0 { failure = WriterError.said(m) }
                     }

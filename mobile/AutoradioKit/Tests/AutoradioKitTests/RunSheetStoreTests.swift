@@ -35,6 +35,7 @@ final class FakeEngine: PlaybackEngine {
     func restartSpoken() { log.append("restart") }
     func spokenPosition() -> (block: Int, seconds: Double) { position }
     func stopSpoken() { log.append("stopSpoken") }
+    func endSpokenAfterCurrentBlock() { log.append("endAfterBlock") }
     func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool {
         log.append("remote:\(url.lastPathComponent):\(start ?? -1):\(end ?? -1)"); return true
     }
@@ -488,6 +489,91 @@ final class RunSheetStoreTests: XCTestCase {
         XCTAssertTrue(poster.posts.allSatisfy { $0.count <= 64 }); XCTAssertGreaterThan(poster.posts.count, 2)
         XCTAssertEqual(poster.posts.flatMap { $0 }, s.sheet.appliedOps, "every applied op was sent once, in order")
     }
+
+    // 21 the phone's opening is what plays until the desk's arrives; the station is never introduced twice
+    func deskOpening(_ id: String = "d-open") -> RunSheetEntry {
+        RunSheetEntry(id: id, kind: .opening, placedBy: .desk, title: "Opening", text: "This is Autoradio.", estSeconds: 5)
+    }
+    func writerWith(_ s: RunSheetStore, _ p: RunSheetPlayer, _ ops: [RunSheetEntry]) -> (RunSheetWriter, FakeFeed) {
+        let feed = FakeFeed()
+        feed.script = ops.map { .ops([ProgrammeRouteFeed.placeOp($0, cause: "open")]) } + [.done]
+        let w = RunSheetWriter(store: s) { feed }
+        w.admit = { op, cause in p.admitDesk(op, cause: cause) }
+        return (w, feed)
+    }
+    func test21_TheDeskOpeningBeforeThePhonesBeganReplacesIt() async {
+        let (p, s, _) = make()
+        let phone = PhoneOpening.entry(lines: lines(1))
+        s.place(phone, at: .end, by: .phone); p.setOpeningForTest(phone.id)          // placed, not yet on air
+        let (w, _) = writerWith(s, p, [deskOpening()])
+        w.open(); await w.settle()
+        XCTAssertNil(s.entry(phone.id), "the phone's is taken off")
+        XCTAssertEqual(s.ahead(limit: 5).map(\.id), ["d-open"])
+    }
+    func test21_TheDeskOpeningMidwayEndsThePhonesAtASentenceAndFollowsIt() async {
+        let (p, s, e) = make()
+        let o = await opened([], p, s)
+        let (w, _) = writerWith(s, p, [deskOpening(), story("d-1")])
+        w.open(); await w.settle()
+        XCTAssertTrue(e.log.contains("endAfterBlock"), "the phone's opening says no more than the block it is on")
+        XCTAssertEqual(s.onAir()?.id, o)
+        XCTAssertEqual(s.ahead(limit: 5).map(\.id), ["d-open", "d-1"], "the desk's opening is next, ahead of what follows")
+        p.documentEnded(id: "rs:" + o, anyPlayed: true); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-open")
+    }
+    func test21_AfterThePhonesWasHeardTheDeskOpeningIsDroppedNotPlayedAsASecondGreeting() async {
+        let (p, s, _) = make()
+        let o = await opened([], p, s)
+        p.documentEnded(id: "rs:" + o, anyPlayed: true); await p.settle()
+        XCTAssertEqual(s.entry(o)?.state, .heard)
+        let (w, _) = writerWith(s, p, [deskOpening(), story("d-1")])
+        w.open(); await w.settle()
+        XCTAssertNil(s.entry("d-open"))
+        XCTAssertEqual(p.droppedFromDesk.map(\.reason), ["opening_already_heard"])
+        XCTAssertEqual(s.onAir()?.id, "d-1", "the story the desk wrote plays")
+    }
+
+    // 22 transitions
+    func test22_ATransitionIsNotAnUpNextRowAndPlaysBetweenItsNeighbours() async {
+        let (p, s, e) = make()
+        let o = await opened([], p, s)
+        deskPlace(s, story("d-a"))
+        var t = story("d-t", text: "And now.", kind: .transition); t.title = ""; t.between = RunSheetBetween(after: "d-a", before: "d-b")
+        deskPlace(s, t); deskPlace(s, story("d-b"))
+        XCTAssertEqual(p.info().upcoming.map(\.id), ["d-a", "d-b"], "a transition is not listed")
+        p.next(); await p.settle()                                   // d-a on air
+        p.documentEnded(id: "rs:d-a", anyPlayed: true); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-t", "heard to its end: the transition plays")
+        p.documentEnded(id: "rs:d-t", anyPlayed: true); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-b")
+        _ = (o, e)
+    }
+    func test22_ASkippedPastNeighbourDropsItsTransition() async {
+        let (p, s, _) = make()
+        _ = await opened([], p, s)
+        deskPlace(s, story("d-a"))
+        var t = story("d-t", text: "And now.", kind: .transition); t.between = RunSheetBetween(after: "d-a", before: "d-b")
+        deskPlace(s, t); deskPlace(s, story("d-b"))
+        p.next(); await p.settle()                                   // d-a on air
+        p.next(); await p.settle()                                   // d-a skipped: its transition is orphaned
+        XCTAssertEqual(s.onAir()?.id, "d-b")
+        XCTAssertNil(s.entry("d-t")); XCTAssertEqual(p.droppedFromDesk.map(\.reason), ["transition_orphaned"])
+    }
+    func test22_AnOpeningAndATransitionHaveTheTitlesTheListenerSees() {
+        let seg = IncomingSegment(stretchID: "s", segmentID: "a", kind: "ident", title: "Autoradio", text: "Hello.", cites: [], blockCount: nil)
+        XCTAssertEqual(ProgrammeRouteFeed.entry(from: seg, clips: ClipStore())?.title, "Opening")
+        let tr = IncomingSegment(stretchID: "s", segmentID: "b", kind: "bridge", title: "", text: "Next.", cites: [], blockCount: nil)
+        XCTAssertEqual(ProgrammeRouteFeed.entry(from: tr, clips: ClipStore())?.title, "")
+        var d = segmentedDocument(["One."], kinds: ["transition"])
+        d.segments[0].title = "Autoradio"
+        var snap = LabSnapshot(); snap.running = true; var pv = ChoirPlayerView(); pv.playing = true
+        XCTAssertEqual(BarTracker().radioInfo(player: pv, snapshot: snap, document: d, route: "", nextTitle: "Harbour story").kind, "Next: Harbour story")
+    }
+    func testDemoStretchNamesNoTimeOfDay() {
+        let t = DemoStretch.segments.compactMap { $0["text"] as? String }.joined(separator: " ").lowercased()
+        for w in ["morning", "afternoon", "good evening", "stretch"] { XCTAssertFalse(t.contains(w), w) }
+    }
+
 }
 
 // Demo mode: the programme route is answered from DemoStretch, so the desk's opening and entries arrive and no notice is placed.

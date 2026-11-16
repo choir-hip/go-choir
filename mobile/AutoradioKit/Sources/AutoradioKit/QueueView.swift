@@ -62,7 +62,7 @@ extension RunSheetPlayer {
             q.elapsedLabel = QueueClock.label(p.elapsed)
             if let d = p.duration { q.remainingLabel = "-" + QueueClock.label(max(0, d - p.elapsed)); q.fraction = min(1, max(0, p.elapsed / d)) }
         }
-        q.upcoming = store.ahead(limit: Self.upNextLimit).enumerated().map { i, e in
+        q.upcoming = store.ahead(limit: Int.max).filter { $0.kind != .transition }.prefix(Self.upNextLimit).enumerated().map { i, e in
             var r = QueueRow(); r.i = i; r.title = e.displayTitle; r.kind = e.kindWord; r.id = e.id
             if let a = e.audioSpec { r.detail = a.show }
             if store.isStale(e) { r.note = "Written for other neighbours" }

@@ -290,6 +290,8 @@ public final class BarTracker: @unchecked Sendable {
             let np = ProgrammeNowPlaying.describe(document: d, blockIndex: idx)
             r.title = np.title; r.kind = np.kind; r.sources = np.sources
             r.index = 0; r.count = 1
+            // The station speaking between two entries: the line says what it is leading into.
+            if d.segments[si].kind == "transition", !nextTitle.isEmpty { r.kind = "Next: " + nextTitle }
         }
         r.playing = p.playing; r.paused = n > 0 && !p.playing
         r.level = s.level; r.speed = Self.speedName(speed); r.speedValue = speed
