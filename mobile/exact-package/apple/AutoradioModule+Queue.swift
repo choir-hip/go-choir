@@ -8,26 +8,28 @@ import UIKit
 
 extension AutoradioModule {
     func queueInfo() -> QueueInfo {
-        var q = PlayQueue.shared.info()
+        var q = onMainThread { PlayQueue.shared.info() }
         if !barWebURL.isEmpty { q.webUrl = barWebURL; q.webHost = URL(string: barWebURL)?.host ?? barWebURL }
         return q
     }
 
     func registerQueue() {
-        let q = PlayQueue.shared
-        q.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["queueView", "radioView", "barState"]) } }
+        onMainThread {
+            PlayQueue.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["queueView", "radioView", "barState"]) } }
+            // The station starts by itself when Autoradio opens (after onboarding), and when the app comes back after it was closed.
+            Station.shared.isReady = { OnboardingController.shared?.finished ?? false }
+        }
         // While remote audio plays, its position moves; while a book or page is read, its block moves (the reader saves it).
         DispatchQueue.main.async { [weak self] in
             let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] timer in
                 guard let self else { timer.invalidate(); return }
                 self.choir.syncQueuePosition()
-                if PlayQueue.shared.current?.isRemoteAudio == true, !PlayQueue.shared.paused { self.touch(["queueView", "radioView", "barState"]) }
+                let moving = onMainThread { PlayQueue.shared.current?.isRemoteAudio == true && !PlayQueue.shared.paused }
+                if moving { self.touch(["queueView", "radioView", "barState"]) }
             }
             RunLoop.main.add(t, forMode: .common)
         }
 
-        // The station starts by itself when Autoradio opens (after onboarding), and when the app comes back after it was closed.
-        Station.shared.isReady = { OnboardingController.shared?.finished ?? false }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)           // the sign-in and the first load get their moment
             await Station.shared.start(reason: .launch)
