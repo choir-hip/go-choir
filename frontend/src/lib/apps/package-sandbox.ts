@@ -49,7 +49,7 @@ import FRAME_RUNTIME from './frame-runtime.js?raw';
 /** SDK names the frame runtime answers itself: no authority, nothing crosses. */
 export const SANDBOX_LOCAL = [
   'AuthRequiredError', 'SDK_VERSION', 'buildInfo', 'getLaunchFile', 'getTheme', 'launchFileFromAppContext',
-  'launchFileStore', 'onDocumentEvent', 'onSetting', 'onThemeChange', 'onWindowEvent', 'repeatEvery', 'sdkSatisfies',
+  'launchFileStore', 'onDocumentEvent', 'onSetting', 'onThemeChange', 'onWindowEvent', 'repeatEvery', 'sdkSatisfies', 'windowStep',
 ] as const;
 
 const MAX_TEXT = 4096;

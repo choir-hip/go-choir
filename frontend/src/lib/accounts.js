@@ -25,6 +25,7 @@ const TAB_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)
 // that run outside the browser shell (autopaper.ts under node) can use them.
 export { lastUserId, setLastUserId, scopedKey } from './user-scope.js';
 import { lastUserId, setLastUserId, scopedKey } from './user-scope.js';
+import { notePlannedReload } from './planned-reload';
 
 // auth.js imports this module, and much imports auth.js; a static import of
 // shell-services here would pull the package registry into every one of them
@@ -159,6 +160,7 @@ export function onAccountSwitched(callback) {
 // ---------------------------------------------------------------------------
 
 function reload() {
+  notePlannedReload();
   window.location.reload();
 }
 
