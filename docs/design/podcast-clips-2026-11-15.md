@@ -59,8 +59,7 @@ change (the same kinds-by-name pattern as `choir.entity`).
 feed list (data) -> worker: poll feeds ----------------> POST episodes
 worker: GET episodes needing a transcript -> download enclosure -> ffmpeg 16 kHz mono
         -> parakeet-cli (110M q8, VAD, word timestamps) -> sentence segments -> PUT transcript
-worker: POST match ->  corpusd: stories x transcripts -> BM25 -> ONE Jev call -> clips   (the red commit)
-operator: PUT clips  (a clip an operator, or the proof run, matched by hand: the same store)
+operator: podcast-worker candidates -> FILE -> a person or an agent judges -> podcast-worker put-clips -> PUT clips   (no model call in our code; 3.5)
 phone / any client: GET /api/platform/podcast-clips   (public, bulk, one request)
 ```
 
@@ -84,33 +83,12 @@ phone / any client: GET /api/platform/podcast-clips   (public, bulk, one request
    an owner act), and Go builds never run on Node B. **Next step, not tonight:**
    a unit on a worker host that runs this same binary on a timer, with the
    model files in the image, and a managed operator credential.
-3. **Matching** runs in corpusd (`POST .../operator/podcasts/match`), because
-   the stories and the transcripts are both in Store B and it has the host
-   door to Jev (the gateway's `/provider/v1/host/judgments`, caller
-   `podcast-clips`, one allowlist entry, a red surface).
-   - Stories: the front list, those updated within the last 72 hours (title,
-     dek and an opening of the body).
-   - Candidate transcripts: episodes published from 48 hours before the
-     story's last update to 6 hours after it.
-   - Retrieval: overlapping 120 s windows with a 60 s stride over the
-     transcript segments; BM25 (k1 1.2, b 0.75) over lowercased,
-     accent-folded, stop-worded, crudely stemmed tokens, plus a tolerant
-     match for names (a token of six or more letters counts as matching a
-     query token within edit distance 1, at half weight), because every
-     transcriber garbles names. The top 4 windows per story go on.
-   - Support check: **one Jev call per run** carrying every story and every
-     candidate passage in one state, one yes/no `choice` question per (story,
-     passage) pair, per `docs/reference/SYSTEM1.md` rules 1, 2 and 7. The call
-     splits only if the vendor's own limit (`internal/jevbudget`: 32k tokens
-     for state plus one question, 64k a request) is crossed, and the split is
-     logged with the limit's name. A pair counts as supported at P(yes) of
-     0.6 or more (a guess, like the other thresholds; it is stored with the
-     clip so it can be scored later).
-   - Boundaries: inside the supported window, the best contiguous run of
-     segments, 20 to 75 s, on sentence or pause boundaries (the worker cut the
-     segments there). At most 3 clips per story, best first.
-   - If Jev is unavailable, no clip is published (a correctness refusal, not
-     a switch): the route simply has fewer clips.
+3. **Matching is by hand tonight (3.5).** `podcast-worker candidates` ranks the
+   paper's recent stories against the stored transcripts with
+   `internal/podcastmatch` and writes the candidates to a file; a person or an
+   agent judges them; `podcast-worker put-clips` sends the judged ones through
+   `PUT .../operator/podcasts/clips`, whose checks are the server's. The
+   automatic job that asked Jev is not built (3.6).
 4. **Serving** is one public read route and the programme (section 4).
 5. **Not built tonight:** the managed transcription service; episode intake
    inside corpusd; Exa discovery (optional, second priority; if built it is
@@ -236,7 +214,7 @@ subscribed show, and upload the timed text to the same transcript store. Nothing
 fetches YouTube from the server. It needs a route that accepts a client-supplied
 transcript, and a trust rule, because anyone could upload a wrong one: such a
 transcript is stored with `source: "device:youtube"` and `verified: false`, is
-never used by the match job and never cited in the paper, and becomes verified
+never used to make a clip and never cited in the paper, and becomes verified
 only when our own transcription of the same episode, or a second device's upload,
 agrees with it on a sample of passages. The route, its trust rule and the
 alignment between a video's times and the audio enclosure's are not built.
@@ -272,25 +250,22 @@ file names (enclosures), so the guard stays.
   malformed envelope (none, or over 200 items) is refused. The worker drops the
   items the server would refuse before posting, and a failed chunk does not stop
   the chunks or the feeds after it.
-- **Read by key.** The featured set is one small index document, a story's clips
-  (its 12 newest) another, and each feed's row remembers its 40 newest episodes,
-  which the match job reads. No public behaviour is derived from a page of "the
+- **Read by key.** The featured set is one small index document and a story's
+  clips (its 12 newest) another. No public behaviour is derived from a page of "the
   newest N rows". A lost featured index while feed rows exist fails closed and is
-  logged once per process. The story's index is written before its clips, so a
-  failure between them leaves an id with no clip, which the read skips and a repeat
-  of the write completes.
-- **The judge is told the passages are data.** The match job's task text says
-  they are untrusted transcript text and never instructions. A stored quote is a
-  prefix of what was said, cut on a word boundary with nothing added, and
-  `PUT .../operator/podcasts/clips` verifies that it occurs in the episode's
-  transcript within the clip's times, so the operator route cannot publish words
-  nobody said. The match job does not ask about an episode that already gave a
-  story a clip (one clip per episode per story, across runs).
+  logged once per process. The story's index is written before its clips, and cut
+  to 12 after them, so a failure between the steps leaves an id with no clip, which
+  the read skips and a repeat of the write completes, and never drops an id whose
+  clip is readable.
+- **A quote is words that were said.** A stored quote is a prefix of what was
+  said, cut on a word boundary with nothing added, and `PUT
+  .../operator/podcasts/clips` verifies that it occurs in the episode's transcript
+  within the clip's times, so the operator route cannot publish words nobody said.
 - **Residual R10.** The worker's episode queue is a scan of the 5000 newest
   episode rows (logged when it truncates), not a query by need; with only the
   operator's feeds nothing can flood it. **R11.** A transcript replaced by a
   longer one (a different download of an ad-stitched file) leaves clips made from
-  the old transcript's times in place until the match job runs again. **R12.**
+  the old transcript's times in place until the clips are matched again by hand. **R12.**
   Everything about feeds reported by accounts is Part 2 (3.2). **R13.** The dial
   guard refuses `64:ff9b::/96` but not NAT64's other prefixes (`64:ff9b:1::/48`).
   **R14.** The quote check is a word-sequence `Contains` over the clip's
@@ -298,6 +273,51 @@ file names (enclosures), so the guard stays.
   quotes are the operator's own code. **R15.** A story's one-clip-per-episode
   memory is its 12-slot index: after more than 12 later clips for one story an
   old episode can be asked about again.
+
+### 3.5 Matching by hand (the operator's path)
+
+No model call is made by any code in this repository for matching.
+
+- `podcast-worker candidates --server S --api-key-file K [--stories 60]
+  [--per-story 4] --out FILE`. It reads the front list (`GET
+  /api/platform/publications/front`, public) and each story's text (the public
+  `export` route, `format=txt`), the operator's episode list (`GET
+  .../operator/podcasts/episodes`, all episodes, with `has_transcript`) and each
+  transcribed episode's blocks (the signed-in `podcast-transcript` route); ranks
+  with `internal/podcastmatch` (overlapping 120 s windows on a 60 s stride, BM25
+  over normalised tokens with a tolerant match for names, a clip of 20 to 75 s on
+  segment boundaries, a quote that is a prefix of what was said); keeps, for each
+  story, the passages of episodes published from 48 hours before the story's last
+  update to 6 hours after it, at most one per episode, best first; and writes
+  `{"generated_at", "candidates":[{story_route, story_version, story_title,
+  story_dek, episode_id, show, episode_title, published, start, end, quote,
+  passage, score}]}`.
+- A person or an agent reads the file and sets `"support"` (0 to 1) on the
+  candidates whose passage reports the same specific event as the story. That is
+  the judgment, and it is made outside this code.
+- `podcast-worker put-clips --in FILE`. It sends the candidates with support above
+  0 through `PUT .../operator/podcasts/clips` in requests of at most 200; a request
+  the server refuses is retried clip by clip, so one bad clip costs only itself;
+  the refusals are printed and the exit status is 1 when there are any. The
+  server's checks are unchanged: the story is on the front, the feed is featured,
+  the quote occurs in the episode's transcript within the clip's times.
+
+### 3.6 Automatic matching: NOT BUILT (owner decision)
+
+The first version of this branch had a corpusd job that did the judging: commit
+`9753eed1e` (and its later repairs), `internal/platform/podcast_match.go`, with
+the gateway host-caller entry `podcast-clips`. In one call per run it put every
+(story, passage) pair of the front's recent stories and the featured feeds'
+newest transcripts into one Jev state, one yes/no `choice` per pair, split only
+where `internal/jevbudget` names a vendor limit; a pair at P(yes) of 0.6 or more
+became a clip; no judge, no clip. It was removed because the owner's rule is that
+every Jev call goes through the one job entry point (`jevJob` in agentcore;
+`scripts/check-jev-entry`, `docs/design/jev-batched-questions-2026-11-10.md`
+section 10), and corpusd cannot import agentcore. Restoring it needs the entry
+point shared with corpusd and the gate taught to admit a new ENTRY, which is a
+change to the owner's gate: an owner decision. The old code is in git (restore it
+by reverting the commit that removed it, the one that adds this section), and
+`internal/podcastmatch` is kept for it.
 
 ## 4. What the phone receives (the exact shapes; do not change without the lead)
 
@@ -398,7 +418,6 @@ internal routes, which accept only the proxy's host credential.
 | `PUT /api/platform/operator/podcasts/transcripts` | `{"episode_id","engine","audio_seconds","file_seconds","segments":[{"start","end","text"}]}`, at most 6 MB; `file_seconds` (optional) is the length of the whole file as downloaded and replaces the feed's duration as the episode's `duration_seconds`; answers `{"segments":n}` |
 | `PUT /api/platform/operator/podcasts/clips` | `{"clips":[{"story_route","episode_id","start","end","quote","support"}]}`, at most 200; the story must be on the front list, the episode known, 5 to 120 s, inside the episode, quote cut to 280 characters; answers `{"clips":n}`; the quote must occur in the episode's transcript within the clip's times and is cut on a word boundary to 280 characters, and the episode's feed must be featured. The clip id is made from story, episode and the start rounded to the second, so a repeat replaces |
 | `PUT /api/platform/operator/podcasts/feeds/listed` | `{"feeds":[{"feed_url","title"}],"listed":true}` (default true), at most 200: features (or, with `listed:false`, unfeatures) feeds; the only way a feed row comes to exist; the worker puts the seed list through it at each intake; answers `{"feeds":n}` |
-| `POST /api/platform/operator/podcasts/match` | (the red commit) `{"since_hours":72}`; answers `{"stories","episodes","windows","pairs","jev_calls","clips","dropped","stories_with_clips"}` |
 
 Enclosure and feed URLs must be `http` or `https`, with no credentials in the
 URL, at most 2048 bytes, a named host (no IP literal, `localhost`, `.local`,
@@ -431,16 +450,12 @@ Optional and repeatable (at most 60); the answer's shape is unchanged.
 
 ## 5. Mutation classes and rollback
 
-The slice lands in two parts so the first can deploy while the second is reviewed:
-part 1 (orange) is the stored kinds, the public read, the operator write routes
-(episodes, transcripts, clips), the programme's `podcast_clip` and the worker;
-part 2 (red) is the match job and the gateway entry. Clips from part 1 come from
-the operator's own matching posted through the clips route.
+The slice is orange throughout: no red surface is touched (no gateway, tape, auth or
+run-acceptance change). Clips reach the public read through the operator's hand
+path (3.5).
 
 - Platform store, public route and operator routes (new kinds, additive): orange,
   rollback revert; the objects are inert without the route.
-- The gateway's host-caller entry `podcast-clips`: red (gateway and provider
-  calls); rollback revert (the match run then refuses and publishes nothing).
 - The programme's `podcast_clip` kind: orange (the route's behaviour; guest
   runtime, so a planned refresh on deploy); rollback revert.
 - The worker and the feed seed: yellow.
@@ -449,6 +464,6 @@ the operator's own matching posted through the clips route.
 
 R1 no desk custodian (section 2). R2 no forecast claim per clip. R3 no
 retention for episodes and transcripts. R4 ad insertion offsets. R10 to R15 (section 3.4). R7 no server-side claim for more than one worker. R5 the
-support threshold (0.6) and the window size are guesses to be scored against
-listening outcomes. R6 matching is operator-triggered tonight, so clips appear
-when the lead runs the worker, not on a schedule.
+window size is a guess to be scored against listening outcomes. R6 matching is by hand (3.5), so clips appear when the
+operator runs `candidates`, judges and runs `put-clips`, not on a schedule; the
+automatic job is not built (3.6).

@@ -24,7 +24,7 @@ October 2026 at least fifteen other hosted or open models share its wire shape
 [R] ([model-space.md](system1/model-space.md) surprise 1), so this page is
 about the role and Jev is the current vendor.
 
-We use it at 15 call sites (section 3.4): intake labels, the event layer, the
+We use it at 14 call sites (section 3.4): intake labels, the event layer, the
 support judge, the prompt router, the disclosure gate, desk and sub-call
 judges, front-page importance, the op-ed gate and the `choir.System1` verb a
 research cell can call. Next: the Autoradio phone, which will run a smaller
@@ -165,7 +165,7 @@ Doors, all converging on `JevTransport.Decide` (`jev.go:104` C):
    (`gatewayruntime.WithJevSite`), so the gateway's `jev call` line names the
    site; before 2026-11-12 every guest call logged `site=unknown`.
 2. Host `POST /provider/v1/host/judgments` (`host_judgment.go:28`), caller
-   table (`hostJudgmentCallers`: `front-importance` and `podcast-clips`); refuses a
+   table (`hostJudgmentCallers`, today only `front-importance`); refuses a
    `scope`.
 3. The `choir.System1` verb (`system1_verb.go:286`): up to 12 closed choice
    questions, on the tape, replayed by digest within a run.
@@ -191,7 +191,6 @@ counted 13 because it merged the router and classifier):
 | 12 | front importance `frontimportance/scorer.go:686` (host door) | one story | 12 a call (importance, promo, section yes/no) | section P(yes)>=0.5 |
 | 13 | op-ed gate `oped_gate.go:242` | an op-ed | 4 yes/no | first P(yes)>=0.5 rejects; never accepts on failure |
 | 14 | desk judge `deskjudge/choice.go:84` | an event | 1 | accepted if share >=0.6 |
-| 15 | podcast clips match `platform/podcast_match.go` (host door, caller `podcast-clips`) | every (story, passage) pair of one run: the recent front stories against the best passages of the transcripts published near them | one yes/no `choice` per pair, one call a run (4 candidates a story, tens of stories: well inside the vendor limits; it splits by stories only where `jevbudget` says a limit is crossed and logs `jev split: site=podcast_clips`) | yes and P(yes)>=0.6 stores a clip; no answer is never read as no |
 
 All C. The thresholds are guesses, not calibrated against recorded outcomes;
 0.92 was raised from 0.85 after false merges on staging, and the vendor's
