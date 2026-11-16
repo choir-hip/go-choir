@@ -33,6 +33,14 @@ run bash scripts/test-node-b-disk-forecast.sh
 # the boot prune is safe only while it is ordered before the daemon and the runtime
 # and cannot be re-run beside them; skips itself without nix or python3
 run bash scripts/updater-prune-unit-nix-test.sh
+# The Jev entry-point gate CI's Vocabulary Gates job runs: a file that calls Jev
+# directly and is not on scripts/jev-entry-baseline.txt, or a list that grew
+# against the base, is refused (owner, 2026-11-15).
+if git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1; then
+  run scripts/check-jev-entry --base "$base"
+else
+  run scripts/check-jev-entry
+fi
 run scripts/check-guest-security-epoch --base "$base" --head HEAD
 if [ "$f" = 0 ]; then echo "ALL GATES PASS"; else echo "GATES FAILED"; fi
 exit "$f"
