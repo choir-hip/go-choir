@@ -99,15 +99,22 @@ Because the default is off, an omitted field means **no reasoning**, not
 - So the only lever is prefix stability. Keep the system prompt and the tool
   list byte-identical across calls of one role, and put what changes last.
 - Send `stream_options: {"include_usage": true}` to get `usage` on a stream;
-  it arrives in a final chunk with empty `choices` [V].
-- **Possible defect, not yet probed.** Our parser reads
-  `prompt_tokens_details.cached_tokens` when a `usage` object arrives
-  (`internal/provider/provider.go:1979`, C), but nothing under
-  `internal/provider` sends `stream_options` (grep for `include_usage`,
-  2026-11-14, no hit). If River sends no `usage` on a stream without that
-  option, every streamed River call is costed with no token counts, and the
-  daily budget undercounts. The first Autoradio turn through River settles
-  this: read its cost line.
+  it arrives in a final chunk with empty `choices` [V]
+  (<https://docs.river.ai/guides/inference/>, re-fetched 2026-11-16: "With
+  `stream_options={"include_usage": True}`, a last chunk with empty `choices`
+  carries `usage`"; the page shows usage on streams only with the option).
+- **Defect, confirmed and fixed 2026-11-16.** Our parser already read usage
+  from a final empty-choices chunk or from a delta
+  (`parseOpenAIChatCompletionsStream`), but no streamed request asked for it:
+  every River call logged `tokens_in=0 tokens_out=0`, and River's spend read
+  $0. The fix is `openAIChatCompletionRequest.MarshalJSON`
+  (`internal/provider/provider.go`), which adds the option to every streamed
+  Chat Completions body (River, OpenRouter, Synthetic, OpenCode). A stream
+  that still ends with no usage logs `stream_usage_missing` and counts in
+  `CacheStats.NoUsageCalls` (gateway `/health`); it is not refused.
+  `scripts/status-paper-usage` also missed the price row because the logged
+  model is the vendor's `deepseek-ai/DeepSeek-V4.1-Flash-1017`; it now strips
+  the prefix and lowercases, as the Go lookup does.
 
 Prices in our table (`internal/llmcost/pricing.go:125-130`, C, from
 `console.river.ai/api/public/pricing`):

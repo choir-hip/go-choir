@@ -82,7 +82,9 @@ def parse_success(text):
 
 def price_call(prov, model, inp, out, cached, w, w1h):
     """USD for one call, or None when the model has no price row."""
-    p = PRICES.get((prov, model))
+    # The gateway logs the vendor's id ("deepseek-ai/DeepSeek-V4.1-Flash-1017");
+    # the table keys are lowercase and unqualified, like the Go lookup.
+    p = PRICES.get((prov, model.lower().rsplit("/", 1)[-1]))
     if not p:
         return None
     uncached = max(inp - cached - w, 0)

@@ -134,6 +134,14 @@ many(3, 100, PAPER, "river", "deepseek-v4.1-flash-1017", inp=1000000, outp=0)'
 runpaper --json
 check "P7 river 3 calls, synthetic 2 calls" '[ "$(jq_ "d[\"river\"][\"today_calls\"]")" = 3 ] && [ "$(jq_ "d[\"synthetic\"][\"today_calls\"]")" = 2 ]'
 check "P7 river dollars 3 x 1M x 0.12/M = 0.36" '[ "$(jq_ "round(d[\"river\"][\"today_usd\"],2)")" = 0.36 ]'
+mkpaper 'many(2, 100, PAPER, "river", "deepseek-ai/DeepSeek-V4.1-Flash-1017", inp=1000000, outp=0)'
+runpaper --json
+check "P7b river vendor-qualified model id is priced, not unpriced (2 x 0.12 = 0.24)" '[ "$(jq_ "round(d[\"river\"][\"today_usd\"],2)")" = 0.24 ]'
+mkpaper '
+many(60, 100, PAPER, "devin", "swe-2-flash")
+many(2, 100, PAPER, "synthetic", "deepseek-v4.1-flash-1017")
+many(3, 100, PAPER, "river", "deepseek-v4.1-flash-1017", inp=1000000, outp=0)'
+runpaper --json
 check "P10 synthetic/river from the paper is a flag" 'jq_ "d[\"flags\"]" | grep -q "synthetic" && jq_ "d[\"flags\"]" | grep -q "river"'
 mkpaper 'many(3, 100, PAPER, "river", "deepseek-v4.1-flash-1017", inp=4000000, outp=0)
 many(60, 100, PAPER, "devin", "swe-2-flash")'

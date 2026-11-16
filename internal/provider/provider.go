@@ -1897,6 +1897,27 @@ type openAIChatCompletionRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
+// MarshalJSON asks for usage on every streamed chat-completions request:
+// providers send token counts on a stream only when
+// stream_options.include_usage is set (River:
+// https://docs.river.ai/guides/inference/, OpenAI, OpenRouter, Synthetic).
+// Doing it here, not at each builder, means no provider can forget it.
+func (r openAIChatCompletionRequest) MarshalJSON() ([]byte, error) {
+	type plain openAIChatCompletionRequest
+	out := struct {
+		plain
+		StreamOptions *struct {
+			IncludeUsage bool `json:"include_usage"`
+		} `json:"stream_options,omitempty"`
+	}{plain: plain(r)}
+	if r.Stream {
+		out.StreamOptions = &struct {
+			IncludeUsage bool `json:"include_usage"`
+		}{IncludeUsage: true}
+	}
+	return json.Marshal(out)
+}
+
 type openAIChatMessage struct {
 	Role             string               `json:"role"`
 	Content          any                  `json:"content,omitempty"`
@@ -2989,6 +3010,13 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 		finishReason = "stop"
 	}
 	finish(finishReason, lastUsage)
+	if !lastUsage.present() {
+		// Not a refusal and not a limit: the call stands, but its spend is
+		// unknown, so say so where it is seen (log line plus counter).
+		recordNoStreamUsage(providerName)
+		log.Printf("provider: %s stream_usage_missing model=%s stop=%s text_len=%d tool_calls=%d (stream ended with no usage; spend for this call is unknown)",
+			providerName, result.Model, result.StopReason, len(result.Text), len(result.ToolCalls))
+	}
 	onChunk(StreamChunk{Type: "message_stop", StopReason: result.StopReason})
 	log.Printf("provider: %s chat completion stream model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
 		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
