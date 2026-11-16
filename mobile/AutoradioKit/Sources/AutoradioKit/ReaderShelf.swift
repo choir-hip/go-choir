@@ -463,18 +463,3 @@ public final class ReaderShelf: @unchecked Sendable {
     }
 }
 
-// MARK: universal search providers
-
-/// Other lanes' sources of launcher rows (the reader's documents, podcasts). The launcher asks each one for every query.
-public enum SearchProviders {
-    private static let lock = NSLock()
-    private static var providers: [(name: String, search: @Sendable (String) -> [SearchHit])] = []
-    /// A second registration under the same name replaces the first.
-    public static func register(name: String, search: @escaping @Sendable (String) -> [SearchHit]) {
-        lock.lock(); providers.removeAll { $0.name == name }; providers.append((name, search)); lock.unlock()
-    }
-    public static func hits(_ query: String) -> [SearchHit] {
-        lock.lock(); let list = providers; lock.unlock()
-        return list.flatMap { $0.search(query) }
-    }
-}

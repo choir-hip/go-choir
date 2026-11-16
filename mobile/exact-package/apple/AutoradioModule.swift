@@ -120,6 +120,7 @@ public final class AutoradioModule: ExactPackage {
         registerQueue()          // lane autoradio-queue
         registerBooks()   // lane autoradio-reader
         registerTalk()
+        registerPodcasts()      // lane autoradio-podcasts
         Task { [choir] in await choir?.refresh() }
     }
 
