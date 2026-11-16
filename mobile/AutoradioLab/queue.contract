@@ -41,6 +41,16 @@ component QueueAudio
             text `From ${qv.keepTitle}` font-family=th.fontUi font-size=15 color=th.fg line-clamp=2
           button press=queueDo("keep", "") testId="queue-keep" appearance="none" width="100%" aria-label=`Keep listening to ${qv.keepTitle}`
             Btn(label="Keep listening", primary=true, wide=true)
+          // lane autoradio-joins: the clip's episode page, opened at the clip's time (the queue's `openEpisode` op)
+          if qv.canOpenEpisode
+            button press=queueDo("openEpisode", "") testId="queue-open-episode" appearance="none" aria-label=`Open the episode ${qv.keepTitle}`
+              row padding="8px 0px" align-items="center"
+                text "Open episode" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+    // lane autoradio-joins: a whole episode has its page too
+    if qv.audio and qv.clip == false and qv.canOpenEpisode
+      button press=queueDo("openEpisode", "") testId="queue-open-episode" appearance="none" aria-label="Open the episode"
+        row padding="8px 4px" align-items="center"
+          text "Open episode" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
 
 // Up next: what is queued, in order. Tap a row to play it now; the remove button takes it out. Each row has its title, what it is
 // (kind, and the show for audio) and one quiet caption: the DJ's own reason when it moved or added the item, else who added it.

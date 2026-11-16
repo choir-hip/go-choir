@@ -31,6 +31,14 @@ extension AutoradioModule {
         service.opener = { [weak self] address, title in DispatchQueue.main.async { self?.pages.open(address, title: title) } }
         pageSources.register(PodcastPageSource(service: service))
         registerPodcastQueueAdapter(service)
+        // lane autoradio-joins: "Open episode" from a clip or the player opens that episode's page at the clip's time.
+        Task { @MainActor in
+            PodcastBridge.open = { episodeId, feedURL, enclosureURL, at in
+                guard let feedURL else { return }
+                let enclosure = PodcastText.webURL(enclosureURL.absoluteString)
+                PodcastEpisodes.open(episodeId: episodeId ?? enclosure, feedURL: feedURL.absoluteString, enclosureURL: enclosure, at: at)   // no guid: the enclosure is the id (the feed's own rule)
+            }
+        }
         // One line: podcasts as a group in the universal search (the launcher merges `SearchProviders` into its hits).
         SearchProviders.register(name: "podcasts") { PodcastService.shared.searchHits($0) }
 

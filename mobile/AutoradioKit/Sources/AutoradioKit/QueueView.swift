@@ -20,6 +20,7 @@ public struct QueueInfo: Codable, Sendable, Equatable {
     public var playing = false
     public var clip = false
     public var keepTitle = ""          // the episode a playing clip is cut from, for "Keep listening"
+    public var canOpenEpisode = false  // the audio playing has an episode page the phone can open ("Open episode")
     public var elapsed = 0.0
     public var duration = 0.0          // 0 when not known
     public var elapsedLabel = ""
@@ -42,7 +43,7 @@ public enum QueueClock {
 }
 
 extension PlayQueue {
-    public func info() -> QueueInfo {
+    public func info(clips: ClipStore = .shared) -> QueueInfo {
         var q = QueueInfo()
         q.current = current?.displayTitle ?? ""
         q.currentKind = current?.kind ?? ""
@@ -50,6 +51,7 @@ extension PlayQueue {
         q.playing = q.audio && !paused
         q.clip = current?.isClip ?? false
         q.keepTitle = keepListeningTitle ?? ""
+        q.canOpenEpisode = PodcastBridge.target(of: current, store: clips) != nil
         if let p = remotePosition() {
             q.elapsed = p.elapsed; q.duration = p.duration ?? 0
             q.elapsedLabel = QueueClock.label(p.elapsed)

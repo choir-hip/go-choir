@@ -74,6 +74,7 @@ extension AutoradioModule {
                 case "fwd15": q.seek(by: 15)
                 case "seek": if let f = Double(arg), let d = q.remotePosition()?.duration { q.seek(to: min(max(f, 0), 1) * d) }
                 case "keep": q.keepListening()
+                case "openEpisode": PodcastBridge.openEpisode(of: q.current)   // lane autoradio-joins: the page of the episode playing, at the clip's time
                 case "remove": if let i = Int(arg) { q.remove(at: i) }
                 case "playAt":
                     if let i = Int(arg) {
