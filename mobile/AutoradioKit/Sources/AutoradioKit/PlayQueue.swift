@@ -206,6 +206,12 @@ extension QueueOp {
     func remotePosition() -> (elapsed: Double, duration: Double?)?
     func setRemoteRate(_ r: Double)
     func setRemoteLevel(_ l: PlayLevel)
+    /// The length of the audio at `url`, read without playing it (nothing is paused or started); nil when unknown within `deadline` seconds.
+    /// A clip's range is valid only for the file that was transcribed (publishers that stitch in ads serve another file each time).
+    func remoteDuration(url: URL, deadline: TimeInterval) async -> Double?
+}
+extension PlaybackEngine {
+    public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { nil }
 }
 
 // MARK: A URL in the prompt bar

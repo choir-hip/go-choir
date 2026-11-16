@@ -196,6 +196,7 @@ final class PlayerAppTests: XCTestCase {
         await rt.start(virtual: true)
         rt.player.pause()
         let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]), openURL: nil)
+        app.stretchSource = { NoStretch() }          // these tests are about the paper's list: the programme route has nothing to say
         await app.loadStories()
         return (app, rt)
     }
@@ -375,6 +376,7 @@ final class PlayerAppTests: XCTestCase {
         }
         let src = Told([[seg(1, cite: "a")], [seg(2, cite: "b")], []])
         let (app, rt) = await makeApp()
+        app.stretchSource = nil                      // this one is about the registry's stage and its extend requests
         let article = { @Sendable () async throws -> ProgrammeDocument in ProgrammeDocument(id: "choir:x", title: "X", blocks: [.speech(text: "x")]) }
         rt.registry.register(.programme, RadioProgramme.self) { _ in RadioProgramme(source: src, fallback: article, firstSegmentDeadline: 5) }
         await app.loadProgramme()
@@ -386,4 +388,9 @@ final class PlayerAppTests: XCTestCase {
         XCTAssertEqual(src.calls[1].skip, ["a"]); XCTAssertEqual(src.calls[2].skip, ["a", "b"])
         rt.player.pause()
     }
+}
+
+/// A programme route with no stretch (404): Play falls to the story plain, and asks for nothing else.
+struct NoStretch: StretchSource {
+    func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> { throw ChoirError.empty("no stretch") }
 }

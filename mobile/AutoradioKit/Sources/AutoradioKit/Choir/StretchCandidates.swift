@@ -14,12 +14,15 @@ public struct StretchCandidate: Sendable, Equatable {
     public var title: String
     public var dek: String
     public var text: String?
+    /// The podcast clips cut for this story (at most 3, from the one bulk set).
+    public var clips: [CandidateClip] = []
 
     /// The cite ref the server derives: `pub:<route>@v<version>`.
     public var ref: String { "pub:\(route)@v\(version)" }
     var json: [String: Any] {
         var o: [String: Any] = ["route": route, "version": version, "title": title, "dek": dek]
         if let text, !text.isEmpty { o["text"] = text }
+        if !clips.isEmpty { o["clips"] = clips.map(\.json) }
         return o
     }
 }
@@ -62,7 +65,7 @@ public enum StretchCandidates {
 
     /// The candidates from a front list (the object `GET /api/platform/publications/front` answers), the paper's weight first.
     /// `skipping`: routes already told in this listening (an `extend` request leaves them out). The text is filled in by the caller.
-    public static func fromFront(_ object: [String: Any], now: Date = Date(), skipping: Set<String> = []) -> [StretchCandidate] {
+    public static func fromFront(_ object: [String: Any], now: Date = Date(), skipping: Set<String> = [], onlyRoutes: [String]? = nil) -> [StretchCandidate] {
         let rows = (object["stories"] as? [[String: Any]]) ?? []
         var scored: [(w: Double, c: StretchCandidate)] = []
         var seen = Set<String>()
@@ -76,14 +79,21 @@ public enum StretchCandidates {
             scored.append((story.weight(now: now), StretchCandidate(route: story.route, version: version, title: title, dek: dek, text: nil)))
         }
         // Stable: equal weights keep the list's own order.
+        if let only = onlyRoutes {
+            // Play handed the reader's list over: its stories, in its order (the DJ chooses the order it tells them in).
+            let byRoute = Dictionary(scored.map { ($0.c.route, $0.c) }, uniquingKeysWith: { a, _ in a })
+            var seenRoutes = Set<String>()
+            return Array(only.compactMap { r in seenRoutes.insert(r).inserted ? byRoute[r] : nil }.prefix(maxItems))
+        }
         let ordered = scored.enumerated().sorted { a, b in a.element.w != b.element.w ? a.element.w > b.element.w : a.offset < b.offset }.map(\.element.c)
         return Array(ordered.prefix(maxItems))
     }
 
     /// The request's `candidates` array, with `texts[route]` on the first ten that have one.
-    public static func body(_ items: [StretchCandidate], texts: [String: String]) -> [[String: Any]] {
+    public static func body(_ items: [StretchCandidate], texts: [String: String], clips: [String: [CandidateClip]] = [:]) -> [[String: Any]] {
         items.prefix(maxItems).enumerated().map { i, c in
             var c = c
+            c.clips = Array((clips[c.route] ?? []).prefix(CandidateClip.maxPerCandidate))
             if i < maxTextItems, let t = texts[c.route].flatMap(shapeText) { c.text = t }
             return c.json
         }

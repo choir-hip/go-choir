@@ -56,6 +56,17 @@ import MediaPlayer
         return true
     }
 
+    /// The length of the file at `url`, read from its header without playing it; nil when it does not answer within `deadline`.
+    public func duration(of url: URL, deadline: TimeInterval) async -> Double? {
+        let shot = OneShot<Double?>()
+        let asset = AVURLAsset(url: url)
+        let load = Task { let d = try? await asset.load(.duration).seconds; shot.fire(d.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }) }
+        let timer = Task { try? await Task.sleep(nanoseconds: UInt64(max(0, deadline) * 1_000_000_000)); shot.fire(nil) }
+        let r = await shot.wait()
+        load.cancel(); timer.cancel()
+        return r
+    }
+
     /// Ready to play, failed, or no answer in 20 seconds (a stream that never starts is a failure, not a hang).
     private func ready(_ it: AVPlayerItem) async -> Bool {
         if it.status == .readyToPlay { return true }
