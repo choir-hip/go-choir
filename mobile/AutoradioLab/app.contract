@@ -239,6 +239,7 @@ component Autoradio
     ctlPanelOf
     ctlRead
     ctlQueueDoc
+    ctlShare
     ctlGo
     ctlStep
     ctlJump
@@ -280,19 +281,12 @@ component Autoradio
     fsRename
     fsDelete
     fvInfo
-    fvChapter
-    fvPages
     fvZoom
     fvPanX
     fvPanY
     fvHold
     fvPos
     fvDur
-    fvSeek
-    fvPage
-    fvFindDraft
-    fvChap
-    fvToc
     fvMediaTitle
     fvZoomTo
     fvCenter
@@ -304,16 +298,6 @@ component Autoradio
     fvEnded
     fvTick
     fvMeasured
-    fvNudge
-    fvRestart
-    fvSkip
-    fvSeekAt
-    fvGo
-    fvEditFind
-    fvSearch
-    fvClearFind
-    fvChapGo
-    fvTocToggle
     // ---- lane 6: mail ----
     mbx
     mmsg

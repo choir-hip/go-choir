@@ -263,11 +263,6 @@ public struct CsvRow: Codable, Sendable, Equatable {
     public init(cells: [String]) { self.cells = cells }
 }
 
-public struct FileChapterRef: Codable, Sendable, Equatable {
-    public var index: Int
-    public var title: String
-}
-
 public struct FileInfo: Codable, Sendable, Equatable {
     public var address: String
     public var path: String
@@ -289,31 +284,12 @@ public struct FileInfo: Codable, Sendable, Equatable {
     public var text: String
     public var truncated: Bool
     public var rows: [CsvRow]
-    public var pages: Int
     /// Pixel size of an image (0 when unknown): the pinch-and-pan viewer fits it to its frame.
     public var width: Double
     public var height: Double
-    public var title: String
-    public var author: String
-    public var chapters: [FileChapterRef]
 
     public static let empty = FileInfo(address: "", path: "", folder: "/", name: "", kind: "other", kindLabel: "File", size: 0, sizeLabel: "", modifiedLabel: "",
-                                       mime: "", status: "loading", message: "", src: "", local: "", text: "", truncated: false, rows: [], pages: 0, width: 0, height: 0,
-                                       title: "", author: "", chapters: [])
-}
-
-public struct FileChapter: Codable, Sendable, Equatable {
-    public var index: Int
-    public var count: Int
-    public var title: String
-    public var markdown: String
-    public var status: String
-}
-
-public struct FilePages: Codable, Sendable, Equatable {
-    public var query: String
-    public var pages: [Int]
-    public var message: String
+                                       mime: "", status: "loading", message: "", src: "", local: "", text: "", truncated: false, rows: [], width: 0, height: 0)
 }
 
 // MARK: Labels
@@ -651,7 +627,6 @@ public final class FilesService: @unchecked Sendable {
     let recents: RecentFiles
     let now: @Sendable () -> Date
     private let lock = NSLock()
-    private var books: [String: EpubBook] = [:]
 
     /// `cacheRoot` is a folder on disk and `appPrefix` the `app:/cache/...` path that names the same folder to Exact.
     public init(backend: FilesBackend, cacheRoot: URL, appPrefix: String, recents: RecentFiles, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -728,7 +703,6 @@ public final class FilesService: @unchecked Sendable {
         i.address = FilePath.address(e.path, isDirectory: e.isDirectory); i.path = e.path; i.folder = FilePath.parent(e.path); i.name = e.name
         i.kind = e.kind.rawValue; i.kindLabel = FileTypes.label(e.kind); i.size = Double(e.size); i.sizeLabel = FileLabels.size(e.size)
         i.modifiedLabel = FileLabels.date(e.modified, now: now()); i.mime = FileTypes.mime(for: e.name); i.status = status; i.message = message
-        i.title = (e.name as NSString).deletingPathExtension
         return i
     }
 
@@ -759,6 +733,27 @@ public final class FilesService: @unchecked Sendable {
         return info(e, status: "ready")
     }
 
+    /// The listener opened this file (it shows in Recent).
+    public func noteOpened(_ e: FileEntry) { recents.touch(e, at: now()) }
+
+    /// The entry at `path` as its folder lists it (nil when it is not there).
+    public func entry(path: String) async -> FileEntry? {
+        (try? await backend.list(FilePath.parent(path)))?.first(where: { $0.path == path })
+    }
+
+    /// The file's bytes on disk (fetched once per path, size and modified time), for the Reader to take in.
+    public func download(_ entry: FileEntry, maxBytes: Int64) async throws -> URL {
+        if entry.size > maxBytes { throw FilesError.tooLarge(entry.size) }
+        let key = Self.hash("\(entry.path)|\(entry.size)|\(entry.modified.map { String($0.timeIntervalSince1970) } ?? "")")
+        let dir = cacheRoot.appendingPathComponent(key, isDirectory: true)
+        let dest = dir.appendingPathComponent(FilePath.cacheName(entry.name))
+        if !FileManager.default.fileExists(atPath: dest.path) || ((try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? Int64) ?? -1) != entry.size {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try await backend.fetch(entry.path, size: entry.size, to: dest, maxBytes: maxBytes)
+        }
+        return dest
+    }
+
     /// Open the file a `file:` address names: find it in its folder, bring it to disk (cached), and read what its viewer needs.
     public func open(address: String) async -> FileInfo {
         guard let (path, isDir) = FilePath.fromAddress(address) else {
@@ -781,7 +776,8 @@ public final class FilesService: @unchecked Sendable {
         if entry.isDirectory { return info(entry, status: "folder") }
         let kind = entry.kind
         var out = info(entry, status: "ready")
-        if kind == .other { recents.touch(entry); return out }
+        // A PDF or an e-book is a Reader document: it is not fetched, parsed or shown here (`FilesInReader` opens it in Reader).
+        if kind == .other || kind == .pdf || kind == .epub { recents.touch(entry); return out }
         let cap = FileTypes.maxBytes(kind)
         if entry.size > cap {
             out.status = "toolarge"; out.message = FilesError.tooLarge(entry.size).description; return out
@@ -808,14 +804,6 @@ public final class FilesService: @unchecked Sendable {
                 out.truncated = cut
             case .image:
                 let (w, h) = Self.imageSize(dest); out.width = Double(w); out.height = Double(h)
-            case .pdf:
-                out.pages = Self.pdfPageCount(dest)
-                if let t = Self.pdfTitle(dest), !t.isEmpty { out.title = t }
-            case .epub:
-                let book = try self.loadBook(at: dest)
-                out.title = book.title.isEmpty ? out.title : book.title; out.author = book.author
-                out.chapters = book.chapters.enumerated().map { FileChapterRef(index: $0.offset, title: $0.element.title) }
-                if book.chapters.isEmpty { out.status = "error"; out.message = "This book has no readable chapters." }
             default: break
             }
             recents.touch(entry, at: now())
@@ -848,37 +836,6 @@ public final class FilesService: @unchecked Sendable {
         return b.count - i < need ? Data(b[..<i]) : Data(b)
     }
 
-    // MARK: books and PDFs
-
-    private func loadBook(at url: URL) throws -> EpubBook {
-        lock.lock(); if let b = books[url.path] { lock.unlock(); return b }; lock.unlock()
-        let b = try Epub.parse(data: Data(contentsOf: url, options: .mappedIfSafe))
-        lock.lock(); books[url.path] = b; lock.unlock()
-        return b
-    }
-
-    /// One chapter of the book at `address`, as Markdown (the reader's component is not importable yet: lane 3's blocks).
-    public func chapter(address: String, index: Int) async -> FileChapter {
-        let i = await open(address: address)
-        guard i.status == "ready", i.kind == "epub", !i.local.isEmpty, let book = try? loadBook(at: URL(fileURLWithPath: i.local)) else {
-            return FileChapter(index: 0, count: 0, title: "", markdown: "", status: i.status == "ready" ? "error" : i.status)
-        }
-        let n = book.chapters.count
-        guard n > 0 else { return FileChapter(index: 0, count: 0, title: "", markdown: "", status: "empty") }
-        let k = min(max(index, 0), n - 1)
-        return FileChapter(index: k, count: n, title: book.chapters[k].title, markdown: Epub.markdown(book.chapters[k].blocks), status: "ready")
-    }
-
-    /// Which pages of the PDF at `address` hold `query` (1-based). PDFKit does the search; the page view cannot highlight it.
-    public func findPages(address: String, query: String) async -> FilePages {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return FilePages(query: "", pages: [], message: "") }
-        let i = await open(address: address)
-        guard i.status == "ready", i.kind == "pdf", !i.local.isEmpty else { return FilePages(query: q, pages: [], message: "Open a PDF to search it.") }
-        let pages = Self.pdfFind(URL(fileURLWithPath: i.local), q)
-        return FilePages(query: q, pages: pages, message: pages.isEmpty ? "No page has \u{201C}\(q)\u{201D}." : "")
-    }
-
     static func imageSize(_ url: URL) -> (Int, Int) {
         #if canImport(ImageIO)
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil), let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
@@ -886,33 +843,6 @@ public final class FilesService: @unchecked Sendable {
         return (w, h)
         #else
         return (0, 0)
-        #endif
-    }
-
-    static func pdfPageCount(_ url: URL) -> Int {
-        #if canImport(PDFKit)
-        return PDFDocument(url: url)?.pageCount ?? 0
-        #else
-        return 0
-        #endif
-    }
-    static func pdfTitle(_ url: URL) -> String? {
-        #if canImport(PDFKit)
-        return PDFDocument(url: url)?.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String
-        #else
-        return nil
-        #endif
-    }
-    static func pdfFind(_ url: URL, _ q: String) -> [Int] {
-        #if canImport(PDFKit)
-        guard let doc = PDFDocument(url: url) else { return [] }
-        var pages = Set<Int>()
-        for s in doc.findString(q, withOptions: [.caseInsensitive, .diacriticInsensitive]) {
-            for p in s.pages { pages.insert(doc.index(for: p) + 1) }
-        }
-        return pages.sorted()
-        #else
-        return []
         #endif
     }
 

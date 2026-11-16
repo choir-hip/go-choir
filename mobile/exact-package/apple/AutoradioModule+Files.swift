@@ -2,8 +2,7 @@
 // exact-package/interface/files.json), all answered by the kit's FilesService (Kit/ChoirFiles.swift, Kit/Epub.swift):
 //   fileList(path, mode, sort, desc, query) -> FileListing        a folder, recents, or a search
 //   fileOpen(address) -> FileInfo                                  a file brought to app:/cache/files, with what its viewer reads
-//   fileChapter(address, index) -> FileChapter                     one chapter of an e-book as Markdown
-//   filePages(address, query) -> FilePages                         the pages of a PDF that hold a word
+// A PDF or an e-book is not shown by Files: opening one (pageOpen on its `file:` address) takes it into Reader (Kit/FilesInReader.swift).
 //   fileMkdir / fileDelete / fileRename / fileUpload -> FileListing
 // Demo mode serves an in-memory tree of invented files; otherwise the listener's computer (GET/PUT/POST/PATCH/DELETE /api/files).
 import Foundation
@@ -19,6 +18,9 @@ extension AutoradioModule {
         let service = FilesService(backend: backend, cacheRoot: disk, appPrefix: "app:/cache/files",
                                    recents: RecentFiles(file: support.appendingPathComponent("recent-files.json")))
         pageSources.register(FilesPageSource(service: service))
+        // One way to open a document: a PDF or an e-book in Files opens in Reader. A page left in the pile for such a file by an earlier build is closed.
+        FilesInReader.current = FilesInReader(files: service)
+        for p in pages.list() where FilesInReader.opensInReader(p.address) { pages.close(p.address) }
 
         func str(_ args: [String: Any], _ k: String) -> String { args[k] as? String ?? "" }
         func num(_ args: [String: Any], _ k: String) -> Int { (args[k] as? NSNumber)?.intValue ?? Int(args[k] as? String ?? "") ?? 0 }
@@ -39,15 +41,6 @@ extension AutoradioModule {
             guard a.hasPrefix("file:"), !a.hasSuffix("/") else { return reply(self.json(FileInfo.empty)) }
             answer(reply) { await service.open(address: a) }
         }
-        handle("fileChapter") { args, reply in
-            let (a, i) = (str(args, "address"), num(args, "index"))
-            answer(reply) { await service.chapter(address: a, index: i) }
-        }
-        handle("filePages") { args, reply in
-            let (a, q) = (str(args, "address"), str(args, "query"))
-            answer(reply) { await service.findPages(address: a, query: q) }
-        }
-
         // Each change answers the refreshed listing of the folder it changed, and refreshes the live sources.
         func change(_ reply: @escaping ([String: Any]) -> Void, _ work: @escaping @Sendable () async -> FileListing) {
             Task { [weak self] in

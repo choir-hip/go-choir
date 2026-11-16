@@ -8,7 +8,7 @@
 //   audio  `audio` with native controls and `metadata=` for Now Playing and the lock screen
 //   PDF    `iframe` on a local .pdf shows PDFKit's PDFView: its own scrolling and pinch, page set by `#page=N` in src
 //   e-book chapters become Markdown for `text markup="markdown"` (no EPUB element in Exact; Kit/Epub.swift parses the book)
-use Theme, FileInfo, FileChapter, FilePages from "@choir/autoradio"
+use Theme, FileInfo from "@choir/autoradio"
 use PageScroll, Card, RowRule, PlainList from "./ui.contract"
 
 // The one control of the Files place and the viewers, drawn as a word (no pill: owner, 2026-11-15): a text action in the accent; when `active` (a
@@ -122,123 +122,27 @@ component VideoViewer
           width="100%" flex=1 min-height=0 object-fit="contain" overflow="hidden" background-color=th.paper2 border-radius=th.radiusCard box-shadow=th.shadow1
 
 // ---------------------------------------------------------------- audio
+// An audio file in Files is played the way everything is played: it is an entry on the run sheet (Play is `place now`, Add to queue is
+// `place queued`), heard through the radio's own player with its Now Playing, its scrubber, Keep listening and the lock screen. This page has
+// no player of its own.
 component AudioViewer
   inject
     th: Theme
     fvInfo: FileInfo
-    fvHold: bool
-    fvPos: number
-    fvDur: number
-    fvPlayed: action
-    fvPausedEv: action
-    fvEnded: action
-    fvTick: action
-    fvMeasured: action
-    fvNudge: action
-    fvRestart: action
-    fvSkip: action
-    fvSeekAt: action
-    fvSeek: number
+    fvShare: action
+    queuePlay: action
+    queueLater: action
   view
     column flex=1 min-height=0 width="100%" testId="viewer-audio"
       ViewerHeader(title=fvInfo.name, sub=`${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}`)
-      // The element draws nothing of its own; with `controls` it is the system's audio controls. Now Playing and the lock screen
-      // follow it through `metadata`, and the radio yields (fvHold) rather than the two talking over each other.
       column padding-left=20 padding-right=20 padding-top=8
         Card(level=2, testId="audio-card", minHeight=0)
           column padding=20 gap=16 align-items="center"
             image "symbol:sf/waveform" width=64 height=64 color=th.accent
-            text fvInfo.title font-family=th.fontHead font-size="-exact-title2" font-weight=700 color=th.fg text-align="center"
-            audio fvInfo.src testId="audio-view" controls=true preload="metadata" paused=fvHold currentTime=fvSeek width="100%"
-              timeupdate=fvTick durationchange=fvMeasured playing=fvPlayed pause=fvPausedEv ended=fvEnded
-              metadata=MediaMetadata(title=fvInfo.title, artist="Files", album="", artwork="")
-              seekbackwardOffset=15 seekforwardOffset=15 seekbackward=fvSkip(-1) seekforward=fvSkip(1) seekto=fvSeekAt
-            row gap=8 align-items="center"
-              Chip(label="Back 15 s", active=false, testId="audio-back", press=fvNudge(-1))
-              Chip(label="Start", active=false, testId="audio-restart", press=fvRestart)
-              Chip(label="Forward 15 s", active=false, testId="audio-forward", press=fvNudge(1))
-            text `${fvPos.toFixed(0)} s of ${fvDur.toFixed(0)} s` testId="audio-position" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted font-variant-numeric="tabular-nums"
-            text (fvHold ? "Paused" : "Playing") testId="audio-state" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-
-// ---------------------------------------------------------------- PDF
-// PDFKit draws and scrolls the pages itself (the iframe of a local .pdf is a PDFView); Contract keeps the page we last sent it to
-// and the search. What Exact does not give: the page the reader scrolled to, a fit control, highlighting a search hit.
-component PdfViewer
-  inject
-    th: Theme
-    fvInfo: FileInfo
-    fvPage: number
-    fvFindDraft: string
-    fvPages: FilePages
-    fvGo: action
-    fvEditFind: action
-    fvSearch: action
-    fvClearFind: action
-    fvShare: action
-  view
-    column flex=1 min-height=0 width="100%" testId="viewer-pdf"
-      ViewerHeader(title=(fvInfo.title.length > 0 ? fvInfo.title : fvInfo.name), sub=`PDF · ${fvInfo.pages.toFixed(0)} pages · ${fvInfo.sizeLabel}`)
-      row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0
-        Chip(label="‹", active=false, testId="pdf-prev", press=fvGo(fvPage - 1))
-        text `Page ${fvPage.toFixed(0)} of ${fvInfo.pages.toFixed(0)}` testId="pdf-page" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 text-align="center" font-variant-numeric="tabular-nums"
-        Chip(label="›", active=false, testId="pdf-next", press=fvGo(fvPage + 1))
-        Chip(label="Share", active=false, testId="pdf-share", press=fvShare(fvInfo.name, fvInfo.src))
-      row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0
-        column flex=1 min-width=0
-          input type="search" value=fvFindDraft input=fvEditFind submit=fvSearch placeholder="Find in this PDF" aria-label="Find in this PDF" testId="pdf-find"
-            enterkeyhint="search" min-width=0 font-family=th.fontLabel font-size=15 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
-          RowRule(indent=0)
-        if fvPages.query != ""
-          Chip(label="Clear", active=false, testId="pdf-find-clear", press=fvClearFind)
-      if fvPages.query != ""
-        row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0 testId="pdf-hits"
-          if fvPages.pages.length == 0
-            text fvPages.message font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-          else
-            text `On pages` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-            for p in fvPages.pages key=p
-              ChoiceChip(label=`${p.toFixed(0)}`, active=(p == fvPage), testId=`pdf-hit-${p}`, press=fvGo(p))
-      // A page change re-creates the frame: PDFView opens at src's #page=N, and does not follow a changed fragment on its own.
-      column flex=1 min-height=0 margin-bottom="calc(56px + 8px + env(safe-area-inset-bottom) + 16px)" overflow="hidden" border-radius=th.radiusCard box-shadow=th.shadow1
-        for n in [fvPage] key=n
-          iframe src=`${fvInfo.src}#page=${n}` testId="pdf-frame" aria-label=fvInfo.name width="100%" flex=1 min-height=0
-
-// ---------------------------------------------------------------- e-book
-// Chapters arrive as Markdown (Kit/Epub.swift turns the book's XHTML into blocks, then Markdown) and are set in the reading face.
-// When lane 3's reader exposes a component taking blocks, this body becomes that component and the book gets the same typography.
-component EpubViewer
-  inject
-    th: Theme
-    fvInfo: FileInfo
-    fvChapter: FileChapter
-    fvChap: number
-    fvToc: bool
-    fvChapGo: action
-    fvTocToggle: action
-    listen: action
-  view
-    PageScroll(id="epub")
-      text fvInfo.title role="heading" aria-level=1 testId="page-title" font-size="-exact-title1" font-weight=700 font-family=th.fontHead
-      text (fvInfo.author.length > 0 ? `${fvInfo.author} · ${fvInfo.chapters.length.toFixed(0)} chapters` : `${fvInfo.chapters.length.toFixed(0)} chapters`) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      row gap=8 align-items="center"
-        Chip(label="Contents", active=fvToc, testId="epub-toc", press=fvTocToggle)
-        Chip(label="Listen", active=false, testId="epub-listen", press=listen(`${fvInfo.address}#${fvChap}`, fvChapter.title, fvChapter.markdown))
-        text `Chapter ${(fvChap + 1).toFixed(0)} of ${fvInfo.chapters.length.toFixed(0)}` testId="epub-position" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted font-variant-numeric="tabular-nums"
-      if fvToc
-        PlainList(testId="epub-contents")
-          column padding="4px 0px"
-            for c in fvInfo.chapters key=c.index
-              button press=fvChapGo(c.index) testId=`epub-chapter-${c.index}` appearance="none" width="100%"
-                row padding="12px 0" align-items="center" width="100%"
-                  text c.title font-family=th.fontHead font-size="-exact-callout" font-weight=(c.index == fvChap ? 700 : 400) color=th.fg flex=1 text-align="left"
-                  image "symbol:forward-chevron" color=th.muted
-      else
-        text fvChapter.title font-family=th.fontLabel font-size="-exact-footnote" color=th.accent testId="epub-chapter-title"
-        column width="100%" max-width=620
-          text fvChapter.markdown markup="markdown" testId="epub-text" font-family=th.fontText font-size="-exact-title3" line-height=1.65 color=th.fg
-        row gap=8 align-items="center"
-          Chip(label="‹ Previous", active=false, testId="epub-prev", press=fvChapGo(fvChap - 1))
-          Chip(label="Next ›", active=false, testId="epub-next", press=fvChapGo(fvChap + 1))
+            row gap=8 align-items="center" flex-wrap="wrap"
+              Chip(label="Play", active=false, testId="audio-play", press=queuePlay("file", fvInfo.address, fvInfo.name))
+              Chip(label="Add to queue", active=false, testId="audio-queue", press=queueLater("file", fvInfo.address, fvInfo.name))
+              Chip(label="Share", active=false, testId="audio-share", press=fvShare(fvInfo.name, fvInfo.src))
 
 // ---------------------------------------------------------------- plain text, Markdown and code
 component TextViewer

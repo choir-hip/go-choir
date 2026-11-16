@@ -210,7 +210,7 @@ final class TypographyRulesTests: XCTestCase {
 
     // T7
     func testFiguresAreTabular() throws {
-        let ids = ["queue-elapsed", "queue-remaining", "player-speed", "player-position", "audio-position", "epub-position", "pdf-page", "doc-position"]
+        let ids = ["queue-elapsed", "queue-remaining", "player-speed", "player-position", "doc-position"]
         var found = 0
         for els in try Self.allElements() { for e in els where Self.isText(e) {
             for id in ids where e.text.contains("\"\(id)\"") {
@@ -218,7 +218,7 @@ final class TypographyRulesTests: XCTestCase {
                 XCTAssertTrue(e.text.contains("font-variant-numeric=\"tabular-nums\""), "\(e.file):\(e.line) \(id) is a figure and takes tabular figures")
             }
         } }
-        XCTAssertGreaterThanOrEqual(found, 6)
+        XCTAssertGreaterThanOrEqual(found, 4)       // the audio, e-book and PDF figures went with the Files players and viewers
     }
 
     // T8

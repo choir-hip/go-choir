@@ -44,13 +44,25 @@ extension AutoradioModule {
             }
             return "app:/cache/files/reader-\(d.id)/doc.pdf"
         }
+        /// The document's own file for the share sheet (any kind): a copy of the original under the cache, made once.
+        func shareable(_ d: ShelfDoc) -> String {
+            guard let from = lib.fileURL(d.id) else { return "" }
+            let folder = cacheDisk.appendingPathComponent("reader-\(d.id)", isDirectory: true)
+            let name = FilePath.cacheName(d.fileName)
+            let to = folder.appendingPathComponent(name)
+            if !FileManager.default.fileExists(atPath: to.path) {
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try? FileManager.default.copyItem(at: from, to: to)
+            }
+            return "app:/cache/files/reader-\(d.id)/\(name)"
+        }
         func num(_ args: [String: Any], _ k: String) -> Int { (args[k] as? NSNumber)?.intValue ?? Int(args[k] as? String ?? "") ?? 0 }
         func listing(_ message: String = "") -> [String: Any] {
             let docs = lib.list()
             let rows: [[String: Any]] = docs.map { d in
                 let pct = d.progress > 0 ? "\(Int((d.progress * 100).rounded()))% read" : "Not started"
                 return ["id": d.id, "address": d.address, "title": d.title, "author": d.author, "kindLabel": d.kind == "pdf" ? "PDF" : "Book",
-                        "detail": [d.author, d.kind == "pdf" ? "PDF" : "Book", pct].filter { !$0.isEmpty }.joined(separator: " · "), "progress": d.progress]
+                        "detail": [d.author, d.kind == "pdf" ? "PDF" : "Book", d.origin == nil ? "" : "From Files", pct].filter { !$0.isEmpty }.joined(separator: " · "), "progress": d.progress]
             }
             return ["status": rows.isEmpty ? "empty" : "ready",
                     "message": message.isEmpty && rows.isEmpty ? "Your books and documents appear here. Add an EPUB or PDF to read it here, hear it read aloud and search it." : message,
@@ -68,7 +80,7 @@ extension AutoradioModule {
             }
             let sections: [[String: Any]] = t.sections.enumerated().map { ["index": $0.offset, "title": $0.element.title] }
             reply(["address": a, "id": id, "title": d.title, "author": d.author, "kind": d.kind, "kindLabel": d.kind == "pdf" ? "PDF" : "Book",
-                   "status": "ready", "message": "", "src": shown(d), "sections": sections, "blockCount": d.length, "position": d.position,
+                   "status": "ready", "message": "", "src": shown(d), "shareSrc": shareable(d), "sections": sections, "blockCount": d.length, "position": d.position,
                    "resumeSection": t.section(of: d.position), "resumeBlock": d.position])
         }
 

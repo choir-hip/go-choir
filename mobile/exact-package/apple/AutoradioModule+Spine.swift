@@ -130,6 +130,16 @@ extension AutoradioModule {
 
         // Sends. Every one answers the open-page list, the shape the page host reads.
         handle("pageOpen") { [unowned self] args, reply in
+            // A PDF or an e-book in Files opens in Reader, the one way a document opens (Kit/FilesInReader.swift).
+            if let address = args["address"] as? String, let r = FilesInReader.current, FilesInReader.opensInReader(address) {
+                Task { [weak self] in
+                    guard let self else { return }
+                    do { let d = try await r.open(address: address); self.pages.open(d.address, title: d.title) }
+                    catch { BarTracker.shared.say(BarDocumentImport.failureLine(error, url: URL(fileURLWithPath: FilePath.fromAddress(address)?.path ?? address))) }
+                    DispatchQueue.main.async { self.touch(["openPages", "barState", "shelfList"], now: true); self.runtime.warmResponder(address: self.pages.list().first?.address); reply(self.pageList()) }
+                }
+                return
+            }
             pages.open(args["address"] as? String ?? "", title: args["title"] as? String); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList())
         }
         handle("pageClose") { [unowned self] args, reply in pages.close(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }

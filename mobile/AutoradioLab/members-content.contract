@@ -43,6 +43,11 @@ members Autoradio
     ctlOpen = false
     ctlPanel = ""
     send ldAck = shelfEnqueue(address=pg.top, section=ldSec, block=ldBlock)
+  // Share is the document's own file (a Files document keeps the file it came from): the system share sheet.
+  action ctlShare
+    ctlOpen = false
+    ctlPanel = ""
+    share(title=ldInfo.title, files=[ldInfo.shareSrc])
   action ctlGo(n: number)
     ldSec = max(0, min(n, max(0, ldInfo.sections.length - 1)))
     ldToc = false

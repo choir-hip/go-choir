@@ -6,7 +6,7 @@
 // files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
 use Theme, FileListing, FileInfo, FileRow from "@choir/autoradio"
 use PageScroll, Card, RowRule, PlainList from "./ui.contract"
-use Chip, ChoiceChip, NoPreview, ImageViewer, VideoViewer, AudioViewer, PdfViewer, EpubViewer, TextViewer, CsvViewer from "./viewers.contract"
+use Chip, ChoiceChip, NoPreview, ImageViewer, VideoViewer, AudioViewer, TextViewer, CsvViewer from "./viewers.contract"
 
 component FilePage
   inject
@@ -28,10 +28,8 @@ component FilePage
       VideoViewer()
     else if fvInfo.kind == "audio"
       AudioViewer()
-    else if fvInfo.kind == "pdf"
-      PdfViewer()
-    else if fvInfo.kind == "epub"
-      EpubViewer()
+    else if fvInfo.kind == "pdf" or fvInfo.kind == "epub"
+      NoPreview(address=address, title=title, message="PDFs and books open in Reader.")
     else if fvInfo.kind == "csv"
       CsvViewer()
     else if fvInfo.kind == "markdown" or fvInfo.kind == "text" or fvInfo.kind == "code"

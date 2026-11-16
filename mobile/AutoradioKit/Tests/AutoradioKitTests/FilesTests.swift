@@ -289,31 +289,6 @@ final class FilesServiceTests: XCTestCase {
         XCTAssertNotEqual(a.src, b.src); XCTAssertEqual(b.text, "changed\n")
     }
 
-    func testEpubAndChapters() async {
-        let i = await service.open(address: "file:/Books/The Lantern Keeper.epub")
-        XCTAssertEqual(i.status, "ready"); XCTAssertEqual(i.title, "The Lantern Keeper"); XCTAssertEqual(i.author, "A. Ferris (invented)")
-        XCTAssertEqual(i.chapters.count, 3)
-        let c = await service.chapter(address: i.address, index: 1)
-        XCTAssertEqual(c.title, "Three visitors"); XCTAssertEqual(c.count, 3); XCTAssertTrue(c.markdown.contains("What the boy asked"))
-        let past = await service.chapter(address: i.address, index: 99)
-        XCTAssertEqual(past.index, 2, "an index past the end clamps to the last chapter")
-        let none = await service.chapter(address: "file:/Documents/Key list.txt", index: 0)
-        XCTAssertEqual(none.status, "error")
-    }
-
-    #if canImport(PDFKit)
-    func testPdfPagesAndSearch() async {
-        let i = await service.open(address: "file:/Documents/Council minutes.pdf")
-        XCTAssertEqual(i.status, "ready"); XCTAssertEqual(i.pages, 3); XCTAssertEqual(i.title, "Harbor Council minutes")
-        let hit = await service.findPages(address: i.address, query: "lamps")
-        XCTAssertEqual(hit.pages, [2])
-        let none = await service.findPages(address: i.address, query: "unicorn")
-        XCTAssertEqual(none.pages, []); XCTAssertFalse(none.message.isEmpty)
-        let empty = await service.findPages(address: i.address, query: "  ")
-        XCTAssertEqual(empty.pages, [])
-    }
-    #endif
-
     // failures 2, 11, 12
     func testChanges() async throws {
         var l = await service.makeFolder(in: "/", name: "Projects")

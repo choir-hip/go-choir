@@ -48,6 +48,10 @@ public struct ShelfDoc: Codable, Equatable, Sendable {
     /// Pages (PDF) or chapters (EPUB).
     public var sections: Int
     public var fileName: String
+    /// Where a document came from when it came from the Files place: the file's path on the computer, and the size and modified time it had
+    /// then. Opening the same file again finds this document; a changed file replaces it. Nil for a document added any other way.
+    public var origin: String?
+    public var etag: String?
     public var address: String { ShelfAddress.address(id) }
     public var progress: Double { length > 1 ? min(1, max(0, Double(position) / Double(length - 1))) : 0 }
 }
@@ -383,6 +387,24 @@ public final class ReaderShelf: @unchecked Sendable {
             try? FileManager.default.removeItem(at: folder)
             throw ShelfError.unreadable("The file could not be stored.")
         }
+    }
+
+    /// The document that came from this Files path, if any.
+    public func doc(origin: String) -> ShelfDoc? { lock.lock(); defer { lock.unlock() }; return docs.first { $0.origin == origin } }
+
+    /// A document now also comes from this Files path (the same bytes, whoever brought them first). Any other copy that came from that path
+    /// (an older version of the file) is removed: the changed file replaces it.
+    @discardableResult
+    public func adopt(id: String, origin: String, etag: String) -> ShelfDoc? {
+        lock.lock()
+        guard let i = docs.firstIndex(where: { $0.id == id }) else { lock.unlock(); return nil }
+        docs[i].origin = origin; docs[i].etag = etag
+        let stale = docs.filter { $0.origin == origin && $0.id != id }.map(\.id)
+        saveIndexLocked(); let d = docs[i]
+        lock.unlock()
+        for old in stale { remove(id: old) }
+        onChange?()
+        return d
     }
 
     public func remove(id: String) {

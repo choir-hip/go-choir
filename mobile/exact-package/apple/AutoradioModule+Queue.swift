@@ -47,7 +47,10 @@ extension AutoradioModule {
             let title = args["title"] as? String ?? ""
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if let entry = QueueRequest.entry(kind: kind, ref: ref, title: title) {
+                // An audio file in Files is a run sheet entry like everything else: brought to disk, then placed (kind "file", ref its address).
+                var found = QueueRequest.entry(kind: kind, ref: ref, title: title)
+                if found == nil, kind == "file" { found = await FilesInReader.current?.audioEntry(address: ref) }
+                if let entry = found {
                     switch mode {
                     case "now":
                         if !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }

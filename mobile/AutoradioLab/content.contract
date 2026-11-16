@@ -47,6 +47,7 @@ component DocExpanded
     ctlPanel: string
     ctlRead: action
     ctlQueueDoc: action
+    ctlShare: action
     ctlPanelOf: action
     ctlSetText: action
     ctlGo: action
@@ -64,6 +65,8 @@ component DocExpanded
           ChipFace(label="Read aloud", selected=false)
         button press=ctlQueueDoc testId="doc-queue" appearance="none" aria-label="Add to queue"
           ChipFace(label="Add to queue", selected=false)
+        button press=ctlShare testId="doc-share" appearance="none" aria-label="Share this document"
+          ChipFace(label="Share", selected=false)
         button press=ctlPanelOf("contents") testId="doc-toc" appearance="none" aria-label="Contents"
           ChipFace(label="Contents", selected=(ctlPanel == "contents"))
         button press=ctlPanelOf("find") testId="doc-find-open" appearance="none" aria-label="Find in this document"
