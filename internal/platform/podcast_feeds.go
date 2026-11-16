@@ -306,11 +306,12 @@ func (s *Service) notePodcastSeedFeed(ctx context.Context, og *ObjectGraphStore,
 	if err != nil {
 		return err
 	}
-	if row == nil {
+	switch {
+	case row == nil:
 		row = &podcastFeedRow{FeedURL: feedURL, Norm: norm, Title: title, FirstSeen: now.Format(time.RFC3339), Featured: true}
-	} else if row.Featured && (row.Title != "" || title == "") {
-		return nil
-	} else if row.Title == "" {
+	case row.Title != "" || title == "":
+		return nil // known and named: a repeat poll writes nothing
+	default:
 		row.Title = title
 	}
 	return s.putPodcastFeed(ctx, og, *row, now)

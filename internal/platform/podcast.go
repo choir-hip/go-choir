@@ -323,8 +323,11 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 				ep.DurationSeconds = prev.DurationSeconds
 			}
 		}
-		if err := s.putPodcastEpisode(ctx, og, ep, now); err != nil {
-			return recorded, fresh, err
+		// A repeat poll of an unchanged item writes nothing.
+		if prev == nil || !sameEpisode(*prev, ep) {
+			if err := s.putPodcastEpisode(ctx, og, ep, now); err != nil {
+				return recorded, fresh, err
+			}
 		}
 		recorded++
 		if !noted[ep.FeedURL] {
@@ -336,6 +339,13 @@ func (s *Service) RecordPodcastEpisodes(ctx context.Context, in []PodcastEpisode
 	}
 	s.podcastCache.reset()
 	return recorded, fresh, nil
+}
+
+// sameEpisode reports whether two rows hold the same facts.
+func sameEpisode(a, b PodcastEpisode) bool {
+	return a.EpisodeID == b.EpisodeID && a.FeedURL == b.FeedURL && a.GUID == b.GUID && a.Show == b.Show && a.Title == b.Title &&
+		a.Published.Equal(b.Published) && a.DurationSeconds == b.DurationSeconds && a.EnclosureURL == b.EnclosureURL && a.Notes == b.Notes &&
+		a.HasTranscript == b.HasTranscript && ((a.StableFile == nil) == (b.StableFile == nil)) && (a.StableFile == nil || *a.StableFile == *b.StableFile)
 }
 
 func checkPodcastEpisode(e PodcastEpisodeIn) (PodcastEpisode, error) {
