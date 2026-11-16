@@ -6,7 +6,7 @@ use ConversationInfo, VoiceProfile, SettingsAck from "@choir/autoradio"
 
 members Autoradio
   resource cv = conversationInfo() as shape ConversationInfo else empty()
-  resource vp = voiceProfile() as shape VoiceProfile else empty()
+  resource voicep = voiceProfile() as shape VoiceProfile else empty()
   mutation tk as shape SettingsAck
   // The answer card's buttons (bar.contract): ask the same words again, hide the card, stop the turn.
   action answerRetry(id: string)

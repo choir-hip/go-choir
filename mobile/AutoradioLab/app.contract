@@ -336,7 +336,7 @@ component Autoradio
     answerRetry
     answerDismiss
     answerCancel
-    vp
+    voicep
     learnVoice
     forgetVoice
     // ---- lane 8: onboarding and the edition topics ----

@@ -212,7 +212,7 @@ component RootScreen
     setDemo: action
     devDetails: bool
     toggleDevDetails: action
-    vp: VoiceProfile
+    voicep: VoiceProfile
     learnVoice: action
     forgetVoice: action
   view
@@ -243,16 +243,16 @@ component RootScreen
         Hairline()
         // Lane autoradio-talk: the reader's voice, learned on this phone so the radio can tell you from a TV.
         column width="100%" box-sizing="border-box" padding="14px 16px" gap=8 align-items="flex-start" testId="settings-my-voice"
-          text (vp.learned ? "Your voice is learned" : (vp.heard > 0 ? `Learning your voice: ${vp.heard} of ${vp.needed}` : "Your voice is not learned yet")) font-family=th.fontUi font-size=17 font-weight=600 color=th.fg testId="settings-voice-state"
-          text (vp.line != "" ? vp.line : "The radio learns your voice from what you say to it. It stays on this phone and is never uploaded.") font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+          text (voicep.learned ? "Your voice is learned" : (voicep.heard > 0 ? `Learning your voice: ${voicep.heard} of ${voicep.needed}` : "Your voice is not learned yet")) font-family=th.fontUi font-size=17 font-weight=600 color=th.fg testId="settings-voice-state"
+          text (voicep.line != "" ? voicep.line : "The radio learns your voice from what you say to it. It stays on this phone and is never uploaded.") font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
           row gap=10
             button press=learnVoice testId="settings-voice-learn" appearance="none"
-              Btn(label=(vp.learned ? "Learn it again" : "Learn my voice"), primary=false, wide=false)
-            if vp.learned or vp.heard > 0
+              Btn(label=(voicep.learned ? "Learn it again" : "Learn my voice"), primary=false, wide=false)
+            if voicep.learned or voicep.heard > 0
               button press=forgetVoice testId="settings-voice-forget" appearance="none"
                 Btn(label="Forget my voice", primary=false, wide=false)
-          if vp.credit != ""
-            text vp.credit font-family=th.fontUi font-size=10 color=th.muted
+          if voicep.credit != ""
+            text voicep.credit font-family=th.fontUi font-size=10 color=th.muted
       SectionLabel(label="The paper")
       Card(level=1, testId="settings-card-paper", minHeight=0)
         NavRow(address="settings:learned", title="What the paper has learned", subtitle="Your more and less of this, with Reset", testId="settings-nav-learned")
