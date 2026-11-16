@@ -15,16 +15,16 @@ component ClipRow
     column gap=4 width="100%" box-sizing="border-box" padding-top=12 padding-bottom=6 padding-left=(pad + 18) padding-right=pad testId=`clip-${r.clipID}` position="relative"
       // a quotation: the reading face at 17 pt, the opening mark hanging in the left gutter (outside the text's edge), the closing mark after the words
       box position="absolute" left=pad top=6
-        text "“" font-family=th.fontRead font-size=34 line-height=1 color=th.muted
-      text `${r.quote}”` font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg line-clamp=(byStory ? 4 : 3) text-align="left"
-      text (byStory ? `${r.story} · ${r.show} · ${r.length}` : `${r.show} · ${r.episode} · ${r.length}`) font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 text-align="left"
+        text "“" font-family=th.fontHead font-size="-exact-large-title" line-height=1 color=th.muted font-weight=700
+      text `${r.quote}”` font-family=th.fontText font-size="-exact-body" line-height=1.45 color=th.fg line-clamp=(byStory ? 4 : 3) text-align="left"
+      text (byStory ? `${r.story} · ${r.show} · ${r.length}` : `${r.show} · ${r.episode} · ${r.length}`) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted line-clamp=1 text-align="left"
       row gap=20 align-items="center"
         button press=clipDo("play", r.clipID) testId=`clip-play-${r.clipID}` appearance="none" aria-label=`Play ${r.show}: ${r.quote}`
           row min-height=44 align-items="center"
-            text (r.episodeOnly ? "Play episode" : "Play") font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+            text (r.episodeOnly ? "Play episode" : "Play") font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
         button press=clipDo("queue", r.clipID) testId=`clip-queue-${r.clipID}` appearance="none" aria-label=`Add ${r.show} to the queue`
           row min-height=44 align-items="center"
-            text "Queue" font-family=th.fontUi font-size=15 font-weight=600 color=th.muted
+            text "Queue" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.muted
         button press=clipDo("open", r.clipID) testId=`clip-open-${r.clipID}` appearance="none" aria-label=`Open the episode of ${r.show}`
           row min-height=44 align-items="center"
-            text "Open episode" font-family=th.fontUi font-size=15 font-weight=600 color=th.muted
+            text "Open episode" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.muted

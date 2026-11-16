@@ -24,7 +24,7 @@ component Chip
   view
     button press=press testId=testId appearance="none" flex-shrink=0 padding="0px 12px 0px 0px"
       column align-items="flex-start" justify-content="center" min-height=44 gap=3
-        text label font-family=th.fontUi font-size=15 font-weight=600 color=(active ? th.fg : th.accent)
+        text label font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=(active ? th.fg : th.accent)
         box width=20 height=2 background-color=(active ? th.accent : "transparent")
 
 // One choice of a set (a zoom, a mode, a page of results): the chosen one full strength with the short accent rule, the others MUTED (the accent is
@@ -40,7 +40,7 @@ component ChoiceChip
   view
     button press=press testId=testId appearance="none" flex-shrink=0 padding="0px 12px 0px 0px"
       column align-items="flex-start" justify-content="center" min-height=44 gap=3
-        text label font-family=th.fontUi font-size=15 font-weight=600 color=(active ? th.fg : th.muted)
+        text label font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=(active ? th.fg : th.muted)
         box width=20 height=2 background-color=(active ? th.accent : "transparent")
 
 // The page's heading, scrolling away with nothing: the viewers that fill the screen keep it above their frame.
@@ -52,8 +52,8 @@ component ViewerHeader
     sub: string
   view
     column padding-left=20 padding-right=20 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-bottom=10 gap=2 flex-shrink=0
-      text title role="heading" aria-level=1 testId="page-title" font-family=th.fontRead font-size=24 font-weight=700 color=th.fg line-clamp=2
-      text sub font-family=th.fontUi font-size=13 color=th.muted line-clamp=1
+      text title role="heading" aria-level=1 testId="page-title" font-family=th.fontHead font-size="-exact-title2" font-weight=700 color=th.fg line-clamp=2
+      text sub font-family=th.fontLabel font-size="-exact-footnote" color=th.muted line-clamp=1
 
 component FactRow
   inject
@@ -63,8 +63,8 @@ component FactRow
     value: string
   view
     row gap=12 align-items="flex-start"
-      text label font-family=th.fontUi font-size=14 color=th.muted width=92 flex-shrink=0
-      text value font-family=th.fontUi font-size=14 color=th.fg flex=1 min-width=0
+      text label font-family=th.fontLabel font-size="-exact-footnote" color=th.muted width=92 flex-shrink=0
+      text value font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 min-width=0
 
 // ---------------------------------------------------------------- image
 component ImageViewer
@@ -148,7 +148,7 @@ component AudioViewer
         Card(level=2, testId="audio-card", minHeight=0)
           column padding=20 gap=16 align-items="center"
             image "symbol:sf/waveform" width=64 height=64 color=th.accent
-            text fvInfo.title font-family=th.fontRead font-size=22 font-weight=700 color=th.fg text-align="center"
+            text fvInfo.title font-family=th.fontHead font-size="-exact-title2" font-weight=700 color=th.fg text-align="center"
             audio fvInfo.src testId="audio-view" controls=true preload="metadata" paused=fvHold currentTime=fvSeek width="100%"
               timeupdate=fvTick durationchange=fvMeasured playing=fvPlayed pause=fvPausedEv ended=fvEnded
               metadata=MediaMetadata(title=fvInfo.title, artist="Files", album="", artwork="")
@@ -157,8 +157,8 @@ component AudioViewer
               Chip(label="Back 15 s", active=false, testId="audio-back", press=fvNudge(-1))
               Chip(label="Start", active=false, testId="audio-restart", press=fvRestart)
               Chip(label="Forward 15 s", active=false, testId="audio-forward", press=fvNudge(1))
-            text `${fvPos.toFixed(0)} s of ${fvDur.toFixed(0)} s` testId="audio-position" font-family=th.fontUi font-size=13 color=th.muted
-            text (fvHold ? "Paused" : "Playing") testId="audio-state" font-family=th.fontUi font-size=13 color=th.muted
+            text `${fvPos.toFixed(0)} s of ${fvDur.toFixed(0)} s` testId="audio-position" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted font-variant-numeric="tabular-nums"
+            text (fvHold ? "Paused" : "Playing") testId="audio-state" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
 
 // ---------------------------------------------------------------- PDF
 // PDFKit draws and scrolls the pages itself (the iframe of a local .pdf is a PDFView); Contract keeps the page we last sent it to
@@ -180,22 +180,22 @@ component PdfViewer
       ViewerHeader(title=(fvInfo.title.length > 0 ? fvInfo.title : fvInfo.name), sub=`PDF · ${fvInfo.pages.toFixed(0)} pages · ${fvInfo.sizeLabel}`)
       row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0
         Chip(label="‹", active=false, testId="pdf-prev", press=fvGo(fvPage - 1))
-        text `Page ${fvPage.toFixed(0)} of ${fvInfo.pages.toFixed(0)}` testId="pdf-page" font-family=th.fontUi font-size=14 color=th.fg flex=1 text-align="center"
+        text `Page ${fvPage.toFixed(0)} of ${fvInfo.pages.toFixed(0)}` testId="pdf-page" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 text-align="center" font-variant-numeric="tabular-nums"
         Chip(label="›", active=false, testId="pdf-next", press=fvGo(fvPage + 1))
         Chip(label="Share", active=false, testId="pdf-share", press=fvShare(fvInfo.name, fvInfo.src))
       row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0
         column flex=1 min-width=0
           input type="search" value=fvFindDraft input=fvEditFind submit=fvSearch placeholder="Find in this PDF" aria-label="Find in this PDF" testId="pdf-find"
-            enterkeyhint="search" min-width=0 font-family=th.fontUi font-size=15 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+            enterkeyhint="search" min-width=0 font-family=th.fontLabel font-size=15 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
           RowRule(indent=0)
         if fvPages.query != ""
           Chip(label="Clear", active=false, testId="pdf-find-clear", press=fvClearFind)
       if fvPages.query != ""
         row gap=8 padding-left=20 padding-right=20 padding-bottom=8 align-items="center" flex-shrink=0 testId="pdf-hits"
           if fvPages.pages.length == 0
-            text fvPages.message font-family=th.fontUi font-size=13 color=th.muted
+            text fvPages.message font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           else
-            text `On pages` font-family=th.fontUi font-size=13 color=th.muted
+            text `On pages` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             for p in fvPages.pages key=p
               ChoiceChip(label=`${p.toFixed(0)}`, active=(p == fvPage), testId=`pdf-hit-${p}`, press=fvGo(p))
       // A page change re-creates the frame: PDFView opens at src's #page=N, and does not follow a changed fragment on its own.
@@ -218,23 +218,23 @@ component EpubViewer
     listen: action
   view
     PageScroll(id="epub")
-      text fvInfo.title role="heading" aria-level=1 testId="page-title" font-size=28 font-weight=700
-      text (fvInfo.author.length > 0 ? `${fvInfo.author} · ${fvInfo.chapters.length.toFixed(0)} chapters` : `${fvInfo.chapters.length.toFixed(0)} chapters`) font-family=th.fontUi font-size=14 color=th.muted
+      text fvInfo.title role="heading" aria-level=1 testId="page-title" font-size="-exact-title1" font-weight=700 font-family=th.fontHead
+      text (fvInfo.author.length > 0 ? `${fvInfo.author} · ${fvInfo.chapters.length.toFixed(0)} chapters` : `${fvInfo.chapters.length.toFixed(0)} chapters`) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       row gap=8 align-items="center"
         Chip(label="Contents", active=fvToc, testId="epub-toc", press=fvTocToggle)
         Chip(label="Listen", active=false, testId="epub-listen", press=listen(`${fvInfo.address}#${fvChap}`, fvChapter.title, fvChapter.markdown))
-        text `Chapter ${(fvChap + 1).toFixed(0)} of ${fvInfo.chapters.length.toFixed(0)}` testId="epub-position" font-family=th.fontUi font-size=13 color=th.muted
+        text `Chapter ${(fvChap + 1).toFixed(0)} of ${fvInfo.chapters.length.toFixed(0)}` testId="epub-position" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted font-variant-numeric="tabular-nums"
       if fvToc
         PlainList(testId="epub-contents")
           column padding="4px 0px"
             for c in fvInfo.chapters key=c.index
               button press=fvChapGo(c.index) testId=`epub-chapter-${c.index}` appearance="none" width="100%"
                 row padding="12px 0" align-items="center" width="100%"
-                  text c.title font-family=th.fontUi font-size=16 font-weight=(c.index == fvChap ? 700 : 400) color=th.fg flex=1 text-align="left"
+                  text c.title font-family=th.fontHead font-size="-exact-callout" font-weight=(c.index == fvChap ? 700 : 400) color=th.fg flex=1 text-align="left"
       else
-        text fvChapter.title font-family=th.fontUi font-size=13 font-weight=600 letter-spacing=1 color=th.accent testId="epub-chapter-title"
+        text fvChapter.title font-family=th.fontLabel font-size="-exact-footnote" color=th.accent testId="epub-chapter-title"
         column width="100%" max-width=620
-          text fvChapter.markdown markup="markdown" testId="epub-text" font-family=th.fontRead font-size=19 line-height=1.65 color=th.fg
+          text fvChapter.markdown markup="markdown" testId="epub-text" font-family=th.fontText font-size="-exact-title3" line-height=1.65 color=th.fg
         row gap=8 align-items="center"
           Chip(label="‹ Previous", active=false, testId="epub-prev", press=fvChapGo(fvChap - 1))
           Chip(label="Next ›", active=false, testId="epub-next", press=fvChapGo(fvChap + 1))
@@ -248,22 +248,22 @@ component TextViewer
     listen: action
   view
     PageScroll(id="text")
-      text fvInfo.name role="heading" aria-level=1 testId="page-title" font-size=26 font-weight=700
-      text `${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}` font-family=th.fontUi font-size=13 color=th.muted
+      text fvInfo.name role="heading" aria-level=1 testId="page-title" font-size="-exact-title1" font-weight=700 font-family=th.fontHead
+      text `${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       row gap=8 align-items="center"
         Chip(label="Share", active=false, testId="text-share", press=fvShare(fvInfo.name, fvInfo.src))
         if fvInfo.kind != "code"
           Chip(label="Listen", active=false, testId="text-listen", press=listen(fvInfo.address, fvInfo.name, fvInfo.text))
       if fvInfo.kind == "markdown"
-        text fvInfo.text markup="markdown" testId="text-body" font-family=th.fontRead font-size=18 line-height=1.6 color=th.fg
+        text fvInfo.text markup="markdown" testId="text-body" font-family=th.fontText font-size="-exact-body" line-height=1.6 color=th.fg
       else if fvInfo.kind == "code"
         Card(level=1, testId="code-card", minHeight=0)
           column padding=14
-            text fvInfo.text testId="text-body" white-space="pre-wrap" font-family=th.fontMono font-size=13 line-height=1.5 color=th.fg
+            text fvInfo.text testId="text-body" white-space="pre-wrap" font-family=th.fontMono font-size="-exact-footnote" line-height=1.5 color=th.fg
       else
-        text fvInfo.text testId="text-body" white-space="pre-wrap" font-family=th.fontRead font-size=17 line-height=1.6 color=th.fg
+        text fvInfo.text testId="text-body" white-space="pre-wrap" font-family=th.fontText font-size="-exact-body" line-height=1.6 color=th.fg
       if fvInfo.truncated
-        text "Showing the start of this file." font-family=th.fontUi font-size=13 color=th.muted
+        text "Showing the start of this file." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
 
 // ---------------------------------------------------------------- table (CSV, TSV)
 component CsvViewer
@@ -272,15 +272,15 @@ component CsvViewer
     fvInfo: FileInfo
   view
     PageScroll(id="csv")
-      text fvInfo.name role="heading" aria-level=1 testId="page-title" font-size=26 font-weight=700
-      text `Table · ${fvInfo.rows.length.toFixed(0)} rows · ${fvInfo.sizeLabel}` font-family=th.fontUi font-size=13 color=th.muted
+      text fvInfo.name role="heading" aria-level=1 testId="page-title" font-size="-exact-title1" font-weight=700 font-family=th.fontHead
+      text `Table · ${fvInfo.rows.length.toFixed(0)} rows · ${fvInfo.sizeLabel}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       Card(level=1, testId="csv-card", minHeight=0)
         column width="100%" box-sizing="border-box" testId="csv-scroll"
           column width="100%" padding="4px 0"
             for r, i in fvInfo.rows key=i
               row width="100%" background-color=(i == 0 ? th.paper : "transparent") border-top-left-radius=(i == 0 ? th.radiusCard : 0) border-top-right-radius=(i == 0 ? th.radiusCard : 0)
                 for c, j in r.cells key=j
-                  text c font-family=th.fontUi font-size=14 font-weight=(i == 0 ? 700 : 400) color=th.fg flex=1 min-width=0 padding="8px 10px" line-clamp=2
+                  text c font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 min-width=0 padding="8px 10px" line-clamp=2 font-variant-numeric="tabular-nums"
 
 // ---------------------------------------------------------------- nothing to open with, or a problem
 // The honest page: what the file is, and why it is not shown. `message` is the reason ("too large", "not there any more", ...).
@@ -294,12 +294,12 @@ component NoPreview
     message: string
   view
     PageScroll(id="nopreview")
-      text (fvInfo.address == address and fvInfo.name.length > 0 ? fvInfo.name : title) role="heading" aria-level=1 testId="page-title" font-size=26 font-weight=700
+      text (fvInfo.address == address and fvInfo.name.length > 0 ? fvInfo.name : title) role="heading" aria-level=1 testId="page-title" font-size="-exact-title1" font-weight=700 font-family=th.fontHead
       Card(level=1, testId="nopreview-card", minHeight=0)
         column padding=18 gap=14
           row gap=14 align-items="center"
             image (fvInfo.address == address ? "symbol:sf/doc" : "symbol:sf/hourglass") width=40 height=40 color=th.muted
-            text message testId="nopreview-message" font-family=th.fontUi font-size=16 color=th.fg flex=1 min-width=0
+            text message testId="nopreview-message" font-family=th.fontLabel font-size="-exact-callout" color=th.fg flex=1 min-width=0
           if fvInfo.address == address and fvInfo.name.length > 0
             FactRow(label="Type", value=fvInfo.kindLabel)
             FactRow(label="Size", value=fvInfo.sizeLabel)

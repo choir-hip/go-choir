@@ -3,7 +3,7 @@
 // reads fixtures/demo/changelog.json; live it is GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
 // as a page. testIds: activity-refresh, activity-section-<name>, activity-row-<id>, activity-status, activity-empty.
 use Theme, ThemeExtras, ActivityInfo, ActivityItem from "@choir/autoradio"
-use ToolScroll, Card, Btn, PlainList from "./ui.contract"
+use ToolScroll, Card, Btn, PlainList, dyn from "./ui.contract"
 use SectionLabel, Hairline, ScreenTitle from "./settings.contract"
 
 component ActivityPage
@@ -19,18 +19,18 @@ component ActivityPage
     ToolScroll(id="activity")
       ScreenTitle(label="Activity", back=false)
       row gap=12 align-items="center" width="100%"
-        text (act.status == "loading" ? "Looking…" : (act.unseen > 0 ? `${act.unseen} new since you last looked` : "Up to date")) testId="activity-status" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted flex=1 min-width=0
+        text (act.status == "loading" ? "Looking…" : (act.unseen > 0 ? `${act.unseen} new since you last looked` : "Up to date")) testId="activity-status" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted flex=1 min-width=0
         button press=refreshActivity testId="activity-refresh" appearance="none"
           Btn(label="Refresh", primary=false, wide=false)
       if act.message != ""
-        text act.message testId="activity-message" font-family=th.fontUi font-size=tx.sizeLabel color=th.danger
+        text act.message testId="activity-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.danger
       ActivitySection(label="Now", items=act.live, testId="activity-section-now")
       ActivitySection(label="Your computer", items=act.computer, testId="activity-section-computer")
       ActivitySection(label="The desk", items=act.desk, testId="activity-section-desk")
       ActivitySection(label="The paper and you", items=act.paper, testId="activity-section-paper")
       ActivitySection(label="The radio's turns", items=act.radio, testId="activity-section-radio")
       if act.blank
-        text "Nothing has happened yet. When the desk revises your edition or your computer updates, it shows here." testId="activity-empty" font-family=th.fontUi font-size=tx.sizeLabel color=th.muted
+        text "Nothing has happened yet. When the desk revises your edition or your computer updates, it shows here." testId="activity-empty" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
 
 component ActivitySection
   props
@@ -76,10 +76,10 @@ component ActivityBody
       box width=3 height=18 margin-top=3 background-color=(ev.unseen ? th.accent : "transparent")
       column flex=1 min-width=0 gap=3 align-items="flex-start"
         row gap=8 width="100%" align-items="flex-start"
-          text ev.label text-align="left" font-family=th.fontUi font-size=tx.sizeLabel font-weight=700 color=th.fg flex=1 min-width=0
-          text ev.ago font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
-        text ev.detail text-align="left" font-family=th.fontRead font-size=tx.sizeLabel line-height=1.4 color=th.fg
+          text ev.label text-align="left" font-family=th.fontHead font-size=dyn(tx.sizeLabel) font-weight=600 color=th.fg flex=1 min-width=0
+          text ev.ago font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted font-variant-numeric="tabular-nums"
+        text ev.detail text-align="left" font-family=th.fontText font-size=dyn(tx.sizeLabel) line-height=1.4 color=th.fg
         if ev.title != ""
-          text ev.title text-align="left" font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
+          text ev.title text-align="left" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
       if opens
-        text "›" font-family=th.fontUi font-size=22 color=th.muted
+        text "›" font-family=th.fontLabel font-size="-exact-title2" color=th.muted

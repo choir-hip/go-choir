@@ -42,6 +42,8 @@ public struct Theme: Codable, Sendable, Equatable {
     public var scrim = "rgba(0,0,0,.7)", onScrim = "#FFFFFF"
     // type: CSS font stacks reduced to the one face Exact resolves; `fontRead` is the body face
     public var fontRead = "ui-serif", fontUi = "system-ui", fontMono = "ui-monospace", scale = "editorial"
+    // the typographic roles (mobile/docs/typography.md): fixed faces, so the face says what a text is. A theme may ask for the rounded sans only.
+    public var fontHead = "ui-serif", fontText = "ui-serif", fontLabel = "system-ui", fontAction = "system-ui"
     public var radiusCard = 12.0, radiusControl = 6.0, radiusPill = 6.0, radiusRules = 0.0
     // elevation 1..3: shadow (CSS), edge (CSS), material (glass | solid), press scale, what is behind a level-3 layer
     public var shadow1 = "none", shadow2 = "none", shadow3 = "none"
@@ -425,6 +427,7 @@ public final class ThemeStore: @unchecked Sendable {
         if let ty = d.type {
             t.fontRead = ty.read.flatMap(face) ?? t.fontRead; t.fontUi = ty.ui.flatMap(face) ?? t.fontUi
             t.fontMono = ty.mono.flatMap(face) ?? t.fontMono; t.scale = ty.scale ?? t.scale
+            if t.fontUi == "ui-rounded" { t.fontLabel = "ui-rounded"; t.fontAction = "ui-rounded" }
         }
         func px(_ s: String?) -> Double? { s.flatMap { Double($0.replacingOccurrences(of: "px", with: "")) } }
         if let r = d.radii { t.radiusCard = px(r["card"]) ?? t.radiusCard; t.radiusControl = px(r["control"]) ?? t.radiusControl

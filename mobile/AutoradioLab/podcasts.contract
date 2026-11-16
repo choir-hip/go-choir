@@ -21,7 +21,7 @@ component PodAction
     row align-items="center" gap=8 min-height=44 width="100%" box-sizing="border-box"
       if icon != ""
         image icon color=th.accent
-      text label font-family=th.fontUi font-size=17 font-weight=(strong ? 700 : 500) color=th.accent text-align="left"
+      text label font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.accent text-align="left"
 
 component PodArt
   inject
@@ -68,7 +68,7 @@ component PodcastsHome
       Emerge(delay=0)
         PageHeader(title="Podcasts", subtitle="Your shows, and where to find more", subId="podcasts-sub")
       input type="search" value=podQ input=editPodQ placeholder="Search podcasts" aria-label="Search podcasts" testId="podcasts-search"
-        enterkeyhint="search" font-family=th.fontUi font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+        enterkeyhint="search" font-family=th.fontLabel font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
         ::placeholder
           color=th.muted
       RowRule(indent=0)
@@ -105,7 +105,7 @@ component PodcastsHome
                 for r, i in podHome.suggestions key=r.feedURL
                   PodShowItem(feed=r.feedURL, address=r.address, title=r.title, detail=r.author, artwork=r.artwork, trailing="", first=(i == 0))
         if podHome.syncNote != ""
-          text podHome.syncNote testId="podcasts-sync" font-family=th.fontUi font-size=13 color=th.muted
+          text podHome.syncNote testId="podcasts-sync" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
 
 // One episode of a show: title, a line (date, length, where you stopped), a play button beside it.
 component PodEpisodeItem
@@ -175,9 +175,9 @@ component PodcastShowPage
               button press=podSubscribeTo(podShow.feedURL) testId="podcast-subscribe" appearance="none" width="100%" aria-label="Subscribe"
                 PodAction(label="Subscribe", icon="", strong=true)
             if podNote != ""
-              text podNote testId="podcast-note" font-family=th.fontUi font-size=13 color=th.muted
+              text podNote testId="podcast-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             if podShow.summary != ""
-              text podShow.summary testId="podcast-summary" font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg line-clamp=5
+              text podShow.summary testId="podcast-summary" font-family=th.fontText font-size="-exact-body" line-height=1.45 color=th.fg line-clamp=5
         if podShow.status == "empty"
           EmptyState(message="No episodes yet.", detail="", testId="podcast-empty")
         // lane autoradio-joins: clips the platform cut from stories out of this show's episodes; nothing is drawn when there are none
@@ -190,7 +190,7 @@ component PodcastShowPage
                   RowRule(indent=0)
                 ClipRow(r=r, byStory=true, pad=0)
               if clipNote != ""
-                text clipNote testId="podcast-clip-note" font-family=th.fontUi font-size=13 color=th.muted
+                text clipNote testId="podcast-clip-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         if podShow.episodes.length > 0
           Emerge(delay=80)
             column gap=8 width="100%"
@@ -240,7 +240,7 @@ component PodcastEpisodePage
               PlainList(testId="podcast-show-card")
                 LineRow(label=(podEp.showTitle != "" ? podEp.showTitle : "The show"), detail="Open the show and its other episodes", trailing="", chevron=true)
             if podEp.playingFrom != ""
-              text podEp.playingFrom testId="podcast-playing-from" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+              text podEp.playingFrom testId="podcast-playing-from" font-family=th.fontLabel font-size="-exact-subheadline" color=th.accent
             if podEp.playable
               if podEp.fromClip
                 button press=podPlayEpisode(podEp.address, "keep") testId="podcast-keep" appearance="none" width="100%" aria-label="Keep listening"
@@ -260,42 +260,42 @@ component PodcastEpisodePage
               button press=podSubscribeTo(podEp.feedURL) testId="podcast-subscribe" appearance="none" width="100%" aria-label="Subscribe to the show"
                 PodAction(label="Subscribe to this show", icon="", strong=false)
             if podEp.subscribed
-              text "You are subscribed to this show." testId="podcast-subscribed" font-family=th.fontUi font-size=13 color=th.muted
+              text "You are subscribed to this show." testId="podcast-subscribed" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             if podEp.note != ""
-              text podEp.note testId="podcast-episode-note" font-family=th.fontUi font-size=13 color=th.muted
+              text podEp.note testId="podcast-episode-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             if podNote != ""
-              text podNote testId="podcast-note" font-family=th.fontUi font-size=13 color=th.muted
+              text podNote testId="podcast-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         // The platform's shared transcript: a line is a button that plays from there; the line being played is full-strength accent.
         if podEp.transcriptState == "ready"
           Emerge(delay=60)
             column gap=8 width="100%" testId="podcast-transcript"
               SectionHeader(label="Transcript")
               input type="search" value=podFind input=editPodFind placeholder="Find in the transcript" aria-label="Find in the transcript" testId="podcast-find"
-                enterkeyhint="search" font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+                enterkeyhint="search" font-family=th.fontLabel font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
                 ::placeholder
                   color=th.muted
               RowRule(indent=0)
               if podEp.transcriptNote != ""
-                text podEp.transcriptNote testId="podcast-transcript-note" font-family=th.fontUi font-size=13 color=th.muted
+                text podEp.transcriptNote testId="podcast-transcript-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
               for t in podEp.transcript key=t.key
                 if t.seekable
                   button press=podPlayEpisode(podEp.address, `at:${t.seconds}`) testId=`podcast-line-${t.key}` appearance="none" width="100%" aria-label=`Play from ${t.time}`
                     row gap=12 align-items="flex-start" width="100%" padding="6px 0" box-sizing="border-box"
-                      text t.time font-family=th.fontMono font-size=13 color=(t.current ? th.accent : th.muted) width=48 flex-shrink=0
-                      text t.text font-family=th.fontRead font-size=17 line-height=1.45 color=(t.current ? th.accent : th.fg) font-weight=(t.current ? 700 : 400) text-align="left" flex=1 min-width=0
+                      text t.time font-family=th.fontLabel font-size="-exact-footnote" color=(t.current ? th.accent : th.muted) width=48 flex-shrink=0 font-variant-numeric="tabular-nums"
+                      text t.text font-family=th.fontText font-size="-exact-body" line-height=1.45 color=(t.current ? th.accent : th.fg) font-weight=(t.current ? 700 : 400) text-align="left" flex=1 min-width=0
                 if t.seekable == false
                   row gap=12 align-items="flex-start" width="100%" padding="6px 0" box-sizing="border-box" testId=`podcast-line-${t.key}`
-                    text t.time font-family=th.fontMono font-size=13 color=th.muted width=48 flex-shrink=0
-                    text t.text font-family=th.fontRead font-size=17 line-height=1.45 color=th.fg text-align="left" flex=1 min-width=0
+                    text t.time font-family=th.fontLabel font-size="-exact-footnote" color=th.muted width=48 flex-shrink=0 font-variant-numeric="tabular-nums"
+                    text t.text font-family=th.fontText font-size="-exact-body" line-height=1.45 color=th.fg text-align="left" flex=1 min-width=0
         if podEp.transcriptState == "pending"
           Emerge(delay=60)
-            text podEp.transcriptNote testId="podcast-transcript-pending" font-family=th.fontUi font-size=13 color=th.muted
+            text podEp.transcriptNote testId="podcast-transcript-pending" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         if podEp.notes.length > 0
           Emerge(delay=80)
             column gap=8 width="100%" testId="podcast-notes"
               SectionHeader(label="Show notes")
               for n, i in podEp.notes key=i
-                text n font-family=th.fontRead font-size=17 line-height=1.5 color=th.fg white-space="pre-wrap"
+                text n font-family=th.fontText font-size="-exact-body" line-height=1.5 color=th.fg white-space="pre-wrap"
 
 // The page host's one line for this kind.
 component PodcastPage
