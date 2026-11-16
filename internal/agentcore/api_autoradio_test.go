@@ -167,7 +167,7 @@ func TestAutoradioTurnRefusesWhatItShould(t *testing.T) {
 		want int
 	}{
 		"no owner":         {radioBody, false, http.StatusUnauthorized},
-		"body too large":   {`{"turn_id":"t","words":"x","page":{"text":"` + strings.Repeat("a", 130<<10) + `"}}`, true, http.StatusRequestEntityTooLarge},
+		"body too large":   {`{"turn_id":"t","words":"x","page":{"text":"` + strings.Repeat("a", 300<<10) + `"}}`, true, http.StatusRequestEntityTooLarge},
 		"page too large":   {`{"turn_id":"t","words":"x","page":{"text":"` + bigPage + `"}}`, true, http.StatusRequestEntityTooLarge},
 		"empty words":      {`{"turn_id":"t","words":"","page":{"text":"p"}}`, true, http.StatusBadRequest},
 		"blank words":      {`{"turn_id":"t","words":"  \n ","page":{"text":"p"}}`, true, http.StatusBadRequest},

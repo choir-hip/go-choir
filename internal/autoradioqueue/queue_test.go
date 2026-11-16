@@ -2,6 +2,7 @@ package autoradioqueue
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -77,7 +78,7 @@ func TestParseSnapshotRefusesAHostileQueue(t *testing.T) {
 		"duplicate id":    `{"version":1,"upcoming":[{"id":"a","item":{"kind":"story","route":"r","title":"t"}},{"id":"a","item":{"kind":"story","route":"r","title":"t"}}]}`,
 		"current dup":     `{"version":1,"current":{"id":"a","item":{"kind":"story","route":"r","title":"t"}},"upcoming":[{"id":"a","item":{"kind":"story","route":"r","title":"t"}}]}`,
 		"long title":      `{"version":1,"upcoming":[{"id":"a","item":{"kind":"story","route":"r","title":"` + strings.Repeat("t", 301) + `"}}]}`,
-		"long url":        `{"version":1,"upcoming":[{"id":"a","item":{"kind":"page","url":"` + strings.Repeat("u", 2049) + `","title":"t"}}]}`,
+		"long url":        `{"version":1,"upcoming":[{"id":"a","item":{"kind":"page","url":"` + strings.Repeat("u", 1025) + `","title":"t"}}]}`,
 		"unknown kind":    `{"version":1,"upcoming":[{"id":"a","item":{"kind":"video","url":"u","title":"t"}}]}`,
 		"story no route":  `{"version":1,"upcoming":[{"id":"a","item":{"kind":"story","title":"t"}}]}`,
 		"page no url":     `{"version":1,"upcoming":[{"id":"a","item":{"kind":"page","title":"t"}}]}`,
@@ -360,10 +361,10 @@ func TestOpsMarshalToThePhonesShape(t *testing.T) {
 }
 
 func TestCutSplitsSpeechFromOpsAtAnyByte(t *testing.T) {
-	whole := "Okay, the long read is next. <<<AR1234 queue>>>\n[{\"op\":\"move\",\"id\":\"q14\",\"to_index\":0,\"reason\":\"r\"}]"
+	whole := "Okay, the long read is next. " + FenceLine("AR1234") + "\n[{\"op\":\"move\",\"id\":\"q14\",\"to_index\":0,\"reason\":\"r\"}]"
 	for cut1 := 0; cut1 <= len(whole); cut1++ {
 		for _, cut2 := range []int{cut1, min(cut1+1, len(whole)), min(cut1+3, len(whole)), len(whole)} {
-			var c Cut
+			c := NewCut("AR1234")
 			var speech strings.Builder
 			speech.WriteString(c.Push(whole[:cut1]))
 			speech.WriteString(c.Push(whole[cut1:cut2]))
@@ -372,38 +373,90 @@ func TestCutSplitsSpeechFromOpsAtAnyByte(t *testing.T) {
 			if speech.String() != "Okay, the long read is next. " {
 				t.Fatalf("cuts %d,%d: speech %q", cut1, cut2, speech.String())
 			}
-			ops, ok := c.Ops()
-			if !ok || !strings.HasPrefix(strings.TrimSpace(ops), `[{"op":"move"`) {
-				t.Fatalf("cuts %d,%d: ops %q ok=%t", cut1, cut2, ops, ok)
+			if !c.Fenced() || !strings.HasPrefix(strings.TrimSpace(c.Ops()), `[{"op":"move"`) {
+				t.Fatalf("cuts %d,%d: ops %q fenced=%t", cut1, cut2, c.Ops(), c.Fenced())
 			}
 		}
 	}
 }
 
-func TestCutKeepsALoneAngleBracketInSpeechAndIgnoresAForeignFence(t *testing.T) {
-	var c Cut
-	got := c.Push("Is 3 < 4? ") + c.Push("Yes <") + c.Flush()
-	if got != "Is 3 < 4? Yes <" {
-		t.Fatalf("%q", got)
+// Anything that is not exactly the request's fence is speech, released whole:
+// a lone "<", a "<<<" the model quotes, a page fence, an end fence, a fence
+// with another token, a fence cut short at the end of the stream.
+func TestCutPassesEverythingButTheExactFenceThrough(t *testing.T) {
+	for name, text := range map[string]string{
+		"lone bracket":     "Is 3 < 4? Yes <",
+		"quoted":           "The sign says: <<< keep left. That is all.",
+		"page fence":       "The page is fenced as <<<AR1234 page>>> and the text follows.",
+		"end queue":        "Closing with <<<AR1234 end queue>>> is not it.",
+		"other token":      "Fine. <<<AR9999 queue>>> [{\"op\":\"clear\"}]",
+		"no space":         "Fine. <<<AR1234queue>>> [] ",
+		"upper":            "Fine. <<<AR1234 QUEUE>>> [] ",
+		"unterminated":     "Fine. <<<AR1234 queue",
+		"trailing partial": "Fine. <<<AR12",
+	} {
+		for _, chunk := range []int{1, 2, 5, 1000} {
+			c := NewCut("AR1234")
+			var got strings.Builder
+			for i := 0; i < len(text); i += chunk {
+				got.WriteString(c.Push(text[i:min(i+chunk, len(text))]))
+			}
+			got.WriteString(c.Flush())
+			if got.String() != text || c.Fenced() || c.Ops() != "" {
+				t.Errorf("%s (chunk %d): speech %q fenced=%t ops=%q", name, chunk, got.String(), c.Fenced(), c.Ops())
+			}
+		}
 	}
-	if _, ok := c.Ops(); ok {
-		t.Fatal("ops from no fence")
+}
+
+func TestBoundsAreSplitIntoTooLargeAndMalformed(t *testing.T) {
+	var up []string
+	for i := 0; i <= MaxUpcoming; i++ {
+		up = append(up, fmt.Sprintf(`{"id":"e%d","item":{"kind":"story","route":"r","title":"t"}}`, i))
 	}
-	var f Cut
-	sp := f.Push("Fine. <<<AR9 page>>> [{\"op\":\"clear\"}]") + f.Flush()
-	if sp != "Fine. " {
-		t.Fatalf("%q", sp)
+	for name, raw := range map[string]string{
+		"too many":   `{"version":1,"upcoming":[` + strings.Join(up, ",") + `]}`,
+		"long title": `{"version":1,"upcoming":[{"id":"a","item":{"kind":"story","route":"r","title":"` + strings.Repeat("t", 301) + `"}}]}`,
+		"long url":   `{"version":1,"upcoming":[{"id":"a","item":{"kind":"page","url":"` + strings.Repeat("u", 1025) + `","title":"t"}}]}`,
+	} {
+		if _, err := ParseSnapshot([]byte(raw)); !IsTooLarge(err) {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
-	if _, ok := f.Ops(); ok {
-		t.Fatal("a page fence was taken for queue ops")
+	for name, raw := range map[string]string{
+		"bad id":  `{"version":1,"upcoming":[{"id":"a b","item":{"kind":"story","route":"r","title":"t"}}]}`,
+		"no kind": `{"version":1,"upcoming":[{"id":"a","item":{"title":"t"}}]}`,
+		"json":    `[`,
+	} {
+		if _, err := ParseSnapshot([]byte(raw)); err == nil || IsTooLarge(err) {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
-	var n Cut
-	_ = n.Push("Fine. <<<AR9 queue")
-	_ = n.Flush()
-	if _, ok := n.Ops(); ok {
-		t.Fatal("an unterminated fence yielded ops")
+	// a realistic 800-byte URL is inside the bound
+	ok := `{"version":1,"upcoming":[{"id":"a","item":{"kind":"audio","url":"` + strings.Repeat("u", 800) + `","title":"t"}}]}`
+	if _, err := ParseSnapshot([]byte(ok)); err != nil {
+		t.Fatal(err)
 	}
-	if !n.Fenced() {
-		t.Fatal("an unterminated fence is still a fence")
+}
+
+func TestModelTextInDropReasonsIsBoundedAndOneLine(t *testing.T) {
+	d := New(snap3(), nil)
+	huge := strings.Repeat("x", 9000)
+	drops := d.ApplyJSON(`[{"op":"enqueue","item":{"kind":"` + huge + `","route":"` + huge + `"},"reason":"r"},` +
+		`{"op":"play_next","item":{"kind":"story","route":"` + huge + `"},"reason":"r"},{"op":"move","id":"` + huge + `","to_index":1,"reason":"r"}]`)
+	if len(drops) != 3 {
+		t.Fatalf("%v", drops)
+	}
+	for _, x := range drops {
+		if len(x) > 300 {
+			t.Fatalf("a drop reason of %d bytes", len(x))
+		}
+	}
+	d2 := New(snap3(), nil)
+	if err := d2.Remove("q13", "one\u2028two\u2029three"); err != nil {
+		t.Fatal(err)
+	}
+	if r := d2.Ops()[0].Reason; strings.ContainsAny(r, "\u2028\u2029") {
+		t.Fatalf("%q", r)
 	}
 }
