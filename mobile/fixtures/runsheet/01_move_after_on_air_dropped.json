@@ -1,0 +1,119 @@
+{
+ "name": "01_move_after_on_air_dropped",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "b",
+   "op": "aired",
+   "op_id": "o1",
+   "position_seconds": 0,
+   "state": "on_air"
+  },
+  {
+   "at": "end",
+   "base_version": 0,
+   "by": "listener",
+   "id": "b",
+   "op": "move",
+   "op_id": "o2"
+  },
+  {
+   "at": "end",
+   "base_version": 0,
+   "by": "listener",
+   "id": "zz",
+   "op": "move",
+   "op_id": "o3"
+  }
+ ],
+ "results": [
+  {
+   "applied": true,
+   "op_id": "o1",
+   "version": 4
+  },
+  {
+   "applied": false,
+   "dropped": "not_ahead",
+   "op_id": "o2",
+   "version": 4
+  },
+  {
+   "applied": false,
+   "dropped": "not_ahead",
+   "op_id": "o3",
+   "version": 4
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   },
+   {
+    "est_seconds": 30,
+    "id": "c",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of c",
+    "title": "T c"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d",
+    "title": "T d"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 3
+ },
+ "want": {
+  "applied_ops": [
+   "o1"
+  ],
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "on_air",
+    "text": "words of b",
+    "title": "T b"
+   },
+   {
+    "est_seconds": 30,
+    "id": "c",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of c",
+    "title": "T c"
+   },
+   {
+    "est_seconds": 30,
+    "id": "d",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d",
+    "title": "T d"
+   }
+  ],
+  "on_air": "b",
+  "position_seconds": 0,
+  "version": 4
+ }
+}
