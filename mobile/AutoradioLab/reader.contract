@@ -8,7 +8,7 @@
 // the source page in place, over the story and above the bar (WebLayer), with no sheet between. A transclusion of another Texture is a nested card that opens as its own page.
 // testIds: page-title, reader-menu, reader-versions, reader-block-<id>, reader-cite-<anchor>, reader-card-<anchor>,
 //          reader-card-source-<anchor>, reader-card-open-<anchor>, reader-source-<n>, reader-sources, reader-related-<address>,
-//          reader-sheet(-layer, -scrim), reader-web(-close, -host, -safari, -view), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
+//          reader-sheet(-layer, -scrim), reader-web(-view; the host, close, read, add and safari are in content.contract), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
 use ReaderFollowInfo, ReaderAimInfo, DemoInfo from "@choir/autoradio"
 use PageScroll, Card, Layer, Btn, BarClear, RowRule from "./ui.contract"
@@ -231,40 +231,24 @@ keyframes sourceGrow
 keyframes sourceFade
   from opacity=0
 
-// The source page, in place: it grows out of the story (a fade only under Reduced Motion), fills the page down to the top of
-// the bar (the bar is the app's layer above the deck, so it stays visible and live, and the radio keeps playing), and
+// The source page, in place: it grows out of the story (a fade only under Reduced Motion), fills the screen from the status bar down to the top
+// of the bar's lens (the bar is the app's layer above the deck, so it stays visible and live, and the radio keeps playing), and
 // closes back to the same story at the same scroll position, because the story is never removed. The page itself is the
 // package view `web-page` (a WKWebView); it sends `message` "loading" and "done" while a page loads.
+// There is no header on it (owner, 2026-11-16): the host, Loading, Read aloud, Add to queue, Open in Safari and Close are the content row
+// in the lens (content.contract), and `ctlClear` is how far this layer stops above the bottom edge (the lens and that row).
 component WebLayer
   inject
     th: Theme
     webUrl: string
-    webHost: string
-    webBusy: bool
-    closeWeb: action
     webMsg: action
-    openExternal: action
-    queuePlay: action
-    queueLater: action
+    ctlClear: number
   view
-    column testId="reader-web" position="absolute" left=0 right=0 top=0 bottom="calc(env(safe-area-inset-bottom) + 72px)" z-index=8
+    column testId="reader-web" position="absolute" left=0 right=0 top=0 bottom=`calc(env(safe-area-inset-bottom) + ${ctlClear}px)` z-index=8
       background-color=th.paper box-shadow=th.shadow2 border-bottom-left-radius=th.radiusCard border-bottom-right-radius=th.radiusCard
+      padding-top="env(safe-area-inset-top)" box-sizing="border-box"
       overflow="hidden"
       animation=(th.reducedMotion ? `sourceFade ${th.motionEnterMs}ms ease-out both` : `sourceGrow ${th.motionEnterMs * 2}ms ease-out both`)
-      row align-items="center" gap=8 padding="calc(env(safe-area-inset-top) + 6px) 8px 6px 8px" width="100%" box-sizing="border-box"
-        button press=closeWeb testId="reader-web-close" appearance="none" aria-label="Close source" width=40 height=40
-          image "symbol:close" color=th.fg
-        text webHost testId="reader-web-host" font-family=th.fontUi font-size=15 font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1
-        if webBusy
-          progress aria-label="Loading" width=18 height=18 color=th.accent
-        button press=openExternal(webUrl) testId="reader-web-safari" appearance="none"
-          Btn(label="Open in Safari", primary=false, wide=false)
-      // lane autoradio-queue: every embedded source page can be read aloud or queued
-      row gap=8 padding="0px 12px 8px 12px" width="100%" box-sizing="border-box"
-        button press=queuePlay("page", webUrl, webHost) testId="reader-web-read" appearance="none" aria-label="Read this page aloud" flex=1
-          Btn(label="Read aloud", primary=false, wide=false)
-        button press=queueLater("page", webUrl, webHost) testId="reader-web-add" appearance="none" aria-label="Add this page to the queue" flex=1
-          Btn(label="Add to queue", primary=false, wide=true)
       web-page page=webUrl message=webMsg testId="reader-web-view" width="100%" flex=1 min-height=0
 
 component VersionsSheet

@@ -1,0 +1,180 @@
+// The content row (owner, 2026-11-16: "for reader and for the embedded web view, the content should get the full screen except for the
+// prompt bar area at the bottom. The screen real estate at the top should not be used that way. We could have some controls just above
+// the prompt bar, which can expand."). A document in the Reader and an embedded web page carry no title, tabs, action row, find field,
+// stepper or header above them: the content starts under the status bar and ends at the top of the bar's lens.
+//
+// This row is the first line inside the lens, above the "On: ..." line. State and actions: members-content.contract.
+//   collapsed  one line: the document's title or the site's host, where you are ("2 of 5" in a paged document, "Loading" for a web
+//              page), the word More, and a Close icon. Tapping the line expands it; the content is not covered beyond this line.
+//   expanded   the actions as words, opening upward over the content (the lens grows up):
+//              a document      Read aloud, Add to queue, Contents, Find, Pages and Text (a PDF), Close, and the page (or chapter) stepper;
+//                              Contents and Find open their list under the words (Find has its field and its hits)
+//              a web page      Read aloud, Add to queue, Open in Safari, Close
+//              It collapses after an action (not after a page step, so a page can be turned again) and on a tap outside (the scrim in app.contract).
+// testIds: content-row, content-line, content-toggle, content-title, content-position, content-more, content-open, content-close-word,
+//   doc-close, doc-read, doc-queue, doc-toc, doc-find-open, doc-find, doc-find-clear, doc-find-none, doc-hits, doc-hit-<n>, doc-mode-pages,
+//   doc-mode-text, doc-prev, doc-position, doc-next, doc-contents, doc-chapter-<n>; for a web page reader-web-host, reader-web-close,
+//   reader-web-read, reader-web-add, reader-web-safari (the page typed into the bar: bar-web-host, bar-web-close, bar-web-read, bar-web-add, bar-web-safari).
+use Theme, ShelfDocInfo, ShelfChapter, ShelfFind from "@choir/autoradio"
+use StackVp, Btn, ChipFace, ChoiceWord, PlainList, LineRow, RowRule from "./ui.contract"
+
+// A list under the actions: it scrolls inside the panel only when it is long (the page behind it never moves).
+component Capped
+  inject
+    vp: StackVp
+  props
+    tall: bool
+  slot
+  view
+    if tall
+      scroll overflow-x="hidden" width="100%" height=(vp.height * 0.3)
+        column width="100%" box-sizing="border-box"
+          children
+    else
+      column width="100%" box-sizing="border-box"
+        children
+
+component DocExpanded
+  inject
+    th: Theme
+    ldInfo: ShelfDocInfo
+    ldChap: ShelfChapter
+    ldSec: number
+    ldShowPages: bool
+    ldFind: string
+    ldFound: ShelfFind
+    ldFindDraft: string
+    ctlPanel: string
+    ctlRead: action
+    ctlQueueDoc: action
+    ctlPanelOf: action
+    ctlSetText: action
+    ctlCloseDoc: action
+    ctlGo: action
+    ctlStep: action
+    ctlJump: action
+    ldEditFind: action
+    ldDoFind: action
+    ldClearFind: action
+  derive pdf = ldInfo.kind == "pdf"
+  derive unitWord = pdf ? "page" : "chapter"
+  view
+    column width="100%" gap=0 testId="content-open"
+      row flex-wrap="wrap" gap=8 width="100%" align-items="center"
+        button press=ctlRead testId="doc-read" appearance="none" aria-label="Read aloud from here"
+          Btn(label="Read aloud", primary=false, wide=false)
+        button press=ctlQueueDoc testId="doc-queue" appearance="none" aria-label="Add to queue"
+          ChipFace(label="Add to queue", selected=false)
+        button press=ctlPanelOf("contents") testId="doc-toc" appearance="none" aria-label="Contents"
+          ChipFace(label="Contents", selected=(ctlPanel == "contents"))
+        button press=ctlPanelOf("find") testId="doc-find-open" appearance="none" aria-label="Find in this document"
+          ChipFace(label="Find", selected=(ctlPanel == "find"))
+        if pdf
+          button press=ctlSetText(false) testId="doc-mode-pages" appearance="none" aria-label="Show the pages"
+            ChoiceWord(label="Pages", selected=ldShowPages)
+          button press=ctlSetText(true) testId="doc-mode-text" appearance="none" aria-label="Show the text"
+            ChoiceWord(label="Text", selected=(ldShowPages == false))
+        button press=ctlCloseDoc testId="content-close-word" appearance="none" aria-label="Close this document"
+          Btn(label="Close", primary=false, wide=false)
+      row gap=8 align-items="center" width="100%"
+        button press=ctlStep(ldSec - 1) testId="doc-prev" appearance="none" aria-label=`Previous ${unitWord}`
+          ChipFace(label="‹ Previous", selected=false)
+        text ldChap.title testId="doc-position" font-family=th.fontUi font-size=14 color=th.fg flex=1 min-width=0 line-clamp=1 text-align="center"
+        button press=ctlStep(ldSec + 1) testId="doc-next" appearance="none" aria-label=`Next ${unitWord}`
+          ChipFace(label="Next ›", selected=false)
+      if ctlPanel == "contents"
+        RowRule(indent=0)
+        Capped(tall=(ldInfo.sections.length > 5))
+          PlainList(testId="doc-contents")
+            for s, i in ldInfo.sections key=s.index
+              if i > 0
+                RowRule(indent=0)
+              button press=ctlGo(s.index) testId=`doc-chapter-${s.index}` appearance="none" width="100%"
+                LineRow(label=s.title, detail="", trailing=(s.index == ldSec ? "Here" : ""), chevron=false)
+      if ctlPanel == "find"
+        RowRule(indent=0)
+        row gap=8 align-items="center" width="100%"
+          column flex=1 min-width=0
+            input type="search" value=ldFindDraft input=ldEditFind submit=ldDoFind placeholder="Find in this document" aria-label="Find in this document" testId="doc-find"
+              enterkeyhint="search" min-width=0 font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
+            RowRule(indent=0)
+          if ldFind != ""
+            button press=ldClearFind testId="doc-find-clear" appearance="none" aria-label="Clear the search"
+              ChipFace(label="Clear", selected=false)
+        if ldFind != ""
+          if ldFound.hits.length == 0
+            text ldFound.message testId="doc-find-none" font-family=th.fontUi font-size=15 color=th.muted
+          else
+            Capped(tall=(ldFound.hits.length > 3))
+              PlainList(testId="doc-hits")
+                for h, i in ldFound.hits key=h.block
+                  if i > 0
+                    RowRule(indent=0)
+                  button press=ctlJump(h.section, h.block) testId=`doc-hit-${h.block}` appearance="none" width="100%" aria-label=`Go to ${h.label}`
+                    LineRow(label=h.label, detail=h.snippet, trailing="", chevron=false)
+
+component WebExpanded
+  inject
+    th: Theme
+    ctlMode: string
+    ctlKey: string
+    ctlTitle: string
+    ctlWebRead: action
+    ctlWebLater: action
+    ctlSafari: action
+    ctlCloseWeb: action
+    ctlCloseBarWeb: action
+  derive pre = ctlMode == "barweb" ? "bar-web" : "reader-web"
+  view
+    row flex-wrap="wrap" gap=8 width="100%" align-items="center" testId="content-open"
+      button press=ctlWebRead(ctlKey, ctlTitle) testId=`${pre}-read` appearance="none" aria-label="Read this page aloud"
+        Btn(label="Read aloud", primary=false, wide=false)
+      button press=ctlWebLater(ctlKey, ctlTitle) testId=`${pre}-add` appearance="none" aria-label="Add this page to the queue"
+        Btn(label="Add to queue", primary=false, wide=false)
+      button press=ctlSafari(ctlKey) testId=`${pre}-safari` appearance="none" aria-label="Open this page in Safari"
+        Btn(label="Open in Safari", primary=false, wide=false)
+      if ctlMode == "barweb"
+        button press=ctlCloseBarWeb testId="content-close-word" appearance="none" aria-label="Close page"
+          Btn(label="Close", primary=false, wide=false)
+      else
+        button press=ctlCloseWeb testId="content-close-word" appearance="none" aria-label="Close source"
+          Btn(label="Close", primary=false, wide=false)
+
+component ContentRow
+  inject
+    th: Theme
+    ctlMode: string
+    ctlUp: bool
+    ctlTitle: string
+    ctlPos: string
+    ctlBusy: bool
+    ctlToggle: action
+    ctlCloseDoc: action
+    ctlCloseWeb: action
+    ctlCloseBarWeb: action
+  derive pre = ctlMode == "barweb" ? "bar-web" : "reader-web"
+  view
+    column testId="content-row" width="100%" gap=0
+      if ctlUp
+        if ctlMode == "doc"
+          DocExpanded()
+        else
+          WebExpanded()
+      row testId="content-line" width="100%" align-items="center" gap=4 min-height=36
+        button press=ctlToggle testId="content-toggle" appearance="none" flex=1 min-width=0 aria-label=(ctlUp ? "Fewer controls" : "More controls for this page")
+          row width="100%" align-items="center" gap=8 min-height=36 padding-left=4
+            text ctlTitle testId=(ctlMode == "doc" ? "content-title" : `${pre}-host`) font-family=th.fontUi font-size=13 font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1 text-align="left"
+            if ctlBusy
+              progress aria-label="Loading" width=16 height=16 color=th.accent
+            if ctlPos != ""
+              text ctlPos testId="content-position" font-family=th.fontUi font-size=13 color=th.muted
+            text (ctlUp ? "Less" : "More") testId="content-more" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent
+        if ctlMode == "doc"
+          button press=ctlCloseDoc testId="doc-close" appearance="none" aria-label="Close this document" width=36 height=36
+            image "symbol:close" color=th.fg
+        else if ctlMode == "barweb"
+          button press=ctlCloseBarWeb testId="bar-web-close" appearance="none" aria-label="Close page" width=36 height=36
+            image "symbol:close" color=th.fg
+        else
+          button press=ctlCloseWeb testId="reader-web-close" appearance="none" aria-label="Close source" width=36 height=36
+            image "symbol:close" color=th.fg
