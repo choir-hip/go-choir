@@ -1,6 +1,6 @@
 # Autoradio overnight: what is on your phone and what is not
 
-I wrote this on Monday the sixteenth of November, at half past eight in the morning, universal time. It covers one night of work, about nine hours, from your order late on Sunday the fifteenth. It is my own report of work I directed and builders carried out.
+I wrote this on Monday the sixteenth of November, at ten to nine in the morning, universal time. It covers one night of work, about nine hours, from your order late on Sunday the fifteenth. It is my own report of work I directed and builders carried out.
 
 The phone has a build with everything you asked for in it, and I have not heard a single second of it. That is the news. Every part compiles, every part passes its tests, and I have watched most of it work in the simulator against the live service. But sound, voice and the feel of it in the hand are yours to judge this morning, and you should expect to find things.
 
@@ -8,11 +8,11 @@ Here is where it stands. The app opens and the station starts by itself. There i
 
 ## The phone
 
-I installed eleven builds through the night. The last went on a few minutes before eight.
+I installed twelve builds through the night. The last went on at twenty to nine, and the full test suite passed on that exact tree: eight hundred and sixty two tests, no failures.
 
 The queue is one structure now. Stories, web pages, documents and podcast audio all go through it. When I played an episode of N P R News Now in the simulator, the player showed thirteen seconds elapsed out of five and a half minutes, with the fifteen second skip buttons that only appear for audio. That is streaming, proven up to the point of sound.
 
-The podcast app lists popular news shows, opens a show, lists its episodes, and plays them. A show page also carries that show's clips. The Reader exists and imports books and documents, but I have only seen its empty shelf. I could not put a real book in front of it with my test tooling, and opening a file from another app into Autoradio is not built.
+The podcast app lists popular news shows, opens a show, lists its episodes, and plays them. A show page also carries that show's clips. The Reader exists and imports books and documents. I could not import a file with my test tooling, so the builder added one short sample book that appears only in demo mode, and I watched it open to its first chapter with read aloud, add to queue, contents and find. I have not seen it with a book of yours. Opening a file from another app into Autoradio is not built.
 
 Voice turns on when the app opens and off after three minutes of quiet, by test. I have not spoken to it.
 
@@ -66,7 +66,7 @@ Three decisions are yours. First, how a second service may ask Jev, so matching 
 
 ## Names and receipts
 
-Phone build: branch `lane/autoradio-qa`, tip `816d7aadf`, installed 07:57 UTC. Rollback build: `1ec3b7b1c`. The lab profile expires Tuesday 17 November, 21:49 UTC.
+Phone build: branch `lane/autoradio-qa`, tip `3f11437d3`, installed 08:40 UTC; Kit suite 862 tests, 0 failures on that tree. Rollback build: `1ec3b7b1c`. The lab profile expires Tuesday 17 November, 21:49 UTC.
 
 Server, in order: `5841da812` (Jev dial fix, intake fix, inline body reader; deployed 02:15), `a99e07d3b` (queue desk; deployed 03:29), `93004c45f` (podcast clips, refused by CI run 43804540972), `af31e4fd0` (the revert), `53747dcca` (podcast clips without the matcher; CI run 43816903927; deployed 06:39).
 
@@ -86,6 +86,6 @@ Problem records written tonight, all under `docs/problems/`:
 
 Goal file: `docs/definitions/choir-autoradio-full-experience-overnight-2026-11-15.md`, with its ledger beside it.
 
-Not built or not verified: sound, voice and clips on the device; the phone playing a stretch with clips while signed in (the server side is proven: three clip segments of fifteen; the script is `prove-programme-clips.py`, beside the queue script); the Reader with a real book; opening a file from another app; captions fetched on the device from video sites (design only); the search step with Exa (not started, nothing spent); automatic matching; subscription intake; the worker as a durable service. One feed address that carried a public app identifier was removed from the seed list but remains in git history. The Jev call volume from the paper is about three hundred an hour, which I did not examine. Other gates may run only on the server and not in the landing script; I did not compare them one by one.
+Not built or not verified: sound, voice and clips on the device; the phone playing a stretch with clips while signed in (the server side is proven: three clip segments of fifteen; the script is `prove-programme-clips.py`, beside the queue script); the Reader with a book of your own (seen only with the demo sample); opening a file from another app; captions fetched on the device from video sites (design only); the search step with Exa (not started, nothing spent); automatic matching; subscription intake; the worker as a durable service. One feed address that carried a public app identifier was removed from the seed list but remains in git history. The Jev call volume from the paper is about three hundred an hour, which I did not examine. Other gates may run only on the server and not in the landing script; I did not compare them one by one.
 
 Rollback for each server change is a revert of its commits; the inline body reader is roll forward only, as its commit says.
