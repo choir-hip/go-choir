@@ -5,7 +5,7 @@
 //   podcast-unsubscribe, podcast-episode-<key>, podcast-play-<key>, podcast-resume, podcast-play, podcast-queue, podcast-keep, podcast-note,
 //   podcast-playing-from, podcast-retry, podcast-notes.
 use Theme, PodHomeView, PodShowView, PodEpisodeView from "@choir/autoradio"
-use PageScroll, PageHeader, SectionHeader, ListGroup, ListRow, RowRule, EmptyState, Emerge from "./ui.contract"
+use PageScroll, PageHeader, SectionHeader, PlainList, LineRow, RowRule, EmptyState, Emerge from "./ui.contract"
 use ClipRow from "./clips.contract"   // lane autoradio-joins
 use ClipRows from "@choir/autoradio"
 
@@ -50,12 +50,12 @@ component PodShowItem
   view
     column width="100%" min-width=0
       if first == false
-        RowRule(indent=88)
+        RowRule(indent=72)
       button press=openPage(address, title) testId=`podcast-row-${feed}` appearance="none" width="100%" aria-label=title
-        row align-items="center" padding-left=16 width="100%" box-sizing="border-box"
+        row align-items="center" gap=16 width="100%" box-sizing="border-box" padding="8px 0px"
           PodArt(src=artwork, size=56)
           column flex=1 min-width=0
-            ListRow(label=title, detail=detail, trailing=trailing, chevron=true)
+            LineRow(label=title, detail=detail, trailing=trailing, chevron=true)
 
 component PodcastsHome
   inject
@@ -77,7 +77,7 @@ component PodcastsHome
           Emerge(delay=0)
             column gap=8 width="100%"
               SectionHeader(label="Podcasts found")
-              ListGroup(testId="podcasts-results")
+              PlainList(testId="podcasts-results")
                 for r, i in podHome.results key=r.feedURL
                   PodShowItem(feed=r.feedURL, address=r.address, title=r.title, detail=r.author, artwork=r.artwork, trailing=(r.subscribed ? "Subscribed" : ""), first=(i == 0))
         if podHome.searchNote != ""
@@ -94,14 +94,14 @@ component PodcastsHome
           Emerge(delay=0)
             column gap=8 width="100%"
               SectionHeader(label="Your shows")
-              ListGroup(testId="podcasts-shows")
+              PlainList(testId="podcasts-shows")
                 for r, i in podHome.shows key=r.feedURL
                   PodShowItem(feed=r.feedURL, address=r.address, title=r.title, detail=r.detail, artwork=r.artwork, trailing=(r.unplayedCount > 0 ? `${r.unplayedCount} new` : ""), first=(i == 0))
         if podHome.suggestions.length > 0
           Emerge(delay=60)
             column gap=8 width="100%"
               SectionHeader(label="Popular in news")
-              ListGroup(testId="podcasts-suggestions")
+              PlainList(testId="podcasts-suggestions")
                 for r, i in podHome.suggestions key=r.feedURL
                   PodShowItem(feed=r.feedURL, address=r.address, title=r.title, detail=r.author, artwork=r.artwork, trailing="", first=(i == 0))
         if podHome.syncNote != ""
@@ -124,10 +124,10 @@ component PodEpisodeItem
   view
     column width="100%" min-width=0
       if first == false
-        RowRule(indent=16)
+        RowRule(indent=0)
       row align-items="center" width="100%" box-sizing="border-box"
         button press=openPage(address, title) testId=`podcast-episode-${ekey}` appearance="none" flex=1 min-width=0 aria-label=title
-          ListRow(label=title, detail=detail, trailing=trailing, chevron=false)
+          LineRow(label=title, detail=detail, trailing=trailing, chevron=false)
         if playable
           button press=podPlayEpisode(address, "resume") testId=`podcast-play-${ekey}` appearance="none" width=52 height=52 flex-shrink=0 aria-label=`Play ${title}`
             row width=52 height=52 align-items="center" justify-content="center"
@@ -195,7 +195,7 @@ component PodcastShowPage
           Emerge(delay=80)
             column gap=8 width="100%"
               SectionHeader(label=(podShow.unplayedLine != "" ? `Episodes · ${podShow.unplayedLine}` : "Episodes"))
-              ListGroup(testId="podcast-episodes")
+              PlainList(testId="podcast-episodes")
                 for e, i in podShow.episodes key=e.key
                   PodEpisodeItem(ekey=e.key, address=e.address, title=e.title, detail=(e.stamp + (e.duration != "" ? ` · ${e.duration}` : "")), trailing=(e.progress != "" ? e.progress : (e.unplayed ? "New" : "")), playable=e.playable, first=(i == 0))
 
@@ -237,8 +237,8 @@ component PodcastEpisodePage
         Emerge(delay=40)
           column gap=12 width="100%"
             button press=openPage(podEp.showAddress, podEp.showTitle) testId="podcast-show-link" appearance="none" width="100%" aria-label=`Open ${podEp.showTitle}`
-              ListGroup(testId="podcast-show-card")
-                ListRow(label=(podEp.showTitle != "" ? podEp.showTitle : "The show"), detail="Open the show and its other episodes", trailing="", chevron=true)
+              PlainList(testId="podcast-show-card")
+                LineRow(label=(podEp.showTitle != "" ? podEp.showTitle : "The show"), detail="Open the show and its other episodes", trailing="", chevron=true)
             if podEp.playingFrom != ""
               text podEp.playingFrom testId="podcast-playing-from" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
             if podEp.playable

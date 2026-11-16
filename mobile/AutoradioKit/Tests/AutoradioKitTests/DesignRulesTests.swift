@@ -12,6 +12,8 @@ import XCTest
 //  R5 a circle or a half-height rounding: a box whose border-radius is half its height or more (a dot, a thumb, a round button, a progress bar
 //     with round ends) outside ui.contract. A marker is a short rule; a progress bar is a flat line.
 //  R6 a radio drawn as a glyph (● or ○): a single choice shows its chosen row with a check, never a circle.
+//  R7 a filled primary block (`Btn(... primary=true`) outside the flow pages: one rule, everywhere. A flat accent block is for a page whose whole job is one action
+//     in a sequence (onboarding, the voice step); every other action is an accent text action (Reader's Add, Subscribe, Keep listening, Reply, Sign in).
 //  R4 a contract reads the retired capsule helpers' look back in: a background fill and a pill radius together on one line.
 final class DesignRulesTests: XCTestCase {
     static let lab = NavigationTests.lab
@@ -125,6 +127,17 @@ final class DesignRulesTests: XCTestCase {
         guard let r = l.range(of: key) else { return nil }
         let digits = l[r.upperBound...].prefix { $0.isNumber || $0 == "." }
         return Double(digits)
+    }
+
+    // R7
+    static let flowPages: Set<String> = ["onboarding.contract", "voice.contract", "ui.contract"]
+    func testFilledBlocksAreOnlyOnFlowPages() throws {
+        for f in try contracts() where !Self.flowPages.contains(f.name) {
+            for (n, raw) in f.lines.enumerated() {
+                let l = code(raw)
+                XCTAssertFalse(l.contains("primary=true"), "\(f.name):\(n + 1) a filled block outside the flow pages (use an accent text action)")
+            }
+        }
     }
 
     // R4: the capsule button face is gone from ui.contract itself.

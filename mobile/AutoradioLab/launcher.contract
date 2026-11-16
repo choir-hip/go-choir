@@ -38,7 +38,7 @@ component ChipPlace
   view
     button press=openPage(address, name) testId=`place-${slug}` appearance="none" flex-shrink=0 aria-label=`Open ${name}`
       row padding="0px 16px 0px 0px" align-items="center" min-height=44
-        text name font-family=th.fontUi font-size=17 font-weight=600 color=th.accent
+        text name font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
 
 // One page of the stack: tap to jump to it; a close button when it can be closed.
 component StackRow

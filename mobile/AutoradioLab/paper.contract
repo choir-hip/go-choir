@@ -25,7 +25,7 @@ component Story
   view
     column gap=6 align-items="flex-start" width="100%"
       if kicker
-        text sectionName(s.section) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+        text sectionName(s.section) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
       button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
         column gap=6 align-items="flex-start" width="100%"
           text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left" text-wrap="balance"
@@ -41,11 +41,11 @@ component Story
           button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
             row gap=4 align-items="center" min-height=44
               image "symbol:play-fill" width=14 height=14 color=th.accent
-              text "Play" font-family=th.fontUi font-size=14 font-weight=600 color=th.accent line-clamp=1
+              text "Play" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent line-clamp=1
           button press=queueLater("story", s.route, s.title) appearance="none" testId=`paper-queue-${s.route}` aria-label=`Add ${s.title} to the queue` flex-shrink=0
             row gap=4 align-items="center" min-height=44
-              image "symbol:sf/text.badge.plus" width=16 height=16 color=th.accent
-              text "Queue" font-family=th.fontUi font-size=14 font-weight=600 color=th.accent line-clamp=1
+              image "symbol:sf/text.badge.plus" width=16 height=16 color=th.muted
+              text "Queue" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted line-clamp=1
 
 // A compact row: a small headline and a play button at the trailing edge. Used for briefs, river and opinion.
 component BriefRow
@@ -65,7 +65,7 @@ component BriefRow
       row align-items="center" gap=4 width="100%" padding="10px 0" box-sizing="border-box"
         column flex=1 min-width=0 gap=3 align-items="flex-start"
           if kicker
-            text sectionName(s.section) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+            text sectionName(s.section) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
           button press=openPage(`pub:${s.route}`, s.title) appearance="none" testId=`paper-story-${s.route}` width="100%"
             text s.title font-family=th.fontRead font-size=s.size font-weight=s.weight line-height=s.lineHeight color=th.fg text-align="left"
           if s.byline != ""
@@ -132,13 +132,13 @@ component Band
       if b.module == "cluster"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding=16 gap=2 width="100%" box-sizing="border-box"
-            text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+            text sectionName(b.label) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
             for s in b.items key=s.route
               FollowRow(s=s)
       if b.module == "briefs" or b.module == "opinion"
         Card(level=1, testId=`paper-band-${b.id}`, minHeight=0)
           column padding="14px 16px 4px 16px" width="100%" box-sizing="border-box"
-            text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+            text sectionName(b.label) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=(b.module == "briefs"), first=(i == 0))
       if b.module == "river"
@@ -146,7 +146,7 @@ component Band
           column padding="6px 16px 4px 16px" width="100%" box-sizing="border-box"
             button press=pickView(b.id.slice(6)) appearance="none" testId=`paper-more-${b.id.slice(6)}` width="100%"
               row align-items="center" justify-content="space-between" padding="10px 0 2px 0" width="100%" box-sizing="border-box"
-                text sectionName(b.label) font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+                text sectionName(b.label) font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted
                 image "symbol:forward-chevron" color=th.muted
             for s, i in b.items key=s.route
               BriefRow(s=s, kicker=false, first=(i == 0))
@@ -251,7 +251,7 @@ component PaperPage
               column padding=16 gap=10 width="100%" box-sizing="border-box"
                 text "Sign in to talk to your computer and to make this paper yours." font-family=th.fontRead font-size=17 line-height=1.35 color=th.fg
                 button press=signIn testId="paper-signin" appearance="none"
-                  Btn(label="Sign in", primary=true, wide=false)
+                  Btn(label="Sign in", primary=false, wide=false)
                 if au.message != ""
                   text au.message testId="paper-signin-message" font-family=th.fontUi font-size=13 color=th.muted
           // nothing to read, or it failed: a line of plain words and one action

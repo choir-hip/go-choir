@@ -65,7 +65,7 @@ component TexturesPage
             text "Make your edition" font-family=th.fontRead font-size=22 font-weight=700 color=th.fg
             text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted width="100%"
             button press=editAsk("Make my edition: ") testId="textures-make-edition" appearance="none"
-              Btn(label="Make your edition", primary=true, wide=false)
+              Btn(label="Make your edition", primary=false, wide=false)
       EditEditionLink()
       for r in edition key=r.address
         TextureRowView(r=r, pinned=true)

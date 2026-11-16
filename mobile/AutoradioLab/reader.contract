@@ -103,7 +103,7 @@ component CiteCard
             row gap=8
               if c.kind == "texture"
                 button press=openPage(c.target, c.title) testId=`reader-card-open-${c.anchor}` appearance="none"
-                  Btn(label="Open as page", primary=true, wide=false)
+                  Btn(label="Open as page", primary=false, wide=false)
               else if c.url != ""
                 button press=openLink(c.url, c.host) testId=`reader-card-source-${c.anchor}` appearance="none"
                   Btn(label="Open source", primary=false, wide=false)
@@ -262,7 +262,7 @@ component WebLayer
       // lane autoradio-queue: every embedded source page can be read aloud or queued
       row gap=8 padding="0px 12px 8px 12px" width="100%" box-sizing="border-box"
         button press=queuePlay("page", webUrl, webHost) testId="reader-web-read" appearance="none" aria-label="Read this page aloud" flex=1
-          Btn(label="Read aloud", primary=true, wide=true)
+          Btn(label="Read aloud", primary=false, wide=false)
         button press=queueLater("page", webUrl, webHost) testId="reader-web-add" appearance="none" aria-label="Add this page to the queue" flex=1
           Btn(label="Add to queue", primary=false, wide=true)
       web-page page=webUrl message=webMsg testId="reader-web-view" width="100%" flex=1 min-height=0

@@ -24,11 +24,11 @@ component BooksPage
         Emerge(delay=th.staggerMs)
           EmptyState(message="Nothing here yet", detail=lbList.message, testId="reader-empty")
             button press=lbImport testId="reader-import" appearance="none" aria-label="Add an EPUB or PDF"
-              Btn(label="Add an EPUB or PDF", primary=true, wide=true)
+              Btn(label="Add an EPUB or PDF", primary=false, wide=false)
       if lbList.status == "ready"
         Emerge(delay=th.staggerMs)
           button press=lbImport testId="reader-import" appearance="none" aria-label="Add an EPUB or PDF"
-            Btn(label="Add an EPUB or PDF", primary=true, wide=true)
+            Btn(label="Add an EPUB or PDF", primary=false, wide=false)
         Emerge(delay=(2 * th.staggerMs))
           ListGroup(testId="reader-list")
             for r, i in lbList.rows key=r.id
@@ -69,7 +69,7 @@ component DocActions
   view
     row flex-wrap="wrap" gap=8 width="100%" align-items="center"
       button press=ldRead testId="doc-read" appearance="none" aria-label="Read aloud from here"
-        Btn(label="Read aloud", primary=true, wide=false)
+        Btn(label="Read aloud", primary=false, wide=false)
       button press=ldQueue testId="doc-queue" appearance="none" aria-label="Add to queue"
         ChipFace(label="Add to queue", selected=false)
       button press=ldTocToggle testId="doc-toc" appearance="none" aria-label="Contents"

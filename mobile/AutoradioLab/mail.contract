@@ -156,7 +156,7 @@ component MailMessage
         row gap=8 flex-wrap="wrap"
           if mmsg.canReply
             button press=openPage(`mail:reply/${mmsg.id}`, `Reply: ${mmsg.subject}`) testId="mail-reply" appearance="none"
-              Btn(label=mmsg.replyLabel, primary=true, wide=false)
+              Btn(label=mmsg.replyLabel, primary=false, wide=false)
           button press=askMail("Summarise this thread") testId="mail-summarise" appearance="none"
             Btn(label="Summarise this thread", primary=false, wide=false)
           button press=readMail testId="mail-read" appearance="none"
@@ -246,7 +246,7 @@ component MailCompose
         text title role="heading" aria-level=1 font-family=th.fontRead font-size=26 font-weight=700 line-height=1.2 testId="page-title" flex=1 min-width=0
         if mailDraftStatus != "approval"
           button press=saveMailDraft testId="mail-save" appearance="none"
-            Btn(label=(mailDraftStatus == "saved" ? "Save again" : "Save draft"), primary=true, wide=false)
+            Btn(label=(mailDraftStatus == "saved" ? "Save again" : "Save draft"), primary=false, wide=false)
       if mcmp.status == "error" and mailDraftId == ""
         MailNotice(testId="mail-error", title="This draft could not be opened", body=mcmp.note, retry=false)
       if mcmp.status != "error" or mailDraftId != ""

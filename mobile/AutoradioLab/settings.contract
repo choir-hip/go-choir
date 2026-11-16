@@ -183,8 +183,8 @@ component ThemePreview
               text `${t.scale} · ${t.schemes.replaceAll(",", " + ")}${t.origin == "bundled" ? "" : " · " + t.origin}` font-family=t.fontUi font-size=12 color=t.muted
           if compact == false
             row gap=8 align-items="center"
-              row padding="8px 16px" border-radius=t.radiusControl background-color=t.accent
-                text "Listen" font-family=t.fontUi font-size=15 font-weight=600 color=t.onAccent
+              row padding="8px 4px"
+                text "Listen" font-family=t.fontUi font-size=15 font-weight=600 color=t.accent
               row padding="8px 4px"
                 text "Ask the desk" font-family=t.fontUi font-size=15 font-weight=600 color=t.accent
       if t.origin != "bundled" and compact == false
@@ -304,7 +304,7 @@ component AppearanceScreen
                 font-family=th.fontUi font-size=16 color=th.fg min-height=44 padding="8px 0px" border-width=0 background-color="transparent"
               RowRule(indent=0)
             button press=loadThemeDoc testId="settings-theme-load" appearance="none"
-              Btn(label="Add", primary=true, wide=false)
+              Btn(label="Add", primary=false, wide=false)
           if dm.on
             button press=loadDemoTheme testId="settings-theme-demo-texture" appearance="none"
               Btn(label="Add the demo theme Texture", primary=false, wide=false)
@@ -453,7 +453,7 @@ component ComputerScreen
       text "Restart to update asks your computer to restart onto the newest version. It waits if the computer is in the middle of a change." font-family=th.fontUi font-size=tx.sizeMeta color=th.muted
       column gap=12 width="100%"
         button press=updateComputer testId="settings-update" appearance="none" width="100%"
-          ActionButton(label=(cmpt.updateAvailable ? "Restart to update" : "Check for an update"), testId="settings-update-box", primary=true, danger=false)
+          ActionButton(label=(cmpt.updateAvailable ? "Restart to update" : "Check for an update"), testId="settings-update-box", primary=false, danger=false)
         button press=wakeComputer testId="settings-wake" appearance="none" width="100%"
           ActionButton(label="Wake the computer", testId="settings-wake-box", primary=false, danger=false)
         button press=refreshComputer testId="settings-computer-refresh" appearance="none" width="100%"

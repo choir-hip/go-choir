@@ -17,11 +17,11 @@ component ClipRow
       text (byStory ? `${r.story} · ${r.show} · ${r.length}` : `${r.show} · ${r.episode} · ${r.length}`) font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 text-align="left"
       row gap=20 align-items="center"
         button press=clipDo("play", r.clipID) testId=`clip-play-${r.clipID}` appearance="none" aria-label=`Play ${r.show}: ${r.quote}`
-          row padding="8px 0px" align-items="center"
+          row min-height=44 align-items="center"
             text (r.episodeOnly ? "Play episode" : "Play") font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
         button press=clipDo("queue", r.clipID) testId=`clip-queue-${r.clipID}` appearance="none" aria-label=`Add ${r.show} to the queue`
-          row padding="8px 0px" align-items="center"
-            text "Queue" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+          row min-height=44 align-items="center"
+            text "Queue" font-family=th.fontUi font-size=15 font-weight=600 color=th.muted
         button press=clipDo("open", r.clipID) testId=`clip-open-${r.clipID}` appearance="none" aria-label=`Open the episode of ${r.show}`
-          row padding="8px 0px" align-items="center"
-            text "Open episode" font-family=th.fontUi font-size=15 font-weight=600 color=th.accent
+          row min-height=44 align-items="center"
+            text "Open episode" font-family=th.fontUi font-size=15 font-weight=600 color=th.muted
