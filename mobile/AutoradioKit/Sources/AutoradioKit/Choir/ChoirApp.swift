@@ -55,6 +55,7 @@ public final class ChoirApp: @unchecked Sendable {
     private var followTask: Task<Void, Never>?
     private var loadToken = 0
     public var onChange: (@Sendable () -> Void)?
+    nonisolated(unsafe) var continuity: PlaybackContinuity?
 
     // The list a story came from (player controls): next, previous and autoplay follow it. The host says what the paper's article
     // stack is; without it the front list is used.
@@ -133,6 +134,11 @@ public final class ChoirApp: @unchecked Sendable {
             q.engine = engine
             engine.remote.onEnded = { g in Task { @MainActor in await PlayQueue.shared.remoteEnded(generation: g) } }
             engine.remote.onTick = { PlayQueue.shared.save() }
+            let continuity = PlaybackContinuity(runtime: me.runtime)
+            engine.continuity = continuity
+            me.continuity = continuity
+            engine.remote.onSystemPause = { [weak continuity] in continuity?.remoteSystemPaused() }
+            engine.remote.note = { [weak me] in me?.runtime.log.emit(.audioNotice(kind: "remote", detail: $0)) }
             // Nothing queued behind a text, a page, a book or audio: the DJ's stretch carries on.
             // The clip runner owns the idle moment: a programme parked behind a clip or a queued item goes on; otherwise the DJ's stretch.
             DJClipRunner.shared.whenIdle = { [weak me] in await me?.continueIntoDJ() ?? false }
@@ -614,6 +620,7 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {
+        await MainActor.run { self.continuity?.readerTapped() }
         if await MainActor.run(body: { () -> Bool in
             let q = PlayQueue.shared
             guard q.current?.isRemoteAudio == true else { return false }

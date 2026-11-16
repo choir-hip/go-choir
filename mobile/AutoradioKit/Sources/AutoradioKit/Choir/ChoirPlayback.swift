@@ -4,6 +4,7 @@ import Foundation
 /// AVPlayer (RemoteAudioPlayer). Only one of them makes sound at a time: starting one silences the other.
 @MainActor public final class ChoirPlaybackEngine: PlaybackEngine {
     let app: ChoirApp
+    var continuity: PlaybackContinuity?
     public let remote = RemoteAudioPlayer()
     var queue: PlayQueue { PlayQueue.shared }
 
@@ -23,12 +24,17 @@ import Foundation
     public func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool {
         app.runtime.player.pause()                      // the programme's voice stops; the paper's list is not advanced by this
         if !app.runtime.snapshot().running { await app.runtime.start() }   // the engine's start claims the audio session
+        else { await app.runtime.ensureSessionReady(reason: "remote audio") }
         return await remote.play(url: url, title: title, show: show, start: start, end: end, rate: BarTracker.shared.speed, generation: queue.generation)
     }
 
     public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { await remote.duration(of: url, deadline: deadline) }
     public func pauseRemote() { remote.pause() }
-    public func resumeRemote() { remote.resume() }
+    public func resumeRemote() {
+        continuity?.readerTapped()
+        let rt = app.runtime, r = remote
+        Task { @MainActor in await rt.ensureSessionReady(reason: "resume remote audio"); r.resume() }     // the session first: it may be dead after the background
+    }
     public func stopRemote() { remote.stop() }
     public func seekRemote(by seconds: Double) { remote.seek(by: seconds) }
     public func seekRemote(to seconds: Double) { remote.seek(to: seconds) }

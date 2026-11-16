@@ -25,6 +25,12 @@ import MediaPlayer
     public var onEnded: ((Int) -> Void)?
     /// About once a second while something plays: the host saves the position.
     public var onTick: (() -> Void)?
+    /// The system paused the player (an interruption, a route change, another app) while the reader wanted it playing: the host marks the
+    /// queue paused, so the bar and the lock screen say what is true and the next Play plays.
+    public var onSystemPause: (() -> Void)?
+    /// Something worth a line in the event log (a failure, a system pause).
+    public var note: ((String) -> Void)?
+    private var controlObserver: NSKeyValueObservation?
 
     public init() {}
 
@@ -41,7 +47,14 @@ import MediaPlayer
         p.defaultRate = Float(self.rate)
         player = p; item = it
         installCommands()
-        guard await ready(it) else { stop(); return false }
+        controlObserver = p.observe(\.timeControlStatus, options: [.new]) { [weak self] pl, _ in
+            guard pl.timeControlStatus == .paused else { return }
+            Task { @MainActor in self?.checkSystemPause() }
+        }
+        guard await ready(it) else {
+            note?("remote: the stream did not become ready (\(it.error.map { "\($0)" } ?? "status \(it.status.rawValue)"))")
+            stop(); return false
+        }
         if let s = start, s > 0 { await p.seek(to: CMTime(seconds: s, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
         if let e = end { setBoundary(e) }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: it, queue: .main) { [weak self] _ in
@@ -81,25 +94,45 @@ import MediaPlayer
         }
     }
 
+    private var boundaryEnd: Double?
     private func setBoundary(_ end: Double) {
         clearBoundary()
+        boundaryEnd = end
         guard let p = player else { return }
         boundary = p.addBoundaryTimeObserver(forTimes: [NSValue(time: CMTime(seconds: end, preferredTimescale: 600))], queue: .main) { [weak self] in
             MainActor.assumeIsolated { self?.fire() }
         }
     }
-    private func clearBoundary() { if let b = boundary { player?.removeTimeObserver(b); boundary = nil } }
+    private func clearBoundary() { if let b = boundary { player?.removeTimeObserver(b); boundary = nil }; boundaryEnd = nil }
 
     private func fire() { let g = generation; onEnded?(g) }
 
     public func pause() { wantPlaying = false; player?.pause(); publish() }
-    public func resume() { guard let p = player else { return }; wantPlaying = true; if level != .pause { p.play() }; publish() }
+    public func resume() {
+        guard let p = player else { return }
+        wantPlaying = true
+        if p.currentItem?.status == .failed { note?("remote: the item had failed (\(p.currentItem?.error.map { "\($0)" } ?? "unknown")); play does nothing until it is started again") }
+        if level != .pause { p.play() }
+        publish()
+    }
+
+    /// The player paused and the reader did not ask for it: not at the end of the item, not for a hands-free turn.
+    private func checkSystemPause() {
+        guard player != nil, wantPlaying, level != .pause else { return }
+        if let pos = position(), let d = pos.duration, pos.elapsed >= d - 0.75 { return }      // it reached its end
+        if let e = boundaryEnd, (position()?.elapsed ?? 0) >= e - 0.25 { return }               // a clip reached its end
+        wantPlaying = false
+        note?("remote: paused by the system at \(Int(position()?.elapsed ?? 0)) s")
+        publish()
+        onSystemPause?()
+    }
 
     public func stop() {
         clearBoundary()
         if let t = tick { player?.removeTimeObserver(t); tick = nil }
         if let o = endObserver { NotificationCenter.default.removeObserver(o); endObserver = nil }
         statusObserver?.invalidate(); statusObserver = nil
+        controlObserver?.invalidate(); controlObserver = nil
         player?.pause(); player = nil; item = nil; wantPlaying = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         setCommands(enabled: false)
