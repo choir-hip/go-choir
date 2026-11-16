@@ -29,6 +29,9 @@ public final class HandsFreeSwitch: @unchecked Sendable {
     private var lastTurn: Date
     /// Told after every change (the app refreshes the bar).
     public var onChange: (@Sendable () -> Void)?
+    /// Told after every change too, for the audio session (the microphone is part of it only while voice is on). Separate from `onChange`,
+    /// which the app owns.
+    public var onVoiceChange: (@Sendable () -> Void)?
     /// `defaults` is accepted for old callers and not used: nothing is kept across launches.
     public init(defaults: UserDefaults? = nil, now: @escaping @Sendable () -> Date = { Date() }) { self.now = now; lastTurn = now() }
 
@@ -37,7 +40,7 @@ public final class HandsFreeSwitch: @unchecked Sendable {
     /// The Voice control: the listener's explicit choice, the only thing that turns it on. Turning it on starts the quiet time.
     public func set(_ value: Bool) {
         lock.lock(); on = value; if value { lastTurn = now() }; lock.unlock()
-        onChange?()
+        onChange?(); onVoiceChange?()
     }
     /// A turn from the reader was sent: the time starts again.
     public func readerSpoke() { lock.lock(); lastTurn = now(); lock.unlock() }
@@ -48,7 +51,7 @@ public final class HandsFreeSwitch: @unchecked Sendable {
         let expired = on && now().timeIntervalSince(lastTurn) >= Self.idleLimit
         if expired { on = false }
         lock.unlock()
-        if expired { onChange?() }
+        if expired { onChange?(); onVoiceChange?() }
         return expired
     }
 }

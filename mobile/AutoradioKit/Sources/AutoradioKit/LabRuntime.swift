@@ -100,7 +100,11 @@ public final class LabRuntime: @unchecked Sendable {
         self.config = cfg
         let policyBox = PolicyBox(cfg.audio)
         self.policyBox = policyBox
-        let coord = SessionCoordinator(inner: session, log: log, audio: audio, policy: { policyBox.value })
+        let override = Locked<Bool?>(nil)
+        self.overrideBox = override
+        // Voice off is a playback session with no microphone; only the tap on the Voice control (or onboarding's own screen) opens it.
+        let coord = SessionCoordinator(inner: session, log: log, audio: audio, policy: { policyBox.value },
+                                       voiceOn: { override.value ?? HandsFreeSwitch.shared.isOn })
         self.coordinator = coord
         self.session = coord
         store = KeptTurnStore(root: supportDir.appendingPathComponent("turns"))
@@ -122,6 +126,10 @@ public final class LabRuntime: @unchecked Sendable {
         // Model loads show in the trace; the one store is shared with voice setup.
         Task { await ModelStore.shared.attach(log: log) }
         player.onChange = { [weak self] in self?.refresh() }
+        // Play asks for the session first when the engine is down or the claim is doubted (after the background, an interruption).
+        player.onNeedsSession = { [coordinator] in Task { await coordinator.ensureReady(reason: "play") } }
+        // The voice switch turned itself off (three quiet minutes) or was set elsewhere: the session drops the microphone.
+        HandsFreeSwitch.shared.onVoiceChange = { [coordinator] in Task { await coordinator.reapply() } }
         // The bar and the player read the real position from the audio, and a speed picked there reaches the audio.
         let pl = player
         BarTracker.shared.positionSource = { [weak pl] in pl?.renderPosition() }
@@ -163,7 +171,9 @@ public final class LabRuntime: @unchecked Sendable {
         }
         if virtual { LabEnvironment.promptsAllowed = false; LabEnvironment.virtualAudio = true }
         do {
-            try await session.claim(.talking, preferBuiltInMic: true, reason: "start")    // voice processing from the start: the radio's voice is not the listener's
+            // The coordinator decides what the claim is: a playback session while voice is off, voice processing from the start while it is on
+            // (the radio's voice is not the listener's).
+            try await session.claim(.talking, preferBuiltInMic: true, reason: "start")
             let micOK = virtual ? true : await LiveAudio.requestMicPermission()
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
             try audio.start(bus: bus, clock: clock, wantMic: micOK, voiceProcessing: coordinator.current == .talking, virtual: virtual)
@@ -201,6 +211,10 @@ public final class LabRuntime: @unchecked Sendable {
         return player.speakText(address: address, text: text, title: title, startNow: !running || now, play: running)
     }
 
+    /// The session is claimed and active and the engine is up, taking the claim again when needed. Call before anything plays.
+    @discardableResult
+    public func ensureSessionReady(reason: String) async -> Bool { await coordinator.ensureReady(reason: reason) }
+
     public func stop() {
         player.pause()
         micTask?.cancel(); micTask = nil
@@ -216,7 +230,7 @@ public final class LabRuntime: @unchecked Sendable {
     private var warmTask: Task<Void, Never>?
     private let warmKeys = Locked<(done: String, running: String)>(("", ""))
     /// Hands-free for one screen only (onboarding's "Talk to it" while the switch is off): not stored.
-    private let overrideBox = Locked<Bool?>(nil)
+    private let overrideBox: Locked<Bool?>
     var handsFreeOverride: Bool? { overrideBox.value }
     static func warmKey(_ address: String, _ text: String) -> String { "\(address)|\(text.utf8.count)|\(text.hashValue)" }
     /// A page's text has arrived (or changed) while the page may already be in front: read it into the responder's cache unless that
@@ -281,7 +295,7 @@ public final class LabRuntime: @unchecked Sendable {
     /// the engine hears nothing and an open turn is dropped now. `persist: false` is for one screen only (onboarding's "Talk to it").
     public func setHandsFree(_ on: Bool, persist: Bool = true) {
         if persist { overrideBox.write { $0 = nil }; HandsFreeSwitch.shared.set(on) } else { overrideBox.write { $0 = on } }
-        Task { [engine] in await engine.handsFreeSet(on) }
+        Task { [engine, coordinator] in await engine.handsFreeSet(on); await coordinator.reapply() }     // the session follows the switch: mic only while on
         refresh()
     }
     /// The stored state again, after a screen's own turn-on.

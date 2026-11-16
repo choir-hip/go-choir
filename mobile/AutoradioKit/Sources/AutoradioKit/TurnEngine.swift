@@ -3,6 +3,9 @@ import Foundation
 // MARK: Host-supplied seams
 
 public enum AudioState: String, Codable, Sendable {
+    /// Playback only, no microphone: the state whenever voice is off. The session is a playback one (so audio goes on in the
+    /// background and with the screen locked) and nothing is recorded.
+    case playing
     /// Full-quality playback, no voice processing. Mic feeds detectors only.
     case listening
     /// Programme paused or ducked, voice processing on, so the listener can interrupt a spoken answer.

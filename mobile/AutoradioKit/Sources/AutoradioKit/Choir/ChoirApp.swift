@@ -81,6 +81,7 @@ public final class ChoirApp: @unchecked Sendable {
     private var loading = false
     private var eventTask: Task<Void, Never>?
     public var onChange: (@Sendable () -> Void)?
+    nonisolated(unsafe) var continuity: PlaybackContinuity?
 
     /// The stretch's source; tests replace it. Default: the programme route on the paper's computer.
     var stretchSource: (@Sendable () -> StretchSource)?
@@ -124,6 +125,12 @@ public final class ChoirApp: @unchecked Sendable {
             let p = RunSheetPlayer.shared
             let engine = ChoirPlaybackEngine(app: me)
             p.engine = engine
+            p.sessionReady = { [weak me] reason in await me?.ensureEngine(reason: reason) }       // before every start of playback
+            let continuity = PlaybackContinuity(runtime: me.runtime)
+            engine.continuity = continuity
+            me.continuity = continuity
+            engine.remote.onSystemPause = { [weak continuity] in continuity?.remoteSystemPaused() }
+            engine.remote.note = { [weak me] in me?.runtime.log.emit(.audioNotice(kind: "remote", detail: $0)) }
             engine.remote.onEnded = { g in Task { @MainActor in RunSheetPlayer.shared.remoteEnded(generation: g) } }
             engine.remote.onTick = { RunSheetStore.shared.save() }
             p.turnOpen = { [weak me] in me.map { $0.runtime.snapshot().phase != "playing" } ?? false }
@@ -269,7 +276,6 @@ public final class ChoirApp: @unchecked Sendable {
         guard let prepared = SegmentPrep.prepare(incoming) else { return false }
         var doc = ProgrammeDocument(id: documentID, title: entry.title.isEmpty ? "Autoradio" : entry.title, blocks: [])
         doc.append(prepared)
-        await ensureEngine()
         runtime.player.setDocument(doc)
         runtime.player.begin(at: 0)
         onChange?()
@@ -278,8 +284,9 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// The audio engine is running before anything is spoken. The host's start request is used when it has one (under a simulator agent
     /// the engine must be the virtual one).
-    func ensureEngine() async {
-        guard !runtime.snapshot().running else { return }
+    /// Already running: the audio session is made ready (`ensureReady`: claimed, active, the engine up) because it may be dead after the background.
+    func ensureEngine(reason: String = "play") async {
+        guard !runtime.snapshot().running else { await runtime.ensureSessionReady(reason: reason); return }
         if let go = runtime.startRequest { await go() } else { await runtime.start() }
     }
 
@@ -287,7 +294,6 @@ public final class ChoirApp: @unchecked Sendable {
     func playPaperStory(route: String) async -> String? {
         do {
             let doc = try await ChoirFront.load(route: route, client: ChoirEnvironment.shared.client(baseURL: frontBaseURL()))
-            await ensureEngine()
             runtime.player.setDocument(doc)
             runtime.player.begin(at: 0)
             onChange?()
@@ -341,6 +347,7 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {
+        await MainActor.run { self.continuity?.readerTapped() }
         if await MainActor.run(body: { () -> Bool in
             let p = RunSheetPlayer.shared
             guard p.isRemote else { return false }

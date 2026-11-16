@@ -14,7 +14,7 @@
 //   ob-topics, ob-explainer, edit-edition, edit-edition-done, edit-edition-link, edit-edition-retry, edit-edition-leave, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
 //   ob-edition-retry, ob-continue-anyway, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
-use Card, PaperCard, PageScroll, Btn, ListGroup, RowRule, SelectMark, PageHeader from "./ui.contract"
+use Card, PaperCard, PageScroll, Btn, ListGroup, RowRule, SelectMark, PageHeader, dyn from "./ui.contract"
 use Mark from "./mark.contract"
 use VoiceStep from "./voice.contract"
 
@@ -40,14 +40,14 @@ component SignInScreen
       box testId="ob-mark-slot" width=72 height=72 align-items="center" justify-content="center"
         Mark(state="idle")
       column gap=8 align-items="center"
-        text "Autoradio" font-size=38 font-weight=700 role="heading" aria-level=2 font-family=th.fontRead color=th.fg
-        text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center" font-size=17 line-height=1.45 font-family=th.fontRead color=th.muted
+        text "Autoradio" font-size="-exact-large-title" font-weight=700 role="heading" aria-level=2 font-family=th.fontHead color=th.fg
+        text "Sign in to hear the paper and talk to your computer." testId="signin-intro" text-align="center" font-size="-exact-body" line-height=1.45 font-family=th.fontText color=th.muted
       if au.status == "pending"
         Card(level=2, testId="signin-card", minHeight=0)
           column padding=20 gap=12 align-items="center"
-            text "Your code" font-family=th.fontUi font-size=13 color=th.muted
-            text au.userCode testId="signin-code" font-size=36 font-weight=600 font-family=th.fontMono color=th.fg
-            text "Approve this sign-in in your browser." font-family=th.fontUi font-size=15 color=th.muted text-align="center"
+            text "Your code" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+            text au.userCode testId="signin-code" font-size="-exact-large-title" font-weight=600 font-family=th.fontMono color=th.fg
+            text "Approve this sign-in in your browser." font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted text-align="center"
             button press=openApproval testId="signin-open" appearance="none"
               Btn(label="Open the approval page", primary=true, wide=false)
             button press=cancelSignIn testId="signin-cancel" appearance="none"
@@ -55,7 +55,7 @@ component SignInScreen
       if au.status != "pending"
         button press=signIn testId="signin" appearance="none"
           Btn(label="Sign in", primary=true, wide=true)
-      text au.message testId="signin-message" font-family=th.fontUi font-size=14 color=th.muted text-align="center"
+      text au.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
 
 // ---------------------------------------------------------------- the page
 
@@ -97,8 +97,8 @@ component SetupRowItem
       column padding=14 gap=8
         row gap=10 align-items="center"
           column flex=1 min-width=0 gap=2
-            text name font-family=th.fontUi font-size=17 font-weight=600 color=th.fg
-            text `${model} · ${sizeLabel}` font-family=th.fontUi font-size=13 color=th.muted
+            text name font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
+            text `${model} · ${sizeLabel}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           if state == "ready"
             image "symbol:checkmark" color=(isFallback ? th.muted : th.success)
           if bad
@@ -108,9 +108,9 @@ component SetupRowItem
         if compact == false and state != "ready" and state != "waiting"
           column height=4 background-color=th.rule width="100%"
             box height=4 background-color=(bad ? th.danger : th.accent) width=`${floor(progress * 100)}%`
-        text statusLine font-family=th.fontUi font-size=14 color=(bad ? th.danger : th.fg) line-height=1.35
+        text statusLine font-family=th.fontLabel font-size="-exact-footnote" color=(bad ? th.danger : th.fg) line-height=1.35
         if numbers != ""
-          text numbers font-family=th.fontMono font-size=12 color=th.muted
+          text numbers font-family=th.fontLabel font-size="-exact-caption1" color=th.muted font-variant-numeric="tabular-nums"
         if canRetry or canFallback
           row gap=8
             if canRetry
@@ -151,7 +151,7 @@ component TopicRowItem
   view
     column width="100%"
       if kind == "yoursHead"
-        text "Yours" testId="ob-topics-yours" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing=0.9 text-transform="uppercase" color=th.muted padding="16px 16px 6px 16px"
+        text "Yours" testId="ob-topics-yours" font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted padding="16px 16px 6px 16px"
       if kind != "yoursHead"
         if first == false
           RowRule(indent=48)
@@ -174,11 +174,11 @@ component TopicRowItem
           button press=obToggleTopic(label) testId=`ob-topic-${label}` role="radio" aria-checked=selected aria-label=pickLabel appearance="none" flex=1 min-width=0
             row align-items="center" gap=12 width="100%" box-sizing="border-box" min-height=rowH padding="0px 16px 0px 0px"
               column flex=1 min-width=0 gap=1 align-items="flex-start"
-                text label font-family=th.fontUi font-size=(sub ? 16 : 17) font-weight=(sub ? 400 : 600) color=((selected or partial) ? th.fg : th.muted) text-align="left"
+                text label font-family=th.fontHead font-size=dyn((sub ? 16 : 17)) font-weight=(sub ? 400 : 600) color=((selected or partial) ? th.fg : th.muted) text-align="left"
                 if sub and note != ""
-                  text note font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+                  text note font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left"
               if sub == false and note != ""
-                text note font-family=th.fontUi font-size=13 color=th.muted
+                text note font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
               SelectMark(state=markState)
 
 // The topic tree with everything that goes with it: the one line of explanation, the tree, a field to type your own, the selection, "Talk to it".
@@ -197,30 +197,30 @@ component TopicPicker
   derive addLabel = ob.talking ? `Listening. ${ob.voiceHint}` : ob.voiceHint
   view
     column width="100%" gap=16
-      text "Tap a topic to pick it. Open one to see what is inside; a topic that fits under several says “also in”." testId="ob-explainer" font-family=th.fontUi font-size=15 line-height=1.4 color=th.muted
+      text "Tap a topic to pick it. Open one to see what is inside; a topic that fits under several says “also in”." testId="ob-explainer" font-family=th.fontLabel font-size="-exact-subheadline" line-height=1.4 color=th.muted
       ListGroup(testId="ob-topics")
         for r, i in ob.tree key=r.key
           TopicRowItem(rowId=r.key, label=r.label, kind=r.kind, selected=r.selected, partial=r.partial, expandable=r.expandable, expanded=r.expanded, note=r.note, first=(i == 0))
       row gap=8 align-items="center" width="100%"
         column flex=1 min-width=0
           input value=obTopicText input=editObTopic submit=obAddTopic placeholder="Add your own topic" aria-label="Add your own topic" testId="ob-topic-input" enterkeyhint="done" min-height=44
-            font-family=th.fontRead font-size=17 color=th.fg padding="8px 0px" border-width=0 background-color="transparent"
+            font-family=th.fontText font-size=17 color=th.fg padding="8px 0px" border-width=0 background-color="transparent"
             ::placeholder
               color=th.muted
           RowRule(indent=0)
         button press=obAddTopic testId="ob-topic-add" appearance="none" aria-label="Add this topic"
           Btn(label="Add", primary=false, wide=false)
-      text ob.selectionLine testId="ob-selection" font-family=th.fontUi font-size=15 line-height=1.4 color=th.muted
+      text ob.selectionLine testId="ob-selection" font-family=th.fontLabel font-size="-exact-subheadline" line-height=1.4 color=th.muted
       button press=obTalk testId="ob-talk" appearance="none" aria-label=talkLabel
         Btn(label=talkLabel, primary=false, wide=true)
-      text addLabel font-family=th.fontUi font-size=13 color=th.muted
+      text addLabel font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       if ob.demo
         Card(level=1, testId="ob-demo", minHeight=0)
           column padding=14 gap=8
-            text "Demo: no microphone here" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+            text "Demo: no microphone here" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             button press=obDemoSay testId="ob-demo-say" appearance="none"
               Btn(label=`Say: ${ob.demoWords}`, primary=false, wide=true)
-      text ob.message font-family=th.fontUi font-size=14 color=th.danger
+      text ob.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
 
 // The edit page: the same topic tree, preselected with the saved picks, without the first-run steps. Changes save as they are made;
 // Done rewrites the edition through the same completion path as onboarding (deadline, progress, Retry) and returns to where the reader was.
@@ -242,13 +242,13 @@ component EditEditionPage
       if busy
         Card(level=2, testId="edit-edition-writing", minHeight=0)
           column padding=18 gap=8 align-items="center"
-            text ob.writingLine testId="edit-edition-progress" font-family=th.fontRead font-size=19 text-align="center"
-            text "This takes a few seconds." font-family=th.fontUi font-size=13 color=th.muted
+            text ob.writingLine testId="edit-edition-progress" font-family=th.fontText font-size="-exact-title3" text-align="center"
+            text "This takes a few seconds." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       if failed
         Card(level=2, testId="edit-edition-failed", minHeight=0)
           column padding=18 gap=10 align-items="center"
-            text ob.editionError testId="edit-edition-error" font-family=th.fontRead font-size=18 text-align="center" line-height=1.35
-            text "Your topics are saved. The edition stays as it was until this works." font-family=th.fontUi font-size=13 color=th.muted text-align="center"
+            text ob.editionError testId="edit-edition-error" font-family=th.fontText font-size="-exact-body" text-align="center" line-height=1.35
+            text "Your topics are saved. The edition stays as it was until this works." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
             button press=obEditionRetry testId="edit-edition-retry" appearance="none"
               Btn(label="Retry", primary=true, wide=true)
             button press=obEditLeave testId="edit-edition-leave" appearance="none"
@@ -268,7 +268,7 @@ component EditEditionLink
     if ob.editionDone
       button press=openPage("onboarding:edit", "My edition") testId="edit-edition-link" appearance="none" aria-label="Edit my edition" align-self="flex-start"
         row align-items="center" gap=4 min-height=44
-          text "Edit my edition" font-family=th.fontUi font-size=14 font-weight=600 color=th.accent
+          text "Edit my edition" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
           image "symbol:forward-chevron" color=th.accent
 
 component OnboardingPage
@@ -303,83 +303,83 @@ component OnboardingPage
         box testId="ob-mark-slot" width=56 height=56 align-items="center" justify-content="center"
           Mark(state=markState)
         column flex=1 min-width=0 gap=2
-          text eyebrow font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
-          text ob.title role="heading" aria-level=1 font-size=30 font-weight=700 line-height=1.1 testId="page-title" font-family=th.fontRead
+          text eyebrow font-family=th.fontLabel font-size="-exact-caption1" color=th.accent
+          text ob.title role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 line-height=1.1 testId="page-title" font-family=th.fontHead
       StepDots(n=n)
 
       // ---- welcome (and skipped): what is about to happen, plainly
       if ob.step == "welcome" or ob.step == "skipped"
         Card(level=1, testId="ob-welcome", minHeight=0)
           column padding=18 gap=12
-            text "Autoradio can arrange your paper around what you care about: you pick topics, or just tell it." font-size=18 line-height=1.45
-            text "First it sets up the voice on this phone: a few audio models to download, and a check that each one works here." font-size=16 line-height=1.45 color=th.muted
-            text ob.totalLabel font-family=th.fontUi font-size=14 color=th.muted testId="ob-total"
+            text "Autoradio can arrange your paper around what you care about: you pick topics, or just tell it." font-size="-exact-body" line-height=1.45 font-family=th.fontText
+            text "First it sets up the voice on this phone: a few audio models to download, and a check that each one works here." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
+            text ob.totalLabel font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="ob-total"
             button press=obBegin testId="ob-begin" appearance="none"
               Btn(label=beginLabel, primary=true, wide=true)
             if ob.step == "skipped"
-              text "You skipped this once. The paper stays as it is until you do it." font-family=th.fontUi font-size=13 color=th.muted
+              text "You skipped this once. The paper stays as it is until you do it." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         button press=obSkip testId="ob-skip" appearance="none" padding=10
-          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+          text "Skip for now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
 
       // ---- voice setup: configure the voice and audio models
       if ob.step == "setup"
         if ob.askMobile
           Card(level=2, testId="ob-mobile", minHeight=0)
             column padding=18 gap=10
-              text "You are on mobile data." font-weight=600 font-size=17
-              text ob.totalLabel font-family=th.fontUi font-size=15 color=th.muted
+              text "You are on mobile data." font-weight=600 font-size="-exact-body" font-family=th.fontHead
+              text ob.totalLabel font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
               button press=obBeginMobile testId="ob-begin-mobile" appearance="none"
                 Btn(label="Download anyway", primary=true, wide=true)
         if ob.askMobile == false
-          text ob.totalLabel font-family=th.fontUi font-size=15 color=th.muted testId="ob-total"
-          text deviceLine font-family=th.fontUi font-size=13 color=th.muted
+          text ob.totalLabel font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="ob-total"
+          text deviceLine font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           for r in ob.rows key=r.stage
             SetupRowItem(stage=r.stage, name=r.name, model=r.model, sizeLabel=r.sizeLabel, state=r.state, progress=r.progress, statusLine=r.statusLine, numbers=r.numbers, isFallback=r.isFallback, canRetry=r.canRetry, canFallback=r.canFallback, compact=false)
-          text "You can leave this page. The paper keeps playing, and setup carries on." font-family=th.fontUi font-size=13 color=th.muted
+          text "You can leave this page. The paper keeps playing, and setup carries on." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           button press=obSkip testId="ob-skip" appearance="none" padding=10
-            text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+            text "Skip for now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
 
       // ---- the microphone, asked in context, with one live check
       if ob.step == "mic"
         Card(level=1, testId="ob-mic", minHeight=0)
           column padding=18 gap=12
             if ob.mic == "unasked" or ob.mic == "refused" or ob.mic == "silent"
-              text "To check I can hear you I need the microphone." font-size=19 font-weight=600 line-height=1.35
-              text "What you say stays on this phone as sound; only the words go to your computer." font-size=16 line-height=1.45 color=th.muted
+              text "To check I can hear you I need the microphone." font-size="-exact-title3" font-weight=600 line-height=1.35 font-family=th.fontHead
+              text "What you say stays on this phone as sound; only the words go to your computer." font-size="-exact-callout" line-height=1.45 color=th.muted font-family=th.fontText
               button press=obMic testId="ob-mic-ask" appearance="none"
                 Btn(label=micLabel, primary=true, wide=true)
             if ob.mic == "checking"
-              text "Say anything." font-size=26 font-weight=700 font-family=th.fontRead
+              text "Say anything." font-size="-exact-title1" font-weight=700 font-family=th.fontHead
               column testId="ob-mic-level" height=6 background-color=th.rule width="100%"
                 box height=6 background-color=th.success width=`${floor(ob.level * 100)}%`
-              text "Listening…" font-family=th.fontUi font-size=14 color=th.muted
+              text "Listening…" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             if ob.mic == "heard"
               row gap=8 align-items="center"
                 image "symbol:checkmark" color=th.success
-                text "I heard you:" font-family=th.fontUi font-size=15 color=th.muted
-              text ob.heard testId="ob-heard" font-size=22 font-family=th.fontRead line-height=1.3
+                text "I heard you:" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
+              text ob.heard testId="ob-heard" font-size="-exact-title2" font-family=th.fontHead line-height=1.3 font-weight=700
               button press=obMicNext testId="ob-mic-next" appearance="none"
                 Btn(label="Continue", primary=true, wide=true)
-            text ob.message font-family=th.fontUi font-size=14 color=th.danger
+            text ob.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
         if ob.setupStarted
-          text "The models" font-family=th.fontUi font-size=13 color=th.muted
+          text "The models" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         for r in ob.rows key=r.stage
           SetupRowItem(stage=r.stage, name=r.name, model=r.model, sizeLabel=r.sizeLabel, state=r.state, progress=r.progress, statusLine=r.statusLine, numbers=r.numbers, isFallback=r.isFallback, canRetry=r.canRetry, canFallback=r.canFallback, compact=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10
-          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+          text "Skip for now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
 
       // ---- a hearing check on the current output route
       if ob.step == "hearing"
         Card(level=1, testId="ob-hearing", minHeight=0)
           column padding=18 gap=12
-            text ob.route testId="ob-route" font-family=th.fontUi font-size=15 color=th.muted
-            text "Can you hear this?" font-size=26 font-weight=700 font-family=th.fontRead
+            text ob.route testId="ob-route" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
+            text "Can you hear this?" font-size="-exact-title1" font-weight=700 font-family=th.fontHead
             row gap=10
               button press=obHearingYes testId="ob-hearing-yes" appearance="none"
                 Btn(label="Yes, I hear it", primary=true, wide=false)
               button press=obHearingNo testId="ob-hearing-no" appearance="none"
                 Btn(label="No", primary=false, wide=false)
-            text ob.message font-family=th.fontUi font-size=14 color=th.danger
+            text ob.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
 
       // ---- the voice: tap a voice to hear it, then go on (voice.contract)
       if ob.step == "voice"
@@ -389,18 +389,18 @@ component OnboardingPage
       if ob.step == "ready"
         Card(level=1, testId="ob-ready", minHeight=0)
           column padding=18 gap=12
-            text "The voice is set up." font-size=20 font-weight=700
-            text "Next, choose what your edition covers. Tap the topics you like, or tell me." font-size=17 line-height=1.45
-            text "You can change it later, any time." font-family=th.fontUi font-size=14 color=th.muted
+            text "The voice is set up." font-size="-exact-title3" font-weight=600 font-family=th.fontHead
+            text "Next, choose what your edition covers. Tap the topics you like, or tell me." font-size="-exact-body" line-height=1.45 font-family=th.fontText
+            text "You can change it later, any time." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             button press=obTopics testId="ob-topics-start" appearance="none"
               Btn(label="Choose your topics", primary=true, wide=true)
-            text ob.message font-family=th.fontUi font-size=14 color=th.danger
+            text ob.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
         if ob.setupStarted
-          text "The models" font-family=th.fontUi font-size=13 color=th.muted testId="ob-summary"
+          text "The models" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="ob-summary"
         for r in ob.rows key=r.stage
           SetupRowItem(stage=r.stage, name=r.name, model=r.model, sizeLabel=r.sizeLabel, state=r.state, progress=r.progress, statusLine=r.statusLine, numbers=r.numbers, isFallback=r.isFallback, canRetry=r.canRetry, canFallback=r.canFallback, compact=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10
-          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+          text "Skip for now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
 
       // ---- the edition's topics: tap to select and deselect, type your own, or say it. Any number; none is the general edition.
       if ob.step == "topics"
@@ -408,7 +408,7 @@ component OnboardingPage
         button press=obTopicsDone testId="ob-topics-done" appearance="none"
           Btn(label="Continue", primary=true, wide=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10
-          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+          text "Skip for now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
 
       // ---- the desk writes the edition: the alive wait (lane 9 owns the mark and the motion)
       if ob.step == "writing"
@@ -417,17 +417,17 @@ component OnboardingPage
             box testId="ob-wait-slot" width=96 height=96 align-items="center" justify-content="center"
               Mark(state="holding")
             if ob.editionStatus == "writing"
-              text ob.writingLine testId="ob-writing-line" font-family=th.fontRead font-size=20 text-align="center"
-              text "This takes a few seconds." font-family=th.fontUi font-size=13 color=th.muted
+              text ob.writingLine testId="ob-writing-line" font-family=th.fontText font-size="-exact-title3" text-align="center"
+              text "This takes a few seconds." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             if ob.editionStatus == "failed"
-              text ob.editionError testId="ob-edition-error" font-family=th.fontRead font-size=19 text-align="center" line-height=1.35
-              text "Your topics are saved. The paper carries on with the general edition meanwhile." font-family=th.fontUi font-size=13 color=th.muted text-align="center"
+              text ob.editionError testId="ob-edition-error" font-family=th.fontText font-size="-exact-title3" text-align="center" line-height=1.35
+              text "Your topics are saved. The paper carries on with the general edition meanwhile." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"
               button press=obEditionRetry testId="ob-edition-retry" appearance="none"
                 Btn(label="Retry", primary=true, wide=true)
               button press=obContinueAnyway testId="ob-continue-anyway" appearance="none"
                 Btn(label="Continue anyway", primary=false, wide=true)
         button press=obSkip testId="ob-skip" appearance="none" padding=10
-          text "Skip for now" font-family=th.fontUi font-size=15 color=th.muted
+          text "Skip for now" font-family=th.fontAction font-size="-exact-subheadline" color=th.muted font-weight=600
 
       // ---- the edition, shown; then the front page and a story
       if ob.step == "done"
@@ -437,9 +437,9 @@ component OnboardingPage
           Btn(label="Start the radio", primary=true, wide=true)
         Card(level=2, testId="ob-edition", minHeight=0)
           column padding=20 gap=10
-            text ob.editionIntro font-size=20 font-weight=700 line-height=1.3
+            text ob.editionIntro font-size="-exact-title3" font-weight=600 line-height=1.3 font-family=th.fontHead
             for l, i in ob.editionLines key=i
-              text l font-family=th.fontRead font-size=16 line-height=1.45 color=th.fg
+              text l font-family=th.fontText font-size="-exact-callout" line-height=1.45 color=th.fg
 
 // The card other places show while the edition does not exist: "Make your edition" (Textures place), "Choose your topics",
 // "Finish voice setup", or the microphone note. Opens the same page; nothing resumes by itself.
@@ -456,8 +456,8 @@ component FirstRunCard
       row testId="firstrun-card" align-items="center" gap=12 width="100%" box-sizing="border-box" min-height=44
         button press=openPage("onboarding:setup", "Make it yours") testId="firstrun-open" appearance="none" flex=1 min-width=0 aria-label=ob.cardBody
           row align-items="center" gap=4 min-height=44
-            text ob.card font-family=th.fontUi font-size=15 font-weight=600 color=th.accent line-clamp=1 text-align="left"
+            text ob.card font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent line-clamp=1 text-align="left"
             image "symbol:forward-chevron" color=th.accent
         button press=obSkip testId="firstrun-dismiss" appearance="none" aria-label="Not now"
           row min-height=44 padding="0px 4px" align-items="center"
-            text "Not now" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted
+            text "Not now" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.muted

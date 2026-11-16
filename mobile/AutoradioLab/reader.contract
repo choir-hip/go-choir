@@ -3,12 +3,12 @@
 // flat blocks of styled runs, citations, sources, versions. See plan section 4 and 5.
 //
 // Reading type: every size is `rem` (it follows Dynamic Type), scaled by the theme's `scale`; the body face is the theme's
-// `fontRead`; the headings and labels are `fontUi`; the measure is `max-width` in rem. No colour or font is named here.
+// `fontText`; the headings are `fontHead`, the labels `fontLabel`, the words that press `fontAction`; the measure is `max-width` in rem. No colour or font is named here.
 // A citation is a tappable pill (no hover): the card opens under its paragraph and pushes the text down; "Open source" opens
 // the source page in place, over the story and above the bar (WebLayer), with no sheet between. A transclusion of another Texture is a nested card that opens as its own page.
 // testIds: page-title, reader-menu, reader-versions, reader-block-<id>, reader-cite-<anchor>, reader-card-<anchor>,
 //          reader-card-source-<anchor>, reader-card-open-<anchor>, reader-source-<n>, reader-sources, reader-related-<address>,
-//          reader-sheet(-layer, -scrim), reader-web(-close, -host, -safari, -view), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
+//          reader-sheet(-layer, -scrim), reader-web(-view; the host, close, read, add and safari are in content.contract), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
 use ReaderFollowInfo, ReaderAimInfo, DemoInfo from "@choir/autoradio"
 use PageScroll, Card, Layer, Btn, BarClear, RowRule from "./ui.contract"
@@ -50,19 +50,19 @@ component Runs
     for r in runs key=r.id
       if r.kind == "cite"
         text r.text testId=`reader-cite-${r.anchor}` press=toggleCite(ckey(address, r.anchor)) aria-label=`Source ${r.label}`
-          font-family=th.fontUi font-size=remv(size * 0.8) font-weight=700 line-height=lh color=th.accent
+          font-family=th.fontAction font-size=remv(size * 0.8) font-weight=600 line-height=lh color=th.accent
       else if r.kind == "ref"
         text r.text testId=`reader-ref-${r.anchor}` press=toggleCite(ckey(address, r.anchor)) aria-label=`Document ${r.label}`
-          font-family=th.fontUi font-size=remv(size * 0.82) font-weight=600 line-height=lh color=th.accent2
+          font-family=th.fontAction font-size=remv(size * 0.82) font-weight=600 line-height=lh color=th.accent2
       else if r.kind == "code"
         text r.text font-family=th.fontMono font-size=remv(size * 0.88) line-height=lh color=th.fg
       else if r.kind == "link"
-        text r.text href=r.href font-family=th.fontRead font-size=remv(size) font-weight=(r.weight > weight ? r.weight : weight)
+        text r.text href=r.href font-family=th.fontText font-size=remv(size) font-weight=(r.weight > weight ? r.weight : weight)
           font-style=(italic ? "italic" : r.slant) line-height=lh color=th.accent
       else if r.kind == "br"
-        text "\n" white-space="pre-line" font-size=remv(size) line-height=lh
+        text "\n" white-space="pre-line" font-size=remv(size) line-height=lh font-family=th.fontText
       else
-        text r.text font-family=th.fontRead font-size=remv(size) font-weight=(r.weight > weight ? r.weight : weight)
+        text r.text font-family=th.fontText font-size=remv(size) font-weight=(r.weight > weight ? r.weight : weight)
           font-style=(italic ? "italic" : r.slant) line-height=lh color=th.fg
           background-color=(hi == r.sent ? tint(th.accent, "30") : "")
 
@@ -86,19 +86,19 @@ component CiteCard
         Card(level=1, testId=`reader-card-${c.anchor}`, minHeight=0)
           column padding=14 gap=8
             row align-items="center" gap=8
-              text (c.kind == "texture" ? "Texture" : `${c.number}`) font-family=th.fontUi font-size=13 font-weight=700 color=th.accent
-              text (c.kind == "texture" ? "Another document" : c.host) font-family=th.fontUi font-size=13 color=th.muted flex=1 min-width=0 line-clamp=1
+              text (c.kind == "texture" ? "Texture" : `${c.number}`) font-family=th.fontLabel font-size="-exact-footnote" color=th.accent
+              text (c.kind == "texture" ? "Another document" : c.host) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted flex=1 min-width=0 line-clamp=1
               button press=toggleCite(ckey(address, c.anchor)) testId=`reader-card-close-${c.anchor}` appearance="none" aria-label="Close" width=32 height=32
                 image "symbol:close" color=th.muted
-            text c.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
+            text c.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg
             if c.quote != ""
               row gap=10
                 box width=2 background-color=th.accent
-                text `“${c.quote}”` font-family=th.fontRead font-style="italic" font-size=15 line-height=1.5 color=th.fg flex=1 min-width=0
+                text `“${c.quote}”` font-family=th.fontText font-style="italic" font-size="-exact-subheadline" line-height=1.5 color=th.fg flex=1 min-width=0
             if c.kind != "texture"
               row align-items="center" gap=6
                 image "symbol:checkmark" color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
-                text c.checkLabel font-family=th.fontUi font-size=13 font-weight=500
+                text c.checkLabel font-family=th.fontLabel font-size="-exact-footnote" 
                   color=(c.check == "exact" or c.check == "tolerant" ? th.success : (c.check == "failed" ? th.danger : th.muted))
             row gap=8
               if c.kind == "texture"
@@ -120,10 +120,10 @@ component SideNote
   view
     column testId=`reader-note-${c.anchor}` padding=10 gap=4 box-sizing="border-box" width="100%" border-radius=th.radiusCard
       background-color=th.paper2 box-shadow=th.shadow1
-      text (c.kind == "texture" ? c.title : `${c.number}  ${c.host}`) font-family=th.fontUi font-size=12 font-weight=700 color=th.accent line-clamp=2
-      text c.quote font-family=th.fontRead font-style="italic" font-size=13 line-height=1.35 color=th.fg line-clamp=5
+      text (c.kind == "texture" ? c.title : `${c.number} ${c.host}`) font-family=th.fontLabel font-size="-exact-caption1" color=th.accent line-clamp=2
+      text c.quote font-family=th.fontText font-style="italic" font-size="-exact-footnote" line-height=1.35 color=th.fg line-clamp=5
       button press=openLink(c.url, c.host) testId=`reader-note-source-${c.anchor}` appearance="none"
-        text "Source" font-family=th.fontUi font-size=12 font-weight=600 color=th.accent
+        text "Source" font-family=th.fontAction font-size="-exact-caption1" font-weight=600 color=th.accent
 
 // ---------------------------------------------------------------------------------------------------------------------
 // One block of the document, its open citation cards after it.
@@ -153,30 +153,30 @@ component BlockView
       if b.kind == "p"
         if noted
           box position="relative" width="100%" margin-bottom=remv(0.9)
-            text testId=`reader-block-${b.id}` font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
+            text testId=`reader-block-${b.id}` font-family=th.fontText font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
               Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
             for c in openHere.slice(0, 1) key=c.anchor
               box position="absolute" right=0 top=0 width=150 wrap-flow="both" shape-outside="inset(0 round 12px)" shape-margin=10
                 SideNote(c=c, address=address)
         else
-          text testId=`reader-block-${b.id}` font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
+          text testId=`reader-block-${b.id}` font-family=th.fontText font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
             margin-bottom=remv(0.9) contextmenu=aimAt(address, b.id, clip(b.text, 64))
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
       if b.kind == "h"
         text role="heading" aria-level=2 testId=`reader-block-${b.id}` text-wrap="balance"
-          font-family=th.fontUi font-size=remv((b.level < 3 ? 1.1875 : 1) * size / 1.125) font-weight=650 line-height=1.25 color=th.fg
+          font-family=th.fontHead font-size=remv((b.level < 3 ? 1.1875 : 1) * size / 1.125) font-weight=600 line-height=1.25 color=th.fg
           margin-top=remv(1.4) margin-bottom=remv(0.45)
           Runs(runs=b.runs, address=address, size=((b.level < 3 ? 1.1875 : 1) * size / 1.125), weight=650, lh=1.25, hi=hi, italic=false)
       if b.kind == "li"
         row align-items="flex-start" gap=remv(0.55) width="100%" margin-bottom=remv(0.4) padding-left=remv((b.depth - 1) * 1.3)
-          text b.marker font-family=th.fontUi font-size=remv(size * 0.92) line-height=lh color=th.muted width=remv(1.4) text-align="right"
-          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
+          text b.marker font-family=th.fontLabel font-size=remv(size * 0.92) line-height=lh color=th.muted width=remv(1.4) text-align="right"
+          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontText font-size=remv(size) line-height=lh hyphens="auto" overflow-wrap="anywhere" color=th.fg
             contextmenu=aimAt(address, b.id, clip(b.text, 64))
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=false)
       if b.kind == "quote"
         row gap=14 width="100%" margin-bottom=remv(0.9) padding-left=remv((b.depth - 1) * 1.0)
           box width=2 background-color=th.accent
-          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontRead font-size=remv(size) line-height=lh overflow-wrap="anywhere" color=th.fg
+          text testId=`reader-block-${b.id}` flex=1 min-width=0 font-family=th.fontText font-size=remv(size) line-height=lh overflow-wrap="anywhere" color=th.fg
             contextmenu=aimAt(address, b.id, clip(b.text, 64))
             Runs(runs=b.runs, address=address, size=size, weight=400, lh=lh, hi=hi, italic=true)
       if b.kind == "code"
@@ -198,7 +198,7 @@ component BlockView
         Card(level=1, testId=`reader-block-${b.id}`, minHeight=0)
           row padding=14 gap=8 align-items="center"
             image "symbol:document" color=th.muted
-            text b.text font-family=th.fontUi font-size=14 color=th.muted flex=1
+            text b.text font-family=th.fontLabel font-size="-exact-footnote" color=th.muted flex=1
       if following
         box testId="reader-following" position="absolute" left=-12 top=2 bottom=remv(0.9) width=3 background-color=th.accent
       if aimed
@@ -231,40 +231,24 @@ keyframes sourceGrow
 keyframes sourceFade
   from opacity=0
 
-// The source page, in place: it grows out of the story (a fade only under Reduced Motion), fills the page down to the top of
-// the bar (the bar is the app's layer above the deck, so it stays visible and live, and the radio keeps playing), and
+// The source page, in place: it grows out of the story (a fade only under Reduced Motion), fills the screen from the status bar down to the top
+// of the bar's lens (the bar is the app's layer above the deck, so it stays visible and live, and the radio keeps playing), and
 // closes back to the same story at the same scroll position, because the story is never removed. The page itself is the
 // package view `web-page` (a WKWebView); it sends `message` "loading" and "done" while a page loads.
+// There is no header on it (owner, 2026-11-16): the host, Loading, Read aloud, Add to queue, Open in Safari and Close are the content row
+// in the lens (content.contract), and `ctlClear` is how far this layer stops above the bottom edge (the lens and that row).
 component WebLayer
   inject
     th: Theme
     webUrl: string
-    webHost: string
-    webBusy: bool
-    closeWeb: action
     webMsg: action
-    openExternal: action
-    queuePlay: action
-    queueLater: action
+    ctlClear: number
   view
-    column testId="reader-web" position="absolute" left=0 right=0 top=0 bottom="calc(env(safe-area-inset-bottom) + 72px)" z-index=8
+    column testId="reader-web" position="absolute" left=0 right=0 top=0 bottom=`calc(env(safe-area-inset-bottom) + ${ctlClear}px)` z-index=8
       background-color=th.paper box-shadow=th.shadow2 border-bottom-left-radius=th.radiusCard border-bottom-right-radius=th.radiusCard
+      padding-top="env(safe-area-inset-top)" box-sizing="border-box"
       overflow="hidden"
       animation=(th.reducedMotion ? `sourceFade ${th.motionEnterMs}ms ease-out both` : `sourceGrow ${th.motionEnterMs * 2}ms ease-out both`)
-      row align-items="center" gap=8 padding="calc(env(safe-area-inset-top) + 6px) 8px 6px 8px" width="100%" box-sizing="border-box"
-        button press=closeWeb testId="reader-web-close" appearance="none" aria-label="Close source" width=40 height=40
-          image "symbol:close" color=th.fg
-        text webHost testId="reader-web-host" font-family=th.fontUi font-size=15 font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1
-        if webBusy
-          progress aria-label="Loading" width=18 height=18 color=th.accent
-        button press=openExternal(webUrl) testId="reader-web-safari" appearance="none"
-          Btn(label="Open in Safari", primary=false, wide=false)
-      // lane autoradio-queue: every embedded source page can be read aloud or queued
-      row gap=8 padding="0px 12px 8px 12px" width="100%" box-sizing="border-box"
-        button press=queuePlay("page", webUrl, webHost) testId="reader-web-read" appearance="none" aria-label="Read this page aloud" flex=1
-          Btn(label="Read aloud", primary=false, wide=false)
-        button press=queueLater("page", webUrl, webHost) testId="reader-web-add" appearance="none" aria-label="Add this page to the queue" flex=1
-          Btn(label="Add to queue", primary=false, wide=true)
       web-page page=webUrl message=webMsg testId="reader-web-view" width="100%" flex=1 min-height=0
 
 component VersionsSheet
@@ -279,16 +263,16 @@ component VersionsSheet
   view
     column width="100%" gap=6
       row align-items="center" gap=8
-        text "Versions" role="heading" aria-level=2 font-family=th.fontUi font-size=18 font-weight=650 flex=1 color=th.fg
+        text "Versions" role="heading" aria-level=2 font-family=th.fontHead font-size="-exact-body" font-weight=600 flex=1 color=th.fg
         button press=hideSheet testId="reader-sheet-close" appearance="none" aria-label="Close" width=36 height=36
           image "symbol:close" color=th.muted
       for v in rdoc.versions key=v.number
         row align-items="center" gap=8 padding="8px 0" width="100%" testId=`reader-version-${v.number}`
           column flex=1 min-width=0 gap=2
-            text v.label font-family=th.fontUi font-size=15 font-weight=600 color=th.fg
-            text (v.author != "" ? `${v.when}  ·  ${v.author}` : v.when) font-family=th.fontUi font-size=13 color=th.muted
+            text v.label font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg
+            text (v.author != "" ? `${v.when} · ${v.author}` : v.when) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           if v.current
-            text "Viewing" font-family=th.fontUi font-size=13 font-weight=600 color=th.accent
+            text "Viewing" font-family=th.fontLabel font-size="-exact-footnote" color=th.accent
           else
             button press=openPage(v.address, rdoc.title) testId=`reader-version-open-${v.number}` appearance="none"
               Btn(label="Open", primary=false, wide=false)
@@ -296,7 +280,7 @@ component VersionsSheet
             button press=restoreVersion(address, v.address) testId=`reader-version-restore-${v.number}` appearance="none"
               Btn(label="Restore", primary=false, wide=false)
       if rdoc.versions.length == 0
-        text "This page has one version." font-family=th.fontUi font-size=14 color=th.muted
+        text "This page has one version." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
 
 component MenuSheet
   inject
@@ -322,41 +306,41 @@ component MenuSheet
     address: string
   view
     column width="100%" gap=2
-      text rdoc.title font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 margin-bottom=4
+      text rdoc.title font-family=th.fontLabel font-size="-exact-footnote" color=th.muted line-clamp=1 margin-bottom=4
       if address.startsWith("pub:")
         button press=queuePlay("story", address, rdoc.title) testId="reader-menu-queue-play" appearance="none" width="100%"
           row padding="12px 0" align-items="center" width="100%"
-            text "Play now" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+            text "Play now" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
         button press=queueLater("story", address, rdoc.title) testId="reader-menu-queue-add" appearance="none" width="100%"
           row padding="12px 0" align-items="center" width="100%"
-            text "Add to queue" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+            text "Add to queue" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
       button press=showSheet("versions") testId="reader-menu-versions" appearance="none" width="100%"
         row padding="12px 0" align-items="center" width="100%"
-          text "Versions" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          text "Versions" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
           image "symbol:forward-chevron" color=th.muted
       button press=jumpSources testId="reader-menu-sources" appearance="none" width="100%"
         row padding="12px 0" align-items="center" width="100%"
-          text "Sources" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          text "Sources" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
           image "symbol:forward-chevron" color=th.muted
       button press=aimAt(address, "", rdoc.title) testId="reader-menu-aim" appearance="none" width="100%"
         row padding="12px 0" align-items="center" width="100%"
-          text "Ask about this document" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          text "Ask about this document" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
           image "symbol:forward-chevron" color=th.muted
       button press=shareDoc testId="reader-menu-share" appearance="none" width="100%"
         row padding="12px 0" align-items="center" width="100%"
-          text "Share" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          text "Share" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
           image "symbol:share" color=th.muted
       if rdoc.permalink != ""
         button press=openLink(`https://choir.news/${rdoc.permalink}`, "choir.news") testId="reader-menu-web" appearance="none" width="100%"
           row padding="12px 0" align-items="center" width="100%"
-            text "Open on the web" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+            text "Open on the web" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
             image "symbol:forward-chevron" color=th.muted
       button press=reloadDoc(address) testId="reader-menu-reload" appearance="none" width="100%"
         row padding="12px 0" align-items="center" width="100%"
-          text "Reload" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+          text "Reload" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
           image "symbol:forward-chevron" color=th.muted
       if dm.on and devDetails
-        text "Demo" font-family=th.fontUi font-size=13 color=th.muted margin-top=8
+        text "Demo" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted margin-top=8
         for b in rdoc.blocks.filter(b => b.kind == "p" and b.sentences > 1).slice(0, 1) key=b.id
           button press=demoFollow(address, b.runs.filter(r => r.sent == 1 and r.kind == "t").map(r => r.text).join("")) testId="reader-menu-follow" appearance="none"
             Btn(label="Read along (second sentence)", primary=false, wide=false)
@@ -402,25 +386,25 @@ component ReaderBody
       scroll id="reader-scroll" testId="reader-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column width="100%" align-items="center" padding-top=`calc(env(safe-area-inset-top) + ${rdoc.revising ? 72 : 12}px)`
           animation=(th.reducedMotion ? "none" : `readerEmerge ${th.motionEnterMs * 1.6}ms ease-out both`)
-          column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontRead
+          column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontText
             // header: kicker, menu, headline, standfirst, byline and version line
             row align-items="center" gap=8 margin-bottom=remv(0.5)
-              text rdoc.kicker testId="reader-kicker" font-family=th.fontUi font-size=12 font-weight=700 letter-spacing="0.08em" text-transform="uppercase"
+              text rdoc.kicker testId="reader-kicker" font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing="0.08em" text-transform="uppercase"
                 color=th.muted flex=1
               button press=listen(address, rdoc.title, rdoc.plain) testId="reader-listen" appearance="none" aria-label=`Listen to ${rdoc.title}`
                 Btn(label="Listen", primary=false, wide=false)
               button press=showSheet("menu") testId="reader-menu" appearance="none" aria-label="Page menu" width=44 height=44
                 image "symbol:sf/ellipsis" color=th.muted
             text rdoc.title role="heading" aria-level=1 testId="page-title" text-wrap="balance"
-              font-family=th.fontRead font-size=remv(titleSize) font-weight=700 line-height=1.12 color=th.fg margin-bottom=remv(0.6)
+              font-family=th.fontHead font-size=remv(titleSize) font-weight=600 line-height=1.12 color=th.fg margin-bottom=remv(0.6)
             if rdoc.dek != ""
-              text rdoc.dek testId="reader-dek" font-family=th.fontRead font-size=remv(1.1875 * k) line-height=1.42 color=th.muted margin-bottom=remv(0.8)
+              text rdoc.dek testId="reader-dek" font-family=th.fontText font-size=remv(1.1875 * k) line-height=1.42 color=th.muted margin-bottom=remv(0.8)
             if rdoc.byline != ""
-              text rdoc.byline font-family=th.fontUi font-size=13 font-weight=500 color=th.muted margin-bottom=4
+              text rdoc.byline font-family=th.fontLabel font-size="-exact-footnote" color=th.muted margin-bottom=4
             if rdoc.meta != ""
               button press=showSheet("versions") testId="reader-versions" appearance="none" aria-label="Versions"
                 row align-items="center" gap=4 padding="4px 0"
-                  text rdoc.meta font-family=th.fontUi font-size=13 font-weight=500 color=th.muted
+                  text rdoc.meta font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
                   image "symbol:forward-chevron" color=th.muted
             if rdoc.newer
               for v in rdoc.versions.filter(v => v.number == rdoc.latest) key=v.number
@@ -430,7 +414,7 @@ component ReaderBody
             // the body
             if mdMode
               text rdoc.markdown markup="markdown" atoms="citation" atompress=mdPress testId="reader-md"
-                font-family=th.fontRead font-size=remv(size) line-height=lh color=th.fg
+                font-family=th.fontText font-size=remv(size) line-height=lh color=th.fg
               for c in rdoc.cites.filter(c => openCites.includes(ckey(address, c.anchor))) key=c.anchor
                 CiteCard(c=c, address=address)
             else
@@ -439,42 +423,46 @@ component ReaderBody
             // lane autoradio-joins: podcast clips cut from this story; nothing is drawn when there are none
             if rdoc.hearIt.length > 0
               column testId="reader-hear-it" width="100%" margin-top=remv(1.4) gap=0
-                text "Hear it" role="heading" aria-level=2 font-family=th.fontUi font-size=remv(1.1875 * k) font-weight=650 color=th.fg margin-bottom=2
+                text "Hear it" role="heading" aria-level=2 font-family=th.fontHead font-size=remv(1.1875 * k) font-weight=600 color=th.fg margin-bottom=2
                 for r, i in rdoc.hearIt key=r.clipID
                   if i > 0
                     RowRule(indent=0)
                   ClipRow(r=r, byStory=false, pad=0)
                 if clipNote != ""
-                  text clipNote testId="reader-hear-note" font-family=th.fontUi font-size=13 color=th.muted
+                  text clipNote testId="reader-hear-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
             // the end: disclosure, sources, related
             if rdoc.disclosure != ""
-              text rdoc.disclosure testId="reader-disclosure" font-family=th.fontUi font-size=13 line-height=1.45 color=th.muted margin-top=remv(1.2)
+              text rdoc.disclosure testId="reader-disclosure" font-family=th.fontLabel font-size="-exact-footnote" line-height=1.45 color=th.muted margin-top=remv(1.2)
             if rdoc.sources.length > 0
               column id="reader-sources" testId="reader-sources" width="100%" margin-top=remv(1.6) gap=2
-                text "Sources" role="heading" aria-level=2 font-family=th.fontUi font-size=remv(1.1875 * k) font-weight=650 color=th.fg margin-bottom=6
+                text "Sources" role="heading" aria-level=2 font-family=th.fontHead font-size=remv(1.1875 * k) font-weight=600 color=th.fg margin-bottom=6
                 for s in rdoc.sources key=s.number
                   if s.kind == "texture"
                     button press=openPage(s.target, s.title) testId=`reader-source-${s.number}` appearance="none" width="100%"
                       row padding="8px 0" gap=10 align-items="flex-start" width="100%"
-                        text `${s.number}` font-family=th.fontUi font-size=13 font-weight=700 color=th.accent width=24 text-align="center"
+                        text `${s.number}` font-family=th.fontLabel font-size="-exact-footnote" color=th.accent width=24 text-align="center" font-variant-numeric="tabular-nums"
                         column flex=1 min-width=0 gap=2 align-items="flex-start"
-                          text s.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left"
-                          text "Another Texture. Opens as a page" font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+                          text s.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left"
+                          text "Another Texture. Opens as a page" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left"
+                        image "symbol:forward-chevron" color=th.muted
                   else
                     button press=openLink(s.url, s.host) testId=`reader-source-${s.number}` appearance="none" width="100%"
                       row padding="8px 0" gap=10 align-items="flex-start" width="100%"
-                        text `${s.number}` font-family=th.fontUi font-size=13 font-weight=700 color=th.accent width=24 text-align="center"
+                        text `${s.number}` font-family=th.fontLabel font-size="-exact-footnote" color=th.accent width=24 text-align="center" font-variant-numeric="tabular-nums"
                         column flex=1 min-width=0 gap=2 align-items="flex-start"
-                          text s.title font-family=th.fontUi font-size=15 font-weight=600 color=th.fg text-align="left"
-                          text s.host font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+                          text s.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left"
+                          text s.host font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left"
+                        image "symbol:forward-chevron" color=th.muted
             if rdoc.related.length > 0
               column width="100%" margin-top=remv(1.6) gap=2
-                text "More on this" role="heading" aria-level=2 font-family=th.fontUi font-size=remv(1.1875 * k) font-weight=650 color=th.fg margin-bottom=6
+                text "More on this" role="heading" aria-level=2 font-family=th.fontHead font-size=remv(1.1875 * k) font-weight=600 color=th.fg margin-bottom=6
                 for r in rdoc.related key=r.address
                   button press=openPage(r.address, r.title) testId=`reader-related-${r.address}` appearance="none" width="100%"
-                    column padding="8px 0" gap=2 align-items="flex-start" width="100%"
-                      text r.title font-family=th.fontRead font-size=remv(1.0625 * k) font-weight=600 line-height=1.25 color=th.fg text-align="left"
-                      text r.dek font-family=th.fontRead font-size=14 line-height=1.4 color=th.muted text-align="left" line-clamp=2
+                    row align-items="center" gap=8 width="100%"
+                      column padding="8px 0" gap=2 align-items="flex-start" flex=1 min-width=0
+                        text r.title font-family=th.fontHead font-size=remv(1.0625 * k) font-weight=600 line-height=1.25 color=th.fg text-align="left"
+                        text r.dek font-family=th.fontText font-size="-exact-subheadline" line-height=1.4 color=th.muted text-align="left" line-clamp=2
+                      image "symbol:forward-chevron" color=th.muted
           BarClear()
       // the desk is writing a new version
       if rdoc.revising
@@ -485,8 +473,8 @@ component ReaderBody
           box-shadow=th.shadow2
           progress aria-label="Revising" width=20 height=20 color=th.accent
           column flex=1 min-width=0
-            text "Revising" font-family=th.fontUi font-size=13 font-weight=700 color=th.fg
-            text rdoc.revisingNote font-family=th.fontUi font-size=12 color=th.muted line-clamp=1
+            text "Revising" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
+            text rdoc.revisingNote font-family=th.fontLabel font-size="-exact-caption1" color=th.muted line-clamp=1
           button press=stopRevision(address) testId="reader-stop" appearance="none"
             Btn(label="Stop", primary=false, wide=false)
       // the prompt is aimed at this document or one block of it
@@ -494,7 +482,7 @@ component ReaderBody
         row testId="reader-aim" position="absolute" left=16 right=16 bottom="calc(env(safe-area-inset-bottom) + 8px + 56px + 10px)" z-index=6
           align-items="center" gap=8 padding="8px 8px 8px 14px" box-sizing="border-box" border-radius=th.radiusCard
           background-color=th.paper2 box-shadow=th.shadow2
-          text (raim.blockId == "" ? "Asking about this document" : `Asking about “${raim.label}”`) font-family=th.fontUi font-size=13 color=th.fg flex=1 min-width=0 line-clamp=1
+          text (raim.blockId == "" ? "Asking about this document" : `Asking about “${raim.label}”`) font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 min-width=0 line-clamp=1
           button press=clearAim testId="reader-aim-clear" appearance="none" aria-label="Clear" width=32 height=32
             image "symbol:close" color=th.muted
       // sheets
@@ -520,8 +508,8 @@ component ReaderMessage
   derive bars = [0.92, 0.98, 0.86, 0.95, 0.6]
   view
     PageScroll(id="reader-message")
-      text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
-        animation=(still ? "none" : `readerEmerge ${th.motionEnterMs}ms ease-out both`)
+      text title role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 testId="page-title"
+        animation=(still ? "none" : `readerEmerge ${th.motionEnterMs}ms ease-out both`) font-family=th.fontHead
       // The title is already the real one: the body is drawn as quiet lines that rise in one after another, not a spinner.
       if busy
         column gap=12 width="100%" margin-top=12 testId="reader-loading"
@@ -529,7 +517,7 @@ component ReaderMessage
             box height=14 border-radius=th.radiusControl background-color=th.paper2 width=`${floor(w * 100)}%`
               animation=(still ? "none" : `readerEmerge ${th.motionEnterMs}ms ${th.staggerMs * (i + 1)}ms ease-out both`)
       if message != ""
-        text message testId="reader-message" font-family=th.fontRead font-size=18 line-height=1.4 color=th.muted
+        text message testId="reader-message" font-family=th.fontText font-size="-exact-body" line-height=1.4 color=th.muted
         // An error is never a dead end: a way back to the paper.
         button press=openPage("paper:front", "Paper") testId="reader-message-back" appearance="none" margin-top=8
           Btn(label="Back to the paper", primary=false, wide=false)

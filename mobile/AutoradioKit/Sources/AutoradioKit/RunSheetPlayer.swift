@@ -70,6 +70,9 @@ extension PlaybackEngine {
     public var spokenPaused: () -> Bool = { false }
     /// Fetches a page's text; replaceable for tests.
     public var pageText: (URL, String) async -> (title: String, paragraphs: [String])? = { await PageText.fetch($0, title: $1) }
+    /// Called before every start of playback this player makes (the opening, play now, next, previous, an audio entry, a restart after a pause):
+    /// the host makes sure the audio session is claimed and active and the engine is up (`ensureReady`). The reason names the entry kind.
+    public var sessionReady: ((String) async -> Void)?
     /// How long a clip's audio may take to start before it is given up.
     public var startDeadline: TimeInterval = 6
 
@@ -219,6 +222,8 @@ extension PlaybackEngine {
     // MARK: Starting an entry
 
     private func begin(_ entry: RunSheetEntry) async {
+        await sessionReady?(entry.kind.rawValue)
+        guard playingId == entry.id else { return }            // a newer start took over while the session was made ready
         guard let engine else { fail(entry.id, why: nil); return }
         generation += 1
         let my = generation
@@ -349,6 +354,7 @@ extension PlaybackEngine {
 
     public var isRemote: Bool { audio != nil && playingDocument == nil }
     public func pause() { guard isRemote else { return }; paused = true; engine?.pauseRemote(); store.save(); changed() }
+    /// Resume paused remote audio (the engine makes the session ready first: `ChoirPlaybackEngine.resumeRemote`).
     public func resume() { guard isRemote else { return }; paused = false; engine?.resumeRemote(); changed() }
     public func seek(by seconds: Double) { guard isRemote else { return }; engine?.seekRemote(by: seconds); changed() }
     public func seek(to seconds: Double) { guard isRemote else { return }; engine?.seekRemote(to: seconds); changed() }

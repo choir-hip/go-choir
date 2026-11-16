@@ -88,5 +88,3 @@ func onMainThread<T>(_ f: @MainActor () -> T) -> T {
     return DispatchQueue.main.sync { MainActor.assumeIsolated(f) }
 }
 
-/// How a clip block of a programme document ended (`ProgrammePlayer.clipHandler`). Run sheet clips are entries, not blocks, so nothing sets that handler any more.
-public enum ClipOutcome: Sendable, Equatable { case played, unknown, failed }
