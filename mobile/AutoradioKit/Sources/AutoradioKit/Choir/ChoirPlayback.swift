@@ -20,6 +20,22 @@ import Foundation
         return await app.playPaperStory(route: route)
     }
 
+    /// The server block being spoken, the last one, and the seconds into the entry (the words before this block at the speaking rate, plus the
+    /// rendered seconds in it).
+    public func spokenReport() -> (block: Int, final: Int, seconds: Double) {
+        let p = app.runtime.player, d = p.document
+        let idx = min(max(p.blockIndex, 0), max(d.blocks.count - 1, 0))
+        let rate = BarTracker.wordsPerSecond * max(p.rate, 0.5)
+        func words(_ b: ProgrammeBlock) -> Double { Double((b.spokenText ?? "").split(separator: " ").count) }
+        let before = d.blocks.prefix(idx).reduce(0.0) { $0 + words($1) } / rate
+        let inBlock = p.renderPosition()?.seconds ?? 0
+        if let si = d.segmentIndex(containingBlock: idx) {
+            let seg = d.segments[si]
+            let k = idx - seg.firstBlock
+            return (seg.unitServerBlocks.indices.contains(k) ? seg.unitServerBlocks[k] : 0, max(0, seg.serverBlockCount - 1), before + inBlock)
+        }
+        return (idx, max(0, d.blocks.count - 1), before + inBlock)
+    }
     public func restartSpoken() { app.runtime.player.begin(at: 0) }
     public func spokenPosition() -> (block: Int, seconds: Double) { app.runtime.player.storyPosition() }
     /// Silence the spoken entry without pausing the radio: an empty document replaces it and its loop ends (the listener's pause is untouched).

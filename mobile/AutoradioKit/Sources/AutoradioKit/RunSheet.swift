@@ -29,7 +29,8 @@ public enum RunSheetState: String, Codable, Equatable, Sendable {
     case ahead, onAir = "on_air", heard, skipped
     var isTail: Bool { self == .heard || self == .skipped }
 }
-public enum RunSheetOutcome: String, Codable, Equatable, Sendable { case finished, skipped, cut, left }
+/// `failed` (amendment to the frozen interface): the phone could not make the entry play. It is not the listener's judgement and settles nothing.
+public enum RunSheetOutcome: String, Codable, Equatable, Sendable { case finished, skipped, cut, left, failed }
 public enum RunSheetRole: String, Codable, Equatable, Sendable { case subject, quoted, mentioned }
 public enum RunSheetOpName: String, Codable, Equatable, Sendable { case place, move, remove, skip, previous, clear, rewrite, aired }
 public enum RunSheetAt: String, Codable, Equatable, Sendable { case now, next, queued, end, after }

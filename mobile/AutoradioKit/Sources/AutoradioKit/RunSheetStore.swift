@@ -18,6 +18,12 @@ import Foundation
 //  6. A batch is over 64 ops or 256 KB: it is sent in several posts.
 //  7. A transition whose neighbours changed is hidden or removed by the phone: it is shown stale (`isStale`), never changed by the phone.
 
+/// Where an entry was when it left the air: the server block being spoken (`last_block`) and the seconds into the entry (`position_seconds`).
+public struct AirReport: Equatable, Sendable {
+    public var block: Int, seconds: Double
+    public init(block: Int = 0, seconds: Double = 0) { self.block = block; self.seconds = seconds }
+}
+
 public enum RunSheetPostOutcome: Sendable {
     /// The route answered 200: every op of the batch is now the server's (replayed op_ids answer the same).
     case answered([RunSheetResult])
@@ -116,7 +122,7 @@ public struct RouteSheetPoster: RunSheetPoster {
             guard op.by == .listener, let last = sheet.ahead().last else {
                 return RunSheetResult(opId: op.opId, applied: false, dropped: "ahead_full", version: sheet.version)
             }
-            _ = run(RunSheetOp(opId: mintOpId(), by: .phone, op: .remove, id: last.id), remote: false)
+            _ = run(RunSheetOp(opId: mintOpId(), by: .phone, op: .remove, id: last.id, reason: "ahead_full: a listener's placement took the last place"), remote: false)
         }
         if op.op == .previous || op.op == .clear, !remote { op.baseVersion = sheet.version }
         let (next, result) = sheet.applying(op)
@@ -139,24 +145,30 @@ public struct RouteSheetPoster: RunSheetPoster {
     // MARK: The ops the app makes (each is one op with a fresh op_id)
 
     @discardableResult
-    public func place(_ e: RunSheetEntry, at: RunSheetAt, after: String? = nil, by: RunSheetBy? = nil, reason: String? = nil) -> RunSheetResult {
+    public func place(_ e: RunSheetEntry, at: RunSheetAt, after: String? = nil, by: RunSheetBy? = nil, reason: String? = nil,
+                      cutting: AirReport? = nil) -> RunSheetResult {
         let by = by ?? e.placedBy
-        return apply(RunSheetOp(opId: mintOpId(), by: by, op: .place, at: at, after: after, entry: e, reason: by == .desk ? (reason ?? "the desk wrote it") : reason))
+        // `place now` cuts the entry on air: the cut is reported with where it was cut (`ended.last_block`, `position_seconds`).
+        let ended = cutting.map { RunSheetEnded(outcome: .cut, at: stamp(), lastBlock: $0.block) }
+        return apply(RunSheetOp(opId: mintOpId(), by: by, op: .place, at: at, after: after, entry: e, ended: ended, positionSeconds: cutting?.seconds, reason: by == .desk ? (reason ?? "the desk wrote it") : reason))
     }
     @discardableResult
-    public func remove(id: String) -> RunSheetResult { apply(RunSheetOp(opId: mintOpId(), by: .listener, op: .remove, id: id)) }
+    /// A listener's removal is by the listener. The phone's own rules (a stale entry, an orphaned transition, a replaced opening) are `by: .phone` with a reason.
+    public func remove(id: String, by: RunSheetBy = .listener, reason: String? = nil) -> RunSheetResult {
+        apply(RunSheetOp(opId: mintOpId(), by: by, op: .remove, id: id, reason: reason))
+    }
     @discardableResult
     public func move(id: String, at: RunSheetAt, after: String? = nil) -> RunSheetResult { apply(RunSheetOp(opId: mintOpId(), by: .listener, op: .move, at: at, after: after, id: id)) }
     /// Skip, the next button, a swipe on the now-playing card, the lock screen's next and "skip" by voice: all this one op. Nil when nothing is on air.
     @discardableResult
-    public func skipOnAir(lastBlock: Int = 0, by: RunSheetBy = .listener) -> RunSheetResult? {
+    public func skipOnAir(report: AirReport = AirReport(), by: RunSheetBy = .listener) -> RunSheetResult? {
         guard let e = onAir() else { return nil }
-        return apply(RunSheetOp(opId: mintOpId(), by: by, op: .skip, id: e.id, ended: RunSheetEnded(outcome: .skipped, at: stamp(), lastBlock: lastBlock)))
+        return apply(RunSheetOp(opId: mintOpId(), by: by, op: .skip, id: e.id, ended: RunSheetEnded(outcome: .skipped, at: stamp(), lastBlock: report.block), positionSeconds: report.seconds))
     }
     @discardableResult
     public func previous(by: RunSheetBy = .listener) -> RunSheetResult { apply(RunSheetOp(opId: mintOpId(), by: by, op: .previous, baseVersion: sheet.version)) }
     @discardableResult
-    public func clearAhead(by: RunSheetBy = .listener) -> RunSheetResult { apply(RunSheetOp(opId: mintOpId(), by: by, op: .clear, baseVersion: sheet.version)) }
+    public func clearAhead(by: RunSheetBy = .listener, reason: String? = nil) -> RunSheetResult { apply(RunSheetOp(opId: mintOpId(), by: by, op: .clear, baseVersion: sheet.version, reason: reason)) }
     /// The phone reports that an entry is now on air.
     @discardableResult
     public func airedOnAir(_ id: String, positionSeconds: Double = 0) -> RunSheetResult {
@@ -164,8 +176,8 @@ public struct RouteSheetPoster: RunSheetPoster {
     }
     /// The phone reports how the entry on air ended: heard (it finished, or was left or cut) or skipped.
     @discardableResult
-    public func airedEnded(_ id: String, as state: RunSheetState, outcome: RunSheetOutcome, lastBlock: Int = 0) -> RunSheetResult {
-        apply(RunSheetOp(opId: mintOpId(), by: .phone, op: .aired, id: id, state: state, ended: RunSheetEnded(outcome: outcome, at: stamp(), lastBlock: lastBlock)))
+    public func airedEnded(_ id: String, as state: RunSheetState, outcome: RunSheetOutcome, report: AirReport = AirReport()) -> RunSheetResult {
+        apply(RunSheetOp(opId: mintOpId(), by: .phone, op: .aired, id: id, state: state, ended: RunSheetEnded(outcome: outcome, at: stamp(), lastBlock: report.block), positionSeconds: report.seconds))
     }
 
     // MARK: Posting

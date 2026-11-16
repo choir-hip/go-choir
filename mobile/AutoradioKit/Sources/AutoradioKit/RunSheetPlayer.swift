@@ -26,6 +26,8 @@ import Foundation
     func playStory(route: String, title: String) async -> String?
     /// The spoken entry from its start.
     func restartSpoken()
+    /// Where the spoken entry is: the server block being spoken, the last server block it has, and the seconds into it.
+    func spokenReport() -> (block: Int, final: Int, seconds: Double)
     /// The block of the spoken entry and the seconds into it.
     func spokenPosition() -> (block: Int, seconds: Double)
     /// Silence the spoken entry (something else is starting, or it was skipped).
@@ -51,6 +53,7 @@ import Foundation
 extension PlaybackEngine {
     public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { nil }
     public func restartSpoken() {}
+    public func spokenReport() -> (block: Int, final: Int, seconds: Double) { (0, 0, 0) }
     public func spokenPosition() -> (block: Int, seconds: Double) { (0, 0) }
     public func stopSpoken() {}
     public func endSpokenAfterCurrentBlock() {}
@@ -134,7 +137,7 @@ extension PlaybackEngine {
     public func open(_ entry: RunSheetEntry) {
         currentOpeningId = entry.id
         wants = false                                // nothing ahead is aired while the sheet is being cleaned: the opening goes first
-        for e in store.ahead(limit: Int.max) where e.placedBy != .listener { store.remove(id: e.id) }
+        for e in store.ahead(limit: Int.max) where e.placedBy != .listener { store.remove(id: e.id, by: .phone, reason: "left from an earlier listening") }
         store.place(entry, at: .now, by: .phone)
         wants = true
     }
@@ -144,7 +147,8 @@ extension PlaybackEngine {
     public func playNow(_ e: RunSheetEntry, words: (title: String, paragraphs: [String])? = nil) {
         wants = true
         if let words { provided[e.id] = words }
-        store.place(e, at: .now)
+        let cut = store.onAir() != nil ? report(final: false) : nil
+        store.place(e, at: .now, cutting: cut)
     }
     /// After the entry on air, before everything else ahead.
     public func playNext(_ e: RunSheetEntry, words: (title: String, paragraphs: [String])? = nil) {
@@ -170,7 +174,7 @@ extension PlaybackEngine {
     /// nothing on air it starts what is next.
     public func next() {
         wants = true
-        if store.onAir() != nil { store.skipOnAir(lastBlock: engine?.spokenPosition().block ?? 0) } else { advanceIfIdle() }
+        if store.onAir() != nil { store.skipOnAir(report: report(final: false)) } else { advanceIfIdle() }
     }
     /// Back: the start of this entry when it has gone on a little (or it is audio), else the entry before it, aired again.
     public func previous() {
@@ -187,8 +191,9 @@ extension PlaybackEngine {
     /// Sign-out: what was on air stops and nothing carries over to the next account.
     public func stopAll() {
         wants = false
-        store.skipOnAir()
-        store.clearAhead()
+        // Sign-out is not a judgement of the entry: it leaves the air as `left`, by the phone, where it was.
+        if let e = store.onAir() { let r = report(final: false); store.airedEnded(e.id, as: .heard, outcome: .left, report: r) }
+        store.clearAhead(by: .phone, reason: "signed out")
         engine?.stopRemote(); engine?.stopSpoken()
     }
 
@@ -214,7 +219,7 @@ extension PlaybackEngine {
             let ok = prev?.state == .heard && (first.between.map { prev?.id == $0.after && after?.id == $0.before } ?? true) && after != nil
             if ok { return first }
             droppedFromDesk.append((first.id, "transition_orphaned"))
-            store.remove(id: first.id)
+            store.remove(id: first.id, by: .phone, reason: "transition_orphaned")
         }
         return nil
     }
@@ -237,7 +242,7 @@ extension PlaybackEngine {
             droppedFromDesk.append((e.id, "opening_already_heard"))
             return nil
         case .ahead:
-            store.remove(id: pid)
+            store.remove(id: pid, by: .phone, reason: "opening_replaced_by_desk")
             o.at = .next
         case .onAir:
             engine?.endSpokenAfterCurrentBlock()
@@ -362,12 +367,22 @@ extension PlaybackEngine {
     }
 
     /// The entry ended (or never made a sound): the phone reports it, and the store's change starts the next one.
-    private func finish(_ id: String, played: Bool) {
+    private func finish(_ id: String, played: Bool, report given: AirReport? = nil) {
         guard playingId == id else { return }
+        let r = given ?? report(final: true)
         playingId = nil; playingDocument = nil; audio = nil; paused = false; pendingEnd = nil
-        if played { store.airedEnded(id, as: .heard, outcome: .finished, lastBlock: 0) }
-        else { store.airedEnded(id, as: .skipped, outcome: .skipped) }
+        // A natural end carries the true final block and position; a failure is `failed` by the phone, never a skip.
+        if played { store.airedEnded(id, as: .heard, outcome: .finished, report: r) }
+        else { store.airedEnded(id, as: .skipped, outcome: .failed) }
         provided[id] = nil
+    }
+
+    /// Where the entry on air is now. Remote audio: its elapsed seconds. Spoken: the server block and the seconds into it (`final`: at its last block).
+    func report(final: Bool) -> AirReport {
+        if audio != nil, playingDocument == nil { return AirReport(block: 0, seconds: engine?.remotePosition()?.elapsed ?? 0) }
+        guard let e = engine else { return AirReport() }
+        let r = e.spokenReport()
+        return AirReport(block: final ? r.final : r.block, seconds: r.seconds)
     }
 
     // MARK: Ends, reported by the engines
@@ -404,8 +419,9 @@ extension PlaybackEngine {
     /// Remote audio reached its end, or the clip's end. `generation` is the start it belongs to.
     public func remoteEnded(generation g: Int) {
         guard g == generation, audio != nil, let id = playingId else { return }
+        let r = report(final: true)                 // before the sound is stopped: the true position
         engine?.stopRemote()
-        finish(id, played: true)
+        finish(id, played: true, report: r)
     }
 
     // MARK: Transport for remote audio

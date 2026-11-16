@@ -32,6 +32,8 @@ final class FakeEngine: PlaybackEngine {
     var position: (block: Int, seconds: Double) = (0, 0)
     func speak(documentID: String, entry: RunSheetEntry, paragraphs: [String]) async -> Bool { log.append("speak:\(entry.id)"); return !failSpeak.contains(entry.id) }
     func playStory(route: String, title: String) async -> String? { log.append("story:\(route)"); return failSpeak.contains(route) ? nil : "choir:\(route)" }
+    var report: (block: Int, final: Int, seconds: Double) = (0, 0, 0)
+    func spokenReport() -> (block: Int, final: Int, seconds: Double) { report }
     func restartSpoken() { log.append("restart") }
     func spokenPosition() -> (block: Int, seconds: Double) { position }
     func stopSpoken() { log.append("stopSpoken") }
@@ -642,6 +644,102 @@ final class RunSheetStoreTests: XCTestCase {
         let a = DemoStretch.body(cause: "extend"), b = DemoStretch.body(cause: "extend")
         XCTAssertNotEqual(a.components(separatedBy: "\n").filter { $0.contains("\"title\"") }, b.components(separatedBy: "\n").filter { $0.contains("\"title\"") })
     }
+
+    // 24 honest air reports: every op the phone posts about what happened to an entry is evidence and must be true
+    func lastOp(_ s: RunSheetStore, _ kind: RunSheetOpName, file: StaticString = #filePath, line: UInt = #line) -> RunSheetOp? {
+        s.pending.last { $0.op == kind }
+    }
+    func test24_AFailureIsReportedAsFailedByThePhoneNeverAsAListenerSkip() async {
+        let (p, s, e) = make()
+        e.failSpeak = ["d-1"]
+        _ = await opened(["d-1"], p, s)
+        let before = s.pending.count
+        p.next(); await p.settle()
+        let ops = s.pending[before...]
+        XCTAssertEqual(ops.filter { $0.op == .skip }.count, 1, "the listener's own skip of the opening")
+        let failed = try? XCTUnwrap(ops.first { $0.op == .aired && $0.id == "d-1" && $0.state == .skipped })
+        XCTAssertEqual(failed?.by, .phone); XCTAssertEqual(failed?.ended?.outcome, .failed)
+        XCTAssertEqual(s.entry("d-1")?.ended?.outcome, .failed)
+    }
+    func test24_SignOutLeavesTheAirAsLeftByThePhoneAtTheTruePosition() async {
+        let (p, s, e) = make()
+        let o = await opened(["d-1"], p, s)
+        e.report = (2, 5, 31.5)
+        let before = s.pending.count
+        p.stopAll()
+        let ops = Array(s.pending[before...])
+        XCTAssertFalse(ops.contains { $0.op == .skip }, "no listener skip")
+        let left = try? XCTUnwrap(ops.first { $0.op == .aired })
+        XCTAssertEqual(left?.id, o); XCTAssertEqual(left?.by, .phone); XCTAssertEqual(left?.state, .heard)
+        XCTAssertEqual(left?.ended?.outcome, .left); XCTAssertEqual(left?.ended?.lastBlock, 2); XCTAssertEqual(left?.positionSeconds, 31.5)
+        XCTAssertEqual(ops.first { $0.op == .clear }?.by, .phone)
+    }
+    func test24_ANaturalEndCarriesTheFinalBlockAndPosition() async {
+        let (p, s, e) = make()
+        let o = await opened([], p, s)
+        e.report = (3, 3, 42)
+        p.documentEnded(id: "rs:" + o, anyPlayed: true)
+        let op = lastOp(s, .aired)
+        XCTAssertEqual(op?.id, o); XCTAssertEqual(op?.by, .phone); XCTAssertEqual(op?.state, .heard)
+        XCTAssertEqual(op?.ended?.outcome, .finished); XCTAssertEqual(op?.ended?.lastBlock, 3); XCTAssertEqual(op?.positionSeconds, 42)
+    }
+    func test24_AListenerSkipCarriesTheBlockBeingSpokenAndTheSecondsIn() async {
+        let (p, s, e) = make()
+        _ = await opened([], p, s)
+        e.report = (1, 4, 7.5)
+        p.next()
+        let op = lastOp(s, .skip)
+        XCTAssertEqual(op?.by, .listener); XCTAssertEqual(op?.ended?.outcome, .skipped); XCTAssertEqual(op?.ended?.lastBlock, 1); XCTAssertEqual(op?.positionSeconds, 7.5)
+        // a skipped clip carries its position
+        let (p2, s2, e2) = make()
+        let c = clipEntry("a"); p2.playNow(c); await p2.settle(); e2.elapsed = 12
+        p2.next()
+        XCTAssertEqual(lastOp(s2, .skip)?.positionSeconds, 12); XCTAssertEqual(lastOp(s2, .skip)?.by, .listener)
+    }
+    func test24_PlayNowReportsWhereItCutTheEntryOnAir() async {
+        let (p, s, e) = make()
+        let o = await opened([], p, s)
+        e.report = (2, 5, 19)
+        p.playNow(.paperStory(route: "r", title: "R")); await p.settle()
+        let op = lastOp(s, .place)
+        XCTAssertEqual(op?.by, .listener); XCTAssertEqual(op?.ended?.outcome, .cut); XCTAssertEqual(op?.ended?.lastBlock, 2); XCTAssertEqual(op?.positionSeconds, 19)
+        XCTAssertEqual(s.entry(o)?.ended?.outcome, .cut)
+    }
+    func test24_PreviousIsAPreviousOpByTheListener() async {
+        let (p, s, e) = make()
+        _ = await opened(["d-1"], p, s)
+        p.next(); await p.settle()
+        e.position = (0, 0.5)
+        p.previous()
+        let op = lastOp(s, .previous)
+        XCTAssertEqual(op?.by, .listener); XCTAssertNil(s.pending.last { $0.op == .aired && $0.state == .heard && $0.ended?.outcome == .skipped })
+    }
+    func test24_RemovesAreByWhoDidThem() async {
+        let (p, s, _) = make()
+        _ = await opened([], p, s)
+        // the listener removes a row
+        let mine = RunSheetEntry.paperStory(route: "m", title: "Mine"); p.queue(mine)
+        p.remove(at: 0)
+        XCTAssertEqual(lastOp(s, .remove)?.by, .listener); XCTAssertNil(lastOp(s, .remove)?.reason)
+        // an orphaned transition is dropped by the phone, with its reason
+        var t = story("d-t", text: "And now.", kind: .transition); t.between = RunSheetBetween(after: "d-a", before: "d-b")
+        deskPlace(s, story("d-a")); deskPlace(s, t); deskPlace(s, story("d-b"))
+        p.next(); await p.settle(); p.next(); await p.settle()
+        let orphan = s.pending.last { $0.op == .remove && $0.id == "d-t" }
+        XCTAssertEqual(orphan?.by, .phone); XCTAssertEqual(orphan?.reason, "transition_orphaned")
+        // a desk opening replacing the phone's unaired one
+        let (p2, s2, _) = make()
+        let phone = PhoneOpening.entry(lines: lines(1)); s2.place(phone, at: .end, by: .phone); p2.setOpeningForTest(phone.id)
+        _ = p2.admitDesk(ProgrammeRouteFeed.placeOp(deskOpening(), cause: "open"), cause: "open")
+        let rep = s2.pending.last { $0.op == .remove && $0.id == phone.id }
+        XCTAssertEqual(rep?.by, .phone); XCTAssertEqual(rep?.reason, "opening_replaced_by_desk")
+        // stale entries of an earlier listening are taken off by the phone
+        let (p3, s3, _) = make()
+        deskPlace(s3, story("d-old")); p3.open(PhoneOpening.entry(lines: lines(1)))
+        let stale = s3.pending.last { $0.op == .remove && $0.id == "d-old" }
+        XCTAssertEqual(stale?.by, .phone); XCTAssertNotNil(stale?.reason)
+    }
+
 }
 
 // Demo mode: the programme route is answered from DemoStretch, so the desk's opening and entries arrive and no notice is placed.
