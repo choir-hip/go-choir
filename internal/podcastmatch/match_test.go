@@ -12,9 +12,11 @@ package podcastmatch
 //   M7. the display quote is over 280 characters.
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // transcript builds n segments of about six seconds: filler about the weather
@@ -50,7 +52,11 @@ func TestM1_M2_M4_TheCoveringPassageRanksFirstAndNamesMayBeGarbled(t *testing.T)
 	wins := append(Windows("a", a), Windows("b", b)...)
 	// The story spells the name another way: one letter off.
 	story := Query{ID: "s1", Text: "Harbor at Hargreaves reopens after storm. Ferry service resumes Monday, the port authority says."}
-	hits := Rank([]Query{story}, wins, 4)["s1"]
+	ranked, err := Rank(context.Background(), []Query{story}, wins, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hits := ranked["s1"]
 	if len(hits) == 0 || hits[0].Window.Key != "a" {
 		t.Fatalf("M1: the covering passage is not first: %+v", hits)
 	}
@@ -65,7 +71,8 @@ func TestM1_M2_M4_TheCoveringPassageRanksFirstAndNamesMayBeGarbled(t *testing.T)
 	}
 	// M2: without the tolerant match the name adds nothing; with it, the score
 	// is higher than for a story that lacks the name.
-	plain := Rank([]Query{{ID: "s2", Text: "Harbor reopens after storm. Ferry service resumes Monday, the port authority says."}}, wins, 1)["s2"]
+	plainRanked, _ := Rank(context.Background(), []Query{{ID: "s2", Text: "Harbor reopens after storm. Ferry service resumes Monday, the port authority says."}}, wins, 1)
+	plain := plainRanked["s2"]
 	if len(plain) == 0 || !(hits[0].Score > plain[0].Score) {
 		t.Fatalf("M2: the garbled name earned nothing: %v vs %v", hits[0].Score, plain)
 	}
@@ -76,14 +83,16 @@ func TestM1_M2_M4_TheCoveringPassageRanksFirstAndNamesMayBeGarbled(t *testing.T)
 
 func TestM3_AStoryThatSharesOnlyACommonWordHasNoHit(t *testing.T) {
 	wins := Windows("a", transcript(60, 20, harborLines))
-	hits := Rank([]Query{{ID: "s", Text: "Council approves new budget for schools."}}, wins, 4)["s"]
+	r3, _ := Rank(context.Background(), []Query{{ID: "s", Text: "Council approves new budget for schools."}}, wins, 4)
+	hits := r3["s"]
 	// "schools" appears in the filler once a cycle; one term is not a match.
 	for _, h := range hits {
 		if h.Matched < 2 {
 			t.Fatalf("M3: a hit with %d matched terms: %+v", h.Matched, h)
 		}
 	}
-	none := Rank([]Query{{ID: "s", Text: "Volcano erupts near the capital city."}}, wins, 4)["s"]
+	r4, _ := Rank(context.Background(), []Query{{ID: "s", Text: "Volcano erupts near the capital city."}}, wins, 4)
+	none := r4["s"]
 	if len(none) != 0 {
 		t.Fatalf("M3: an unrelated story has %d hits", len(none))
 	}
@@ -93,7 +102,8 @@ func TestM5_M6_M7_TheClipIsOnSegmentBoundariesAndTrimmed(t *testing.T) {
 	segs := transcript(60, 20, harborLines)
 	wins := Windows("a", segs)
 	story := "Harbor at Hargreaves reopens after storm. Ferry service resumes Monday, the port authority says."
-	hits := Rank([]Query{{ID: "s", Text: story}}, wins, 1)["s"]
+	r5, _ := Rank(context.Background(), []Query{{ID: "s", Text: story}}, wins, 1)
+	hits := r5["s"]
 	clip, ok := ChooseClip(segs, *hits[0].Window, story)
 	if !ok {
 		t.Fatal("no clip")
@@ -153,5 +163,51 @@ func TestTokensAndWithinOne(t *testing.T) {
 	}
 	if len(Windows("x", nil)) != 0 {
 		t.Fatal("windows of nothing")
+	}
+}
+
+// Round 2 repairs: the deadline reaches the ranking, a transcript costs a
+// bounded number of windows, the quote is a prefix of what was said, and a
+// float that cannot advance does not spin.
+func TestM8_TheDeadlineCancelsTheRanking(t *testing.T) {
+	wins := Windows("a", transcript(60, 20, harborLines))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := Rank(ctx, []Query{{ID: "s", Text: "harbor ferry storm"}}, wins, 4); err == nil {
+		t.Fatal("M8: a cancelled context did not stop the ranking")
+	}
+}
+
+func TestM9_WindowsAreBoundedAndAlwaysAdvance(t *testing.T) {
+	var long []Segment
+	for i := 0; i < 20000; i++ {
+		long = append(long, Segment{Start: float64(i) * 6, End: float64(i)*6 + 5, Text: "a long episode of talk"})
+	}
+	if n := len(Windows("long", long)); n > MaxWindowsPerTranscript {
+		t.Fatalf("M9: %d windows for one transcript, bound %d", n, MaxWindowsPerTranscript)
+	}
+	// A start so large that adding a stride changes nothing must end, not spin.
+	huge := []Segment{{Start: 1e18, End: 1e18 + 5, Text: "x y"}, {Start: 1e18 + 6, End: 1e18 + 9, Text: "z"}}
+	done := make(chan int, 1)
+	go func() { done <- len(Windows("huge", huge)) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("M9: Windows spins on a start the float cannot advance")
+	}
+}
+
+func TestM10_AQuoteIsAPrefixOfWhatWasSaid(t *testing.T) {
+	long := strings.Repeat("harbor ", 100) // 700 characters
+	segs := []Segment{{Start: 0, End: 30, Text: long}, {Start: 30, End: 55, Text: "other"}}
+	c, ok := ChooseClip(segs, Window{First: 0, Last: 1}, "harbor ferry storm")
+	if !ok {
+		t.Fatal("M10: no clip")
+	}
+	if len([]rune(c.Quote)) > QuoteMaxRunes || strings.Contains(c.Quote, "…") || !strings.Contains(long, c.Quote) {
+		t.Fatalf("M10: quote %q is not a plain prefix of the transcript", c.Quote)
+	}
+	if strings.HasSuffix(c.Quote, "harbo") || strings.HasSuffix(c.Quote, " ") {
+		t.Fatalf("M10: the quote is cut inside a word or ends in space: %q", c.Quote)
 	}
 }

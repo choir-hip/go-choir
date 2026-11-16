@@ -49,6 +49,10 @@ func podcastFail(w http.ResponseWriter, what string, err error) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
+	if errors.Is(err, errPodcastRowLimit) {
+		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: err.Error()})
+		return
+	}
 	log.Printf("corpusd: podcast %s: %v", what, err)
 	writeJSON(w, http.StatusInternalServerError, apiError{Error: "podcast service failed"})
 }

@@ -7,6 +7,7 @@
 package podcastmatch
 
 import (
+	"context"
 	"math"
 	"sort"
 	"strings"
@@ -42,6 +43,9 @@ const (
 	bm25B  = 0.75
 	// fuzzyWeight is the share of a term's weight a near-miss spelling earns.
 	fuzzyWeight = 0.5
+	// MaxWindowsPerTranscript bounds the windows of one transcript (about seven
+	// hours at one a minute), so no transcript costs the ranking without bound.
+	MaxWindowsPerTranscript = 420
 	// QuoteMaxRunes is the longest display quote.
 	QuoteMaxRunes = 280
 )
@@ -125,7 +129,10 @@ func Windows(key string, segs []Segment) []Window {
 		return nil
 	}
 	lastStart := -1
-	for next := segs[0].Start; ; next += StrideSeconds {
+	for next := segs[0].Start; len(out) < MaxWindowsPerTranscript; next += StrideSeconds {
+		if next+StrideSeconds <= next {
+			break // the float no longer advances
+		}
 		i := sort.Search(len(segs), func(i int) bool { return segs[i].Start >= next })
 		if i >= len(segs) {
 			break
@@ -183,11 +190,11 @@ type Hit struct {
 // the windows themselves) and returns, per query, up to topK hits with a
 // positive score and at least two distinct matched terms, best first, windows
 // of one transcript that overlap a better hit left out.
-func Rank(queries []Query, windows []Window, topK int) map[string][]Hit {
+func Rank(ctx context.Context, queries []Query, windows []Window, topK int) (map[string][]Hit, error) {
 	out := map[string][]Hit{}
 	n := float64(len(windows))
 	if n == 0 {
-		return out
+		return out, nil
 	}
 	avg := 0.0
 	df := map[string]int{}
@@ -199,7 +206,7 @@ func Rank(queries []Query, windows []Window, topK int) map[string][]Hit {
 	}
 	avg /= n
 	if avg == 0 {
-		return out
+		return out, nil
 	}
 	for _, q := range queries {
 		qterms := map[string]int{}
@@ -208,6 +215,12 @@ func Rank(queries []Query, windows []Window, topK int) map[string][]Hit {
 		}
 		var hits []Hit
 		for wi := range windows {
+			// The deadline cancels the ranking: it is the one unbounded loop.
+			if wi%64 == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
 			w := &windows[wi]
 			score, matched := 0.0, 0
 			for term := range qterms {
@@ -251,7 +264,7 @@ func Rank(queries []Query, windows []Window, topK int) map[string][]Hit {
 		}
 		out[q.ID] = kept
 	}
-	return out
+	return out, nil
 }
 
 // nearTF counts the window's tokens within edit distance 1 of term (both at
@@ -383,10 +396,19 @@ func ChooseClip(segs []Segment, win Window, query string) (Clip, bool) {
 	return pick, true
 }
 
+// cutRunes cuts at most n runes on a word boundary and adds nothing: the quote
+// is a prefix of what was said.
 func cutRunes(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
 		return s
 	}
-	return string(r[:n-1]) + "…"
+	cut := n
+	for cut > 0 && r[cut] != ' ' {
+		cut--
+	}
+	if cut == 0 {
+		cut = n
+	}
+	return strings.TrimSpace(string(r[:cut]))
 }

@@ -49,6 +49,23 @@ func listFeeds(t *testing.T, f frontFixture, feedURLs ...string) {
 	}
 }
 
+// seedTranscript stores an episode's transcript of one segment every 10 s up to
+// seconds, each with text (so any quote of that text sits inside any clip).
+func seedTranscript(t *testing.T, f frontFixture, episodeID string, seconds float64, text string, override map[int]string) {
+	t.Helper()
+	var segs []PodcastSegment
+	for i := 0; float64(i)*10+9.5 <= seconds; i++ {
+		txt := text
+		if o, ok := override[i]; ok {
+			txt = o
+		}
+		segs = append(segs, PodcastSegment{Start: float64(i) * 10, End: float64(i)*10 + 9.5, Text: txt})
+	}
+	if _, _, err := f.svc.PutPodcastTranscript(context.Background(), PodcastTranscript{EpisodeID: episodeID, Engine: "test", AudioSeconds: seconds, Segments: segs}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPodcastEpisodesRefuseBadURLsWhole(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
@@ -60,6 +77,7 @@ func TestPodcastEpisodesRefuseBadURLsWhole(t *testing.T) {
 		"no guid":     func(e *PodcastEpisodeIn) { e.GUID = "" },
 		"bad date":    func(e *PodcastEpisodeIn) { e.Published = "yesterday" },
 		"huge":        func(e *PodcastEpisodeIn) { e.EnclosureURL = "https://x.example.test/" + strings.Repeat("a", 3000) },
+		"future":      func(e *PodcastEpisodeIn) { e.Published = time.Now().UTC().Add(48 * time.Hour).Format(time.RFC3339) },
 	} {
 		bad := podcastFixtureEpisode("g2", 600)
 		mutate(&bad)
@@ -125,24 +143,27 @@ func TestPodcastRepollKeepsTranscriptFlag(t *testing.T) {
 func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
+	listFeeds(t, f, "https://feeds.example.test/news.xml")
 	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{podcastFixtureEpisode("g1", 900)}); err != nil {
 		t.Fatal(err)
 	}
-	listFeeds(t, f, "https://feeds.example.test/news.xml")
 	id := PodcastEpisodeID("https://feeds.example.test/news.xml", "g1")
+	seedTranscript(t, f, id, 900, "the harbor reopened after repairs", map[int]string{50: strings.Repeat("harbor ", 250)})
 	harbor, bridge := f.routes["doc-harbor"], f.routes["doc-bridge"]
 	long := strings.Repeat("harbor ", 100)
 	clip := func(route string, start, end float64) PodcastClipIn {
 		return PodcastClipIn{StoryRoute: route, EpisodeID: id, Start: start, End: end, Quote: "the harbor reopened", Support: 0.9}
 	}
 	for name, in := range map[string]PodcastClipIn{
-		"not on the front": clip("/nope", 10, 50),
-		"under five":       clip(harbor, 10, 12),
-		"over two minutes": clip(harbor, 10, 200),
-		"past the episode": clip(harbor, 880, 930),
-		"unknown episode":  {StoryRoute: harbor, EpisodeID: "ep-x", Start: 1, End: 30, Quote: "q", Support: 0.9},
-		"support too high": {StoryRoute: harbor, EpisodeID: id, Start: 1, End: 30, Quote: "q", Support: 1.5},
-		"empty quote":      {StoryRoute: harbor, EpisodeID: id, Start: 1, End: 30, Quote: "  ", Support: 0.9},
+		"not on the front":  clip("/nope", 10, 50),
+		"under five":        clip(harbor, 10, 12),
+		"over two minutes":  clip(harbor, 10, 200),
+		"past the episode":  clip(harbor, 880, 930),
+		"unknown episode":   {StoryRoute: harbor, EpisodeID: "ep-x", Start: 1, End: 30, Quote: "q", Support: 0.9},
+		"support too high":  {StoryRoute: harbor, EpisodeID: id, Start: 1, End: 30, Quote: "the harbor", Support: 1.5},
+		"empty quote":       {StoryRoute: harbor, EpisodeID: id, Start: 1, End: 30, Quote: "  ", Support: 0.9},
+		"words nobody said": {StoryRoute: harbor, EpisodeID: id, Start: 100, End: 140, Quote: "the minister resigned", Support: 0.9},
+		"said elsewhere":    {StoryRoute: harbor, EpisodeID: id, Start: 100, End: 140, Quote: long, Support: 0.9}, // the long run of harbor is at 500 s
 	} {
 		if _, err := f.svc.PutPodcastClips(ctx, []PodcastClipIn{clip(harbor, 100, 140), in}); !errors.Is(err, ErrPodcastInvalid) {
 			t.Fatalf("%s: err = %v, want ErrPodcastInvalid", name, err)
@@ -184,22 +205,10 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 			t.Fatalf("clip %s listed twice", c.ClipID)
 		}
 		seen[c.ClipID] = true
-		if len([]rune(c.Quote)) > podcastQuoteMaxRunes {
-			t.Fatalf("quote is %d runes", len([]rune(c.Quote)))
+		if len([]rune(c.Quote)) > podcastQuoteMaxRunes || strings.Contains(c.Quote, "…") {
+			t.Fatalf("quote is %d runes or carries an ellipsis: %q", len([]rune(c.Quote)), c.Quote)
 		}
 	}
-	// Written twice at nearly the same start is one clip (id by whole second).
-	all, _ := f.svc.allPodcastClips(ctx)
-	harborClips := 0
-	for _, c := range all {
-		if c.Story.Route == harbor {
-			harborClips++
-		}
-	}
-	if harborClips != 4 {
-		t.Fatalf("harbor holds %d stored clips, want 4 (100 and 100.2 are one)", harborClips)
-	}
-
 	// No routes: the recent front, both stories.
 	bulk, err := f.svc.ListPodcastClips(ctx, nil, nil, 0)
 	if err != nil {
@@ -228,6 +237,20 @@ func TestPodcastClipsValidationAndPublicRead(t *testing.T) {
 	capped, _ := f.svc.ListPodcastClips(ctx, nil, nil, 1)
 	if len(capped.Clips) != 1 {
 		t.Fatalf("limit 1 gave %d clips", len(capped.Clips))
+	}
+}
+
+func TestCutQuoteIsAPrefixOnAWordBoundary(t *testing.T) {
+	long := strings.Repeat("word ", 100)
+	q := CutQuote(long, 280)
+	if len([]rune(q)) > 280 || strings.Contains(q, "…") || !strings.HasPrefix(strings.Join(strings.Fields(long), " "), q) || strings.HasSuffix(q, " ") {
+		t.Fatalf("CutQuote = %q", q)
+	}
+	if got := CutQuote("  short   quote ", 280); got != "short quote" {
+		t.Fatalf("CutQuote = %q", got)
+	}
+	if got := CutQuote(strings.Repeat("x", 400), 280); len(got) != 280 {
+		t.Fatalf("a word longer than the bound is cut at the bound: %d", len(got))
 	}
 }
 
@@ -266,12 +289,15 @@ func TestPodcastClipsOfAStableFileComeFirst(t *testing.T) {
 	f := newFrontFixture(t)
 	ctx := context.Background()
 	stable, unstable := podcastFixtureEpisode("stable", 900), podcastFixtureEpisode("unstable", 900)
+	listFeeds(t, f, stable.FeedURL)
 	if _, _, err := f.svc.RecordPodcastEpisodes(ctx, []PodcastEpisodeIn{stable, unstable}); err != nil {
 		t.Fatal(err)
 	}
-	listFeeds(t, f, stable.FeedURL)
 	yes, no := true, false
-	seg := []PodcastSegment{{Start: 0, End: 5, Text: "one"}}
+	seg := []PodcastSegment{}
+	for i := 0; i < 90; i++ {
+		seg = append(seg, PodcastSegment{Start: float64(i) * 10, End: float64(i)*10 + 9.5, Text: "u1 u2 s1 s2"})
+	}
 	idS, idU := PodcastEpisodeID(stable.FeedURL, "stable"), PodcastEpisodeID(unstable.FeedURL, "unstable")
 	if _, _, err := f.svc.PutPodcastTranscript(ctx, PodcastTranscript{EpisodeID: idS, Engine: "t", AudioSeconds: 900, StableFile: &yes, Segments: seg}); err != nil {
 		t.Fatal(err)

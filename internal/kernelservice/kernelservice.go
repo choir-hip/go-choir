@@ -101,7 +101,7 @@ var builtin = []Manifest{
 		"choir.retrieval_manifest", "choir.publication_source_entity", "choir.publication_transclusion",
 		"choir.publication_policy", "choir.verifier_attestation", "choir.publication_resolved_blocks",
 		"choir.publication_check", "choir.support_judgement", "choir.entity", "choir.entity_review",
-		"choir.entity_stopword", "choir.podcast_episode", "choir.podcast_transcript", "choir.podcast_clip", "choir.podcast_feed", "choir.software_release", "choir.package_release", "choir.release_listing",
+		"choir.entity_stopword", "choir.podcast_episode", "choir.podcast_transcript", "choir.podcast_clip", "choir.podcast_feed", "choir.podcast_index", "choir.software_release", "choir.package_release", "choir.release_listing",
 		"choir.package_force_request",
 		// The courier copy of the paper's op-ed verdict and the changelog
 		// notices corpusd derives at publish (autopaper contracts 2 and 3).
