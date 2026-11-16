@@ -13,9 +13,10 @@
 //  F4  A second death of the same window reports a count of 2 (reopen marks it
 //      pending again; the count survives the hold).
 //  F5  Proving a window resets its death count.
-//  F6  pagehide with a window still pending leaves the pending marker AND the
-//      boot marker (a user reloading a frozen page is the crash case).
-//  F7  pagehide with nothing pending clears the boot marker.
+//  F6  (round 4) A page that leaves alive (pagehide, hidden) takes its own
+//      markers and boot marker with it; a hung or killed page runs nothing, so
+//      its markers stay. Except a foreground step in flight (no done).
+//  F7  Leaving clears the boot marker; rejoin (shown again, unstable) restores it.
 //  F8  A boot marker left by the previous load is reported as an interrupted
 //      boot; once the desktop was stable it is not.
 //  F9  A marker from another page is left alone while that page is
@@ -30,7 +31,7 @@
 //  F14 Boot interrupted with no window identified is the page-level backstop.
 //  F15 The step an app reported last survives into the held record, the
 //      last-step lookup and a per-device history capped at 10.
-//  F16 Liveness: Web Locks, else a heartbeat fresh within 6 s, else nobody.
+//  F16 Liveness: Web Locks only; without them, or on error, nobody is alive.
 //  F17 (review B2) This page's own markers are never dead for itself, so the
 //      guard can be armed and windows marked before the first restore runs.
 //  F18 (review B4) Markers are per (window, page): another page's proof or
@@ -40,10 +41,8 @@
 //      latest foreground step; background steps do not count; a window that
 //      announced work and never finished is proven only at the busy ceiling;
 //      a foreground step on a proven window arms it again.
-//  F20 (review nb) A planned reload (markPlanned) makes that page's markers
-//      clean at the next load, once; an unplanned death is still a death.
 //  F22 (round 2) beginBoot reports previousDead: an interrupted boot OR any
-//      dead page's pending marker (planned reloads excluded), so an automatic
+//      dead page's pending marker so an automatic
 //      open at load (a route, a replay: a fresh window id, unmatchable) can be
 //      held when the last boot of this device died. An alive page's markers
 //      and this page's own do not count.
@@ -57,7 +56,7 @@
 //  F27 A hold for a window the server no longer has is pruned.
 //  F28 An automatic open (fresh window id) dies: held by app+route key, durably;
 //      holdAuto records a hold when the previous boot died; proof or Close by key ends it.
-//  F29 A hold survives a clean pagehide and a planned reload.
+//  F29 A hold survives a page leaving alive.
 //  F30 A liveness read that never resolves is bounded (withTimeout) and answers 'nobody alive'.
 //  F32 (round 3) The body may mount iff crashHoldFor(win, held, reopened) is 0:
 //      held by window id or by automatic-open key, unless Reopened in this page.
@@ -66,7 +65,10 @@
 //      Close or a prune against a SUCCESSFULLY fetched list end a hold.
 //  F34 A failed fetch (takeDeaths(null)) holds every dead window by id and
 //      prunes nothing; holds() against a real list prunes the absent ones.
-//  F31 A planned reload does not launder a window with a foreground step in flight and no done.
+//  F35 (round 4) leave then rejoin: markers are written again without
+//      overwriting an entry still there (its step and in-flight flag are kept).
+//  F36 A dead automatic open holds its key AND the window id it created; a
+//      restored window with that id is held, and the id is pruned like any other.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -79,7 +81,6 @@ import {
   withTimeout,
   crashHoldFor,
   RECORD_CAP,
-  HEARTBEAT_KEY,
   readLiveTabs,
 } from '../src/lib/crash-guard.js';
 
@@ -150,23 +151,50 @@ test('F5 proving resets the count', () => {
   assert.deepEqual(pageOn(s, 'p4').takeDeaths(['w1'], none), { w1: 1 });
 });
 
-test('F6 pagehide with a pending window keeps both markers', () => {
+test('F6 a page that leaves alive takes its markers with it, except work in flight', () => {
   const s = memory();
   const g = pageOn(s, 'p1');
   g.beginBoot(none);
   g.markPending(win('w1'));
-  g.leaveCleanly();
+  g.markPending(win('w2'));
+  g.step('w2', 'fetching the PDF file', { win: win('w2') }); // foreground, no done: in flight
+  g.leave();
   const g2 = pageOn(s, 'p2');
-  assert.equal(g2.beginBoot(none).interrupted, true);
-  assert.deepEqual(g2.takeDeaths(['w1'], none), { w1: 1 });
+  assert.equal(g2.beginBoot(none).interrupted, true, 'work in flight keeps the boot marker too');
+  assert.deepEqual(g2.takeDeaths(['w1', 'w2'], none), { w2: 1 }, 'only the slow open stays a death');
 });
 
-test('F7 pagehide with nothing pending clears the boot marker', () => {
+test('F7 leaving with nothing in flight clears the boot marker; rejoin restores it', () => {
   const s = memory();
   const g = pageOn(s, 'p1');
   g.beginBoot(none);
-  g.leaveCleanly();
+  g.leave();
   assert.equal(pageOn(s, 'p2').beginBoot(none).interrupted, false);
+  const s2 = memory();
+  const h = pageOn(s2, 'p1');
+  h.beginBoot(none);
+  h.leave();
+  h.rejoin(false); // shown again before the desktop was stable
+  assert.equal(pageOn(s2, 'p2').beginBoot(none).interrupted, true);
+  const s3 = memory();
+  const k = pageOn(s3, 'p1');
+  k.beginBoot(none);
+  k.bootStable();
+  k.leave();
+  k.rejoin(true);
+  assert.equal(pageOn(s3, 'p2').beginBoot(none).interrupted, false);
+});
+
+test('F35 leave then rejoin: this page marks its windows again, keeping an entry that is still there', () => {
+  const s = memory();
+  const g = pageOn(s, 'p1');
+  g.markPending(win('w1'));
+  g.step('w1', 'x', {});
+  g.leave(); // busy: stays
+  g.markPending(win('w1')); // rejoin re-marks; the existing entry (with its step) is kept
+  g.markPending(win('w2'));
+  assert.deepEqual(pageOn(s, 'p2').takeDeaths(['w1', 'w2'], none), { w1: 1, w2: 1 });
+  assert.equal(pageOn(s, 'p3').lastStep('w1'), 'x');
 });
 
 test('F8 boot marker: interrupted until stable', () => {
@@ -199,10 +227,9 @@ test('F10 broken storage never throws and reports nothing', () => {
     assert.deepEqual(g.beginBoot(none), { interrupted: false, previousDead: false });
     g.markPending(win('w1'));
     g.step('w1', 'x', {});
-    g.markPlanned();
     g.settle('w1');
     g.bootStable();
-    g.leaveCleanly();
+    g.leave();
     assert.deepEqual(g.takeDeaths(['w1'], none), {});
   }
   const s = memory();
@@ -293,18 +320,13 @@ test('F15 the last step survives into the held record and the history', () => {
   assert.equal(mk('z').history().length, 10);
 });
 
-test('F16 liveness from locks, heartbeat, or nothing', async () => {
+test('F16 liveness from locks; without them nobody is alive', async () => {
   const locks = (names) => ({ query: async () => ({ held: names.map((name) => ({ name })) }) });
-  const t = 100000;
-  const alive = await readLiveTabs({ locks: locks(['choir-desktop-tab-b', 'other-lock']), storage: null, now: () => t });
+  const alive = await readLiveTabs({ locks: locks(['choir-desktop-tab-b', 'other-lock']) });
   assert.deepEqual([...alive], ['b']);
-  const hb = memory();
-  hb.setItem(HEARTBEAT_KEY, JSON.stringify({ fresh: t - 1000, stale: t - 7000 }));
-  assert.deepEqual([...(await readLiveTabs({ locks: null, storage: hb, now: () => t }))], ['fresh']);
-  const boom = { getItem() { throw new Error('x'); }, setItem() {}, removeItem() {} };
-  assert.equal((await readLiveTabs({ locks: null, storage: boom, now: () => t })).size, 0);
-  assert.equal((await readLiveTabs({ locks: { query: async () => { throw new Error('x'); } }, storage: null, now: () => t })).size, 0);
-  assert.equal((await readLiveTabs({ locks: null, storage: null, now: () => t })).size, 0);
+  assert.equal((await readLiveTabs({ locks: null })).size, 0);
+  assert.equal((await readLiveTabs({ locks: { query: async () => { throw new Error('x'); } } })).size, 0);
+  assert.equal((await readLiveTabs({})).size, 0);
 });
 
 test('F17 the page that marks first is not dead to itself', () => {
@@ -380,22 +402,6 @@ test('F19 proof needs quiet after mount and after the latest foreground step', (
   assert.deepEqual(pageOn(s5, 'p2').takeDeaths(['w1'], none), { w1: 1 }, 'a foreground step on a proven window arms it again');
 });
 
-test('F20 a planned reload is clean once; an unplanned death is not', () => {
-  const s = memory();
-  const g = pageOn(s, 'p1');
-  g.beginBoot(none);
-  g.markPending(win('w1'));
-  g.markPlanned();
-  const g2 = pageOn(s, 'p2');
-  assert.equal(g2.beginBoot(none).interrupted, false);
-  assert.deepEqual(g2.takeDeaths(['w1'], none), {});
-  assert.deepEqual(pageOn(s, 'p3').takeDeaths(['w1'], none), {}, 'consumed, and the marker is gone');
-  const s2 = memory();
-  const h = pageOn(s2, 'p1');
-  h.markPending(win('w1'));
-  assert.deepEqual(pageOn(s2, 'p2').takeDeaths(['w1'], none), { w1: 1 });
-});
-
 test('F21 holds are capped by count', () => {
   const s = memory();
   for (let i = 0; i < RECORD_CAP + 10; i++) {
@@ -430,13 +436,6 @@ test('F22 previousDead: interrupted boot or any dead pending marker', () => {
   const own = pageOn(s3b, 'solo');
   own.markPending(win('w1'));
   assert.equal(own.beginBoot(none).previousDead, false, 'own markers are not dead to itself');
-  // planned reload: clean
-  const s4 = memory();
-  const c = pageOn(s4, 'p1');
-  c.beginBoot(none);
-  c.markPending(win('w1'));
-  c.markPlanned();
-  assert.equal(pageOn(s4, 'p2').beginBoot(none).previousDead, false);
 });
 
 const dieHeld = (s) => {
@@ -525,11 +524,10 @@ test('F28 an automatic open is held by key, durably', () => {
   assert.equal(pageOn(s, 'p9').autoHeld('reader|{"x":1}'), 0);
 });
 
-test('F29 a hold survives a clean pagehide and a planned reload', () => {
+test('F29 a hold survives a page leaving alive', () => {
   const s = memory();
   const p2 = dieHeld(s);
-  p2.leaveCleanly();
-  p2.markPlanned();
+  p2.leave();
   const p3 = pageOn(s, 'p3');
   p3.beginBoot(none);
   p3.takeDeaths(['w1'], none);
@@ -548,20 +546,6 @@ test('F30 a liveness read that never resolves is bounded', async () => {
   const rejected = await withTimeout(Promise.reject(new Error('x')), 10, 'fb');
   assert.equal(rejected, 'fb');
   assert.equal(await withTimeout(Promise.resolve('ok'), 1000, 'fb'), 'ok');
-});
-
-test('F31 a planned reload does not launder a window with work in flight', () => {
-  const s = memory();
-  const g = pageOn(s, 'p1');
-  g.beginBoot(none);
-  g.markPending(win('w1'));
-  g.markPending(win('w2'));
-  g.step('w1', 'fetching the PDF file', { win: win('w1') }); // in flight, no done
-  g.step('w2', 'first page drawn', { done: true, win: win('w2') });
-  g.markPlanned();
-  const p2 = pageOn(s, 'p2');
-  assert.equal(p2.beginBoot(none).previousDead, true);
-  assert.deepEqual(p2.takeDeaths(['w1', 'w2'], none), { w1: 1 });
 });
 
 test('F32 the body may mount iff the derived hold is 0', () => {
@@ -597,4 +581,21 @@ test('F34 a failed fetch holds by id and prunes nothing; a real list prunes', ()
   assert.deepEqual(p2.readHeld(), { 'w:w1': 1, 'w:w2': 1 });
   assert.deepEqual(p2.holds([]), {}, 'a successful but empty list prunes (the server has none)');
   assert.deepEqual(p2.readHeld(), {});
+});
+
+test('F36 a dead automatic open holds its key and the window id it created', () => {
+  const s = memory();
+  const key = 'texture|[]';
+  const a = pageOn(s, 'p1');
+  a.markPending(win('auto-1', 'texture'), { autoKey: key });
+  const b = pageOn(s, 'p2');
+  b.beginBoot(none);
+  assert.deepEqual(b.readHeld(), { [`a:${key}`]: 1, 'w:auto-1': 1 });
+  assert.deepEqual(b.holds(['auto-1']), { 'auto-1': 1 }, 'the server restored that window: held by id');
+  assert.deepEqual(pageOn(s, 'p3').holds(['other']), {}, 'not restored: the id is pruned');
+  assert.equal(pageOn(s, 'p4').autoHeld(key), 1, 'the key stays');
+  // holdAuto records the id as well
+  const c = pageOn(s, 'p5');
+  assert.equal(c.holdAuto('reader|[]', { windowId: 'r1' }), 1);
+  assert.deepEqual(c.readHeld()['w:r1'], 1);
 });

@@ -13,7 +13,6 @@
   //                           treated as "Restarting..."
   import { onDestroy, onMount } from 'svelte';
   import { fetchWithRenewal } from './auth.js';
-  import { notePlannedReload } from './planned-reload';
 
   export let computerId = '';
   export let liveStatus = '';
@@ -91,10 +90,7 @@
     phase = 'idle';
     available = false;
     message = '';
-    if (await frontendBuildChanged()) {
-      notePlannedReload();
-      window.location.reload();
-    }
+    if (await frontendBuildChanged()) window.location.reload();
     return true;
   }
 
