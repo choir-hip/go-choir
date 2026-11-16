@@ -70,3 +70,42 @@ What is still open:
   waited on them is not measured.
 - The host's fast-drain warning fired for this step (39.9 GiB in 6 h). It
   will clear by itself when the step leaves the window; it is not a drain.
+
+## Seen again, 18:43Z to 20:36Z
+
+The same step happened in the evening and the growth ledger shows it is the
+pattern, not an accident of one deploy.
+
+- The paper's console shows the store held by `internal/snapshot.copyPages`
+  from 18:43Z and "checkpoint after snapshot capture" at 18:48:27Z. The
+  host's hourly ledger row at 19:00Z has the data image at 86 GiB (45 GiB an
+  hour earlier) and free space at 125 GiB (166 GiB an hour earlier). Nothing
+  else moved by more than 2 GiB.
+- The console still said "a store snapshot is streaming" at 19:18Z and
+  19:33Z. The snapshot root `0416b20b5f2e` (head 12,235,390, 10,385 chunks)
+  is dated 19:36:54Z, so the upload took about 48 minutes and finished about
+  a minute before the deploy refresh restarted the paper at 19:37Z.
+- At 20:35Z the image was back at 45.2 GiB and free space at 165.3 GiB. The
+  console shows a `snapshot-scratch-sweep` at boot and an hourly trim of the
+  guest data volume; together they return the blocks.
+- The ledger has the same step on 2026-11-15 near 01:00Z (+35 GiB, back by
+  04:00Z) and on 2026-11-16 near 01:00Z (+39 GiB, back by 02:00Z).
+
+## Belief
+
+Every capture writes one whole copy of the store inside the guest (41 GiB
+now), holds it for the length of the upload (about 48 minutes now), and the
+space returns within an hour of the scratch copy being removed. So the host
+needs the store's size free for most of an hour per capture, and both the
+size and the time grow with the store.
+
+## Remaining error
+
+- A deploy refresh that restarts the paper during the upload would discard
+  the capture. This one finished a minute before the restart. Whether the
+  refresh waits for a streaming snapshot was not read from the code.
+- The lead's reading at 19:35Z blamed the Texture deploy; the capture began
+  35 minutes before it. A later reading said the deploys had killed the
+  snapshot; the root dated 19:36:54Z shows it completed.
+- Why captures happen when they do (01:12Z and 18:43Z today) is not read.
+
