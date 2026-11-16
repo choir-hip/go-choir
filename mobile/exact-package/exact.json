@@ -1300,14 +1300,6 @@
       "answers": "LabState"
     },
     {
-      "send": "labTalkDown",
-      "answers": "LabState"
-    },
-    {
-      "send": "labTalkUp",
-      "answers": "LabState"
-    },
-    {
       "send": "labPlayPause",
       "answers": "LabState"
     },
@@ -1433,17 +1425,6 @@
     },
     {
       "send": "choirStartRadio",
-      "answers": "LabState"
-    },
-    {
-      "send": "choirTalkDown",
-      "options": {
-        "aim": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "choirTalkUp",
       "answers": "LabState"
     },
     {

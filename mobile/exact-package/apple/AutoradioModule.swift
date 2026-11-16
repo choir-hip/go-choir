@@ -218,8 +218,6 @@ public final class AutoradioModule: ExactPackage {
             }
             reply(["path": shared, "documents": u.path, "name": u.lastPathComponent])
         case "labStop": runtime.stop(); reply(state())
-        case "labTalkDown": runtime.talkDown(); reply(state())
-        case "labTalkUp": runtime.talkUp(); reply(state())
         case "labPlayPause": if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }; reply(state())
         // Skip and previous move the programme: the player's view and the bar read the new position (found in the P1 simulator drive:
         // with the engine paused nothing else asked for them again, so the view kept the old segment).
@@ -257,8 +255,6 @@ public final class AutoradioModule: ExactPackage {
             reply(state())
         case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
         case "choirPlayPause": Task { [choir] in await choir?.playPause() }; reply(state())
-        case "choirTalkDown": Task { [choir] in await choir?.talkDown() }; reply(state())
-        case "choirTalkUp": runtime.talkUp(); reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
         case "choirPlay": let r = args["route"] as? String ?? ""; Task { [choir] in await choir?.play(route: r) }; reply(state())
         default: reply(["error": "NotSupportedError"])

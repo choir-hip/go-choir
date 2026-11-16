@@ -57,7 +57,7 @@ public struct TraceView: Codable, Sendable {
 public struct TurnRow: Codable, Sendable { public var id, transcript, configName, outcome: String; public var ackMs, revisionMs: Double }
 
 /// Everything a host needs: the registry, the audio, the engine, kept turns, configurations.
-/// A host (the Exact module) creates one, then calls `start`, `talkDown`, `talkUp`, `setStage`, `replay` ...
+/// A host (the Exact module) creates one, then calls `start`, `setStage`, `replay` ...
 public final class LabRuntime: @unchecked Sendable {
     public let registry: StageRegistry
     public let clock = LabClock()
@@ -280,9 +280,6 @@ public final class LabRuntime: @unchecked Sendable {
     /// The stored state again, after a screen's own turn-on.
     public func restoreHandsFree() { setHandsFree(HandsFreeSwitch.shared.isOn) }
     public var handsFreeIsOn: Bool { handsFreeOverride ?? HandsFreeSwitch.shared.isOn }
-    /// The lab's press and release buttons (not in the normal app): press turns hands-free on, release turns it off.
-    public func talkDown() { setHandsFree(true) }
-    public func talkUp() { setHandsFree(false) }
     /// Discard the turn being talked (Cancel beside Send): stop the capture, drop the audio and words, call nothing.
     public func cancelTalk() { Task { await engine.cancelTurn() } }
 

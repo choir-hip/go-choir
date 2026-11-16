@@ -46,7 +46,7 @@ members Autoradio
   action editAsk(v: string)
     ask = v
   // A typed ask is aimed at the page in front: its address goes with the turn (`aim`). The engine side reads `args["aim"]` of
-  // choirAsk and choirTalkDown and puts the page's address, title and text in the Autoradio desk request.
+  // choirAsk and puts the page's address, title and text in the Autoradio desk request.
   action sendAsk
     send pm = signalRecord(kind="ask", subject=pg.top, detail=ask)
     send acct = choirAsk(text=ask, aim=pg.top)

@@ -1,10 +1,10 @@
 // The integrator's members of the root: the engine, the Lab, the Choir sign-in and the player. Owned by the integrator lane
 // (engine, Components, Trace, audio session). The spine only moved them out of app.contract; nothing here changed.
 use labState, labStages, labParams, labTrace, labTurns, labEvents, labConfigs from "@choir/autoradio"
-use labStart, labStop, labTalkDown, labTalkUp, labPlayPause, labNext, labPrevious from "@choir/autoradio"
+use labStart, labStop, labPlayPause, labNext, labPrevious from "@choir/autoradio"
 use labSelectStage, labSetParam, labSaveConfig, labLoadConfig, labLoadConfigURL, labReplay from "@choir/autoradio"
 use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
-use choirSignIn, choirSignOut, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirTalkDown, choirTalkUp, choirPlay, choirListen from "@choir/autoradio"
+use choirSignIn, choirSignOut, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirPlay, choirListen from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
 use LabState, StageList, ParamList, Trace, TurnList, Lines, Names from "@choir/autoradio"
 use labAudio, labInject, labSetAudioPolicy, labSetAckTiming, labExportTurn from "@choir/autoradio"
@@ -45,10 +45,6 @@ members Autoradio
     send acct = choirRefresh()
   action radioPlay
     send acct = choirPlayPause()
-  action radioDown
-    send down = choirTalkDown(aim=pg.top)
-  action radioUp
-    send up = choirTalkUp()
   action playStory(route: string)
     send acct = choirPlay(route=route)
   // Listen: the radio reads this text now, headline first (the page's own text; the module cleans it).
@@ -65,10 +61,6 @@ members Autoradio
     send ctl = labNext()
   action previous
     send ctl = labPrevious()
-  action talkDown
-    send down = labTalkDown()
-  action talkUp
-    send up = labTalkUp()
 
   action pick(kind: string, id: string)
     send ctl = labSelectStage(kind=kind, id=id)

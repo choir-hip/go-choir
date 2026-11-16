@@ -96,8 +96,6 @@ component Autoradio
     stop
     next
     previous
-    talkDown
-    talkUp
     pick
     setParam
     editCfgName

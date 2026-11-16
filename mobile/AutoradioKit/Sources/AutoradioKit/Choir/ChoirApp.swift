@@ -647,7 +647,6 @@ public final class ChoirApp: @unchecked Sendable {
         onChange?()
     }
     /// The lab's talk button: start the engine if it is not running and turn hands-free on.
-    public func talkDown() async { if !runtime.snapshot().running { await runtime.start() }; runtime.setHandsFree(true) }
 
     public func signOut() async {
         await signIn.signOut()

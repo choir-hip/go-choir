@@ -89,6 +89,29 @@ final class HandsFreeToggleTests: XCTestCase {
         s.set(true); c.t.addTimeInterval(100); XCTAssertFalse(s.expireIfIdle()); XCTAssertTrue(s.isOn)
     }
 
+    // ---- no press-and-hold talk (owner, 2026-11-16: "I don't like press and hold"): the bar's Voice control is the one way to talk ----
+    // Failure list, written first: H1 a talkDown/talkUp action or message is in a contract; H2 it is in the Exact interface (generator
+    // and exact.json); H3 a button there is bound to pointerdown/pointerup; H4 the module or runtime still handles one.
+    func testNoPressAndHoldTalkAnywhereInTheApp() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        var hits: [String] = []
+        let fm = FileManager.default
+        for dir in ["AutoradioLab", "exact-package", "AutoradioKit/Sources"] {
+            guard let en = fm.enumerator(at: root.appendingPathComponent(dir), includingPropertiesForKeys: nil) else { continue }
+            for case let u as URL in en {
+                guard u.path.contains("/Kit/") == false, ["contract", "json", "swift"].contains(u.pathExtension),
+                      let text = try? String(contentsOf: u, encoding: .utf8) else { continue }
+                for (i, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                    let l = String(line)
+                    if l.contains("TalkDown") || l.contains("TalkUp") || l.contains("talkDown") || l.contains("talkUp") || l.contains("pointerdown") || l.contains("lab-talk") {
+                        hits.append("\(u.lastPathComponent):\(i + 1)")
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(hits, [], "press-and-hold talk is still in the app")
+    }
+
     // ---- the engine ----
     func make() throws -> (TurnEngine, StoppablePlayback) {
         let r = StageRegistry.builtIn()

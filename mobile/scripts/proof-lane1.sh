@@ -2,7 +2,7 @@
 # Lane 1 proof (bar, radio, talk), on a simulator of its own in demo mode, driven by test id.
 # Swift tests first (BarStateTests), then the build, then three drives:
 #   A light: idle, typing and send, play from the bar, the expanded player (follow-along, jump, speed, pause), the paused bar,
-#            hold to talk (talking, then heard/holding), after release
+#            the bar's Voice control (a tap)
 #   B dark:  the same bar states in dark
 #   C light: a scripted turn through the Components page (stub stages) with the bar visible, shots at intervals
 # Screenshots go to $PROOF_SHOTS. Last line: PROOF OK or PROOF FAILED at <step>. NOBUILD=1 skips the build.

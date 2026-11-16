@@ -60,7 +60,7 @@ extension AutoradioModule {
             guard let self else { return }
             await self.runtime.start(virtual: self.virtualEngine)
         }
-        for name in ["choirPlayPause", "choirStartRadio", "choirTalkDown", "choirPlay"] {
+        for name in ["choirPlayPause", "choirStartRadio", "choirPlay"] {
             handle(name) { [unowned self] args, reply in
                 Task { [weak self] in
                     guard let self else { return }
@@ -68,9 +68,6 @@ extension AutoradioModule {
                     switch name {
                     case "choirPlayPause": await self.choir.playPause()
                     case "choirStartRadio": await self.choir.startRadio()
-                    case "choirTalkDown":
-                        self.runtime.aimAddress = args["aim"] as? String ?? ""     // the spoken turn is about this page
-                        await self.choir.talkDown()
                     default: await self.choir.play(route: args["route"] as? String ?? "")
                     }
                     DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }

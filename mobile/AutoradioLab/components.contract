@@ -24,8 +24,6 @@ component ComponentsPage
     stop: action
     setPolicy: action
     setAckTiming: action
-    talkDown: action
-    talkUp: action
     inject: action
     replay: action
     editCfgName: action
@@ -67,9 +65,7 @@ component ComponentsPage
         text `Phase: ${st.phase} · mic ${st.micActive ? "on" : "off"} · config ${st.configName}` testId="phase" color=th.muted
         text st.message testId="lab-message" color=th.muted
         text (st.transcript == "" ? "(listening)" : st.transcript) testId="lab-transcript"
-        button pointerdown=talkDown pointerup=talkUp testId="lab-talk" appearance="none"
-          width="100%" box-sizing="border-box" padding=40 background-color=th.paper2 border-radius=th.radiusControl box-shadow=th.shadow1
-          text (st.phase == "playing" ? "Talk" : st.phase)
+        text (st.phase == "playing" ? "Listening" : st.phase) testId="lab-phase"
         row gap=8 align-items="center"
           button press=inject testId="inject" appearance="none"
             Btn(label="Inject fixture turn", primary=false, wide=false)

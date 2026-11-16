@@ -177,7 +177,7 @@ The app is called Autoradio and opens to the radio. No stage names, ids or jargo
 4. The Player has loaded the newest story from choir.news. It shows the story title, the passage being read, "3 of 12", a large Play button, and below it a list of stories.
 5. Taps Play. The first tap starts audio (the microphone permission prompt appears here, once). The passage is read aloud, block by block.
 6. Taps a story in the list: it loads and plays from its start.
-7. Holds the big "Hold to talk" button and speaks; the programme dips then pauses; the screen shows what the radio heard. On release the radio says it is on it, then the revised text from the listener's computer is read from the point that changed.
+7. Speaks (voice is off until the Voice control is tapped; there is no press-and-hold); the programme dips then pauses; the screen shows what the radio heard. On release the radio says it is on it, then the revised text from the listener's computer is read from the point that changed.
 8. If anything fails, one plain sentence appears on the Player ("Could not reach choir.news. Check your connection.", "Your sign-in is no longer accepted. Please sign in again.", "Your computer is busy right now."). Nothing falls back to a stub silently. The details are in the Lab tab, Trace.
 9. Sign out is in the Lab tab, under Account. It removes the key from the phone and asks the server to revoke it.
 10. The Lab tab (stages, parameters, configurations, kept turns, replay, Trace) is the old lab, unchanged. The default configuration there is named "listener" (choir-front, choir-system1, choir-desk, Apple speech and voice, button to talk); the stubs and the fixture programme stay selectable.
@@ -638,7 +638,7 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 
 `mobile/scripts/proof-sim.sh` (build, then drives the app in demo mode on a simulator of its own; `NOBUILD=1` to skip the build; prints the screenshot directory):
 launch in demo mode, the bar visible, open a second page, the pile with two cards, switch through the launcher, close by swipe, pull the bar up for the
-launcher, Settings, theme Newsprint, dark, Depth, light, play on the bar, hold to talk, Components (a talk turn through the injected fixture path with
+launcher, Settings, theme Newsprint, dark, Depth, light, play on the bar, Components (a talk turn through the injected fixture path with
 the stub stages) and Trace. `mobile/scripts/proof-replay.sh` and `swift test` (30 tests, 7 of them the spine's) still pass.
 
 ## Lane 3: the Texture reader and the Textures place
