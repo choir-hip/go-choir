@@ -76,6 +76,8 @@ public final class AutoradioModule: ExactPackage {
     private var dirty = Set<String>()
     private var scheduled = false
     private var turnArg: [String: Any] = [:]
+    /// The page the bar opened in place (a URL typed in the bar); lane autoradio-queue.
+    var barWebURL = ""
 
     public init(context: ExactPackageContext) {
         self.context = context
@@ -115,6 +117,7 @@ public final class AutoradioModule: ExactPackage {
         registerOnboarding()
         registerMark()
         registerVoice()
+        registerQueue()          // lane autoradio-queue
         Task { [choir] in await choir?.refresh() }
     }
 
@@ -211,6 +214,9 @@ public final class AutoradioModule: ExactPackage {
         case "labPlayPause": if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }; reply(state())
         // Skip and previous move the programme: the player's view and the bar read the new position (found in the P1 simulator drive:
         // with the engine paused nothing else asked for them again, so the view kept the old segment).
+        // While remote audio plays, the passage buttons are its 15 second skips (lane autoradio-queue).
+        case "labNext" where MainActor.assumeIsolated({ PlayQueue.shared.current?.isRemoteAudio == true }): MainActor.assumeIsolated { PlayQueue.shared.seek(by: 15) }; reply(state())
+        case "labPrevious" where MainActor.assumeIsolated({ PlayQueue.shared.current?.isRemoteAudio == true }): MainActor.assumeIsolated { PlayQueue.shared.seek(by: -15) }; reply(state())
         case "labNext": runtime.player.next(); touch(["radioView", "barState"]); reply(state())
         case "labPrevious": runtime.player.previous(); touch(["radioView", "barState"]); reply(state())
         case "labSelectStage":

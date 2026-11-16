@@ -246,6 +246,8 @@ component WebLayer
     closeWeb: action
     webMsg: action
     openExternal: action
+    queuePlay: action
+    queueLater: action
   view
     column testId="reader-web" position="absolute" left=0 right=0 top=0 bottom="calc(env(safe-area-inset-bottom) + 72px)" z-index=8
       background-color=th.paper box-shadow=th.shadow2 border-bottom-left-radius=th.radiusCard border-bottom-right-radius=th.radiusCard
@@ -259,6 +261,12 @@ component WebLayer
           progress aria-label="Loading" width=18 height=18 color=th.accent
         button press=openExternal(webUrl) testId="reader-web-safari" appearance="none"
           Btn(label="Open in Safari", primary=false, wide=false)
+      // lane autoradio-queue: every embedded source page can be read aloud or queued
+      row gap=8 padding="0px 12px 8px 12px" width="100%" box-sizing="border-box"
+        button press=queuePlay("page", webUrl, webHost) testId="reader-web-read" appearance="none" aria-label="Read this page aloud" flex=1
+          Btn(label="Read aloud", primary=true, wide=true)
+        button press=queueLater("page", webUrl, webHost) testId="reader-web-add" appearance="none" aria-label="Add this page to the queue" flex=1
+          Btn(label="Add to queue", primary=false, wide=true)
       web-page page=webUrl message=webMsg testId="reader-web-view" width="100%" flex=1 min-height=0
 
 component VersionsSheet
@@ -310,11 +318,20 @@ component MenuSheet
     demoFollow: action
     toggleSideNotes: action
     toggleMdMode: action
+    queuePlay: action
+    queueLater: action
   props
     address: string
   view
     column width="100%" gap=2
       text rdoc.title font-family=th.fontUi font-size=13 color=th.muted line-clamp=1 margin-bottom=4
+      if address.startsWith("pub:")
+        button press=queuePlay("story", address, rdoc.title) testId="reader-menu-queue-play" appearance="none" width="100%"
+          row padding="12px 0" align-items="center" width="100%"
+            text "Play now" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
+        button press=queueLater("story", address, rdoc.title) testId="reader-menu-queue-add" appearance="none" width="100%"
+          row padding="12px 0" align-items="center" width="100%"
+            text "Add to queue" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
       button press=showSheet("versions") testId="reader-menu-versions" appearance="none" width="100%"
         row padding="12px 0" align-items="center" width="100%"
           text "Versions" font-family=th.fontUi font-size=17 font-weight=600 color=th.fg flex=1 text-align="left"
