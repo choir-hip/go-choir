@@ -147,7 +147,12 @@ whole of** `/var/lib/go-choir/gateway-provider.env` on Node B, and restarts
 only the gateway. It has forwarded `RIVER_API_KEY` and `RIVER_BASE_URL` since
 52d93ddb3 (2026-11-09).
 
-The file on Node B was last written 2026-11-10 17:31Z and has no River line,
+**Done 2026-11-15.** The file was rewritten at 19:02Z with a River line and the
+gateway restarted at 19:07Z, logging `provider: resolved river`. Both Autoradio
+roles have called River since, with `stream=true`. What follows is the history
+and the procedure, kept for the next credential.
+
+Before that, the file on Node B was last written 2026-11-10 17:31Z and had no River line,
 although the key was already in `.env` and the script already forwarded it.
 The cause was not found. The likeliest is a run from a worktree older than
 52d93ddb3, or with `CHOIR_PROVIDER_ENV_FILE` pointing elsewhere.

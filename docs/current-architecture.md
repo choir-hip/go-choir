@@ -91,7 +91,7 @@ Texture and the router; the file holds only `autoradio`.
 | Turns: queue ops | proven on d@e | 2026-11-16 03:30Z: "put the long read next" moved the right entry 3 of 3; "what's coming up" changed nothing (overnight report) |
 | `POST /api/autoradio/programme` | proven | ledger C98 settled true 2026-11-15; clips: 3 of 15 segments on d@e 2026-11-16 (`prove-programme-clips.py`) |
 | Queue package | built | `internal/autoradioqueue`: structure, bounds, reducer, stream cut; driven from model JSON, not from a cell |
-| River model | unknown | Not registered on the gateway as of 2026-11-15 (RIVER.md section 5; owner act). Settle by a gateway log of a `river` call |
+| River model | proven (registered), partial (usage) | Registered on the gateway since 2026-11-15T19:07Z (gateway log: `resolved river`); the `autoradio` and `autoradio_programme` roles route to it first and its calls are `stream=true` (Node B journal, 2026-11-16). Every River call logs zero tokens, so its spend reads $0 and its daily budget cannot trip (problem record 2026-11-16). Whether the guest forwards segments as they arrive is unknown |
 | Forecast claims per segment | proven | agent `autoradio-dj`, `p_heard`, `caused_by` (C95, C98) |
 | Not built (from `design/autoradio-dj-programme-2026-11-11.md`) | specified | slice 3 mail headers; slice 4 air log and `/api/autoradio/heard`; slice 5 hand-offs and the `go` cell with Cast and Ask; slice 6 station and write-ahead; slice 7 podcast notes. Learning engine settlement (outcomes, lessons, trust): no route |
 | Not built (from `design/autoradio-queue-desk-2026-11-15.md` section 6) | specified | the `autoradio.queue` cell module; `queue` on the programme route; a server copy of the queue; claims for reorders |

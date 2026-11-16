@@ -69,9 +69,9 @@ wait, and a server landing waits only on a refused deploy.
 Autoradio pass 1
 ([`definitions/choir-autoradio-pass1-2026-11-10.md`](definitions/choir-autoradio-pass1-2026-11-10.md))
 stays the root for the app and is `blocked_incomplete` on owner items: the
-install go, the TestFlight verdict and the River credential. River is not
-registered on the gateway; the procedure is
-[`reference/RIVER.md`](reference/RIVER.md), section 5, and it is an owner act.
+install go and the TestFlight verdict. River has been registered on the
+gateway since 2026-11-15T19:07Z and both Autoradio roles route to it first
+([`reference/RIVER.md`](reference/RIVER.md), section 5).
 
 ## Storage solutions, part 2: history of the station
 
