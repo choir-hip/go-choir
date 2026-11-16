@@ -63,7 +63,7 @@ component StackRow
             text name font-family=th.fontUi font-size=16 font-weight=600 color=th.fg line-clamp=1 text-align="left"
             text word font-family=th.fontUi font-size=11 font-weight=600 letter-spacing=0.6 text-transform="uppercase" color=(here ? th.accent : th.muted)
           if here
-            box width=8 height=8 border-radius=4 background-color=th.accent
+            box width=3 height=18 background-color=th.accent
       if isFixed(address) == false and here == false
         button press=closePage(address) testId=`launcher-close-${address}` appearance="none" width=44 height=44 aria-label=`Remove ${name} from the deck`
           row width=44 height=44 align-items="center" justify-content="center"

@@ -9,6 +9,9 @@ import XCTest
 //     including ones other lanes add later).
 //  R3 a contract draws an outline around something (`border-style="solid"`, or a `border-width` with a colour) outside ui.contract. A hairline
 //     above a row is a rule and is allowed.
+//  R5 a circle or a half-height rounding: a box whose border-radius is half its height or more (a dot, a thumb, a round button, a progress bar
+//     with round ends) outside ui.contract. A marker is a short rule; a progress bar is a flat line.
+//  R6 a radio drawn as a glyph (● or ○): a single choice shows its chosen row with a check, never a circle.
 //  R4 a contract reads the retired capsule helpers' look back in: a background fill and a pill radius together on one line.
 final class DesignRulesTests: XCTestCase {
     static let lab = NavigationTests.lab
@@ -69,6 +72,24 @@ final class DesignRulesTests: XCTestCase {
                 XCTFail("\(f.name):\(n + 1) draws an outline: \(l.trimmingCharacters(in: .whitespaces).prefix(110))")
             }
         }
+    }
+
+    // R5, R6
+    func testNoCirclesOrRoundEndedBars() throws {
+        for f in try contracts() where f.name != "ui.contract" {
+            for (n, raw) in f.lines.enumerated() {
+                let l = code(raw)
+                XCTAssertFalse(l.contains("●") || l.contains("○"), "\(f.name):\(n + 1) a radio glyph")
+                let radii = Self.radii(in: l)
+                guard let r = radii.first, r > 0, let h = Self.number(after: " height=", in: l) else { continue }
+                XCTAssertLessThan(Double(r) * 2, h, "\(f.name):\(n + 1) a circle or a round-ended bar (radius \(r), height \(Int(h)))")
+            }
+        }
+    }
+    static func number(after key: String, in l: String) -> Double? {
+        guard let r = l.range(of: key) else { return nil }
+        let digits = l[r.upperBound...].prefix { $0.isNumber || $0 == "." }
+        return Double(digits)
     }
 
     // R4: the capsule button face is gone from ui.contract itself.

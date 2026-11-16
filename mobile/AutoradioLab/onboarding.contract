@@ -66,10 +66,10 @@ component StepDots
     n: number
   view
     row testId="ob-steps" gap=6 width="100%" aria-label=`Step ${n} of 4`
-      box flex=1 height=4 border-radius=2 background-color=(n >= 1 ? th.accent : th.rule)
-      box flex=1 height=4 border-radius=2 background-color=(n >= 2 ? th.accent : th.rule)
-      box flex=1 height=4 border-radius=2 background-color=(n >= 3 ? th.accent : th.rule)
-      box flex=1 height=4 border-radius=2 background-color=(n >= 4 ? th.accent : th.rule)
+      box flex=1 height=3 background-color=(n >= 1 ? th.accent : th.rule)
+      box flex=1 height=3 background-color=(n >= 2 ? th.accent : th.rule)
+      box flex=1 height=3 background-color=(n >= 3 ? th.accent : th.rule)
+      box flex=1 height=3 background-color=(n >= 4 ? th.accent : th.rule)
 
 // One model's row: name in plain words, the model and its size, a real progress bar, the state in words, the numbers measured
 // on this phone, and "Try again" / "Use the fallback" where the row stalled or failed.
@@ -104,10 +104,10 @@ component SetupRowItem
           if bad
             image "symbol:alert" color=th.danger
           if state == "preparing" and th.reducedMotion == false
-            box width=10 height=10 border-radius=5 background-color=th.accent animation="obBreathe 900ms ease-in-out infinite alternate"
+            box width=3 height=12 background-color=th.accent animation="obBreathe 900ms ease-in-out infinite alternate"
         if compact == false and state != "ready" and state != "waiting"
-          column height=6 border-radius=3 background-color=th.rule width="100%"
-            box height=6 border-radius=3 background-color=(bad ? th.danger : th.accent) width=`${floor(progress * 100)}%`
+          column height=4 background-color=th.rule width="100%"
+            box height=4 background-color=(bad ? th.danger : th.accent) width=`${floor(progress * 100)}%`
         text statusLine font-family=th.fontUi font-size=14 color=(bad ? th.danger : th.fg) line-height=1.35
         if numbers != ""
           text numbers font-family=th.fontMono font-size=12 color=th.muted
@@ -350,8 +350,8 @@ component OnboardingPage
                 Btn(label=micLabel, primary=true, wide=true)
             if ob.mic == "checking"
               text "Say anything." font-size=26 font-weight=700 font-family=th.fontRead
-              column testId="ob-mic-level" height=10 border-radius=5 background-color=th.rule width="100%"
-                box height=10 border-radius=5 background-color=th.success width=`${floor(ob.level * 100)}%`
+              column testId="ob-mic-level" height=6 background-color=th.rule width="100%"
+                box height=6 background-color=th.success width=`${floor(ob.level * 100)}%`
               text "Listening…" font-family=th.fontUi font-size=14 color=th.muted
             if ob.mic == "heard"
               row gap=8 align-items="center"
