@@ -287,7 +287,19 @@ PY
 runpaper --json
 check "G1 luna 30%, other 10%, devin 60%" '[ "$(jq_ "round(d[\"shares\"][\"luna\"],2)")" = 0.3 ] && [ "$(jq_ "round(d[\"shares\"][\"other\"],2)")" = 0.1 ] && [ "$(jq_ "round(d[\"shares\"][\"devin\"],2)")" = 0.6 ]'
 check "G2 pacer is the newest hour: shed 58 of 1789, trips 2, flagged" '[ "$(jq_ "d[\"pacer\"][\"shed_calls\"]")" = 58 ] && [ "$(jq_ "d[\"pacer\"][\"trips\"]")" = 2 ] && jq_ "d[\"flags\"]" | grep -q "pacer tripped"'
-check "G3 search: 10 requests, 1 zero, tavily quota_limited 10, serper error 10, chatgpt capped 10; zero flagged" '[ "$(jq_ "d[\"search\"][\"requests\"]")" = 10 ] && [ "$(jq_ "d[\"search\"][\"zero\"]")" = 1 ] && [ "$(jq_ "d[\"search\"][\"by\"][\"tavily\"][\"quota_limited\"]")" = 10 ] && [ "$(jq_ "d[\"search\"][\"by\"][\"serper\"][\"error\"]")" = 10 ] && jq_ "d[\"flags\"]" | grep -q "answered by 0"'
+check "G3 search: 10 requests, 1 zero, tavily quota_limited 10, serper error 10, chatgpt capped 10; zero flagged" '[ "$(jq_ "d[\"search\"][\"requests\"]")" = 10 ] && [ "$(jq_ "d[\"search\"][\"zero\"]")" = 1 ] && [ "$(jq_ "d[\"search\"][\"by\"][\"tavily\"][\"quota_limited\"]")" = 10 ] && [ "$(jq_ "d[\"search\"][\"by\"][\"serper\"][\"error\"]")" = 10 ] && jq_ "d[\"flags\"]" | grep -q "got no provider answer"'
+# G3b real line shape: answered by the one provider not skipped (named in today=), results counted
+python3 - "$root/paper.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+real = "answered 1 of 1 providers (5 cooling, 0 pending) skipped=[searxng=success_empty tavily=quota_limited brave=quota_limited] served=miss results=%d unique=40 seen=6 routing=budget escalated=no paid_calls=0 today=[brave=7 keenable=%d]"
+d["search_lines"] = "\n".join([real % (40, 9)] * 3 + [real % (0, 10)] + ["answered 0 of 1 providers (2 cooling, 0 pending) skipped=[brave=quota_limited] served=miss results=0 unique=0 seen=0 routing=budget escalated=no paid_calls=0 today=[brave=7]"]) + "\n"
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runpaper --json
+check "G3b search: 5 requests, 3 with results, 1 zero, answered by keenable 4 and not brave" '[ "$(jq_ "d[\"search\"][\"requests\"]")" = 5 ] && [ "$(jq_ "d[\"search\"][\"with_results\"]")" = 3 ] && [ "$(jq_ "d[\"search\"][\"zero\"]")" = 1 ] && [ "$(jq_ "d[\"search\"][\"answered_by\"][\"keenable\"]")" = 4 ] && [ "$(jq_ "d[\"search\"][\"answered_by\"].get(\"brave\",0)")" = 0 ]'
+runpaper
+check "G3b text: results and provider lines" 'grep -q "5 requests, 3 returned results (60%), 1 got no provider answer" "$root/out" && grep -q "minus skipped=\[...\]): keenable 4" "$root/out"'
 check "G3 serper erroring means not every paid provider is quota_limited" '! jq_ "d[\"flags\"]" | grep -q "every paid"'
 mkstore 77926 '78 + 0.25 * h' 3
 python3 - "$root/store.json" <<'PY'

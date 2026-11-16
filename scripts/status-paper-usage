@@ -58,6 +58,8 @@ LINE_RE = re.compile(
     r"(?: text_len=\d+)?(?: cache_write=(\d+))?(?: cache_write_1h=(\d+))?(?: model=([^\s)]+))?")
 PACER_RE = re.compile(r"devin pacing hour=(\S+) .*?shed_share=(\d+)% shed_calls=(\d+) of (\d+) trips=(\d+)")
 SEARCH_RE = re.compile(r"answered (\d+) of (\d+) providers.*?skipped=\[([^\]]*)\]")
+SEARCH_RESULTS_RE = re.compile(r"\bresults=(\d+)")
+SEARCH_TODAY_RE = re.compile(r"\btoday=\[([^\]]*)\]")
 STAMP_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) ")
 ERROR_KINDS = (("429", re.compile(r"\b429\b")), ("quota", re.compile(r"quota", re.I)),
                ("hold", re.compile(r"\bhold", re.I)), ("error", re.compile(r"error", re.I)))
@@ -153,8 +155,9 @@ def pacer(text):
 def search_health(text):
     """Requests in the window, those answered by zero providers, and per
     provider counts of quota_limited, capped and error among skipped=[...]."""
-    req = zero = 0
+    req = zero = with_results = 0
     by = {}
+    answered_by = {}
     for ln in text.splitlines():
         m = SEARCH_RE.search(ln)
         if not m:
@@ -162,12 +165,26 @@ def search_health(text):
         req += 1
         if int(m.group(1)) == 0:
             zero += 1
+        rm = SEARCH_RESULTS_RE.search(ln)
+        if rm and int(rm.group(1)) > 0:
+            with_results += 1
+        # The line does not name the answering provider. It names the providers
+        # called today (today=[name=calls ...]) and those skipped; the answerers
+        # are the called ones that were not skipped.
+        skipped_names = {i.partition("=")[0] for i in m.group(3).split()}
+        tm = SEARCH_TODAY_RE.search(ln)
+        if tm and int(m.group(1)) > 0:
+            for item in tm.group(1).split():
+                name = item.partition("=")[0]
+                if name not in skipped_names:
+                    answered_by[name] = answered_by.get(name, 0) + 1
         for item in m.group(3).split():
             name, _, reason = item.partition("=")
             if reason in ("quota_limited", "capped", "error"):
                 d = by.setdefault(name, {"quota_limited": 0, "capped": 0, "error": 0})
                 d[reason] += 1
-    return {"requests": req, "zero": zero, "zero_share": (zero / req) if req else None, "by": by}
+    return {"requests": req, "with_results": with_results, "zero": zero, "zero_share": (zero / req) if req else None,
+            "answered_by": answered_by, "by": by}
 
 
 def devin_errors(text, now):
@@ -227,7 +244,7 @@ def compute(raw):
         f.append("pacer tripped %d times in hour %s" % (pc["trips"], pc["hour"]))
     sr = rep["search"]
     if sr["requests"] and sr["zero"] > SEARCH_ZERO_SHARE * sr["requests"]:
-        f.append("search: %d of %d requests answered by 0 providers" % (sr["zero"], sr["requests"]))
+        f.append("search: %d of %d requests got no provider answer" % (sr["zero"], sr["requests"]))
     if sr["requests"] and all(sr["by"].get(n, {}).get("quota_limited", 0) > SEARCH_QUOTA_SHARE * sr["requests"]
                               for n in PAID_SEARCH):
         f.append("search: every paid provider quota_limited in over 80% of requests")
@@ -276,8 +293,12 @@ def render(r):
         o.append("devin pacer: (no hourly pacing line in the last 2 h)")
     sr = r["search"]
     if sr["requests"]:
-        o.append("search, last hour: %d requests, %d answered by 0 providers (%.1f%%)"
-                 % (sr["requests"], sr["zero"], 100 * sr["zero_share"]))
+        o.append("search, last hour: %d requests, %d returned results (%.0f%%), %d got no provider answer"
+                 % (sr["requests"], sr["with_results"], 100 * sr["with_results"] / sr["requests"], sr["zero"]))
+        # The gateway line does not name the answering provider: it is inferred
+        # from today=[...] minus skipped=[...] (see search_health).
+        if sr["answered_by"]:
+            o.append("    answered by (inferred from today=[...] minus skipped=[...]): " + ", ".join("%s %d" % (n, c) for n, c in sorted(sr["answered_by"].items(), key=lambda x: -x[1])))
         for n in sorted(sr["by"]):
             d = sr["by"][n]
             o.append("    %-10s quota_limited %5d  capped %5d  error %5d" % (n, d["quota_limited"], d["capped"], d["error"]))
@@ -299,7 +320,7 @@ journalctl -u go-choir-gateway --since '-61 min' --no-pager -o cat --utc 2>/dev/
 echo "##PACER"
 journalctl -u go-choir-gateway --since '-2 hours' --no-pager -o cat --utc 2>/dev/null | grep -a 'devin pacing hour=' | tail -n 1
 echo "##SEARCH"
-journalctl -u go-choir-gateway --since '-60 min' --no-pager -o cat --utc 2>/dev/null | grep -a 'search for autoputer' | grep -a -o 'answered [0-9]* of [0-9]* providers.*skipped=\[[^]]*\]'
+journalctl -u go-choir-gateway --since '-60 min' --no-pager -o cat --utc 2>/dev/null | grep -a 'search for autoputer' | grep -a -o 'answered [0-9]* of [0-9]* providers.*skipped=\[[^]]*\].*today=\[[^]]*\]'
 echo "##PAPER20"
 journalctl -u go-choir-gateway --since '-20 min' --no-pager -o cat --utc 2>/dev/null | grep -a -c '@VM@'
 echo "##END"
