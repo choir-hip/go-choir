@@ -7,6 +7,20 @@ PIN="$(tr -d ' \n' < "$HERE/exact.pin")"      # the one place the pin is written
 SRC="$HERE/.exact-src"
 REPO="${EXACT_REPO:-https://github.com/expo/exact.git}"
 die() { echo "setup-exact: $*" >&2; exit 1; }
+# One copy of Exact and of the model libraries per Mac (scripts/build-tree.sh). In any tree but the build tree this script
+# clones nothing: it links .exact-src and .deps to the build tree's copies and checks the pin against them.
+BT="$("$HERE/scripts/build-tree.sh" path)" || exit 1
+if ! "$HERE/scripts/build-tree.sh" is; then
+  for D in .exact-src .deps; do
+    if [ -e "$HERE/$D" ] && [ ! -L "$HERE/$D" ]; then die "$HERE/$D is a real copy outside the build tree; delete it (scripts/gc-build-output at the repo root) and run this again"; fi
+    [ -e "$BT/$D" ] || continue
+    ln -sfn "$BT/$D" "$HERE/$D"
+  done
+  [ -e "$HERE/.exact-src" ] || die "the build tree $BT has no .exact-src yet; the lead runs setup-exact.sh there first"
+  "$HERE/scripts/check-exact-pin.sh" || die "this tree's exact.pin differs from the Exact in the build tree $BT; ask the lead to move the build tree to this pin"
+  echo "setup-exact: linked to the build tree's Exact at $BT (nothing cloned here)"
+  exit 0
+fi
 case "$PIN" in [0-9a-f]*) [ "${#PIN}" -eq 40 ] || die "mobile/exact.pin is not a full 40-character sha: $PIN" ;; *) die "mobile/exact.pin is not a sha: $PIN" ;; esac
 if [ ! -d "$SRC/.git" ]; then git clone -q "$REPO" "$SRC" || die "cannot clone $REPO"; fi
 if [ "$(git -C "$SRC" rev-parse HEAD)" != "$PIN" ]; then

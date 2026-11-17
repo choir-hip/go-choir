@@ -2,12 +2,12 @@
 *.xcodeproj/
 DerivedData/
 .swiftpm/
-.exact-src/
+.exact-src
 .exact-build/
 exact-package/apple/Kit/
 exact-package/apple/exact.json
 # Third-party sources and static xcframeworks built by scripts/build-xcframeworks.sh; downloaded model weights.
-.deps/
+.deps
 *.gguf
 *.mlmodelc/
 AutoradioLab/modules/apple/Models_*.swift

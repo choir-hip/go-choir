@@ -7,6 +7,8 @@
 # build only (a `--run` app that stays open must not hold it), unless AUTORADIO_MAC_LOCK_HELD is set by a caller that holds it.
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
+# The app is compiled in one tree per Mac (scripts/build-tree.sh): its output is 12 GiB a copy.
+"$HERE/scripts/build-tree.sh" is || { echo "build-lab: this is not the build tree ($("$HERE/scripts/build-tree.sh" path 2>/dev/null || echo none named)). Push your lane; the lead builds it there." >&2; exit 1; }
 # Never build against the wrong Exact: .exact-src must be the commit in exact.pin with the patches applied (prints both shas otherwise).
 "$HERE/scripts/check-exact-pin.sh" || exit 1
 PLATFORM=ios
