@@ -120,3 +120,59 @@ extension SavedAnswerTests {
         XCTAssertEqual(page.address, "autoradio:home")
     }
 }
+
+final class PrivateTurnTests: XCTestCase {
+    func ctx(_ docs: [SavedCorpus.Document], _ q: String) -> RetrievalContext {
+        let c = SavedCorpus(readerStore: nil); c.setSource("t") { docs }; return c.retrieve(q)
+    }
+    let story = SavedCorpus.Document(id: "pub:s", title: "Tunnel referendum result", address: "pub:/s", text: "The tunnel referendum passed.", kind: "story", source: "Autopaper", date: Date(timeIntervalSince1970: 1_794_000_000))
+    let mail = SavedCorpus.Document(id: "mail:m", title: "Tunnel referendum notes", address: "mail:m", text: "From Ana. The tunnel referendum notes and the private plan for the tunnel.", kind: "mail", source: "Mail", date: Date(timeIntervalSince1970: 1_794_100_000))
+
+    func testMailAndLocalOnlyFilesAreNeverInWhatTheDeskIsSent() {
+        let c = ctx([story, mail, SavedCorpus.Document(id: "f", title: "Tunnel diary", address: "file:/d", text: "tunnel referendum diary", kind: "file", source: "Local files", date: nil)], "tunnel referendum")
+        XCTAssertEqual(c.items.count, 3, "the local model gets everything")
+        let page = DeskContext.page(front: FrontPage(address: "autoradio:home", title: "Autoradio"), pageText: "", brief: "", retrieved: c)!
+        XCTAssertTrue(page.text.contains("Tunnel referendum result")); XCTAssertFalse(page.text.contains("private plan")); XCTAssertFalse(page.text.contains("Tunnel diary")); XCTAssertFalse(page.text.contains("notes"))
+        let only = ctx([mail], "tunnel referendum")
+        XCTAssertNil(DeskContext.page(front: nil, pageText: "", brief: "", retrieved: only), "nothing sendable: no page at all")
+    }
+    func testAMailPageInFrontIsSentWithoutItsSubjectOrBody() {
+        let p = DeskContext.page(front: FrontPage(address: "mail:m", title: "Tunnel referendum notes", kind: "mail"), pageText: "From Ana. private plan", brief: "On air now: X.", retrieved: nil)!
+        XCTAssertEqual(p.title, "A mail message"); XCTAssertFalse(p.text.contains("private plan")); XCTAssertEqual(p.address, "mail:m")
+    }
+    func testTheBestPassageDecidesWhetherTheLocalAnswerStands() {
+        XCTAssertTrue(DeskContext.keepsLocal(ctx([mail], "tunnel referendum notes plan")))
+        XCTAssertFalse(DeskContext.keepsLocal(ctx([story], "tunnel referendum")))
+        XCTAssertFalse(DeskContext.keepsLocal(nil))
+    }
+    func testTheTurnLineSaysPrivateAndNothingElse() {
+        let line = DeskContext.turnLine(desk: "local", retrieved: ctx([mail], "tunnel referendum notes plan"), command: "none", reason: "private")
+        XCTAssertEqual(line.prefix(46), "AUTORADIO turn desk=local reason=private retri"); XCTAssertFalse(line.contains("Ana")); XCTAssertTrue(line.contains("sources=mail"))
+    }
+}
+
+extension SavedAnswerTests {
+    func privateCorpus() -> SavedCorpus {
+        let c = SavedCorpus(readerStore: nil)
+        c.setSource("t") { [SavedCorpus.Document(id: "mail:m", title: "Tunnel referendum notes", address: "mail:m", text: "From Ana. The tunnel referendum notes and the plan for the tunnel.", kind: "mail", source: "Mail", date: Date())] }
+        return c
+    }
+    func testAMailQuestionIsAnsweredLocallyAndTheDeskIsNotAsked() async throws {
+        ScriptedStreamingDesk.requests = []; ScriptedStreamingDesk.sentences = ["The server's answer."]; ScriptedStreamingDesk.hang = false
+        let m = FakeLocalModel(pieces: ["The notes say the tunnel plan is private. "])
+        let (e, _, got) = try engine(desk: "scripted-stream-desk", model: m, corpus: privateCorpus(), deskParams: ["delay": .number(0.05)])
+        _ = await e.typedTurn("what do the tunnel referendum notes say about the plan")
+        try await waitDone(got)
+        XCTAssertTrue(ScriptedStreamingDesk.requests.isEmpty, "mail never reaches the server desk")
+        XCTAssertEqual(Conversation.shared.entries().last?.answer ?? "", "", "the answer is the local one: first, not a desk revision")
+        XCTAssertEqual(Conversation.shared.entries().last?.first, "The notes say the tunnel plan is private.")
+    }
+    func testWithNoLocalModelTheDeskIsAskedButNeverSentTheMail() async throws {
+        ScriptedStreamingDesk.requests = []; ScriptedStreamingDesk.sentences = ["Ok."]; ScriptedStreamingDesk.hang = false
+        let (e, _, got) = try engine(desk: "scripted-stream-desk", model: nil, corpus: privateCorpus(), deskParams: ["delay": .number(0.05)])
+        _ = await e.typedTurn("what do the tunnel referendum notes say about the plan")
+        try await waitDone(got)
+        let page = ScriptedStreamingDesk.requests.last?.page
+        XCTAssertFalse(ScriptedStreamingDesk.requests.isEmpty); XCTAssertFalse((page?.text ?? "").contains("plan for the tunnel"))
+    }
+}
