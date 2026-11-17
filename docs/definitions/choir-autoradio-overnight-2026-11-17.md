@@ -1,0 +1,228 @@
+---
+definition_version: 7
+
+readiness: executable
+
+review:
+  reviewer: none
+  frozen_ref: none
+  verdict: none
+  evidence_ref: none; the owner's words of 2026-11-17 (about 02:00Z to 03:30Z) are the authority to start ("let's make a goal file for our overnight work. We're doing a bunch of different things"). Each server candidate is reviewed at its tier before landing; phone and Mac builds are judged by the owner on the devices.
+
+start:
+  captured_at: 2026-11-17T03:35Z
+  source:
+    canonical_ref: origin/main c3a54a69d
+    deploy_identity: staging deployed_commit 6ba3e1080 (2026-11-17T01:24Z)
+  worktrees:
+    - path: /Users/wiz/Dev/go-choir
+      status: dirty
+      class: user_wip
+      owner: owner
+      touch: forbidden
+      recovery: leave in place (one untracked env backup that holds secrets)
+    - path: /Users/wiz/Dev/go-choir/.claude/worktrees/agent-a6cf48f517bc78dc1
+      status: dirty
+      class: generated_temp
+      owner: lead
+      touch: goal_owned
+      recovery: the QA build tree, detached at lane/autoradio-integ 102e874ee; two generated exact.json files are rewritten by every build and checked out again before a switch
+    - path: lanes autoradio-integ (102e874ee), mac-app (867c05d4a), programme-opening (c6aeec9e4), phone-retrieval and voice-fullband (not yet pushed)
+      status: unknown
+      class: other_agent_wip
+      owner: builders
+      touch: read_only
+      recovery: each lane is its own branch on origin
+  known:
+    - The phone runs lane/autoradio-integ 102e874ee, installed 2026-11-17 about 03:10Z. The owner confirmed voice works after the playback-session fix; the one-voice work after it is unheard.
+    - The server run sheet is deployed and proven (ledger C114). The opening-first programme is reviewed and not landed.
+    - Exact is pinned at 76cd50f9 with one local patch.
+
+finish:
+  deliver: In the morning the owner opens Autoradio on the phone and on the Mac, lands on a page that is the radio, hears one voice at a time, asks about a subject and gets an answer drawn from what the device holds, and is told plainly which embedding route works on which machine.
+  artifact: A phone build and a Mac build from one branch on the latest Exact, each opening on the Autoradio page, with local retrieval in the on-device model's context; a measured verdict on EmbeddingGemma 2 (GGUF and Core AI) on the phone and the Mac in docs/reference/EMBEDDINGGEMMA.md.
+  acceptance:
+    - action: the owner's one QA pass on the phone (launch, play, mic on, talk over the radio, ask "tell me about the Senate", open a PDF, edit a Markdown file)
+      proves: the phone build works as a whole, by the owner's ear and eye
+      evidence_class: human inspection
+    - action: the lead launches the Mac app, signs in, plays a programme aloud and runs one local-model turn; mobile/scripts/proof-mac.sh passes
+      proves: the same app runs natively on macOS with its local models
+      evidence_class: local run plus human inspection
+    - action: a simulator tour photographs each state of the Autoradio page and asserts its test ids
+      proves: the app opens on the radio page and the sheet view is gone
+      evidence_class: local test
+    - action: retrieval tests and a device turn whose context.json lists retrieved ids for a subject not in the queue
+      proves: the on-device model's context comes from a local search, not only the queue
+      evidence_class: local test plus device file
+    - action: timing and recall figures for BM25 alone, vectors alone and both fused, on the Mac and on the phone, written into the reference page
+      proves: which embedding route works where, and whether fusion beats BM25
+      evidence_class: measurement
+  rollback: the phone keeps the last build the owner accepted until a newer one passes its checks; every lane is a branch and nothing merges into lane/autoradio-integ unbuilt; server changes revert by commit.
+  landing:
+    required: true
+    environment: staging, for the opening-first programme only; phone and Mac work is not deployed
+    required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
+
+value:
+  better_means: fewer steps and fewer surprises between opening the app and hearing a programme that answers to the listener, on either machine, with every piece checked by running it (sound produced, a window opened, a search returned) rather than by reading it.
+  goodharting_would_be: test counts and screenshots that pass while the device is silent or two voices overlap; a Mac window that opens in demo mode without models and is called the Mac app; retrieval that returns ids the model never uses; an embedding "works" claim from one load with no timing on the owner's phone.
+
+homotopy:
+  realism_axis: from Swift package tests with virtual audio, through the simulator and the Mac build with real engines, to the owner's phone in the owner's hand.
+
+boundaries:
+  mutation_class: orange for phone and Mac code; red for the opening-first programme (agentcore) which lands with its existing two-seat acceptance
+  authority_sources: [the owner's messages of 2026-11-16 and 2026-11-17, CLAUDE.md, docs/choir-doctrine.md]
+  must_preserve:
+    - one Mac build at a time through the lock; every simulator slim
+    - exactly one voice audible; the listener outranks the radio
+    - one way to do each thing in the app; no switches or settings that gate behaviour
+    - no model weights, secrets or addresses in the repo
+    - the owner's installed build is replaced only by one that built from a pushed commit
+    - no server-side embeddings in this mission
+  excluded: [Mac-specific design, a server vector store, the master stream, spreadsheets]
+  protected_surfaces: [internal/agentcore programme route (opening-first), gateway and provider calls]
+
+stations:
+  - id: S1
+    name: One voice at a time
+    scope: single-voice gate over every sound path; an answer keeps the story's place; full-band listening so the radio's tone does not change while voice is on (side lane until a device trial)
+    class: orange
+    review: one seat
+    depends_on: []
+    carrier: lane/autoradio-integ 102e874ee; lane/voice-fullband
+    status: working
+  - id: S2
+    name: Local retrieval for the on-device model
+    scope: BM25 over everything the phone holds, recent first among relevant hits, into the turn context with ids
+    class: orange
+    review: one seat
+    depends_on: []
+    carrier: lane/phone-retrieval
+    status: working
+  - id: S3
+    name: Latest Exact on both platforms
+    scope: move the pin from 76cd50f9 to upstream head, re-fit or delete the editor patch, adapt to breaking changes, update the reference page; phone simulator build then Mac build before it reaches the phone branch
+    class: orange
+    review: one seat
+    depends_on: []
+    carrier: lane/mac-app
+    status: working
+  - id: S4
+    name: The Autoradio Mac app
+    scope: the same app as a native macOS app with the local models; platform guards, manifest, model libraries with macOS slices, audio without a session, proof script
+    class: orange
+    review: one seat
+    depends_on: [S3]
+    carrier: lane/mac-app
+    status: working
+  - id: S5
+    name: EmbeddingGemma 2 on device
+    scope: try the GGUF through the llama runtime (to support iOS 26 and the A16 phone) and the Core AI port (Mac, and the phone if it loads); embed what the device holds; flat-file cosine search; fuse with BM25; measure load, speed, memory and retrieval quality on both machines
+    class: orange
+    review: one seat
+    depends_on: [S2]
+    carrier: none yet
+    status: pending
+  - id: S6
+    name: The Autoradio page
+    scope: the app opens on a page that is the run sheet made readable (docs/design/autoradio-page-2026-11-17.md); the sheet behind the bar is deleted
+    class: orange
+    review: one seat
+    depends_on: []
+    carrier: none yet
+    status: pending
+  - id: S7
+    name: Opening-first programme
+    scope: land lane/programme-opening (accepted in review round 3) once the phone build that understands it is the installed one; deployed timing proof on the drill computer
+    class: red
+    review: two seats (done)
+    depends_on: []
+    carrier: lane/programme-opening c6aeec9e4
+    status: pending
+
+decisions_for_the_owner:
+  - id: D1
+    question: Which minimum iOS does the app support?
+    why: it decides the embedding runtime and which Exact and Apple features are allowed
+    options: iOS 27 only; iOS 26 and later
+    default: iOS 26 and later (the owner's stated wish), so the GGUF route is tried first on the phone
+  - id: D2
+    question: If full-band listening makes the radio pause itself now and then, which is worse, that or the tone change while voice is on?
+    why: it decides which audio mode ships
+    options: keep voice-chat mode (tone changes, reliable pause); full-band (true tone, some risk of false pauses)
+    default: keep the installed behaviour until the owner has tried the side build
+  - id: D3
+    question: May the station learn from anonymous listening in aggregate?
+    why: the master stream's forecasts cannot be scored without it
+    options: yes; no
+    default: no; master forecasts stay unscored
+owner_rulings:
+  - on: 2026-11-17
+    decision: D1
+    said: "it seems like my iPhone is too old for that Core AI version, and I don't really want to just support iOS 27. I'd love to support iOS 26 as well. So maybe we should target the GGUF version. Let's play around with it and see which one or both or neither ends up working"
+  - on: 2026-11-17
+    decision: S3
+    said: "for overnight build we should also update to latest exact. then build mac off that; and later: i want new exact on phone too"
+  - on: 2026-11-17
+    decision: S6
+    said: "we should definitely have a page for auto radio itself. That should be what it loads into... I let you, Fable, design that."
+
+now:
+  status: working
+  slice: S1 to S4 in parallel lanes; S5 and S6 start now
+  source_ref: origin/main c3a54a69d
+  deploy_identity: staging 6ba3e1080
+  candidate:
+    id: none
+    state: none
+    ref: none
+    base: none
+    digest: none
+    scope: []
+  conjecture:
+    id: K1
+    calibration_claim: C115
+    claim: By the owner's morning check, one branch on the latest Exact builds both a phone app and a Mac app that open on the Autoradio page and speak, and the phone build carries local retrieval.
+    test: the build logs of both targets from one pushed commit, the Mac proof script, and the owner's verdict on the phone
+    edge: missing_oracle
+    delta_o: a device check that needs no person, the console line per on-air entry with its sample count, read by the lead after each install when the phone is unlocked
+    scope_if_supported: the two builds named, on the owner's two machines
+    status: active
+    evidence_refs: []
+  decision:
+    what: Mac first for embeddings and for the new Exact pin, the phone after each passes; the phone keeps its last accepted build meanwhile
+    kind: operational
+    status: settled
+    evidence_ref: this file
+    owner_ratification_ref: not_applicable
+  belief:
+    believed_state: the phone speaks again; the one-voice work is installed and unheard; four builders are working in separate lanes
+    main_uncertainty: whether the model libraries get macOS slices tonight, and whether EmbeddingGemma 2 loads at all on an A16 phone by either route
+    next_observation: the first Mac build at the new Exact pin
+  blocker_or_risk: one Mac build lock serves four lanes, so builds queue; the lead's checks have twice passed a silent or broken phone build, so nothing is called working without sound or a sample count
+  next_action: start the embedding trials and the Autoradio page builders, then run the phone simulator build and the Mac build at the new pin when the Mac lane reports
+
+receipts: []
+---
+
+# Autoradio overnight, 17 November
+
+The owner asked for seven things in one evening and then for this file to hold
+them together. They are the stations above. Three points are worth prose.
+
+**Nothing is working until it has run.** On the 16th a phone build passed
+nine hundred tests and a simulator tour and was silent on the device, because
+the virtual audio engine returned before the real start. The acceptance lines
+therefore name sound, windows and files, not test counts.
+
+**The order protects the phone.** The new Exact pin, the Mac work, retrieval
+and the page each live in a lane. A lane reaches `lane/autoradio-integ` only
+after the lead has built it, and the phone gets a build only from there.
+
+**The embedding question is an experiment, not a build.** Two routes exist
+for one model. The owner's phone has an A16 chip and should run iOS 26 as
+well as 27, so the GGUF through the runtime the app already carries is tried
+first there; the Core AI port is tried on the Mac. The result that matters is
+a table: route, machine, load time, speed, memory, and whether fused ranking
+beats BM25 on questions the owner would ask.

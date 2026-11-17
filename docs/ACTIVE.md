@@ -11,7 +11,16 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live station beside them (2026-11-15 night): Autoradio, the full experience
+## Live station (2026-11-17 night): Autoradio overnight
+
+Owner, 2026-11-17: one voice at a time, local retrieval for the on-device
+model, the latest Exact on phone and Mac, a native Mac app, EmbeddingGemma 2
+tried on device, and a page that is the radio. Goal:
+[`definitions/choir-autoradio-overnight-2026-11-17.md`](definitions/choir-autoradio-overnight-2026-11-17.md).
+The goal of the 15th below was cleared by the owner on the 17th and is
+superseded by it.
+
+## Superseded (2026-11-15 night): Autoradio, the full experience
 
 Owner, 2026-11-15 23:36Z, an overnight order: podcast clips, a podcast app, a
 Reader, the DJ mixing news and clips, one play queue the DJ can edit, no
