@@ -32,13 +32,9 @@ if have "$CACHE"; then
   echo "deps: copied xcframeworks from $CACHE"
   exit 0
 fi
-if [ "$PLATFORM" = macos ]; then
-  echo "deps: the xcframeworks have no macos arm64 slice yet (build-xcframeworks.sh and build-llama-xcframework.sh add it); build without models: ALLOW_NO_MODELS=1" >&2
-  exit 1
-fi
-echo "deps: building the xcframeworks (this takes a while, once per machine)"
-[ -d "$OUT/FluidAudio.xcframework" ] || "$HERE/scripts/build-xcframeworks.sh" fluidaudio
-[ -d "$OUT/llama.xcframework" ] || "$HERE/scripts/build-llama-xcframework.sh"
+echo "deps: building the xcframeworks (this takes a while, once per machine: about 10 minutes per FluidAudio slice, three slices, and llama.cpp's builds)"
+has_slice "$OUT/FluidAudio.xcframework" || "$HERE/scripts/build-xcframeworks.sh" fluidaudio
+has_slice "$OUT/llama.xcframework" || "$HERE/scripts/build-llama-xcframework.sh"
 have "$OUT" || { echo "deps: the xcframeworks are still missing after the build" >&2; exit 1; }
 mkdir -p "$CACHE"
 for fw in FluidAudio llama; do rm -rf "$CACHE/$fw.xcframework"; cp -R "$OUT/$fw.xcframework" "$CACHE/"; done

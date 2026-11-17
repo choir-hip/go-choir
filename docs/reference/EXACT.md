@@ -367,3 +367,19 @@ animation research.
 - Not supported on the Mac yet: lock-screen and background playback concepts (`host.ios.backgroundModes`, `audio_session` are iOS-only
   words), echo cancellation until the engine's voice processing is wired on the Mac, the phone's route names, and anything the
   Mac-specific work would add (menus, keyboard shortcuts, a centred column).
+
+### The model libraries on the Mac
+
+- FluidAudio and llama.cpp reach the Exact app only as static xcframeworks, and each needs a `macos` arm64 slice for `mac`
+  (`scripts/ensure-deps.sh macos` checks `Info.plist` for it; an iOS-only copy is "missing" for the Mac, as Exact says "has no macos
+  arm64 slice in its Info.plist"). `build-xcframeworks.sh fluidaudio` builds three slices (`sim`, `dev`, `mac`:
+  `--triple arm64-apple-macos15.0`, about 10 minutes each on a loaded Mac) and `build-llama-xcframework.sh` builds the macOS one itself
+  (cmake, arm64 only, macOS 15.0, the release script's own options; the release script is not used for macOS because it deletes the other
+  `build-*` directories and builds universal at 13.3). **[unrun]** until the lead's first run: where SwiftPM puts the macOS product (the
+  script finds `libFluidAudio.a` instead of assuming `Release-<sdk>`).
+- Where things live on the Mac: models under `~/Library/Application Support/Autoradio/models` (the app is not sandboxed in a development
+  build), exports under `~/Documents/AutoradioExports`.
+- Permissions **[src]** (`runner/src/device.rs`): `device.microphone` writes `NSMicrophoneUsageDescription` and `device.speech-recognition`
+  `NSSpeechRecognitionUsageDescription` for macOS from `strings/en.json`; `device.microphone-background` needs nothing on a Mac. A
+  development build is ad hoc signed with no hardened runtime, so the first microphone use shows the system prompt and nothing else is
+  required; an `exact release` build derives the hardened-runtime audio-input entitlement from the grant.
