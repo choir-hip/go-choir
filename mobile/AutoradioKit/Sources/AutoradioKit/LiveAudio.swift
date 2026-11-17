@@ -55,6 +55,26 @@ public final class LiveAudio: @unchecked Sendable {
     /// Samples handed to the programme node since the engine was made (what the output was given to play).
     private var samplesHanded = 0
     public var programmeSamplesHanded: Int { lock.lock(); defer { lock.unlock() }; return samplesHanded }
+    /// One voice at a time. While a voice line (acknowledgement, holding line, answer) is being heard, the programme node is held: it is the lower
+    /// rank. It goes on when the last voice line ends, if the programme is still wanted. Under the lock.
+    private var voiceLines = 0
+    private var heldForVoice = false
+    /// True while a voice line is audible (tests and the on-air line read it).
+    public var voiceIsSpeaking: Bool { lock.lock(); defer { lock.unlock() }; return voiceLines > 0 }
+    /// True when the programme node is audible or may be heard now: wanted, and no voice line speaking.
+    private func voiceBegan(reason: String) {
+        lock.lock(); voiceLines += 1; let first = voiceLines == 1; lock.unlock()
+        guard first else { return }
+        if virtual { if !virtualPaused { lock.lock(); heldForVoice = true; lock.unlock(); virtualPaused = true } }
+        else if running, programmeNode.isPlaying { lock.lock(); heldForVoice = true; lock.unlock(); programmeNode.pause() }
+        if heldForVoice { print("AUTORADIO hold programme reason=\(reason)") }
+    }
+    private func voiceEnded() {
+        lock.lock(); voiceLines = max(0, voiceLines - 1); let last = voiceLines == 0; let held = heldForVoice; if last { heldForVoice = false }; lock.unlock()
+        guard last, held, wantPlaying else { return }
+        if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false }
+        print("AUTORADIO resume programme reason=voice line ended")
+    }
     private var micPermitted = false
     private var micWanted = false
     private var wantMic: Bool { micPermitted && micWanted }
@@ -248,7 +268,7 @@ public final class LiveAudio: @unchecked Sendable {
         running = true; down = false
         lastRestart = clock.now
         programmeNode.volume = volume
-        if wantPlaying { programmeNode.play(); nodeStopped = false }
+        if wantPlaying, !voiceIsSpeaking { programmeNode.play(); nodeStopped = false }
         onNotice?("engine", "up: mic \(micActive), voice processing \(voiceProcessing), programme wanted \(wantPlaying)")
     }
 
@@ -276,7 +296,11 @@ public final class LiveAudio: @unchecked Sendable {
 
     // MARK: Programme node, guarded
 
-    public func programmePlay() { wantPlaying = true; if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false } }
+    public func programmePlay() {
+        wantPlaying = true
+        if voiceIsSpeaking { lock.lock(); heldForVoice = true; lock.unlock(); return }      // the voice line has the output; the programme goes on after it
+        if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false }
+    }
     public func programmePause() { wantPlaying = false; if virtual { virtualPaused = true } else if running { programmeNode.pause() } }
     public func programmeStop() { wantPlaying = false; if virtual { virtualPaused = true } else { programmeNode.stop(); nodeStopped = true; releaseWaiters() } }
     /// Speed of the programme, 0.5 to 3, pitch kept (`PlaybackSpeed`). Applies at once, also to what is already scheduled. The time-pitch
@@ -304,7 +328,9 @@ public final class LiveAudio: @unchecked Sendable {
     // MARK: Playing
 
     /// Play voice frames now (acknowledgement, holding lines). Returns when the last frame has been heard.
-    public func playVoice(_ frames: AsyncThrowingStream<AudioFrame, Error>) async {
+    public func playVoice(_ frames: AsyncThrowingStream<AudioFrame, Error>, reason: String = "a voice line") async {
+        voiceBegan(reason: reason)
+        defer { voiceEnded() }
         if virtual {
             var secs = 0.0
             do { for try await f in frames { secs += f.duration } } catch {}
@@ -394,7 +420,7 @@ public final class LiveAudio: @unchecked Sendable {
                 await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
                     once.arm(c)
                     programmeNode.scheduleBuffer(ob, completionCallbackType: .dataPlayedBack) { _ in once.resume(()) }
-                    if wantPlaying, !programmeNode.isPlaying { programmeNode.play(); nodeStopped = false }
+                    if wantPlaying, !voiceIsSpeaking, !programmeNode.isPlaying { programmeNode.play(); nodeStopped = false }
                 }
             } onCancel: { once.resume(()) }
             waiters.write { $0[wid] = nil }

@@ -86,3 +86,67 @@ final class MuteVoiceTwo: Voice, @unchecked Sendable {
     init(_ p: StageParams) {}
     func speak(_ text: AsyncStream<String>) -> AsyncThrowingStream<AudioFrame, Error> { AsyncThrowingStream { c in Task { for await _ in text {}; c.finish() } } }
 }
+
+/// One voice at a time, and the listener outranks the radio.
+final class OneVoiceTests: XCTestCase {
+    func audio() -> LiveAudio { virtualAudio() }
+    func line(seconds: Double) -> AsyncThrowingStream<AudioFrame, Error> {
+        AsyncThrowingStream { c in c.yield(AudioFrame(samples: [Float](repeating: 0.1, count: Int(16000 * seconds)), sampleRate: 16000, t: 0)); c.finish() }
+    }
+
+    /// Two sources asked to speak at once: the programme and a voice line are never audible together.
+    func testAVoiceLineHoldsTheProgrammeAndTheProgrammeGoesOnAfterIt() async {
+        let a = audio()
+        a.programmePlay()
+        XCTAssertTrue(a.programmeAudible)
+        let v = Task { await a.playVoice(self.line(seconds: 0.4), reason: "test") }
+        let held = await poll { a.voiceIsSpeaking }
+        XCTAssertTrue(held)
+        XCTAssertFalse(a.programmeAudible, "the programme is silent while the voice line speaks")
+        a.programmePlay()                                           // the programme asks to play again: it waits
+        XCTAssertFalse(a.programmeAudible, "a second request while one speaks never mixes")
+        await v.value
+        XCTAssertFalse(a.voiceIsSpeaking)
+        XCTAssertTrue(a.programmeAudible, "when the voice line ends the programme goes on")
+    }
+
+    /// Barge-in: the listener cuts the voice line; the programme is not left held.
+    func testCuttingTheVoiceLineReleasesTheProgramme() async {
+        let a = audio()
+        a.programmePlay()
+        let v = Task { await a.playVoice(self.line(seconds: 20), reason: "test") }
+        _ = await poll { a.voiceIsSpeaking }
+        v.cancel()
+        _ = await v.value
+        XCTAssertFalse(a.voiceIsSpeaking)
+    }
+
+    /// A paused programme stays paused when a voice line ends.
+    func testAPausedProgrammeStaysPausedAfterAVoiceLine() async {
+        let a = audio()
+        a.programmePlay()
+        let v = Task { await a.playVoice(self.line(seconds: 0.2), reason: "test") }
+        _ = await poll { a.voiceIsSpeaking }
+        a.programmePause()
+        await v.value
+        XCTAssertFalse(a.programmeAudible)
+    }
+
+    /// Speech start pauses at once (the default policy), and a pause is kept for the listener's whole turn.
+    func testSpeechStartPausesAtOnce() throws {
+        let cfg = StageRegistry.defaultConfiguration()
+        let y = try StageRegistry.builtIn().make(.yieldPolicy, as: YieldPolicy.self, cfg)
+        XCTAssertEqual(y.target(for: YieldSituation(current: .play, speechSeconds: 0.1, addressed: false, notATurn: false)), .pause)
+        XCTAssertEqual(y.target(for: YieldSituation(current: .pause, speechSeconds: 0, addressed: false, notATurn: false)), .pause)
+        XCTAssertEqual(y.target(for: YieldSituation(current: .pause, speechSeconds: 3, addressed: false, notATurn: true)), .play)
+    }
+
+    /// Mic on is one session state whether or not a turn is open: no category or mode change between listening and talking.
+    func testVoiceOnIsOneSessionState() {
+        let c = SessionCoordinator(inner: NullSessionOwner(), log: EventLog(clock: LabClock()), audio: LiveAudio(), policy: { .switchOnAddress }, voiceOn: { true })
+        XCTAssertEqual(c.target(for: .listening), .talking)
+        XCTAssertEqual(c.target(for: .talking), .talking)
+        let off = SessionCoordinator(inner: NullSessionOwner(), log: EventLog(clock: LabClock()), audio: LiveAudio(), policy: { .switchOnAddress }, voiceOn: { false })
+        XCTAssertEqual(off.target(for: .talking), .playing)
+    }
+}

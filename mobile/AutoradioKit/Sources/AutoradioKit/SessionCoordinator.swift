@@ -72,7 +72,10 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     public func noteRecommendation(shouldResume: Bool) { lock.lock(); _shouldResume = shouldResume; lock.unlock() }
 
     /// The state a request for `asked` becomes: voice off is a playback session whatever the policy.
-    func target(for asked: AudioState) -> AudioState { voiceOn() ? policy().effective(asked) : .playing }
+    /// Voice on is one state: the capture session with voice processing (echo cancellation), whether or not a turn is open. The session does not
+    /// change category or mode again between listening and talking, so the programme is never played through a mode switch; the one switch is
+    /// the Voice control's, made with the engine stopped. (`alwaysListening` is the lab's own choice and stays what it says.)
+    func target(for asked: AudioState) -> AudioState { voiceOn() ? (policy() == .alwaysListening ? .listening : .talking) : .playing }
 
     public func claim(_ asked: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
         await mutex.lock(); defer { mutex.unlock() }

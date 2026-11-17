@@ -297,7 +297,13 @@ public final class LabRuntime: @unchecked Sendable {
     /// the engine hears nothing and an open turn is dropped now. `persist: false` is for one screen only (onboarding's "Talk to it").
     public func setHandsFree(_ on: Bool, persist: Bool = true) {
         if persist { overrideBox.write { $0 = nil }; HandsFreeSwitch.shared.set(on) } else { overrideBox.write { $0 = on } }
-        Task { [engine, coordinator] in await engine.handsFreeSet(on); await coordinator.reapply() }     // the session follows the switch: mic only while on
+        // The session follows the switch first (mic and voice processing only while on); then the engine is told whether the radio's own voice is
+        // cancelled from the microphone, which is what lets the listener's speech pause the programme at once.
+        Task { [engine, coordinator, audio] in
+            await coordinator.reapply()
+            await engine.handsFreeConfigure(echoCancelled: audio.voiceProcessing)
+            await engine.handsFreeSet(on)
+        }
         refresh()
     }
     /// The stored state again, after a screen's own turn-on.
