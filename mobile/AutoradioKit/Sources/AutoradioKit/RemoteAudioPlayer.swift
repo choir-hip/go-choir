@@ -64,7 +64,7 @@ import MediaPlayer
             MainActor.assumeIsolated { self?.publish(); self?.onTick?() }
         }
         wantPlaying = true
-        p.play()
+        if !held { p.play() }
         publish()
         return true
     }
@@ -112,7 +112,7 @@ import MediaPlayer
         guard let p = player else { return }
         wantPlaying = true
         if p.currentItem?.status == .failed { note?("remote: the item had failed (\(p.currentItem?.error.map { "\($0)" } ?? "unknown")); play does nothing until it is started again") }
-        if level != .pause { p.play() }
+        if level != .pause, !held { p.play() }
         publish()
     }
 
@@ -164,6 +164,17 @@ import MediaPlayer
     }
 
     /// A hands-free turn: lowered, paused, or back. A pause for a turn does not forget that the reader wanted it playing.
+    /// A voice line is speaking (the one voice at a time): remote audio is held, and goes on after it if it was playing.
+    private var held = false
+    public func setHeld(_ h: Bool) {
+        guard h != held else { return }
+        held = h
+        guard let p = player, wantPlaying else { return }
+        if h { p.pause() } else if level != .pause { p.rate = Float(rate) }
+        publish()
+    }
+    public var isHeld: Bool { held }
+
     public func setLevel(_ l: PlayLevel) {
         level = l
         guard let p = player else { return }

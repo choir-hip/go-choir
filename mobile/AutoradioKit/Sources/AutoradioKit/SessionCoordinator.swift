@@ -129,6 +129,10 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         let from = current
         if from == state { return }
         let t0 = DispatchTime.now().uptimeNanoseconds
+        // What is on air is held (as for a voice line) while the session is reconfigured, and goes on from the held position: the programme is
+        // never played through a mode switch.
+        audio.holdForSessionSwitch(true)
+        defer { audio.holdForSessionSwitch(false) }
         audio.quiesce()                                   // the category change would stop it anyway
         do { try await inner.claim(state, preferBuiltInMic: preferBuiltInMic, reason: reason) }
         catch {
@@ -144,6 +148,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         let d = inner.describe()
         log.emit(.audioSession(category: state.rawValue, mode: preferBuiltInMic ? "builtin-mic" : "route-mic", note: "\(reason): \(d)"))
         log.emit(.audioSwitch(from: from?.rawValue ?? "none", to: state.rawValue, ms: ms))
+        print("AUTORADIO session \(from?.rawValue ?? "none") -> \(state.rawValue) took_ms=\(Int(ms))")
         if ms > 5000 { log.emit(.error(stage: "audio-session", message: String(format: "switch to %@ took %.1f s", state.rawValue, ms / 1000))) }
         onChange?()
     }

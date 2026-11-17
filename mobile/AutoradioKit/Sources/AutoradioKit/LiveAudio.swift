@@ -62,15 +62,21 @@ public final class LiveAudio: @unchecked Sendable {
     /// True while a voice line is audible (tests and the on-air line read it).
     public var voiceIsSpeaking: Bool { lock.lock(); defer { lock.unlock() }; return voiceLines > 0 }
     /// True when the programme node is audible or may be heard now: wanted, and no voice line speaking.
+    /// The first voice line began (true) or the last ended (false): other sound outside this engine (remote audio) is held with the programme.
+    public var onVoiceHold: (@Sendable (Bool) -> Void)?
     private func voiceBegan(reason: String) {
         lock.lock(); voiceLines += 1; let first = voiceLines == 1; lock.unlock()
         guard first else { return }
+        onVoiceHold?(true)
         if virtual { if !virtualPaused { lock.lock(); heldForVoice = true; lock.unlock(); virtualPaused = true } }
         else if running, programmeNode.isPlaying { lock.lock(); heldForVoice = true; lock.unlock(); programmeNode.pause() }
         if heldForVoice { print("AUTORADIO hold programme reason=\(reason)") }
     }
+    /// The session is being reconfigured: the same hold as a voice line, so what is on air is paused (and remote audio held) and goes on after.
+    public func holdForSessionSwitch(_ on: Bool) { if on { voiceBegan(reason: "session switch") } else { voiceEnded() } }
     private func voiceEnded() {
         lock.lock(); voiceLines = max(0, voiceLines - 1); let last = voiceLines == 0; let held = heldForVoice; if last { heldForVoice = false }; lock.unlock()
+        if last { onVoiceHold?(false) }
         guard last, held, wantPlaying else { return }
         if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false }
         print("AUTORADIO resume programme reason=voice line ended")
@@ -813,6 +819,14 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         guard !paused, lvl != .pause, audio.programmeAudible, doc.blocks.indices.contains(i),
               let full = doc.blocks[i].spokenText, let p = audio.programmePosition(tag: i), p.fraction < 1 else { return nil }
         return SpokenCut(blockIndex: i, full: full, spoken: SpeechCut.text(of: full, upTo: p.fraction), fraction: p.fraction)
+    }
+    /// What of the document is still to be said, from the start of the block being spoken (a block is a sentence or a short run of them).
+    public func remainingText() -> String? {
+        st.read { s -> String? in
+            guard s.document.blocks.indices.contains(s.blockIndex) else { return nil }
+            let t = s.document.blocks[s.blockIndex...].compactMap { $0.spokenText }.joined(separator: " ")
+            return t.isEmpty ? nil : t
+        }
     }
     public func setLevel(_ l: PlayLevel) async {
         let paused = st.write { s -> Bool in s.level = l; return s.userPaused }

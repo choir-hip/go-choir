@@ -143,6 +143,7 @@ public final class ChoirApp: @unchecked Sendable {
             let continuity = PlaybackContinuity(runtime: me.runtime)
             engine.continuity = continuity
             me.continuity = continuity
+            me.runtime.audio.onVoiceHold = { [weak engine] held in Task { @MainActor in engine?.remote.setHeld(held) } }
             engine.remote.onSystemPause = { [weak continuity] in continuity?.remoteSystemPaused() }
             engine.remote.note = { [weak me] in me?.runtime.log.emit(.audioNotice(kind: "remote", detail: $0)) }
             engine.remote.onEnded = { g in Task { @MainActor in RunSheetPlayer.shared.remoteEnded(generation: g) } }

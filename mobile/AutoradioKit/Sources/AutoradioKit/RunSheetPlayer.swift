@@ -34,6 +34,8 @@ import Foundation
     func stopSpoken()
     /// Why the last spoken block could not be made (nil: it was).
     func speakFailure() -> String?
+    /// What of the spoken entry is still to be said, from the start of the sentence it is in; nil when unknown.
+    func spokenRemainder() -> String?
     /// The spoken entry says no more than the block it is on (the rest is replaced): whole sentences, no word cut.
     func endSpokenAfterCurrentBlock()
     /// Play remote audio from `start` (seconds) and stop at `end` when there is one.
@@ -122,6 +124,9 @@ extension PlaybackEngine {
     private var reconciling = false, again = false
     private var pendingEnd: (id: String, played: Bool)?
     private var leadInDone = Set<String>()
+    /// An answer went on air over this entry: where it was, as a continuation entry (fresh id, same source, the words still to say, or the same
+    /// audio from where it was). It is placed `next` when the answers are over, unless the listener asked for something else meanwhile.
+    var remembered: RunSheetEntry?
 
     public init(store: RunSheetStore) {
         self.store = store
@@ -151,6 +156,7 @@ extension PlaybackEngine {
     /// Play this now ("Play", Listen, Read it to me, Read aloud). What was on air is cut; what was ahead stays ahead. `words` are what a
     /// page's own text said, held for this entry (the entry itself is a pointer).
     public func playNow(_ e: RunSheetEntry, words: (title: String, paragraphs: [String])? = nil) {
+        dropRemembered()
         wants = true
         if let words { provided[e.id] = words }
         let cut = store.onAir() != nil ? report(final: false) : nil
@@ -175,19 +181,22 @@ extension PlaybackEngine {
     public func playUpcoming(at i: Int) {
         let a = store.ahead(limit: i + 1)
         guard a.indices.contains(i) else { return }
+        dropRemembered()
         wants = true
         store.move(id: a[i].id, at: .now)
     }
-    public func clearUpcoming() { store.clearAhead() }
+    public func clearUpcoming() { dropRemembered(); store.clearAhead() }
 
     /// Skip, the next button, a swipe on the now-playing card, the lock screen's next, and "next" by voice: one op, `skip(on air)`. With
     /// nothing on air it starts what is next.
     public func next() {
+        dropRemembered()
         wants = true
         if store.onAir() != nil { store.skipOnAir(report: report(final: false)) } else { advanceIfIdle() }
     }
     /// Back: the start of this entry when it has gone on a little (or it is audio), else the entry before it, aired again.
     public func previous() {
+        dropRemembered()
         wants = true
         if audio != nil, store.onAir() != nil { engine?.seekRemote(to: 0); changed(); return }
         if store.onAir() != nil {
@@ -200,6 +209,7 @@ extension PlaybackEngine {
 
     /// Sign-out: what was on air stops and nothing carries over to the next account.
     public func stopAll() {
+        dropRemembered()
         wants = false
         // Sign-out is not a judgement of the entry: it leaves the air as `left`, by the phone, where it was.
         if let e = store.onAir() { let r = report(final: false); store.airedEnded(e.id, as: .heard, outcome: .left, report: r) }
@@ -276,16 +286,46 @@ extension PlaybackEngine {
         aheadChanged?()
     }
 
+    /// An answer is about to take the air from an entry that was cut: keep that entry's place. (The reducer's `place now` cuts it; the player
+    /// is what remembers where.) Read before the engine is stopped.
+    private func rememberPlace(of oldId: String?, nextKind: RunSheetKind?) {
+        guard nextKind == .answer, remembered == nil, let oldId, let old = store.entry(oldId),
+              old.kind != .answer, old.kind != .transition, old.ended?.outcome == .cut else { return }
+        if audio != nil, playingDocument == nil, let a = audio {
+            var c = a
+            c.start = max(a.start ?? 0, engine?.remotePosition()?.elapsed ?? 0)
+            remembered = .audio(c, by: .phone)
+            print("AUTORADIO kept place \(old.id) at \(Int(c.start ?? 0)) s while an answer speaks")
+        } else if let rest = engine?.spokenRemainder(), !rest.isEmpty {
+            var c = RunSheetEntry(id: "c-" + UUID().uuidString.prefix(8).lowercased(), kind: .story, placedBy: .phone, title: old.title, text: rest,
+                                  estSeconds: RunSheetEntry.estimateSeconds(words: rest))
+            c.source = old.source; c.cites = old.cites
+            remembered = c
+            print("AUTORADIO kept place \(old.id) as \(c.id) while an answer speaks")
+        }
+    }
+    /// The listener asked for something else: what was kept is not wanted back.
+    private func dropRemembered() { if remembered != nil { print("AUTORADIO kept place dropped: the listener changed what plays") }; remembered = nil }
+
     private func reconcile() {
         if let air = store.onAir() {
             guard air.id != playingId else { return }
+            rememberPlace(of: playingId, nextKind: air.kind)
             playingId = air.id; playingDocument = nil; audio = nil; pendingEnd = nil
             startTask = Task { @MainActor in await self.begin(air) }
             return
         }
         if playingId != nil {                         // what was on air was skipped, cut or taken off: its sound stops
+            rememberPlace(of: playingId, nextKind: nextToAir()?.kind)
             playingId = nil; playingDocument = nil; audio = nil; paused = false; generation += 1; pendingEnd = nil
             engine?.stopRemote(); engine?.stopSpoken()
+        }
+        // The answers are over (nothing on air, the next is not an answer): what they cut goes back on air, from the start of its sentence.
+        if let r = remembered, playingId == nil, nextToAir()?.kind != .answer {
+            remembered = nil
+            store.place(r, at: .next, by: .phone, reason: "back to where it was before the answer")
+            again = true
+            return
         }
         if wants, !spokenPaused(), !turnOpen(), let first = nextToAir() { store.airedOnAir(first.id); again = true }
     }
@@ -482,4 +522,4 @@ extension PlaybackEngine {
     }
 }
 
-public extension PlaybackEngine { func speakFailure() -> String? { nil } }
+public extension PlaybackEngine { func speakFailure() -> String? { nil }; func spokenRemainder() -> String? { nil } }

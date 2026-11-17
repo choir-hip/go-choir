@@ -44,6 +44,7 @@ import Foundation
         app.runtime.player.start(at: 0)
     }
 
+    public func spokenRemainder() -> String? { app.runtime.player.remainingText() }
     public func speakFailure() -> String? { app.runtime.player.speakFailure }
 
     public func endSpokenAfterCurrentBlock() { app.runtime.player.endAfterCurrentBlock() }
