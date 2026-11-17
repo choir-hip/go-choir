@@ -422,7 +422,6 @@ component Autoradio
     radioToggleWhy
     radioDo
     radioDrop
-    radioSay
     // ---- lane autoradio-queue ----
     qv
     qm

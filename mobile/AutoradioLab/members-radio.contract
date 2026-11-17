@@ -1,6 +1,6 @@
 // Lane members file (the Autoradio page): the run sheet made readable, and the gestures on it. Owned by lane autoradio-page.
 // Source and send are declared in exact-package/interface/radio.json. The page (radio.contract) only reads `rp` and sends these.
-use radioPage, radioPageAct, choirAsk from "@choir/autoradio"
+use radioPage, radioPageAct from "@choir/autoradio"
 use RadioPageInfo from "@choir/autoradio"
 
 members Autoradio
@@ -26,6 +26,3 @@ members Autoradio
         send rpm = radioPageAct(op="reorder", arg=item, to=b)
       case none
         send rpm = radioPageAct(op="reorder", arg=item, to="")
-  // A suggestion is a turn, as if it were typed in the bar.
-  action radioSay(text: string)
-    send acct = choirAsk(text=text, aim="radio:")

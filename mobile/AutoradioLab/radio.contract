@@ -7,7 +7,7 @@
 // radio-onair-byline, radio-onair-sentence, radio-onair-sentence-number, radio-greeting, radio-heard-words, radio-cannot, radio-retry, radio-then-back,
 // radio-progress, radio-elapsed, radio-remaining, radio-play, radio-next, radio-why, radio-why-text, radio-forecast, radio-back15, radio-fwd15,
 // radio-speed, radio-speed-slider, radio-speed-down, radio-speed-up, radio-speed-reset, radio-next-list, radio-next-<n>, radio-next-play-<n>,
-// radio-next-grip-<n>, radio-next-all, radio-next-writing, radio-next-empty, radio-notice, radio-say-<n>, radio-place-<name>, radio-heard-<n>.
+// radio-next-grip-<n>, radio-next-all, radio-next-writing, radio-next-empty, radio-notice, radio-place-<name>, radio-heard-<n>.
 use Theme, RadioPageInfo, QueueInfo from "@choir/autoradio"
 use Btn, SectionHeader, RowRule, BarClear from "./ui.contract"
 use QueueAudio, QueueScrub from "./queue.contract"
@@ -41,7 +41,6 @@ component RadioPage
     radioToggleWhy: action
     radioDrop: action
     radioDo: action
-    radioSay: action
     speedShown: number
     speedPct: number
     speedMove: action
@@ -57,7 +56,9 @@ component RadioPage
   derive isError = rp.state == "error"
   derive playLabel = rp.playing ? "Pause the radio" : "Play the radio"
   view
-    column flex=1 min-height=0 width="100%" testId="radio-page"
+    column flex=1 min-height=0 width="100%" position="relative" testId="radio-page"
+      // an opaque band under the status bar: the page scrolls beneath it, never under the clock
+      box position="absolute" top=0 left=0 right=0 height="env(safe-area-inset-top)" background-color=th.paper z-index=5 pointer-events="none" testId="radio-statusbar-band"
       scroll id="radio" testId="radio-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 gap=20
           font-family=th.fontText color=th.fg
@@ -68,7 +69,11 @@ component RadioPage
               text rp.dateLine font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-date"
             box height=1 background-color=th.fg width="100%"
             box height=1 background-color=th.fg width="100%" margin-top=2
-            text rp.statusLine font-family=th.fontLabel font-size="-exact-subheadline" color=(isError ? th.danger : th.muted) testId="radio-status" line-clamp=2
+            row align-items="center" gap=8 width="100%"
+              text rp.statusLine font-family=th.fontLabel font-size="-exact-subheadline" color=(isError ? th.danger : th.muted) testId="radio-status" line-clamp=3 flex=1 min-width=0
+              if rp.action != ""
+                button press=radioPlay testId="radio-retry" appearance="none" flex-shrink=0 aria-label=rp.action
+                  Btn(label=rp.action, primary=false, wide=false)
           // on air: the largest thing on the page; it dims while the listener speaks
           column gap=14 width="100%" testId="radio-onair" opacity=(rp.dim ? 0.4 : 1) transition=(th.reducedMotion ? "none" : `opacity ${th.motionFastMs}ms ease`)
             if rp.onAir
@@ -105,18 +110,11 @@ component RadioPage
               // nothing on air: the greeting with what is lined up, or one plain line
               if rp.greeting != ""
                 text rp.greeting font-family=th.fontText font-size="-exact-title3" line-height=1.5 color=th.fg testId="radio-greeting"
-              else
+              else if rp.state != "error"
                 text "Nothing is on air." font-family=th.fontText font-size="-exact-title3" line-height=1.5 color=th.fg testId="radio-greeting"
             // what the listener said, as it was recognised
             if rp.heardWords != ""
               text rp.heardWords font-family=th.fontText font-size="-exact-body" font-style="italic" color=th.fg line-clamp=3 testId="radio-heard-words"
-            // the radio cannot speak: the reason, and the one action
-            if rp.cannotSpeak != ""
-              column gap=4 width="100%" align-items="flex-start" testId="radio-cannot"
-                text rp.cannotSpeak font-family=th.fontLabel font-size="-exact-subheadline" color=th.danger line-clamp=3
-                if rp.action != ""
-                  button press=radioPlay testId="radio-retry" appearance="none" aria-label=rp.action
-                    Btn(label=rp.action, primary=false, wide=false)
             // the controls: a large Play or Pause, Next, and Why this when the entry carries a reason
             row align-items="center" gap=20 width="100%"
               if qv.audio
@@ -202,14 +200,6 @@ component RadioPage
                     text (radioAll ? "Fewer" : `All of it · ${rp.aheadMore} more`) font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
               if rp.writing
                 text "The desk is writing ahead…" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-next-writing"
-          // say something: what the bar's field and microphone are for; a tap sends it as a turn
-          column gap=4 width="100%" testId="radio-say"
-            SectionHeader(label="Say something")
-            row flex-wrap="wrap" width="100%"
-              for s in rp.suggestions key=s.n
-                button press=radioSay(s.label) testId=`radio-say-${s.n}` appearance="none" flex-shrink=0 aria-label=`Say: ${s.label}`
-                  row padding="0px 16px 0px 0px" align-items="center" min-height=44
-                    text s.label font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.accent
           // places: this page is the hub
           column gap=4 width="100%" testId="radio-places"
             SectionHeader(label="Places")

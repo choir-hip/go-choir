@@ -708,10 +708,6 @@
       "title": "string",
       "outcome": "string"
     },
-    "RadioSuggestion": {
-      "n": "number",
-      "label": "string"
-    },
     "RadioPageInfo": {
       "state": "string",
       "statusLine": "string",
@@ -743,7 +739,6 @@
       "writing": "bool",
       "emptyNote": "string",
       "notice": "string",
-      "suggestions": "RadioSuggestion[]",
       "heard": "RadioHeardRow[]"
     },
     "ReaderRun": {
@@ -2455,7 +2450,6 @@
           "writing": false,
           "emptyNote": "",
           "notice": "",
-          "suggestions": [],
           "heard": []
         }
       }

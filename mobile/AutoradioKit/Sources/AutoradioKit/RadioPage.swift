@@ -15,7 +15,7 @@ import Foundation
 //  8  "Why this" exists only when the entry carries a forecast; an entry with none has no control and no empty text
 //  9  the sentence being spoken is the one at the player's index; an index past the end shows no sentence, not a crash
 // 10  podcasts and clips show no sentence (no transcript on the phone): the progress line alone
-// 11  suggestions depend on what is on air; there are never more than four
+//  11 (removed by the owner, 2026-11-17: the Say something row)
 // 12  Heard lists the last entries that ended, newest first, with one word each; a failed entry is not called finished
 // 13  a reorder is one `move` op (after the entry that now precedes it, `next` at the head, `end` at the foot); a swipe is one `remove`;
 //     a tap is the same op "play now" sends (`move` at now); replay from Heard is one `place` at now of a fresh copy
@@ -46,14 +46,6 @@ public struct RadioHeardRow: Codable, Sendable, Equatable {
     /// finished | skipped | cut | left | failed
     public var outcome = ""
     public init() {}
-}
-
-public struct RadioSuggestion: Codable, Sendable, Equatable {
-    public var n = 0
-    /// What the button says, and the words that go as a turn when it is tapped.
-    public var label = ""
-    public init() {}
-    public init(n: Int, label: String) { self.n = n; self.label = label }
 }
 
 public struct RadioPageInfo: Codable, Sendable, Equatable {
@@ -101,7 +93,6 @@ public struct RadioPageInfo: Codable, Sendable, Equatable {
     /// The desk could not be reached ("" when all is well).
     public var notice = ""
 
-    public var suggestions: [RadioSuggestion] = []
     public var heard: [RadioHeardRow] = []
     public init() {}
 }
@@ -139,7 +130,6 @@ public struct RadioPageInput: Sendable {
 public enum RadioPage {
     public static let nextShown = 5
     public static let heardShown = 5
-    public static let maxSuggestions = 4
 
     // MARK: Words
 
@@ -187,10 +177,10 @@ public enum RadioPage {
         return f.string(from: now)
     }
 
+    /// The app's one day-part word (PhoneOpening.hello): morning from 5, afternoon from 12, evening from 18, plain "Hello" after midnight.
     static func daypart(_ now: Date, timeZone: TimeZone) -> String {
         var c = Calendar(identifier: .gregorian); c.timeZone = timeZone
-        let h = c.component(.hour, from: now)
-        return h >= 5 && h < 12 ? "Good morning" : (h >= 12 && h < 18 ? "Good afternoon" : "Good evening")
+        return PhoneOpening.hello(now, calendar: c)
     }
 
     /// "Good evening. Six things are ready, about eighteen minutes. Press play and I'll start with the opening."
@@ -204,20 +194,6 @@ public enum RadioPage {
         let about = minutes == 1 ? "about a minute" : "about \(word(minutes)) minutes"
         let start = first.kind == .opening ? "the opening" : first.displayTitle
         return "\(hello). \(things), \(about). Press play and I\u{2019}ll start with \(start)."
-    }
-
-    /// Three or four things to say, by what is on air. Tapping one sends its label as a turn.
-    public static func suggestions(onAir: RunSheetEntry?) -> [RadioSuggestion] {
-        let labels: [String]
-        switch onAir?.kind {
-        case nil: labels = ["What else is new", "Read my book", "What is in my mail"]
-        case .story?, .page?: labels = ["Skip this", "More on this", "What else is new", "Read my book"]
-        case .clip?, .episode?: labels = ["Skip this", "More from this show", "What else is new", "Read my book"]
-        case .document?: labels = ["Skip this", "What else is new", "Where was I"]
-        case .answer?: labels = ["Skip this", "More on this", "Back to the story"]
-        case .opening?, .transition?, .mail?, .result?: labels = ["Skip this", "What else is new", "Read my book"]
-        }
-        return labels.prefix(maxSuggestions).enumerated().map { RadioSuggestion(n: $0.offset, label: $0.element) }
     }
 
     /// The page an entry's title opens: a story, a book, a file.
@@ -314,19 +290,18 @@ public enum RadioPage {
                 : (i.notice != "" ? "Nothing is coming up yet." : (i.dry ? "Nothing is coming up. Add a story, a page or a podcast, or open a place below." : "The desk will write more shortly."))
         }
 
-        o.suggestions = suggestions(onAir: air)
-
         o.heard = tail.reversed().prefix(heardShown).enumerated().map { k, e in
             var r = RadioHeardRow()
             r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.displayTitle; r.outcome = outcomeWord(e)
             return r
         }
 
-        if air == nil, !ahead.isEmpty { o.greeting = greeting(ahead: ahead, now: i.now, timeZone: i.timeZone) }
 
         // the status line, one state at a time; the first that is true wins
+        // (the greeting is not offered while the radio cannot speak: it would say "Press play" over the reason)
         let listening = ["listening", "talking", "heard"].contains(i.barState)
         let failure = i.playing ? "" : i.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if air == nil, failure.isEmpty, !ahead.isEmpty { o.greeting = greeting(ahead: ahead, now: i.now, timeZone: i.timeZone) }
         if listening {
             o.state = "listening"; o.statusLine = "Listening"; o.dim = true
             let w = i.heardWords.trimmingCharacters(in: .whitespacesAndNewlines)

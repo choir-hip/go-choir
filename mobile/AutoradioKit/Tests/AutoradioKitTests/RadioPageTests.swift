@@ -56,6 +56,10 @@ final class RadioPageTests: XCTestCase {
         XCTAssertEqual(p.cannotSpeak, "Could not play \u{201C}X\u{201D}.")
         i.playing = true
         XCTAssertEqual(RadioPage.make(i).state, "onair", "a stale message does not hide a voice that is speaking")
+        var cold = input([entry("a"), entry("b")]); cold.message = "Can\u{2019}t speak: the audio session could not be taken"
+        let c = RadioPage.make(cold)
+        XCTAssertEqual(c.greeting, "", "while it cannot speak the greeting does not say Press play"); XCTAssertEqual(c.state, "error")
+        XCTAssertEqual(c.statusLine, "Can\u{2019}t speak: the audio session could not be taken"); XCTAssertEqual(c.action, "Try again")
     }
 
     // 4 an answer on air holds the entry it cut
@@ -98,6 +102,16 @@ final class RadioPageTests: XCTestCase {
     func test05c_TheDemoSheetFixturesAreBundledAndDecode() async throws {
         for n in ["cold", "day", "answer", "empty"] { XCTAssertNotNil(Demo.runSheet(n), n) }
         XCTAssertNil(Demo.runSheet("nope"))
+    }
+
+    func test05d_TheDayPartIsTheAppsOneFunction() {
+        var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!
+        func at(_ h: Int) -> Date { c.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: h, minute: 53))! }
+        XCTAssertEqual(PhoneOpening.hello(at(0), calendar: c), "Hello"); XCTAssertEqual(PhoneOpening.hello(at(5), calendar: c), "Good morning")
+        XCTAssertEqual(PhoneOpening.hello(at(12), calendar: c), "Good afternoon"); XCTAssertEqual(PhoneOpening.hello(at(18), calendar: c), "Good evening")
+        XCTAssertEqual(PhoneOpening.greeting(at(0), calendar: c), "Hello.")
+        var i = input([entry("a")]); i.now = at(0); i.timeZone = c.timeZone
+        XCTAssertTrue(RadioPage.make(i).greeting.hasPrefix("Hello. One thing is ready"))
     }
 
     // 6 transitions are not rows
@@ -195,18 +209,6 @@ final class RadioPageTests: XCTestCase {
         let p = RadioPage.make(i)
         XCTAssertEqual(p.sentence, ""); XCTAssertEqual(p.elapsed, "1:12"); XCTAssertEqual(p.remaining, "-3:40")
         XCTAssertEqual(p.kindLabel, "Podcast"); XCTAssertEqual(p.source, "Harbour Hour")
-    }
-
-    // 11 suggestions
-    func test11_SuggestionsFollowWhatIsOnAir() {
-        func labels(_ e: RunSheetEntry?) -> [String] { RadioPage.suggestions(onAir: e).map(\.label) }
-        XCTAssertEqual(labels(entry("s", .story, state: .onAir)), ["Skip this", "More on this", "What else is new", "Read my book"])
-        XCTAssertTrue(labels(entry("p", .episode, state: .onAir)).contains("More from this show"))
-        XCTAssertEqual(labels(nil).first, "What else is new")
-        for k in [RunSheetKind.opening, .transition, .story, .clip, .episode, .page, .document, .mail, .result, .answer] {
-            let l = labels(entry("k", k, state: .onAir)); XCTAssertTrue((3...4).contains(l.count), "\(k)")
-        }
-        XCTAssertEqual(RadioPage.suggestions(onAir: nil).map(\.n), [0, 1, 2])
     }
 
     // 12 heard

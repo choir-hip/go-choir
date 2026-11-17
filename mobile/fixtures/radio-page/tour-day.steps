@@ -33,11 +33,6 @@ clock +900 real
 clock data
 tree
 screenshot @S@/B06-why-this.png window
-tap radio-say-0
-clock +2500 real
-clock data
-tree
-screenshot @S@/B07-after-skip-this.png window
 tap radio-place-mail
 clock +1500 real
 clock data

@@ -50,10 +50,13 @@ public enum PhoneOpening {
         guard let last = t.last else { return "" }
         return ".!?".contains(last) ? t : t + "."
     }
-    public static func greeting(_ now: Date, calendar: Calendar = .current) -> String {
+    /// The app's one day-part word: morning from 05:00, afternoon from 12:00, evening from 18:00, and plain "Hello" from midnight to 05:00
+    /// (evening ends at midnight). The opening and the Autoradio page both use it.
+    public static func hello(_ now: Date, calendar: Calendar = .current) -> String {
         let h = calendar.component(.hour, from: now)
-        return h < 5 ? "Good evening." : h < 12 ? "Good morning." : h < 18 ? "Good afternoon." : "Good evening."
+        return h < 5 ? "Hello" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
     }
+    public static func greeting(_ now: Date, calendar: Calendar = .current) -> String { hello(now, calendar: calendar) + "." }
     /// The first sentence of a dek, with no closing mark; "" when it only says the headline again.
     static func lead(dek: String, title: String) -> String {
         guard let first = BarTracker.sentences(dek.trimmingCharacters(in: .whitespacesAndNewlines)).first else { return "" }
