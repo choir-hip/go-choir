@@ -21,7 +21,7 @@ carries "checked" (the date someone read the code or proof). A row with no proof
 5. Texture writes one piece at a time. Research is read-only on the world. Engineering mutates only inside capsules. Management admits engineering.
 6. Prompts are embedded yaml, seeded to disk per computer; a per-owner override file exists, but its write route is refused on deployed computers (section 3, 8).
 7. Every Jev call goes through one job (`internal/agentcore/jev_job.go`); `scripts/check-jev-entry` fails a second path.
-8. Podcast clips are matched by an operator's hand. The automatic matcher was removed on 2026-11-16 (CI refused it).
+8. Podcast clips: the worker's `match` mode (no model, so no Jev call) ranks and writes clips by explicit rules; written in lane `clips-auto-match`, not yet run against staging. The Jev-based matcher was removed on 2026-11-16 (CI refused it).
 9. Nothing on the phone has been heard by the owner as of the overnight report: sound, voice and clips on the device are unproven.
 10. `sourcecycled`, World Wire and Universal Wire are retired names; Dolt and Store B are deleted (2026-10-30).
 
@@ -79,7 +79,7 @@ Texture and the router; the file holds only `autoradio`.
 | Stories open and publish from source schedules and captures | proven | design `autopaper-sw-design-2026-10-09.md`; no `sourcecycled` |
 | Jev, one entry point | proven | `internal/agentcore/jev_job.go`, gate `scripts/check-jev-entry`; gateway hour summaries show `failures=0` (ledger C104 settled true 2026-11-16) |
 | Search providers | partial | Per the overnight report, five paid providers out of quota, search runs on two. Which two: unknown; settle by `status-hourly` search section (itself reported wrong, problem `status-hourly-reports-zero-search-answers...-2026-11-16`) |
-| Podcast clips | partial | Worker `cmd/podcast-worker` records and transcribes; ranking tool `internal/podcastmatch` with no model; **a human-run agent approves matches**; the worker runs on a Mac session and stops when it ends. `GET /api/platform/podcast-clips` served 26 clips for 11 stories on 2026-11-16. Automatic matching: removed (CI run 43804540972) |
+| Podcast clips | partial | Worker `cmd/podcast-worker` records and transcribes; ranking tool `internal/podcastmatch` with no model; `podcast-worker match` (rules in `internal/podcastmatch/auto.go`: time, sentence edges, score, entity gate, margin; no model) is written and tested but **not run against staging until the lead does**; before it, matches were by a human-run agent; the worker runs on a Mac session and stops when it ends. `GET /api/platform/podcast-clips` served 26 clips for 11 stories on 2026-11-16. The Jev-based matcher was removed (CI run 43804540972) |
 | Headline "failed search" stories | known defect | problem `paper-publishes-stories-whose-headline-is-a-failed-search-2026-11-16` |
 | Hourly status | built | `scripts/status-hourly` (paper usage plus storage, one line); its search count is wrong |
 

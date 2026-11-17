@@ -32,6 +32,8 @@ type fakeBackend struct {
 	pending []PendingEpisode
 	put     []string
 	polls   int
+	putErr  error
+	onPut   func(Result)
 }
 
 func (b *fakeBackend) PendingEpisodes(_ context.Context, _ time.Time, _ int) ([]PendingEpisode, error) {
@@ -41,9 +43,15 @@ func (b *fakeBackend) PendingEpisodes(_ context.Context, _ time.Time, _ int) ([]
 	return append([]PendingEpisode(nil), b.pending...), nil
 }
 
-func (b *fakeBackend) PutTranscript(_ context.Context, id, _ string, _ Result) error {
+func (b *fakeBackend) PutTranscript(_ context.Context, id, _ string, r Result) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.putErr != nil {
+		return b.putErr
+	}
+	if b.onPut != nil {
+		b.onPut(r)
+	}
 	b.put = append(b.put, id)
 	rest := b.pending[:0]
 	for _, p := range b.pending {
@@ -103,7 +111,7 @@ func (c *clock) advance(d time.Duration) {
 	c.mu.Unlock()
 }
 
-func runServe(t *testing.T, b *fakeBackend, e *fakeEngine, stopAfterSleeps int, cfg ServeConfig) (sleeps []time.Duration, logs []string) {
+func runServe(t *testing.T, b *fakeBackend, e Engine, stopAfterSleeps int, cfg ServeConfig) (sleeps []time.Duration, logs []string) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
