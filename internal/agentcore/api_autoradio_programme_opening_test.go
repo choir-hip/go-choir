@@ -194,15 +194,17 @@ func TestC3_BetweenOnAStoryIsDropped(t *testing.T) {
 func TestC4_IdentAndBridgeAreAcceptedAndRenamed(t *testing.T) {
 	rt, _ := radioRuntime(t, linesScript(
 		progLine(map[string]any{"kind": "ident", "title": "On air", "text": "This is the radio.", "p_heard": nil, "caused_by": nil, "cites": nil}),
+	))
+	_, evs := progRun(t, rt, openBody())
+	if segs := segmentEvents(evs); len(segs) != 1 || segs[0]["kind"] != "opening" {
+		t.Fatalf("(C4) ident on an open request: %+v", segs)
+	}
+	rt, _ = radioRuntime(t, linesScript(
 		progLine(map[string]any{"kind": "bridge", "title": "", "text": "Closer to home.", "p_heard": nil, "caused_by": nil, "cites": nil}),
 	))
-	_, evs := progRun(t, rt, progBody())
-	var kinds []any
-	for _, s := range segmentEvents(evs) {
-		kinds = append(kinds, s["kind"])
-	}
-	if fmt.Sprint(kinds) != "[opening transition]" {
-		t.Fatalf("(C4) kinds %v", kinds)
+	_, evs = progRun(t, rt, progBody())
+	if segs := segmentEvents(evs); len(segs) != 1 || segs[0]["kind"] != "transition" {
+		t.Fatalf("(C4) bridge: %+v", segs)
 	}
 }
 
@@ -368,5 +370,59 @@ func TestC3_AForwardBeforeAtTheCapIsRefused(t *testing.T) {
 	_, evs := progRun(t, rt, progBody())
 	if n := len(segmentEvents(evs)); n != 5 || len(eventsNamed(evs, "done")) != 1 {
 		t.Fatalf("(C3) %d segments, events %+v", n, evs)
+	}
+}
+
+// An opening exists only when the radio is opened. On any other cause a line
+// of kind opening (or its old name ident) is dropped at validation, never
+// sent and never written; the rest of the answer stands.
+func TestExtendDropsAnOpeningLine(t *testing.T) {
+	for _, kind := range []string{"opening", "ident"} {
+		for _, cause := range []string{"extend", "turn", "result"} {
+			rt, _ := radioRuntime(t, linesScript(
+				progLine(map[string]any{"kind": kind, "title": "", "text": "Hello again.", "p_heard": nil, "caused_by": nil, "cites": nil}),
+				titled("First", nil)))
+			_, evs := progRun(t, rt, progBody(func(m map[string]any) { m["cause"] = cause }))
+			segs := segmentEvents(evs)
+			if len(segs) != 1 || segs[0]["kind"] == "opening" {
+				t.Fatalf("%s/%s: segments %+v", kind, cause, segs)
+			}
+			done := eventsNamed(evs, "done")
+			if len(done) != 1 || done[0].Data["dropped"].(float64) != 1 {
+				t.Fatalf("%s/%s: done %+v", kind, cause, done)
+			}
+			sid := stretchIDOf(t, evs)
+			idx := getRecord(t, rt, "autoradio-stretch:"+sid)
+			if idx == nil || !strings.Contains(idx.SubjectRefs["dropped"], "only when the radio is opened") {
+				t.Errorf("%s/%s: index %+v", kind, cause, idx)
+			}
+			for _, r := range tape(t, rt, "autoradio.segment") {
+				if r.SubjectRefs["kind"] == "opening" {
+					t.Errorf("%s/%s: an opening was written: %+v", kind, cause, r)
+				}
+			}
+		}
+	}
+}
+
+// A model that greets and then writes entries, some of them bad, still plays:
+// the dropped opening is not one of the three invalid lines in a row.
+func TestExtendOpeningDoesNotCountTowardTheInvalidRun(t *testing.T) {
+	bad := func(n string) string { return titled(n, map[string]any{"p_heard": 9}) }
+	rt, _ := radioRuntime(t, linesScript(bad("1"), openingLine("Hello again."), bad("2"), titled("Good", nil)))
+	_, evs := progRun(t, rt, progBody())
+	if got := strings.Join(segmentTitles(evs), "|"); got != "Good" || len(eventsNamed(evs, "done")) != 1 || len(eventsNamed(evs, "error")) != 0 {
+		t.Fatalf("titles %q, events %+v", got, evs)
+	}
+	if d := eventsNamed(evs, "done")[0].Data["dropped"].(float64); d != 3 {
+		t.Errorf("dropped = %v, want 3", d)
+	}
+}
+
+func TestExtendOfOnlyAnOpeningIsTheNoValidSegmentPath(t *testing.T) {
+	rt, _ := radioRuntime(t, linesScript(openingLine("Hello again.")))
+	_, evs := progRun(t, rt, progBody())
+	if len(segmentEvents(evs)) != 0 || len(eventsNamed(evs, "error")) != 1 {
+		t.Fatalf("events %+v", evs)
 	}
 }

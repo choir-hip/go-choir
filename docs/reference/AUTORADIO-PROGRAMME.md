@@ -105,11 +105,19 @@ are recognised and ignored until station L3.
   `opening_only`); the response is `done`, not an error. A lesson line or an
   invalid line after the opening is not a surplus line: it is ignored or
   noted, and reading goes on. An opening carries no forecast and no claim.
-- **Other causes:** the cap is 6 segments (was 30); a seventh line is dropped
+- **Other causes:** a line of kind `opening` (or `ident`) is dropped at
+  validation (noted in the index's `dropped`, counted in `done.dropped`, never
+  sent, never written). It does not count toward the three invalid lines in a
+  row, so a model that greets and then writes good entries still plays;
+  if nothing valid remains the answer is the usual "wrote no valid segment"
+  failure. Found 2026-11-17: the deployed proof showed `kinds=opening,headlines`
+  for an extend. The cap is 6 segments (was 30); a seventh line is dropped
   and the call ends `completed`, as the old cap did.
 - **transition `between`:** the model may write
-  `between: {after_segment, before_segment}`, each `s<n>` (the n-th segment of
-  this response, from 0) or `ahead:<n>` (the n-th title of `ahead_titles`,
+  `between: {after_segment, before_segment}`, each `s<n>` (the n-th entry
+  written in this response, from 0: it counts entries written, not the lines
+  the model wrote, so a dropped line takes no number; a `between` that names
+  an entry that does not exist because of a dropped line drops the transition) or `ahead:<n>` (the n-th title of `ahead_titles`,
   from 1). `after_segment` must name an entry that already exists: an
   earlier `s<n>` of this response (n below the transition's own number) or an
   `ahead:<n>` within the list. `before_segment` may be `ahead:<n>`, an
@@ -117,8 +125,7 @@ are recognised and ignored until station L3.
   which must be below the cap of 6. That one forward reference is allowed and
   is not held: the transition is committed and sent when its line validates,
   like any entry, so the entry it names may never arrive if the response ends
-  first. The phone drops a transition whose `before` entry is not the entry
-  that follows it (it records `transition_orphaned`). When a response ends on a
+  first. When a response ends on a
   transition whose `before` is that forward reference, the index's `dropped`
   list carries a note (a note only; the event was already sent). `after_segment` and
   `before_segment` must differ, and no other field is accepted. A line that fails is dropped. The

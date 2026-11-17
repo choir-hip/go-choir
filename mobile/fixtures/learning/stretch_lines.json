@@ -508,12 +508,12 @@
    "drop_reason": "forecast on a non-content kind"
   },
   {
-   "name": "valid ident",
+   "name": "valid bridge (an extend takes no opening, so the ident case is a bridge)",
    "validator": "ident, bridge, answer, result carry no forecast",
    "valid": true,
    "line": {
-    "kind": "ident",
-    "text": "This is the radio."
+    "kind": "bridge",
+    "text": "Closer to home."
    }
   }
  ],

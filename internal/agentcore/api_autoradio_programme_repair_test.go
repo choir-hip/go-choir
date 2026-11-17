@@ -19,7 +19,7 @@ import (
 )
 
 func identLine() string {
-	return progLine(map[string]any{"kind": "ident", "title": "On air", "text": "This is the radio.", "p_heard": nil, "caused_by": nil, "cites": nil})
+	return progLine(map[string]any{"kind": "transition", "title": "", "text": "Now, closer to home.", "p_heard": nil, "caused_by": nil, "cites": nil})
 }
 
 // F45 (B1): a replay streams only the leading run of segments that have what
@@ -32,11 +32,11 @@ func TestF45_AReplayNeverStreamsASegmentWhoseClaimWasNotWritten(t *testing.T) {
 	w := httptest.NewRecorder()
 	progServe(h, w, progBody(withRequestID("f45")))
 	live := parseSSE(t, w.Body.String())
-	if strings.Join(segmentTitles(live), "|") != "On air|First" {
+	if strings.Join(segmentTitles(live), "|") != "|First" {
 		t.Fatalf("live stream %q", segmentTitles(live))
 	}
 	_, replay := progRun(t, rt, progBody(withRequestID("f45")))
-	if got := strings.Join(segmentTitles(replay), "|"); got != "On air|First" {
+	if got := strings.Join(segmentTitles(replay), "|"); got != "|First" {
 		t.Fatalf("(F45) replay streamed %q: a segment without its claim, or too little", got)
 	}
 	if len(eventsNamed(replay, "error")) != 1 || len(eventsNamed(replay, "done")) != 0 {
@@ -58,7 +58,7 @@ func TestF45_APanicBetweenTheSegmentRecordAndItsClaimThenReplay(t *testing.T) {
 		t.Fatal("the segment record of s1 is not on the tape: the panic did not land between the two writes")
 	}
 	_, replay := progRun(t, rt, progBody(withRequestID("f45p")))
-	if got := strings.Join(segmentTitles(replay), "|"); got != "On air" {
+	if got := strings.Join(segmentTitles(replay), "|"); got != "" {
 		t.Fatalf("(F45) replay streamed %q", got)
 	}
 }

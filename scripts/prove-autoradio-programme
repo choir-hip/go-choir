@@ -5,7 +5,7 @@ Posts POST /api/autoradio/programme with cause "open" five times and cause
 "extend" five times (counts with --count), and prints for each request the time
 from sending to the first `segment` event and to `done`, the kinds returned and
 the dropped count. Then the median per cause. An open must return exactly one
-`opening`; an extend one to six entries. Exit 0 when every request completed
+`opening`; an extend one to six entries, none of kind `opening`. Exit 0 when every request completed
 and those two shapes held, 1 otherwise, 2 on bad arguments. The claim this
 checks (p=0.7): the median open time to first segment is under 6 s. Each line
 also prints the server's timings_ms from `done` (first_delta, first_segment_sent,
@@ -133,7 +133,7 @@ def main():
         print("cause %s" % cause)
         for i in range(args.count):
             r = one(args, key, cause)
-            shape = (r["kinds"] == ["opening"]) if cause == "open" else (1 <= len(r["kinds"]) <= 6)
+            shape = (r["kinds"] == ["opening"]) if cause == "open" else (1 <= len(r["kinds"]) <= 6 and "opening" not in r["kinds"])
             good = r["error"] is None and r["done"] is not None and shape
             ok = ok and good
             if r["first"] is not None:
