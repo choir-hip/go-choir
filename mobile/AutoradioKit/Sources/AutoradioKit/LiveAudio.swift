@@ -244,7 +244,9 @@ public final class LiveAudio: @unchecked Sendable {
         if !wantMic, voiceProcessing { replaceEngine() }
         voiceProcessing = false
         if wantMic {
-            #if os(iOS)
+            // Voice processing I/O (echo cancellation) is on the iPhone and on the Mac alike: AVAudioIONode.h declares
+            // setVoiceProcessingEnabled(_:) for macOS 10.15 and iOS 13, with the same rule (the engine stopped, both IO nodes switch together).
+            #if os(iOS) || os(macOS)
             do { try engine.inputNode.setVoiceProcessingEnabled(vp); voiceProcessing = vp }
             catch { onNotice?("error", "voice processing \(vp ? "on" : "off") failed: \(error)") }
             #endif

@@ -90,7 +90,9 @@ public final class KeychainKeyStore: KeyStore, @unchecked Sendable {
         SecItemDelete(base(account) as CFDictionary)
         var add = base(account)
         add[kSecValueData as String] = Data(value.utf8)
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        #if os(iOS)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly   // data-protection class: iOS only (the Mac's login keychain has none)
+        #endif
         let st = SecItemAdd(add as CFDictionary, nil)
         if st != errSecSuccess { throw LabError.unavailable("keychain refused the write (\(st))") }
     }

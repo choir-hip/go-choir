@@ -383,3 +383,40 @@ animation research.
   `NSSpeechRecognitionUsageDescription` for macOS from `strings/en.json`; `device.microphone-background` needs nothing on a Mac. A
   development build is ad hoc signed with no hardened runtime, so the first microphone use shows the system prompt and nothing else is
   required; an `exact release` build derives the hardened-runtime audio-input entitlement from the grant.
+
+### Audio, sign-in and files on the Mac
+
+- **Audio [src]:** the engine runs with no session: `AutoradioKit`'s `LiveAudio` asks `AVAudioInputNode.setVoiceProcessingEnabled(_:)` on macOS
+  as on iOS (`AVAudioIONode.h` in the macOS SDK declares it for macOS 10.15; both IO nodes switch together, and only while the engine is
+  stopped, which `bring(voiceProcessing:)` already honours). Play, pause and the single-voice hold live in the engine and the run sheet, not
+  in a session. Device changes (headphones in or out) arrive as `AVAudioEngineConfigurationChange`, which `LiveAudio.observe()` already
+  handles. **[unrun]** by ear: echo cancellation with speakers, and whether the voice-processing input node's format (it can be more
+  than one channel on a Mac) converts to the mono bus (`Resampler`).
+- **Sign-in:** the approval page opens through `Platform.open` (`NSWorkspace`). The key is stored in the Keychain without the iOS-only
+  `kSecAttrAccessible` class on the Mac. **[unrun]** whether an ad hoc signed app can write the login keychain without a prompt.
+- **Files and the Reader:** the picker is Exact's `input type="file"` (the host opens `NSOpenPanel` on the Mac); PDFKit and ImageIO are
+  present on macOS. The Reader's web view is our `WebPageView` (`WKWebView`; `drawsBackground` is false on the Mac).
+- **Proof:** `mobile/scripts/proof-mac.sh` drives the Mac app through `agent macos` and prints what a person must check by ear.
+
+### Apple privacy manifests (required-reason APIs) at this pin
+
+**[src]** `host/apple/privacy.mjs`, `docs/reference.md` "Apple privacy manifests". An iOS build scans every binary of a bundle (the app,
+Exact's `libexact_*.dylib` and our `libExactPkg_autoradio.dylib` together) for required-reason APIs and stops with, for example,
+"uses disk-space APIs without an audited reason" when one lacks a declaration. It audits five categories (file timestamp, system boot time,
+disk space, active keyboards, user defaults) and refuses `getattrlist` without an audit; Exact seeds its own reasons for the first, second,
+fourth and fifth, never for disk space. macOS skips the check (Apple's reporting excludes it). An app declares its own in
+`PrivacyInfo.xcprivacy` beside `app.json`; reasons are merged, each must be one of Apple's approved codes for the category, and only
+categories the binaries really use are written.
+
+Ours is `mobile/AutoradioLab/PrivacyInfo.xcprivacy`, with codes read from Apple's "NSPrivacyAccessedAPIType" page (2026-11-17):
+
+| Category | Our use | Code |
+| --- | --- | --- |
+| Disk space | `volumeAvailableCapacityForImportantUsage` in `VoiceSetup` and `Configurator`: the setup plan and model downloads depend on free space | `E174.1` (check there is sufficient space to write files) |
+| File timestamp | `attributesOfItem` size and modification date in `ModelStore`, `PaperSource`, `ChoirFiles`, `ReaderShelf`: files in the app container | `C617.1` |
+| System boot time | `ProcessInfo.systemUptime` for intervals and frame times inside the app | `35F9.1` |
+| User defaults | `UserDefaults.standard` for the app's own settings | `CA92.1` |
+
+Not declared: active keyboards (we never read them; Exact declares its own). The disk-space and boot-time information must not leave the
+device: it does not, except that turn timings in an export the person shares are intervals, not boot time. Re-run this table when a new use
+of one of these APIs is added.
