@@ -1,4 +1,5 @@
-# Radio page tour C: an answer on air. Install runsheet-answer.json (a story cut by an answer; the answer first ahead) as above.
+# Radio page tour (answer). Demo mode, and the launch default AutoradioDemoSheet = answer (defaults write news.choir.autoradio.lab AutoradioDemoSheet answer),
+# which loads fixtures/demo/runsheet-answer.json as the run sheet and keeps the station from starting by itself. @S@ is the shots directory.
 clock data
 clock +1500 real
 clock data

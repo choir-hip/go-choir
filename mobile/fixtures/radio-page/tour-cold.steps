@@ -1,6 +1,7 @@
-# Radio page tour A: the cold start. The product starts the opening by itself 2 s after launch (Station.start, in demo and not), so the cold
-# start (greeting, one Play) exists only before that: the first shot is taken at once, with no wait. If it already plays, run again. Install runsheet-cold.json as <app container>/Library/Application Support/Autoradio/runsheet.json
-# (delete open-pages.json too) before the launch. Demo mode on. @S@ is the shots directory.
+# Radio page tour (cold). Demo mode, and the launch default AutoradioDemoSheet = cold (defaults write news.choir.autoradio.lab AutoradioDemoSheet cold),
+# which loads fixtures/demo/runsheet-cold.json as the run sheet and keeps the station from starting by itself. @S@ is the shots directory.
+clock data
+clock +1500 real
 clock data
 tree
 screenshot @S@/A01-cold-start.png window

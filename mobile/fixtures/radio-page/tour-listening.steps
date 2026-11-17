@@ -1,5 +1,6 @@
-# Radio page tour E (best effort): Listening, by the lab's scripted turn (as proof-lane1.sh drive C). Install runsheet-day.json first.
-# The page state is driven by the engine's phase, which only a turn changes; no file can set it. Timing of the shots is the risk.
+# Radio page tour (listening). Demo mode, and the launch default AutoradioDemoSheet = day (defaults write news.choir.autoradio.lab AutoradioDemoSheet day),
+# which loads fixtures/demo/runsheet-day.json as the run sheet and keeps the station from starting by itself. @S@ is the shots directory.
+# Best effort: Listening is driven by the engine's phase (a scripted turn through the Components page); no file can set it.
 clock data
 clock +1500 real
 clock data

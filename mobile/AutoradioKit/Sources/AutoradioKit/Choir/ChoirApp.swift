@@ -180,6 +180,11 @@ public final class ChoirApp: @unchecked Sendable {
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
             RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
+            if let name = Demo.sheetName, let sheet = Demo.runSheet(name) {          // demo test affordance (Demo.sheetKey): a tour's own run sheet
+                RunSheetStore.shared.adopt(sheet, epoch: 0)
+                Station.shared.holdForDemoSheet = true
+                p.aheadChanged = nil
+            }
             Station.shared.startDJ = { [weak me] in await me?.startRadio() }       // the entry Play uses
         }
         runtime.player.onTransport = { cmd in

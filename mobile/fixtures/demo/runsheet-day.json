@@ -16,7 +16,7 @@
     },
     "ended": {
      "outcome": "finished",
-     "at": "2026-11-17T08:00:00Z",
+     "at": "",
      "last_block": 0
     }
    },
@@ -34,7 +34,7 @@
     },
     "ended": {
      "outcome": "skipped",
-     "at": "2026-11-17T08:00:00Z",
+     "at": "",
      "last_block": 0
     }
    },
@@ -52,7 +52,7 @@
     },
     "ended": {
      "outcome": "left",
-     "at": "2026-11-17T08:00:00Z",
+     "at": "",
      "last_block": 0
     }
    },
@@ -62,7 +62,7 @@
     "placed_by": "desk",
     "state": "ahead",
     "title": "The harbour barrier passes its first test",
-    "est_seconds": 150,
+    "est_seconds": 240,
     "text": "The harbour barrier passes its first test. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
     "source": {
      "ref": "pub:harbour-barrier",
@@ -80,7 +80,7 @@
     "placed_by": "desk",
     "state": "ahead",
     "title": "A library opens late for exam week",
-    "est_seconds": 95,
+    "est_seconds": 240,
     "text": "A library opens late for exam week. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
     "source": {
      "ref": "pub:library-late",
@@ -93,7 +93,7 @@
     "placed_by": "listener",
     "state": "ahead",
     "title": "Why the tram fares changed",
-    "est_seconds": 140,
+    "est_seconds": 240,
     "text": "Why the tram fares changed. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
     "source": {
      "ref": "pub:tram-fares",
@@ -106,7 +106,7 @@
     "placed_by": "desk",
     "state": "ahead",
     "title": "Seven new lamps for the old bridge",
-    "est_seconds": 80,
+    "est_seconds": 240,
     "text": "Seven new lamps for the old bridge. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
     "source": {
      "ref": "pub:bridge-lamps",
@@ -119,7 +119,7 @@
     "placed_by": "desk",
     "state": "ahead",
     "title": "The market adds a winter day",
-    "est_seconds": 70,
+    "est_seconds": 240,
     "text": "The market adds a winter day. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
     "source": {
      "ref": "pub:winter-market",
@@ -145,7 +145,7 @@
     "placed_by": "desk",
     "state": "ahead",
     "title": "The ferry timetable changes in January",
-    "est_seconds": 85,
+    "est_seconds": 240,
     "text": "The ferry timetable changes in January. Invented fixture words for the tour.",
     "source": {
      "ref": "pub:ferry-times",
@@ -158,7 +158,7 @@
     "placed_by": "desk",
     "state": "ahead",
     "title": "A bakery wins the street award",
-    "est_seconds": 85,
+    "est_seconds": 240,
     "text": "A bakery wins the street award. Invented fixture words for the tour.",
     "source": {
      "ref": "pub:bakery-award",
@@ -171,7 +171,7 @@
     "placed_by": "desk",
     "state": "ahead",
     "title": "Rain returns to the coast on Friday",
-    "est_seconds": 85,
+    "est_seconds": 240,
     "text": "Rain returns to the coast on Friday. Invented fixture words for the tour.",
     "source": {
      "ref": "pub:coast-rain",

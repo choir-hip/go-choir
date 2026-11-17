@@ -84,6 +84,22 @@ final class RadioPageTests: XCTestCase {
         XCTAssertEqual(RadioPage.make(input([])).greeting, "")
     }
 
+    // the cold start is nothing played lately, not only an empty tail (every real launch has yesterday's entries behind it)
+    func test05b_ColdMeansNothingHeardLately() {
+        func ended(_ at: String) -> RunSheetEntry { var e = entry("h", state: .heard, outcome: .finished); e.ended = RunSheetEnded(outcome: .finished, at: at); return e }
+        var i = input([ended("2023-11-13T09:00:00Z"), entry("a", .opening, by: .phone, est: 120), entry("b", est: 1680)])
+        XCTAssertEqual(RadioPage.make(i).state, "cold", "yesterday's entries do not stop the greeting")
+        XCTAssertTrue(RadioPage.make(i).greeting.contains("two things are ready") || RadioPage.make(i).greeting.contains("Two things are ready"))
+        XCTAssertTrue(RadioPage.make(i).greeting.contains("about thirty minutes"))
+        i = input([ended("2023-11-14T22:00:00Z"), entry("a")])
+        XCTAssertEqual(RadioPage.make(i).state, "ready", "heard fifteen minutes ago: not a cold start")
+    }
+
+    func test05c_TheDemoSheetFixturesAreBundledAndDecode() async throws {
+        for n in ["cold", "day", "answer", "empty"] { XCTAssertNotNil(Demo.runSheet(n), n) }
+        XCTAssertNil(Demo.runSheet("nope"))
+    }
+
     // 6 transitions are not rows
     func test06_ATransitionIsNeitherUpNextNorHeard() {
         var t = entry("t", .transition, title: ""); t.title = ""
@@ -283,8 +299,8 @@ final class RadioPageTests: XCTestCase {
 
     // the tour's fixtures decode and say what the tour expects of them
     func test16_TheTourFixturesDecode() throws {
-        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("fixtures/radio-page")
-        for (name, ahead, heard) in [("runsheet-cold.json", 5, 0), ("runsheet-day.json", 9, 3)] {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("fixtures/demo")
+        for (name, ahead, heard) in [("runsheet-cold.json", 6, 0), ("runsheet-day.json", 9, 3), ("runsheet-answer.json", 3, 1), ("runsheet-empty.json", 0, 1)] {
             let d = try Data(contentsOf: dir.appendingPathComponent(name))
             let saved = try JSONDecoder().decode(RunSheetStore.Saved.self, from: d)
             let p = RadioPage.make(RadioPageInput(sheet: saved.sheet))

@@ -1,4 +1,5 @@
-# Radio page tour D: nothing ahead. Install runsheet-empty.json (one heard entry, nothing ahead) as above.
+# Radio page tour (empty). Demo mode, and the launch default AutoradioDemoSheet = empty (defaults write news.choir.autoradio.lab AutoradioDemoSheet empty),
+# which loads fixtures/demo/runsheet-empty.json as the run sheet and keeps the station from starting by itself. @S@ is the shots directory.
 clock data
 clock +1500 real
 clock data

@@ -166,7 +166,8 @@ public enum RadioPage {
 
     private static let small = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen",
                                 "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"]
-    static func word(_ n: Int) -> String { n >= 0 && n < small.count ? small[n] : String(n) }
+    private static let tens = [25: "twenty-five", 30: "thirty", 35: "thirty-five", 40: "forty", 45: "forty-five", 50: "fifty", 55: "fifty-five", 60: "sixty"]
+    static func word(_ n: Int) -> String { n >= 0 && n < small.count ? small[n] : (tens[n] ?? String(n)) }
 
     public static func outcomeWord(_ e: RunSheetEntry) -> String {
         switch e.ended?.outcome ?? .finished {
@@ -247,6 +248,15 @@ public enum RadioPage {
         sheet.entries.last { $0.state.isTail && $0.ended?.outcome == .cut && $0.kind != .answer && $0.kind != .transition }
     }
 
+    /// Nothing played yet: nothing heard, or what was heard last ended more than half an hour ago (an earlier listening). A heard entry with no
+    /// time on it counts as lately heard.
+    public static let coldAfter: TimeInterval = 30 * 60
+    static func isCold(tail: [RunSheetEntry], now: Date) -> Bool {
+        guard let last = tail.last else { return true }
+        guard let at = last.ended?.at, !at.isEmpty, let d = ISO8601DateFormatter().date(from: at) else { return false }
+        return now.timeIntervalSince(d) > coldAfter
+    }
+
     // MARK: The model
 
     public static func make(_ i: RadioPageInput) -> RadioPageInfo {
@@ -312,7 +322,7 @@ public enum RadioPage {
             return r
         }
 
-        if air == nil, tail.isEmpty, !ahead.isEmpty { o.greeting = greeting(ahead: ahead, now: i.now, timeZone: i.timeZone) }
+        if air == nil, isCold(tail: tail, now: i.now), !ahead.isEmpty { o.greeting = greeting(ahead: ahead, now: i.now, timeZone: i.timeZone) }
 
         // the status line, one state at a time; the first that is true wins
         let listening = ["listening", "talking", "heard"].contains(i.barState)

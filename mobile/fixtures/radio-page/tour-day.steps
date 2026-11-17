@@ -1,4 +1,6 @@
-# Radio page tour B (drags need: agent ios --touch platform): a day in progress. Install runsheet-day.json (3 heard, 6 ahead, the first with a forecast, one podcast) as above.
+# Radio page tour (day). Demo mode, and the launch default AutoradioDemoSheet = day (defaults write news.choir.autoradio.lab AutoradioDemoSheet day),
+# which loads fixtures/demo/runsheet-day.json as the run sheet and keeps the station from starting by itself. @S@ is the shots directory.
+# Drags need: agent ios --touch platform.
 clock data
 clock +1500 real
 clock data

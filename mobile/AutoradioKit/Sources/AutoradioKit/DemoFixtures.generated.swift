@@ -1996,6 +1996,372 @@ public enum DemoFixtureData {
  }
 }
 """#,
+        "runsheet-answer": #"""
+{
+ "sheet": {
+  "version": 4,
+  "entries": [
+   {
+    "id": "c-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "skipped",
+    "title": "The harbour barrier passes its first test",
+    "est_seconds": 150,
+    "text": "The harbour barrier passes its first test. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:harbour-barrier",
+     "label": "Example Harbour Ledger"
+    },
+    "ended": {
+     "outcome": "cut",
+     "at": "",
+     "last_block": 0
+    }
+   },
+   {
+    "id": "a-1",
+    "kind": "answer",
+    "placed_by": "phone",
+    "state": "ahead",
+    "title": "Answer",
+    "est_seconds": 40,
+    "text": "The barrier was tested on Tuesday and held. The board will report in spring."
+   },
+   {
+    "id": "c-2",
+    "kind": "story",
+    "placed_by": "phone",
+    "state": "ahead",
+    "title": "The harbour barrier passes its first test",
+    "est_seconds": 90,
+    "text": "The rest of the story, from where it was cut."
+   },
+   {
+    "id": "d-2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A library opens late for exam week",
+    "est_seconds": 95,
+    "text": "A library opens late for exam week. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:library-late",
+     "label": "Example City Post"
+    }
+   }
+  ],
+  "position_seconds": 0
+ },
+ "pending": []
+}
+"""#,
+        "runsheet-cold": #"""
+{
+ "sheet": {
+  "version": 6,
+  "entries": [
+   {
+    "id": "d-open",
+    "kind": "opening",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Opening",
+    "est_seconds": 120,
+    "text": "Good evening. Here is what is lined up for you tonight."
+   },
+   {
+    "id": "d-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The harbour barrier passes its first test",
+    "est_seconds": 336,
+    "text": "The harbour barrier passes its first test. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:harbour-barrier",
+     "label": "Example Harbour Ledger"
+    },
+    "forecast": {
+     "p_heard": 0.78,
+     "caused_by": "you finished two stories on the harbour this week",
+     "claim_id": "c-example-1"
+    }
+   },
+   {
+    "id": "d-2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A library opens late for exam week",
+    "est_seconds": 336,
+    "text": "A library opens late for exam week. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:library-late",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "l-1",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "title": "Why the tram fares changed",
+    "est_seconds": 336,
+    "text": "Why the tram fares changed. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:tram-fares",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-3",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Seven new lamps for the old bridge",
+    "est_seconds": 336,
+    "text": "Seven new lamps for the old bridge. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:bridge-lamps",
+     "label": "Example Harbour Ledger"
+    }
+   },
+   {
+    "id": "d-4",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The market adds a winter day",
+    "est_seconds": 336,
+    "text": "The market adds a winter day. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:winter-market",
+     "label": "Example City Post"
+    }
+   }
+  ],
+  "position_seconds": 0
+ },
+ "pending": []
+}
+"""#,
+        "runsheet-day": #"""
+{
+ "sheet": {
+  "version": 12,
+  "entries": [
+   {
+    "id": "h-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "title": "Morning tide tables, explained",
+    "est_seconds": 120,
+    "text": "Morning tide tables, explained. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:tide-tables",
+     "label": "Example Harbour Ledger"
+    },
+    "ended": {
+     "outcome": "finished",
+     "at": "",
+     "last_block": 0
+    }
+   },
+   {
+    "id": "h-2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "skipped",
+    "title": "A dispute over a bike lane",
+    "est_seconds": 100,
+    "text": "A dispute over a bike lane. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:bike-lane",
+     "label": "Example City Post"
+    },
+    "ended": {
+     "outcome": "skipped",
+     "at": "",
+     "last_block": 0
+    }
+   },
+   {
+    "id": "h-3",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "title": "The school choir tours the coast",
+    "est_seconds": 90,
+    "text": "The school choir tours the coast. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:school-choir",
+     "label": "Example City Post"
+    },
+    "ended": {
+     "outcome": "left",
+     "at": "",
+     "last_block": 0
+    }
+   },
+   {
+    "id": "d-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The harbour barrier passes its first test",
+    "est_seconds": 240,
+    "text": "The harbour barrier passes its first test. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:harbour-barrier",
+     "label": "Example Harbour Ledger"
+    },
+    "forecast": {
+     "p_heard": 0.78,
+     "caused_by": "you finished two stories on the harbour this week",
+     "claim_id": "c-example-1"
+    }
+   },
+   {
+    "id": "d-2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A library opens late for exam week",
+    "est_seconds": 240,
+    "text": "A library opens late for exam week. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:library-late",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "l-1",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "title": "Why the tram fares changed",
+    "est_seconds": 240,
+    "text": "Why the tram fares changed. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:tram-fares",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-3",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Seven new lamps for the old bridge",
+    "est_seconds": 240,
+    "text": "Seven new lamps for the old bridge. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:bridge-lamps",
+     "label": "Example Harbour Ledger"
+    }
+   },
+   {
+    "id": "d-4",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The market adds a winter day",
+    "est_seconds": 240,
+    "text": "The market adds a winter day. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:winter-market",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-pod",
+    "kind": "episode",
+    "placed_by": "listener",
+    "state": "ahead",
+    "title": "Episode 12: Bridges",
+    "est_seconds": 1500,
+    "source": {
+     "ref": "episode:example-show",
+     "label": "The Example Hour",
+     "url": "https://example.com/audio/ep12.mp3"
+    }
+   },
+   {
+    "id": "d-x0",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The ferry timetable changes in January",
+    "est_seconds": 240,
+    "text": "The ferry timetable changes in January. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:ferry-times",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-x1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A bakery wins the street award",
+    "est_seconds": 240,
+    "text": "A bakery wins the street award. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:bakery-award",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-x2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Rain returns to the coast on Friday",
+    "est_seconds": 240,
+    "text": "Rain returns to the coast on Friday. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:coast-rain",
+     "label": "Example City Post"
+    }
+   }
+  ],
+  "position_seconds": 0
+ },
+ "pending": []
+}
+"""#,
+        "runsheet-empty": #"""
+{
+ "sheet": {
+  "version": 1,
+  "entries": [
+   {
+    "id": "h-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "title": "Morning tide tables, explained",
+    "est_seconds": 120,
+    "text": "Morning tide tables, explained. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:tide-tables",
+     "label": "Example Harbour Ledger"
+    },
+    "ended": {
+     "outcome": "finished",
+     "at": "",
+     "last_block": 0
+    }
+   }
+  ],
+  "position_seconds": 0
+ },
+ "pending": []
+}
+"""#,
         "setup-script": #"""
 {
   "tickMs": 450,

@@ -40,6 +40,19 @@ public enum Demo {
         env.keys = keys()
     }
 
+    /// TEST AFFORDANCE, inside demo mode only (not a product switch: nothing ships on or off by it). The launch default `AutoradioDemoSheet <name>`
+    /// (set like `AutoradioDemo`) loads the bundled fixture `runsheet-<name>` as the run sheet for this launch: the station does not start by itself
+    /// and the desk is not asked, so a tour photographs exactly that sheet. Names: cold, day, answer, empty (fixtures/demo/runsheet-<name>.json).
+    public static let sheetKey = "AutoradioDemoSheet"
+    public static var sheetName: String? {
+        guard isOn, let n = UserDefaults.standard.string(forKey: sheetKey), !n.isEmpty else { return nil }
+        return n
+    }
+    @MainActor public static func runSheet(_ name: String) -> RunSheet? {
+        guard let d = fixture("runsheet-" + name), let s = try? JSONDecoder().decode(RunSheetStore.Saved.self, from: d) else { return nil }
+        return s.sheet
+    }
+
     public static func fixture(_ name: String) -> Data? { DemoFixtureData.files[name].map { Data($0.utf8) } }
 
     /// The demo front page as stories, for pages that list them without a request.
