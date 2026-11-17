@@ -381,11 +381,16 @@ public final class ChoirApp: @unchecked Sendable {
             if p.paused { p.resume() } else { p.pause() }
             return true
         }) { onChange?(); return }
+        // Whether something was on air BEFORE this press decides what the press means: with nothing on air, Play opens the radio, and
+        // opening it starts the player (the entry's own start), so reading `userPaused` afterwards would take that start for "it was
+        // playing" and pause it at once (the Mac's first Play spoke one block and fell silent).
+        let wasOnAir = await MainActor.run { RunSheetStore.shared.onAir() != nil }
         await ensureOnAir()
         await RunSheetPlayer.shared.settle()
         guard await MainActor.run(body: { RunSheetStore.shared.onAir() != nil }) else { onChange?(); return }      // nothing is on air: never play a document the player happens to hold
         await ensureEngine()
-        if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause(reason: "play button toggle") }
+        if runtime.player.userPaused { runtime.player.play() }
+        else if wasOnAir { runtime.player.pause(reason: "play button toggle") }
         onChange?()
     }
     /// Start the radio and leave it playing, whatever it was doing: the setup's "Start the radio" and the station when Autoradio opens.

@@ -37,13 +37,15 @@ if [ -z "${NOBUILD:-}" ]; then
   "$HERE/build-lab.sh" mac > "$SCRATCH/build.txt" 2>&1 || { tail -20 "$SCRATCH/build.txt"; fail "build" "the Mac build failed"; }
 fi
 
+# Why the proof taps Play itself: the station starts by itself only after onboarding has finished (Station.isReady), so a fresh
+# state (onboarding.json removed below, as proof-common.sh does on the phone) never auto-starts and the one tap is the only start.
 # A fresh app: quit, demo mode, light, silent output, no open pages from an earlier run.
 quit_app
 /usr/bin/defaults write $APP AutoradioDemo -bool YES
 /usr/bin/defaults write $APP AutoradioThemeMode light
 /usr/bin/defaults write $APP AutoradioProofSilent -bool YES
 /usr/bin/defaults delete $APP AutoradioThemeID >/dev/null 2>&1
-rm -f "$SUPPORT/open-pages.json"
+rm -f "$SUPPORT/open-pages.json" "$SUPPORT/onboarding.json"
 # The first `agent macos` of a checkout builds its own copy of the app (its log: "building for macOS: there is no build yet", minutes
 # long) and exits 1 when that outlasts the driver: that was attempt 1's refusal. A warm-up drive absorbs it, so the proof drive below is
 # a real run; its result is not read.
