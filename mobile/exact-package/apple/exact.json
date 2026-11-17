@@ -52,6 +52,8 @@
       "Kit/Citations.swift",
       "Kit/Concurrency.swift",
       "Kit/Configurator.swift",
+      "Kit/ContentStore.swift",
+      "Kit/ContentSync.swift",
       "Kit/Conversation.swift",
       "Kit/Core.swift",
       "Kit/CorpusSearch.swift",

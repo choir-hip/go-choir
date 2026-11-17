@@ -103,6 +103,15 @@ public final class AutoradioModule: ExactPackage {
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
         pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
+        // The phone's own content store (Kit/ContentStore.swift): one source for the index, the offline pages and "play that".
+        ContentSync.enabled = true
+        ContentSync.shared.audioBusy = { await MainActor.run { RunSheetPlayer.shared.isRemote } }
+        SavedCorpus.shared.setDeltaSource("store") { ContentStore.shared.drain() }
+        ContentStore.shared.onChange = { }
+        Task.detached(priority: .utility) { SavedCorpus.shared.refresh() }          // reads the held content into the index once, off the main thread
+        ReaderStore.shared.offline = { ContentStore.shared.readerDoc(address: $0) }
+        PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
+        choir.signIn.onSignOut = { ContentSync.wipeAccount() }
         SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         themes = ThemeStore(userDir: support.appendingPathComponent("themes"), systemScheme: { Self.systemScheme() })

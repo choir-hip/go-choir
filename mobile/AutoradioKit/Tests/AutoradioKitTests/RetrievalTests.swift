@@ -198,61 +198,6 @@ final class RetrievalHolderTests: XCTestCase {
     }
 }
 
-final class StoryBodiesTests: XCTestCase {
-    func story(_ n: Int, days: Double = 0) -> StoryBodies.Story { .init(route: "/p/s\(n)", title: "Story \(n)", date: Date(timeIntervalSince1970: 1_794_000_000 - Double(n) * 3600 - days)) }
-    final class Calls: @unchecked Sendable { private let l = NSLock(); private var r: [String] = []; var all: [String] { l.lock(); defer { l.unlock() }; return r }; func add(_ x: String) { l.lock(); r.append(x); l.unlock() } }
-    func tmp() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("sb-\(UUID().uuidString).json") }
-
-    func testFetchesNewestFirstOnceEachAndIndexesWhatLands() async {
-        let calls = Calls()
-        let b = StoryBodies(file: nil, fetcher: { r in calls.add(r); return "Body of \(r) about the Senate vote." })
-        let n = await b.sweep([story(3), story(1), story(2)])
-        XCTAssertEqual(n, 3); XCTAssertEqual(calls.all, ["/p/s1", "/p/s2", "/p/s3"], "newest first, one request each")
-        let again0 = await b.sweep([story(1), story(2), story(3)]); XCTAssertEqual(again0, 0); XCTAssertEqual(calls.all.count, 3, "held and unchanged: not asked again")
-        let c = SavedCorpus(readerStore: nil); c.setSource("bodies") { b.documents() }
-        XCTAssertEqual(c.retrieve("tell me about the Senate vote").items.count, 3)
-    }
-    func testCapsTheCountAndTheBytesAndDropsTheOldest() async {
-        let calls = Calls()
-        let b = StoryBodies(file: nil, fetcher: { r in calls.add(r); return String(repeating: "word ", count: 20) })
-        _ = await b.sweep((0..<(StoryBodies.maxStories + 30)).map { story($0) })
-        XCTAssertEqual(calls.all.count, StoryBodies.maxStories, "only the newest are asked")
-        XCTAssertLessThanOrEqual(b.count, StoryBodies.maxStories)
-        let big = StoryBodies(file: nil, fetcher: { _ in String(repeating: "x", count: 1_500_000) })
-        _ = await big.sweep([story(1), story(2), story(3), story(4)])
-        XCTAssertLessThanOrEqual(big.totalBytes, StoryBodies.maxBytes)
-        XCTAssertTrue(big.documents().contains { $0.id == "body:/p/s1" }, "the newest stays")
-    }
-    func testAFailureOrAnEmptyBodyIsSkippedAndTheSweepGoesOn() async {
-        let b = StoryBodies(file: nil, fetcher: { r in if r == "/p/s1" { throw URLError(.notConnectedToInternet) }; return r == "/p/s2" ? nil : "text" })
-        let landed = await b.sweep([story(1), story(2), story(3)]); XCTAssertEqual(landed, 1)
-    }
-    func testABusyRadioEndsTheSweepAndTheNextOneResumes() async {
-        let calls = Calls(); let busy = Calls()
-        let b = StoryBodies(file: nil, fetcher: { r in calls.add(r); return "text" })
-        b.audioBusy = { busy.add("x"); return busy.all.count > 1 }
-        let one = await b.sweep([story(1), story(2), story(3)]); XCTAssertEqual(one, 1, "one landed, then the radio needed the network")
-        b.audioBusy = { false }
-        let two = await b.sweep([story(1), story(2), story(3)]); XCTAssertEqual(two, 2); XCTAssertEqual(calls.all, ["/p/s1", "/p/s2", "/p/s3"])
-    }
-    func testBodiesSurviveARestartAndABadFileIsEmpty() async throws {
-        let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
-        let b = StoryBodies(file: f, fetcher: { _ in "kept text" })
-        _ = await b.sweep([story(1)])
-        let again = Calls()
-        let b2 = StoryBodies(file: f, fetcher: { r in again.add(r); return "x" })
-        XCTAssertEqual(b2.count, 1); _ = await b2.sweep([story(1)]); XCTAssertTrue(again.all.isEmpty, "resumed: nothing asked")
-        try Data("junk".utf8).write(to: f); XCTAssertEqual(StoryBodies(file: f).count, 0)
-    }
-    func testOnlyOneSweepRunsAtATime() async {
-        let b = StoryBodies(file: nil, fetcher: { _ in try await Task.sleep(nanoseconds: 100_000_000); return "t" })
-        async let first = b.sweep([story(1), story(2)])
-        try? await Task.sleep(nanoseconds: 20_000_000)
-        let second = await b.sweep([story(3)])
-        let f = await first; XCTAssertEqual(second, 0); XCTAssertEqual(f, 2)
-    }
-}
-
 final class RetrievedCommandTests: XCTestCase {
     func item(_ n: Int, _ address: String, _ kind: String = "story") -> RetrievalItem {
         RetrievalItem(id: "i\(n)", address: address, kind: kind, title: "Title \(n)", source: "x", date: nil, place: "", score: Double(10 - n), text: "t")
