@@ -39,7 +39,7 @@ start:
     - Exact is pinned at 76cd50f9 with one local patch.
 
 finish:
-  deliver: In the morning the owner opens Autoradio on the phone and on the Mac, lands on a page that is the radio, hears one voice at a time, asks about a subject and gets an answer drawn from what the device holds, and is told plainly which embedding route works on which machine.
+  deliver: In the morning the owner opens Autoradio on the phone and on the Mac, lands on a page that is the radio, hears it start talking at once, hears one voice at a time and more podcast clips, asks about a subject and gets an answer drawn from what the device holds, and is told plainly which embedding route works on which machine.
   artifact: A phone build and a Mac build from one branch on the latest Exact, each opening on the Autoradio page, with local retrieval in the on-device model's context; a measured verdict on EmbeddingGemma 2 (GGUF and Core AI) on the phone and the Mac in docs/reference/EMBEDDINGGEMMA.md.
   acceptance:
     - action: the owner's one QA pass on the phone (launch, play, mic on, talk over the radio, ask "tell me about the Senate", open a PDF, edit a Markdown file)
@@ -57,6 +57,15 @@ finish:
     - action: timing and recall figures for BM25 alone, vectors alone and both fused, on the Mac and on the phone, written into the reference page
       proves: which embedding route works where, and whether fusion beats BM25
       evidence_class: measurement
+    - action: the launch console line on the phone (`AUTORADIO launch ... first_audio_ms= source=cached`) after a cold start with a fresh cached opening
+      proves: the radio's voice starts from an opening written and synthesised before the launch
+      evidence_class: device console
+    - action: the worker's match run (dry run first, then written through the verified route) and the count of stories with a clip in the front window on staging, before and after
+      proves: clips are matched without a hand and without a model call, at the precision the tests state
+      evidence_class: local test plus deployed count
+    - action: scripts/prove-autoradio-programme on the drill computer after the opening-first landing
+      proves: an open is answered with one opening and its first speech time
+      evidence_class: deployed proof
   rollback: the phone keeps the last build the owner accepted until a newer one passes its checks; every lane is a branch and nothing merges into lane/autoradio-integ unbuilt; server changes revert by commit.
   landing:
     required: true
@@ -80,7 +89,7 @@ boundaries:
     - no model weights, secrets or addresses in the repo
     - the owner's installed build is replaced only by one that built from a pushed commit
     - no server-side embeddings in this mission
-  excluded: [Mac-specific design, a server vector store, the master stream, spreadsheets]
+  excluded: [Mac-specific design, a server vector store, the master stream and its platform computer, spreadsheets, any new Jev caller]
   protected_surfaces: [internal/agentcore programme route (opening-first), gateway and provider calls]
 
 stations:
@@ -98,7 +107,7 @@ stations:
     class: orange
     review: one seat
     depends_on: []
-    carrier: lane/phone-retrieval
+    carrier: lane/phone-retrieval 5a7813642 (first version 6e7551507 is on lane/autoradio-integ and installed)
     status: working
   - id: S3
     name: Latest Exact on both platforms
@@ -122,24 +131,40 @@ stations:
     class: orange
     review: one seat
     depends_on: [S2]
-    carrier: none yet
-    status: pending
+    carrier: lane/embed-trial
+    status: working
   - id: S6
     name: The Autoradio page
     scope: the app opens on a page that is the run sheet made readable (docs/design/autoradio-page-2026-11-17.md); the sheet behind the bar is deleted
     class: orange
     review: one seat
     depends_on: []
-    carrier: none yet
-    status: pending
+    carrier: lane/radio-page
+    status: working
   - id: S7
     name: Opening-first programme
-    scope: land lane/programme-opening (accepted in review round 3) once the phone build that understands it is the installed one; deployed timing proof on the drill computer
+    scope: land lane/programme-opening (accepted in review round 3); the installed phone build already understands it. It stopped merging when the run sheet landed, so it is being rebased; a rebase that is more than mechanical is re-read by one seat. Deployed timing proof on the drill computer.
     class: red
-    review: two seats (done)
+    review: two seats (done); one seat on the rebase delta if it is not mechanical
     depends_on: []
-    carrier: lane/programme-opening c6aeec9e4
-    status: pending
+    carrier: lane/programme-opening c6aeec9e4, rebasing to lane/programme-opening-rebased
+    status: working
+  - id: S8
+    name: More podcast clips
+    scope: automatic matching of stories to transcript passages inside the podcast worker with no model call (entity gate, score floor and margin, publication window, today's clip shape), precision at least 0.9 on a labelled set; long interviews split rather than dropped; the failed uploads explained. Measured opportunity 2026-11-17, about 30 to 40 stories in 100 against 6 in 100 by hand. Later slices, not tonight, more shows, a worker host that stays up, cold opens.
+    class: orange
+    review: one seat
+    depends_on: []
+    carrier: lane/clips-auto-match; plan in the lead's scratch (more-clips-plan.md)
+    status: working
+  - id: S9
+    name: Talking at once
+    scope: the phone keeps the next opening written ahead and synthesised to an audio file (asked after an opening airs, on going to the background, and from background refresh if Exact exposes it); a cold launch plays it through the one-voice gate within about a second; a stale opening is not played as new; one launch console line with the timing breakdown
+    class: orange
+    review: one seat
+    depends_on: []
+    carrier: lane/instant-start
+    status: working
 
 decisions_for_the_owner:
   - id: D1
@@ -157,7 +182,29 @@ decisions_for_the_owner:
     why: the master stream's forecasts cannot be scored without it
     options: yes; no
     default: no; master forecasts stay unscored
+  - id: D4
+    question: May the Jev job entry point (jevJob) move to a shared package, with that one file admitted to the list scripts/check-jev-entry protects, so a service outside agentcore can ask Jev through the approved path?
+    why: a judged clip match (or any Jev caller in corpusd) cannot obey the entry rule today, because corpusd cannot import agentcore
+    options: yes; no, keep Jev callers inside agentcore
+    default: no change; clip matching uses no model, so the question waits
+  - id: D5
+    question: Where does the podcast worker live?
+    why: it runs on the owner's Mac, which sleeps, so new episodes are transcribed late
+    options: stay on the Mac; a host that stays up
+    default: stay on the Mac for now (the owner, 2026-11-17)
+  - id: D6
+    question: Clip length and how many per story; search spend for finding more shows
+    why: rights exposure and cost
+    options: keep or change
+    default: 20 to 75 seconds, at most 3 a story, as the code has it; at most 1.50 of the 3 dollars of search budget, not spent tonight
 owner_rulings:
+  - on: 2026-11-17
+    decision: S8, D5
+    said: "I heard the first podcast clip, and I love it. So I want to add another thing to the list, which is how do we get more podcast clips? ... we can use embedding and BM25 on my Mac. Well, it's kind of a kludge, the thing we're doing on the Mac. I guess we can keep doing that for now."
+  - on: 2026-11-17
+    decision: S9
+    said: "it takes about 5 to 10 seconds to start talking after you open the app. It'd be cool if it had already started talking, so that would mean it would have to already be scripted in advance ... We can save the master stream for later."
+    read_as: solved on the phone with the existing per-owner programme route; no platform computer and no master stream in this mission
   - on: 2026-11-17
     decision: D1
     said: "it seems like my iPhone is too old for that Core AI version, and I don't really want to just support iOS 27. I'd love to support iOS 26 as well. So maybe we should target the GGUF version. Let's play around with it and see which one or both or neither ends up working"
@@ -170,7 +217,7 @@ owner_rulings:
 
 now:
   status: working
-  slice: S1 to S4 in parallel lanes; S5 and S6 start now
+  slice: nine stations in parallel lanes; the lead builds each for the simulator, the Mac or the phone as it reports
   source_ref: origin/main c3a54a69d
   deploy_identity: staging 6ba3e1080
   candidate:
@@ -197,11 +244,11 @@ now:
     evidence_ref: this file
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: the phone speaks again; the one-voice work is installed and unheard; four builders are working in separate lanes
+    believed_state: the phone speaks (the owner heard a podcast clip on 6e7551507, one-voice work and first retrieval included); eight builders are working in separate lanes; the new Exact pin de212e671 has not yet built
     main_uncertainty: whether the model libraries get macOS slices tonight, and whether EmbeddingGemma 2 loads at all on an A16 phone by either route
     next_observation: the first Mac build at the new Exact pin
   blocker_or_risk: one Mac build lock serves four lanes, so builds queue; the lead's checks have twice passed a silent or broken phone build, so nothing is called working without sound or a sample count
-  next_action: start the embedding trials and the Autoradio page builders, then run the phone simulator build and the Mac build at the new pin when the Mac lane reports
+  next_action: read the simulator and Mac builds at the new Exact pin; build and install the finished retrieval lane; land the rebased opening-first programme; dry-run the clip matcher against staging
 
 receipts: []
 ---
