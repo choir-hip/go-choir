@@ -21,20 +21,26 @@ public enum SavedAnswerPrompt {
     public static let maxSentences = 3
     public static let noAnswer = "NO_ANSWER"
     public static func system() -> String {
-        "You answer a listener's question using ONLY the numbered passages you are given, which come from stories and books saved on their phone. "
+        "You answer a listener's question using ONLY the numbered passages you are given. They were found on the listener's phone (stories, books, podcasts, pages), newest first, each with its date and id. "
             + "Never use anything you know that is not written in the passages, and never guess. "
             + "If the passages do not answer the question, write exactly \(noAnswer) and nothing else. "
-            + "Otherwise answer in two or three short plain sentences that a voice can say, the most important first, each making sense on its own. "
+            + "Otherwise answer in two or three short plain sentences that a voice can say, the most important first, each making sense on its own; when passages differ, prefer the newest and say its date. Name an item by its title, never by its id. "
             + "No lists, no markup, no quotes, no emoji."
     }
-    public static func prefix(_ hits: [PassageHit]) -> String {
-        hits.prefix(3).enumerated().map { i, h in
-            "Passage \(i + 1) (from \"\(AckPrompt.flat(h.passage.title))\"): \(AckPrompt.flat(String(h.passage.text.prefix(700))))"
-        }.joined(separator: "\n") + "\n"
-    }
+    /// The retrieved context (Retrieval.swift): header with today's date and what is on air, then each passage with kind, date, source, place, id and title.
+    public static func prefix(_ c: RetrievalContext) -> String { c.text }
     public static func suffix(_ question: String) -> String { "Question: \"\(AckPrompt.flat(question))\"\nAnswer:" }
 
-    /// "From the paper's story on X" for a passage; "From this page" for the page in front.
+    /// "From the paper's story on X" for the best item; "From this page" for the page in front.
+    public static func source(_ i: RetrievalItem) -> String {
+        if i.kind == "page" { return "From this page" }
+        if i.kind == "book" { return "From your book \(String(i.title.prefix(90)))" }
+        if i.kind == "podcast" || i.kind == "transcript" { return "From the podcast \(String(i.title.prefix(90)))" }
+        if i.kind == "runsheet" { return "From what was on air" }
+        if let t = AckPrompt.usableTitle(i.title) { return "From the paper's story on \(String(t.prefix(90)))" }
+        return "From a story you saved"
+    }
+    /// Kept for the old index's hits (tests of PassageIndex still use it).
     public static func source(_ h: PassageHit) -> String {
         if h.passage.docID.hasPrefix("page:") { return "From this page" }
         if h.passage.docID.hasPrefix("book:") { return "From your book \(String(h.passage.title.prefix(90)))" }
@@ -87,15 +93,17 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
                 defer { c.finish() }
                 if let f = i.pageText { corpus.offer(address: i.pageAddress, title: i.pageTitle, text: await f()) }
                 if Task.isCancelled { say("cancelled"); return }
-                let hits = await corpus.search(words, pageAddress: i.pageAddress)
+                let ctx = corpus.retrieve(words, onAir: i.pageTitle, pageAddress: i.pageAddress)
+                let hits = ctx.items
                 if Task.isCancelled { say("cancelled"); return }
                 func holding(_ why: String) { say(why); c.yield(SavedAnswerPrompt.holdingLine(words)) }
                 guard !hits.isEmpty else { return holding("nothing in the saved stories answers this; the model was not asked") }
-                guard let m = model, m.isLoaded else { return holding("the local model is not loaded; found \(hits.count) passages") }
+                guard let m = model, m.isLoaded else { return holding("the local model is not loaded; found \(hits.count) items") }
                 m.willGenerate(); defer { m.generationEnded() }
                 var splitter = SentenceSplitter()
                 var spoken = 0, first = true
-                let source = SavedAnswerPrompt.source(hits[0])
+                let best = hits.max { $0.score < $1.score } ?? hits[0]
+                let source = SavedAnswerPrompt.source(best)
                 var refused = false
                 func offer(_ raw: String) {
                     guard spoken < SavedAnswerPrompt.maxSentences, !refused, let s = AckPrompt.speakable(raw) else { return }
@@ -107,7 +115,7 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
                     c.yield(line)
                 }
                 do {
-                    for try await piece in m.stream(system: SavedAnswerPrompt.system(), userPrefix: SavedAnswerPrompt.prefix(hits), userSuffix: SavedAnswerPrompt.suffix(words), temperature: temperature) {
+                    for try await piece in m.stream(system: SavedAnswerPrompt.system(), userPrefix: SavedAnswerPrompt.prefix(ctx), userSuffix: SavedAnswerPrompt.suffix(words), temperature: temperature) {
                         if Task.isCancelled || refused || spoken >= SavedAnswerPrompt.maxSentences { break }
                         if first { first = false; let r = m.lastReport(); lock.lock(); generation = r; lock.unlock() }
                         for s in splitter.push(piece) { offer(s) }
@@ -116,7 +124,7 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
                 if Task.isCancelled { say("cancelled"); return }
                 for s in splitter.finish() { offer(s) }
                 if spoken == 0 { return holding(refused ? "the passages do not answer the question (the model said so)" : "the model wrote nothing") }
-                say("\(spoken) sentences from \"\(hits[0].passage.title)\"")
+                say("\(spoken) sentences from \"\(best.title)\" (\(best.address)) of \(hits.count) retrieved")
             }
             self.lock.lock(); self.task = t; self.lock.unlock()
             c.onTermination = { _ in t.cancel() }

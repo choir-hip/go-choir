@@ -9,8 +9,11 @@ public struct TurnContextFile: Codable, Sendable {
     public var inputs: [ScheduledInput]
     /// Words a fixture expects in the transcript (proof only).
     public var expectedWords: [String]?
+    /// What the phone retrieved for the on-device model on this turn: the query, its terms, the ids and scores shown (Retrieval.swift).
+    public var retrieval: RetrievalRecord?
     public init(position: ProgramPosition, preparedMaterial: String? = nil, configuration: LabConfiguration? = nil,
-                inputs: [ScheduledInput] = [], expectedWords: [String]? = nil) {
+                inputs: [ScheduledInput] = [], expectedWords: [String]? = nil, retrieval: RetrievalRecord? = nil) {
+        self.retrieval = retrieval
         self.position = position; self.preparedMaterial = preparedMaterial; self.configuration = configuration
         self.inputs = inputs; self.expectedWords = expectedWords
     }

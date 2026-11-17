@@ -181,6 +181,10 @@ public final class PodcastService: @unchecked Sendable {
         let n = PodcastKey.feed(feedURL); lock.lock(); defer { lock.unlock() }
         return lib.subscriptions.contains { PodcastKey.feed($0.show.feedURL) == n }
     }
+    func cachedTranscript(feed: String, id: String) -> PodcastTranscript? {
+        let key = PodcastKey.episode(feed: PodcastKey.feed(feed), id: id)
+        lock.lock(); defer { lock.unlock() }; return transcripts[key]
+    }
     public func subscriptions() -> [PodcastShow] { lock.lock(); defer { lock.unlock() }; return lib.subscriptions.map(\.show) }
 
     @discardableResult

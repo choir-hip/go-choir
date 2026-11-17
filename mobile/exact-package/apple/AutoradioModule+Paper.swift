@@ -12,6 +12,9 @@ extension AutoradioModule {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let source = PaperSource(cacheFile: support.appendingPathComponent("paper-front.json"))
         let topicsFile = support.appendingPathComponent("edition-topics.json")
+        // The cached front list (title, dek, date of up to a hundred stories) is searchable by the on-device model, even offline at launch.
+        let frontFile = support.appendingPathComponent("paper-front.json")
+        SavedCorpus.shared.setSource("paper-front") { RetrievalSources.paperFront(file: frontFile) }
         let engine = LayoutEngine()
         handle("paperFront") { [weak self] args, reply in
             let asked = args["view"] as? String ?? ""

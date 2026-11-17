@@ -1,11 +1,12 @@
 import Foundation
 
 // The Reader's books as passages a question can be answered from (join: the talk lane's SavedCorpus and the reader lane's ReaderShelf).
-// Bounded: at most `maxPassages` passages, taken from the most recently added documents first, so a large library never makes a search slow.
+// Bounded: at most `maxPassages` (old index) passages, taken from the most recently added documents first. The retrieval index gets every
+// chapter of those books as parts, so a handful of books are searched whole.
 // The reading of the books is cached until the library changes (the corpus asks for its sources before every search).
 
 public final class LibraryCorpusSource: @unchecked Sendable {
-    public static let maxPassages = 200
+    public static let maxPassages = 6000
     private let docs: @Sendable () -> [ShelfDoc]
     private let text: @Sendable (String) -> DocText?
     private let lock = NSLock()
@@ -23,15 +24,25 @@ public final class LibraryCorpusSource: @unchecked Sendable {
         var out: [SavedCorpus.Document] = []
         for d in list where budget > 0 {
             guard let t = text(d.id) else { continue }
-            var chars = 0, parts: [String] = []
-            for b in t.blocks where b.kind != "code" && !b.text.isEmpty {       // no more words than the budget can use
-                parts.append(b.text); chars += b.text.count
-                if chars > budget * PassageIndex.maxPassageChars { break }
+            // One part per section (chapter or page run), each keeping the block it starts at, so a hit can say where it is and open there.
+            var parts: [RetrievalDoc.Part] = [], cur: [String] = [], curBlock = 0, curSection = -1, chars = 0
+            func close() {
+                guard !cur.isEmpty else { return }
+                let title = curSection >= 0 && curSection < t.sections.count ? t.sections[curSection].title : ""
+                let label = (d.kind == "pdf" ? "page " : "chapter ") + "\(curSection + 1)" + (title.isEmpty ? "" : ": " + title)
+                parts.append(.init(label: label, text: cur.joined(separator: "\n"), block: curBlock)); cur = []
             }
-            let pieces = Array(PassageIndex.split(parts.joined(separator: "\n")).prefix(budget))
-            guard !pieces.isEmpty else { continue }
-            budget -= pieces.count
-            out.append(SavedCorpus.Document(id: "book:" + d.id, title: d.title, address: d.address, text: pieces.joined(separator: "\n")))
+            for (i, b) in t.blocks.enumerated() where b.kind != "code" && !b.text.isEmpty {
+                if b.section != curSection { close(); curSection = b.section; curBlock = i }
+                cur.append(b.text); chars += b.text.count
+            }
+            close()
+            let passages = parts.reduce(0) { $0 + PassageIndex.split($1.text).count }
+            guard !parts.isEmpty else { continue }
+            budget -= max(1, passages)
+            let flat = parts.map(\.text).joined(separator: "\n")
+            out.append(SavedCorpus.Document(id: "book:" + d.id, title: d.title, address: d.address, text: String(flat.prefix(PassageIndex.maxPassageChars * 3)),
+                                            kind: "book", source: "Reader", date: d.added, parts: parts))
         }
         lock.lock(); key = k; cached = out; lock.unlock()
         return out

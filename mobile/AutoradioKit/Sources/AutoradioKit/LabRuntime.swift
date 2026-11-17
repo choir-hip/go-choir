@@ -408,7 +408,7 @@ public final class LabRuntime: @unchecked Sendable {
         let snapAudio = recorder.snapshot(from: t0, to: t1)
         lock.lock(); records[rec.id] = rec; lastID = rec.id; lock.unlock()
         let pos = ProgramPosition(programmeID: player.document.id, blockIndex: player.blockIndex, context: "")
-        let ctx = TurnContextFile(position: pos, configuration: rec.configuration)
+        let ctx = TurnContextFile(position: pos, configuration: rec.configuration, retrieval: RetrievalLog.shared.last)
         _ = try? store.save(record: rec, mic: snapAudio.mic, reference: snapAudio.reference, context: ctx)
         refresh()
     }

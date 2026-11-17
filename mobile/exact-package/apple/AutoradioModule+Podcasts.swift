@@ -24,6 +24,7 @@ struct PodcastPageSource: PageSource {
 extension AutoradioModule {
     func registerPodcasts() {
         let service = PodcastService.shared
+        SavedCorpus.shared.setSource("podcasts") { PodcastService.shared.retrievalDocuments() }   // shows, cached episodes and fetched transcripts
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         service.configure(directory: support)
         if !Demo.isOn { service.syncHooks = PodcastSyncCodec.hooks(); service.platform = PodcastPlatformCodec.hooks() }

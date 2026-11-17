@@ -91,15 +91,17 @@ final class JoinLibraryTests: XCTestCase {
         XCTAssertEqual(hits.first?.passage.title, "The Keeper")
         XCTAssertEqual(SavedAnswerPrompt.source(hits[0]), "From your book The Keeper")
     }
-    func testJ5_AtMostTwoHundredPassagesFromTheMostRecentDocuments() {
-        let many = (0..<300).map { "Paragraph number \($0) about harbour tides and the long grey winter, told at some length so that it stands alone as a passage of its own in the book. \(String(repeating: "More words. ", count: 12))" }
+    func testJ5_ABookIsKeptWholeByChapterForRetrievalAndTheOldIndexIsBounded() {
+        let many = (0..<300).map { "Paragraph number \($0) about harbour tides and the long grey winter, told at some length so that it stands alone as a passage of its own in the book. \(String(repeating: "tide ", count: 20))" }
         let docs = [doc("old", "Old Book", added: 1), doc("new", "New Book", added: 9)]
         let src = LibraryCorpusSource(docs: { docs }, text: { _ in self.text(many) })
         let out = src.documents()
+        XCTAssertEqual(out.first?.title, "New Book", "the most recent document comes first")
+        XCTAssertEqual(out.count, 2, "both books are kept: the budget is thousands of passages, not 200")
+        XCTAssertFalse(out[0].parts.isEmpty); XCTAssertTrue(out[0].parts[0].label.hasPrefix("chapter 1"))
         let c = SavedCorpus(readerStore: nil); c.setSource("library") { out }; c.refresh()
-        XCTAssertLessThanOrEqual(c.index.passageCount, LibraryCorpusSource.maxPassages)
-        XCTAssertEqual(out.first?.title, "New Book", "the most recent document comes first and takes the budget")
-        XCTAssertFalse(out.contains { $0.title == "Old Book" }, "the budget is spent on the newest")
+        XCTAssertLessThan(c.index.passageCount, 60, "the old index sees only the opening of a book")
+        XCTAssertGreaterThan(c.retrieval.count, 100, "the retrieval index sees all of it")
     }
     func testJ5_AnUnreadableOrEmptyDocumentIsSkippedAndNothingThrows() {
         let src = LibraryCorpusSource(docs: { [self.doc("a", "A", added: 1), self.doc("b", "B", added: 2)] }, text: { $0 == "a" ? nil : self.text([]) })

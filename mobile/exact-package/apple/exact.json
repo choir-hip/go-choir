@@ -109,6 +109,8 @@
       "Kit/ReaderSample.swift",
       "Kit/ReaderShelf.swift",
       "Kit/RemoteAudioPlayer.swift",
+      "Kit/Retrieval.swift",
+      "Kit/RetrievalSources.swift",
       "Kit/RunSheet.swift",
       "Kit/RunSheetEntries.swift",
       "Kit/RunSheetFeed.swift",
