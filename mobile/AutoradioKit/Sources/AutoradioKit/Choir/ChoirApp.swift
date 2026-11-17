@@ -125,6 +125,7 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.player.onNextTrack = { [weak self] in self?.takeRemote(.next) ?? false }
         runtime.player.onPreviousTrack = { [weak self] in self?.takeRemote(.previous) ?? false }
         wireRunSheet()
+        warmVoice()
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await te in self.runtime.log.stream() {
@@ -413,6 +414,18 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// A fresh opening is kept: the launch need not wait for the sign-in or the first load.
     public func openingReady() -> Bool { openingCache.isReady(voice: runtime.player.voiceKey) }
+    /// What the launch waits for: a written-ahead opening, a front page held or kept, or no sign-in (nothing will come).
+    public func launchConditionHolds() -> Bool { openingReady() || !frontLines().isEmpty || !signIn.current.signedIn }
+    /// The voice is made ready in parallel with the engine start: one short line through the real voice path, so its model is loaded and
+    /// compiled before the first block asks (the time is logged; it is not the launch line's `voice_load_ms`, which is what the first block waited).
+    public func warmVoice() {
+        let p = runtime.player
+        Task.detached {
+            let t0 = Date()
+            let ok = await p.warmVoice()
+            print("AUTORADIO voice warm \(ok ? "ok" : "failed") in \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        }
+    }
     /// The app went to the background: write the next opening ahead (one request, none when a fresh one is kept).
     @MainActor public func enteredBackground() async { await writeAhead?.refresh(reason: "background") }
 

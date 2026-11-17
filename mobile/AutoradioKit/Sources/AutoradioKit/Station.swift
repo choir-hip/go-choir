@@ -23,6 +23,15 @@ import AVFoundation
         #endif
     }
     public var player: RunSheetPlayer = .shared
+    /// What the launch waits for before it starts the radio: the front page it speaks from is held (or kept from the last launch), or nothing
+    /// will arrive (not signed in). Added in place of a fixed 2 s sleep (4c2c06ae9: "the sign-in and the first load get their moment").
+    public var launchCondition: () -> Bool = { true }
+    /// The most the launch waits for it, and how it waits (replaceable: a test's clock).
+    public var launchDeadline: TimeInterval = 2
+    public var launchPoll: TimeInterval = 0.05
+    public var sleep: (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }
+    /// Seconds the last launch waited.
+    public private(set) var waited: TimeInterval = 0
     public private(set) var started = false
     public private(set) var lastReason: Reason?
 
@@ -34,6 +43,10 @@ import AVFoundation
     public func start(reason: Reason) async -> Bool {
         if reason == .foreground, started { return false }
         guard isReady(), !otherAudioPlaying() else { return false }
+        waited = 0
+        if reason == .launch {
+            while !launchCondition(), waited < launchDeadline { await sleep(launchPoll); waited += launchPoll }
+        }
         started = true; lastReason = reason
         if player.store.onAir() != nil { return false }         // already playing or paused by the reader this launch
         await startDJ?()

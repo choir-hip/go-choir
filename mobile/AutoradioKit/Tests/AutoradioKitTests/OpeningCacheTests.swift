@@ -11,6 +11,7 @@ import XCTest
 //  7  the opening's speech is made block by block, the first entry's first block only; a voice that fails keeps the text
 //  8  the cached audio reaches the output node through the programme player (the voice is not asked), the same path as made audio
 //  9  the launch line carries every field once
+// 10  the launch starts as soon as its condition holds (no fixed sleep), and gives up at the deadline; a warm voice does not fill the launch line
 
 @MainActor
 final class OpeningCacheTests: XCTestCase {
@@ -172,5 +173,26 @@ final class OpeningCacheTests: XCTestCase {
         c = Date(timeIntervalSince1970: 100.6); t.mark("sheet")
         c = Date(timeIntervalSince1970: 100.9); t.printLine(source: "cached"); t.printLine(source: "cached")
         XCTAssertEqual(out, ["AUTORADIO launch engine_ms=400 session_ms=500 sheet_ms=600 request_ms=-1 first_segment_ms=-1 voice_load_ms=-1 synth_ms=-1 first_audio_ms=900 source=cached"])
+    }
+
+    // 10
+    func testTheStationStartsAsSoonAsTheConditionHoldsAndNeverPastTheDeadline() async {
+        let st = Station(); var slept: [TimeInterval] = []; var started = 0
+        st.startDJ = { started += 1 }
+        st.sleep = { slept.append($0) }
+        var polls = 0
+        st.launchCondition = { polls += 1; return polls > 3 }
+        _ = await st.start(reason: .launch)
+        XCTAssertEqual(started, 1); XCTAssertEqual(slept.count, 3, "waited for the condition, three polls, not two seconds")
+        XCTAssertLessThan(st.waited, 0.5)
+        let never = Station(); var n = 0
+        never.startDJ = { n += 1 }; never.sleep = { _ in }
+        never.launchCondition = { false }
+        _ = await never.start(reason: .launch)
+        XCTAssertEqual(n, 1, "the deadline starts it anyway"); XCTAssertEqual(never.waited, 2, accuracy: 0.06)
+        let ready = Station(); var m = 0; var s2 = 0
+        ready.startDJ = { m += 1 }; ready.sleep = { _ in s2 += 1 }
+        _ = await ready.start(reason: .launch)
+        XCTAssertEqual(s2, 0, "nothing to wait for: no wait")
     }
 }

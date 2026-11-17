@@ -513,11 +513,17 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var preparedSpeech: (@Sendable (String) -> PreparedAudio?)?
     /// The chosen voice, as the cache keys it: a changed voice is another key.
     public var voiceKey: String { lock.lock(); defer { lock.unlock() }; return String(describing: configuration.setting(.voice)) }
+    /// Load the chosen voice by making one short line (never played, never timed into the launch line).
+    public func warmVoice() async -> Bool {
+        lock.lock(); let cfg = configuration; lock.unlock()
+        var why = ""
+        return await synthesize("Ready.", with: cfg, why: &why, timed: false) != nil
+    }
     /// Make the audio of one block for the cache: the chosen voice only (a fall back to the system voice would be cached under the wrong name).
     public func synthesizeForCache(_ text: String) async -> PreparedAudio? {
         lock.lock(); let cfg = configuration; lock.unlock()
         var why = ""
-        guard let m = await synthesize(text, with: cfg, why: &why) else { return nil }
+        guard let m = await synthesize(text, with: cfg, why: &why, timed: false) else { return nil }
         return PreparedAudio(text: text, samples: m.samples, rate: m.rate)
     }
     /// Per-document state dies with the document: the block index, where the loop ran dry (`resumeAt`), and the tracker's open and
@@ -801,11 +807,12 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// Why the last block could not be spoken (nil: it was).
     public var speakFailure: String? { lock.lock(); defer { lock.unlock() }; return speakFailureText }
 
-    private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String) async -> Synthesized? {
+    private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String, timed: Bool = true) async -> Synthesized? {
         let voice: Voice
         let t0 = Date()
-        defer { LaunchTimings.shared.mark("synth", ms: Date().timeIntervalSince(t0) * 1000) }
-        do { voice = try registry.makeSpeaker(cfg, log: log); LaunchTimings.shared.mark("voice_load", ms: Date().timeIntervalSince(t0) * 1000) } catch {
+        var loaded = t0
+        defer { if timed { LaunchTimings.shared.mark("synth", ms: Date().timeIntervalSince(loaded) * 1000) } }
+        do { voice = try registry.makeSpeaker(cfg, log: log); loaded = Date(); if timed { LaunchTimings.shared.mark("voice_load", ms: loaded.timeIntervalSince(t0) * 1000) } } catch {
             why = "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)"
             log.emit(.error(stage: "voice", message: why)); return nil
         }
