@@ -742,6 +742,15 @@ func (c *programmeCall) handleLine(line string, tooLong bool) bool {
 	if c.req.Cause == "open" && seg.Kind != "opening" {
 		return c.drop(fmt.Sprintf("an open request is answered by an opening, not a %s", seg.Kind))
 	}
+	if c.req.Cause != "open" && seg.Kind == "opening" {
+		// An opening exists only when the radio is opened, so a second greeting
+		// mid-programme is not sent and not written. It is not a malformed
+		// line: it is noted and counted in dropped, but it is not one of the
+		// run of invalid lines that ends a call.
+		c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: fmt.Sprintf("an opening is written only when the radio is opened, not on a request with cause %q", c.req.Cause)})
+		programmeDroppedTotal.Add(1)
+		return true
+	}
 	if c.segCount >= c.maxSegments() {
 		c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: fmt.Sprintf("segment cap %d reached: the stretch ended", c.maxSegments())})
 		c.capped, c.stop = true, true

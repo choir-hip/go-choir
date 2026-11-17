@@ -23,7 +23,7 @@ import (
 
 func twoStoryScript() radioScript {
 	return linesScript(
-		progLine(map[string]any{"kind": "ident", "title": "On air", "text": "This is the radio.", "p_heard": nil, "caused_by": nil, "cites": nil}),
+		progLine(map[string]any{"kind": "transition", "title": "", "text": "Now, closer to home.", "p_heard": nil, "caused_by": nil, "cites": nil}),
 		titled("First", nil),
 		titled("Second", map[string]any{"kind": "update", "cites": []any{"pub:harbour-2@v1"}, "caused_by": "explore"}),
 	)
@@ -185,7 +185,7 @@ func TestF5_SameRequestIDInFlightOrWithAnotherCause(t *testing.T) {
 
 func TestF6_F7_OnlyValidLinesAreStreamedWithOneClaimEach(t *testing.T) {
 	rt, fake := radioRuntime(t, linesScript(
-		progLine(map[string]any{"kind": "ident", "title": "On air", "text": "This is the radio.", "p_heard": nil, "caused_by": nil, "cites": nil}),
+		progLine(map[string]any{"kind": "transition", "title": "", "text": "Now, closer to home.", "p_heard": nil, "caused_by": nil, "cites": nil}),
 		titled("First", nil),
 		titled("bad p", map[string]any{"p_heard": 1.7}),
 		titled("Second", map[string]any{"kind": "update", "cites": []any{map[string]any{"ref": "pub:harbour-2@v1", "role": "quoted", "label": "The ferry piece"}}, "caused_by": "explore"}),
@@ -195,7 +195,7 @@ func TestF6_F7_OnlyValidLinesAreStreamedWithOneClaimEach(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
-	if got := segmentTitles(evs); strings.Join(got, "|") != "On air|First|Second|" {
+	if got := segmentTitles(evs); strings.Join(got, "|") != "|First|Second|" {
 		t.Fatalf("(F6) streamed titles %q", got)
 	}
 	sid := stretchIDOf(t, evs)
@@ -227,7 +227,7 @@ func TestF6_F7_OnlyValidLinesAreStreamedWithOneClaimEach(t *testing.T) {
 	}
 	claims := stretchClaims(t, rt, sid)
 	if len(claims) != 2 {
-		t.Fatalf("(F7) %d claims, want 2 (ident and bridge carry none)", len(claims))
+		t.Fatalf("(F7) %d claims, want 2 (transitions carry none)", len(claims))
 	}
 	for i, c := range claims {
 		seg := segs[i+1]
@@ -284,7 +284,7 @@ func TestF8_TheSegmentRecordAndTheClaimArePersistedBeforeTheSegmentEvent(t *test
 			t.Errorf("(F8) the segment event for %s went out before its segment record", seg)
 			return
 		}
-		if data["kind"] == "opening" {
+		if data["kind"] == "opening" || data["kind"] == "transition" {
 			checked++
 			return
 		}
@@ -466,10 +466,10 @@ func TestF28_AClaimWriteThatFailsEndsTheCallWithNoSegmentAndNoIndex(t *testing.T
 	w := httptest.NewRecorder()
 	progServe(h, w, progBody())
 	evs := parseSSE(t, w.Body.String())
-	// The ident carries no claim, so it streams; the first content segment is
+	// The transition carries no claim, so it streams; the first content segment is
 	// the failure.
-	if got := segmentTitles(evs); strings.Join(got, "|") != "On air" {
-		t.Fatalf("(F28) streamed %q, want only the ident before the failed claim", got)
+	if got := segmentTitles(evs); strings.Join(got, "|") != "" {
+		t.Fatalf("(F28) streamed %q, want only the transition before the failed claim", got)
 	}
 	if e := eventsNamed(evs, "error"); len(e) != 1 || e[0].Data["spoken"] == "" || e[0].Data["reason"] == "" {
 		t.Fatalf("(F28) error events %v", e)

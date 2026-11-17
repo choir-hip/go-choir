@@ -209,7 +209,7 @@ func TestF23_ForecastFieldsOnNonContentKinds(t *testing.T) {
 			lineCase{kind + " with caused_by", plain(kind, kind+"-c", map[string]any{"caused_by": "explore"}), false},
 		)
 	}
-	cases = append(cases, lineCase{"a plain ident", plain("ident", "ident-ok", nil), true}, lineCase{"a plain bridge", plain("bridge", "bridge-ok", nil), true})
+	cases = append(cases, lineCase{"a plain ident (an extend takes no opening)", plain("ident", "ident-ok", nil), false}, lineCase{"a plain bridge", plain("bridge", "bridge-ok", nil), true})
 	rt, _ := radioRuntime(t, linesScript())
 	for i, c := range cases {
 		rt.provider.(*fakeRadio).script = linesScript(c.line)
@@ -315,12 +315,12 @@ func TestF26_TheRunOfThreeInvalidLines(t *testing.T) {
 	if strings.Join(segmentTitles(evs), "|") != "reset|v" || len(eventsNamed(evs, "done")) != 1 {
 		t.Fatalf("(F26) reset: %+v", evs)
 	}
-	// An ident is a valid line and resets the run too.
-	ident := progLine(map[string]any{"kind": "ident", "title": "On air", "text": "This is the radio.", "p_heard": nil, "caused_by": nil, "cites": nil})
-	rt5, _ := radioRuntime(t, linesScript(bad("1"), bad("2"), ident, bad("3"), titled("v", nil)))
+	// A transition is a valid line and resets the run too.
+	transition := progLine(map[string]any{"kind": "transition", "title": "", "text": "Now, closer to home.", "p_heard": nil, "caused_by": nil, "cites": nil})
+	rt5, _ := radioRuntime(t, linesScript(bad("1"), bad("2"), transition, bad("3"), titled("v", nil)))
 	_, evs = progRun(t, rt5, progBody())
 	if len(eventsNamed(evs, "done")) != 1 {
-		t.Fatalf("(F26) ident reset: %+v", evs)
+		t.Fatalf("(F26) transition reset: %+v", evs)
 	}
 }
 
