@@ -116,9 +116,12 @@ public struct HolderInput: Sendable {
     public var pageAddress: String
     /// The text of the page the phone has (fetched by the holder when it needs it; nil: none).
     public var pageText: (@Sendable () async -> String)?
+    /// What the phone retrieved for this turn (Retrieval.swift), built once by the engine so the local model and the server desk see the same passages.
+    public var retrieved: RetrievalContext?
     public init(listenerWords: String, answers: [System1Answer], pageTitle: String = "", pageKind: String = "", pageAddress: String = "",
-                pageText: (@Sendable () async -> String)? = nil) {
+                pageText: (@Sendable () async -> String)? = nil, retrieved: RetrievalContext? = nil) {
         self.listenerWords = listenerWords; self.answers = answers; self.pageTitle = pageTitle; self.pageKind = pageKind; self.pageAddress = pageAddress; self.pageText = pageText
+        self.retrieved = retrieved
     }
 }
 
@@ -277,6 +280,12 @@ public protocol Holder: Stage {
     /// True when what the holder is saying is itself an answer (from the reader's saved stories): the desk's answer waits for it to end
     /// instead of cutting it at a sentence. False: the holder only fills the wait and is cut when the desk speaks.
     var keepsSpeakingForDesk: Bool { get }
+    /// Search what the phone holds for this question (nil: this holder does not retrieve). The engine calls it once per turn and hands the result to
+    /// the holder (HolderInput.retrieved) and to the server desk (DeskContext), so both answer from the same passages.
+    func retrieve(words: String, pageTitle: String, pageAddress: String) async -> RetrievalContext?
+}
+public extension Holder {
+    func retrieve(words: String, pageTitle: String, pageAddress: String) async -> RetrievalContext? { nil }
 }
 public extension Holder {
     var keepsSpeakingForDesk: Bool { false }

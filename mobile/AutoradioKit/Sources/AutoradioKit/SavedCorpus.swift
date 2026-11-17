@@ -51,6 +51,8 @@ public final class SavedCorpus: @unchecked Sendable {
     public var preparers: [@Sendable () async -> Void] = []
     /// The title of what is on air, for "that" and "this" when no page is in front.
     public var onAirHint = ""
+    /// "On air now: X. Up next: A; B." for the server desk when the page in front has no text.
+    public var onAirBrief = ""
     public func prepare() async { for p in preparers { await p() } }
     /// The retriever the model's context is built from: BM25 over `retrieval` today; a fused retriever can be set here.
     public var retriever: (any Retriever)?
@@ -76,7 +78,7 @@ public final class SavedCorpus: @unchecked Sendable {
     public func reset() {
         lock.lock(); held = [:]; heldOrder = []; known = []; onAirHint = ""; lock.unlock()
         retrieval.removeAll(except: [])
-        RetrievedRefs.shared.clear(); RetrievalLog.shared.clear()
+        RetrievalLog.shared.clear()
     }
 
     /// Name a source of documents. Replaces the source of that name.
@@ -119,6 +121,8 @@ public final class SavedCorpus: @unchecked Sendable {
     /// What the on-device model is shown for this question: every store searched with BM25, newest first, within the budget.
     public func retrieve(_ question: String, onAir: String = "", pageAddress: String = "", now: Date = Date()) -> RetrievalContext {
         refresh()
-        return (retriever ?? retrieval).retrieve(.init(words: question, onAirTitle: onAir, pageID: pageAddress.isEmpty ? nil : "page:" + pageAddress, now: now))
+        var c = (retriever ?? retrieval).retrieve(.init(words: question, onAirTitle: onAir, pageID: pageAddress.isEmpty ? nil : "page:" + pageAddress, now: now))
+        lock.lock(); c.brief = onAirBrief; lock.unlock()          // what is on air and ahead, for both desks
+        return c
     }
 }
