@@ -224,3 +224,48 @@ final class ContentSyncTests: XCTestCase {
         XCTAssertTrue(b.isEmpty); XCTAssertFalse(aa.isEmpty)
     }
 }
+
+final class ContentStoreBootTests: XCTestCase {
+    func brokenRoot() -> URL {            // a folder that cannot be made: its parent is a regular file
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("blocker-\(UUID().uuidString)")
+        try? Data("x".utf8).write(to: f); return f.appendingPathComponent("content")
+    }
+    func testAStoreThatCannotOpenDoesNothingAndLogsOnlyACode() {
+        let logs = ContentStoreTests.Box<[String]>([]); let root = brokenRoot()
+        let s = ContentStore(root: root, log: { logs.value.append($0) })
+        XCTAssertFalse(s.usable)
+        s.put(StoredItem(id: "mail:1", kind: .mail, title: "SECRET-SUBJECT", text: "SECRET-BODY", address: "mail:1")); s.flush()
+        XCTAssertNil(s.get("mail:1")); XCTAssertEqual(s.summary().totalBytes, 0); XCTAssertTrue(s.drain().up.isEmpty)
+        XCTAssertEqual(logs.value.count, 1); XCTAssertTrue(logs.value[0].hasPrefix("content: store open failed ("), logs.value[0])
+        XCTAssertFalse(logs.value[0].contains("SECRET")); XCTAssertFalse(logs.value[0].contains("blocker"), "no path in the log")
+        let said = ContentStoreTests.Box<[String]>([])
+        XCTAssertFalse(ContentBoot.start(store: s, corpus: SavedCorpus(readerStore: nil), say: { said.value.append($0) }))
+        XCTAssertTrue(said.value[0].hasPrefix("AUTORADIO store open FAILED "), said.value[0])
+        // The retrieval path still answers, from what else the phone holds.
+        let corpus = SavedCorpus(readerStore: nil); corpus.setSource("t") { [SavedCorpus.Document(id: "a", title: "Senate vote", address: "pub:a", text: "The Senate voted.")] }
+        XCTAssertEqual(corpus.retrieve("senate vote").items.count, 1)
+    }
+    func testAnEmptyStoreOpensAndSaysSo() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("boot-\(UUID().uuidString)"); defer { try? FileManager.default.removeItem(at: root) }
+        let s = ContentStore(root: root); let said = ContentStoreTests.Box<[String]>([])
+        XCTAssertTrue(ContentBoot.start(store: s, corpus: SavedCorpus(readerStore: nil), say: { said.value.append($0) }))
+        XCTAssertEqual(said.value, ["AUTORADIO store open ok items=0"])
+    }
+    func testEmptyStoreAndNetworkAvailableTheFrontPageLoadsFromTheNetwork() async {
+        let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubProtocol.self]
+        StubProtocol.handler = { _ in .init(json: ["stories": [["title": "Senate passes the water bill", "dek": "A vote.", "route": ["bare": "/p/water"], "updated_at": "2026-11-14T10:00:00Z", "words": 400]], "sections": []]) }
+        let client = ChoirClient(baseURL: "https://example.test", keys: InMemoryKeyStore([:]), session: URLSession(configuration: cfg))
+        for store in [ContentStore(root: FileManager.default.temporaryDirectory.appendingPathComponent("front-\(UUID().uuidString)")), ContentStore(root: brokenRoot())] {
+            let source = PaperSource(cacheFile: nil)
+            let r = await source.live(client: client, fresh: true)
+            XCTAssertEqual(r.status, "ready"); XCTAssertEqual(r.stories.count, 1, "the network list is the page, whatever the store holds")
+            XCTAssertNil(store.readerDoc(address: "pub:/p/water"), "an empty store offers nothing, and nothing is required of it")
+        }
+    }
+    func testASlowOrBrokenStoreNeverHoldsUpTheReader() async {
+        let store = ReaderStore(limit: 5, fetcher: { a in ReaderDoc(address: a, status: "ready", title: "From the network") })
+        store.offline = { _ in sleep(0); return nil }
+        let d = await store.doc("pub:/p/x")
+        XCTAssertEqual(d.title, "From the network")
+    }
+}

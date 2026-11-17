@@ -102,6 +102,9 @@ public final class ContentStore: @unchecked Sendable {
     private var removed = Set<String>()
     private var dirty = false
     public var onChange: (@Sendable () -> Void)?
+    /// Whether the store could open its folder and write to it. When it could not, every call does nothing and the app behaves as it did without a store.
+    public private(set) var usable = false
+    public private(set) var openReason = ""
 
     /// `protect` is called with every file and directory the store creates (tests record it; the default sets the platform attributes).
     public init(root: URL?, budget: Budget = .standard, clock: @escaping @Sendable () -> Date = { Date() },
@@ -110,8 +113,19 @@ public final class ContentStore: @unchecked Sendable {
         self.protect = protect ?? { url in
             try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: url.path)
         }
-        guard let root else { return }
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        guard let root else { openReason = "no folder"; return }
+        do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let probe = root.appendingPathComponent(".probe")
+            try Data("ok".utf8).write(to: probe, options: Self.writeOptions)
+            try? FileManager.default.removeItem(at: probe)
+            usable = true
+        } catch {
+            let e = error as NSError
+            openReason = "\(e.domain) \(e.code)"                       // a code, never a path or content
+            log?("content: store open failed (\(openReason))")
+            return
+        }
         self.protect?(root)
         var v = URLResourceValues(); v.isExcludedFromBackup = true
         var r = root; try? r.setResourceValues(v)
@@ -148,6 +162,7 @@ public final class ContentStore: @unchecked Sendable {
     // MARK: put, get, remove
 
     public func put(_ item: StoredItem) {
+        guard usable else { return }
         var it = item; if it.syncedAt == Date.distantPast { it.syncedAt = clock() }
         guard let dir = dir(it.kind), let data = try? JSONEncoder().encode(it) else { return }
         let name = Self.fileName(it.id) + ".json"
@@ -191,6 +206,7 @@ public final class ContentStore: @unchecked Sendable {
     public func lastSynced(_ kind: ContentKind) -> Date? { lock.lock(); defer { lock.unlock() }; return synced[kind.rawValue] }
     /// Write the manifest (metadata and checkpoints). A sync flushes after every batch, so a kill loses at most one batch's checkpoint.
     public func flush() {
+        guard usable else { return }
         lock.lock(); let m = Manifest(metas: Array(metas.values), checkpoints: checkpoints, synced: synced); dirty = false; lock.unlock()
         guard let root, let d = try? JSONEncoder().encode(m) else { return }
         write(d, to: root.appendingPathComponent("manifest.json"))
