@@ -186,81 +186,112 @@ type Hit struct {
 	Matched int
 }
 
+// corpus holds the statistics BM25 needs: the document frequency of each term
+// over the windows, the number of windows and the mean window length.
+type corpus struct {
+	windows []Window
+	n, avg  float64
+	df      map[string]int
+}
+
+func newCorpus(windows []Window) *corpus {
+	c := &corpus{windows: windows, n: float64(len(windows)), df: map[string]int{}}
+	for i := range windows {
+		c.avg += float64(windows[i].length)
+		for t := range windows[i].terms {
+			c.df[t]++
+		}
+	}
+	if c.n > 0 {
+		c.avg /= c.n
+	}
+	return c
+}
+
+// score is the BM25 of one window for a query's terms, and how many distinct
+// query terms the window carries (near-miss spellings included).
+func (c *corpus) score(qterms map[string]int, w *Window) (score float64, matched int) {
+	for term := range qterms {
+		tf := float64(w.terms[term])
+		weight := 1.0
+		if tf == 0 && len(term) >= 6 {
+			tf = nearTF(w, term)
+			weight = fuzzyWeight
+		}
+		if tf == 0 {
+			continue
+		}
+		matched++
+		d := float64(c.df[term])
+		if d == 0 {
+			d = 1
+		}
+		idf := math.Log(1 + (c.n-d+0.5)/(d+0.5))
+		score += weight * idf * (tf * (bm25K1 + 1)) / (tf + bm25K1*(1-bm25B+bm25B*float64(w.length)/c.avg))
+	}
+	return score, matched
+}
+
+func queryTerms(text string) map[string]int {
+	qterms := map[string]int{}
+	for _, t := range Tokens(text) {
+		qterms[t]++
+	}
+	return qterms
+}
+
+// rankOne returns up to topK hits for one query: positive score, at least two
+// distinct matched terms, best first, windows of one transcript that overlap
+// a better hit left out. scored is how many windows were scored.
+func (c *corpus) rankOne(ctx context.Context, q Query, topK int) (kept []Hit, err error) {
+	qterms := queryTerms(q.Text)
+	var hits []Hit
+	for wi := range c.windows {
+		// The deadline cancels the ranking: it is the one unbounded loop.
+		if wi%64 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+		w := &c.windows[wi]
+		score, matched := c.score(qterms, w)
+		if score > 0 && matched >= 2 {
+			hits = append(hits, Hit{QueryID: q.ID, Window: w, Score: score, Matched: matched})
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
+	for _, h := range hits {
+		overlap := false
+		for _, k := range kept {
+			if k.Window.Key == h.Window.Key && h.Window.Start < k.Window.End && k.Window.Start < h.Window.End {
+				overlap = true
+				break
+			}
+		}
+		if !overlap {
+			kept = append(kept, h)
+		}
+		if len(kept) == topK {
+			break
+		}
+	}
+	return kept, nil
+}
+
 // Rank scores every window for every query by BM25 (document frequency from
 // the windows themselves) and returns, per query, up to topK hits with a
 // positive score and at least two distinct matched terms, best first, windows
 // of one transcript that overlap a better hit left out.
 func Rank(ctx context.Context, queries []Query, windows []Window, topK int) (map[string][]Hit, error) {
 	out := map[string][]Hit{}
-	n := float64(len(windows))
-	if n == 0 {
-		return out, nil
-	}
-	avg := 0.0
-	df := map[string]int{}
-	for i := range windows {
-		avg += float64(windows[i].length)
-		for t := range windows[i].terms {
-			df[t]++
-		}
-	}
-	avg /= n
-	if avg == 0 {
+	c := newCorpus(windows)
+	if c.n == 0 || c.avg == 0 {
 		return out, nil
 	}
 	for _, q := range queries {
-		qterms := map[string]int{}
-		for _, t := range Tokens(q.Text) {
-			qterms[t]++
-		}
-		var hits []Hit
-		for wi := range windows {
-			// The deadline cancels the ranking: it is the one unbounded loop.
-			if wi%64 == 0 {
-				if err := ctx.Err(); err != nil {
-					return nil, err
-				}
-			}
-			w := &windows[wi]
-			score, matched := 0.0, 0
-			for term := range qterms {
-				tf := float64(w.terms[term])
-				weight := 1.0
-				if tf == 0 && len(term) >= 6 {
-					tf = nearTF(w, term)
-					weight = fuzzyWeight
-				}
-				if tf == 0 {
-					continue
-				}
-				matched++
-				d := float64(df[term])
-				if d == 0 {
-					d = 1
-				}
-				idf := math.Log(1 + (n-d+0.5)/(d+0.5))
-				score += weight * idf * (tf * (bm25K1 + 1)) / (tf + bm25K1*(1-bm25B+bm25B*float64(w.length)/avg))
-			}
-			if score > 0 && matched >= 2 {
-				hits = append(hits, Hit{QueryID: q.ID, Window: w, Score: score, Matched: matched})
-			}
-		}
-		sort.SliceStable(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
-		var kept []Hit
-		for _, h := range hits {
-			overlap := false
-			for _, k := range kept {
-				if k.Window.Key == h.Window.Key && h.Window.Start < k.Window.End && k.Window.Start < h.Window.End {
-					overlap = true
-					break
-				}
-			}
-			if !overlap {
-				kept = append(kept, h)
-			}
-			if len(kept) == topK {
-				break
-			}
+		kept, err := c.rankOne(ctx, q, topK)
+		if err != nil {
+			return nil, err
 		}
 		out[q.ID] = kept
 	}
@@ -335,6 +366,37 @@ type Clip struct {
 // of the best segment's weight, so irrelevant edges are trimmed. It returns
 // false when no run of segments fits the bounds.
 func ChooseClip(segs []Segment, win Window, query string) (Clip, bool) {
+	return chooseClip(segs, win, query, false)
+}
+
+// ChooseSentenceClip is ChooseClip with the clip's edges on sentence or
+// speaker-turn edges: it starts where the segment before ends a sentence (or
+// a pause of PauseEdgeSeconds or more precedes it) and ends on a segment that
+// ends a sentence (or is followed by such a pause). The transcript's segments
+// are sentence or pause bounded, so a clip never starts or ends mid-word; this
+// also keeps it from starting or ending mid-sentence.
+func ChooseSentenceClip(segs []Segment, win Window, query string) (Clip, bool) {
+	return chooseClip(segs, win, query, true)
+}
+
+// PauseEdgeSeconds is the silence that counts as a turn edge.
+const PauseEdgeSeconds = 0.9
+
+// SentenceEnd reports whether text ends a sentence.
+func SentenceEnd(text string) bool {
+	t := strings.TrimRight(strings.TrimSpace(text), `"')]}»”’`)
+	return strings.HasSuffix(t, ".") || strings.HasSuffix(t, "?") || strings.HasSuffix(t, "!")
+}
+
+func startsClean(segs []Segment, i int) bool {
+	return i == 0 || SentenceEnd(segs[i-1].Text) || segs[i].Start-segs[i-1].End >= PauseEdgeSeconds
+}
+
+func endsClean(segs []Segment, j int) bool {
+	return j == len(segs)-1 || SentenceEnd(segs[j].Text) || segs[j+1].Start-segs[j].End >= PauseEdgeSeconds
+}
+
+func chooseClip(segs []Segment, win Window, query string, edges bool) (Clip, bool) {
 	q := map[string]bool{}
 	for _, t := range Tokens(query) {
 		q[t] = true
@@ -365,12 +427,18 @@ func ChooseClip(segs []Segment, win Window, query string) (Clip, bool) {
 	var pick Clip
 	for i := lo; i <= hi; i++ {
 		score := 0.0
+		if edges && !startsClean(segs, i) {
+			continue
+		}
 		for j := i; j <= hi; j++ {
 			dur := segs[j].End - segs[i].Start
 			if dur > ClipMaxSeconds {
 				break
 			}
 			score += weight[j] - tau
+			if edges && !endsClean(segs, j) {
+				continue
+			}
 			if dur >= ClipMinSeconds && score > bestScore {
 				found, bestScore = true, score
 				pick = Clip{Start: segs[i].Start, End: segs[j].End, First: i, Last: j}

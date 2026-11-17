@@ -66,7 +66,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		if len(msg) > 300 {
 			msg = msg[:300]
 		}
-		return fmt.Errorf("%s %s: %d %s", method, path, resp.StatusCode, msg)
+		return &HTTPError{Method: method, Path: path, Status: resp.StatusCode, Body: msg}
 	}
 	if out != nil {
 		if err := json.Unmarshal(raw, out); err != nil {
@@ -74,6 +74,23 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		}
 	}
 	return nil
+}
+
+// HTTPError is the platform's refusal of a request.
+type HTTPError struct {
+	Method, Path string
+	Status       int
+	Body         string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("%s %s: %d %s", e.Method, e.Path, e.Status, e.Body)
+}
+
+// Permanent reports whether repeating the same request cannot succeed: the
+// platform refused its content (a 4xx other than a timeout or a rate limit).
+func (e *HTTPError) Permanent() bool {
+	return e.Status >= 400 && e.Status < 500 && e.Status != 408 && e.Status != 429
 }
 
 const opBase = "/api/platform/operator/podcasts/"
@@ -154,4 +171,23 @@ func (c *Client) ListFeeds(ctx context.Context, feeds []FeedSpec) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// PutClipsEach sends clips like PutClips and returns one error per clip, nil
+// for a clip stored: a request the server refuses is retried clip by clip.
+func (c *Client) PutClipsEach(ctx context.Context, clips []ClipIn) []error {
+	errs := make([]error, len(clips))
+	put := func(batch []ClipIn) error {
+		return c.do(ctx, http.MethodPut, opBase+"clips", map[string]any{"clips": batch}, nil)
+	}
+	for start := 0; start < len(clips); start += 200 {
+		end := min(start+200, len(clips))
+		if err := put(clips[start:end]); err == nil {
+			continue
+		}
+		for i := start; i < end; i++ {
+			errs[i] = put(clips[i : i+1])
+		}
+	}
+	return errs
 }

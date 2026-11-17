@@ -3,6 +3,7 @@ package podcastworker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -43,9 +44,14 @@ type ServeConfig struct {
 	Intake      func(ctx context.Context) error
 	IntakeEvery time.Duration // how often Intake runs (default 30 min); 0 with Intake nil is never
 	ReportEvery time.Duration // the volume line (default 1 h)
-	Now         func() time.Time
-	Sleep       func(ctx context.Context, d time.Duration) // a test seam
-	Logf        func(format string, args ...any)
+	// Match runs the automatic clip matcher (no model call). It runs when the
+	// queue of episodes is drained after a transcript was stored, and at least
+	// every MatchEvery (default 30 min) so stories new to the front are seen.
+	Match      func(ctx context.Context) error
+	MatchEvery time.Duration
+	Now        func() time.Time
+	Sleep      func(ctx context.Context, d time.Duration) // a test seam
+	Logf       func(format string, args ...any)
 }
 
 func (c *ServeConfig) defaults() {
@@ -69,6 +75,9 @@ func (c *ServeConfig) defaults() {
 	}
 	if c.Intake != nil && c.IntakeEvery == 0 {
 		c.IntakeEvery = 30 * time.Minute
+	}
+	if c.Match != nil && c.MatchEvery == 0 {
+		c.MatchEvery = 30 * time.Minute
 	}
 	if c.ReportEvery == 0 {
 		c.ReportEvery = time.Hour
@@ -106,6 +115,8 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 		idle       = cfg.MinIdle
 		lastIntake time.Time
 		windowFrom = cfg.Now()
+		lastMatch  time.Time
+		matchDirty bool
 		stats      struct {
 			stored, failed int
 			audio          float64
@@ -125,8 +136,17 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 		stats.stored, stats.failed, stats.audio, stats.wall = 0, 0, 0, 0
 		windowFrom = now
 	}
+	runMatch := func() {
+		lastMatch, matchDirty = cfg.Now(), false
+		if err := cfg.Match(ctx); err != nil && ctx.Err() == nil {
+			cfg.Logf("podcast-worker: match failed: %v", err)
+		}
+	}
 	for ctx.Err() == nil {
 		report(false)
+		if cfg.Match != nil && cfg.Now().Sub(lastMatch) >= cfg.MatchEvery {
+			runMatch()
+		}
 		if cfg.Intake != nil && cfg.Now().Sub(lastIntake) >= cfg.IntakeEvery {
 			lastIntake = cfg.Now()
 			if err := cfg.Intake(ctx); err != nil && ctx.Err() == nil {
@@ -152,6 +172,9 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 			break
 		}
 		if next == nil {
+			if cfg.Match != nil && matchDirty {
+				runMatch()
+			}
 			cfg.Sleep(ctx, idle)
 			idle = min(idle*2, cfg.MaxIdle)
 			continue
@@ -159,6 +182,12 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 		idle = cfg.MinIdle
 		started := cfg.Now()
 		res, err := e.Transcribe(ctx, next.EnclosureURL)
+		if err == nil {
+			var rep Repairs
+			if res, rep, err = PrepareResult(res); rep.Any() {
+				cfg.Logf("podcast-worker: episode %s (%s): segments repaired before storing: %s", next.EpisodeID, next.Show, rep)
+			}
+		}
 		if err == nil {
 			err = b.PutTranscript(ctx, next.EpisodeID, e.Engine(), res)
 		}
@@ -182,14 +211,26 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 			if skip > cfg.MaxFailSkip || skip <= 0 {
 				skip = cfg.MaxFailSkip
 			}
+			// A transcript the platform refused, or one that fails its rules
+			// here, is the same on the next try: the download and the
+			// transcription would be repeated for nothing.
+			refused := IsRefusal(err)
+			if refused {
+				skip = cfg.MaxFailSkip
+			}
 			f.until = cfg.Now().Add(skip)
 			failed[next.EpisodeID] = f
 			stats.failed++
 			mu.Unlock()
-			cfg.Logf("podcast-worker: episode %s (%s) failed (%d): %v; skipped for %s", next.EpisodeID, next.Show, f.count, err, skip)
+			if refused {
+				cfg.Logf("podcast-worker: episode %s (%s) transcript refused (%d): %v; not retried for %s", next.EpisodeID, next.Show, f.count, err, skip)
+			} else {
+				cfg.Logf("podcast-worker: episode %s (%s) failed (%d): %v; skipped for %s", next.EpisodeID, next.Show, f.count, err, skip)
+			}
 			continue
 		}
 		delete(failed, next.EpisodeID)
+		matchDirty = true
 		stats.stored++
 		stats.audio += res.Seconds
 		mu.Unlock()
@@ -197,4 +238,30 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 	}
 	report(true)
 	return ctx.Err()
+}
+
+// ErrInvalidTranscript marks a transcript that fails the platform's rules
+// after repair: the same transcript would be refused again.
+var ErrInvalidTranscript = errors.New("transcript fails the platform's rules")
+
+// PrepareResult repairs a result's segments (RepairSegments) and checks them
+// against the platform's rules (ValidateSegments). An error names the first
+// segment that still breaks a rule and wraps ErrInvalidTranscript.
+func PrepareResult(r Result) (Result, Repairs, error) {
+	segs, rep := RepairSegments(r.Segments)
+	r.Segments = segs
+	if err := ValidateSegments(segs); err != nil {
+		return r, rep, fmt.Errorf("%w: %v", ErrInvalidTranscript, err)
+	}
+	return r, rep, nil
+}
+
+// IsRefusal reports whether err is a refusal of the transcript's content that
+// repeating cannot cure: the platform's 4xx or a failed local validation.
+func IsRefusal(err error) bool {
+	var he *HTTPError
+	if errors.As(err, &he) {
+		return he.Permanent()
+	}
+	return errors.Is(err, ErrInvalidTranscript)
 }

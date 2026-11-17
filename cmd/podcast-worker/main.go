@@ -11,7 +11,10 @@
 // run (both, once), candidates (rank the paper's stories against the stored
 // transcripts into a file for a person or an agent to judge; no model call),
 // put-clips (send the candidates judged support > 0 through the operator
-// route) and serve (intake and transcribe, for good: it polls for episodes that need
+// route), match (rank, apply the rules of internal/podcastmatch and write the
+// clips that clear them, no model call; --dry-run prints instead; serve runs
+// it too), match-eval (precision and recall against judged candidates files,
+// no key needed) and serve (intake and transcribe, for good: it polls for episodes that need
 // a transcript, transcribes one at a time at the lowest CPU and I/O priority
 // with at most four threads, and sleeps with a backoff when idle; SIGTERM
 // stops it and an unfinished episode stays pending). The API key is read from
@@ -30,6 +33,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/podcastmatch"
 	"github.com/yusefmosiah/go-choir/internal/podcastworker"
 )
 
@@ -42,7 +46,7 @@ type feedList struct {
 
 func main() {
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Fprintln(os.Stderr, "usage: podcast-worker {intake|transcribe|run|serve|candidates|put-clips} [flags]")
+		fmt.Fprintln(os.Stderr, "usage: podcast-worker {intake|transcribe|run|serve|candidates|put-clips|match|match-eval} [flags]")
 		os.Exit(2)
 	}
 	cmd := os.Args[1]
@@ -65,12 +69,33 @@ func main() {
 	perStory := fs.Int("per-story", 4, "candidates: passages offered per story, at most one per episode")
 	outFile := fs.String("out", "", "candidates: the file to write")
 	inFile := fs.String("in", "", "put-clips: the judged candidates file")
+	dryRun := fs.Bool("dry-run", false, "match: print the clips it would write and write nothing")
+	matchState := fs.String("match-state", "", "match, serve: the file that remembers what was matched and written (default: only for this run)")
+	judged := fs.String("judged", "", "match-eval: comma separated judged candidates files")
+	minScore := fs.Float64("min-score", podcastmatch.DefaultParams.MinScore, "match: the clip's BM25 as a share of a perfect passage's")
+	minMargin := fs.Float64("min-margin", podcastmatch.DefaultParams.MinMargin, "match: how far the story's score must exceed the next story's, as a fraction")
+	minShare := fs.Float64("min-entity-share", podcastmatch.DefaultParams.MinEntityShare, "match: the share of the story's distinctive terms the clip must carry")
 	intakeEvery := fs.Duration("intake-every", 30*time.Minute, "serve: how often the feeds are polled")
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		os.Exit(2)
 	}
-	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "candidates" && cmd != "put-clips" {
+	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "candidates" && cmd != "put-clips" && cmd != "match" && cmd != "match-eval" {
 		log.Fatalf("unknown command %q", cmd)
+	}
+	params := podcastmatch.DefaultParams
+	params.MinScore, params.MinMargin, params.MinEntityShare = *minScore, *minMargin, *minShare
+	if cmd == "match-eval" {
+		if *judged == "" {
+			log.Fatal("match-eval needs --judged")
+		}
+		rows, err := podcastworker.EvalJudged(context.Background(), strings.Split(*judged, ","),
+			map[string]podcastmatch.Params{"strict": podcastmatch.StrictParams, "default": podcastmatch.DefaultParams, "loose": podcastmatch.LooseParams},
+			[]string{"strict", "default", "loose"})
+		if err != nil {
+			log.Fatalf("match-eval: %v", err)
+		}
+		fmt.Print(podcastworker.FormatEval(rows))
+		return
 	}
 	raw, err := os.ReadFile(*keyFile)
 	if err != nil {
@@ -96,7 +121,9 @@ func main() {
 		ctx, stop = signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
+		matcher := &podcastworker.Matcher{B: client, Params: params, StatePath: *matchState, Logf: log.Printf}
 		cfg := podcastworker.ServeConfig{
+			Match: func(ctx context.Context) error { _, err := matcher.Run(ctx); return err },
 			Since: time.Duration(*sinceHours) * time.Hour, ListLimit: *maxEpisodes, IntakeEvery: *intakeEvery,
 			Intake: func(ctx context.Context) error {
 				// Free space is logged at each intake, so a filling disk is seen.
@@ -112,6 +139,15 @@ func main() {
 			log.Fatalf("serve: %v", err)
 		}
 		log.Printf("podcast-worker stopped")
+		return
+	}
+	if cmd == "match" {
+		ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		m := &podcastworker.Matcher{B: client, Params: params, DryRun: *dryRun, StatePath: *matchState, Out: os.Stdout, Logf: log.Printf}
+		if _, err := m.Run(ctx); err != nil {
+			log.Fatalf("match: %v", err)
+		}
 		return
 	}
 	if cmd == "candidates" {
@@ -224,7 +260,14 @@ func transcribe(ctx context.Context, c *podcastworker.Client, t *podcastworker.T
 			log.Printf("episode %s (%s): skipped: %v", ep.EpisodeID, ep.Show, err)
 			continue
 		}
-		if err := c.PutTranscript(ctx, ep.EpisodeID, t.Engine(), res); err != nil {
+		res, rep, err := podcastworker.PrepareResult(res)
+		if rep.Any() {
+			log.Printf("episode %s (%s): segments repaired before storing: %s", ep.EpisodeID, ep.Show, rep)
+		}
+		if err == nil {
+			err = c.PutTranscript(ctx, ep.EpisodeID, t.Engine(), res)
+		}
+		if err != nil {
 			log.Printf("episode %s (%s): not stored: %v", ep.EpisodeID, ep.Show, err)
 			continue
 		}

@@ -107,7 +107,22 @@ func guardedDialerWith(permit func(net.IP, string) error, lookup lookupFunc, dia
 				return nil, fmt.Errorf("dial %s: %w", addr, err)
 			}
 		}
-		return dial(ctx, network, net.JoinHostPort(ips[0].String(), port))
+		// Every address was checked above, so each may be tried, in the order
+		// the resolver gave: a host whose first (IPv6) address refuses is
+		// reached by the next one.
+		var errs []error
+		for _, ip := range ips {
+			target := net.JoinHostPort(ip.String(), port)
+			conn, err := dial(ctx, network, target)
+			if err == nil {
+				return conn, nil
+			}
+			errs = append(errs, fmt.Errorf("%s: %w", target, err))
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		return nil, errors.Join(errs...)
 	}
 }
 
