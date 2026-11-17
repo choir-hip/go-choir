@@ -114,11 +114,18 @@ func (m *Matcher) save() {
 	if err != nil {
 		return
 	}
+	if err := os.MkdirAll(filepath.Dir(m.StatePath), 0o700); err != nil {
+		m.logf("podcast-worker match: state not saved: %v", err)
+		return
+	}
 	tmp := m.StatePath + ".tmp"
-	if os.WriteFile(tmp, raw, 0o600) == nil {
-		if err := os.Rename(tmp, m.StatePath); err != nil {
-			m.logf("podcast-worker match: state not saved: %v", err)
-		}
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		m.logf("podcast-worker match: state not saved: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, m.StatePath); err != nil {
+		os.Remove(tmp)
+		m.logf("podcast-worker match: state not saved: %v", err)
 	}
 }
 
@@ -149,12 +156,19 @@ func DefaultMatchStatePath(workDir string) string {
 	return filepath.Join(os.TempDir(), "choir-podcast-match-state.json")
 }
 
+func audioKeyURL(raw string) string {
+	if u, err := url.Parse(strings.TrimSpace(raw)); err == nil && u.Host != "" {
+		return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + u.Path
+	}
+	return ""
+}
+
 // audioKey is the identity of an episode's audio: its enclosure without query
 // or fragment, so two feed entries of one file are one; without an enclosure,
 // the feed, title and publish time.
 func audioKey(e EpisodeInfo) string {
-	if u, err := url.Parse(strings.TrimSpace(e.EnclosureURL)); err == nil && u.Host != "" {
-		return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + u.Path
+	if k := audioKeyURL(e.EnclosureURL); k != "" {
+		return k
 	}
 	return e.FeedURL + "|" + e.Title + "|" + e.Published.UTC().Format(time.RFC3339)
 }
@@ -162,17 +176,28 @@ func audioKey(e EpisodeInfo) string {
 // Run matches once.
 func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	m.load()
+	var before int
+	counter, counts := m.B.(interface{ Requests() int })
+	if counts {
+		before = counter.Requests()
+	}
+	var rep MatchReport
+	done := func() {
+		if counts {
+			rep.Requests = counter.Requests() - before
+		}
+		m.report(rep)
+	}
 	now := time.Now()
 	if m.Now != nil {
 		now = m.Now()
 	}
-	rep := MatchReport{Rejected: map[podcastmatch.Rule]int{}}
+	rep.Rejected = map[podcastmatch.Rule]int{}
 	limit := m.Stories
 	if limit <= 0 {
 		limit = 100
 	}
 	front, err := m.B.Front(ctx, 100)
-	rep.Requests++
 	if err != nil {
 		return rep, fmt.Errorf("front list: %w", err)
 	}
@@ -203,7 +228,7 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	}
 	if len(stories) == 0 {
 		m.save()
-		m.report(rep)
+		done()
 		return rep, nil
 	}
 	earliest := now
@@ -212,7 +237,6 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 			earliest = t
 		}
 	}
-	rep.Requests++
 	eps, err := m.B.Episodes(ctx, earliest, 500)
 	if err != nil {
 		return rep, fmt.Errorf("episodes: %w", err)
@@ -251,7 +275,7 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	}
 	if len(subjects) == 0 {
 		m.save()
-		m.report(rep)
+		done()
 		return rep, nil
 	}
 	if m.transcripts == nil {
@@ -264,7 +288,6 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 		seen[e.EpisodeID] = true
 		segs, cached := m.transcripts[e.EpisodeID]
 		if !cached {
-			rep.Requests++
 			blocks, err := m.B.Transcript(ctx, e.FeedURL, e.GUID)
 			if err != nil {
 				m.logf("podcast-worker match: episode %s: transcript unavailable: %v", e.EpisodeID, err)
@@ -292,16 +315,18 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	for _, st := range stories {
 		routes = append(routes, st.Route.Bare)
 	}
-	rep.Requests++
 	heldRows, err := m.B.Clips(ctx, routes)
 	if err != nil {
 		return rep, fmt.Errorf("read the clips the platform holds: %w", err)
 	}
 	held := map[string][]podcastmatch.Held{}
 	for _, h := range heldRows {
-		ak, ok := audioOf[h.FeedURL+"\x00"+h.GUID]
-		if !ok {
-			ak = h.FeedURL + "\x00" + h.GUID
+		ak := audioKeyURL(h.AudioURL) // the platform's own enclosure, as for the episodes
+		if ak == "" {
+			var ok bool
+			if ak, ok = audioOf[h.FeedURL+"\x00"+h.GUID]; !ok {
+				ak = h.FeedURL + "\x00" + h.GUID
+			}
 		}
 		held[h.Route] = append(held[h.Route], podcastmatch.Held{AudioKey: ak, Text: h.Quote})
 	}
@@ -336,7 +361,6 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	if m.DryRun {
 		rep.WouldWrite = len(fresh)
 	} else if len(fresh) > 0 {
-		rep.Requests++
 		errs := m.B.PutClipsEach(ctx, fresh)
 		for i, err := range errs {
 			switch {
@@ -364,7 +388,7 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 		}
 	}
 	m.save()
-	m.report(rep)
+	done()
 	return rep, nil
 }
 

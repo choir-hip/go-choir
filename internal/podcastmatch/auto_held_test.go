@@ -176,3 +176,27 @@ func TestKnownLimit_AnEpisodeBeforeAnOngoingEventInsideTheWindow(t *testing.T) {
 		}
 	}
 }
+
+// C2 of the re-review: editorial speech that contains an ad-like word is not an ad.
+func TestC2_EditorialSpeechWithAdLikeWordsStillClips(t *testing.T) {
+	for _, text := range []string{
+		"The sponsors of the bill say the Marlin ferry crash in Tessaly Bay shows why it is needed.",
+		"The finding that the Harborview vessel lost steering is supported by the data from the coast guard.",
+		"Passengers had to book a second crossing after the Marlin hit the pier in Tessaly Bay.",
+		"Subscribe to the view that forty hurt on the Marlin ferry in Tessaly Bay was avoidable, said the coast guard.",
+	} {
+		if isAdRead(text) {
+			t.Errorf("C2: %q read as an ad", text)
+		}
+	}
+	for _, text := range []string{
+		"This episode is brought to you by Harborview Lines.",
+		"Today's show is sponsored by Kestrel Dynamics.",
+		"This episode is supported by Orbis bikes.",
+		"Use code NEWS for a free trial, terms apply.",
+	} {
+		if !isAdRead(text) {
+			t.Errorf("C2: %q not read as an ad", text)
+		}
+	}
+}

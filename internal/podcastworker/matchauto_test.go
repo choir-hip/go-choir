@@ -23,6 +23,8 @@ package podcastworker
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,12 +47,16 @@ type fakeMatchBackend struct {
 	tcalls      int
 	held        []HeldClip
 	clipReads   int
+	reqs        int
 }
+
+func (b *fakeMatchBackend) Requests() int { b.mu.Lock(); defer b.mu.Unlock(); return b.reqs }
 
 func (b *fakeMatchBackend) Clips(_ context.Context, routes []string) ([]HeldClip, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.clipReads++
+	b.reqs++
 	var out []HeldClip
 	for _, h := range b.held {
 		for _, r := range routes {
@@ -62,20 +68,30 @@ func (b *fakeMatchBackend) Clips(_ context.Context, routes []string) ([]HeldClip
 	return out, nil
 }
 
-func (b *fakeMatchBackend) Front(context.Context, int) ([]FrontStory, error) { return b.front, nil }
+func (b *fakeMatchBackend) Front(context.Context, int) ([]FrontStory, error) {
+	b.mu.Lock()
+	b.reqs++
+	b.mu.Unlock()
+	return b.front, nil
+}
 func (b *fakeMatchBackend) Episodes(context.Context, time.Time, int) ([]EpisodeInfo, error) {
+	b.mu.Lock()
+	b.reqs++
+	b.mu.Unlock()
 	return b.eps, nil
 }
 func (b *fakeMatchBackend) Transcript(_ context.Context, _, guid string) ([]Segment, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.tcalls++
+	b.reqs++
 	return b.transcripts[guid], nil
 }
 func (b *fakeMatchBackend) PutClipsEach(_ context.Context, clips []ClipIn) []error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.puts = append(b.puts, clips)
+	b.reqs++
 	errs := make([]error, len(clips))
 	for _, c := range clips {
 		if b.putErr != nil && b.putErr(c) != nil {
@@ -394,5 +410,92 @@ func TestB5_TheStateFileHasAStableDefaultBesideTheWorkDir(t *testing.T) {
 	}
 	if got := DefaultMatchStatePath(""); !strings.HasSuffix(got, "match-state.json") || got == "match-state.json" {
 		t.Fatalf("B5: %q", got)
+	}
+}
+
+// Re-review 02ce8f5e6, written first:
+//   C1. the state file is never written when its directory does not exist, and
+//       the write error is swallowed;
+//   C3. PutClipsEach re-sends every clip after a 401 or 403 on the batch;
+//   C4. Requests counts calls to the backend, not HTTP requests.
+
+func TestC1_TheStateFileIsWrittenInAMissingDirectoryAndErrorsAreLogged(t *testing.T) {
+	b := newFakeMatch()
+	var logs []string
+	m := newMatcher(b, &logs)
+	m.StatePath = filepath.Join(t.TempDir(), "a", "b", "state.json")
+	if _, err := m.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(m.StatePath); err != nil {
+		t.Fatalf("C1: state not written: %v", err)
+	}
+	// A path that cannot be written is said so.
+	file := filepath.Join(t.TempDir(), "plain")
+	os.WriteFile(file, []byte("x"), 0o600)
+	m2 := newMatcher(newFakeMatch(), &logs)
+	m2.StatePath = filepath.Join(file, "state.json")
+	logs = nil
+	m2.Run(context.Background())
+	found := false
+	for _, l := range logs {
+		found = found || strings.Contains(l, "state not saved")
+	}
+	if !found {
+		t.Fatalf("C1: the write failure was not logged: %v", logs)
+	}
+}
+
+func TestC3_AnAuthFailureOnABatchIsNotRepeatedPerClip(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	c, err := NewClient(srv.URL, "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := c.PutClipsEach(context.Background(), make([]ClipIn, 50))
+	if calls != 1 {
+		t.Fatalf("C3: %d requests after a 401 on the batch", calls)
+	}
+	for _, e := range errs {
+		if e == nil {
+			t.Fatal("C3: a clip reported stored")
+		}
+	}
+}
+
+func TestC4_TheClientCountsHTTPRequests(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"clips":[]}`)) }))
+	defer srv.Close()
+	c, _ := NewClient(srv.URL, "k")
+	routes := make([]string, 120)
+	c.Clips(context.Background(), routes)
+	if c.Requests() != 3 {
+		t.Fatalf("C4: %d requests for 120 routes, want 3", c.Requests())
+	}
+}
+
+// AlreadyWritten counts a clip the state remembers writing that the platform
+// no longer shows (it fell out of its top three): it is not written again.
+func TestAlreadyWrittenIsTheStatesMemoryOfWhatTheServerNoLongerShows(t *testing.T) {
+	b := newFakeMatch()
+	var logs []string
+	path := filepath.Join(t.TempDir(), "s.json")
+	m := newMatcher(b, &logs)
+	m.StatePath = path
+	if rep, _ := m.Run(context.Background()); rep.Written != 1 {
+		t.Fatal("setup")
+	}
+	b.held = nil // the server shows nothing now
+	b.front[0].LatestRevision = 7
+	m2 := newMatcher(b, &logs)
+	m2.StatePath = path
+	rep, _ := m2.Run(context.Background())
+	if rep.AlreadyWritten != 1 || rep.Written != 0 || len(b.puts) != 1 {
+		t.Fatalf("%+v puts %d", rep, len(b.puts))
 	}
 }
