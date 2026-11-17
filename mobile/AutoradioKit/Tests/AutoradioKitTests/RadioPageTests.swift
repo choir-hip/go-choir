@@ -92,6 +92,29 @@ final class RadioPageTests: XCTestCase {
         XCTAssertEqual(p.ahead.map(\.id), ["a", "b"]); XCTAssertEqual(p.heard.map(\.id), ["hh"])
     }
 
+    func test07d_TheEntryOnAirIsNotListedInUpNext() {
+        let p = RadioPage.make(input([entry("h", state: .heard, outcome: .finished), entry("on", .opening, by: .phone, state: .onAir, title: "Opening"), entry("a"), entry("b")]))
+        XCTAssertEqual(p.ahead.map(\.id), ["a", "b"]); XCTAssertEqual(p.title, "Opening")
+        XCTAssertEqual(p.aheadMore, 0)
+        let nine = RadioPage.make(input([entry("on", state: .onAir)] + (1...8).map { entry("e\($0)") }))
+        XCTAssertEqual(nine.ahead.count, 8); XCTAssertEqual(nine.aheadMore, 3, "All of it appears when more than five are ahead")
+    }
+
+    // 1b the page says "On air" only when something is on air; before the first audio it is the cold start
+    func test01b_BeforeTheFirstAudioItIsTheColdStartWithOnePlay() {
+        let p = RadioPage.make(input([entry("a"), entry("b")]))
+        XCTAssertEqual(p.state, "cold"); XCTAssertFalse(p.onAir); XCTAssertFalse(p.playing); XCTAssertEqual(p.sentence, "")
+        XCTAssertTrue(p.greeting.hasPrefix("Good evening. Two things are ready"))
+    }
+
+    // the bar's now-playing line is not drawn on the Autoradio page (it would sit over the list); everywhere else it opens the page
+    func test07e_TheBarsNowLineIsHiddenOnTheRadioPage() throws {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("AutoradioLab")
+        let bar = try String(contentsOf: dir.appendingPathComponent("bar.contract"))
+        XCTAssertTrue(bar.contains(#"st == "playing" ? (topAddr == "radio:" ? "none" : "playing")"#))
+        XCTAssertTrue(bar.contains(#"press=openPage("radio:", "Autoradio") testId="bar-now""#))
+    }
+
     // 7 up next
     func test07_UpNextHasEveryEntryInOrderWithWhoPlacedEach() {
         let es = (1...8).map { entry("e\($0)", by: $0 == 2 ? .listener : .desk, est: $0 == 3 ? 0 : 200) }
@@ -261,7 +284,7 @@ final class RadioPageTests: XCTestCase {
     // the tour's fixtures decode and say what the tour expects of them
     func test16_TheTourFixturesDecode() throws {
         let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("fixtures/radio-page")
-        for (name, ahead, heard) in [("runsheet-cold.json", 6, 0), ("runsheet-day.json", 6, 3)] {
+        for (name, ahead, heard) in [("runsheet-cold.json", 5, 0), ("runsheet-day.json", 9, 3)] {
             let d = try Data(contentsOf: dir.appendingPathComponent(name))
             let saved = try JSONDecoder().decode(RunSheetStore.Saved.self, from: d)
             let p = RadioPage.make(RadioPageInput(sheet: saved.sheet))

@@ -1,16 +1,7 @@
 {
  "sheet": {
-  "version": 6,
+  "version": 5,
   "entries": [
-   {
-    "id": "d-open",
-    "kind": "opening",
-    "placed_by": "phone",
-    "state": "ahead",
-    "title": "Opening",
-    "est_seconds": 110,
-    "text": "Good evening. Here is what is lined up."
-   },
    {
     "id": "d-1",
     "kind": "story",

@@ -109,8 +109,8 @@ component BarShell
   derive aimTitle = topAddr == "paper:front" ? "Front page" : ((raim.address == pg.top and raim.blockId != "") ? raim.label : frontName)
   derive onSetup = pg.top == "onboarding:setup"
   derive setupLine = ob.step == "topics" ? "Choose your topics" : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
-  // What the line above the controls shows.
-  derive lineMode = heardNow ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (st == "playing" ? "playing" : (st == "paused" ? "paused" : (onSetup ? "setup" : (typing ? "aim" : "none"))))))))
+  // What the line above the controls shows. On the Autoradio page the now-playing line is redundant (the page is what it opens), so it is not drawn there.
+  derive lineMode = heardNow ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (st == "playing" ? (topAddr == "radio:" ? "none" : "playing") : (st == "paused" ? (topAddr == "radio:" ? "none" : "paused") : (onSetup ? "setup" : (typing ? "aim" : "none"))))))))
   derive loaded = ri.title != "" ? ri.title : bi.text
   derive yielded = ri.level != "play" and heardNow
   derive tint = st == "error" ? th.danger : (st == "revised" ? th.success : (st == "playing" ? th.accent2 : th.accent))

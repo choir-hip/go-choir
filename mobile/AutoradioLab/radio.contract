@@ -78,7 +78,7 @@ component RadioPage
                   button press=openPage(rp.openAddress, rp.title) testId="radio-onair-open" appearance="none" width="100%" aria-label=`Open ${rp.title}`
                     row gap=8 align-items="center" width="100%"
                       text rp.title font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.15 color=th.fg text-align="left" text-wrap="balance" flex=1 min-width=0 testId="radio-onair-title" role="heading" aria-level=2
-                      image "symbol:forward-chevron" color=th.muted
+                      image "symbol:forward-chevron" color=th.muted pointer-events="none"
                 else
                   text rp.title font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.15 color=th.fg text-align="left" text-wrap="balance" testId="radio-onair-title" role="heading" aria-level=2
                 if byline != ""
@@ -121,22 +121,22 @@ component RadioPage
             row align-items="center" gap=20 width="100%"
               if qv.audio
                 button press=queueDo("back15", "") testId="radio-back15" appearance="none" aria-label="Back 15 seconds" width=44 height=44
-                  row width=44 height=44 align-items="center" justify-content="center"
-                    image "symbol:skip-back-15" color=th.fg
+                  row width=44 height=44 align-items="center" justify-content="center" pointer-events="none"
+                    image "symbol:skip-back-15" color=th.fg pointer-events="none"
               button press=radioPlay testId="radio-play" appearance="none" width=64 height=64 aria-label=playLabel
-                row width=64 height=64 align-items="center" justify-content="center"
+                row width=64 height=64 align-items="center" justify-content="center" pointer-events="none"
                   if rp.playing
-                    image "symbol:pause-fill" width=40 height=40 color=th.accent
+                    image "symbol:pause-fill" width=40 height=40 color=th.accent pointer-events="none"
                   else
-                    image "symbol:play-fill" width=40 height=40 color=th.accent
+                    image "symbol:play-fill" width=40 height=40 color=th.accent pointer-events="none"
               if qv.audio
                 button press=queueDo("fwd15", "") testId="radio-fwd15" appearance="none" aria-label="Forward 15 seconds" width=44 height=44
-                  row width=44 height=44 align-items="center" justify-content="center"
-                    image "symbol:skip-forward-15" color=th.fg
+                  row width=44 height=44 align-items="center" justify-content="center" pointer-events="none"
+                    image "symbol:skip-forward-15" color=th.fg pointer-events="none"
               if rp.onAir
                 button press=nextStory testId="radio-next" appearance="none" aria-label="Next" height=44
                   row min-height=44 padding="0px 4px" align-items="center" gap=6
-                    image "symbol:sf/forward.end.fill" color=th.fg
+                    image "symbol:sf/forward.end.fill" color=th.fg pointer-events="none"
                     text "Next" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.fg
               if rp.canWhy
                 button press=radioToggleWhy testId="radio-why" appearance="none" aria-label=(showWhy ? "Hide why this" : "Why this")
@@ -156,7 +156,7 @@ component RadioPage
                 text "Speed" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted width=44
                 text `${speedShown}×` testId="radio-speed" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg width=44 font-variant-numeric="tabular-nums"
                 button press=speedNudge(0 - 0.05) testId="radio-speed-down" appearance="none" aria-label="Slower" width=36 height=44
-                  row width=36 height=44 align-items="center" justify-content="center"
+                  row width=36 height=44 align-items="center" justify-content="center" pointer-events="none"
                     text "−" font-family=th.fontAction font-size="-exact-title2" font-weight=600 color=th.fg
                 column flex=1 min-width=0 height=44 justify-content="center" pan=speedMove panrelease=speedEnd testId="radio-speed-slider" aria-label="Speed"
                   row width="100%" height=22 align-items="center" padding-left=11 box-sizing="border-box"
@@ -165,11 +165,11 @@ component RadioPage
                       box width=3 height=22 background-color=th.accent
                     box flex=1 height=4 background-color=th.rule
                 button press=speedNudge(0.05) testId="radio-speed-up" appearance="none" aria-label="Faster" width=36 height=44
-                  row width=36 height=44 align-items="center" justify-content="center"
+                  row width=36 height=44 align-items="center" justify-content="center" pointer-events="none"
                     text "+" font-family=th.fontAction font-size="-exact-title2" font-weight=600 color=th.fg
                 if speedShown != 1
                   button press=speedReset testId="radio-speed-reset" appearance="none" aria-label="Reset the speed to 1 times" width=32 height=44
-                    row width=32 height=44 align-items="center" justify-content="center"
+                    row width=32 height=44 align-items="center" justify-content="center" pointer-events="none"
                       text "1×" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
                 else
                   box width=32 height=44
@@ -191,7 +191,7 @@ component RadioPage
                           text (r.note != "" ? `${r.byWord} · ${r.note}` : r.byWord) font-family=th.fontLabel font-size="-exact-caption2" color=th.muted line-clamp=1
                         row align-items="center" gap=6 width="100%"
                           text r.title font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=1 flex=1 min-width=0
-                          image "symbol:forward-chevron" color=th.muted
+                          image "symbol:forward-chevron" color=th.muted pointer-events="none"
                     text r.length font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted
                     box reorderFor="radio-next" touch-action="none" testId=`radio-next-grip-${r.n}` aria-label=`Drag ${r.title} to reorder` width=44 height=44
                       row width=44 height=44 align-items="center" justify-content="center"
@@ -232,5 +232,5 @@ component RadioPage
                       text h.kind font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.8 text-transform="uppercase" color=th.muted
                       text h.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=1
                     text h.outcome font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-                    image "symbol:forward-chevron" color=th.muted
+                    image "symbol:forward-chevron" color=th.muted pointer-events="none"
           BarClear()

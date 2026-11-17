@@ -1,6 +1,6 @@
 {
  "sheet": {
-  "version": 9,
+  "version": 12,
   "entries": [
    {
     "id": "h-1",
@@ -137,6 +137,45 @@
      "ref": "episode:example-show",
      "label": "The Example Hour",
      "url": "https://example.com/audio/ep12.mp3"
+    }
+   },
+   {
+    "id": "d-x0",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The ferry timetable changes in January",
+    "est_seconds": 85,
+    "text": "The ferry timetable changes in January. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:ferry-times",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-x1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A bakery wins the street award",
+    "est_seconds": 85,
+    "text": "A bakery wins the street award. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:bakery-award",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-x2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Rain returns to the coast on Friday",
+    "est_seconds": 85,
+    "text": "Rain returns to the coast on Friday. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:coast-rain",
+     "label": "Example City Post"
     }
    }
   ],
