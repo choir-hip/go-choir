@@ -515,16 +515,52 @@ final class RunSheetStoreTests: XCTestCase {
         XCTAssertNil(s.entry(phone.id), "the phone's is taken off")
         XCTAssertEqual(s.ahead(limit: 5).map(\.id), ["d-open"])
     }
-    func test21_TheDeskOpeningMidwayEndsThePhonesAtASentenceAndFollowsIt() async {
+    func test21_TheDeskOpeningWhileThePhonesIsOnAirIsDroppedAndWhatFollowsIsAdmitted() async {
         let (p, s, e) = make()
         let o = await opened([], p, s)
         let (w, _) = writerWith(s, p, [deskOpening(), story("d-1")])
         w.open(); await w.settle()
-        XCTAssertTrue(e.log.contains("endAfterBlock"), "the phone's opening says no more than the block it is on")
+        XCTAssertFalse(e.log.contains("endAfterBlock"), "the phone's opening plays whole: no second one follows it")
         XCTAssertEqual(s.onAir()?.id, o)
-        XCTAssertEqual(s.ahead(limit: 5).map(\.id), ["d-open", "d-1"], "the desk's opening is next, ahead of what follows")
-        p.documentEnded(id: "rs:" + o, anyPlayed: true); await p.settle()
-        XCTAssertEqual(s.onAir()?.id, "d-open")
+        XCTAssertEqual(s.ahead(limit: 5).map(\.id), ["d-1"], "one opening heard; the entries after it are admitted as usual")
+        XCTAssertEqual(p.droppedFromDesk.map(\.reason), ["opening_one_per_start"])
+    }
+    func test21_AnOpeningHeardTenMinutesAgoMeansNoOpeningNowAndThirtyOneMinutesMeansOne() async {
+        for (minutes, expectOpening) in [(10.0, false), (31.0, true)] {
+            let (p, s, _) = make()
+            let o = await opened([], p, s)
+            p.documentEnded(id: "rs:" + o, anyPlayed: true); await p.settle()
+            XCTAssertEqual(s.entry(o)?.state, .heard)
+            let ended = ISO8601DateFormatter().date(from: s.entry(o)?.ended?.at ?? "") ?? Date()
+            s.now = { ended.addingTimeInterval(minutes * 60) }
+            p.open(PhoneOpening.entry(lines: lines(1)))                                   // the radio is opened again
+            let openings = s.sheet.entries.filter { $0.kind == .opening && $0.state != .heard }
+            XCTAssertEqual(openings.count, expectOpening ? 1 : 0, "\(minutes) min after the last opening")
+            let (w, _) = writerWith(s, p, [deskOpening("d-open2")])
+            w.open(); await w.settle()
+            let total = s.sheet.entries.filter { $0.kind == .opening && $0.id != o }.count
+            XCTAssertEqual(total, expectOpening ? 1 : 0, "never two openings in a row (\(minutes) min)")
+        }
+    }
+    func test21_TheCachedOpeningIsTheOpeningOfThisStartAndObeysTheSameRule() async {
+        let (p, s, _) = make()
+        let cached = RunSheetEntry(id: "cache-1", kind: .opening, placedBy: .phone, title: "Opening", text: "Good evening. Written ahead.", estSeconds: 5)
+        p.open(cached)                                                                      // the written-ahead opening starts the launch
+        XCTAssertEqual(s.onAir()?.id, "cache-1")
+        let (w, _) = writerWith(s, p, [deskOpening(), story("d-1")])
+        w.open(); await w.settle()
+        XCTAssertNil(s.entry("d-open"), "the live opening is not a second one behind the cached one")
+        XCTAssertEqual(s.sheet.entries.filter { $0.kind == .opening }.count, 1)
+        // it was heard ten minutes ago and the radio is opened again with the cached opening: none is placed
+        p.documentEnded(id: "rs:cache-1", anyPlayed: true); await p.settle()
+        let ended = ISO8601DateFormatter().date(from: s.entry("cache-1")?.ended?.at ?? "") ?? Date()
+        s.now = { ended.addingTimeInterval(600) }
+        var again = cached; again.id = "cache-2"
+        p.open(again)
+        XCTAssertNil(s.entry("cache-2"))
+        var first = story("d-first"); first.placedBy = .phone
+        p.open(first, asOpening: false)                                                      // an entry that is not an opening is never refused by it
+        XCTAssertNotNil(s.entry("d-first"))
     }
     func test21_AfterThePhonesWasHeardTheDeskOpeningIsDroppedNotPlayedAsASecondGreeting() async {
         let (p, s, _) = make()
@@ -534,7 +570,7 @@ final class RunSheetStoreTests: XCTestCase {
         let (w, _) = writerWith(s, p, [deskOpening(), story("d-1")])
         w.open(); await w.settle()
         XCTAssertNil(s.entry("d-open"))
-        XCTAssertEqual(p.droppedFromDesk.map(\.reason), ["opening_already_heard"])
+        XCTAssertEqual(p.droppedFromDesk.map(\.reason), ["opening_one_per_start"])
         XCTAssertEqual(s.onAir()?.id, "d-1", "the story the desk wrote plays")
     }
 
@@ -890,7 +926,7 @@ final class RunSheetDemoTests: XCTestCase {
             w.open(); await w.settle()
             let i = p.info()
             let page = RadioPage.make(RadioPageInput(sheet: s.sheet))
-            XCTAssertGreaterThanOrEqual(page.ahead.count, 3, "launch \(launch): three desk entries under Up next")
+            XCTAssertGreaterThanOrEqual(page.ahead.count, launch == 1 ? 3 : 2, "launch \(launch): the desk writes after a relaunch; its opening is dropped when one was heard in the last 30 minutes (one opening per start), the entries after it are admitted")
             XCTAssertEqual(page.ahead.first?.by, "desk"); XCTAssertEqual(i.notice, ""); XCTAssertFalse(i.writing)
         }
     }

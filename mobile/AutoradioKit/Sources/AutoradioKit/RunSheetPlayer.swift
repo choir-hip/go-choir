@@ -150,12 +150,33 @@ extension PlaybackEngine {
     public var openingIsTransition = false
     /// An entry ended (heard or skipped): the host writes ahead after the session's opening.
     public var onEntryEnded: ((RunSheetEntry, Bool) -> Void)?
+
+    /// THE ONE OPENING RULE (a listener never hears two openings in a row): an opening may be placed only when none is on air and none was heard
+    /// (finished or part-heard) in the last `openingWindow`. The phone's `open` (its built opening and the cached one alike: both are an entry of
+    /// kind opening) and the desk's `admitDesk` both ask it. A heard opening with no time on it counts as recent. This is admission on the phone,
+    /// before an op is made; the reducer and the server are not involved.
+    public static let openingWindow: TimeInterval = 30 * 60
+    public func openingAllowed() -> Bool {
+        if store.sheet.entries.contains(where: { $0.kind == .opening && $0.state == .onAir }) { return false }
+        let now = store.now()
+        for e in store.sheet.entries where e.kind == .opening && e.state.isTail && e.ended?.outcome != .failed {
+            guard let at = e.ended?.at, !at.isEmpty, let d = ISO8601DateFormatter().date(from: at) else { return false }
+            if now.timeIntervalSince(d) <= Self.openingWindow { return false }
+        }
+        return true
+    }
+
     public func open(_ entry: RunSheetEntry, asOpening: Bool = true) {
-        currentOpeningId = asOpening ? entry.id : nil
         openingIsTransition = !asOpening
         wants = false                                // nothing ahead is aired while the sheet is being cleaned: the opening goes first
         for e in store.ahead(limit: Int.max) where e.placedBy != .listener { store.remove(id: e.id, by: .phone, reason: "left from an earlier listening") }
-        store.place(entry, at: .now, by: .phone)
+        if entry.kind != .opening || openingAllowed() {
+            currentOpeningId = asOpening ? entry.id : nil
+            store.place(entry, at: .now, by: .phone)
+        } else {
+            currentOpeningId = nil
+            print("AUTORADIO opening dropped reason=one per start")
+        }
         wants = true
     }
 
@@ -266,20 +287,22 @@ extension PlaybackEngine {
             var o = op; o.at = .next; o.entry = e
             return o
         }
-        guard cause == "open", op.op == .place, var e = op.entry, e.kind == .opening, e.placedBy == .desk,
-              let pid = currentOpeningId, let phone = store.entry(pid) else { return op }
-        var o = op
-        switch phone.state {
-        case .heard, .skipped:
-            droppedFromDesk.append((e.id, "opening_already_heard"))
-            return nil
-        case .ahead:
+        guard cause == "open", op.op == .place, var e = op.entry, e.kind == .opening, e.placedBy == .desk else { return op }
+        // A phone opening ahead and not yet on air is replaced by the desk's.
+        if let pid = currentOpeningId, let phone = store.entry(pid), phone.state == .ahead {
             store.remove(id: pid, by: .phone, reason: "opening_replaced_by_desk")
+            var o = op
             o.at = .next
-        case .onAir:
-            engine?.endSpokenAfterCurrentBlock()
-            o.at = .next
+            e.title = "Opening"; o.entry = e
+            return o
         }
+        // Otherwise one opening per start: none on air, none heard lately. The line is dropped; what follows it is admitted as usual.
+        guard openingAllowed() else {
+            droppedFromDesk.append((e.id, "opening_one_per_start"))
+            print("AUTORADIO opening dropped reason=one per start")
+            return nil
+        }
+        var o = op
         e.title = "Opening"; o.entry = e
         return o
     }
