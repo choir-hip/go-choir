@@ -1,0 +1,11 @@
+# Radio page tour C: an answer on air. Install runsheet-answer.json (a story cut by an answer; the answer first ahead) as above.
+clock data
+clock +1500 real
+clock data
+tree
+screenshot @S@/C01-before-answer.png window
+tap radio-play
+clock +3000 real
+clock data
+tree
+screenshot @S@/C02-answer-on-air.png window

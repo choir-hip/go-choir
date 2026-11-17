@@ -23,6 +23,7 @@ component Autoradio
   members "./members-mark.contract"
   members "./members-voice.contract"
   members "./members-queue.contract"          // lane autoradio-queue
+  members "./members-radio.contract"          // the Autoradio page
   members "./members-books.contract"
   members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
   members "./members-talk.contract"
@@ -127,9 +128,6 @@ component Autoradio
     speedEnd
     speedNudge
     speedReset
-    sheetMove
-    sheetEnd
-    sheetPull
     // ---- lane 2: paper layout ----
     pfront
     paperLoading
@@ -416,6 +414,15 @@ component Autoradio
     waitSince
     galReplay
     waitReplay
+    // ---- the Autoradio page ----
+    rp
+    radioAll
+    whyFor
+    radioToggleAll
+    radioToggleWhy
+    radioDo
+    radioDrop
+    radioSay
     // ---- lane autoradio-queue ----
     qv
     qm

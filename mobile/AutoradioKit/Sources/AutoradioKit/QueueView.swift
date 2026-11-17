@@ -1,17 +1,6 @@
 import Foundation
 
-// What the screens read of the queue: "Up next", the playing clip's "Keep listening", the scrubber, the page opened from the bar.
-
-public struct QueueRow: Codable, Sendable, Equatable {
-    public var i = 0
-    public var title = ""
-    public var kind = ""
-    public var detail = ""
-    public var id = ""
-    public var note = ""       // a quiet caption: a transition written for other neighbours says so
-    public var by = ""         // who put it there, as a sentence: "Added by you", "From the desk", "From the phone"
-    public init() {}
-}
+// What the screens read of the queue: the playing clip's "Keep listening", the scrubber, the page opened from the bar.
 
 public struct QueueInfo: Codable, Sendable, Equatable {
     public var current = ""            // title of what the queue is playing ("" when it plays nothing of its own)
@@ -26,7 +15,6 @@ public struct QueueInfo: Codable, Sendable, Equatable {
     public var elapsedLabel = ""
     public var remainingLabel = ""
     public var fraction = 0.0          // 0...1 for the scrubber
-    public var upcoming: [QueueRow] = []
     public var message = ""
     public var notice = ""             // the desk could not be reached ("" when all is well): a quiet line, never a row
     public var dry = false             // the last write brought nothing new and none is under way: "nothing is coming" is true
@@ -46,8 +34,6 @@ public enum QueueClock {
 }
 
 extension RunSheetPlayer {
-    /// Up next is the first three entries ahead on the run sheet (`ahead(limit: 3)`).
-    public static let upNextLimit = 3
     public func info(clips: ClipStore = .shared) -> QueueInfo {
         var q = QueueInfo()
         let air = store.onAir()
@@ -62,13 +48,6 @@ extension RunSheetPlayer {
             q.elapsed = p.elapsed; q.duration = p.duration ?? 0
             q.elapsedLabel = QueueClock.label(p.elapsed)
             if let d = p.duration { q.remainingLabel = "-" + QueueClock.label(max(0, d - p.elapsed)); q.fraction = min(1, max(0, p.elapsed / d)) }
-        }
-        q.upcoming = store.ahead(limit: Int.max).filter { $0.kind != .transition }.prefix(Self.upNextLimit).enumerated().map { i, e in
-            var r = QueueRow(); r.i = i; r.title = e.displayTitle; r.kind = e.kindWord; r.id = e.id
-            if let a = e.audioSpec { r.detail = a.show } else if e.filesAddress != nil { r.detail = e.source?.label ?? "Files" }
-            if store.isStale(e) { r.note = "Written for other neighbours" }
-            r.by = e.byWords
-            return r
         }
         q.message = message
         q.notice = deskNotice ?? ""; q.writing = deskWriting; q.dry = deskDry && !deskWriting

@@ -24,6 +24,8 @@ public enum PageAddress {
     /// so "texture:my-edition" would be fetched as a document id and answer 404. Every open of it, and every saved page list
     /// that holds it, lands on the local edit page instead.
     public static let edition = "onboarding:edit"
+    /// The Autoradio page. The app opens on it, it is the first card of the deck and it cannot be closed.
+    public static let radio = "radio:"
     public static func canonical(_ address: String) -> String {
         // lane autoradio-reader: "doc:<id>@<block>" (a search hit) opens the document page and remembers the block once.
         if let (id, block) = ShelfAddress.parse(address), let b = block { ShelfJump.shared.set(id, block: b); return ShelfAddress.address(id) }
@@ -34,6 +36,7 @@ public enum PageAddress {
     public static func kind(of address: String) -> String {
         let scheme = address.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         switch scheme {
+        case "radio": return "radio"       // the Autoradio page: the deck's first card, always open
         case "paper": return "paper"
         case "pub", "texture": return "reader"
         case "textures": return "textures"
@@ -61,6 +64,7 @@ public enum PageAddress {
     public static func defaultTitle(_ address: String) -> String {
         let rest = rest(of: address)
         switch address {
+        case "radio:": return "Autoradio"
         case "paper:front": return "Paper"
         case "textures:": return "Textures"
         case "activity:": return "Activity"
@@ -97,7 +101,7 @@ public enum PageAddress {
 }
 
 /// The ordered set of open pages: open, close, focus, opener, pin, restored at launch from a list of addresses
-/// (never resumed work). Never empty: closing the last page opens the front page.
+/// (never resumed work). Never empty: the Autoradio page is always open and cannot be closed.
 public final class OpenPages: @unchecked Sendable {
     public static let limit = 30
     private let lock = NSLock()
@@ -112,7 +116,7 @@ public final class OpenPages: @unchecked Sendable {
     public init(file: URL?, signals: Signals? = nil) {
         self.file = file; self.signals = signals
         load()
-        if pages.isEmpty { openLocked(Page(address: "paper:front", kind: "paper", title: "Paper"), record: false) }
+        openLocked(Page(address: PageAddress.radio, kind: "radio", title: "Autoradio"), record: false)   // every launch lands on the radio
     }
 
     // MARK: Reading
@@ -169,13 +173,12 @@ public final class OpenPages: @unchecked Sendable {
     /// Close a page. When it was in front, its opener (if still open) comes forward, else the next most recent.
     public func close(_ address: String) {
         lock.lock()
-        guard let p = pages.first(where: { $0.address == address }) else { lock.unlock(); return }
+        guard address != PageAddress.radio, let p = pages.first(where: { $0.address == address }) else { lock.unlock(); return }
         let wasFront = recency.first == address
         pages.removeAll { $0.address == address }
         recency.removeAll { $0 == address }
         lastClosedPage = p
         if wasFront, !p.opener.isEmpty, pages.contains(where: { $0.address == p.opener }) { focusLocked(p.opener) }
-        if pages.isEmpty { openLocked(Page(address: "paper:front", kind: "paper", title: "Paper"), record: false) }
         lock.unlock()
         signals?.record(SignalEvent(kind: "close", subject: address, detail: p.kind))
         changed()

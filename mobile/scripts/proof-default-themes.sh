@@ -58,8 +58,7 @@ tour() { # <light|dark>
   step "tap paper-scroll drag 0 -260"; wait_ 700
   step "tap paper-story-demo-grid-storage"; view default-$m-02-story-reader 1000
   step "tap bar-voice down"; step "tap up"; wait_ 1800
-  step "tap bar-text"; view default-$m-03-player 900
-  step "tap player-close"; wait_ 700
+  step "tap bar-now"; view default-$m-03-radio-page 900
   step "tap bar-pages"; view default-$m-04-pile 700
   step "tap pile-places"; view default-$m-05-launcher 700
   step "tap place-mail"; view default-$m-06-mail-inbox 900

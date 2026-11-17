@@ -19,7 +19,7 @@ import XCTest
 //  2.2 A `scroll overflow-x="scroll"` row is left in a page (menu chips, breadcrumbs, a table, a code block, a CSV): it competes with
 //      the deck's horizontal pan for the one gesture the owner wants to be the card swipe.
 //  2.3 A page's vertical `scroll` has no axis, so it also scrolls sideways when its content is wider.
-//  2.4 The page's content column has no width, so one wide child widens every page built on it (PageScroll, the paper, the player).
+//  2.4 The page's content column has no width, so one wide child widens every page built on it (PageScroll, the paper, the Autoradio page).
 //  2.5 A wrapped chip row squeezes its buttons to nothing (a chip must keep its label; rows wrap, chips do not shrink).
 
 final class NavigationTests: XCTestCase {
@@ -93,7 +93,7 @@ final class NavigationTests: XCTestCase {
         let page = try XCTUnwrap(ui.components(separatedBy: "component PageScroll").last)
         XCTAssertTrue(page.prefix(900).contains("column width=\"100%\" box-sizing=\"border-box\" min-width=0"))
         XCTAssertTrue(try text("paper.contract").contains("column width=\"100%\" box-sizing=\"border-box\" min-width=0 padding-top"))
-        XCTAssertTrue(try text("player.contract").contains("column width=\"100%\" box-sizing=\"border-box\" min-width=0 padding=\"4px 20px 12px\""))
+        XCTAssertTrue(try text("radio.contract").contains("column width=\"100%\" box-sizing=\"border-box\" min-width=0 padding-top"))
     }
     // 2.1, 2.5: the Mail tabs are a wrapping row with a width.
     func testMailTabsWrapAndHaveAWidth() throws {

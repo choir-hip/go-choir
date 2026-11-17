@@ -20,6 +20,7 @@ use MotionPage, WaitPage from "./motion.contract"
 use OnboardingPage, EditEditionPage from "./onboarding.contract"
 use ConversationPage from "./talk.contract"
 use PodcastPage from "./podcasts.contract"
+use RadioPage from "./radio.contract"
 
 // A "lab" page is known only at the four addresses below; any other lab:* address shows the not-yet page, not a blank screen.
 component PageHost
@@ -27,10 +28,12 @@ component PageHost
     address: string
     kind: string
     title: string
-  derive known = ["paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "onboarding", "books", "doc", "conversation", "podcast"].includes(kind) or (kind == "lab" and ["lab:components", "lab:trace", "lab:motion", "lab:wait"].includes(address))
+  derive known = ["radio", "paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "onboarding", "books", "doc", "conversation", "podcast"].includes(kind) or (kind == "lab" and ["lab:components", "lab:trace", "lab:motion", "lab:wait"].includes(address))
   view
     column position="absolute" inset=0
       // ---- one line per kind: a lane replaces the component, not this line ----
+      if kind == "radio"
+        RadioPage(address=address, title=title)
       if kind == "paper"
         PaperPage(address=address, title=title)
       if kind == "reader"

@@ -125,7 +125,7 @@ final class TypographyRulesTests: XCTestCase {
             let caps = Self.isCaps(e); let tracked = e.text.contains("letter-spacing=")
             let italic = e.text.contains("font-style=")
             let mixed = fs.count > 1      // a ternary of two roles: the breadcrumb and the status line are the only ones (below)
-            if mixed { XCTAssertTrue(["files.contract", "player.contract", "books.contract", "settings.contract"].contains(e.file), "\(e.file):\(e.line) a text that is two roles"); continue }
+            if mixed { XCTAssertTrue(["files.contract", "books.contract", "settings.contract"].contains(e.file), "\(e.file):\(e.line) a text that is two roles"); continue }
             guard let f = fs.first else { continue }
             switch f {
             case "th.fontAction":
@@ -210,7 +210,7 @@ final class TypographyRulesTests: XCTestCase {
 
     // T7
     func testFiguresAreTabular() throws {
-        let ids = ["queue-elapsed", "queue-remaining", "player-speed", "player-position", "doc-position"]
+        let ids = ["queue-elapsed", "queue-remaining", "radio-speed", "radio-elapsed", "radio-remaining", "radio-onair-sentence-number", "doc-position"]
         var found = 0
         for els in try Self.allElements() { for e in els where Self.isText(e) {
             for id in ids where e.text.contains("\"\(id)\"") {

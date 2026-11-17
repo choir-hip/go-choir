@@ -1,0 +1,53 @@
+# Radio page tour B: a day in progress. Install runsheet-day.json (3 heard, 6 ahead, the first with a forecast, one podcast) as above.
+clock data
+clock +1500 real
+clock data
+tree
+screenshot @S@/B01-ready.png window
+tap radio-next-all
+clock +900 real
+clock data
+tree
+screenshot @S@/B02-all-of-it.png window
+tap radio-next-all
+clock +900 real
+tap radio-next-grip-3 drag 0 -130
+clock +1200 real
+clock data
+tree
+screenshot @S@/B03-after-drag.png window
+tap radio-next-1-delete
+clock +1200 real
+clock data
+tree
+screenshot @S@/B04-after-swipe.png window
+tap radio-next-play-0
+clock +3500 real
+clock data
+tree
+screenshot @S@/B05-on-air-story.png window
+tap radio-why
+clock +900 real
+clock data
+tree
+screenshot @S@/B06-why-this.png window
+tap radio-say-0
+clock +2500 real
+clock data
+tree
+screenshot @S@/B07-after-skip-this.png window
+tap radio-place-mail
+clock +1500 real
+clock data
+tree
+screenshot @S@/B08-mail-place.png window
+tap bar-now
+clock +1500 real
+clock data
+tree
+screenshot @S@/B09-back-from-bar-now.png window
+tap radio-heard-0
+clock +3000 real
+clock data
+tree
+screenshot @S@/B10-replay-from-heard.png window

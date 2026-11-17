@@ -1,0 +1,21 @@
+# Radio page tour A: the cold start. Install runsheet-cold.json as <app container>/Library/Application Support/Autoradio/runsheet.json
+# (delete open-pages.json too) before the launch. Demo mode on. @S@ is the shots directory.
+clock data
+clock +1500 real
+clock data
+tree
+screenshot @S@/A01-cold-start.png window
+tap radio-play
+clock +3500 real
+clock data
+tree
+screenshot @S@/A02-on-air-opening.png window
+clock +4000 real
+clock data
+tree
+screenshot @S@/A03-on-air-later.png window
+tap radio-play
+clock +900 real
+clock data
+tree
+screenshot @S@/A04-paused.png window

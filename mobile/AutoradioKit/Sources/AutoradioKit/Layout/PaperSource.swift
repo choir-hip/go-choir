@@ -38,7 +38,9 @@ public final class PaperSource: @unchecked Sendable {
         guard let d = Demo.fixture(name), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else {
             return Result(stories: [], status: "error", message: "The demo front page is missing.", cachedAt: nil)
         }
-        return Result(stories: PaperStory.parseList(o), status: "ready", message: "", cachedAt: nil, sections: PaperViews.parseLiveSections(o))
+        let stories = PaperStory.parseList(o)
+        PublishedTimes.shared.record(stories)
+        return Result(stories: stories, status: "ready", message: "", cachedAt: nil, sections: PaperViews.parseLiveSections(o))
     }
 
     /// The front list (`section` empty) or one category's list. A category that cannot be asked answers status "error" with no stories and
@@ -54,6 +56,7 @@ public final class PaperSource: @unchecked Sendable {
             let r = try await client.send("GET", "/api/platform/publications/front", query: q, authenticated: false)
             let o = try r.object()
             let stories = PaperStory.parseList(o)
+            PublishedTimes.shared.record(stories)
             if section.isEmpty, !stories.isEmpty, let f = cacheFile {
                 try? FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? r.data.write(to: f, options: .atomic)

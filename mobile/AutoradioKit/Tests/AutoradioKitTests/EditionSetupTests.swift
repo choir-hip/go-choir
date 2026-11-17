@@ -290,8 +290,8 @@ final class EditionAddressTests: XCTestCase {
         let old = #"{"pages":[{"address":"paper:front","kind":"paper","title":"Paper","opener":"","pinned":false},{"address":"texture:my-edition","kind":"reader","title":"My edition","opener":"","pinned":false}],"recency":["texture:my-edition","paper:front"]}"#
         try Data(old.utf8).write(to: f)
         let p = OpenPages(file: f)
-        XCTAssertEqual(p.list().map(\.address).sorted(), ["onboarding:edit", "paper:front"])
-        XCTAssertEqual(p.list().first?.address, "onboarding:edit")
-        XCTAssertEqual(p.list().first?.kind, "onboarding")
+        XCTAssertEqual(p.list().map(\.address).sorted(), ["onboarding:edit", "paper:front", "radio:"], "the Autoradio page is always open")
+        XCTAssertEqual(p.list().first?.address, "radio:", "every launch lands on the Autoradio page")
+        XCTAssertEqual(p.list().first { $0.address == "onboarding:edit" }?.kind, "onboarding")
     }
 }

@@ -139,6 +139,7 @@ public final class AutoradioModule: ExactPackage {
         registerMark()
         registerVoice()
         registerQueue()          // lane autoradio-queue
+        registerRadioPage()      // the Autoradio page
         registerBooks()   // lane autoradio-reader
         registerTalk()
         registerTextureEdit()   // your own Texture documents in rich text
@@ -161,6 +162,7 @@ public final class AutoradioModule: ExactPackage {
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
         if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
         dirty.formUnion(names)
+        if names.contains(where: { $0 == "radioView" || $0 == "queueView" || $0 == "barState" }) { dirty.insert("radioPage") }   // the Autoradio page reads all three
         if now {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }

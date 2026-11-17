@@ -1,0 +1,6 @@
+# Radio page tour D: nothing ahead. Install runsheet-empty.json (one heard entry, nothing ahead) as above.
+clock data
+clock +1500 real
+clock data
+tree
+screenshot @S@/D01-nothing-ahead.png window

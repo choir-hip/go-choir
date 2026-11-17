@@ -3,7 +3,7 @@
 // the next page showing beneath it with depth) sends it to the BOTTOM of the deck and brings the next to the top; keep swiping and
 // the whole deck cycles round. Nothing is closed by a swipe. Opening a page (a story, a Texture, a file, a message, a section)
 // puts it on top; if it is in the deck already it moves to the top (no duplicates). The launcher brings any page to the top and
-// removes opened pages; the five key pages (Paper, Textures, Files, Mail, Settings) cannot be removed.
+// removes opened pages; the six key pages (Autoradio, Paper, Textures, Files, Mail, Settings) cannot be removed.
 // `pan` on the deck with `touch-action="pan-y"` so a vertical drag still scrolls the page.
 //
 // `order` is the deck, top first. The Kit's OpenPages (pg.rows, pg.top) is the open set and the focus that every page's resources
@@ -16,7 +16,7 @@ use StackVp, stackName, isFixed, kindOf, kindWord from "./ui.contract"
 
 members Autoradio
   resource vp = exactViewport() as shape StackVp
-  state order = ["paper:front", "textures:", "file:/", "mailbox:inbox", "settings:root"]
+  state order = ["radio:", "paper:front", "textures:", "file:/", "mailbox:inbox", "settings:root"]
   state px = 0
   state pdrag = false
   state flying = false

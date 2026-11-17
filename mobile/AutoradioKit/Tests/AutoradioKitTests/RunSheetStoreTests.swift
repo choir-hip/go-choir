@@ -447,12 +447,13 @@ final class RunSheetStoreTests: XCTestCase {
     }
 
     // 18
-    func test18_UpNextIsTheFirstThreeAhead() async {
+    func test18_UpNextIsEveryEntryAheadInOrder() async {
         let (p, s, _) = make()
         _ = await opened(["d-1", "d-2", "d-3", "d-4", "d-5"], p, s)
         let i = p.info()
-        XCTAssertEqual(i.upcoming.map(\.id), ["d-1", "d-2", "d-3"])
-        XCTAssertTrue(i.upcoming.allSatisfy { $0.by == "From the desk" })
+        let page = RadioPage.make(RadioPageInput(sheet: s.sheet))
+        XCTAssertEqual(page.ahead.map(\.id), ["d-1", "d-2", "d-3", "d-4", "d-5"], "the page lists every entry ahead, in order")
+        XCTAssertTrue(page.ahead.allSatisfy { $0.by == "desk" })
         XCTAssertEqual(i.current, "Opening")
     }
 
@@ -544,7 +545,7 @@ final class RunSheetStoreTests: XCTestCase {
         deskPlace(s, story("d-a"))
         var t = story("d-t", text: "And now.", kind: .transition); t.title = ""; t.between = RunSheetBetween(after: "d-a", before: "d-b")
         deskPlace(s, t); deskPlace(s, story("d-b"))
-        XCTAssertEqual(p.info().upcoming.map(\.id), ["d-a", "d-b"], "a transition is not listed")
+        XCTAssertEqual(RadioPage.make(RadioPageInput(sheet: s.sheet)).ahead.map(\.id), ["d-a", "d-b"], "a transition is not listed")
         p.next(); await p.settle()                                   // d-a on air
         p.documentEnded(id: "rs:d-a", anyPlayed: true); await p.settle()
         XCTAssertEqual(s.onAir()?.id, "d-t", "heard to its end: the transition plays")
@@ -888,8 +889,9 @@ final class RunSheetDemoTests: XCTestCase {
             p.open(o); await p.settle()
             w.open(); await w.settle()
             let i = p.info()
-            XCTAssertGreaterThanOrEqual(i.upcoming.count, 3, "launch \(launch): three desk entries under Up next")
-            XCTAssertEqual(i.upcoming.first?.by, "From the desk"); XCTAssertEqual(i.notice, ""); XCTAssertFalse(i.writing)
+            let page = RadioPage.make(RadioPageInput(sheet: s.sheet))
+            XCTAssertGreaterThanOrEqual(page.ahead.count, 3, "launch \(launch): three desk entries under Up next")
+            XCTAssertEqual(page.ahead.first?.by, "desk"); XCTAssertEqual(i.notice, ""); XCTAssertFalse(i.writing)
         }
     }
 
@@ -905,6 +907,6 @@ final class RunSheetDemoTests: XCTestCase {
         XCTAssertTrue(p.info().writing)
         p.deskWriting = false; p.deskNotice = "The desk can't be reached right now."
         XCTAssertEqual(p.info().notice, "The desk can't be reached right now.")
-        XCTAssertTrue(p.info().upcoming.isEmpty)
+        XCTAssertTrue(RadioPage.make(RadioPageInput(sheet: s.sheet)).ahead.isEmpty)
     }
 }

@@ -83,8 +83,7 @@ goto "pub:demo-grid-storage"; view light-02e-story-back-after-swipe 900
 # the bar's explicit controls: play starts the edition, the line above names what is loaded, a tap on it opens the player sheet
 step "tap bar-play"; wait_ 1800
 step tree; shot light-02b-bar-playing
-step "tap bar-text"; view light-03-player 900
-step "tap player-close"; wait_ 700
+step "tap bar-now"; view light-03-radio-page 900
 # the mic: a tap talks, a tap again sends
 step "tap bar-mic"; view light-03b-mic-listening 900
 step "tap bar-cancel"; view light-03c-mic-cancelled 900
@@ -202,7 +201,7 @@ place settings 900
 step "tap settings-nav-talk"; wait_ 700
 step "tap settings-choice-talkMode-open"; view light-16-settings-talk-open 700
 step "tap bar-play"; wait_ 1800
-step "tap bar-text"; view light-17-player-open-mode 900
+step "tap bar-now"; view light-17-radio-page 900
 step logs
 run_drive talk light "" --touch platform
 
@@ -254,8 +253,7 @@ goto "paper:front"; view dark-02-paper-front 700
 step "tap paper-scroll drag 0 -260"; wait_ 700
 step "tap paper-story-demo-grid-storage"; view dark-03-paper-story-reader 1000
 step "tap bar-play"; wait_ 1800
-step "tap bar-text"; view dark-04-player 900
-step "tap player-close"; wait_ 700
+step "tap bar-now"; view dark-04-radio-page 900
 step "tap bar-mic"; view dark-04b-mic-listening 900
 step "tap bar-cancel"; view dark-04c-mic-cancelled 900
 step "tap bar-mic"; wait_ 900
@@ -334,7 +332,7 @@ must "deck: the pages" '[page-deck]'
 must "deck: a story has a visible More of this" '[story-more]'
 must "launcher: the deck is listed" '[launcher-open-pub:demo-grid-storage]'
 nomust "no raw reader-facing address as a title" 'pub:/pub/'
-must "player: opens from the bar" '[player-title]'
+must "radio page: opens from the bar" '[radio-onair-title]'
 must "launcher: places" '[place-files]'
 must "files: list" '[files-row-/Documents]'
 must "files: the PDF viewer" '[pdf-frame]'

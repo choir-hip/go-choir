@@ -1,9 +1,8 @@
 // The queue's screens (lane autoradio-queue): "Up next" and the audio controls in the expanded player, and the page a URL typed in the bar
 // opens in place. Built from the design components in ui.contract (SectionHeader, PlainList, RowRule, EmptyState).
-// testIds: queue-audio, queue-elapsed, queue-remaining, queue-scrub, player-keep, queue-up-next, queue-row-<i>, queue-remove-<i>,
-// queue-note-<i>, queue-empty, bar-web, bar-web-close, bar-web-read, bar-web-add, bar-web-host.
+// testIds: queue-audio, queue-elapsed, queue-remaining, queue-scrub, player-keep, bar-web, bar-web-close, bar-web-read, bar-web-add, bar-web-host.
 use Theme, QueueInfo from "@choir/autoradio"
-use Card, Btn, SectionHeader, PlainList, RowRule, EmptyState, BarClear, sentence from "./ui.contract"
+use Card, Btn from "./ui.contract"
 
 // The scrubber of remote audio, under the player's title: elapsed, the track, remaining. Dragged like the speed slider (the move is relative,
 // the position is sent when the finger lifts). The track is the width less 120 (`scrubMove` in members-queue.contract).
@@ -51,37 +50,6 @@ component QueueAudio
       button press=queueDo("openEpisode", "") testId="queue-open-episode" appearance="none" aria-label="Open the episode"
         row min-height=44 align-items="center"
           text "Open episode" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
-
-// Up next: what is queued, in order. Tap a row to play it now; the remove button takes it out. Each row has its title, what it is
-// (kind, and the show for audio) and one quiet caption: the DJ's own reason when it moved or added the item, else who added it.
-component UpNext
-  inject
-    th: Theme
-    qv: QueueInfo
-    queueDo: action
-  view
-    column gap=8 testId="queue-up-next" width="100%"
-      SectionHeader(label=(qv.upcoming.length > 0 ? `Up next · ${qv.upcoming.length}` : "Up next"))
-      if qv.notice != ""
-        text qv.notice testId="sheet-notice" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      if qv.upcoming.length == 0
-        EmptyState(message=(qv.writing ? "The desk is writing what comes next." : (qv.notice != "" ? "Nothing is coming up yet." : (qv.dry ? "Nothing is coming up. Add a story, a page or a podcast and it plays next." : "The desk will write more shortly."))), detail="", testId="queue-empty")
-      else
-        PlainList(testId="queue-list")
-          for r, k in qv.upcoming key=r.id
-            if k > 0
-              RowRule(indent=0)
-            row align-items="center" width="100%" testId=`sheet-ahead-${k}`
-              button press=queueDo("playAt", `${r.i}`) testId=`queue-row-${r.i}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
-                row align-items="center" gap=8 width="100%"
-                  column gap=2 align-items="flex-start" box-sizing="border-box" min-height=52 justify-content="center" padding="8px 0px 8px 0px" flex=1 min-width=0
-                    text r.title font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=2
-                    // one quiet caption (one size): what it is (the show for audio, else the kind) and why it is here (the DJ's reason, else who added it)
-                    text `${r.detail != "" ? r.detail : sentence(r.kind)} · ${r.note != "" ? r.note : r.by}` testId=`queue-note-${r.i}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=2
-                  image "symbol:forward-chevron" color=th.muted
-              button press=queueDo("remove", `${r.i}`) testId=`queue-remove-${r.i}` appearance="none" width=44 height=44 aria-label=`Remove ${r.title}`
-                row width=44 height=44 align-items="center" justify-content="center"
-                  image "symbol:close" color=th.muted
 
 keyframes barWebGrow
   from opacity=0 scale=0.96

@@ -51,12 +51,3 @@ members Autoradio
   action speedReset
     speedLive = 1
     send rm = radioSpeed(speed="1")
-
-  // Pull the expanded player down to put it away (`pan` gives the move since its last event; `panrelease` decides).
-  state sheetPull = 0
-  action sheetMove(dx: number, dy: number)
-    sheetPull = sheetPull + dy
-  action sheetEnd(vx: number, vy: number)
-    if sheetPull > 70
-      layer = ""
-    sheetPull = 0

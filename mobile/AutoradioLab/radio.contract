@@ -1,0 +1,237 @@
+// The Autoradio page (docs/design/autoradio-page-2026-11-17.md): the app opens here. It is the run sheet made readable: what is on air, what comes
+// next, how to talk to it, where to go, what was heard. It replaces the sheet that rose from the bar (that view is deleted); the bar's now-playing
+// line comes here. The model is the Kit's (RadioPage.swift); this file only draws it and sends the gestures.
+// Type is the Autopaper's: the masthead and its double rule (paper.contract), the headline face for titles, the label face for what describes,
+// the action face for what is pressed (mobile/docs/typography.md). No second scale.
+// testIds: radio-page, radio-scroll, radio-title, radio-date, radio-status, radio-onair, radio-onair-kind, radio-onair-title, radio-onair-open,
+// radio-onair-byline, radio-onair-sentence, radio-onair-sentence-number, radio-greeting, radio-heard-words, radio-cannot, radio-retry, radio-then-back,
+// radio-progress, radio-elapsed, radio-remaining, radio-play, radio-next, radio-why, radio-why-text, radio-forecast, radio-back15, radio-fwd15,
+// radio-speed, radio-speed-slider, radio-speed-down, radio-speed-up, radio-speed-reset, radio-next-list, radio-next-<n>, radio-next-play-<n>,
+// radio-next-grip-<n>, radio-next-all, radio-next-writing, radio-next-empty, radio-notice, radio-say-<n>, radio-place-<name>, radio-heard-<n>.
+use Theme, RadioPageInfo, QueueInfo from "@choir/autoradio"
+use Btn, SectionHeader, RowRule, BarClear from "./ui.contract"
+use QueueAudio, QueueScrub from "./queue.contract"
+
+// One place of the row of places: a text action in the accent colour, as the launcher's key pages are.
+component RadioPlace
+  inject
+    th: Theme
+    openPage: action
+  props
+    slug: string
+    name: string
+    address: string
+  view
+    button press=openPage(address, name) testId=`radio-place-${slug}` appearance="none" flex-shrink=0 aria-label=`Open ${name}`
+      row padding="0px 16px 0px 0px" align-items="center" min-height=44
+        text name font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.accent
+
+component RadioPage
+  inject
+    th: Theme
+    rp: RadioPageInfo
+    qv: QueueInfo
+    radioAll: bool
+    whyFor: string
+    radioPlay: action
+    nextStory: action
+    queueDo: action
+    openPage: action
+    radioToggleAll: action
+    radioToggleWhy: action
+    radioDrop: action
+    radioDo: action
+    radioSay: action
+    speedShown: number
+    speedPct: number
+    speedMove: action
+    speedEnd: action
+    speedNudge: action
+    speedReset: action
+  props
+    address: string
+    title: string
+  derive shownRows = radioAll ? rp.ahead : rp.ahead.slice(0, 5)
+  derive byline = [rp.source, rp.published].filter(s => s != "").join(" · ")
+  derive showWhy = rp.canWhy and whyFor == rp.title
+  derive isError = rp.state == "error"
+  derive playLabel = rp.playing ? "Pause the radio" : "Play the radio"
+  view
+    column flex=1 min-height=0 width="100%" testId="radio-page"
+      scroll id="radio" testId="radio-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
+        column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 gap=20
+          font-family=th.fontText color=th.fg
+          // the masthead: the nameplate in the paper's type, a double rule, the date, and one line in plain words
+          column gap=6 width="100%"
+            row align-items="baseline" justify-content="space-between" width="100%"
+              text "AUTORADIO" font-family=th.fontHead font-size="-exact-large-title" font-weight=700 letter-spacing=-0.3 color=th.fg testId="radio-title" role="heading" aria-level=1
+              text rp.dateLine font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-date"
+            box height=1 background-color=th.fg width="100%"
+            box height=1 background-color=th.fg width="100%" margin-top=2
+            text rp.statusLine font-family=th.fontLabel font-size="-exact-subheadline" color=(isError ? th.danger : th.muted) testId="radio-status" line-clamp=2
+          // on air: the largest thing on the page; it dims while the listener speaks
+          column gap=14 width="100%" testId="radio-onair" opacity=(rp.dim ? 0.4 : 1) transition=(th.reducedMotion ? "none" : `opacity ${th.motionFastMs}ms ease`)
+            if rp.onAir
+              column gap=8 width="100%" align-items="flex-start"
+                text rp.kindLabel font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted testId="radio-onair-kind"
+                if rp.openAddress != ""
+                  button press=openPage(rp.openAddress, rp.title) testId="radio-onair-open" appearance="none" width="100%" aria-label=`Open ${rp.title}`
+                    row gap=8 align-items="center" width="100%"
+                      text rp.title font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.15 color=th.fg text-align="left" text-wrap="balance" flex=1 min-width=0 testId="radio-onair-title" role="heading" aria-level=2
+                      image "symbol:forward-chevron" color=th.muted
+                else
+                  text rp.title font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.15 color=th.fg text-align="left" text-wrap="balance" testId="radio-onair-title" role="heading" aria-level=2
+                if byline != ""
+                  text byline font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-onair-byline"
+              // the sentence being spoken, moving as the voice moves
+              if rp.sentence != ""
+                column gap=6 width="100%"
+                  text rp.sentence font-family=th.fontText font-size="-exact-title3" line-height=1.5 color=th.fg line-clamp=4 testId="radio-onair-sentence"
+                  text `${rp.sentenceNumber} of ${rp.sentenceCount}` font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted testId="radio-onair-sentence-number"
+              if rp.thenBack != ""
+                text rp.thenBack font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-then-back"
+              // the thin progress line, with time heard and time left (remote audio has its scrubber)
+              if qv.audio
+                QueueScrub()
+              else
+                column gap=4 width="100%" testId="radio-progress"
+                  box height=2 background-color=th.rule width="100%"
+                    box height=2 width=`${floor(rp.fraction * 100)}%` background-color=th.accent
+                  if rp.elapsed != ""
+                    row justify-content="space-between" width="100%"
+                      text rp.elapsed font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted testId="radio-elapsed"
+                      text rp.remaining font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted testId="radio-remaining"
+            else
+              // nothing on air: the greeting with what is lined up, or one plain line
+              if rp.greeting != ""
+                text rp.greeting font-family=th.fontText font-size="-exact-title3" line-height=1.5 color=th.fg testId="radio-greeting"
+              else
+                text "Nothing is on air." font-family=th.fontText font-size="-exact-title3" line-height=1.5 color=th.fg testId="radio-greeting"
+            // what the listener said, as it was recognised
+            if rp.heardWords != ""
+              text rp.heardWords font-family=th.fontText font-size="-exact-body" font-style="italic" color=th.fg line-clamp=3 testId="radio-heard-words"
+            // the radio cannot speak: the reason, and the one action
+            if rp.cannotSpeak != ""
+              column gap=4 width="100%" align-items="flex-start" testId="radio-cannot"
+                text rp.cannotSpeak font-family=th.fontLabel font-size="-exact-subheadline" color=th.danger line-clamp=3
+                if rp.action != ""
+                  button press=radioPlay testId="radio-retry" appearance="none" aria-label=rp.action
+                    Btn(label=rp.action, primary=false, wide=false)
+            // the controls: a large Play or Pause, Next, and Why this when the entry carries a reason
+            row align-items="center" gap=20 width="100%"
+              if qv.audio
+                button press=queueDo("back15", "") testId="radio-back15" appearance="none" aria-label="Back 15 seconds" width=44 height=44
+                  row width=44 height=44 align-items="center" justify-content="center"
+                    image "symbol:skip-back-15" color=th.fg
+              button press=radioPlay testId="radio-play" appearance="none" width=64 height=64 aria-label=playLabel
+                row width=64 height=64 align-items="center" justify-content="center"
+                  if rp.playing
+                    image "symbol:pause-fill" width=40 height=40 color=th.accent
+                  else
+                    image "symbol:play-fill" width=40 height=40 color=th.accent
+              if qv.audio
+                button press=queueDo("fwd15", "") testId="radio-fwd15" appearance="none" aria-label="Forward 15 seconds" width=44 height=44
+                  row width=44 height=44 align-items="center" justify-content="center"
+                    image "symbol:skip-forward-15" color=th.fg
+              if rp.onAir
+                button press=nextStory testId="radio-next" appearance="none" aria-label="Next" height=44
+                  row min-height=44 padding="0px 4px" align-items="center" gap=6
+                    image "symbol:sf/forward.end.fill" color=th.fg
+                    text "Next" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.fg
+              if rp.canWhy
+                button press=radioToggleWhy testId="radio-why" appearance="none" aria-label=(showWhy ? "Hide why this" : "Why this")
+                  row min-height=44 padding="0px 4px" align-items="center"
+                    text "Why this" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
+            if showWhy
+              column gap=4 width="100%" testId="radio-why-panel"
+                if rp.why != ""
+                  text rp.why font-family=th.fontText font-size="-exact-callout" line-height=1.4 color=th.fg testId="radio-why-text"
+                if rp.forecast != ""
+                  text rp.forecast font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-forecast"
+            // a clip: keep listening to the episode it is cut from, or open the episode
+            QueueAudio()
+            // the reading speed, one line: the value, minus, the slider from 0.5x to 3x, plus, and 1x to reset when it is not 1x
+            if rp.onAir
+              row gap=4 width="100%" align-items="center"
+                text "Speed" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted width=44
+                text `${speedShown}×` testId="radio-speed" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg width=44 font-variant-numeric="tabular-nums"
+                button press=speedNudge(0 - 0.05) testId="radio-speed-down" appearance="none" aria-label="Slower" width=36 height=44
+                  row width=36 height=44 align-items="center" justify-content="center"
+                    text "−" font-family=th.fontAction font-size="-exact-title2" font-weight=600 color=th.fg
+                column flex=1 min-width=0 height=44 justify-content="center" pan=speedMove panrelease=speedEnd testId="radio-speed-slider" aria-label="Speed"
+                  row width="100%" height=22 align-items="center" padding-left=11
+                    box width=`${speedPct}%` height=4 background-color=th.accent
+                    row width=22 height=22 margin-left=-11 justify-content="center"
+                      box width=3 height=22 background-color=th.accent
+                    box flex=1 height=4 background-color=th.rule
+                button press=speedNudge(0.05) testId="radio-speed-up" appearance="none" aria-label="Faster" width=36 height=44
+                  row width=36 height=44 align-items="center" justify-content="center"
+                    text "+" font-family=th.fontAction font-size="-exact-title2" font-weight=600 color=th.fg
+                if speedShown != 1
+                  button press=speedReset testId="radio-speed-reset" appearance="none" aria-label="Reset the speed to 1 times" width=32 height=44
+                    row width=32 height=44 align-items="center" justify-content="center"
+                      text "1×" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
+                else
+                  box width=32 height=44
+          // up next: the first five (all of it on request): kind, title, length, and who placed each. Drag the grip to reorder, swipe to remove, tap to play now.
+          column gap=8 width="100%" testId="radio-up-next"
+            SectionHeader(label=(rp.ahead.length > 0 ? `Up next · ${rp.ahead.length}` : "Up next"))
+            if rp.notice != ""
+              text rp.notice font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-notice"
+            if rp.ahead.length == 0
+              text rp.emptyNote font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="radio-next-empty"
+            else
+              list id="radio-next" testId="radio-next-list" appearance="auto" listStyle="plain" virtualized=true reorderdrop=radioDrop width="100%" height=(shownRows.length * 64) overflow-x="hidden"
+                section
+                  for r in shownRows key=r.id
+                    row testId=`radio-next-${r.n}` delete=radioDo("remove", r.id) height=64 align-items="center" gap=8 width="100%"
+                      button press=radioDo("play", r.id) testId=`radio-next-play-${r.n}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
+                        column gap=2 align-items="flex-start" width="100%"
+                          row gap=6 align-items="baseline"
+                            text r.kind font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.8 text-transform="uppercase" color=th.muted
+                            text (r.note != "" ? `${r.byWord} · ${r.note}` : r.byWord) font-family=th.fontLabel font-size="-exact-caption2" color=th.muted line-clamp=1
+                          row align-items="center" gap=6 width="100%"
+                            text r.title font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=1 flex=1 min-width=0
+                            image "symbol:forward-chevron" color=th.muted
+                      text r.length font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted
+                      box reorderFor="radio-next" touch-action="none" testId=`radio-next-grip-${r.n}` aria-label=`Drag ${r.title} to reorder` width=44 height=44
+                        row width=44 height=44 align-items="center" justify-content="center"
+                          image "symbol:sf/line.3.horizontal" color=th.muted
+              if rp.aheadMore > 0
+                button press=radioToggleAll testId="radio-next-all" appearance="none" align-self="flex-start" aria-label=(radioAll ? "Show fewer" : "Show all of it")
+                  row min-height=44 align-items="center"
+                    text (radioAll ? "Fewer" : `All of it · ${rp.aheadMore} more`) font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
+              if rp.writing
+                text "The desk is writing ahead…" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-next-writing"
+          // say something: what the bar's field and microphone are for; a tap sends it as a turn
+          column gap=4 width="100%" testId="radio-say"
+            SectionHeader(label="Say something")
+            row flex-wrap="wrap" width="100%"
+              for s in rp.suggestions key=s.n
+                button press=radioSay(s.label) testId=`radio-say-${s.n}` appearance="none" flex-shrink=0 aria-label=`Say: ${s.label}`
+                  row padding="0px 16px 0px 0px" align-items="center" min-height=44
+                    text s.label font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.accent
+          // places: this page is the hub
+          column gap=4 width="100%" testId="radio-places"
+            SectionHeader(label="Places")
+            row flex-wrap="wrap" width="100%"
+              RadioPlace(slug="autopaper", name="Autopaper", address="paper:front")
+              RadioPlace(slug="books", name="Books", address="books:")
+              RadioPlace(slug="podcasts", name="Podcasts", address="podcasts:")
+              RadioPlace(slug="mail", name="Mail", address="mailbox:inbox")
+              RadioPlace(slug="files", name="Files", address="file:/")
+          // heard: what ended, newest first, with how it ended; tap to hear it again
+          if rp.heard.length > 0
+            column gap=0 width="100%" testId="radio-heard"
+              SectionHeader(label="Heard")
+              for h, k in rp.heard key=h.id
+                if k > 0
+                  RowRule(indent=0)
+                button press=radioDo("replay", h.id) testId=`radio-heard-${h.n}` appearance="none" width="100%" aria-label=`Play ${h.title} again`
+                  row align-items="center" gap=8 width="100%" min-height=52
+                    column flex=1 min-width=0 gap=2 align-items="flex-start"
+                      text h.kind font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.8 text-transform="uppercase" color=th.muted
+                      text h.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=1
+                    text h.outcome font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+                    image "symbol:forward-chevron" color=th.muted
+          BarClear()

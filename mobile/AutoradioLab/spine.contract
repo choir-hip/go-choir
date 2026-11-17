@@ -17,8 +17,8 @@ members Autoradio
   // A second handle, for an action that opens one page and closes another in the same step.
   mutation pc as shape PageList
 
-  // The layer above the page: "" (none), "launcher" (the stack's pages and the destinations), "player" (the expanded player, a
-  // sheet over the page with the bar still under it).
+  // The layer above the page: "" (none), "launcher" (the stack's pages and the destinations). The expanded player is gone: the
+  // Autoradio page (radio.contract, the deck's first card) is where the radio is read.
   state layer = ""
   // The Ask field in the bar.
   state ask = ""

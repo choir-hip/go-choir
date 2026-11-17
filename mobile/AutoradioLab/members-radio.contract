@@ -1,0 +1,31 @@
+// Lane members file (the Autoradio page): the run sheet made readable, and the gestures on it. Owned by lane autoradio-page.
+// Source and send are declared in exact-package/interface/radio.json. The page (radio.contract) only reads `rp` and sends these.
+use radioPage, radioPageAct, choirAsk from "@choir/autoradio"
+use RadioPageInfo from "@choir/autoradio"
+
+members Autoradio
+  resource rp = radioPage() as shape RadioPageInfo else empty()
+  mutation rpm as shape RadioPageInfo
+
+  // "All of it" opens Up next to the whole run sheet ahead, in place.
+  state radioAll = false
+  action radioToggleAll
+    radioAll = radioAll == false
+  // "Why this" is open for the entry whose title it was opened on; another entry on air closes it by itself.
+  state whyFor = ""
+  action radioToggleWhy
+    whyFor = whyFor == rp.title ? "" : rp.title
+
+  // remove | play | replay, arg the entry's id
+  action radioDo(op: string, id: string)
+    send rpm = radioPageAct(op=op, arg=id, to="")
+  // A row dragged to a new place: the entry, and the entry it now sits above (none: the end). One `move` op.
+  action radioDrop(item: string, before: option<string>)
+    match before
+      case some(b)
+        send rpm = radioPageAct(op="reorder", arg=item, to=b)
+      case none
+        send rpm = radioPageAct(op="reorder", arg=item, to="")
+  // A suggestion is a turn, as if it were typed in the bar.
+  action radioSay(text: string)
+    send acct = choirAsk(text=text, aim="radio:")

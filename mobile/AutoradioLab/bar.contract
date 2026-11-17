@@ -1,5 +1,5 @@
 // The bar (round 3, owner rulings 21 and 22): a glass lens at the bottom of the screen, always visible and usable on every page, in
-// onboarding and with the launcher or the player open. It is not a floating capsule: it spans the full width, overlaps the page
+// onboarding and with the launcher open. It is not a floating capsule: it spans the full width, overlaps the page
 // (which scrolls full bleed underneath and shows through the glass), covers the bottom safe area and runs off the bottom edge;
 // only its top corners are rounded. With the keyboard up it rides on top of the keyboard (`interactive-widget` on the root).
 //
@@ -10,16 +10,15 @@
 //   play / pause   the radio; when nothing is loaded it starts the edition.
 // For a document in the Reader or an embedded web page the lens carries one more line at its top, the content row (content.contract),
 // and the page above it takes the whole screen (owner, 2026-11-16).
-// A line above the controls says what is going on: what is loaded when something plays or is paused (tap: the player), the
+// A line above the controls says what is going on: what is loaded when something plays or is paused (tap: the Autoradio page), the
 // words as heard, the holding line, a revision, an error, the setup state, or the aim while typing. A quiet count
-// ("Story · 7 in the deck") sits just above the lens. The launcher and the player rise from the lens, as sheets
+// ("Story · 7 in the deck") sits just above the lens. The launcher rises from the lens, as a sheet
 // above it, so the bar stays visible and usable under them.
 // testIds: bar-stack, bar, bar-mark, bar-field, bar-mic, bar-send, bar-play, bar-text, bar-aim, bar-setup, bar-yield, bar-progress,
 // page-indicator, content-row (content.contract), bar-answer, bar-asked, bar-answer-text, bar-answer-working, bar-answer-note, bar-answer-retry, bar-answer-cancel, bar-answer-close.
 use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding, MailMessageView from "@choir/autoradio"
 use Mark from "./mark.contract"
 use Launcher from "./launcher.contract"
-use PlayerLayer from "./player.contract"
 use StackVp from "./ui.contract"
 use ContentRow from "./content.contract"
 
@@ -125,17 +124,12 @@ component BarShell
   derive calm = still ? 0 : 1
   derive enter = still ? "none" : "barRise 220ms ease-out both"
   derive panelH = vp.height * 0.62
-  // the player is the page the reader lives in: more of the screen, so the passage and Up next have room above the fixed transport
-  derive playerH = vp.height * 0.8
   view
     column testId="bar-stack" position="absolute" left=0 right=0 bottom=0 z-index=20
-      // the launcher and the player rise from the lens; the lens stays under them, visible and usable
+      // the launcher rises from the lens; the lens stays under it, visible and usable
       if layer == "launcher"
         column testId="launcher" width="100%" height=panelH animation=(still ? "none" : "sheetUp 260ms ease-out both")
           Launcher()
-      if layer == "player"
-        column testId="player" width="100%" height=playerH animation=(still ? "none" : "sheetUp 260ms ease-out both")
-          PlayerLayer()
       // the lens: glass over the page, full width, top corners rounded, running off the bottom edge
       column testId="bar" position="relative" width="100%" box-sizing="border-box" gap=4
         padding-top=8 padding-left=12 padding-right=12 padding-bottom="calc(env(safe-area-inset-bottom) + 6px)"
@@ -204,7 +198,7 @@ component BarShell
           text setupLine testId="bar-setup" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-clamp=1 padding-left=4 animation=enter
         if lineMode == "playing" or lineMode == "paused"
           column gap=4 animation=enter
-            button press=showLayer("player") testId="bar-now" appearance="none" width="100%" aria-label=`${lineMode == "playing" ? "Now playing" : "Paused"}, ${loaded}. Open the player`
+            button press=openPage("radio:", "Autoradio") testId="bar-now" appearance="none" width="100%" aria-label=`${lineMode == "playing" ? "Now playing" : "Paused"}, ${loaded}. Open the Autoradio page`
               row gap=8 align-items="center" width="100%" padding-left=4 min-height=30 testId="bar-text"
                 if lineMode == "playing"
                   image "symbol:waveform" color=th.accent
@@ -234,7 +228,7 @@ component BarShell
         if lineMode == "holding"
           text bi.text testId="bar-text" font-family=th.fontText font-size="-exact-subheadline" color=th.fg line-clamp=2 padding-left=4 animation=enter font-style="italic"
         if lineMode == "revised"
-          button press=showLayer("player") testId="bar-text" appearance="none" aria-label="Revised. Show" animation=enter
+          button press=openPage("radio:", "Autoradio") testId="bar-text" appearance="none" aria-label="Revised. Show" animation=enter
             row gap=6 align-items="center" padding-left=4 min-height=30
               image "symbol:sparkles" color=th.success
               text bi.text font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
