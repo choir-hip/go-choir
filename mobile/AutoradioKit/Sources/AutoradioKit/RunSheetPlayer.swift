@@ -169,15 +169,19 @@ extension PlaybackEngine {
     public func open(_ entry: RunSheetEntry, asOpening: Bool = true) {
         openingIsTransition = !asOpening
         wants = false                                // nothing ahead is aired while the sheet is being cleaned: the opening goes first
-        for e in store.ahead(limit: Int.max) where e.placedBy != .listener { store.remove(id: e.id, by: .phone, reason: "left from an earlier listening") }
-        if entry.kind != .opening || openingAllowed() {
+        let allowed = entry.kind != .opening || openingAllowed()
+        // A fresh opening goes first and what an earlier listening left is taken off. When the one-opening rule refuses the opening, the earlier
+        // listening was minutes ago: what it left ahead is still good, and it plays at once (nothing waits for the desk).
+        if allowed { for e in store.ahead(limit: Int.max) where e.placedBy != .listener { store.remove(id: e.id, by: .phone, reason: "left from an earlier listening") } }
+        if allowed {
             currentOpeningId = asOpening ? entry.id : nil
             store.place(entry, at: .now, by: .phone)
         } else {
             currentOpeningId = nil
-            print("AUTORADIO opening dropped reason=one per start")
+            print("AUTORADIO opening dropped reason=one per start; \(store.ahead(limit: Int.max).count) entries ahead play at once")
         }
         wants = true
+        if !allowed { advanceIfIdle() }                // nothing changed on the sheet, so nothing would start by itself
     }
 
     /// Play this now ("Play", Listen, Read it to me, Read aloud). What was on air is cut; what was ahead stays ahead. `words` are what a
@@ -450,7 +454,7 @@ extension PlaybackEngine {
                 if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.title, show: entry.source?.label ?? "Files") }
             }
             guard let a = spec else { break }
-            if entry.kind == .clip, let id = entry.source?.clipId, !(await preflight(id)) { if my == generation { finish(entry.id, played: false) }; return }
+            if entry.kind == .clip, let id = entry.source?.clipId, !(await preflight(id)) { if my == generation { finish(entry.id, played: false, why: "the clip was refused before playing (preflight)") }; return }
             guard my == generation else { return }
             audio = a
             if entry.kind == .clip, let lead = entry.text, !lead.isEmpty {
@@ -489,13 +493,13 @@ extension PlaybackEngine {
     private func fail(_ id: String, why: String?) {
         silent += 1
         if silent >= 2, wants { wants = false; if message.isEmpty { message = "The radio could not play the next entries. Tap play to try again." } }
-        finish(id, played: false)
+        finish(id, played: false, why: "failed to start: \(why ?? message)")
     }
 
     /// The entry ended (or never made a sound): the phone reports it, and the store's change starts the next one.
-    private func finish(_ id: String, played: Bool, report given: AirReport? = nil) {
+    private func finish(_ id: String, played: Bool, report given: AirReport? = nil, why: String = "") {
         guard playingId == id else { return }
-        print("AUTORADIO entry finished id=\(id) played=\(played)")
+        print("AUTORADIO entry finished id=\(id) played=\(played)\(why.isEmpty ? "" : " why=\(why)")")
         let r = given ?? report(final: true)
         playingId = nil; playingDocument = nil; audio = nil; paused = false; pendingEnd = nil
         // A natural end carries the true final block and position; a failure is `failed` by the phone, never a skip.
@@ -536,7 +540,7 @@ extension PlaybackEngine {
             message = "Can\u{2019}t speak: \(engine?.speakFailure() ?? "the voice made no sound")"
             if silent >= 2 { wants = false }
         }
-        finish(eid, played: anyPlayed)
+        finish(eid, played: anyPlayed, why: anyPlayed ? "" : "its document ended with no block heard (\(engine?.speakFailure() ?? "no failure reported"))")
     }
 
     /// A turn ended: an entry that ended over the listener's words is closed now, and the next one starts.

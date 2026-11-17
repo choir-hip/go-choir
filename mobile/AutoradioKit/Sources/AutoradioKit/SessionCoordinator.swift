@@ -186,6 +186,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     private var lastTouch = Date.distantPast
     private func touched() { lock.lock(); lastTouch = Date(); lock.unlock() }
     /// The radio itself changed the session in the last `seconds`: a pause that arrives now is the system reacting to that, not the listener.
+    public var msSinceSessionChange: Int { lock.lock(); defer { lock.unlock() }; return Int(min(Date().timeIntervalSince(lastTouch), 3600) * 1000) }
     public func changedWithin(_ seconds: TimeInterval) -> Bool { lock.lock(); defer { lock.unlock() }; return Date().timeIntervalSince(lastTouch) < seconds }
 
     public func release() {

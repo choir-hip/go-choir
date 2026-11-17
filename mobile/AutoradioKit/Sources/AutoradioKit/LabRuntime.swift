@@ -132,6 +132,7 @@ public final class LabRuntime: @unchecked Sendable {
         player.onChange = { [weak self] in self?.refresh() }
         // Play asks for the session first when the engine is down or the claim is doubted (after the background, an interruption).
         player.ignoreSystemPause = { [coordinator] in coordinator.changedWithin(2.5) }
+        player.msSinceSessionChange = { [coordinator] in coordinator.msSinceSessionChange }
         player.onNeedsSession = { [coordinator] in Task { await coordinator.ensureReady(reason: "play") } }
         // The voice switch turned itself off (three quiet minutes) or was set elsewhere: the session drops the microphone.
         HandsFreeSwitch.shared.onVoiceChange = { [coordinator, audio] in

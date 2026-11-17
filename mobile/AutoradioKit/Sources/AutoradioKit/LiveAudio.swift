@@ -489,6 +489,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var onTransport: (@Sendable (String) -> Bool)?
     /// True when a system pause arriving now is the system reacting to the radio's own session change (a reclaim, a switch): it is not the listener's.
     public var ignoreSystemPause: (@Sendable () -> Bool)?
+    public var msSinceSessionChange: (@Sendable () -> Int)?
     /// Play was pressed: the host makes sure the audio session is claimed and active and the engine is up before sound is expected (it takes
     /// the claim again when the session was doubted or the engine is down). Play does not wait for it: the node plays as the engine comes up.
     public var onNeedsSession: (@Sendable () -> Void)?
@@ -911,7 +912,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         for cmd in [c.playCommand, c.pauseCommand, c.togglePlayPauseCommand, c.nextTrackCommand, c.previousTrackCommand] { cmd.isEnabled = true }
         c.playCommand.addTarget { [weak self] _ in if self?.onTransport?("play") == true { return .success }; self?.play(); return .success }
         c.pauseCommand.addTarget { [weak self] _ in
-            if self?.ignoreSystemPause?() == true { print("AUTORADIO ignored remote pause: the radio had just changed the session"); return .success }
+            let since = self?.msSinceSessionChange?() ?? -1
+            if self?.ignoreSystemPause?() == true { print("AUTORADIO remote pause ignored ms_since_session_change=\(since)"); return .success }
+            print("AUTORADIO remote pause accepted ms_since_session_change=\(since)")
             if self?.onTransport?("pause") == true { return .success }; self?.pause(reason: "remote command pause"); return .success }
         c.togglePlayPauseCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
