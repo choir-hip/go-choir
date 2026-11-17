@@ -509,6 +509,17 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         installRemoteCommands()
     }
     public func setConfiguration(_ c: LabConfiguration) { lock.lock(); configuration = c; lock.unlock() }
+    /// Audio made before it was wanted, by the block's text (the host sets it from `OpeningCache.prepared`). Nil or no answer: the block is made.
+    public var preparedSpeech: (@Sendable (String) -> PreparedAudio?)?
+    /// The chosen voice, as the cache keys it: a changed voice is another key.
+    public var voiceKey: String { lock.lock(); defer { lock.unlock() }; return String(describing: configuration.setting(.voice)) }
+    /// Make the audio of one block for the cache: the chosen voice only (a fall back to the system voice would be cached under the wrong name).
+    public func synthesizeForCache(_ text: String) async -> PreparedAudio? {
+        lock.lock(); let cfg = configuration; lock.unlock()
+        var why = ""
+        guard let m = await synthesize(text, with: cfg, why: &why) else { return nil }
+        return PreparedAudio(text: text, samples: m.samples, rate: m.rate)
+    }
     /// Per-document state dies with the document: the block index, where the loop ran dry (`resumeAt`), and the tracker's open and
     /// closed segments.
     public func setDocument(_ d: ProgrammeDocument) {
@@ -723,7 +734,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 a = nil; return x.task
             }
             let made: Synthesized?
-            if let hit { made = await hit.value } else { made = await synthesize(t) }
+            var source = "live"
+            // Audio written ahead of the launch (OpeningCache): the block's samples are handed over instead of made; the rest of the path is the same.
+            if let p = preparedSpeech?(t) { made = Synthesized(samples: p.samples, rate: p.rate); source = "cached" }
+            else if let hit { made = await hit.value } else { made = await synthesize(t) }
             if Task.isCancelled { return false }
             guard let made else {
                 if tag == firstTag { print("AUTORADIO on air \(st.read { $0.document.id }) FAILED \(speakFailure ?? "no sound")") }
@@ -732,6 +746,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             if tag == firstTag {
                 let ms = Int((Date().timeIntervalSince(startedAt)) * 1000)
                 print("AUTORADIO on air \(st.read { $0.document.id }) voice=\(current.setting(.voice)?.id ?? "") samples=\(made.samples.count) first_audio_ms=\(ms)")
+                LaunchTimings.shared.printLine(source: source)
             } else {
                 print("AUTORADIO on air \(st.read { $0.document.id }) block=\(tag) samples=\(made.samples.count)")
             }
@@ -788,7 +803,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
 
     private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String) async -> Synthesized? {
         let voice: Voice
-        do { voice = try registry.makeSpeaker(cfg, log: log) } catch {
+        let t0 = Date()
+        defer { LaunchTimings.shared.mark("synth", ms: Date().timeIntervalSince(t0) * 1000) }
+        do { voice = try registry.makeSpeaker(cfg, log: log); LaunchTimings.shared.mark("voice_load", ms: Date().timeIntervalSince(t0) * 1000) } catch {
             why = "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)"
             log.emit(.error(stage: "voice", message: why)); return nil
         }

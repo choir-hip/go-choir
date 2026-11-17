@@ -1,0 +1,87 @@
+import Foundation
+
+// Writes the next opening ahead of need (see OpeningCache). Triggers, each one request at most: the session's opening has aired, and the app
+// goes to the background. (The Exact host exposes no BGAppRefreshTask: docs/reference/exact has no background-task surface, so there is no
+// third trigger.) Never a loop, never a second request while one is in flight (this one's, or the run sheet writer's).
+//
+// Ways this can fail (each has a test in OpeningCacheTests):
+//  1. a trigger while a request is in flight asks again
+//  2. a background with a fresh opening already kept (under `refreshAfter`) asks again
+//  3. the opening's speech is made for text the player will not speak (the blocks must be the ones SegmentPrep makes)
+//  4. a voice that cannot make the sound loses the text (it is kept without audio)
+//  5. the first entry is written ahead with all its blocks (only its first block is made; the rest is made as it plays)
+//  6. an entry already heard, or already the one kept, is made again
+
+@MainActor public final class OpeningWriteAhead {
+    let cache: OpeningCache
+    let store: RunSheetStore
+    var feed: () -> RunSheetFeed?
+    var voice: () -> String
+    var synth: (String) async -> PreparedAudio?
+    /// The run sheet writer has a request in flight.
+    var busy: () -> Bool
+    var clock: () -> Date
+    /// A kept opening younger than this is not asked for again on a background (the part of the day still has to match).
+    public var refreshAfter: TimeInterval
+    public private(set) var inFlight = false
+    public private(set) var requests: [String] = []
+    public private(set) var synthesised: [String] = []
+
+    public init(cache: OpeningCache, store: RunSheetStore, feed: @escaping () -> RunSheetFeed?, voice: @escaping () -> String,
+                synth: @escaping (String) async -> PreparedAudio?, busy: @escaping () -> Bool = { false }, clock: @escaping () -> Date = { Date() }) {
+        self.cache = cache; self.store = store; self.feed = feed; self.voice = voice; self.synth = synth; self.busy = busy; self.clock = clock
+        self.refreshAfter = cache.bound / 2
+    }
+
+    /// The blocks the player will speak for an entry: the same cut the player makes (`SegmentPrep`).
+    static func blocks(of e: RunSheetEntry) -> [String] {
+        let kind = e.kind == .opening ? "opening" : e.kind == .transition ? "transition" : "story"
+        let inc = IncomingSegment(stretchID: "rs", segmentID: e.id, kind: kind, title: e.title, text: e.text ?? "", cites: [], blockCount: nil)
+        return (SegmentPrep.prepare(inc)?.blocks ?? []).compactMap(\.spokenText)
+    }
+
+    /// One trigger. Returns when everything it does is done.
+    public func refresh(reason: String) async {
+        guard !inFlight else { return }
+        inFlight = true
+        defer { inFlight = false }
+        let v = voice()
+        // The first entry: no request, only the first block made. Done on every trigger.
+        await keepFirstEntry(voice: v)
+        let kept = cache.opening(voice: v)
+        if let k = kept, reason == "background" {
+            let age = clock().timeIntervalSince(k.writtenAt)
+            if age >= 0, age < refreshAfter, cache.dayPart(k.writtenAt) == cache.dayPart(clock()) { return }
+        }
+        guard !busy(), let feed = feed() else { return }
+        requests.append(reason)
+        var opening: RunSheetEntry?
+        do {
+            let stream = try await feed.ask(RunSheetAsk(cause: "open"))
+            for try await e in stream {
+                if case .ops(let ops) = e, opening == nil {
+                    opening = ops.compactMap { $0.op == .place ? $0.entry : nil }.first { $0.kind == .opening && !($0.text ?? "").isEmpty }
+                }
+            }
+        } catch { return }
+        guard let o = opening else { return }
+        var audio: [PreparedAudio] = []
+        for b in Self.blocks(of: o) {
+            guard let a = await synth(b) else { audio = []; break }       // a voice that cannot make it: the text is kept without sound
+            synthesised.append(b)
+            audio.append(a)
+        }
+        cache.put(.opening, entry: o, titles: (o.cites ?? []).map(\.label).filter { !$0.isEmpty }, audio: audio, voice: v)
+    }
+
+    /// The first entry ahead on the sheet (a desk story the listener has not heard), with its first block made.
+    private func keepFirstEntry(voice v: String) async {
+        guard let e = store.ahead(limit: 20).first(where: { $0.kind == .story && $0.placedBy == .desk && !($0.text ?? "").isEmpty }),
+              store.entry(e.id)?.state == .ahead else { return }
+        if let k = cache.first(voice: v), k.entry.id == e.id, !k.files.isEmpty || Self.blocks(of: e).isEmpty { return }
+        guard let b = Self.blocks(of: e).first else { return }
+        let a = await synth(b)
+        if a != nil { synthesised.append(b) }
+        cache.put(.first, entry: e, titles: (e.cites ?? []).map(\.label).filter { !$0.isEmpty }, audio: a.map { [$0] } ?? [], voice: v)
+    }
+}

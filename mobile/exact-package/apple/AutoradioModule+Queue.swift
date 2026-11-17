@@ -30,8 +30,14 @@ extension AutoradioModule {
         }
 
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)           // the sign-in and the first load get their moment
+            // The start waits for the front page it speaks from (held, or kept from the last launch, or nothing to wait for), at most 2 s.
+            Station.shared.launchCondition = { [weak self] in self?.choir.launchConditionHolds() ?? true }
             await Station.shared.start(reason: .launch)
+        }
+        // Going to the background: write the next opening ahead (one request; the system gives the app a little time to finish it).
+        NotificationCenter.default.addObserver(forName: Platform.wentToBackground, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            Platform.finishInBackground { await self.choir.enteredBackground() }
         }
         NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { _ in
             Task { @MainActor in await Station.shared.start(reason: .foreground) }

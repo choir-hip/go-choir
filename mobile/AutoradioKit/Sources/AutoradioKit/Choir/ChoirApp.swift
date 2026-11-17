@@ -103,6 +103,10 @@ public final class ChoirApp: @unchecked Sendable {
     var frontCache: URL?
     /// The writer of the desk's entries (made on the main actor with the run sheet's player).
     @MainActor var writer: RunSheetWriter?
+    /// The opening written and spoken ahead of the launch (kept in Caches), and what writes it.
+    let openingCache = OpeningCache(dir: OpeningCache.defaultDirectory() ?? FileManager.default.temporaryDirectory.appendingPathComponent("AutoradioOpening"))
+    @MainActor var writeAhead: OpeningWriteAhead?
+    @MainActor private var askedAfterOpening = false
 
     public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL, openURL: (@Sendable (URL) -> Void)?) {
         self.runtime = runtime
@@ -155,6 +159,18 @@ public final class ChoirApp: @unchecked Sendable {
                 return ProgrammeRouteFeed(source: me.stretchSource?() ?? RouteStretchSource(baseURL: me.frontBaseURL()))
             }
             me.writer = w
+            let wa = OpeningWriteAhead(cache: me.openingCache, store: .shared,
+                                       feed: { [weak me] in me.map { ProgrammeRouteFeed(source: $0.stretchSource?() ?? RouteStretchSource(baseURL: $0.frontBaseURL())) } },
+                                       voice: { [weak me] in me?.runtime.player.voiceKey ?? "" },
+                                       synth: { [weak me] t in await me?.runtime.player.synthesizeForCache(t) },
+                                       busy: { [weak w] in w?.inFlight ?? false })
+            me.writeAhead = wa
+            me.runtime.player.preparedSpeech = { [cache = me.openingCache] t in cache.prepared(text: t) }
+            p.onEntryEnded = { [weak me] e, played in
+                guard let me, e.kind == .opening, played, !me.askedAfterOpening else { return }
+                me.askedAfterOpening = true
+                Task { @MainActor in await me.writeAhead?.refresh(reason: "opening aired") }
+            }
             w.admit = { op, cause in RunSheetPlayer.shared.admitDesk(op, cause: cause) }
             w.onNotice = { n in RunSheetPlayer.shared.deskNotice = n }
             w.onDry = { d in RunSheetPlayer.shared.deskDry = d }
@@ -310,10 +326,14 @@ public final class ChoirApp: @unchecked Sendable {
     @discardableResult
     func ensureEngine(reason: String = "play") async -> String? {
         if runtime.snapshot().running {
-            return await runtime.ensureSessionReady(reason: reason) ? nil : "the audio session could not be taken"
+            let ok = await runtime.ensureSessionReady(reason: reason)
+            LaunchTimings.shared.mark("engine")
+            if ok { LaunchTimings.shared.mark("session") }
+            return ok ? nil : "the audio session could not be taken"
         }
         if let go = runtime.startRequest { await go() } else { await runtime.start() }
         let s = runtime.snapshot()
+        if s.running { LaunchTimings.shared.mark("engine"); LaunchTimings.shared.mark("session") }
         return s.running ? nil : (s.message.isEmpty ? "the audio engine did not start" : s.message)
     }
 
@@ -365,12 +385,36 @@ public final class ChoirApp: @unchecked Sendable {
     /// the desk is asked for its own opening in the same moment.
     func openRadio() async {
         let lines = frontLines()
+        let plan = openingCache.take(voice: runtime.player.voiceKey)
         await MainActor.run {
-            RunSheetPlayer.shared.open(PhoneOpening.entry(lines: lines))
-            writer?.open()
+            let p = RunSheetPlayer.shared
+            @MainActor func fresh(_ e: RunSheetEntry) -> RunSheetEntry? { var x = e; x.state = .ahead; x.ended = nil; return RunSheetStore.shared.entry(x.id) == nil ? x : nil }
+            switch plan {
+            case .opening(let o, let next):
+                var o = o; o.placedBy = .phone; o.state = .ahead; o.ended = nil
+                p.open(o)
+                if let n = next.flatMap(fresh) { RunSheetStore.shared.place(n, at: .next, by: .desk, reason: "written ahead and kept for this launch") }
+                writer?.openAhead()
+                print("AUTORADIO opening from the written-ahead cache \(o.id)")
+            case .entry(let n):
+                if let n = fresh(n) {
+                    p.open(n, asOpening: false)
+                    print("AUTORADIO first entry from the written-ahead cache \(n.id); the live opening follows as a transition")
+                    writer?.open()
+                } else { p.open(PhoneOpening.entry(lines: lines)); writer?.open() }
+            case .none:
+                p.open(PhoneOpening.entry(lines: lines))
+                writer?.open()
+            }
+            LaunchTimings.shared.mark("sheet")
         }
         onChange?()                                   // the entry's own start begins the player (speakEntry); nothing here plays a document
     }
+
+    /// A fresh opening is kept: the launch need not wait for the sign-in or the first load.
+    public func openingReady() -> Bool { openingCache.isReady(voice: runtime.player.voiceKey) }
+    /// The app went to the background: write the next opening ahead (one request, none when a fresh one is kept).
+    @MainActor public func enteredBackground() async { await writeAhead?.refresh(reason: "background") }
 
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {

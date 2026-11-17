@@ -145,8 +145,14 @@ extension PlaybackEngine {
     /// What the desk and the phone wrote for an earlier listening is not played now (it may be a day old): it is taken off. What the listener
     /// placed themselves stays.
     func setOpeningForTest(_ id: String) { currentOpeningId = id }
-    public func open(_ entry: RunSheetEntry) {
-        currentOpeningId = entry.id
+    /// The launch started with an entry that is not an opening (the first entry written ahead): the desk's live opening, when it comes, is a
+    /// transition placed next, never a second greeting over a story.
+    public var openingIsTransition = false
+    /// An entry ended (heard or skipped): the host writes ahead after the session's opening.
+    public var onEntryEnded: ((RunSheetEntry, Bool) -> Void)?
+    public func open(_ entry: RunSheetEntry, asOpening: Bool = true) {
+        currentOpeningId = asOpening ? entry.id : nil
+        openingIsTransition = !asOpening
         wants = false                                // nothing ahead is aired while the sheet is being cleaned: the opening goes first
         for e in store.ahead(limit: Int.max) where e.placedBy != .listener { store.remove(id: e.id, by: .phone, reason: "left from an earlier listening") }
         store.place(entry, at: .now, by: .phone)
@@ -253,6 +259,12 @@ extension PlaybackEngine {
            store.sheet.entries.contains(where: { $0.kind == .story && $0.id != e.id && $0.title.lowercased() == e.title.lowercased() && !e.title.isEmpty }) {
             droppedFromDesk.append((e.id, "title_already_on_sheet"))
             return nil
+        }
+        if openingIsTransition, cause == "open", op.op == .place, var e = op.entry, e.kind == .opening {
+            openingIsTransition = false
+            e.kind = .transition; e.title = ""; e.between = nil
+            var o = op; o.at = .next; o.entry = e
+            return o
         }
         guard cause == "open", op.op == .place, var e = op.entry, e.kind == .opening, e.placedBy == .desk,
               let pid = currentOpeningId, let phone = store.entry(pid) else { return op }
@@ -437,6 +449,7 @@ extension PlaybackEngine {
         if played { store.airedEnded(id, as: .heard, outcome: .finished, report: r) }
         else { store.airedEnded(id, as: .skipped, outcome: .failed) }
         provided[id] = nil
+        if let e = store.entry(id) { onEntryEnded?(e, played) }
     }
 
     /// Where the entry on air is now. Remote audio: its elapsed seconds. Spoken: the server block and the seconds into it (`final`: at its last block).

@@ -159,6 +159,8 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
 
     /// Ask for the opening write. Called when the radio opens.
     public func open() { opened = true; ask(cause: "open") }
+    /// The radio opened with an opening and an entry written ahead: no opening is asked for now; more is asked for by the usual rule.
+    public func openAhead() { opened = true; checkAhead() }
 
     /// The sheet changed or an entry started: is the time ahead short? Called by the player after every change.
     /// Writing ahead is the rule: ask when the spoken time ahead is under max(twice the measured write latency, `aheadFloorSeconds`), or at once
@@ -176,6 +178,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     /// The write latency assumed until one has been measured.
     public static let unmeasuredLatencySeconds: Double = 30
     private var opened = false
+    private var launchAsked = false
 
     private func ask(cause: String) {
         guard !inFlight, let feed = feed() else { return }
@@ -184,16 +187,18 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         asks.append(cause)
         let a = RunSheetAsk(cause: cause, aheadTitles: store.ahead(limit: 20).map(\.displayTitle), excludeRoutes: cause == "open" ? [] : toldRoutes())
         let started = clock()
+        let first0 = !launchAsked; launchAsked = true
         let airId = store.onAir()?.id
         task = Task { @MainActor in
             var added = 0, received = 0, first: Date?
             var failure: Error?
             do {
                 let stream = try await feed.ask(a)
+                if first0 { LaunchTimings.shared.mark("request", ms: self.clock().timeIntervalSince(started) * 1000) }
                 for try await e in stream {
                     switch e {
                     case .ops(let ops):
-                        if first == nil { first = self.clock() }
+                        if first == nil { first = self.clock(); if first0 { LaunchTimings.shared.mark("first_segment", ms: first!.timeIntervalSince(started) * 1000) } }
                         received += ops.count
                         for op in ops {
                             guard let admitted = self.admit?(op, cause) ?? (self.admit == nil ? op : nil) else { continue }
