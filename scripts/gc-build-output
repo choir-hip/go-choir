@@ -1,0 +1,50 @@
+#!/bin/sh
+# gc-build-output: delete regenerable, git-ignored build output from idle
+# work trees (lanes and old agent worktrees) on a developer Mac.
+#
+# Why: on 2026-11-17 the Mac fell to 30 GiB free. 124 GiB was per-tree copies
+# of the Exact source, its compiled output and Swift package build folders.
+# lane clones only what the primary checkout already holds, so anything a
+# builder compiles in its lane is new data.
+#
+# It never touches tracked files, untracked files that are not ignored, a
+# branch, or a work tree itself. It skips the build tree(s) named by --keep
+# (default: qa-mac) and any folder with a top-level entry changed in the last
+# --hours hours (default 24), so a tree in use keeps its cache.
+#
+# Usage: scripts/gc-build-output [--dry-run] [--hours N] [--keep name[,name]]
+set -eu
+dry=0; hours=24; keep="qa-mac"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) dry=1 ;;
+    --hours) hours="$2"; shift ;;
+    --keep) keep="$2"; shift ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    *) echo "gc-build-output: unknown argument $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+root=$(dirname "$common")
+mins=$((hours * 60))
+dirs="mobile/.exact-src mobile/.deps mobile/AutoradioKit/.build mobile/AutoradioLab/target mobile/AutoradioLab/.build mobile/EmbedTrial/.build"
+removed=0; skipped=0; kb=0
+for t in "$root"/.lane/trees/* "$root"/.claude/worktrees/*; do
+  [ -d "$t" ] || continue
+  name=$(basename "$t")
+  case ",$keep," in *",$name,"*) continue ;; esac
+  for d in $dirs; do
+    p="$t/$d"
+    [ -d "$p" ] || continue
+    if ! git -C "$t" check-ignore -q "$d" 2>/dev/null; then skipped=$((skipped + 1)); continue; fi
+    if [ -n "$(find "$p" -maxdepth 1 -mmin "-$mins" 2>/dev/null | head -1)" ]; then skipped=$((skipped + 1)); continue; fi
+    k=$(du -sk "$p" 2>/dev/null | cut -f1)
+    kb=$((kb + k))
+    if [ "$dry" = 1 ]; then echo "would remove $((k / 1024)) MiB $p"; else rm -rf "$p"; fi
+    removed=$((removed + 1))
+  done
+done
+verb="removed"; [ "$dry" = 1 ] && verb="would remove"
+free=$(df -k "$root" | tail -1 | awk '{print int($4 / 1048576)}')
+echo "gc-build-output: $verb $removed folders, $((kb / 1048576)) GiB; skipped $skipped (in use or not ignored); $free GiB free"

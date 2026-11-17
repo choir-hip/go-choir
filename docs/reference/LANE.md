@@ -46,6 +46,13 @@ the landing loop is `scripts/land`.
   checkout holds no mobile build caches, so a lane does not either. Mobile
   builds happen in one build worktree, run by the lead
   (`CLAUDE.md`, "One Mac build at a time").
+- A lane is cheap when made and grows with what is compiled in it. Lane
+  shares only what the primary checkout held at the moment of the clone. On
+  2026-11-17 (**verified**, `du` and `df` before and after) 59 lanes and 184
+  older worktrees held 124 GiB of per-tree Exact copies and compiled output;
+  deleting it took the Mac from 30 to 154 GiB free. `scripts/gc-build-output`
+  removes that output from idle trees and is safe to rerun
+  (`CLAUDE.md`, "Build output lives in one place").
 - Untracked, non-ignored files are not carried (`--dirty` carries them). Do
   not use `--dirty` from the primary checkout: it would carry the kept
   secret backup file.

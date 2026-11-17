@@ -227,6 +227,15 @@ record lands alone first. See
   through the lock (`/usr/bin/lockf -k -t 7200
   ~/.cache/autoradio-mac-build.lock ...`); it never runs an Exact build, a
   device build or a simulator. The lead's builds take the same lock.
+- **Build output lives in one place** (owner, 2026-11-17, after the Mac fell
+  to 30 GiB free). A builder's lane never holds a copy of Exact or of the
+  app's compiled output: `mobile/scripts/setup-exact.sh` and `build-lab.sh`
+  run only in the lead's build tree and refuse elsewhere. A lane's Swift
+  package build folder is the only build output a builder makes, and
+  `scripts/gc-build-output` deletes it once the lane has been idle a day.
+  The lead runs `scripts/gc-build-output` at the start of a session and
+  before a device build, and removes a lane with `lane rm` when its branch
+  lands or is dropped. Every builder's brief says so.
 - **Every simulator is slim** (owner, 2026-11-15). Get one only through
   `AR_SIM_NAME=<your name> mobile/scripts/sim-device.sh`, which slims a new
   simulator with `mobile/scripts/sim-slim.sh` before first use; check with
