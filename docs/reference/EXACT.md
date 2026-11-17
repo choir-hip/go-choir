@@ -1,8 +1,11 @@
 # EXACT: the reference for building Autoradio's app on Exact
 
-Observed: `expo/exact` at commit `76cd50f9e863129b3fc75db1673d6ad4bbf79258`
-(2026-11-10), Xcode 27.1, iOS 27 simulator, on an M1 Mac. The earlier handoff
-read `94b8671`; that pin is stale. Exact is pre-1.0 with "no API stability, no
+Pinned: `expo/exact` at commit `de212e671a69f4fea18bed67d5b73b259ddf3061`
+(upstream `main`, 2026-11-16 17:10 -0800), moved on 2026-11-17 from
+`76cd50f9e863129b3fc75db1673d6ad4bbf79258` (2026-11-10), 3018 commits. Observed
+with Xcode 27.1, iOS 27 simulator, on an M1 Mac. The subpages and the examples
+below were written and their `file:line` read at the old pin; the section "Pin
+move, 2026-11-17" says what was re-read at the new one. Exact is pre-1.0 with "no API stability, no
 backwards compatibility, no migration guide, by design" (Exact `README.md`).
 Pin a commit and move the pin on purpose. We carry no fork: local changes to the pinned source are patch files in `mobile/exact-patches/`
 (applied by `mobile/scripts/setup-exact.sh`; each one explained in that directory's README and, for the Markdown editor, in
@@ -34,6 +37,51 @@ Evidence marks used everywhere in this set:
 Our real example code is tracked in
 [`mobile/exact-spike/`](../../mobile/exact-spike/README.md): one Swift package
 and one app. Examples in these pages are lifted from it unless stated.
+
+## Pin move, 2026-11-17 (76cd50f9e to de212e671)
+
+What was done (read, not built: **[src]** unless marked; the first builds at the new pin are the lead's):
+
+- **The Markdown patch stays.** `mobile/exact-patches/0001-markdown-editor-hides-all-syntax.patch` passes `git apply --check`
+  at the new pin and `setup-exact.sh` applies it from the pin's checkout. Upstream's `host/apple/Sources/ExactMarkdown` changed only in
+  `MarkupAtoms.swift` and `MarkupRuns.swift` (atom icons), and `markdown/src/style.rs` gained `Paragraph.content` and
+  `Styled.delimiters` (matched emphasis, code and strike delimiters) but still no option that hides all syntax, so the patch is not
+  replaced. `Styled.delimiters` is the new upstream hook a later version of the patch could use instead of the hidden-range walk.
+- **Manifest and interface.** Every key our `app.json` uses (`host.ios.launchImage|minimumOS|deviceFamily|backgroundModes`,
+  `deploy.store`, `audio_session`) is still in `scripts/app.schema.json`; `audio_session` gained `playback-mix`. Package
+  `exact.json` (implementation) and the interface format are unchanged in shape; `targets` takes `["ios","macos"]`.
+- **Package seam** (`host/apple/modules/ExactPackage.swift`): additive only. New context members (`label`, `data`, `cache`,
+  `temporary`, `directory`, `credentials`, `push`, `hostEvents`), `ExactPackageImplementation`; `ExactPackage` protocol unchanged.
+  Our module needed no change for it.
+- **A package's Swift now loads as a framework of its own, at first use** (LLP 1067.000.001, `4e1b0e245`). "A package whose type
+  the app's Swift imports still loads at launch": our `Models_*.swift` import `ExactPkg_autoradio`, so ours does. **[unrun]**
+  whether the app module's `import ExactPkg_autoradio` still resolves; the first iOS build says.
+- **The audio session owner was rewritten** (`ExactKit/AudioSession.swift`): background execution now needs an activated, running
+  owner, a `playback` or `playAndRecord` category and `audio` in `UIBackgroundModes`; a call's session stays the call's until the system
+  deactivates it; holders reuse an active session without querying `AVAudioSession`. Our claims (`speech-playback`, `default`,
+  `voiceChat`, `background: true`) are unchanged in name. **[unrun]** whether the programme keeps playing with the phone locked: re-prove
+  it on the phone after the move.
+- **Contract language**: the retired spellings the migrator rewrites are `syntax-list-type`, `syntax-method-form`,
+  `syntax-view-keyword` (`when`/`each` for `if`/`for`), `syntax-else-keyword`, and press paints moved into an active part. Our contracts
+  use `if`/`else if`/`for`; `bun exact.mjs contract migrate app.contract` rewrites any other. `tamber` is renamed `forma`
+  (`app.tamber` is now `app.forma`); we use neither. A package view now holds an enum to the cases it declares (`393202fae`): an
+  `enum<...>` prop needs a state typed with every case. **[unrun]** all of these for our contracts: `contract build` is the check.
+- **Toolchain**: Bun stays exactly 1.4.2 (`packageManager`, `engines`). Rust moves from 1.97.0 to 1.99.1 (`rust-toolchain.toml`; rustup
+  installs it on demand; this Mac has it). Xcode 27.1 or later (unchanged). The Hermes receipt schema changed
+  (`vendor/ibex/crates/hermes-lean-sys/receipt_schema.rs`): if the build asks for Hermes bundles, `bun exact.mjs setup`. Nothing is
+  installed system-wide by this change. `bun exact.mjs update` and `lock` are for scaffolding drift and Rust locks: not run, our launcher
+  `AutoradioLab/exact.mjs` still matches `run({ dir, name, exact2, args })`.
+
+### The Mac host at the new pin (re-checked against the investigator's plan)
+
+- **Still true [src]:** `mac` (spelling) / `macos` (manifest key) builds the AppKit host with the same package for both platforms
+  (`app-cli.mjs` `mac: ['host/apple/build.mjs', ...]`); `host.macos` takes `minimumOS` (never below "14.0"), `window` with
+  `width`, `height`, `minWidth`, `minHeight`, `keepRunning`, `presenter`, `activationPolicy`, `team`, `infoPlist`, `entitlements`,
+  `link` and more; `ExactPackagePlatformView` is `NSView`; **the Mac has no audio session** (`AudioSession.swift` is `#if os(iOS) ||
+  os(tvOS)`; the engine starts with no category and a capture's claim composes nothing; `docs/reference.md` "The Mac has no session").
+- **New [src]:** `mac --sandbox` signs the App Sandbox and the agent drives it; `exact appstore` builds the Mac App Store package; a
+  production Mac build captures its own windows; `test macos` and `agent macos` exist; `app-cli.mjs` refreshes the contract's
+  declaration on `ios`/`mac`. None is used by us yet.
 
 ## What Exact is, in three paragraphs
 

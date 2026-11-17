@@ -1,6 +1,6 @@
 # Exact: gaps the Autoradio lab will hit, and the cheapest fix
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**,
+Part of [EXACT.md](../EXACT.md). Pinned commit `de212e671` (2026-11-17; written and every `file:line` read at the old pin `76cd50f9e`, so a line number may have moved: re-check before relying on it). Marks: **[run]**,
 **[src]**, **[doc]**, **[seen]** (observed by our app builders on the simulator, 2026-11-11, not read
 in source), **[unrun]**. "Upstream" links: none searched yet; no
 Exact issue or PR numbers are known to us. `issues/` in the Exact repo holds

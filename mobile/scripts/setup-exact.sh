@@ -2,7 +2,7 @@
 # Check out the pinned Exact source at mobile/.exact-src (gitignored) and install Bun 1.4.2 at ~/.bun-1.4.2.
 # EXACT_REPO overrides the clone source (a local checkout is fine). No full `exact.mjs setup`.
 set -eu
-PIN=76cd50f9e863129b3fc75db1673d6ad4bbf79258
+PIN=de212e671a69f4fea18bed67d5b73b259ddf3061
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$HERE/.exact-src"
 REPO="${EXACT_REPO:-https://github.com/expo/exact.git}"

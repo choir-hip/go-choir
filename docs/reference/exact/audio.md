@@ -1,6 +1,6 @@
 # Exact: the audio session owner and claims
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**
+Part of [EXACT.md](../EXACT.md). Pinned commit `de212e671` (2026-11-17; written and every `file:line` read at the old pin `76cd50f9e`, so a line number may have moved: re-check before relying on it). Marks: **[run]**
 verified by running (iOS 27 simulator, 2026-11-10), **[src]**, **[doc]**,
 **[unrun]**. All line numbers are in
 `host/apple/Sources/ExactKit/AudioSession.swift` unless a path is given.

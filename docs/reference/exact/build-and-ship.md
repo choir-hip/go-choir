@@ -1,6 +1,6 @@
 # Exact: project layout, build, signing, install, pinning
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**
+Part of [EXACT.md](../EXACT.md). Pinned commit `de212e671` (2026-11-17; written and every `file:line` read at the old pin `76cd50f9e`, so a line number may have moved: re-check before relying on it). Marks: **[run]**
 (simulator, 2026-11-10, M1 Mac with another agent building at the same time),
 **[src]**, **[doc]**, **[unrun]**. The runnable example is
 [`mobile/exact-spike/`](../../../mobile/exact-spike/README.md).
@@ -12,7 +12,7 @@ exactly**, Xcode 27.1 or later, and Hermes bundles.
 
 ```sh
 git clone --depth 1 https://github.com/expo/exact exact-checkout
-cd exact-checkout && git fetch --depth 1 origin 76cd50f9e863129b3fc75db1673d6ad4bbf79258 && git checkout FETCH_HEAD
+cd exact-checkout && git fetch --depth 1 origin de212e671a69f4fea18bed67d5b73b259ddf3061 && git checkout FETCH_HEAD
 
 # Bun 1.4.2 beside any other Bun. 1.3.14 is refused:
 #   "error: Bun 1.3.14 is older than 1.4.2 or unavailable; set BUN=~/.bun-1.4.2/bin/bun"

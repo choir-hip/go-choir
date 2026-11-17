@@ -1,6 +1,6 @@
 # Exact: rendering, motion, 3D and drawing
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[src]**
+Part of [EXACT.md](../EXACT.md). Pinned commit `de212e671` (2026-11-17; written and every `file:line` read at the old pin `76cd50f9e`, so a line number may have moved: re-check before relying on it). Marks: **[src]**
 read in source at the pinned commit, **[doc]** stated in Exact's docs only,
 **[seen]** observed by the builders of our app on the simulator, not read in
 source (EXACT.md, "Evidence marks"), **[test]** read in a fixture or test that exists in the tree (not run by us),

@@ -18,4 +18,4 @@ destinations. The styler already computes every hidden range (`Styled.hidden`, r
 Not changed: Return in a list and an empty item ending it (the crate's editing already does that), fenced-code lines and `---` (hidden/drawn as
 the styler says), ordered numbers (shown as the number). Verified by `git apply --check` on the pin and by the Kit tests of the pure rules; **not
 compiled or run** by the lane that wrote it: the first Exact build is the check.
-Drop it when upstream's `host/apple/Sources/ExactMarkdown` hides all syntax (upstream `main` did not at 2026-11-16, 3007 commits past the pin).
+Drop it when upstream's `host/apple/Sources/ExactMarkdown` hides all syntax (upstream `main` did not at 2026-11-16, 3018 commits past the old pin 76cd50f9e, at the new pin de212e671 on 2026-11-17).

@@ -1,6 +1,6 @@
 # Exact: internals
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**,
+Part of [EXACT.md](../EXACT.md). Pinned commit `de212e671` (2026-11-17; written and every `file:line` read at the old pin `76cd50f9e`, so a line number may have moved: re-check before relying on it). Marks: **[run]**,
 **[src]**, **[doc]**, **[unrun]**. Figures from Exact's own docs stay marked
 **[doc, relayed]** and are not promoted to measured.
 
