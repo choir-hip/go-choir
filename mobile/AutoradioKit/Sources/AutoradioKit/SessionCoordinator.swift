@@ -43,6 +43,8 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     private var _shouldResume: Bool?
     /// Called after a notice has been handled (the runtime refreshes its snapshot).
     public var onChange: (@Sendable () -> Void)?
+    /// The session changed state: voice processing (echo cancellation) is on or off now.
+    public var onSwitched: (@Sendable () -> Void)?
     /// An interruption began (`began`), or ended (`shouldResume`: the system says to go on; the session and the engine are back).
     public var onInterruption: (@Sendable (_ began: Bool, _ shouldResume: Bool) -> Void)?
 
@@ -72,10 +74,15 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     public func noteRecommendation(shouldResume: Bool) { lock.lock(); _shouldResume = shouldResume; lock.unlock() }
 
     /// The state a request for `asked` becomes: voice off is a playback session whatever the policy.
-    /// Voice on is one state: the capture session with voice processing (echo cancellation), whether or not a turn is open. The session does not
-    /// change category or mode again between listening and talking, so the programme is never played through a mode switch; the one switch is
-    /// the Voice control's, made with the engine stopped. (`alwaysListening` is the lab's own choice and stays what it says.)
-    func target(for asked: AudioState) -> AudioState { voiceOn() ? (policy() == .alwaysListening ? .listening : .talking) : .playing }
+    /// Voice off is a playback session. Voice on is full-band capture (`listening`: playAndRecord, default mode, no voice processing) while the
+    /// radio plays; the listener speaking over it is heard by `ReferenceSpeechDetector`, the programme is held, and only then is voice
+    /// processing (`talking`) switched on, so its output tone never reaches the listener. Audio the engine does not play (a podcast) has no
+    /// reference signal, so while it plays voice processing stays on to cancel it.
+    func target(for asked: AudioState) -> AudioState {
+        guard voiceOn() else { return .playing }
+        if OutsideAudio.isPlaying, policy() == .switchOnAddress { return .talking }
+        return policy().effective(asked)
+    }
 
     public func claim(_ asked: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
         await mutex.lock(); defer { mutex.unlock() }
@@ -148,6 +155,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         let d = inner.describe()
         log.emit(.audioSession(category: state.rawValue, mode: preferBuiltInMic ? "builtin-mic" : "route-mic", note: "\(reason): \(d)"))
         log.emit(.audioSwitch(from: from?.rawValue ?? "none", to: state.rawValue, ms: ms))
+        onSwitched?()
         print("AUTORADIO session \(from?.rawValue ?? "none") -> \(state.rawValue) took_ms=\(Int(ms))")
         if ms > 5000 { log.emit(.error(stage: "audio-session", message: String(format: "switch to %@ took %.1f s", state.rawValue, ms / 1000))) }
         onChange?()

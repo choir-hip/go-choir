@@ -330,7 +330,7 @@ extension PlaybackEngine {
         if wants, !spokenPaused(), !turnOpen(), let first = nextToAir() { store.airedOnAir(first.id); again = true }
     }
 
-    private func changed() { onChange?() }
+    private func changed() { OutsideAudio.set(isRemote && !paused); onChange?() }
 
     // MARK: Starting an entry
 

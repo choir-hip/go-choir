@@ -141,12 +141,15 @@ final class OneVoiceTests: XCTestCase {
         XCTAssertEqual(y.target(for: YieldSituation(current: .pause, speechSeconds: 3, addressed: false, notATurn: true)), .play)
     }
 
-    /// Mic on is one session state whether or not a turn is open: no category or mode change between listening and talking.
-    func testVoiceOnIsOneSessionState() {
-        let c = SessionCoordinator(inner: NullSessionOwner(), log: EventLog(clock: LabClock()), audio: LiveAudio(), policy: { .switchOnAddress }, voiceOn: { true })
-        XCTAssertEqual(c.target(for: .listening), .talking)
-        XCTAssertEqual(c.target(for: .talking), .talking)
-        let off = SessionCoordinator(inner: NullSessionOwner(), log: EventLog(clock: LabClock()), audio: LiveAudio(), policy: { .switchOnAddress }, voiceOn: { false })
-        XCTAssertEqual(off.target(for: .talking), .playing)
+    /// Mic on keeps full-band capture while the radio plays: no voice processing (its output tone) until the listener is heard and the programme is held.
+    func testVoiceOnKeepsFullBandCaptureUnlessAPodcastPlays() {
+        func coordinator(_ on: Bool) -> SessionCoordinator { SessionCoordinator(inner: NullSessionOwner(), log: EventLog(clock: LabClock()), audio: LiveAudio(), policy: { .switchOnAddress }, voiceOn: { on }) }
+        OutsideAudio.set(false)      // other tests leave a podcast "playing" in this process-wide flag
+        let c = coordinator(true)
+        XCTAssertEqual(c.target(for: .listening), .listening, "the radio plays full-band while voice is on")
+        XCTAssertEqual(c.target(for: .talking), .talking, "a turn is voice-processed")
+        XCTAssertEqual(coordinator(false).target(for: .talking), .playing)
+        OutsideAudio.set(true); defer { OutsideAudio.set(false) }
+        XCTAssertEqual(c.target(for: .listening), .talking, "a podcast has no reference signal: voice processing cancels it")
     }
 }

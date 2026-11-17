@@ -144,6 +144,12 @@ public final class LabRuntime: @unchecked Sendable {
             }
         }
         coord.onChange = { [weak self] in self?.refresh() }
+        // Echo cancellation is on only in the voice-processing state; the turn policy needs to know which it is.
+        coord.onSwitched = { [weak self] in
+            guard let self else { return }
+            Task { [engine = self.engine, audio = self.audio] in await engine.handsFreeConfigure(echoCancelled: audio.voiceProcessing) }
+        }
+        OutsideAudio.onChange = { [coord] in Task { await coord.reapply() } }
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await te in self.log.stream() { self.absorb(te) }
@@ -183,10 +189,20 @@ public final class LabRuntime: @unchecked Sendable {
             let mic = bus.mic()
             let echo = audio.voiceProcessing
             let on = handsFreeOverride ?? HandsFreeSwitch.shared.isOn
-            micTask = Task { [engine] in
+            let monitor = SpeechOverRadioMonitor()
+            let reference = bus.reference()
+            refTask?.cancel()
+            refTask = Task { for await f in reference { monitor.reference(f) } }
+            micTask = Task { [engine, coordinator, audio] in
                 await engine.handsFreeConfigure(echoCancelled: echo)
                 await engine.handsFreeSet(on)
-                for await f in mic { await engine.ingestHandsFree(f) }      // hands-free: no button, the policy decides (HandsFree.swift); off: the engine looks at nothing
+                for await f in mic {
+                    await engine.ingestHandsFree(f)      // hands-free: no button, the policy decides (HandsFree.swift); off: the engine looks at nothing
+                    // Full-band capture (no voice processing): the listener over the radio is heard against what the engine plays.
+                    if !audio.voiceProcessing, coordinator.current == .listening, audio.programmeAudible || audio.voiceIsSpeaking,
+                       let e = monitor.mic(f) { await engine.speechOverRadio(e) }
+                    else if audio.voiceProcessing || coordinator.current != .listening { _ = monitor.mic(f) }
+                }
             }
             player.play()
             lock.lock(); snap.running = true; snap.message = ""; lock.unlock()
@@ -229,6 +245,7 @@ public final class LabRuntime: @unchecked Sendable {
     public var frontPageResolver: (@Sendable (String?) -> FrontPage?)?
     /// Set by the host: the text of the page at an address, as far as the phone has it (the local stream may say something from it).
     public var pageTextProvider: (@Sendable (String) async -> String)?
+    private var refTask: Task<Void, Never>?
     private var warmTask: Task<Void, Never>?
     private let warmKeys = Locked<(done: String, running: String)>(("", ""))
     /// Hands-free for one screen only (onboarding's "Talk to it" while the switch is off): not stored.
