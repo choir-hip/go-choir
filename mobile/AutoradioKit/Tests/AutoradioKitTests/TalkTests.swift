@@ -274,26 +274,6 @@ final class QueueVoiceTests: XCTestCase {
     override func setUp() { Conversation.shared.clear(); QueueVoice.hooks = QueueVoice.Hooks(); RecordingDesk.turns = [] }
     override func tearDown() { QueueVoice.hooks = QueueVoice.Hooks() }
 
-    func testPlainCommandsMatchWhatTheyMean() {
-        XCTAssertEqual(SpokenCommand.match("Skip."), [.skip])
-        XCTAssertEqual(SpokenCommand.match("okay, next story please"), [.skip])
-        XCTAssertEqual(SpokenCommand.match("Go back"), [.previous])
-        XCTAssertEqual(SpokenCommand.match("pause"), [.pause])
-        XCTAssertEqual(SpokenCommand.match("Could you resume"), [.resume])
-        XCTAssertEqual(SpokenCommand.match("Play this next!"), [.playNext(.front)])
-        XCTAssertEqual(SpokenCommand.match("add this to the queue"), [.enqueue(.front)])
-        XCTAssertEqual(SpokenCommand.match("clear the queue"), [.clear])
-    }
-    func testAQuestionWithACommandWordIsNotACommand() {
-        for q in ["what is next in the paper", "is the next election close", "why did the strike stop", "play the Hard Fork episode next", "skip to the part about rates", "what should I play next"] {
-            XCTAssertNil(SpokenCommand.match(q), q)
-        }
-    }
-    func testThisNeedsAPageInFront() {
-        XCTAssertNil(SpokenCommand.match("play this next", pageInFront: false))
-        XCTAssertEqual(SpokenCommand.match("skip", pageInFront: false), [.skip])
-    }
-
     func engine(desk: String = "rec-desk") throws -> (TurnEngine, EventLog) {
         let r = StageRegistry.builtIn()
         r.register(.system1, StubS1.self) { StubS1($0) }
@@ -311,32 +291,11 @@ final class QueueVoiceTests: XCTestCase {
         return (TurnEngine(env: env, configuration: cfg), log)
     }
 
-    func testACommandIsCarriedOutAtOnceAndNeverReachesTheDesk() async throws {
-        let seen = Locked<[[TalkQueueOp]]>([])
-        var h = QueueVoice.Hooks(); h.perform = { ops, _ in seen.write { $0.append(ops) }; return true }
-        QueueVoice.hooks = h
-        let (e, _) = try engine()
-        let started = await e.typedTurn("skip")
-        XCTAssertTrue(started)
-        XCTAssertEqual(seen.value, [[.skip]])
-        XCTAssertTrue(RecordingDesk.turns.isEmpty, "nothing is sent for a plain command")
-        let entry = Conversation.shared.entries().last
-        XCTAssertEqual(entry?.answer, "Okay, skipping."); XCTAssertEqual(entry?.status, "answered")
-        let p = await e.phase; XCTAssertEqual(p, .playing)
-    }
-    func testWithNoQueueHookTheWordsGoToTheDeskAsBefore() async throws {
+    func testEveryTurnGoesToTheDeskWithItsWords() async throws {
         let (e, _) = try engine()
         _ = await e.typedTurn("skip")
         for _ in 0..<60 where RecordingDesk.turns.isEmpty { try await Task.sleep(nanoseconds: 50_000_000) }
-        XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "skip")
-    }
-    func testACommandThatCouldNotBeDoneFallsThroughToTheDesk() async throws {
-        var h = QueueVoice.Hooks(); h.perform = { _, _ in false }
-        QueueVoice.hooks = h
-        let (e, _) = try engine()
-        _ = await e.typedTurn("clear the queue")
-        for _ in 0..<60 where RecordingDesk.turns.isEmpty { try await Task.sleep(nanoseconds: 50_000_000) }
-        XCTAssertEqual(RecordingDesk.turns.count, 1)
+        XCTAssertEqual(RecordingDesk.turns.first?.listenerWords, "skip", "no phrase is handled on the phone: the desk answers and acts through the run sheet's ops")
     }
 
     func testTheRequestBodyCarriesTheQueueAndCandidates() throws {

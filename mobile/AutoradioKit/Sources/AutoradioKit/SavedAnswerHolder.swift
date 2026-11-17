@@ -28,7 +28,7 @@ public enum SavedAnswerPrompt {
             + "No lists, no markup, no quotes, no emoji."
     }
     /// The retrieved context (Retrieval.swift): header with today's date and what is on air, then each passage with kind, date, source, place, id and title.
-    public static func prefix(_ c: RetrievalContext) -> String { c.text }
+    public static func prefix(_ c: RetrievalContext) -> String { (c.brief.isEmpty ? "" : c.brief + "\n") + c.text }
     public static func suffix(_ question: String) -> String { "Question: \"\(AckPrompt.flat(question))\"\nAnswer:" }
 
     /// "From the paper's story on X" for the best item; "From this page" for the page in front.
@@ -106,8 +106,6 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
                     ctx = corpus.retrieve(words, onAir: OnAir.title(pageAddress: i.pageAddress, pageTitle: i.pageTitle, hint: corpus.onAirHint), pageAddress: i.pageAddress)
                 }
                 let hits = ctx.items
-                // What "play that" and "open the second one" mean next: the items as the model sees them, and the one it will speak from.
-                RetrievedRefs.shared.set(hits, best: hits.max { $0.score < $1.score }?.id)
                 if Task.isCancelled { say("cancelled"); return }
                 func holding(_ why: String) { say(why); c.yield(SavedAnswerPrompt.holdingLine(words)) }
                 guard !hits.isEmpty else {

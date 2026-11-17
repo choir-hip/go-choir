@@ -14,57 +14,8 @@ extension AutoradioModule {
         // `applyTurnOps`, which translates the old words onto run sheet ops.
         var hooks = QueueVoice.hooks
         hooks.candidates = { [choir] in (choir?.storyRows() ?? []).prefix(40).map { (route: $0.route, title: $0.title) } }
-        // Plain commands are run sheet ops by the listener: "skip" is `skip(on air)`, the same op as the next button, a swipe on the
-        // card and the lock screen's next; "back" is `previous`; "play this next" is `place next`, "queue this" is `place queued`.
-        hooks.perform = { [weak self] ops, front in
-            guard let self, let op = ops.first else { return false }
-            switch op {
-            case .pause: self.runtime.player.pause(); return true
-            case .resume: await self.choir.startPlaying(); return true
-            case .skip: await self.choir.moveStory(.next); return true
-            case .previous: await self.choir.moveStory(.previous); return true
-            case .clear: await MainActor.run { RunSheetPlayer.shared.clearUpcoming() }; return true
-            case .playNext(.front), .enqueue(.front):
-                // Only a paper story in front can be queued by "this" tonight; a page, book or episode in front falls through to the desk.
-                guard let f = front, f.address.hasPrefix("pub:") else { return false }
-                let entry = RunSheetEntry.paperStory(route: String(f.address.dropFirst(4)), title: f.title)
-                await MainActor.run { if case .playNext = op { RunSheetPlayer.shared.playNext(entry) } else { RunSheetPlayer.shared.queue(entry) } }
-                return true
-            }
-        }
         hooks.snapshot = { await MainActor.run { RunSheetPlayer.shared.turnQueueJSON() } }       // the wire's `queue`
         hooks.applyServerOps = { json in _ = await MainActor.run { RunSheetPlayer.shared.applyTurnOps(json) } }  // dedupe by turn, decoding, rebase: the sheet's
-        // "Play that", "open the second one": the items the last answer retrieved (Kit/RetrievedCommand.swift).
-        hooks.actOnRetrieved = { [weak self] action, item in
-            guard let self else { return false }
-            switch action {
-            case .open:
-                await MainActor.run { _ = self.pages.open(item.address, title: item.title) }
-                return true
-            case .play, .queue:
-                guard let entry = RetrievedCommand.entry(for: item) else {
-                    if action == .play { await MainActor.run { _ = self.pages.open(item.address, title: item.title) }; return true }     // it cannot play: it opens
-                    return false
-                }
-                await MainActor.run { if action == .play { RunSheetPlayer.shared.playNow(entry) } else { RunSheetPlayer.shared.queue(entry) } }
-                return true
-            }
-        }
-        // Commands the phone resolves from its own stores (Kit/LocalCommands.swift).
-        hooks.actOnCommand = { [weak self] cmd in
-            guard let self else { return false }
-            switch cmd {
-            case .readBook(let id, let title, let block):
-                await MainActor.run { RunSheetPlayer.shared.playNow(RunSheetEntry.book(id: id, title: title, at: block)) }
-                return true
-            case .playEpisode(let address, _):
-                return PodcastService.shared.play(address: address, mode: "resume").status == "ok"
-            case .readMail(let address, _, _, _, let subject):
-                if address.isEmpty { return true }            // nothing saved: the line says so
-                await MainActor.run { RunSheetPlayer.shared.playNow(RunSheetEntry.readAloud(address: address, title: subject)) }
-                return true
-            }
-        }
         QueueVoice.hooks = hooks
         SavedCorpus.shared.installRunSheet()
 

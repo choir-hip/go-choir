@@ -99,6 +99,8 @@ public struct RetrievalContext: Sendable {
     public var text: String
     public var items: [RetrievalItem]
     public var record: RetrievalRecord
+    /// "On air now: X. Up next: A; B." (the run sheet), shown to both desks with the passages.
+    public var brief = ""
     public var isEmpty: Bool { items.isEmpty }
 }
 
@@ -413,10 +415,10 @@ public final class RetrievalIndex: @unchecked Sendable {
         let page = q.pageID
         var ranked = scores(weighted, matchTerms: matchTerms, boost: { $0 == page ? 1.25 : 1 })
         let need = min(2, matchTerms.count)
+        // The floor is measured among the items that match the question's own words: an item that matches only the title on air must not set the bar.
+        ranked = ranked.filter { r in r.matched >= need && Double(r.matched) / Double(max(1, matchTerms.count)) >= 0.5 }
         let best = ranked.first?.score ?? 0
-        ranked = ranked.filter { r in
-            r.matched >= need && Double(r.matched) / Double(max(1, matchTerms.count)) >= 0.5 && r.score >= best * 0.2
-        }
+        ranked = ranked.filter { $0.score >= best * 0.2 }
         return ranked.prefix(limit).map { var it = item($0.slot); it.score = $0.score; return it }
     }
     public var indexedCount: Int { count }

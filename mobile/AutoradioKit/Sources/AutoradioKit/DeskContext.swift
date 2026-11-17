@@ -28,7 +28,7 @@ public extension RetrievalContext {
         guard !keep.isEmpty else { return RetrievalContext(text: "", items: [], record: rec) }
         let text = RetrievalIndex.header(query: record.query, onAir: record.onAir, now: record.at) + keep.enumerated().map { RetrievalIndex.block($0.offset + 1, $0.element) }.joined()
         rec.usedChars = text.count
-        return RetrievalContext(text: text, items: keep, record: rec)
+        var r = RetrievalContext(text: text, items: keep, record: rec); r.brief = brief; return r
     }
 }
 
@@ -62,8 +62,8 @@ public enum DeskContext {
     }
 
     /// One console line per turn: counts and kinds only, never content.
-    public static func turnLine(desk: String, retrieved: RetrievalContext?, command: String, reason: String = "") -> String {
+    public static func turnLine(desk: String, retrieved: RetrievalContext?, reason: String = "") -> String {
         let kinds = Set((retrieved?.items ?? []).map(\.kind)).sorted().joined(separator: ",")
-        return "AUTORADIO turn desk=\(desk)\(reason.isEmpty ? "" : " reason=" + reason) retrieved=\(retrieved?.items.count ?? 0) sources=\(kinds.isEmpty ? "-" : kinds) context_chars=\(retrieved?.text.count ?? 0) command=\(command)"
+        return "AUTORADIO turn desk=\(desk)\(reason.isEmpty ? "" : " reason=" + reason) retrieved=\(retrieved?.items.count ?? 0) sources=\(kinds.isEmpty ? "-" : kinds) context_chars=\(retrieved?.text.count ?? 0)"
     }
 }

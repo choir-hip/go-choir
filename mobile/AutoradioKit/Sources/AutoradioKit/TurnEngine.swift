@@ -428,30 +428,6 @@ public actor TurnEngine {
     /// A candidate that counted becomes ended, then the pipeline.
     func runTurn(_ t: Turn, transcript: String) async {
         if !t.ended { t.ended = true; setPhase(.ended); env.log.emit(.turnEnded) }
-        // A plain playback command ("skip", "pause", "add this to the queue") is carried out on the phone at once and never sent.
-        // "Play that", "open the second one": the items the last answer was built from (RetrievedCommand).
-        if let act = QueueVoice.hooks.actOnRetrieved {
-            let r = RetrievedRefs.shared.current()
-            if let (a, item) = RetrievedCommand.match(transcript, items: r.items, best: r.best), await act(a, item) {
-                print(DeskContext.turnLine(desk: "local", retrieved: nil, command: "retrieved-" + a.rawValue))
-                await finishCommand(t, transcript: transcript, line: RetrievedCommand.line(a, item))
-                return
-            }
-        }
-        // "Read my book", "play the latest <show>", "what is in my mail": resolved from the phone's own stores, no model, no desk.
-        if let act = QueueVoice.hooks.actOnCommand, let cmd = LocalCommands.match(transcript, catalog: QueueVoice.hooks.catalog?() ?? .live()), await act(cmd) {
-            print(DeskContext.turnLine(desk: "local", retrieved: nil, command: cmd.name))
-            await finishCommand(t, transcript: transcript, line: cmd.line)
-            return
-        }
-        if let perform = QueueVoice.hooks.perform {
-            let front = t.front ?? env.frontPage()
-            if let ops = SpokenCommand.match(transcript, pageInFront: front != nil), await perform(ops, front) {
-                print(DeskContext.turnLine(desk: "local", retrieved: nil, command: "playback"))
-                await finishCommand(t, transcript: transcript, line: SpokenCommand.line(ops))
-                return
-            }
-        }
         if let a = addressing { _ = await a.decide(.turnFinished, now: env.log.clock.now) }
         let endedAt = env.log.clock.now
         turn = nil
@@ -460,22 +436,6 @@ public actor TurnEngine {
     }
 
     /// A command turn is over: shown as a one-line answer, the programme carries on, the microphone goes back to listening.
-    func finishCommand(_ t: Turn, transcript: String, line: String) async {
-        if let a = addressing { _ = await a.decide(.turnFinished, now: env.log.clock.now) }
-        turn = nil
-        t.partialTask?.cancel()
-        env.log.emit(.note("command: \(transcript) -> \(line)"))
-        Conversation.shared.begin(id: t.id, question: transcript)
-        Conversation.shared.addAnswer(id: t.id, sentence: line)
-        Conversation.shared.finishAnswer(id: t.id, status: "completed")
-        await hfAnswerEnded(turnID: t.id)
-        // Not `restoreProgramme`: its `resume` could undo the very pause the command asked for. Only the dip and the session are given back.
-        await setLevelTo(.play, reason: .resume)
-        do { try await env.session.claim(.listening, preferBuiltInMic: false, reason: "command") } catch {}
-        if let b = bounds { await b.reset() }
-        setPhase(.playing)
-    }
-
     func dropTurn(reason: String?, notATurn: Bool = false) async {
         if let r = reason { env.log.emit(.notATurn(reason: r)) }
         if let t = turn { t.session.cancel(); t.partialTask?.cancel() }
@@ -567,7 +527,7 @@ public actor TurnEngine {
         // model is loaded there is no local answer to keep, so the desk is asked as usual, with the private passages left out of what it is sent.
         let keepLocal = DeskContext.keepsLocal(retrieved) && (LocalLanguage.model?.isLoaded ?? false)
         if keepLocal { desk = nil }
-        print(DeskContext.turnLine(desk: desk != nil ? "server" : "local", retrieved: retrieved, command: "none", reason: keepLocal ? "private" : ""))
+        print(DeskContext.turnLine(desk: desk != nil ? "server" : "local", retrieved: retrieved, reason: keepLocal ? "private" : ""))
 
         // The desk starts at once; System 1 and the acknowledgement do not wait for it.
         let revisionSeen = Flag()
@@ -592,7 +552,7 @@ public actor TurnEngine {
                 deskTask = Task { [self] in
                     var turnReq = baseReq
                     let own = front != nil ? await pageFetch(front!.address) : ""
-                    turnReq.page = DeskContext.page(front: front, pageText: own, brief: SavedCorpus.shared.onAirBrief, retrieved: retrieved)
+                    turnReq.page = DeskContext.page(front: front, pageText: own, brief: retrieved?.brief ?? "", retrieved: retrieved)
                     turnReq.queue = await QueueVoice.hooks.snapshot?()
                     turnReq.candidates = (QueueVoice.hooks.candidates?() ?? []).prefix(40).map { DeskCandidate(route: $0.route, title: $0.title) }
                     var firstSeen = false

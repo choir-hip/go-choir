@@ -78,7 +78,7 @@ public final class SavedCorpus: @unchecked Sendable {
     public func reset() {
         lock.lock(); held = [:]; heldOrder = []; known = []; onAirHint = ""; lock.unlock()
         retrieval.removeAll(except: [])
-        RetrievedRefs.shared.clear(); RetrievalLog.shared.clear()
+        RetrievalLog.shared.clear()
     }
 
     /// Name a source of documents. Replaces the source of that name.
@@ -121,6 +121,8 @@ public final class SavedCorpus: @unchecked Sendable {
     /// What the on-device model is shown for this question: every store searched with BM25, newest first, within the budget.
     public func retrieve(_ question: String, onAir: String = "", pageAddress: String = "", now: Date = Date()) -> RetrievalContext {
         refresh()
-        return (retriever ?? retrieval).retrieve(.init(words: question, onAirTitle: onAir, pageID: pageAddress.isEmpty ? nil : "page:" + pageAddress, now: now))
+        var c = (retriever ?? retrieval).retrieve(.init(words: question, onAirTitle: onAir, pageID: pageAddress.isEmpty ? nil : "page:" + pageAddress, now: now))
+        lock.lock(); c.brief = onAirBrief; lock.unlock()          // what is on air and ahead, for both desks
+        return c
     }
 }

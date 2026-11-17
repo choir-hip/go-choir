@@ -65,10 +65,9 @@ final class ContentStoreTests: XCTestCase {
         let corpus = SavedCorpus(readerStore: nil); corpus.setDeltaSource("store") { s.drain() }
         s.put(StoredItem(id: "mail:1", kind: .mail, title: "Tunnel referendum", text: "The referendum notes.", date: c.now, address: "mail:1", syncedAt: c.now)); s.flush()
         XCTAssertEqual(corpus.retrieve("tunnel referendum").items.count, 1)
-        RetrievedRefs.shared.set(corpus.retrieve("tunnel referendum").items, best: nil)
         ContentSync.wipeAccount(store: s, corpus: corpus)
         XCTAssertEqual(s.summary().totalBytes, 0); XCTAssertNil(s.get("mail:1"))
-        XCTAssertTrue(corpus.retrieve("tunnel referendum").isEmpty, "the index forgot it"); XCTAssertTrue(RetrievedRefs.shared.current().items.isEmpty)
+        XCTAssertTrue(corpus.retrieve("tunnel referendum").isEmpty, "the index forgot it")
         let left = (FileManager.default.enumerator(at: r, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? []).filter { !$0.hasDirectoryPath }
         XCTAssertTrue(left.isEmpty, "no file of the account remains: \(left.map(\.lastPathComponent))")
         XCTAssertTrue(ContentStore(root: r, clock: { c.now }).summary().totalBytes == 0, "and a restart finds nothing")

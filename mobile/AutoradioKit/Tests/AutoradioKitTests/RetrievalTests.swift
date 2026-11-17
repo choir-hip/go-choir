@@ -198,52 +198,6 @@ final class RetrievalHolderTests: XCTestCase {
     }
 }
 
-final class RetrievedCommandTests: XCTestCase {
-    func item(_ n: Int, _ address: String, _ kind: String = "story") -> RetrievalItem {
-        RetrievalItem(id: "i\(n)", address: address, kind: kind, title: "Title \(n)", source: "x", date: nil, place: "", score: Double(10 - n), text: "t")
-    }
-    var items: [RetrievalItem] { [item(1, "pub:/p/a"), item(2, "pub:/p/b"), item(3, "doc:b1@90", "book")] }
-    func m(_ s: String, best: String? = nil) -> (RetrievedAction, String)? { RetrievedCommand.match(s, items: items, best: best).map { ($0.0, $0.1.id) } }
-
-    func testOrdinalsThatAndLatest() {
-        XCTAssertEqual(m("open the second one")?.1, "i2"); XCTAssertEqual(m("open the second one")?.0, .open)
-        XCTAssertEqual(m("Play the first story please")?.1, "i1")
-        XCTAssertEqual(m("play number three")?.1, "i3")
-        XCTAssertEqual(m("queue the third one")?.0, .queue)
-        XCTAssertEqual(m("add the second one to the queue")?.0, .queue); XCTAssertEqual(m("add the second one to the queue")?.1, "i2")
-        XCTAssertEqual(m("play that", best: "i2")?.1, "i2")
-        XCTAssertEqual(m("play the latest")?.1, "i1")
-    }
-    func testNotACommandWhenItIsAQuestionOrOutOfRangeOrAmbiguous() {
-        XCTAssertNil(m("who will open the second round"))
-        XCTAssertNil(m("open the fifth one"), "only three items: never the wrong one")
-        XCTAssertNil(m("play that"), "three items and no best: ambiguous")
-        XCTAssertNil(m("play that next"))
-        XCTAssertNil(RetrievedCommand.match("play that", items: []))
-    }
-    func testRefsExpireAndAreSetPerAnswer() {
-        let r = RetrievedRefs(); r.set(items, best: "i1", now: Date(timeIntervalSince1970: 0))
-        XCTAssertEqual(r.current(now: Date(timeIntervalSince1970: 100)).items.count, 3)
-        XCTAssertTrue(r.current(now: Date(timeIntervalSince1970: 100_000)).items.isEmpty)
-    }
-    func testIdsRoundTripToThePlayAndOpenPath() {
-        XCTAssertEqual(RetrievedCommand.entry(for: items[0])?.source?.ref, "pub:/p/a")
-        let book = RetrievedCommand.entry(for: items[2])
-        XCTAssertEqual(book?.source?.ref, "doc:b1"); XCTAssertEqual(book?.source?.start, 90, "the passage's own block")
-        XCTAssertNil(RetrievedCommand.entry(for: item(4, "file:/a/b.txt", "file")), "a file name opens, it does not play")
-    }
-    func testHolderSetsTheRefsFromWhatTheModelSaw() async {
-        RetrievedRefs.shared.clear()
-        let c = SavedCorpus(readerStore: nil)
-        c.setSource("t") { [SavedCorpus.Document(id: "pub:a", title: "Senate passes the water bill", address: "pub:/p/a", text: "The Senate voted on Tuesday to pass the water bill.")] }
-        let h = SavedAnswerHolder(StageParams(), corpus: c, model: { FakeLocalModel(pieces: ["The Senate passed it. "]) })
-        for await _ in h.lines(for: HolderInput(listenerWords: "tell me about the Senate", answers: [])) {}
-        let r = RetrievedRefs.shared.current()
-        XCTAssertEqual(r.items.map(\.address), ["pub:/p/a"]); XCTAssertEqual(r.best, "pub:a")
-        XCTAssertEqual(RetrievedCommand.match("play that", items: r.items, best: r.best)?.1.address, "pub:/p/a")
-    }
-}
-
 final class RetrievalMoreSourcesTests: XCTestCase {
     func testNothingLineNamesWhatWasSearched() {
         XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: ["Autopaper", "Reader", "Podcasts"]), "I have nothing on that in the paper, your books or your podcasts.")
