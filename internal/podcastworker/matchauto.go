@@ -20,7 +20,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
+	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -38,6 +41,7 @@ type MatchBackend interface {
 	Episodes(ctx context.Context, since time.Time, limit int) ([]EpisodeInfo, error)
 	Transcript(ctx context.Context, feedURL, guid string) ([]Segment, error)
 	PutClipsEach(ctx context.Context, clips []ClipIn) []error
+	Clips(ctx context.Context, routes []string) ([]HeldClip, error)
 }
 
 type storyState struct {
@@ -78,6 +82,7 @@ type MatchReport struct {
 	AlreadyWritten int
 	Refused        int
 	Failed         int
+	Requests       int // calls to the platform this run
 }
 
 func (m *Matcher) load() {
@@ -125,8 +130,33 @@ func (m *Matcher) logf(f string, a ...any) {
 	fmt.Fprintf(os.Stderr, f+"\n", a...)
 }
 
+// clipKey is the platform's clip identity: story, episode and the start
+// rounded to the second (internal/platform podcastClipID).
 func clipKey(route, episodeID string, start float64) string {
-	return fmt.Sprintf("%s|%s|%.1f", route, episodeID, start)
+	return fmt.Sprintf("%s|%s|%d", route, episodeID, int(math.Round(start)))
+}
+
+// DefaultMatchStatePath is where the matcher's state lives when none is named:
+// beside the work directory (so it outlives a hand-started process), or in the
+// user's cache directory.
+func DefaultMatchStatePath(workDir string) string {
+	if workDir != "" {
+		return filepath.Join(filepath.Dir(filepath.Clean(workDir)), "match-state.json")
+	}
+	if dir, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(dir, "choir-podcast-worker", "match-state.json")
+	}
+	return filepath.Join(os.TempDir(), "choir-podcast-match-state.json")
+}
+
+// audioKey is the identity of an episode's audio: its enclosure without query
+// or fragment, so two feed entries of one file are one; without an enclosure,
+// the feed, title and publish time.
+func audioKey(e EpisodeInfo) string {
+	if u, err := url.Parse(strings.TrimSpace(e.EnclosureURL)); err == nil && u.Host != "" {
+		return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + u.Path
+	}
+	return e.FeedURL + "|" + e.Title + "|" + e.Published.UTC().Format(time.RFC3339)
 }
 
 // Run matches once.
@@ -142,6 +172,7 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 		limit = 100
 	}
 	front, err := m.B.Front(ctx, 100)
+	rep.Requests++
 	if err != nil {
 		return rep, fmt.Errorf("front list: %w", err)
 	}
@@ -181,15 +212,23 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 			earliest = t
 		}
 	}
+	rep.Requests++
 	eps, err := m.B.Episodes(ctx, earliest, 500)
 	if err != nil {
 		return rep, fmt.Errorf("episodes: %w", err)
 	}
+	// One audio under two feed entries is one episode: the first by id stays.
+	sort.SliceStable(eps, func(i, j int) bool { return eps[i].EpisodeID < eps[j].EpisodeID })
 	var have []EpisodeInfo
+	audioOf := map[string]string{} // "feed\x00guid" -> audio key
+	seenAudio := map[string]bool{}
 	for _, e := range eps {
-		if e.HasTranscript {
-			have = append(have, e)
+		audioOf[e.FeedURL+"\x00"+e.GUID] = audioKey(e)
+		if !e.HasTranscript || seenAudio[audioKey(e)] {
+			continue
 		}
+		seenAudio[audioKey(e)] = true
+		have = append(have, e)
 	}
 	// Which stories have something new to match against.
 	digests := map[string]string{}
@@ -225,6 +264,7 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 		seen[e.EpisodeID] = true
 		segs, cached := m.transcripts[e.EpisodeID]
 		if !cached {
+			rep.Requests++
 			blocks, err := m.B.Transcript(ctx, e.FeedURL, e.GUID)
 			if err != nil {
 				m.logf("podcast-worker match: episode %s: transcript unavailable: %v", e.EpisodeID, err)
@@ -237,12 +277,33 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 			m.transcripts[e.EpisodeID] = segs
 		}
 		info[e.EpisodeID] = e
-		pm = append(pm, podcastmatch.Episode{Key: e.EpisodeID, Published: e.Published, DurationSeconds: e.DurationSeconds, Segs: segs})
+		pm = append(pm, podcastmatch.Episode{Key: e.EpisodeID, AudioKey: audioKey(e), Published: e.Published, DurationSeconds: e.DurationSeconds, Segs: segs})
 	}
 	for id := range m.transcripts {
 		if !seen[id] {
 			delete(m.transcripts, id)
 		}
+	}
+	// What the platform already holds for these stories: it counts toward the
+	// cap, and its audio and words are not offered again. The clips written in
+	// an earlier run, or by hand, are the memory; the state file only saves the
+	// writes.
+	var routes []string
+	for _, st := range stories {
+		routes = append(routes, st.Route.Bare)
+	}
+	rep.Requests++
+	heldRows, err := m.B.Clips(ctx, routes)
+	if err != nil {
+		return rep, fmt.Errorf("read the clips the platform holds: %w", err)
+	}
+	held := map[string][]podcastmatch.Held{}
+	for _, h := range heldRows {
+		ak, ok := audioOf[h.FeedURL+"\x00"+h.GUID]
+		if !ok {
+			ak = h.FeedURL + "\x00" + h.GUID
+		}
+		held[h.Route] = append(held[h.Route], podcastmatch.Held{AudioKey: ak, Text: h.Quote})
 	}
 	var ms []podcastmatch.Story
 	byRoute := map[string]FrontStory{}
@@ -250,7 +311,7 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 		ms = append(ms, podcastmatch.Story{ID: st.Route.Bare, Title: st.Title, Dek: st.Dek, Updated: st.UpdatedAt})
 		byRoute[st.Route.Bare] = st
 	}
-	res, err := podcastmatch.MatchSubjects(ctx, ms, subjects, pm, m.Params)
+	res, err := podcastmatch.MatchSubjects(ctx, ms, subjects, held, pm, m.Params)
 	if err != nil {
 		return rep, err
 	}
@@ -275,6 +336,7 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	if m.DryRun {
 		rep.WouldWrite = len(fresh)
 	} else if len(fresh) > 0 {
+		rep.Requests++
 		errs := m.B.PutClipsEach(ctx, fresh)
 		for i, err := range errs {
 			switch {
@@ -315,6 +377,6 @@ func (m *Matcher) report(r MatchReport) {
 	if m.DryRun {
 		verb = fmt.Sprintf("dry run: would write %d (already written %d)", r.WouldWrite, r.AlreadyWritten)
 	}
-	m.logf("podcast-worker match: stories considered %d (unchanged %d), passages scored %d, passages judged %d, accepted %d, rejected %s, %s",
-		r.Stories, r.Unchanged, r.Scored, r.Passages, r.Accepted, strings.Join(rej, " "), verb)
+	m.logf("podcast-worker match: stories considered %d (unchanged %d), passages scored %d, passages judged %d, accepted %d, rejected %s, %s, requests %d",
+		r.Stories, r.Unchanged, r.Scored, r.Passages, r.Accepted, strings.Join(rej, " "), verb, r.Requests)
 }

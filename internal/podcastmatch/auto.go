@@ -17,6 +17,7 @@ package podcastmatch
 //	clip      a clip of 20 to 75 seconds exists on segment edges;
 //	boundary  and its edges are sentence or speaker-turn edges (a pause of 0.9 s
 //	          or more) of the transcript, never mid-sentence or mid-word;
+//	ad        the clip is not a sponsor message or a promotion;
 //	score     the clip's own BM25 for the story is at least MinScore;
 //	entity    the clip carries at least MinEntities of the story's distinctive
 //	          terms and at least MinEntityShare of them, and at least one of
@@ -54,7 +55,10 @@ type Story struct {
 
 // Episode is a transcribed episode.
 type Episode struct {
-	Key             string
+	Key string
+	// AudioKey identifies the audio: two feed entries of one enclosure share
+	// it. Empty means the Key is the identity.
+	AudioKey        string
 	Published       time.Time
 	DurationSeconds float64
 	Segs            []Segment
@@ -106,6 +110,7 @@ const (
 	RuleTime     Rule = "time"
 	RuleClip     Rule = "clip"
 	RuleBoundary Rule = "boundary"
+	RuleAd       Rule = "ad"
 	RuleScore    Rule = "score"
 	RuleEntity   Rule = "entity"
 	RuleMargin   Rule = "margin"
@@ -113,7 +118,7 @@ const (
 )
 
 // Rules lists them in the order they are tried.
-var Rules = []Rule{RuleTime, RuleClip, RuleBoundary, RuleScore, RuleEntity, RuleMargin, RuleCap}
+var Rules = []Rule{RuleTime, RuleClip, RuleBoundary, RuleAd, RuleScore, RuleEntity, RuleMargin, RuleCap}
 
 // Accepted is a clip that cleared every rule.
 type Accepted struct {
@@ -140,12 +145,59 @@ type Result struct {
 
 // Match runs the matcher over stories and episodes.
 func Match(ctx context.Context, stories []Story, eps []Episode, p Params) (Result, error) {
-	return MatchSubjects(ctx, stories, nil, eps, p)
+	return MatchSubjects(ctx, stories, nil, nil, eps, p)
+}
+
+// Held is a clip the platform already holds for a story: it counts toward the
+// story's cap, and its audio and words are not offered again.
+type Held struct {
+	AudioKey string
+	Text     string // the clip's quote
+}
+
+func (e *Episode) audio() string {
+	if e.AudioKey != "" {
+		return e.AudioKey
+	}
+	return e.Key
+}
+
+var adPhrases = []string{"brought to you by", "sponsored by", "sponsor", "promo code", "use code", "terms apply", "learn more at", "visit our website", "support for this", "is supported by", "this episode is supported", "free trial", "subscribe", "download the app", "limited time offer", "book today", "book a "}
+
+// isAdRead reports whether a clip's words read as a sponsor message or a
+// promotion: an ad that names the story's brand is not the story.
+func isAdRead(text string) bool {
+	low := strings.ToLower(text)
+	for _, p := range adPhrases {
+		if strings.Contains(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameWords reports whether two texts are one passage said twice: 80% of the
+// shorter's distinct terms are in the other (an hourly brief repeating an item).
+func sameWords(a, b string) bool {
+	ta, tb := queryTerms(a), queryTerms(b)
+	if len(ta) == 0 || len(tb) == 0 {
+		return false
+	}
+	if len(ta) > len(tb) {
+		ta, tb = tb, ta
+	}
+	in := 0
+	for t := range ta {
+		if tb[t] > 0 {
+			in++
+		}
+	}
+	return float64(in)/float64(len(ta)) >= 0.9
 }
 
 // MatchSubjects is Match for the stories named in subjects only (nil means all
 // of them); the others still count as competitors for the margin rule.
-func MatchSubjects(ctx context.Context, stories []Story, subjects map[string]bool, eps []Episode, p Params) (Result, error) {
+func MatchSubjects(ctx context.Context, stories []Story, subjects map[string]bool, held map[string][]Held, eps []Episode, p Params) (Result, error) {
 	res := Result{Rejected: map[Rule]int{}}
 	byKey := map[string]*Episode{}
 	var wins []Window
@@ -185,7 +237,12 @@ func MatchSubjects(ctx context.Context, stories []Story, subjects map[string]boo
 		res.Scored += len(wins)
 		res.Candidates += len(hits)
 		taken := map[string]bool{}
-		accepted := 0
+		accepted := len(held[st.ID])
+		var said []string
+		for _, h := range held[st.ID] {
+			taken[h.AudioKey] = true
+			said = append(said, h.Text)
+		}
 		for _, h := range hits {
 			ep := byKey[h.Window.Key]
 			if ep == nil {
@@ -194,11 +251,18 @@ func MatchSubjects(ctx context.Context, stories []Story, subjects map[string]boo
 			res.Passages++
 			rule, acc := c.judge(ctx, stories, qts, ents, i, ep, h, p)
 			if rule == "" {
-				if taken[ep.Key] || accepted >= p.PerStory {
+				dup := taken[ep.audio()] || accepted >= p.PerStory
+				for _, w := range said {
+					if !dup && sameWords(w, acc.Text) {
+						dup = true
+					}
+				}
+				if dup {
 					res.Rejected[RuleCap]++
 					continue
 				}
-				taken[ep.Key] = true
+				taken[ep.audio()] = true
+				said = append(said, acc.Text)
 				accepted++
 				res.Accepted = append(res.Accepted, acc)
 				continue
@@ -227,6 +291,9 @@ func (c *corpus) judge(ctx context.Context, stories []Story, qts []map[string]in
 	clip, ok = ChooseSentenceClip(ep.Segs, *h.Window, gist)
 	if !ok || (ep.DurationSeconds > 0 && clip.End > ep.DurationSeconds+5) {
 		return RuleBoundary, Accepted{}
+	}
+	if isAdRead(clip.Text) {
+		return RuleAd, Accepted{}
 	}
 	cw := Window{Key: ep.Key, First: clip.First, Last: clip.Last, Start: clip.Start, End: clip.End, Text: clip.Text}
 	cw.index()

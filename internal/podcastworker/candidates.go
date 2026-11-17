@@ -52,6 +52,7 @@ type EpisodeInfo struct {
 	Title           string    `json:"title"`
 	Published       time.Time `json:"published"`
 	DurationSeconds float64   `json:"duration_seconds"`
+	EnclosureURL    string    `json:"enclosure_url"`
 	HasTranscript   bool      `json:"has_transcript"`
 }
 

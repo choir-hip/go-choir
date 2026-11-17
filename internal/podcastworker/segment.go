@@ -123,13 +123,21 @@ type Repairs struct {
 	Split    int // segments cut for length (extra parts made)
 	Shifted  int // segments moved to start after the one before ended
 	Extended int // segments given a length
+	// MaxShift is the largest move of a start, in seconds. A shift over
+	// LargeShift means the transcriber's times overlapped by more than a
+	// moment: the words' audio may lie earlier than their times.
+	MaxShift    float64
+	LargeShifts int
 }
+
+// LargeShift is a shift of a segment start worth a log line.
+const LargeShift = 1.0
 
 // Any reports whether anything was repaired.
 func (r Repairs) Any() bool { return r != Repairs{} }
 
 func (r Repairs) String() string {
-	return fmt.Sprintf("%d empty dropped, %d long split, %d overlapping moved, %d zero-length extended", r.Dropped, r.Split, r.Shifted, r.Extended)
+	return fmt.Sprintf("%d empty dropped, %d long split, %d overlapping moved (largest %.1f s, %d over %.0f s), %d zero-length extended", r.Dropped, r.Split, r.Shifted, r.MaxShift, r.LargeShifts, LargeShift, r.Extended)
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
@@ -156,8 +164,13 @@ func RepairSegments(in []Segment) ([]Segment, Repairs) {
 			start, end = prevEnd, prevEnd
 		}
 		if start < prevEnd-overlapTolerance {
+			shift := prevEnd - start
 			start = prevEnd
 			rep.Shifted++
+			rep.MaxShift = math.Max(rep.MaxShift, shift)
+			if shift > LargeShift {
+				rep.LargeShifts++
+			}
 		}
 		if end <= start {
 			end = start + minSegmentSeconds
