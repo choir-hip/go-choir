@@ -90,7 +90,7 @@ func (e *HTTPError) Error() string {
 // Permanent reports whether repeating the same request cannot succeed: the
 // platform refused its content (a 4xx other than a timeout or a rate limit).
 func (e *HTTPError) Permanent() bool {
-	return e.Status >= 400 && e.Status < 500 && e.Status != 408 && e.Status != 429
+	return e.Status >= 400 && e.Status < 500 && e.Status != 401 && e.Status != 403 && e.Status != 408 && e.Status != 429
 }
 
 const opBase = "/api/platform/operator/podcasts/"
@@ -190,4 +190,47 @@ func (c *Client) PutClipsEach(ctx context.Context, clips []ClipIn) []error {
 		}
 	}
 	return errs
+}
+
+// HeldClip is a clip the platform serves for a story.
+type HeldClip struct {
+	Route    string
+	FeedURL  string
+	GUID     string
+	AudioURL string
+	Start    float64
+	Quote    string
+	Version  int
+}
+
+// Clips reads the clips the platform serves for the routes (the public read:
+// at most three a story), in requests of at most 50 routes.
+func (c *Client) Clips(ctx context.Context, routes []string) ([]HeldClip, error) {
+	var out []HeldClip
+	for start := 0; start < len(routes); start += 50 {
+		q := url.Values{"limit": {"200"}}
+		for _, r := range routes[start:min(start+50, len(routes))] {
+			q.Add("route", r)
+		}
+		var ans struct {
+			Clips []struct {
+				Story struct {
+					Route   string `json:"route"`
+					Version int    `json:"version"`
+				} `json:"story"`
+				FeedURL  string  `json:"feed_url"`
+				GUID     string  `json:"episode_guid"`
+				AudioURL string  `json:"audio_url"`
+				Start    float64 `json:"start"`
+				Quote    string  `json:"quote"`
+			} `json:"clips"`
+		}
+		if err := c.do(ctx, http.MethodGet, "/api/platform/podcast-clips?"+q.Encode(), nil, &ans); err != nil {
+			return nil, err
+		}
+		for _, k := range ans.Clips {
+			out = append(out, HeldClip{Route: k.Story.Route, FeedURL: k.FeedURL, GUID: k.GUID, AudioURL: k.AudioURL, Start: k.Start, Quote: k.Quote, Version: k.Story.Version})
+		}
+	}
+	return out, nil
 }

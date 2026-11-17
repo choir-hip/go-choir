@@ -43,6 +43,23 @@ type fakeMatchBackend struct {
 	puts        [][]ClipIn
 	putErr      func(ClipIn) error
 	tcalls      int
+	held        []HeldClip
+	clipReads   int
+}
+
+func (b *fakeMatchBackend) Clips(_ context.Context, routes []string) ([]HeldClip, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.clipReads++
+	var out []HeldClip
+	for _, h := range b.held {
+		for _, r := range routes {
+			if h.Route == r {
+				out = append(out, h)
+			}
+		}
+	}
+	return out, nil
 }
 
 func (b *fakeMatchBackend) Front(context.Context, int) ([]FrontStory, error) { return b.front, nil }
@@ -60,6 +77,16 @@ func (b *fakeMatchBackend) PutClipsEach(_ context.Context, clips []ClipIn) []err
 	defer b.mu.Unlock()
 	b.puts = append(b.puts, clips)
 	errs := make([]error, len(clips))
+	for _, c := range clips {
+		if b.putErr != nil && b.putErr(c) != nil {
+			continue
+		}
+		for _, e := range b.eps {
+			if e.EpisodeID == c.EpisodeID {
+				b.held = append(b.held, HeldClip{Route: c.StoryRoute, FeedURL: e.FeedURL, GUID: e.GUID, Start: c.Start, Quote: c.Quote})
+			}
+		}
+	}
 	if b.putErr != nil {
 		for i, c := range clips {
 			errs[i] = b.putErr(c)
@@ -151,15 +178,15 @@ func TestA2_A3_SecondRunIsIdempotentAndNewMaterialIsMatched(t *testing.T) {
 	}
 	// A new episode of the same event arrives: matched, and the first clip is not written again.
 	b.eps = append(b.eps, EpisodeInfo{EpisodeID: "ep-2", FeedURL: "f", GUID: "g2", Show: "Show C", Title: "Noon", Published: matchNow.Add(-1 * time.Hour), HasTranscript: true})
-	b.transcripts["g2"] = ferrySpoken()
+	b.transcripts["g2"] = spoken("Tessaly Bay saw a collision this morning when the Marlin, a Harborview ferry, struck a pier.", "About forty passengers were hurt and the coast guard said the vessel lost steering.", "Crews pulled the ferry clear and divers checked the damaged pier in the bay.", "The Marlin was carrying commuters across Tessaly Bay at the time of the crash.", "Harborview said it would cooperate with the coast guard inquiry.")
 	rep3, _ := m.Run(context.Background())
-	if rep3.Written != 1 || rep3.AlreadyWritten != 1 || len(b.puts) != 2 || b.puts[1][0].EpisodeID != "ep-2" {
+	if rep3.Written != 1 || len(b.puts) != 2 || b.puts[1][0].EpisodeID != "ep-2" {
 		t.Fatalf("A3: %+v puts %v", rep3, b.puts)
 	}
 	// A new story version re-matches, still without rewriting.
 	b.front[0].LatestRevision = 3
 	rep4, _ := m.Run(context.Background())
-	if rep4.Unchanged != 1 || rep4.Written != 0 || rep4.AlreadyWritten != 2 {
+	if rep4.Unchanged != 1 || rep4.Written != 0 {
 		t.Fatalf("A3: version bump %+v", rep4)
 	}
 }
@@ -279,4 +306,93 @@ func TestA10_TheBackendHasNoModelCall(t *testing.T) {
 	// MatchBackend is the whole of what the matcher can reach.
 	var _ MatchBackend = (*Client)(nil)
 	var _ MatchBackend = (*fakeMatchBackend)(nil)
+}
+
+// Review of 5cc739079, written first:
+//   B1. a restart with no state file writes again what the server holds, or a
+//       fourth clip, or a second clip of an episode the story has;
+//   B2. one audio under two feed entries gives two clips;
+//   B3. a 401 or 403 marks clips written;
+//   B4. the report does not count the requests of the run;
+//   B5. the state file defaults to "only for this run".
+
+func TestB1_ARestartWithNoStateDoesNotWriteWhatTheServerHolds(t *testing.T) {
+	b := newFakeMatch()
+	var logs []string
+	if rep, _ := newMatcher(b, &logs).Run(context.Background()); rep.Written != 1 {
+		t.Fatalf("first: %+v", rep)
+	}
+	// A new process, no state, the story's version bumped: the server's clip is the memory.
+	b.front[0].LatestRevision = 9
+	rep, _ := newMatcher(b, &logs).Run(context.Background())
+	if rep.Written != 0 || len(b.puts) != 1 {
+		t.Fatalf("B1: wrote again: %+v puts %d", rep, len(b.puts))
+	}
+}
+
+func TestB1_TheServersThreeClipsFillTheStory(t *testing.T) {
+	b := newFakeMatch()
+	for i := 0; i < 3; i++ {
+		b.held = append(b.held, HeldClip{Route: "/pub/texture/ferry", FeedURL: "f", GUID: fmt.Sprintf("other-%d", i), Quote: fmt.Sprintf("something else entirely %d", i)})
+	}
+	var logs []string
+	rep, _ := newMatcher(b, &logs).Run(context.Background())
+	if rep.Written != 0 || len(b.puts) != 0 {
+		t.Fatalf("B1: a fourth clip: %+v", rep)
+	}
+}
+
+func TestB1_TheWrittenKeyIsTheServersClipIdentity(t *testing.T) {
+	if clipKey("/r", "e", 32.6) != clipKey("/r", "e", 32.7) || clipKey("/r", "e", 32.4) == clipKey("/r", "e", 33.6) {
+		t.Fatal("B1: the key is not int(round(start))")
+	}
+}
+
+func TestB2_OneAudioUnderTwoFeedEntriesGivesOneClip(t *testing.T) {
+	b := newFakeMatch()
+	b.eps[0].EnclosureURL = "https://cdn.example.test/a.mp3?session=1"
+	dup := b.eps[0]
+	dup.EpisodeID, dup.GUID, dup.EnclosureURL = "ep-dup", "gdup", "https://CDN.example.test/a.mp3?session=2"
+	b.eps = append(b.eps, dup)
+	b.transcripts["gdup"] = ferrySpoken()
+	var logs []string
+	rep, _ := newMatcher(b, &logs).Run(context.Background())
+	if rep.Written != 1 {
+		t.Fatalf("B2: %+v", rep)
+	}
+}
+
+func TestB3_AnAuthFailureIsNotAContentRefusal(t *testing.T) {
+	b := newFakeMatch()
+	b.putErr = func(ClipIn) error { return &HTTPError{Method: "PUT", Path: "/clips", Status: 401, Body: "no"} }
+	var logs []string
+	m := newMatcher(b, &logs)
+	rep, _ := m.Run(context.Background())
+	if rep.Refused != 0 || rep.Failed != 1 {
+		t.Fatalf("B3: %+v", rep)
+	}
+	m.Run(context.Background())
+	if len(b.puts) != 2 {
+		t.Fatalf("B3: not retried after an auth failure (%d puts)", len(b.puts))
+	}
+}
+
+func TestB4_TheReportCountsRequests(t *testing.T) {
+	b := newFakeMatch()
+	var logs []string
+	rep, _ := newMatcher(b, &logs).Run(context.Background())
+	// front, episodes, clips read, 31 transcripts (1 + 120 pads: all uncached), clip write
+	want := 1 + 1 + 1 + len(b.eps) + 1
+	if rep.Requests != want || !strings.Contains(logs[0], fmt.Sprintf("requests %d", want)) {
+		t.Fatalf("B4: requests %d want %d; %s", rep.Requests, want, logs[0])
+	}
+}
+
+func TestB5_TheStateFileHasAStableDefaultBesideTheWorkDir(t *testing.T) {
+	if got := DefaultMatchStatePath("/data/work"); got != "/data/match-state.json" {
+		t.Fatalf("B5: %q", got)
+	}
+	if got := DefaultMatchStatePath(""); !strings.HasSuffix(got, "match-state.json") || got == "match-state.json" {
+		t.Fatalf("B5: %q", got)
+	}
 }

@@ -70,7 +70,7 @@ func main() {
 	outFile := fs.String("out", "", "candidates: the file to write")
 	inFile := fs.String("in", "", "put-clips: the judged candidates file")
 	dryRun := fs.Bool("dry-run", false, "match: print the clips it would write and write nothing")
-	matchState := fs.String("match-state", "", "match, serve: the file that remembers what was matched and written (default: only for this run)")
+	matchState := fs.String("match-state", "", "match, serve: the file that remembers what was matched and written (default: beside the work directory)")
 	judged := fs.String("judged", "", "match-eval: comma separated judged candidates files")
 	minScore := fs.Float64("min-score", podcastmatch.DefaultParams.MinScore, "match: the clip's BM25 as a share of a perfect passage's")
 	minMargin := fs.Float64("min-margin", podcastmatch.DefaultParams.MinMargin, "match: how far the story's score must exceed the next story's, as a fraction")
@@ -81,6 +81,9 @@ func main() {
 	}
 	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "candidates" && cmd != "put-clips" && cmd != "match" && cmd != "match-eval" {
 		log.Fatalf("unknown command %q", cmd)
+	}
+	if *matchState == "" {
+		*matchState = podcastworker.DefaultMatchStatePath(*workDir)
 	}
 	params := podcastmatch.DefaultParams
 	params.MinScore, params.MinMargin, params.MinEntityShare = *minScore, *minMargin, *minShare

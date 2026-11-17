@@ -193,3 +193,10 @@ func TestR7_TheDialerTriesEveryPermittedAddress(t *testing.T) {
 }
 
 var _ = utf8.RuneError
+
+func TestR8_TheLargestShiftIsReported(t *testing.T) {
+	_, rep := RepairSegments([]Segment{{0, 10, "a b."}, {7.5, 12, "c d."}, {12, 20, "e f."}})
+	if rep.Shifted != 1 || rep.MaxShift < 2.4 || rep.MaxShift > 2.6 || rep.LargeShifts != 1 || !strings.Contains(rep.String(), "largest 2.5 s") {
+		t.Fatalf("R8: %+v %s", rep, rep)
+	}
+}
