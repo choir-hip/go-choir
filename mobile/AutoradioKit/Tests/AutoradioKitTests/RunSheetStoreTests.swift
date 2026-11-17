@@ -562,6 +562,14 @@ final class RunSheetStoreTests: XCTestCase {
         p.open(first, asOpening: false)                                                      // an entry that is not an opening is never refused by it
         XCTAssertNotNil(s.entry("d-first"))
     }
+    func test21_PlayWithoutALaunchOpeningStillFollowsAnEndedOpeningWithTheNextEntryUntouched() async {
+        let (p, s, _) = make()                                                              // no open(): the station did not start (launch condition, other audio)
+        s.place(deskOpening("d-open"), at: .end, by: .desk, reason: "test"); s.place(story("d-1"), at: .end, by: .desk, reason: "test")
+        p.advanceIfIdle(); await p.settle()                                                 // the Play button
+        XCTAssertEqual(s.onAir()?.id, "d-open")
+        p.documentEnded(id: "rs:d-open", anyPlayed: true); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-1", "the opening ends and the next entry is on air with no press")
+    }
     func test21_AfterThePhonesWasHeardTheDeskOpeningIsDroppedNotPlayedAsASecondGreeting() async {
         let (p, s, _) = make()
         let o = await opened([], p, s)

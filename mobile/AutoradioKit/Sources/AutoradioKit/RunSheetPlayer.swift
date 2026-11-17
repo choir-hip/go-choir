@@ -247,6 +247,7 @@ extension PlaybackEngine {
     /// The radio is on and nothing is on air: start what is next.
     public func advanceIfIdle() {
         guard store.onAir() == nil, playingId == nil else { return }
+        wants = true                                  // pressing Play (or the station) is the want: what ends is followed by the next, with no press
         advance()
     }
 

@@ -78,7 +78,7 @@ final class RadioPageTests: XCTestCase {
         XCTAssertEqual(p.state, "cold"); XCTAssertEqual(p.statusLine, "Ready")
         XCTAssertEqual(p.greeting, "Good evening. Six things are ready, about ten minutes. Press play and I\u{2019}ll start with the opening.")
         let after = RadioPage.make(input([entry("h", state: .heard, outcome: .finished), entry("b")]))
-        XCTAssertEqual(after.greeting, "", "after something was heard it is no cold start")
+        XCTAssertTrue(after.greeting.hasPrefix("Good evening. One thing is ready"), "nothing on air and entries ahead: the greeting says what is lined up"); XCTAssertEqual(after.state, "ready", "but it is not the cold start")
         let one = RadioPage.make(input([entry("only", title: "Alone", est: 30)]))
         XCTAssertEqual(one.greeting, "Good evening. One thing is ready, about a minute. Press play and I\u{2019}ll start with Alone.")
         XCTAssertEqual(RadioPage.make(input([])).greeting, "")

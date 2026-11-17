@@ -13,7 +13,7 @@ tree
 screenshot @S@/B02-all-of-it.png window
 tap radio-next-all
 clock +900 real
-tap radio-next-grip-3 drag 0 -130
+tap radio-next-grip-1 drag 0 70
 clock +1200 real
 clock data
 tree

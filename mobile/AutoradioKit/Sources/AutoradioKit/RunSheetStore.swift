@@ -260,6 +260,12 @@ public struct RouteSheetPoster: RunSheetPoster {
         adopt(theirs, epoch: theirs.sheetEpoch > 0 ? theirs.sheetEpoch : epoch)
     }
 
+    /// Demo mode's fixture run sheet (Demo.sheetKey): the sheet is exactly `sheet`, with no pending ops of an earlier launch applied on top.
+    public func replaceForDemo(_ sheet: RunSheet) {
+        self.sheet = sheet; pending = []; sheetEpoch = 0
+        save(); onChange?()
+    }
+
     /// Replace the local sheet with `theirs` (a GET, or a full `sheet` stream event) and remember its epoch; pending ops are applied again on top.
     public func adopt(_ theirs: RunSheet, epoch: Int64) {
         var s = theirs

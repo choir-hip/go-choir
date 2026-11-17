@@ -181,7 +181,7 @@ public final class ChoirApp: @unchecked Sendable {
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
             RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
             if let name = Demo.sheetName, let sheet = Demo.runSheet(name) {          // demo test affordance (Demo.sheetKey): a tour's own run sheet
-                RunSheetStore.shared.adopt(sheet, epoch: 0)
+                RunSheetStore.shared.replaceForDemo(sheet)
                 Station.shared.holdForDemoSheet = true
                 p.aheadChanged = nil
             }

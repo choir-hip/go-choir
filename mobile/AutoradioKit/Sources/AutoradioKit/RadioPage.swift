@@ -322,7 +322,7 @@ public enum RadioPage {
             return r
         }
 
-        if air == nil, isCold(tail: tail, now: i.now), !ahead.isEmpty { o.greeting = greeting(ahead: ahead, now: i.now, timeZone: i.timeZone) }
+        if air == nil, !ahead.isEmpty { o.greeting = greeting(ahead: ahead, now: i.now, timeZone: i.timeZone) }
 
         // the status line, one state at a time; the first that is true wins
         let listening = ["listening", "talking", "heard"].contains(i.barState)
@@ -341,7 +341,7 @@ public enum RadioPage {
             o.state = i.playing ? "onair" : "paused"; o.statusLine = i.playing ? "On air" : "Paused"
         } else if i.writing {
             o.state = "writing"; o.statusLine = "Writing the next stretch"
-        } else if !o.greeting.isEmpty {
+        } else if !o.greeting.isEmpty && isCold(tail: tail, now: i.now) {
             o.state = "cold"; o.statusLine = "Ready"
         } else {
             o.state = "ready"; o.statusLine = "Ready"
