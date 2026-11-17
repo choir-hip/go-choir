@@ -4,6 +4,10 @@ import Foundation
 // (docs/reference/EMBEDDINGGEMMA.md section 0.6), one function so a test and the Mac trial can run any of them. The app uses ONE (`HybridRank.shipped`);
 // there is no setting.
 //
+// ONE FLOOR PER RANKING SOURCE (none prunes twice): the keyword list is floored by `RetrievalIndex.candidates` (two matched terms, at least half of the
+// question's terms, 20 percent of the best score among those: the rag-fix version); the vector list by the cosine floor, and only that; the exact-term
+// list (a rare word of the question) by nothing, one rare word is the evidence. The fused list is a union and an order, it adds no floor of its own.
+//
 // WAYS THIS CAN FAIL (each has a test in HybridRetrievalTests):
 //  1. No model, no vectors, or a partly embedded backlog: BM25 alone, and nothing says so.
 //  2. A long item embedded as windows: the windows collapse to the item.
