@@ -2,21 +2,34 @@
 # Check out the pinned Exact source at mobile/.exact-src (gitignored) and install Bun 1.4.2 at ~/.bun-1.4.2.
 # EXACT_REPO overrides the clone source (a local checkout is fine). No full `exact.mjs setup`.
 set -eu
-PIN=de212e671a69f4fea18bed67d5b73b259ddf3061
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
+PIN="$(tr -d ' \n' < "$HERE/exact.pin")"      # the one place the pin is written (check-exact-pin.sh and the build read it)
 SRC="$HERE/.exact-src"
 REPO="${EXACT_REPO:-https://github.com/expo/exact.git}"
-if [ ! -d "$SRC/.git" ]; then git clone -q "$REPO" "$SRC"; fi
+die() { echo "setup-exact: $*" >&2; exit 1; }
+case "$PIN" in [0-9a-f]*) [ "${#PIN}" -eq 40 ] || die "mobile/exact.pin is not a full 40-character sha: $PIN" ;; *) die "mobile/exact.pin is not a sha: $PIN" ;; esac
+if [ ! -d "$SRC/.git" ]; then git clone -q "$REPO" "$SRC" || die "cannot clone $REPO"; fi
 if [ "$(git -C "$SRC" rev-parse HEAD)" != "$PIN" ]; then
-  git -C "$SRC" fetch -q origin 2>/dev/null || true
-  git -C "$SRC" checkout -q "$PIN"
+  # A clone made at an older pin lacks the new commit: fetch exactly that sha from the origin it was cloned from.
+  if ! git -C "$SRC" cat-file -e "$PIN^{commit}" 2>/dev/null; then
+    echo "setup-exact: fetching $PIN from $(git -C "$SRC" remote get-url origin)"
+    git -C "$SRC" fetch -q origin "$PIN" 2>/dev/null || git -C "$SRC" fetch -q origin || die "cannot fetch the pin $PIN from origin"
+    git -C "$SRC" cat-file -e "$PIN^{commit}" 2>/dev/null || die "origin does not have the pin $PIN"
+  fi
+  # The patches are working-tree changes of the old checkout: take them off, switch, and reapply below.
+  for P in "$HERE"/exact-patches/*.patch; do
+    [ -f "$P" ] || continue
+    if git -C "$SRC" apply --check -R "$P" 2>/dev/null; then git -C "$SRC" apply -R "$P" || die "cannot take $P off the old checkout"; fi
+  done
+  git -C "$SRC" checkout -q "$PIN" || die "cannot check out the pin $PIN (does $SRC hold local changes?)"
 fi
+[ "$(git -C "$SRC" rev-parse HEAD)" = "$PIN" ] || die "$SRC is not at the pin $PIN"
 # Local patches (mobile/exact-patches/README.md): applied in order; an applied one is skipped; one that does not apply stops here.
 for P in "$HERE"/exact-patches/*.patch; do
   [ -f "$P" ] || continue
-  if git -C "$SRC" apply --check "$P" 2>/dev/null; then git -C "$SRC" apply "$P"; echo "patched: $(basename "$P")"
+  if git -C "$SRC" apply --check "$P" 2>/dev/null; then git -C "$SRC" apply "$P" || die "cannot apply $P"; echo "patched: $(basename "$P")"
   elif git -C "$SRC" apply --check -R "$P" 2>/dev/null; then :
-  else echo "patch does not apply to the pin: $P" >&2; exit 1; fi
+  else die "patch does not apply to the pin: $P"; fi
 done
 BUNDIR="$HOME/.bun-1.4.2"
 if [ ! -x "$BUNDIR/bin/bun" ]; then

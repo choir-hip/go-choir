@@ -7,6 +7,8 @@
 # build only (a `--run` app that stays open must not hold it), unless AUTORADIO_MAC_LOCK_HELD is set by a caller that holds it.
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
+# Never build against the wrong Exact: .exact-src must be the commit in exact.pin with the patches applied (prints both shas otherwise).
+"$HERE/scripts/check-exact-pin.sh" || exit 1
 PLATFORM=ios
 case "${1:-}" in mac|macos) PLATFORM=macos ;; esac
 if [ "$PLATFORM" = macos ] && [ -z "${AUTORADIO_MAC_LOCK_HELD:-}" ]; then

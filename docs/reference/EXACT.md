@@ -420,3 +420,12 @@ Ours is `mobile/AutoradioLab/PrivacyInfo.xcprivacy`, with codes read from Apple'
 Not declared: active keyboards (we never read them; Exact declares its own). The disk-space and boot-time information must not leave the
 device: it does not, except that turn timings in an export the person shares are intervals, not boot time. Re-run this table when a new use
 of one of these APIs is added.
+
+### The pin is checked, not trusted
+
+The pin is one file, `mobile/exact.pin`. `scripts/setup-exact.sh` reads it, fetches that exact sha from the clone's origin when an older
+clone lacks it, takes the local patches off, checks out the pin, reapplies the patches, and exits non-zero with a `setup-exact:` line on any
+failure. `scripts/check-exact-pin.sh` is called first by `build-lab.sh` (every target) and `exact.sh` (the common entry to Exact's CLI): it
+refuses to go on unless `.exact-src` HEAD equals the pin and every patch is applied, printing both shas. Reason: a checkout left at the old
+pin once printed `fatal: unable to read tree` from setup and then built an iOS app against the OLD Exact, exit 0. Moving the pin is a change to
+`exact.pin` (and this page), never to a script.
