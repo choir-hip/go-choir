@@ -30,6 +30,15 @@ public enum KnownModels {
         sha256: "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
         bytes: 639_446_688, fileName: "Qwen3-0.6B-Q8_0.gguf")
 
+    /// EmbeddingGemma 2, Q8_0, the official GGUF (ggml-org, Apache-2.0; the Gemma Prohibited Use Policy applies): the on-device embedder behind search.
+    /// Size and SHA-256 are the Hugging Face listing's and were re-checked on the downloaded file, 2026-11-17. Runs on llama.cpp b12259.
+    /// docs/reference/EMBEDDINGGEMMA.md. Fetched at first use into the store, never in the bundle.
+    public static let embeddingGemma2 = ModelSpec(
+        id: "embeddinggemma-2-q8_0",
+        url: URL(string: "https://huggingface.co/ggml-org/embeddinggemma-2-GGUF/resolve/main/embeddinggemma-2-Q8_0.gguf")!,
+        sha256: "2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135",
+        bytes: 309_855_456, fileName: "embeddinggemma-2-Q8_0.gguf")
+
     // Responder candidates (research note 2026-11-11, docs/design/autoradio-on-device-voice-configurations-2026-11-11.md). Sizes and
     // SHA-256 digests are the Hugging Face API's own file listings (LFS object ids), fetched 2026-11-11.
     /// Qwen3-0.6B Q4_K_M, the first quantisation to try (non-thinking template). Apache-2.0. unsloth's GGUF of the official weights.
@@ -62,7 +71,7 @@ public enum KnownModels {
         bytes: 1_049_615_680, fileName: "LFM3-1.7B-QAD-Q4_0.gguf")
 
     /// Models fetched by us over HTTP, pinned by SHA-256.
-    public static var pinned: [ModelSpec] { [qwen3, qwen3Q4, qwen317, qwen35, lfm3Text] + extraGGUF.map(\.spec) }
+    public static var pinned: [ModelSpec] { [qwen3, qwen3Q4, qwen317, qwen35, lfm3Text, embeddingGemma2] + extraGGUF.map(\.spec) }
 
     /// More GGUF quantisations of the responder families, for the configurator (the candidate table, ModelCandidates.swift). Sizes and
     /// SHA-256 digests are the Hugging Face API file listings' (LFS object ids) fetched 2026-11-11; names are the repos' own, not guessed.
@@ -112,6 +121,8 @@ public enum KnownModels {
                              approxBytes: 2_900_000_000, license: "LFM Open License (read it: commercial use limited by revenue)", cachePath: c),
             ManagedModelSpec(id: qwen3.id, label: "Qwen3-0.6B Q8_0 (llama.cpp GGUF)", source: "hf:Qwen/Qwen3-0.6B-GGUF",
                              approxBytes: qwen3.bytes, license: "Apache-2.0 (model); llama.cpp MIT", cachePath: storeRoot),
+            ManagedModelSpec(id: embeddingGemma2.id, label: "EmbeddingGemma 2 Q8_0 (llama.cpp GGUF, 768-d embeddings)", source: "hf:ggml-org/embeddinggemma-2-GGUF",
+                             approxBytes: embeddingGemma2.bytes, license: "Apache-2.0 (model; Gemma Prohibited Use Policy applies); llama.cpp MIT", cachePath: storeRoot),
             ManagedModelSpec(id: qwen3Q4.id, label: "Qwen3-0.6B Q4_K_M (llama.cpp GGUF)", source: "hf:unsloth/Qwen3-0.6B-GGUF",
                              approxBytes: qwen3Q4.bytes, license: "Apache-2.0 (model); llama.cpp MIT", cachePath: storeRoot),
             ManagedModelSpec(id: qwen317.id, label: "Qwen3-1.7B Q4_K_M (llama.cpp GGUF)", source: "hf:unsloth/Qwen3-1.7B-GGUF",

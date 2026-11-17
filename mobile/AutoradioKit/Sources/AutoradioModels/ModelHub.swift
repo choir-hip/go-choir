@@ -110,6 +110,7 @@ public final class AutoradioModelsRegistrar: NSObject {
         #endif
         ModelProof.runFromLaunchArguments()
         print("AUTORADIO models registered n=\(ModelHub.catalog.count) stages=\(r.all.count) names=\(r.all.map { "\($0.kind.rawValue):\($0.id)" }.sorted().joined(separator: ","))")
+        EmbedDeviceTrial.runFromLaunchArguments()                 // `-EmbedTrial 1`: one device measurement of the embedder, otherwise nothing
         fputs("autoradio models: registered \(ModelHub.catalog.count) models, \(r.all.count) stages\n", stderr)
     }
 }
