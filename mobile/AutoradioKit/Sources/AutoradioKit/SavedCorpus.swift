@@ -56,6 +56,8 @@ public final class SavedCorpus: @unchecked Sendable {
     public func prepare() async { for p in preparers { await p() } }
     /// The retriever the model's context is built from: BM25 over `retrieval` today; a fused retriever can be set here.
     public var retriever: (any Retriever)?
+    /// Called by `reset()` (sign-out): other holders of derived data (the vector store) clear themselves.
+    public var resetHooks: [@Sendable () -> Void] = []
 
     public init(readerStore: ReaderStore? = .shared) {
         setSource("held") { [unowned self] in lock.lock(); defer { lock.unlock() }; return held.values.flatMap { $0 } }
@@ -79,6 +81,7 @@ public final class SavedCorpus: @unchecked Sendable {
         lock.lock(); held = [:]; heldOrder = []; known = []; onAirHint = ""; lock.unlock()
         retrieval.removeAll(except: [])
         RetrievalLog.shared.clear()
+        for h in resetHooks { h() }
     }
 
     /// Name a source of documents. Replaces the source of that name.

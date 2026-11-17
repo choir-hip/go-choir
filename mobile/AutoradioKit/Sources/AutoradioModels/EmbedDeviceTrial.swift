@@ -88,7 +88,7 @@ public enum EmbedDeviceTrial {
     static func runRouteA(log: (String) -> Void) async throws -> RouteA {
         var a = RouteA(); a.ran = true
         let spec = KnownModels.embeddingGemma2
-        a.engine = "embeddinggemma-2-q8_0@llama.cpp-b12259"; a.modelBytes = spec.bytes
+        a.engine = KnownModels.embeddingEngine; a.modelBytes = spec.bytes
         a.availableMBBefore = availableMB()
         let d0 = nowMs()
         let have = await ModelStore.shared.localFileIfPresent(spec.id) != nil

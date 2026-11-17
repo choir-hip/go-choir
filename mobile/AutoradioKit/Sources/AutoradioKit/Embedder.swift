@@ -56,7 +56,7 @@ public final class VectorStore: @unchecked Sendable {
 
     public init(directory: URL, engine: String, dimension: Int) {
         self.directory = directory; self.engine = engine; self.dimension = dimension
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        Self.prepare(directory)
         guard let m = (try? Data(contentsOf: metaURL)).flatMap({ try? JSONDecoder().decode(Meta.self, from: $0) }),
               m.engine == engine, m.dimension == dimension, m.ids.count == m.keys.count,
               let d = try? Data(contentsOf: vectorsURL, options: .mappedIfSafe) else { return }
@@ -66,6 +66,19 @@ public final class VectorStore: @unchecked Sendable {
         for (i, id) in ids.enumerated() { slot[id] = i }
     }
 
+    /// The folder is made with the content store's protection class and left out of device backups (everything here is derived from the store).
+    static func prepare(_ directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: directory.path)
+        var v = URLResourceValues(); v.isExcludedFromBackup = true
+        var d = directory; try? d.setResourceValues(v)
+    }
+    /// Sign-out: forget every vector, in memory and on disk.
+    public func wipe() {
+        lock.lock(); ids = []; keys = []; vec = []; slot = [:]; dirty = false; lock.unlock()
+        try? FileManager.default.removeItem(at: directory)
+        Self.prepare(directory)
+    }
     public var count: Int { lock.lock(); defer { lock.unlock() }; return ids.count }
     /// The content key each stored id was made from (what the job compares to decide what to embed again).
     public func contentKeys() -> [String: String] { lock.lock(); defer { lock.unlock() }; return Dictionary(uniqueKeysWithValues: zip(ids, keys)) }
@@ -93,8 +106,8 @@ public final class VectorStore: @unchecked Sendable {
     public func save() throws {
         lock.lock(); let v = vec, m = Meta(engine: engine, dimension: dimension, ids: ids, keys: keys); let was = dirty; dirty = false; lock.unlock()
         guard was else { return }
-        try v.withUnsafeBytes { Data($0) }.write(to: vectorsURL, options: .atomic)
-        try JSONEncoder().encode(m).write(to: metaURL, options: .atomic)
+        try v.withUnsafeBytes { Data($0) }.write(to: vectorsURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try JSONEncoder().encode(m).write(to: metaURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
     /// The best `k` rows by cosine (the stored vectors and `query` are unit length, so a dot product), best first.
@@ -148,7 +161,7 @@ public actor EmbeddingJob {
 
     /// Embed what the store lacks. Returns when done or when the task is cancelled (what was embedded stays saved).
     @discardableResult
-    public func run(_ items: [Item], removeOthers: Bool = true) async -> Progress {
+    public func run(_ items: [Item], removeOthers: Bool = true, onSlice: (@Sendable (Progress) -> Void)? = nil) async -> Progress {
         progress = Progress()
         let have = store.contentKeys()
         if removeOthers { let keep = Set(items.map(\.id)); progress.removed = have.keys.filter { !keep.contains($0) }.count; store.removeAll(except: keep) }
@@ -164,6 +177,7 @@ public actor EmbeddingJob {
             } catch { progress.failed = todo.count - i; break }     // the model is not there or failed: stop, the caller sees `failed`
             try? store.save()
             i += slice.count
+            onSlice?(progress)
             try? await Task.sleep(for: budget.restBetweenSlices)
         }
         try? store.save()
@@ -171,3 +185,6 @@ public actor EmbeddingJob {
         return progress
     }
 }
+
+/// An embedder that can also embed one short query at once, without waiting on an async hop (the retriever runs inside a synchronous call).
+public protocol QueryEmbedding: Sendable { func embedQuery(_ text: String) -> [Float]? }

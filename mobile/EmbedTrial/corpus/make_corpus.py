@@ -237,3 +237,49 @@ enum EmbedTrialFixture {{
     ]
 }}
 ''')
+
+# ---- the second set (stories-extra.json, questions-extra.json): 20 questions that mix a name with a paraphrase, decoys that share the name,
+# and 6 questions the corpus cannot answer (they calibrate the cosine floor). Added for the retriever comparison, 2026-11-17. ----
+E = [
+ ("fenwick", "mixed", "Fenwick's committee backs a Gasworks streetcar", "A council transport committee led by Councilwoman Odalys Fenwick voted 4-1 to fund a streetcar line linking the old Gasworks district to the ferry terminal. The 3.2-mile route would open in 2029 and cost $210 million, mostly from federal grants.", "Did Fenwick's panel approve the tram line down to the waterfront?"),
+ ("kessling", "para", "Dr. Ravindra Kessling named head of the Coldwater observatory", "The university named astrophysicist Ravindra Kessling director of its Coldwater observatory, succeeding a founder who retired after thirty-one years. Kessling has led a survey of faint galaxies and plans to open the dome to school groups on weekends.", "Which scientist now leads the sky-watching facility at Coldwater?"),
+ ("brightwater", "mixed", "Brightwater Dairy recalls soft cheese", "Brightwater Dairy recalled 12,000 wheels of soft cheese after a routine test found listeria. No illnesses were reported. Shoppers were told to throw the product away or return it to the store for a refund.", "Is there a recall of Brightwater's dairy products over bacterial contamination?"),
+ ("marlowe", "mixed", "Marlowe Textiles workers end eleven-day strike", "About 400 employees at the Marlowe Textiles mill returned to work on Monday after accepting a three-year agreement with a 9 percent raise. The walkout began over mandatory overtime and a plan to freeze pensions.", "Have the Marlowe mill employees gone back after their walkout?"),
+ ("quillfeather", "mixed", "Quillfeather Games delays Nightbloom", "Quillfeather Games said its fantasy role-playing title Nightbloom will launch in March instead of December, saying the extra months would be used to fix performance problems on older consoles.", "Is the much-awaited fantasy adventure from Quillfeather coming out later than planned?"),
+ ("tern", "para", "Fog cancels Tern Island ferry", "Ferries to Tern Island did not run on Thursday because dense fog cut visibility to under 200 feet. Residents of the offshore community were stranded on the mainland overnight, and the mail boat was held at its pier.", "Why were boats to the small offshore isle not running Thursday?"),
+ ("halvard", "mixed", "Halvard Pharmaceuticals ordered to pay $62 million", "A federal judge ordered Halvard Pharmaceuticals to pay $62 million for misleading doctors about how addictive its painkiller was. The company said it would appeal the ruling and noted that it stopped selling the drug in 2022.", "How much must Halvard pay after the court ruled on how it marketed its opioid?"),
+ ("silvermine", "mixed", "Silvermine schools adopt a four-day week", "The Silvermine school board voted 4-1 to hold classes Monday through Thursday beginning next autumn, lengthening each day by forty minutes. The district said the change would save $1.1 million and help it keep teachers.", "Will pupils in Silvermine attend class fewer days next year?"),
+ ("ostrander", "exact", "Ostrander Rail Bridge cleared for freight", "The Ostrander Rail Bridge reopened to freight trains after a three-week inspection found the steel piers sound. Two grain shippers had rerouted cars through a yard 90 miles away during the closure.", "Can trains cross Ostrander again?"),
+ ("vance", "mixed", "Mayor Vance proposes ban on gas leaf blowers", "Mayor Teodora Vance asked the council to prohibit gasoline-powered leaf blowers within city limits by next fall, citing noise and exhaust. Landscaping firms said battery models cost twice as much and run half as long.", "Is the city leader trying to outlaw petrol-powered yard blowers?"),
+ ("nimbus", "mixed", "Nimbus Cloud outage lasts six hours", "Nimbus Cloud customers lost access to storage and databases for six hours on Tuesday after an expired security certificate in a core service. The company apologized and promised credits to affected accounts.", "What knocked Nimbus Cloud offline for much of Tuesday?"),
+ ("harborview", "mixed", "Harborview Hospital nurses ratify contract", "Nurses at Harborview Hospital ratified a three-year contract by 82 percent, winning raises of 11 percent and limits on mandatory shifts. The union had threatened a walkout on December 1.", "Did the nursing staff at Harborview accept the new pay deal?"),
+ ("dunmore-lead", "para", "Lead found in Dunmore school fountains", "Testing found lead above the federal action level in drinking fountains at six Dunmore schools. The fountains were shut and bottled water was delivered while the district replaced pipes and fixtures.", "Was the toxic metal found in the water taps of the schools in Dunmore?"),
+ ("cobalt", "mixed", "Avalanche kills two skiers on Cobalt Peak", "Two backcountry skiers died when an avalanche swept them down the north face of Cobalt Peak on Saturday. Rescuers recovered the bodies the next morning. Avalanche forecasters had rated the danger as considerable.", "Did anyone die in the snow slide at Cobalt Peak?"),
+ ("pelham", "para", "Pelham growers lose half the harvest to frost", "Grape growers around Pelham said an early hard frost destroyed roughly half of this year's crop. Several vineyards will make no reserve wine, and the county asked for disaster aid.", "Did cold weather ruin the wine crop around Pelham?"),
+ ("arc", "para", "Arc Motors recalls 48,000 electric SUVs", "Arc Motors is recalling 48,000 battery-powered utility vehicles because a software error can delay braking when the car is in regenerative mode. Dealers will install an update free of charge.", "Which carmaker is calling back battery-powered family trucks over a braking fault?"),
+ ("teague", "exact", "Prosecutors drop charges against Marcus Teague", "Prosecutors dropped all charges against Marcus Teague, a bus mechanic accused of stealing parts, after the main witness recanted. Teague said he wants his job back and an apology.", "Was Teague's case dropped?"),
+ ("saltmarsh", "para", "Fire destroys the old Saltmarsh lighthouse cottage", "A fire early Sunday destroyed the keeper's cottage beside the Saltmarsh lighthouse, a building from 1871. The tower itself was undamaged. Investigators said an old chimney is the likely cause.", "What burned down at the historic beacon by the marsh?"),
+ ("eastbrook-food", "mixed", "Eastbrook food bank sees demand up 30 percent", "The Greater Eastbrook Food Bank said it served 30 percent more households than a year ago and that shelves are nearly empty before the holidays. Volunteers asked for canned protein and baby formula.", "Are more families lining up for free groceries in Eastbrook?"),
+ ("brandvold", "mixed", "Senator Brandvold unveils the Open Meadows Act", "Senator Ilse Brandvold introduced the Open Meadows Act, which would pay ranchers to leave grassland unplowed and open it to hikers and hunters. The bill has eleven co-sponsors from both parties.", "What is Senator Brandvold's new bill about?"),
+]
+decoys = [
+ ("Fenwick Orchards sells forty acres for housing", "Fenwick Orchards agreed to sell forty acres of apple trees to a builder planning 220 homes. The family said rising taxes made farming unaffordable."),
+ ("Brightwater Reservoir falls to a record low", "The Brightwater Reservoir dropped to its lowest level on record after a dry autumn, and the water district asked customers to cut outdoor use."),
+ ("Marlowe Street to get speed cameras", "The city will install speed cameras on Marlowe Street near two schools, with warnings for the first thirty days."),
+ ("Silvermine hikers rescued after night on the ridge", "Three hikers were rescued from the Silvermine ridge after becoming lost in fog. All were treated for exposure."),
+ ("Harborview Mall to lose its anchor store", "The department store anchoring Harborview Mall will close in January, leaving a third of the space empty."),
+ ("Brandvold Foundation gives $5 million to the county library", "The Brandvold Foundation gave $5 million to rebuild the main branch of the county library, which will gain a children's wing."),
+]
+U = ["What is a good recipe for sourdough starter?", "Who won the 1998 men's World Cup?", "How do I reset the password on my home router?",
+     "What is the boiling point of mercury in degrees?", "When is the next total solar eclipse visible from Peru?", "How many moons does Saturn have?"]
+extra = []; eq = []
+n = 0
+for k, kind, h, b, q in E:
+    n += 1; extra.append(dict(id=f"x{n:04d}", h=h, b=b, date=(D0 + datetime.timedelta(days=R.randint(0, 13))).isoformat()))
+    eq.append(dict(q=q, kind=kind, source="story", answer_ids=[f"x{n:04d}"]))
+for h, b in decoys:
+    n += 1; extra.append(dict(id=f"x{n:04d}", h=h, b=b, date=(D0 + datetime.timedelta(days=R.randint(0, 13))).isoformat()))
+for q in U: eq.append(dict(q=q, kind="unanswerable", source="none", answer_ids=[]))
+json.dump(extra, open("stories-extra.json", "w"), indent=0, ensure_ascii=False)
+json.dump(eq, open("questions-extra.json", "w"), indent=1, ensure_ascii=False)
+print(len(extra), "extra stories", len(eq), "extra questions")

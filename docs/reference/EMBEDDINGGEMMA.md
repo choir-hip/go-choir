@@ -132,8 +132,7 @@ Built in this lane (class orange; not built for iOS by the builder, only the Mac
   now also refuses `*.aimodel`, `*.aimodelc` and `*.mlirb`.
 - `EmbeddingJob` embeds only what is new or changed (content key), 4 passages per slice by default, saves after every slice (a kill loses
   one slice), waits and looks again while `busy()` is true (the app passes "a voice line is on or the listener is speaking": the
-  `LiveAudio.voiceIsSpeaking` flag is the source) and rests 150 ms between slices. **Not yet wired into the app**: nothing calls it when
-  the stores change (the phone-retrieval lane's `RetrievalIndex` is where that hook belongs). It never starts after a crash by itself.
+  `RadioDemand`, section 0.7) and rests 150 ms between slices. Wired in section 0.7. It never starts after a crash by itself.
 - `AutoradioModels/EmbedDeviceTrial.swift`, **the device trial**. Launch the app once with `-EmbedTrial 1` (the same way as
   `-ModelProofStages`, e.g. `devicectl device process launch ... --arguments "-EmbedTrial 1"`). With the flag absent it does nothing. It
   downloads the 310 MB file when needed (Wi-Fi), loads it, embeds the 24 fixture stories, asks the 24 questions, scans 50,000 random vectors,
@@ -143,6 +142,63 @@ Built in this lane (class orange; not built for iOS by the builder, only the Mac
   cosines and PASS, passages per second and tokens per second, query p50 and p95, recall@5 and MRR for BM25, vectors 768, vectors 256 and
   fused, the 50k scan at 768 and 256 d, the job's stop-and-resume line, and for route B whether the OS has `CoreAI.framework` (route B is
   not built into the app). Pull it with `devicectl device copy from` as for `results.json`.
+
+### 0.6 Which way to combine BM25 and vectors (measured 2026-11-17, 475 documents, 50 answerable questions)
+
+Corpus as in 0.3 plus 26 more stories (20 answers to 20 new questions that mix a name with a paraphrase, 6 decoys that share a name with an
+answer: two "Fenwick", two "Marlowe", and so on) and 6 questions the corpus cannot answer. 475 documents: 300 + 26 stories, 149 Alice passages. Route A,
+Metal. A hit is a right document in the top 5 of a list of 20; the 50 are the first 30 questions of 0.3 ("base") and the 20 new ("extra").
+The three strategies are `HybridRank.fuse` in `AutoradioKit/HybridRetrieval.swift`; each is unit-tested (`HybridRetrievalTests`).
+"BM25 as shipped" is `RetrievalIndex.candidates` with its relevance floor (two matching terms, at least half of the question's terms).
+
+| Method | recall@5 base 30 | MRR base | recall@5 extra 20 | MRR extra | recall@5 all 50 | MRR all | names (27) recall / MRR | paraphrase (23) recall / MRR |
+|---|---|---|---|---|---|---|---|---|
+| BM25 as shipped (with its floor) | 0.433 | 0.394 | 0.500 | 0.500 | **0.460** | 0.437 | 0.704 / 0.660 | 0.174 / 0.174 |
+| BM25 with no floor | 0.733 | 0.587 | 0.950 | 0.892 | 0.820 | 0.709 | 1.000 / 0.895 | 0.609 / 0.491 |
+| (a) vectors only, 768 d | 1.000 | 0.957 | 1.000 | 1.000 | **1.000** | **0.974** | 1.000 / 0.981 | 1.000 / 0.965 |
+| (b) RRF k = 60, top 50 of each | 1.000 | 0.915 | 1.000 | 1.000 | 1.000 | 0.949 | 1.000 / 0.954 | 1.000 / 0.943 |
+| (c) vectors, plus every passage holding a rare word | 1.000 | 0.957 | 1.000 | 1.000 | **1.000** | **0.974** | 1.000 / 0.981 | 1.000 / 0.965 |
+| (a) at 256 d | 1.000 | 0.901 | 1.000 | 1.000 | 1.000 | 0.941 | 1.000 / 0.981 | 1.000 / 0.893 |
+
+Read it plainly: the BM25 the app has today finds the right passage in the top 5 for **46 percent** of these questions (its relevance floor
+drops most paraphrases: 17 percent of the paraphrase questions), vectors find **all 50**. (a) and (c) tie to the third decimal; (b) is
+worse on MRR (RRF lets BM25's weaker list move wrong items above right ones). **Shipped: (c)**: the same numbers as (a), and a name or number
+that the vectors rank low still stays in the list (at most half of it). It is the only path; there is no setting. What the numbers cannot
+say: (c)'s guarantee never fired on this set (the vectors already ranked each name first), so the only evidence for (c) over (a) is the
+tie plus the unit test of the case; 50 questions, one author, a Mac. A corpus where the right passage holds a rare word the vectors miss
+would separate them.
+
+Floor on the cosine: the best cosine of each answerable question was at least **0.716** (5th percentile 0.745, median 0.808); of the 6
+unanswerable ones at most **0.627**. The app's floor is **0.67** (`KnownModels.embeddingCosineFloor`): all 50 answerable kept, all 6
+unanswerable refused (also by BM25's own floor), with 0.04 of margin each side. Six unanswerable questions is a small sample; treat 0.67 as
+a first setting to re-check on the phone's real content, not as a constant of the model (an unrelated sentence pair scores 0.68 in the
+card's sentence-similarity prompt, so a floor below 0.65 would let anything through).
+
+### 0.7 What is wired (lane `embed-trial`, class orange)
+
+- `EmbeddingService` (`AutoradioKit/EmbeddingService.swift`): attached at launch where the content store opens (`AutoradioModule.swift`), it sets
+  `SavedCorpus.retriever` to a `FusedRetriever` straight away (BM25 alone, nothing said about vectors, until the model is on the phone and 90
+  percent of the items hold a vector), waits 15 s after launch, then runs a pass on every store change (3 s settle): it reads the index, makes
+  the item list (every live item; an item longer than about 180 words as windows `id~w1`, `id~w2` ...; newest first, undated last: stories,
+  book passages, transcripts, mail, documents all come from the index), embeds only what is new or changed (content key), and saves after every
+  slice of 4. A killed app resumes from the file.
+- The model: fetched once into the model store by `ModelStore.ensure`, **only on Wi-Fi** (`NWPathMonitor`: Wi-Fi or wired, not expensive), SHA-256 checked;
+  off Wi-Fi nothing is fetched and the state is `absent` until Wi-Fi comes back. No weights in the repo.
+- Waits (the job sleeps and looks again): Low Power Mode, thermal state serious or critical, and `RadioDemand.busy`: a voice line or the programme
+  audible (`LiveAudio.voiceIsSpeaking`, `programmeAudible`), speech being made (`ProgrammePlayer.synthesisBusy`, new), remote audio playing
+  (`RunSheetPlayer.isRemote` and not paused, copied every 2 s because the player is main-actor state). Not connected: the listener's own speech
+  before a turn starts (the job runs while the listener speaks if nothing is on air).
+- Files: `<content store root>/vectors/vectors.f16` and `rows.json`; the folder carries the store's protection class
+  (`completeUntilFirstUserAuthentication`), the files are written with it, and it is excluded from backup. Sign-out: `SavedCorpus.reset()` runs a hook that
+  stops the pass and wipes the vectors; the store's own `wipe()` removes the root.
+- Console, counts only: `AUTORADIO embed model=<ok|downloading|absent> items=<done>/<total> rate=<per s>` on change (at most once a second,
+  and at the end of a pass) and, per question, `AUTORADIO retrieve retrieved=<n> vec=<n> bm25=<n> ms=<n>`. The prompt and the commands are the
+  other lanes'; the seam is `SavedCorpus.retriever`.
+- Tests (all through the lock): `HybridRankTests`, `FusedRetrieverTests`, `EmbeddingServiceTests` (download once and only on Wi-Fi, low power and
+  thermal pause, speech pauses, sign-out wipes, newest first, backup flag), `EmbedderTests`.
+- iOS: `swift build --triple arm64-apple-ios18.0 --sdk iphoneos --target AutoradioModels` compiled `LlamaEmbedder` and `EmbedDeviceTrial` for
+  arm64 iOS against the release xcframework's iOS slice (with the package's llama condition temporarily widened to iOS; the committed `Package.swift` is
+  unchanged, the Exact app links the static build). Not compiled: the Exact app, `AutoradioModule.swift`, a device or simulator run.
 
 ### 0.5 Commands
 

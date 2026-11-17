@@ -422,6 +422,20 @@ public final class RetrievalIndex: @unchecked Sendable {
         return ranked.prefix(limit).map { var it = item($0.slot); it.score = $0.score; return it }
     }
     public var indexedCount: Int { count }
+
+    /// Every live item (a story, a passage, a mail), with its parent document's id, for the embedding job: the vectors are made for exactly these.
+    public func snapshot() -> [RetrievalItem] {
+        lock.lock(); defer { lock.unlock() }
+        return slots.filter { $0.live }.map { $0.item }
+    }
+    /// One item by its id (a document's, or a passage's `<doc id>#<n>`), or nil when it has left the index.
+    public func item(id: String) -> RetrievalItem? {
+        lock.lock(); defer { lock.unlock() }
+        for i in children[id] ?? [] where slots[i].live && slots[i].id == id { return slots[i].item }          // a document that is one item
+        let parent = String(id.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
+        for i in children[parent] ?? [] where slots[i].live && slots[i].id == id { return slots[i].item }       // a passage of a document
+        return nil
+    }
 }
 
 /// What a retrieval is asked: the listener's words, the title on air, the page in front (modest boost), the clock.

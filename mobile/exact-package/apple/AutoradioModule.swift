@@ -115,6 +115,12 @@ public final class AutoradioModule: ExactPackage {
         ContentSync.enabled = true
         Task.detached(priority: .utility) {
             if ContentBoot.start() { ContentSync.shared.audioBusy = { await MainActor.run { RunSheetPlayer.shared.isRemote } } }
+            if ContentStore.shared.usable {                // vectors for the same items: BM25 alone until the model is there and the backlog embedded
+                Task { @MainActor in          // remote audio on air: the player is main-actor state, so its flag is copied across every two seconds
+                    while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
+                }
+                EmbeddingService.shared.attach(corpus: .shared, store: .shared)
+            }
             try? await Task.sleep(nanoseconds: 30_000_000_000)
             SavedCorpus.shared.refresh()          // the index warm-up, long after the front page has drawn
         }

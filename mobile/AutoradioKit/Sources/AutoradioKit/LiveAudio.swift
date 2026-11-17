@@ -807,7 +807,11 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// Why the last block could not be spoken (nil: it was).
     public var speakFailure: String? { lock.lock(); defer { lock.unlock() }; return speakFailureText }
 
+    /// True while a block of speech is being made (the vector job waits on it).
+    public var synthesisBusy: Bool { synthDepth.read { $0 > 0 } }
+    private let synthDepth = Locked(0)
     private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String, timed: Bool = true) async -> Synthesized? {
+        synthDepth.write { $0 += 1 }; defer { synthDepth.write { $0 -= 1 } }
         let voice: Voice
         let t0 = Date()
         var loaded = t0

@@ -125,6 +125,8 @@ public final class LabRuntime: @unchecked Sendable {
         snap.configName = cfg.name
         // Model loads show in the trace; the one store is shared with voice setup.
         Task { await ModelStore.shared.attach(log: log) }
+        // What the vector job waits for (EmbeddingService): speech on air, a voice line, or speech being made. Speech always wins the processor.
+        RadioDemand.shared.add { [audio, player] in audio.voiceIsSpeaking || audio.programmeAudible || player.synthesisBusy }
         player.onChange = { [weak self] in self?.refresh() }
         // Play asks for the session first when the engine is down or the claim is doubted (after the background, an interruption).
         player.onNeedsSession = { [coordinator] in Task { await coordinator.ensureReady(reason: "play") } }

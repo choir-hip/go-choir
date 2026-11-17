@@ -99,34 +99,62 @@ func quality() async throws {
     let (docs, qs, rel) = try Corpus.load(dir: corpusDir, book: bookURL)
     let idx = Corpus.index(docs)
     let ids = docs.map { $0.id }
-    var table: [(String, Metrics, Metrics, Metrics)] = []   // name, all, exact, para
-    func record(_ name: String, _ rankings: [[String]]) {
-        var a = Metrics(), e = Metrics(), p = Metrics()
-        for (i, q) in qs.enumerated() { a.add(rankings[i], rel[i]); if q.kind == "exact" { e.add(rankings[i], rel[i]) } else { p.add(rankings[i], rel[i]) } }
-        table.append((name, a, e, p))
+    let baseN = 30
+    let answerable = (0..<qs.count).filter { qs[$0].kind != "unanswerable" }
+    let floorArg = Float(opt("floor", "0")) ?? 0
+    func group(_ i: Int) -> String { i < baseN ? "base" : "extra" }
+    var rows: [(String, [Int: [String]])] = []
+    func record(_ name: String, _ rankings: [Int: [String]]) { rows.append((name, rankings)) }
+    func query(_ i: Int) -> RetrievalQuery { RetrievalQuery(words: qs[i].q) }
+    var bmFloor: [Int: [String]] = [:], bmRaw: [Int: [String]] = [:], exact: [Int: [String]] = [:]
+    for i in 0..<qs.count {
+        bmFloor[i] = idx.candidates(query(i), limit: 50).map(\.id)
+        bmRaw[i] = idx.bm25Ranking(qs[i].q, limit: 50).map { $0.id }
+        exact[i] = idx.exactTermHits(query(i), limit: 20)
     }
-    let bm = qs.map { idx.bm25Ranking($0.q, limit: 50).map { $0.id } }
-    record("BM25 alone", bm)
-    for tag in args {
+    record("BM25 as shipped (relevance floor)", bmFloor)
+    record("BM25 no floor", bmRaw)
+    var top1: [String: [Int: Float]] = [:]
+    for tag in args where !tag.hasPrefix("--") && Float(tag) == nil {
         let v = try readVecs(tag); let dv = Array(v.prefix(docs.count)), qv = Array(v.suffix(qs.count))
         for dim in [768, 256] {
             let store = FlatStore(dim: dim); for x in dv { store.add(x) }
-            let vr = qv.map { q in store.search(normalized(q, dim: dim), k: 50).map { ids[$0.row] } }
-            record("vectors \(tag) \(dim)d", vr)
-            record("BM25 + vectors \(tag) \(dim)d, RRF k=60", (0..<qs.count).map { Fusion.rrf([bm[$0], vr[$0]]) })
+            var vr: [Int: [String]] = [:], t1: [Int: Float] = [:]
+            for i in 0..<qs.count {
+                let hits = store.search(normalized(qv[i], dim: dim), k: 50)
+                t1[i] = hits.first?.score ?? 0
+                vr[i] = hits.filter { $0.score >= floorArg }.map { ids[$0.row] }
+            }
+            if dim == 768 { top1[tag] = t1 }
+            for s in FusionStrategy.allCases {
+                record("\(s.rawValue) \(tag) \(dim)d", Dictionary(uniqueKeysWithValues: (0..<qs.count).map { ($0, HybridRank.fuse(s, vectors: vr[$0]!, bm25: bmFloor[$0]!, exact: exact[$0]!, limit: 20)) }))
+            }
         }
     }
-    line("method | all 30 | exact-name 13 | paraphrase 17")
-    for (n, a, e, p) in table { line("\(n) | \(a.line) | \(e.line) | \(p.line)") }
-    line("\nper question (rank of the first right answer; BM25 / each vector run at 768d):")
-    for (i, q) in qs.enumerated() {
-        func rk(_ l: [String]) -> String { l.firstIndex(where: { rel[i].contains($0) }).map { "\($0 + 1)" } ?? "-" }
-        var s = "\(i + 1). [\(q.kind)] bm25 \(rk(bm[i]))"
-        for tag in args {
-            let v = try readVecs(tag); let store = FlatStore(dim: 768); for x in v.prefix(docs.count) { store.add(x) }
-            s += "  \(tag) \(rk(store.search(v[docs.count + i], k: 50).map { ids[$0.row] }))"
+    func metrics(_ r: [Int: [String]], _ sel: [Int]) -> Metrics { var m = Metrics(); for i in sel { m.add(r[i]!, rel[i]) }; return m }
+    let base = answerable.filter { $0 < baseN }, extra = answerable.filter { $0 >= baseN }
+    line("method | base 30 | extra 20 | all 50 | exact+mixed names | paraphrase")
+    let names = answerable.filter { qs[$0].kind == "exact" || qs[$0].kind == "mixed" }, para = answerable.filter { qs[$0].kind == "para" }
+    for (n, r) in rows { line("\(n) | \(metrics(r, base).line) | \(metrics(r, extra).line) | \(metrics(r, answerable).line) | \(metrics(r, names).line) | \(metrics(r, para).line)") }
+    // the floor: the best cosine of each question, answerable against not
+    for (tag, t1) in top1 {
+        let a = answerable.map { Double(t1[$0]!) }.sorted(), u = (0..<qs.count).filter { qs[$0].kind == "unanswerable" }.map { Double(t1[$0]!) }.sorted()
+        func f(_ x: [Double]) -> String { x.isEmpty ? "-" : String(format: "min %.3f p5 %.3f median %.3f max %.3f", x.first!, percentile(x, 0.05), percentile(x, 0.5), x.last!) }
+        line("\n[\(tag)] best cosine per question: answerable (\(a.count)) \(f(a)); unanswerable (\(u.count)) \(f(u))")
+        for fl in [0.0, 0.6, 0.65, 0.7, 0.72, 0.74, 0.76, 0.78, 0.8] {
+            let keepA = a.filter { $0 >= fl }.count, dropU = u.filter { $0 < fl }.count
+            line(String(format: "   floor %.2f: answerable kept %d/%d, unanswerable refused %d/%d", fl, keepA, a.count, dropU, u.count))
         }
-        line(s + "  | \(q.q)")
+    }
+    let un = (0..<qs.count).filter { qs[$0].kind == "unanswerable" }
+    for (n, r) in rows where n.hasPrefix("BM25") || n.hasSuffix("768d") { line("\(n): unanswerable questions that still return something: \(un.filter { !r[$0]!.isEmpty }.count)/\(un.count)") }
+    line("\nper question (first right rank; bm25 floored, then vectors-only 768 / rrf / exact-terms for the first vector tag):")
+    let first = args.first { !$0.hasPrefix("--") && Float($0) == nil }
+    for i in answerable {
+        func rk(_ l: [String]?) -> String { l?.firstIndex(where: { rel[i].contains($0) }).map { "\($0 + 1)" } ?? "-" }
+        var s = "\(i + 1). [\(qs[i].kind)] bm25 \(rk(bmFloor[i]))"
+        if let t = first { for st in FusionStrategy.allCases { s += " \(st.rawValue.prefix(4)) \(rk(rows.first { $0.0 == "\(st.rawValue) \(t) 768d" }?.1[i]))" } }
+        line(s + " | " + qs[i].q)
     }
 }
 

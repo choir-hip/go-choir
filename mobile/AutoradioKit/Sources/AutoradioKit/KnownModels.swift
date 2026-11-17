@@ -33,6 +33,10 @@ public enum KnownModels {
     /// EmbeddingGemma 2, Q8_0, the official GGUF (ggml-org, Apache-2.0; the Gemma Prohibited Use Policy applies): the on-device embedder behind search.
     /// Size and SHA-256 are the Hugging Face listing's and were re-checked on the downloaded file, 2026-11-17. Runs on llama.cpp b12259.
     /// docs/reference/EMBEDDINGGEMMA.md. Fetched at first use into the store, never in the bundle.
+    /// The name a vector store records: the model file and the runtime. A store made by another engine is not read.
+    public static let embeddingEngine = "embeddinggemma-2-q8_0@llama.cpp-b12259"
+    /// A passage whose cosine to the question is below this is not a match on vectors alone. 0.67: the trial's 50 answerable questions had a best cosine of at least 0.716 and its 6 unanswerable ones at most 0.627 (reference page, section 0.6).
+    public static let embeddingCosineFloor: Float = 0.67
     public static let embeddingGemma2 = ModelSpec(
         id: "embeddinggemma-2-q8_0",
         url: URL(string: "https://huggingface.co/ggml-org/embeddinggemma-2-GGUF/resolve/main/embeddinggemma-2-Q8_0.gguf")!,

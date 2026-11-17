@@ -10,6 +10,10 @@ enum Corpus {
         let rows = try JSONDecoder().decode([StoryRow].self, from: Data(contentsOf: dir.appendingPathComponent("stories.json")))
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
         var docs = rows.map { TrialDoc(id: $0.id, title: $0.h, body: $0.b, date: f.date(from: $0.date)) }
+        // The second set (2026-11-17): 26 more stories (20 answers, 6 decoys that share a name) and 26 more questions (6 cannot be answered).
+        if let d = try? Data(contentsOf: dir.appendingPathComponent("stories-extra.json")), let more = try? JSONDecoder().decode([StoryRow].self, from: d) {
+            docs += more.map { TrialDoc(id: $0.id, title: $0.h, body: $0.b, date: f.date(from: $0.date)) }
+        }
         // Alice's Adventures in Wonderland, Project Gutenberg #11 (public domain): the text between the START and END markers,
         // curly quotes made straight, italics underscores dropped, split into passages of about 180 words.
         var t = try String(contentsOf: book, encoding: .utf8)
@@ -27,13 +31,14 @@ enum Corpus {
         }
         if !cur.isEmpty { pieces.append(cur) }
         for p in pieces { n += 1; docs.append(TrialDoc(id: String(format: "alice#%04d", n), title: "Alice's Adventures in Wonderland", body: p, date: nil)) }
-        let qs = try JSONDecoder().decode([TrialQuestion].self, from: Data(contentsOf: dir.appendingPathComponent("questions.json")))
+        var qs = try JSONDecoder().decode([TrialQuestion].self, from: Data(contentsOf: dir.appendingPathComponent("questions.json")))
+        if let d = try? Data(contentsOf: dir.appendingPathComponent("questions-extra.json")), let more = try? JSONDecoder().decode([TrialQuestion].self, from: d) { qs += more }
         let rel: [Set<String>] = qs.map { q in
             if let ids = q.answer_ids { return Set(ids) }
             let ph = (q.answer_phrases ?? []).map { $0.lowercased() }
             return Set(docs.filter { d in d.id.hasPrefix("alice#") && ph.contains(where: { d.body.lowercased().contains($0) }) }.map { $0.id })
         }
-        for (i, r) in rel.enumerated() where r.isEmpty { throw NSError(domain: "corpus", code: 1, userInfo: [NSLocalizedDescriptionKey: "question \(i) has no answer passage"]) }
+        for (i, r) in rel.enumerated() where r.isEmpty && qs[i].kind != "unanswerable" { throw NSError(domain: "corpus", code: 1, userInfo: [NSLocalizedDescriptionKey: "question \(i) has no answer passage"]) }
         return (docs, qs, rel)
     }
     static func index(_ docs: [TrialDoc]) -> RetrievalIndex {

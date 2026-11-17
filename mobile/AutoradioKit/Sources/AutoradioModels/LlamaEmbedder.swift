@@ -6,9 +6,9 @@ import llama
 /// The phone's embedder: EmbeddingGemma 2 (Q8_0 GGUF) through the same llama.cpp b12259 the language models use (docs/reference/EMBEDDINGGEMMA.md).
 /// The file is fetched at first use into the model store and checked by SHA-256; nothing is in the bundle. One context, one decode at a time.
 /// The graph mean-pools but returns vectors of norm in the hundreds, so this normalises (llama.cpp's own server does the same).
-public final class LlamaEmbedder: Embedder, @unchecked Sendable {
+public final class LlamaEmbedder: Embedder, QueryEmbedding, @unchecked Sendable {
     public static let modelID = KnownModels.embeddingGemma2.id
-    public let engine = "embeddinggemma-2-q8_0@llama.cpp-b12259"
+    public let engine = KnownModels.embeddingEngine
     public let dimension = 768
     /// Longest prompt the context takes, in tokens (the card says retrieval passages should be 512 or fewer; the model reads 2,048).
     public static let maxTokens: UInt32 = 2048
@@ -70,5 +70,7 @@ public final class LlamaEmbedder: Embedder, @unchecked Sendable {
     }
 
     public func embed(_ prompts: [String]) async throws -> [[Float]] { try prompts.map { try embedOne($0).vec } }
+    /// One question, at once (the retriever is synchronous).
+    public func embedQuery(_ text: String) -> [Float]? { try? embedOne(EmbedPrompt.query(text)).vec }
 }
 #endif
