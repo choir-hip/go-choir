@@ -162,18 +162,30 @@ func (e *Episode) audio() string {
 	return e.Key
 }
 
-var adPhrases = []string{"brought to you by", "sponsored by", "sponsor", "promo code", "use code", "terms apply", "learn more at", "visit our website", "support for this", "is supported by", "this episode is supported", "free trial", "subscribe", "download the app", "limited time offer", "book today", "book a "}
+// adDeclarations are phrases that announce a sponsor message on their own.
+var adDeclarations = []string{"brought to you by", "sponsored by", "this episode is supported by", "this podcast is supported by", "this show is supported by"}
+
+// adSignals are phrases of a promotion; two different ones make an ad read.
+// None is a bare word that editorial speech uses ("the bill's sponsors",
+// "supported by the data", "subscribe to the view").
+var adSignals = []string{"promo code", "use code", "terms apply", "learn more at", "visit our website", "free trial", "download the app", "limited time offer", "book today", "subscribe today", "subscribe now"}
 
 // isAdRead reports whether a clip's words read as a sponsor message or a
 // promotion: an ad that names the story's brand is not the story.
 func isAdRead(text string) bool {
 	low := strings.ToLower(text)
-	for _, p := range adPhrases {
+	for _, p := range adDeclarations {
 		if strings.Contains(low, p) {
 			return true
 		}
 	}
-	return false
+	n := 0
+	for _, p := range adSignals {
+		if strings.Contains(low, p) {
+			n++
+		}
+	}
+	return n >= 2
 }
 
 // sameWords reports whether two texts are one passage said twice: 80% of the

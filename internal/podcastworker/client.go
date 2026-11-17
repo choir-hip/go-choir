@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,7 +20,12 @@ type Client struct {
 	Base string
 	key  string
 	HTTP *http.Client
+
+	requests atomic.Int64
 }
+
+// Requests is how many HTTP requests this client has sent.
+func (c *Client) Requests() int { return int(c.requests.Load()) }
 
 // NewClient builds a client. base is the site, such as https://choir.news.
 func NewClient(base, apiKey string) (*Client, error) {
@@ -55,6 +61,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	c.requests.Add(1)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, path, err)
@@ -182,7 +189,16 @@ func (c *Client) PutClipsEach(ctx context.Context, clips []ClipIn) []error {
 	}
 	for start := 0; start < len(clips); start += 200 {
 		end := min(start+200, len(clips))
-		if err := put(clips[start:end]); err == nil {
+		err := put(clips[start:end])
+		if err == nil {
+			continue
+		}
+		// A refused sign-in is the same for every clip: do not send them one by one.
+		var he *HTTPError
+		if errors.As(err, &he) && (he.Status == http.StatusUnauthorized || he.Status == http.StatusForbidden) {
+			for i := start; i < end; i++ {
+				errs[i] = err
+			}
 			continue
 		}
 		for i := start; i < end; i++ {
