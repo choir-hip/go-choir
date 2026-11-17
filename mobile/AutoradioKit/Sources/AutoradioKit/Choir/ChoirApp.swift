@@ -160,6 +160,7 @@ public final class ChoirApp: @unchecked Sendable {
                 return ProgrammeRouteFeed(source: me.stretchSource?() ?? RouteStretchSource(baseURL: me.frontBaseURL()))
             }
             me.writer = w
+            w.offlineFill = { LocalStories.entries(from: .shared, sheet: .shared) }       // the desk cannot be reached: stories held on the phone
             let wa = OpeningWriteAhead(cache: me.openingCache, store: .shared,
                                        feed: { [weak me] in me.map { ProgrammeRouteFeed(source: $0.stretchSource?() ?? RouteStretchSource(baseURL: $0.frontBaseURL())) } },
                                        voice: { [weak me] in me?.runtime.player.voiceKey ?? "" },

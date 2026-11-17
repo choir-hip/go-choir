@@ -138,6 +138,9 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     public var admit: ((RunSheetOp, String) -> RunSheetOp?)?
     public var noticeWords: ((Error?) -> String?) = { RunSheetWriter.plainWords($0) }
     public var clock: () -> Date = { Date() }
+    /// Entries to play when the desk cannot be reached and fewer than two playable entries are ahead (the stories held on the phone). Each
+    /// is placed at the end, by the phone, once per failed ask; the writer does not ask again until another entry airs.
+    public var offlineFill: (() -> [RunSheetEntry])?
     private var task: Task<Void, Never>?
     private var quietOn: String?          // the entry that was on air when the last ask added nothing: not asked again until another one is
 
@@ -222,6 +225,9 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                 else if failure != nil || cause == "open" { self.setNotice(self.noticeWords(failure)) }
             }
             if added > 0 { self.checkAhead() }
+            else if failure != nil, let fill = self.offlineFill, self.store.ahead(limit: Int.max).filter({ $0.kind != .transition }).count < 2 {
+                for e in fill() { self.store.place(e, at: .end, by: .phone, reason: "the desk could not be reached: a story held on this phone") }
+            }
         }
     }
 
