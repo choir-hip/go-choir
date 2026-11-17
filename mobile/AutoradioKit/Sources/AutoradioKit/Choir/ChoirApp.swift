@@ -385,7 +385,7 @@ public final class ChoirApp: @unchecked Sendable {
         await RunSheetPlayer.shared.settle()
         guard await MainActor.run(body: { RunSheetStore.shared.onAir() != nil }) else { onChange?(); return }      // nothing is on air: never play a document the player happens to hold
         await ensureEngine()
-        if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }
+        if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause(reason: "play button toggle") }
         onChange?()
     }
     /// Start the radio and leave it playing, whatever it was doing: the setup's "Start the radio" and the station when Autoradio opens.
@@ -407,7 +407,7 @@ public final class ChoirApp: @unchecked Sendable {
     public func signOut() async {
         await signIn.signOut()
         lock.lock(); loading = false; lock.unlock()
-        runtime.player.pause()
+        runtime.player.pause(reason: "sign out")
         runtime.player.clearQueue()
         runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
         await MainActor.run { RunSheetPlayer.shared.stopAll() }

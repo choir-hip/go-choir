@@ -109,6 +109,7 @@ public final class AutoradioModelsRegistrar: NSObject {
         LocalLanguage.model = LlamaLocalModel.shared              // the acknowledgement is written by this
         #endif
         ModelProof.runFromLaunchArguments()
+        print("AUTORADIO models registered n=\(ModelHub.catalog.count) stages=\(r.all.count) names=\(r.all.map { "\($0.kind.rawValue):\($0.id)" }.sorted().joined(separator: ","))")
         fputs("autoradio models: registered \(ModelHub.catalog.count) models, \(r.all.count) stages\n", stderr)
     }
 }

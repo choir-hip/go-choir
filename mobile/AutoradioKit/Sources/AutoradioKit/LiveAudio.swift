@@ -127,6 +127,9 @@ public final class LiveAudio: @unchecked Sendable {
         engine.connect(voiceNode, to: engine.mainMixerNode, format: playFmt)
     }
 
+    /// The listener's answer to the microphone question, when voice is turned on after the engine started.
+    public func permitMic(_ ok: Bool) { micPermitted = ok }
+
     /// Whether the microphone is already allowed (no prompt).
     public static func micPermissionGranted() -> Bool { AVAudioApplication.shared.recordPermission == .granted }
 
@@ -269,6 +272,9 @@ public final class LiveAudio: @unchecked Sendable {
             let s = rr.convert(buf)
             if !s.isEmpty { bus.pushReference(AudioFrame(samples: s, sampleRate: busSampleRate, t: clock.now)) }
         }
+        // A test affordance for the Mac proof, not a feature: with -AutoradioProofSilent YES (or that default set) the output is muted, and
+        // the samples are still rendered and counted, so the proof does not play through the owner's speakers.
+        if UserDefaults.standard.bool(forKey: "AutoradioProofSilent") { engine.mainMixerNode.outputVolume = 0 }
         engine.prepare()
         do { try engine.start() } catch {
             if micActive { engine.inputNode.removeTap(onBus: 0); micActive = false }
@@ -525,7 +531,11 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         if !hasLoop { start(at: at) }
         publishNowPlaying(); onChange?()
     }
-    public func pause() { st.write { $0.userPaused = true }; audio.programmePause(); playback.paused(true); publishNowPlaying(); onChange?() }
+    /// `reason` names who asked: every pause is on the console, never silent.
+    public func pause(reason: String = "listener") {
+        print("AUTORADIO paused reason=\(reason)")
+        st.write { $0.userPaused = true }; audio.programmePause(); playback.paused(true); publishNowPlaying(); onChange?()
+    }
     public func next() {
         let (i, doc) = st.read { ($0.blockIndex, $0.document) }
         let count = doc.blocks.count
@@ -643,7 +653,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 // The story is over: what the listener asked to hear comes next, like the next story.
                 if tail == 2 {
                     if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) }
-                    else { self.onChange?(); self.onRanDry?(self.st.read { $0.document.id }, anyPlayed) }
+                    else { print("AUTORADIO ran dry doc=\(self.st.read { $0.document.id }) played=\(anyPlayed)"); self.onChange?(); self.onRanDry?(self.st.read { $0.document.id }, anyPlayed) }
                 }
                 break
             }
@@ -722,6 +732,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             if tag == firstTag {
                 let ms = Int((Date().timeIntervalSince(startedAt)) * 1000)
                 print("AUTORADIO on air \(st.read { $0.document.id }) voice=\(current.setting(.voice)?.id ?? "") samples=\(made.samples.count) first_audio_ms=\(ms)")
+            } else {
+                print("AUTORADIO on air \(st.read { $0.document.id }) block=\(tag) samples=\(made.samples.count)")
             }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             startLookahead(after: tag)
@@ -863,11 +875,11 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         let c = MPRemoteCommandCenter.shared()
         for cmd in [c.playCommand, c.pauseCommand, c.togglePlayPauseCommand, c.nextTrackCommand, c.previousTrackCommand] { cmd.isEnabled = true }
         c.playCommand.addTarget { [weak self] _ in if self?.onTransport?("play") == true { return .success }; self?.play(); return .success }
-        c.pauseCommand.addTarget { [weak self] _ in if self?.onTransport?("pause") == true { return .success }; self?.pause(); return .success }
+        c.pauseCommand.addTarget { [weak self] _ in if self?.onTransport?("pause") == true { return .success }; self?.pause(reason: "remote command pause"); return .success }
         c.togglePlayPauseCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
             if self.onTransport?("toggle") == true { return .success }
-            if self.userPaused { self.play() } else { self.pause() }; return .success
+            if self.userPaused { self.play() } else { self.pause(reason: "remote command toggle") }; return .success
         }
         c.nextTrackCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
@@ -902,4 +914,10 @@ public enum FixtureResources {
         if let d = directory, FileManager.default.fileExists(atPath: d.appendingPathComponent(name).path) { return d.appendingPathComponent(name) }
         return FixtureClip.materialise(name: name)
     }
+}
+
+/// When the microphone permission is asked for: only with voice on, and only when it is not granted yet. Voice is off unless the listener
+/// turns it on, and with it off the radio never uses the microphone, so it does not ask.
+public enum MicAsk {
+    public static func shouldRequest(voiceOn: Bool, granted: Bool) -> Bool { voiceOn && !granted }
 }

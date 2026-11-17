@@ -430,6 +430,7 @@ extension PlaybackEngine {
     /// The entry ended (or never made a sound): the phone reports it, and the store's change starts the next one.
     private func finish(_ id: String, played: Bool, report given: AirReport? = nil) {
         guard playingId == id else { return }
+        print("AUTORADIO entry finished id=\(id) played=\(played)")
         let r = given ?? report(final: true)
         playingId = nil; playingDocument = nil; audio = nil; paused = false; pendingEnd = nil
         // A natural end carries the true final block and position; a failure is `failed` by the phone, never a skip.
@@ -489,7 +490,7 @@ extension PlaybackEngine {
     // MARK: Transport for remote audio
 
     public var isRemote: Bool { audio != nil && playingDocument == nil }
-    public func pause() { guard isRemote else { return }; paused = true; engine?.pauseRemote(); store.save(); changed() }
+    public func pause() { guard isRemote else { return }; print("AUTORADIO paused reason=remote entry"); paused = true; engine?.pauseRemote(); store.save(); changed() }
     /// Resume paused remote audio (the engine makes the session ready first: `ChoirPlaybackEngine.resumeRemote`).
     public func resume() { guard isRemote else { return }; paused = false; engine?.resumeRemote(); changed() }
     public func seek(by seconds: Double) { guard isRemote else { return }; engine?.seekRemote(by: seconds); changed() }

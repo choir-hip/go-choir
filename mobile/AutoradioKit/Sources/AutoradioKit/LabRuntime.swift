@@ -129,7 +129,15 @@ public final class LabRuntime: @unchecked Sendable {
         // Play asks for the session first when the engine is down or the claim is doubted (after the background, an interruption).
         player.onNeedsSession = { [coordinator] in Task { await coordinator.ensureReady(reason: "play") } }
         // The voice switch turned itself off (three quiet minutes) or was set elsewhere: the session drops the microphone.
-        HandsFreeSwitch.shared.onVoiceChange = { [coordinator] in Task { await coordinator.reapply() } }
+        HandsFreeSwitch.shared.onVoiceChange = { [coordinator, audio] in
+            Task {
+                // Turning voice on is the moment to ask for the microphone (never before); a refusal leaves voice without a microphone.
+                if !audio.virtual, MicAsk.shouldRequest(voiceOn: HandsFreeSwitch.shared.isOn, granted: LiveAudio.micPermissionGranted()) {
+                    audio.permitMic(await LiveAudio.requestMicPermission())
+                } else if HandsFreeSwitch.shared.isOn, LiveAudio.micPermissionGranted() { audio.permitMic(true) }
+                await coordinator.reapply()
+            }
+        }
         // The bar and the player read the real position from the audio, and a speed picked there reaches the audio.
         let pl = player
         BarTracker.shared.positionSource = { [weak pl] in pl?.renderPosition() }
@@ -174,13 +182,10 @@ public final class LabRuntime: @unchecked Sendable {
             // The coordinator decides what the claim is: a playback session while voice is off, voice processing from the start while it is on
             // (the radio's voice is not the listener's).
             try await session.claim(.talking, preferBuiltInMic: true, reason: "start")
-            #if os(macOS)
-            // The Mac's system prompt waits for a person, and with voice off the radio never uses the microphone: Play must not wait on
-            // it (a launch nobody is watching hung here, and the programme never started). Voice on asks; voice off uses what is granted.
-            let micOK = virtual ? true : (coordinator.current != .playing ? await LiveAudio.requestMicPermission() : LiveAudio.micPermissionGranted())
-            #else
-            let micOK = virtual ? true : await LiveAudio.requestMicPermission()
-            #endif
+            // Voice off is the default and never touches the microphone, so it never asks for it (owner: "it's off unless you turn it on";
+            // the Mac's prompt also waits for a person, which hung Play). Voice on asks, here or when the listener turns it on (below).
+            let voiceIsOn = coordinator.current != .playing
+            let micOK = virtual ? true : (MicAsk.shouldRequest(voiceOn: voiceIsOn, granted: LiveAudio.micPermissionGranted()) ? await LiveAudio.requestMicPermission() : LiveAudio.micPermissionGranted())
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
             try audio.start(bus: bus, clock: clock, wantMic: micOK, mic: micOK && coordinator.current != .playing,
                             voiceProcessing: coordinator.current == .talking, virtual: virtual)
@@ -224,7 +229,7 @@ public final class LabRuntime: @unchecked Sendable {
     public func ensureSessionReady(reason: String) async -> Bool { await coordinator.ensureReady(reason: reason) }
 
     public func stop() {
-        player.pause()
+        player.pause(reason: "runtime stop")
         micTask?.cancel(); micTask = nil
         audio.stop(); coordinator.release(); started = false
         lock.lock(); snap.running = false; lock.unlock()

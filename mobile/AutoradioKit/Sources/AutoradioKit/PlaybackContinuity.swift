@@ -152,7 +152,7 @@ public final class SessionWatcher: @unchecked Sendable {
     func interruption(began: Bool, shouldResume: Bool) {
         if began {
             memory.began(programmePlaying: programmePlaying, remotePlaying: remotePlaying)
-            if programmePlaying { runtime.player.pause() }                       // B1: the state says what is true
+            if programmePlaying { runtime.player.pause(reason: "system interruption or route change") }                       // B1: the state says what is true
             if remotePlaying { queue.pause() }
             runtime.log.emit(.audioNotice(kind: "interruption", detail: "began; will resume programme=\(memory.programme) remote=\(memory.remote)"))
             return
@@ -166,7 +166,7 @@ public final class SessionWatcher: @unchecked Sendable {
     func routeLost() {
         memory.forget()
         runtime.log.emit(.audioNotice(kind: "route-lost", detail: "pausing (programme playing \(programmePlaying), remote playing \(remotePlaying))"))
-        if programmePlaying { runtime.player.pause() }
+        if programmePlaying { runtime.player.pause(reason: "system interruption or route change") }
         if remotePlaying { queue.pause() }
     }
 
@@ -187,7 +187,7 @@ public final class SessionWatcher: @unchecked Sendable {
         Task { @MainActor in
             let ok = await rt.ensureSessionReady(reason: "foreground")
             rt.log.emit(.audioNotice(kind: "foreground-recover", detail: ok ? "session and engine are back" : "could not recover; showing paused"))
-            if !ok { rt.player.pause() }
+            if !ok { rt.player.pause(reason: "foreground recovery failed") }
         }
     }
 }
