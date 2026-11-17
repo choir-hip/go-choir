@@ -13,7 +13,7 @@ public enum OnAir {
     static let contentPrefixes = ["pub:", "doc:", "texture:", "mail:", "podcast:", "file:", "url:", "web:"]
     public static func isContent(_ address: String) -> Bool { contentPrefixes.contains { address.hasPrefix($0) } }
     public static func title(pageAddress: String, pageTitle: String, hint: String) -> String {
-        if isContent(pageAddress), !pageTitle.isEmpty { return pageTitle }
+        if (isContent(pageAddress) || pageAddress.isEmpty), !pageTitle.isEmpty { return pageTitle }       // no address: the caller named what is on air
         return hint.isEmpty ? (isContent(pageAddress) ? pageTitle : "") : hint
     }
 }
