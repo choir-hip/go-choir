@@ -31,6 +31,7 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
     func claim(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
         let ok: Bool = await MainActor.run {
             if claim != nil, held == state { return true }
+            if claim != nil { print("AUTORADIO released reason=state change \(held?.rawValue ?? "?") -> \(state.rawValue)") }
             claim?.cancel(); claim = nil; held = nil          // release first: the first claim's mode wins
             let spec = Self.spec(state)
             claim = context.audioSession.claim(mode: spec.mode, options: spec.options, background: true, events: { [weak self] e in
@@ -45,8 +46,16 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
             if s.mode != spec.expected && !context.agent { note("MODE MISMATCH: asked \(spec.mode), session has \(s.mode.rawValue)") }
             return true
         }
-        if !ok { throw LabError.unavailable("Exact refused the audio session claim for \(state.rawValue)") }
+        if !ok {
+            // Exact answers 0 without the system's reason: ask the session once, so the notice and the log carry the real code.
+            var code = ""
+            do { try AVAudioSession.sharedInstance().setActive(true) } catch { let ns = error as NSError; code = " (setActive: \(ns.domain) \(ns.code))" }
+            throw LabError.unavailable("Exact refused the audio session claim for \(state.rawValue)\(code)")
+        }
     }
+    func holds(_ state: AudioState) -> Bool { lock.lock(); defer { lock.unlock() }; return claim != nil && held == state }
+    /// Assert the session again without giving the claim up (the claim is Exact's; this only asks the system to be active).
+    func reassert() async throws { try await MainActor.run { try AVAudioSession.sharedInstance().setActive(true) } }
     func release() {
         let drop = { [self] in claim?.cancel(); claim = nil; held = nil; note("released") }
         if Thread.isMainThread { drop() } else { DispatchQueue.main.async(execute: drop) }       // in order with the claim that follows
@@ -92,7 +101,7 @@ public final class AutoradioModule: ExactPackage {
         #else
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
         #endif
-        runtime = LabRuntime(supportDir: support, session: owner)
+        runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
         runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState"], now: true) } }
         // Demo mode first: the Choir environment then talks to the bundled fixtures, signed in as the demo listener.

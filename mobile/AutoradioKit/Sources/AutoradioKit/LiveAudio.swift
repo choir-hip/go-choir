@@ -487,6 +487,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var onPreviousTrack: (@Sendable () -> Bool)?
     /// The lock screen's play, pause and toggle: the host may take them (true: handled) when something other than this player is playing (remote audio).
     public var onTransport: (@Sendable (String) -> Bool)?
+    /// True when a system pause arriving now is the system reacting to the radio's own session change (a reclaim, a switch): it is not the listener's.
+    public var ignoreSystemPause: (@Sendable () -> Bool)?
     /// Play was pressed: the host makes sure the audio session is claimed and active and the engine is up before sound is expected (it takes
     /// the claim again when the session was doubted or the engine is down). Play does not wait for it: the node plays as the engine comes up.
     public var onNeedsSession: (@Sendable () -> Void)?
@@ -670,7 +672,12 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 // The story is over: what the listener asked to hear comes next, like the next story.
                 if tail == 2 {
                     if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) }
-                    else { print("AUTORADIO ran dry doc=\(self.st.read { $0.document.id }) played=\(anyPlayed)"); self.onChange?(); self.onRanDry?(self.st.read { $0.document.id }, anyPlayed) }
+                    else {
+                        let id = self.st.read { $0.document.id }
+                        self.onChange?()
+                        // The empty document of a stop ends at once: nothing ran dry, and nothing is told.
+                        if id != "none" { print("AUTORADIO ran dry doc=\(id) played=\(anyPlayed)"); self.onRanDry?(id, anyPlayed) }
+                    }
                 }
                 break
             }
@@ -903,7 +910,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         let c = MPRemoteCommandCenter.shared()
         for cmd in [c.playCommand, c.pauseCommand, c.togglePlayPauseCommand, c.nextTrackCommand, c.previousTrackCommand] { cmd.isEnabled = true }
         c.playCommand.addTarget { [weak self] _ in if self?.onTransport?("play") == true { return .success }; self?.play(); return .success }
-        c.pauseCommand.addTarget { [weak self] _ in if self?.onTransport?("pause") == true { return .success }; self?.pause(reason: "remote command pause"); return .success }
+        c.pauseCommand.addTarget { [weak self] _ in
+            if self?.ignoreSystemPause?() == true { print("AUTORADIO ignored remote pause: the radio had just changed the session"); return .success }
+            if self?.onTransport?("pause") == true { return .success }; self?.pause(reason: "remote command pause"); return .success }
         c.togglePlayPauseCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
             if self.onTransport?("toggle") == true { return .success }

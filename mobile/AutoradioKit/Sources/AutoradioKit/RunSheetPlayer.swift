@@ -347,12 +347,14 @@ extension PlaybackEngine {
         if let air = store.onAir() {
             guard air.id != playingId else { return }
             rememberPlace(of: playingId, nextKind: air.kind)
+            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
             playingId = air.id; playingDocument = nil; audio = nil; pendingEnd = nil
             startTask = Task { @MainActor in await self.begin(air) }
             return
         }
         if playingId != nil {                         // what was on air was skipped, cut or taken off: its sound stops
             rememberPlace(of: playingId, nextKind: nextToAir()?.kind)
+            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
             playingId = nil; playingDocument = nil; audio = nil; paused = false; generation += 1; pendingEnd = nil
             engine?.stopRemote(); engine?.stopSpoken()
         }
@@ -370,14 +372,41 @@ extension PlaybackEngine {
 
     // MARK: Starting an entry
 
+    /// Seconds between tries when the session cannot be taken (the last repeats).
+    nonisolated(unsafe) public static var sessionRetryDelays: [TimeInterval] = [1, 2, 4, 8, 15]
+    private var sessionHeldFor: String?
+    private var sessionAttempts = 0
+    private var retryTask: Task<Void, Never>?
+    /// The entry on air is waiting for the audio session.
+    public var isWaitingForSession: Bool { sessionHeldFor != nil }
+    /// The app is back in front, an interruption ended, a route came back, or the listener tapped Play: try the held entry now.
+    public func sessionMayBeBack() {
+        guard let id = sessionHeldFor, playingId == id, let e = store.entry(id) else { return }
+        retryTask?.cancel()
+        retryTask = Task { @MainActor in await self.begin(e) }
+    }
+
     private func begin(_ entry: RunSheetEntry) async {
         let notReady = await sessionReady?(entry.kind.rawValue)
         guard playingId == entry.id else { return }            // a newer start took over while the session was made ready
         if let why = notReady {
+            // The session or the engine is not ready: that is not this entry's failure. It stays on air, held, with no outcome recorded; the
+            // claim is tried again with backoff, and at once when the app returns, an interruption ends or the listener taps Play.
             message = "Can\u{2019}t speak: \(why)"
-            print("AUTORADIO on air \(entry.id) FAILED \(why)")
-            fail(entry.id, why: message); return
+            sessionHeldFor = entry.id
+            sessionAttempts += 1
+            let wait = Self.sessionRetryDelays[min(sessionAttempts - 1, Self.sessionRetryDelays.count - 1)]
+            print("AUTORADIO on air \(entry.id) HELD \(why); attempt \(sessionAttempts), again in \(wait) s")
+            changed()
+            retryTask?.cancel()
+            retryTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                guard !Task.isCancelled, self.sessionHeldFor == entry.id, self.playingId == entry.id else { return }
+                await self.begin(entry)
+            }
+            return
         }
+        sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
         guard let engine else { fail(entry.id, why: nil); return }
         generation += 1
         let my = generation

@@ -107,11 +107,38 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     /// Give the claim up and take it again (which activates the session), then bring the engine back. Under the mutex.
     private func reclaim(_ state: AudioState, reason: String, why: String) async -> Bool {
         log.emit(.audioNotice(kind: "session", detail: "reclaim \(state.rawValue) (\(reason); \(why)); was \(inner.describe())"))
+        touched()
+        // A claim already held in this state is asserted again, not given up: deactivating a session that audio is still running through
+        // (a podcast, the engine) is refused as busy, and from the background the claim after it is refused too. Nothing is released.
+        if inner.holds(state) {
+            do { try await inner.reassert() }
+            catch {
+                let ns = error as NSError
+                print("AUTORADIO session reassert FAILED \(state.rawValue) (\(reason)) \(ns.domain) \(ns.code); the claim is kept")
+                log.emit(.error(stage: "audio-session", message: "reassert \(state.rawValue) failed (\(reason)): \(ns.domain) \(ns.code)"))
+                lastFailure = "\(ns.domain) \(ns.code)"
+                onChange?()
+                return false
+            }
+            lock.lock(); _current = state; _suspect = false; lock.unlock()
+            var ok = true
+            if audio.needsRecovery {
+                do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing) }
+                catch { ok = false; log.emit(.error(stage: "audio-engine", message: "engine did not start after reassert of \(state.rawValue) (\(reason)): \(error)")) }
+            }
+            print("AUTORADIO session reasserted \(state.rawValue) (\(reason))")
+            onChange?()
+            return ok
+        }
         audio.quiesce()
+        print("AUTORADIO released reason=reclaim (\(reason); \(why))")
         inner.release()
         do { try await inner.claim(state, preferBuiltInMic: false, reason: "reclaim: \(reason)") }
         catch {
             lock.lock(); _current = nil; lock.unlock()
+            let ns = error as NSError
+            lastFailure = "\(ns.domain) \(ns.code): \(ns.localizedDescription)"
+            print("AUTORADIO claim FAILED \(state.rawValue) (\(reason)) \(ns.domain) \(ns.code): \(ns.localizedDescription)")
             log.emit(.error(stage: "audio-session", message: "claim \(state.rawValue) failed (\(reason)): \(error)"))
             onChange?()
             return false
@@ -128,6 +155,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     private func switchTo(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
         let from = current
         if from == state { return }
+        touched()
         let t0 = DispatchTime.now().uptimeNanoseconds
         // What is on air is held (as for a voice line) while the session is reconfigured, and goes on from the held position: the programme is
         // never played through a mode switch.
@@ -153,7 +181,15 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         onChange?()
     }
 
+    /// The last session failure in plain words (the system's error domain and code), for the notice.
+    public private(set) var lastFailure = ""
+    private var lastTouch = Date.distantPast
+    private func touched() { lock.lock(); lastTouch = Date(); lock.unlock() }
+    /// The radio itself changed the session in the last `seconds`: a pause that arrives now is the system reacting to that, not the listener.
+    public func changedWithin(_ seconds: TimeInterval) -> Bool { lock.lock(); defer { lock.unlock() }; return Date().timeIntervalSince(lastTouch) < seconds }
+
     public func release() {
+        print("AUTORADIO released reason=stop")
         lock.lock(); let had = _current != nil; _current = nil; lock.unlock()
         if had { log.emit(.audioSession(category: "released", mode: "", note: "stop")) }
         inner.release()

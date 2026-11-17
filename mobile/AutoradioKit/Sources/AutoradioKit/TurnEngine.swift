@@ -21,12 +21,18 @@ public protocol AudioSessionOwner: AnyObject, Sendable {
     func describe() -> String
     /// Give the claim up (Stop). The session falls back to what the app's own sound wants.
     func release()
+    /// The owner holds a live claim in `state`: nothing needs taking again, only asserting (no release).
+    func holds(_ state: AudioState) -> Bool
+    /// Activate the session again without giving it up (after the background, an interruption). Throws with the system's error code.
+    func reassert() async throws
     /// The system told the claim something: "interrupted", "resumed", "reset", "route" (detail: the route now).
     func observe(_ handler: @escaping @Sendable (_ kind: String, _ detail: String) -> Void)
 }
 public extension AudioSessionOwner {
     func describe() -> String { "" }
     func release() {}
+    func holds(_ state: AudioState) -> Bool { false }
+    func reassert() async throws {}
     func observe(_ handler: @escaping @Sendable (String, String) -> Void) {}
 }
 

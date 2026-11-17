@@ -157,6 +157,7 @@ public final class SessionWatcher: @unchecked Sendable {
             runtime.log.emit(.audioNotice(kind: "interruption", detail: "began; will resume programme=\(memory.programme) remote=\(memory.remote)"))
             return
         }
+        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
         let again = memory.ended(shouldResume: shouldResume)
         runtime.log.emit(.audioNotice(kind: "interruption", detail: "ended; shouldResume=\(shouldResume) programme=\(again.programme) remote=\(again.remote)"))
         if again.programme { runtime.player.play() }
@@ -181,6 +182,7 @@ public final class SessionWatcher: @unchecked Sendable {
     /// B6: back in front. A programme that should be playing and has no engine gets its session again; failing that, it says paused.
     /// A podcast the system paused is already marked paused. Nothing starts by itself.
     func returnedToForeground() {
+        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
         let rt = runtime
         guard programmePlaying else { return }
         if !rt.audio.needsRecovery { if rt.audio.programmeAudible { rt.coordinator.confirmHealthy() }; return }

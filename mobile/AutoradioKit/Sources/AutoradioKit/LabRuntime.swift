@@ -88,7 +88,9 @@ public final class LabRuntime: @unchecked Sendable {
     private let policyBox: PolicyBox
     private var injecting = false
 
-    public init(supportDir: URL, session: AudioSessionOwner, registry: StageRegistry = .builtIn()) {
+    /// `emptyProgramme`: the radio starts with nothing loaded (the phone and the Mac): the lab's fixture edition is for tests and the lab, and
+    /// must never be spoken on a listener's device. Everything that plays is a run sheet entry.
+    public init(supportDir: URL, session: AudioSessionOwner, registry: StageRegistry = .builtIn(), emptyProgramme: Bool = false) {
         self.registry = registry
         let log = EventLog(clock: clock)
         self.log = log
@@ -110,7 +112,7 @@ public final class LabRuntime: @unchecked Sendable {
         store = KeptTurnStore(root: supportDir.appendingPathComponent("turns"))
         configs = ConfigStore(dir: supportDir.appendingPathComponent("configs"))
         FixtureTurn.install(into: store)
-        let doc = FixtureProgramme.document
+        let doc = emptyProgramme ? ProgrammeDocument(id: "none", title: "", blocks: []) : FixtureProgramme.document
         player = ProgrammePlayer(audio: audio, registry: registry, log: log, configuration: cfg, document: doc)
         recorder = TurnRecorder(bus: bus)
         let storeRef = store
@@ -129,6 +131,7 @@ public final class LabRuntime: @unchecked Sendable {
         RadioDemand.shared.add { [audio, player] in audio.voiceIsSpeaking || audio.programmeAudible || player.synthesisBusy }
         player.onChange = { [weak self] in self?.refresh() }
         // Play asks for the session first when the engine is down or the claim is doubted (after the background, an interruption).
+        player.ignoreSystemPause = { [coordinator] in coordinator.changedWithin(2.5) }
         player.onNeedsSession = { [coordinator] in Task { await coordinator.ensureReady(reason: "play") } }
         // The voice switch turned itself off (three quiet minutes) or was set elsewhere: the session drops the microphone.
         HandsFreeSwitch.shared.onVoiceChange = { [coordinator, audio] in
@@ -193,6 +196,7 @@ public final class LabRuntime: @unchecked Sendable {
                             voiceProcessing: coordinator.current == .talking, virtual: virtual)
             if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
+            LaunchTimings.shared.mark("engine"); LaunchTimings.shared.mark("session")
             let mic = bus.mic()
             let echo = audio.voiceProcessing
             let on = handsFreeOverride ?? HandsFreeSwitch.shared.isOn

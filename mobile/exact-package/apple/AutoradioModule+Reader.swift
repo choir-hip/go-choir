@@ -86,7 +86,11 @@ extension AutoradioModule {
 
         handle("readerDoc") { [unowned self] args, reply in
             let address = args["address"] as? String ?? ""
-            guard TextureAddress.parse(address).kind != .none else { return reply(json(ReaderDoc.loading(""))) }
+            guard TextureAddress.parse(address).kind != .none else {
+                var blank = json(ReaderDoc.loading(""))
+                blank["hearIt"] = []                       // every answer carries every field of the shape, or the request keeps its last value
+                return reply(blank)
+            }
             Task { [weak self] in
                 // A document the desk is revising is read again each time it is asked for (and asked for again every few seconds).
                 let again = ReaderStore.shared.cached(address)?.revising ?? false

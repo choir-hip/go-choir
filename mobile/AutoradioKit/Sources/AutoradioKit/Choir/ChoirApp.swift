@@ -441,7 +441,7 @@ public final class ChoirApp: @unchecked Sendable {
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {
         LaunchTimings.shared.mark("play")
-        await MainActor.run { self.continuity?.readerTapped() }
+        await MainActor.run { self.continuity?.readerTapped(); RunSheetPlayer.shared.sessionMayBeBack() }       // Try again, when the session was the trouble
         if await MainActor.run(body: { () -> Bool in
             let p = RunSheetPlayer.shared
             guard p.isRemote else { return false }
@@ -469,6 +469,7 @@ public final class ChoirApp: @unchecked Sendable {
     }
     /// Resume (by voice or a button): what is on air plays; with nothing on air, what is next.
     public func startPlaying() async {
+        await MainActor.run { RunSheetPlayer.shared.sessionMayBeBack() }
         await ensureOnAir()
         await RunSheetPlayer.shared.settle()
         guard await MainActor.run(body: { RunSheetStore.shared.onAir() != nil }) else { onChange?(); return }
