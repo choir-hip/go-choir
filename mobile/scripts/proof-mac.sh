@@ -23,15 +23,26 @@ if [ -z "${NOBUILD:-}" ]; then
   "$HERE/build-lab.sh" mac > "$SCRATCH/build.txt" 2>&1 || { tail -20 "$SCRATCH/build.txt"; fail "build"; }
 fi
 
-# Fresh state: demo mode, light scheme, no open pages from an earlier run. The app's own preferences outlive `defaults write`
-# made while it runs, so it is not running here.
-/usr/bin/defaults write $APP AutoradioDemo -bool YES
-/usr/bin/defaults write $APP AutoradioThemeMode light
-/usr/bin/defaults delete $APP AutoradioThemeID >/dev/null 2>&1
-rm -f "$HOME/Library/Application Support/Autoradio/open-pages.json"
+# Fresh state before EVERY attempt: demo mode, light scheme, no open pages from an earlier run (a retry that kept the first attempt's
+# open story page failed at the first tap, "drive refused" three times). The app's own preferences outlive `defaults write` made while
+# it runs, so it is quit first. AutoradioDemo is restored to what it was when the script ends.
+SUPPORT="$HOME/Library/Application Support/Autoradio"
+CONSOLE="$SUPPORT/console.log"
+PRIOR_DEMO=$(/usr/bin/defaults read $APP AutoradioDemo 2>/dev/null || echo "__unset__")
+restore() { if [ "$PRIOR_DEMO" = "__unset__" ]; then /usr/bin/defaults delete $APP AutoradioDemo >/dev/null 2>&1; else /usr/bin/defaults write $APP AutoradioDemo -bool "$([ "$PRIOR_DEMO" = 1 ] && echo YES || echo NO)"; fi; }
+trap 'restore; rm -rf "$SCRATCH"' EXIT
+fresh() {
+  /usr/bin/osascript -e "tell application id \"$APP\" to quit" >/dev/null 2>&1
+  sleep 2
+  /usr/bin/defaults write $APP AutoradioDemo -bool YES
+  /usr/bin/defaults write $APP AutoradioThemeMode light
+  /usr/bin/defaults delete $APP AutoradioThemeID >/dev/null 2>&1
+  rm -f "$SUPPORT/open-pages.json"
+}
 
 attempt=1
 while :; do
+  fresh
   "$HERE/exact.sh" agent macos \
     "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01-paper.png window" \
     "tap paper-story-demo-grid-storage" "clock +800 real" "clock data" tree "screenshot $SHOTS/02-story-page.png window" \
@@ -41,8 +52,10 @@ while :; do
     logs > "$OUT" 2>&1
   rc=$?
   [ $rc -eq 0 ] && break
+  cp "$OUT" "$SHOTS/drive-attempt-$attempt.txt"
+  echo "drive attempt $attempt failed (exit $rc); first lines:"; head -5 "$OUT"
   [ $attempt -ge 3 ] && fail "drive (exit $rc)" "$(tail -15 "$OUT")"
-  attempt=$((attempt + 1)); echo "drive refused, retrying ($attempt)"; sleep 5
+  attempt=$((attempt + 1)); sleep 5
 done
 echo "launched: the app answered the agent"
 
@@ -54,6 +67,21 @@ if [ -n "${ALLOW_NO_MODELS:-}" ]; then
 else
   grep -q "stage-transcriber-" "$OUT" || fail "model stages" "no stage-transcriber-* row in the Components page: the model libraries are not linked or did not register"
   echo "stages: the model stages are registered"
+fi
+
+# Audio: a fresh app, Play, wait; the Kit prints "AUTORADIO on air <id> ... samples=<n>" to console.log (the app writes it on the Mac).
+fresh
+LINES_BEFORE=$(wc -l < "$CONSOLE" 2>/dev/null || echo 0)
+"$HERE/exact.sh" agent macos "clock data" "clock +1500 real" "clock data" "tap bar-play" "clock +25000 real" "clock data" tree \
+  "screenshot $SHOTS/04-played.png window" logs > "$SCRATCH/play.txt" 2>&1 || { cp "$SCRATCH/play.txt" "$SHOTS/play.txt"; fail "play drive" "$(tail -10 "$SCRATCH/play.txt")"; }
+[ -f "$CONSOLE" ] || fail "console log" "$CONSOLE does not exist: the app did not write its console file"
+tail -n +$((LINES_BEFORE + 1)) "$CONSOLE" > "$SHOTS/console-after-play.txt"
+if grep -E "AUTORADIO on air .* samples=[1-9][0-9]*" "$SHOTS/console-after-play.txt" >/dev/null; then
+  echo "audio: the first entry went on air with samples"
+else
+  why=$(grep -E "AUTORADIO on air .*FAILED|AUTORADIO .*(error|failed)" "$SHOTS/console-after-play.txt" | head -3)
+  grep -m1 "Paused" "$SCRATCH/play.txt" >/dev/null && echo "the bar says Paused after Play"
+  fail "audio" "FAILED ${why:-no 'on air ... samples=' line in console.log (see $SHOTS/console-after-play.txt)}"
 fi
 
 cat <<'TXT'

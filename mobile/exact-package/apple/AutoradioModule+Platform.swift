@@ -96,3 +96,41 @@ typealias PlatformSessionOwner = MacSessionOwner
 #else
 typealias PlatformSessionOwner = ExactSessionOwner
 #endif
+
+#if os(macOS)
+/// On the Mac the unified log hides NSLog text (`<private>`) and a GUI app's stdout goes nowhere, so every `AUTORADIO ...` line (the Kit
+/// prints them) would be unreadable. stdout and stderr are pointed at `~/Library/Application Support/Autoradio/console.log`, line
+/// buffered, capped at 256 KB (the file is rotated to console.log.1 when it passes the cap, at launch and every minute). Lines carry
+/// counts and ids, never content, as they do on the phone.
+enum ConsoleFile {
+    private static let cap = 256 * 1024
+    nonisolated(unsafe) private static var url: URL?
+    nonisolated(unsafe) private static var timer: DispatchSourceTimer?
+    static func install(directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        url = directory.appendingPathComponent("console.log")
+        open()
+        let t = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        t.schedule(deadline: .now() + 60, repeating: 60)
+        t.setEventHandler { rotateIfNeeded() }
+        t.resume(); timer = t
+        print("AUTORADIO console log opened pid=\(getpid())")
+    }
+    private static func open() {
+        guard let url else { return }
+        rotateIfNeeded()
+        let fd = Darwin.open(url.path, O_WRONLY | O_CREAT | O_APPEND, 0o600)
+        guard fd >= 0 else { return }
+        dup2(fd, STDOUT_FILENO); dup2(fd, STDERR_FILENO); Darwin.close(fd)
+        setvbuf(stdout, nil, _IOLBF, 0); setvbuf(stderr, nil, _IOLBF, 0)
+    }
+    private static func rotateIfNeeded() {
+        guard let url, let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int, size > cap else { return }
+        let old = url.appendingPathExtension("1")
+        try? FileManager.default.removeItem(at: old)
+        try? FileManager.default.moveItem(at: url, to: old)
+        let fd = Darwin.open(url.path, O_WRONLY | O_CREAT | O_APPEND, 0o600)
+        if fd >= 0 { dup2(fd, STDOUT_FILENO); dup2(fd, STDERR_FILENO); Darwin.close(fd) }
+    }
+}
+#endif

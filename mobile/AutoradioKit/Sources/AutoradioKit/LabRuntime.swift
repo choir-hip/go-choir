@@ -174,7 +174,13 @@ public final class LabRuntime: @unchecked Sendable {
             // The coordinator decides what the claim is: a playback session while voice is off, voice processing from the start while it is on
             // (the radio's voice is not the listener's).
             try await session.claim(.talking, preferBuiltInMic: true, reason: "start")
+            #if os(macOS)
+            // The Mac's system prompt waits for a person, and with voice off the radio never uses the microphone: Play must not wait on
+            // it (a launch nobody is watching hung here, and the programme never started). Voice on asks; voice off uses what is granted.
+            let micOK = virtual ? true : (coordinator.current != .playing ? await LiveAudio.requestMicPermission() : LiveAudio.micPermissionGranted())
+            #else
             let micOK = virtual ? true : await LiveAudio.requestMicPermission()
+            #endif
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
             try audio.start(bus: bus, clock: clock, wantMic: micOK, mic: micOK && coordinator.current != .playing,
                             voiceProcessing: coordinator.current == .talking, virtual: virtual)

@@ -127,6 +127,9 @@ public final class LiveAudio: @unchecked Sendable {
         engine.connect(voiceNode, to: engine.mainMixerNode, format: playFmt)
     }
 
+    /// Whether the microphone is already allowed (no prompt).
+    public static func micPermissionGranted() -> Bool { AVAudioApplication.shared.recordPermission == .granted }
+
     public static func requestMicPermission() async -> Bool {
         await withCheckedContinuation { c in AVAudioApplication.requestRecordPermission { c.resume(returning: $0) } }
     }
