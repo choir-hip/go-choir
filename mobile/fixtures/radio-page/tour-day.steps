@@ -1,4 +1,4 @@
-# Radio page tour B: a day in progress. Install runsheet-day.json (3 heard, 6 ahead, the first with a forecast, one podcast) as above.
+# Radio page tour B (drags need: agent ios --touch platform): a day in progress. Install runsheet-day.json (3 heard, 6 ahead, the first with a forecast, one podcast) as above.
 clock data
 clock +1500 real
 clock data
@@ -16,7 +16,7 @@ clock +1200 real
 clock data
 tree
 screenshot @S@/B03-after-drag.png window
-tap radio-next-1-delete
+tap radio-next-1 drag -160 0
 clock +1200 real
 clock data
 tree

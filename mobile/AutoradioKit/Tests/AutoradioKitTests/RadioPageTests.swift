@@ -117,20 +117,25 @@ final class RadioPageTests: XCTestCase {
         XCTAssertEqual(RadioPage.make(i).ahead[0].note, "Written for other neighbours")
     }
 
-    // 8 why this
-    func test08_WhyThisOnlyWhenTheEntryCarriesAForecast() {
+    // 8 why this: the stated cause and forecast when carried, else a sentence from what the entry does carry
+    func test08_WhyThisSaysWhatTheEntryCarries() {
         var e = entry("a", state: .onAir)
         var i = input([e]); i.playing = true
         var p = RadioPage.make(i)
-        XCTAssertFalse(p.canWhy); XCTAssertEqual(p.why, ""); XCTAssertEqual(p.forecast, "")
+        XCTAssertTrue(p.canWhy); XCTAssertEqual(p.why, "The desk wrote this for you."); XCTAssertEqual(p.forecast, "", "no forecast is invented")
+        e.cites = [RunSheetCite(ref: "pub:x", role: .subject, label: "Harbour Ledger")]
+        p = RadioPage.make(input([e]))
+        XCTAssertEqual(p.why, "The desk wrote this for you. It draws on Harbour Ledger.")
+        XCTAssertEqual(RadioPage.make(input([entry("l", by: .listener, state: .onAir)])).why, "You added this.")
+        XCTAssertEqual(RadioPage.make(input([entry("o", .opening, by: .phone, state: .onAir)])).why, "The station opens each listening, from the front page it holds.")
         e.forecast = RunSheetForecast(pHeard: 0.72, causedBy: "you finished two stories on the harbour yesterday", claimId: "c1")
-        i = input([e]); i.playing = true; p = RadioPage.make(i)
-        XCTAssertTrue(p.canWhy)
+        p = RadioPage.make(input([e]))
         XCTAssertEqual(p.why, "You finished two stories on the harbour yesterday.")
         XCTAssertEqual(p.forecast, "The desk forecast a 72 in 100 chance that you hear it through.")
         e.forecast = RunSheetForecast(pHeard: 0.5, causedBy: "", claimId: "c1")
-        i = input([e]); p = RadioPage.make(i)
-        XCTAssertTrue(p.canWhy); XCTAssertEqual(p.why, "")
+        p = RadioPage.make(input([e]))
+        XCTAssertTrue(p.why.hasPrefix("The desk wrote this")); XCTAssertEqual(p.forecast, "The desk forecast a 50 in 100 chance that you hear it through.")
+        XCTAssertFalse(RadioPage.make(input([entry("n")])).canWhy, "nothing on air: no control")
     }
 
     // 9 the sentence

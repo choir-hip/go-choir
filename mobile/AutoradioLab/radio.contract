@@ -159,7 +159,7 @@ component RadioPage
                   row width=36 height=44 align-items="center" justify-content="center"
                     text "−" font-family=th.fontAction font-size="-exact-title2" font-weight=600 color=th.fg
                 column flex=1 min-width=0 height=44 justify-content="center" pan=speedMove panrelease=speedEnd testId="radio-speed-slider" aria-label="Speed"
-                  row width="100%" height=22 align-items="center" padding-left=11
+                  row width="100%" height=22 align-items="center" padding-left=11 box-sizing="border-box"
                     box width=`${speedPct}%` height=4 background-color=th.accent
                     row width=22 height=22 margin-left=-11 justify-content="center"
                       box width=3 height=22 background-color=th.accent
@@ -173,7 +173,7 @@ component RadioPage
                       text "1×" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
                 else
                   box width=32 height=44
-          // up next: the first five (all of it on request): kind, title, length, and who placed each. Drag the grip to reorder, swipe to remove, tap to play now.
+          // up next: the first five (all of it on request): kind, title, length, and who placed each. Drag the grip to reorder (the list's native reorderdrop, which needs a virtualized list), swipe left to remove (swipeleft: the platform's own delete swipe belongs to a grouped list, which cannot be virtualized), tap to play now.
           column gap=8 width="100%" testId="radio-up-next"
             SectionHeader(label=(rp.ahead.length > 0 ? `Up next · ${rp.ahead.length}` : "Up next"))
             if rp.notice != ""
@@ -181,22 +181,21 @@ component RadioPage
             if rp.ahead.length == 0
               text rp.emptyNote font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="radio-next-empty"
             else
-              list id="radio-next" testId="radio-next-list" appearance="auto" listStyle="plain" virtualized=true reorderdrop=radioDrop width="100%" height=(shownRows.length * 64) overflow-x="hidden"
-                section
-                  for r in shownRows key=r.id
-                    row testId=`radio-next-${r.n}` delete=radioDo("remove", r.id) height=64 align-items="center" gap=8 width="100%"
-                      button press=radioDo("play", r.id) testId=`radio-next-play-${r.n}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
-                        column gap=2 align-items="flex-start" width="100%"
-                          row gap=6 align-items="baseline"
-                            text r.kind font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.8 text-transform="uppercase" color=th.muted
-                            text (r.note != "" ? `${r.byWord} · ${r.note}` : r.byWord) font-family=th.fontLabel font-size="-exact-caption2" color=th.muted line-clamp=1
-                          row align-items="center" gap=6 width="100%"
-                            text r.title font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=1 flex=1 min-width=0
-                            image "symbol:forward-chevron" color=th.muted
-                      text r.length font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted
-                      box reorderFor="radio-next" touch-action="none" testId=`radio-next-grip-${r.n}` aria-label=`Drag ${r.title} to reorder` width=44 height=44
-                        row width=44 height=44 align-items="center" justify-content="center"
-                          image "symbol:sf/line.3.horizontal" color=th.muted
+              list id="radio-next" testId="radio-next-list" appearance="none" virtualized=true reorderdrop=radioDrop width="100%" height=(shownRows.length * 64) overflow-x="hidden"
+                for r in shownRows key=r.id
+                  row testId=`radio-next-${r.n}` swipeleft=radioDo("remove", r.id) touch-action="pan-y" height=64 align-items="center" gap=8 width="100%"
+                    button press=radioDo("play", r.id) testId=`radio-next-play-${r.n}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
+                      column gap=2 align-items="flex-start" width="100%"
+                        row gap=6 align-items="baseline"
+                          text r.kind font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.8 text-transform="uppercase" color=th.muted
+                          text (r.note != "" ? `${r.byWord} · ${r.note}` : r.byWord) font-family=th.fontLabel font-size="-exact-caption2" color=th.muted line-clamp=1
+                        row align-items="center" gap=6 width="100%"
+                          text r.title font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left" line-clamp=1 flex=1 min-width=0
+                          image "symbol:forward-chevron" color=th.muted
+                    text r.length font-family=th.fontLabel font-size="-exact-footnote" font-variant-numeric="tabular-nums" color=th.muted
+                    box reorderFor="radio-next" touch-action="none" testId=`radio-next-grip-${r.n}` aria-label=`Drag ${r.title} to reorder` width=44 height=44
+                      row width=44 height=44 align-items="center" justify-content="center"
+                        image "symbol:sf/line.3.horizontal" color=th.muted
               if rp.aheadMore > 0
                 button press=radioToggleAll testId="radio-next-all" appearance="none" align-self="flex-start" aria-label=(radioAll ? "Show fewer" : "Show all of it")
                   row min-height=44 align-items="center"

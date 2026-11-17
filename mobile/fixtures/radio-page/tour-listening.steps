@@ -1,0 +1,38 @@
+# Radio page tour E (best effort): Listening, by the lab's scripted turn (as proof-lane1.sh drive C). Install runsheet-day.json first.
+# The page state is driven by the engine's phase, which only a turn changes; no file can set it. Timing of the shots is the risk.
+clock data
+clock +1500 real
+clock data
+tap bar-mark
+clock +600 real
+tap place-components
+clock +800 real
+clock data
+tap stage-addressing-hybrid
+tap stage-transcriber-scripted
+tap stage-system1-fixed
+tap stage-holder-local-ack
+tap stage-desk-stub-echo
+tap stage-programme-fixture
+tap ack-immediate
+clock data
+tap start
+clock +1500 real
+clock data
+tap bar-mark
+clock +600 real
+tap "launcher-open-radio:"
+clock +900 real
+clock data
+tap inject
+clock +700 real
+clock data
+tree
+screenshot @S@/E01-listening-a.png window
+clock +1000 real
+tree
+screenshot @S@/E02-listening-b.png window
+clock +2500 real
+clock data
+tree
+screenshot @S@/E03-after-turn.png window

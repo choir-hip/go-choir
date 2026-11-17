@@ -226,6 +226,22 @@ public enum RadioPage {
         return e.filesAddress ?? ""
     }
 
+    /// A sentence from what an entry carries when it carries no stated cause.
+    static func builtWhy(_ e: RunSheetEntry) -> String {
+        let subjects = (e.cites ?? []).filter { $0.role == .subject }.map(\.label).filter { !$0.isEmpty }
+        let drawn = subjects.isEmpty ? "" : " It draws on \(subjects.prefix(3).joined(separator: ", "))."
+        switch e.placedBy {
+        case .listener: return "You added this" + (e.kind == .answer ? " by asking." : ".")
+        case .phone:
+            if e.kind == .opening { return "The station opens each listening, from the front page it holds." }
+            if e.kind == .answer { return "You asked, and this is the answer." }
+            return "The radio put this here." + drawn
+        case .desk:
+            if e.kind == .transition { return "The station speaks between two entries." }
+            return "The desk wrote this for you." + drawn
+        }
+    }
+
     /// The entry an answer will hand back to: the latest one an answer cut (the player puts its rest back after the answers).
     static func held(in sheet: RunSheet) -> RunSheetEntry? {
         sheet.entries.last { $0.state.isTail && $0.ended?.outcome == .cut && $0.kind != .answer && $0.kind != .transition }
@@ -262,12 +278,15 @@ public enum RadioPage {
                 o.elapsed = QueueClock.label(done); o.remaining = "-" + QueueClock.label(max(0, e.estSeconds - done))
             }
             if e.kind == .answer, let h = held(in: i.sheet) { o.thenBack = "Then back to: \(h.displayTitle)" }
+            // Why this: the desk's own cause and forecast when the entry carries them (the programme route sends neither today), else a sentence
+            // built from what the entry does carry: who placed it, what it draws on, the entry it leads into.
             if let f = e.forecast {
                 let cause = f.causedBy.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !cause.isEmpty { o.why = cause.prefix(1).uppercased() + cause.dropFirst() + (cause.hasSuffix(".") ? "" : ".") }
                 if f.pHeard >= 0 && f.pHeard <= 1 { o.forecast = "The desk forecast a \(Int((f.pHeard * 100).rounded())) in 100 chance that you hear it through." }
-                o.canWhy = !o.why.isEmpty || !o.forecast.isEmpty
             }
+            if o.why.isEmpty { o.why = builtWhy(e) }
+            o.canWhy = !o.why.isEmpty
         }
 
         // up next
