@@ -32,6 +32,8 @@ import Foundation
     func spokenPosition() -> (block: Int, seconds: Double)
     /// Silence the spoken entry (something else is starting, or it was skipped).
     func stopSpoken()
+    /// Why the last spoken block could not be made (nil: it was).
+    func speakFailure() -> String?
     /// The spoken entry says no more than the block it is on (the rest is replaced): whole sentences, no word cut.
     func endSpokenAfterCurrentBlock()
     /// Play remote audio from `start` (seconds) and stop at `end` when there is one.
@@ -85,7 +87,7 @@ extension PlaybackEngine {
     public internal(set) var droppedFromDesk: [(id: String, reason: String)] = []
     /// Called before every start of playback this player makes (the opening, play now, next, previous, an audio entry, a restart after a pause):
     /// the host makes sure the audio session is claimed and active and the engine is up (`ensureReady`). The reason names the entry kind.
-    public var sessionReady: ((String) async -> Void)?
+    public var sessionReady: ((String) async -> String?)?   // nil: ready; else why sound cannot come out
     /// How long a clip's audio may take to start before it is given up.
     public var startDeadline: TimeInterval = 6
 
@@ -293,8 +295,13 @@ extension PlaybackEngine {
     // MARK: Starting an entry
 
     private func begin(_ entry: RunSheetEntry) async {
-        await sessionReady?(entry.kind.rawValue)
+        let notReady = await sessionReady?(entry.kind.rawValue)
         guard playingId == entry.id else { return }            // a newer start took over while the session was made ready
+        if let why = notReady {
+            message = "Can\u{2019}t speak: \(why)"
+            print("AUTORADIO on air \(entry.id) FAILED \(why)")
+            fail(entry.id, why: message); return
+        }
         guard let engine else { fail(entry.id, why: nil); return }
         generation += 1
         let my = generation
@@ -419,7 +426,8 @@ extension PlaybackEngine {
         }
         if anyPlayed { silent = 0 } else {
             silent += 1
-            if silent >= 2 { wants = false; message = "The radio's voice did not work, so nothing could be read aloud." }
+            message = "Can\u{2019}t speak: \(engine?.speakFailure() ?? "the voice made no sound")"
+            if silent >= 2 { wants = false }
         }
         finish(eid, played: anyPlayed)
     }
@@ -473,3 +481,5 @@ extension PlaybackEngine {
         if let b = playingId.flatMap({ store.entry($0)?.book }) { onDocumentPosition?(b.id, documentBlock) }
     }
 }
+
+public extension PlaybackEngine { func speakFailure() -> String? { nil } }

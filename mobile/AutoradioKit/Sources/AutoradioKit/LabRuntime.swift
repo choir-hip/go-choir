@@ -176,7 +176,8 @@ public final class LabRuntime: @unchecked Sendable {
             try await session.claim(.talking, preferBuiltInMic: true, reason: "start")
             let micOK = virtual ? true : await LiveAudio.requestMicPermission()
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
-            try audio.start(bus: bus, clock: clock, wantMic: micOK, voiceProcessing: coordinator.current == .talking, virtual: virtual)
+            try audio.start(bus: bus, clock: clock, wantMic: micOK, mic: micOK && coordinator.current != .playing,
+                            voiceProcessing: coordinator.current == .talking, virtual: virtual)
             if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
             let mic = bus.mic()
@@ -190,7 +191,8 @@ public final class LabRuntime: @unchecked Sendable {
             player.play()
             lock.lock(); snap.running = true; snap.message = ""; lock.unlock()
         } catch {
-            log.emit(.error(stage: "start", message: "\(error)"))
+            let ns = error as NSError
+            log.emit(.error(stage: "start", message: "\(ns.domain) \(ns.code): \(ns.localizedDescription)"))
             lock.lock(); snap.message = "start failed: \(error)"; lock.unlock()
         }
         refresh()

@@ -204,7 +204,7 @@ public final class ChoirApp: @unchecked Sendable {
         switch stage {
         case "system1": return "Your computer was slow to understand that; carrying on."
         case "desk": return "Your computer could not act on that. Try asking again."
-        case "start": return "The radio could not start its audio. Try Play again."
+        case "start": return "The radio could not start its audio (\(m)). Try Play again."
         case "voice": return "The radio's voice did not work, so nothing could be read aloud."
         default: return "Something went wrong loading the radio."
         }
@@ -303,9 +303,15 @@ public final class ChoirApp: @unchecked Sendable {
     /// The audio engine is running before anything is spoken. The host's start request is used when it has one (under a simulator agent
     /// the engine must be the virtual one).
     /// Already running: the audio session is made ready (`ensureReady`: claimed, active, the engine up) because it may be dead after the background.
-    func ensureEngine(reason: String = "play") async {
-        guard !runtime.snapshot().running else { await runtime.ensureSessionReady(reason: reason); return }
+    /// Nil when sound can come out; else the plain reason it cannot.
+    @discardableResult
+    func ensureEngine(reason: String = "play") async -> String? {
+        if runtime.snapshot().running {
+            return await runtime.ensureSessionReady(reason: reason) ? nil : "the audio session could not be taken"
+        }
         if let go = runtime.startRequest { await go() } else { await runtime.start() }
+        let s = runtime.snapshot()
+        return s.running ? nil : (s.message.isEmpty ? "the audio engine did not start" : s.message)
     }
 
     /// Load a paper story in full and play it. The document's id; nil when the story could not be loaded.

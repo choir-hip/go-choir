@@ -111,7 +111,6 @@
       "loading": "bool",
       "title": "string",
       "passage": "string",
-      "position": "string",
       "playing": "bool",
       "talking": "bool",
       "heard": "string",
@@ -190,6 +189,7 @@
       "status": "string",
       "message": "string",
       "src": "string",
+      "shareSrc": "string",
       "sections": "ShelfSectionRef[]",
       "blockCount": "number",
       "position": "number",
@@ -339,10 +339,6 @@
     "CsvRow": {
       "cells": "string[]"
     },
-    "FileChapterRef": {
-      "index": "number",
-      "title": "string"
-    },
     "FileInfo": {
       "address": "string",
       "path": "string",
@@ -358,27 +354,10 @@
       "message": "string",
       "src": "string",
       "local": "string",
-      "text": "string",
       "truncated": "bool",
       "rows": "CsvRow[]",
-      "pages": "number",
       "width": "number",
-      "height": "number",
-      "title": "string",
-      "author": "string",
-      "chapters": "FileChapterRef[]"
-    },
-    "FileChapter": {
-      "index": "number",
-      "count": "number",
-      "title": "string",
-      "markdown": "string",
-      "status": "string"
-    },
-    "FilePages": {
-      "query": "string",
-      "pages": "number[]",
-      "message": "string"
+      "height": "number"
     },
     "HearItRow": {
       "clipID": "string",
@@ -699,8 +678,7 @@
       "detail": "string",
       "id": "string",
       "note": "string",
-      "by": "string",
-      "programme": "bool"
+      "by": "string"
     },
     "QueueInfo": {
       "current": "string",
@@ -716,8 +694,10 @@
       "remainingLabel": "string",
       "fraction": "number",
       "upcoming": "QueueRow[]",
-      "coming": "QueueRow[]",
       "message": "string",
+      "notice": "string",
+      "writing": "bool",
+      "dry": "bool",
       "webUrl": "string",
       "webHost": "string"
     },
@@ -821,7 +801,10 @@
       "plain": "string",
       "textBlocks": "number",
       "markdown": "string",
-      "hearIt": "HearItRow[]"
+      "hearIt": "HearItRow[]",
+      "editable": "bool",
+      "source": "string",
+      "docId": "string"
     },
     "TextureRow": {
       "address": "string",
@@ -1125,6 +1108,12 @@
       "line": "string",
       "credit": "string"
     },
+    "TextureEditInfo": {
+      "status": "string",
+      "label": "string",
+      "address": "string",
+      "editable": "bool"
+    },
     "VoiceCard": {
       "id": "string",
       "name": "string",
@@ -1385,7 +1374,6 @@
           "loading": false,
           "title": "",
           "passage": "",
-          "position": "",
           "playing": false,
           "talking": false,
           "heard": "",
@@ -1557,6 +1545,7 @@
           "status": "loading",
           "message": "",
           "src": "",
+          "shareSrc": "",
           "sections": [],
           "blockCount": 0,
           "position": 0,
@@ -1859,49 +1848,10 @@
           "message": "",
           "src": "",
           "local": "",
-          "text": "",
           "truncated": false,
           "rows": [],
-          "pages": 0,
           "width": 0,
-          "height": 0,
-          "title": "",
-          "author": "",
-          "chapters": []
-        }
-      }
-    },
-    {
-      "source": "fileChapter",
-      "live": true,
-      "answers": "FileChapter",
-      "options": {
-        "address": "string",
-        "index": "number"
-      },
-      "substitute": {
-        "default": {
-          "index": 0,
-          "count": 0,
-          "title": "",
-          "markdown": "",
-          "status": "loading"
-        }
-      }
-    },
-    {
-      "source": "filePages",
-      "live": true,
-      "answers": "FilePages",
-      "options": {
-        "address": "string",
-        "query": "string"
-      },
-      "substitute": {
-        "default": {
-          "query": "",
-          "pages": [],
-          "message": ""
+          "height": 0
         }
       }
     },
@@ -2398,8 +2348,10 @@
           "remainingLabel": "",
           "fraction": 0,
           "upcoming": [],
-          "coming": [],
           "message": "",
+          "notice": "",
+          "writing": false,
+          "dry": false,
           "webUrl": "",
           "webHost": ""
         }
@@ -2458,7 +2410,10 @@
           "plain": "",
           "textBlocks": 0,
           "markdown": "",
-          "hearIt": []
+          "hearIt": [],
+          "editable": false,
+          "source": "",
+          "docId": ""
         }
       }
     },
@@ -2994,6 +2949,37 @@
     {
       "send": "voiceForget",
       "answers": "SettingsAck"
+    },
+    {
+      "source": "textureEditInfo",
+      "live": true,
+      "answers": "TextureEditInfo",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "idle",
+          "label": "",
+          "address": "",
+          "editable": false
+        }
+      }
+    },
+    {
+      "send": "textureEdit",
+      "options": {
+        "address": "string",
+        "markdown": "string"
+      },
+      "answers": "TextureEditInfo"
+    },
+    {
+      "send": "textureFlush",
+      "options": {
+        "address": "string"
+      },
+      "answers": "TextureEditInfo"
     },
     {
       "source": "voiceCards",

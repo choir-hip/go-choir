@@ -44,6 +44,8 @@ import Foundation
         app.runtime.player.start(at: 0)
     }
 
+    public func speakFailure() -> String? { app.runtime.player.speakFailure }
+
     public func endSpokenAfterCurrentBlock() { app.runtime.player.endAfterCurrentBlock() }
 
     public func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool {

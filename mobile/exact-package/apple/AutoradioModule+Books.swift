@@ -73,10 +73,13 @@ extension AutoradioModule {
 
         handle("shelfDoc") { args, reply in
             let a = args["address"] as? String ?? ""
-            guard let (id, block) = ShelfAddress.parse(a) else { return reply(["address": a, "status": "loading", "sections": [], "resumeBlock": -1]) }
+            // Every answer carries every field of the shape: a missing one fails the request and it keeps its last value.
+            let blank: [String: Any] = ["address": a, "id": "", "title": "", "author": "", "kind": "", "kindLabel": "", "status": "loading", "message": "", "src": "",
+                                        "shareSrc": "", "sections": [], "blockCount": 0, "position": 0, "resumeSection": 0, "resumeBlock": -1]
+            guard let (id, block) = ShelfAddress.parse(a) else { return reply(blank) }
             if let b = ShelfJump.shared.take(id) ?? block { lib.setPosition(id: id, block: b) }
             guard let d = lib.doc(id), let t = lib.text(id) else {
-                return reply(["address": a, "id": id, "status": "notfound", "message": "This document is not in Reader any more.", "sections": [], "resumeBlock": -1])
+                return reply(blank.merging(["id": id, "status": "notfound", "message": "This document is not in Reader any more."]) { $1 })
             }
             let sections: [[String: Any]] = t.sections.enumerated().map { ["index": $0.offset, "title": $0.element.title] }
             reply(["address": a, "id": id, "title": d.title, "author": d.author, "kind": d.kind, "kindLabel": d.kind == "pdf" ? "PDF" : "Book",
@@ -87,7 +90,7 @@ extension AutoradioModule {
         handle("shelfChapter") { args, reply in
             let a = args["address"] as? String ?? ""
             guard let (id, _) = ShelfAddress.parse(a), let t = lib.text(id), !t.sections.isEmpty else {
-                return reply(["index": 0, "count": 0, "title": "", "start": 0, "status": "loading", "blocks": []])
+                return reply(["index": 0, "count": 0, "title": "", "start": 0, "page": 1, "status": "loading", "blocks": []])
             }
             let i = min(max(num(args, "index"), 0), t.sections.count - 1), s = t.sections[i]
             let blocks: [[String: Any]] = (s.start..<(s.start + s.count)).map { n in

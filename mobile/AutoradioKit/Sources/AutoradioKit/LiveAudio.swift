@@ -52,6 +52,9 @@ public final class LiveAudio: @unchecked Sendable {
     private var bus: AudioBus?
     private var clock: LabClock?
     /// The microphone may be used at all (permission granted) and is wanted now (voice is on): the tap exists only while both hold.
+    /// Samples handed to the programme node since the engine was made (what the output was given to play).
+    private var samplesHanded = 0
+    public var programmeSamplesHanded: Int { lock.lock(); defer { lock.unlock() }; return samplesHanded }
     private var micPermitted = false
     private var micWanted = false
     private var wantMic: Bool { micPermitted && micWanted }
@@ -108,9 +111,11 @@ public final class LiveAudio: @unchecked Sendable {
 
     // MARK: Start, stop, restart
 
-    public func start(bus: AudioBus, clock: LabClock, wantMic: Bool, voiceProcessing: Bool = false, virtual: Bool = false) throws {
+    /// `wantMic`: the microphone is permitted. `mic`: it is wanted now (voice is on); nil means as permitted. A playback-only session has no
+    /// input: a tap on its input node makes the engine fail to start, and nothing is then ever heard.
+    public func start(bus: AudioBus, clock: LabClock, wantMic: Bool, mic: Bool? = nil, voiceProcessing: Bool = false, virtual: Bool = false) throws {
         if running { return }
-        self.bus = bus; self.clock = clock; self.micPermitted = wantMic; self.micWanted = wantMic; self.virtual = virtual
+        self.bus = bus; self.clock = clock; self.micPermitted = wantMic; self.micWanted = mic ?? wantMic; self.virtual = virtual
         if virtual { running = true; down = false; micActive = true; return }
         try bring(voiceProcessing: voiceProcessing)
         observe()
@@ -349,12 +354,15 @@ public final class LiveAudio: @unchecked Sendable {
     /// Schedule a buffer on the programme node and wait until it has played. If the engine is restarted meanwhile
     /// (a session switch, a route change), carry on from the frames already rendered once it is back.
     func playProgramme(_ samples: [Float], rate: Double, tag: Int = -1) async {
+        lock.lock(); samplesHanded += samples.count; lock.unlock()
         if virtual {
             let total = Int(Double(samples.count) / rate * LiveAudio.playRate)
             lock.lock(); var h = Playhead(tag: tag, totalFrames: total); h.frozen = 0; playhead = h; lock.unlock()
             var played = 0.0                                      // source seconds
             let length = Double(samples.count) / rate
-            while played < length, !Task.isCancelled {
+            // A block always ends: a virtual engine that stays paused gives up at ten times the block's own length (and at least a minute).
+            let deadline = Date().addingTimeInterval(max(60, length * 10))
+            while played < length, !Task.isCancelled, Date() < deadline {
                 try? await Task.sleep(nanoseconds: 50_000_000)
                 if !virtualPaused {
                     lock.lock(); let sp = self.rate; lock.unlock()
@@ -554,7 +562,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         publishNowPlaying(); onChange?()
     }
 
+    private var startedAt = Date()
+    private var firstTag = 0
     func start(at i: Int) {
+        lock.lock(); startedAt = Date(); firstTag = i; lock.unlock()
         let (old, my) = st.write { s -> (Task<Void, Never>?, Int) in
             let o = s.loop; s.epoch += 1; s.blockIndex = i; s.loop = nil; s.resumeAt = nil; return (o, s.epoch)
         }
@@ -667,7 +678,14 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             let made: Synthesized?
             if let hit { made = await hit.value } else { made = await synthesize(t) }
             if Task.isCancelled { return false }
-            guard let made else { return false }
+            guard let made else {
+                if tag == firstTag { print("AUTORADIO on air \(st.read { $0.document.id }) FAILED \(speakFailure ?? "no sound")") }
+                return false
+            }
+            if tag == firstTag {
+                let ms = Int((Date().timeIntervalSince(startedAt)) * 1000)
+                print("AUTORADIO on air \(st.read { $0.document.id }) voice=\(current.setting(.voice)?.id ?? "") samples=\(made.samples.count) first_audio_ms=\(ms)")
+            }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             startLookahead(after: tag)
             await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
@@ -697,17 +715,41 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// made; the failure is on the log (the trace's "voice" errors).
     func synthesize(_ text: String) async -> Synthesized? {
         lock.lock(); let cfg = configuration; lock.unlock()
+        let want = cfg.setting(.voice)?.id ?? ""
+        var failure = ""
+        if let made = await synthesize(text, with: cfg, why: &failure) { setFailure(nil); return made }
+        if Task.isCancelled { return nil }
+        // The chosen voice made nothing: the system voice speaks instead, and the listener is told why.
+        if want != VoiceCatalog.fallbackStageID {
+            log.emit(.note("voice: \(want) made no sound (\(failure)); the system voice speaks"))
+            var system = cfg
+            system.set(.voice, StageSetting(id: VoiceCatalog.fallbackStageID))
+            var second = ""
+            if let made = await synthesize(text, with: system, why: &second) { setFailure(nil); return made }
+            if !second.isEmpty { failure += "; the system voice: \(second)" }
+        }
+        setFailure(failure)
+        return nil
+    }
+
+    private func setFailure(_ f: String?) { lock.lock(); speakFailureText = f; lock.unlock() }
+    private var speakFailureText: String?
+    /// Why the last block could not be spoken (nil: it was).
+    public var speakFailure: String? { lock.lock(); defer { lock.unlock() }; return speakFailureText }
+
+    private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String) async -> Synthesized? {
         let voice: Voice
         do { voice = try registry.makeSpeaker(cfg, log: log) } catch {
-            log.emit(.error(stage: "voice", message: "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)")); return nil
+            why = "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)"
+            log.emit(.error(stage: "voice", message: why)); return nil
         }
         var samples: [Float] = []; var rate = 22050.0
         var failed = false
         do { for try await f in voice.speak(AsyncStream { $0.yield(text); $0.finish() }) { samples += f.samples; rate = f.sampleRate } } catch {
-            log.emit(.error(stage: "voice", message: "\(error)")); failed = true
+            why = "\(error)"; log.emit(.error(stage: "voice", message: "\(error)")); failed = true
         }
         if Task.isCancelled { return nil }
-        if samples.isEmpty && !failed { log.emit(.error(stage: "voice", message: "the voice made no sound for this block")) }
+        if samples.isEmpty && !failed { why = "the voice made no sound for this block"; log.emit(.error(stage: "voice", message: why)) }
         if failed || samples.isEmpty { return nil }
         return Synthesized(samples: samples, rate: rate)
     }

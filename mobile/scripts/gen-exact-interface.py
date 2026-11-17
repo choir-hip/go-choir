@@ -24,7 +24,7 @@ shapes = {
     "Names": {"names": "string[]"},
     # Listener path (Choir client)
     "ChoirAuth": {"signedIn": B, "baseURL": S, "status": S, "userCode": S, "verificationURL": S, "message": S},
-    "ChoirPlayer": {"signedIn": B, "loading": B, "title": S, "passage": S, "position": S, "playing": B, "talking": B,
+    "ChoirPlayer": {"signedIn": B, "loading": B, "title": S, "passage": S, "playing": B, "talking": B,
                     "heard": S, "message": S},
     "StoryRow": {"title": S, "dek": S, "route": S, "section": S, "current": B},
     "StoryList": {"rows": "StoryRow[]"},
@@ -68,7 +68,7 @@ names = [
     snd("labLoadConfigURL", {"url": S}),
     snd("labReplay", {"turn": S}),
     src("choirAuth", "ChoirAuth", default={"signedIn": False, "baseURL": "", "status": "idle", "userCode": "", "verificationURL": "", "message": ""}),
-    src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "", "position": "",
+    src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "",
         "playing": False, "talking": False, "heard": "", "message": ""}),
     src("choirStories", "StoryList", default={"rows": []}),
     snd("choirSignIn"), snd("choirSignOut"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
