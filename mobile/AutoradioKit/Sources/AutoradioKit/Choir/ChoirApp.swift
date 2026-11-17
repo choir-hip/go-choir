@@ -440,6 +440,7 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {
+        LaunchTimings.shared.mark("play")
         await MainActor.run { self.continuity?.readerTapped() }
         if await MainActor.run(body: { () -> Bool in
             let p = RunSheetPlayer.shared
@@ -461,6 +462,7 @@ public final class ChoirApp: @unchecked Sendable {
     }
     /// Start the radio and leave it playing, whatever it was doing: the setup's "Start the radio" and the station when Autoradio opens.
     public func startRadio() async {
+        LaunchTimings.shared.mark("play")
         await openRadio()
         await RunSheetPlayer.shared.settle()
         onChange?()

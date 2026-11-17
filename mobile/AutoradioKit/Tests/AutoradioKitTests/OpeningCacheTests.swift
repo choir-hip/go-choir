@@ -162,6 +162,17 @@ final class OpeningCacheTests: XCTestCase {
         XCTAssertTrue(ok, "the output node was handed the cached samples, not a made voice's")
     }
 
+    // 9b: a start asked for later than the launch (a press of Play) says when, and how long the start itself took
+    func testTheLaunchLineSaysWhenTheStartWasAskedFor() {
+        var out: [String] = []
+        let t = LaunchTimings(start: Date(timeIntervalSince1970: 100))
+        var c = Date(timeIntervalSince1970: 100)
+        t.clock = { c }; t.sink = { out.append($0) }
+        c = Date(timeIntervalSince1970: 105.0); t.mark("play"); t.mark("engine"); t.mark("session"); t.mark("sheet")
+        c = Date(timeIntervalSince1970: 105.8); t.printLine(source: "live")
+        XCTAssertEqual(out, ["AUTORADIO launch engine_ms=5000 session_ms=5000 sheet_ms=5000 request_ms=-1 first_segment_ms=-1 voice_load_ms=-1 synth_ms=-1 first_audio_ms=5800 source=live play_ms=5000 since_play_ms=800"])
+    }
+
     // 9
     func testTheLaunchLineCarriesEveryField() {
         var out: [String] = []
@@ -172,7 +183,7 @@ final class OpeningCacheTests: XCTestCase {
         c = Date(timeIntervalSince1970: 100.5); t.mark("session")
         c = Date(timeIntervalSince1970: 100.6); t.mark("sheet")
         c = Date(timeIntervalSince1970: 100.9); t.printLine(source: "cached"); t.printLine(source: "cached")
-        XCTAssertEqual(out, ["AUTORADIO launch engine_ms=400 session_ms=500 sheet_ms=600 request_ms=-1 first_segment_ms=-1 voice_load_ms=-1 synth_ms=-1 first_audio_ms=900 source=cached"])
+        XCTAssertEqual(out, ["AUTORADIO launch engine_ms=400 session_ms=500 sheet_ms=600 request_ms=-1 first_segment_ms=-1 voice_load_ms=-1 synth_ms=-1 first_audio_ms=900 source=cached play_ms=-1 since_play_ms=-1"])
     }
 
     // 10

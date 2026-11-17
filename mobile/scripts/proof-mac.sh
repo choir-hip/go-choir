@@ -1,7 +1,7 @@
 #!/bin/sh
 # Rerunnable proof of the Mac app, driven through Exact's agent over the macOS host (no simulator, no person), in demo mode (bundled
 # fixtures, no network). What a script can check, in one drive of a fresh app:
-#   1. it launched and answered the agent, and the front page's story rows are in the tree;
+#   1. it launched on the Autoradio page (radio-page, radio-play), and Autopaper, reached from the Places row, shows story rows;
 #   2. Play was pressed and, in ~/Library/Application Support/Autoradio/console.log (the app writes its AUTORADIO lines there):
 #      at least two `AUTORADIO on air ... samples=<n>` lines with n > 0, and no `AUTORADIO paused reason=` line;
 #   3. the models registered: `AUTORADIO models registered n=<n>` with n > 0 (skipped with ALLOW_NO_MODELS=1);
@@ -12,7 +12,7 @@
 # affordance for this script only, not a feature or a setting; the script restores the defaults it changed when it ends.
 #   NOBUILD=1          skip the build (use the installed app)
 #   ALLOW_NO_MODELS=1  the app has no model libraries: the model check is skipped, not failed
-# UNRUN until the lead's next Mac build; test ids are the ones the Mac app's launch tree has (bar-play, paper-story-*).
+# Test ids: radio-page, radio-play, radio-place-autopaper, paper-story-* (docs/design/autoradio-page-2026-11-17.md).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRATCH="${TMPDIR:-/tmp}/proof-mac.$$"
@@ -57,21 +57,26 @@ BEFORE=$(wc -l < "$CONSOLE" 2>/dev/null || echo 0)
 
 attempt=1
 while :; do
+  # The app opens on the Autoradio page (radio-page, with radio-play). Play is pressed on the page; Autopaper is reached from the page's
+  # Places row (radio-place-autopaper) and must show story rows. The Autopaper step comes last so leaving the page cannot disturb the audio check.
   "$HERE/exact.sh" agent macos \
-    "clock data" "clock +2500 real" "clock data" tree "screenshot $SHOTS/01-front-page.png window" \
-    "tap bar-play" "clock +25000 real" "clock data" tree "screenshot $SHOTS/02-after-play.png window" logs > "$OUT" 2>&1
+    "clock data" "clock +2500 real" "clock data" tree "screenshot $SHOTS/01-radio-page.png window" \
+    "tap radio-play" "clock +25000 real" "clock data" tree "screenshot $SHOTS/02-after-play.png window" \
+    "tap radio-place-autopaper" "clock +2500 real" "clock data" tree "screenshot $SHOTS/03-autopaper.png window" logs > "$OUT" 2>&1
   rc=$?
   [ $rc -eq 0 ] && break
   cp "$OUT" "$SHOTS/drive-attempt-$attempt.txt"
   echo "drive attempt $attempt failed (exit $rc); first lines:"; head -5 "$OUT"
   [ $attempt -ge 2 ] && fail "drive (exit $rc)" "$(grep -m1 -E 'no view matches|never opened|refused' "$OUT" || tail -3 "$OUT")"
   # Reset before a retry: a retry on the first attempt's state fails at the first tap.
-  attempt=$((attempt + 1)); quit_app; rm -f "$SUPPORT/open-pages.json"; BEFORE=$(wc -l < "$CONSOLE" 2>/dev/null || echo 0); sleep 3
+  attempt=$((attempt + 1)); quit_app; rm -f "$SUPPORT/open-pages.json" "$SUPPORT/onboarding.json"; BEFORE=$(wc -l < "$CONSOLE" 2>/dev/null || echo 0); sleep 3
 done
 echo "launched: the app answered the agent"
 
-grep -q "paper-story-" "$OUT" || fail "front page" "no paper-story row in the launch tree: the front page did not open"
-echo "front page: story rows present"
+grep -q "radio-page" "$OUT" && grep -q "radio-play" "$OUT" || fail "radio page" "the launch tree has no radio-page with radio-play: the app did not open on the Autoradio page"
+echo "radio page: radio-page and radio-play present"
+grep -q "paper-story-" "$OUT" || fail "autopaper" "no paper-story row after radio-place-autopaper: the Places row did not open Autopaper"
+echo "autopaper: reached from the Places row, story rows present"
 
 [ -f "$CONSOLE" ] || fail "console log" "$CONSOLE does not exist: the app did not write its console file"
 tail -n +$((BEFORE + 1)) "$CONSOLE" > "$SHOTS/console-after-play.txt"

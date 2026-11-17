@@ -250,7 +250,12 @@ public final class LaunchTimings: @unchecked Sendable {
         lock.lock(); let already = printed; printed = true; lock.unlock()
         guard !already else { return }
         mark("first_audio")
-        sink("AUTORADIO launch engine_ms=\(value("engine")) session_ms=\(value("session")) sheet_ms=\(value("sheet")) request_ms=\(value("request")) first_segment_ms=\(value("first_segment")) voice_load_ms=\(value("voice_load")) synth_ms=\(value("synth")) first_audio_ms=\(value("first_audio")) source=\(source)")
+        // The marks above are milliseconds since the process started, so when the radio was started by a press of Play (or any start that is not
+        // the launch's own) they all include the wait before it: the Mac proof taps Play 5 s in and engine, session and sheet read 5428 together.
+        // `play_ms` is when the first start was asked for, `since_play_ms` what the start itself took to first sound.
+        let play = value("play"), first = value("first_audio")
+        let sincePlay = play >= 0 ? first - play : -1
+        sink("AUTORADIO launch engine_ms=\(value("engine")) session_ms=\(value("session")) sheet_ms=\(value("sheet")) request_ms=\(value("request")) first_segment_ms=\(value("first_segment")) voice_load_ms=\(value("voice_load")) synth_ms=\(value("synth")) first_audio_ms=\(first) source=\(source) play_ms=\(play) since_play_ms=\(sincePlay)")
     }
     public func reset() { lock.lock(); marks = [:]; printed = false; lock.unlock() }
 }
