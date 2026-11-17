@@ -82,6 +82,8 @@ What was done (read, not built: **[src]** unless marked; the first builds at the
 - **New [src]:** `mac --sandbox` signs the App Sandbox and the agent drives it; `exact appstore` builds the Mac App Store package; a
   production Mac build captures its own windows; `test macos` and `agent macos` exist; `app-cli.mjs` refreshes the contract's
   declaration on `ios`/`mac`. None is used by us yet.
+- **How we build for macOS** (`mobile/scripts/build-lab.sh mac --run`) and what the app does not support there: see "Building for
+  the Mac" below.
 
 ## What Exact is, in three paragraphs
 
@@ -341,3 +343,17 @@ branches `lane/ar-integrate`, `lane/ar-models` and `lane/ar-ui` (2026-11-10;
 `lane/ar-spine` was not on origin), from the `mobile/README.md` of
 `lane/ar-app` and the builders' notes of 2026-11-11 (marked [seen]), and from the 2026-11-10 contract and
 animation research.
+
+## Building for the Mac
+
+**[unrun]** until the first Mac build is seen: this is the plan as built in the `mac-app` lane.
+
+- Command: `mobile/scripts/build-lab.sh mac --run` (add `ALLOW_NO_MODELS=1` until the macOS slices of the model libraries exist).
+  It takes `~/.cache/autoradio-mac-build.lock` itself for the build. The window is `host.macos.window` in `AutoradioLab/app.json`
+  (430 by 900, minimum 360 by 560), `minimumOS` 15.0 (the Kit needs macOS 15).
+- The module is the same Swift as on the phone. Every UIKit or `AVAudioSession` call goes through `AutoradioModule+Platform.swift`
+  (`Platform.open`, `systemScheme`, `reduceMotion`, `outputName`, the notices); on the Mac the session owner is `MacSessionOwner`, which
+  holds no claim and reports "ready", because the Mac has no session.
+- Not supported on the Mac yet: lock-screen and background playback concepts (`host.ios.backgroundModes`, `audio_session` are iOS-only
+  words), echo cancellation until the engine's voice processing is wired on the Mac, the phone's route names, and anything the
+  Mac-specific work would add (menus, keyboard shortcuts, a centred column).

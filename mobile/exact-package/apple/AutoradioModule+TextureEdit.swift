@@ -5,7 +5,6 @@
 //   textureEdit(address, markdown)      the listener typed: the text is now this (posted after a pause in typing)
 //   textureFlush(address)               post what is waiting now (Done, leaving the page)
 import Foundation
-import UIKit
 
 extension AutoradioModule {
     func registerTextureEdit() {
@@ -32,8 +31,10 @@ extension AutoradioModule {
             }
         }
         // The app goes to the background: what is waiting is posted now, not after the pause.
-        NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in
-            Task { @MainActor in await TextureEditor.shared.flushAll() }
+        for note in Platform.flushNotes {
+            NotificationCenter.default.addObserver(forName: note, object: nil, queue: .main) { _ in
+                Task { @MainActor in await TextureEditor.shared.flushAll() }
+            }
         }
     }
 }

@@ -4,7 +4,6 @@
 // This file is also THE ADAPTER to the shared playback queue: the only place the podcast app names the run sheet.
 // If the run sheet's API changes, change `registerPodcastQueueAdapter` and nothing else.
 import Foundation
-import UIKit
 
 /// Page model for podcast pages (titles in the deck and the pile).
 struct PodcastPageSource: PageSource {

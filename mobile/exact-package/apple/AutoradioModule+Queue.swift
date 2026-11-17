@@ -4,7 +4,6 @@
 //   queueAct          op toggle|back15|fwd15|seek|keep|remove|playAt|skip|clear|openWeb|closeWeb, arg
 // Everything plays through RunSheetPlayer.shared and RunSheetStore.shared (the Kit); other lanes call them directly from their own handlers.
 import Foundation
-import UIKit
 
 extension AutoradioModule {
     func queueInfo() -> QueueInfo {
@@ -34,7 +33,7 @@ extension AutoradioModule {
             try? await Task.sleep(nanoseconds: 2_000_000_000)           // the sign-in and the first load get their moment
             await Station.shared.start(reason: .launch)
         }
-        NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
+        NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { _ in
             Task { @MainActor in await Station.shared.start(reason: .foreground) }
         }
 

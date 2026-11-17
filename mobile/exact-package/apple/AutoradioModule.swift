@@ -3,12 +3,12 @@
 import AVFoundation
 import ExactPackage
 import Foundation
-import UIKit
 
 /// Adapts Exact's session claims to the kit's AudioSessionOwner. One standing capture claim at a time:
 /// listening (mode default, A2DP, speaker, no voice processing) or talking (voiceChat, HFP, speaker). A change of
 /// state is release, then claim, because the first claim's mode wins in Exact (AudioSession.swift:238-262). Options
 /// are always explicit: an empty list silently means defaultToSpeaker + allowBluetoothHFP (NativeHatches.swift:239-243).
+#if os(iOS)
 final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
     private let context: ExactPackageContext
     private var claim: ExactSubscription?
@@ -59,6 +59,8 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
     }
 }
 
+#endif
+
 /// A handler for one source or send name. Lanes register theirs from their own AutoradioModule+<Lane>.swift.
 public typealias AutoradioHandler = ([String: Any], @escaping ([String: Any]) -> Void) -> Void
 
@@ -66,7 +68,7 @@ public final class AutoradioModule: ExactPackage {
     // Internal (not private) so the per-lane extension files can reach them.
     let context: ExactPackageContext
     var runtime: LabRuntime!
-    var owner: ExactSessionOwner!
+    var owner: PlatformSessionOwner!
     var choir: ChoirApp!
     /// The spine's shared kit objects: every lane reads these and none replaces them.
     var pages: OpenPages!
@@ -84,7 +86,7 @@ public final class AutoradioModule: ExactPackage {
     public init(context: ExactPackageContext) {
         self.context = context
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
-        owner = ExactSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
+        owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
         runtime = LabRuntime(supportDir: support, session: owner)
         runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState"], now: true) } }
@@ -98,7 +100,7 @@ public final class AutoradioModule: ExactPackage {
             ProofKey.importIfPresent(documents: docs, into: appKeys)
         }
         #endif
-        choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in DispatchQueue.main.async { UIApplication.shared.open(url) } })
+        choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
         choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "labState", "barState", "radioView"]) } }
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
@@ -130,13 +132,7 @@ public final class AutoradioModule: ExactPackage {
     }
 
     /// The system's appearance, read from the first window (main thread).
-    static func systemScheme() -> String {
-        let read: () -> String = {
-            let style = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first?.traitCollection.userInterfaceStyle
-            return style == .dark ? "dark" : "light"
-        }
-        return Thread.isMainThread ? read() : DispatchQueue.main.sync(execute: read)
-    }
+    static func systemScheme() -> String { Platform.systemScheme() }
 
     /// Register a handler for a source or send name.
     func handle(_ name: String, _ h: @escaping AutoradioHandler) { handlers[name] = h }
@@ -256,7 +252,7 @@ public final class AutoradioModule: ExactPackage {
         case "choirCancelSignIn": choir.signIn.cancel(); reply(state())
         case "choirSignOut": Task { [choir] in await choir?.signOut() }; reply(state())
         case "choirOpenApproval":
-            if let u = URL(string: choir.authView().verificationURL) { DispatchQueue.main.async { UIApplication.shared.open(u) } }
+            if let u = URL(string: choir.authView().verificationURL) { Platform.open(u) }
             reply(state())
         case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
         case "choirPlayPause": Task { [choir] in await choir?.playPause() }; reply(state())

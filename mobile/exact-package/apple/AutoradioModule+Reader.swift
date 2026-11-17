@@ -6,7 +6,6 @@
 // View: web-page (WebPageView), the source page in place. Sends: readerOpenExternal, readerAimSet, readerStop (stop the desk's revision), readerRestore (a version as latest), readerReload, readerPrefetch, readerFollowSet.
 import Foundation
 import ExactPackage
-import UIKit
 import WebKit
 
 /// The source page shown in place: a WKWebView that Exact lays out as the `web-page` node (the contract sizes it to the page
@@ -24,8 +23,12 @@ final class WebPageView: NSObject, ExactPackageView, WKNavigationDelegate, WKUID
         web.navigationDelegate = self
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = true
+        #if os(iOS)
         web.isOpaque = false
         web.backgroundColor = .clear
+        #else
+        web.setValue(false, forKey: "drawsBackground")
+        #endif
     }
 
     var view: ExactPackagePlatformView { web }
@@ -54,7 +57,7 @@ final class WebPageView: NSObject, ExactPackageView, WKNavigationDelegate, WKUID
         guard let url = action.request.url else { return decisionHandler(.cancel) }
         switch SourceLink.route(url.absoluteString) {
         case .inApp: decisionHandler(.allow)
-        case .external(let u): DispatchQueue.main.async { UIApplication.shared.open(u) }; decisionHandler(.cancel)   // a mailto: or tel: inside the page
+        case .external(let u): Platform.open(u); decisionHandler(.cancel)   // a mailto: or tel: inside the page
         case .refused: decisionHandler(url.scheme?.lowercased() == "about" || action.targetFrame?.isMainFrame == false ? .allow : .cancel)   // about:blank and the page's own frames
         }
     }
@@ -148,7 +151,7 @@ extension AutoradioModule {
         // in place by the contract (WebLayer); anything that is neither is refused.
         handle("readerOpenExternal") { args, reply in
             switch SourceLink.route(args["url"] as? String ?? "") {
-            case .inApp(let u), .external(let u): DispatchQueue.main.async { UIApplication.shared.open(u) }; reply(["ok": true])
+            case .inApp(let u), .external(let u): Platform.open(u); reply(["ok": true])
             case .refused: reply(["ok": false])
             }
         }

@@ -1,7 +1,6 @@
 // The spine's sources and sends: open pages, the page model, themes, the bar's state, signals and demo mode.
 // Owned by the spine. A lane does not edit this file; it registers its own handlers in AutoradioModule+<Lane>.swift.
 import Foundation
-import UIKit
 
 extension AutoradioModule {
     /// The simulator driven by the Exact agent opens no audio hardware.

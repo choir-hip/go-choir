@@ -13,7 +13,6 @@
 //                                  UNPROVEN on a device.
 import AVFoundation
 import Foundation
-import UIKit
 
 private struct OnboardingProgress: Codable {
     var offered = false
@@ -220,8 +219,7 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     private func currentRoute() -> String {
-        let outs = AVAudioSession.sharedInstance().currentRoute.outputs
-        return "Playing on " + (outs.first?.portName ?? "this phone")
+        return "Playing on " + Platform.outputName()
     }
 
     func hearing(ok: Bool) {

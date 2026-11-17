@@ -3,7 +3,8 @@
   "implements": "@choir/autoradio@^1.0",
   "platform": "apple",
   "targets": [
-    "ios"
+    "ios",
+    "macos"
   ],
   "shapes": {},
   "options": {},
@@ -24,6 +25,7 @@
       "AutoradioModule+Mark.swift",
       "AutoradioModule+Onboarding.swift",
       "AutoradioModule+Paper.swift",
+      "AutoradioModule+Platform.swift",
       "AutoradioModule+Podcasts.swift",
       "AutoradioModule+Queue.swift",
       "AutoradioModule+Reader.swift",

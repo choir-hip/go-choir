@@ -6,7 +6,6 @@
 // The phone never talks to a mail provider: every call goes to the listener's computer (the Mail agent is the sole
 // custodian of email there) through MailService in the kit.
 import Foundation
-import UIKit
 
 extension AutoradioModule {
     func registerMail() {
