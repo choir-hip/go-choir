@@ -433,13 +433,21 @@ public actor TurnEngine {
         if let act = QueueVoice.hooks.actOnRetrieved {
             let r = RetrievedRefs.shared.current()
             if let (a, item) = RetrievedCommand.match(transcript, items: r.items, best: r.best), await act(a, item) {
+                print(DeskContext.turnLine(desk: "local", retrieved: nil, command: "retrieved-" + a.rawValue))
                 await finishCommand(t, transcript: transcript, line: RetrievedCommand.line(a, item))
                 return
             }
         }
+        // "Read my book", "play the latest <show>", "what is in my mail": resolved from the phone's own stores, no model, no desk.
+        if let act = QueueVoice.hooks.actOnCommand, let cmd = LocalCommands.match(transcript, catalog: QueueVoice.hooks.catalog?() ?? .live()), await act(cmd) {
+            print(DeskContext.turnLine(desk: "local", retrieved: nil, command: cmd.name))
+            await finishCommand(t, transcript: transcript, line: cmd.line)
+            return
+        }
         if let perform = QueueVoice.hooks.perform {
             let front = t.front ?? env.frontPage()
             if let ops = SpokenCommand.match(transcript, pageInFront: front != nil), await perform(ops, front) {
+                print(DeskContext.turnLine(desk: "local", retrieved: nil, command: "playback"))
                 await finishCommand(t, transcript: transcript, line: SpokenCommand.line(ops))
                 return
             }
@@ -553,6 +561,10 @@ public actor TurnEngine {
             desk = try env.registry.make(.desk, as: Desk.self, cfg)
         } catch { log.emit(.error(stage: "resolve", message: "\(error)")) }
 
+        // What the phone holds for this question, searched once: the local model and the server desk are shown the same passages.
+        let retrieved = await holder?.retrieve(words: transcript, pageTitle: front?.title ?? "", pageAddress: front?.address ?? "")
+        print(DeskContext.turnLine(desk: desk != nil ? "server" : "local", retrieved: retrieved, command: "none"))
+
         // The desk starts at once; System 1 and the acknowledgement do not wait for it.
         let revisionSeen = Flag()
         let cutLocal = Flag()                 // set the moment real desk speech is ready: the local stream stops at a sentence end
@@ -575,7 +587,8 @@ public actor TurnEngine {
                 let pageFetch = env.pageText
                 deskTask = Task { [self] in
                     var turnReq = baseReq
-                    if let f = front { turnReq.page = DeskPage(address: f.address, title: f.title, text: await pageFetch(f.address)) }
+                    let own = front != nil ? await pageFetch(front!.address) : ""
+                    turnReq.page = DeskContext.page(front: front, pageText: own, brief: SavedCorpus.shared.onAirBrief, retrieved: retrieved)
                     turnReq.queue = await QueueVoice.hooks.snapshot?()
                     turnReq.candidates = (QueueVoice.hooks.candidates?() ?? []).prefix(40).map { DeskCandidate(route: $0.route, title: $0.title) }
                     var firstSeen = false
@@ -659,7 +672,7 @@ public actor TurnEngine {
         if let f = front { let fetch = env.pageText; pageTextSource = { await fetch(f.address) } }
         var earlySrc: AsyncStream<String>?
         if immediate, let holder, voice != nil {
-            earlySrc = holder.lines(for: HolderInput(listenerWords: transcript, answers: [], pageTitle: pageTitle, pageKind: pageKind, pageAddress: front?.address ?? "", pageText: pageTextSource),
+            earlySrc = holder.lines(for: HolderInput(listenerWords: transcript, answers: [], pageTitle: pageTitle, pageKind: pageKind, pageAddress: front?.address ?? "", pageText: pageTextSource, retrieved: retrieved),
                                     later: { await s1Box.value?.value ?? [] })
         }
 
@@ -690,7 +703,7 @@ public actor TurnEngine {
             // as they are ready (unless the desk speaks first). No timer decides between them.
             log.emit(.cueStarted(msSinceTurnEnd: (log.clock.now - endedAt) * 1000))
             log.emit(.ackStarted(msSinceTurnEnd: (log.clock.now - endedAt) * 1000))
-            let src = earlySrc ?? holder.lines(for: HolderInput(listenerWords: transcript, answers: answers, pageTitle: pageTitle, pageKind: pageKind, pageAddress: front?.address ?? "", pageText: pageTextSource))
+            let src = earlySrc ?? holder.lines(for: HolderInput(listenerWords: transcript, answers: answers, pageTitle: pageTitle, pageKind: pageKind, pageAddress: front?.address ?? "", pageText: pageTextSource, retrieved: retrieved))
             relayTask = Task {
                 var said = 0
                 for await l in src {

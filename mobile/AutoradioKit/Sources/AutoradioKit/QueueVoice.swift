@@ -87,6 +87,10 @@ public enum QueueVoice {
         /// The `queue_ops` event's JSON, as the server sent it, for `PlayQueue.shared.apply(serverOpsJSON:)`.
         public var applyServerOps: (@Sendable (Data) async -> Void)?
         /// Plays, opens or queues an item the last answer retrieved ("play that", "open the second one"). False: it could not.
+        /// Carries out a command the phone resolved from its own stores ("read my book", "play the latest <show>", "what is in my mail"). False: could not.
+        public var actOnCommand: (@Sendable (LocalCommand) async -> Bool)?
+        /// The stores commands are resolved against (nil: the real ones).
+        public var catalog: (@Sendable () -> LocalCatalog)?
         public var actOnRetrieved: (@Sendable (RetrievedAction, RetrievalItem) async -> Bool)?
         public init() {}
     }

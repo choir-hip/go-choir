@@ -51,6 +51,8 @@ public final class SavedCorpus: @unchecked Sendable {
     public var preparers: [@Sendable () async -> Void] = []
     /// The title of what is on air, for "that" and "this" when no page is in front.
     public var onAirHint = ""
+    /// "On air now: X. Up next: A; B." for the server desk when the page in front has no text.
+    public var onAirBrief = ""
     public func prepare() async { for p in preparers { await p() } }
     /// The retriever the model's context is built from: BM25 over `retrieval` today; a fused retriever can be set here.
     public var retriever: (any Retriever)?

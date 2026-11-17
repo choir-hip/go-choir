@@ -107,6 +107,8 @@ public extension SavedCorpus {
             let sheet = await MainActor.run { RunSheetStore.shared.sheet }
             let r = RetrievalSources.runSheet(sheet)
             hold(group: "runsheet", r.docs); onAirHint = r.onAirTitle
+            let ahead = r.docs.filter { $0.source == "Up next" }.prefix(4).map(\.title)
+            onAirBrief = (r.onAirTitle.isEmpty ? "Nothing is on air." : "On air now: \(r.onAirTitle).") + (ahead.isEmpty ? "" : " Up next: " + ahead.joined(separator: "; ") + ".")
         }
     }
 }

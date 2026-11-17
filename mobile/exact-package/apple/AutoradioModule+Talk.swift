@@ -50,6 +50,21 @@ extension AutoradioModule {
                 return true
             }
         }
+        // Commands the phone resolves from its own stores (Kit/LocalCommands.swift).
+        hooks.actOnCommand = { [weak self] cmd in
+            guard let self else { return false }
+            switch cmd {
+            case .readBook(let id, let title, let block):
+                await MainActor.run { RunSheetPlayer.shared.playNow(RunSheetEntry.book(id: id, title: title, at: block)) }
+                return true
+            case .playEpisode(let address, _):
+                return PodcastService.shared.play(address: address, mode: "resume").status == "ok"
+            case .readMail(let address, _, _, _, let subject):
+                if address.isEmpty { return true }            // nothing saved: the line says so
+                await MainActor.run { RunSheetPlayer.shared.playNow(RunSheetEntry.readAloud(address: address, title: subject)) }
+                return true
+            }
+        }
         QueueVoice.hooks = hooks
         SavedCorpus.shared.installRunSheet()
 

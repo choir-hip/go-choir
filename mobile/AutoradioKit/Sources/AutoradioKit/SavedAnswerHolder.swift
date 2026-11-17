@@ -80,6 +80,10 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
         temperature = p.double("temperature", 0.2); self.corpus = corpus; modelSource = model
     }
 
+    public func retrieve(words: String, pageTitle: String, pageAddress: String) async -> RetrievalContext? {
+        await corpus.prepare()
+        return corpus.retrieve(words, onAir: OnAir.title(pageAddress: pageAddress, pageTitle: pageTitle, hint: corpus.onAirHint), pageAddress: pageAddress)
+    }
     public var keepsSpeakingForDesk: Bool { lock.lock(); defer { lock.unlock() }; return answering }
     public func diagnostics() -> String { lock.lock(); defer { lock.unlock() }; return note }
     public func report() -> GenerationReport? { lock.lock(); defer { lock.unlock() }; return generation }
@@ -96,8 +100,11 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
                 defer { c.finish() }
                 if let f = i.pageText { corpus.offer(address: i.pageAddress, title: i.pageTitle, text: await f()) }
                 if Task.isCancelled { say("cancelled"); return }
-                await corpus.prepare()
-                let ctx = corpus.retrieve(words, onAir: i.pageTitle.isEmpty ? corpus.onAirHint : i.pageTitle, pageAddress: i.pageAddress)
+                let ctx: RetrievalContext
+                if let given = i.retrieved { ctx = given } else {
+                    await corpus.prepare()
+                    ctx = corpus.retrieve(words, onAir: OnAir.title(pageAddress: i.pageAddress, pageTitle: i.pageTitle, hint: corpus.onAirHint), pageAddress: i.pageAddress)
+                }
                 let hits = ctx.items
                 // What "play that" and "open the second one" mean next: the items as the model sees them, and the one it will speak from.
                 RetrievedRefs.shared.set(hits, best: hits.max { $0.score < $1.score }?.id)
