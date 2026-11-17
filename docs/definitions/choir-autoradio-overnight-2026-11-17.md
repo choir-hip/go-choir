@@ -217,9 +217,9 @@ owner_rulings:
 
 now:
   status: working
-  slice: the phone candidate with every finished lane but full-band listening is installed and waits for the owner's ear; two server landings are deployed
-  source_ref: origin/main at the commit that carries this edit; phone and Mac candidate origin/lane/autoradio-integ4 bfa5674f0
-  deploy_identity: staging 0316d7cfc when last read (24cd67412 is worker-only code and docs)
+  slice: "the phone candidate with every finished lane but full-band listening is installed and waits for the owner's ear; two server landings are deployed"
+  source_ref: "origin/main at the commit that carries this edit; phone and Mac candidate origin/lane/autoradio-integ4 bfa5674f0"
+  deploy_identity: "staging 0316d7cfc when last read (24cd67412 is worker-only code and docs)"
   candidate:
     id: none
     state: none
@@ -244,22 +244,22 @@ now:
     evidence_ref: this file
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: lane/autoradio-integ4 bfa5674f0 on Exact de212e671 is installed on the phone, unlaunched and unheard; the same code path spoke on the Mac (proof at e8f4454a4: three entries on air, 22 models registered) and passed four simulator tours of the Autoradio page; the opening-first programme and the clip matcher are deployed and proven; EmbeddingGemma 2 loads on the Mac by both routes
-    main_uncertainty: whether the installed build makes sound on the device, and whether EmbeddingGemma 2 loads on the A16 phone by the GGUF route
-    next_observation: the owner launches the phone build; then the lead launches it with -EmbedTrial 1 and reads Documents/proof/embed-trial.json
-  blocker_or_risk: the installed build is unheard; a launch speaks at once, so the lead did not launch it at night; rollback is lane/autoradio-integ 5a7813642
-  next_action: owner QA of the phone and Mac builds; the phone embedding trial; wire EmbeddingJob to the stores; the full-band listening trial (D2); Mac build of integ4 and its proof
+    believed_state: "lane/autoradio-integ4 bfa5674f0 on Exact de212e671 is installed on the phone, unlaunched and unheard; the same code path spoke on the Mac (proof at e8f4454a4: three entries on air, 22 models registered) and passed four simulator tours of the Autoradio page; the opening-first programme and the clip matcher are deployed and proven; EmbeddingGemma 2 loads on the Mac by both routes"
+    main_uncertainty: "whether the installed build makes sound on the device, and whether EmbeddingGemma 2 loads on the A16 phone by the GGUF route"
+    next_observation: "the owner launches the phone build; then the lead launches it with -EmbedTrial 1 and reads Documents/proof/embed-trial.json"
+  blocker_or_risk: "the installed build is unheard; a launch speaks at once, so the lead did not launch it at night; rollback is lane/autoradio-integ 5a7813642"
+  next_action: "owner QA of the phone and Mac builds; the phone embedding trial; wire EmbeddingJob to the stores; the full-band listening trial (D2); Mac build of integ4 and its proof"
 
 receipts:
-  - S3 the latest Exact on both platforms: pin de212e671 (mobile/exact.pin); simulator, device and Mac builds exit 0 at lane/mac-app e685d4a45 and later; builds refuse a wrong Exact (dbb466e69)
-  - S4 native Mac app: proof-mac.sh MAC PROOF OK at e8f4454a4 (opening, two further entries on air with nonzero samples, 22 models registered); sound not judged by ear; the Mac build of integ4 itself has not been run
-  - S2 retrieval and the local content store: lane/phone-retrieval 21a882649 in integ4; store renders in the simulator; sync and sign-out wipe not exercised on a device
-  - S6 the Autoradio page: lane/radio-page bfa5674f0; tours cold, answer and empty pass in the simulator, day tour fails at a later step, listening is not photographed
-  - S9 talking at once: lane/instant-start 2e773295a in integ4; launch timings unmeasured on a device
-  - S1 one voice at a time is in the installed build; full-band listening is lane/voice-fullband cb6def5c9, not merged (D2)
-  - S7 opening first: landed 0316d7cfc, CI 44019332807, scripts/prove-autoradio-programme PASS on d@e (open median 5.17 s); ledger C116 true
-  - S8 clips: landed 24cd67412, CI 44019560901; staging went from 3 clips for 1 story to 30 for 17 after one match run; ledger C117 true; no clip judged by ear
-  - S5 EmbeddingGemma 2: lane/embed-trial 1e24b6f7a; both routes load on the Mac; the phone rows of the verdict table are unknown; docs/reference/EMBEDDINGGEMMA.md
+  - "S3 the latest Exact on both platforms: pin de212e671 (mobile/exact.pin); simulator, device and Mac builds exit 0 at lane/mac-app e685d4a45 and later; builds refuse a wrong Exact (dbb466e69)"
+  - "S4 native Mac app: proof-mac.sh MAC PROOF OK at e8f4454a4 (opening, two further entries on air with nonzero samples, 22 models registered); sound not judged by ear; the Mac build of integ4 itself has not been run"
+  - "S2 retrieval and the local content store: lane/phone-retrieval 21a882649 in integ4; store renders in the simulator; sync and sign-out wipe not exercised on a device"
+  - "S6 the Autoradio page: lane/radio-page bfa5674f0; tours cold, answer and empty pass in the simulator, day tour fails at a later step, listening is not photographed"
+  - "S9 talking at once: lane/instant-start 2e773295a in integ4; launch timings unmeasured on a device"
+  - "S1 one voice at a time is in the installed build; full-band listening is lane/voice-fullband cb6def5c9, not merged (D2)"
+  - "S7 opening first: landed 0316d7cfc, CI 44019332807, scripts/prove-autoradio-programme PASS on d@e (open median 5.17 s); ledger C116 true"
+  - "S8 clips: landed 24cd67412, CI 44019560901; staging went from 3 clips for 1 story to 30 for 17 after one match run; ledger C117 true; no clip judged by ear"
+  - "S5 EmbeddingGemma 2: lane/embed-trial 1e24b6f7a; both routes load on the Mac; the phone rows of the verdict table are unknown; docs/reference/EMBEDDINGGEMMA.md"
 ---
 
 # Autoradio overnight, 17 November
