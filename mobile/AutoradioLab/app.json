@@ -10,7 +10,7 @@
     "name": "Autoradio"
   },
   "icons": [
-    { "src": "appicon/default.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+    { "src": "assets/appicon/default.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
   ],
   "host": {
     "ios": {

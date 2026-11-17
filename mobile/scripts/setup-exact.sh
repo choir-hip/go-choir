@@ -23,4 +23,10 @@ if [ ! -x "$BUNDIR/bin/bun" ]; then
   mkdir -p "$BUNDIR"
   BUN_INSTALL="$BUNDIR" curl -fsSL https://bun.sh/install | BUN_INSTALL="$BUNDIR" bash -s "bun-v1.4.2"
 fi
+# Exact's own build dependencies (every build's type check imports rolldown from them): installed from the pin's lockfile when
+# missing or when the pin changed (a stamp in node_modules records the pin that was installed).
+STAMP="$SRC/node_modules/.choir-pin"
+if [ ! -d "$SRC/node_modules" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$PIN" ]; then
+  (cd "$SRC" && "$BUNDIR/bin/bun" install --frozen-lockfile) && echo "$PIN" > "$STAMP"
+fi
 echo "exact $(git -C "$SRC" rev-parse --short HEAD), bun $("$BUNDIR/bin/bun" --version)"

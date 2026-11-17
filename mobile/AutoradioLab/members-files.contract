@@ -5,6 +5,7 @@
 use fileList, fileOpen from "@choir/autoradio"
 use fileMkdir, fileDelete, fileRename, fileUpload from "@choir/autoradio"
 use FileListing, FileInfo from "@choir/autoradio"
+use choirPlayPause from "@choir/autoradio"
 
 // Pinch-and-pan geometry for the image viewer (Exact's transform handle, as its interaction-gallery photo viewer does):
 // the picture is `contain`-fitted in its frame, so its on-screen size is natural * fit * zoom, and a pan may not leave the frame.
