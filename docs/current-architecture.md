@@ -22,7 +22,7 @@ carries "checked" (the date someone read the code or proof). A row with no proof
 6. Prompts are embedded yaml, seeded to disk per computer; a per-owner override file exists, but its write route is refused on deployed computers (section 3, 8).
 7. Every Jev call goes through one job (`internal/agentcore/jev_job.go`); `scripts/check-jev-entry` fails a second path.
 8. Podcast clips: the worker's `match` mode (no model, so no Jev call) ranks and writes clips by explicit rules; landed 2026-11-17 (24cd67412) and run from the Mac worker: 30 clips for 17 stories on staging after its first run (3 for 1 before), at most 3 per story; no clip has been judged by ear. The Jev-based matcher was removed on 2026-11-16 (CI refused it).
-9. Nothing on the phone has been heard by the owner as of the overnight report: sound, voice and clips on the device are unproven.
+9. The phone carries `lane/autoradio-integ4` bfa5674f0 (Exact de212e671, the Autoradio page, the local content store, instant start), installed 2026-11-17 and not yet launched or heard; the same code spoke on the Mac under `mobile/scripts/proof-mac.sh`. None of it is on main.
 10. `sourcecycled`, World Wire and Universal Wire are retired names; Dolt and Store B are deleted (2026-10-30).
 
 ## 1. The layers (owner, 2026-11-16)

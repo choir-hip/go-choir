@@ -4,12 +4,157 @@ Reference page (convention: [README.md](README.md)). Checked 2026-11-17 from
 primary sources fetched that day; every claim carries its URL in the source
 list at the end (S1 and so on). Marked **verified** (read on the page named),
 **est** (our arithmetic from marked inputs) or **unknown** (no source found).
-Text on fetched pages was treated as data. Nothing here was run on a phone.
+Text on fetched pages was treated as data. Nothing here was run on a phone. Section 0 holds what was run on the Mac, 2026-11-17.
 
 The ask (owner): embed everything the Autoradio apps hold, on device, with
 `EverPaper/embeddinggemma-2-coreai`, search the vectors on device, combine with
 the BM25 index (`PassageIndex.swift` in the phone lane, k1 1.2, b 0.75). No
 server-side embeddings.
+
+## 0. The trial on the Mac (2026-11-17, measured) and the verdict
+
+Builder run for station S5 of the overnight goal. Machine: Mac, macOS 27.2 (26B118), Xcode 27.1, SDK 27.0 (`CoreAI.framework`
+present), Apple silicon, the dev Mac (not the porter's M5). Weights in `~/.cache/autoradio-embed-trial/` (outside the repo); every
+downloaded file checked: the GGUF's sha256 `2188ac1d...09135` and size 309,855,456 equal the Hub listing, and each Core AI file
+(text asset, tokenizer, config, Swift sources) equals `CHECKSUMS.sha256`. Code: `mobile/EmbedTrial/` (a Mac command,
+`embed-trial bench|quality|compare|scan`), the corpus generator and files in `mobile/EmbedTrial/corpus/`. Phone rows are **unknown**
+until the lead runs the device trial (section 0.4).
+
+### 0.1 Verdict table
+
+| Route | Mac | iPhone 14 Pro Max (A16, iOS 26) | iPhone on iOS 27 |
+|---|---|---|---|
+| A. official GGUF Q8_0 through llama.cpp **b12259** (the commit the app pins) | **works** (loads, 768-d, smoke passes, best quality measured) | **unknown**: same code and the same library as the app's Qwen models; the device trial decides | unknown (same) |
+| B. Core AI port `EverPaper/embeddinggemma-2-coreai` | **works** on macOS 27.2 (loads on the Neural Engine, 768-d, smoke passes) | **does not apply**: Core AI is iOS 27 only (S4) and the owner's phone cannot run iOS 27 | unknown (framework exists; A16 behaviour and the specialisation cost are untested, the port's `Package.swift` declares macOS only) |
+
+Decision for the app: **route A**. It runs where the app runs (iOS 26 and earlier, the A16 phone), is half the disk (310 MB vs 632 MB), needs
+no new runtime (same xcframework, same `ModelStore` fetch with a pinned SHA-256), and its vectors are within cosine 0.9991 (mean 0.99987) of
+route B's. Route B stays an option for iOS 27 devices; an index records its engine and rebuilds when the engine changes (the kit's
+`VectorStore` does).
+
+### 0.2 What had to be true of llama.cpp
+
+- **b12259 loads it.** The GGUF's architecture is `gemma-embedding2` and its tokenizer `gemma4`; b12259 (`351025ec5`, 2026-11-10) has
+  `LLM_ARCH_GEMMA_EMBEDDING2` in `src/llama-arch.cpp` and `src/models/gemma-embedding2.cpp`. The runtime does **not** have to move. Run
+  through the release `llama-b12259-xcframework.zip` (the macOS slice, the same URL and checksum as `mobile/AutoradioKit/Package.swift`),
+  not a source build, so the trial ran the exact binary the Mac command links.
+- The file's pooling is mean (`pooling_type 1`), `add_bos` and `add_eos` are true (llama.cpp's tokenizer adds both), the context is not causal.
+  The pooled vector is **not unit length**: raw norms are 259 to 1394 (measured over 479 vectors), so the caller normalises
+  (llama.cpp's own server does the same). After normalising the norm is 1.00000 (min 0.999999, max 1.000001). Route B's output norms are
+  0.9995 to 1.0005 (fp16).
+- Prompt strings are the card's own (section 3). They go in the text: `title: <headline> | text: <body>` for documents (the card's
+  titled form) and `task: search result | query: <question>` for questions.
+- Metal (GPU) is essential, the CPU is not usable for a backlog: see the numbers below.
+
+### 0.3 Numbers (`mobile/EmbedTrial`, corpus of 449 passages: 300 synthetic stories + 149 passages of Alice's Adventures in Wonderland)
+
+Corpus (all ours, no owner data): 300 invented news stories dated 2 to 15 November 2026, many on overlapping subjects (senate votes, bridge
+closures, a chip company), 24 of them the answers to 24 questions; and *Alice's Adventures in Wonderland* (Project Gutenberg #11, public
+domain, fetched from the PGLAF mirror `gutenberg.pglaf.org/cache/epub/11/pg11.txt`, because gutenberg.org itself answered "down for
+maintenance"), cut into 149 passages of about 150 words; 6 questions on it. 30 questions in all: 13 exact-name ones (BM25 should win) and 17
+paraphrases written to share no key words with the answer. 54,216 tokens in the corpus.
+
+| | A, GGUF Q8_0, Metal | A, GGUF Q8_0, CPU 4 threads | B, Core AI, Neural Engine |
+|---|---|---|---|
+| load, first in the process | 517 ms (an earlier run 8.6 s: cold file cache) | 699 ms | 7.6 s to 8.2 s **after** the cache existed (see note) |
+| load again in the same process | 253 to 288 ms | 439 ms | prewarm 1.4 s |
+| passages / second (449, one at a time) | 23.5 | 1.3 | 26.8 |
+| tokens / second | 2,835 | 160 | 3,237 |
+| per passage p50 / p95 | 25 ms / 95 ms | 408 ms / 1,800 ms | 25 ms / 67 ms |
+| one query (about 20 tokens), p50 / p95 | 22.3 ms / 27.4 ms | 251 ms / 267 ms | 15.0 ms / 15.1 ms |
+| process footprint after load / peak | 148 MB / 161 MB (peak resident 484 MB) | 278 MB / 369 MB (peak resident 646 MB) | 1,055 MB / 1,110 MB (peak resident 4.4 GB) |
+
+Notes. (1) The first Core AI run was stopped by us after 2 minutes 20 seconds, still inside its first load (the coordinator needed the
+build lock); the next run loaded in 8.2 s, so the one-time specialisation on this Mac took longer than 2 minutes and less than the
+roughly 5 minutes between the two runs, not measured more finely. The card says about 140 s. (2) "Cold" file cache was not forced (it
+needs `purge`, which needs root). (3) The 4.4 GB peak resident size is the Neural Engine's mapped model on this Mac; the footprint
+column is what the system charges the process. (4) Runs went one at a time through the Mac build lock; A's Metal numbers are one
+run each (a first run: 21.5 s, 20.9 passages/s, load 8.6 s). (5) A phone is not this Mac: the card puts the Neural Engine in
+the M5 at 5 ms a call; ours is 15 ms for a query.
+
+Smoke (same for both routes): dimension 768; a paraphrase pair scores 0.887 and an unrelated pair 0.679 (route A: 0.8872 / 0.6782 Metal, 0.8873 /
+0.6788 CPU; route B: 0.8873 / 0.6794).
+
+Routes against each other (same 479 texts: 449 passages and 30 questions): cosine min **0.99906**, mean **0.99987**, 5th percentile 0.99977; at
+256 d: min 0.99916, mean 0.99989. They are close; a store still must not mix engines.
+
+Vector store (`FlatStore`, flat float16 file read back with `mmap`, Accelerate `cblas_sgemv` over 4,096-row blocks converted to float32, top 50):
+
+| Vectors | dim | file | scan, f16 blocks p50 / p95 | scan, f32 in memory p50 |
+|---|---|---|---|---|
+| 330 | 768 | 495 KiB | 0.27 ms / 0.28 ms | 0.02 ms |
+| 50,000 (random, unit) | 768 | 75,000 KiB | **16.8 ms / 19.1 ms** | 10.2 ms |
+| 330 | 256 | 165 KiB | 0.07 ms | 0.02 ms |
+| 50,000 | 256 | 25,000 KiB | **4.9 ms / 5.0 ms** | 6.0 ms |
+
+A scan is not the cost of a question: a query takes 15 to 22 ms to embed, the scan at corpus size is far under a millisecond, and at
+50,000 vectors the scan is about as long as embedding the query. This Mac is not a phone: the page's trigger ("a scan on the A16
+above about 50 ms at p95") is **untested**; 768-d at 50k is 17 ms here.
+
+Quality, 30 questions, a hit is a right passage in the top 5 (for a book question, any passage holding the phrase), MRR counts the first right one:
+
+| Method | recall@5 all | MRR all | recall@5 exact (13) | recall@5 paraphrase (17) | MRR paraphrase |
+|---|---|---|---|---|---|
+| BM25 alone (`RetrievalIndex`, no floor, top 50) | 0.767 (23/30) | 0.591 | 1.000 | 0.588 (10/17) | 0.376 |
+| vectors, route A, 768 d | **1.000 (30/30)** | **0.957** | 1.000 | **1.000** | 0.953 |
+| vectors, route A, 256 d | 1.000 | 0.901 | 1.000 | 1.000 | 0.855 |
+| vectors, route B, 768 d | 0.967 (29/30) | 0.956 | 1.000 | 0.941 | 0.951 |
+| vectors, route B, 256 d | 1.000 | 0.901 | 1.000 | 1.000 | 0.855 |
+| BM25 + vectors A 768, RRF k = 60, top 50 each | 0.933 (28/30) | 0.810 | 1.000 | 0.882 | 0.693 |
+| BM25 + vectors A 256, RRF k = 60 | 0.933 | 0.785 | 1.000 | 0.882 | 0.651 |
+| BM25 + vectors B 768, RRF k = 60 | 0.933 | 0.810 | 1.000 | 0.882 | 0.693 |
+
+What this says, and what it does not:
+
+- **Vectors beat BM25 on paraphrase** (recall@5 1.00 against 0.59; BM25 ranked the right story 44th, 25th, 19th and 18th on several, and
+  did not list two at all) and **tie it on exact names** (both 13/13). Exact-name questions did not need BM25.
+- **RRF with k = 60 did worse than vectors alone** here (0.933 against 1.000; MRR 0.81 against 0.96): BM25's weaker list pulls a wrong
+  story over the right one where BM25 ranks the right one low and a wrong one high. The page's recipe (section 9) is **not** supported on
+  this corpus; the cheap alternatives (vector first, BM25 only as a tiebreak or for a name that the vectors miss; or weight the vector
+  list) were **not measured**. Do not weaken the finding: 30 questions and one author; the sets overlap by design.
+- Truncating to 256 d keeps recall@5 and costs about 0.05 MRR (0.957 to 0.901).
+- The questions and stories are ours and were written by one author with the model's behaviour in mind only loosely; this is a smoke-level
+  measure, not a benchmark. The weakest question for every vector route was the Alice question about growing too tall for the house
+  (rank 5 for A, 6 for B, where BM25 had 2).
+- Route B's one miss (29/30) is that same question at rank 6; route A has it at rank 5. A sixth-place difference between two fp16/Q8 runs is noise.
+
+### 0.4 The phone (what the app now has, and what the lead runs)
+
+Built in this lane (class orange; not built for iOS by the builder, only the Mac targets compile here):
+
+- `AutoradioKit/Embedder.swift`: the `Embedder` protocol (`engine`, `dimension`, `embed(prompts)`), `EmbedPrompt` (the card's strings),
+  `VectorStore` (flat float16 file + `rows.json` of ids and content keys, atomic save, drops rows the vector file lacks, starts empty when
+  the engine or dimension changes, Accelerate scan), `RankFusion.rrf` and `EmbeddingJob`. Tests: `EmbedderTests` (prompts, truncation,
+  incremental embedding by content key, reopen, engine change, cancel and resume, speech wins, a missing model, fusion).
+- `AutoradioModels/LlamaEmbedder.swift`: route A, one context on the shared `LlamaWeights`, fetched through `ModelStore.shared.ensure`
+  into Application Support (spec `KnownModels.embeddingGemma2`, SHA-256 pinned, in the registry beside the Qwen files: the registered
+  count is now one more; the log line is `autoradio models: registered N models, M stages`). Nothing is in the bundle; `check-no-weights.sh`
+  now also refuses `*.aimodel`, `*.aimodelc` and `*.mlirb`.
+- `EmbeddingJob` embeds only what is new or changed (content key), 4 passages per slice by default, saves after every slice (a kill loses
+  one slice), waits and looks again while `busy()` is true (the app passes "a voice line is on or the listener is speaking": the
+  `LiveAudio.voiceIsSpeaking` flag is the source) and rests 150 ms between slices. **Not yet wired into the app**: nothing calls it when
+  the stores change (the phone-retrieval lane's `RetrievalIndex` is where that hook belongs). It never starts after a crash by itself.
+- `AutoradioModels/EmbedDeviceTrial.swift`, **the device trial**. Launch the app once with `-EmbedTrial 1` (the same way as
+  `-ModelProofStages`, e.g. `devicectl device process launch ... --arguments "-EmbedTrial 1"`). With the flag absent it does nothing. It
+  downloads the 310 MB file when needed (Wi-Fi), loads it, embeds the 24 fixture stories, asks the 24 questions, scans 50,000 random vectors,
+  runs the job and stops and resumes it, and writes `Documents/proof/embed-trial.json` plus `autoradio embed-trial:` lines on stderr. The
+  file holds: device and OS, thermal state before and after, low power mode, model download seconds, load ms first and again, memory
+  available (`os_proc_available_memory`) before, after load and after the batch, footprint and peak, dimension and raw norms, the smoke
+  cosines and PASS, passages per second and tokens per second, query p50 and p95, recall@5 and MRR for BM25, vectors 768, vectors 256 and
+  fused, the 50k scan at 768 and 256 d, the job's stop-and-resume line, and for route B whether the OS has `CoreAI.framework` (route B is
+  not built into the app). Pull it with `devicectl device copy from` as for `results.json`.
+
+### 0.5 Commands
+
+```
+cd mobile/EmbedTrial && python3 -I corpus/make_corpus.py        # corpus and the device fixture (deterministic)
+swift build -c release                                          # through the Mac build lock; resolves the llama release xcframework
+.build/release/embed-trial bench --route a [--gpu 0|1] [--tag NAME] [--limit N]
+.build/release/embed-trial bench --route b --compute ane
+.build/release/embed-trial quality a-gpu b-ane ; compare a-gpu b-ane ; scan
+```
+Weights: `ggml-org/embeddinggemma-2-GGUF` `embeddinggemma-2-Q8_0.gguf`; `EverPaper/embeddinggemma-2-coreai` text asset, tokenizer, config and
+Swift sources (the Swift sources are vendored unmodified in `mobile/EmbedTrial/Sources/EmbeddingGemma2CoreAI/`, Apache-2.0).
 
 ## 1. What the model is
 
@@ -181,10 +326,10 @@ iPhone.**
   `AtomicChat/embeddinggemma-2-GGUF`, ONNX, litert-lm, an MLX int8 text
   port. S9.
 - We already link llama.cpp b12259 and have a pinned-GGUF fetch path (Qwen3
-  GGUFs). Whether b12259 runs this architecture, whether the GGUF pools and
-  normalises as upstream, and the prompt handling are **unknown**: the card
-  says only "run with llama serve". Test before trusting: load, embed the
-  card's own smoke strings, compare cosine with the Core AI vectors.
+  GGUFs). **Tested 2026-11-17 on the Mac (section 0):** b12259 runs this
+  architecture, the file mean-pools but does not normalise (we do), the card's
+  prompt strings work, and its vectors are within cosine 0.9991 of the Core AI
+  vectors (mean 0.99987). Phone: unknown until the device trial.
 - Q8_0 is 310 MB against 632 MB fp16: half the disk. Quality loss from
   Q8_0 is unmeasured by us (the upstream card gives no quantised figures, S2).
 - Note a vector from the GGUF and a vector from Core AI are not guaranteed to
@@ -359,7 +504,7 @@ id and content hash so a kill never loses work.
 
 iPhone support of the package; A16 behaviour of Core AI; specialisation time
 and memory on the phone; the "22 models, 34 stages" registry count; text
-energy; whether llama.cpp b12259 runs the GGUF; sqlite-vec on iOS system
+energy; whether llama.cpp b12259 runs the GGUF (**settled**: it does, section 0.2); sqlite-vec on iOS system
 SQLite; IVF/DiskANN status; the licence relation above.
 
 ## Sources (all fetched 2026-11-17 unless noted)
