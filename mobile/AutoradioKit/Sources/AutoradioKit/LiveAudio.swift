@@ -720,7 +720,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         if let made = await synthesize(text, with: cfg, why: &failure) { setFailure(nil); return made }
         if Task.isCancelled { return nil }
         // The chosen voice made nothing: the system voice speaks instead, and the listener is told why.
-        if want != VoiceCatalog.fallbackStageID {
+        if VoiceCatalog.neuralStageIDs.contains(want) {   // a chosen on-device voice; any other id that cannot be made is an error, not a guess
             log.emit(.note("voice: \(want) made no sound (\(failure)); the system voice speaks"))
             var system = cfg
             system.set(.voice, StageSetting(id: VoiceCatalog.fallbackStageID))

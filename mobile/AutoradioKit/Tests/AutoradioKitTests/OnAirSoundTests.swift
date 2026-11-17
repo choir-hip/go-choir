@@ -3,7 +3,7 @@ import XCTest
 
 /// A voice that answers but makes no sound (the failure the listener hears as silence).
 final class MuteVoice: Voice, @unchecked Sendable {
-    static let stageID = "mute-voice"
+    static let stageID = "phonon"
     static var descriptor: StageDescriptor { StageDescriptor(displayName: "mute voice") }
     init(_ p: StageParams) {}
     func speak(_ text: AsyncStream<String>) -> AsyncThrowingStream<AudioFrame, Error> {
@@ -45,7 +45,7 @@ final class OnAirSoundTests: XCTestCase {
 
     /// A voice that makes no sound falls back to the system voice, so the listener still hears the words.
     func testAVoiceThatMakesNoSoundFallsBackToTheSystemVoice() async {
-        let p = player(voice: "mute-voice")
+        let p = player(voice: "phonon")
         p.begin(at: 0)
         let got = await poll { p.audio.programmeSamplesHanded > 0 }
         XCTAssertTrue(got, "the system voice should have spoken")
@@ -57,7 +57,7 @@ final class OnAirSoundTests: XCTestCase {
         r.register(.voice, MuteVoice.self) { MuteVoice($0) }
         r.register(.voice, MuteVoiceTwo.self) { MuteVoiceTwo($0) }
         var cfg = StageRegistry.defaultConfiguration()
-        cfg.set(.voice, .init(id: "mute-voice"))
+        cfg.set(.voice, .init(id: "phonon"))
         let p = ProgrammePlayer(audio: virtualAudio(), registry: r, log: EventLog(clock: LabClock()), configuration: cfg,
                                 document: ProgrammeDocument(id: "rs:y", title: "T", blocks: [.speech(text: "Hello there.")]))
         let t = await p.synthesize("Hello there.")
