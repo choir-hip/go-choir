@@ -217,7 +217,7 @@ owner_rulings:
 
 now:
   status: working
-  slice: "the phone candidate with every finished lane but full-band listening is installed and waits for the owner's ear; two server landings are deployed"
+  slice: "the owner found the first candidate failing on the phone (podcasts broke the audio session, no restart after background, wrong context for the desk); the repaired candidate fbf7e84f8 is installed and not yet checked on the device; three server landings are deployed"
   source_ref: "origin/main at the commit that carries this edit; phone and Mac candidate origin/lane/autoradio-integ4 bfa5674f0"
   deploy_identity: "staging 0316d7cfc when last read (24cd67412 is worker-only code and docs)"
   candidate:
@@ -248,7 +248,7 @@ now:
     main_uncertainty: "whether the installed build makes sound on the device, and whether EmbeddingGemma 2 loads on the A16 phone by the GGUF route"
     next_observation: "the owner launches the phone build; then the lead launches it with -EmbedTrial 1 and reads Documents/proof/embed-trial.json"
   blocker_or_risk: "the installed build is unheard; a launch speaks at once, so the lead did not launch it at night; rollback is lane/autoradio-integ 5a7813642"
-  next_action: "owner QA of the phone and Mac builds; the phone embedding trial; wire EmbeddingJob to the stores; the full-band listening trial (D2); Mac build of integ4 and its proof"
+  next_action: "device check of fbf7e84f8 with the console attached (play, background, return; ledger C118), which needs the phone unlocked; then review and land the mobile lanes; the phone embedding model download and first vector query; the full-band listening trial (D2); the day-state page tour"
 
 receipts:
   - "S3 the latest Exact on both platforms: pin de212e671 (mobile/exact.pin); simulator, device and Mac builds exit 0 at lane/mac-app e685d4a45 and later; builds refuse a wrong Exact (dbb466e69)"
