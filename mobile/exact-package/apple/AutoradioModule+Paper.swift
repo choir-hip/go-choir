@@ -16,8 +16,6 @@ extension AutoradioModule {
         let frontFile = support.appendingPathComponent("paper-front.json")
         SavedCorpus.shared.setSource("paper-front") { RetrievalSources.paperFront(file: frontFile) }
         SavedCorpus.shared.setSource("edition-topics") { RetrievalSources.editionTopics(EditionSetupSession.load(topicsFile)?.topics ?? []) }
-        SavedCorpus.shared.setSource("story-bodies") { StoryBodies.shared.documents() }          // bodies fetched in the background after each front load
-        StoryBodies.shared.audioBusy = { await MainActor.run { RunSheetPlayer.shared.isRemote } }
         let engine = LayoutEngine()
         handle("paperFront") { [weak self] args, reply in
             let asked = args["view"] as? String ?? ""
@@ -41,9 +39,7 @@ extension AutoradioModule {
                         if c.status == "ready" { inCategory = c.stories }
                     }
                 }
-                if r.status == "ready", !Demo.isOn {       // the edition's and the front's stories: bodies fetched one by one, newest first, within StoryBodies' caps
-                    Task { await StoryBodies.shared.sweep(r.stories.map { StoryBodies.Story(route: $0.route, title: $0.title, date: $0.updated) }) }
-                }
+                if r.status == "ready" { ContentSync.kick() }       // the front's and the edition's stories: bodies into the phone's own store
                 let picks = view == PaperViews.mine ? (EditionSetupSession.load(topicsFile)?.topics ?? []) : []
                 // A demo edition is dated by its own newest story; a live one by the clock.
                 let front = PaperComposer.front(stories: r.stories, view: view, picks: picks, categoryStories: inCategory, live: r.sections, width: width,

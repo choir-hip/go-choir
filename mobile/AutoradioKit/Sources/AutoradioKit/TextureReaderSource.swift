@@ -91,6 +91,9 @@ public final class ReaderStore: @unchecked Sendable {
         }
     }
 
+    /// A page held on this phone (the ContentStore), shown when the network cannot be reached. Set by the app.
+    public var offline: (@Sendable (String) -> ReaderDoc?)?
+
     func load(_ address: String) async -> ReaderDoc {
         do {
             let d: ReaderDoc
@@ -102,7 +105,7 @@ public final class ReaderStore: @unchecked Sendable {
         } catch ChoirError.notSignedIn {
             return .failed(address, "Sign in to open your documents.")
         } catch {
-            return cached(address) ?? .failed(address, "Could not open this page. \(Self.describe(error))")
+            return cached(address) ?? offline?(address) ?? .failed(address, "Could not open this page. \(Self.describe(error))")
         }
     }
 

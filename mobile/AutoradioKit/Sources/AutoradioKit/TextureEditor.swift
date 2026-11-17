@@ -147,8 +147,8 @@ public struct TextureEditInfo: Codable, Sendable, Equatable {
             pending[doc] = nil; savePending()
             ReaderStore.shared.invalidate("texture:" + doc)
             let heading = draft.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "# ").union(.whitespaces)) }.first { !$0.isEmpty } ?? "Document"
-            SavedCorpus.shared.hold(group: "texture", adding: SavedCorpus.Document(id: "texturedoc:" + doc, title: String(heading.prefix(120)), address: "texture:" + doc, text: draft,
-                                                                                kind: "document", source: "Texture", date: Date()))      // a saved document is searchable at once
+            ContentStore.shared.put(StoredItem(id: "texture:" + doc, kind: .document, title: String(heading.prefix(120)), text: draft, date: Date(), address: "texture:" + doc,
+                                               source: "Texture", version: "saved-\(r.version)", pinned: true, syncedAt: Date()))      // what the owner wrote is kept and searchable at once
             s.info.status = "saved"; s.info.label = r.version > 0 ? "Saved · version \(r.version)" : "Saved"
         } catch {
             pending[doc] = draft; savePending()

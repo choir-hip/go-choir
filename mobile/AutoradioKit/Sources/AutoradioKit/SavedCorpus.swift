@@ -67,6 +67,18 @@ public final class SavedCorpus: @unchecked Sendable {
         }
     }
 
+    /// A source that reports changes instead of its whole content (the ContentStore: far too big to rebuild before every question).
+    private var deltas: [String: @Sendable () -> (up: [Document], removed: [String])] = [:]
+    public func setDeltaSource(_ name: String, _ drain: @escaping @Sendable () -> (up: [Document], removed: [String])) {
+        lock.lock(); deltas[name] = drain; lock.unlock()
+    }
+    /// Sign-out: nothing of the account stays in the index, the held groups, or what the last answer pointed at.
+    public func reset() {
+        lock.lock(); held = [:]; heldOrder = []; known = []; onAirHint = ""; lock.unlock()
+        retrieval.removeAll(except: [])
+        RetrievedRefs.shared.clear(); RetrievalLog.shared.clear()
+    }
+
     /// Name a source of documents. Replaces the source of that name.
     public func setSource(_ name: String, _ provider: @escaping @Sendable () -> [Document]) {
         lock.lock(); sources[name] = provider; lock.unlock()
@@ -83,6 +95,12 @@ public final class SavedCorpus: @unchecked Sendable {
             }
         }
         retrieval.upsertAll(docs)
+        lock.lock(); let drains = Array(deltas.values); lock.unlock()
+        for drain in drains {
+            let d = drain()
+            retrieval.upsertAll(d.up.map(\.retrieval))
+            for id in d.removed { retrieval.remove("store:" + id) }
+        }
         lock.lock()
         let gone = known.subtracting(seen).filter { !$0.hasPrefix("page:") }
         known = known.filter { $0.hasPrefix("page:") }.union(seen)

@@ -398,6 +398,10 @@ public final class MailService: @unchecked Sendable {
     public static let folders: [(name: String, label: String)] = [("inbox", "Inbox"), ("drafts", "Drafts"), ("sent", "Sent"), ("quarantine", "Quarantine")]
     public static let demoStates: Set<String> = ["demo-empty", "demo-loading", "demo-offline", "demo-error"]
 
+    /// Mail held on this phone (the ContentStore), used when the network cannot be reached. Set by the app.
+    public var offlineRows: (@Sendable (String) -> [MailSummary])?
+    public var offlineDetail: (@Sendable (String) -> MailDetail?)?
+    public var offlineNote: (@Sendable () -> String)?
     private let lock = NSLock()
     private var cache: [String: (rows: [MailSummary], total: Int, unread: Int)] = [:]
     private var drafts: [MailDraftInfo] = []
@@ -457,7 +461,9 @@ public final class MailService: @unchecked Sendable {
                 let o = try await client().send("GET", "/api/email/messages", query: ["folder": v.folder], route: "/api/email/messages").object()
                 let l = MailParse.list(o)
                 store(v.folder, l)
-                SavedCorpus.shared.hold(group: "mail:" + v.folder, RetrievalSources.mail(l.rows))      // searchable by the on-device model; not persisted
+                for row in l.rows where !row.id.isEmpty && !ContentStore.shared.has("mail:" + row.id) {          // a row seen is kept at once; its body follows from the sync
+                    ContentStore.shared.put(ContentStore.mailItem(row, text: "", folder: v.folder, syncedAt: Date()))
+                }
                 v.rows = MailThreads.rows(l.rows, now: now); v.total = l.total; v.unread = l.unread
                 if v.folder == "inbox" { for i in v.folders.indices where v.folders[i].name == "inbox" { v.folders[i].badge = l.unread > 0 ? "\(l.unread)" : "" } }
             }
@@ -469,6 +475,9 @@ public final class MailService: @unchecked Sendable {
             v.status = w.status; v.message = w.message
             if let c = cached(v.folder) {   // failure 3: keep the last good rows under the banner
                 v.rows = MailThreads.rows(c.rows, now: now); v.total = c.total; v.unread = c.unread; v.cached = true
+            } else if let off = offlineRows?(v.folder), !off.isEmpty {       // never opened this session: the phone still holds the mail
+                v.rows = MailThreads.rows(off, now: now); v.total = off.count; v.cached = true
+                v.message = "Offline. Showing mail saved on this phone" + (offlineNote.map { ", " + $0() } ?? "") + "."
             }
         }
         return v
@@ -512,10 +521,15 @@ public final class MailService: @unchecked Sendable {
         guard !rest.isEmpty, rest != "new", !rest.hasPrefix("reply/"), !rest.hasPrefix("draft/") else { v.status = "idle"; return v }
         v.id = rest; v.address = address
         do {
-            let o = try await client().send("GET", "/api/email/messages/" + PathSegment.encode(rest),
-                                            route: "/api/email/messages/{id}").object()
-            let d = MailParse.detail(o)
-            SavedCorpus.shared.hold(group: "mail-open", adding: RetrievalSources.mailMessage(d), cap: 100)
+            let d: MailDetail
+            do {
+                d = MailParse.detail(try await client().send("GET", "/api/email/messages/" + PathSegment.encode(rest), route: "/api/email/messages/{id}").object())
+                ContentStore.shared.put(ContentStore.mailItem(d.summary, text: d.text, folder: ContentStore.shared.get("mail:" + rest)?.meta["folder"] ?? "inbox", syncedAt: Date(), to: d.to))
+            } catch is CancellationError { throw CancellationError() }
+            catch {
+                guard let off = offlineDetail?(rest) else { throw error }          // no network: the message the phone holds
+                d = off; v.message = "Offline. Showing mail saved on this phone" + (offlineNote.map { ", " + $0() } ?? "") + "."
+            }
             if cached("inbox") == nil { if let l = try? await client().send("GET", "/api/email/messages", query: ["folder": "inbox"], route: "/api/email/messages").object() { store("inbox", MailParse.list(l)) } }
             let s = d.summary
             v.subject = s.subject.isEmpty ? "(no subject)" : s.subject

@@ -10,6 +10,15 @@ import Foundation
 extension AutoradioModule {
     func registerMail() {
         let service = MailService()
+        // No network: the mail the phone holds (ContentStore) is shown, with when it was last synced.
+        service.offlineRows = { ContentStore.shared.mailSummaries(folder: $0) }
+        service.offlineDetail = { id in
+            guard let it = ContentStore.shared.get("mail:" + id), it.version == "body" else { return nil }
+            var d = MailDetail(); d.summary = ContentStore.summary(it); d.text = it.text
+            d.to = (it.meta["to"] ?? "").components(separatedBy: ", ").filter { !$0.isEmpty }
+            return d
+        }
+        service.offlineNote = { ContentStore.shared.syncedWords(.mail) ?? "never synced" }
         pageSources.register(MailPageSource(service: service))
 
         handle("mailBox") { [weak self] args, reply in

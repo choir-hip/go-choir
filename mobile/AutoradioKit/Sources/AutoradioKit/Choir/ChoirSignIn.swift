@@ -131,6 +131,9 @@ public final class ChoirSignIn: @unchecked Sendable {
         }
         env.keys.delete(KeyAccount.apiKey); env.keys.delete(KeyAccount.keyID); env.keys.delete(KeyAccount.computerID)
         env.log?.emit(.note("choir: \(note)"))
+        onSignOut?()           // the content store, the index and the answers kept for "play that" go with the account
         update { $0.status = "idle"; $0.userCode = ""; $0.verificationURL = ""; $0.message = note }
     }
+    /// Set by the app: wipes what belongs to the account (ContentStore.wipe, SavedCorpus.reset).
+    public var onSignOut: (@Sendable () -> Void)?
 }
