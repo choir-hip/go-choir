@@ -103,6 +103,7 @@ public final class AutoradioModule: ExactPackage {
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
         pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
+        SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         themes = ThemeStore(userDir: support.appendingPathComponent("themes"), systemScheme: { Self.systemScheme() })
         pageSources.register(NotYetPageSource())

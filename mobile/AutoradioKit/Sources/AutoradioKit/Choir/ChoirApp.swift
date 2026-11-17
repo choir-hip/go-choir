@@ -233,6 +233,7 @@ public final class ChoirApp: @unchecked Sendable {
             // The headlines and deks the phone now holds are part of what it can answer from first.
             for s in list { StoryDates.shared.note("pub:" + s.route, PaperStory.date(s.updated)) }
             SavedCorpus.shared.setSource("front") { list.filter { !$0.dek.isEmpty }.map { SavedCorpus.Document(id: "front:" + $0.route, title: $0.title, address: "pub:" + $0.route, text: $0.dek, kind: "story", source: "Autopaper", date: PaperStory.date($0.updated)) } }
+            Task { await StoryBodies.shared.sweep(list.map { StoryBodies.Story(route: $0.route, title: $0.title, date: PaperStory.date($0.updated)) }) }   // the bodies, in the background
             ClipStore.shared.markStale()                          // the front is fresh: the next write asks for the clips again, once
             if list.isEmpty { say("The front page is empty right now.") }
         } catch { say(Self.plain(stage: "programme", message: "\(error)")) }

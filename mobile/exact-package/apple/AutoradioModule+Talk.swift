@@ -34,7 +34,24 @@ extension AutoradioModule {
         }
         hooks.snapshot = { await MainActor.run { RunSheetPlayer.shared.turnQueueJSON() } }       // the wire's `queue`
         hooks.applyServerOps = { json in _ = await MainActor.run { RunSheetPlayer.shared.applyTurnOps(json) } }  // dedupe by turn, decoding, rebase: the sheet's
+        // "Play that", "open the second one": the items the last answer retrieved (Kit/RetrievedCommand.swift).
+        hooks.actOnRetrieved = { [weak self] action, item in
+            guard let self else { return false }
+            switch action {
+            case .open:
+                await MainActor.run { _ = self.pages.open(item.address, title: item.title) }
+                return true
+            case .play, .queue:
+                guard let entry = RetrievedCommand.entry(for: item) else {
+                    if action == .play { await MainActor.run { _ = self.pages.open(item.address, title: item.title) }; return true }     // it cannot play: it opens
+                    return false
+                }
+                await MainActor.run { if action == .play { RunSheetPlayer.shared.playNow(entry) } else { RunSheetPlayer.shared.queue(entry) } }
+                return true
+            }
+        }
         QueueVoice.hooks = hooks
+        SavedCorpus.shared.installRunSheet()
 
         // The reader's voice (lane autoradio-talk): the Core ML model is fetched quietly (about 8 MB) and, once loaded, the gate listens.
         // Learned from what the reader says to the radio; stored on this phone only (SpeakerStore); never uploaded.

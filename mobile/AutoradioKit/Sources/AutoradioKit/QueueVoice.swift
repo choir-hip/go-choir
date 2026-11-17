@@ -86,6 +86,8 @@ public enum QueueVoice {
         public var candidates: (@Sendable () -> [(route: String, title: String)])?
         /// The `queue_ops` event's JSON, as the server sent it, for `PlayQueue.shared.apply(serverOpsJSON:)`.
         public var applyServerOps: (@Sendable (Data) async -> Void)?
+        /// Plays, opens or queues an item the last answer retrieved ("play that", "open the second one"). False: it could not.
+        public var actOnRetrieved: (@Sendable (RetrievedAction, RetrievalItem) async -> Bool)?
         public init() {}
     }
     private static let box = Locked<Hooks>(Hooks())

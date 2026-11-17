@@ -1,7 +1,7 @@
 import Foundation
 
 // The Reader's books as passages a question can be answered from (join: the talk lane's SavedCorpus and the reader lane's ReaderShelf).
-// Bounded: at most `maxPassages` (old index) passages, taken from the most recently added documents first. The retrieval index gets every
+// Bounded: at most `maxPassages` passages, taken from the most recently added documents first. The retrieval index gets every
 // chapter of those books as parts, so a handful of books are searched whole.
 // The reading of the books is cached until the library changes (the corpus asks for its sources before every search).
 
@@ -37,11 +37,10 @@ public final class LibraryCorpusSource: @unchecked Sendable {
                 cur.append(b.text); chars += b.text.count
             }
             close()
-            let passages = parts.reduce(0) { $0 + PassageIndex.split($1.text).count }
+            let passages = parts.reduce(0) { $0 + RetrievalText.passages($1.text).count }
             guard !parts.isEmpty else { continue }
             budget -= max(1, passages)
-            let flat = parts.map(\.text).joined(separator: "\n")
-            out.append(SavedCorpus.Document(id: "book:" + d.id, title: d.title, address: d.address, text: String(flat.prefix(PassageIndex.maxPassageChars * 3)),
+            out.append(SavedCorpus.Document(id: "book:" + d.id, title: d.title, address: d.address, text: "",
                                             kind: "book", source: "Reader", date: d.added, parts: parts))
         }
         lock.lock(); key = k; cached = out; lock.unlock()

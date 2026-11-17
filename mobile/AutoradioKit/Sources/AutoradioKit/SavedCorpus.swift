@@ -23,16 +23,40 @@ public final class SavedCorpus: @unchecked Sendable {
         var retrieval: RetrievalDoc { RetrievalDoc(id: id, kind: kind, title: title, text: text, date: date, source: source, address: address, parts: parts) }
     }
 
-    public let index = PassageIndex()
     /// The index the on-device model's context is retrieved from: every store, one BM25 index (Retrieval.swift).
     public let retrieval = RetrievalIndex()
     private let lock = NSLock()
     private var sources: [String: @Sendable () -> [Document]] = [:]
     private var known = Set<String>()
-    /// Set by the reader lane when `Library.passages(matching:limit:)` exists: (question, limit) -> passages.
-    public var library: (@Sendable (String, Int) async -> [PassageHit])?
+
+    // Documents other code hands over when it opens or loads something (Mail rows, a saved Texture document, a Files listing): kept per group
+    // (a group is replaced whole), at most `maxHeld` documents in all, oldest group entries out first. Not persisted (see Retrieval notes).
+    public static let maxHeld = 1500
+    private var held: [String: [Document]] = [:]
+    private var heldOrder: [String] = []
+    public func hold(group: String, _ docs: [Document]) {
+        lock.lock()
+        held[group] = docs; heldOrder.removeAll { $0 == group }; heldOrder.append(group)
+        while held.values.reduce(0, { $0 + $1.count }) > Self.maxHeld, let first = heldOrder.first, first != group { held[first] = nil; heldOrder.removeFirst() }
+        if let d = held[group], d.count > Self.maxHeld { held[group] = Array(d.prefix(Self.maxHeld)) }
+        lock.unlock()
+    }
+    /// Add one document to a group (a saved Texture document), replacing its earlier copy; the group keeps its newest `cap`.
+    public func hold(group: String, adding d: Document, cap: Int = 200) {
+        lock.lock(); var list = held[group] ?? []; lock.unlock()
+        list.removeAll { $0.id == d.id }; list.append(d)
+        hold(group: group, Array(list.suffix(cap)))
+    }
+    /// Work that must finish before a question reads the index (the run sheet lives on the main actor). Run by `prepare()`.
+    public var preparers: [@Sendable () async -> Void] = []
+    /// The title of what is on air, for "that" and "this" when no page is in front.
+    public var onAirHint = ""
+    public func prepare() async { for p in preparers { await p() } }
+    /// The retriever the model's context is built from: BM25 over `retrieval` today; a fused retriever can be set here.
+    public var retriever: (any Retriever)?
 
     public init(readerStore: ReaderStore? = .shared) {
+        setSource("held") { [unowned self] in lock.lock(); defer { lock.unlock() }; return held.values.flatMap { $0 } }
         if let store = readerStore {
             setSource("reader") {
                 store.readyDocuments().map { d in
@@ -55,7 +79,6 @@ public final class SavedCorpus: @unchecked Sendable {
         for provider in all {
             for d in provider() where !d.text.isEmpty || !d.title.isEmpty || !d.parts.isEmpty {
                 seen.insert(d.id)
-                index.add(docID: d.id, title: d.title, address: d.address, text: d.text)
                 docs.append(d.retrieval)
             }
         }
@@ -64,14 +87,13 @@ public final class SavedCorpus: @unchecked Sendable {
         let gone = known.subtracting(seen).filter { !$0.hasPrefix("page:") }
         known = known.filter { $0.hasPrefix("page:") }.union(seen)
         lock.unlock()
-        for id in gone { index.remove(docID: id); retrieval.remove(id) }
+        for id in gone { retrieval.remove(id) }
     }
 
     /// The page in front, with the text the phone has for it.
     public func offer(address: String, title: String, text: String) {
         guard !address.isEmpty, !text.isEmpty else { return }
         let id = "page:" + address
-        index.add(docID: id, title: title, address: address, text: text)
         retrieval.upsert(RetrievalDoc(id: id, kind: "page", title: title, text: text, date: Date(), source: "the page in front", address: address, key: "\(text.utf8.count)|\(text.hashValue)"))
         lock.lock(); known.insert(id); lock.unlock()
     }
@@ -79,16 +101,6 @@ public final class SavedCorpus: @unchecked Sendable {
     /// What the on-device model is shown for this question: every store searched with BM25, newest first, within the budget.
     public func retrieve(_ question: String, onAir: String = "", pageAddress: String = "", now: Date = Date()) -> RetrievalContext {
         refresh()
-        return retrieval.retrieve(.init(words: question, onAirTitle: onAir, pageID: pageAddress.isEmpty ? nil : "page:" + pageAddress, now: now))
-    }
-
-    public func search(_ question: String, pageAddress: String = "", limit: Int = 4) async -> [PassageHit] {
-        refresh()
-        var hits = index.search(question, limit: limit, prefer: pageAddress.isEmpty ? nil : "page:" + pageAddress)
-        if let lib = library { hits += await lib(question, limit); hits.sort { $0.score > $1.score }; hits = Array(hits.prefix(limit)) }
-        // The page and its cached copy are one story: keep the better passage once.
-        var seen = Set<String>(), out: [PassageHit] = []
-        for h in hits where seen.insert(String(h.passage.text.prefix(80))).inserted { out.append(h) }
-        return out
+        return (retriever ?? retrieval).retrieve(.init(words: question, onAirTitle: onAir, pageID: pageAddress.isEmpty ? nil : "page:" + pageAddress, now: now))
     }
 }

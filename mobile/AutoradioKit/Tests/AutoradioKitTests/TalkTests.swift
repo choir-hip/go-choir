@@ -12,57 +12,50 @@ import XCTest
 //  engine:       no network (the desk throws) -> a plain line is spoken and kept with a retry; the server answer never arrives -> Cancel
 //                leaves a cancelled entry, not a failure; two questions in quick succession -> the first is cancelled, the second answered.
 
-final class PassageIndexTests: XCTestCase {
-    func makeIndex() -> PassageIndex {
-        let i = PassageIndex()
-        i.add(docID: "a", title: "Harbor strike ends after nine days", address: "pub:a",
-              text: "Dock workers at the harbor voted on Tuesday to end a nine day strike over pay and shift lengths.\nThe union said talks with the port authority resume Monday.")
-        i.add(docID: "b", title: "Central bank holds interest rates", address: "pub:b",
-              text: "The central bank left interest rates unchanged on Wednesday, citing steady inflation and a cooling labour market.")
+final class RetrievalIndexPortedTests: XCTestCase {      // the old PassageIndexTests, on the one index
+    func makeIndex() -> RetrievalIndex {
+        let i = RetrievalIndex()
+        i.upsert(RetrievalDoc(id: "a", kind: "story", title: "Harbor strike ends after nine days",
+              text: "Dock workers at the harbor voted on Tuesday to end a nine day strike over pay and shift lengths.\nThe union said talks with the port authority resume Monday.", address: "pub:a"))
+        i.upsert(RetrievalDoc(id: "b", kind: "story", title: "Central bank holds interest rates",
+              text: "The central bank left interest rates unchanged on Wednesday, citing steady inflation and a cooling labour market.", address: "pub:b"))
         return i
     }
-    func testFindsTheRightStory() {
-        let h = makeIndex().search("what happened with the harbor strike")
-        XCTAssertEqual(h.first?.passage.docID, "a")
-    }
-    func testPluralAndSingularMatch() {
-        XCTAssertEqual(makeIndex().search("what did the bank do about interest rate").first?.passage.docID, "b")
-    }
+    func search(_ i: RetrievalIndex, _ q: String, page: String? = nil) -> [RetrievalItem] { i.retrieve(.init(words: q, pageID: page), record: false).items }
+    func testFindsTheRightStory() { XCTAssertEqual(search(makeIndex(), "what happened with the harbor strike").first?.id, "a") }
+    func testPluralAndSingularMatch() { XCTAssertEqual(search(makeIndex(), "what did the bank do about interest rate").first?.id, "b") }
     func testAQuestionTheCorpusCannotAnswerReturnsNothing() {
-        XCTAssertTrue(makeIndex().search("what is the weather on Mars today").isEmpty)
-        XCTAssertTrue(makeIndex().search("who won the football match").isEmpty)
+        XCTAssertTrue(search(makeIndex(), "what is the weather on Mars today").isEmpty)
+        XCTAssertTrue(search(makeIndex(), "who won the football match").isEmpty)
     }
-    func testOneSharedCommonWordIsNotRelevance() {
-        // "strike" alone matches one of three terms: below the coverage floor.
-        XCTAssertTrue(makeIndex().search("lightning strike survivors in Peru").isEmpty)
-    }
+    func testOneSharedCommonWordIsNotRelevance() { XCTAssertTrue(search(makeIndex(), "lightning strike survivors in Peru").isEmpty) }
     func testStopWordsOnlyAndEmpty() {
-        XCTAssertTrue(makeIndex().search("what about it").isEmpty)
-        XCTAssertTrue(makeIndex().search("").isEmpty)
-        XCTAssertTrue(PassageIndex().search("harbor strike").isEmpty)
+        XCTAssertTrue(search(makeIndex(), "what about it").isEmpty)
+        XCTAssertTrue(search(makeIndex(), "").isEmpty)
+        XCTAssertTrue(search(RetrievalIndex(), "harbor strike").isEmpty)
     }
     func testIndexingADocumentAgainReplacesIt() {
-        let i = makeIndex(); let n = i.passageCount
-        i.add(docID: "a", title: "Harbor strike ends after nine days", address: "pub:a", text: "Dock workers ended the harbor strike on Tuesday after nine days of talks and pay.")
-        XCTAssertLessThanOrEqual(i.passageCount, n)
-        XCTAssertEqual(i.search("harbor strike").filter { $0.passage.docID == "a" }.count, 1)
+        let i = makeIndex(); let n = i.count
+        i.upsert(RetrievalDoc(id: "a", kind: "story", title: "Harbor strike ends after nine days", text: "Dock workers ended the harbor strike on Tuesday after nine days of talks and pay.", address: "pub:a"))
+        XCTAssertLessThanOrEqual(i.count, n)
+        XCTAssertEqual(search(i, "harbor strike").filter { $0.id == "a" }.count, 1)
     }
     func testAHugeLineIsCutIntoBoundedPassages() {
         let line = (0..<400).map { "word\($0) harbor" }.joined(separator: " ")
-        let parts = PassageIndex.split(line)
+        let parts = RetrievalText.passages(line)
         XCTAssertGreaterThan(parts.count, 1)
-        XCTAssertTrue(parts.allSatisfy { $0.count <= PassageIndex.maxPassageChars + 20 })
+        XCTAssertTrue(parts.allSatisfy { $0.count <= 2000 })
     }
     func testNonASCIITextIsIndexed() {
-        let i = PassageIndex()
-        i.add(docID: "c", title: "Café reopens", address: "pub:c", text: "The café on rue Saint-Honoré reopens after the renovation, with a new espresso menu.")
-        XCTAssertEqual(i.search("café renovation reopens").first?.passage.docID, "c")
+        let i = RetrievalIndex()
+        i.upsert(RetrievalDoc(id: "c", kind: "story", title: "Café reopens", text: "The café on rue Saint-Honoré reopens after the renovation, with a new espresso menu.", address: "pub:c"))
+        XCTAssertEqual(search(i, "café renovation reopens").first?.id, "c")
     }
     func testThePageInFrontIsPreferred() {
-        let i = PassageIndex()
-        i.add(docID: "x", title: "Rates", address: "pub:x", text: "Interest rates stayed unchanged at the central bank this week.")
-        i.add(docID: "page:y", title: "Rates", address: "pub:y", text: "Interest rates stayed unchanged at the central bank this week.")
-        XCTAssertEqual(i.search("central bank interest rates", prefer: "page:y").first?.passage.docID, "page:y")
+        let i = RetrievalIndex()
+        i.upsert(RetrievalDoc(id: "x", kind: "story", title: "Rates", text: "Interest rates stayed unchanged at the central bank this week.", address: "pub:x"))
+        i.upsert(RetrievalDoc(id: "page:y", kind: "page", title: "Rates", text: "Interest rates stayed unchanged at the central bank this week.", address: "pub:y"))
+        XCTAssertEqual(search(i, "central bank interest rates", page: "page:y").first?.id, "page:y")
     }
 }
 
@@ -164,7 +157,7 @@ final class SavedAnswerTests: XCTestCase {
         let h = holder(m, corpus())
         let lines = await collect(h.lines(for: HolderInput(listenerWords: "what is the weather on Mars today", answers: [])))
         XCTAssertEqual(lines.count, 1)
-        XCTAssertTrue(lines[0].hasPrefix("Let me look that up"), lines[0])
+        XCTAssertEqual(lines[0], "I have nothing on that in the paper.", "it names what it searched")
         XCTAssertTrue(m.asked.isEmpty, "the small model must not answer from its own knowledge")
         XCTAssertFalse(h.keepsSpeakingForDesk, "a holding line is cut by the desk's answer")
     }

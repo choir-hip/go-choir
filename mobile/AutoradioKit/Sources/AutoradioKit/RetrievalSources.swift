@@ -59,11 +59,54 @@ public enum RetrievalSources {
         return out
     }
 
-    /// The run sheet's entries that carry words (a story read, an answer, a transition), with the address they play from.
-    public static func runSheet(_ sheet: RunSheet) -> [SavedCorpus.Document] {
-        sheet.entries.compactMap { e in
-            guard let t = e.text, !t.isEmpty || !e.title.isEmpty else { return nil }
-            return SavedCorpus.Document(id: "runsheet:" + e.id, title: e.title, address: e.source?.ref ?? ("runsheet:" + e.id), text: t, kind: "runsheet", source: "Run sheet", date: nil)
+    /// The run sheet's entries on air and ahead (what "that" and "this" point at), with the address they play from. Heard and skipped entries are history.
+    public static func runSheet(_ sheet: RunSheet) -> (docs: [SavedCorpus.Document], onAirTitle: String) {
+        var onAir = ""
+        let docs: [SavedCorpus.Document] = sheet.entries.compactMap { e in
+            guard e.state == .onAir || e.state == .ahead, !e.title.isEmpty || !(e.text ?? "").isEmpty else { return nil }
+            let air = e.state == .onAir
+            if air, onAir.isEmpty { onAir = e.title }
+            return SavedCorpus.Document(id: "runsheet:" + e.id, title: e.title, address: e.source?.ref ?? ("runsheet:" + e.id), text: e.text ?? "", kind: "runsheet",
+                                        source: air ? "On air" : "Up next", date: nil)
+        }
+        return (docs, onAir)
+    }
+
+    /// Mail rows (sender, subject, the preview) as documents; the body is added when a message is opened. Not persisted.
+    public static func mail(_ rows: [MailSummary]) -> [SavedCorpus.Document] {
+        rows.filter { !$0.id.isEmpty }.map { r in
+            SavedCorpus.Document(id: "mail:" + r.id, title: r.subject.isEmpty ? "(no subject)" : r.subject, address: "mail:" + r.id,
+                                 text: "From \(r.from). \(r.snippet)", kind: "mail", source: "Mail", date: PaperStory.date(r.at))
+        }
+    }
+    public static func mailMessage(_ d: MailDetail) -> SavedCorpus.Document {
+        let r = d.summary
+        return SavedCorpus.Document(id: "mail:" + r.id, title: r.subject.isEmpty ? "(no subject)" : r.subject, address: "mail:" + r.id,
+                                    text: "From \(r.from). \(d.text.isEmpty ? r.snippet : d.text)", kind: "mail", source: "Mail", date: PaperStory.date(r.at))
+    }
+    /// A folder's file names (never their contents): searchable by name, openable by path.
+    public static func fileNames(_ entries: [FileEntry]) -> [SavedCorpus.Document] {
+        entries.filter { !$0.isDirectory }.map { e in
+            SavedCorpus.Document(id: "file:" + e.path, title: e.name, address: "file:" + e.path, text: e.path, kind: "file", source: "Files", date: e.modified)
+        }
+    }
+    /// The reader's chosen edition topics, as one small note.
+    public static func editionTopics(_ topics: [String]) -> [SavedCorpus.Document] {
+        topics.isEmpty ? [] : [SavedCorpus.Document(id: "edition-topics", title: "My edition topics", address: "paper:mine", text: "The reader follows these topics: " + topics.joined(separator: ", "),
+                                                    kind: "note", source: "Autopaper", date: nil)]
+    }
+    public static func openPages(_ pages: [Page]) -> [SavedCorpus.Document] {
+        pages.filter { !$0.title.isEmpty }.map { SavedCorpus.Document(id: "openpage:" + $0.address, title: $0.title, address: $0.address, text: "An open \($0.kind) page.", kind: "page", source: "Open pages", date: nil) }
+    }
+}
+
+public extension SavedCorpus {
+    /// Read the run sheet before every question (it lives on the main actor), and name what is on air.
+    func installRunSheet() {
+        preparers.append { [unowned self] in
+            let sheet = await MainActor.run { RunSheetStore.shared.sheet }
+            let r = RetrievalSources.runSheet(sheet)
+            hold(group: "runsheet", r.docs); onAirHint = r.onAirTitle
         }
     }
 }

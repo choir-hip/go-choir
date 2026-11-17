@@ -89,6 +89,8 @@ public struct RetrievalRecord: Codable, Sendable, Equatable {
     public var budgetChars: Int
     public var usedChars: Int
     public var millis: Double
+    /// The sources the index held ("Autopaper", "Reader" ...), so a nothing-found answer can say what was searched.
+    public var sources: [String]?
     public var nothing: Bool { hits.isEmpty }
 }
 
@@ -372,7 +374,7 @@ public final class RetrievalIndex: @unchecked Sendable {
     }
 
     func item(_ slot: Int) -> RetrievalItem { lock.lock(); defer { lock.unlock() }; return slots[slot].item }
-    func idf(_ t: String) -> Double {
+    public func idf(_ t: String) -> Double {
         lock.lock(); defer { lock.unlock() }
         let n = Double(max(liveCount, 1)), d = Double(postings[t]?.count ?? 0)
         return log(1 + (n - d + 0.5) / (d + 0.5))
@@ -381,18 +383,10 @@ public final class RetrievalIndex: @unchecked Sendable {
 
     // MARK: query
 
-    public struct Query: Sendable {
-        public var words: String
-        public var onAirTitle: String
-        public var pageID: String?
-        public var now: Date
-        public init(words: String, onAirTitle: String = "", pageID: String? = nil, now: Date = Date()) {
-            self.words = words; self.onAirTitle = onAirTitle; self.pageID = pageID; self.now = now
-        }
-    }
+    public typealias Query = RetrievalQuery
 
     /// The listener's words become terms; the on-air title joins when the question is short or leans on a pronoun.
-    public static func terms(for q: Query) -> (listener: [String], onAir: [String], usedOnAir: Bool) {
+    public static func terms(for q: RetrievalQuery) -> (listener: [String], onAir: [String], usedOnAir: Bool) {
         let listener = unique(RetrievalText.tokens(q.words))
         let raw = q.words.lowercased().split(whereSeparator: { !($0.isLetter || $0.isNumber) }).map(String.init)
         let pointing = raw.contains { RetrievalText.pronouns.contains($0) }
@@ -402,39 +396,80 @@ public final class RetrievalIndex: @unchecked Sendable {
     }
     private static func unique(_ a: [String]) -> [String] { var s = Set<String>(); return a.filter { s.insert($0).inserted } }
 
-    public func retrieve(_ q: Query, record: Bool = true) -> RetrievalContext {
-        let t0 = DispatchTime.now().uptimeNanoseconds
-        let (listener, onAir, usedOnAir) = Self.terms(for: q)
+    /// The names of the sources the index holds, with how many documents each (for "I searched the paper, your books ...").
+    public func sources() -> [String: Int] {
+        lock.lock(); defer { lock.unlock() }
+        var out: [String: Int] = [:]
+        for (_, idxs) in children { if let f = idxs.first, slots[f].live { out[slots[f].item.source, default: 0] += 1 } }
+        return out
+    }
+
+    /// BM25 over the index with the relevance floor: best first, full text, no budget. The seam a fused retriever wraps.
+    public func candidates(_ q: RetrievalQuery, limit: Int) -> [RetrievalItem] {
+        let (listener, onAir, _) = Self.terms(for: q)
         let matchTerms = Set(listener.isEmpty ? onAir : listener)
         var weighted = listener.map { ($0, 1.0) }
         weighted += onAir.map { ($0, listener.isEmpty ? 1.0 : 0.5) }
         let page = q.pageID
         var ranked = scores(weighted, matchTerms: matchTerms, boost: { $0 == page ? 1.25 : 1 })
-        let indexed = count
-
-        // The relevance floor.
         let need = min(2, matchTerms.count)
         let best = ranked.first?.score ?? 0
         ranked = ranked.filter { r in
             r.matched >= need && Double(r.matched) / Double(max(1, matchTerms.count)) >= 0.5 && r.score >= best * 0.2
         }
-        let top = Array(ranked.prefix(RetrievalBudget.candidates))
+        return ranked.prefix(limit).map { var it = item($0.slot); it.score = $0.score; return it }
+    }
+    public var indexedCount: Int { count }
+}
+
+/// What a retrieval is asked: the listener's words, the title on air, the page in front (modest boost), the clock.
+public struct RetrievalQuery: Sendable {
+    public var words: String
+    public var onAirTitle: String
+    public var pageID: String?
+    public var now: Date
+    public init(words: String, onAirTitle: String = "", pageID: String? = nil, now: Date = Date()) {
+        self.words = words; self.onAirTitle = onAirTitle; self.pageID = pageID; self.now = now
+    }
+}
+
+/// THE SEAM. Anything that can rank the phone's items for a question: BM25 (`RetrievalIndex`) today; a fused retriever (BM25 plus vectors by
+/// reciprocal rank fusion) wraps one or more of them and implements `candidates` only. `retrieve` (floor already applied by `candidates`,
+/// budget, per-parent limit, one item per address, newest-first presentation, record, nothing-found sentence) is shared, so every retriever
+/// fills the model's context the same way. `RetrievalItem` is the hit type (its `score` is the retriever's own scale; `id` is stable).
+public protocol Retriever: Sendable {
+    /// Best first, relevance floor applied, items carrying their FULL text (the context cuts the best window). At most `limit`.
+    func candidates(_ q: RetrievalQuery, limit: Int) -> [RetrievalItem]
+    /// How many items it holds, and which sources (name -> documents), for the nothing-found sentence and the record.
+    var indexedCount: Int { get }
+    func sources() -> [String: Int]
+    /// Inverse document frequency of a normalised term (used only to choose the best window of a long item).
+    func idf(_ term: String) -> Double
+}
+
+public extension Retriever {
+    func retrieve(_ q: RetrievalQuery, record: Bool = true) -> RetrievalContext {
+        let t0 = DispatchTime.now().uptimeNanoseconds
+        let (listener, onAir, usedOnAir) = RetrievalIndex.terms(for: q)
+        let matchTerms = Set(listener.isEmpty ? onAir : listener)
+        let top = candidates(q, limit: RetrievalBudget.candidates)
+        let indexed = indexedCount
 
         // Selection by relevance until the budget is spent; at most `perParent` passages of one document; one item per address.
         var chosen: [RetrievalItem] = [], used = 0, perParent: [String: Int] = [:], seenAddress = Set<String>()
         let budget = RetrievalBudget.chars
-        let header = Self.header(query: q.words, onAir: q.onAirTitle, now: q.now)
+        let header = RetrievalIndex.header(query: q.words, onAir: q.onAirTitle, now: q.now)
         used += header.count
-        for r in top {
-            let item = item(r.slot), parent = parent(r.slot)
+        for item in top {
+            let parent = String(item.id.split(separator: "#", maxSplits: 1).first ?? "")
             guard perParent[parent, default: 0] < RetrievalBudget.perParent else { continue }
-            // One item per address: a headline and the cached full text of one story are one story. Passages of a book differ by id.
+            // A headline and the cached full text of one story are one story. Passages of a book differ by id.
             if item.kind != "book", item.kind != "transcript", !seenAddress.insert(item.address).inserted { continue }
-            let room = budget - used - Self.overhead(item)
+            let room = budget - used - RetrievalIndex.overhead(item)
             guard room >= RetrievalBudget.minItemChars else { break }
-            var it = item; it.score = r.score
-            it.text = Self.snippet(item.text, terms: Set(matchTerms).union(onAir), idf: self.idf, limit: min(RetrievalBudget.maxItemChars, room))
-            used += Self.overhead(it) + it.text.count
+            var it = item
+            it.text = RetrievalIndex.snippet(item.text, terms: matchTerms.union(onAir), idf: self.idf, limit: min(RetrievalBudget.maxItemChars, room))
+            used += RetrievalIndex.overhead(it) + it.text.count
             perParent[parent, default: 0] += 1
             chosen.append(it)
         }
@@ -447,21 +482,27 @@ public final class RetrievalIndex: @unchecked Sendable {
             default: return a.score > b.score
             }
         }
+        let srcs = sources()
         let text: String
         if chosen.isEmpty {
             used = 0
-            text = Self.nothing(query: q.words, searched: indexed)
+            text = RetrievalIndex.nothing(query: q.words, searched: indexed)
         } else {
-            text = header + chosen.enumerated().map { Self.block($0.offset + 1, $0.element) }.joined()
+            text = header + chosen.enumerated().map { RetrievalIndex.block($0.offset + 1, $0.element) }.joined()
             used = text.count
         }
-        let rec = RetrievalRecord(at: q.now, query: q.words, onAir: q.onAirTitle, terms: listener + onAir, usedOnAir: usedOnAir, considered: ranked.count, indexed: indexed,
+        let rec = RetrievalRecord(at: q.now, query: q.words, onAir: q.onAirTitle, terms: listener + onAir, usedOnAir: usedOnAir, considered: top.count, indexed: indexed,
                                   hits: chosen.map { .init(id: $0.id, address: $0.address, kind: $0.kind, score: ($0.score * 1000).rounded() / 1000, date: $0.date, chars: $0.text.count) },
-                                  budgetChars: budget, usedChars: used, millis: Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6)
+                                  budgetChars: budget, usedChars: used, millis: Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6,
+                                  sources: srcs.keys.sorted())
         if record { RetrievalLog.shared.add(rec) }
         return RetrievalContext(text: text, items: chosen, record: rec)
     }
+}
 
+extension RetrievalIndex: Retriever {}
+
+extension RetrievalIndex {
     // MARK: format
 
     static func day(_ d: Date?) -> String {

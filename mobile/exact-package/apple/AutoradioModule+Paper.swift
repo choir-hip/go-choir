@@ -15,6 +15,9 @@ extension AutoradioModule {
         // The cached front list (title, dek, date of up to a hundred stories) is searchable by the on-device model, even offline at launch.
         let frontFile = support.appendingPathComponent("paper-front.json")
         SavedCorpus.shared.setSource("paper-front") { RetrievalSources.paperFront(file: frontFile) }
+        SavedCorpus.shared.setSource("edition-topics") { RetrievalSources.editionTopics(EditionSetupSession.load(topicsFile)?.topics ?? []) }
+        SavedCorpus.shared.setSource("story-bodies") { StoryBodies.shared.documents() }          // bodies fetched in the background after each front load
+        StoryBodies.shared.audioBusy = { await MainActor.run { RunSheetPlayer.shared.isRemote } }
         let engine = LayoutEngine()
         handle("paperFront") { [weak self] args, reply in
             let asked = args["view"] as? String ?? ""
@@ -37,6 +40,9 @@ extension AutoradioModule {
                         let c = await source.live(client: client, section: id, fresh: fresh)
                         if c.status == "ready" { inCategory = c.stories }
                     }
+                }
+                if r.status == "ready", !Demo.isOn {       // the edition's and the front's stories: bodies fetched one by one, newest first, within StoryBodies' caps
+                    Task { await StoryBodies.shared.sweep(r.stories.map { StoryBodies.Story(route: $0.route, title: $0.title, date: $0.updated) }) }
                 }
                 let picks = view == PaperViews.mine ? (EditionSetupSession.load(topicsFile)?.topics ?? []) : []
                 // A demo edition is dated by its own newest story; a live one by the clock.

@@ -429,6 +429,14 @@ public actor TurnEngine {
     func runTurn(_ t: Turn, transcript: String) async {
         if !t.ended { t.ended = true; setPhase(.ended); env.log.emit(.turnEnded) }
         // A plain playback command ("skip", "pause", "add this to the queue") is carried out on the phone at once and never sent.
+        // "Play that", "open the second one": the items the last answer was built from (RetrievedCommand).
+        if let act = QueueVoice.hooks.actOnRetrieved {
+            let r = RetrievedRefs.shared.current()
+            if let (a, item) = RetrievedCommand.match(transcript, items: r.items, best: r.best), await act(a, item) {
+                await finishCommand(t, transcript: transcript, line: RetrievedCommand.line(a, item))
+                return
+            }
+        }
         if let perform = QueueVoice.hooks.perform {
             let front = t.front ?? env.frontPage()
             if let ops = SpokenCommand.match(transcript, pageInFront: front != nil), await perform(ops, front) {

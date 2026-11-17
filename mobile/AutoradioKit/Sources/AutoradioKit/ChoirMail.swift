@@ -457,6 +457,7 @@ public final class MailService: @unchecked Sendable {
                 let o = try await client().send("GET", "/api/email/messages", query: ["folder": v.folder], route: "/api/email/messages").object()
                 let l = MailParse.list(o)
                 store(v.folder, l)
+                SavedCorpus.shared.hold(group: "mail:" + v.folder, RetrievalSources.mail(l.rows))      // searchable by the on-device model; not persisted
                 v.rows = MailThreads.rows(l.rows, now: now); v.total = l.total; v.unread = l.unread
                 if v.folder == "inbox" { for i in v.folders.indices where v.folders[i].name == "inbox" { v.folders[i].badge = l.unread > 0 ? "\(l.unread)" : "" } }
             }
@@ -514,6 +515,7 @@ public final class MailService: @unchecked Sendable {
             let o = try await client().send("GET", "/api/email/messages/" + PathSegment.encode(rest),
                                             route: "/api/email/messages/{id}").object()
             let d = MailParse.detail(o)
+            SavedCorpus.shared.hold(group: "mail-open", adding: RetrievalSources.mailMessage(d), cap: 100)
             if cached("inbox") == nil { if let l = try? await client().send("GET", "/api/email/messages", query: ["folder": "inbox"], route: "/api/email/messages").object() { store("inbox", MailParse.list(l)) } }
             let s = d.summary
             v.subject = s.subject.isEmpty ? "(no subject)" : s.subject

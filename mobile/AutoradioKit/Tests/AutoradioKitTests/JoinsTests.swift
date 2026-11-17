@@ -87,8 +87,8 @@ final class JoinLibraryTests: XCTestCase {
         let d = src.documents()
         XCTAssertEqual(d.count, 1); XCTAssertEqual(d[0].title, "The Keeper"); XCTAssertEqual(d[0].address, "doc:a"); XCTAssertTrue(d[0].id.hasPrefix("book:"))
         let c = SavedCorpus(readerStore: nil); c.setSource("library") { src.documents() }; c.refresh()
-        let hits = c.index.search("who climbed the lighthouse stair to trim the lamp")
-        XCTAssertEqual(hits.first?.passage.title, "The Keeper")
+        let hits = c.retrieve("who climbed the lighthouse stair to trim the lamp").items
+        XCTAssertEqual(hits.first?.title, "The Keeper")
         XCTAssertEqual(SavedAnswerPrompt.source(hits[0]), "From your book The Keeper")
     }
     func testJ5_ABookIsKeptWholeByChapterForRetrievalAndTheOldIndexIsBounded() {
@@ -100,7 +100,6 @@ final class JoinLibraryTests: XCTestCase {
         XCTAssertEqual(out.count, 2, "both books are kept: the budget is thousands of passages, not 200")
         XCTAssertFalse(out[0].parts.isEmpty); XCTAssertTrue(out[0].parts[0].label.hasPrefix("chapter 1"))
         let c = SavedCorpus(readerStore: nil); c.setSource("library") { out }; c.refresh()
-        XCTAssertLessThan(c.index.passageCount, 60, "the old index sees only the opening of a book")
         XCTAssertGreaterThan(c.retrieval.count, 100, "the retrieval index sees all of it")
     }
     func testJ5_AnUnreadableOrEmptyDocumentIsSkippedAndNothingThrows() {

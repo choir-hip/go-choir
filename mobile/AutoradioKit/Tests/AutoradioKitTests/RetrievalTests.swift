@@ -197,3 +197,149 @@ final class RetrievalHolderTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(TurnContextFile.self, from: JSONSerialization.data(withJSONObject: o)).retrieval)
     }
 }
+
+final class StoryBodiesTests: XCTestCase {
+    func story(_ n: Int, days: Double = 0) -> StoryBodies.Story { .init(route: "/p/s\(n)", title: "Story \(n)", date: Date(timeIntervalSince1970: 1_794_000_000 - Double(n) * 3600 - days)) }
+    final class Calls: @unchecked Sendable { private let l = NSLock(); private var r: [String] = []; var all: [String] { l.lock(); defer { l.unlock() }; return r }; func add(_ x: String) { l.lock(); r.append(x); l.unlock() } }
+    func tmp() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("sb-\(UUID().uuidString).json") }
+
+    func testFetchesNewestFirstOnceEachAndIndexesWhatLands() async {
+        let calls = Calls()
+        let b = StoryBodies(file: nil, fetcher: { r in calls.add(r); return "Body of \(r) about the Senate vote." })
+        let n = await b.sweep([story(3), story(1), story(2)])
+        XCTAssertEqual(n, 3); XCTAssertEqual(calls.all, ["/p/s1", "/p/s2", "/p/s3"], "newest first, one request each")
+        let again0 = await b.sweep([story(1), story(2), story(3)]); XCTAssertEqual(again0, 0); XCTAssertEqual(calls.all.count, 3, "held and unchanged: not asked again")
+        let c = SavedCorpus(readerStore: nil); c.setSource("bodies") { b.documents() }
+        XCTAssertEqual(c.retrieve("tell me about the Senate vote").items.count, 3)
+    }
+    func testCapsTheCountAndTheBytesAndDropsTheOldest() async {
+        let calls = Calls()
+        let b = StoryBodies(file: nil, fetcher: { r in calls.add(r); return String(repeating: "word ", count: 20) })
+        _ = await b.sweep((0..<(StoryBodies.maxStories + 30)).map { story($0) })
+        XCTAssertEqual(calls.all.count, StoryBodies.maxStories, "only the newest are asked")
+        XCTAssertLessThanOrEqual(b.count, StoryBodies.maxStories)
+        let big = StoryBodies(file: nil, fetcher: { _ in String(repeating: "x", count: 1_500_000) })
+        _ = await big.sweep([story(1), story(2), story(3), story(4)])
+        XCTAssertLessThanOrEqual(big.totalBytes, StoryBodies.maxBytes)
+        XCTAssertTrue(big.documents().contains { $0.id == "body:/p/s1" }, "the newest stays")
+    }
+    func testAFailureOrAnEmptyBodyIsSkippedAndTheSweepGoesOn() async {
+        let b = StoryBodies(file: nil, fetcher: { r in if r == "/p/s1" { throw URLError(.notConnectedToInternet) }; return r == "/p/s2" ? nil : "text" })
+        let landed = await b.sweep([story(1), story(2), story(3)]); XCTAssertEqual(landed, 1)
+    }
+    func testABusyRadioEndsTheSweepAndTheNextOneResumes() async {
+        let calls = Calls(); let busy = Calls()
+        let b = StoryBodies(file: nil, fetcher: { r in calls.add(r); return "text" })
+        b.audioBusy = { busy.add("x"); return busy.all.count > 1 }
+        let one = await b.sweep([story(1), story(2), story(3)]); XCTAssertEqual(one, 1, "one landed, then the radio needed the network")
+        b.audioBusy = { false }
+        let two = await b.sweep([story(1), story(2), story(3)]); XCTAssertEqual(two, 2); XCTAssertEqual(calls.all, ["/p/s1", "/p/s2", "/p/s3"])
+    }
+    func testBodiesSurviveARestartAndABadFileIsEmpty() async throws {
+        let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
+        let b = StoryBodies(file: f, fetcher: { _ in "kept text" })
+        _ = await b.sweep([story(1)])
+        let again = Calls()
+        let b2 = StoryBodies(file: f, fetcher: { r in again.add(r); return "x" })
+        XCTAssertEqual(b2.count, 1); _ = await b2.sweep([story(1)]); XCTAssertTrue(again.all.isEmpty, "resumed: nothing asked")
+        try Data("junk".utf8).write(to: f); XCTAssertEqual(StoryBodies(file: f).count, 0)
+    }
+    func testOnlyOneSweepRunsAtATime() async {
+        let b = StoryBodies(file: nil, fetcher: { _ in try await Task.sleep(nanoseconds: 100_000_000); return "t" })
+        async let first = b.sweep([story(1), story(2)])
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        let second = await b.sweep([story(3)])
+        let f = await first; XCTAssertEqual(second, 0); XCTAssertEqual(f, 2)
+    }
+}
+
+final class RetrievedCommandTests: XCTestCase {
+    func item(_ n: Int, _ address: String, _ kind: String = "story") -> RetrievalItem {
+        RetrievalItem(id: "i\(n)", address: address, kind: kind, title: "Title \(n)", source: "x", date: nil, place: "", score: Double(10 - n), text: "t")
+    }
+    var items: [RetrievalItem] { [item(1, "pub:/p/a"), item(2, "pub:/p/b"), item(3, "doc:b1@90", "book")] }
+    func m(_ s: String, best: String? = nil) -> (RetrievedAction, String)? { RetrievedCommand.match(s, items: items, best: best).map { ($0.0, $0.1.id) } }
+
+    func testOrdinalsThatAndLatest() {
+        XCTAssertEqual(m("open the second one")?.1, "i2"); XCTAssertEqual(m("open the second one")?.0, .open)
+        XCTAssertEqual(m("Play the first story please")?.1, "i1")
+        XCTAssertEqual(m("play number three")?.1, "i3")
+        XCTAssertEqual(m("queue the third one")?.0, .queue)
+        XCTAssertEqual(m("add the second one to the queue")?.0, .queue); XCTAssertEqual(m("add the second one to the queue")?.1, "i2")
+        XCTAssertEqual(m("play that", best: "i2")?.1, "i2")
+        XCTAssertEqual(m("play the latest")?.1, "i1")
+    }
+    func testNotACommandWhenItIsAQuestionOrOutOfRangeOrAmbiguous() {
+        XCTAssertNil(m("who will open the second round"))
+        XCTAssertNil(m("open the fifth one"), "only three items: never the wrong one")
+        XCTAssertNil(m("play that"), "three items and no best: ambiguous")
+        XCTAssertNil(m("play that next"))
+        XCTAssertNil(RetrievedCommand.match("play that", items: []))
+    }
+    func testRefsExpireAndAreSetPerAnswer() {
+        let r = RetrievedRefs(); r.set(items, best: "i1", now: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(r.current(now: Date(timeIntervalSince1970: 100)).items.count, 3)
+        XCTAssertTrue(r.current(now: Date(timeIntervalSince1970: 100_000)).items.isEmpty)
+    }
+    func testIdsRoundTripToThePlayAndOpenPath() {
+        XCTAssertEqual(RetrievedCommand.entry(for: items[0])?.source?.ref, "pub:/p/a")
+        let book = RetrievedCommand.entry(for: items[2])
+        XCTAssertEqual(book?.source?.ref, "doc:b1"); XCTAssertEqual(book?.source?.start, 90, "the passage's own block")
+        XCTAssertNil(RetrievedCommand.entry(for: item(4, "file:/a/b.txt", "file")), "a file name opens, it does not play")
+    }
+    func testHolderSetsTheRefsFromWhatTheModelSaw() async {
+        RetrievedRefs.shared.clear()
+        let c = SavedCorpus(readerStore: nil)
+        c.setSource("t") { [SavedCorpus.Document(id: "pub:a", title: "Senate passes the water bill", address: "pub:/p/a", text: "The Senate voted on Tuesday to pass the water bill.")] }
+        let h = SavedAnswerHolder(StageParams(), corpus: c, model: { FakeLocalModel(pieces: ["The Senate passed it. "]) })
+        for await _ in h.lines(for: HolderInput(listenerWords: "tell me about the Senate", answers: [])) {}
+        let r = RetrievedRefs.shared.current()
+        XCTAssertEqual(r.items.map(\.address), ["pub:/p/a"]); XCTAssertEqual(r.best, "pub:a")
+        XCTAssertEqual(RetrievedCommand.match("play that", items: r.items, best: r.best)?.1.address, "pub:/p/a")
+    }
+}
+
+final class RetrievalMoreSourcesTests: XCTestCase {
+    func testNothingLineNamesWhatWasSearched() {
+        XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: ["Autopaper", "Reader", "Podcasts"]), "I have nothing on that in the paper, your books or your podcasts.")
+        XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: ["Autopaper", "Autopaper"]), "I have nothing on that in the paper.")
+        XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: []), "I have nothing saved on this phone to search yet.")
+    }
+    func testMailFilesPagesTopicsAndRunSheetBecomeDocuments() {
+        var row = MailSummary(); row.id = "m1"; row.fromDisplay = "Ana"; row.subject = "Tunnel vote"; row.snippet = "See the referendum notes."; row.at = "2026-11-14T09:00:00Z"
+        let mail = RetrievalSources.mail([row, MailSummary()])
+        XCTAssertEqual(mail.count, 1); XCTAssertEqual(mail[0].address, "mail:m1"); XCTAssertNotNil(mail[0].date)
+        let files = RetrievalSources.fileNames([FileEntry(name: "budget-notes.md", path: "/docs/budget-notes.md", isDirectory: false, size: 1, modified: nil), FileEntry(name: "docs", path: "/docs", isDirectory: true, size: 0, modified: nil)])
+        XCTAssertEqual(files.map(\.title), ["budget-notes.md"])
+        XCTAssertEqual(RetrievalSources.editionTopics(["Science", "Senate"]).first?.text.contains("Senate"), true); XCTAssertTrue(RetrievalSources.editionTopics([]).isEmpty)
+        let pages = RetrievalSources.openPages([Page(address: "pub:/p/x", kind: "story", title: "Open story")])
+        XCTAssertEqual(pages.first?.address, "pub:/p/x")
+        var sheet = RunSheet()
+        sheet.entries = [RunSheetEntry(id: "e1", kind: .story, placedBy: .listener, state: .onAir, title: "On air story", text: "Words."), RunSheetEntry(id: "e2", kind: .story, placedBy: .listener, state: .heard, title: "Old", text: "x"),
+                         RunSheetEntry(id: "e3", kind: .story, placedBy: .listener, state: .ahead, title: "Next story", text: "More words.")]
+        let r = RetrievalSources.runSheet(sheet)
+        XCTAssertEqual(r.docs.map(\.title), ["On air story", "Next story"], "heard entries are history"); XCTAssertEqual(r.onAirTitle, "On air story")
+        XCTAssertEqual(r.docs.map(\.source), ["On air", "Up next"])
+    }
+    func testHeldGroupsAreSearchedReplacedAndBounded() {
+        let c = SavedCorpus(readerStore: nil)
+        c.hold(group: "files:/", RetrievalSources.fileNames([FileEntry(name: "zeppelin-plans.md", path: "/z.md", isDirectory: false, size: 1, modified: nil)]))
+        XCTAssertEqual(c.retrieve("zeppelin plans").items.first?.address, "file:/z.md")
+        c.hold(group: "files:/", [])
+        XCTAssertTrue(c.retrieve("zeppelin plans").isEmpty, "a replaced group drops its old documents")
+        c.hold(group: "texture", adding: SavedCorpus.Document(id: "texturedoc:1", title: "Garden notes", address: "texture:1", text: "Tomatoes and basil.", kind: "document", source: "Texture", date: Date()))
+        XCTAssertEqual(c.retrieve("tomatoes basil").items.first?.address, "texture:1")
+    }
+    func testAFusedRetrieverCanWrapTheSeam() {
+        struct Doubled: Retriever {
+            let inner: RetrievalIndex
+            func candidates(_ q: RetrievalQuery, limit: Int) -> [RetrievalItem] { inner.candidates(q, limit: limit) }
+            var indexedCount: Int { inner.indexedCount }
+            func sources() -> [String: Int] { inner.sources() }
+            func idf(_ t: String) -> Double { inner.idf(t) }
+        }
+        let i = RetrievalIndex(); i.upsert(RetrievalDoc(id: "a", kind: "story", title: "Senate", text: "The senate met.", source: "Autopaper"))
+        let c = SavedCorpus(readerStore: nil); c.setSource("t") { [] }; c.retriever = Doubled(inner: i)
+        XCTAssertEqual(c.retrieve("senate").items.first?.id, "a")
+    }
+}

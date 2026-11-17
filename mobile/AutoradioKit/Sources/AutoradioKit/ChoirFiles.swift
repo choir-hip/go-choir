@@ -666,6 +666,7 @@ public final class FilesService: @unchecked Sendable {
                 return listing(path: "/", mode: "recent", sort: sort, desc: desc, query: "", entries: entries, places: places)
             }
             let entries = try await backend.list(path)
+            SavedCorpus.shared.hold(group: "files:" + path, RetrievalSources.fileNames(entries))     // names only, always searchable
             return listing(path: path, mode: "browse", sort: sort, desc: desc, query: "", entries: sort.sorted(entries, desc: desc))
         } catch {
             return listing(path: path, mode: mode, sort: sort, desc: desc, query: q, entries: [], status: "error", message: Self.say(error))

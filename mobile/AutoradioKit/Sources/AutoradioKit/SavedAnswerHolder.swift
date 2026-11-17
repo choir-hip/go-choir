@@ -40,12 +40,15 @@ public enum SavedAnswerPrompt {
         if let t = AckPrompt.usableTitle(i.title) { return "From the paper's story on \(String(t.prefix(90)))" }
         return "From a story you saved"
     }
-    /// Kept for the old index's hits (tests of PassageIndex still use it).
-    public static func source(_ h: PassageHit) -> String {
-        if h.passage.docID.hasPrefix("page:") { return "From this page" }
-        if h.passage.docID.hasPrefix("book:") { return "From your book \(String(h.passage.title.prefix(90)))" }
-        if let t = AckPrompt.usableTitle(h.passage.title) { return "From the paper's story on \(String(t.prefix(90)))" }
-        return "From a story you saved"
+    /// "I have nothing on that in the paper, your books or your podcasts.": what the phone searched, in the listener's words for each source.
+    public static func nothingLine(searched: [String]) -> String {
+        let names: [String: String] = ["Autopaper": "the paper", "Reader": "your books", "Podcasts": "your podcasts", "Texture": "your documents", "Mail": "your mail",
+                                       "Files": "your files", "Run sheet": "the run sheet", "On air": "the run sheet", "Up next": "the run sheet", "Open pages": "your open pages", "the page in front": "this page"]
+        var seen = Set<String>(), words: [String] = []
+        for s in searched { let w = names[s] ?? s.lowercased(); if seen.insert(w).inserted { words.append(w) } }
+        guard !words.isEmpty else { return "I have nothing saved on this phone to search yet." }
+        let list = words.count == 1 ? words[0] : words.dropLast().joined(separator: ", ") + " or " + words.last!
+        return "I have nothing on that in \(list)."
     }
 
     /// The honest line when nothing in the saved stories answers: it says what is being looked up and claims nothing.
@@ -93,11 +96,18 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
                 defer { c.finish() }
                 if let f = i.pageText { corpus.offer(address: i.pageAddress, title: i.pageTitle, text: await f()) }
                 if Task.isCancelled { say("cancelled"); return }
-                let ctx = corpus.retrieve(words, onAir: i.pageTitle, pageAddress: i.pageAddress)
+                await corpus.prepare()
+                let ctx = corpus.retrieve(words, onAir: i.pageTitle.isEmpty ? corpus.onAirHint : i.pageTitle, pageAddress: i.pageAddress)
                 let hits = ctx.items
+                // What "play that" and "open the second one" mean next: the items as the model sees them, and the one it will speak from.
+                RetrievedRefs.shared.set(hits, best: hits.max { $0.score < $1.score }?.id)
                 if Task.isCancelled { say("cancelled"); return }
                 func holding(_ why: String) { say(why); c.yield(SavedAnswerPrompt.holdingLine(words)) }
-                guard !hits.isEmpty else { return holding("nothing in the saved stories answers this; the model was not asked") }
+                guard !hits.isEmpty else {
+                    say("nothing on the phone matches this; the model was not asked")
+                    c.yield(SavedAnswerPrompt.nothingLine(searched: ctx.record.sources ?? []))
+                    return
+                }
                 guard let m = model, m.isLoaded else { return holding("the local model is not loaded; found \(hits.count) items") }
                 m.willGenerate(); defer { m.generationEnded() }
                 var splitter = SentenceSplitter()

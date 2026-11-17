@@ -146,6 +146,9 @@ public struct TextureEditInfo: Codable, Sendable, Equatable {
             s.base = TextureHead(content: draft, body: merged.body, revisionId: r.revisionId, version: r.version)
             pending[doc] = nil; savePending()
             ReaderStore.shared.invalidate("texture:" + doc)
+            let heading = draft.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "# ").union(.whitespaces)) }.first { !$0.isEmpty } ?? "Document"
+            SavedCorpus.shared.hold(group: "texture", adding: SavedCorpus.Document(id: "texturedoc:" + doc, title: String(heading.prefix(120)), address: "texture:" + doc, text: draft,
+                                                                                kind: "document", source: "Texture", date: Date()))      // a saved document is searchable at once
             s.info.status = "saved"; s.info.label = r.version > 0 ? "Saved · version \(r.version)" : "Saved"
         } catch {
             pending[doc] = draft; savePending()
