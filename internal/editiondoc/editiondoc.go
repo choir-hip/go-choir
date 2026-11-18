@@ -9,10 +9,15 @@ package editiondoc
 import "strings"
 
 // Title is the title of the edition document.
-const Title = "My edition"
+const Title = "My notebook"
+
+// LegacyTitle is the title an edition document had before the notebook
+// absorbed it; a document so titled is adopted, not duplicated.
+const LegacyTitle = "My edition"
 
 // IsEditionTitle reports whether a document title names the edition: the
 // title compared case-insensitively with runs of white space folded.
 func IsEditionTitle(title string) bool {
-	return strings.EqualFold(strings.Join(strings.Fields(title), " "), Title)
+	t := strings.Join(strings.Fields(title), " ")
+	return strings.EqualFold(t, Title) || strings.EqualFold(t, LegacyTitle)
 }

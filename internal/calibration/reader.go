@@ -131,7 +131,7 @@ func (r Reader) Scorecard(ctx context.Context, ownerID, computerID string, now t
 	opts := SummaryOptions{GroupBy: []string{"project"}, Filters: Filters{Agent: AutoradioAgent}}
 	sum := Summarize(views, opts, now)
 	card := Scorecard{Overall: sum.Overall, ByKind: sum.Groups, Claims: views, Truncated: truncated}
-	for _, cause := range []string{CauseInstruction, CauseEdition, CauseImportance, CauseLesson, CauseExplore} {
+	for _, cause := range []string{CauseInstruction, CauseEdition, CauseImportance, CauseLesson, CauseTrying, CauseExplore} {
 		var sub []ClaimView
 		for _, v := range views {
 			for _, t := range v.Tags {

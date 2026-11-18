@@ -15,7 +15,15 @@ one's end op (the app was killed): the first is closed as no verdict
 asserts for those ten forecasts: seven settled (four true, three false) and
 three no verdict. Then posts the same ops again and asserts nothing was settled
 twice (the scorecard's settled count and every row are unchanged). Prints the
-ledger rows. Exit 0 when all hold, 1 otherwise, 2 on bad arguments.
+ledger rows. Then the notebook (docs/reference/AUTORADIO-NOTEBOOK.md): a more/less
+tap and a mute become lines of the notebook (the revision is the desk's); the
+next stretch's input receipt on the tape (GET /api/autoradio/learning,
+notebook.inputs: revision, sha256, bytes, never the text) names a notebook
+revision at least as new as the tap's; the page is within budget (at most 12
+learned, 3 trying, 1,000 written words); and every lesson line cites ledger
+rows that exist. Whether the model proposed a lesson in that one call is its
+own choice: it is reported, and --require-lesson makes it a failure.
+Exit 0 when all hold, 1 otherwise, 2 on bad arguments.
 
 Rerun ceiling: each run leaves about ten entries on the sheet's 100 ahead
 places and the desk removes only entries older than 12 hours, so about eight
@@ -87,9 +95,12 @@ class Api:
             body["ahead_titles"] = []
         raw = self.call("POST", "/api/autoradio/programme", body, stream=True)
         segs, event = [], None
+        self.last_done = {}
         for line in raw.splitlines():
             if line.startswith("event: "):
                 event = line[7:]
+            elif line.startswith("data: ") and event == "done":
+                self.last_done = json.loads(line[6:])
             elif line.startswith("data: ") and event == "segment":
                 segs.append(json.loads(line[6:]))
             elif line.startswith("data: ") and event == "error":
@@ -101,6 +112,9 @@ class Api:
 
     def sheet(self):
         return self.call("GET", "/api/autoradio/sheet")
+
+    def steer(self, body):
+        return self.call("POST", "/api/autoradio/steer", body)
 
     def learning(self):
         return self.call("GET", "/api/autoradio/learning?limit=200")
@@ -131,6 +145,7 @@ def main():
     ap.add_argument("--timeout", type=float, default=0.0)
     ap.add_argument("--insecure-http", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--require-lesson", action="store_true", help="fail unless the model proposed a lesson that was written")
     args = ap.parse_args()
     key = read_key(args.api_key_file)
     if args.dry_run:
@@ -211,8 +226,59 @@ def main():
         "changed" if r1 != r2 else "unchanged"))
     ok = ok and not twice
     print("scorecard: %s" % json.dumps({k: after["scorecard"][k] for k in ("forecasts", "settled", "heard_through", "heard_through_rate", "brier", "no_verdict")}))
+    ok = notebook_phase(api, args, content, ok)
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1
+
+
+def notebook_phase(api, args, content, ok):
+    print("-- the notebook")
+    nb0 = api.learning().get("notebook") or {}
+    tap = api.steer({"entry_id": content[0]["entry_id"], "direction": "less"})
+    mute = api.steer({"direction": "mute", "publisher": "voice-d0d0d0"})
+    print("  tap: %s %s; mute: %s %s" % (tap["status"], tap["line"], mute["status"], mute["line"]))
+    ok = ok and tap["status"] in ("applied", "noop") and mute["status"] in ("applied", "noop")
+    nb1 = api.learning()["notebook"]
+    lines = nb1.get("lines", [])
+    has_tap = any(l["section"] == "Recent steering" and l["text"] == tap["line"] for l in lines)
+    has_mute = any(l["section"] == "What you asked for" and l["text"] == mute["line"] for l in lines)
+    print("  the tap is a steering line: %s; the mute is the listener's line: %s" % (has_tap, has_mute))
+    ok = ok and has_tap and has_mute and nb1.get("found") is True
+    # The next stretch is shown the notebook; its input receipt is on the tape.
+    api.programme("extend")
+    stretch = api.last_done.get("stretch_id", "")
+    nb2 = api.learning()["notebook"]
+    receipt = next((r for r in nb2.get("inputs", []) if r["stretch_id"] == stretch), None)
+    shown = receipt is not None and len(receipt["notebook_sha256"]) == 64 and int(receipt["notebook_bytes"]) > 0
+    print("  stretch %s input receipt: %s" % (stretch, json.dumps(receipt)))
+    if shown:
+        # Revisions are opaque ids; the receipt must name the revision the tap
+        # (or a later desk patch) wrote, which is the notebook's head now or
+        # an earlier head of this run.
+        shown = receipt["notebook_revision_id"] != "" and receipt["notebook_revision_id"] != (nb0.get("revision_id") or "-")
+    ok = ok and shown
+    print("  the call's input held the notebook: %s" % shown)
+    # Budget, and every lesson cites ledger rows that exist.
+    learned = [l for l in nb2["lines"] if l["section"] == "What Autoradio has learned"]
+    trying = [l for l in nb2["lines"] if l["section"] == "What Autoradio is trying"]
+    budget = len(learned) <= 12 and len(trying) <= 3 and nb2.get("written_words", 0) <= 1000
+    print("  budget: %d learned, %d trying, %d written words: %s" % (len(learned), len(trying), nb2.get("written_words", 0), "within" if budget else "OVER"))
+    ok = ok and budget
+    claims = {r["claim_id"] for r in api.learning()["rows"]}
+    cited_ok, wrote = True, False
+    for l in learned + trying:
+        cites = l.get("cites", [])
+        if cites:
+            wrote = True
+        if not cites or any(c not in claims for c in cites):
+            cited_ok = False
+            print("  line %s cites %s: a cite is not a ledger row" % (l.get("id"), cites))
+    print("  every lesson cites ledger rows: %s; a lesson was written by this run's model call: %s" % (cited_ok, wrote))
+    ok = ok and cited_ok
+    if args.require_lesson and not wrote:
+        print("  --require-lesson: the model proposed no lesson")
+        ok = False
+    return ok
 
 
 if __name__ == "__main__":
