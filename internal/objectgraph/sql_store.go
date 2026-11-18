@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // commitmentRecordKind is the object kind of the addressed-record ledger
@@ -1375,13 +1376,21 @@ func (s *SQLStore) KindUsage(ctx context.Context, kind ObjectKind, ownerID strin
 // canonical authority for record fields that must not be duplicated into
 // independently drifting object metadata.
 func (s *SQLStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID string, matches []JSONFieldMatch, limit int) ([]Object, error) {
+	return s.ListObjectsByOwnerAndBodySince(ctx, kind, ownerID, matches, time.Time{}, limit)
+}
+
+// ListObjectsByOwnerAndBodySince is ListObjectsByOwnerAndBody for the rows last
+// written at or after since (a zero since: all). The bound is in the query
+// and rides the (kind, owner, updated_at) index, so a sparse match walks only
+// the window and not the owner's whole kind.
+func (s *SQLStore) ListObjectsByOwnerAndBodySince(ctx context.Context, kind, ownerID string, matches []JSONFieldMatch, since time.Time, limit int) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
 	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
 		return nil, err
 	}
-	if fam := s.derivedAddresseeRead(kind, matches); fam != nil {
+	if fam := s.derivedAddresseeRead(kind, matches); fam != nil && since.IsZero() {
 		// The owner's newest rows of the key, from the validated side table;
 		// a stale row withdraws the family and falls through to the scan.
 		if objs, ok, err := s.listByDerivedKeyNewest(ctx, fam, matches[0].Value, ownerID, limit); err != nil {
@@ -1390,7 +1399,7 @@ func (s *SQLStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID 
 			return objs, nil
 		}
 	}
-	query, args, err := ownerBodySQL(kind, ownerID, matches, limit)
+	query, args, err := ownerBodySinceSQL(kind, ownerID, matches, since, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1414,9 +1423,19 @@ func (s *SQLStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID 
 // the kind newest first, each body by obj_id, the body predicates on b.body
 // ("body" in bodyTextSQL: only og_bodies has a body column).
 func ownerBodySQL(kind, ownerID string, matches []JSONFieldMatch, limit int) (string, []any, error) {
+	return ownerBodySinceSQL(kind, ownerID, matches, time.Time{}, limit)
+}
+
+// ownerBodySinceSQL is ownerBodySQL with an optional lower bound on updated_at
+// (bound as UTC, as the header writer stores it).
+func ownerBodySinceSQL(kind, ownerID string, matches []JSONFieldMatch, since time.Time, limit int) (string, []any, error) {
 	query := objectSelectSQL + `
 		 WHERE h.object_kind = ? AND h.owner_id = ?`
 	args := []any{kind, ownerID}
+	if !since.IsZero() {
+		query += ` AND h.updated_at >= ?`
+		args = append(args, since.UTC())
+	}
 	for _, match := range matches {
 		if match.JSONPath == "" {
 			return "", nil, fmt.Errorf("objectgraph sql: body JSON path is required")
