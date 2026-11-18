@@ -1,0 +1,483 @@
+#!/usr/bin/env python3
+"""status-corpus-reuse: how much the paper's research stands on pages it already
+holds versus the web (search-reuse; problem record
+docs/problems/search-volume-outruns-keenable-credits-2026-11-18.md).
+
+Read only against Node B: one ssh reads the paper VM's guest console files and
+the gateway journal; nothing is written there. Fetching and computing are
+separate: fetch() returns raw text, compute() is pure. --fixture FILE feeds
+console lines and --gateway-fixture FILE gateway lines with no network (the
+test uses them; scripts/test-status-scripts.sh).
+
+  status-corpus-reuse [--since T] [--until T] [--first N --after T]
+                      [--append [FILE]] [--json] [--node HOST]
+                      [--fixture FILE] [--gateway-fixture FILE]
+
+T is YYYY-MM-DDTHH:MMZ; the window is [since, until). Exit 0, or 2 when the
+fetch failed.
+
+What it reads. The guest console, /var/lib/go-choir/vm-state/<paper vm>/
+console.log and console.log.1 .. .4 (sudo -n grep, as status-storage does), the
+Go log lines (UTC) the runtime already writes:
+  runtime: search run= desk= started= from_held= not_sent= (reasons)
+      pages_returned= pages_new= pages_read= [search_all_calls= wordings_offered=
+      wordings_sent= unread_notes= untagged=]    internal/agentcore/search_run_summary.go
+  corpus search computer= ... by_body= by_title= by_both= by_labels_only= ...
+      run= desk= conv= published= events= capped=   internal/researchtools logCorpusSearch
+  corpus read run= desk= conv= capture= held=(false|own|true) via=
+      internal/researchtools corpusReadLine
+and, from the gateway journal, "search request from autoputer <paper vm>
+(... run= desk= conv=)" lines: the web searches the paper sent.
+The query and note text are removed on Node B before the lines leave it, and
+the script never prints one. It prints ids, counts and desks only.
+
+What it cannot see:
+  - Rotation. The console rotates at about 1 MB and keeps about 2.5 hours. A
+    window that starts before the oldest console line is partial; the output
+    says so. The gateway journal is kept longer, so its count can cover more
+    than the console does; both are printed with their own spans.
+  - A run still in flight has no summary line (it is written at the run's end),
+    and only a run that searched writes one. Runs that never searched are not
+    in these numbers. Corpus search and read lines of a run whose summary is
+    outside the window or not yet written join to nothing.
+  - The older corpus search lines lack text_index .. by_labels_only; their
+    page-text share is computed over the lines that have the fields.
+  - search_all_calls .. untagged exist only once the sfn change is deployed;
+    they print only when a line carries them.
+
+Limits on requests: one ssh per run, one console pass and one journal query.
+--append writes one row per whole UTC clock hour the console fully covers (it
+has a line before the hour and a line at or after its end) and the file does
+not have yet, to FILE (default ~/.cache/choir-status/corpus-reuse.tsv; never
+inside the repo). The gateway column is filled only when the gateway journal
+was read.
+"""
+import argparse
+import calendar
+import json
+import os
+import re
+import statistics
+import subprocess
+import sys
+import time
+
+PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+NODE = "node-b"
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(HERE)
+DEFAULT_APPEND = os.path.join("~", ".cache", "choir-status", "corpus-reuse.tsv")
+RESEARCH = "research"
+
+STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
+QUOTED_RE = re.compile(r' (?:note|query)="(?:[^"\\]|\\.)*"')
+SR_RE = re.compile(
+    STAMP + r" runtime: search run=(\S+) desk=(\S+) started=(\d+) from_held=(\d+) not_sent=(\d+)"
+    r"(?: \(([^)]*)\))? pages_returned=(\d+) pages_new=(\d+) pages_read=(\d+)"
+    r"(?: search_all_calls=(\d+) wordings_offered=(\d+) wordings_sent=(\d+) unread_notes=(\d+) untagged=(\d+))?")
+CS_RE = re.compile(STAMP + r" corpus search computer=\S+ (.*)$")
+RD_RE = re.compile(STAMP + r" corpus read run=(\S+) desk=(\S+) conv=\S+ capture=\S+ held=(\S+) via=(\S+)")
+GW_RE = re.compile(STAMP + r" .*search request from autoputer (\S+) \(.*?run=(\S+) desk=(\S+) conv=")
+ANY_STAMP_RE = re.compile(STAMP)
+KV_RE = re.compile(r"(\w+)=(\S*)")
+
+HEADER = ["hour", "runs", "started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read",
+          "wordings_offered", "wordings_sent", "corpus_searches", "corpus_searches_with_capture",
+          "corpus_searches_with_text_hit", "corpus_searches_with_text_fields", "reads", "research_reads_held",
+          "research_reads_own", "research_reads_new", "runs_web_no_corpus", "gateway_web_searches"]
+
+
+def stamp_epoch(s):
+    return calendar.timegm(time.strptime(s, "%Y/%m/%d %H:%M:%S"))
+
+
+def iso(t):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+
+
+def parse_arg_time(s):
+    return calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%MZ"))
+
+
+def parse_console(text):
+    """Events from console text: sr (run summaries), cs (corpus searches),
+    rd (corpus reads), each a dict with t (epoch). Also returns every stamp's
+    min and max, so the coverage does not depend on the three kinds."""
+    ev = []
+    lo = hi = None
+    for ln in text.splitlines():
+        ln = QUOTED_RE.sub("", ln)   # never carry a query or note any further
+        m = ANY_STAMP_RE.search(ln)
+        if not m:
+            continue
+        t = stamp_epoch(m.group(1))
+        lo = t if lo is None else min(lo, t)
+        hi = t if hi is None else max(hi, t)
+        m = SR_RE.search(ln)
+        if m:
+            g = m.groups()
+            reasons = {}
+            for item in (g[6] or "").split():
+                k, _, v = item.partition("=")
+                if v.isdigit():
+                    reasons[k] = int(v)
+            has_new = g[10] is not None
+            ev.append({"k": "sr", "t": t, "run": g[1], "desk": g[2], "started": int(g[3]), "from_held": int(g[4]),
+                       "not_sent": int(g[5]), "reasons": reasons, "returned": int(g[7]), "new": int(g[8]),
+                       "read": int(g[9]), "has_new": has_new,
+                       "all_calls": int(g[10]) if has_new else 0, "offered": int(g[11]) if has_new else 0,
+                       "sent": int(g[12]) if has_new else 0, "unread": int(g[13]) if has_new else 0,
+                       "untagged": int(g[14]) if has_new else 0})
+            continue
+        m = CS_RE.search(ln)
+        if m:
+            kv = dict(KV_RE.findall(m.group(2)))
+            def num(k):
+                v = kv.get(k, "")
+                return int(v) if v.isdigit() else None
+            tx = num("by_body") is not None and num("by_both") is not None
+            ev.append({"k": "cs", "t": t, "run": kv.get("run", "-"), "desk": kv.get("desk", "-"),
+                       "captures": num("captures") or 0, "text_fields": tx,
+                       "text_hit": tx and (num("by_body") + num("by_both")) > 0})
+            continue
+        m = RD_RE.search(ln)
+        if m:
+            ev.append({"k": "rd", "t": t, "run": m.group(2), "desk": m.group(3), "held": m.group(4), "via": m.group(5)})
+    return ev, lo, hi
+
+
+def parse_gateway(text):
+    ev = []
+    for ln in text.splitlines():
+        m = GW_RE.search(QUOTED_RE.sub("", ln))
+        if m and m.group(2) == PAPER_VM:
+            ev.append({"t": stamp_epoch(m.group(1)), "run": m.group(3), "desk": m.group(4)})
+    return ev
+
+
+def pct(a, b):
+    return "n/a" if not b else "%.1f%%" % (100.0 * a / b)
+
+
+def share(a, b):
+    return None if not b else a / b
+
+
+def med(xs):
+    return None if not xs else statistics.median(xs)
+
+
+def metrics(sr, cs_all, rd_all, gw):
+    """The numbers for the run summaries in sr, the corpus searches and reads
+    in cs_all/rd_all (joined on run=), and the gateway events gw (or None)."""
+    r = {"runs": len(sr)}
+    for k in ("started", "from_held", "not_sent", "returned", "new", "read"):
+        r[k] = sum(e[k] for e in sr)
+    r["started_median"] = med([e["started"] for e in sr])
+    r["started_max"] = max([e["started"] for e in sr], default=None)
+    r["not_sent_reasons"] = {}
+    for e in sr:
+        for k, v in e["reasons"].items():
+            r["not_sent_reasons"][k] = r["not_sent_reasons"].get(k, 0) + v
+    r["read_share"] = share(r["read"], r["returned"])
+    nw = [e for e in sr if e["has_new"]]
+    r["new_fields"] = None
+    if nw:
+        r["new_fields"] = {"lines": len(nw)}
+        for k in ("all_calls", "offered", "sent", "unread", "untagged"):
+            r["new_fields"][k] = sum(e[k] for e in nw)
+        r["new_fields"]["sent_share"] = share(r["new_fields"]["sent"], r["new_fields"]["offered"])
+    # corpus searches by desk, reads by desk and held x via
+    cs_by = {}
+    for e in cs_all:
+        d = cs_by.setdefault(e["desk"], {"n": 0, "ge1": 0, "tf": 0, "th": 0})
+        d["n"] += 1
+        d["ge1"] += e["captures"] > 0
+        d["tf"] += e["text_fields"]
+        d["th"] += e["text_hit"]
+    r["corpus_searches"] = cs_by
+    rd_by, rd_hv, shares = {}, {}, {"true": 0, "own": 0, "false": 0}
+    for e in rd_all:
+        rd_by[e["desk"]] = rd_by.get(e["desk"], 0) + 1
+        key = "held=%s via=%s" % (e["held"], e["via"])
+        rd_hv[key] = rd_hv.get(key, 0) + 1
+        if e["desk"] == RESEARCH and e["held"] in shares:
+            shares[e["held"]] += 1
+    r["reads_by_desk"] = rd_by
+    r["reads_by_held_via"] = rd_hv
+    r["research_reads"] = {"held": shares["true"], "own": shares["own"], "new": shares["false"]}
+    # per run
+    csn, rdn = {}, {}
+    for e in cs_all:
+        csn[e["run"]] = csn.get(e["run"], 0) + 1
+    for e in rd_all:
+        rdn[e["run"]] = rdn.get(e["run"], 0) + 1
+    per = [(csn.get(e["run"], 0), e["started"], rdn.get(e["run"], 0)) for e in sr]
+    r["per_run"] = {"corpus_searches_median": med([p[0] for p in per]), "web_started_median": med([p[1] for p in per]),
+                    "reads_median": med([p[2] for p in per]),
+                    "web_without_corpus": sum(1 for p in per if p[1] > 0 and p[0] == 0)}
+    r["gateway_web_searches"] = None if gw is None else len(gw)
+    return r
+
+
+def compute(console_text, gateway_text, since=None, until=None, first=None, after=None,
+            extra_lo=None, extra_hi=None):
+    ev, lo, hi = parse_console(console_text)
+    if extra_lo is not None:
+        lo = extra_lo if lo is None else min(lo, extra_lo)
+    if extra_hi is not None:
+        hi = extra_hi if hi is None else max(hi, extra_hi)
+    gw_all = parse_gateway(gateway_text) if gateway_text is not None else None
+
+    def inwin(t):
+        return (since is None or t >= since) and (until is None or t < until)
+    win = [e for e in ev if inwin(e["t"])]
+    sr = [e for e in win if e["k"] == "sr"]
+    cs = [e for e in win if e["k"] == "cs"]
+    rd = [e for e in win if e["k"] == "rd"]
+    gw = None if gw_all is None else [e for e in gw_all if inwin(e["t"])]
+    rep = {"covers": {"oldest": iso(lo) if lo is not None else None, "newest": iso(hi) if hi is not None else None},
+           "since": iso(since) if since is not None else None, "until": iso(until) if until is not None else None,
+           "partial_start": bool(since is not None and (lo is None or since < lo)),
+           "partial_end": bool(until is not None and (hi is None or until > hi + 1)),
+           "first": None}
+    if first is not None:
+        sub = sorted([e for e in sr if after is None or e["t"] >= after], key=lambda e: e["t"])[:first]
+        rep["first"] = {"asked": first, "found": len(sub), "after": iso(after) if after is not None else None}
+        sr = sub
+    rep["m"] = metrics(sr, cs, rd, gw)
+    rep["gateway_span"] = None
+    if gw_all:
+        rep["gateway_span"] = [iso(min(e["t"] for e in gw_all)), iso(max(e["t"] for e in gw_all))]
+    rep["flags"] = []
+    rep["_events"] = ev
+    rep["_gw"] = gw_all
+    rep["_lo"], rep["_hi"] = lo, hi
+    rep["line"] = one_line(rep)
+    rep["text"] = render(rep)
+    return rep
+
+
+def fmt(x):
+    if x is None:
+        return "n/a"
+    return str(int(x)) if float(x) == int(x) else "%.1f" % x
+
+
+def one_line(r):
+    m = r["m"]
+    span = "no console lines" if not r["covers"]["oldest"] else "%s to %s" % (r["covers"]["oldest"][5:16], r["covers"]["newest"][5:16])
+    rr = m["research_reads"]
+    tot = rr["held"] + rr["own"] + rr["new"]
+    cs = sum(d["n"] for d in m["corpus_searches"].values())
+    return ("Corpus reuse (%s): %d runs searched, %d web searches started, %s of returned pages read, %d corpus searches, "
+            "research reads %s held before the run, %s own, %s new%s."
+            % (span, m["runs"], m["started"], pct(m["read"], m["returned"]), cs,
+               pct(rr["held"], tot), pct(rr["own"], tot), pct(rr["new"], tot),
+               "" if m["gateway_web_searches"] is None else "; gateway saw %d web searches" % m["gateway_web_searches"]))
+
+
+def render(r):
+    m = r["m"]
+    o = ["== corpus reuse (paper %s) ==" % PAPER_VM]
+    c = r["covers"]
+    if c["oldest"] is None:
+        o.append("console: no lines found")
+    else:
+        o.append("console covers %s to %s" % (c["oldest"], c["newest"]))
+    if r["since"] or r["until"]:
+        o.append("requested window: %s to %s" % (r["since"] or "(start)", r["until"] or "(now)"))
+    if r["partial_start"]:
+        o.append("NOTE: the requested window starts before the oldest console line (the console rotates at about "
+                 "1 MB); what follows is a PARTIAL window from %s." % (c["oldest"] or "(no lines)"))
+    if r["partial_end"]:
+        o.append("NOTE: the requested window ends after the newest console line (%s); what follows may be partial." % c["newest"])
+    f = r["first"]
+    if f:
+        o.append("first %d research-run summaries at or after %s: found %d%s" % (
+            f["asked"], f["after"] or "(start)", f["found"],
+            "" if f["found"] >= f["asked"] else " (fewer than %d exist yet; this is not the full set)" % f["asked"]))
+    o.append("research runs that searched (summary lines): %d" % m["runs"])
+    if m["runs"]:
+        o.append("  started (web searches sent) sum %d, median %s, max %s" % (m["started"], fmt(m["started_median"]), fmt(m["started_max"])))
+        o.append("  from_held %d" % m["from_held"])
+        reasons = ", ".join("%s=%d" % kv for kv in sorted(m["not_sent_reasons"].items()))
+        o.append("  not_sent %d%s" % (m["not_sent"], " (%s)" % reasons if reasons else ""))
+        o.append("  pages_returned %d, pages_new %d, pages_read %d; pages_read / pages_returned %s"
+                 % (m["returned"], m["new"], m["read"], pct(m["read"], m["returned"])))
+        nf = m["new_fields"]
+        if nf:
+            o.append("  (%d lines carry the wording fields) search_all_calls %d, wordings_offered %d, wordings_sent %d (%s), unread_notes %d, untagged %d"
+                     % (nf["lines"], nf["all_calls"], nf["offered"], nf["sent"], pct(nf["sent"], nf["offered"]), nf["unread"], nf["untagged"]))
+    o.append("corpus searches by desk:")
+    if not m["corpus_searches"]:
+        o.append("  (none)")
+    for d, v in sorted(m["corpus_searches"].items()):
+        o.append("  %-12s %5d; %s returned one capture or more; page-text hit %s (of %d lines with the fields)"
+                 % (d, v["n"], pct(v["ge1"], v["n"]), pct(v["th"], v["tf"]), v["tf"]))
+    o.append("page reads by desk:")
+    if not m["reads_by_desk"]:
+        o.append("  (none)")
+    for d, n in sorted(m["reads_by_desk"].items()):
+        o.append("  %-12s %5d" % (d, n))
+    for k, n in sorted(m["reads_by_held_via"].items()):
+        o.append("  %-36s %5d" % (k, n))
+    rr = m["research_reads"]
+    tot = rr["held"] + rr["own"] + rr["new"]
+    o.append("research reads: held before the run %d (%s), own (captured by this run) %d (%s), new %d (%s)"
+             % (rr["held"], pct(rr["held"], tot), rr["own"], pct(rr["own"], tot), rr["new"], pct(rr["new"], tot)))
+    p = m["per_run"]
+    o.append("per run (joined on run=): corpus searches median %s, web searches started median %s, reads median %s; "
+             "runs with a web search and no corpus search at all: %d of %d"
+             % (fmt(p["corpus_searches_median"]), fmt(p["web_started_median"]), fmt(p["reads_median"]), p["web_without_corpus"], m["runs"]))
+    if m["gateway_web_searches"] is None:
+        o.append("web searches the paper sent (gateway journal): not read")
+    else:
+        o.append("web searches the paper sent in the window (gateway journal): %d%s" % (
+            m["gateway_web_searches"], "" if not r["gateway_span"] else " (journal lines span %s to %s)" % tuple(r["gateway_span"])))
+    o.append(r["line"])
+    return "\n".join(o)
+
+
+def hour_rows(rep, since, until):
+    """One TSV row per whole UTC hour the console fully covers, in the window."""
+    lo, hi = rep["_lo"], rep["_hi"]
+    if lo is None:
+        return []
+    ev, gw = rep["_events"], rep["_gw"]
+    rows = []
+    h = (lo // 3600 + 1) * 3600 if lo % 3600 else lo + 3600   # first hour starting after the oldest line
+    while h + 3600 <= hi:   # a line exists at or after the hour's end
+        a, b = h, h + 3600
+        h += 3600
+        if (since is not None and a < since) or (until is not None and b > until):
+            continue
+        sel = lambda e: a <= e["t"] < b
+        sr = [e for e in ev if e["k"] == "sr" and sel(e)]
+        cs = [e for e in ev if e["k"] == "cs" and sel(e)]
+        rd = [e for e in ev if e["k"] == "rd" and sel(e)]
+        g = None if gw is None else [e for e in gw if sel(e)]
+        m = metrics(sr, cs, rd, g)
+        csv = list(m["corpus_searches"].values())
+        rr = m["research_reads"]
+        nf = m["new_fields"]
+        row = [time.strftime("%Y-%m-%dT%H:00Z", time.gmtime(a)), m["runs"], m["started"], m["from_held"], m["not_sent"],
+               m["returned"], m["new"], m["read"], nf["offered"] if nf else "", nf["sent"] if nf else "",
+               sum(d["n"] for d in csv), sum(d["ge1"] for d in csv), sum(d["th"] for d in csv), sum(d["tf"] for d in csv),
+               sum(m["reads_by_desk"].values()), rr["held"], rr["own"], rr["new"], m["per_run"]["web_without_corpus"],
+               "" if g is None else len(g)]
+        rows.append(row)
+    return rows
+
+
+def append_rows(path, rows):
+    path = os.path.abspath(os.path.expanduser(path))
+    if path == REPO or path.startswith(REPO + os.sep):
+        raise ValueError("refusing to write inside the repo: %s" % path)
+    have = set()
+    exists = os.path.exists(path)
+    if exists:
+        with open(path) as f:
+            for ln in f:
+                have.add(ln.split("\t", 1)[0])
+    new = [r for r in rows if r[0] not in have]
+    if not new and exists:
+        return 0
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a") as f:
+        if not exists or os.path.getsize(path) == 0:
+            f.write("\t".join(HEADER) + "\n")
+        for r in new:
+            f.write("\t".join(str(x) for x in r) + "\n")
+    return len(new)
+
+
+REMOTE = r"""
+dir=/var/lib/go-choir/vm-state/@VM@
+sudo -n true 2>/dev/null || echo "##NOSUDO"
+echo "##CONSOLE"
+sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
+  grep -a -E 'runtime: search run=|corpus search computer=|corpus read run=' |
+  sed -E 's/ (note|query)="([^"\\]|\\.)*"//g'
+echo "##RANGE"
+sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
+  grep -a -o -E '[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' | sed -n '1p;$p'
+echo "##GATEWAY"
+journalctl -u go-choir-gateway --since '-26 hours' --no-pager -o cat --utc 2>/dev/null | grep -a 'search request from autoputer @VM@' |
+  sed -E 's/ query="([^"\\]|\\.)*"//'
+echo "##END"
+""".replace("@VM@", PAPER_VM)
+
+
+def sections(text):
+    out, cur = {}, None
+    for ln in text.splitlines():
+        if ln.startswith("##"):
+            cur = ln[2:].split(" ", 1)[0]
+            out[cur] = []
+        elif cur:
+            out[cur].append(ln)
+    return out
+
+
+def fetch(node):
+    p = subprocess.run(["ssh", "-C", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node, REMOTE],
+                       capture_output=True, text=True, timeout=240)
+    s = sections(p.stdout)
+    if "END" not in s:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    if "NOSUDO" in s:
+        raise RuntimeError("sudo -n is not allowed on %s: the guest console cannot be read" % node)
+    rng = [x for x in s.get("RANGE", []) if x.strip()]
+    return {"console": "\n".join(s.get("CONSOLE", [])), "gateway": "\n".join(s.get("GATEWAY", [])), "range": rng}
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="status-corpus-reuse", description="how much the paper's research stands on held pages")
+    ap.add_argument("--since")
+    ap.add_argument("--until")
+    ap.add_argument("--first", type=int)
+    ap.add_argument("--after")
+    ap.add_argument("--append", nargs="?", const=DEFAULT_APPEND, default=None)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--node", default=NODE)
+    ap.add_argument("--fixture")
+    ap.add_argument("--gateway-fixture")
+    a = ap.parse_args(argv)
+    try:
+        since = parse_arg_time(a.since) if a.since else None
+        until = parse_arg_time(a.until) if a.until else None
+        after = parse_arg_time(a.after) if a.after else None
+        if a.after and a.first is None:
+            raise ValueError("--after needs --first N")
+        extra_lo = extra_hi = None
+        if a.fixture:
+            with open(a.fixture) as f:
+                console = f.read()
+            gateway = None
+            if a.gateway_fixture:
+                with open(a.gateway_fixture) as f:
+                    gateway = f.read()
+        else:
+            raw = fetch(a.node)
+            console, gateway = raw["console"], raw["gateway"]
+            if raw["range"]:
+                extra_lo = stamp_epoch(raw["range"][0])
+                extra_hi = stamp_epoch(raw["range"][-1])
+        rep = compute(console, gateway, since, until, a.first, after, extra_lo, extra_hi)
+        if a.append:
+            n = append_rows(a.append, hour_rows(rep, since, until))
+            rep["text"] += "\nappended %d whole-hour rows to %s" % (n, os.path.expanduser(a.append))
+            rep["appended"] = n
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as e:
+        print("status-corpus-reuse: unavailable: %s" % e, file=sys.stderr)
+        return 2
+    if a.json:
+        print(json.dumps({k: v for k, v in rep.items() if not k.startswith("_")}, sort_keys=True))
+    else:
+        print(rep["text"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

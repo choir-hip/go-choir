@@ -389,5 +389,104 @@ check "Q3 a list that reaches before the day is complete" '! grep -q "may be inc
 env -u BASH_ENV python3 "$quality" --day 2026-11-17 --fixture "$root/front1.json" >"$root/out" 2>&1
 check "Q3 a list that ends inside the day is said to be incomplete" 'grep -q "may be incomplete" "$root/out"'
 
+# status-corpus-reuse (search-reuse). Failure list, written before the code:
+#  R1  a query or note text reaches the output, in the text or the JSON
+#  R2  a line of the older corpus shape (no text_index .. by_labels_only) is
+#      dropped, or counted as a page-text miss instead of left out of that share
+#  R3  the new summary fields are printed when no line carries them, or are not
+#      summed when some do; wordings_sent / wordings_offered is wrong
+#  R4  a window that starts before the oldest console line is not called partial
+#  R5  an hour the console does not fully cover (no line before it, or none at
+#      or after its end) is appended, or a covered hour is missing, or running
+#      twice appends it twice, or the header is missing, or the file lands in the repo
+#  R6  --first N --after T takes lines before T, takes more than N, or does not say
+#      so when fewer than N exist
+#  R7  held=true/own/false shares of the research desk's reads are wrong; another
+#      desk's reads are counted in them
+#  R8  runs with a web search and no corpus search are miscounted; the join is
+#      not on run=
+#  R9  the gateway count includes another computer, a line outside the window,
+#      or prints the query
+#  R10 the hourly script fails, or changes its last line, when the corpus
+#      section is unavailable
+corpus="$here/status-corpus-reuse"
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+PRE = "[ 3433.240153] 267hzahw99fgwgizzlinyajh0hnpc6ya-go-choir-run-autoputer-runtime[723]: "
+def sr(ts, run, started, ret, new, read, extra="", reasons="", notsent=0, desk="research"):
+    r = " (%s)" % reasons if reasons else ""
+    return f"{PRE}{ts} runtime: search run={run} desk={desk} started={started} from_held=0 not_sent={notsent}{r} pages_returned={ret} pages_new={new} pages_read={read}{extra}\n"
+def cs(ts, run, caps, new=True, body=0, both=0, desk="research"):
+    f = f" text_index=true text_indexed=100 computer_pages=900 by_body={body} by_title=0 by_both={both} by_labels_only=1" if new else ""
+    return (f'{PRE}{ts} corpus search computer=computer-aaaa captures_ms=5 captures={caps}{f} note="SECRET-NOTE \\"x\\"" '
+            f'query="SECRET-QUERY \\"quoted\\" example.com" capture_ids= run={run} desk={desk} conv=conv-1 published=1 events=1 capped=false\n')
+def rd(ts, run, held, via="read", desk="research"):
+    return f"{PRE}{ts} corpus read run={run} desk={desk} conv=conv-1 capture=cap-1 held={held} via={via}\n"
+NEWF = " search_all_calls=5 wordings_offered=10 wordings_sent=4 unread_notes=2 untagged=1"
+# console A: 20:30 .. 23:10, whole hours 21:00 and 22:00 covered; 20:00 and 23:00 not.
+a = [PRE + "2026/11/18 20:30:00 runtime: something else\n",
+     sr("2026/11/18 21:10:00", "run-1", 4, 100, 80, 5, NEWF, "stopped_yielding=2", 2),
+     sr("2026/11/18 21:20:00", "run-2", 6, 50, 40, 5),
+     sr("2026/11/18 22:00:00", "run-3", 0, 0, 0, 1),            # exactly on the boundary: belongs to 22:00
+     sr("2026/11/18 22:30:00", "run-4", 2, 10, 10, 0, desk="other"),
+     cs("2026/11/18 21:09:00", "run-1", 2, True, body=1),
+     cs("2026/11/18 21:19:00", "run-2", 0, False),               # old shape
+     cs("2026/11/18 21:59:59", "run-3", 1, True, both=1),
+     cs("2026/11/18 22:29:00", "run-4", 0, True, desk="other"),
+     rd("2026/11/18 21:11:00", "run-1", "true"), rd("2026/11/18 21:11:01", "run-1", "own", "read_capture"),
+     rd("2026/11/18 21:11:02", "run-1", "false"), rd("2026/11/18 21:12:00", "run-2", "false"),
+     rd("2026/11/18 22:31:00", "run-4", "true", desk="other"),
+     PRE + "2026/11/18 23:10:00 runtime: something else\n"]
+open(root + "/cr_a.log", "w").write("".join(a))
+# console B: only the new-field-free shape, 30 research runs from 21:00 on
+b = [sr("2026/11/18 21:%02d:00" % i, "b-%d" % i, 1, 10, 5, 1) for i in range(30)] + [cs("2026/11/18 21:01:00", "b-0", 1)]
+open(root + "/cr_b.log", "w").write("".join(b))
+g = ["2026/11/18 21:10:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (query=\"SECRET-QUERY gw\" max_results=10 run=run-1 desk=research conv=c)\n",
+     "2026/11/18 21:50:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (query=\"SECRET-QUERY gw\" max_results=10 run=run-2 desk=research conv=c)\n",
+     "2026/11/18 21:50:00 gateway: search request from autoputer vm-00000000000000000000000000000001 (query=\"SECRET-QUERY gw\" max_results=10 run=x desk=research conv=c)\n",
+     "2026/11/18 22:05:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (query=\"SECRET-QUERY gw\" max_results=10 run=run-3 desk=research conv=c)\n",
+     "2026/11/18 19:00:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (query=\"SECRET-QUERY gw\" max_results=10 run=old desk=research conv=c)\n"]
+open(root + "/cr_g.log", "w").write("".join(g))
+PY
+runcorpus() { env -u BASH_ENV python3 "$corpus" "$@" >"$root/out" 2>&1; echo $? >"$root/rc"; }
+runcorpus --fixture "$root/cr_a.log" --gateway-fixture "$root/cr_g.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z
+check "R1 no query or note text in the report" '! grep -q SECRET "$root/out"'
+check "R3 4 runs searched; started 12; the new fields are summed over the one line that has them" 'grep -q "summary lines): 4" "$root/out" && grep -q "started (web searches sent) sum 12" "$root/out" && grep -q "wordings_offered 10, wordings_sent 4 (40.0%)" "$root/out"'
+check "R3 not_sent reasons summed" 'grep -q "not_sent 2 (stopped_yielding=2)" "$root/out"'
+check "R3 pages_read / pages_returned = 11/160 = 6.9%" 'grep -q "pages_returned 160, pages_new 130, pages_read 11; pages_read / pages_returned 6.9%" "$root/out"'
+check "R2 research corpus searches: 3 lines, 2 with a capture; text hit 2 of the 2 lines with the fields" 'grep -q "research *3; 66.7% returned one capture or more; page-text hit 100.0% (of 2 lines" "$root/out"'
+check "R7 research reads: held 1, own 1, new 2; the other desk is apart" 'grep -q "held before the run 1 (25.0%), own (captured by this run) 1 (25.0%), new 2 (50.0%)" "$root/out" && grep -q "^  other  *1$" "$root/out"'
+check "R8 every run has a corpus line under its own run=, so none made web searches without one (0 of 4)" 'grep -q "no corpus search at all: 0 of 4" "$root/out"'
+check "R9 gateway: 3 paper lines in the window (the other computer and 19:00 are out)" 'grep -q "journal): 3 " "$root/out"'
+check "R4 a window inside the console is not partial" '! grep -q PARTIAL "$root/out"'
+runcorpus --fixture "$root/cr_a.log" --since 2026-11-18T19:00Z
+check "R4 a window starting before the oldest line says it is partial" 'grep -q "PARTIAL window from 2026-11-18T20:30:00Z" "$root/out"'
+runcorpus --fixture "$root/cr_b.log"
+check "R3 no line carries the new fields: they are not printed" '! grep -q "wordings" "$root/out"'
+check "R8 console B: 29 of 30 runs searched the web with no corpus search under their run=" 'grep -q "no corpus search at all: 29 of 30" "$root/out"'
+runcorpus --fixture "$root/cr_a.log" --json
+check "R1 JSON has no query text and carries a one-line summary" '! grep -q SECRET "$root/out" && [ "$(jq_ "len(d[\"line\"].splitlines())")" = 1 ]'
+# R6
+runcorpus --fixture "$root/cr_b.log" --first 24 --after 2026-11-18T21:05Z
+check "R6 first 24 after 21:05: 24 found (the lines at 21:05..21:28), none before" 'grep -q "found 24" "$root/out" && grep -q "summary lines): 24" "$root/out"'
+runcorpus --fixture "$root/cr_b.log" --first 24 --after 2026-11-18T21:20Z
+check "R6 only 10 exist at or after 21:20: found 10, said plainly" 'grep -q "found 10 (fewer than 24 exist yet" "$root/out"'
+# R5
+tsv="$root/cr.tsv"
+runcorpus --fixture "$root/cr_a.log" --gateway-fixture "$root/cr_g.log" --append "$tsv"
+check "R5 whole hours 21:00 and 22:00 only, with a header" '[ "$(cut -f1 "$tsv")" = "$(printf "hour\n2026-11-18T21:00Z\n2026-11-18T22:00Z")" ]'
+check "R5 the 21:00 row: 2 runs, 10 started; the boundary run (22:00:00) is in the 22:00 row" '[ "$(sed -n 2p "$tsv" | cut -f2,3)" = "$(printf "2\t10")" ] && [ "$(sed -n 3p "$tsv" | cut -f2,3)" = "$(printf "2\t2")" ]'
+runcorpus --fixture "$root/cr_a.log" --append "$tsv"
+check "R5 a second run appends nothing new" '[ "$(wc -l <"$tsv")" -eq 3 ] && grep -q "appended 0" "$root/out"'
+runcorpus --fixture "$root/cr_a.log" --append "$here/../corpus-reuse-test.tsv"
+check "R5 a file inside the repo is refused" '[ "$(cat "$root/rc")" = 2 ] && [ ! -e "$here/../corpus-reuse-test.tsv" ]'
+# R10
+mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 * h' 3
+env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/missing.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
+check "R10 a corpus failure is shown in its own section and changes neither exit code nor last line" '[ "$rc" = 0 ] && grep -q "corpus reuse: unavailable" "$root/out" && tail -n 1 "$root/out" | grep -q "OK$"'
+env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/cr_a.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
+check "R10 the corpus section prints between the reports and the last line" '[ "$rc" = 0 ] && grep -q "== corpus reuse" "$root/out" && tail -n 1 "$root/out" | grep -q "OK$"'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """status-hourly: runs status-paper-usage and status-storage, prints both
-reports and ends with ONE line under 200 characters that leads with whatever
+reports (and the status-corpus-reuse section, which also appends the whole
+hours the guest console still holds to ~/.cache/choir-status/corpus-reuse.tsv;
+if it fails, only its own line says so) and ends with ONE line under 200 characters that leads with whatever
 needs action (storage mission S9; the combined hourly status tick).
 
-  status-hourly [--json] [--paper-fixture FILE] [--storage-fixture FILE] [--node HOST]
+  status-hourly [--json] [--paper-fixture FILE] [--storage-fixture FILE]
+                [--corpus-fixture FILE] [--corpus-gateway-fixture FILE] [--corpus-append FILE] [--node HOST]
 
 Exit 0 when no flag is raised in either report and both fetched; non-zero
 otherwise (1 for a flag, 2 when a report was unavailable). --json prints one
@@ -75,6 +78,23 @@ def main(argv):
     if opt("--node"):
         p_args += ["--node", opt("--node")]
         s_args += ["--node", opt("--node")]
+    # The corpus section runs against Node B unless fixtures are in play: a test
+    # that gives the other two fixtures and no corpus fixture must not use ssh.
+    corpus, cerr = None, None
+    c_args = []
+    if opt("--corpus-fixture"):
+        c_args = ["--fixture", opt("--corpus-fixture")]
+        if opt("--corpus-gateway-fixture"):
+            c_args += ["--gateway-fixture", opt("--corpus-gateway-fixture")]
+    elif opt("--node"):
+        c_args = ["--node", opt("--node")]
+    run_corpus = bool(opt("--corpus-fixture")) or not (opt("--paper-fixture") or opt("--storage-fixture"))
+    if run_corpus:
+        c_args += ["--append"] + ([opt("--corpus-append")] if opt("--corpus-append") else [])
+        try:
+            corpus, cerr = run("status-corpus-reuse", c_args)
+        except Exception as e:   # this section never fails the hourly report
+            corpus, cerr = None, str(e)[:80]
     paper, perr = run("status-paper-usage", p_args)
     storage, serr = run("status-storage", s_args)
     problems = []
@@ -85,12 +105,15 @@ def main(argv):
     line = build_line(paper, storage, problems)
     flagged = bool(problems) or any(r and r["flags"] for r in (paper, storage))
     if "--json" in argv:
-        print(json.dumps({"paper": paper, "storage": storage, "line": line,
+        print(json.dumps({"paper": paper, "storage": storage, "corpus": corpus, "line": line,
                           "flags": problems + (paper["flags"] if paper else []) + (storage["flags"] if storage else [])},
                          sort_keys=True))
     else:
         for r, err, name in ((paper, perr, "paper usage"), (storage, serr, "storage")):
             print(r["text"] if r else "== %s: unavailable: %s ==" % (name, err))
+            print()
+        if run_corpus:
+            print(corpus["text"] if corpus else "== corpus reuse: unavailable: %s ==" % cerr)
             print()
         print(line)
     if problems:
