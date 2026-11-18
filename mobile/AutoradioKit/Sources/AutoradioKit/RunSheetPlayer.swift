@@ -127,6 +127,8 @@ extension PlaybackEngine {
     private var startTask: Task<Void, Never>?
     /// The radio is on: an entry that ends is followed by the next one. Off at launch, after a pause that stopped it, and after sign-out.
     var wants = false
+    /// The radio is wanted (started and not stopped): the next entry starts by itself when one arrives.
+    public var wantsToPlay: Bool { wants }
     /// The turn ids already applied (the turn route's replay rule).
     var turnLog: [String] = []
     private var silent = 0

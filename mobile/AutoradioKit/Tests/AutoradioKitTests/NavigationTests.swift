@@ -101,7 +101,7 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(mail.contains("row flex-wrap=\"wrap\" gap=8 width=\"100%\"\n          for f in mbx.folders"))
         for id in ["files-sorts", "files-crumbs"] { XCTAssertTrue(try text("files.contract").contains("width=\"100%\" testId=\"\(id)\"")) }
         XCTAssertTrue(try text("paper.contract").contains("row flex-wrap=\"wrap\" gap=8 width=\"100%\" testId=\"paper-sections\""))
-        XCTAssertTrue(try text("launcher.contract").contains("row flex-wrap=\"wrap\" gap=8 width=\"100%\" testId=\"launcher-key-pages\""))
+        XCTAssertTrue(try text("launcher.contract").contains("row flex-wrap=\"wrap\" gap=0 width=\"100%\" testId=\"launcher-key-pages\""))
     }
 
     private func text(_ name: String) throws -> String { try String(contentsOf: Self.lab.appendingPathComponent(name), encoding: .utf8) }

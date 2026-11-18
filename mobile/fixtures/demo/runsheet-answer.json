@@ -18,7 +18,14 @@
      "outcome": "cut",
      "at": "",
      "last_block": 0
-    }
+    },
+    "cites": [
+     {
+      "ref": "pub:demo-harbor-barrier@v2",
+      "role": "subject",
+      "label": "The harbor council approves a tide barrier"
+     }
+    ]
    },
    {
     "id": "a-1",
@@ -36,7 +43,14 @@
     "state": "ahead",
     "title": "The harbour barrier passes its first test",
     "est_seconds": 90,
-    "text": "The rest of the story, from where it was cut."
+    "text": "The rest of the story, from where it was cut.",
+    "cites": [
+     {
+      "ref": "pub:demo-harbor-barrier@v2",
+      "role": "subject",
+      "label": "The harbor council approves a tide barrier"
+     }
+    ]
    },
    {
     "id": "d-2",

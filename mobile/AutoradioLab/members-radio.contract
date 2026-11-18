@@ -16,6 +16,11 @@ members Autoradio
   action radioToggleWhy
     whyFor = whyFor == rp.title ? "" : rp.title
 
+  // A Heard row's "Built on" list is open for the entry whose id it was opened on.
+  state heardOpen = ""
+  action toggleHeardBuilt(id: string)
+    heardOpen = heardOpen == id ? "" : id
+
   // remove | play | replay, arg the entry's id
   action radioDo(op: string, id: string)
     send rpm = radioPageAct(op=op, arg=id, to="")

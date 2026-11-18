@@ -20,8 +20,9 @@ extension AutoradioModule {
             i.playing = radio.playing || bar.state == "playing"
             i.sentences = radio.sentences; i.sentenceIndex = radio.sentenceIndex; i.progress = radio.progress
             i.remoteAudio = q.audio; i.elapsedLabel = q.elapsedLabel; i.remainingLabel = q.remainingLabel
-            i.message = q.message; i.notice = q.notice; i.writing = q.writing; i.dry = q.dry
+            i.wants = player.wantsToPlay; i.message = q.message; i.notice = q.notice; i.writing = q.writing; i.dry = q.dry
             if let r = player.store.onAir()?.paperRoute { i.published = PublishedTimes.shared.words(route: r) }
+            i.versions = PublishedTimes.shared.versions()
             i.stale = Set(player.store.sheet.ahead().filter { player.store.isStale($0) }.map(\.id))
             return RadioPage.make(i)
         }

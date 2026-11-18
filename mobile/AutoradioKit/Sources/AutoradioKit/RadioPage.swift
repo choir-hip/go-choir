@@ -35,6 +35,19 @@ public struct RadioPageRow: Codable, Sendable, Equatable {
     public var byWord = ""
     /// One quiet caption ("Written for other neighbours"); "" when there is none.
     public var note = ""
+    public var builtOn: [RadioBuiltOn] = []
+    public init() {}
+}
+
+/// A story an entry was built on: the title and the page that opens it (its Texture, which shows its own sources).
+public struct RadioBuiltOn: Codable, Sendable, Equatable {
+    public var n = 0
+    public var title = ""
+    public var address = ""
+    /// The cite's role when it is not the subject ("quoted", "mentioned"); "" for a subject.
+    public var role = ""
+    /// "cited v2, now v3" when the story has a newer version than the one cited (the reader opens the current version, not a pinned one).
+    public var note = ""
     public init() {}
 }
 
@@ -45,6 +58,7 @@ public struct RadioHeardRow: Codable, Sendable, Equatable {
     public var title = ""
     /// finished | skipped | cut | left | failed
     public var outcome = ""
+    public var builtOn: [RadioBuiltOn] = []
     public init() {}
 }
 
@@ -82,6 +96,10 @@ public struct RadioPageInfo: Codable, Sendable, Equatable {
     /// What the listener said, as it was recognised ("" before words come).
     public var heardWords = ""
     public var greeting = ""
+    /// The stories the entry on air was built on ("Built on"); empty when it has none (no heading then).
+    public var builtOn: [RadioBuiltOn] = []
+    /// A Play button is offered only when pressing it does something: not while the desk is writing and the radio will start by itself.
+    public var canPlay = true
 
     // up next
     public var ahead: [RadioPageRow] = []
@@ -118,10 +136,14 @@ public struct RadioPageInput: Sendable {
     public var notice = ""
     public var writing = false
     public var dry = false
+    /// The radio is wanted (it was started and not stopped): what is written next starts by itself.
+    public var wants = false
     /// When the entry on air was published ("2 h ago"); "" when not known.
     public var published = ""
     /// Ahead entries whose neighbours changed since they were written.
     public var stale: Set<String> = []
+    /// The current version of stories the phone holds, by route (from the front list): a cite of another version is noted on its row.
+    public var versions: [String: Int] = [:]
     public var now = Date()
     public var timeZone = TimeZone.current
     public init(sheet: RunSheet) { self.sheet = sheet }
@@ -199,8 +221,32 @@ public enum RadioPage {
     /// The page an entry's title opens: a story, a book, a file.
     static func openAddress(_ e: RunSheetEntry) -> String {
         if let r = e.paperRoute { return "pub:" + r }
+        // A desk story (kind story) names the story it tells in `source` (the first pub: cite): its title opens that story.
+        if let s = e.source?.ref, s.hasPrefix("pub:"), e.kind == .story { return "pub:" + (s.dropFirst(4).split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? "") }
         if let b = e.book { return ShelfAddress.address(b.id) }
         return e.filesAddress ?? ""
+    }
+
+    /// The stories an entry was built on: its cites and its source that name a story's page (`pub:<route>[@version]` or `texture:<id>`), once each, in
+    /// order. The title is the label the server gave (it defaults to the story's own title). An opening, an answer or a clip with no story has none.
+    public static func builtOn(_ e: RunSheetEntry, versions: [String: Int] = [:]) -> [RadioBuiltOn] {
+        var seen = Set<String>(), out: [RadioBuiltOn] = []
+        func add(_ ref: String, _ label: String, _ role: RunSheetRole? = nil) {
+            guard ref.hasPrefix("pub:") || ref.hasPrefix("texture:") else { return }
+            let address = ref.hasPrefix("pub:") ? "pub:" + (ref.dropFirst(4).split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? "") : ref
+            guard address.count > 4, seen.insert(address).inserted else { return }
+            var b = RadioBuiltOn()
+            b.n = out.count; b.address = address
+            if let role, role != .subject { b.role = role.rawValue }
+            if ref.hasPrefix("pub:"), let at = ref.firstIndex(of: "@"), ref[ref.index(after: at)...].hasPrefix("v"), let cited = Int(ref[ref.index(at, offsetBy: 2)...]),
+               let now = versions[String(address.dropFirst(4))], now != cited { b.note = "cited v\(cited), now v\(now)" }
+            let t = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            b.title = t.isEmpty ? String(address.drop(while: { $0 != ":" }).dropFirst()) : t
+            out.append(b)
+        }
+        for c in e.cites ?? [] { add(c.ref, c.label, c.role) }
+        if let s = e.source { add(s.ref, s.label) }
+        return out
     }
 
     /// A sentence from what an entry carries when it carries no stated cause.
@@ -253,6 +299,7 @@ public enum RadioPage {
             o.source = e.audioSpec?.show.isEmpty == false ? e.audioSpec!.show : (e.source?.label ?? "")
             o.published = i.published
             o.openAddress = openAddress(e)
+            o.builtOn = builtOn(e, versions: i.versions)
             if !i.remoteAudio, i.sentences.indices.contains(i.sentenceIndex) {
                 o.sentence = i.sentences[i.sentenceIndex]; o.sentenceNumber = i.sentenceIndex + 1; o.sentenceCount = i.sentences.count
             }
@@ -281,18 +328,21 @@ public enum RadioPage {
             r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.displayTitle; r.length = length(e.estSeconds)
             r.by = e.placedBy.rawValue; r.byWord = e.placedBy == .listener ? "You" : (e.placedBy == .desk ? "Desk" : "Phone")
             if i.stale.contains(e.id) { r.note = "Written for other neighbours" }
+            r.builtOn = builtOn(e, versions: i.versions)
             return r
         }
         o.ahead = rows
         o.aheadMore = max(0, rows.count - nextShown)
         if rows.isEmpty {
             o.emptyNote = i.writing ? "The desk is writing what comes next."
-                : (i.notice != "" ? "Nothing is coming up yet." : (i.dry ? "Nothing is coming up. Add a story, a page or a podcast, or open a place below." : "The desk will write more shortly."))
+                : (i.notice != "" ? "Nothing is coming up yet." : (i.dry ? "Nothing is coming up. Open the mark below to find a story, a page or a podcast, and add it." : "The desk will write more shortly."))
         }
 
-        o.heard = tail.reversed().prefix(heardShown).enumerated().map { k, e in
+        // An entry that never made a sound (failed) was not heard: it is not listed.
+        let sounded = tail.filter { $0.ended?.outcome != .failed }
+        o.heard = sounded.reversed().prefix(heardShown).enumerated().map { k, e in
             var r = RadioHeardRow()
-            r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.displayTitle; r.outcome = outcomeWord(e)
+            r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.displayTitle; r.outcome = outcomeWord(e); r.builtOn = builtOn(e, versions: i.versions)
             return r
         }
 
@@ -315,7 +365,9 @@ public enum RadioPage {
         } else if air != nil {
             o.state = i.playing ? "onair" : "paused"; o.statusLine = i.playing ? "On air" : "Paused"
         } else if i.writing {
-            o.state = "writing"; o.statusLine = "Writing the next stretch"
+            o.state = "writing"
+            o.statusLine = i.wants ? "Writing the next stretch. It will start by itself." : "Writing the next stretch"
+            o.canPlay = !i.wants
         } else if !o.greeting.isEmpty && isCold(tail: tail, now: i.now) {
             o.state = "cold"; o.statusLine = "Ready"
         } else {
@@ -385,11 +437,13 @@ public final class PublishedTimes: @unchecked Sendable {
     public static let shared = PublishedTimes()
     private let lock = NSLock()
     private var at: [String: Date] = [:]
+    private var ver: [String: Int] = [:]
     public init() {}
     public func record(_ stories: [PaperStory]) {
         lock.lock(); defer { lock.unlock() }
-        for s in stories { if let d = s.updated { at[s.route] = d } }
+        for s in stories { if let d = s.updated { at[s.route] = d }; ver[s.route] = s.versions }
     }
+    public func versions() -> [String: Int] { lock.lock(); defer { lock.unlock() }; return ver }
     /// "2 h ago"; "" when the story is not in the list.
     public func words(route: String, now: Date = Date()) -> String {
         lock.lock(); let d = at[route]; lock.unlock()

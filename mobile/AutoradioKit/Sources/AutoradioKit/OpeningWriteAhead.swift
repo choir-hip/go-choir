@@ -64,7 +64,9 @@ import Foundation
                 }
             }
         } catch { return }
-        guard let o = opening else { return }
+        guard var o = opening else { return }
+        // Nothing that depends on the moment of speaking is pre-rendered (Moment.swift): the body is made true whenever it is played.
+        o.text = Moment.body(o.text ?? "")
         var audio: [PreparedAudio] = []
         for b in Self.blocks(of: o) {
             guard let a = await synth(b) else { audio = []; break }       // a voice that cannot make it: the text is kept without sound
@@ -80,7 +82,7 @@ import Foundation
               store.entry(e.id)?.state == .ahead else { return }
         if let k = cache.first(voice: v), k.entry.id == e.id, !k.files.isEmpty || Self.blocks(of: e).isEmpty { return }
         guard let b = Self.blocks(of: e).first else { return }
-        let a = await synth(b)
+        let a = Moment.dependsOnMoment(b) ? nil : await synth(b)             // a first block that names the moment is kept as text, not as sound
         if a != nil { synthesised.append(b) }
         cache.put(.first, entry: e, titles: (e.cites ?? []).map(\.label).filter { !$0.isEmpty }, audio: a.map { [$0] } ?? [], voice: v)
     }

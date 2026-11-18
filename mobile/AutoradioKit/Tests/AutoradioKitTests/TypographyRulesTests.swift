@@ -195,8 +195,9 @@ final class TypographyRulesTests: XCTestCase {
     func testKeyPagesAreActionsAndThePlaceholderIsALabel() throws {
         var chip = 0, field = false
         for els in try Self.allElements() { for (k, e) in els.enumerated() {
-            if e.file == "launcher.contract", Self.isText(e), Self.ancestors(els, k).contains(where: { $0.text.hasPrefix("component ChipPlace") }) {
-                chip += 1; XCTAssertEqual(Self.faces(in: e.text), ["th.fontAction"], "a key page is an Action, not a headline")
+            if e.file == "launcher.contract", Self.ancestors(els, k).contains(where: { $0.text.hasPrefix("component KeyGlyph") }) {
+                XCTAssertFalse(Self.isText(e), "a key page is a glyph with no caption; its name is the accessibility label")
+                if e.text.hasPrefix("button") { chip += 1; XCTAssertTrue(e.text.contains("aria-label=`Open ${name}`"), "each glyph names its page for accessibility") }
             }
             if e.text.contains("testId=\"bar-field\"") {
                 field = true
