@@ -127,7 +127,7 @@ question whose answers it already holds.
   the repo sends `x`, so it was a cell the model wrote.
 - Log lines for the corpus audit
   (`research-does-not-start-from-the-corpus-2026-11-18`): the `corpus search`
-  line ends `run= desk= conv= published= events= captures= capped=`; a
+  line ends `run= desk= conv= published= events= capped=`; a
   `corpus read` line per Read and ReadCapture (run, capture id, held, verb); a
   `management story choice` line per management record sent to a story (run,
   feed or open, the fed story's id, candidate stories shown). Ids and counts.
