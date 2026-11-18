@@ -25,7 +25,7 @@ skill://agentic-consensus/agentic-consensus-model-probe.sh --all      # every an
 
 ## Default Panel
 
-The default panel is 10 members, all verified live with exact served-model
+The default panel is 9 members, all verified live with exact served-model
 identity:
 
 1. `codex` CLI with its configured default model.
@@ -33,11 +33,10 @@ identity:
 3. `opencode` CLI with its configured default model.
 4. OMP `openai-codex/gpt-6.1-sol` with `--thinking xhigh` — the flagship.
 5. OMP `openai-codex/gpt-6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-6 tier (weak long-context recall).
-6. OMP `google-antigravity/gemini-4-hydrogen-high` with `--thinking high` (replaced gemini-3.8-flash on 2026-11-12 by owner direction; probed OK). Review seat 1.
-7. OMP `opencode-go/muse-spark-1.3-contributor` with `--thinking max`.
-8. OMP `opencode-go/deepseek-v4.1-flash` with `--thinking max`. Review seat 2.
-9. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
-10. OMP `opencode-go/minimax-m3.1-flash-free` with `--thinking high` (added 2026-10-22 by owner direction; free tier, probed OK).
+6. OMP `opencode-go/muse-spark-1.3-contributor` with `--thinking max`.
+7. OMP `opencode-go/deepseek-v4.1-flash` with `--thinking max`. Review seat 2.
+8. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
+9. OMP `opencode-go/minimax-m3.1-flash-free` with `--thinking high` (added 2026-10-22 by owner direction; free tier, probed OK).
 
 `claude` is in the default panel, pinned to `opus`. `fable` is request-only: pass `--claude-model fable` when the user explicitly asks for it — never in the default panel.
 
@@ -78,8 +77,6 @@ cursor          (quota-gated; not default)
 opencode
 omp-gpt61-sol   (default)
 omp-gpt6-luna   (default)
-omp-gemini4-hydrogen    (default)
-omp-claude-opus46
 omp-muse-spark  (default)
 omp-deepseek-v41-flash (default)
 omp-glm53-flash (default)
@@ -117,7 +114,27 @@ the panel was simply trimmed):
 | `omp-grok47` | `opencode-go/grok-4.7` |
 | `omp-space-bunny` | `opencode-go/space-bunny-free` (removed 2026-10-07) |
 | `omp-qwen38max` | `opencode-go/qwen3.8-max` (removed 2026-10-07) |
-| `omp-gemini38` | `google-antigravity/gemini-3.8-flash` (replaced by `omp-gemini4-hydrogen` on 2026-11-12) |
+| `omp-gemini38` | `google-antigravity/gemini-3.8-flash` (replaced by `omp-gemini4-hydrogen` on 2026-11-12, itself removed 2026-11-17) |
+
+### Removed 2026-11-17: the Google product login
+
+Google disabled Gemini Code Assist on the owner's account for third-party
+OAuth use (`403 PERMISSION_DENIED ... violation of Terms of Service`), which
+takes `google-antigravity/*` with it. The Google Antigravity terms forbid
+driving the product login from another client at all, and a second
+suspension is permanent, so these ids are **deleted, not re-pointed**. Any
+call through that login is the violation the account was punished for.
+
+| removed id | was pinned to |
+| --- | --- |
+| `omp-gemini4-hydrogen` | `google-antigravity/gemini-4-hydrogen-high` |
+| `omp-claude-opus46` | `google-antigravity/claude-opus-4-6` |
+
+Do not reintroduce them, and do not reintroduce the provider under a new id.
+A Gemini seat needs a Vertex or AI Studio API key (`google/gemini-4-hydrogen`),
+which is the route Google's own appeal form recommends for third-party
+agents. Problem record:
+[antigravity-login-suspended-2026-11-17](../../docs/problems/antigravity-login-suspended-2026-11-17.md).
 
 `devin` left the default panel on 2026-11-12 (owner: Devin does not run code
 review). It stays a supported id for an explicit `--include devin` on a
@@ -153,7 +170,8 @@ Known failure domains, so a red row is diagnosable without re-probing:
 | `cursor` (agent CLI) | account quota | buy Agent usage; not a code problem |
 | `cursor/*` via OMP | plan entitlement | free plan cannot name models at all |
 | `opencode-zen/*-free` via OMP | plan entitlement | use the `opencode-go` route |
-| `openai-codex`, `opencode-go`, `google-antigravity` | catalog retirement | re-probe, repin, commit |
+| `openai-codex`, `opencode-go` | catalog retirement | re-probe, repin, commit |
+| `google-antigravity/*` | account suspension | removed 2026-11-17; do not call, see [problem record](../../docs/problems/antigravity-login-suspended-2026-11-17.md) |
 
 ## Verified CLI Invocation Contracts
 
@@ -319,7 +337,6 @@ Runner contracts:
 ```bash
 omp -p --mode text --model openai-codex/gpt-6.1-sol --thinking xhigh --no-session "$PROMPT"
 omp -p --mode text --model openai-codex/gpt-6-luna --thinking max --no-session "$PROMPT"
-omp -p --mode text --model google-antigravity/gemini-4-hydrogen-high --thinking high --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/muse-spark-1.3-contributor --thinking max --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/deepseek-v4.1-flash --thinking max --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/glm-5.3-flash --thinking high --no-session "$PROMPT"
@@ -334,8 +351,6 @@ Optional overrides — one `--<id-without-omp->-model` and
 ```bash
 --omp-gpt61-sol-model MODEL       --omp-gpt61-sol-thinking LEVEL
 --omp-gpt6-luna-model MODEL       --omp-gpt6-luna-thinking LEVEL
---omp-gemini4-hydrogen-model MODEL        --omp-gemini4-hydrogen-thinking LEVEL
---omp-claude-opus46-model MODEL   --omp-claude-opus46-thinking LEVEL
 --omp-muse-spark-model MODEL      --omp-muse-spark-thinking LEVEL
 --omp-deepseek-v41-flash-model MODEL --omp-deepseek-v41-flash-thinking LEVEL
 --omp-glm53-flash-model MODEL     --omp-glm53-flash-thinking LEVEL
@@ -697,6 +712,17 @@ seat 2 is DeepSeek v4.1 flash (`omp-deepseek-v41-flash`), both through OMP.
 Devin does not run code review. The repo contract (`CLAUDE.md`, Review) is
 the authority; the runner shapes are:
 
+**Seat 1 is gone and is not being faked.** Google disabled Gemini Code
+Assist on the panel account on 2026-11-17 for third-party OAuth use, so
+`omp-gemini4-hydrogen` no longer exists in the runner and any call through
+that login is what the account is already suspended for
+([problem record](../../docs/problems/antigravity-login-suspended-2026-11-17.md)).
+A replacement seat 1 is the owner's to name; a Gemini seat needs a Vertex or
+AI Studio API key (`google/gemini-4-hydrogen`), not a product login. Until
+then seat 1 reviews are **blocked, not silently downgraded**: one seat is
+not two, and a tier 2 change does not get a cheaper review because the panel
+is short.
+
 - Cheap checks before any review, every time: the repo gates
   (`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
   `selftest-guest-token`), a nix eval of both systems when nix or the flake
@@ -711,14 +737,17 @@ the authority; the runner shapes are:
   is not tier 0; it gets the deploy's own review.
 - Tier 1, one seat: orange changes, and red changes that are additive, behind
   a data/config switch, with a one-act rollback that shows on staging within
-  minutes. `--include omp-gemini4-hydrogen`.
+  minutes. `--include omp-deepseek-v41-flash`.
 - Tier 2, two seats: red where a defect would be silent or irreversible
   (deletes, tape/evidence, Texture canonical writes, auth/session, store
   schema, boot path, new concurrency).
-  `--include omp-gemini4-hydrogen,omp-deepseek-v41-flash`.
+  `--include omp-deepseek-v41-flash,<seat 1>`.
+  With seat 1 unavailable this tier cannot run: wait for the owner to name
+  the second seat rather than reviewing red twice with one model.
   Never include `devin` in a review.
-- Re-review a red delta, one seat (Gemini), whenever the previous round found
+- Re-review a red delta, one seat, whenever the previous round found
   a blocking-real defect; not when it found only doc, nit or test-only items.
+  `--include omp-deepseek-v41-flash` until seat 1 is named.
   After three rounds on one mechanism, stop adding rounds and look at the
   substrate (CLAUDE.md "Escalate on dead ends").
 - `gpt-6.1-sol`, Luna, Opus and Fable do not run code review.
