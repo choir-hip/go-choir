@@ -196,7 +196,8 @@ func (s *Store) ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context,
 // limit counts only matching rows. rows is every row the query returned (a
 // full page is rows >= limit); undecodable those that did not decode. Paths
 // are code constants of the caller, not input: they are checked all the same.
-func (s *Store) ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error) {
+func (s *Store) ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, q types.BodyListQuery, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error) {
+	match := q.Match
 	if limit <= 0 {
 		limit = 200
 	}

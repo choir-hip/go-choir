@@ -261,7 +261,7 @@ func NewAutoradioForecast(in AutoradioForecastInput, now time.Time) (types.Commi
 // computer whose body holds every match, the matches applied in the query
 // before its limit (the store's predicate list).
 type HeardLedger interface {
-	ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
+	ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, q types.BodyListQuery, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
 }
 
 // HeardRead says what a heard read saw: rows is every row the query returned
@@ -279,15 +279,16 @@ type HeardRead struct {
 // evidence (the phone's finished outcome, which only the run sheet's op path
 // writes). The predicate is in the query, so the limit counts only heard
 // settlements: the false ones that skipped and cut entries write do not use
-// up the page. It returns the settled time by claim id. Readers outside this
+// up the page, and only settlements written at or after since are read (a
+// zero since reads them all). It returns the settled time by claim id. Readers outside this
 // package ask here instead of naming the rule or the record kind.
-func ListAutoradioHeard(ctx context.Context, led HeardLedger, ownerID, computerID string, limit int) (map[string]time.Time, HeardRead, error) {
-	recs, undecodable, rows, err := led.ListCommitmentRecordsByBodyOfComputer(ctx, ownerID, computerID, map[string]string{
+func ListAutoradioHeard(ctx context.Context, led HeardLedger, ownerID, computerID string, since time.Time, limit int) (map[string]time.Time, HeardRead, error) {
+	recs, undecodable, rows, err := led.ListCommitmentRecordsByBodyOfComputer(ctx, ownerID, computerID, types.BodyListQuery{Since: since, Match: map[string]string{
 		"$.subject_refs.record_kind":             "autoradio.settlement",
 		"$.calibration.settlement.scorer_method": types.CalibrationScorerRule,
 		"$.calibration.settlement.scorer_name":   AutoradioHeardRule,
 		"$.calibration.settlement.outcome":       types.CalibrationOutcomeTrue,
-	}, limit)
+	}}, limit)
 	if err != nil {
 		return nil, HeardRead{}, err
 	}
