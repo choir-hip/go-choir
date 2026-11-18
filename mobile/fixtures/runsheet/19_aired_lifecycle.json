@@ -13,14 +13,6 @@
   {
    "base_version": 0,
    "by": "phone",
-   "id": "a",
-   "op": "aired",
-   "op_id": "o2",
-   "state": "on_air"
-  },
-  {
-   "base_version": 0,
-   "by": "phone",
    "id": "b",
    "op": "aired",
    "op_id": "o3",
@@ -76,12 +68,6 @@
   {
    "applied": true,
    "op_id": "o1",
-   "version": 1
-  },
-  {
-   "applied": false,
-   "dropped": "other_on_air",
-   "op_id": "o2",
    "version": 1
   },
   {

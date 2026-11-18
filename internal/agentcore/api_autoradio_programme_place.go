@@ -185,6 +185,7 @@ func (c *programmeCall) placeOnSheet(ctx context.Context, s *programmeSegment) {
 	case err != nil:
 		c.placeFailed++
 		log.Printf("autoradio programme: stretch %s: entry %s not placed on the run sheet: %v", c.stretchID, e.ID, err)
+		c.recordUnplaced(ctx, s, e)
 	case len(res) != 1 || (!res[0].Applied && res[0].Dropped != runsheet.DroppedDuplicate && res[0].Dropped != runsheet.DroppedDuplicateID):
 		c.placeFailed++
 		why := "no answer"
@@ -192,8 +193,26 @@ func (c *programmeCall) placeOnSheet(ctx context.Context, s *programmeSegment) {
 			why = res[0].Dropped
 		}
 		log.Printf("autoradio programme: stretch %s: entry %s not placed on the run sheet: %s", c.stretchID, e.ID, why)
+		c.recordUnplaced(ctx, s, e)
 	default:
 		c.placed++
+	}
+}
+
+// recordUnplaced keeps a forecast that can never be settled from being silent:
+// an entry that is not on the sheet can never be ended by an op, so its claim
+// gets a no-verdict record (reason unplaced). It is a notice, not a
+// settlement; the route writes no outcome.
+func (c *programmeCall) recordUnplaced(ctx context.Context, s *programmeSegment, e runsheet.Entry) {
+	if s.ClaimID == "" {
+		return
+	}
+	rec, err := noVerdictRecord(c.ownerID, c.rt.cfg.ComputerID, c.stretchID, s.ClaimID, "unplaced", e.ID, noVerdictUnplaced, "", 0, "", 0, "none", time.Now())
+	if err == nil {
+		err = c.append(ctx, rec)
+	}
+	if err != nil {
+		log.Printf("autoradio programme: stretch %s: no-verdict record for unplaced entry %s: %v", c.stretchID, e.ID, err)
 	}
 }
 

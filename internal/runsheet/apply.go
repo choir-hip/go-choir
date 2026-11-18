@@ -12,7 +12,9 @@ import (
 //     last 512 applied op_ids). A dropped op is not remembered: it changed
 //     nothing, so a resend is judged afresh.
 //   - Dropped reasons beyond duplicate and not_ahead: not_on_air (skip),
-//     not_phone and bad_transition and other_on_air and unknown_id (aired),
+//     not_phone and bad_transition and unknown_id (aired; other_on_air is no
+//     longer produced: an aired on_air for another entry closes the one on air
+//     as left, see aired),
 //     stale_version (clear, previous), no_previous, duplicate_id (place),
 //     reason_required, invalid (malformed op or entry).
 //   - The reducer reads no clock. ended.at is whatever the op carried ("" when
@@ -430,8 +432,17 @@ func (s *RunSheet) aired(op Op) string {
 	cur := s.Entries[i].State
 	switch {
 	case cur == StateAhead && op.State == StateOnAir:
-		if s.onAirIndex() >= 0 {
-			return DroppedOtherOnAir
+		// A takeover: the phone says a different entry is on air while the
+		// sheet holds one. The older entry's end op was lost (the app was
+		// killed, an op never arrived), and nothing else can close it, so it
+		// would wedge the on-air slot for every later entry. It is closed as
+		// heard with outcome left (no verdict, as a sign-out is), carrying no
+		// time and no block, and the new entry goes on air.
+		if oi := s.onAirIndex(); oi >= 0 {
+			s.Entries[oi].State = StateHeard
+			s.Entries[oi].Ended = &Ended{Outcome: OutcomeLeft}
+			s.OnAir = ""
+			i = s.index(op.ID)
 		}
 		e := s.removeAt(i)
 		e.State = StateOnAir

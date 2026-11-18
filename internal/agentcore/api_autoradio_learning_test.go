@@ -14,7 +14,13 @@ package agentcore
 //	L7  an entry whose claim id is not its own segment's claim settles;
 //	L8  the learning route is served unauthenticated, wrongly counts, or does
 //	    not show the settling op and the no-verdict rows to the listener;
-//	L9  the programme route has a path to a settlement (F41 holds that).
+//	L9  the programme route has a path to a settlement (F41 holds that);
+//	L10 an on_air for another entry while one is on air wedges the slot
+//	    (review B1): the stale entry must close as no verdict (superseded) and
+//	    the new one settle, in both orders, replay-safe;
+//	L11 an op may reach back more than seven days before its arrival (N1);
+//	L12 a refused settlement, or an entry the sheet had no room for, leaves
+//	    no record (N3, N4); an unknown `after` cursor is silently an empty page (N6).
 
 import (
 	"context"
@@ -287,5 +293,95 @@ func TestL9_ARecordOfTheMaximalForecastFitsTheBound(t *testing.T) {
 	res, err := h.applySheetOps(context.Background(), progOwner, sheetOwnerID, []runsheet.Op{{OpID: "o-max", By: runsheet.ByDesk, Op: runsheet.OpPlace, At: runsheet.AtEnd, Reason: "t", Entry: entryOf(t, e)}}, true)
 	if err != nil || !res[0].Applied {
 		t.Fatalf("(L9) %v %+v", err, res)
+	}
+}
+
+func TestL10_ALostEndOpDoesNotWedgeTheOnAirSlot(t *testing.T) {
+	rt, _ := radioRuntime(t, sixStories())
+	h := NewAPIHandler(rt)
+	_, entries, claims, _ := runStretch(t, rt)
+	// A goes on air, the app is killed, B goes on air and ends.
+	a := phoneEnd(entries[0], "a", "heard", "finished", 1)
+	b := phoneEnd(entries[1], "b", "heard", "finished", 1)
+	ops := []map[string]any{a[0], b[0], b[1]}
+	for _, r := range mustOps(t, h, ops...).Results {
+		if !r.Applied {
+			t.Fatalf("(L10) op dropped: %+v", r)
+		}
+	}
+	if settlementOf(t, rt, claims[1]) != "true" || settlementOf(t, rt, claims[0]) != "" || noVerdicts(t, rt)[claims[0]] != "superseded" {
+		t.Fatalf("(L10) %q %q %v", settlementOf(t, rt, claims[1]), settlementOf(t, rt, claims[0]), noVerdicts(t, rt))
+	}
+	// The slot is free: a later entry settles. Replay changes nothing.
+	mustOps(t, h, phoneEnd(entries[2], "c", "skipped", "skipped", 0)...)
+	if settlementOf(t, rt, claims[2]) != "false" {
+		t.Errorf("(L10) a later forecast is not settled: %q", settlementOf(t, rt, claims[2]))
+	}
+	nSettle, nNV := len(tape(t, rt, "autoradio.settlement")), len(tape(t, rt, kindNoVerdict))
+	mustOps(t, h, ops...)
+	if len(tape(t, rt, "autoradio.settlement")) != nSettle || len(tape(t, rt, kindNoVerdict)) != nNV || len(noVerdicts(t, rt)) != 1 {
+		t.Errorf("(L10) replay wrote records")
+	}
+	// The newest phone closes the crashed entry itself (failed), then B-like on_air.
+	mustOps(t, h, phoneEnd(entries[3], "d", "skipped", "failed", 0)...)
+	mustOps(t, h, phoneEnd(entries[4], "e", "heard", "finished", 1)...)
+	if noVerdicts(t, rt)[claims[3]] != "failed" || settlementOf(t, rt, claims[4]) != "true" {
+		t.Errorf("(L10) failed then on air: %v %q", noVerdicts(t, rt), settlementOf(t, rt, claims[4]))
+	}
+}
+
+func TestL11_AnOpCannotReachBackMoreThanSevenDays(t *testing.T) {
+	rt, _ := radioRuntime(t, twoStoryScript())
+	h := NewAPIHandler(rt)
+	_, entries, claims, _ := runStretch(t, rt)
+	settleNow = func() time.Time { return time.Now().Add(9 * 24 * time.Hour) }
+	defer func() { settleNow = time.Now }()
+	ops := phoneEnd(entries[1], "old", "heard", "finished", 1)
+	ops[1]["ended"].(map[string]any)["at"] = time.Now().UTC().Format(time.RFC3339Nano) // 9 days before arrival
+	mustOps(t, h, ops...)
+	if settlementOf(t, rt, claims[1]) != "" || noVerdicts(t, rt)[claims[1]] != "late" {
+		t.Errorf("(L11) %q %v", settlementOf(t, rt, claims[1]), noVerdicts(t, rt))
+	}
+}
+
+func TestL12_NothingIsSilentlyUnsettleable(t *testing.T) {
+	// A refused settlement (a forged claim id) is recorded.
+	rt, _ := radioRuntime(t, twoStoryScript())
+	h := NewAPIHandler(rt)
+	_, _, claims, _ := runStretch(t, rt)
+	forged := storyEntry("d-forged", "desk")
+	forged["forecast"] = map[string]any{"p_heard": 0.5, "caused_by": "importance", "claim_id": claims[1]}
+	if _, err := h.applySheetOps(context.Background(), progOwner, sheetOwnerID, []runsheet.Op{{OpID: "o-forged", By: runsheet.ByDesk, Op: runsheet.OpPlace, At: runsheet.AtEnd, Reason: "test", Entry: entryOf(t, forged)}}, true); err != nil {
+		t.Fatal(err)
+	}
+	mustOps(t, h, phoneEnd("d-forged", "fg", "heard", "finished", 1)...)
+	if noVerdicts(t, rt)[claims[1]] != "refused" {
+		t.Errorf("(L12) refusal not recorded: %v", noVerdicts(t, rt))
+	}
+	// An unknown cursor is an error, not an empty page.
+	if code, _ := learningGet(t, h, "?after=no-such-claim"); code != http.StatusBadRequest {
+		t.Errorf("(L12) unknown after: %d", code)
+	}
+}
+
+func TestL12_AnEntryTheSheetHadNoRoomForIsRecordedUnplaced(t *testing.T) {
+	rt, _ := radioRuntime(t, twoStoryScript())
+	h := NewAPIHandler(rt)
+	for i := 0; i < sheetMaxAhead/10+1; i++ {
+		var ops []map[string]any
+		for j := 0; j < 10; j++ {
+			ops = append(ops, placeOp("fill-"+string(rune('a'+i))+string(rune('a'+j)), "listener", "end", storyEntry("L-"+string(rune('a'+i))+string(rune('a'+j)), "listener")))
+		}
+		mustOps(t, h, ops...)
+	}
+	_, _, claims, evs := runStretch(t, rt)
+	if d := eventsNamed(evs, "done"); len(d) != 1 || d[0].Data["place_failed"].(float64) == 0 {
+		t.Fatalf("(L12) expected failed placements: %+v", d)
+	}
+	nv := noVerdicts(t, rt)
+	for _, c := range claims {
+		if c != "" && nv[c] != "unplaced" {
+			t.Errorf("(L12) claim %s: %q", c, nv[c])
+		}
 	}
 }
