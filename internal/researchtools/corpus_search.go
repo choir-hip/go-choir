@@ -53,6 +53,12 @@ type CorpusCapture struct {
 	PublishedAt string   `json:"published_at,omitempty"`
 	BlockCount  int      `json:"block_count,omitempty"`
 	Matched     []string `json:"matched"`
+	// Passage is the part of the page's text that matched the query, when
+	// the text search found the page: quote it only after ReadCapture, which
+	// returns the page's blocks.
+	Passage        string `json:"passage,omitempty"`
+	PassageOrdinal int    `json:"passage_ordinal,omitempty"`
+	PassageCount   int    `json:"passage_count,omitempty"`
 }
 
 // corpusField is one searchable field of a capture and the weight of a
@@ -137,22 +143,67 @@ func corpusLimit(limit int) int {
 	return limit
 }
 
-// searchCaptures finds the computer's captures matching terms, ranked by
-// how many query words they match, then by how strongly (a title word
-// outweighs an outlet or label word), then newest first. Candidates come
-// from corpusd's capture index over all of the computer's captures; when
-// the index refuses (or CHOIR_CORPUS_SEARCH=window), from the window of
-// its newest corpusCaptureScan captures. A note says which, and when the
-// capture store is not configured or a bound was hit.
-func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID string, terms []string, limit int) (_ []CorpusCapture, note string, capped bool, err error) {
+// corpusRequest is one corpus search over the captures: the query as the
+// model wrote it (the text search takes every word of it), the words the
+// title and label half keeps, and a time window and order.
+type corpusRequest struct {
+	Query string
+	Terms []string
+	// Since is inclusive and Until exclusive; a page's time is its
+	// published time when known, else the time it was fetched.
+	Since, Until time.Time
+	// Order is "relevance" (default) or "recent".
+	Order string
+}
+
+// corpusSearchInfo counts how a capture search went, for the journal line.
+type corpusSearchInfo struct {
+	// TextUsed: corpusd's text search answered. TextIndexed and Captures
+	// say how much of the computer it covers.
+	TextUsed    bool
+	TextIndexed int64
+	Captures    int
+	// Of the captures returned: found by the page text only, by the title
+	// only, by both, and by the title and labels without the text search.
+	Body, Title, Both, LabelsOnly int
+	// Capped: a candidate bound was hit (the index's or the window's).
+	Capped bool
+}
+
+// searchCaptures is the title-and-label search alone (the words kept by
+// corpusQueryTerms), as before the text index.
+func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID string, terms []string, limit int) ([]CorpusCapture, string, bool, error) {
+	out, note, info, err := searchCapturesFor(ctx, deps, ownerID, computerID, corpusRequest{Terms: terms}, limit)
+	return out, note, info.Capped, err
+}
+
+// searchCapturesFor finds the computer's captures for a request. Two halves
+// answer and are merged:
+//
+//   - the text half, in corpusd: BM25 over the passages of every indexed
+//     page's text, title words counting three times, every query word
+//     counting (no word gate), each hit with its best passage;
+//   - the title and label half, as it always was: the capture index's term
+//     table, or the window of the newest captures, matched by this file's
+//     matcher against title, outlet, language and Jev's labels.
+//
+// A page not yet indexed by text is still found by the second half, so
+// nothing gets worse while the index catches up. The halves are merged by
+// reciprocal rank (a page both found rises), or by time when Order is
+// "recent". A note says which half answered and how much the text index
+// covers.
+func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computerID string, req corpusRequest, limit int) ([]CorpusCapture, string, corpusSearchInfo, error) {
+	var info corpusSearchInfo
 	if deps.Captures == nil {
-		return nil, "captures not searched: the shared capture store is not configured", false, nil
+		return nil, "captures not searched: the shared capture store is not configured", info, nil
 	}
 	if strings.TrimSpace(computerID) == "" {
-		return nil, "captures not searched: the run names no computer", false, nil
+		return nil, "captures not searched: the run names no computer", info, nil
 	}
-	if len(terms) == 0 {
-		return nil, "captures not searched: the query has no search words", false, nil
+	terms := req.Terms
+	query := strings.TrimSpace(req.Query)
+	if len(terms) == 0 && query == "" {
+		return nil, "captures not searched: the query has no search words", info, nil
 	}
 	labels := map[string]store.CaptureLabel{}
 	var notes []string
@@ -164,15 +215,26 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 		}
 	}
 	var objs []objectgraph.Object
+	var answer CaptureSearchAnswer
 	searched := false
 	if searcher, ok := deps.Captures.(CaptureSearcher); ok && corpusIndexEnabled() {
-		answer, err := searcher.SearchCaptures(ctx, CaptureSearchQuery{OwnerID: ownerID, ComputerID: computerID, Words: terms,
-			Need: corpusNeeded(len(terms)), Candidates: corpusIndexCandidates, IDs: labelMatchedCaptureIDs(labels, terms)})
+		q := CaptureSearchQuery{OwnerID: ownerID, ComputerID: computerID, Words: terms,
+			Need: corpusNeeded(len(terms)), Candidates: corpusIndexCandidates, IDs: labelMatchedCaptureIDs(labels, terms)}
+		if query != "" {
+			q.Query, q.Order, q.Limit = query, req.Order, 2*limit
+			if !req.Since.IsZero() {
+				q.Since = req.Since.UTC().Format(time.RFC3339)
+			}
+			if !req.Until.IsZero() {
+				q.Until = req.Until.UTC().Format(time.RFC3339)
+			}
+		}
+		got, err := searcher.SearchCaptures(ctx, q)
 		if err == nil {
-			objs, searched = answer.Objects, true
-			if answer.Capped {
-				capped = true
-				notes = append(notes, fmt.Sprintf("searched all %d captures of this computer; ranked the strongest, newest %d of the %d that match enough words", answer.Searched, corpusIndexCandidates, answer.Matched))
+			answer, objs, searched = got, got.Objects, !got.TermsIncomplete
+			if got.Capped {
+				info.Capped = true
+				notes = append(notes, fmt.Sprintf("searched all %d captures of this computer; ranked the strongest, newest %d of the %d that match enough words", got.Searched, corpusIndexCandidates, got.Matched))
 			}
 		} else {
 			notes = append(notes, "capture index not used ("+err.Error()+")")
@@ -181,7 +243,7 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 	if !searched {
 		window, err := deps.Captures.ListCaptures(ctx, ownerID, computerID, corpusCaptureScan)
 		if err != nil {
-			return nil, "", false, err
+			return nil, "", info, err
 		}
 		objs = window
 		if len(objs) >= corpusCaptureScan {
@@ -189,7 +251,182 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
 		}
 	}
-	return rankCaptures(objs, labels, terms, limit), strings.Join(notes, "; "), capped, nil
+	objs = inWindow(objs, req.Since, req.Until)
+	var labelHalf []CorpusCapture
+	if len(terms) > 0 {
+		labelHalf = rankCaptures(objs, labels, terms, corpusMaxLimit)
+	}
+	var textHalf []CorpusCapture
+	if ft := answer.FullText; ft != nil {
+		switch {
+		case ft.Used:
+			info.TextUsed, info.TextIndexed, info.Captures = true, ft.Indexed, ft.Captures
+			textHalf = textHitCaptures(answer, labels)
+			if ft.Indexed < int64(ft.Captures) {
+				notes = append(notes, fmt.Sprintf("the page text of %d of this computer's %d captures is searchable so far; the rest are found by title and labels only", ft.Indexed, ft.Captures))
+			}
+		case ft.Reason != "":
+			notes = append(notes, "page text not searched ("+ft.Reason+")")
+		}
+	}
+	merged := mergeCaptureHalves(textHalf, labelHalf, req.Order, limit)
+	textFound := map[string][]string{}
+	for _, c := range textHalf {
+		textFound[c.CaptureID] = c.Matched
+	}
+	for _, c := range merged {
+		if matched, ok := textFound[c.CaptureID]; ok {
+			title, body := containsString(matched, "title"), containsString(matched, "body")
+			switch {
+			case title && body:
+				info.Both++
+			case title:
+				info.Title++
+			default:
+				info.Body++
+			}
+		} else {
+			info.LabelsOnly++
+		}
+	}
+	return merged, strings.Join(notes, "; "), info, nil
+}
+
+// inWindow keeps the captures whose time (published when known, else
+// fetched) is in [since, until). A capture with no readable time is kept
+// only when there is no window.
+func inWindow(objs []objectgraph.Object, since, until time.Time) []objectgraph.Object {
+	if since.IsZero() && until.IsZero() {
+		return objs
+	}
+	var out []objectgraph.Object
+	for _, obj := range objs {
+		meta, err := objectgraph.WebCaptureMetadataFromObject(obj)
+		if err != nil {
+			continue
+		}
+		at, ok := captureTime(meta)
+		if !ok || (!since.IsZero() && at.Before(since)) || (!until.IsZero() && !at.Before(until)) {
+			continue
+		}
+		out = append(out, obj)
+	}
+	return out
+}
+
+// captureTime is a capture's time: published when known, else fetched.
+func captureTime(meta objectgraph.WebCaptureMetadata) (time.Time, bool) {
+	for _, raw := range []string{meta.PublishedAt, meta.FetchedAt} {
+		if t, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw)); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// textHitCaptures turns corpusd's text hits into results, best first.
+func textHitCaptures(answer CaptureSearchAnswer, labels map[string]store.CaptureLabel) []CorpusCapture {
+	byID := map[string]objectgraph.Object{}
+	for _, obj := range answer.HitObjects {
+		byID[obj.CanonicalID] = obj
+	}
+	var out []CorpusCapture
+	for _, h := range answer.Hits {
+		obj, ok := byID[h.CaptureID]
+		if !ok {
+			continue
+		}
+		meta, err := objectgraph.WebCaptureMetadataFromObject(obj)
+		if err != nil {
+			continue
+		}
+		c := newCorpusCapture(obj.CanonicalID, meta, labels[obj.CanonicalID])
+		if h.TitleMatch {
+			c.Matched = append(c.Matched, "title")
+		}
+		if h.BodyMatch || !h.TitleMatch {
+			c.Matched = append(c.Matched, "body")
+		}
+		c.Passage, c.PassageOrdinal, c.PassageCount = h.Snippet, h.Ordinal+1, h.Passages
+		out = append(out, c)
+	}
+	return out
+}
+
+// mergeCaptureHalves merges the text half and the title-and-label half. A
+// capture found by both is one result carrying both halves' evidence.
+func mergeCaptureHalves(text, labelHalf []CorpusCapture, order string, limit int) []CorpusCapture {
+	const rrfK = 60.0
+	type entry struct {
+		c     CorpusCapture
+		score float64
+		at    time.Time
+	}
+	merged := map[string]*entry{}
+	var ids []string
+	add := func(list []CorpusCapture) {
+		for rank, c := range list {
+			e := merged[c.CaptureID]
+			if e == nil {
+				at, _ := time.Parse(time.RFC3339Nano, firstNonEmptyString(c.PublishedAt, c.FetchedAt))
+				e = &entry{c: c, at: at}
+				merged[c.CaptureID] = e
+				ids = append(ids, c.CaptureID)
+			} else {
+				for _, m := range c.Matched {
+					if !containsString(e.c.Matched, m) {
+						e.c.Matched = append(e.c.Matched, m)
+					}
+				}
+				if e.c.Passage == "" {
+					e.c.Passage, e.c.PassageOrdinal, e.c.PassageCount = c.Passage, c.PassageOrdinal, c.PassageCount
+				}
+			}
+			e.score += 1 / (rrfK + float64(rank+1))
+		}
+	}
+	add(text)
+	add(labelHalf)
+	sort.SliceStable(ids, func(i, j int) bool {
+		a, b := merged[ids[i]], merged[ids[j]]
+		if strings.EqualFold(order, "recent") {
+			if !a.at.Equal(b.at) {
+				return a.at.After(b.at)
+			}
+		}
+		if a.score != b.score {
+			return a.score > b.score
+		}
+		if !a.at.Equal(b.at) {
+			return a.at.After(b.at)
+		}
+		return ids[i] < ids[j]
+	})
+	if len(ids) > limit {
+		ids = ids[:limit]
+	}
+	out := make([]CorpusCapture, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, merged[id].c)
+	}
+	return out
+}
+
+func containsString(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+// newCorpusCapture is a capture's result row before any matching.
+func newCorpusCapture(id string, meta objectgraph.WebCaptureMetadata, label store.CaptureLabel) CorpusCapture {
+	return CorpusCapture{CaptureID: id, Title: firstNonEmptyString(meta.Title, label.Title), URL: meta.URL,
+		Outlet: firstNonEmptyString(label.Outlet, corpusHost(meta.URL)), SourceID: meta.SourceID, Language: firstNonEmptyString(meta.Language, label.Language),
+		Script: label.Script, Topic: firstNonEmptyString(label.EventHeadline, label.TopicHeadline), FetchedAt: meta.FetchedAt,
+		PublishedAt: meta.PublishedAt, BlockCount: meta.BlockCount, Matched: []string{}}
 }
 
 // corpusIndexCandidates bounds the candidates corpusd returns for ranking.
@@ -232,10 +469,8 @@ func rankCaptures(objs []objectgraph.Object, labels map[string]store.CaptureLabe
 		}
 		label := labels[obj.CanonicalID]
 		host := corpusHost(meta.URL)
-		c := CorpusCapture{CaptureID: obj.CanonicalID, Title: firstNonEmptyString(meta.Title, label.Title), URL: meta.URL,
-			Outlet: firstNonEmptyString(label.Outlet, host), SourceID: meta.SourceID, Language: firstNonEmptyString(meta.Language, label.Language),
-			Script: label.Script, Topic: firstNonEmptyString(label.EventHeadline, label.TopicHeadline), FetchedAt: meta.FetchedAt,
-			PublishedAt: meta.PublishedAt, BlockCount: meta.BlockCount}
+		c := newCorpusCapture(obj.CanonicalID, meta, label)
+		c.Matched = nil
 		fields := []corpusField{
 			{"title", c.Title, 3},
 			{"topic", label.EventHeadline + "\n" + label.TopicHeadline, 2},
@@ -300,4 +535,67 @@ func corpusHost(raw string) string {
 		return ""
 	}
 	return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+}
+
+// corpusWindow is a search's time bound and order.
+type corpusWindow struct {
+	Since, Until time.Time
+	Order        string
+}
+
+// parseCorpusWindow reads the window and order from the tool's fields or
+// from operators in the query text (since:2026-11-10 until:2026-11-18
+// order:recent), which a cell reaches when it passes only a query. The
+// operators are removed from the query. An unreadable date is an error the
+// model can correct.
+func parseCorpusWindow(query, since, until, order string) (string, corpusWindow, error) {
+	var w corpusWindow
+	var kept []string
+	for _, word := range strings.Fields(query) {
+		lower := strings.ToLower(word)
+		switch {
+		case strings.HasPrefix(lower, "since:"):
+			if since == "" {
+				since = word[len("since:"):]
+			}
+		case strings.HasPrefix(lower, "until:"):
+			if until == "" {
+				until = word[len("until:"):]
+			}
+		case strings.HasPrefix(lower, "order:"):
+			if order == "" {
+				order = word[len("order:"):]
+			}
+		default:
+			kept = append(kept, word)
+		}
+	}
+	parse := func(name, raw string) (time.Time, error) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return time.Time{}, nil
+		}
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04", "2006-01-02"} {
+			if t, err := time.Parse(layout, raw); err == nil {
+				return t.UTC(), nil
+			}
+		}
+		return time.Time{}, fmt.Errorf("%s %q is not a date: use 2026-11-18 or 2026-11-18T09:30:00Z", name, raw)
+	}
+	var err error
+	if w.Since, err = parse("since", since); err != nil {
+		return "", w, err
+	}
+	if w.Until, err = parse("until", until); err != nil {
+		return "", w, err
+	}
+	switch strings.ToLower(strings.TrimSpace(order)) {
+	case "", "relevance":
+		w.Order = "relevance"
+	case "recent", "newest":
+		w.Order = "recent"
+	default:
+		return "", w, fmt.Errorf("order %q is not relevance or recent", order)
+	}
+	return strings.Join(kept, " "), w, nil
 }
