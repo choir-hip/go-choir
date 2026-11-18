@@ -1050,3 +1050,147 @@ hold. A test builds a second registry and handler over the same state
 directory (pending set and ownerships from disk, the deploy's expedite) and
 shows it refreshes both computers the held vmctl skipped, with counters as
 left.
+## Fix (lane boot-closure-batch, 2026-11-18)
+
+Fix 2 of the three above. Mutation class red (boot path, crash-restart
+closure). Protected surfaces: the inbox record plane and its heads, the
+crash-boot closure. Rollback: revert the fix commit; every closure returns to
+one commit each, byte for byte what it was.
+
+**What was verified in code.** Each closure was its own
+`CommitInboxRecords` (`closeOpenRoundsAfterCrash`, `inbox_records.go`): the
+global `trajectoryMu`, `replayInboxCommand`, `planInboxCommand` and one
+`PutBatchSegments` per round. `planInboxRecords` (`inbox.go`) already plans
+any number of records of any conversations in one pass: it keeps one cached
+inbox head and one cached conversation head per id, gives records of one
+inbox consecutive sequence numbers in list order, steps each conversation's
+head once per record, and writes each head once under one compare-and-set.
+So `Records` can carry different conversations. What forbade batching the
+closures was the command, not the plan: one `inbox_command` object per
+command id, one replay lookup per call.
+
+**What changed.**
+- `Store.CommitInboxRecordsBatch` (`internal/store/inbox_batch.go`): many
+  commands, one atomic write. The records of every command not already
+  committed are planned together; each command keeps its own id, digest and
+  stored receipt (`inboxCommandObject`), so `boot-closure:<record id>` still
+  replays alone or in a later batch. A command already committed is skipped
+  and returns its receipt. A cursor, verdicts, task rows, a library head or
+  a Cast to `texture:new` are refused (they need their own commit). Any
+  refusal or conflict writes nothing. `planInboxCommand` is split into
+  `planInboxCommandBody` and the command object so both paths share the plan.
+  `Store.InboxCommitsWritten` counts writes.
+- `closeOpenRoundsAfterCrash` closes the open rounds in chunks of
+  `bootRoundClosureBatch` (200; the constant's comment gives the bound:
+  transaction and tape-event size, about 1 KiB a closure; 5,229 rounds are
+  27 commits). A chunk the store refuses writes nothing; its rounds are then
+  closed one at a time with one log line, so one bad conversation cannot
+  block the rest. Per round the record, command id, fate, console line
+  ("closed round N of conv:... after a crash restart") and tally are
+  unchanged. The phase logs
+  `crash boot round closure: closed K of M open rounds in C commits dur=D`.
+- Not changed: `close_pre_boot_runs_after_crash` (R-C1). It is per run:
+  `terminalizeRunCanonical` (a write transaction on the run), the texture
+  mutation mark, and `emitEvent` (a second write whose first append per run
+  seeds the run's event sequence). Different tables and the event-sequence
+  allocator, so it is not the same small change. Cost 150 ms a run, bounded
+  by the runs open or parked at the crash (132 candidates in the 2026-11-18
+  line is about 20 s); it stays a residual.
+
+**Tests.** `internal/store/inbox_batch_test.go` (T1 count, T2 equivalence,
+T3 replay, T4 all-or-nothing, refusal of commands that need their own
+commit) and `internal/agentcore/crash_round_closure_batch_test.go` (T1 at
+the runtime: 2 x batch + 37 rounds in 3 commits; T3 second boot writes
+nothing; T4 fallback closes the 5 good rounds of 6; T5 golden against the
+one-at-a-time commits). The both-ways comparisons ignore only
+`Provenance.CommittedAt`, `Observation.ObservedAt` and the receipts'
+`CreatedAt` (clocks that differ between two runs). Which ran: see the lane's
+final report; the agentcore tests need a machine that can link that package.
+
+**Staging proof (not run).** At a crash boot of the drill computer with K
+open rounds (K > 200 so more than one commit shows), the console shows
+`crash boot round closure: closed K of K open rounds in ceil(K/200) commits
+dur=` a few seconds, one "closed round" line per round, and a second crash
+boot shows `closed 0 of 0 ... in 0 commits`.
+
+**Residuals.** R-C1 as above. A management-task round in a batch is planned
+with the task rows (`planManagementTasks` shares its state across records),
+but no test here closes one in a batch; the fallback covers a refusal, not a
+wrong write. The batch is bounded by count, not bytes. Open rounds still
+accrue at about 250 an hour (below).
+
+## What closes a management-to-Texture round in normal operation (read-only analysis, 2026-11-18)
+
+Read in code at `49a64bd4e` plus this lane; nothing here was run. Not read: a
+live trace of a Texture run's end.
+
+**What the round is.** `conv:management:<owner>|texture:<doc>` is opened by
+management's Cast to `texture:new` (`planStoryOpenings`, `store/story_open.go`):
+the Cast is rewritten to the new `texture:<doc>`, the story is created, and
+`stepConversation` opens round 1 with management as caster and Texture as
+recipient. The round means "Texture owes management a final Report for this
+brief". Only the recipient's final Report or a system closure closes it
+(`stepConversation`).
+
+**Does Texture ever send that Report?** No. The Texture desk's verbs are
+`Ask, Cast, Done, ReadCapture, ReadDoc, Reject, Wait, Write`
+(`deskmanifest/grants_test.go`, pinned); `Report` and `ReportPacket` belong to
+management, research and engineering. Texture's `Done` "says the requested work is complete"
+(`yaegikernel/surface.go`); no path was found that turns it into a Report; the Texture turn commit
+(`store/texture_turn.go`) touches no round. `closeRoundsOfEndedRun` handles
+the researcher, admitter and performer profiles and returns by `default` for
+Texture. So the only closer of this round is the crash boot. (The research
+prompt's "your final Report closes the round" applies to the research and
+admitter desks.)
+
+**What an open round costs.** Almost nothing while open, and that is why it
+went unseen. `OpenRoundsAddressedTo` and `OpenRoundsCastBy` read the header of
+every conversation head of the owner and point-read each head whose id matches
+the inbox, open or closed (`openConversationHeads`: the `wanted` filter runs
+before the read, `keep` after). Management is the recipient of no
+management-cast round, so `closeRoundsOfEndedRun` for management matches none
+of these as recipient, and the Texture next-actor check reads one document's
+conversations. Open rounds are not read by a wake, the dispatcher or a head
+rebuild; `RebuildInboxHeads` is off the boot path. The costs are the boot
+closure (0.29 s each before this lane, milliseconds each after) and one head
+object plus its records per story forever. Closing a round does not make the
+header list shorter.
+
+**What closing it would cause.** A store commit of a system closure wakes no
+one: `RecordWakesReader` returns false for a system record that is not on its
+list, and `inboxRecordWakes` is that predicate. The wake in
+`closeRoundsOfEndedRun` is a separate `DispatchActor` after the commit
+(`inbox_records.go`, "round closure wake"). So a closure committed without
+that call is quiet. A closure that is not quiet (a Report or a
+`DispatchActor`) wakes management: about 250 turns an hour, a regression.
+The quiet closure still lands unread in management's inbox (as the boot
+closures do today); it moves the unread count, not a wake.
+
+**Options.**
+1. Quiet closure when Texture's run ends idle (orange: runtime behavior). In
+   `closeRoundsOfEndedRun`, a Texture case: when a Texture run ends and no
+   run, open work item or round Texture cast remains for the document, commit
+   a system closure `run_<state>` for each management-cast round and do not
+   call `DispatchActor`. For the newspaper: no new model turn; crash boots
+   stop finding thousands of rounds; a later management Cast to the same
+   story opens round 2 as it does after any closure. Risk: closing too early
+   on a Texture run that only parks while research works; the idle test must
+   be the one the unserved-work closure already uses.
+2. Close at the document's end of life (orange): on publish or on discard of
+   a story, the custodian side writes the quiet closure. Precise, but most
+   opened stories never publish (about 5,100 rounds in 21 hours, ten times the stories
+   published in a day, by the earlier section), so the leak remains for the rest.
+3. Off-boot sweep (orange): an hourly kernel pass closes management-to-Texture
+   rounds whose Texture has no run, work item or later record, in batches
+   through `CommitInboxRecordsBatch`, with no wake. The cheapest to prove
+   (a pass over open heads, the same code as the boot closure) and it drains
+   today's backlog, but it is a timer whose job is to hide a missing closer.
+4. Do nothing: boot cost is now seconds per few thousand rounds, growing by
+   about 250 an hour (about 42,000 after a week, 210 commits).
+
+**Recommendation.** Option 1, committed quiet, with option 3's pass run once to
+drain the backlog (a one-time red act on the paper, an owner decision), because
+it closes the round at the moment its recipient has nothing left to say and
+costs no model turn. Before building it, read a live Texture run's end in a
+trace (state, work item, round) to confirm that a run end is a safe "idle"
+signal; that is the one fact not read here.
