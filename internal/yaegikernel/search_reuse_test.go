@@ -1,7 +1,9 @@
 package yaegikernel
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -24,6 +26,13 @@ import (
 //  7. A query with no word of two or more letters ("x") is sent to the web.
 //  8. The summary of a thread of searches does not show what the latest
 //     few added.
+// From the review of f7df119fb:
+//  9. There is no way to send a search that is held (the "fresh" argument),
+//     and the note does not name it.
+//  10. A match still running is answered from before it has results, or a
+//     match that returned nothing, or that no provider answered, is reused.
+//  11. A time-sensitive query reuses for 30 minutes, not 10.
+//  12. Parallel SearchStart calls race on the marks or the held set.
 
 func searchCell(t *testing.T, f *researchFixture) (func(string) SessionResult, CellHooks) {
 	t.Helper()
@@ -83,20 +92,20 @@ func TestSearchStartAnswersTheSameTermsFromHeldResults(t *testing.T) {
 	f := newResearchFixture(t)
 	cell, _ := searchCell(t, f)
 	out := cell(`a, _ := choir.SearchStart("Harbor strike Mauritius")
-b, _ := choir.SearchStart("\"mauritius\" strike, harbor 2026")
+b, _ := choir.SearchStart("MAURITIUS strike, the harbor")
 c, _ := choir.SearchStart("harbor strike mauritius union")
 fmt.Println(a.ID, b.ID, c.ID)
 fmt.Println(b)`)
 	if !strings.Contains(out.Stdout, "s1 s1 s2\n") {
 		t.Fatalf("ids: the reworded query must come back as s1, the one with another word as s2:\n%s", out.Stdout)
 	}
-	if !strings.Contains(out.Stdout, "s1 not sent: answered from your search s1, under a minute ago (same terms)") {
+	if !strings.Contains(out.Stdout, "s1 not sent: answered from your search s1, under a minute ago (same terms); send it anyway with fresh") {
 		t.Fatalf("the stub does not say it was answered from s1:\n%s", out.Stdout)
 	}
 	if got := f.searchCalls.Load(); got != 2 {
 		t.Fatalf("host asked to start %d searches, want 2", got)
 	}
-	if !strings.Contains(strings.Join(out.Searches, "\n"), `not sent: "mauritius" strike, harbor 2026: answered from your search s1`) {
+	if !strings.Contains(strings.Join(out.Searches, "\n"), `not sent: MAURITIUS strike, the harbor: answered from your search s1`) {
 		t.Fatalf("the cell result does not say a search was not sent:\n%v", out.Searches)
 	}
 	if st := out.SearchStats; st == nil || st.FromHeld != 1 || st.Started != 2 {
@@ -158,5 +167,109 @@ fmt.Println(s.ID, err)`)
 	}
 	if st := out.SearchStats; st == nil || st.NotSent["refused"] != 2 {
 		t.Fatalf("stats = %+v, want 2 refused", st)
+	}
+}
+
+func TestSearchStartFreshSendsAnyway(t *testing.T) {
+	f := newResearchFixture(t)
+	cell, _ := searchCell(t, f)
+	out := cell(`a, _ := choir.SearchStart("harbor strike")
+b, _ := choir.SearchStart("strike harbor", true)
+c, _ := choir.Search("harbor strike", true)
+d, _ := choir.Search("harbor strike")
+fmt.Println(a.ID, b.ID, c.ID, d.ID)`)
+	if !strings.Contains(out.Stdout, "s1 s2 s3 s3\n") || f.searchCalls.Load() != 3 {
+		t.Fatalf("fresh must send (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
+	}
+}
+
+func TestSearchTimeSensitiveQueriesReuseForTenMinutes(t *testing.T) {
+	f := newResearchFixture(t)
+	clk := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	f.scope.searches.now = func() time.Time { return clk }
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchStart("breaking harbor strike")`)
+	clk = clk.Add(9 * time.Minute)
+	out := cell(`b, _ := choir.SearchStart("strike harbor breaking"); fmt.Println(b.ID)`)
+	if strings.TrimSpace(out.Stdout) != "s1" {
+		t.Fatalf("9 minutes on a time-sensitive query must reuse: %s", out.Stdout)
+	}
+	clk = clk.Add(2 * time.Minute)
+	out = cell(`b, _ := choir.SearchStart("strike harbor breaking"); fmt.Println(b.ID)`)
+	if strings.TrimSpace(out.Stdout) != "s2" || f.searchCalls.Load() != 2 {
+		t.Fatalf("11 minutes on a time-sensitive query must search again (calls %d): %s", f.searchCalls.Load(), out.Stdout)
+	}
+}
+
+func TestSearchStartWaitsOnARunningMatch(t *testing.T) {
+	f := newResearchFixture(t)
+	f.runningFor = map[string]bool{"harbor strike": true}
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchStart("harbor strike")`)
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		f.scope.searches.apply(providerFrame("s1", "keenable", true, "https://a.example/1", "https://a.example/2"))
+		f.scope.searches.apply(SearchFrame{ID: "s1", Kind: SearchFrameDone})
+	}()
+	out := cell(`b, _ := choir.SearchStart("strike harbor")
+r, _ := choir.Searches.Get(b.ID)
+fmt.Println(b.ID, r.Done, len(r.Results))`)
+	if strings.TrimSpace(out.Stdout) != "s1 true 2" || f.searchCalls.Load() != 1 {
+		t.Fatalf("a running match must be waited on, then answered from (calls %d): %s", f.searchCalls.Load(), out.Stdout)
+	}
+}
+
+func TestSearchReuseSkipsASearchNoProviderAnswered(t *testing.T) {
+	f := newResearchFixture(t)
+	f.failFor = map[string]string{"harbor strike": "provider timed out"}
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchStart("harbor strike")`)
+	out := cell(`b, _ := choir.SearchStart("strike harbor"); fmt.Println(b.ID)`)
+	if strings.TrimSpace(out.Stdout) != "s2" || f.searchCalls.Load() != 2 {
+		t.Fatalf("a search no provider answered must be tried again (calls %d): %s", f.searchCalls.Load(), out.Stdout)
+	}
+}
+
+// Parallel SearchStart and reads of the store, for -race: the marks, the held
+// set and the counts agree when the calls end.
+func TestParallelSearchesKeepTheMarksConsistent(t *testing.T) {
+	f := newResearchFixture(t)
+	f.urlsFor = map[string][]string{}
+	for i := 0; i < 8; i++ {
+		var urls []string
+		for j := 0; j < 5; j++ {
+			urls = append(urls, fmt.Sprintf("https://h%d.example/p", (i+j)%9))
+		}
+		f.urlsFor[fmt.Sprintf("topic%c words", 'a'+i)] = urls
+	}
+	f.scope.BindCell().Begin(SessionFrame{RunID: "run-1"})
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			stub, err := f.scope.SearchStart(fmt.Sprintf("topic%c words", 'a'+i))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			_, _ = f.scope.searches.Get(stub.ID)
+			_ = f.scope.searches.List()
+			_ = f.scope.searches.counts()
+		}(i)
+	}
+	wg.Wait()
+	distinct, news := map[string]bool{}, 0
+	for _, s := range f.scope.searches.List() {
+		if s.NewPages+s.HeldPages != len(s.Results) {
+			t.Fatalf("%s: %d new + %d held != %d results", s.ID, s.NewPages, s.HeldPages, len(s.Results))
+		}
+		news += s.NewPages
+		for _, h := range s.Results {
+			distinct[searchHitKey(h.URL)] = true
+		}
+	}
+	if news != len(distinct) {
+		t.Fatalf("new pages across searches = %d, want the %d distinct pages once each", news, len(distinct))
 	}
 }

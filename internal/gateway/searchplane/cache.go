@@ -3,11 +3,12 @@ package searchplane
 import (
 	"container/list"
 	"context"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/searchquery"
 )
 
 // Result cache and in-flight join
@@ -116,11 +117,9 @@ func NormalizeQuery(q string) string {
 	return strings.Join(strings.Fields(q), " ")
 }
 
-var timeSensitive = regexp.MustCompile(`(?i)\b(today|tonight|yesterday|this (week|morning|evening|month)|latest|breaking|live|now|just|hours? ago|minutes? ago|january|february|march|april|may|june|july|august|september|october|november|december)\b`)
-
 // IsTimeSensitive reports whether a query asks about the news of the
 // moment, which gets the shorter FreshTTL.
-func IsTimeSensitive(q string) bool { return timeSensitive.MatchString(q) }
+func IsTimeSensitive(q string) bool { return searchquery.IsTimeSensitive(q) }
 
 func cacheKey(scope, query string, maxResults int) string {
 	return scope + "\x00" + NormalizeQuery(query) + "\x00" + strconv.Itoa(maxResults)
