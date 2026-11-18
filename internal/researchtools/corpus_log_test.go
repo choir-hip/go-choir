@@ -76,6 +76,35 @@ func TestCorpusSearchLineCarriesRunDeskAndCounts(t *testing.T) {
 	if strings.Count(out, "corpus search ") != 1 {
 		t.Fatalf("want one line per search:\n%s", out)
 	}
+	// A call that names no caller is a cell's verb call; caller is the last
+	// field so parsers of the earlier fields keep working.
+	if line := strings.TrimSpace(out); !strings.HasSuffix(line, " capped=false caller=cell") {
+		t.Fatalf("the line does not end with the caller of a verb call:\n%s", out)
+	}
+}
+
+// The host's own search for a research run's brief is told apart from the
+// desk's own corpus searches: a measure of "web search before any corpus read"
+// would otherwise count the brief as the desk's first corpus read.
+func TestCorpusSearchLineNamesTheBriefAsCaller(t *testing.T) {
+	srv := publishedServer(`{"query":"harbor strike","pieces":[]}`)
+	defer srv.Close()
+	guest, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = guest.Close() })
+	logs := captureReadLog(t)
+	tool := newSearchWireCorpusTool(Dependencies{Store: guest, Captures: NewCorpusdCaptureSink(srv.URL)})
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: "run-6", OwnerID: "owner-1", ComputerID: "computer-1", Role: "research",
+	})
+	if _, err := tool.Func(WithCorpusCaller(ctx, CorpusCallerBrief), json.RawMessage(`{"query":"harbor strike"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if line := strings.TrimSpace(logs.String()); !strings.HasSuffix(line, " caller=brief") {
+		t.Fatalf("the brief's search does not say so:\n%s", line)
+	}
 }
 
 // capped comes from the search itself: the index said it ranked only its
