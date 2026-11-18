@@ -415,6 +415,16 @@ component Autoradio
     // ---- lane 9: motion and the mark ----
     mkT
     mkFrames
+    mdAX
+    mdAY
+    mdBX
+    mdBY
+    mdBZ
+    mdRU
+    mdBN
+    mdFX
+    mdFY
+    mdFZ
     mkSince
     mkCur
     mkPrev
