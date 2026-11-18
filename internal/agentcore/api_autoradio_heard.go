@@ -47,11 +47,14 @@ const (
 	heardRecentLineMax  = 160
 	heardRecentTitleMax = 100
 	// heardSegmentsRead bounds the segment list, as listNotices bounds its own.
-	heardSegmentsRead = 5000
 
 	tellingFull     = "full"
 	tellingFollowup = "followup"
 )
+
+// heardSegmentsRead bounds the segment list, as listNotices bounds its own; a
+// variable so a test can lower it.
+var heardSegmentsRead = 5000
 
 type heardRef struct{ Route, Version string }
 
