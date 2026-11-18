@@ -1,10 +1,9 @@
 import Foundation
 
-// The front page as data. Input: stories from the paper's front list (`GET /api/platform/publications/front`, the route
-// the Choir client already calls). Output: the placed bands the Contract draws (shapes declared in
-// exact-package/interface/paper.json; these Codable types encode to them).
+// One story of the paper's front list (`GET /api/platform/publications/front`), as the RADIO reads it (StretchCandidates, the published times).
+// The paper page no longer uses this: its data, ranking and layout are TypeScript (AutoradioLab/paper.ts, paper-model.ts, paper-layout.ts).
 
-public struct PaperEntity: Codable, Sendable, Equatable { public var id: String; public var label: String
+public struct PaperEntity: Sendable, Equatable { public var id: String; public var label: String
     public init(id: String, label: String) { self.id = id; self.label = label } }
 
 public struct PaperStory: Sendable, Equatable {
@@ -83,93 +82,7 @@ public struct PaperStory: Sendable, Equatable {
     }
 }
 
-// MARK: output (these encode to the shapes in interface/paper.json)
-
-public struct PaperItem: Codable, Sendable, Equatable {
-    public var route: String
-    public var title: String
-    public var dek: String
-    public var section: String
-    public var meta: String
-    public var byline: String
-    public var entityLabels: String      // "Ukraine · Russia", shown under the lead and in the cluster
-    public var entityIds: String         // "ukraine,russia": what lane 4's "more of this" records
-    public var size: Double
-    public var weight: Double
-    public var lineHeight: Double
-    public var lines: Int
-    public var showDek: Bool
-    public var dekSize: Double
-    public var dekLines: Int
-    public var indent: Bool
-    public var rank: Int
-}
-
-public struct PaperBand: Codable, Sendable, Equatable {
-    public var id: String
-    public var module: String            // lead | colead | pair | cluster | briefs | river | opinion
-    public var label: String
-    public var side: Bool                // items sit side by side (a pair that fits)
-    public var rule: Bool                // a rule between items
-    public var items: [PaperItem]
-}
-
-public struct PaperSection: Codable, Sendable, Equatable { public var id: String; public var label: String; public var count: Int; public var current: Bool }
-
-public struct PaperFront: Codable, Sendable, Equatable {
-    public var status: String            // ready | empty | offline | error
-    public var message: String
-    public var edition: String
-    public var layout: String
-    public var composition: String       // "lead+cluster+pair+briefs+river": the modules the rules chose
-    public var dateLine: String
-    public var updated: String
-    public var sectionId: String         // the open category's id; "" on the front page and on My edition
-    public var sectionLabel: String
-    /// Which view this answer is for: "front", "mine" or a category id; and its name for the masthead.
-    public var viewId: String
-    public var viewLabel: String
-    /// My edition: "ready" (arranged around the picks), "nopicks" (nothing picked yet) or "nomatch" (picks, but nothing in the paper matches today);
-    /// "" in every other view. For the last two the bands are the general front page and `note` says why.
-    public var mineState: String
-    /// My edition: what it is built from, one line ("Technology, AI, Space"). "" when nothing is picked.
-    public var mineFrom: String
-    public var note: String
-    public var count: Int
-    /// The switcher's categories after "Front page" and "My edition": the live house sections, in house order.
-    public var sections: [PaperSection]
-    public var bands: [PaperBand]
-    /// The stories of this page in reading order (band by band, item by item), each once. An open article is a card in the stack
-    /// these make: a swipe goes to the next or previous route here. `titles[i]` is the title of `routes[i]`.
-    public var routes: [String]
-    public var titles: [String]
-
-    /// The card a swipe from `route` lands on: `step` +1 is the next article, -1 the previous. Nil when `route` is not in the
-    /// stack or the swipe runs past either end (the card springs back; the stack never wraps and never leaves for the front page).
-    public func neighbor(of route: String, step: Int) -> Int? {
-        guard let i = routes.firstIndex(of: route) else { return nil }
-        let j = i + step
-        return routes.indices.contains(j) ? j : nil
-    }
-
-    /// Flatten bands into the stack order. A route in two bands is listed once, at its first place.
-    public static func stack(of bands: [PaperBand]) -> (routes: [String], titles: [String]) {
-        var seen = Set<String>(), routes: [String] = [], titles: [String] = []
-        for b in bands { for it in b.items where !it.route.isEmpty && seen.insert(it.route).inserted { routes.append(it.route); titles.append(it.title) } }
-        return (routes, titles)
-    }
-
-    public static func empty(status: String = "empty", message: String = "") -> PaperFront {
-        PaperFront(status: status, message: message, edition: "", layout: "", composition: "", dateLine: "", updated: "", sectionId: "", sectionLabel: "",
-                   viewId: "", viewLabel: "", mineState: "", mineFrom: "", note: "", count: 0, sections: [], bands: [], routes: [], titles: [])
-    }
-}
-
 public enum PaperText {
-    public static func slug(_ s: String) -> String {
-        let t = s.lowercased().map { $0.isLetter || $0.isNumber ? String($0) : "-" }.joined()
-        return t.split(separator: "-").joined(separator: "-")
-    }
     public static func relative(_ d: Date?, now: Date) -> String {
         guard let d else { return "" }
         let s = Int(now.timeIntervalSince(d))
@@ -177,12 +90,5 @@ public enum PaperText {
         if s < 3600 { return "\(s / 60) min ago" }
         if s < 86400 { return "\(s / 3600) h ago" }
         return "\(s / 86400) d ago"
-    }
-    public static func dateLine(_ d: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "EEE d MMM"
-        f.timeZone = TimeZone(identifier: "UTC")
-        return f.string(from: d)
     }
 }

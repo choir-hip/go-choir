@@ -21,17 +21,6 @@ public final class StoryDates: @unchecked Sendable {
 }
 
 public enum RetrievalSources {
-    /// The front list the phone last cached (`paper-front.json`): title, dek and date of up to a hundred stories. No full text.
-    public static func paperFront(file: URL) -> [SavedCorpus.Document] {
-        guard let d = try? Data(contentsOf: file), let o = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return [] }
-        return PaperStory.parseList(o).compactMap { s in
-            guard !s.route.isEmpty, !s.title.isEmpty else { return nil }
-            StoryDates.shared.note("pub:" + s.route, s.updated)
-            return SavedCorpus.Document(id: "front:" + s.route, title: s.title, address: "pub:" + s.route, text: s.dek,
-                                        kind: "story", source: "Autopaper", date: s.updated)
-        }
-    }
-
     /// Subscribed shows and their cached episodes (title and show notes, dated), from the feeds already on the phone.
     public static func podcasts(shows: [PodcastShow], feed: (String) -> PodcastFeed?, transcript: (String, String) -> PodcastTranscript?) -> [SavedCorpus.Document] {
         var out: [SavedCorpus.Document] = []

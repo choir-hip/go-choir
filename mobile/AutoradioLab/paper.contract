@@ -6,8 +6,8 @@
 // the article stack reads the answer's routes, so a story swipes through the list of the view it was opened from.
 // testIds: page-title, paper-section-front, paper-section-mine, paper-section-<id>, paper-mine-from, paper-edit-edition, paper-choose-topics, paper-mine-note, paper-band-<id>, paper-story-<route>, paper-play-<route>, paper-composition,
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
-use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
-use paperFront from "@choir/autoradio"
+use Theme, ChoirAuth, DemoInfo from "@choir/autoradio"
+use PaperFront, PaperBand, PaperItem from "./paper-types.contract"
 use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge, dyn from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 

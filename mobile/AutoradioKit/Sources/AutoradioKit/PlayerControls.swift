@@ -63,17 +63,3 @@ public enum StoryCursor {
         blockIndex > 0 || secondsIntoBlock >= restartAfterSeconds
     }
 }
-
-/// The paper's article stack as the host last composed it (the order a swipe goes in). The host writes it when the paper page composes the
-/// front; the paper page and "Play" on a story use it for titles; it decides nothing about what plays next (the run sheet does).
-public final class FrontOrder: @unchecked Sendable {
-    public static let shared = FrontOrder()
-    private let lock = NSLock()
-    private var items: [StoryRef] = []
-    public init() {}
-    public func set(routes: [String], titles: [String]) {
-        let refs = routes.enumerated().map { StoryRef(route: $1, title: titles.indices.contains($0) ? titles[$0] : "") }
-        lock.lock(); items = refs; lock.unlock()
-    }
-    public var stories: [StoryRef] { lock.lock(); defer { lock.unlock() }; return items }
-}
