@@ -173,6 +173,9 @@ type Runtime struct {
 	// last read with choir.Stories() (run id -> int64), stamped on its
 	// texture:new commits (management delegation R2-5).
 	storyLibraryShown sync.Map
+	// storiesShown counts the candidate stories each running desk run was
+	// shown through choir.Stories (management_story_choice.go).
+	storiesShown sync.Map
 	// pollSources serializes choir.PollSource per source within a run.
 	pollSources pollSourceLocks
 	// calibration caches each computer's calibration snapshot for the
@@ -766,6 +769,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		s.SetRunTerminalObserver(func(runID string) {
 			rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded)
 			rt.logRunSearchSummary(runID)
+			rt.forgetStoriesShown(runID)
 		})
 		// A closed round with a scorable desk-to-desk Cast is judged
 		// (desk_cast_judge.go).

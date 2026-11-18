@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -331,6 +332,7 @@ func newReadCaptureTool(deps Dependencies) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
+			log.Print(corpusReadLine(ctx, strings.TrimSpace(in.CaptureID), true, "read_capture"))
 			return string(out), nil
 		}}
 }
