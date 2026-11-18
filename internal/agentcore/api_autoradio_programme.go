@@ -449,10 +449,10 @@ type programmeCall struct {
 	writeErr error       // the first write error: the client went away
 	prompt   string
 
-	// The heard index (api_autoradio_heard.go): the scorecard and the segment
-	// list, each read once per call, and the follow-ups the DJ wrote.
-	card      *calibration.Scorecard
+	// The heard index (api_autoradio_programme_heard.go): the segment list and
+	// what its reads found full, and the follow-ups the DJ wrote.
 	segRecs   map[string]types.CommitmentRecord
+	heardFull []string // the heard reads that reached their limit, for the log
 	followups int
 
 	// The notebook (L5): Texture's service, the notebook lines the model wrote
