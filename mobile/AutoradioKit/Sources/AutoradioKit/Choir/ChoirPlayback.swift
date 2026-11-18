@@ -37,6 +37,8 @@ import Foundation
         return (idx, max(0, d.blocks.count - 1), before + inBlock)
     }
     public func restartSpoken() { app.runtime.player.begin(at: 0) }
+    /// The engine came back mid-entry: `play()` starts at the first block that did not play.
+    public func resumeSpoken() { app.runtime.player.play() }
     public func spokenPosition() -> (block: Int, seconds: Double) { app.runtime.player.storyPosition() }
     /// Silence the spoken entry without pausing the radio: an empty document replaces it and its loop ends (the listener's pause is untouched).
     public func stopSpoken() {

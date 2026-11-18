@@ -1,14 +1,16 @@
 import Foundation
 
-/// What a local-only run sheet entry (a message, a book, a file) may not post, kept on the phone by entry id: its real title and label (the posted
-/// entry carries neutral ones) and, for the continuation of a cut passage, the words still to read. One JSON file in Application Support, protected
-/// until first unlock, excluded from backup, at most 50 rows (the oldest dropped). A row goes when its entry finishes, is skipped or leaves the
-/// sheet. Sign-out empties it (`AccountWipe`), and a write made for an account that was wiped meanwhile is dropped.
-public final class LocalEntryKeep: @unchecked Sendable {
-    public struct Row: Codable, Equatable, Sendable { public var id: String; public var title: String; public var label: String; public var rest: String? }
+/// The words still to read of a cut passage (a message, a book, a file), kept by the id of the continuation entry. The continuation names the
+/// same address and carries no words (the phone reads them from its own store), so a relaunch before it finishes needs these to resume. One JSON
+/// file in Application Support (still `local-entries.json`, so an upgrade overwrites the old file in place), protected until first unlock,
+/// excluded from backup, at most 50 rows (the oldest dropped). A row goes when its entry finishes, is skipped or leaves the sheet. Sign-out
+/// empties it (`AccountWipe`), and a write made for an account that was wiped meanwhile is dropped. This is not a privacy device: titles and
+/// labels are posted like any entry's.
+public final class HeldRest: @unchecked Sendable {
+    public struct Row: Codable, Equatable, Sendable { public var id: String; public var rest: String }
     public static let cap = 50
-    /// The app's keep. Under the test runner it is memory only.
-    public static let shared = LocalEntryKeep(file: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil ? LocalEntryKeep.defaultFile() : nil)
+    /// The app's store. Under the test runner it is memory only.
+    public static let shared = HeldRest(file: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil ? HeldRest.defaultFile() : nil)
 
     private let lock = NSLock()
     private var rows: [Row] = []
@@ -26,12 +28,12 @@ public final class LocalEntryKeep: @unchecked Sendable {
         return dir.appendingPathComponent("local-entries.json")
     }
 
-    /// Keep (or replace) the row of an entry. `generation` is the account generation the caller's work began in.
-    public func put(id: String, title: String, label: String, rest: String? = nil, generation: Int = AccountWipe.generation) {
+    /// Hold (or replace) the rest of an entry's passage. `generation` is the account generation the caller's work began in.
+    public func put(id: String, rest: String, generation: Int = AccountWipe.generation) {
         lock.lock(); defer { lock.unlock() }
         guard generation == AccountWipe.generation else { return }
         rows.removeAll { $0.id == id }
-        rows.append(Row(id: id, title: title, label: label, rest: rest))
+        rows.append(Row(id: id, rest: rest))
         if rows.count > Self.cap { rows.removeFirst(rows.count - Self.cap) }
         save()
     }
@@ -61,13 +63,5 @@ public final class LocalEntryKeep: @unchecked Sendable {
         try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: file.path)
         var v = URLResourceValues(); v.isExcludedFromBackup = true
         var u = file; try? u.setResourceValues(v)
-    }
-}
-
-extension RunSheetEntry {
-    /// The title the phone shows for this entry: the kept real title of a local-only entry, else its own. Never used for anything posted.
-    public func shownTitle(keep: LocalEntryKeep = .shared) -> String {
-        if let t = keep.row(id)?.title, !t.isEmpty { return t }
-        return displayTitle
     }
 }

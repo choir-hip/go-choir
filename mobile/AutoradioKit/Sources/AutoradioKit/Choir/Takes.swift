@@ -297,7 +297,7 @@ public struct TakesClient: Sendable {
 
 // MARK: What the phone keeps: its own ids, its handle, the muted voices
 
-/// Where the phone keeps these (its own support folder; none of it is mail or a local-only file, and none of it is posted).
+/// Where the phone keeps these (its own support folder).
 enum TakeFiles {
     static func url(_ name: String) -> URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio").appendingPathComponent(name)

@@ -529,11 +529,7 @@ public actor TurnEngine {
 
         // What the phone holds for this question, searched once: the local model and the server desk are shown the same passages.
         let retrieved = await holder?.retrieve(words: transcript, pageTitle: front?.title ?? "", pageAddress: front?.address ?? "")
-        // Private material (mail) is answered here and only here: the desk is not asked, so its revision cannot replace the local answer. When no local
-        // model is loaded there is no local answer to keep, so the desk is asked as usual, with the private passages left out of what it is sent.
-        let keepLocal = DeskContext.keepsLocal(retrieved) && (LocalLanguage.model?.isLoaded ?? false)
-        if keepLocal { desk = nil }
-        print(DeskContext.turnLine(desk: desk != nil ? "server" : "local", retrieved: retrieved, reason: keepLocal ? "private" : ""))
+        print(DeskContext.turnLine(desk: desk != nil ? "server" : "local", retrieved: retrieved))
 
         // The desk starts at once; System 1 and the acknowledgement do not wait for it.
         let revisionSeen = Flag()

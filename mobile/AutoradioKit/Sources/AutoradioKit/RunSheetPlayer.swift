@@ -24,6 +24,8 @@ import Foundation
     func speak(documentID: String, entry: RunSheetEntry, paragraphs: [String]) async -> Bool
     /// Load a paper story in full and play it. Its document id; nil when it could not be loaded.
     func playStory(route: String, title: String) async -> String?
+    /// The spoken entry from the block that did not play (the engine was lost mid-entry and is back).
+    func resumeSpoken()
     /// The spoken entry from its start.
     func restartSpoken()
     /// Where the spoken entry is: the server block being spoken, the last server block it has, and the seconds into it.
@@ -57,6 +59,7 @@ import Foundation
 extension PlaybackEngine {
     public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { nil }
     public func restartSpoken() {}
+    public func resumeSpoken() {}
     public func spokenReport() -> (block: Int, final: Int, seconds: Double) { (0, 0, 0) }
     public func spokenPosition() -> (block: Int, seconds: Double) { (0, 0) }
     public func stopSpoken() {}
@@ -78,6 +81,8 @@ extension PlaybackEngine {
     public var turnOpen: () -> Bool = { false }
     /// The listener paused the spoken radio: nothing starts by itself.
     public var spokenPaused: () -> Bool = { false }
+    /// The listener paused (or the route was lost): not the system's interruption pause. A held entry resumes by itself over the system's pause only.
+    public var spokenPausedByListener: () -> Bool = { false }
     /// Fetches a page's text; replaceable for tests.
     public var pageText: (URL, String) async -> (title: String, paragraphs: [String])? = { await PageText.fetch($0, title: $1) }
     /// Where the phone keeps its own copy of an audio file from Files, by entry id: never posted. After a relaunch it is empty and `fileResolver` finds the file again.
@@ -205,6 +210,7 @@ extension PlaybackEngine {
     public func playNow(_ e: RunSheetEntry, words: (title: String, paragraphs: [String])? = nil) {
         dropRemembered()
         wants = true
+        pressPending = true; defer { pressPending = false }       // an explicit placement is a press: it may take the session back
         if let words { provided[e.id] = words }
         let cut = store.onAir() != nil ? report(final: false) : nil
         placed(store.place(e, at: .now, cutting: cut))
@@ -230,6 +236,7 @@ extension PlaybackEngine {
         guard a.indices.contains(i) else { return }
         dropRemembered()
         wants = true
+        pressPending = true; defer { pressPending = false }
         store.move(id: a[i].id, at: .now)
     }
     public func clearUpcoming() { dropRemembered(); store.clearAhead() }
@@ -259,7 +266,14 @@ extension PlaybackEngine {
         dropRemembered()
         wants = false
         // Sign-out is not a judgement of the entry: it leaves the air as `left`, by the phone, where it was.
-        if let e = store.onAir() { let r = report(final: false); store.airedEnded(e.id, as: .heard, outcome: .left, report: r) }
+        if let e = store.onAir() {
+            let r = report(final: false)
+            // An entry that never sounded (held at its start, or lost at its first block) was not heard: `skipped` with `failed`, the phone's
+            // "could not play it", which the server settles as no verdict. One that sounded leaves as it did: `heard`, `left`.
+            let silent = (sessionHeldFor == e.id && !heldMidEntry) || (heldMidEntry && lostAtFirstBlock)
+            if silent { store.airedEnded(e.id, as: .skipped, outcome: .failed, report: r, reason: "signed out before it made a sound") }
+            else { store.airedEnded(e.id, as: .heard, outcome: .left, report: r) }
+        }
         store.clearAhead(by: .phone, reason: "signed out")
         engine?.stopRemote(); engine?.stopSpoken()
     }
@@ -343,7 +357,7 @@ extension PlaybackEngine {
         keptSeen.formUnion(store.sheet.entries.map(\.id))
         let live = Set(store.sheet.entries.filter { $0.state == .ahead || $0.state == .onAir }.map(\.id) + (remembered.map { [$0.id] } ?? []))
         let gone = keptSeen.subtracting(live)
-        if !gone.isEmpty { LocalEntryKeep.shared.remove(ids: gone); keptSeen.subtract(gone) }
+        if !gone.isEmpty { HeldRest.shared.remove(ids: gone); keptSeen.subtract(gone) }
         changed()
         aheadChanged?()
     }
@@ -390,16 +404,15 @@ extension PlaybackEngine {
             c.start = max(a.start ?? 0, engine?.remotePosition()?.elapsed ?? 0)
             remembered = .audio(c, by: .phone)
             print("AUTORADIO kept place \(old.id) at \(Int(c.start ?? 0)) s while an answer speaks")
-        } else if old.wordsStayOnPhone, let rest = engine?.spokenRemainder(), !rest.isEmpty {
-            // A message, book or file: the rest of the passage is held here and never posted. The continuation is an entry that names the same
-            // address with no words (as the original did); its words are the phone's, like any read-aloud's.
+        } else if old.wordsComeFromThePhone, let rest = engine?.spokenRemainder(), !rest.isEmpty {
+            // A message, book or file: the rest of the passage is held here. The continuation is an entry that names the same address with no
+            // words (as the original did); the phone reads the words from its own store.
             let id = "c-" + UUID().uuidString.prefix(8).lowercased()
             var c = RunSheetEntry(id: id, kind: old.kind == .mail ? .mail : .page, placedBy: .phone, title: old.title, estSeconds: RunSheetEntry.estimateSeconds(words: rest))
             c.source = old.source
             provided[id] = (old.title, [rest])
-            // The words also go to the keep, so a relaunch before it finishes still has them (they never leave the phone).
-            let k = LocalEntryKeep.shared.row(old.id)
-            LocalEntryKeep.shared.put(id: id, title: k?.title ?? old.title, label: k?.label ?? old.source?.label ?? "", rest: rest)
+            // The words are also held on disk, so a relaunch before it finishes still has them.
+            HeldRest.shared.put(id: id, rest: rest)
             remembered = c
             print("AUTORADIO kept place \(old.id) as \(c.id) on the phone while an answer speaks")
         } else if let rest = engine?.spokenRemainder(), !rest.isEmpty {
@@ -417,15 +430,16 @@ extension PlaybackEngine {
         if let air = store.onAir() {
             guard air.id != playingId else { return }
             rememberPlace(of: playingId, nextKind: air.kind)
-            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
+            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil; heldMidEntry = false
             playingId = air.id; playingDocument = nil; audio = nil; pendingEnd = nil
-            startTask = Task { @MainActor in await self.begin(air) }
+            let press = pressPending
+            startTask = Task { @MainActor in await self.begin(air, reason: press ? "play" : nil) }
             return
         }
         if playingId != nil {                         // what was on air was skipped, cut or taken off: its sound stops
             if let p = playingId, let f = takeFiles.removeValue(forKey: p) { try? FileManager.default.removeItem(at: f) }
             rememberPlace(of: playingId, nextKind: nextToAir()?.kind)
-            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
+            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil; heldMidEntry = false
             playingId = nil; playingDocument = nil; audio = nil; paused = false; generation += 1; pendingEnd = nil
             engine?.stopRemote(); engine?.stopSpoken()
         }
@@ -447,34 +461,89 @@ extension PlaybackEngine {
     nonisolated(unsafe) public static var sessionRetryDelays: [TimeInterval] = [1, 2, 4, 8, 15]
     private var sessionHeldFor: String?
     private var sessionAttempts = 0
+    /// The entry is held for the session in the middle of its speech (a block could not sound): when the session is back it goes on from the
+    /// block that did not play, and it is never finished, heard or failed, meanwhile.
+    private var heldMidEntry = false
+    /// The engine was lost at the entry's first block: the entry has made no sound at all.
+    private var lostAtFirstBlock = false
+    /// The spoken document `documentID` lost the engine at a block: the entry on air is held like one whose start could not take the session.
+    public func engineLost(documentID: String, block: Int? = nil) {
+        guard let eid = playingId, documentID == playingDocument, let e = store.entry(eid) else { return }
+        heldMidEntry = true
+        lostAtFirstBlock = block == 0
+        Task { @MainActor in await self.hold(e, why: "the audio session could not be taken") }
+    }
     private var retryTask: Task<Void, Never>?
     /// The entry on air is waiting for the audio session.
     public var isWaitingForSession: Bool { sessionHeldFor != nil }
+    /// The big Play button was pressed. The held entry is retried at once. True when the press was only that: while an entry is held for the
+    /// session (at its start or in the middle) the bar says paused, so the press means Play, and it must never be taken for a pause.
+    public func playPressed() -> Bool {
+        let held = isWaitingForSession
+        sessionMayBeBack(reason: "play")
+        return held
+    }
+    /// The lock screen's play, pause or toggle. A press is a press wherever it comes from: while an entry is held for the session, play and toggle
+    /// are the in-app Play (`playPressed`). Otherwise remote audio takes the command; false when it is not remote (the programme player does).
+    public func remoteTransport(_ cmd: String) -> Bool {
+        if isWaitingForSession, cmd == "play" || cmd == "toggle" { _ = playPressed(); return true }
+        guard isRemote else { return false }
+        switch cmd {
+        case "play": resume()
+        case "pause": pause()
+        default: if paused { resume() } else { pause() }
+        }
+        return true
+    }
     /// The app is back in front, an interruption ended, a route came back, or the listener tapped Play: try the held entry now.
-    public func sessionMayBeBack() {
+    public func sessionMayBeBack(reason: String = "resume") {
         guard let id = sessionHeldFor, playingId == id, let e = store.entry(id) else { return }
         retryTask?.cancel()
-        retryTask = Task { @MainActor in await self.begin(e, reason: "resume") }
+        retryTask = Task { @MainActor in await self.begin(e, reason: reason) }
     }
 
+    /// The session or the engine is not ready: that is not this entry's failure. It stays on air, held, with no outcome recorded; the
+    /// claim is tried again with backoff, and at once when the app returns, an interruption ends or the listener taps Play.
+    private func hold(_ entry: RunSheetEntry, why: String) async {
+        guard playingId == entry.id else { return }
+        message = "Can\u{2019}t speak: \(why)"
+        sessionHeldFor = entry.id
+        sessionAttempts += 1
+        let wait = Self.sessionRetryDelays[min(sessionAttempts - 1, Self.sessionRetryDelays.count - 1)]
+        print("AUTORADIO on air \(entry.id) HELD \(why); attempt \(sessionAttempts), again in \(wait) s")
+        changed()
+        retryTask?.cancel()
+        retryTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard !Task.isCancelled, self.sessionHeldFor == entry.id, self.playingId == entry.id else { return }
+            await self.begin(entry, reason: "retry")      // gated while another app has the session
+        }
+    }
+
+    private var pressPending = false
+    private var beginSeq = 0
     private func begin(_ entry: RunSheetEntry, reason: String? = nil) async {
+        beginSeq += 1
+        let seq = beginSeq
         let notReady = await sessionReady?(reason ?? entry.kind.rawValue)
         guard playingId == entry.id else { return }            // a newer start took over while the session was made ready
-        if let why = notReady {
-            // The session or the engine is not ready: that is not this entry's failure. It stays on air, held, with no outcome recorded; the
-            // claim is tried again with backoff, and at once when the app returns, an interruption ends or the listener taps Play.
-            message = "Can\u{2019}t speak: \(why)"
-            sessionHeldFor = entry.id
-            sessionAttempts += 1
-            let wait = Self.sessionRetryDelays[min(sessionAttempts - 1, Self.sessionRetryDelays.count - 1)]
-            print("AUTORADIO on air \(entry.id) HELD \(why); attempt \(sessionAttempts), again in \(wait) s")
+        guard seq == beginSeq else { return }                  // a later begin of this entry (a retry, Play, the foreground) is the one that goes on
+        if let why = notReady { await hold(entry, why: why); return }
+        if reason != "play", sessionHeldFor == entry.id, spokenPausedByListener() {
+            // The listener paused (or the route was lost) while the entry was held, at its start or in the middle: it stays held, and only their Play
+            // goes on. Neither the timer nor the foreground undoes a pause.
+            print("AUTORADIO on air \(entry.id) stays held: the listener paused")
+            changed(); return
+        }
+        if heldMidEntry {
+            // The session is back: the entry goes on from the block that did not play (not from the start, and not finished).
+            heldMidEntry = false
+            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
+            message = ""
+            paused = false
+            print("AUTORADIO on air \(entry.id) resumes at the block that did not play")
+            engine?.resumeSpoken()
             changed()
-            retryTask?.cancel()
-            retryTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
-                guard !Task.isCancelled, self.sessionHeldFor == entry.id, self.playingId == entry.id else { return }
-                await self.begin(entry, reason: "retry")      // gated while another app has the session
-            }
             return
         }
         sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
@@ -493,7 +562,7 @@ extension PlaybackEngine {
             ok = await engine.speak(documentID: doc, entry: entry, paragraphs: [entry.text ?? ""])
         case .page, .mail:
             engine.stopRemote()
-            if let w = provided[entry.id] ?? LocalEntryKeep.shared.row(entry.id)?.rest.map({ (entry.title, [$0]) }) {
+            if let w = provided[entry.id] ?? HeldRest.shared.row(entry.id).map({ (entry.title, [$0.rest]) }) {
                 let doc = "rs:" + entry.id
                 playingDocument = doc
                 ok = await engine.speak(documentID: doc, entry: entry, paragraphs: w.paragraphs)
@@ -533,7 +602,7 @@ extension PlaybackEngine {
             if spec == nil, let address = entry.filesAddress {
                 let url: URL?
                 if let known = localFiles[entry.id] { url = known } else { url = await fileResolver?(address) }
-                if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.shownTitle(), show: LocalEntryKeep.shared.row(entry.id)?.label ?? entry.source?.label ?? "Files") }
+                if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.displayTitle, show: entry.source?.label ?? "Files") }
             }
             guard let a = spec else { break }
             if entry.kind == .clip, entry.source?.clipId != nil {
@@ -589,7 +658,7 @@ extension PlaybackEngine {
         if played { store.airedEnded(id, as: .heard, outcome: .finished, report: r) }
         else { store.airedEnded(id, as: .skipped, outcome: .failed) }
         provided[id] = nil
-        LocalEntryKeep.shared.remove(id)
+        HeldRest.shared.remove(id)
         leadInDone.remove(id)
         dropLocated(id)
         if let e = store.entry(id) { onEntryEnded?(e, played) }

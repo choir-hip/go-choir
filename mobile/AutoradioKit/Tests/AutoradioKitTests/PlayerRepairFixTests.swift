@@ -2,7 +2,7 @@ import XCTest
 import AVFoundation
 @testable import AutoradioKit
 
-/// Phone review repairs (2026-11-18): mail words never leave the phone; a replayed clip plays its audio again; Previous works in a lead-in;
+/// Phone review repairs (2026-11-18): a replayed clip plays its audio again; Previous works in a lead-in;
 /// a hold on remote audio (a voice line, a session switch) is not a system pause; a held player is not resumed by a rate or level change.
 @MainActor
 final class PlayerRepairFixTests: XCTestCase {
@@ -23,7 +23,7 @@ final class PlayerRepairFixTests: XCTestCase {
     }
 
     // P1
-    func testNoWordOfAMailPassageIsPostedByReadingItAloudAndCuttingIn() async {
+    func testACutMailPassageIsContinuedFromTheStoreWithoutPostingItsWordsAsText() async {
         let (p, s, e) = make()
         let poster = Capture(); s.poster = poster
         let words = ["Zebrafish", "quarterly", "invoice", "mentions", "Dolores", "tomorrow", "marmalade", "afternoon", "confidential"]
@@ -43,7 +43,9 @@ final class PlayerRepairFixTests: XCTestCase {
         XCTAssertFalse(sent.isEmpty)
         let enc = JSONEncoder()
         let all = sent.map { String(decoding: (try? enc.encode($0)) ?? Data(), as: UTF8.self).lowercased() }.joined(separator: "\n")
-        for w in (words + ["Pelican", "budget", "lantern", "sketch"]) { XCTAssertFalse(all.contains(w.lowercased()), "\(w) left the phone: \(all)") }
+        XCTAssertTrue(all.contains(title.lowercased()), "the entry posts its real title")
+        // The continuation names the address and carries no text: the phone reads the rest from its own store (this is the entry's shape, not a privacy rule).
+        for w in ["Pelican", "budget", "lantern", "sketch"] { XCTAssertFalse(all.contains(w.lowercased()), "\(w) was posted as entry text: \(all)") }
     }
 
     // P2
@@ -126,16 +128,17 @@ final class PlayerRepairFixTests: XCTestCase {
         XCTAssertEqual(told, 1); XCTAssertFalse(r.isPlaying)
         XCTAssertEqual(r.playerRateForTest, 0, "not restarted into a call")
     }
-    // review 4: a book's title is not posted
-    func testABooksTitleIsNotPosted() async {
+    // a book's title is posted like any entry's: the phone talks to the listener's own computer
+    func testABooksTitleIsPosted() async {
         let (p, s, _) = make()
         let poster = Capture(); s.poster = poster
         p.registerTextSource(kind: "document") { _, _ in ["Block one."] }
         p.playNow(.book(id: "b1", title: "Confidential Merger Memoir", at: 2)); await p.settle()
         await s.flushTask?.value; s.flush(); await s.flushTask?.value
-        let all = poster.ops.map { String(decoding: (try? JSONEncoder().encode($0)) ?? Data(), as: UTF8.self).lowercased() }.joined()
+        let all = poster.ops.map { String(decoding: (try? JSONEncoder().encode($0)) ?? Data(), as: UTF8.self) }.joined()
         XCTAssertFalse(poster.ops.isEmpty)
-        for w in ["confidential", "merger", "memoir"] { XCTAssertFalse(all.contains(w), all) }
+        XCTAssertTrue(all.contains("Confidential Merger Memoir"), all)
+        XCTAssertFalse(all.contains("Read aloud"), all)
         XCTAssertTrue(all.contains("doc:b1"))
     }
 }

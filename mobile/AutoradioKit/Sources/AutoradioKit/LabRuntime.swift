@@ -233,7 +233,11 @@ public final class LabRuntime: @unchecked Sendable {
 
     /// The session is claimed and active and the engine is up, taking the claim again when needed. Call before anything plays.
     @discardableResult
-    public func ensureSessionReady(reason: String) async -> Bool { await coordinator.ensureReady(reason: reason) }
+    public func ensureSessionReady(reason: String) async -> Bool {
+        let ok = await coordinator.ensureReady(reason: reason)
+        if !ok { print("AUTORADIO session could not be taken (\(reason)) \(await coordinator.failureDiagnostic())") }
+        return ok
+    }
 
     public func stop() {
         player.pause(reason: "runtime stop")

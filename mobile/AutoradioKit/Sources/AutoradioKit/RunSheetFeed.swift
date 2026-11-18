@@ -154,6 +154,8 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     public var onNotice: ((String?) -> Void)?
     /// Told when a write starts and ends (the host shows "the desk is writing what comes next").
     public var onWriting: ((Bool) -> Void)?
+    /// Told when an ask has ended and the writer is idle (not on `stop`: a sign-out is not an idle writer).
+    public var onIdle: (() -> Void)?
     /// True when the last ask returned nothing new (a repeat, or nothing), and no ask is in flight: only then is "nothing is coming" true.
     public private(set) var dry = false
     public var onDry: ((Bool) -> Void)?
@@ -165,6 +167,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     /// is placed at the end, by the phone, once per failed ask; the writer does not ask again until another entry airs.
     public var offlineFill: (() -> [RunSheetEntry])?
     private var task: Task<Void, Never>?
+    private var stops = 0             // counts `stop()`: an ask that began before one ends silently (its flags were cleared, and a later ask may own them)
     private var quietOn: String?          // the entry that was on air when the last ask added nothing: not asked again until another one is
 
     public init(store: RunSheetStore, feed: @escaping () -> RunSheetFeed?) { self.store = store; self.feed = feed }
@@ -216,8 +219,10 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         let first0 = !launchAsked; launchAsked = true
         let airId = store.onAir()?.id
         let gen = AccountWipe.generation          // the account this ask is for
+        let stopsAtStart = stops
+        print("AUTORADIO ask begin cause=\(cause) ahead=\(a.aheadTitles.count)")
         task = Task { @MainActor in
-            var added = 0, received = 0, first: Date?
+            var added = 0, received = 0, dropped = 0, first: Date?
             var failure: Error?
             do {
                 let stream = try await feed.ask(a)
@@ -229,7 +234,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                         if first == nil { first = self.clock(); if first0 { LaunchTimings.shared.mark("first_segment", ms: first!.timeIntervalSince(started) * 1000) } }
                         received += ops.count
                         for op in ops {
-                            guard let admitted = self.admit?(op, cause) ?? (self.admit == nil ? op : nil) else { continue }
+                            guard let admitted = self.admit?(op, cause) ?? (self.admit == nil ? op : nil) else { dropped += 1; continue }
                             if self.store.applyFromDesk(admitted, generation: gen).applied { added += 1 }
                         }
                     case .done: break
@@ -238,18 +243,24 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                 }
             } catch is CancellationError {
             } catch { failure = error }
-            guard gen == AccountWipe.generation else { return }          // stop() already cleared the flags; a later ask owns them now
+            guard stopsAtStart == self.stops, gen == AccountWipe.generation else { return }          // stop() already cleared the flags; a later ask owns them now
+            print("AUTORADIO ask end cause=\(cause) ms=\(Int(self.clock().timeIntervalSince(started) * 1000)) placed=\(added) dropped=\(dropped) failed=\(failure != nil)")
             if let f = first { self.latency = max(0.5, f.timeIntervalSince(started)) }
             self.inFlight = false
             self.onWriting?(false)
             self.setDry(added == 0 && failure == nil)
             if added > 0 { self.quietOn = nil; self.setNotice(nil) }
             else {
-                self.quietOn = airId
+                // An answer the player dropped is not "the desk has nothing more": it must not hold back the next extend.
+                // Only a dropped OPENING (an `open` ask) is not "the desk has nothing more"; a repeat dropped from an extend is exactly that.
+                if !(cause == "open" && dropped > 0) { self.quietOn = airId }
                 // The desk answered but everything it wrote is already on the sheet (a repeat): that is not a failure.
                 if received > 0 && failure == nil { self.setNotice(nil) }
                 else if failure != nil || cause == "open" { self.setNotice(self.noticeWords(failure)) }
             }
+            defer { self.onIdle?() }
+            // The entry on air changed while the ask ran: `quietOn` holds the old one, so the answer's emptiness is no longer true of now.
+            if added == 0, self.store.onAir()?.id != airId { self.checkAhead() }
             if added > 0 { self.checkAhead() }
             else if failure != nil, let fill = self.offlineFill, self.store.ahead(limit: Int.max).filter({ $0.kind != .transition }).count < 2 {
                 for e in fill() { self.store.place(e, at: .end, by: .phone, reason: "the desk could not be reached: a story held on this phone") }
@@ -259,6 +270,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
 
     /// Sign-out: cancel the ask in flight and clear its flags; what its stream still delivers is dropped (the generation check).
     public func stop() {
+        stops += 1
         task?.cancel(); task = nil
         if inFlight { inFlight = false; onWriting?(false) }
         quietOn = nil

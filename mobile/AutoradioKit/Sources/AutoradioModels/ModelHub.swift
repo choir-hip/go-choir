@@ -50,6 +50,9 @@ final class ModelSlot<T>: @unchecked Sendable {
             // cancelled must not let a second caller start a second copy of the same model beside the first.
             defer { lock.lock(); loading = nil; lock.unlock() }
             var made: T?
+            print("AUTORADIO model slot load begin id=\(id)")
+            let t0 = Date()
+            defer { print("AUTORADIO model slot load end id=\(id) ms=\(Int(Date().timeIntervalSince(t0) * 1000))") }
             _ = try await ModelHub.store.measuredLoad(id) {
                 let (v, c) = try await make()
                 made = v

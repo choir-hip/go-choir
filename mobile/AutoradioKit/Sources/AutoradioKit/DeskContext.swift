@@ -18,38 +18,11 @@ public enum OnAir {
     }
 }
 
-public extension RetrievalContext {
-    /// The same context without the items that must stay on the phone (DeskContext.isPrivate), re-rendered; empty when nothing is left.
-    func sendable() -> RetrievalContext {
-        let keep = items.filter { !DeskContext.isPrivate($0) }
-        guard keep.count != items.count else { return self }
-        var rec = record
-        rec.hits = rec.hits.filter { h in keep.contains { $0.id == h.id } }
-        guard !keep.isEmpty else { return RetrievalContext(text: "", items: [], record: rec) }
-        let text = RetrievalIndex.header(query: record.query, onAir: record.onAir, now: record.at) + keep.enumerated().map { RetrievalIndex.block($0.offset + 1, $0.element) }.joined()
-        rec.usedChars = text.count
-        var r = RetrievalContext(text: text, items: keep, record: rec); r.brief = brief; return r
-    }
-}
-
 public enum DeskContext {
-    /// What stays on the phone (owner, 2026-11-17: mail is kept on the phone): mail, and files that exist only here. Stories, podcasts, transcripts, books from the
-    /// Choir library, Texture documents, files synced from the owner's Choir computer and the run sheet are already on the server and may be sent.
-    public static func isPrivate(_ i: RetrievalItem) -> Bool { i.kind == "mail" || i.source == "Local files" }
-    public static func isPrivateAddress(_ a: String) -> Bool { a.hasPrefix("mail:") }
-    /// The turn is about private material: its best passage (by score) is private. The local answer then stands and the desk is not asked.
-    public static func keepsLocal(_ c: RetrievalContext?) -> Bool {
-        guard let best = c?.items.max(by: { $0.score < $1.score }) else { return false }
-        return isPrivate(best)
-    }
-
     /// The page the server desk is sent. `pageText` is what the phone has for the page in front; `brief` what is on air and ahead.
     public static func page(front: FrontPage?, pageText: String, brief: String, retrieved: RetrievalContext?) -> DeskPage? {
-        let shown = retrieved?.sendable()
-        let passages = (shown?.isEmpty == false) ? shown!.text : ""
-        let privatePage = isPrivateAddress(front?.address ?? "")             // a mail message in front is not sent: not its words, not its subject
-        let own = privatePage ? "" : pageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let front = privatePage ? front.map { FrontPage(address: $0.address, title: "A mail message", kind: $0.kind) } : front
+        let passages = (retrieved?.isEmpty == false) ? retrieved!.text : ""
+        let own = pageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard front != nil || !brief.isEmpty || !passages.isEmpty else { return nil }
         var parts: [String] = []
         if own.isEmpty || !OnAir.isContent(front?.address ?? "") { if !brief.isEmpty { parts.append(brief) } }
@@ -62,8 +35,8 @@ public enum DeskContext {
     }
 
     /// One console line per turn: counts and kinds only, never content.
-    public static func turnLine(desk: String, retrieved: RetrievalContext?, reason: String = "") -> String {
+    public static func turnLine(desk: String, retrieved: RetrievalContext?) -> String {
         let kinds = Set((retrieved?.items ?? []).map(\.kind)).sorted().joined(separator: ",")
-        return "AUTORADIO turn desk=\(desk)\(reason.isEmpty ? "" : " reason=" + reason) retrieved=\(retrieved?.items.count ?? 0) sources=\(kinds.isEmpty ? "-" : kinds) context_chars=\(retrieved?.text.count ?? 0)"
+        return "AUTORADIO turn desk=\(desk) retrieved=\(retrieved?.items.count ?? 0) sources=\(kinds.isEmpty ? "-" : kinds) context_chars=\(retrieved?.text.count ?? 0)"
     }
 }
