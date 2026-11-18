@@ -247,11 +247,27 @@ extension TurnEngine {
             if !text.isEmpty { env.log.emit(.partialTranscript(text)) }
         case .commit: await hfCommit()
         case .bargeIn: await hfBargeIn()
-        case .pausePlayback: await env.playback.setLevel(.pause)
+        case .pausePlayback:
+            print("AUTORADIO voice speech start")
+            await env.playback.setLevel(.pause)
+            // A pause for speech that comes to no turn is given back: nothing heard for 8 s and the radio plays on.
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(TurnEngine.nothingHeardSeconds * 1_000_000_000))
+                await self?.hfResumeIfNothingHeard()
+            }
         case .resumePlayback: await env.playback.setLevel(.play)
         case .clearTranscript: hf.wordBase = hf.lastWords.count
         case .runSmartTurn, .checkSpeaker: break          // neither model is loaded (H1)
         }
+    }
+
+    /// After a pause for speech with no turn coming of it, the radio plays on after this long.
+    nonisolated(unsafe) public static var nothingHeardSeconds: Double = 8
+    func hfResumeIfNothingHeard() async {
+        guard turn == nil, hf.session == nil, pipeline == nil, phase == .playing else { return }
+        print("AUTORADIO voice resume why=nothing heard in \(Int(TurnEngine.nothingHeardSeconds)) s")
+        await setLevelTo(.play, reason: .resume)
+        await env.playback.setLevel(.play)
     }
 
     /// The policy says the turn is over: the session's final text becomes the turn.
@@ -262,6 +278,7 @@ extension TurnEngine {
         hfEndSession(cancel: false)
         let text = ((try? await env.log.timed("transcribe") { try await session.finish() }) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         env.log.emit(.finalTranscript(text))
+        print("AUTORADIO voice heard chars=\(text.count)")
         guard !text.isEmpty, let transcriber, let yield = try? env.registry.make(.yieldPolicy, as: YieldPolicy.self, config) else {
             env.log.emit(.notATurn(reason: "empty transcript"))
             hf.cut = nil

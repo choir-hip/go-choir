@@ -83,7 +83,12 @@ public final class LiveAudio: @unchecked Sendable {
     }
     private var micPermitted = false
     private var micWanted = false
-    private var wantMic: Bool { micPermitted && micWanted }
+    /// Another app has the session, or this app is in the background: the microphone is not taken (and not fought for) until it is given back.
+    private let suspendedBox = Locked<Bool>(false)
+    public var micSuspended: Bool { get { suspendedBox.value } set { suspendedBox.write { $0 = newValue } } }
+    /// The input rate of the tap now installed (0: none), for the log line of voice on.
+    public private(set) var micTapRate = 0.0
+    private var wantMic: Bool { micPermitted && micWanted && !micSuspended }
     private var observer: NSObjectProtocol?
     /// Flags the audio thread, the notification queue, background tasks and the main thread all read: one lock (the repair of the
     /// app review; `running` was polled by `playProgramme` while `bring` and `takeDown` wrote it).
@@ -263,8 +268,13 @@ public final class LiveAudio: @unchecked Sendable {
                     let s = rs.convert(buf)
                     if !s.isEmpty { bus.pushMic(AudioFrame(samples: s, sampleRate: busSampleRate, t: clock.now)) }
                 }
-                micActive = true
-            } else { onNotice?("error", "input format has sample rate 0 (no microphone available)") }
+                micActive = true; micTapRate = inFmt.sampleRate
+                micRetries = 0
+            } else {
+                micTapRate = 0
+                onNotice?("error", "input format has sample rate 0 (no microphone available)")
+                scheduleMicRetry()
+            }
         }
         let mixFmt = engine.mainMixerNode.outputFormat(forBus: 0)
         let rr = Resampler(rate: busSampleRate)
@@ -287,6 +297,20 @@ public final class LiveAudio: @unchecked Sendable {
         programmeNode.volume = volume
         if wantPlaying, !voiceIsSpeaking { programmeNode.play(); nodeStopped = false }
         onNotice?("engine", "up: mic \(micActive), voice processing \(voiceProcessing), programme wanted \(wantPlaying)")
+    }
+
+    /// A route that is still settling (Bluetooth A2DP to the hands-free profile) reports no input for a moment: the tap is tried again, a few times,
+    /// instead of leaving the microphone silent for good.
+    private var micRetries = 0
+    private func scheduleMicRetry() {
+        guard micRetries < 6, !virtual else { return }
+        micRetries += 1
+        let wait = 0.4 * Double(1 << (micRetries - 1))
+        DispatchQueue.global().asyncAfter(deadline: .now() + wait) { [weak self] in
+            guard let self, self.wantMic, !self.micActive, !self.restarting else { return }
+            print("AUTORADIO voice mic retry \(self.micRetries): the input was not there yet")
+            self.recover(reason: "microphone input not available yet")
+        }
     }
 
     /// The engine stops itself when the route changes (AirPods in or out); restart it once, after the burst settles.

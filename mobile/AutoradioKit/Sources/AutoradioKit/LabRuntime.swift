@@ -321,6 +321,16 @@ public final class LabRuntime: @unchecked Sendable {
             await coordinator.reapply()
             await engine.handsFreeConfigure(echoCancelled: audio.voiceProcessing)
             await engine.handsFreeSet(on)
+            if on {
+                let tap = audio.micActive ? "ok" : "fail"
+                print("AUTORADIO voice on claim=\(coordinator.describe()) rate=\(Int(audio.micTapRate)) tap=\(tap)")
+                if !audio.micActive, !audio.virtual {
+                    // The route may still be settling: look again before saying so.
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    if !audio.micActive, HandsFreeSwitch.shared.isOn { log.emit(.error(stage: "listen", message: "the microphone could not be opened (input rate \(Int(audio.micTapRate)))")) }
+                    else { print("AUTORADIO voice mic tap=ok after the route settled rate=\(Int(audio.micTapRate))") }
+                }
+            }
         }
         refresh()
     }

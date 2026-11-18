@@ -622,6 +622,7 @@ public actor TurnEngine {
                 deskTask = Task { [self] in
                     do {
                         var firstSeen = false
+                        print("AUTORADIO turn desk=\(type(of: desk).stageID) asked chars=\(transcript.count)")
                         for try await r in desk.submit(baseReq, heard: heard) {
                             if Task.isCancelled { break }       // an interrupted turn's revision is not applied
                             if !firstSeen { firstSeen = true; log.emit(.deskFirstToken(msSinceTurnEnd: (log.clock.now - endedAt) * 1000)) }

@@ -75,7 +75,23 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     /// Voice on is one state: the capture session with voice processing (echo cancellation), whether or not a turn is open. The session does not
     /// change category or mode again between listening and talking, so the programme is never played through a mode switch; the one switch is
     /// the Voice control's, made with the engine stopped. (`alwaysListening` is the lab's own choice and stays what it says.)
-    func target(for asked: AudioState) -> AudioState { voiceOn() ? (policy() == .alwaysListening ? .listening : .talking) : .playing }
+    func target(for asked: AudioState) -> AudioState {
+        guard voiceOn(), !isBackgrounded else { return .playing }       // in the background the microphone is given up and the radio plays on
+        return policy() == .alwaysListening ? .listening : .talking
+    }
+    private var _backgrounded = false, _interrupted = false
+    public var isBackgrounded: Bool { lock.lock(); defer { lock.unlock() }; return _backgrounded }
+    /// Another app has the session (an interruption began and has not ended): nothing here asks for it back except a foreground, an
+    /// interruption's end and a press of Play.
+    public var isInterrupted: Bool { lock.lock(); defer { lock.unlock() }; return _interrupted }
+    /// The app left or came back to the foreground: voice on gives the microphone up (a playback session) and takes it back.
+    public func setBackgrounded(_ b: Bool) async {
+        lock.lock(); let was = _backgrounded; _backgrounded = b; lock.unlock()
+        guard was != b, voiceOn() else { return }
+        audio.micSuspended = b
+        print(b ? "AUTORADIO voice mic released why=background" : "AUTORADIO voice mic taken why=foreground")
+        await reapply()
+    }
 
     public func claim(_ asked: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
         await mutex.lock(); defer { mutex.unlock() }
@@ -100,6 +116,10 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         lock.lock(); let asked = _asked, cur = _current, doubted = _suspect; lock.unlock()
         let want = target(for: asked)
         if cur == want, !doubted, !audio.needsRecovery { return true }
+        if isInterrupted, !["play", "foreground", "interruption ended", "resume"].contains(reason) {
+            lastFailure = "another app is using the audio"
+            return false                                    // not fought for: the retry waits for the foreground, the interruption's end or Play
+        }
         let why = cur == nil ? "no claim" : doubted ? "session doubted" : audio.needsRecovery ? "engine down" : "state changed"
         return await reclaim(want, reason: reason, why: why)
     }
@@ -120,7 +140,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
                 onChange?()
                 return false
             }
-            lock.lock(); _current = state; _suspect = false; lock.unlock()
+            lock.lock(); _current = state; _suspect = false; _interrupted = false; lock.unlock()
             var ok = true
             if audio.needsRecovery {
                 do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing) }
@@ -143,7 +163,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
             onChange?()
             return false
         }
-        lock.lock(); _current = state; _suspect = false; lock.unlock()
+        lock.lock(); _current = state; _suspect = false; _interrupted = false; lock.unlock()
         var ok = true
         do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing) }
         catch { ok = false; log.emit(.error(stage: "audio-engine", message: "engine did not start after reclaim of \(state.rawValue) (\(reason)): \(error)")) }
@@ -205,7 +225,9 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         let audio = self.audio
         switch kind {
         case "interrupted":
-            lock.lock(); _suspect = true; _shouldResume = nil; lock.unlock()
+            lock.lock(); _suspect = true; _shouldResume = nil; _interrupted = true; lock.unlock()
+            audio.micSuspended = true
+            print("AUTORADIO interruption began")
             audio.interrupted()
             onInterruption?(true, false)
         case "resumed":
@@ -232,6 +254,9 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     /// programme is told, and resumes what it had); without it (the person started other audio) nothing is taken: the session and the
     /// engine are re-established by the next Play.
     func interruptionEnded(shouldResume: Bool) async {
+        lock.lock(); _interrupted = false; lock.unlock()
+        audio.micSuspended = isBackgrounded
+        print("AUTORADIO interruption ended resume=\(shouldResume)")
         log.emit(.audioNotice(kind: "interruption-ended", detail: "shouldResume=\(shouldResume)"))
         if shouldResume {
             await mutex.lock()

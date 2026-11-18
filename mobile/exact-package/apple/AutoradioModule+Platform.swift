@@ -149,6 +149,57 @@ enum ConsoleFile {
 #endif
 
 #if os(iOS)
+/// The phone's console, kept: every `AUTORADIO ...` line (the Kit prints them; the session owner's notes come through `write`) is also appended to
+/// `Library/Application Support/Autoradio/console.log`, so a run can be read after the fact (devicectl copies the file). The standard output stays
+/// as it was (a pipe tees to the original). One file, capped at 512 KB: past the cap the oldest half is dropped. Lines carry counts, ids, states
+/// and error codes only, never the words spoken, titles or mail.
+enum ConsoleFile {
+    private static let cap = 512 * 1024
+    nonisolated(unsafe) private static var url: URL?
+    private static let queue = DispatchQueue(label: "autoradio.console")
+    static func install(directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        url = directory.appendingPathComponent("console.log")
+        var fds: [Int32] = [0, 0]
+        guard pipe(&fds) == 0 else { return }
+        let original = dup(STDOUT_FILENO)
+        dup2(fds[1], STDOUT_FILENO)
+        setvbuf(stdout, nil, _IOLBF, 0)
+        let readFD = fds[0]
+        Thread.detachNewThread {
+            var pending = Data()
+            var buf = [UInt8](repeating: 0, count: 4096)
+            while true {
+                let n = read(readFD, &buf, buf.count)
+                if n <= 0 { break }
+                if original >= 0 { _ = buf.withUnsafeBytes { Darwin.write(original, $0.baseAddress, n) } }
+                pending.append(buf, count: n)
+                while let nl = pending.firstIndex(of: 10) {
+                    let line = String(decoding: pending[pending.startIndex..<nl], as: UTF8.self)
+                    pending.removeSubrange(pending.startIndex...nl)
+                    if line.contains("AUTORADIO") { write(line) }
+                }
+            }
+        }
+        write("AUTORADIO console log opened pid=\(getpid())")
+    }
+    /// Appends one line (with the time of day), and trims the file when it is past the cap.
+    static func write(_ line: String) {
+        queue.async {
+            guard let url else { return }
+            let stamp = ISO8601DateFormatter().string(from: Date())
+            guard let data = "\(stamp) \(line)\n".data(using: .utf8) else { return }
+            if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(data); try? h.close() }
+            else { try? data.write(to: url) }
+            if let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int, size > cap, let all = try? Data(contentsOf: url) {
+                var tail = all.suffix(all.count / 2)
+                if let nl = tail.firstIndex(of: 10) { tail = tail[tail.index(after: nl)...] }          // start at a whole line
+                try? Data(tail).write(to: url)
+            }
+        }
+    }
+}
+
 final class BackgroundTaskBox: @unchecked Sendable {
     var id = UIBackgroundTaskIdentifier.invalid
     func end() { DispatchQueue.main.async { if self.id != .invalid { let i = self.id; self.id = .invalid; UIApplication.shared.endBackgroundTask(i) } } }

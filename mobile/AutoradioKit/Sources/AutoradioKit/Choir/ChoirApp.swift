@@ -218,7 +218,7 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// Error stages that reach the player's message. "start" and "voice" are the Play path: a failed engine start and a voice
     /// that could not be made or could not speak.
-    static let surfacedErrorStages: Set<String> = ["system1", "desk", "programme", "start", "voice"]
+    static let surfacedErrorStages: Set<String> = ["system1", "desk", "programme", "start", "voice", "listen"]
 
     func say(_ m: String) { lock.lock(); message = m; lock.unlock(); onChange?() }
 
@@ -233,6 +233,7 @@ public final class ChoirApp: @unchecked Sendable {
         case "desk": return "Your computer could not act on that. Try asking again."
         case "start": return "The radio could not start its audio (\(m)). Try Play again."
         case "voice": return "The radio's voice did not work, so nothing could be read aloud."
+        case "listen": return "Can\u{2019}t listen: \(m)"
         default: return "Something went wrong loading the radio."
         }
     }

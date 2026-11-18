@@ -99,7 +99,8 @@ public final class AutoradioModule: ExactPackage {
         ConsoleFile.install(directory: support)
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); print("AUTORADIO \(s)") }
         #else
-        owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
+        ConsoleFile.install(directory: support)
+        owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
         #endif
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
         runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }

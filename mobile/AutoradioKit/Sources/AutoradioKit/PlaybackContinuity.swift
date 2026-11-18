@@ -165,6 +165,12 @@ public final class SessionWatcher: @unchecked Sendable {
     }
 
     func routeLost() {
+        // The radio's own session change (voice on moves a Bluetooth headset from A2DP to the hands-free profile) removes the old route: that is
+        // not the headset going away, and the radio does not pause for it.
+        if runtime.coordinator.changedWithin(4) {
+            print("AUTORADIO route change ignored: the radio's own session change ms_since_session_change=\(runtime.coordinator.msSinceSessionChange)")
+            return
+        }
         memory.forget()
         runtime.log.emit(.audioNotice(kind: "route-lost", detail: "pausing (programme playing \(programmePlaying), remote playing \(remotePlaying))"))
         if programmePlaying { runtime.player.pause(reason: "system interruption or route change") }
@@ -173,8 +179,14 @@ public final class SessionWatcher: @unchecked Sendable {
 
     func lifecycle(_ name: String) {
         switch name {
-        case "didEnterBackground": runtime.coordinator.markSuspect("app in the background")
-        case "didBecomeActive": returnedToForeground()
+        case "didEnterBackground":
+            runtime.coordinator.markSuspect("app in the background")
+            Task { await runtime.coordinator.setBackgrounded(true) }       // voice on: the microphone is given up, the radio plays on
+        case "didBecomeActive":
+            Task { @MainActor in
+                await runtime.coordinator.setBackgrounded(false)
+                returnedToForeground()
+            }
         default: break
         }
     }

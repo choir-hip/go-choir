@@ -387,11 +387,11 @@ extension PlaybackEngine {
     public func sessionMayBeBack() {
         guard let id = sessionHeldFor, playingId == id, let e = store.entry(id) else { return }
         retryTask?.cancel()
-        retryTask = Task { @MainActor in await self.begin(e) }
+        retryTask = Task { @MainActor in await self.begin(e, reason: "resume") }
     }
 
-    private func begin(_ entry: RunSheetEntry) async {
-        let notReady = await sessionReady?(entry.kind.rawValue)
+    private func begin(_ entry: RunSheetEntry, reason: String? = nil) async {
+        let notReady = await sessionReady?(reason ?? entry.kind.rawValue)
         guard playingId == entry.id else { return }            // a newer start took over while the session was made ready
         if let why = notReady {
             // The session or the engine is not ready: that is not this entry's failure. It stays on air, held, with no outcome recorded; the
@@ -406,7 +406,7 @@ extension PlaybackEngine {
             retryTask = Task { @MainActor in
                 try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
                 guard !Task.isCancelled, self.sessionHeldFor == entry.id, self.playingId == entry.id else { return }
-                await self.begin(entry)
+                await self.begin(entry, reason: "retry")      // gated while another app has the session
             }
             return
         }
