@@ -102,7 +102,7 @@ func TestNewAutoradioForecastFields(t *testing.T) {
 	if c.Deadline != "2026-11-15T21:00:00Z" {
 		t.Fatalf("deadline = %q, want start + 12h", c.Deadline)
 	}
-	wantTags := []string{"autoradio", "stretch:st1", "seg:st1.s0", "kind:story", "cause:lesson", "lesson:L12", "sha:" + testSHA[:32], "blocks:3"}
+	wantTags := []string{"autoradio", "stretch:st1", "seg:st1.s0", "kind:story", "cause:lesson", "lesson:L12", "line:lesson:L12", "sha:" + testSHA[:32], "blocks:3"}
 	if !reflect.DeepEqual(c.Tags, wantTags) {
 		t.Fatalf("tags = %v", c.Tags)
 	}
