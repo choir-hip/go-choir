@@ -103,13 +103,13 @@ func TestR2_AllHeardStillProducesContent(t *testing.T) {
 	rt, fake := radioRuntime(t, oneStory())
 	seedAllHeard(t, rt)
 	in := djInput(t, rt, fake, nil)
-	if !strings.Contains(in, "All candidates were already heard at their current versions.") {
+	if !strings.Contains(in, "Every story candidate was already heard at its current version.") {
 		t.Errorf("(R2) no all-heard line")
 	}
 	// A candidate not heard: no such line.
 	rt2, fake2 := radioRuntime(t, oneStory())
 	seedHeard(t, rt2, heardSeed{stretch: "st-1", route: "harbour-1", version: 1, title: "Harbour reopens", text: "The harbour reopened.", at: time.Now().Add(-26 * time.Hour)})
-	if in2 := djInput(t, rt2, fake2, nil); strings.Contains(in2, "All candidates were already heard") {
+	if in2 := djInput(t, rt2, fake2, nil); strings.Contains(in2, "Every story candidate was already heard") {
 		t.Errorf("(R2) all-heard line with candidates never heard")
 	}
 
