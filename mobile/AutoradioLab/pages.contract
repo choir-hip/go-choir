@@ -6,7 +6,8 @@
 // adds its names to its own band in app.contract) and reads its page's model with the `pageModel` source.
 use Theme from "@choir/autoradio"
 use NotYetPage, StackVp, kindOf, kindWord, stackName, frontTitle, isFixed from "./ui.contract"
-use PageList, PaperFront from "@choir/autoradio"
+use PageList from "@choir/autoradio"
+use PaperFront from "./paper-types.contract"
 use PaperPage from "./paper.contract"
 use ReaderPage from "./reader.contract"
 use TexturesPage from "./textures.contract"

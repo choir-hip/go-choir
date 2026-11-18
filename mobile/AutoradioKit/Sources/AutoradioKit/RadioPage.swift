@@ -445,7 +445,7 @@ extension RunSheetPlayer {
 }
 
 /// When each story of the front list was last updated, by route, so the page can say when the story on air was published. Filled by
-/// PaperSource whenever it reads the front list; read by the Autoradio page. Nothing is asked from the network here.
+/// the radio (RadioProgramme.candidates) whenever it reads the front list; read by the Autoradio page. Nothing is asked from the network here.
 public final class PublishedTimes: @unchecked Sendable {
     public static let shared = PublishedTimes()
     private let lock = NSLock()

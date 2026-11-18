@@ -31,7 +31,7 @@ members Autoradio
   derive stackCount = order.length
   // An open paper article is a card in a stack of the front page's articles (owner, 2026-11-15, item 1): a swipe goes to the next
   // article (leftwards) or the previous one (rightwards) and never wraps or returns to the front page. The list is the front
-  // page's reading order for the VIEW the reader is in (Front page, My edition or a category: `paperView`, Kit: PaperFront.routes); the view is state, so it
+  // page's reading order for the VIEW the reader is in (Front page, My edition or a category: `paperView`, paper.ts: pfront.routes); the view is state, so it
   // is still the open view while an article is on top.
   // A page that is not in that list (a Texture, a file) keeps the deck's own cycle.
   derive curIdx = topAddr.startsWith("pub:") ? pfront.routes.indexOf(topAddr.slice(4)) : 0 - 1

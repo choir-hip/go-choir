@@ -147,17 +147,6 @@ final class RetrievalTimingTests: XCTestCase {
 }
 
 final class RetrievalSourcesTests: XCTestCase {
-    func testPaperFrontCacheBecomesDatedHeadlinesAndABadFileIsEmpty() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("retr-\(UUID().uuidString)"); try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let f = dir.appendingPathComponent("paper-front.json")
-        XCTAssertTrue(RetrievalSources.paperFront(file: f).isEmpty)
-        try Data("not json".utf8).write(to: f); XCTAssertTrue(RetrievalSources.paperFront(file: f).isEmpty)
-        let body = #"{"stories":[{"title":"Senate passes the water bill","dek":"A vote on Tuesday.","route":{"bare":"/p/water"},"updated_at":"2026-11-14T10:00:00Z"},{"title":"","route":{"bare":"/p/none"}}]}"#
-        try Data(body.utf8).write(to: f)
-        let docs = RetrievalSources.paperFront(file: f)
-        XCTAssertEqual(docs.count, 1); XCTAssertEqual(docs[0].address, "pub:/p/water"); XCTAssertNotNil(docs[0].date)
-    }
     func testEpisodesAndTranscriptsBecomeSearchablePassagesWithTheirMinute() {
         let show = PodcastShow(feedURL: "https://example.com/feed.xml", title: "Morning Talk", summary: "Politics and weather.")
         let feed = PodcastFeed(show: show, episodes: [PodcastEpisode(id: "e1", title: "The budget fight", published: 1_794_000_000, notes: "Why the budget stalled."),

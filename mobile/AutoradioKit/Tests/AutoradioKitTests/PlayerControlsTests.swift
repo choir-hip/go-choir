@@ -72,10 +72,6 @@ final class StoryCursorTests: XCTestCase {
         XCTAssertTrue(StoryCursor.previousRestartsCurrent(blockIndex: 0, secondsIntoBlock: 3))
         XCTAssertTrue(StoryCursor.previousRestartsCurrent(blockIndex: 1, secondsIntoBlock: 0))
     }
-    func testP10_FrontOrderKeepsTheStackAsComposed() {
-        let o = FrontOrder(); o.set(routes: ["x", "y"], titles: ["X"])
-        XCTAssertEqual(o.stories, [StoryRef(route: "x", title: "X"), StoryRef(route: "y", title: "")])
-    }
 }
 
 // MARK: The DJ's candidates

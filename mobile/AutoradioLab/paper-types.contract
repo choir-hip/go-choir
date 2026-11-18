@@ -1,0 +1,57 @@
+// The shapes of the paper page's data. They are declared here, in Contract, and `app.ts` answers them (paper.ts: `paperFront`);
+// the generated app.contract.d.ts gives paper.ts its types from these lines, so a field is added in this file and nowhere else.
+// Before the paper moved to shared logic these came from the Swift package's interface (interface/paper.json).
+
+shape PaperItem
+  route: string
+  title: string
+  dek: string
+  section: string
+  meta: string
+  byline: string
+  entityLabels: string
+  entityIds: string
+  size: number
+  weight: number
+  lineHeight: number
+  lines: number
+  showDek: bool
+  dekSize: number
+  dekLines: number
+  indent: bool
+  rank: number
+
+shape PaperBand
+  id: string
+  module: string
+  label: string
+  side: bool
+  rule: bool
+  items: PaperItem[]
+
+shape PaperSection
+  id: string
+  label: string
+  count: number
+  current: bool
+
+shape PaperFront
+  status: string
+  message: string
+  edition: string
+  layout: string
+  composition: string
+  dateLine: string
+  updated: string
+  sectionId: string
+  sectionLabel: string
+  viewId: string
+  viewLabel: string
+  mineState: string
+  mineFrom: string
+  note: string
+  count: number
+  sections: PaperSection[]
+  bands: PaperBand[]
+  routes: string[]
+  titles: string[]

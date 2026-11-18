@@ -571,59 +571,8 @@
       "expanded": "bool",
       "note": "string"
     },
-    "PaperItem": {
-      "route": "string",
-      "title": "string",
-      "dek": "string",
-      "section": "string",
-      "meta": "string",
-      "byline": "string",
-      "entityLabels": "string",
-      "entityIds": "string",
-      "size": "number",
-      "weight": "number",
-      "lineHeight": "number",
-      "lines": "number",
-      "showDek": "bool",
-      "dekSize": "number",
-      "dekLines": "number",
-      "indent": "bool",
-      "rank": "number"
-    },
-    "PaperBand": {
-      "id": "string",
-      "module": "string",
-      "label": "string",
-      "side": "bool",
-      "rule": "bool",
-      "items": "PaperItem[]"
-    },
-    "PaperSection": {
-      "id": "string",
-      "label": "string",
-      "count": "number",
-      "current": "bool"
-    },
-    "PaperFront": {
-      "status": "string",
-      "message": "string",
-      "edition": "string",
-      "layout": "string",
-      "composition": "string",
-      "dateLine": "string",
-      "updated": "string",
-      "sectionId": "string",
-      "sectionLabel": "string",
-      "viewId": "string",
-      "viewLabel": "string",
-      "mineState": "string",
-      "mineFrom": "string",
-      "note": "string",
-      "count": "number",
-      "sections": "PaperSection[]",
-      "bands": "PaperBand[]",
-      "routes": "string[]",
-      "titles": "string[]"
+    "EditionPicks": {
+      "picks": "string"
     },
     "PodShowRow": {
       "feedURL": "string",
@@ -2356,37 +2305,15 @@
       "answers": "Onboarding"
     },
     {
-      "source": "paperFront",
+      "source": "editionPicks",
       "live": true,
-      "answers": "PaperFront",
+      "answers": "EditionPicks",
       "options": {
-        "view": "string",
-        "edition": "string",
-        "width": "number",
-        "tick": "number",
         "focus": "string"
       },
       "substitute": {
         "default": {
-          "status": "empty",
-          "message": "",
-          "edition": "",
-          "layout": "",
-          "composition": "",
-          "dateLine": "",
-          "updated": "",
-          "sectionId": "",
-          "sectionLabel": "",
-          "viewId": "",
-          "viewLabel": "",
-          "mineState": "",
-          "mineFrom": "",
-          "note": "",
-          "count": 0,
-          "sections": [],
-          "bands": [],
-          "routes": [],
-          "titles": []
+          "picks": ""
         }
       }
     },
