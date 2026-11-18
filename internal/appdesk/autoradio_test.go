@@ -1,6 +1,7 @@
 package appdesk
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -151,5 +152,16 @@ func TestTheAutoradioDeskIsTheOnlyCustodianOfTheRunSheetKind(t *testing.T) {
 	// The reserved kind it replaces is not registered.
 	if _, err := objectgraph.DefaultRegistry().LookupKind("choir.autoradio" + "_run_sheet"); err == nil {
 		t.Fatal("the reserved kind is still registered")
+	}
+}
+
+// The prompt's all-heard sentence names story candidates, as the frame line does.
+func TestTheProgrammePromptSaysEveryStoryCandidateOnAnAllHeardDay(t *testing.T) {
+	p, ok := ProgrammePrompt()
+	if !ok {
+		t.Fatal("no programme prompt")
+	}
+	if !strings.Contains(p, "every story candidate was already heard at its current version") || strings.Contains(p, "every candidate was already heard") {
+		t.Errorf("the all-heard sentence does not say every story candidate")
 	}
 }
