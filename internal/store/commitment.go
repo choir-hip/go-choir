@@ -190,6 +190,55 @@ func (s *Store) ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context,
 	return records, undecodable, rows, nil
 }
 
+// ListCommitmentRecordsByBodyOfComputer lists the owner's newest records of
+// one computer whose body holds every match (JSON path to exact value), the
+// computer filter and every match inside the query before its limit, so the
+// limit counts only matching rows. rows is every row the query returned (a
+// full page is rows >= limit); undecodable those that did not decode. Paths
+// are code constants of the caller, not input: they are checked all the same.
+func (s *Store) ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" || len(match) == 0 {
+		return nil, 0, 0, fmt.Errorf("commitment record list by body requires owner, computer and a match")
+	}
+	paths := make([]string, 0, len(match))
+	for p := range match {
+		if !bodyMatchPathRe.MatchString(p) {
+			return nil, 0, 0, fmt.Errorf("commitment record list by body: %q is not a body path", p)
+		}
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	ms := make([]objectgraph.JSONFieldMatch, 0, len(paths)+1)
+	for _, p := range paths {
+		ms = append(ms, objectgraph.JSONFieldMatch{JSONPath: p, Value: match[p]})
+	}
+	ms = append(ms, objectgraph.JSONFieldMatch{JSONPath: "$.computer_id", Value: computerID})
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, ms, limit)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	records = make([]types.CommitmentRecord, 0, len(objs))
+	for _, obj := range objs {
+		rows++
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			undecodable++
+			continue
+		}
+		records = append(records, rec)
+	}
+	return records, undecodable, rows, nil
+}
+
+var bodyMatchPathRe = regexp.MustCompile(`^\$(\.[a-z_]+)+$`)
+
 // ListCommitmentClaimRecords lists the newest records that are not
 // directives (note, escalate, cast, retract), filtered in the query before
 // its limit. Directives carry no scored claim, and every Texture control
