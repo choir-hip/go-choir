@@ -142,6 +142,14 @@ and textureowner both changed and not `--local` (`SHARD=1`). Each carries a
 `land-conditional` line with its condition, which the check prints; a program
 only land runs without such a line fails.
 
+CI runs the check as `--ci` and does not read the landing script: the
+`land-conditional` lines of the exemption file are its statement of what that
+script runs, so CI's verdict cannot depend on a file whose edits do not trigger
+CI. The local run in `scripts/gates` reads the landing script and verifies
+those lines (a missing or stale line fails there). The checker builds the
+script's path from parts because `.github/scripts/ci-impact-classify-test`
+traces script names textually and keeps the landing script a developer script.
+
 Interpreter forms are parsed, not skipped: `bash -e`, `-euo pipefail`,
 `-o NAME`, `sh -c '...'` (the payload is scanned as a command line),
 `env -i`; `bash -n` runs nothing. A form whose program cannot be determined
