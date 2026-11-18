@@ -952,3 +952,70 @@ tell. Inferred; the 18:02Z ledger row's breakdown was not read.
    round in normal operation. Closing it with a Report would wake
    management about 250 more times an hour, so the answer is not "send a
    Report".
+
+### Fix (lane deploy-refresh-race, 2026-11-18)
+
+Mutation class of this section: green. The fix it records is red (vmctl
+refresh scheduling). Read again in code before building: the claims above
+hold. The link moves in the `go-choir-guest-image` activation
+(`nix/node-b.nix:2975` on, `ln`/`mv -T` of `$target`, `$next`); the unit has
+`restartIfChanged = false`; the deploy restarts vmctl in its "vmctl restart"
+block (`node-b-ci-deploy:546`) and calls `ring-walk/expedite` after it
+(`:659`); the ticker runs `TickRingWalk` then `SweepDeployRefreshPending`
+(`deploy_refresh_retry.go:624`), and the old vmctl's `trackedDeployRefresh`
+calls `GrantDeployRetry` (`deploy_refresh.go:474`), which is how the retry
+re-armed at 18:06:26. One correction to the record: the sweep, not only the
+ring walk, starts the refresh, so both are held.
+
+**Mechanism: (b), by vmctl alone, with no deploy or nix change.**
+`PrimeRingWalk` takes the release the link names at start as the vmctl's
+baseline (`release_hold.go`). `TickRingWalk` and `SweepDeployRefreshPending`
+start nothing while the link names another release (compared by id): a link
+that moved under a running vmctl means the deploy replaces it next. The
+replacement starts on the moved link, takes it as its baseline and walks as
+before. The hold logs `refresh hold: started` once and `refresh hold: ended`
+once; it ends when the link returns (a rollback), or at 60 minutes (the
+deploy job's own timeout) with a line saying no restart came and the moved
+link is now the baseline. Held: the ticker's two paths only. Not held: the
+deploy's own HTTP requests, boots, wakes, the manual refresh. No marker is
+written or re-issued, nothing resumes, no setting.
+
+Why not (a), the deploy's pending file: it adds a state that a deploy dying
+between the write and the restart (the script has many `exit` points between
+the switch at `:336` and the restart at `:553`) leaves behind, and needs pid
+checks to be safe; (b) has no such file and its worst case is bounded by one
+constant. Why not (c), moving the link after the restart: the new vmctl
+reads the link at start (`PrimeRingWalk`, before first boot) and the guest
+image activation is one nixos activation script, so the step cannot be moved
+without splitting the switch.
+
+Ways the hold could outlast its use, each bounded: a link moved with no vmctl
+restart (an owner's manual `switch-to-configuration`; a rollback that does
+not restart vmctl, which returns the link to the baseline and ends the hold)
+holds the ticker for at most 60 minutes. The cases in
+`.github/scripts/deploy-impact-classify-test` that set `deploy_host_os=true`
+also set `deploy_vmctl_restart=true`; not proven for every path, which is
+what the 60-minute bound is for.
+A deploy that restarts vmctl without changing the binary is the ordinary case
+and needs nothing.
+
+Tests (`internal/vmctl/release_hold_test.go`; first commit fails on the
+parent): the link moves under a running vmctl and no refresh, no marker and
+no walk follows, with the hold line once; a fresh vmctl on the moved link
+refreshes; the link returning ends the hold with one line; the expiry at the
+bound with one line; the deploy's own refresh request is unaffected. The
+ring fixture's `deploy()` now models the restart.
+
+Rollback: revert the fix commit. Residual: a computer the old vmctl refreshed
+before this ships is not helped; the 18:06 case had the old vmctl 30 seconds
+from replacement, which the hold covers from the first tick after the
+switch, but a refresh the old vmctl began before the link moved is the
+deploy's ordinary planned refresh of the old release. Fixes 2 and 3 above
+are not in this change.
+
+Staging proof plan: a deploy that moves the link shows, in the old vmctl's
+journal between the switch and the restart, one `refresh hold: started`
+line, then no `deploy refresh caller=retry-sweep` and no ring-walk enrol; the
+new vmctl's journal shows no hold line, `ring-walk/expedite` applied, and
+each refresh `planned_restart=true`. A deploy with no link move shows no hold
+line at all.
