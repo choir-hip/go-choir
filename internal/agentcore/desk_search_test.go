@@ -257,3 +257,36 @@ func TestDeskSearchStartWithoutAClientRefuses(t *testing.T) {
 		t.Fatalf("SearchStart without a search client = %+v, want a refusal", out)
 	}
 }
+
+// From the review of 56c96bf09: SearchAll's gate tags each search it sends with
+// its question, and relies on startSearch pushing the start frame before it
+// returns the answer. If that order changed the tag would silently fail and the
+// gate would fail open. This runs the real path (host startSearch, worker
+// socket, store): a first wording that returns 20 pages must withhold the
+// second, which it can only do if the start was recorded before the answer.
+type manyPagesClient struct{ pages int }
+
+func (c manyPagesClient) Stream(ctx context.Context, query string, maxResults int) (*search.Stream, error) {
+	var results []string
+	for i := 1; i <= c.pages; i++ {
+		results = append(results, fmt.Sprintf(`{"title":"t%d","url":"https://seam.example/%s/%d"}`, i, strings.ReplaceAll(query, " ", "-"), i))
+	}
+	body := `{"type":"start","query":` + jsonString(query) + `,"providers":["stub"],"cooling":[]}
+{"type":"provider","provider":"stub","status":"success","latency_ms":1,"results":[` + strings.Join(results, ",") + `]}
+{"type":"done","answered":1,"total":1,"cooling":[]}
+`
+	return search.ReadStream(io.NopCloser(strings.NewReader(body)))
+}
+
+func TestDeskSearchStartIsRecordedBeforeTheAnswerSoSearchAllCanTagIt(t *testing.T) {
+	tool, ctx, _, _ := researchSearchTool(t, manyPagesClient{pages: 20})
+	out := evalDeskCell(t, tool, ctx, `r, err := choir.SearchAll("the harbor strike", []string{"w1 alpha", "w2 beta"})
+fmt.Println(err)
+fmt.Println(r)`)
+	if out.Error != "" {
+		t.Fatalf("cell error: %s", out.Error)
+	}
+	if !strings.Contains(out.Stdout, `2 "w2 beta": not sent (this question already holds 20 pages new to this run that you have not read)`) {
+		t.Fatalf("the second wording was sent: the first search was not tagged with its question, so the start frame did not reach the store before the answer:\n%s", out.Stdout)
+	}
+}

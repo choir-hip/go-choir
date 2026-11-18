@@ -96,6 +96,13 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				f.scope.searches.apply(providerFrame(id, "keenable", true, urls...))
 				f.scope.searches.apply(SearchFrame{ID: id, Kind: SearchFrameDone})
 				return json.RawMessage(fmt.Sprintf(`{"id":%q,"query":%q,"providers":["keenable"]}`, id, in.Query)), nil
+			case ActionReadCapture:
+				// A capture id "cap:<url>" names the capture of that page.
+				var in ReadCapturePayload
+				if err := json.Unmarshal(payload, &in); err != nil {
+					return nil, err
+				}
+				return json.RawMessage(fmt.Sprintf(`{"capture_id":%q,"url":%q,"title":"t","blocks":[{"id":"b0","kind":"paragraph","text":"text"}]}`, in.CaptureID, strings.TrimPrefix(in.CaptureID, "cap:"))), nil
 			case ActionRead:
 				var in ReadPayload
 				if err := json.Unmarshal(payload, &in); err != nil {
