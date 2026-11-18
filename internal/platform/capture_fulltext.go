@@ -62,6 +62,11 @@ var (
 	// captureFullTextMaxWaitIdle bounds how long a batch waits for running
 	// searches to finish before it goes on.
 	captureFullTextMaxWaitIdle = 2 * time.Second
+	// captureFullTextMaxConsecutiveFailures stops a walk: 20 writes in a row
+	// failing is a full or failing disk, not 20 bad pages, and going on would
+	// only count failures; the walk ends with an error and the next attempt
+	// waits longer (doubling from 5 minutes to an hour).
+	captureFullTextMaxConsecutiveFailures = 20
 	// captureFullTextProgressEvery is how often the catch-up logs progress.
 	captureFullTextProgressEvery = 30 * time.Second
 	// captureFullTextYield is called between batches (tests count it).
@@ -493,16 +498,19 @@ func (s *Store) StartCaptureFullTextCatchUp(ctx context.Context) {
 			}
 			ticker := time.NewTicker(24 * time.Hour)
 			defer ticker.Stop()
+			backoff := 5 * time.Minute
 			for {
 				if _, err := s.CatchUpCaptureFullText(ctx); err != nil && ctx.Err() == nil {
-					log.Printf("corpusd capture fulltext catch-up err=%v", err)
+					log.Printf("corpusd capture fulltext catch-up err=%v (next attempt in %s)", err, backoff)
 					select {
 					case <-ctx.Done():
 						return
-					case <-time.After(5 * time.Minute):
+					case <-time.After(backoff):
 					}
+					backoff = min(2*backoff, time.Hour)
 					continue
 				}
+				backoff = 5 * time.Minute
 				select {
 				case <-ctx.Done():
 					return
@@ -546,8 +554,10 @@ func (s *Store) CatchUpCaptureFullText(ctx context.Context) (CaptureFullTextProg
 	dirty := ft.dirty.Swap(false)
 	fail := func(err error) (CaptureFullTextProgress, error) {
 		ft.dirty.Store(true)
+		ft.complete.Store(false)
 		return prog, err
 	}
+	consecutive := 0
 	if err := s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE canonical_id >= ? AND canonical_id < ? AND tombstone = FALSE`, captureIDPrefix, captureIDEnd).Scan(&prog.Total); err != nil {
 		return fail(err)
 	}
@@ -593,7 +603,7 @@ func (s *Store) CatchUpCaptureFullText(ctx context.Context) (CaptureFullTextProg
 		}
 		cursor = objs[len(objs)-1].CanonicalID
 		done := s.retrievalTimer(retrievalFullTextCatchUp)
-		bp, err := s.catchUpBatch(ctx, ft, objs, true, expected)
+		bp, err := s.catchUpBatch(ctx, ft, objs, true, expected, &consecutive)
 		done("batch", bp.Indexed, err)
 		prog.Scanned += len(objs)
 		prog.Indexed += bp.Indexed
@@ -665,7 +675,7 @@ func logCaptureFullTextProgress(p CaptureFullTextProgress, started time.Time) {
 }
 
 // catchUpBatch indexes the captures among objs the index does not hold.
-func (s *Store) catchUpBatch(ctx context.Context, ft *captureFullText, objs []objectgraph.Object, repairRemovals bool, expected map[capturefts.Scope]int64) (CaptureFullTextProgress, error) {
+func (s *Store) catchUpBatch(ctx context.Context, ft *captureFullText, objs []objectgraph.Object, repairRemovals bool, expected map[capturefts.Scope]int64, consecutive *int) (CaptureFullTextProgress, error) {
 	var bp CaptureFullTextProgress
 	type item struct {
 		obj  objectgraph.Object
@@ -715,9 +725,14 @@ func (s *Store) catchUpBatch(ctx context.Context, ft *captureFullText, objs []ob
 			}
 			if err := ft.writeCaptureText(ctx, it.obj); err != nil {
 				bp.Failed++
-				log.Printf("corpusd capture fulltext catch-up write failed capture=%s err=%v", it.obj.CanonicalID, err)
+				ft.noteFailure(it.obj.CanonicalID, err) // counted and logged in a window, as an inline failure is
+				*consecutive++
+				if *consecutive >= captureFullTextMaxConsecutiveFailures {
+					return bp, fmt.Errorf("catch-up stopped after %d consecutive write failures: %w", *consecutive, err)
+				}
 				continue
 			}
+			*consecutive = 0
 			bp.Indexed++
 		}
 	}
