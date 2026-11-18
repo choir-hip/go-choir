@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,10 +17,11 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/capturefts"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // The captured pages' full-text index in corpusd (capture_fulltext.go).
-// Failure modes guarded here, written before the code:
+// Failure modes guarded here:
 //   1. a fact only in a page's body is not found through the capture search,
 //      or comes with no passage and no captured-object to cite;
 //   6. a guest of another computer, or another owner, reaches the pages;
@@ -255,7 +257,7 @@ func TestFullTextWriteFailureDoesNotFailTheCaptureAndTheCatchUpRepairsIt(t *test
 	if _, err := f.og.GetObject(context.Background(), c.CanonicalID); err != nil {
 		t.Fatalf("the capture must be stored whatever the index does: %v", err)
 	}
-	if !strings.Contains(buf.String(), "capture fulltext write failed capture="+c.CanonicalID) {
+	if !strings.Contains(buf.String(), "capture fulltext write failed") || !strings.Contains(buf.String(), "capture="+c.CanonicalID) {
 		t.Fatalf("the failure is not logged with the capture id:\n%s", buf.String())
 	}
 	if got := hitIDs(f.search(t, "owner-a", "computer-a", "osprey nest")); len(got) != 0 {
@@ -332,7 +334,13 @@ func TestFullTextCatchUpIsIdempotentBoundedLoggedAndKeepsTheOldWayMeanwhile(t *t
 	if len(resp.Hits) != 23 || resp.FullText.Indexed != 23 {
 		t.Fatalf("after the catch-up: %d hits, info %+v", len(resp.Hits), resp.FullText)
 	}
-	// Idempotent: a second pass finds everything there and writes nothing.
+	// Counts match and nothing failed since: a second pass does not walk.
+	short, err := f.store.CatchUpCaptureFullText(context.Background())
+	if err != nil || short.Scanned != 0 || short.Indexed != 0 {
+		t.Fatalf("a pass with matching counts must not walk: %+v %v", short, err)
+	}
+	// Idempotent: a forced walk finds everything there and writes nothing.
+	f.store.fullText.Load().dirty.Store(true)
 	again, err := f.store.CatchUpCaptureFullText(context.Background())
 	if err != nil || again.Indexed != 0 || again.Skipped != 23 {
 		t.Fatalf("second pass %+v %v", again, err)
@@ -342,7 +350,7 @@ func TestFullTextCatchUpIsIdempotentBoundedLoggedAndKeepsTheOldWayMeanwhile(t *t
 		t.Fatal(err)
 	}
 	restarted, err := f.store.CatchUpCaptureFullText(context.Background())
-	if err != nil || restarted.Indexed != 0 || restarted.Skipped != 23 {
+	if err != nil || restarted.Indexed != 0 || restarted.Skipped != 23 { // a new process has no gap to compare, so it walks once
 		t.Fatalf("pass after a restart %+v %v", restarted, err)
 	}
 	if got := f.search(t, "owner-a", "computer-a", "zanzibar"); len(got.Hits) != 23 {
@@ -455,5 +463,115 @@ func TestFullTextIndexesA2MBPage(t *testing.T) {
 	}
 	if got := hitIDs(f.search(t, "owner-a", "computer-a", "tailmarker")); len(got) != 0 {
 		t.Fatalf("text past the per-page cap was indexed: %v", got)
+	}
+}
+
+// A capture whose record carries an owner-private label is not served to a
+// non-custodian (agentcore capture_read_gate.go); its passage must not leave
+// through the search either. It is not indexed, a search never returns a
+// page whose record became private, and the catch-up removes it.
+func TestFullTextNeverIndexesOrReturnsAnOwnerPrivateCapture(t *testing.T) {
+	f := newFTFixture(t, true)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	private := f.capture(t, "owner-a", "computer-a", "priv", "Private notes", "https://example.com/p", "the walrus colony moved north.\n\n", now)
+	private.Metadata = types.StampMetadataLabels(private.Metadata, types.NewLabelSet(types.OwnerPrivateLabel("capture")))
+	open := f.capture(t, "owner-a", "computer-a", "open", "Open notes", "https://example.com/o", "the walrus colony moved south.\n\n", now)
+	f.put(t, private, open)
+	resp := f.search(t, "owner-a", "computer-a", "walrus colony")
+	if got := hitIDs(resp); len(got) != 1 || got[0] != open.CanonicalID {
+		t.Fatalf("an owner-private capture was indexed or returned: %v", got)
+	}
+	scope := capturefts.Scope{Owner: "owner-a", Computer: "computer-a"}
+	if st, _ := f.store.fullText.Load().index.Stats(ctx, scope); st.Pages != 1 {
+		t.Fatalf("pages indexed: %d, want only the open one", st.Pages)
+	}
+
+	// A capture indexed while open, then relabelled private in its record.
+	later := f.capture(t, "owner-a", "computer-a", "later", "Later notes", "https://example.com/l", "the narwhal pod moved east.\n\n", now)
+	f.put(t, later)
+	if got := hitIDs(f.search(t, "owner-a", "computer-a", "narwhal pod")); len(got) != 1 {
+		t.Fatal("setup: the page should be found while open")
+	}
+	relabelled := types.StampMetadataLabels(later.Metadata, types.NewLabelSet(types.OwnerPrivateLabel("capture")))
+	if _, err := f.store.corpus().ExecContext(ctx, `UPDATE og_objects SET metadata = ? WHERE canonical_id = ?`, string(relabelled), later.CanonicalID); err != nil {
+		t.Fatal(err)
+	}
+	if got := hitIDs(f.search(t, "owner-a", "computer-a", "narwhal pod")); len(got) != 0 {
+		t.Fatalf("a page whose record became owner-private was returned: %v", got)
+	}
+	prog, err := f.store.CatchUpCaptureFullText(ctx)
+	if err != nil || prog.Removed < 1 {
+		t.Fatalf("catch-up %+v %v", prog, err)
+	}
+	if st, _ := f.store.fullText.Load().index.Stats(ctx, scope); st.Pages != 1 {
+		t.Fatalf("the sweep left the relabelled page: %d pages", st.Pages)
+	}
+}
+
+// A disk-full host must not turn every failing capture into a log line and a
+// full walk of every row: failures are counted, logged in a window with a
+// count, and the walk is requested once. A later failure also says the index
+// is no longer complete.
+func TestFullTextWriteFailuresAreCountedNotLoggedOnePerCapture(t *testing.T) {
+	f := newFTFixture(t, true)
+	buf := fullTextLog(t)
+	ft := f.store.fullText.Load()
+	if _, err := f.store.CatchUpCaptureFullText(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !ft.complete.Load() {
+		t.Fatal("setup: an empty catch-up should be complete")
+	}
+	ft.writeHook = func(objectgraph.Object) error { return fmt.Errorf("no space left on device") }
+	now := time.Now().UTC()
+	var objs []objectgraph.Object
+	for i := 0; i < 60; i++ {
+		objs = append(objs, f.capture(t, "owner-a", "computer-a", fmt.Sprint("fail", i), "Page", fmt.Sprintf("https://example.com/f%d", i), "text of the page.\n\n", now))
+	}
+	f.put(t, objs...)
+	if got := ft.failures.Load(); got != 60 {
+		t.Fatalf("failures counted %d, want 60", got)
+	}
+	if n := strings.Count(buf.String(), "capture fulltext write failed"); n > 2 || n == 0 {
+		t.Fatalf("%d log lines for 60 failures, want one or two with a count:\n%s", n, buf.String())
+	}
+	if !strings.Contains(buf.String(), "count=") {
+		t.Fatalf("the line carries no count:\n%s", buf.String())
+	}
+	if got := ft.kicks.Load(); got != 1 {
+		t.Fatalf("the catch-up was requested %d times for 60 failures, want 1", got)
+	}
+	if ft.complete.Load() {
+		t.Fatal("a failed write must reset complete")
+	}
+}
+
+// The cached count of a computer's captures is not re-counted on every search.
+func TestFullTextSearchDoesNotCountTheProjectionEveryTime(t *testing.T) {
+	f := newFTFixture(t, true)
+	now := time.Now().UTC()
+	f.put(t, f.capture(t, "owner-a", "computer-a", "c1", "One", "https://example.com/1", "the osprey nest.\n\n", now))
+	if got := f.search(t, "owner-a", "computer-a", "osprey").FullText.Captures; got != 1 {
+		t.Fatalf("captures %d", got)
+	}
+	f.put(t, f.capture(t, "owner-a", "computer-a", "c2", "Two", "https://example.com/2", "the osprey eggs.\n\n", now))
+	if got := f.search(t, "owner-a", "computer-a", "osprey").FullText.Captures; got != 1 {
+		t.Fatalf("a search inside the cache window re-counted: %d", got)
+	}
+	f.store.fullText.Load().resetCountCache()
+	if got := f.search(t, "owner-a", "computer-a", "osprey").FullText.Captures; got != 2 {
+		t.Fatalf("after the cache is dropped: %d", got)
+	}
+}
+
+func TestFullTextAQueryWithNoUsableWordIsNotASearch(t *testing.T) {
+	f := newFTFixture(t, true)
+	resp, err := f.store.SearchCaptures(context.Background(), CaptureSearchRequest{OwnerID: "owner-a", ComputerID: "computer-a", Query: "!!! ---"})
+	if err != nil && !errors.Is(err, ErrCaptureIndexIncomplete) {
+		t.Fatal(err)
+	}
+	if resp.FullText == nil || resp.FullText.Used || !strings.Contains(resp.FullText.Reason, "no searchable words") {
+		t.Fatalf("a query with no usable word answered %+v", resp.FullText)
 	}
 }
