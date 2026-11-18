@@ -113,6 +113,7 @@ public final class ChoirApp: @unchecked Sendable {
 
     public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL, openURL: (@Sendable (URL) -> Void)?) {
         self.runtime = runtime
+        LaunchTimings.shared.begin()
         ChoirEnvironment.shared.keys = keys
         ChoirEnvironment.shared.log = runtime.log
         signIn = ChoirSignIn(baseURL: baseURL)
@@ -132,6 +133,8 @@ public final class ChoirApp: @unchecked Sendable {
             self.onChange?()
         }
         runtime.player.onRanDry = { id, played in Task { @MainActor in RunSheetPlayer.shared.documentEnded(id: id, anyPlayed: played) } }
+        runtime.player.onEngineLost = { id, n in Task { @MainActor in RunSheetPlayer.shared.engineLost(documentID: id, block: n) } }
+        runtime.coordinator.remoteAudioActive = { onMainThread { RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused } }
         // The lock screen's next and previous are the run sheet's: `skip(on air)` and `previous` (ChoirApp.moveStory). Always handled here.
         runtime.player.onNextTrack = { [weak self] in self?.takeRemote(.next) ?? false }
         runtime.player.onPreviousTrack = { [weak self] in self?.takeRemote(.previous) ?? false }
@@ -166,6 +169,7 @@ public final class ChoirApp: @unchecked Sendable {
             engine.remote.onTick = { RunSheetStore.shared.save() }
             p.turnOpen = { [weak me] in me.map { $0.runtime.snapshot().phase != "playing" } ?? false }
             p.spokenPaused = { [weak me] in me?.runtime.player.userPaused ?? false }
+            p.spokenPausedByListener = { [weak me] in me?.runtime.player.pausedByListener ?? false }
             let w = RunSheetWriter(store: .shared) { [weak me] in
                 guard let me else { return nil }
                 return ProgrammeRouteFeed(source: me.stretchSource?() ?? RouteStretchSource(baseURL: me.frontBaseURL()))
@@ -189,6 +193,8 @@ public final class ChoirApp: @unchecked Sendable {
             w.onNotice = { n in RunSheetPlayer.shared.deskNotice = n }
             w.onDry = { d in RunSheetPlayer.shared.deskDry = d }
             w.onWriting = { on in RunSheetPlayer.shared.deskWriting = on }
+            // An ask ended (never sign-out's stop): a refused write-ahead runs now; a missing kept first entry is kept.
+            w.onIdle = { [weak me] in Task { @MainActor in await me?.writeAhead?.writerIdle() } }
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
             RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
@@ -200,16 +206,7 @@ public final class ChoirApp: @unchecked Sendable {
             Station.shared.startDJ = { [weak me] in await me?.startRadio() }       // the entry Play uses
         }
         runtime.player.onTransport = { cmd in
-            onMainThread { () -> Bool in
-                let p = RunSheetPlayer.shared
-                guard p.isRemote else { return false }
-                switch cmd {
-                case "play": p.resume()
-                case "pause": p.pause()
-                default: if p.paused { p.resume() } else { p.pause() }
-                }
-                return true
-            }
+            onMainThread { RunSheetPlayer.shared.remoteTransport(cmd) }
         }
         runtime.player.onLevel = { l in Task { @MainActor in RunSheetPlayer.shared.setLevel(l) } }
         BarTracker.shared.speedObservers.append { v in Task { @MainActor in RunSheetPlayer.shared.setRate(v) } }
@@ -407,28 +404,43 @@ public final class ChoirApp: @unchecked Sendable {
         let lines = frontLines()
         let plan = openingCache.take(voice: runtime.player.voiceKey)
         await MainActor.run {
-            let p = RunSheetPlayer.shared
-            @MainActor func fresh(_ e: RunSheetEntry) -> RunSheetEntry? { var x = e; x.state = .ahead; x.ended = nil; return RunSheetStore.shared.entry(x.id) == nil ? x : nil }
-            switch plan {
-            case .opening(let o, let next):
-                var o = o; o.placedBy = .phone; o.state = .ahead; o.ended = nil
-                p.open(o)
-                if let n = next.flatMap(fresh) { RunSheetStore.shared.place(n, at: .next, by: .desk, reason: "written ahead and kept for this launch") }
-                writer?.openAhead()
-                print("AUTORADIO opening from the written-ahead cache \(o.id)")
-            case .entry(let n):
-                if let n = fresh(n) {
-                    p.open(n, asOpening: false)
-                    print("AUTORADIO first entry from the written-ahead cache \(n.id); the live opening follows as a transition")
-                    writer?.open()
-                } else { p.open(PhoneOpening.entry(lines: lines)); writer?.open() }
-            case .none:
-                p.open(PhoneOpening.entry(lines: lines))
-                writer?.open()
-            }
+            Self.placeLaunch(plan: plan, lines: lines, player: RunSheetPlayer.shared, store: RunSheetStore.shared, writer: writer)
             LaunchTimings.shared.mark("sheet")
         }
         onChange?()                                   // the entry's own start begins the player (speakEntry); nothing here plays a document
+    }
+
+    /// What the radio puts on air at launch and what it asks the desk for. The phone's own opening needs no model; the desk's `open` answer is
+    /// exactly one opening line, which the player drops when the phone's is on air ("one per start"), so when the phone has an opening of its
+    /// own the desk is asked to `extend` (the stretch is written while the opening plays). `open` is asked only when a kept first entry
+    /// starts the radio: the desk's opening then follows it as a transition.
+    @MainActor static func placeLaunch(plan: OpeningPlan, lines: [PhoneOpening.Line], player p: RunSheetPlayer, store: RunSheetStore, writer: RunSheetWriter?) {
+        // A restored sheet still holds the id of a kept entry. Ahead: the copy is stale and `open` removes it, the kept one plays. On air, heard or
+        // skipped: the listener has had it, never replay it (the phone's opening plays; the reason is logged).
+        @MainActor func fresh(_ e: RunSheetEntry) -> RunSheetEntry? {
+            var x = e; x.state = .ahead; x.ended = nil
+            guard let have = store.entry(x.id) else { return x }
+            if have.state == .ahead { return x }
+            print("AUTORADIO kept first entry not played: its copy on the sheet is \(have.state.rawValue)")
+            return nil
+        }
+        switch plan {
+        case .opening(let o, let next):
+            var o = o; o.placedBy = .phone; o.state = .ahead; o.ended = nil
+            p.open(o)
+            if let n = next.flatMap(fresh) { store.place(n, at: .next, by: .desk, reason: "written ahead and kept for this launch") }
+            writer?.openAhead()
+            print("AUTORADIO opening from the written-ahead cache \(o.id)")
+        case .entry(let n):
+            if let n = fresh(n) {
+                p.open(n, asOpening: false)
+                print("AUTORADIO first entry from the written-ahead cache \(n.id); the live opening follows as a transition")
+                writer?.open()
+            } else { p.open(PhoneOpening.entry(lines: lines)); writer?.openAhead() }
+        case .none:
+            p.open(PhoneOpening.entry(lines: lines))
+            writer?.openAhead()
+        }
     }
 
     /// A fresh opening is kept: the launch need not wait for the sign-in or the first load.
@@ -451,7 +463,8 @@ public final class ChoirApp: @unchecked Sendable {
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {
         LaunchTimings.shared.mark("play")
-        await MainActor.run { self.continuity?.readerTapped(); RunSheetPlayer.shared.sessionMayBeBack() }       // Try again, when the session was the trouble
+        // Try again, when the session was the trouble: that press is a retry and nothing else (the bar says paused while an entry is held).
+        if await MainActor.run(body: { self.continuity?.readerTapped(); return RunSheetPlayer.shared.playPressed() }) { onChange?(); return }
         if await MainActor.run(body: { () -> Bool in
             let p = RunSheetPlayer.shared
             guard p.isRemote else { return false }

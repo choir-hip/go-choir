@@ -13,7 +13,7 @@ extension AutoradioModule {
             let bar = player.overlay(tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot()))
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
             let radio = player.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route,
-                                                         nextTitle: player.store.ahead(limit: 1).first?.shownTitle() ?? ""))
+                                                         nextTitle: player.store.ahead(limit: 1).first?.displayTitle ?? ""))
             let q = player.info()
             var i = RadioPageInput(sheet: player.store.sheet)
             i.barState = bar.state; i.heardWords = bar.text

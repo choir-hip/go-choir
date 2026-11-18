@@ -99,7 +99,9 @@ final class HandsFreeToggleTests: XCTestCase {
         for dir in ["AutoradioLab", "exact-package", "AutoradioKit/Sources"] {
             guard let en = fm.enumerator(at: root.appendingPathComponent(dir), includingPropertiesForKeys: nil) else { continue }
             for case let u as URL in en {
-                guard u.path.contains("/Kit/") == false, ["contract", "json", "swift"].contains(u.pathExtension),
+                // Build output is not the app's source: Exact's web loop writes generated page-style.json under target/ (seen 2026-11-18).
+                guard u.path.contains("/Kit/") == false, u.path.contains("/target/") == false, u.path.contains("/node_modules/") == false,
+                      ["contract", "json", "swift"].contains(u.pathExtension),
                       let text = try? String(contentsOf: u, encoding: .utf8) else { continue }
                 for (i, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
                     let l = String(line)

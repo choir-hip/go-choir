@@ -152,12 +152,12 @@ public final class SessionWatcher: @unchecked Sendable {
     func interruption(began: Bool, shouldResume: Bool) {
         if began {
             memory.began(programmePlaying: programmePlaying, remotePlaying: remotePlaying)
-            if programmePlaying { runtime.player.pause(reason: "system interruption or route change") }                       // B1: the state says what is true
+            if programmePlaying { runtime.player.pause(reason: "system interruption") }                       // B1: the state says what is true
             if remotePlaying { queue.pause() }
             runtime.log.emit(.audioNotice(kind: "interruption", detail: "began; will resume programme=\(memory.programme) remote=\(memory.remote)"))
             return
         }
-        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
+        if shouldResume { Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() } }      // without the recommendation the listener's Play asks
         let again = memory.ended(shouldResume: shouldResume)
         runtime.log.emit(.audioNotice(kind: "interruption", detail: "ended; shouldResume=\(shouldResume) programme=\(again.programme) remote=\(again.remote)"))
         if again.programme { runtime.player.play() }
@@ -173,7 +173,7 @@ public final class SessionWatcher: @unchecked Sendable {
         }
         memory.forget()
         runtime.log.emit(.audioNotice(kind: "route-lost", detail: "pausing (programme playing \(programmePlaying), remote playing \(remotePlaying))"))
-        if programmePlaying { runtime.player.pause(reason: "system interruption or route change") }
+        if programmePlaying { runtime.player.pause(reason: "route lost") }        // the listener's Play ends this one, as the system's recommendation never comes
         if remotePlaying { queue.pause() }
     }
 
@@ -194,9 +194,9 @@ public final class SessionWatcher: @unchecked Sendable {
     /// B6: back in front. A programme that should be playing and has no engine gets its session again; failing that, it says paused.
     /// A podcast the system paused is already marked paused. Nothing starts by itself.
     func returnedToForeground() {
-        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
         let rt = runtime
-        guard programmePlaying else { return }
+        guard programmePlaying else { return }                  // a paused programme (the listener's, or an interruption that gave no go-ahead) is not revived by opening the app
+        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
         if !rt.audio.needsRecovery { if rt.audio.programmeAudible { rt.coordinator.confirmHealthy() }; return }
         Task { @MainActor in
             let ok = await rt.ensureSessionReady(reason: "foreground")

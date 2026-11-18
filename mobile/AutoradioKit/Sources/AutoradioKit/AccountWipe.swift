@@ -63,7 +63,7 @@ public final class AccountWipe: @unchecked Sendable {
         reader: ReaderStore = .shared,
         keptTurns: KeptTurnStore? = nil,
         voice: SpeakerGate = .shared,
-        localKeep: LocalEntryKeep = .shared
+        heldRest: HeldRest = .shared
     ) {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
@@ -89,7 +89,7 @@ public final class AccountWipe: @unchecked Sendable {
         // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
-        register("local-entries") { localKeep.wipe() }
+        register("held-rest") { heldRest.wipe() }
         register("content") { ContentSync.wipeAccount(store: content, corpus: corpus) }
     }
 

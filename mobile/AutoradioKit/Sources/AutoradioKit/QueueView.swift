@@ -37,7 +37,7 @@ extension RunSheetPlayer {
     public func info(clips: ClipStore = .shared) -> QueueInfo {
         var q = QueueInfo()
         let air = store.onAir()
-        q.current = air?.shownTitle() ?? ""
+        q.current = air?.displayTitle ?? ""
         q.currentKind = air?.kindWord ?? ""
         q.audio = isRemote
         q.playing = q.audio && !paused
@@ -56,6 +56,10 @@ extension RunSheetPlayer {
 
     /// The remote audio shown as the radio: the bar's line, the player's title and position, and its play button follow the audio.
     public func overlay(_ r: RadioInfo) -> RadioInfo {
+        if isWaitingForSession, !isRemote {               // the entry is held for the audio session: nothing is playing, and Play tries again
+            var o = r; o.playing = false; o.paused = true
+            return o
+        }
         if store.onAir() == nil, !isRemote {              // nothing on air: say so plainly; Play starts the opening or asks the desk
             var o = r
             o.title = ""; o.kind = ""; o.sources = []; o.source = ""; o.position = ""; o.playing = false; o.paused = false
@@ -74,6 +78,10 @@ extension RunSheetPlayer {
         return o
     }
     public func overlay(_ b: BarInfo) -> BarInfo {
+        if isWaitingForSession, !isRemote, b.state == "playing" {
+            var o = b; o.state = "paused"; o.playing = false
+            return o
+        }
         if store.onAir() == nil, !isRemote, b.state == "playing" || b.state == "paused" {
             var o = b
             o.state = "idle"; o.text = ""; o.playing = false; o.progress = 0

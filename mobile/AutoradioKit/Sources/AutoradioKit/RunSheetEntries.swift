@@ -42,32 +42,16 @@ extension RunSheetEntry {
         return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .page, placedBy: by, title: t, source: RunSheetSource(ref: "url:" + url.absoluteString, label: url.host ?? t, url: url.absoluteString))
     }
     public static func book(id: String, title: String, at: Int, by: RunSheetBy = .listener) -> RunSheetEntry {
-        // A book is a file on the phone: its own title is not posted (the same rule as a `doc:` read-aloud).
-        let neutral = localOnlyTitle(address: "doc:" + id) ?? "Read aloud"
-        let e = RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .document, placedBy: by, title: neutral, source: RunSheetSource(ref: "doc:" + id, label: neutral, start: Double(at)))
-        LocalEntryKeep.shared.put(id: e.id, title: cleanTitle(title), label: cleanTitle(title))
-        return e
+        RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .document, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: "doc:" + id, label: cleanTitle(title), start: Double(at)))
     }
     /// A page's words, read aloud on the listener's asking (Listen on a page, "Read it to me" on a message): the address says what it is.
     public static func readAloud(address: String, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {
         let kind: RunSheetKind = address.hasPrefix("mail:") ? .mail : .page
-        // What the listener has on the phone alone (a message, a book, a file) is never named by its words: the entry is posted to the server.
-        // The title the caller built (the first words of a message) stays with the caller, on the phone.
-        if let neutral = RunSheetEntry.localOnlyTitle(address: address) {
-            let e = RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: kind, placedBy: by, title: neutral, source: RunSheetSource(ref: address, label: neutral))
-            LocalEntryKeep.shared.put(id: e.id, title: cleanTitle(title), label: cleanTitle(title))
-            return e
-        }
         return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: kind, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: address, label: cleanTitle(title)))
     }
-    /// The neutral title for an address whose words stay on the phone (mail, books and files), else nil.
-    static func localOnlyTitle(address: String) -> String? {
-        if address.hasPrefix("mail:") { return "A message" }
-        if address.hasPrefix("doc:") || address.hasPrefix("file:") { return "Read aloud" }
-        return nil
-    }
-    /// True when the words of this entry are the phone's alone: they are never posted, not even as the rest of a cut passage.
-    var wordsStayOnPhone: Bool { kind == .mail || kind == .document || (source.flatMap { Self.localOnlyTitle(address: $0.ref) } != nil) }
+    /// True when the entry's words are read from the phone's own store by its address (a message, a book, a file), so the entry carries none: the
+    /// rest of a cut passage is then held by the phone (`HeldRest`) rather than made into a story entry with text.
+    var wordsComeFromThePhone: Bool { kind == .mail || kind == .document || (source.map { $0.ref.hasPrefix("mail:") || $0.ref.hasPrefix("doc:") || $0.ref.hasPrefix("file:") } ?? false) }
     /// Addresses too long for the server's bound (2048 bytes), kept on the phone by entry id: the entry names the audio by its ref and leaves its url out.
     nonisolated(unsafe) private static var longURLs: [String: URL] = [:]
     private static let longLock = NSLock()
@@ -90,10 +74,7 @@ extension RunSheetEntry {
     /// An audio file in Files. The entry names the file by its Files path (`file:<path>`), never by where the phone keeps a copy: that is a device
     /// path and goes nowhere. The phone finds its own copy again from the path (`RunSheetPlayer.fileResolver`).
     public static func filesAudio(address: String, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {
-        // The file's name is the listener's own: the posted entry says "A file"; the name is kept on the phone for the screens.
-        let e = RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .episode, placedBy: by, title: "A file", source: RunSheetSource(ref: address, label: "A file"))
-        LocalEntryKeep.shared.put(id: e.id, title: cleanTitle(title), label: "Files")
-        return e
+        RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .episode, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: address, label: "Files"))
     }
     /// The Files address of an audio file this entry plays.
     public var filesAddress: String? {
