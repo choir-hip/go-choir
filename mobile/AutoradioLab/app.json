@@ -1,4 +1,37 @@
 {
+  "host": {
+    "ios": {
+      "launchImage": {
+        "src": "launch-mark.png",
+        "width": 96
+      },
+      "minimumOS": "18.0",
+      "deviceFamily": [
+        "iphone"
+      ],
+      "backgroundModes": [
+        "audio"
+      ]
+    },
+    "macos": {
+      "minimumOS": "15.0",
+      "window": {
+        "width": 430,
+        "height": 900,
+        "minWidth": 360,
+        "minHeight": 560
+      }
+    },
+    "web": {},
+    "android": {}
+  },
+  "deploy": {
+    "store": {
+      "ios": "0",
+      "macos": "0",
+      "web": "0"
+    }
+  },
   "$schema": "../.exact-src/scripts/app.schema.json",
   "name": "Autoradio",
   "short_name": "Autoradio",
@@ -10,27 +43,12 @@
     "name": "Autoradio"
   },
   "icons": [
-    { "src": "assets/appicon/default.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
-  ],
-  "host": {
-    "ios": {
-      "launchImage": { "src": "launch-mark.png", "width": 96 },
-      "minimumOS": "18.0",
-      "deviceFamily": ["iphone"],
-      "backgroundModes": ["audio"]
-    },
-    "macos": {
-      "minimumOS": "15.0",
-      "window": { "width": 430, "height": 900, "minWidth": 360, "minHeight": 560 }
-    },
-    "web": {}
-  },
-  "deploy": {
-    "store": {
-      "ios": "0",
-      "macos": "0",
-      "web": "0"
+    {
+      "src": "assets/appicon/default.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
     }
-  },
+  ],
   "audio_session": "playback"
 }
