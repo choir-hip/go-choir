@@ -699,7 +699,8 @@
       "length": "string",
       "by": "string",
       "byWord": "string",
-      "note": "string"
+      "note": "string",
+      "builtOn": "RadioBuiltOn[]"
     },
     "RadioHeardRow": {
       "n": "number",

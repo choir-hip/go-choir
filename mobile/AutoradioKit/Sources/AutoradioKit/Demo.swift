@@ -49,8 +49,21 @@ public enum Demo {
         return n
     }
     @MainActor public static func runSheet(_ name: String) -> RunSheet? {
-        guard let d = fixture("runsheet-" + name), let s = try? JSONDecoder().decode(RunSheetStore.Saved.self, from: d) else { return nil }
-        return s.sheet
+        guard let d = fixture("runsheet-" + name) else { return nil }
+        return lossySheet(d)
+    }
+
+    /// The sheet of a saved file, entry by entry: an entry that does not decode is dropped and the rest load (one bad entry never empties the page).
+    @MainActor static func lossySheet(_ data: Data) -> RunSheet? {
+        guard let top = try? JSONSerialization.jsonObject(with: data) as? [String: Any], var sheet = top["sheet"] as? [String: Any] else { return nil }
+        let raw = (sheet["entries"] as? [Any]) ?? []
+        let good: [Any] = raw.filter { e in
+            guard JSONSerialization.isValidJSONObject(e), let d = try? JSONSerialization.data(withJSONObject: e) else { return false }
+            return (try? JSONDecoder().decode(RunSheetEntry.self, from: d)) != nil
+        }
+        sheet["entries"] = good
+        guard let d = try? JSONSerialization.data(withJSONObject: sheet) else { return nil }
+        return try? JSONDecoder().decode(RunSheet.self, from: d)
     }
 
     public static func fixture(_ name: String) -> Data? { DemoFixtureData.files[name].map { Data($0.utf8) } }

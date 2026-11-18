@@ -28,6 +28,7 @@ final class VoiceCoexistTests: XCTestCase {
     func testARealRouteLossStillPauses() async {
         let rt = LabRuntime(supportDir: FileManager.default.temporaryDirectory.appendingPathComponent("vc-\(UUID().uuidString)"), session: NullSessionOwner())
         let c = PlaybackContinuity(runtime: rt, queue: RunSheetPlayer(store: RunSheetStore()))
+        rt.player.onNeedsSession = nil          // play's own session claim (an async Task) would touch the coordinator and race the route loss
         rt.player.play()
         c.routeLost()
         XCTAssertTrue(rt.player.userPaused, "headphones unplugged, no session change of ours: paused")

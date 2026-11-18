@@ -340,6 +340,49 @@ final class RadioPageTests: XCTestCase {
         XCTAssertEqual(s.sheet.version, v)
     }
 
+    // The page is empty on the device when the shape the module answers is not the shape the contract declares (an extra or missing field makes
+    // the resource fail and the page shows its empty default). Every Swift field of the page's shapes is in interface/radio.json, and the other way.
+    func test17_TheModulesAnswerHasExactlyTheFieldsTheContractDeclares() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("exact-package/interface/radio.json")
+        let j = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let shapes = try XCTUnwrap(j["shapes"] as? [String: [String: String]])
+        func keys<T: Encodable>(_ v: T) throws -> Set<String> { Set(try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(v)) as? [String: Any]).keys) }
+        var info = RadioPageInfo()
+        var bo = RadioBuiltOn(); bo.title = "t"
+        var row = RadioPageRow(); row.builtOn = [bo]
+        var heard = RadioHeardRow(); heard.builtOn = [bo]
+        info.ahead = [row]; info.heard = [heard]; info.builtOn = [bo]
+        for (name, got) in [("RadioPageInfo", try keys(info)), ("RadioPageRow", try keys(row)), ("RadioHeardRow", try keys(heard)), ("RadioBuiltOn", try keys(bo))] {
+            XCTAssertEqual(got, Set(try XCTUnwrap(shapes[name], name).keys), "\(name): the Swift fields and the declared shape differ")
+        }
+        let def = try XCTUnwrap(((j["names"] as? [[String: Any]])?.first { ($0["source"] as? String) == "radioPage" }?["substitute"] as? [String: Any])?["default"] as? [String: Any])
+        XCTAssertEqual(Set(def.keys), Set(shapes["RadioPageInfo"]!.keys), "the substitute default has every field")
+    }
+
+    func test18b_OneBadEntryInTheDemoSheetIsDroppedAndTheRestLoad() throws {
+        let json = #"{"sheet":{"version":3,"entries":[{"id":"a","kind":"story","placed_by":"desk","state":"ahead","title":"A","est_seconds":60,"text":"Words."},{"id":"b","kind":"nonsense","placed_by":"desk","state":"ahead"},{"id":"c","kind":"story","placed_by":"desk","state":"ahead","title":"C","est_seconds":60,"text":"Words."}]},"pending":[]}"#
+        let sheet = try XCTUnwrap(Demo.lossySheet(Data(json.utf8)))
+        XCTAssertEqual(sheet.entries.map(\.id), ["a", "c"])
+    }
+
+    // The demo install path end to end: the fixture the tour installs, through the store, to the state the page draws.
+    func test18_TheDemoSheetFixtureReachesThePageAsUpNextRows() throws {
+        for (name, ahead, more) in [("cold", 6, 1), ("day", 9, 4)] {
+            let sheet = try XCTUnwrap(Demo.runSheet(name), name)
+            let store = RunSheetStore(); store.replaceForDemo(sheet)
+            let p = RadioPage.make(RadioPageInput(sheet: store.sheet))
+            XCTAssertEqual(p.ahead.count, ahead, name); XCTAssertEqual(p.aheadMore, more, name)
+            XCTAssertFalse(p.statusLine.isEmpty, name)
+            XCTAssertFalse(p.greeting.isEmpty, "nothing on air and entries ahead: the greeting")
+            XCTAssertTrue(p.canPlay)
+            if name == "day" { XCTAssertEqual(p.heard.count, 2) }
+            var started = store.sheet; let k = try XCTUnwrap(started.entries.firstIndex { $0.state == .ahead }); started.entries[k].state = .onAir; started.onAir = started.entries[k].id
+            var i = RadioPageInput(sheet: started); i.playing = true
+            let on = RadioPage.make(i)
+            XCTAssertTrue(on.onAir); XCTAssertEqual(on.statusLine, "On air"); XCTAssertEqual(on.ahead.count, ahead - 1)
+        }
+    }
+
     // the tour's fixtures decode and say what the tour expects of them
     func test16_TheTourFixturesDecode() throws {
         let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("fixtures/demo")

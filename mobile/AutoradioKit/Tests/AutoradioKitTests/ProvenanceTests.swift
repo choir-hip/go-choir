@@ -14,7 +14,7 @@ final class ProvenanceTests: XCTestCase {
         let clips = ClipStore()
         clips.replace([PodcastClip.parse(["clip_id": "clip-000000000001", "story": ["route": "tide", "version": 3, "title": "Tide tables"], "show": "The Hour", "episode_title": "Ep 1",
                                           "episode_guid": "g1", "feed_url": "https://example.test/f.xml", "published": "2026-11-16T09:00:00Z", "audio_url": "https://example.test/1.mp3",
-                                          "duration_seconds": 900, "start": 10, "end": 70, "quote": "q", "support": 0.9])!])
+                                          "duration_seconds": 900, "start": 10, "end": 70, "quote": "q", "support": 0.9, "fingerprint": testFingerprintJSON()])!])
         let segs: [[String: Any]] = [
             ["segment_id": "s.s1", "kind": "story", "title": "Barrier", "text": "The barrier held.", "cites": [cite("harbour-barrier", "subject", "The harbour barrier")]],
             ["segment_id": "s.s2", "kind": "update", "title": "Update", "text": "More on the barrier.", "cites": [cite("harbour-barrier", "subject", "The harbour barrier")]],
