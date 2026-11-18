@@ -114,6 +114,7 @@ type ChoirScope struct {
 	heldStat    int
 	notSentStat map[string]int
 	notes       []string
+	reuseQuiet  bool
 	// ledger is this session's read ledger (read_ledger.go): every Read, its
 	// capture or its error, so a failed Read is never invisible.
 	ledger readLedger
@@ -445,6 +446,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Reads":            func() reflect.Value { return reflect.ValueOf(s.Reads) },
 		"ReadAll":          func() reflect.Value { return reflect.ValueOf(s.ReadAll) },
 		"Search":           func() reflect.Value { return reflect.ValueOf(s.Search) },
+		"SearchAll":        func() reflect.Value { return reflect.ValueOf(s.SearchAll) },
 		"Cut":              func() reflect.Value { return reflect.ValueOf(s.Cut) },
 		"Captures":         func() reflect.Value { return reflect.ValueOf(s.Captures) },
 		"PollSource":       func() reflect.Value { return reflect.ValueOf(s.PollSource) },

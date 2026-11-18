@@ -105,6 +105,28 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 	}
 }
 
+// One question's wordings go to one call, and results say what is new
+// (search-reuse commit 3, docs/problems/search-volume-outruns-keenable-credits-2026-11-18.md).
+// Failure list: the prompt still asks for several searches per thread in one
+// cell with different wording (the burst that spent the credits), or does not
+// name the call that sends them in turn, or does not say a question whose
+// wordings return held pages is answered.
+func TestResearchPromptSendsOneQuestionsWordingsToOneCall(t *testing.T) {
+	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
+	if err != nil {
+		t.Fatalf("load research prompt: %v", err)
+	}
+	flat := strings.Join(strings.Fields(prompt.Content), " ")
+	for _, want := range []string{"all the wordings of one question", "choir.SearchAll(question, wordings)", "mark each page new or held", "a question whose wordings return held pages is answered"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("research prompt lacks %q", want)
+		}
+	}
+	if strings.Contains(flat, "several searches per thread") {
+		t.Error("research prompt still asks for several searches per thread")
+	}
+}
+
 // The research prompt carries the source floor, the pack-everything rule and
 // the early interim packet (problems/ordinary-prompt-path-2026-11-09.md 1.5
 // item 1): read at least 8 independent sources across hosts or say why fewer.
