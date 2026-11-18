@@ -33,6 +33,9 @@ func takeFail(w http.ResponseWriter, what string, err error) {
 		writeJSON(w, http.StatusNotFound, apiError{Error: "take not found"})
 	case errors.Is(err, ErrTakeGone), errors.Is(err, ErrTakeRemoved):
 		writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+	case errors.Is(err, ErrTakeUnavailable):
+		log.Printf("corpusd: takes %s: %v", what, err)
+		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "takes cannot count this right now"})
 	case errors.Is(err, ErrTakeOwn):
 		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 	default:
@@ -116,6 +119,7 @@ func (h *Handler) HandleTakeAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "audio/mp4")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Length", strconv.Itoa(len(audio)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(audio)

@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -55,7 +56,18 @@ type takesCall struct {
 	body                       []byte
 }
 
+// takesNotMine is a computer some other account owns: the fake vmctl names
+// someone else as its owner.
+const takesNotMine = "computer-00000000000000000000000000000001"
+
 func takesHarness(t *testing.T, audioReply func(w http.ResponseWriter)) (func(string) func(*http.Request), func(*http.Request, ...func(*http.Request)) *httptest.ResponseRecorder, func() []takesCall) {
+	t.Helper()
+	return takesHarnessKeys(t, audioReply, takesKeys{computer: takesDrillComputer})
+}
+
+// takesHarnessKeys is takesHarness with the API-key store of the caller's
+// choice (a computer-bound key, or an owner-wide one).
+func takesHarnessKeys(t *testing.T, audioReply func(w http.ResponseWriter), keys takesKeys) (func(string) func(*http.Request), func(*http.Request, ...func(*http.Request)) *httptest.ResponseRecorder, func() []takesCall) {
 	t.Helper()
 	var mu sync.Mutex
 	var calls []takesCall
@@ -80,12 +92,16 @@ func takesHarness(t *testing.T, audioReply func(w http.ResponseWriter)) (func(st
 			return
 		}
 		c := r.URL.Query().Get("computer_id")
-		_, _ = w.Write([]byte(`{"computer_id":"` + c + `","user_id":"user-key","desktop_id":"primary","kind":"interactive","state":"active","epoch":1}`))
+		owner := "user-key"
+		if c == takesNotMine {
+			owner = "someone-else"
+		}
+		_, _ = w.Write([]byte(`{"computer_id":"` + c + `","user_id":"` + owner + `","desktop_id":"primary","kind":"interactive","state":"active","epoch":1}`))
 	}))
 	t.Cleanup(vm.Close)
 	h, priv := opinionTestHandler(t, autoputer.URL, corpusd.URL)
 	h.vmctlClient = vmctl.NewClient(vm.URL)
-	h.SetAPIKeyValidator(takesKeys{computer: takesDrillComputer})
+	h.SetAPIKeyValidator(keys)
 	send := func(req *http.Request, mutate ...func(*http.Request)) *httptest.ResponseRecorder {
 		for _, m := range mutate {
 			m(req)
@@ -284,6 +300,171 @@ func TestTakeYankIsTheOperatorsAct(t *testing.T) {
 	for _, c := range calls() {
 		if c.path == platform.TakesYankPath {
 			t.Fatalf("the yank reached corpusd: %+v", c)
+		}
+	}
+}
+
+// An owner-wide key (a device login: no computer bound) must name a computer on
+// every takes route, by X-Choir-Computer: unnamed is 400, named and owned is
+// served, named and not owned is refused.
+func TestTakesRoutesNeedANamedComputerForAnOwnerWideKey(t *testing.T) {
+	_, send, calls := takesHarnessKeys(t, func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "audio/mp4")
+		_, _ = w.Write([]byte("bytes"))
+	}, takesKeys{})
+	named := func(id string) func(*http.Request) {
+		return func(r *http.Request) { r.Header.Set("X-Choir-Computer", id) }
+	}
+	routes := []struct {
+		name string
+		req  func() *http.Request
+	}{
+		{"publish", func() *http.Request {
+			return takePost(t, []byte("fake-m4a-bytes"), map[string]string{"transcript": "hi", "duration_seconds": "10"})
+		}},
+		{"list", func() *http.Request {
+			return httptest.NewRequest(http.MethodGet, "https://choir.news/api/platform/takes", nil)
+		}},
+		{"mine", func() *http.Request {
+			return httptest.NewRequest(http.MethodGet, "https://choir.news/api/platform/takes?mine=1", nil)
+		}},
+		{"record", func() *http.Request {
+			return httptest.NewRequest(http.MethodGet, "https://choir.news/api/platform/takes/record?publisher=voice-abcdef", nil)
+		}},
+		{"audio", func() *http.Request {
+			return httptest.NewRequest(http.MethodGet, "https://choir.news/api/platform/takes/take-0123456789abcdef/audio", nil)
+		}},
+		{"delete", func() *http.Request {
+			return httptest.NewRequest(http.MethodDelete, "https://choir.news/api/platform/takes/take-0123456789abcdef", nil)
+		}},
+		{"outcome", func() *http.Request {
+			return httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/takes/take-0123456789abcdef/outcome", strings.NewReader(`{"outcome":"heard","claim_id":"claim-aaaaaaaaaaaa"}`))
+		}},
+	}
+	for _, rt := range routes {
+		if w := send(rt.req(), takesKey); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "named computer") {
+			t.Errorf("%s: an unnamed owner-wide key = %d %s, want 400 naming a computer", rt.name, w.Code, w.Body)
+		}
+	}
+	if got := calls(); len(got) != 0 {
+		t.Fatalf("an unnamed request reached corpusd: %+v", got)
+	}
+	for _, rt := range routes {
+		before := len(calls())
+		if w := send(rt.req(), takesKey, named(takesNotMine)); w.Code != http.StatusForbidden {
+			t.Errorf("%s: a computer another account owns = %d %s, want 403", rt.name, w.Code, w.Body)
+		}
+		if len(calls()) != before {
+			t.Errorf("%s: a computer another account owns reached corpusd", rt.name)
+		}
+	}
+	for _, rt := range routes {
+		before := len(calls())
+		w := send(rt.req(), takesKey, named(takesDrillComputer))
+		if w.Code != http.StatusOK || len(calls()) != before+1 {
+			t.Errorf("%s: a named, owned computer = %d %s", rt.name, w.Code, w.Body)
+		}
+	}
+}
+
+// The audio route says what it serves cannot be sniffed into something else.
+func TestTakeAudioIsNosniff(t *testing.T) {
+	cookie, send, _ := takesHarness(t, func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "audio/mp4")
+		_, _ = w.Write([]byte("bytes"))
+	})
+	w := send(httptest.NewRequest(http.MethodGet, "https://choir.news/api/platform/takes/take-0123456789abcdef/audio", nil), cookie("user-1"))
+	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("headers = %v", w.Header())
+	}
+}
+
+// A body past the relay's limit is an error, never a truncated 200.
+func TestTakeAudioOverTheRelayLimitIsAnErrorNotATruncation(t *testing.T) {
+	cookie, send, _ := takesHarness(t, func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "audio/mp4")
+		_, _ = w.Write(bytes.Repeat([]byte("a"), takesAudioMaxOut+1))
+	})
+	w := send(httptest.NewRequest(http.MethodGet, "https://choir.news/api/platform/takes/take-0123456789abcdef/audio", nil), cookie("user-1"))
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("an over-limit body = %d (%d bytes), want 502", w.Code, w.Body.Len())
+	}
+}
+
+// mobile/fixtures/takes/routes.json is the route table both sides read: each
+// row is a registered proxy route that accepts its own example.
+func TestTakesRouteTableFixtureIsTheRegisteredRoutes(t *testing.T) {
+	raw, err := os.ReadFile("../../mobile/fixtures/takes/routes.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var table struct {
+		Routes []struct {
+			Name     string            `json:"name"`
+			Method   string            `json:"method"`
+			Path     string            `json:"path"`
+			Auth     string            `json:"auth"`
+			Headers  []string          `json:"headers"`
+			Encoding string            `json:"encoding"`
+			Fields   map[string]string `json:"fields"`
+			Body     string            `json:"body"`
+			Response string            `json:"response"`
+		} `json:"routes"`
+	}
+	if err := json.Unmarshal(raw, &table); err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Routes) != 8 {
+		t.Fatalf("%d rows, want one per route (8)", len(table.Routes))
+	}
+	_, send, calls := takesHarnessKeys(t, func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "audio/mp4")
+		_, _ = w.Write([]byte("bytes"))
+	}, takesKeys{})
+	for _, row := range table.Routes {
+		var req *http.Request
+		switch row.Encoding {
+		case "multipart":
+			req = takePost(t, []byte("fake-m4a-bytes"), row.Fields)
+			req.URL.Path = row.Path
+		case "json":
+			req = httptest.NewRequest(row.Method, "https://choir.news"+row.Path, strings.NewReader(row.Body))
+		case "none":
+			req = httptest.NewRequest(row.Method, "https://choir.news"+row.Path, nil)
+		default:
+			t.Fatalf("%s: encoding %q", row.Name, row.Encoding)
+		}
+		if req.Method != row.Method {
+			t.Fatalf("%s: method %s, row says %s", row.Name, req.Method, row.Method)
+		}
+		hasComputer := false
+		for _, h := range row.Headers {
+			if h == "X-Choir-Computer" {
+				hasComputer = true
+			}
+		}
+		if !hasComputer && row.Auth != "operator" {
+			t.Errorf("%s: a takes route row must list X-Choir-Computer", row.Name)
+		}
+		before := len(calls())
+		w := send(req, takesKey, func(r *http.Request) { r.Header.Set("X-Choir-Computer", takesDrillComputer) })
+		if row.Auth == "operator" {
+			// Registered and gated: an ordinary key is refused by the operator check, not routed away.
+			if w.Code != http.StatusForbidden {
+				t.Errorf("%s: %d %s, want the operator gate (403)", row.Name, w.Code, w.Body)
+			}
+			for _, c := range calls()[before:] {
+				if c.path == platform.TakesYankPath {
+					t.Errorf("%s: a non-operator's yank reached corpusd", row.Name)
+				}
+			}
+			continue
+		}
+		if w.Code != http.StatusOK || len(calls()) != before+1 {
+			t.Errorf("%s %s %s: %d %s, want it accepted", row.Name, row.Method, row.Path, w.Code, w.Body)
+		}
+		if _, err := os.Stat("../../mobile/fixtures/takes/" + row.Response); row.Response != "" && err != nil {
+			t.Errorf("%s: response fixture %s: %v", row.Name, row.Response, err)
 		}
 	}
 }

@@ -69,6 +69,22 @@ func (h *Handler) takesCaller(w http.ResponseWriter, r *http.Request) (*AuthResu
 	return authResult, target.ComputerID, true
 }
 
+// takeDrill says whether the named computer is a drill computer. When the
+// tier file cannot be read it answers 503 and returns an error: a drill
+// computer is never counted as a real one.
+func (h *Handler) takeDrill(w http.ResponseWriter, computerID string) (bool, error) {
+	if computerID == "" {
+		return false, nil
+	}
+	drill, err := platform.TakeDrillComputer(computerID)
+	if err != nil {
+		log.Printf("proxy: takes: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "takes cannot tell a drill computer from a real one right now"})
+		return false, err
+	}
+	return drill, nil
+}
+
 // HandlePlatformTakes dispatches the takes routes.
 func (h *Handler) HandlePlatformTakes(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
@@ -161,13 +177,17 @@ func (h *Handler) takePublish(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "the audio does not match its sha256"})
 		return
 	}
+	drill, err := h.takeDrill(w, computerID)
+	if err != nil {
+		return
+	}
 	in := platform.TakeIn{
 		PublisherKey: types.TakePublisherKey(authResult.UserID), Publisher: types.TakePublisherHandle(authResult.UserID),
 		DurationSeconds: duration, SHA256: hex.EncodeToString(sum[:]), AudioBase64: base64.StdEncoding.EncodeToString(audio),
 		Transcript: r.FormValue("transcript"),
 		// A take published by a drill computer's credential is drill data:
 		// the proxy decides, never the request.
-		Drill: computerID != "" && platform.TakeDrillComputer(computerID),
+		Drill: drill,
 	}
 	if raw := strings.TrimSpace(r.FormValue("responds_to")); raw != "" {
 		var resp platform.TakeRespondsTo
@@ -198,7 +218,11 @@ func (h *Handler) takeList(w http.ResponseWriter, r *http.Request) {
 			}
 			q.Set("limit", limit)
 		}
-		if computerID != "" && platform.TakeDrillComputer(computerID) {
+		drill, err := h.takeDrill(w, computerID)
+		if err != nil {
+			return
+		}
+		if drill {
 			q.Set("include_drill", "1")
 		}
 	}
@@ -239,6 +263,7 @@ func (h *Handler) takeAudio(w http.ResponseWriter, r *http.Request, id string) {
 	w.Header().Set("Content-Type", "audio/mp4")
 	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
 	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = bytes.NewReader(raw).WriteTo(w)
 }
@@ -262,6 +287,9 @@ func (h *Handler) takeOutcome(w http.ResponseWriter, r *http.Request, id string)
 	}
 	if authResult.AuthMethod != "api_key" || computerID == "" {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "an outcome is reported by the listener's computer, under its own credential"})
+		return
+	}
+	if _, err := h.takeDrill(w, computerID); err != nil {
 		return
 	}
 	var body struct {
