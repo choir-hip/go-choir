@@ -209,6 +209,7 @@ add_path() { # $1 path, $2 required|optional
 EXCLUDES=(
   "$ART/sha256/projection-base"   # 47 GB, rebuilt from the tape; retired at the cutover, excluded until the old data is deleted
   "$ART/checkpoint-scratch"       # regenerable scratch
+  "$ART/capture-fts"              # the captured pages' full-text index: derived, rebuilt by corpusd's catch-up, and live SQLite files
   "$ROOT/secrets/offhost-backup"  # holds this backup's own key
   "key-escrow-kek*"                # opens the sealed escrow key; the owner keeps it offline (FP9)
   "gateway-provider.env"           # every provider API key, plaintext; re-provisioned by hand after a restore (PR-13)
