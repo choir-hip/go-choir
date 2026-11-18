@@ -244,7 +244,7 @@ extension PlaybackEngine {
     public func previous() {
         dropRemembered()
         wants = true
-        if audio != nil, store.onAir() != nil { engine?.seekRemote(to: 0); changed(); return }
+        if audio != nil, playingDocument == nil, store.onAir() != nil { engine?.seekRemote(to: 0); changed(); return }
         if store.onAir() != nil {
             let p: (block: Int, seconds: Double) = engine?.spokenPosition() ?? (block: 0, seconds: 0)
             if StoryCursor.previousRestartsCurrent(blockIndex: p.block, secondsIntoBlock: p.seconds) { engine?.restartSpoken(); changed(); return }
@@ -384,6 +384,15 @@ extension PlaybackEngine {
             c.start = max(a.start ?? 0, engine?.remotePosition()?.elapsed ?? 0)
             remembered = .audio(c, by: .phone)
             print("AUTORADIO kept place \(old.id) at \(Int(c.start ?? 0)) s while an answer speaks")
+        } else if old.wordsStayOnPhone, let rest = engine?.spokenRemainder(), !rest.isEmpty {
+            // A message, book or file: the rest of the passage is held here and never posted. The continuation is an entry that names the same
+            // address with no words (as the original did); its words are the phone's, like any read-aloud's.
+            let id = "c-" + UUID().uuidString.prefix(8).lowercased()
+            var c = RunSheetEntry(id: id, kind: old.kind == .mail ? .mail : .page, placedBy: .phone, title: old.title, estSeconds: RunSheetEntry.estimateSeconds(words: rest))
+            c.source = old.source
+            provided[id] = (old.title, [rest])
+            remembered = c
+            print("AUTORADIO kept place \(old.id) as \(c.id) on the phone while an answer speaks")
         } else if let rest = engine?.spokenRemainder(), !rest.isEmpty {
             var c = RunSheetEntry(id: "c-" + UUID().uuidString.prefix(8).lowercased(), kind: .story, placedBy: .phone, title: old.title, text: rest,
                                   estSeconds: RunSheetEntry.estimateSeconds(words: rest))
@@ -463,6 +472,7 @@ extension PlaybackEngine {
         guard let engine else { fail(entry.id, why: nil); return }
         generation += 1
         let my = generation
+        leadInDone.remove(entry.id)                    // a clip or take played again plays its lead-in and then its audio
         paused = false; message = ""
         documentBlock = entry.book?.at ?? 0
         var ok = false
@@ -570,6 +580,7 @@ extension PlaybackEngine {
         if played { store.airedEnded(id, as: .heard, outcome: .finished, report: r) }
         else { store.airedEnded(id, as: .skipped, outcome: .failed) }
         provided[id] = nil
+        leadInDone.remove(id)
         dropLocated(id)
         if let e = store.entry(id) { onEntryEnded?(e, played) }
     }

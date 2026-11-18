@@ -20,6 +20,11 @@ import MediaPlayer
     private var wantPlaying = false
     private var commandsInstalled = false
     private var generation = 0
+    /// Which start is current: a stop or a newer start moves it, and a start that waited through that gives up quietly.
+    private var startToken = 0
+    /// When the player itself last paused or resumed (a hold, a level change, the reader's pause): the observer reports that pause a moment later.
+    private var ownPauseAt: DispatchTime = .init(uptimeNanoseconds: 0)
+    private func ownPause() { ownPauseAt = .now() }
 
     /// The generation that ended (the item's own end or the clip's end).
     public var onEnded: ((Int) -> Void)?
@@ -39,6 +44,8 @@ import MediaPlayer
 
     public func play(url: URL, title: String, show: String, start: Double?, end: Double?, rate: Double, generation: Int) async -> Bool {
         stop()
+        startToken &+= 1
+        let token = startToken
         self.generation = generation; self.title = title; self.show = show; self.rate = PlaybackSpeed.clamp(rate); self.level = .play
         let it = AVPlayerItem(url: url)
         it.audioTimePitchAlgorithm = .timeDomain          // speech: keeps the pitch, no warble, 1/32x to 32x
@@ -51,7 +58,10 @@ import MediaPlayer
             guard pl.timeControlStatus == .paused else { return }
             Task { @MainActor in self?.checkSystemPause() }
         }
-        guard await ready(it) else {
+        let isReady = await ready(it)
+        // A newer start (or a stop) took the player while this one waited: it touches nothing, and above all does not stop its replacement.
+        guard token == startToken else { return false }
+        guard isReady else {
             note?("remote: the stream did not become ready (\(it.error.map { "\($0)" } ?? "status \(it.status.rawValue)"))")
             stop(); return false
         }
@@ -107,7 +117,7 @@ import MediaPlayer
 
     private func fire() { let g = generation; onEnded?(g) }
 
-    public func pause() { wantPlaying = false; player?.pause(); publish() }
+    public func pause() { ownPause(); wantPlaying = false; player?.pause(); publish() }
     public func resume() {
         guard let p = player else { return }
         wantPlaying = true
@@ -117,8 +127,10 @@ import MediaPlayer
     }
 
     /// The player paused and the reader did not ask for it: not at the end of the item, not for a hands-free turn.
-    private func checkSystemPause() {
-        guard player != nil, wantPlaying, level != .pause else { return }
+    func checkSystemPause() {
+        guard player != nil, wantPlaying, level != .pause, !held else { return }
+        // A pause this player made itself (a voice line's hold, a session switch) is reported after it ended too: it is not the system's.
+        if DispatchTime.now().uptimeNanoseconds &- ownPauseAt.uptimeNanoseconds < 1_500_000_000 { return }
         if let pos = position(), let d = pos.duration, pos.elapsed >= d - 0.75 { return }      // it reached its end
         if let e = boundaryEnd, (position()?.elapsed ?? 0) >= e - 0.25 { return }               // a clip reached its end
         wantPlaying = false
@@ -128,6 +140,7 @@ import MediaPlayer
     }
 
     public func stop() {
+        startToken &+= 1
         clearBoundary()
         if let t = tick { player?.removeTimeObserver(t); tick = nil }
         if let o = endObserver { NotificationCenter.default.removeObserver(o); endObserver = nil }
@@ -159,7 +172,7 @@ import MediaPlayer
     public func setRate(_ r: Double) {
         rate = PlaybackSpeed.clamp(r)
         player?.defaultRate = Float(rate)
-        if wantPlaying, level != .pause { player?.rate = Float(rate) }
+        if wantPlaying, level != .pause, !held { player?.rate = Float(rate) }
         publish()
     }
 
@@ -169,17 +182,21 @@ import MediaPlayer
     public func setHeld(_ h: Bool) {
         guard h != held else { return }
         held = h
+        ownPause()
         guard let p = player, wantPlaying else { return }
         if h { p.pause() } else if level != .pause { p.rate = Float(rate) }
         publish()
     }
     public var isHeld: Bool { held }
+    func installPlayerForTest() { player = AVPlayer(); wantPlaying = true }
+    var playerRateForTest: Float { player?.rate ?? 0 }
 
     public func setLevel(_ l: PlayLevel) {
         level = l
+        ownPause()
         guard let p = player else { return }
         switch l {
-        case .play: p.volume = 1; if wantPlaying { p.rate = Float(rate) }
+        case .play: p.volume = 1; if wantPlaying, !held { p.rate = Float(rate) }
         case .dip: p.volume = 0.25
         case .pause: p.pause()
         }

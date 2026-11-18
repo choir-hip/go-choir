@@ -47,8 +47,21 @@ extension RunSheetEntry {
     /// A page's words, read aloud on the listener's asking (Listen on a page, "Read it to me" on a message): the address says what it is.
     public static func readAloud(address: String, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {
         let kind: RunSheetKind = address.hasPrefix("mail:") ? .mail : .page
+        // What the listener has on the phone alone (a message, a book, a file) is never named by its words: the entry is posted to the server.
+        // The title the caller built (the first words of a message) stays with the caller, on the phone.
+        if let neutral = RunSheetEntry.localOnlyTitle(address: address) {
+            return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: kind, placedBy: by, title: neutral, source: RunSheetSource(ref: address, label: neutral))
+        }
         return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: kind, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: address, label: cleanTitle(title)))
     }
+    /// The neutral title for an address whose words stay on the phone (mail, books and files), else nil.
+    static func localOnlyTitle(address: String) -> String? {
+        if address.hasPrefix("mail:") { return "A message" }
+        if address.hasPrefix("doc:") || address.hasPrefix("file:") { return "Read aloud" }
+        return nil
+    }
+    /// True when the words of this entry are the phone's alone: they are never posted, not even as the rest of a cut passage.
+    var wordsStayOnPhone: Bool { kind == .mail || kind == .document || (source.flatMap { Self.localOnlyTitle(address: $0.ref) } != nil) }
     /// Addresses too long for the server's bound (2048 bytes), kept on the phone by entry id: the entry names the audio by its ref and leaves its url out.
     nonisolated(unsafe) private static var longURLs: [String: URL] = [:]
     private static let longLock = NSLock()
