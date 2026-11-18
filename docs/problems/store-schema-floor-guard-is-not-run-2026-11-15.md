@@ -28,3 +28,11 @@ this day as if it ran.
 
 Not checked: whether the deploy program runs an equivalent check of its
 own. The fix (one line in `scripts/gates`) is yellow and not yet made.
+
+## Status (2026-11-18)
+
+Fixed. `scripts/gates` runs `scripts/check-store-schema-floor.sh --base
+origin/main --head HEAD` and its selftest, and CI's Vocabulary Gates job has a
+step "Check the store schema floor". `scripts/check-gates-cover-ci` finds any
+executable `scripts/check-*` that nothing runs, so this class cannot sit
+unseen again. Not checked: whether the deploy program runs an equivalent.

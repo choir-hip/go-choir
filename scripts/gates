@@ -33,6 +33,12 @@ run scripts/doccheck
 run scripts/check-heresies.sh --fail-on-regression --report "$hr_report"
 # CI's Base Packages Are Listed: every package directory is in base-packages.json
 run scripts/check-base-packages
+# CI's Go Vet + Build job runs the lock-scope ratchet (a push that adds a lock
+# in a scope the baseline does not allow is refused); about 1 s warm
+run go run ./cmd/lockscope -check cmd/lockscope/baseline.txt
+# the selftests CI has no step for but the repo keeps (1 s each)
+run scripts/selftest-store-schema-floor
+run scripts/selftest-test-computer-create
 run scripts/check-v1-writer-purity.sh
 run node frontend/scripts/gen-package-kinds.mjs --check
 run scripts/check-decode-roots.sh
@@ -62,8 +68,15 @@ run bash scripts/updater-prune-unit-nix-test.sh
 # against the base, is refused (owner, 2026-11-15).
 if git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1; then
   run scripts/check-jev-entry --base "$base"
+  # a commit that lowers storeschema.Version needs a Store-Floor-Override trailer
+  # (docs/problems/store-schema-floor-guard-is-not-run-2026-11-15.md); and a
+  # package export commit carries the release tree verbatim
+  run scripts/check-store-schema-floor.sh --base "$base" --head HEAD
+  run scripts/check-package-export "$base..HEAD"
 else
   run scripts/check-jev-entry
+  run scripts/check-store-schema-floor.sh
+  run scripts/check-package-export
 fi
 run scripts/check-guest-security-epoch --base "$base" --head HEAD
 if [ "$f" = 0 ]; then echo "ALL GATES PASS"; else echo "GATES FAILED"; fi

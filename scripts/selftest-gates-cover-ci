@@ -14,6 +14,7 @@ fails=0
 
 wf=$tmp/ci.yml
 gates=$tmp/gates
+land=$tmp/land
 ex=$tmp/ex.txt
 
 write_wf() { # extra job text on stdin
@@ -43,11 +44,22 @@ YAML
 base_gates() {
 	printf '%s\n' '#!/usr/bin/env bash' 'run scripts/check-alpha' 'run scripts/check-beta' 'run go run ./cmd/gamma-lock' >"$gates"
 }
-reset() { write_wf </dev/null; base_gates; printf '# none\n' >"$ex"; }
+reset() { write_wf </dev/null; base_gates; : >"$land"; printf '# none\n' >"$ex"; rm -rf "$tmp/scripts" "$tmp/.github"; }
+# wfstep CMD: the workflow with one extra job whose single run step is CMD
+wfstep() { reset; write_wf <<YAML
+  extra:
+    name: Extra
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extra step
+        run: |
+          $1
+YAML
+}
 
 expect() { # NAME WANT(0|1) [grep pattern wanted in stderr]
 	local name=$1 want=$2 pat=${3:-} got=0 out
-	out=$("$check" --workflow "$wf" --gates "$gates" --exemptions "$ex" --root "$tmp" 2>&1) || got=$?
+	out=$("$check" --workflow "$wf" --gates "$gates" --land "$land" --exemptions "$ex" --root "$tmp" 2>&1) || got=$?
 	if [ "$got" != "$want" ]; then
 		echo "FAIL: $name: exit $got, want $want"; echo "$out" | head -5; fails=$((fails + 1))
 	elif [ -n "$pat" ] && ! grep -q -- "$pat" <<<"$out"; then
@@ -77,7 +89,7 @@ printf 'scripts/check-gone this script left CI long ago\n' >"$ex"
 expect "a stale exemption fails" 1 'stale exemption'
 
 printf 'scripts/check-beta already run by the gates file\n' >"$ex"
-expect "an exemption for a script the gates run fails" 1 'scripts/gates runs it'
+expect "an exemption for a script the gates run fails" 1 'runs it (delete'
 
 reset
 write_wf <<'YAML'
@@ -90,12 +102,123 @@ write_wf <<'YAML'
 YAML
 expect "a new job with a new script fails by default" 1 'job newjob, step "Run delta": scripts/check-delta'
 
-printf 'not-a-gate newjob builds artifacts for the deploy\n' >"$ex"
-expect "a not-a-gate job is skipped" 0
-printf 'not-a-gate newjob\n' >"$ex"
-expect "a not-a-gate line without a reason fails" 1 'needs a reason'
-printf 'not-a-gate nojob builds artifacts for the deploy\nnot-a-gate newjob builds artifacts for the deploy\n' >"$ex"
-expect "a not-a-gate line for a missing job fails" 1 'no such job'
+# findings: a job is never excluded wholesale; a build job that runs a repo program is scanned
+reset
+write_wf <<'YAML'
+  go-vet-build:
+    name: Go Vet + Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and vet
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./...
+YAML
+expect "a build job with only go build, vet and test needs nothing" 0
+write_wf <<'YAML'
+  go-vet-build:
+    name: Go Vet + Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and vet
+        run: |
+          go build ./...
+          scripts/check-new-thing
+YAML
+expect "a build job that gains a repo script fails" 1 'job go-vet-build, step "Build and vet": scripts/check-new-thing'
+printf 'scripts/check-new-thing needs a database\n' >"$ex"
+expect "an exemption for it passes" 0
+write_wf <<'YAML'
+  go-vet-build:
+    name: Go Vet + Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lock scope
+        run: go run ./cmd/lockscope -check cmd/lockscope/baseline.txt
+YAML
+expect "go run ./cmd/x in a build job fails" 1 './cmd/lockscope'
+
+# findings: forms the first version missed
+for form in './scripts/check-delta' '$ROOT/scripts/check-delta' '"$root"/scripts/check-delta' '${root}/scripts/check-delta' 'bash scripts/check-delta' 'FOO=1 python3 -I scripts/check-delta' 'echo hi && scripts/check-delta' 'timeout 60 scripts/check-delta' 'if scripts/check-delta; then echo ok; fi'; do
+	wfstep "$form"
+	expect "CI form [$form] is seen" 1 'scripts/check-delta'
+	printf 'run scripts/check-delta\n' >>"$gates"
+	expect "CI form [$form] passes once the gates run it" 0
+done
+for form in './scripts/check-delta' '"$root"/scripts/check-delta' 'bash scripts/check-delta' 'FOO=1 python3 -I scripts/check-delta --x' 'env GOFLAGS=-mod=mod scripts/check-delta'; do
+	wfstep 'scripts/check-delta'
+	printf 'run %s\n' "$form" >>"$gates"
+	expect "gates form [run $form] counts as run" 0
+done
+wfstep '${{ matrix.script }}'
+expect "a command from an expression fails closed" 1 'expression'
+wfstep 'scripts/${{ matrix.script }} --x'
+expect "a script path built from an expression fails closed" 1 'expression'
+reset
+write_wf <<'YAML'
+  reusable:
+    uses: ./.github/workflows/other.yml
+YAML
+expect "a job with uses and no steps fails closed" 1 'reusable'
+printf 'job:reusable calls a reusable workflow, which is the lead of its own gates\n' >"$ex"
+expect "a reusable job exempted by name passes" 0
+reset
+write_wf <<'YAML'
+  local:
+    name: Local
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/thing
+YAML
+expect "a local action fails closed" 1 'local action'
+printf './.github/actions/thing a composite action that only installs tools\n' >"$ex"
+expect "a local action exempted by name passes" 0
+
+# mentioned, not invoked
+wfstep 'p=scripts/check-delta; echo scripts/check-delta # scripts/check-delta'
+expect "a path only mentioned in CI is not run" 0
+wfstep 'scripts/check-delta'
+printf 'p=scripts/check-delta\necho scripts/check-delta # run scripts/check-delta\n# run scripts/check-delta\n' >>"$gates"
+expect "a path only mentioned in the gates file is not run" 1 'scripts/check-delta'
+reset; wfstep 'scripts/check-delta'
+printf 'run "$t"\n' >>"$gates"
+expect "an unrecognised run form in the gates file fails closed" 1 'not understood'
+reset; wfstep 'scripts/check-delta'
+printf 'run bash -c "scripts/check-delta"\n' >>"$gates"
+expect "bash -c in the gates file fails closed" 1 'not understood'
+printf "run scripts/check-delta 'unclosed\n" >"$gates"
+expect "an unbalanced quote in the gates file fails closed" 1 'quote'
+
+# land
+wfstep 'scripts/check-delta'
+printf "echo 'run scripts/check-delta' >>\"\$1\"\n" >"$land"
+expect "a script land runs through its generated runner counts" 0
+wfstep '.github/scripts/some-test'
+printf 'for t in .github/scripts/*-test; do echo "$t"; done\n' >"$land"
+expect "a for-in glob in land covers a matching program" 0
+printf 'for t in .github/scripts/*-gate; do echo "$t"; done\n' >"$land"
+expect "a glob that does not match covers nothing" 1 'some-test'
+
+# converse: executable checks nothing runs
+reset
+mkdir -p "$tmp/scripts" "$tmp/.github/scripts"
+printf '#!/bin/sh\n' >"$tmp/scripts/check-orphan"; chmod +x "$tmp/scripts/check-orphan"
+printf '#!/bin/sh\n' >"$tmp/scripts/selftest-orphan"; chmod +x "$tmp/scripts/selftest-orphan"
+printf '#!/bin/sh\n' >"$tmp/.github/scripts/thing-test"; chmod +x "$tmp/.github/scripts/thing-test"
+printf '#!/bin/sh\n' >"$tmp/scripts/check-not-executable"
+expect "an executable check nothing runs is an orphan" 1 'scripts/check-orphan is not run by CI'
+expect "an orphan selftest is named too" 1 'scripts/selftest-orphan is not run'
+expect "an orphan .github test is named too" 1 '.github/scripts/thing-test is not run'
+printf 'run scripts/check-orphan\n' >>"$gates"
+expect "the gates running it removes it from the orphans" 1 'selftest-orphan'
+printf 'scripts/selftest-orphan a long-running drill, run by hand\n.github/scripts/thing-test run by hand only\n' >"$ex"
+expect "orphans exempted by name pass" 0
+rm "$tmp/scripts/selftest-orphan"
+expect "an exemption for a script that is gone is stale" 1 'stale'
+printf '#!/bin/sh\n' >"$tmp/scripts/selftest-orphan"; chmod +x "$tmp/scripts/selftest-orphan"
+printf 'scripts/check-orphan run by hand, but the gates run it\n' >>"$ex"
+expect "an orphan exemption for a script the gates run fails" 1 'runs it (delete'
 
 reset
 printf 'jobs:\n  a:\n    steps:\n    - run: scripts/check-alpha\n' >"$wf"
