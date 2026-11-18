@@ -156,7 +156,7 @@ component RadioPage
             // what the listener said, as it was recognised
             if rp.heardWords != ""
               text rp.heardWords font-family=th.fontText font-size="-exact-body" font-style="italic" color=th.fg line-clamp=3 testId="radio-heard-words"
-            // the controls: a large Play or Pause, Next, and Why this when the entry carries a reason
+            // the controls: a large Play or Pause, Next and Take (the Why this button was removed by the owner, 2026-11-18; voice can still ask why)
             row align-items="center" gap=12 width="100%" flex-wrap="wrap"
               if qv.audio
                 button press=queueDo("back15", "") testId="radio-back15" appearance="none" aria-label="Back 15 seconds" width=44 height=44
@@ -183,10 +183,6 @@ component RadioPage
                   row min-height=44 padding="0px 4px" align-items="center" gap=6
                     image "symbol:sf/mic.fill" color=th.accent pointer-events="none"
                     text "Take" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
-              if rp.canWhy
-                button press=radioToggleWhy testId="radio-why" appearance="none" aria-label=(showWhy ? "Hide why this" : "Why this")
-                  row min-height=44 padding="0px 4px" align-items="center"
-                    text "Why this" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
             if showWhy
               column gap=4 width="100%" testId="radio-why-panel"
                 if rp.why != ""

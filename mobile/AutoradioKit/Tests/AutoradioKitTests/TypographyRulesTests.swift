@@ -192,11 +192,16 @@ final class TypographyRulesTests: XCTestCase {
         } }
         XCTAssertGreaterThan(headlineButtons, 3)
     }
-    func testKeyPagesAreActionsAndThePlaceholderIsALabel() throws {
-        var chip = 0, field = false
+    func testKeyPagesAreGlyphsWithLabelsAndThePlaceholderIsALabel() throws {
+        var chip = 0, labels = 0, field = false
         for els in try Self.allElements() { for (k, e) in els.enumerated() {
             if e.file == "launcher.contract", Self.ancestors(els, k).contains(where: { $0.text.hasPrefix("component KeyGlyph") }) {
-                XCTAssertFalse(Self.isText(e), "a key page is a glyph with no caption; its name is the accessibility label")
+                if Self.isText(e) {
+                    labels += 1
+                    XCTAssertTrue(e.text.hasPrefix("text name "), "the caption is the page's own name: \(e.text)")
+                    XCTAssertTrue(e.text.contains("aria-hidden=true"), "the caption is hidden from VoiceOver: the button's label already says the name")
+                    XCTAssertFalse(e.text.contains("line-clamp"), "a tray name is never truncated")
+                }
                 if e.text.hasPrefix("button") { chip += 1; XCTAssertTrue(e.text.contains("aria-label=`Open ${name}`"), "each glyph names its page for accessibility") }
             }
             if e.text.contains("testId=\"bar-field\"") {
@@ -206,7 +211,7 @@ final class TypographyRulesTests: XCTestCase {
             }
             XCTAssertFalse(e.text.contains("content-close-word"), "the content row has the X and no Close word")
         } }
-        XCTAssertEqual(chip, 1); XCTAssertTrue(field)
+        XCTAssertEqual(chip, 1); XCTAssertEqual(labels, 1, "each tray glyph has one text label under it"); XCTAssertTrue(field)
     }
 
     // T7

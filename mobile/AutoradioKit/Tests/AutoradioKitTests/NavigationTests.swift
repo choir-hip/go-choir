@@ -104,6 +104,20 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(try text("launcher.contract").contains("row flex-wrap=\"wrap\" gap=0 width=\"100%\" testId=\"launcher-key-pages\""))
     }
 
+    // Owner, 2026-11-18: no Why this button on the radio page; the tray's glyphs carry their names as text.
+    func testRadioHasNoWhyButtonAndTrayGlyphsAreLabelled() throws {
+        let radio = try text("radio.contract")
+        XCTAssertFalse(radio.contains("testId=\"radio-why\""), "the Why this button is gone")
+        XCTAssertFalse(radio.contains("press=radioToggleWhy"), "nothing presses the why toggle")
+        XCTAssertTrue(radio.contains("testId=\"radio-next\"") && radio.contains("testId=\"radio-take-start\""), "Next and Take stay")
+        let launcher = try text("launcher.contract")
+        let glyphs = try XCTUnwrap(launcher.components(separatedBy: "component KeyGlyph").last?.components(separatedBy: "component StackRow").first)
+        XCTAssertTrue(glyphs.contains("text name testId=`place-label-${slug}` aria-hidden=true"), "each glyph shows its name once, hidden from VoiceOver")
+        XCTAssertTrue(glyphs.contains("aria-label=`Open ${name}`"))
+        let names = launcher.components(separatedBy: "KeyGlyph(slug=").dropFirst().compactMap { $0.components(separatedBy: "name=\"").dropFirst().first?.components(separatedBy: "\"").first }
+        XCTAssertEqual(names.count, 9); XCTAssertFalse(names.contains(""))
+    }
+
     private func text(_ name: String) throws -> String { try String(contentsOf: Self.lab.appendingPathComponent(name), encoding: .utf8) }
     private func contracts() throws -> [(name: String, text: String)] {
         try FileManager.default.contentsOfDirectory(atPath: Self.lab.path).filter { $0.hasSuffix(".contract") }.sorted().map { ($0, try text($0)) }

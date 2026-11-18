@@ -27,8 +27,9 @@ component PlaceRow
         image "symbol:forward-chevron" color=th.muted
 
 // A key page as a glyph (owner, 2026-11-17: "make them glyphs, and then we can remove the key pages label"): a line drawing in the accent colour,
-// drawn here as `svg` paths in the app's own line style (round caps, one stroke weight), the same mechanism as the tetramark. No caption: the
-// accessibility label is the page's name. A touch target of 44 by 44 or more; the row width comes from `cols`, which is TrayGrid.columns in the Kit for the count there is (nine make three rows of three).
+// drawn here as `svg` paths in the app's own line style (round caps, one stroke weight), the same mechanism as the tetramark. Owner, 2026-11-18:
+// "glyphs and text labels for the buttons, not just the glyphs": the page's name sits under the glyph. The button's aria-label is the name and the
+// visible caption is aria-hidden, so VoiceOver says it once. A touch target of 44 by 44 or more; the row width comes from `cols`, which is TrayGrid.columns in the Kit for the count there is (nine make three rows of three).
 component KeyGlyph
   inject
     th: Theme
@@ -40,7 +41,7 @@ component KeyGlyph
     cols: number
   view
     button press=openPage(address, name) testId=`place-${slug}` appearance="none" width=`${floor(10000 / cols) / 100}%` aria-label=`Open ${name}`
-      row min-height=52 align-items="center" justify-content="center" pointer-events="none"
+      column min-height=64 padding="6px 2px" gap=4 align-items="center" justify-content="center" pointer-events="none"
         svg viewBox="0 0 24 24" width=28 height=28 fill="none" stroke=th.accent stroke-width=1.7 stroke-linecap="round" stroke-linejoin="round" pointer-events="none"
           if slug == "radio"
             circle cx=12 cy=12 r=1.8
@@ -71,6 +72,7 @@ component KeyGlyph
             path d="M4 8h16M4 16h16"
             circle cx=9 cy=8 r=2.2
             circle cx=15 cy=16 r=2.2
+        text name testId=`place-label-${slug}` aria-hidden=true font-family=th.fontLabel font-size="-exact-footnote" color=th.fg text-align="center" pointer-events="none"
 
 // One page of the stack: tap to jump to it; a close button when it can be closed.
 component StackRow
