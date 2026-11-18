@@ -120,7 +120,7 @@ func (s *Service) storyClips(ctx context.Context, og *ObjectGraphStore, route st
 		rows = append(rows, joined{stable: ep.StableFile != nil && *ep.StableFile, clip: PodcastClip{
 			ClipID: row.ClipID, Story: PodcastClipStory{Route: row.StoryRoute, Version: row.StoryVersion, Title: row.StoryTitle},
 			Show: ep.Show, EpisodeTitle: ep.Title, EpisodeGUID: ep.GUID, FeedURL: ep.FeedURL, Published: ep.Published,
-			AudioURL: ep.EnclosureURL, DurationSeconds: ep.DurationSeconds, Start: row.Start, End: row.End, Quote: row.Quote, Support: row.Support,
+			AudioURL: ep.EnclosureURL, DurationSeconds: ep.DurationSeconds, Start: row.Start, End: row.End, Quote: row.Quote, Support: row.Support, Fingerprint: row.Fingerprint,
 		}})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {

@@ -49,9 +49,17 @@ type ServeConfig struct {
 	// every MatchEvery (default 30 min) so stories new to the front are seen.
 	Match      func(ctx context.Context) error
 	MatchEvery time.Duration
-	Now        func() time.Time
-	Sleep      func(ctx context.Context, d time.Duration) // a test seam
-	Logf       func(format string, args ...any)
+	// Stored runs after an episode's transcript is stored (the worker keeps the
+	// episode's fingerprint track there).
+	Stored func(ep PendingEpisode, res Result)
+	// Repair runs the fingerprint repair pass, only when the queue of episodes
+	// is drained (it downloads and transcribes, and must not delay transcripts),
+	// at most every RepairEvery (default 30 min).
+	Repair      func(ctx context.Context) error
+	RepairEvery time.Duration
+	Now         func() time.Time
+	Sleep       func(ctx context.Context, d time.Duration) // a test seam
+	Logf        func(format string, args ...any)
 }
 
 func (c *ServeConfig) defaults() {
@@ -78,6 +86,9 @@ func (c *ServeConfig) defaults() {
 	}
 	if c.Match != nil && c.MatchEvery == 0 {
 		c.MatchEvery = 30 * time.Minute
+	}
+	if c.Repair != nil && c.RepairEvery == 0 {
+		c.RepairEvery = 30 * time.Minute
 	}
 	if c.ReportEvery == 0 {
 		c.ReportEvery = time.Hour
@@ -116,6 +127,7 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 		lastIntake time.Time
 		windowFrom = cfg.Now()
 		lastMatch  time.Time
+		lastRepair time.Time
 		matchDirty bool
 		stats      struct {
 			stored, failed int
@@ -175,6 +187,12 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 			if cfg.Match != nil && matchDirty {
 				runMatch()
 			}
+			if cfg.Repair != nil && cfg.Now().Sub(lastRepair) >= cfg.RepairEvery {
+				lastRepair = cfg.Now()
+				if err := cfg.Repair(ctx); err != nil && ctx.Err() == nil {
+					cfg.Logf("podcast-worker: fingerprint repair failed: %v", err)
+				}
+			}
 			cfg.Sleep(ctx, idle)
 			idle = min(idle*2, cfg.MaxIdle)
 			continue
@@ -230,6 +248,9 @@ func Serve(ctx context.Context, b Backend, e Engine, cfg ServeConfig) error {
 			continue
 		}
 		delete(failed, next.EpisodeID)
+		if cfg.Stored != nil {
+			cfg.Stored(*next, res)
+		}
 		matchDirty = true
 		stats.stored++
 		stats.audio += res.Seconds

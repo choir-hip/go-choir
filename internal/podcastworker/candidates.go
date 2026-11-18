@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/yusefmosiah/go-choir/internal/podcastfp"
 	"github.com/yusefmosiah/go-choir/internal/podcastmatch"
 )
 
@@ -141,6 +142,9 @@ type ClipIn struct {
 	End        float64 `json:"end"`
 	Quote      string  `json:"quote"`
 	Support    float64 `json:"support"`
+	// Fingerprint is set when the worker has the audio's track
+	// (docs/reference/PODCAST-CLIP-FINGERPRINT.md); omitted otherwise.
+	Fingerprint *podcastfp.ClipRecord `json:"fingerprint,omitempty"`
 }
 
 // PutClips sends clips in requests of at most 200. A request the server refuses

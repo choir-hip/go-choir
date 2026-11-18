@@ -1,0 +1,45 @@
+{
+ "description": "Podcast clip fingerprint v1 conformance (docs/reference/PODCAST-CLIP-FINGERPRINT.md). Generate `samples` s16 samples by the documented integer formula, build the frames, compare frames_hex byte for byte; pack frames [from,to) and compare pack_hex; locate that pack in the whole frame track and expect pos and a peak of at least min_peak.",
+ "version": 1,
+ "sample_rate": 16000,
+ "frame_len": 1024,
+ "hop": 1600,
+ "band_bins": [
+  6,
+  10,
+  16,
+  25,
+  39,
+  62,
+  98,
+  154,
+  243
+ ],
+ "samples": 48000,
+ "first_samples": [
+  2731,
+  2867,
+  3004,
+  3209,
+  2540,
+  2867,
+  3281,
+  3057,
+  2505,
+  3142,
+  2745,
+  2921,
+  3092,
+  3345,
+  2729,
+  3492
+ ],
+ "frames_hex": "36396a984276655f4b596b984b75666263676b9759786b666b6d73986e7b736c8284819979857e7c676b71996b736f71534d71985a7869674b4d6c984f76675f453e6b9844756660544e6b985076676159686d985a766b67637673986c7971717a7e7a987c837e7c666d6e9770797271505a6e9861766966444e6e984a7668613e3f6a983d75665f495469984a7565615d5b6b9860766b666d6872986c7e717076787e987c847d7d6a626e976f7a7470505d6e985a766a684b496d984e75676243336a983f756560554b6d984c7666615a586e995d776c656d6f67976e7a71716371859c79857d7e6b7371976c7b7070",
+ "locate": {
+  "From": 6,
+  "To": 18,
+  "pack_hex": "0108000c534d71985a7869674b4d6c984f76675f453e6b9844756660544e6b985076676159686d985a766b67637673986c7971717a7e7a987c837e7c666d6e9770797271505a6e9861766966444e6e984a7668613e3f6a983d75665f495469984a756561",
+  "pos": 6,
+  "min_peak": 0.99
+ }
+}
