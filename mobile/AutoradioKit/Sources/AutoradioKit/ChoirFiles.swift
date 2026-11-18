@@ -741,6 +741,13 @@ public final class FilesService: @unchecked Sendable {
         (try? await backend.list(FilePath.parent(path)))?.first(where: { $0.path == path })
     }
 
+    /// True when `download` would find the bytes on disk and fetch nothing.
+    public func isCached(_ entry: FileEntry) -> Bool {
+        let key = Self.hash("\(entry.path)|\(entry.size)|\(entry.modified.map { String($0.timeIntervalSince1970) } ?? "")")
+        let dest = cacheRoot.appendingPathComponent(key, isDirectory: true).appendingPathComponent(FilePath.cacheName(entry.name))
+        return FileManager.default.fileExists(atPath: dest.path) && ((try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? Int64) ?? -1) == entry.size
+    }
+
     /// The file's bytes on disk (fetched once per path, size and modified time), for the Reader to take in.
     public func download(_ entry: FileEntry, maxBytes: Int64) async throws -> URL {
         if entry.size > maxBytes { throw FilesError.tooLarge(entry.size) }

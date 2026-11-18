@@ -42,7 +42,7 @@ members Autoradio
   state ldFollowSeen = -1
   // A block to bring into view once its chapter is on screen (a found passage, the place left off, the block being read); -1 for none.
   state ldScrollTo = -1
-  derive ldShowPages = ldInfo.kind == "pdf" and ldText == false
+  derive ldShowPages = ldInfo.kind == "pdf" and ldText == false and ldInfo.src != ""
 
   // A different document starts where the listener left it.
   task ldSeenTask when ldInfo.address != ldSeen

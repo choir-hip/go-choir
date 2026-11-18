@@ -56,6 +56,8 @@ public final class ContentSync: @unchecked Sendable {
     }
 
     public static let maxFolders = 200, maxFileBytes = 1_000_000, transcriptsPerRun = 20, transcriptDays = 14.0
+    /// A file's version in the store: its size and modified time.
+    public static func fileVersion(_ e: FileEntry) -> String { "\(e.size)|\(e.modified?.timeIntervalSince1970 ?? 0)" }
     static let textExtensions: Set<String> = ["md", "markdown", "txt", "text", "csv", "json", "rtf"]
 
     let store: ContentStore
@@ -230,7 +232,7 @@ public final class ContentSync: @unchecked Sendable {
                 if e.isDirectory { queue.append(e.path); continue }
                 let ext = (e.name as NSString).pathExtension.lowercased()
                 guard Self.textExtensions.contains(ext), e.size <= Int64(Self.maxFileBytes) else { continue }
-                let id = "file:" + e.path, version = "\(e.size)|\(e.modified?.timeIntervalSince1970 ?? 0)"
+                let id = "file:" + e.path, version = Self.fileVersion(e)
                 if store.has(id, version: version) { r.skipped += 1; continue }
                 guard await gate(&r) else { return r }
                 do {

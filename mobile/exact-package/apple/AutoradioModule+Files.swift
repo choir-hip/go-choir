@@ -20,7 +20,7 @@ extension AutoradioModule {
         pageSources.register(FilesPageSource(service: service))
         // One way to open a document: a PDF or an e-book in Files opens in Reader. A page left in the pile for such a file by an earlier build is closed.
         FilesInReader.current = FilesInReader(files: service)
-        FilesInTexture.current = FilesInTexture(files: service)
+        FilesInTexture.current = FilesInTexture(files: service, store: ContentStore.shared)
         // The run sheet finds its own copy of an audio file from Files again from the Files path (after a relaunch, downloading it if need be).
         Task { @MainActor in RunSheetPlayer.shared.fileResolver = { await FilesInReader.current?.audioURL(address: $0) } }
         FilesOpen.purge(pages: pages)
