@@ -206,3 +206,13 @@ not joined.
 - Exact duplicates were not separated from updates and overlaps: first
   publication times were not available from the public routes.
 - Fact overlap between stories of a cluster: not measured.
+
+## Design proposal (2026-11-18)
+
+[design/corpus-first-retrieval-and-research-2026-11-18.md](../design/corpus-first-retrieval-and-research-2026-11-18.md):
+the event as the unit and a story as one telling of it; vectors beside the
+BM25 passages; every captured page through the event layer; story event ids
+at publish; research that reads a corpus brief first and searches the web
+only for the gaps; the new-or-revise choice at a new story's first publish.
+A proposal with stations and the owner's decisions; not ratified.
+
