@@ -2,6 +2,7 @@ package researchtools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // The corpus search's capture half (symptom 3 of
@@ -254,7 +256,7 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
 		}
 	}
-	objs = inWindow(objs, req.Since, req.Until)
+	objs = dropOwnerPrivate(inWindow(objs, req.Since, req.Until))
 	var labelHalf []CorpusCapture
 	if len(terms) > 0 {
 		labelHalf = rankCaptures(objs, labels, terms, corpusMaxLimit)
@@ -265,6 +267,13 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 		case ft.Used:
 			info.TextUsed, info.TextIndexed, info.Captures = true, ft.Indexed, ft.Captures
 			textHalf = textHitCaptures(answer, labels)
+			if ft.Capped {
+				info.Capped = true
+				notes = append(notes, "the page-text search ranked only its best 300 passages (at most 3 per page); more passages matched")
+			}
+			if strings.EqualFold(req.Order, "recent") {
+				notes = append(notes, "recent order lists, newest first, only the pages at least half as relevant as the best match")
+			}
 			info.Dropped = append(append([]string(nil), ft.Pruned...), ft.TermCapped...)
 			if len(info.Dropped) > 0 {
 				notes = append(notes, "words not searched in page text (found in no page, or so common they carry no weight): "+strings.Join(info.Dropped, ", "))
@@ -347,6 +356,9 @@ func textHitCaptures(answer CaptureSearchAnswer, labels map[string]store.Capture
 	for _, h := range answer.Hits {
 		obj, ok := byID[h.CaptureID]
 		if !ok {
+			continue
+		}
+		if types.LabelsFromMetadata(obj.Metadata).OwnerPrivate() {
 			continue
 		}
 		meta, err := objectgraph.WebCaptureMetadataFromObject(obj)
@@ -612,4 +624,47 @@ func parseCorpusWindow(query, since, until, order string) (string, corpusWindow,
 		return "", w, fmt.Errorf("order %q is not relevance or recent", order)
 	}
 	return strings.Join(kept, " "), w, nil
+}
+
+// CorpusResultCarriesPassage reads a search_wire_corpus result for the host's
+// labelling: carries is true when some capture in it holds a non-empty
+// passage (verbatim page text), and understood is false when the result is
+// not a JSON object with a "captures" list. It parses the same fields the
+// tool writes (wireCorpusResult and CorpusCapture), so a renamed field breaks
+// the test that marshals the real struct, and the host fails closed on what it
+// does not understand.
+func CorpusResultCarriesPassage(result []byte) (carries, understood bool) {
+	var body struct {
+		Captures json.RawMessage `json:"captures"`
+	}
+	if json.Unmarshal(result, &body) != nil || len(body.Captures) == 0 {
+		return false, false
+	}
+	var list []struct {
+		Passage string `json:"passage"`
+	}
+	if string(body.Captures) != "null" && json.Unmarshal(body.Captures, &list) != nil {
+		return false, false
+	}
+	for _, c := range list {
+		if strings.TrimSpace(c.Passage) != "" {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+// dropOwnerPrivate removes the captures whose record carries an owner-private
+// label. The search hides them from every caller, the research desk included:
+// a passage or a title of one would leave through a result labelled with the
+// capture floor, and ReadCapture's gate refuses its body to a non-custodian.
+func dropOwnerPrivate(objs []objectgraph.Object) []objectgraph.Object {
+	var out []objectgraph.Object
+	for _, obj := range objs {
+		if types.LabelsFromMetadata(obj.Metadata).OwnerPrivate() {
+			continue
+		}
+		out = append(out, obj)
+	}
+	return out
 }
