@@ -96,6 +96,12 @@ func (h *APIHandler) HandleAutoradioLearning(w http.ResponseWriter, r *http.Requ
 	}
 	after := r.URL.Query().Get("after")
 	line := r.URL.Query().Get("line") // behind a line: the forecasts it caused (design 7.3)
+	// The phone asks by the line's id (L1, T2); the ledger names it by ref.
+	if len(line) > 1 && line[0] == 'L' {
+		line = "lesson:" + line
+	} else if len(line) > 1 && line[0] == 'T' {
+		line = "try:" + line
+	}
 	ctx := r.Context()
 	computer := h.rt.cfg.ComputerID
 	now := time.Now()

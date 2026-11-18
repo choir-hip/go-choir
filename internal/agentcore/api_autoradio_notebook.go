@@ -742,6 +742,12 @@ type steerRequest struct {
 	EntryID   string `json:"entry_id"`
 	Direction string `json:"direction"` // more, less or mute
 	Publisher string `json:"publisher,omitempty"`
+	// The phone's optional fields (mobile/fixtures/learning/steer-request.json):
+	// the entry's title (used when the sheet has no such entry), the stories it
+	// cites (recorded on the note) and the publisher's handle (a mute's).
+	Handle  string   `json:"handle,omitempty"`
+	Title   string   `json:"title,omitempty"`
+	Stories []string `json:"stories,omitempty"`
 }
 
 var publisherHandleRe = regexp.MustCompile(`^voice-[0-9a-f]{6}$`)
@@ -762,7 +768,10 @@ func (h *APIHandler) HandleAutoradioSteer(w http.ResponseWriter, r *http.Request
 	var req steerRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
+	if err := dec.Decode(&req); err != nil || len(req.Stories) > 20 {
+		if err == nil {
+			err = fmt.Errorf("stories holds at most 20")
+		}
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "decode the request: " + err.Error()})
 		return
 	}
@@ -774,8 +783,17 @@ func (h *APIHandler) HandleAutoradioSteer(w http.ResponseWriter, r *http.Request
 	case "more", "less":
 		e, found := h.sheetEntry(ctx, ownerID, req.EntryID)
 		if !found || strings.TrimSpace(e.Title) == "" {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "entry_id is not an entry with a title on the run sheet"})
-			return
+			// The phone may tap an entry it placed itself before the server's
+			// sheet has it: its own title stands (one line, bounded).
+			if t := strings.TrimSpace(req.Title); t != "" && req.EntryID != "" && !hasControl(t) && len(t) <= 300 && autoradioTurnID.MatchString(req.EntryID) {
+				e.Title = t
+			} else {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "entry_id is not an entry with a title on the run sheet"})
+				return
+			}
+		}
+		if len(req.Stories) > 0 {
+			noteRefs["stories"] = strings.Join(req.Stories, ",")
 		}
 		verb := "More like this"
 		if req.Direction == "less" {
@@ -785,8 +803,11 @@ func (h *APIHandler) HandleAutoradioSteer(w http.ResponseWriter, r *http.Request
 		op = notebook.Op{Op: "tap", Ref: "tap:" + req.EntryID, Text: line}
 		noteRefs["entry_id"], noteRefs["line"] = req.EntryID, line
 	case "mute":
+		if req.Publisher == "" {
+			req.Publisher = req.Handle
+		}
 		if !publisherHandleRe.MatchString(req.Publisher) {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "publisher is a handle like voice-3fa2c1"})
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "publisher (or handle) is a handle like voice-3fa2c1"})
 			return
 		}
 		op = notebook.Op{Op: "ask", Text: "Never play takes by " + req.Publisher + "."}
