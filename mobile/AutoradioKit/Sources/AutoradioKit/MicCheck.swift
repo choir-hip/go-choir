@@ -43,3 +43,15 @@ public struct MicCheck: Sendable {
         return elapsed >= Self.giveUpSeconds ? .silent : .listening
     }
 }
+
+/// The check as the onboarding module drives it: the frame feeder and the polling loop are two tasks, so one lock guards the value.
+public final class MicCheckMeter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var check = MicCheck()
+    public init() {}
+    public func frame(db: Double, seconds: Double) { lock.lock(); check.feed(db: db, seconds: seconds); lock.unlock() }
+    public func transcript(_ text: String) { lock.lock(); check.hear(transcript: text); lock.unlock() }
+    public func tick(_ seconds: Double) { lock.lock(); check.tick(seconds: seconds); lock.unlock() }
+    public var verdict: MicCheck.Verdict { lock.lock(); defer { lock.unlock() }; return check.verdict }
+    public var level: Double { lock.lock(); defer { lock.unlock() }; return check.level }
+}
