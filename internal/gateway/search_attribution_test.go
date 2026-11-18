@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -55,7 +56,10 @@ func TestHandleSearch_LogsAttributionAndTheFirstTenResultHashes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _ = json.NewDecoder(resp.Body).Token()
+		// Read to the end: the handler writes its served line before it
+		// returns, and the body ends only after it returns. Reading one token
+		// and closing left the handler logging while the test read the log.
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 		client.cache.WaitIdleForTest()
 	}
