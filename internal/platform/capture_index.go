@@ -194,6 +194,9 @@ func (s *Store) indexCaptures(ctx context.Context, fresh bool, objs ...objectgra
 	if len(captures) == 0 {
 		return
 	}
+	// The pages' text is indexed beside the projection; its failure is its
+	// own (logged with ids, repaired by the catch-up).
+	defer s.indexCaptureText(ctx, captures)
 	done := s.retrievalTimer(retrievalCaptureIndexWrite)
 	err := s.writeCaptureProjections(ctx, fresh, captures)
 	if err != nil {
@@ -309,6 +312,7 @@ func (s *Store) unindexCapture(ctx context.Context, id string) {
 	if s == nil || !s.retrievalState.captureIndexReady.Load() || !strings.HasPrefix(id, captureIDPrefix) {
 		return
 	}
+	s.removeCaptureText(ctx, id) // before the projection row, which holds the scope
 	_, err1 := s.corpus().ExecContext(ctx, `DELETE FROM proj_capture_terms WHERE capture_id = ?`, id)
 	_, err2 := s.corpus().ExecContext(ctx, `DELETE FROM proj_capture_index WHERE capture_id = ?`, id)
 	if err1 != nil || err2 != nil {
@@ -505,6 +509,18 @@ type CaptureSearchRequest struct {
 	// IDs are captures the caller matched by its own hints (labels); they
 	// are returned whatever their words, within the owner and computer.
 	IDs []string `json:"ids,omitempty"`
+	// Query, when set, also searches the pages' text (capture_fulltext.go):
+	// BM25 over passages, every query word counting, no word gate. Since and
+	// Until bound a page's time (published when known, else fetched; Since
+	// inclusive, Until exclusive; RFC 3339 or a date). Order is "relevance"
+	// (default) or "recent". Limit is how many pages the text search
+	// returns. Words, Need and Candidates keep driving the title and label
+	// half as before.
+	Query string `json:"query,omitempty"`
+	Since string `json:"since,omitempty"`
+	Until string `json:"until,omitempty"`
+	Order string `json:"order,omitempty"`
+	Limit int    `json:"limit,omitempty"`
 }
 
 // CaptureSearchResponse holds the candidate captures, newest first among
@@ -518,6 +534,17 @@ type CaptureSearchResponse struct {
 	// Searched is how many captures of this computer the projection
 	// holds: the search covered all of them.
 	Searched int `json:"searched"`
+	// Hits are the pages found by their text, best first, each with the
+	// passage that found it; HitObjects are those captures (no body). Both
+	// are empty unless the request carried a Query and the index answered.
+	Hits       []CaptureFullTextHit `json:"hits,omitempty"`
+	HitObjects []objectgraph.Object `json:"hit_objects,omitempty"`
+	// FullText says how the text half went (nil when no Query was sent).
+	FullText *CaptureFullTextInfo `json:"fulltext,omitempty"`
+	// TermsIncomplete is true when the text half answered but the title and
+	// label projection is still being built: Objects is empty and the caller
+	// uses its own window for that half.
+	TermsIncomplete bool `json:"terms_incomplete,omitempty"`
 }
 
 const (
@@ -533,10 +560,21 @@ const (
 func (s *Store) SearchCaptures(ctx context.Context, req CaptureSearchRequest) (resp CaptureSearchResponse, err error) {
 	done := s.retrievalTimer(retrievalCaptureSearch)
 	defer func() { done("terms", len(resp.Objects), err) }()
+	owner, computer := strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID)
+	if strings.TrimSpace(req.Query) != "" && owner != "" && computer != "" {
+		if err := s.searchCaptureFullText(ctx, owner, computer, req, &resp); err != nil {
+			return resp, err
+		}
+	}
 	if !s.retrievalState.captureIndexComplete.Load() {
+		if resp.FullText != nil && resp.FullText.Used {
+			// The text half answered; the title and label half is still
+			// being built, and the caller covers it with its own window.
+			resp.TermsIncomplete = true
+			return resp, nil
+		}
 		return resp, ErrCaptureIndexIncomplete
 	}
-	owner, computer := strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID)
 	if owner == "" || computer == "" {
 		return resp, fmt.Errorf("owner and computer are required")
 	}
