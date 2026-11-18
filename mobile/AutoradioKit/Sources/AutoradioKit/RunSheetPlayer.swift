@@ -24,6 +24,8 @@ import Foundation
     func speak(documentID: String, entry: RunSheetEntry, paragraphs: [String]) async -> Bool
     /// Load a paper story in full and play it. Its document id; nil when it could not be loaded.
     func playStory(route: String, title: String) async -> String?
+    /// The spoken entry from the block that did not play (the engine was lost mid-entry and is back).
+    func resumeSpoken()
     /// The spoken entry from its start.
     func restartSpoken()
     /// Where the spoken entry is: the server block being spoken, the last server block it has, and the seconds into it.
@@ -57,6 +59,7 @@ import Foundation
 extension PlaybackEngine {
     public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { nil }
     public func restartSpoken() {}
+    public func resumeSpoken() {}
     public func spokenReport() -> (block: Int, final: Int, seconds: Double) { (0, 0, 0) }
     public func spokenPosition() -> (block: Int, seconds: Double) { (0, 0) }
     public func stopSpoken() {}
@@ -417,7 +420,7 @@ extension PlaybackEngine {
         if let air = store.onAir() {
             guard air.id != playingId else { return }
             rememberPlace(of: playingId, nextKind: air.kind)
-            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
+            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil; heldMidEntry = false
             playingId = air.id; playingDocument = nil; audio = nil; pendingEnd = nil
             startTask = Task { @MainActor in await self.begin(air) }
             return
@@ -425,7 +428,7 @@ extension PlaybackEngine {
         if playingId != nil {                         // what was on air was skipped, cut or taken off: its sound stops
             if let p = playingId, let f = takeFiles.removeValue(forKey: p) { try? FileManager.default.removeItem(at: f) }
             rememberPlace(of: playingId, nextKind: nextToAir()?.kind)
-            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
+            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil; heldMidEntry = false
             playingId = nil; playingDocument = nil; audio = nil; paused = false; generation += 1; pendingEnd = nil
             engine?.stopRemote(); engine?.stopSpoken()
         }
@@ -447,6 +450,15 @@ extension PlaybackEngine {
     nonisolated(unsafe) public static var sessionRetryDelays: [TimeInterval] = [1, 2, 4, 8, 15]
     private var sessionHeldFor: String?
     private var sessionAttempts = 0
+    /// The entry is held for the session in the middle of its speech (a block could not sound): when the session is back it goes on from the
+    /// block that did not play, and it is never finished, heard or failed, meanwhile.
+    private var heldMidEntry = false
+    /// The spoken document `documentID` lost the engine at a block: the entry on air is held like one whose start could not take the session.
+    public func engineLost(documentID: String) {
+        guard let eid = playingId, documentID == playingDocument, let e = store.entry(eid) else { return }
+        heldMidEntry = true
+        Task { @MainActor in await self.hold(e, why: "the audio session could not be taken") }
+    }
     private var retryTask: Task<Void, Never>?
     /// The entry on air is waiting for the audio session.
     public var isWaitingForSession: Bool { sessionHeldFor != nil }
@@ -457,24 +469,41 @@ extension PlaybackEngine {
         retryTask = Task { @MainActor in await self.begin(e, reason: "resume") }
     }
 
+    /// The session or the engine is not ready: that is not this entry's failure. It stays on air, held, with no outcome recorded; the
+    /// claim is tried again with backoff, and at once when the app returns, an interruption ends or the listener taps Play.
+    private func hold(_ entry: RunSheetEntry, why: String) async {
+        guard playingId == entry.id else { return }
+        message = "Can\u{2019}t speak: \(why)"
+        sessionHeldFor = entry.id
+        sessionAttempts += 1
+        let wait = Self.sessionRetryDelays[min(sessionAttempts - 1, Self.sessionRetryDelays.count - 1)]
+        print("AUTORADIO on air \(entry.id) HELD \(why); attempt \(sessionAttempts), again in \(wait) s")
+        changed()
+        retryTask?.cancel()
+        retryTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard !Task.isCancelled, self.sessionHeldFor == entry.id, self.playingId == entry.id else { return }
+            await self.begin(entry, reason: "retry")      // gated while another app has the session
+        }
+    }
+
     private func begin(_ entry: RunSheetEntry, reason: String? = nil) async {
         let notReady = await sessionReady?(reason ?? entry.kind.rawValue)
         guard playingId == entry.id else { return }            // a newer start took over while the session was made ready
-        if let why = notReady {
-            // The session or the engine is not ready: that is not this entry's failure. It stays on air, held, with no outcome recorded; the
-            // claim is tried again with backoff, and at once when the app returns, an interruption ends or the listener taps Play.
-            message = "Can\u{2019}t speak: \(why)"
-            sessionHeldFor = entry.id
-            sessionAttempts += 1
-            let wait = Self.sessionRetryDelays[min(sessionAttempts - 1, Self.sessionRetryDelays.count - 1)]
-            print("AUTORADIO on air \(entry.id) HELD \(why); attempt \(sessionAttempts), again in \(wait) s")
-            changed()
-            retryTask?.cancel()
-            retryTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
-                guard !Task.isCancelled, self.sessionHeldFor == entry.id, self.playingId == entry.id else { return }
-                await self.begin(entry, reason: "retry")      // gated while another app has the session
+        if let why = notReady { await hold(entry, why: why); return }
+        if heldMidEntry {
+            // The session is back: the entry goes on from the block that did not play (not from the start, and not finished).
+            heldMidEntry = false
+            sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
+            message = ""
+            if spokenPaused() {                       // the listener paused meanwhile: their Play starts at the block that did not play
+                print("AUTORADIO on air \(entry.id) is no longer held: the listener paused")
+                changed(); return
             }
+            paused = false
+            print("AUTORADIO on air \(entry.id) resumes at the block that did not play")
+            engine?.resumeSpoken()
+            changed()
             return
         }
         sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil

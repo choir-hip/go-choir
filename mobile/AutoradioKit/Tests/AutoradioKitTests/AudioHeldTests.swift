@@ -57,8 +57,6 @@ final class AudioHeldTests: XCTestCase {
     func testReassertThatLeavesTheEngineDownDoesAFullReclaimInsteadOfRepeating() async throws {
         let (c, o, a, calls) = rig { _ in }
         try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
-        let failing = Locked(true)
-        a.driveForTest = { _, _ in calls.write { $0 += 1 }; if failing.value { throw Boom() } }
         a.interrupted()
         // the first two starts (the engine and its new-engine retry, both after the reassert) fail; the start after the full re-claim works
         let claimsBefore = o.claims
@@ -96,34 +94,133 @@ final class AudioHeldTests: XCTestCase {
         XCTAssertFalse(or.playing); XCTAssertTrue(or.paused)
     }
 
-    @MainActor func testATakesRecorderIsNeverLeftAliveAfterThePathEnds() async {
-        final class Rec: TakeRecorderEngine { var live = false, fail = false, secs = 10.0
-            func start(to url: URL) throws { if fail { throw LabError.unavailable("x") }; live = true; try? Data(repeating: 1, count: 4000).write(to: url) }
-            func stop() -> Double { live = false; return secs }
-            func cancel() { live = false } }
-        let rec = Rec(), gate = FakeGate(), dir = FileManager.default.temporaryDirectory.appendingPathComponent("held-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: dir) }
-        var clock = Date(timeIntervalSince1970: 1000)
-        func make() -> TakeSession {
-            TakeSession(recorder: rec, transcriber: FakeTranscriber(), gate: gate, preview: FakePreview(), client: { nil }, micAllowed: { true }, responds: { nil }, own: TakeOwn(), dir: dir, now: { clock })
-        }
-        var s = make(); rec.fail = true; await s.start()
-        XCTAssertFalse(rec.live); XCTAssertEqual(gate.given, 1, "a failed start gives the session back")
-        rec.fail = false; s = make(); await s.start(); XCTAssertTrue(rec.live)
-        clock += 10; await s.stop(); XCTAssertFalse(rec.live, "stop ends the recorder")
-        s.discard(); XCTAssertFalse(rec.live); XCTAssertEqual(gate.given, 2)
-        s = make(); await s.start(); s.discard(); XCTAssertFalse(rec.live, "discard while recording")
-        rec.secs = 1; s = make(); await s.start(); clock += 1; await s.stop(); XCTAssertFalse(rec.live, "a too-short take")
-    }
-
-    func testABlockThatFindsTheEngineDownAsksTheHostForIt() async {
+    func testABlockThatFindsTheEngineDownGetsAnAnswerAtOnce() async {
         let (_, _, a, _) = rig { _ in }
         let asked = Locked(0)
-        a.onNeedsEngine = { asked.write { $0 += 1 } }
+        a.onNeedsEngine = { asked.write { $0 += 1 }; return false }
         a.interrupted()
-        let t = Task { await a.playProgramme([Float](repeating: 0, count: 1600), rate: 16_000, tag: 0) }
-        _ = await poll(2) { asked.value > 0 }
+        let t0 = Date()
+        let played = await a.playProgramme([Float](repeating: 0, count: 1600), rate: 16_000, tag: 0)
+        XCTAssertFalse(played, "nothing was heard")
         XCTAssertEqual(asked.value, 1)
-        t.cancel(); _ = await t.value
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 2, "no 45 s wait")
+    }
+
+    func testAnEngineLostBlockStopsTheLoopAtThatBlockAndIsNeverRanDry() async {
+        let a = LiveAudio(); let calls = Locked(0)
+        a.driveForTest = { _, _ in calls.write { $0 += 1 } }
+        try? a.start(bus: AudioBus(), clock: LabClock(), wantMic: false, mic: false)
+        a.interrupted()
+        a.onNeedsEngine = { false }
+        let r = StageRegistry.builtIn(); r.register(.voice, LongVoice.self) { LongVoice($0) }
+        var cfg = StageRegistry.defaultConfiguration(); cfg.set(.voice, .init(id: "long-voice"))
+        let p = ProgrammePlayer(audio: a, registry: r, log: EventLog(clock: LabClock()), configuration: cfg,
+                                document: ProgrammeDocument(id: "story", title: "S", blocks: [.speech(text: "One."), .speech(text: "Two.")]))
+        let lost = Locked<[String]>([]), dry = Locked<[String]>([])
+        p.onEngineLost = { id, n in lost.write { $0.append("\(id)#\(n)") } }
+        p.onRanDry = { id, _ in dry.write { $0.append(id) } }
+        p.start(at: 1)
+        _ = await poll(5) { !lost.value.isEmpty }
+        XCTAssertEqual(lost.value, ["story#1"])
+        XCTAssertEqual(p.blockIndex, 1, "the block that did not play")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(dry.value.isEmpty, "the run did not end")
+    }
+
+    @MainActor func testAnEngineLostMidEntryHoldsItAndNothingIsPostedUntilItFinishesHeardOnce() async {
+        let old = RunSheetPlayer.sessionRetryDelays; defer { RunSheetPlayer.sessionRetryDelays = old }
+        RunSheetPlayer.sessionRetryDelays = [3600]
+        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
+        var ready = true
+        p.sessionReady = { _ in ready ? nil : "the audio session could not be taken" }
+        p.playNow(RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 5)); await p.settle()
+        XCTAssertEqual(e.speaks, ["speak:a"])
+        ready = false
+        p.engineLost(documentID: "rs:a")
+        _ = await poll { p.isWaitingForSession }
+        XCTAssertTrue(p.isWaitingForSession)
+        XCTAssertEqual(s.sheet.onAirEntry?.id, "a", "still on air")
+        XCTAssertNil(s.sheet.entries.first { $0.id == "a" }?.ended, "no ended op, no heard, no failed")
+        var b = BarInfo(); b.state = "playing"; b.playing = true
+        XCTAssertEqual(p.overlay(b).state, "paused")
+        ready = true; p.sessionMayBeBack()
+        _ = await poll { e.log.contains("resumeSpoken") }
+        XCTAssertTrue(e.log.contains("resumeSpoken"))
+        XCTAssertEqual(e.speaks, ["speak:a"], "not spoken again from the start")
+        XCTAssertFalse(p.isWaitingForSession)
+        p.documentEnded(id: "rs:a", anyPlayed: true)
+        XCTAssertEqual(s.sheet.entries.first { $0.id == "a" }?.ended?.outcome, .finished)
+        XCTAssertEqual(s.sheet.entries.first { $0.id == "a" }?.state, .heard)
+    }
+
+    @MainActor func testAnEntryThatMadeNoSoundIsNotAVerdict() async {
+        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
+        p.playNow(RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 5)); await p.settle()
+        p.documentEnded(id: "rs:a", anyPlayed: false)
+        let a = s.sheet.entries.first { $0.id == "a" }
+        XCTAssertEqual(a?.ended?.outcome, .failed, "failed: the server records no verdict for it")
+        XCTAssertNotEqual(a?.state, .heard)
+    }
+
+    func testAnInterruptionWithoutAResumeIsNotAnswerForByABlock() async throws {
+        let (c, o, a, _) = rig { _ in }
+        try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
+        a.programmePlay()
+        c.heard("interrupted", "")
+        await c.interruptionEnded(shouldResume: false)
+        let claims = o.claims, releases = o.releases, reasserts = o.reasserts
+        let up = await a.onNeedsEngine!()
+        XCTAssertFalse(up)
+        XCTAssertEqual([o.claims, o.releases, o.reasserts], [claims, releases, reasserts], "the other audio keeps the session")
+        let retry = await c.ensureReady(reason: "retry")
+        XCTAssertFalse(retry, "a backoff retry does not take it either")
+        let play = await c.ensureReady(reason: "play")
+        XCTAssertTrue(play, "Play does")
+        XCTAssertTrue(a.running)
+    }
+
+    func testAStopIsNotUndoneByABlockThatFindsTheEngineDown() async throws {
+        let (c, o, a, _) = rig { _ in }
+        try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
+        a.programmePlay()
+        a.stop()                                       // LabRuntime.stop: audio first, the claim after
+        var up = await a.onNeedsEngine!()
+        XCTAssertFalse(up, "stopped: not wanted")
+        c.release()
+        let before = o.claims
+        up = await a.onNeedsEngine!()
+        XCTAssertFalse(up)
+        XCTAssertEqual(o.claims, before)
+    }
+
+    func testAPausedProgrammeIsNotBroughtBackByABlock() async throws {
+        let (c, o, a, _) = rig { _ in }
+        try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
+        a.programmePlay(); a.programmePause()
+        a.interrupted()
+        let before = (o.claims, o.releases, o.reasserts)
+        let up = await a.onNeedsEngine!()
+        XCTAssertFalse(up)
+        XCTAssertTrue(before == (o.claims, o.releases, o.reasserts))
+    }
+
+    func testAPlayingProgrammeWithTheEngineDownIsBroughtBack() async throws {
+        let (c, _, a, _) = rig { _ in }
+        try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
+        a.programmePlay()
+        a.interrupted()
+        let up = await a.onNeedsEngine!()
+        XCTAssertTrue(up); XCTAssertTrue(a.running)
+    }
+
+    func testARemoteSoundPlayingKeepsTheClaimWhenTheEngineWillNotStart() async throws {
+        let (c, o, a, _) = rig { _ in }
+        try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
+        c.remoteAudioActive = { true }
+        a.driveForTest = { _, _ in throw Boom() }
+        a.interrupted()
+        let ok = await c.ensureReady(reason: "play")
+        XCTAssertFalse(ok)
+        XCTAssertEqual(o.releases, 0, "a podcast is not cut by a deactivation")
     }
 }

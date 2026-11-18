@@ -154,6 +154,7 @@ public final class LiveAudio: @unchecked Sendable {
         if running { return }
         self.bus = bus; self.clock = clock; self.micPermitted = wantMic; self.micWanted = mic ?? wantMic; self.virtual = virtual
         if virtual { running = true; down = false; micActive = true; return }
+        engineGate.lock(); defer { engineGate.unlock() }
         try bring(voiceProcessing: voiceProcessing)
         observe()
     }
@@ -162,6 +163,7 @@ public final class LiveAudio: @unchecked Sendable {
     /// session changes category (that stops a running engine anyway).
     public func quiesce() {
         guard running, !virtual else { return }
+        engineGate.lock(); defer { engineGate.unlock() }
         lock.lock(); generation += 1; lock.unlock()
         freezePlayhead()
         takeDown()
@@ -174,6 +176,7 @@ public final class LiveAudio: @unchecked Sendable {
     public func resume(voiceProcessing vp: Bool, mic: Bool? = nil, fresh: Bool = false) throws {
         guard !virtual, bus != nil else { return }
         if let mic { micWanted = mic }
+        engineGate.lock(); defer { engineGate.unlock() }
         try bring(voiceProcessing: vp, fresh: fresh)
     }
 
@@ -182,18 +185,25 @@ public final class LiveAudio: @unchecked Sendable {
     /// How many engines have been made (the first included): the proof that a switch built a new one.
     private(set) var engineBuilds = 1
     /// The programme found the engine down when a block began: the host takes the session and the engine again (the event that shows the fault).
-    public var onNeedsEngine: (@Sendable () -> Void)?
+    /// The answer is whether the engine is up and wanted: false makes the block give up at once (the entry is held, never counted as heard).
+    public var onNeedsEngine: (@Sendable () async -> Bool)?
+    /// The programme is wanted audible now (Play was pressed and not undone by a pause, a stop or a hands-free pause).
+    public var isPlayWanted: Bool { wantPlaying }
+    /// One gate for everything that replaces, starts or stops the engine: a restart from the configuration-change observer cannot run
+    /// through a replacement made by the coordinator.
+    private let engineGate = NSRecursiveLock()
     /// The engine's input node was asked for since this engine was made: an engine that has had one fails to start under a playback-only category.
     private var inputTouched = false
 
     /// Plain facts for the log when sound cannot come out (flags and numbers only).
     public func diagnostic() -> String {
         if virtual { return "engine=virtual" }
+        engineGate.lock(); defer { engineGate.unlock() }
         let f = engine.outputNode.outputFormat(forBus: 0)
         return "engine running=\(running) down=\(down) builds=\(engineBuilds) out_rate=\(Int(f.sampleRate)) out_ch=\(f.channelCount)"
     }
     /// The output format's sample rate now (0 when not known), for the category-change line.
-    public func outputRate() -> Int { virtual ? 0 : Int(engine.outputNode.outputFormat(forBus: 0).sampleRate) }
+    public func outputRate() -> Int { if virtual { return 0 }; engineGate.lock(); defer { engineGate.unlock() }; return Int(engine.outputNode.outputFormat(forBus: 0).sampleRate) }
 
     /// The engine should be making sound or ready to, and is not: it was taken down (interruption, failed restart) or never came back.
     public var needsRecovery: Bool { !virtual && bus != nil && (down || !running) }
@@ -201,6 +211,7 @@ public final class LiveAudio: @unchecked Sendable {
     /// Restart in place (route change, interruption end): the same voice processing setting.
     public func recover(reason: String) {
         guard !virtual, bus != nil, !restarting else { return }
+        engineGate.lock(); defer { engineGate.unlock() }
         restarting = true; defer { restarting = false }
         if running { quiesce() }
         do { try bring(voiceProcessing: voiceProcessing); onNotice?("engine", "restarted: \(reason)") }
@@ -210,6 +221,7 @@ public final class LiveAudio: @unchecked Sendable {
     /// Media services were reset: every engine object is invalid. Make new ones and start again.
     public func rebuild() {
         guard !virtual, bus != nil else { return }
+        engineGate.lock(); defer { engineGate.unlock() }
         if let o = observer { NotificationCenter.default.removeObserver(o); observer = nil }
         lock.lock(); generation += 1; lock.unlock()
         freezePlayhead()
@@ -233,7 +245,9 @@ public final class LiveAudio: @unchecked Sendable {
     public func stop() {
         if virtual { running = false; micActive = false; virtualPaused = true; return }
         defer { releaseWaiters() }
+        wantPlaying = false                              // also when the engine is down: a block must not ask for it back after a stop
         guard running else { return }
+        engineGate.lock(); defer { engineGate.unlock() }
         if let o = observer { NotificationCenter.default.removeObserver(o); observer = nil }
         wantPlaying = false
         programmeNode.stop(); voiceNode.stop(); nodeStopped = true
@@ -377,6 +391,7 @@ public final class LiveAudio: @unchecked Sendable {
     /// The system took the session (a call): stop pretending the engine runs.
     public func interrupted() {
         guard !virtual else { return }
+        engineGate.lock(); defer { engineGate.unlock() }
         lock.lock(); generation += 1; lock.unlock()
         freezePlayhead()
         if running { takeDown() }
@@ -469,7 +484,10 @@ public final class LiveAudio: @unchecked Sendable {
 
     /// Schedule a buffer on the programme node and wait until it has played. If the engine is restarted meanwhile
     /// (a session switch, a route change), carry on from the frames already rendered once it is back.
-    func playProgramme(_ samples: [Float], rate: Double, tag: Int = -1) async {
+    /// True when the block was played (to its end, or until a transport change stopped it); false when the engine is down and could not be made
+    /// ready (or the wait was cancelled while it was down): nothing was heard, and the caller must not count it as heard.
+    @discardableResult
+    func playProgramme(_ samples: [Float], rate: Double, tag: Int = -1) async -> Bool {
         lock.lock(); samplesHanded += samples.count; lock.unlock()
         if virtual {
             let total = Int(Double(samples.count) / rate * LiveAudio.playRate)
@@ -486,23 +504,28 @@ public final class LiveAudio: @unchecked Sendable {
                     lock.lock(); if playhead?.tag == tag { playhead?.frozen = Int(played * LiveAudio.playRate) }; lock.unlock()
                 }
             }
-            return
+            return true
         }
-        guard let inb = monoBuffer(samples, rate: rate) else { return }
+        guard let inb = monoBuffer(samples, rate: rate) else { return true }
         let all = Resampler(rate: LiveAudio.playRate).convert(inb)
         lock.lock(); playhead = Playhead(tag: tag, totalFrames: all.count); lock.unlock()
         var offset = 0
         while offset < all.count, !Task.isCancelled {
-            // Wait for the engine if it is down (a restart is under way); give up after 45 s.
-            var waited = 0
+            // The engine is down. A restart that is under way is waited for a moment; otherwise the host is asked to bring it back (it
+            // refuses when the listener paused, stopped, or another app has the session). No sleeping to pass time: a block that cannot
+            // sound says so at once.
             if !running, !Task.isCancelled {
-                print("AUTORADIO block waits for the engine \(diagnostic())")
-                onNeedsEngine?()                      // the event that shows the fault: the host takes the session and the engine again
+                var w = 0
+                while !running, restarting, !Task.isCancelled, w < 60 { try? await Task.sleep(nanoseconds: 50_000_000); w += 1 }
             }
-            while !running, !Task.isCancelled, waited < 900 { try? await Task.sleep(nanoseconds: 50_000_000); waited += 1 }
-            if !running || Task.isCancelled { if !running, !Task.isCancelled { print("AUTORADIO block given up: the engine did not come back in 45 s \(diagnostic())") }; return }
+            if !running, !Task.isCancelled {
+                print("AUTORADIO block finds the engine down \(diagnostic())")
+                let up = await onNeedsEngine?() ?? false
+                if !up || !running { print("AUTORADIO block gives up: the engine is not available, nothing was heard"); return false }
+            }
+            if Task.isCancelled { return !running ? false : true }
             lock.lock(); let gen = generation; lock.unlock()
-            guard let ob = monoBuffer(Array(all[offset...]), rate: LiveAudio.playRate), ob.frameLength > 0 else { return }
+            guard let ob = monoBuffer(Array(all[offset...]), rate: LiveAudio.playRate), ob.frameLength > 0 else { return true }
             let base = renderedFrames()
             lock.lock(); if playhead?.tag == tag { playhead?.reschedule(from: offset, base: base) }; lock.unlock()
             // Resumed exactly once by: the buffer played, any stop or restart of the nodes or the engine (releaseWaiters), or the
@@ -519,9 +542,10 @@ public final class LiveAudio: @unchecked Sendable {
             } onCancel: { once.resume(()) }
             waiters.write { $0[wid] = nil }
             lock.lock(); let now = generation; let frozen = playhead?.tag == tag ? playhead?.frozen : nil; lock.unlock()
-            if now == gen { return }           // played through, or stopped by a transport change
+            if now == gen { return true }      // played through, or stopped by a transport change
             offset = frozen ?? offset          // the engine restarted mid-buffer: continue from what was rendered
         }
+        return true
     }
 }
 
@@ -559,6 +583,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// The loop ran out of blocks and nothing is queued behind it: (the document's id, whether any block of this run made sound).
     /// A programme whose stretch is still arriving also runs dry between segments; the host decides what that means (autoplay).
     public var onRanDry: (@Sendable (String, Bool) -> Void)?
+    /// A block could not sound because the engine is down and could not be made ready: (the document's id, the block that did not play). The loop
+    /// has stopped at that block (`play()` starts there again); the run is not over and nothing was heard.
+    public var onEngineLost: (@Sendable (String, Int) -> Void)?
+    private let engineLostFlag = Locked(false)
     /// The lock screen's next and previous: the host may take them as story moves (true: handled); else they skip a passage or segment.
     public var onNextTrack: (@Sendable () -> Bool)?
     public var onPreviousTrack: (@Sendable () -> Bool)?
@@ -734,6 +762,13 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                     self.playback.unitBegan(n, in: doc)
                     let played = await self.playBlock(block, index: n)
                     if Task.isCancelled { break }
+                    if self.engineLostFlag.write({ let v = $0; $0 = false; return v }) {
+                        let id = self.st.write { s -> String in if s.epoch == my { s.blockIndex = n; s.resumeAt = n; s.loop = nil }; return s.document.id }
+                        print("AUTORADIO engine lost at doc=\(id) block=\(n); the entry is held, nothing counted as heard")
+                        self.onChange?()
+                        self.onEngineLost?(id, n)
+                        break outer
+                    }
                     if played { anyPlayed = true }
                     self.playback.unitEnded(n, played: played, in: self.st.read { $0.document })
                     n += 1
@@ -847,7 +882,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             startLookahead(after: tag)
-            await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
+            let sounded = await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
+            if !sounded { if !Task.isCancelled { engineLostFlag.value = true }; return false }
             lastBlockEnd.write { $0 = Date() }
             return true
         case .podcastClip:
@@ -857,7 +893,12 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 log.emit(.error(stage: "player", message: "clip not found: \(url)")); return false
             }
             let a = Int(start * 16_000), z = min(all.count, end.map { Int($0 * 16_000) } ?? all.count)
-            if a < z { log.emit(.programmeAudioStart(block: tag)); await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag); return true }
+            if a < z {
+                log.emit(.programmeAudioStart(block: tag))
+                let sounded = await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag)
+                if !sounded { if !Task.isCancelled { engineLostFlag.value = true }; return false }
+                return true
+            }
             return false
         }
     }

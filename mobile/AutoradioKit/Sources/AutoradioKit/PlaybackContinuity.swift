@@ -157,7 +157,7 @@ public final class SessionWatcher: @unchecked Sendable {
             runtime.log.emit(.audioNotice(kind: "interruption", detail: "began; will resume programme=\(memory.programme) remote=\(memory.remote)"))
             return
         }
-        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
+        if shouldResume { Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() } }      // without the recommendation the listener's Play asks
         let again = memory.ended(shouldResume: shouldResume)
         runtime.log.emit(.audioNotice(kind: "interruption", detail: "ended; shouldResume=\(shouldResume) programme=\(again.programme) remote=\(again.remote)"))
         if again.programme { runtime.player.play() }

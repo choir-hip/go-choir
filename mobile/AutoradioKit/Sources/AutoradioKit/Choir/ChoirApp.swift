@@ -132,6 +132,8 @@ public final class ChoirApp: @unchecked Sendable {
             self.onChange?()
         }
         runtime.player.onRanDry = { id, played in Task { @MainActor in RunSheetPlayer.shared.documentEnded(id: id, anyPlayed: played) } }
+        runtime.player.onEngineLost = { id, _ in Task { @MainActor in RunSheetPlayer.shared.engineLost(documentID: id) } }
+        runtime.coordinator.remoteAudioActive = { onMainThread { RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused } }
         // The lock screen's next and previous are the run sheet's: `skip(on air)` and `previous` (ChoirApp.moveStory). Always handled here.
         runtime.player.onNextTrack = { [weak self] in self?.takeRemote(.next) ?? false }
         runtime.player.onPreviousTrack = { [weak self] in self?.takeRemote(.previous) ?? false }
