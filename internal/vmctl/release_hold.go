@@ -32,13 +32,15 @@ import (
 // nothing resumes: this only declines to start a refresh.
 //
 // A hold ends when the link returns (a rollback), when this vmctl is replaced,
-// or at releaseHoldBound after the first tick that saw the move, whatever the
-// link reads then; the moved release becomes the baseline and the line says
-// so. The 60 minutes is the deploy job's timeout (ci.yml deploy-staging) used
-// as a generous upper bound on the gap, not a guarantee about the job: the
-// clock starts at the first tick after the move, inside the job, so it can
-// outlast it by up to one tick. A link moved by something other than a deploy
-// that restarts vmctl is held for at most that long.
+// or at the bound, whatever the link reads then; the release the link names
+// then becomes the baseline (the original, when the link is back at it) and
+// the line says so. The hold ends no later than one tick past releaseHoldBound
+// after the link moved. The bound equals the timeout of the deploy job that
+// moves the link (.github/workflows/ci.yml, job deploy-staging,
+// timeout-minutes: 60), so a hold cannot end while a job that moved the link
+// could still be about to restart vmctl: the job dies at its start plus 60
+// minutes, and the link moved after its start. A link moved by something other
+// than a deploy that restarts vmctl is held for at most that long.
 const releaseHoldBound = 60 * time.Minute
 
 type releaseHold struct {
