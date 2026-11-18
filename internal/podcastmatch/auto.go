@@ -14,7 +14,7 @@ package podcastmatch
 //	          story's last update and no more than Params.After after it, so
 //	          an old discussion of a recurring subject is not passed off as
 //	          about today's event;
-//	clip      a clip of 20 to 75 seconds exists on segment edges;
+//	clip      a clip of 24 to 75 seconds exists on segment edges;
 //	boundary  and its edges are sentence or speaker-turn edges (a pause of 0.9 s
 //	          or more) of the transcript, never mid-sentence or mid-word;
 //	ad        the clip is not a sponsor message or a promotion;

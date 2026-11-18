@@ -36,7 +36,7 @@ const (
 	WindowSeconds = 120.0
 	StrideSeconds = 60.0
 	// ClipMinSeconds and ClipMaxSeconds bound a chosen clip.
-	ClipMinSeconds = 20.0
+	ClipMinSeconds = 24.0 // a clip under 24 s cannot carry a fingerprint (podcastfp.Cut)
 	ClipMaxSeconds = 75.0
 
 	bm25K1 = 1.2
