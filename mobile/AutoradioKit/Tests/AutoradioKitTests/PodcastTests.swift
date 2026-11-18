@@ -76,6 +76,26 @@ final class PodcastTests: XCTestCase {
         XCTAssertEqual(try notes("<content:encoded><ul><li>A</li><li>B</li></ul></content:encoded>").contains("A"), true)
     }
 
+    func testHostileFeedIsCapped() throws {
+        func notes(_ item: String) throws -> String {
+            let x = "<rss><channel><title>S</title><item><title>T</title><guid>g</guid><enclosure url=\"https://cdn.example/a.mp3\" type=\"audio/mpeg\"/>\(item)</item></channel></rss>"
+            return try RSSFeedParser.parse(Data(x.utf8), feedURL: "x").episodes[0].notes
+        }
+        // Text: one element stops growing near the cap (chunks of 1000 characters, 600 of them).
+        let big = String(repeating: "word ", count: 200) + "\n\n"
+        let n = try notes("<description>" + String(repeating: big, count: 600) + "</description>")
+        XCTAssertLessThan(n.utf8.count, 260_000); XCTAssertGreaterThan(n.utf8.count, 1000)
+        // Many children: still parses, still bounded.
+        let kids = try notes("<description>" + String(repeating: "<p>paragraph of some words here</p>", count: 20_000) + "</description>")
+        XCTAssertLessThan(kids.utf8.count, 260_000); XCTAssertTrue(kids.hasPrefix("paragraph of some words here"))
+        // Depth: elements deeper than 64 are ignored, the feed still parses and the text above them is kept.
+        let deep = String(repeating: "<div>", count: 200) + "deep words" + String(repeating: "</div>", count: 200)
+        XCTAssertEqual(try notes("<description>shallow \(deep)</description>"), "shallow")
+        let ok = String(repeating: "<div>", count: 5) + "near words" + String(repeating: "</div>", count: 5)
+        XCTAssertEqual(try notes("<description>\(ok)</description>"), "near words")
+        XCTAssertEqual(try parsed().episodes.count, 5, "an ordinary feed parses as before")
+    }
+
     func testBadFeeds_6() {
         XCTAssertThrowsError(try RSSFeedParser.parse(Data("<!DOCTYPE html><html><body>hi</body></html>".utf8), feedURL: "x"))
         XCTAssertThrowsError(try RSSFeedParser.parse(Data(), feedURL: "x"))

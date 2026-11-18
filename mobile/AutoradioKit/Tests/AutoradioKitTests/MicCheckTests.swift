@@ -54,4 +54,12 @@ final class MicCheckMeterTests: XCTestCase {
         let spoken = MicCheckMeter(); spoken.transcript("  "); XCTAssertEqual(spoken.verdict, .listening)
         spoken.transcript("hello"); XCTAssertEqual(spoken.verdict, .heard)
     }
+    func testStaleTranscriptFromAnEarlierTurnDoesNotPass() {
+        let m = MicCheckMeter()
+        m.begin(transcript: "tell me about the harbor")
+        m.transcript("tell me about the harbor")
+        XCTAssertEqual(m.verdict, .listening)
+        m.transcript("something new")
+        XCTAssertEqual(m.verdict, .heard)
+    }
 }

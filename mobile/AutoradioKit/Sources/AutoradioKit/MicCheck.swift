@@ -19,6 +19,7 @@ public struct MicCheck: Sendable {
     public private(set) var elapsed: Double = 0
     private var loud: Double = 0
     private var transcriptHeard = false
+    private var baseline = ""
 
     public init() {}
 
@@ -30,9 +31,12 @@ public struct MicCheck: Sendable {
         if db >= Self.floorDb { loud += seconds } else { loud = max(0, loud - seconds * 0.5) }   // a pause does not erase the speech before it at once
     }
 
-    /// The engine's transcript so far (any non-empty text counts).
+    /// The transcript the engine already held when the check began (an earlier turn's); it never counts as heard.
+    public mutating func begin(transcript: String) { baseline = transcript }
+
+    /// The engine's transcript so far: a non-empty one that differs from the one held at the start counts.
     public mutating func hear(transcript: String) {
-        if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { transcriptHeard = true }
+        if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, transcript != baseline { transcriptHeard = true }
     }
 
     /// Wall time passing (the polling loop's clock; frames do not advance it, so a silent microphone still times out).
@@ -50,6 +54,7 @@ public final class MicCheckMeter: @unchecked Sendable {
     private var check = MicCheck()
     public init() {}
     public func frame(db: Double, seconds: Double) { lock.lock(); check.feed(db: db, seconds: seconds); lock.unlock() }
+    public func begin(transcript text: String) { lock.lock(); check.begin(transcript: text); lock.unlock() }
     public func transcript(_ text: String) { lock.lock(); check.hear(transcript: text); lock.unlock() }
     public func tick(_ seconds: Double) { lock.lock(); check.tick(seconds: seconds); lock.unlock() }
     public var verdict: MicCheck.Verdict { lock.lock(); defer { lock.unlock() }; return check.verdict }

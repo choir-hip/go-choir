@@ -191,12 +191,16 @@ final class OnboardingController: @unchecked Sendable {
                 guard let self else { return }
                 let rt = self.module.runtime!
                 let meter = MicCheckMeter()
+                let before = rt.snapshot().transcript
+                meter.begin(transcript: before)                  // an earlier turn's words are not this check's
                 let frames = rt.bus.mic()
                 let feeder = Task { for await f in frames { meter.frame(db: f.rmsDb, seconds: f.duration) } }
                 await rt.start(virtual: self.module.virtualEngine)
                 if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }
                 defer { feeder.cancel(); rt.restoreHandsFree() }
                 while meter.verdict == .listening {
+                    self.lock.lock(); let here = self.step == "mic"; self.lock.unlock()
+                    if !here { return }                                                  // the listener left the step: end the check (defer restores)
                     try? await Task.sleep(nanoseconds: 100_000_000)
                     meter.tick(0.1)
                     meter.transcript(rt.snapshot().transcript)
@@ -204,8 +208,9 @@ final class OnboardingController: @unchecked Sendable {
                     self.set { self.level = l }
                 }
                 if meter.verdict == .heard {
+                    rt.cancelTalk()                                                      // a phrase spoken here must not become a turn to the desk
                     let t = rt.snapshot().transcript
-                    self.set { self.heard = t.isEmpty ? "Your microphone is working." : t; self.mic = "heard" }
+                    self.set { self.heard = (t.isEmpty || t == before) ? "Your microphone is working." : t; self.mic = "heard" }
                 } else {
                     self.set { self.mic = "silent"; self.message = "I could not hear anything. The paper keeps working, and you can tap your topics instead." }
                 }
