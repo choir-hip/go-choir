@@ -205,7 +205,7 @@ expect "an unbalanced quote in the gates file fails closed" 1 'quote'
 # land
 wfstep 'scripts/check-delta'
 printf "echo 'run scripts/check-delta' >>\"\$1\"\n" >"$land"
-expect "a script only land runs needs a land-conditional line" 1 'conditional in scripts/land'
+expect "a script only land runs needs a land-conditional line" 1 'conditional in the land script'
 printf 'land-conditional scripts/check-delta only when SHARD=1\n' >"$ex"
 expect "a land-conditional line makes it count" 0
 printf 'land-conditional scripts/check-delta\n' >"$ex"
