@@ -230,3 +230,57 @@ BM25 passages; every captured page through the event layer; story event ids
 at publish; research that reads a corpus brief first and searches the web
 only for the gaps; the new-or-revise choice at a new story's first publish.
 A proposal with stations and the owner's decisions; not ratified.
+
+## Built: the corpus brief (station S3, lane `corpus-brief`, 2026-11-18)
+
+Not deployed. Before a research desk run's first model call the host searches
+the computer's own corpus and puts the result at the end of the run's first
+message (`internal/agentcore/research_brief.go`, wired at
+`runtime.go` next to `managementTaskOpening`). It costs no model turn.
+
+What it does:
+
+- The threads are the objective of the newest unread Cast (or Ask) record plus
+  its typed hypotheses and uncertainties and the `questions` list of its
+  packet: the objective and at most 5 more; the rest are named, not searched.
+- Each thread is one call of the verb's own host function
+  (`search_wire_corpus`), as the run's owner and computer, in turn, under one
+  8 s deadline for the whole build. A slow or failing corpusd, an empty corpus
+  or a run with no objective starts the run with one plain sentence (or none);
+  the run always starts.
+- It delivers at most 6 captures (with dates, capture ids and the matching
+  passage) and 5 published stories a thread, and 8,000 estimated tokens in all
+  (it rides on every turn; the verb gives more). Over the bound whole threads
+  are dropped from the last and named.
+- A resumed run builds nothing: the first message is replayed from run memory.
+- Labels: what the verb gives for what was delivered (the capture floor when a
+  passage is shown, world otherwise), marked only when the run memory took the
+  text as a fresh start. The run-label union feeds publish admission and the
+  disclosure gate, so an owner's computer may see the capture label on more
+  research runs (the v16 prompt already asks the desk to search the corpus
+  first, which gives the same label).
+- The ledger is not seeded: brief pages are not pages the run searched for, so
+  the "has not tried to read" count and the `search run=` line speak of web
+  searches only.
+- One journal line per research run start: `research brief run= desk= ms=
+  threads= queries= stories= captures= passages= newest_held= bytes=
+  tokens_est= dropped= outcome=(delivered|empty|failed|skipped) reason=`. The
+  `corpus search` line gains `caller=brief` or `caller=cell` at its end.
+  "Runs that made a web search before any corpus read": the first `gateway:
+  search request ... run=` against the first `corpus read run=` or
+  `corpus search ... caller=cell`.
+
+What it cannot do:
+
+- It cannot judge a story stale. A published story carries no date in the
+  corpus answer (`PublishedPiece`), so the brief says so in one clause and
+  shows dates only for held captures. "Stale" waits on story dates or event
+  ids (S8).
+- Each thread is three searches (captures, published stories, events), not one
+  neighbourhood read; the brief shows captures and stories, not events.
+- Query quality on long objectives is unmeasured: the text half takes every
+  word of the query with term caps and pruning, and the benchmark queries were
+  12 words.
+- Whether the delivered brief lowers web searches is not measured; the claim
+  is entered separately.
+- The child Report label gap above is not touched.
