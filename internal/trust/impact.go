@@ -23,7 +23,7 @@ var impactTableJSON []byte
 // PinnedImpactTableDigest pins the table's bytes. The table is locked data:
 // changing it changes every view that used it, so the change must bump the
 // table's version and this pin together, in one reviewed commit.
-const PinnedImpactTableDigest = "c6103448570191536dce0bc5c993c0d9cce31313171b30310ac4f52aa126eab3"
+const PinnedImpactTableDigest = "9916395e2ebe7777b4694e923f6462911fd3cf3ebbbe10830c895d1bc22b1375"
 
 // ClassRow is one impact class.
 type ClassRow struct {

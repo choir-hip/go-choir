@@ -229,7 +229,7 @@ is written as sentences with n from signed settled outcomes, never a score.
 `internal/trust` derives the view and never stores it. `Derive(Inputs, Params)`
 returns a row per subject and action class: posterior, lower bound, tau,
 breaker. Evidence classes E1 to E8 (`evidence.go`), the impact table as locked
-data (`impact_table.json`, version impact-table/3, a row for every catalogue
+data (`impact_table.json`, version impact-table/4, a row for every catalogue
 grant), a hierarchical prior and change discount (`prior.go`), tempered and
 capped weighting both computed (`posterior.go`), and `Params` logged with every
 view so it reproduces. `GET /api/trust` serves the view; `?replay=1` adds the
