@@ -299,6 +299,7 @@ func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.Co
 		c.heardFull = append(c.heardFull, fmt.Sprintf("kind=settlement rows=%d undecodable=%d unparsable=%d limit=%d", rd.Rows, rd.Undecodable, rd.Unparsable, rd.Limit))
 	}
 	c.heardUnparsable = rd.Unparsable
+	c.heardStats = heardReadStats{SegRows: segRows, SegFull: segRows >= heardSegmentsRead, SetRows: rd.Rows, SetFull: rd.Full}
 	segs = make(map[string]types.CommitmentRecord, len(recs))
 	for _, r := range recs {
 		if strings.HasPrefix(r.RecordID, segmentRecordPrefix) {
@@ -463,3 +464,49 @@ func (c *programmeCall) logHeard() {
 
 // heardWindowDays is the window in whole days, as the DJ is told it.
 func heardWindowDays() string { return strconv.Itoa(int(heardWindow / (24 * time.Hour))) }
+
+// heardReadStats is what the two reads saw, for the log and the receipt.
+type heardReadStats struct {
+	SegRows, SetRows int
+	SegFull, SetFull bool
+}
+
+// heardReceiptRefs is the heard part of the stretch's input receipt (the
+// start record's subject refs): ids and counts only, never a title or words.
+// The numbers are the variables the `autoradio heard:` log line prints. An
+// unavailable read carries the error class and no counts.
+func (c *programmeCall) heardReceiptRefs() map[string]string {
+	in := c.input
+	if in == nil {
+		return nil
+	}
+	if in.heardUnavailable {
+		return map[string]string{"heard_unavailable": "true", "heard_error_class": in.heardClass}
+	}
+	n, st := in.heardCounts, c.heardStats
+	return map[string]string{
+		"heard_unavailable": "false", "heard_candidates": fmt.Sprint(n.Candidates), "heard_not_in_window": fmt.Sprint(n.Never),
+		"heard_same": fmt.Sprint(n.Same), "heard_earlier": fmt.Sprint(n.Earlier), "heard_recent": fmt.Sprint(n.Recent),
+		"heard_all_heard": fmt.Sprint(n.AllHeard == 1), "heard_unparsable": fmt.Sprint(c.heardUnparsable),
+		"heard_segments_rows": fmt.Sprint(st.SegRows), "heard_segments_full": fmt.Sprint(st.SegFull),
+		"heard_settlements_rows": fmt.Sprint(st.SetRows), "heard_settlements_full": fmt.Sprint(st.SetFull),
+	}
+}
+
+// heardReceiptView reads the heard receipt back from a stretch start record's
+// subject refs as the learning route shows it; nil when the record has none.
+func heardReceiptView(refs map[string]string) map[string]any {
+	switch refs["heard_unavailable"] {
+	case "":
+		return nil
+	case "true":
+		return map[string]any{"unavailable": true, "error_class": refs["heard_error_class"]}
+	}
+	num := func(k string) int { v, _ := strconv.Atoi(refs[k]); return v }
+	return map[string]any{
+		"unavailable": false, "candidates": num("heard_candidates"), "not_in_window": num("heard_not_in_window"), "same": num("heard_same"),
+		"earlier": num("heard_earlier"), "recent": num("heard_recent"), "all_heard": refs["heard_all_heard"] == "true", "unparsable": num("heard_unparsable"),
+		"segments_rows": num("heard_segments_rows"), "segments_full": refs["heard_segments_full"] == "true",
+		"settlements_rows": num("heard_settlements_rows"), "settlements_full": refs["heard_settlements_full"] == "true",
+	}
+}
