@@ -126,7 +126,10 @@ type AutoradioForecastInput struct {
 	LessonID string
 	// TakeID is the take a take segment leads in: required when, and only
 	// when, Kind is "take", and tagged take:<id> (design 11.5).
-	TakeID     string
+	TakeID string
+	// Telling is "followup" when the DJ wrote a short follow-up to something the
+	// listener heard; anything else is "full". It becomes the telling: tag.
+	Telling    string
 	TextSHA256 string // 64 lower-case hex digits
 	Blocks     int
 	// StretchStart is the stretch start record's time; the deadline derives
@@ -216,6 +219,11 @@ func NewAutoradioForecast(in AutoradioForecastInput, now time.Time) (types.Commi
 	tags := []string{
 		AutoradioNamespace, "stretch:" + in.StretchID, "seg:" + in.SegmentID, "kind:" + in.Kind, "cause:" + in.Cause,
 	}
+	if in.Telling == "followup" {
+		tags = append(tags, "telling:followup")
+	} else {
+		tags = append(tags, "telling:full")
+	}
 	if in.Cause == CauseLesson {
 		tags = append(tags, "lesson:"+in.LessonID)
 	}
@@ -247,6 +255,24 @@ func NewAutoradioForecast(in AutoradioForecastInput, now time.Time) (types.Commi
 		return rec, err
 	}
 	return stampAutoradio(rec, "autoradio.forecast"), nil
+}
+
+// GoverningAutoradioHeard reports whether a claim's governing rule settlement
+// is the heard rule's "heard" (outcome true, an air event as evidence): the
+// phone's finished outcome. A settlement of another method, another rule or
+// another outcome is not it. Readers outside this package ask here instead of
+// naming the rule.
+func GoverningAutoradioHeard(settlements []SettlementView) (SettlementView, bool) {
+	g, ok := Governing(settlements, types.CalibrationScorerRule)
+	if !ok || g.Scorer != AutoradioHeardRule || g.Outcome != types.CalibrationOutcomeTrue {
+		return SettlementView{}, false
+	}
+	for _, e := range g.Evidence {
+		if strings.HasPrefix(e, "air:") {
+			return g, true
+		}
+	}
+	return SettlementView{}, false
 }
 
 // stampAutoradio sets the subject refs and the owner-private label of an

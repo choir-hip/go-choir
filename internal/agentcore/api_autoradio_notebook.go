@@ -154,9 +154,9 @@ func (c *programmeCall) loadNotebook(ctx context.Context, in *programmeInput) er
 		in.nbReceiptSHA, in.nbReceiptLen = sha256Hex(text), len(text)
 	}
 	if c.req.Cause != "open" {
-		card, err := calibration.Reader{Ledger: c.rt.store}.Scorecard(ctx, c.ownerID, c.rt.cfg.ComputerID, time.Now())
+		card, err := c.scorecard(ctx)
 		if err != nil {
-			return fmt.Errorf("read the settled forecasts: %w", err)
+			return err
 		}
 		in.liveCounts = countsOf(card.Claims)
 		cases, err := c.markedCases(ctx, card.Claims)
@@ -199,7 +199,9 @@ func (c *programmeCall) markedCases(ctx context.Context, claims []calibration.Cl
 		}
 		k := nbCase{ClaimID: v.ID, Kind: v.Project, P: v.P, CausedBy: strings.TrimPrefix(v.Criterion, "caused_by="), Heard: g.Outcome == "true"}
 		stretch, seg := tagOf(v.Tags, "stretch:"), tagOf(v.Tags, "seg:")
-		if rec, err := c.get(ctx, segmentRecordID(stretch, seg)); err == nil && rec != nil && rec.Directive != nil {
+		if r, ok := c.segRecs[segmentRecordID(stretch, seg)]; ok {
+			k.Title = r.Directive.Objective
+		} else if rec, err := c.get(ctx, segmentRecordID(stretch, seg)); err == nil && rec != nil && rec.Directive != nil {
 			k.Title = rec.Directive.Objective
 		}
 		out = append(out, k)
