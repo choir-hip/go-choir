@@ -265,7 +265,7 @@ func (c *programmeCall) frame(in *programmeInput, local string) (stable, volatil
 			line("(There are no candidates; write only openings and transitions.)")
 		}
 		if in.heardCounts.AllHeard == 1 && !in.heardUnavailable {
-			line("All candidates were already heard at their current versions.")
+			line("Every story candidate was already heard at its current version. Whatever you write about one is a follow-up: put \"telling\":\"followup\" on its line, and say only what the listener already knows and that nothing new is reported, or a different angle the earlier telling left out.")
 		}
 		for _, cand := range in.candidates {
 			if cand.isTake() {

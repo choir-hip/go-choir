@@ -46,6 +46,11 @@ type autoradioLedger interface {
 	// ListCommitmentRecordsBySubjectRefOfComputer counts only this computer's
 	// rows toward the limit (the run sheet replay pages by it).
 	ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context, ownerID, computerID, key, value string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
+	// ListCommitmentRecordsByBodyOfComputer is the predicate list the heard
+	// reads use (calibration.HeardLedger); the scorecard reads page through
+	// calibration.PagedLedger.
+	ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
+	calibration.PagedLedger
 }
 
 func (h *APIHandler) programmeLedger() autoradioLedger {

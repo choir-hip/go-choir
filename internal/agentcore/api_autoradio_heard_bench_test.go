@@ -46,8 +46,9 @@ func BenchmarkBuildHeardSegs5000(b *testing.B) {
 
 // TestHeardIndexTimeOver5000Segments times the whole heard read on a real
 // store holding 5,000 heard segments: the two lists, then the join. It prints
-// the numbers and asserts nothing about them; it is slow to seed, so it runs
-// only with HEARD_TIMED=1.
+// the numbers; it asserts the sizes (the index holds exactly the cap, and both
+// reads reported full) but nothing about the time. It is slow to seed, so it
+// runs only with HEARD_TIMED=1.
 func TestHeardIndexTimeOver5000Segments(t *testing.T) {
 	if os.Getenv("HEARD_TIMED") != "1" {
 		t.Skip("set HEARD_TIMED=1 to seed 5,000 heard segments and time the read")
@@ -67,5 +68,8 @@ func TestHeardIndexTimeOver5000Segments(t *testing.T) {
 	t1 := time.Now()
 	ix := buildHeardSegs(segs, heard)
 	t2 := time.Now()
+	if len(ix) != heardSegmentsRead || len(c.heardFull) != 2 {
+		t.Errorf("index %d segments, full reads %v: want %d and both reads full", len(ix), c.heardFull, heardSegmentsRead)
+	}
 	t.Logf("heard read over 5000 segments: lists %v, join %v, index %d segments, full reads %v", t1.Sub(t0), t2.Sub(t1), len(ix), c.heardFull)
 }

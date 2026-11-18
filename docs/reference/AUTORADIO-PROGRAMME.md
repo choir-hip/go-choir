@@ -275,20 +275,34 @@ publication said, and the words are shown so the DJ can judge). The index is
 the computer's, so every device of the listener gets the same marks.
 
 **Reads per programme call, for the heard index** (the same on `open` and
-`extend`): one list of the computer's newest segment records and one list of
-its newest heard settlements, each through the computer-scoped list so the
-limit applies after the computer filter, each at most 2,000 rows
-(`heardSegmentsRead`); the join is by the claim id a segment names, no claim
-or scorecard read. When a list reaches its limit the call logs `autoradio
-heard: read full kind= rows= undecodable= limit=` and the oldest rows are not
-read (a story heard that long ago is not marked). The notebook keeps its own
-scorecard read as before: `extend`, `turn` and `result` only, never `open`;
-when it fails, the notebook's counts and cases are skipped for the call and the
-radio goes on; a truncated read is logged. Measured on the build VM, 2026-11-18
-(quiet): the two lists over 2,000 rows each 0.64 s, the join 12 ms; over 5,000
-rows each 1.30 s and 33 ms; `BenchmarkBuildHeardSegs5000` 26 ms per join. The
-read adds that to the call before the model is asked; the cap is why it is
-2,000, not 5,000.
+`extend`): two lists, read at the same time, either failing meaning "history
+unavailable". (1) The computer's newest segment records with the forecast flag
+(content segments only, so openings and transitions do not use up the page),
+at most 2,000 (`heardSegmentsRead`). (2) The computer's newest heard
+settlements, at most 2,000 (`heardSettlementsRead`): the query itself holds
+rule method, the heard rule, outcome true, so the false settlements that
+skipped and cut entries write do not use up the page, and the 2,000 are 2,000
+heard ones. An `air:` evidence ref is checked on each row. The join is by the
+claim id a segment names; no claim or scorecard read. Both limits apply after
+the computer filter (`store.ListCommitmentRecordsByBodyOfComputer`).
+
+Past the caps: a story heard before the newest 2,000 heard settlements, or whose
+segment is older than the newest 2,000 content segments (unheard content
+segments use up that page; it is the weaker of the two bounds), reads `heard:
+never`, and the call logs `autoradio heard: read full kind= rows= undecodable=
+unparsable= limit=` so the gap is visible. A settlement whose settled time does
+not parse is skipped and counted (`unparsable=` on that line and on the call's
+line); an undecodable row is counted and never fails the read.
+
+The notebook keeps its own scorecard read as before, now through the call's
+ledger: `extend`, `turn` and `result` only, never `open`; when it fails, the
+notebook's counts and cases are skipped for the call (logged, not a 500); a
+truncated read is logged. Timing, two runs on two machines, one number each:
+the sequential, unfiltered read on the build VM over 2,000 rows each took
+0.64 s and over 5,000 rows each 1.30 s; the concurrent, predicate read over
+2,000 rows each took 0.20 s on the runner (join 8 ms; `BenchmarkBuildHeardSegs5000`
+26 ms per join). The two figures are not the same machine, so they do not
+isolate the change.
 
 **What the DJ is shown.** In the candidates section, a `heard:` line under every
 `ref:` line: `heard: never`; `heard: at this version (v<n>) on <day>. Said
@@ -299,19 +313,26 @@ fenced `heard` section (before the candidates, only when it has rows) lists
 `recent: <day> | <title> | <words>` for stories heard in the last 14 days whose
 route is not among the candidates, newest first, one row per route.
 
-**The day is the listener's.** `<day>` is `on <date>` in the request's `tz`, or
-the offset of its `local_time`. With neither, the DJ is given no date and no
-weekday: `earlier`, `1 day ago` or `<n> days ago`, counted by UTC dates.
+**The day is the listener's.** `<day>` is `on <date>` in the request's `tz`, or,
+when `tz` is absent or does not resolve, in the fixed offset of its
+`local_time`. A fixed offset knows nothing of daylight saving, so the date can
+be a day off near a change or when the offset in `local_time` is not the one in
+force then: the DST-correct day needs `tz`. With neither, the DJ is given no
+date and no weekday: `earlier`, `1 day ago` or `<n> days ago`, counted by UTC
+dates.
 
 **History unavailable.** If either list fails, the call does not fail: the log
 says `autoradio heard: unavailable ... class=<error type>` (no words), no
 `heard:` line and no recent row is shown, and the heard fence says the history
 is unavailable for this call. Unknown is never shown as "never".
 
-**An all-heard day.** When every candidate is heard at its current version the
-candidates section says so in one line and the prompt tells the DJ to write at
-least one entry anyway: the candidate most likely to have moved, told briefly
-as what the listener knows and that nothing new is reported, or another angle.
+**An all-heard day.** When every story candidate (takes are never marked) is
+heard at its current version the candidates section says so in one line and
+the prompt tells the DJ to write at least one entry anyway: the candidate most
+likely to have moved, told briefly as what the listener knows and that nothing
+new is reported, or another angle. Both the line and the prompt say that this
+brief telling carries `"telling":"followup"`, so the claim tag and the
+`followups` count are right.
 If the DJ writes none, the call ends as it does for any call with no valid
 segment: the listener gets the spoken fallback line and an `error` event,
 status `failed`, nothing is placed; the log line carries `all_heard=1` so
@@ -335,7 +356,7 @@ optional (missing or anything else is `full`); each forecast claim gains the tag
 `telling:full` or `telling:followup`, and the learning route's rows show it.
 
 **Log.** One line per call: `autoradio heard: stretch= request= candidates=
-never= same= earlier= recent= all_heard= followups=`, counts only.
+never= same= earlier= recent= all_heard= unparsable= followups=`, counts only.
 
 **Residual (named, pinned by a test).** A segment the listener skipped and later
 replayed to the end is not heard: its forecast settles on the first outcome

@@ -154,7 +154,7 @@ func (c *programmeCall) loadNotebook(ctx context.Context, in *programmeInput) er
 		in.nbReceiptSHA, in.nbReceiptLen = sha256Hex(text), len(text)
 	}
 	if c.req.Cause != "open" {
-		card, err := calibration.Reader{Ledger: c.rt.store}.Scorecard(ctx, c.ownerID, c.rt.cfg.ComputerID, time.Now())
+		card, err := calibration.Reader{Ledger: c.ledger}.Scorecard(ctx, c.ownerID, c.rt.cfg.ComputerID, time.Now())
 		if err != nil {
 			// The notebook's counts and cases are skipped for this call; the
 			// radio is not silenced by a failed read of the history.

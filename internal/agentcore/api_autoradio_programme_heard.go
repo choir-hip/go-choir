@@ -28,6 +28,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -249,27 +250,47 @@ func buildHeardSegs(segs map[string]types.CommitmentRecord, heard map[string]tim
 	return out
 }
 
-// readHeard reads the two lists and notes the full ones for the log.
+// readHeard reads the two lists at the same time (neither needs the other) and
+// notes the full ones for the log. Either failing fails the read.
 func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.CommitmentRecord, heard map[string]time.Time, err error) {
-	recs, undecodable, rows, err := c.ledger.ListCommitmentRecordsBySubjectRefOfComputer(ctx, c.ownerID, c.rt.cfg.ComputerID, "record_kind", kindSegment, heardSegmentsRead)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read the segments: %w", err)
+	var (
+		wg                sync.WaitGroup
+		recs              []types.CommitmentRecord
+		segUndec, segRows int
+		segErr, heardErr  error
+		rd                calibration.HeardRead
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		// Content segments only (the forecast flag): openings and transitions
+		// are never heard-settled and would use up the page.
+		recs, segUndec, segRows, segErr = c.ledger.ListCommitmentRecordsByBodyOfComputer(ctx, c.ownerID, c.rt.cfg.ComputerID,
+			map[string]string{"$.subject_refs.record_kind": kindSegment, "$.subject_refs.forecast": "true"}, heardSegmentsRead)
+	}()
+	go func() {
+		defer wg.Done()
+		heard, rd, heardErr = calibration.ListAutoradioHeard(ctx, c.ledger, c.ownerID, c.rt.cfg.ComputerID, heardSettlementsRead)
+	}()
+	wg.Wait()
+	if segErr != nil {
+		return nil, nil, fmt.Errorf("read the segments: %w", segErr)
 	}
-	if rows >= heardSegmentsRead {
-		c.heardFull = append(c.heardFull, fmt.Sprintf("kind=segment rows=%d undecodable=%d limit=%d", rows, undecodable, heardSegmentsRead))
+	if heardErr != nil {
+		return nil, nil, fmt.Errorf("read the heard settlements: %w", heardErr)
 	}
+	if segRows >= heardSegmentsRead {
+		c.heardFull = append(c.heardFull, fmt.Sprintf("kind=segment rows=%d undecodable=%d limit=%d", segRows, segUndec, heardSegmentsRead))
+	}
+	if rd.Full {
+		c.heardFull = append(c.heardFull, fmt.Sprintf("kind=settlement rows=%d undecodable=%d unparsable=%d limit=%d", rd.Rows, rd.Undecodable, rd.Unparsable, rd.Limit))
+	}
+	c.heardUnparsable = rd.Unparsable
 	segs = make(map[string]types.CommitmentRecord, len(recs))
 	for _, r := range recs {
 		if strings.HasPrefix(r.RecordID, segmentRecordPrefix) {
 			segs[r.RecordID] = r
 		}
-	}
-	heard, rd, err := calibration.ListAutoradioHeard(ctx, c.ledger, c.ownerID, c.rt.cfg.ComputerID, heardSettlementsRead)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read the heard settlements: %w", err)
-	}
-	if rd.Full {
-		c.heardFull = append(c.heardFull, fmt.Sprintf("kind=settlement rows=%d undecodable=%d limit=%d", rd.Rows, rd.Undecodable, rd.Limit))
 	}
 	return segs, heard, nil
 }
@@ -404,6 +425,6 @@ func (c *programmeCall) logHeard() {
 		return
 	}
 	n := c.input.heardCounts
-	log.Printf("autoradio heard: stretch=%s request=%s candidates=%d never=%d same=%d earlier=%d recent=%d all_heard=%d followups=%d",
-		c.stretchID, c.req.RequestID, n.Candidates, n.Never, n.Same, n.Earlier, n.Recent, n.AllHeard, c.followups)
+	log.Printf("autoradio heard: stretch=%s request=%s candidates=%d never=%d same=%d earlier=%d recent=%d all_heard=%d unparsable=%d followups=%d",
+		c.stretchID, c.req.RequestID, n.Candidates, n.Never, n.Same, n.Earlier, n.Recent, n.AllHeard, c.heardUnparsable, c.followups)
 }

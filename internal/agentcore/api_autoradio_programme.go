@@ -453,7 +453,9 @@ type programmeCall struct {
 	// what its reads found full, and the follow-ups the DJ wrote.
 	segRecs   map[string]types.CommitmentRecord
 	heardFull []string // the heard reads that reached their limit, for the log
-	followups int
+	// heardUnparsable counts the heard settlements whose time did not parse.
+	heardUnparsable int
+	followups       int
 
 	// The notebook (L5): Texture's service, the notebook lines the model wrote
 	// (raw, read after the stream), the title of the entry on air, and the
