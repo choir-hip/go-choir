@@ -101,9 +101,11 @@ A commit subject ends with its class and rollback, for example
   the id is removed from the panel, not re-pointed, and it comes back only
   through the official `agy` CLI, interactively, never an OAuth bridge
   another tool drives. Devin, Opus, Sol and Luna do not run code review.
-- Seat 1's absence is not a discount: tier 2 review (two seats) is blocked
-  until the owner names a replacement, rather than run twice on one model.
-  Re-review after a blocking finding and tier 1 both use seat 2.
+- Seat 1 is a Claude Sonnet subagent (owner, 2026-11-18: "for the second
+  review seat, use Sonnet subagents"), given the code and not the author's
+  conclusion, and never the agent that wrote the change. Tier 2 is seat 1
+  and seat 2 together. Re-review after a blocking finding and tier 1 use
+  seat 2.
 - Guest-security paths need the `Security-Effect` and
   `Security-Effect-Reviewed-By` trailers (`scripts/check-guest-security-epoch`).
   Never write a review trailer that no review backs.

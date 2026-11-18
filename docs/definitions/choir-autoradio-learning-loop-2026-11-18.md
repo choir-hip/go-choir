@@ -224,6 +224,10 @@ owner_rulings:
     decision: L7
     said: "The social nature of takes is intentional... We are just going to use an honest reporting system... we are going to cross that bridge of, like, what happens when someone tries to make 1,000 accounts to all listen to their takes to get a higher reputation... we'll deal with that later. Like, that's going to be a good problem to have... as soon as the reputation on choir is a valuable currency, then we're de facto in the realm of auto capital."
     read_as: "takes use honest reporting: each listener's computer reports its own outcome and the platform trusts it. No anti-fraud or anti-sybil mechanism is built in this mission; the ordinary bounds on what one account can cause stay. Rigging a record, up or down, is named as a known open edge that belongs to Autocapital."
+  - on: 2026-11-18
+    decision: D6
+    said: "for the second review seat, use Sonnet subagents."
+    read_as: "tier-2 review is DeepSeek v4.1 flash plus a Claude Sonnet subagent that did not write the change; red stations land when both accept"
 
 now:
   status: working
