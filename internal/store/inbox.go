@@ -790,6 +790,7 @@ func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitIn
 		}
 		return types.InboxCommitReceipt{}, err
 	}
+	s.inboxCommits.Add(1)
 	s.signalActorWakesIfAny(signalled)
 	return receipt, nil
 }
@@ -860,6 +861,30 @@ func (s *Store) inboxCommandParts(ctx context.Context, objects []objectgraph.Obj
 // records, cursor, the assignment row and its binding commit together, and
 // refuses a command that opens a story.
 func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecordsRequest, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, []storyOpening, types.InboxCommitReceipt, error) {
+	objects, conditions, openings, receipt, err := s.planInboxCommandBody(ctx, req, now)
+	if err != nil {
+		return nil, nil, nil, types.InboxCommitReceipt{}, err
+	}
+	commandObj, err := inboxCommandObject(req.OwnerID, req.ComputerID, receipt, now)
+	if err != nil {
+		return nil, nil, nil, types.InboxCommitReceipt{}, err
+	}
+	objects = append(objects, commandObj)
+	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: commandObj.CanonicalID})
+	return objects, conditions, openings, receipt, nil
+}
+
+// inboxCommandObject is the stored receipt that makes a command replayable
+// under its id. receipt carries the command id and digest.
+func inboxCommandObject(ownerID, computerID string, receipt types.InboxCommitReceipt, now time.Time) (objectgraph.Object, error) {
+	return lifecycleObject(ogKindInboxCommand, ownerID, computerID, receipt.CommandID, receipt,
+		map[string]any{"command_id": receipt.CommandID, "computer_id": computerID}, now, now)
+}
+
+// planInboxCommandBody is planInboxCommand without the command object, so a
+// batch of commands (CommitInboxRecordsBatch) can plan its records once and
+// write one command object per command.
+func (s *Store) planInboxCommandBody(ctx context.Context, req types.CommitInboxRecordsRequest, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, []storyOpening, types.InboxCommitReceipt, error) {
 	ownerID, computerID := req.OwnerID, req.ComputerID
 	// Support verdicts (the runtime's Jev job, as system:support) commit
 	// their memos here, and their failure records ride the same plan.
@@ -911,13 +936,6 @@ func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecor
 	receipt.Verdicts = recorded
 	receipt.StoryLibraryHead = libraryHead
 	receipt.CommandID, receipt.CommandDigest = req.CommandID, req.CommandDigest
-	commandObj, err := lifecycleObject(ogKindInboxCommand, ownerID, computerID, req.CommandID, receipt,
-		map[string]any{"command_id": req.CommandID, "computer_id": computerID}, now, now)
-	if err != nil {
-		return nil, nil, nil, types.InboxCommitReceipt{}, err
-	}
-	objects = append(objects, commandObj)
-	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: commandObj.CanonicalID})
 	return objects, conditions, openings, receipt, nil
 }
 
