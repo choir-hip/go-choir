@@ -70,12 +70,13 @@ DEFAULT_APPEND = os.path.join("~", ".cache", "choir-status", "corpus-reuse.tsv")
 RESEARCH = "research"
 
 STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
-QUOTED_RE = re.compile(r' (?:note|query)="(?:[^"\\]|\\.)*"')
+QUOTED_RE = re.compile(r' (?:note|query|reason)="(?:[^"\\]|\\.)*"')
 SR_RE = re.compile(
     STAMP + r" runtime: search run=(\S+) desk=(\S+) started=(\d+) from_held=(\d+) not_sent=(\d+)"
     r"(?: \(([^)]*)\))? pages_returned=(\d+) pages_new=(\d+) pages_read=(\d+)"
     r"(?: search_all_calls=(\d+) wordings_offered=(\d+) wordings_sent=(\d+) unread_notes=(\d+) untagged=(\d+))?")
 CS_RE = re.compile(STAMP + r" corpus search computer=\S+ (.*)$")
+RB_RE = re.compile(STAMP + r" research brief run=(\S+) desk=(\S+) (.*)$")
 RD_RE = re.compile(STAMP + r" corpus read run=(\S+) desk=(\S+) conv=\S+ capture=\S+ held=(\S+) via=(\S+)")
 GW_RE = re.compile(STAMP + r" .*search request from autoputer (\S+) \(.*?run=(\S+) desk=(\S+) conv=")
 ANY_STAMP_RE = re.compile(STAMP)
@@ -83,7 +84,7 @@ KV_RE = re.compile(r"(\w+)=(\S*)")
 
 HEADER = ["hour", "runs", "started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read",
           "wordings_offered", "wordings_sent", "corpus_searches", "corpus_searches_with_capture",
-          "corpus_searches_with_text_hit", "corpus_searches_with_text_fields", "reads", "research_reads_held",
+          "corpus_searches_with_text_hit", "corpus_searches_with_text_fields", "corpus_searches_brief", "reads", "research_reads_held",
           "research_reads_own", "research_reads_new", "runs_web_no_corpus", "gateway_web_searches"]
 
 
@@ -137,8 +138,18 @@ def parse_console(text):
                 return int(v) if v.isdigit() else None
             tx = num("by_body") is not None and num("by_both") is not None
             ev.append({"k": "cs", "t": t, "run": kv.get("run", "-"), "desk": kv.get("desk", "-"),
+                       "caller": "brief" if kv.get("caller") == "brief" else "cell",
                        "captures": num("captures") or 0, "text_fields": tx,
                        "text_hit": tx and (num("by_body") + num("by_both")) > 0})
+            continue
+        m = RB_RE.search(ln)
+        if m:
+            kv = dict(KV_RE.findall(m.group(4)))
+            def bnum(k):
+                v = kv.get(k, "")
+                return int(v) if v.isdigit() else None
+            ev.append({"k": "rb", "t": t, "run": m.group(2), "desk": m.group(3), "outcome": kv.get("outcome", "?"),
+                       "ms": bnum("ms"), "captures": bnum("captures"), "tokens": bnum("tokens_est")})
             continue
         m = RD_RE.search(ln)
         if m:
@@ -167,7 +178,7 @@ def med(xs):
     return None if not xs else statistics.median(xs)
 
 
-def metrics(sr, cs_all, rd_all, gw):
+def metrics(sr, cs_all, rd_all, gw, rb_all=()):
     """The numbers for the run summaries in sr, the corpus searches and reads
     in cs_all/rd_all (joined on run=), and the gateway events gw (or None)."""
     r = {"runs": len(sr)}
@@ -190,8 +201,9 @@ def metrics(sr, cs_all, rd_all, gw):
     # corpus searches by desk, reads by desk and held x via
     cs_by = {}
     for e in cs_all:
-        d = cs_by.setdefault(e["desk"], {"n": 0, "ge1": 0, "tf": 0, "th": 0})
+        d = cs_by.setdefault(e["desk"], {"n": 0, "brief": 0, "cell": 0, "ge1": 0, "tf": 0, "th": 0})
         d["n"] += 1
+        d[e["caller"]] += 1
         d["ge1"] += e["captures"] > 0
         d["tf"] += e["text_fields"]
         d["th"] += e["text_hit"]
@@ -209,13 +221,21 @@ def metrics(sr, cs_all, rd_all, gw):
     # per run
     csn, rdn = {}, {}
     for e in cs_all:
-        csn[e["run"]] = csn.get(e["run"], 0) + 1
+        if e["caller"] == "cell":   # the host's own brief search is not the desk's choice
+            csn[e["run"]] = csn.get(e["run"], 0) + 1
     for e in rd_all:
         rdn[e["run"]] = rdn.get(e["run"], 0) + 1
     per = [(csn.get(e["run"], 0), e["started"], rdn.get(e["run"], 0)) for e in sr]
     r["per_run"] = {"corpus_searches_median": med([p[0] for p in per]), "web_started_median": med([p[1] for p in per]),
                     "reads_median": med([p[2] for p in per]),
                     "web_without_corpus": sum(1 for p in per if p[1] > 0 and p[0] == 0)}
+    outs = {}
+    for e in rb_all:
+        outs[e["outcome"]] = outs.get(e["outcome"], 0) + 1
+    r["brief"] = None if not rb_all else {
+        "n": len(rb_all), "outcomes": outs, "ms_median": med([e["ms"] for e in rb_all if e["ms"] is not None]),
+        "captures_median": med([e["captures"] for e in rb_all if e["captures"] is not None]),
+        "tokens_est_median": med([e["tokens"] for e in rb_all if e["tokens"] is not None])}
     r["gateway_web_searches"] = None if gw is None else len(gw)
     return r
 
@@ -235,7 +255,12 @@ def compute(console_text, gateway_text, since=None, until=None, first=None, afte
     sr = [e for e in win if e["k"] == "sr"]
     cs = [e for e in win if e["k"] == "cs"]
     rd = [e for e in win if e["k"] == "rd"]
-    gw = None if gw_all is None else [e for e in gw_all if inwin(e["t"])]
+    # The gateway journal reaches back further than the console: count only the
+    # span the statistics cover (the console's, or the requested window).
+    g_lo = since if since is not None else lo
+    g_hi = until if until is not None else (None if hi is None else hi + 1)
+    gw = None if gw_all is None else [e for e in gw_all if g_lo is not None and g_hi is not None
+                                      and g_lo <= e["t"] < g_hi]
     rep = {"covers": {"oldest": iso(lo) if lo is not None else None, "newest": iso(hi) if hi is not None else None},
            "since": iso(since) if since is not None else None, "until": iso(until) if until is not None else None,
            "partial_start": bool(since is not None and (lo is None or since < lo)),
@@ -245,7 +270,11 @@ def compute(console_text, gateway_text, since=None, until=None, first=None, afte
         sub = sorted([e for e in sr if after is None or e["t"] >= after], key=lambda e: e["t"])[:first]
         rep["first"] = {"asked": first, "found": len(sub), "after": iso(after) if after is not None else None}
         sr = sub
-    rep["m"] = metrics(sr, cs, rd, gw)
+    rb = [e for e in win if e["k"] == "rb"]
+    if first is not None:
+        keep = {e["run"] for e in sr}
+        rb = [e for e in rb if e["run"] in keep]
+    rep["m"] = metrics(sr, cs, rd, gw, rb)
     rep["gateway_span"] = None
     if gw_all:
         rep["gateway_span"] = [iso(min(e["t"] for e in gw_all)), iso(max(e["t"] for e in gw_all))]
@@ -313,8 +342,8 @@ def render(r):
     if not m["corpus_searches"]:
         o.append("  (none)")
     for d, v in sorted(m["corpus_searches"].items()):
-        o.append("  %-12s %5d; %s returned one capture or more; page-text hit %s (of %d lines with the fields)"
-                 % (d, v["n"], pct(v["ge1"], v["n"]), pct(v["th"], v["tf"]), v["tf"]))
+        o.append("  %-12s %5d (cell %d, brief %d); %s returned one capture or more; page-text hit %s (of %d lines with the fields)"
+                 % (d, v["n"], v["cell"], v["brief"], pct(v["ge1"], v["n"]), pct(v["th"], v["tf"]), v["tf"]))
     o.append("page reads by desk:")
     if not m["reads_by_desk"]:
         o.append("  (none)")
@@ -326,8 +355,13 @@ def render(r):
     tot = rr["held"] + rr["own"] + rr["new"]
     o.append("research reads: held before the run %d (%s), own (captured by this run) %d (%s), new %d (%s)"
              % (rr["held"], pct(rr["held"], tot), rr["own"], pct(rr["own"], tot), rr["new"], pct(rr["new"], tot)))
+    b = m["brief"]
+    if b:
+        o.append("research briefs: %d (%s); median ms %s, captures %s, tokens_est %s" % (
+            b["n"], ", ".join("%s %d" % kv for kv in sorted(b["outcomes"].items())),
+            fmt(b["ms_median"]), fmt(b["captures_median"]), fmt(b["tokens_est_median"])))
     p = m["per_run"]
-    o.append("per run (joined on run=): corpus searches median %s, web searches started median %s, reads median %s; "
+    o.append("per run (joined on run=; cell searches only): corpus searches median %s, web searches started median %s, reads median %s; "
              "runs with a web search and no corpus search at all: %d of %d"
              % (fmt(p["corpus_searches_median"]), fmt(p["web_started_median"]), fmt(p["reads_median"]), p["web_without_corpus"], m["runs"]))
     if m["gateway_web_searches"] is None:
@@ -357,14 +391,14 @@ def hour_rows(rep, since, until):
         cs = [e for e in ev if e["k"] == "cs" and sel(e)]
         rd = [e for e in ev if e["k"] == "rd" and sel(e)]
         g = None if gw is None else [e for e in gw if sel(e)]
-        m = metrics(sr, cs, rd, g)
+        m = metrics(sr, cs, rd, g, [e for e in ev if e["k"] == "rb" and sel(e)])
         csv = list(m["corpus_searches"].values())
         rr = m["research_reads"]
         nf = m["new_fields"]
         row = [time.strftime("%Y-%m-%dT%H:00Z", time.gmtime(a)), m["runs"], m["started"], m["from_held"], m["not_sent"],
                m["returned"], m["new"], m["read"], nf["offered"] if nf else "", nf["sent"] if nf else "",
                sum(d["n"] for d in csv), sum(d["ge1"] for d in csv), sum(d["th"] for d in csv), sum(d["tf"] for d in csv),
-               sum(m["reads_by_desk"].values()), rr["held"], rr["own"], rr["new"], m["per_run"]["web_without_corpus"],
+               sum(d["brief"] for d in csv), sum(m["reads_by_desk"].values()), rr["held"], rr["own"], rr["new"], m["per_run"]["web_without_corpus"],
                "" if g is None else len(g)]
         rows.append(row)
     return rows
@@ -397,8 +431,8 @@ dir=/var/lib/go-choir/vm-state/@VM@
 sudo -n true 2>/dev/null || echo "##NOSUDO"
 echo "##CONSOLE"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
-  grep -a -E 'runtime: search run=|corpus search computer=|corpus read run=' |
-  sed -E 's/ (note|query)="([^"\\]|\\.)*"//g'
+  grep -a -E 'runtime: search run=|corpus search computer=|corpus read run=|research brief run=' |
+  sed -E 's/ (note|query|reason)="([^"\\]|\\.)*"//g'
 echo "##RANGE"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
   grep -a -o -E '[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' | sed -n '1p;$p'

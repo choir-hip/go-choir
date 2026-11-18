@@ -407,6 +407,14 @@ check "Q3 a list that ends inside the day is said to be incomplete" 'grep -q "ma
 #      not on run=
 #  R9  the gateway count includes another computer, a line outside the window,
 #      or prints the query
+#  R11 gateway lines from before the console's first line (or after its last) are
+#      counted when no --since is given, or an hour row counts another hour's lines
+#  R12 a corpus search with caller=brief counts as the desk's own search: in the
+#      per-run median, or in the runs-with-no-corpus-search count; a line without
+#      the field is not a cell search; the brief count is missing from the hour row
+#  R13 the research brief line's free-text reason is printed, or outcomes, median
+#      ms, captures and tokens_est are wrong, or the old console without the line
+#      prints a brief section
 #  R10 the hourly script fails, or changes its last line, when the corpus
 #      section is unavailable
 corpus="$here/status-corpus-reuse"
@@ -455,7 +463,7 @@ check "R1 no query or note text in the report" '! grep -q SECRET "$root/out"'
 check "R3 4 runs searched; started 12; the new fields are summed over the one line that has them" 'grep -q "summary lines): 4" "$root/out" && grep -q "started (web searches sent) sum 12" "$root/out" && grep -q "wordings_offered 10, wordings_sent 4 (40.0%)" "$root/out"'
 check "R3 not_sent reasons summed" 'grep -q "not_sent 2 (stopped_yielding=2)" "$root/out"'
 check "R3 pages_read / pages_returned = 11/160 = 6.9%" 'grep -q "pages_returned 160, pages_new 130, pages_read 11; pages_read / pages_returned 6.9%" "$root/out"'
-check "R2 research corpus searches: 3 lines, 2 with a capture; text hit 2 of the 2 lines with the fields" 'grep -q "research *3; 66.7% returned one capture or more; page-text hit 100.0% (of 2 lines" "$root/out"'
+check "R2 research corpus searches: 3 lines, 2 with a capture; text hit 2 of the 2 lines with the fields" 'grep -q "research *3 (cell 3, brief 0); 66.7% returned one capture or more; page-text hit 100.0% (of 2 lines" "$root/out"'
 check "R7 research reads: held 1, own 1, new 2; the other desk is apart" 'grep -q "held before the run 1 (25.0%), own (captured by this run) 1 (25.0%), new 2 (50.0%)" "$root/out" && grep -q "^  other  *1$" "$root/out"'
 check "R8 every run has a corpus line under its own run=, so none made web searches without one (0 of 4)" 'grep -q "no corpus search at all: 0 of 4" "$root/out"'
 check "R9 gateway: 3 paper lines in the window (the other computer and 19:00 are out)" 'grep -q "journal): 3 " "$root/out"'
@@ -481,6 +489,40 @@ runcorpus --fixture "$root/cr_a.log" --append "$tsv"
 check "R5 a second run appends nothing new" '[ "$(wc -l <"$tsv")" -eq 3 ] && grep -q "appended 0" "$root/out"'
 runcorpus --fixture "$root/cr_a.log" --append "$here/../corpus-reuse-test.tsv"
 check "R5 a file inside the repo is refused" '[ "$(cat "$root/rc")" = 2 ] && [ ! -e "$here/../corpus-reuse-test.tsv" ]'
+# R11: no --since: the gateway's 19:00 line is before the console's first line (20:30)
+runcorpus --fixture "$root/cr_a.log" --gateway-fixture "$root/cr_g.log"
+check "R11 gateway lines before the console's first line are not counted (3, not 4)" 'grep -q "journal): 3 " "$root/out"'
+check "R11 the hour rows count only their own hour's gateway lines (21:00: 2, 22:00: 1)" '[ "$(sed -n 2p "$tsv" | cut -f21)" = 2 ] && [ "$(sed -n 3p "$tsv" | cut -f21)" = 1 ]'
+# R12/R13
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+PRE = "[ 1.0] x-go-choir-run-autoputer-runtime[1]: "
+def sr(ts, run, started):
+    return f"{PRE}{ts} runtime: search run={run} desk=research started={started} from_held=0 not_sent=0 pages_returned=10 pages_new=5 pages_read=1\n"
+def cs(ts, run, caller):
+    c = f" caller={caller}" if caller else ""
+    return (f'{PRE}{ts} corpus search computer=c captures_ms=5 captures=1 note="n" query="SECRET-Q" capture_ids= run={run} '
+            f'desk=research conv=v published=1 events=1 capped=false{c}\n')
+def rb(ts, run, ms, caps, tok, outcome, reason):
+    return (f'{PRE}{ts} research brief run={run} desk=research ms={ms} threads=1 queries=2 stories=3 captures={caps} passages=4 '
+            f'newest_held=2026-11-18 bytes=10 tokens_est={tok} dropped=0 outcome={outcome} reason={reason}\n')
+L = [PRE + "2026/11/18 20:30:00 other\n", PRE + "2026/11/18 22:10:00 other\n", sr("2026/11/18 21:30:00", "c-1", 3), sr("2026/11/18 21:31:00", "c-2", 2), sr("2026/11/18 21:32:00", "c-3", 0),
+     cs("2026/11/18 21:01:00", "c-1", "brief"), cs("2026/11/18 21:02:00", "c-1", "cell"), cs("2026/11/18 21:03:00", "c-1", ""),
+     cs("2026/11/18 21:04:00", "c-2", "brief"),   # brief only: c-2 searched the web with no cell corpus search
+     rb("2026/11/18 21:01:00", "c-1", 100, 4, 1000, "delivered", '"SECRET-REASON with spaces"'),
+     rb("2026/11/18 21:04:00", "c-2", 300, 0, 0, "empty", "SECRET-WORD"),
+     rb("2026/11/18 21:05:00", "c-3", 200, 2, 2000, "failed", '"x"')]
+open(root + "/cr_c.log", "w").write("".join(L))
+PY
+runcorpus --fixture "$root/cr_c.log"
+check "R12 research corpus searches 4: cell 2 (one without the field), brief 2" 'grep -q "research *4 (cell 2, brief 2)" "$root/out"'
+check "R12 per run uses cell searches only: c-1 has 2, c-2 0, c-3 0 (median 0); c-2 is a web search without a cell search: 1 of 3" 'grep -q "corpus searches median 0," "$root/out" && grep -q "no corpus search at all: 1 of 3" "$root/out"'
+check "R13 briefs: 3 (delivered 1, empty 1, failed 1), median ms 200, captures 2, tokens_est 1000; no free text" 'grep -q "research briefs: 3 (delivered 1, empty 1, failed 1); median ms 200, captures 2, tokens_est 1000" "$root/out" && ! grep -q SECRET "$root/out"'
+runcorpus --fixture "$root/cr_a.log"
+check "R13 no brief lines: no brief section" '! grep -q "research briefs" "$root/out"'
+runcorpus --fixture "$root/cr_c.log" --append "$root/c.tsv"
+check "R12 the hour row has the brief count (21:00 row, column 15 = 2)" '[ "$(head -1 "$root/c.tsv" | cut -f15)" = corpus_searches_brief ] && [ "$(sed -n 2p "$root/c.tsv" | cut -f15)" = 2 ]'
 # R10
 mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 * h' 3
 env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/missing.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
