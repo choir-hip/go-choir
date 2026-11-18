@@ -16,6 +16,7 @@ package podcastworker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -421,5 +422,46 @@ func TestRepairSkipsAClipUnder24SecondsAndDeletesNothing(t *testing.T) {
 	rep, err := r.Run(context.Background())
 	if err != nil || f.windows != 0 || len(f.deleted) != 0 || len(f.puts) != 0 || rep.Skipped != 1 {
 		t.Fatalf("%+v %v downloads %d deleted %v puts %v", rep, err, f.windows, f.deleted, f.puts)
+	}
+}
+
+func TestLocalFingerprintShapeAndArguments(t *testing.T) {
+	f := newFakeRepair()
+	f.said = map[float64]string{417: q1}
+	c, err := LocalFingerprint(context.Background(), f, "https://cdn.example.test/a.mp3", 400, 440, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ClipID != "local" || c.AudioURL != "https://cdn.example.test/a.mp3" || c.Start != 400 || c.End != 440 || c.Fingerprint == nil || c.Fingerprint.Start != 400 || f.windows != 1 {
+		t.Fatalf("seconds trusted: %+v %+v downloads %d", c, c.Fingerprint, f.windows)
+	}
+	// With the quote the clip is found where it now is: 17 s later.
+	f2 := newFakeRepair()
+	c, err = LocalFingerprint(context.Background(), f2, "https://cdn.example.test/a.mp3", 400, 440, q1)
+	if err != nil || c.Start != 400 || c.Fingerprint.Start != 417 || c.Fingerprint.End != 457 || c.Fingerprint.HeadAt != 417 || c.Fingerprint.Validate() != nil {
+		t.Fatalf("quote: %v %+v", err, c)
+	}
+	raw, _ := json.Marshal(c)
+	var shape map[string]any
+	json.Unmarshal(raw, &shape)
+	for _, k := range []string{"clip_id", "story", "show", "episode_title", "episode_guid", "feed_url", "published", "audio_url", "duration_seconds", "start", "end", "quote", "support", "fingerprint"} {
+		if _, ok := shape[k]; !ok {
+			t.Fatalf("field %q missing from %s", k, raw)
+		}
+	}
+	for _, k := range []string{"head", "tail", "head_at", "tail_at", "start", "end", "version", "seekable_by_bitrate"} {
+		if _, ok := shape["fingerprint"].(map[string]any)[k]; !ok {
+			t.Fatalf("fingerprint field %q missing", k)
+		}
+	}
+	for name, a := range map[string][4]any{"no url": {"", 1.0, 40.0, ""}, "short": {"u", 10.0, 20.0, ""}, "unset": {"u", -1.0, -1.0, ""}} {
+		if _, err := LocalFingerprint(context.Background(), f, a[0].(string), a[1].(float64), a[2].(float64), a[3].(string)); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+	f3 := newFakeRepair()
+	f3.said = nil
+	if _, err := LocalFingerprint(context.Background(), f3, "u", 400, 440, q1); err == nil {
+		t.Fatal("a quote that is not in the episode gave a clip")
 	}
 }
