@@ -70,6 +70,11 @@ type SearchHit struct {
 	PublishedAt string  `json:"published_at,omitempty"`
 	Score       float64 `json:"score,omitempty"`
 	Provider    string  `json:"provider,omitempty"`
+	// Held and Read are set on a copy the desk reads, never on the wire.
+	// Held: an earlier search of this run already returned this page.
+	// Read: this run captured it with choir.Read.
+	Held bool `json:"held,omitempty"`
+	Read bool `json:"read,omitempty"`
 }
 
 // Search is a copy of one search as the worker holds it now.
@@ -87,9 +92,14 @@ type Search struct {
 	Total int `json:"total"`
 	// Results are every arrival's hits, each URL once, in arrival order.
 	Results []SearchHit `json:"results"`
-	Done    bool        `json:"done"`
-	Pending []string    `json:"pending,omitempty"`
-	Error   string      `json:"error,omitempty"`
+	// NewPages, HeldPages and ReadPages count Results: pages no earlier
+	// search of this run returned, pages one did, and pages this run read.
+	NewPages  int      `json:"new_pages"`
+	HeldPages int      `json:"held_pages"`
+	ReadPages int      `json:"read_pages"`
+	Done      bool     `json:"done"`
+	Pending   []string `json:"pending,omitempty"`
+	Error     string   `json:"error,omitempty"`
 }
 
 // SearchCount is how far one search has come.
@@ -151,6 +161,15 @@ type SearchStore struct {
 	order    []string
 	// changed is closed and replaced on every apply, waking SearchWait.
 	changed chan struct{}
+	// runStart is the index in order of the first search of the current run:
+	// held is judged against searches from there on (markRunStart).
+	runStart int
+	// isRead says whether this run read the page with that searchHitKey;
+	// nil means the store knows no read ledger.
+	isRead func(key string) bool
+	// counted is what the host has been told (takeStats).
+	startedCounted int
+	counted        map[string][2]int
 }
 
 func newSearchStore() *SearchStore {
@@ -211,11 +230,16 @@ func (st *SearchStore) Get(id string) (Search, error) {
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	s := st.searches[strings.TrimSpace(id)]
-	if s == nil {
+	id = strings.TrimSpace(id)
+	if st.searches[id] == nil {
 		return Search{}, st.unknownLocked(id)
 	}
-	return copySearch(s), nil
+	for _, c := range st.markedLocked() {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return Search{}, st.unknownLocked(id)
 }
 
 // List returns a copy of every search in this session, oldest first.
@@ -225,11 +249,7 @@ func (st *SearchStore) List() []Search {
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	out := make([]Search, 0, len(st.order))
-	for _, id := range st.order {
-		out = append(out, copySearch(st.searches[id]))
-	}
-	return out
+	return st.markedLocked()
 }
 
 // summaryMaxBytes keeps a Summary under the cell output cut (8000 runes).
