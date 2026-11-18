@@ -160,7 +160,16 @@ func TestB3_ASparseMatchOverTwentyThousandRecordsIsBoundedByTheWindow(t *testing
 	if len(recs) != 3 || rows != 3 {
 		t.Errorf("(B3) %d records, %d rows; want 3 and 3", len(recs), rows)
 	}
-	if took > 2*time.Second {
-		t.Errorf("(B3) the sparse read took %v, over the stated 2 s", took)
+	// The stated bound is 2 s on an ordinary build, where the read takes about
+	// 66 ms. The race detector slows this read about twenty-five times (1.68 s
+	// on an idle build machine, 2.09 s in CI run 44403811600 on 2026-11-18),
+	// so under race the bound is 10 s. The rows count above is what proves
+	// the window bounds the read; the time only catches a gross regression.
+	bound, said := 2*time.Second, "the stated 2 s"
+	if raceDetectorEnabled {
+		bound, said = 10*time.Second, "10 s (the bound under the race detector)"
+	}
+	if took > bound {
+		t.Errorf("(B3) the sparse read took %v, over %s", took, said)
 	}
 }
