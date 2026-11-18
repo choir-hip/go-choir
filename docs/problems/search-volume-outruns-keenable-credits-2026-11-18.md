@@ -257,3 +257,77 @@ of reads already held.
 Remaining error: 35 minutes right after a restart, one sample; `from_held`
 counts only reuse inside a run; the gateway cache's 44 hits are not split
 by cause.
+
+## Why a run searches again: the traces and the code (2026-11-18, read after 20:05Z)
+
+Read only: the gateway journal of Node B and the paper's console, 20:05Z to
+about 20:43Z, 32 research runs of the paper's computer, 349 gateway search
+requests (the 343 of the journal plus the last few minutes), 54 `corpus
+search` lines, 2,004 `corpus read` lines and the 28 `search run=` lines of the
+runs that had ended. Counts only; no query is quoted.
+
+**Measured.**
+
+- Shape. A run has a median of 2.5 groups of web searches (most 12) with
+  reads between them; a group has a median of 2 searches and a mean of 3.3
+  (largest 29, the 29 searches before any read of one run). 58% of all web
+  searches (203 of 349) arrived in the same second as another search of the
+  same run, in bursts of 2 to 8; 42% (146) arrived alone. The median run sent
+  3 web searches before its first read (119 of 349 in all, 34%).
+- Reads between. In 779 of the 1,256 reads that follow a first web search, a
+  later web search of the run still came after the read. So the desk does
+  read between rounds; it does not read between the searches of a round
+  (the round is a burst), and a round starts with new searches in 105 groups
+  over 32 runs.
+- Corpus first. 26 of 32 runs searched the corpus at all (54 corpus searches
+  against 349 web searches); in 23 the corpus search came before the first
+  web search. The corpus search is no gate: of those that returned captures
+  by count, 18 of 54 returned the full 10, 9 returned none, the rest 1 to 8.
+  The counts do not say whether the run then read what the corpus held (47%
+  of reads were held captures, above).
+
+**Read in code.**
+
+- The prompt asks for both patterns in one list. `research.yaml` v15, first
+  bullet: "To run searches at once, start each with choir.SearchStart(query)
+  and read them with choir.Searches.Get(id) or choir.SearchWait(id, ms)";
+  fifth bullet: "Cover every open thread in each round: give all the wordings
+  of one question, with the named organizations' own sites, to one
+  choir.SearchAll(question, wordings) call ... Also search for what the
+  request asks and the document does not yet cover." The tool texts agree:
+  `SearchStart`: "Starts a web search on every search provider at once";
+  `Search`: "Use SearchStart when you want several searches running at once";
+  `SearchAll`: "Give it ALL the wordings of ONE question ... It stops sending
+  when a wording's first ten pages are at least 80% pages you already hold".
+  The second-to-last sentence of the first bullet and "Cover every open
+  thread in each round" are what produce a burst per round; "search the
+  corpus first" is one clause and says nothing of writing down what the
+  corpus held and what is missing.
+- A round is a run. `researchInboxPrompt` (`inbox_records.go`) starts a run
+  per Texture record: "Send an interim packet ... as soon as you have read
+  one new source you can cite, and another each time you have read more".
+  Nothing in it or in the prompt tells the desk to list what it holds before
+  it searches; the next round starts from the objective, so it searches again
+  (and the `from_held` reuse of a run does not carry over to the next).
+- `SearchAll` stops on novelty only (`search_all.go`: 80% of a wording's
+  first ten pages held, two empty, two failed, 120 seconds). With 83% of
+  returned pages new, it sends every wording.
+
+**Inferred.**
+
+- Most searches are plain `SearchStart` bursts, not `SearchAll`: `SearchAll`
+  waits for each wording (up to 15 seconds) so it cannot put two requests in
+  one second, and 58% of the requests share a second. The logs cannot say
+  how many `SearchAll` calls were made nor how many wordings each was offered:
+  the run summary counts searches started and not sent, not the verbs. One
+  field would tell: calls to `SearchAll`, wordings offered, wordings sent.
+  That is added in the change below.
+- Why searching again does not need more searching: a search returns 40
+  pages, a run reads 19 in all; a second wording over a question that already
+  holds 40 unread pages mostly adds unread pages. The need to ask for another
+  wording is about what the question lacks, which only a desk that has read
+  can say.
+
+Remaining error: one 38-minute window right after a restart; "same second"
+is the gateway's receive time, so a cached answer or a slow cell can move a
+search a second; the corpus counts are per search, not per capture read.
