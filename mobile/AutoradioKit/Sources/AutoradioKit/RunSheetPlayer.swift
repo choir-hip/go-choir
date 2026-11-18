@@ -484,6 +484,18 @@ extension PlaybackEngine {
         sessionMayBeBack(reason: "play")
         return held
     }
+    /// The lock screen's play, pause or toggle. A press is a press wherever it comes from: while an entry is held for the session, play and toggle
+    /// are the in-app Play (`playPressed`). Otherwise remote audio takes the command; false when it is not remote (the programme player does).
+    public func remoteTransport(_ cmd: String) -> Bool {
+        if isWaitingForSession, cmd == "play" || cmd == "toggle" { _ = playPressed(); return true }
+        guard isRemote else { return false }
+        switch cmd {
+        case "play": resume()
+        case "pause": pause()
+        default: if paused { resume() } else { pause() }
+        }
+        return true
+    }
     /// The app is back in front, an interruption ended, a route came back, or the listener tapped Play: try the held entry now.
     public func sessionMayBeBack(reason: String = "resume") {
         guard let id = sessionHeldFor, playingId == id, let e = store.entry(id) else { return }
