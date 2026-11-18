@@ -61,13 +61,22 @@ func TestNotebookOwner(t *testing.T) {
 	if stale, _ := h.NotebookApply(ctx, owner, desk, notebook.Patch{PatchID: "p3", BaseRevisionID: res.RevisionID, Ops: []notebook.Op{nbAddOp("L3", "Stale.")}}); stale.Status != notebook.StatusStale { // N3
 		t.Errorf("(N3) stale: %+v", stale)
 	}
+	// N5: the page cap, proved with taps and lessons each valid on its own. Ten
+	// taps of 100 words are accepted (a tap is never refused for words) and
+	// leave the page at 1,000; a lesson on top of that is refused for the cap.
 	var big []notebook.Op
 	for i := 0; i < 10; i++ {
-		big = append(big, notebook.Op{Op: "tap", Ref: "tap:e", Text: strings.Repeat("word ", 90)})
+		big = append(big, notebook.Op{Op: "tap", Ref: "tap:e" + string(rune('a'+i)), Text: `More like this: "` + string(rune('a'+i)) + strings.Repeat(" ab", 99) + `" (1 Jan 08:00)`})
 	}
-	if ref, _ := h.NotebookApply(ctx, owner, desk, notebook.Patch{PatchID: "p4", BaseRevisionID: res2.RevisionID, Ops: big}); ref.Status != notebook.StatusRefused { // N5
+	res3, err := h.NotebookApply(ctx, owner, desk, notebook.Patch{PatchID: "p4", BaseRevisionID: res2.RevisionID, Ops: big})
+	if err != nil || res3.Status != notebook.StatusApplied || res3.Words < notebook.HardWords-30 {
+		t.Fatalf("(N5) ten long taps: %+v %v", res3, err)
+	}
+	ref, _ := h.NotebookApply(ctx, owner, desk, notebook.Patch{PatchID: "p5", BaseRevisionID: res3.RevisionID, Ops: []notebook.Op{nbAddOp("L9", "Over the page.")}})
+	if ref.Status != notebook.StatusRefused || !strings.Contains(ref.Reason, "words") { // N5
 		t.Errorf("(N5) over the page: %+v", ref)
 	}
+	res2 = res3
 
 	// The listener's edit is an owner revision; the chain shows it after the desk's.
 	head, err := h.Store.GetLifecycleRevision(ctx, owner, "autoputer-test", res2.RevisionID)

@@ -260,9 +260,12 @@ func (d Doc) MaxTag(letter string) int {
 
 // IsTapLine reports whether a bullet's text is a steering line Autoradio wrote
 // from a tap (a listener's own bullet under that heading is not).
-func IsTapLine(text string) bool {
-	return strings.HasPrefix(text, "More like this: ") || strings.HasPrefix(text, "Less like this: ")
-}
+func IsTapLine(text string) bool { return tapLineRe.MatchString(text) }
+
+// tapLineRe is the whole grammar of a tap line: the verb, the quoted title, and
+// the date stamp the desk prints ("17 Nov 08:12"). A listener's own line that
+// merely begins "More like this: " is theirs.
+var tapLineRe = regexp.MustCompile(`^(More|Less) like this: ".*" \([0-9]{1,2} [A-Z][a-z]{2} [0-9]{2}:[0-9]{2}\)$`)
 
 // tapKey is a tap line without its trailing time: "More like this: "T"".
 func tapKey(text string) string {
@@ -500,6 +503,9 @@ func (d Doc) ApplyOp(op Op) (Doc, error) {
 		}
 		if err := checkAsked(op.Text); err != nil {
 			return d, err
+		}
+		if !IsTapLine(strings.TrimSpace(op.Text)) {
+			return d, fmt.Errorf(`a tap line is More like this: "<title>" (<d Mon HH:MM>), or Less`)
 		}
 		sec := out.section(SecSteering)
 		line := strings.TrimSpace(op.Text)
