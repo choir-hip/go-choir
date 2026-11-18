@@ -16,7 +16,7 @@ Android build today would draw the pages with nothing behind them.
 | Part | Size | Language |
 | --- | --- | --- |
 | Pages | 50 contract files, 7,742 lines | Exact contract |
-| App glue | 8 files, 4,884 lines | TypeScript in the Exact app |
+| App glue | 1 file, 11 lines (`app.ts`) | TypeScript in the Exact app |
 | Logic behind the pages (`mobile/AutoradioKit/Sources`) | 157 files, 38,149 lines | Swift |
 | Binding (`mobile/exact-package/apple`) | 22 files, 3,136 lines | Swift |
 | Interface (`mobile/exact-package/exact.json`) | 181 names, 62 with a declared substitute | JSON |
@@ -38,6 +38,11 @@ The Swift in `AutoradioKit` by what it does (by file name, so approximate):
 The package has an Apple implementation only. On Android an Exact package is
 a Kotlin class (`host/android/README.md:796-806` in the pinned source); ours
 has none.
+
+Correction, the same day: this table first said "8 files, 4,884 lines" of
+TypeScript. That count included generated type files in the build output.
+The app has one TypeScript file of 11 lines. There is no shared logic layer
+to build on; the move writes one.
 
 ## Belief
 
@@ -66,9 +71,9 @@ compiles; long builds.
 
 ## Next
 
-1. A design for the move: the 181 names sorted into native (voice) and
-   shared, what the shared layer offers, and an order by page with the
-   existing fixtures as the specification.
+1. The design for the move is
+   [docs/design/autoradio-in-exact-2026-11-18.md](../design/autoradio-in-exact-2026-11-18.md)
+   (proposed; read from source, not run).
 2. The Android toolchain proved on Exact's own sample app, then the app with
    Android enabled, to see what the pages do with no native side.
 3. Until a page is moved, repairs to its Swift are allowed; new features in
