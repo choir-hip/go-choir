@@ -174,8 +174,15 @@ not joined.
   (`system1ChannelTape`, `ListAcknowledgedEventsByChannel`), so on a busy
   computer an older story's record falls out of the window. In a sample the
   stories without entities were the many-version ones (3, 4, 6 and 25
-  versions). Not proven in production; lane `entity-export-window` verifies
-  the chain before repairing it.
+  versions). **Refuted the same day by reading the chain**: an export that
+  finds no record sends nothing (`story_entities_source.go:229`), and the
+  front reads story-level edges that a later revision cannot remove
+  (`publication_story_entities_read.go`), so the window can only block a
+  first export, and nothing shows first exports failing. The cause is not
+  known. Untested and cheaper: those stories have only incidental entities
+  and the front shows central ones. What would settle it: for the stories
+  with an empty list, whether a `story.entities` record exists on the
+  paper's tape and what roles it holds. No repair was built.
 - **Entity ids are not merged**: "U.S." and "United States", "Trump" and
   "Donald Trump" are separate, so groups split; generic entities ("Drone",
   "Woman") join unrelated stories.
