@@ -55,6 +55,7 @@ internal/ownerfiles
 internal/packagepath
 internal/quotematch
 internal/receiptsigner
+internal/searchquery
 internal/sourcecontract
 internal/sourcefetch
 internal/steptrace
