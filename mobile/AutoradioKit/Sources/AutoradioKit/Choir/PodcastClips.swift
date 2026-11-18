@@ -24,6 +24,12 @@ public struct PodcastClip: Sendable, Equatable {
     public var end: Double
     public var quote: String
     public var support: Double
+    /// The audio signature the phone finds the clip by (docs/reference/PODCAST-CLIP-FINGERPRINT.md); nil on an old record.
+    public var fingerprint: ClipFingerprintRecord? = nil
+
+    /// The phone can find this clip in a served file: it has both fingerprints and the file is seekable by bitrate. A clip that is not
+    /// relocatable is never played as a clip (its row offers the episode).
+    public var isRelocatable: Bool { fingerprint?.isUsable ?? false }
 
     public var seconds: Double { end - start }
     /// The same episode from its start: no clip times (a file whose ads moved the range).
@@ -48,7 +54,8 @@ public struct PodcastClip: Sendable, Equatable {
                            show: (o["show"] as? String) ?? "", episodeTitle: (o["episode_title"] as? String) ?? "",
                            episodeGUID: (o["episode_guid"] as? String) ?? "", feedURL: (o["feed_url"] as? String).flatMap(URL.init(string:)),
                            published: (o["published"] as? String) ?? "", audioURL: a, duration: num(o["duration_seconds"]), start: start, end: end,
-                           quote: (o["quote"] as? String) ?? "", support: num(o["support"]))
+                           quote: (o["quote"] as? String) ?? "", support: num(o["support"]),
+                           fingerprint: (o["fingerprint"] as? [String: Any]).flatMap(ClipFingerprintRecord.parse))
     }
 
     /// What the run sheet plays: the episode from `start`, stopping at `end` (Keep listening clears the end).
@@ -60,6 +67,36 @@ public struct PodcastClip: Sendable, Equatable {
     public var lengthLabel: String {
         let s = Int(seconds.rounded())
         return s < 60 ? "\(s) s" : (s % 60 == 0 ? "\(s / 60) min" : "\(s / 60) min \(s % 60) s")
+    }
+}
+
+/// The record's `fingerprint` object (all additive and optional on the wire; the whole object is dropped when it does not decode).
+public struct ClipFingerprintRecord: Sendable, Equatable {
+    public var version: Int
+    public var head: [UInt8], tail: [UInt8]             // packed fingerprints
+    public var headAt: Double, tailAt: Double           // where head and tail begin in the fingerprinted file
+    public var start: Double, end: Double               // the clip's bounds in the fingerprinted file
+    public var fileBytes: Int64, fileSeconds: Double
+    public var firstFrameOffset: Int
+    public var bitrateKbps: Int
+    public var seekableByBitrate: Bool
+
+    public var isUsable: Bool {
+        version == ClipFingerprint.version && seekableByBitrate && bitrateKbps > 0 && end > start
+            && ClipFingerprint.unpack(head) != nil && ClipFingerprint.unpack(tail) != nil
+    }
+    /// The byte of a file, by its constant bitrate: first audio frame offset plus seconds at bitrate (spec section 3).
+    public func byte(at seconds: Double) -> Int { firstFrameOffset + Int((max(0, seconds) * Double(bitrateKbps) * 125).rounded()) }
+
+    static func parse(_ o: [String: Any]) -> ClipFingerprintRecord? {
+        func num(_ k: String) -> Double? { (o[k] as? NSNumber).map(\.doubleValue).flatMap { $0.isFinite ? $0 : nil } }
+        func bytes(_ k: String) -> [UInt8]? { (o[k] as? String).flatMap { Data(base64Encoded: $0) }.map { [UInt8]($0) } }
+        guard let v = num("version"), let head = bytes("head"), let tail = bytes("tail"), let ha = num("head_at"), let ta = num("tail_at"),
+              let s = num("start"), let e = num("end") else { return nil }
+        return ClipFingerprintRecord(version: Int(v), head: head, tail: tail, headAt: ha, tailAt: ta, start: s, end: e,
+                                     fileBytes: Int64(num("file_bytes") ?? 0), fileSeconds: num("file_seconds") ?? 0,
+                                     firstFrameOffset: Int(num("first_frame_offset") ?? 0), bitrateKbps: Int(num("bitrate_kbps") ?? 0),
+                                     seekableByBitrate: (o["seekable_by_bitrate"] as? Bool) ?? false)
     }
 }
 

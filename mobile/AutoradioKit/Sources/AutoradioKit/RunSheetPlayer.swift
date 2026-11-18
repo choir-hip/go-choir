@@ -92,6 +92,15 @@ extension PlaybackEngine {
     public var sessionReady: ((String) async -> String?)?   // nil: ready; else why sound cannot come out
     /// How long a clip's audio may take to start before it is given up.
     public var startDeadline: TimeInterval = 6
+    /// Finds a podcast clip in the file the host serves now, from its fingerprint, and keeps the bytes it measured (ClipLocator). A clip is
+    /// played from those bytes, never from the host again.
+    public var locator: ClipLocating = ClipLocator.shared
+    /// The clips the phone holds (the located ones are looked up here by the entry's clip id).
+    public var clips: ClipStore = .shared
+    /// Locating in flight or done, by entry id: it starts when the entry is next in line, so the clip begins with no gap.
+    private var locating: [String: Task<ClipLocation, Never>] = [:]
+    /// The clip files kept for entries (deleted when the entry ends or leaves the sheet).
+    private var located: [String: LocatedClip] = [:]
 
     /// The desk could not be reached or wrote nothing: a quiet line, never an entry. Set by the host from the writer.
     public var deskNotice: String? { didSet { if oldValue != deskNotice { onChange?() } } }
@@ -322,8 +331,40 @@ extension PlaybackEngine {
             again = false
             reconcile()
         } while again
+        prefetchClips()
         changed()
         aheadChanged?()
+    }
+
+    /// The clip that is next in line (or the one after a transition) is located now, while the entry before it plays. Entries that left the
+    /// sheet lose their file.
+    private func prefetchClips() {
+        let live = Set(store.sheet.entries.filter { $0.state == .ahead || $0.state == .onAir }.map(\.id))
+        for id in Array(locating.keys) where !live.contains(id) {
+            locating[id]?.cancel(); locating[id] = nil
+            if let l = located.removeValue(forKey: id) { try? FileManager.default.removeItem(at: l.file) }
+        }
+        for e in store.ahead(limit: 2) where e.kind == .clip { _ = locating(e) }
+    }
+
+    /// The located clip for an entry: started once, shared by the prefetch and the start. Nil when the entry is not a clip the phone can find.
+    private func locating(_ entry: RunSheetEntry) -> Task<ClipLocation, Never>? {
+        guard entry.kind == .clip, let id = entry.source?.clipId else { return nil }
+        if let t = locating[entry.id] { return t }
+        guard let clip = clips.clip(id), clip.isRelocatable else { return nil }
+        let loc = locator, eid = entry.id
+        let t = Task { @MainActor [weak self] () -> ClipLocation in
+            let r = await Task.detached { await loc.locate(clip) }.value
+            if case .located(let l) = r { self?.located[eid] = l }
+            return r
+        }
+        locating[entry.id] = t
+        return t
+    }
+
+    private func dropLocated(_ id: String) {
+        locating[id]?.cancel(); locating[id] = nil
+        if let l = located.removeValue(forKey: id) { try? FileManager.default.removeItem(at: l.file) }
     }
 
     /// An answer is about to take the air from an entry that was cut: keep that entry's place. (The reducer's `place now` cuts it; the player
@@ -331,7 +372,7 @@ extension PlaybackEngine {
     private func rememberPlace(of oldId: String?, nextKind: RunSheetKind?) {
         guard nextKind == .answer, remembered == nil, let oldId, let old = store.entry(oldId),
               old.kind != .answer, old.kind != .transition, old.ended?.outcome == .cut else { return }
-        if audio != nil, playingDocument == nil, let a = audio {
+        if audio != nil, playingDocument == nil, let a = audio, located[old.id] == nil {
             var c = a
             c.start = max(a.start ?? 0, engine?.remotePosition()?.elapsed ?? 0)
             remembered = .audio(c, by: .phone)
@@ -454,7 +495,13 @@ extension PlaybackEngine {
                 if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.title, show: entry.source?.label ?? "Files") }
             }
             guard let a = spec else { break }
-            if entry.kind == .clip, let id = entry.source?.clipId, !(await preflight(id)) { if my == generation { finish(entry.id, played: false, why: "the clip was refused before playing (preflight)") }; return }
+            if entry.kind == .clip, entry.source?.clipId != nil {
+                // The clip is found in the file the host serves now, in a window fetched once, and plays from those bytes.
+                guard let task = locating(entry) else { if my == generation { finish(entry.id, played: false, why: "the clip has no fingerprint, so it is not played as a clip") }; return }
+                let r = await task.value
+                guard my == generation, playingId == entry.id else { return }
+                if case .refused(let why) = r { finish(entry.id, played: false, why: "the clip was not found in the file (\(why))"); return }
+            }
             guard my == generation else { return }
             audio = a
             if entry.kind == .clip, let lead = entry.text, !lead.isEmpty {
@@ -474,19 +521,14 @@ extension PlaybackEngine {
     /// The remote half of an audio entry (after its lead-in, if it had one).
     private func startAudio(_ a: RunSheetAudio, generation my: Int) async -> Bool {
         guard let engine else { return false }
-        let ok = await engine.playRemote(url: a.url, title: a.title, show: a.show, start: a.start, end: a.end)
+        let ok: Bool
+        if let id = playingId, let l = located[id] {
+            ok = await engine.playRemote(url: l.file, title: a.title, show: a.show, start: nil, end: nil)      // the bytes that were measured; the clip is the whole file
+        } else {
+            ok = await engine.playRemote(url: a.url, title: a.title, show: a.show, start: a.start, end: a.end)
+        }
         if !ok, my == generation { message = "Could not play \u{201C}\(a.title)\u{201D}." }
         return ok
-    }
-
-    /// Before a clip is spoken or played: is this the file the clip was cut from? Its length is read without playing it. False: unknown
-    /// clip, no engine, no answer in time, or a length more than 3 s from the transcribed file's; the clip is marked so its "Hear it" row
-    /// offers the episode only.
-    public func preflight(_ id: String, store clips: ClipStore = .shared) async -> Bool {
-        guard let clip = clips.clip(id), let engine else { return false }
-        guard let d = await engine.remoteDuration(url: clip.audioURL, deadline: startDeadline) else { return false }
-        if clip.duration > 0, abs(d - clip.duration) > PodcastClip.durationTolerance { clips.markMismatch(id); return false }
-        return true
     }
 
     /// What cannot play is skipped, once, and the radio goes on. Two in a row that made no sound stop it.
@@ -506,6 +548,7 @@ extension PlaybackEngine {
         if played { store.airedEnded(id, as: .heard, outcome: .finished, report: r) }
         else { store.airedEnded(id, as: .skipped, outcome: .failed) }
         provided[id] = nil
+        dropLocated(id)
         if let e = store.entry(id) { onEntryEnded?(e, played) }
     }
 
@@ -571,7 +614,7 @@ extension PlaybackEngine {
 
     /// "Keep listening": the clip stops being a clip. The episode continues past it, from where it is.
     public func keepListening() {
-        guard var a = audio, a.end != nil else { return }
+        guard var a = audio, a.end != nil, playingId.map({ located[$0] == nil }) ?? true else { return }
         a.end = nil
         audio = a
         engine?.clearRemoteEnd()
@@ -579,7 +622,7 @@ extension PlaybackEngine {
     }
     /// The current clip's title, and for a clip the show it is cut from (what "Keep listening" shows).
     public var keepListeningTitle: String? {
-        guard let a = audio, a.end != nil else { return nil }
+        guard let a = audio, a.end != nil, playingId.map({ located[$0] == nil }) ?? true else { return nil }
         return a.show.isEmpty ? a.title : "\(a.title) (\(a.show))"
     }
     public func remotePosition() -> (elapsed: Double, duration: Double?)? { isRemote ? engine?.remotePosition() : nil }

@@ -10,7 +10,7 @@ import XCTest
 private func clipRow(_ id: String, route: String = "/a", start: Double = 10, end: Double = 70, show: String = "Show", ep: String = "Episode", quote: String = "A quote.") -> [String: Any] {
     ["clip_id": id, "story": ["route": route, "version": 2, "title": "Story"], "show": show, "episode_title": ep, "episode_guid": "g-\(id)",
      "feed_url": "https://example.test/feed.xml", "published": "2026-11-16T09:00:00Z", "audio_url": "https://example.test/\(id).mp3",
-     "duration_seconds": 900, "start": start, "end": end, "quote": quote, "support": 0.9]
+     "duration_seconds": 900, "start": start, "end": end, "quote": quote, "support": 0.9, "fingerprint": testFingerprintJSON()]
 }
 private func hex(_ n: Int) -> String { "clip-" + String(format: "%012x", n) }
 

@@ -105,7 +105,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         if let p = cites.first(where: { $0.ref.hasPrefix("pub:") }) { e.source = RunSheetSource(ref: p.ref, label: p.label) }
         if let b = s.between { e.between = RunSheetBetween(after: entryID(b.after), before: entryID(b.before)) }
         if kind == .clip {
-            guard let ref = s.clip, let c = clips.clip(ref.clipID) else { return nil }          // a clip the phone does not have is not played
+            guard let ref = s.clip, let c = clips.clip(ref.clipID), c.isRelocatable else { return nil }          // a clip the phone does not have, or cannot find in a served file (no fingerprint: an old record), is not played; it never reaches the page as a failed row
             e.source = RunSheetSource(ref: "clip:" + c.clipID, label: c.show, url: c.audioURL.absoluteString, start: c.start, end: c.end, clipId: c.clipID)
             e.estSeconds += c.seconds
             if e.title.isEmpty || e.title == SegmentKinds.label(s.kind) { e.title = c.episodeTitle.isEmpty ? c.show : c.episodeTitle }
