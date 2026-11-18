@@ -77,7 +77,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			if err != nil {
 				captures, note = nil, "captures not searched: "+err.Error()
 			}
-			logCorpusSearch(query, exec.ComputerID, time.Since(capturesStart), captures, note)
+			capturesElapsed := time.Since(capturesStart)
 			if captures == nil {
 				captures = []CorpusCapture{}
 			}
@@ -92,6 +92,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			// Published Autopaper stories and opinion pieces, from every
 			// computer: citable once Read captures their read_url.
 			published, publishedNote := searchPublished(ctx, deps, query, limit)
+			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events))
 			body := wireCorpusResult{
 				Query:     query,
 				Published: published, PublishedCount: len(published), PublishedNote: publishedNote,
@@ -153,7 +154,11 @@ func universalWirePlatformOwnerID() string {
 // docs/archive/reports/object-graph-retrieval-research-2026-10-14.md): the query,
 // both halves' latency and counts, and the capture ids returned, so the
 // retrieval eval set can be grown from real searches and their hits.
-func logCorpusSearch(query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string) {
+//
+// The line also names the run, desk and conversation that searched, how many
+// published stories and events came back beside the captures, and whether the
+// candidate cap was hit (search-reuse commit 4): ids and counts only.
+func logCorpusSearch(ctx context.Context, query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string, published, events int) {
 	ids := make([]string, 0, len(captures))
 	for i, c := range captures {
 		if i == 10 {
@@ -164,6 +169,36 @@ func logCorpusSearch(query, computerID string, capturesElapsed time.Duration, ca
 	if len(query) > 200 {
 		query = query[:200]
 	}
-	log.Printf("corpus search computer=%s captures_ms=%d captures=%d note=%q query=%q capture_ids=%s",
-		computerID, capturesElapsed.Milliseconds(), len(captures), note, query, strings.Join(ids, ","))
+	run, desk, conv := corpusAttribution(ctx)
+	log.Printf("corpus search computer=%s captures_ms=%d captures=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d captures=%d capped=%t",
+		computerID, capturesElapsed.Milliseconds(), len(captures), note, query, strings.Join(ids, ","), run, desk, conv, published, events, len(captures), capturesCapped(note))
+}
+
+// corpusAttribution is the run, desk and conversation of a call, cleaned for
+// the log; "-" for a field the call does not carry.
+func corpusAttribution(ctx context.Context) (run, desk, conv string) {
+	exec := toolregistry.ExecutionContextFrom(ctx)
+	a := search.Attribution{RunID: exec.RunID, Desk: firstNonEmptyString(exec.Role, exec.Profile), Conversation: exec.ChannelID}.Clean()
+	dash := func(s string) string {
+		if s == "" {
+			return "-"
+		}
+		return s
+	}
+	return dash(a.RunID), dash(a.Desk), dash(a.Conversation)
+}
+
+// capturesCapped reports whether a capture search's note says a bound was
+// hit: the index ranked only its strongest candidates, or the window of
+// newest captures left older ones unsearched.
+func capturesCapped(note string) bool {
+	return strings.Contains(note, "ranked the strongest") || strings.Contains(note, "older captures were not searched")
+}
+
+// corpusReadLine is the journal line for one Read of a capture: the run, the
+// capture id, and whether the computer already held it (a Read of a held
+// capture is one the run did not need the web for). via is the verb.
+func corpusReadLine(ctx context.Context, captureID string, held bool, via string) string {
+	run, desk, conv := corpusAttribution(ctx)
+	return fmt.Sprintf("corpus read run=%s desk=%s conv=%s capture=%s held=%t via=%s", run, desk, conv, captureID, held, via)
 }

@@ -123,6 +123,7 @@ func TestReadFetchesAPageIntoABlockCapture(t *testing.T) {
 	defer corpusd.Close()
 
 	deps := Dependencies{HTTP: sourcefetch.Client(10 * time.Second), Captures: NewCorpusdCaptureSink(corpusd.URL)}
+	readLog := captureReadLog(t)
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		RunID: "research-run", OwnerID: "owner-1", ComputerID: "computer-1", Profile: agentprofile.Research,
 	})
@@ -169,6 +170,20 @@ func TestReadFetchesAPageIntoABlockCapture(t *testing.T) {
 	again, err := read("/harbor")
 	if err != nil || again.New || again.CaptureID != first.CaptureID {
 		t.Fatalf("unchanged re-read = %+v, %v; want the first capture", again, err)
+	}
+	// Each Read logs the run, the capture and whether the capture was held
+	// (ids only), so the share of a story's sources held before its run began
+	// is countable.
+	for _, want := range []string{
+		"corpus read run=research-run desk=research conv=- capture=" + first.CaptureID + " held=false via=read",
+		"corpus read run=research-run desk=research conv=- capture=" + first.CaptureID + " held=true via=read",
+	} {
+		if !strings.Contains(readLog.String(), want) {
+			t.Fatalf("log lacks %q:\n%s", want, readLog.String())
+		}
+	}
+	if strings.Contains(readLog.String(), "harbor") {
+		t.Fatalf("the read line carries a URL or title:\n%s", readLog.String())
 	}
 	edited.Store(true)
 	changed, err := read("/harbor")

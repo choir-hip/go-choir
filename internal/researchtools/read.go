@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -98,6 +99,7 @@ func newReadTool(deps Dependencies) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
+			log.Print(corpusReadLine(ctx, out.CaptureID, !out.New, "read"))
 			return toolregistry.ResultJSON(out)
 		}}
 }
