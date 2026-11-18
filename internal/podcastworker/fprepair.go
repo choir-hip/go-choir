@@ -425,13 +425,17 @@ func (t *Transcriber) Windows(ctx context.Context, enclosureURL string, spans []
 		if track == nil {
 			return file, nil, errors.New("the cut audio could not be fingerprinted")
 		}
-		parsed, err := t.runParakeet(ctx, wav)
-		if err != nil {
-			return file, nil, err
+		var spoken []Word
+		if t.Parakeet != "" { // none: the caller trusts the times and wants only the track
+			parsed, err := t.runParakeet(ctx, wav)
+			if err != nil {
+				return file, nil, err
+			}
+			spoken = parsed.Words
 		}
 		os.Remove(wav)
-		words := make([]Word, len(parsed.Words))
-		for j, w := range parsed.Words {
+		words := make([]Word, len(spoken))
+		for j, w := range spoken {
 			words[j] = Word{W: w.W, Start: w.Start + sp.T0, End: w.End + sp.T0}
 		}
 		complete := sp.T0 == 0 && sp.T1 == 0 && file.Seconds > 0 && float64(len(track)/podcastfp.Bands)/podcastfp.FPS >= file.Seconds-3
