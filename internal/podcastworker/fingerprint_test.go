@@ -366,7 +366,7 @@ func TestRepairIgnoresFingerprintedClipsAndDryRunWritesNothing(t *testing.T) {
 	r := newRepairer(f, &logs)
 	r.DryRun = true
 	rep, err := r.Run(context.Background())
-	if err != nil || len(f.puts) != 0 || rep.Unfingerprinted != 1 || rep.Fingerprinted != 1 {
+	if err != nil || len(f.puts) != 0 || rep.Unfingerprinted != 1 || rep.NotFound != 1 || rep.Fingerprinted != 0 {
 		t.Fatalf("%+v %v puts %v", rep, err, f.puts)
 	}
 }
