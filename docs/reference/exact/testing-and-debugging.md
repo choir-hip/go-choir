@@ -1,7 +1,6 @@
 # Exact: testing, driving and debugging
 
-Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against `de212e671` on
-2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**,
+Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**,
 **[src]**, **[doc]**, **[seen]** (observed by our app builders, not read
 in source), **[unrun]**.
 
@@ -20,13 +19,9 @@ bun exact.mjs agent ios "screenshot .exact/a.png" check             # [doc]
 choose another); `--device [--phone <name|udid>]` targets a phone over a
 temporary, unencrypted Mac-side port with a per-launch token
 (`docs/reference.md:2469-2473`) [doc]. A drive builds first if the build is
-older than its sources (`test` and `agent` build their own copy on iOS, macOS
-and Windows; on Linux and Android they do not, and drive the build you made:
-`docs/start-here.md:75, 83-85`). An edit to only `app.contract` or what
-`app.ts` imports reaches a running simulator build as a baked plan, "in
-seconds" (`recipes/ios-driving.md:17-19`, `recipes/app-json.md:48`); the
-recipe gives no number; the "about a second" this page once gave is not in it. A manifest, asset, font, grant, `appId`, canvas or Rust edit
-rebuilds the app.
+older than its sources; an edit to only `app.contract` or what `app.ts`
+imports reaches a running simulator build as a baked plan in about a second
+[doc: recipes/ios-driving.md].
 
 What `tree` returned for the spike [run]:
 
@@ -66,9 +61,8 @@ test "search, swipe to delete, delete from the menu"
   tap "note-2-delete"
 ```
 
-`bun exact.mjs test web|ios|macos|android|linux|windows`; `verify` builds, runs
-tests, checks where each ends and relaunches [doc: README.md Quick start;
-`start-here.md:70, 75`].
+`bun exact.mjs test web|ios|macos`; `verify` builds, runs tests, checks where
+each ends and relaunches [doc: README.md Quick start].
 
 ### Voice flows for agent tests [doc, handoff]
 
@@ -78,36 +72,6 @@ through the speech packages (`packages/speech-recognition`,
 microphone", `MediaCapture.swift:22-24`) [src]. We built none of this. A
 double for AutoradioKit should be a package implementation that branches on
 `context.agent` and feeds scripted events with `context.changed`.
-
-## What each check can see
-
-| Check | Sees | Cannot see | Source |
-|---|---|---|---|
-| `contract build app.contract --json --errors-only` | Contract errors, the type check of `app.ts`, and a direct `Date.now()`, `new Date()`, `Math.random()`, `setInterval` by file and line | anything at run time | `start-here.md:69`; `reference.md:2299-2311` |
-| `bun test` on the module (`answer(source, args, store, storage, native)` with a fake `storage`) | the module's own logic: ordering, normalisation, storage use, refusals it throws | Bun has no clock or randomness guard, so a `Date.now()` passes; Bun has no `scheduler`; no 100 ms turn budget or 64 MiB heap; no grants (`denied`); no shape check unless the test makes one; no real `fetch` timing | `reference.md:2224, 2305-2309`; `agent-pitfalls.md:1068`; Shelf `app.test.ts:1-4, 35-45` |
-| `test web`, `agent web`, `verify web` | the real plan on the runner, the web build's guarded `Date`/`Math`/timers, fetch faults and fixtures (`fail fetch`, `answer fetch`), a server per test (`request`) | Hermes limits (the browser keeps no turn budget), native packages (placeholder or substitute), UIKit bars, audio, real touch | `recipes/tests.md:21-32`; `reference.md:2218-2224` |
-| `test ios`, `agent ios`, `verify ios` | Hermes, UIKit's bars and controls, light and dark at two widths, a relaunch, scrolling; `--touch platform` makes taps real touches | audio hardware under the agent (our package ran real, see below), a lock screen, a phone | `start-here.md:70`; `recipes/ios-driving.md:3-9` |
-| `test android`, `agent android --reader`, `verify android` | Hermes on the Android bundle, the reader's views; the driver's clock; `tree --ax` | `check` (refused); a real Android touch (`tap` is the presenter's addressed press) or keyboard (`type` sets the value); `--plan`, `--world`, `--size`, a launch URL (refused) | `host/android/README.md:313-330` |
-| `prefer frozen true`, `prefer visibility-state hidden` | an authored reaction to the fact | process suspension, coalesced delivery, waking; "qualify on a real host" | `contract-for-agents.md:4937-4943`; `reference.md:1937-1943` |
-| A phone | the real thing | iOS: `agent ios --device`; Android: not done | `reference.md:4744-4760` |
-
-
-## Driving Android [run, 2026-11-18, this Mac, Shelf only]
-
-```sh
-ANDROID_SERIAL=emulator-5554 bun scripts/agent.mjs android --reader --app shelf \
-  --storage s1 "clock data" tree "screenshot <png>"
-```
-
-The APK was built first by `bun scripts/agent-android.mjs build shelf --apk`
-(6 min 33 s; `build-and-ship.md`, "Android"), installed on an emulator (an
-android-36 arm64 image, an AVD of our own), and the tree and screenshot came
-back correct. `--reader` installs the APK, launches it under a driver and speaks
-the agent's JSON lines to it; `ANDROID_SERIAL` picks the device; a drive
-refuses an APK older than its sources and installs only when the device does
-not hold the same bytes (`host/android/README.md:256-262, 339-346`) [src].
-Exact's own tests for Shelf (eleven) pass on the reader (`:330-334`) [doc].
-Autoradio on Android and a physical Android phone are not done.
 
 ## Logs
 
@@ -131,7 +95,7 @@ Autoradio on Android and a physical Android phone are not done.
 | Message | Cause | Fix |
 |---|---|---|
 | `error: Bun 1.3.14 is older than 1.4.2 or unavailable; set BUN=~/.bun-1.4.2/bin/bun` | wrong Bun | install 1.4.2, `export BUN=` |
-| `setup` sits on "Installing pinned Hermes bundle for target aarch64-linux-android" | at `76cd50f9e` it fetched every platform (not re-run at `de212e671`, whose docs list host and Apple bundles, `reference.md:35-41`) | run the installer crate for the three Apple targets only |
+| `setup` sits on "Installing pinned Hermes bundle for target aarch64-linux-android" | it fetches every platform | run the installer crate for the three Apple targets only |
 | `error: No Account for Team "..."` / `No profiles for '<bundle id>' were found` | no Apple account in Xcode | owner signs in under Xcode > Settings > Accounts |
 | `error: tool 'xcodebuild' not found` / `'simctl' not found` / `'devicectl' not found` | the Nix dev shell shadows Xcode tools | use `env -i ... DEVELOPER_DIR=...` |
 | `host/apple: no Metal toolchain...` | optional | ignore or `xcodebuild -downloadComponent MetalToolchain` |
@@ -189,10 +153,9 @@ abort, which are not needed.
    answer. On a phone the module runs the real engine even under the agent (only
    the simulator is virtual) [run, lane report]. Nothing is installed on the
    owner's phone by builders without the owner's agreement.
-8. **Timings** [run, lane reports, loaded M1; native builds, not Exact's
-   loop, see `build-and-ship.md`, "What each kind of edit costs to see"]: a
-   warm rebuild plus drive takes about 60 s; a TypeScript-only change about
-   57 s; a cold Exact build about 15 minutes; a first `ios` build in a new worktree about 5 minutes (cargo 220 s,
+8. **Timings** [run, lane reports, loaded M1]: a warm rebuild plus drive takes
+   about 60 s; a TypeScript-only change about 57 s; a cold Exact build about 15
+   minutes; a first `ios` build in a new worktree about 5 minutes (cargo 220 s,
    swift 128 s) when the caches were warm. A single exit 128 seen once was
    transient. **Rule: one shared build tree, one build at a time, one simulator
    at a time.** Each worktree compiling its own copy overloaded the Mac

@@ -1,38 +1,9 @@
 # Exact: project layout, build, signing, install, pinning
 
-Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against `de212e671` on
-2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**
+Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**
 (simulator, 2026-11-10, M1 Mac with another agent building at the same time),
 **[src]**, **[doc]**, **[unrun]**. The runnable example is
 [`mobile/exact-spike/`](../../../mobile/exact-spike/README.md).
-
-## What each kind of edit costs to see
-
-Marks per cell: **D** documented by Exact (its words, not our run), **M**
-measured by us, **?** unknown (neither stated by Exact nor measured here). Exact
-paths are at `de212e671`. "Loop" means a native client launched against the web
-loop, `host/apple/build.mjs --ios --run --url <url>` or `bun exact.mjs android
---run --url <url>` (`docs/reference.md:1855-1870`; `host/android/README.md:153-165`).
-
-| You edit | Web (`bun exact.mjs web`) | iOS | Android |
-|---|---|---|---|
-| `app.contract` | In the page in 99 ms on a fresh app (D, `README.md:155-156`); on ours 57 to 90 s (M, below) | Loop: plan replaced, state carried; "seconds" (D, `reference.md:1866,1877`; `recipes/app-json.md:48`); our time ?. `agent ios` / `test ios`: rebuilt as a baked plan (D, `recipes/ios-driving.md:17-19`); a Contract-only rebuild took 12 to 40 s through our build path (M). `bun exact.mjs ios`: bake and link, "compiles no Rust" (D, `reference.md:4693-4698`); "a minute or two" (D, `start-here.md:51`); a warm rebuild plus drive about 60 s (M) | Loop: plan replaced, state carried (D, `README.md:157-159`); time ?. Without the loop `test android` and `agent android` do not build; run `bun exact.mjs android` after the edit (D, `start-here.md:75`); a build after the first ? |
-| `app.ts` or a file it imports | As above (D) | Loop: module pair replaced in the running app (D, `reference.md:1866-1868, 4718-4723`). `agent ios`: baked plan (D, `recipes/ios-driving.md:17-19`). A TypeScript-only change took about 57 s through our build path (M). A first use of a newer prelude feature raises `typescriptRuntime` and needs one new binary (D, `reference.md:2084, 2406, 2761`) | Loop: module pair replaced (D, `README.md:158-159`); time ? |
-| `app.test.contract`, `app.test.ts` | No build. Caltrain's three tests take about two seconds on the web host (D, `README.md:370-371`); ours ? | No build for `test web`; `test ios` ? | `test android` drives an APK built earlier (D, `start-here.md:75`) |
-| Swift package or app module | n/a | `bun exact.mjs ios` (D, `recipes/native-module.md:76`); a Swift change about 60 s warm (M); a cold build that adds Swift about 3 min (M); a first build in a new worktree about 5 min (M) | n/a |
-| Kotlin package | n/a | n/a | New APK (D, `host/android/README.md:796-806`); time ? |
-| `app.json`, grants, `appId`, assets, fonts, strings, icons, canvas surfaces | Rebuild (D) | Native build; the client keeps the last good generation until relaunched (D, `recipes/app-json.md:47-49`; `reference.md:1877-1879`) | New APK (D, `scripts/agent-android.mjs:1372`) |
-| Rust data crate | We have none | `ios-driving.md:18-19` says rebuild; `reference.md:1867-1868` says declared Rust modules reload in the loop; Exact disagrees with itself (D) | New APK; the loop refuses a Rust pair (D, `host/android/README.md:160-164`) |
-| First build for the target | `setup` a few minutes (D, `start-here.md:51`) | "Ten to fifteen minutes" (D, `start-here.md:51`); about 15 min (M, below) | Shelf, 6 min 33 s (M, 2026-11-18, below) |
-
-What "a first build ten to fifteen minutes, later builds a minute or two"
-(`start-here.md:51`, `README.md:351-353`) refers to: the first native build of a
-platform, which compiles Exact's Rust host cold, and the later *native builds*
-that reuse it. It does not describe what a Contract or `app.ts` edit costs in the
-loop, where no native build runs. Our "57 s for a TypeScript-only change" is a
-native build through `mobile/scripts/build-lab.sh` (it syncs the kit,
-regenerates the interface, runs `bun install` in the app and then the whole
-`ios` verb); whether any run used the loop is not recorded.
 
 ## Prerequisites and the exact commands [run]
 
@@ -48,19 +19,16 @@ cd exact-checkout && git fetch --depth 1 origin 76cd50f9e863129b3fc75db1673d6ad4
 curl -fsSL https://bun.sh/install | BUN_INSTALL=$HOME/.bun-1.4.2 bash -s bun-v1.4.2
 export BUN=$HOME/.bun-1.4.2/bin/bun
 
-# At 76cd50f9e `bun scripts/exact.mjs setup` also fetched Hermes for Android,
-# Linux, Windows, tvOS and the game SDK's crates, each ~190 MB, and stalled for
-# us. (de212e671's docs say it installs the host and Apple bundles only,
-# reference.md:35-41; not re-run.) Installing only the Apple targets worked:
+# DO NOT run `bun scripts/exact.mjs setup` for iOS-only work: it also fetches
+# Hermes for Android, Linux, Windows, tvOS and the game SDK's crates, each
+# ~190 MB, and stalled for us. Install only the Apple targets:
 for t in aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim; do
   cargo run --manifest-path vendor/ibex/crates/hermes-lean-sys-installer/Cargo.toml -- --target $t
 done
 ```
 
 Result: `~/.cargo/hermes-lean-sys/hermes-vanilla-d412d3bd8512-v5/<hash>/` for
-each target (525 MB for five bundles after the aborted `setup`) [run]. At
-`de212e671` the set is v6, with an Android arm64 bundle among them
-(`docs/reference.md:30-34`); the path will differ.
+each target (525 MB for five bundles after the aborted `setup`) [run].
 `setup --check` says what is missing [doc: README.md Quick start].
 
 Run Apple tools outside the Nix shell (the repo shell shadows `xcodebuild`,
@@ -128,89 +96,6 @@ Notices in the log, harmless: "no Metal toolchain, so no ExactSvgFilter.metallib
 The generated `Info.plist` carried [run]: `ExactAudioSession = playback`,
 `ExactCapturesInBackground = true`, `UIBackgroundModes = [audio]`,
 `NSMicrophoneUsageDescription` (from `strings/en.json`), `UIDeviceFamily`.
-
-## Our own loop is slow, and the mark is most of it [run, 2026-11-18]
-
-Measured in the build tree on `lane/autoradio-integ20`, an M1 Mac:
-
-| What | Time |
-|---|---|
-| `bun exact.mjs contract build app.contract --json --errors-only` | 64 to 66 s |
-| The same with `MarkAt`'s `view` replaced by one empty box | 16 s |
-| `bun exact.mjs web`, until the first plan is served | 38 s |
-| A one-line edit to `radio.contract` in that loop | 90 s the first time, 57 s the second |
-| `bun exact.mjs agent web … tree screenshot` (builds its own copy) | 99 s first, 39 s unchanged |
-
-Exact's figure for a fresh app is 99 ms per edit (`README.md:155-156`). Ours is
-about six hundred times that, and the Swift has no part in it: this is the
-Contract compiler on our pages. The plan is 5.9 MB with the mark and 1.3 MB
-without it; the web build reports `MarkAt: 4616382 B (29 instances)` of a
-16 MB `app.js` ("shared bodies counted per use": a component's body is
-compiled once per use). The mark is drawn in pure Contract `fn`s
-(`mobile/AutoradioLab/mark.contract`), each polygon's points a deep expression,
-and it is used 29 times, 12 of them in the motion gallery (`motion.contract`,
-a lab page).
-
-What follows: cut the mark's uses to the few the product shows, move lab pages
-out of the product app, and find a cheaper form for the mark (points computed
-once and shared, or a canvas). The remaining 16 s is still far from Exact's
-figure and is not yet explained; `Btn` has 231 uses and `Card` 93.
-
-## Android [run, 2026-11-18, this Mac]
-
-Proven today with Exact's own Shelf sample, not with Autoradio. From the Exact
-checkout, `bun scripts/agent-android.mjs build shelf --apk`
-(`host/android/README.md:73-75`) built the APK in **6 min 33 s** on the first
-build for the target, after three things the first attempt lacked:
-
-1. **The Rust target `aarch64-linux-android` on the pinned 1.99.1 toolchain**
-   (`rust-toolchain.toml:3`). The script checks and says so:
-   `rustup target add aarch64-linux-android --toolchain 1.99.1`
-   (`scripts/agent-android.mjs:1436-1441`).
-2. **The pinned Android Hermes bundle**, installed with the hermes-lean-sys
-   installer and `--target aarch64-linux-android` (`README.md:278-280`). Exact's
-   pages say `exact setup` installs it with the target (`README.md:790-791`;
-   `host/android/README.md:174-175`); our first attempt did not have it.
-3. **`cargo fetch --locked` for the whole workspace.** The build's own
-   `cargo fetch --target` left `jpeg-encoder` unfetched, and its offline
-   `cargo tree` then failed.
-
-Environment: `JAVA_HOME` the Homebrew `openjdk@21` (21.0.12; Exact wants 21.0.8
-or later in 21, `host/android/README.md:83-84`), `ANDROID_HOME`
-`~/Library/Android/sdk` (a default the build also tries, `:77`), Bun 1.4.2 first
-on `PATH`. Gradle fetched its 9.8.0 distribution (the committed wrapper, `:20`)
-and platform 37.2 (`:23`, `:77`).
-
-The APK installed on an emulator (an android-36 arm64 image, an AVD of its own)
-and was driven with
-
-```sh
-ANDROID_SERIAL=emulator-5554 bun scripts/agent.mjs android --reader --app shelf \
-  --storage s1 "clock data" tree "screenshot <png>"
-```
-
-The tree and the screenshot were correct. That is Exact's reader on Android
-drawing a TypeScript-data app (`host/android/README.md:256-262`).
-
-**Autoradio itself on Android [run, 2026-11-18].** `bun exact.mjs android` in
-`mobile/AutoradioLab` (it added `"android": {}` to `app.json`'s `host`, kept on
-the local branch `android-probe` in the build tree, not landed) built and
-installed in 260 s on the first build. `bun exact.mjs agent android --storage a1
-"clock data" tree logs "screenshot <png>"` drew the deck, the bar, the mark and
-the tray with its labels. Under the driver all 114 source reads were answered
-`(substituted)` and a send failed: `autoradio.pageOpen: NotSupportedError; it
-ends unsent`. Our package has no Android implementation, so the pages have
-nothing behind them. One refusal to fix in the contracts:
-`-exact-exit-animation: refused on Android (LLP 1063)`; and the compiler warns
-that `sf/…` symbols draw only on Apple (`lower-symbol-platform`).
-
-**Not yet done:** a physical Android phone (the owner's old one never appeared
-on the USB bus); `android --run --url` against the web loop; the app outside
-the driver; the time of a second Android build.
-From Exact's own pages, not our runs: minSdk 31 unless `host.android.minimumOS`
-says `"10"` or `"11"` (`:22`, `:1545-1548`); `arm64-v8a` only (`:23`); its
-controls are the desktop painter's shapes and a sheet or chooser is refused
-(`:1642`); `check` is refused for every Android carrier (`:326`).
 
 ## Signing and device install (free provisioning)
 
@@ -285,9 +170,7 @@ drive about 60 s, a TypeScript-only change about 57 s, a first build in a new
 worktree about 5 minutes with warm caches, a cold build about 15 minutes
 (`testing-and-debugging.md`, item 8). Exact keeps shared caches under
 `~/.cache/exact` (modules by input SHA-256, registry crates); deleting them only
-costs the next first build its time (Exact `AGENTS.md` [doc]). These are
-timings of native builds. Exact's loop (table above) swaps a Contract or
-`app.ts` edit into a running app with no native build; we have not timed it.
+costs the next first build its time (Exact `AGENTS.md` [doc]).
 
 **Merging lanes (seen in our build, 2026-11-11):** a lane's last unproven
 commit can break the merged build. Re-fetch and merge every lane head just
@@ -321,21 +204,14 @@ not author it.
   `~/.cache/exact` between CI runs to get minutes [doc].
 - TestFlight upload is Apple's tooling after the `.ipa`; not exercised.
 
-## Over-the-air updates: off for us, not absent in Exact
+## Over-the-air updates: off
 
 `deploy.store.<platform>` is `"0"` (no update store, every change is a new
-binary) or `"A"` (signed plans, assets and a TypeScript module pair update over
-the air, never native code: `scripts/app.schema.json:1208`, `README.md:797-801`
-at `de212e671`) [src]. What "isn't implemented" is delivering a TypeScript and a
-Rust module together. A production bake with updates needs
-`deploy.signing.keys` and `EXACT_UPDATE_RECEIPT` or `EXACT_UPDATE_GENESIS=1`
-(`recipes/mobile-build.md:7-10`); the binary must carry the module's
-`typescriptRuntime` and exactly its grants, so a new grant is a new binary
-(`reference.md:4770-4777`). Android's store reads `"0"` when absent. We set
-`"0"` in version 1 and have not run an update [doc, unrun]. Moving the app's
-logic into `app.ts` is what would make `"A"` worth deciding; it is an owner act,
-not a default. Rust data-module replacement exists in development (`wasmi` on
-iOS) but not in production for Android (`host/android/README.md:1731-1736`).
+binary) or `"A"` (signed plans and assets update over the air). "Signed
+TypeScript and Rust module delivery isn't implemented"
+(`scripts/app.schema.json:1003`) [src]. Rust data-module replacement exists in
+development (`wasmi` on iOS) but production capability "does not grant store
+permission" (`docs/reference.md:2917-2921`). Set `"0"` for iOS in version 1.
 
 ## Telemetry-like behaviour to switch off
 

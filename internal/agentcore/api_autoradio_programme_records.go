@@ -96,9 +96,19 @@ func (c *programmeCall) get(ctx context.Context, id string) (*types.CommitmentRe
 // deadlines derive from is read back from the stored start record.
 func (c *programmeCall) writeStart(ctx context.Context) error {
 	now := time.Now().UTC()
-	start, err := c.noticeRecord(stretchStartRecordPrefix+c.stretchID, kindStretchStart, map[string]string{
+	startRefs := map[string]string{
 		"stretch_id": c.stretchID, "started_at": now.Format(time.RFC3339Nano), "request_id": c.req.RequestID, "cause": c.req.Cause,
-	}, "stretch "+c.stretchID+" started", "", nil, now)
+	}
+	if c.input != nil && c.input.nbFound {
+		// The input receipt: which notebook revision the model was shown, with
+		// the hash and length of the text, never the text (rule 2: the text is
+		// the notebook, which the listener reads).
+		startRefs["notebook_revision_id"] = c.input.nbRevID
+		startRefs["notebook_sha256"] = c.input.nbReceiptSHA
+		startRefs["notebook_bytes"] = fmt.Sprint(c.input.nbReceiptLen)
+		startRefs["marked_cases"] = fmt.Sprint(len(c.input.cases))
+	}
+	start, err := c.noticeRecord(stretchStartRecordPrefix+c.stretchID, kindStretchStart, startRefs, "stretch "+c.stretchID+" started", "", nil, now)
 	if err != nil {
 		return err
 	}
@@ -190,11 +200,15 @@ func (c *programmeCall) writeIndex(ctx context.Context, status string) (string, 
 	droppedJSON, _ := json.Marshal(dropped)
 	ids, _ := json.Marshal(c.segmentIDs)
 	timings, _ := json.Marshal(c.timings(time.Now()))
-	rec, err := c.noticeRecord(stretchIndexRecordPrefix+c.stretchID, kindStretchIndex, map[string]string{
+	idxRefs := map[string]string{
 		"stretch_id": c.stretchID, "request_id": c.req.RequestID, "status": status, "segments": fmt.Sprint(len(c.segmentIDs)),
 		"claims": fmt.Sprint(len(c.claimIDs)), "dropped_count": fmt.Sprint(len(c.dropped)), "dropped": string(droppedJSON),
 		"provider": c.provider, "model": c.model, "timings_ms": string(timings), "client_gone": fmt.Sprint(c.writeErr != nil),
-	}, "stretch "+c.stretchID+" "+status, string(ids), append([]string{}, c.claimIDs...), time.Now())
+	}
+	if c.nbSummary != "" {
+		idxRefs["notebook"] = c.nbSummary
+	}
+	rec, err := c.noticeRecord(stretchIndexRecordPrefix+c.stretchID, kindStretchIndex, idxRefs, "stretch "+c.stretchID+" "+status, string(ids), append([]string{}, c.claimIDs...), time.Now())
 	if err != nil {
 		return "", err
 	}

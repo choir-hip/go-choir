@@ -20,7 +20,7 @@ func TestAutoradioRecordKindsTable(t *testing.T) {
 		"autoradio.turn", "autoradio.request", "autoradio.forecast", "autoradio.settlement",
 		"autoradio.stretch_start", "autoradio.segment", "autoradio.stretch", "autoradio.air",
 		"autoradio.conflict", "autoradio.lesson", "autoradio.strike", "autoradio.clear", "autoradio.note",
-		"autoradio.sheet_op", "autoradio.sheet_snapshot", "autoradio.no_verdict",
+		"autoradio.sheet_op", "autoradio.sheet_snapshot", "autoradio.no_verdict", "autoradio.notebook_patch",
 	}
 	if len(AutoradioRecordKinds) != len(want) {
 		t.Fatalf("table has %d kinds, design 12.2 has %d", len(AutoradioRecordKinds), len(want))

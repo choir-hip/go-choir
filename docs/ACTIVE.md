@@ -11,33 +11,7 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live station (2026-11-18): Autoradio, the cutover from Swift to Exact
-
-Owner, 2026-11-18: "only the voice stuff should be swift. the rest should be
-exact... the whole point is the codebase is shared, using EXACT". Goal:
-[`definitions/choir-autoradio-exact-cutover-2026-11-18.md`](definitions/choir-autoradio-exact-cutover-2026-11-18.md)
-(stations X0 to X11, and K1 to K3 carried from the learning loop). State at
-2026-11-18T12:50Z: the app's pages build and draw on an Android emulator with
-nothing behind them; the first page (the paper) is being moved to TypeScript;
-the app's own Exact loop takes a minute per edit and is being made fast; the
-owner's iPhone runs `lane/autoradio-integ20`; the phone work is not on main.
-The rule is in CLAUDE.md, Product. The station below is a checkpoint.
-
-## Checkpoint (2026-11-18): Autoradio learns from its listener
-
-Owner, 2026-11-17 night: the overnight work is the learning engine, takes are
-built now, TestFlight this week. Goal:
-[`definitions/choir-autoradio-learning-loop-2026-11-18.md`](definitions/choir-autoradio-learning-loop-2026-11-18.md)
-(stations L1 to L10). State at 2026-11-18T10:15Z: settlement (L1 to L3) is
-deployed and proven on the drill computer; the takes server (L7) is deployed and proven
-on the drill computer; the notebook (L4, L5) is in a repair round after review;
-the phone build `lane/autoradio-integ19` is on the owner's phone and the
-phone lanes are not on main. What is built is in
-[`current-architecture.md`](current-architecture.md). Incomplete: the owner
-cleared it on 2026-11-18 for the cutover above, which carries its open work.
-The station below is superseded by it.
-
-## Superseded (2026-11-17 night): Autoradio overnight
+## Live station (2026-11-17 night): Autoradio overnight
 
 Owner, 2026-11-17: one voice at a time, local retrieval for the on-device
 model, the latest Exact on phone and Mac, a native Mac app, EmbeddingGemma 2

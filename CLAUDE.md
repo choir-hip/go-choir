@@ -15,18 +15,6 @@ wins unless this file carries a newer, explicitly promoted update.
 - Names are never camel case: Autopaper, Autoputer, Autoradio. "World Wire",
   "Universal Wire" and "sourcecycled" are retired names for Autopaper. The
   shared graph of published objects is **the Autopaper object graph**.
-- **The phone app is Exact; only voice is native** (owner, 2026-11-18: "only
-  the voice stuff should be swift. the rest should be exact... the whole
-  point is the codebase is shared, using EXACT"). The audio session, the
-  microphone, speech and the on-device models are native (Swift on iPhone,
-  Kotlin on Android). Everything else is written once in Exact and runs on
-  both: pages, page logic, the server client, sign-in, sync, the run sheet,
-  mail, files, the reader, podcasts, takes, the notebook. No new feature
-  adds logic to `mobile/AutoradioKit` or `mobile/exact-package/apple`
-  outside voice; a repair to existing Swift is allowed until its page is
-  moved. A new native call needs a reason only native code can meet, written
-  beside it. Where the app stands against this rule:
-  [docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md](docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md).
 - The roadmap is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md); the
   live station is [docs/ACTIVE.md](docs/ACTIVE.md).
 - **What exists today is [docs/current-architecture.md](docs/current-architecture.md)**
@@ -254,12 +242,6 @@ record lands alone first. See
   run only in the lead's build tree and refuse elsewhere. A lane's Swift
   package build folder is the only build output a builder makes, and
   `scripts/gc-build-output` deletes it once the lane has been idle a day.
-  What a lane may run (2026-11-18, for the move to shared logic): the Exact
-  loop that needs no native build, against the lead's one Exact checkout:
-  `EXACT2=<build tree>/mobile/.exact-src`, then `scripts/sync-exact-package.sh`,
-  `bun install`, and `bun exact.mjs contract build`, `test web`, `agent web`
-  and `bun test` in `mobile/AutoradioLab`. That writes megabytes, not
-  gigabytes. Native builds, simulators and emulators stay with the lead.
   The lead runs `scripts/gc-build-output` at the start of a session and
   before a device build, and removes a lane with `lane rm` when its branch
   lands or is dropped. Every builder's brief says so.

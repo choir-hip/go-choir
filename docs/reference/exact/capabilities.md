@@ -1,7 +1,6 @@
 # Exact: on-demand capabilities (GPU module, Canvas 2D, textflow, Markdown, game add-on, native modules)
 
-Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against `de212e671` on
-2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**,
+Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**,
 **[src]**, **[doc]**, **[test]**, **[inferred]**, **[unrun]** as in the front
 page. Paths are relative to the Exact repo root (`mobile/.exact-src` here).
 Source of this page: the 2026-11-11 read-only research "Does Exact render
@@ -124,10 +123,9 @@ from the app's TypeScript at runtime: the `gpu` object in `app.json` allows only
    `lib<app>_gpu.dylib` per module, signs it and carries it as a framework
    (`host/apple/build.mjs:669-691`, `:924-`) [src]. Android: the `.so` goes in
    `jniLibs` beside the app crate, shaders as assets; `bun scripts/agent-android.mjs
-   build <app> --apk` (`host/android/README.md:73-110` at `de212e671`) [src]. Android
-   needs the NDK, Gradle and the `aarch64-linux-android` Rust target
-   (`host/android/README.md:77`) [doc]; the Shelf sample built on this Mac on
-   2026-11-18 (`build-and-ship.md`, "Android"). Whether the module runs on our devices
+   build <app> --apk` (`host/android/README.md:50-60`) [src]. Android needs the
+   NDK, Gradle and the `aarch64-linux-android` Rust target
+   (`host/android/README.md:9-15`) [doc]. Whether the module runs on our devices
    is **[unrun]**.
 
 **The example to copy:** `apps/weatherlight/gpu` (one fragment-shader sky,
@@ -149,12 +147,10 @@ over children and a 3D card stack [src].
   crate. Expect extra minutes on a cold build and a cached build after
   [inferred, not measured]. Per Exact rule 5 in `EXACT.md`, state the measured
   added time when we add a crate.
-- **Android: "A GPU canvas over children draws nothing"** (`QUEUE.md:566`,
-  2026-10-16): Caltrain's sky was blank with its module packaged, where a canvas
-  without children (a game's world) draws [src]. At `de212e671` the reader gives
-  a `Composite` surface its children's picture, "built and unit tested on a Mac,
-  not seen on a device" (`host/android/README.md:1728-1730`) [src]. Until seen on
-  a device, a surface with no Contract children draws; children over it are the gap.
+- **Android: "A GPU canvas over children draws nothing"**: Caltrain's sky "is
+  blank with its module packaged, where a canvas without children (a game's
+  world) draws" (`host/android/README.md:1254-1255`, pointing at `QUEUE.md`)
+  [src]. A surface with no Contract children draws; children over it are the gap.
   Design a mark or wait surface with no children, and place text beside it.
 - Whether the WGSL path needs the Metal toolchain: the module's `build.rs` mentions
   Metal only in a patched-vendor note and we found no `xcrun metal` requirement
@@ -302,13 +298,8 @@ exact-map testId="map" flex=1 min-height=0 width="100%" latitude=37.7946 longitu
 This is the mechanism our Swift package views use (`native-modules.md`). A native
 module view is a UIView, not Metal, unless the module draws with Metal itself.
 It is separate from `hatch="word"`, which hands native code the UIView Exact
-built (`README.md:509-512`) [src]. iOS today: yes (MapKit, photo-editor). A
-package view is declared once in `exact.json` `views` and implemented per
-platform: Swift `view(_:id:props:events:)`, Kotlin `ExactExtension.view`, a web
-roster (`docs/contract-for-agents.md:3315-3325` at `de212e671`) [src]. Ours are
-Swift only because we wrote no Kotlin; that is a gap in our package, not in
-Exact. `app.json` `modules` lists a native *app module*'s tags
-(`recipes/native-views.md:3-4`).
+built (`README.md:509-512`) [src]. iOS today: yes (MapKit, photo-editor). Our
+package views are Swift, so they are iOS-only [inferred].
 
 ## 8. What our build needs
 
@@ -337,9 +328,9 @@ Exact. `app.json` `modules` lists a native *app module*'s tags
 
 | Capability | iOS | Android |
 |---|---|---|
-| GPU module (`canvas surface=`) | Loaded by `GpuIOS.swift` onto a CAMetalLayer [src]; ours unrun | Ships as a `.so` (`host/android/README.md:50-60`), Vulkan backend; a GPU canvas over children drew nothing (`QUEUE.md:566`) and at `de212e671` is "built and unit tested on a Mac, not seen on a device" (`:1728-1730`) [src]; unrun |
+| GPU module (`canvas surface=`) | Loaded by `GpuIOS.swift` onto a CAMetalLayer [src]; ours unrun | Ships as a `.so` (`host/android/README.md:50-60`), Vulkan backend; **a GPU canvas with children draws nothing** (`:1254`) [src]; unrun |
 | Canvas 2D | Core Graphics by default; vello once the Metal Toolchain is installed [src] | Replayed onto Android Canvas [src] |
-| textflow | Yes per the README (`README.md:645`) [doc]; unrun by us | `apps/textflow` has web, apple and linux folders and no android one at `de212e671` [src]; unrun |
+| textflow | Yes per the README (`README.md:645`) [doc]; unrun by us | No android crate in the app [src]; unrun |
 | Markdown reader | Yes, all hosts per the grammar [doc]; unrun by us | Same [doc]; unrun |
 | Game add-on | Listed host (`game/README.md:594`) [doc] | Listed host [doc]; same children gap |
-| Native package view | Swift (`ExactPackage.view`); ours: yes | Kotlin (`ExactExtension.view`, `host/android/README.md:796-806`); ours: none written [src] |
+| Native module (Swift package view) | Yes | No: Swift only [inferred] |

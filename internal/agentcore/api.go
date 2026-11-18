@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/notebook"
 	"io"
 	"log"
 	"net/http"
@@ -197,6 +198,9 @@ type APIHandler struct {
 	// autoradioLedgerOverride, when set, stands in for the runtime's store in
 	// the programme call (a test seam: a decorator that refuses a claim write).
 	autoradioLedgerOverride autoradioLedger
+	// notebook is Texture's notebook service (the grants notebook.read and
+	// notebook.patch); set at route registration, nil in tests that have none.
+	notebook notebook.Service
 }
 
 // NewAPIHandler creates an APIHandler for the given runtime.

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/notebook"
 	"io"
 	"log"
 	"math"
@@ -448,6 +449,14 @@ type programmeCall struct {
 	writeErr error       // the first write error: the client went away
 	prompt   string
 
+	// The notebook (L5): Texture's service, the notebook lines the model wrote
+	// (raw, read after the stream), the title of the entry on air, and the
+	// summary the done event and the index carry.
+	nb         notebook.Service
+	nbLines    []string
+	onAirTitle func(ctx context.Context) string
+	nbSummary  string
+
 	// sheet is the listener's server run sheet, the door the handler binds.
 	sheet               programmeSheet
 	placed, placeFailed int
@@ -622,6 +631,8 @@ func (h *APIHandler) HandleAutoradioProgramme(w http.ResponseWriter, r *http.Req
 	ctx := context.WithoutCancel(r.Context())
 	c := &programmeCall{rt: rt, ledger: h.programmeLedger(), w: w, ownerID: ownerID, req: req, received: received}
 	c.sheet = programmeSheetOf{h: h, ownerID: ownerID}
+	c.nb = h.notebook
+	c.onAirTitle = func(ctx context.Context) string { return h.sheetOnAirTitle(ctx, ownerID) }
 
 	prior, err := c.get(ctx, requestRecordPrefix+req.RequestID)
 	if err != nil {
@@ -863,7 +874,18 @@ func (c *programmeCall) handleLine(line string, tooLong bool) bool {
 	openDone := c.req.Cause == "open" && c.segCount >= programmeOpenSegment
 	switch class {
 	case lineLesson:
-		return true // station L3 reads lesson lines; here they are neither counted nor reset
+		return true // the old lesson line: neither counted nor reset
+	case lineNotebook:
+		// A notebook line is read after the stream (settleNotebook); an open
+		// request writes none, and it is neither counted nor reset.
+		if c.req.Cause != "open" {
+			if len(c.nbLines) < nbMaxProposals {
+				c.nbLines = append(c.nbLines, line)
+			} else {
+				c.dropped = append(c.dropped, droppedLine{N: c.lineNo, Reason: "more than the notebook lines a response may carry"})
+			}
+		}
+		return true
 	case lineInvalid:
 		if openDone {
 			// After the opening of an open request an invalid line is noted and
@@ -1000,6 +1022,9 @@ func (c *programmeCall) finish(ctx context.Context, status, reason string, index
 		// whose before entry is not the entry that follows it.
 		c.dropped = append(c.dropped, droppedLine{N: c.trailing.lineNo, Reason: "the last transition leads into the next entry, which was never written"})
 	}
+	if status == "completed" && index {
+		c.settleNotebook(ctx)
+	}
 	indexID, indexErr := "", ""
 	if index {
 		id, err := c.writeIndex(ctx, status)
@@ -1026,6 +1051,9 @@ func (c *programmeCall) finish(ctx context.Context, status, reason string, index
 	}
 	if indexErr != "" {
 		data["index_error"] = indexErr
+	}
+	if c.nbSummary != "" {
+		data["notebook"] = json.RawMessage(c.nbSummary)
 	}
 	c.event("done", data)
 }

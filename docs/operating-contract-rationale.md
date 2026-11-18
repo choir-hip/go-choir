@@ -96,26 +96,6 @@ file, it wins for that work.
    - "Escalate on dead ends", except that the first response is a shift
      of approach, not a pause.
 
-## The Phone App Is Exact; Only Voice Is Native (owner, 2026-11-18)
-
-The owner connected an Android phone and asked for an Android build. The lead
-reported that an Android build would be the screens with nothing behind them,
-because "all of the app's logic is a Swift package". The owner, 2026-11-18:
-"what do you mean all of the apps logic is a swift package? only the voice
-stuff should be swift. the rest should be exact..." and then: "omg, we need to
-rewrite it lol. i didnt realize we were skipping exact. now i know why the
-build times are so slow lol. wow, this is annoying. well, all the more reason
-to work on the android version. IN EXACT. the whole point is the codebase is
-shared, using EXACT".
-
-Why the rule is written into the contract: nothing in it said where phone
-logic lives, the native package is the one door Exact gives to the audio
-session, voice went through that door first, and every feature after it
-followed. Measured the same morning: 36,100 lines of Swift behind the pages,
-about a quarter of it voice; 7,700 lines of contract; 181 named calls from
-the pages into Swift; no Android side. The record is
-`docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md`.
-
 ## Desk Ontology
 
 There are no special desks or apps (doctrine I26, amended by the owner,

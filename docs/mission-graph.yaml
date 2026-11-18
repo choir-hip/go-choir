@@ -1402,7 +1402,7 @@ nodes:
   - id: choir-autoradio-learning-engine-2026-11-14
     title: Autoradio learns its listener — the four-stroke learning engine, first build (forecast, outcome, lesson, trust)
     path: docs/definitions/choir-autoradio-learning-engine-2026-11-14.md
-    status: superseded  # 2026-11-18 by choir-autoradio-learning-loop-2026-11-18
+    status: working  # 2026-11-14 next station; slice L0, the design review
     kind: station
     entrypoint: false
     depends_on: []
@@ -1414,36 +1414,6 @@ nodes:
       Design: docs/design/autoradio-learning-engine-2026-11-14.md. Takes
       pass 1's acceptance item on run sheet forecasts and widens it to all
       four strokes. The backport to Autopaper is the mission after it.
-  - id: choir-autoradio-learning-loop-2026-11-18
-    title: Autoradio learns from its listener — settlement, the notebook, takes, TestFlight (stations L1 to L10)
-    path: docs/definitions/choir-autoradio-learning-loop-2026-11-18.md
-    status: checkpoint_incomplete  # 2026-11-18 cleared by the owner; L1-L3 and L7 server proven; open work carried by choir-autoradio-exact-cutover-2026-11-18
-    kind: station
-    entrypoint: true
-    depends_on: []
-    enables: []
-    settled_by: owner
-    note: >-
-      Owner 2026-11-17: "the key thing is for the overnight work to be all
-      about the learning engine"; "let's just build everything". Takes the
-      work of choir-autoradio-learning-engine-2026-11-14 forward as built
-      stations; conjecture K1 is ledger C120.
-  - id: choir-autoradio-exact-cutover-2026-11-18
-    title: Autoradio, the cutover from Swift to Exact — one shared codebase for iPhone and Android, only voice native (stations X0 to X11, K1 to K3)
-    path: docs/definitions/choir-autoradio-exact-cutover-2026-11-18.md
-    status: working  # 2026-11-18 live station; X1 and X2 in lanes
-    kind: station
-    entrypoint: true
-    depends_on: []
-    enables: []
-    settled_by: owner
-    note: >-
-      Owner 2026-11-18: "only the voice stuff should be swift. the rest
-      should be exact... the whole point is the codebase is shared, using
-      EXACT". Carries the open work of
-      choir-autoradio-learning-loop-2026-11-18. Design:
-      docs/design/autoradio-in-exact-2026-11-18.md (a proposal until
-      reviewed). Conjecture E1 is ledger C127.
   - id: choir-storage-solutions-3-store-once-2026-11-14
     title: Storage solutions, part 3 — store once (ops carry what changed, the guest store is a working set, receipts by segment, shared-context compression, a bounded data volume)
     path: docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md
