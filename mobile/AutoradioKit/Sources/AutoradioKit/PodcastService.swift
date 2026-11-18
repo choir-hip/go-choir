@@ -154,6 +154,28 @@ public final class PodcastService: @unchecked Sendable {
         return d
     }
 
+    // MARK: Sign-out
+
+    private var epoch = 0
+    /// Sign-out: the library (subscriptions, positions, removed and synced sets), every cached feed and transcript, and the files
+    /// (`podcasts-library.json`, `podcast-feeds/`). A sync or feed load in flight finds the epoch changed and keeps nothing.
+    public func wipe() {
+        lock.lock()
+        epoch += 1
+        lib = LibraryFile(); feeds = [:]; known = [:]; inflight = []; failed = [:]; hints = [:]
+        transcripts = [:]; transcriptAsked = [:]; playedKeys = []
+        searchTask?.cancel(); searchTask = nil; searchQuery = ""; searchState = .idle
+        suggestions = []; suggestionsAt = 0; suggesting = false
+        syncAt = 0; syncing = false; syncNote = ""; reportedThisLaunch = false
+        let d = dir
+        lock.unlock()
+        if let d {
+            try? FileManager.default.removeItem(at: d.appendingPathComponent("podcasts-library.json"))
+            try? FileManager.default.removeItem(at: d.appendingPathComponent("podcast-feeds"))
+        }
+        changed()
+    }
+
     // MARK: Library file
 
     private var libraryFile: URL? { dir?.appendingPathComponent("podcasts-library.json") }
@@ -386,12 +408,13 @@ public final class PodcastService: @unchecked Sendable {
         lock.lock()
         let now = clock()
         if syncing || (syncAt > 0 && now - syncAt < 600) { lock.unlock(); return }
-        syncing = true; syncAt = now; lock.unlock()
+        syncing = true; syncAt = now; let startEpoch = epoch; lock.unlock()
         Task { [weak self] in
             guard let self else { return }
             var note = ""
             if let list = await hooks.pull() {
                 self.lock.lock()
+                if self.epoch != startEpoch { self.lock.unlock(); return }          // signed out meanwhile: this is not the account that asked
                 let removed = Set(self.lib.removed.map(PodcastKey.feed))
                 var added: [PodcastShow] = []
                 for s in list {
@@ -406,7 +429,10 @@ public final class PodcastService: @unchecked Sendable {
                 if !added.isEmpty { self.saveLocked() }
                 self.lock.unlock()
                 var failedPush = 0
-                for s in toPush { if await hooks.push(s) { self.markSynced(PodcastKey.feed(s.feedURL)) } else { failedPush += 1 } }
+                for s in toPush {
+                    self.lock.lock(); let same = self.epoch == startEpoch; self.lock.unlock()
+                    if !same { return }
+                    if await hooks.push(s) { self.markSynced(PodcastKey.feed(s.feedURL)) } else { failedPush += 1 } }
                 note = failedPush == 0 ? "In step with your computer's podcasts." : "Some shows could not be sent to your computer yet."
                 for s in added { self.refreshIfNeeded(s.feedURL) }
             } else { note = "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone." }

@@ -199,6 +199,9 @@ public final class ChoirEnvironment: @unchecked Sendable {
                     trustedOrigin: URL(string: configuredBaseURL))
     }
 
+    /// Sign-out: the programmes the account was hearing.
+    public func wipePlaying() { lock.lock(); _playing = [:]; lock.unlock() }
+
     // What is playing, so the desk knows which document a turn is about.
     public func setPlaying(_ p: PlayingProgramme) { lock.lock(); _playing[p.programmeID] = p; lock.unlock() }
     public func playing(_ programmeID: String) -> PlayingProgramme? { lock.lock(); defer { lock.unlock() }; return _playing[programmeID] }

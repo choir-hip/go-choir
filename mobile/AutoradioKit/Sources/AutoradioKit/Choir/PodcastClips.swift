@@ -50,7 +50,7 @@ public struct PodcastClip: Sendable, Equatable {
         let story = (o["story"] as? [String: Any]) ?? [:]
         func num(_ v: Any?) -> Double { (v as? NSNumber)?.doubleValue ?? 0 }
         let route = bare((story["route"] as? String) ?? "")
-        return PodcastClip(clipID: id, route: route, version: Int(num(story["version"])), storyTitle: (story["title"] as? String) ?? "",
+        return PodcastClip(clipID: id, route: route, version: Int(exactly: num(story["version"]).rounded(.towardZero)) ?? 0, storyTitle: (story["title"] as? String) ?? "",
                            show: (o["show"] as? String) ?? "", episodeTitle: (o["episode_title"] as? String) ?? "",
                            episodeGUID: (o["episode_guid"] as? String) ?? "", feedURL: (o["feed_url"] as? String).flatMap(URL.init(string:)),
                            published: (o["published"] as? String) ?? "", audioURL: a, duration: num(o["duration_seconds"]), start: start, end: end,
@@ -89,16 +89,20 @@ public struct ClipFingerprintRecord: Sendable, Equatable {
         return h.count == Self.frames * ClipFingerprint.bands && t.count == Self.frames * ClipFingerprint.bands      // 12 s each; a shorter clip has none
     }
     /// The byte of a file, by its constant bitrate: first audio frame offset plus seconds at bitrate (spec section 3).
-    public func byte(at seconds: Double) -> Int { firstFrameOffset + Int((max(0, seconds) * Double(bitrateKbps) * 125).rounded()) }
+    public func byte(at seconds: Double) -> Int { firstFrameOffset + Int(min(9e15, (max(0, seconds) * Double(bitrateKbps) * 125).rounded())) }
 
     static func parse(_ o: [String: Any]) -> ClipFingerprintRecord? {
         func num(_ k: String) -> Double? { (o[k] as? NSNumber).map(\.doubleValue).flatMap { $0.isFinite ? $0 : nil } }
         func bytes(_ k: String) -> [UInt8]? { (o[k] as? String).flatMap { Data(base64Encoded: $0) }.map { [UInt8]($0) } }
         guard let v = num("version"), let head = bytes("head"), let tail = bytes("tail"), let ha = num("head_at"), let ta = num("tail_at"),
               let s = num("start"), let e = num("end") else { return nil }
-        return ClipFingerprintRecord(version: Int(v), head: head, tail: tail, headAt: ha, tailAt: ta, start: s, end: e,
-                                     fileBytes: Int64(num("file_bytes") ?? 0), fileSeconds: num("file_seconds") ?? 0,
-                                     firstFrameOffset: Int(num("first_frame_offset") ?? 0), bitrateKbps: Int(num("bitrate_kbps") ?? 0),
+        // A finite number outside the Int range would trap in Int(Double): such a record is no fingerprint.
+        func whole(_ x: Double) -> Int? { x.rounded(.towardZero) == x && x >= -9e15 && x <= 9e15 ? Int(x) : nil }
+        guard let version = whole(v), let ffo = whole(num("first_frame_offset") ?? 0), let kbps = whole(num("bitrate_kbps") ?? 0),
+              let fb = whole(num("file_bytes") ?? 0) else { return nil }
+        return ClipFingerprintRecord(version: version, head: head, tail: tail, headAt: ha, tailAt: ta, start: s, end: e,
+                                     fileBytes: Int64(fb), fileSeconds: num("file_seconds") ?? 0,
+                                     firstFrameOffset: ffo, bitrateKbps: kbps,
                                      seekableByBitrate: (o["seekable_by_bitrate"] as? Bool) ?? false)
     }
 }
@@ -209,10 +213,13 @@ public struct CandidateClip: Sendable, Equatable {
     /// request is never refused for one.
     static func make(_ c: PodcastClip) -> CandidateClip? {
         guard c.clipID.range(of: "^clip-[0-9a-f]{12,64}$", options: .regularExpression) != nil, c.seconds >= 5, c.seconds <= 300 else { return nil }
-        let show = StretchCandidates.cut(StretchCandidates.oneLine(c.show), bytes: 200), ep = StretchCandidates.cut(StretchCandidates.oneLine(c.episodeTitle), bytes: 200)
+        let show = SegmentPrep.oneLine(c.show, maxBytes: 200), ep = SegmentPrep.oneLine(c.episodeTitle, maxBytes: 200)
         guard !show.isEmpty, !ep.isEmpty else { return nil }
-        return CandidateClip(clipID: c.clipID, show: show, episodeTitle: ep, published: c.published,
-                             quote: StretchCandidates.cut(StretchCandidates.oneLine(c.quote), bytes: 400), seconds: c.seconds)
+        // The date is RFC 3339 or the clip is left out: one bad value would make the server refuse the whole request.
+        let published = c.published.trimmingCharacters(in: .whitespaces)
+        guard Take.date(published) != nil else { return nil }
+        return CandidateClip(clipID: c.clipID, show: show, episodeTitle: ep, published: published,
+                             quote: SegmentPrep.oneLine(c.quote, maxBytes: 400), seconds: c.seconds)
     }
     public static let maxPerCandidate = 3
 }

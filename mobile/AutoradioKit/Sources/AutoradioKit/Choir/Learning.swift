@@ -195,6 +195,12 @@ public final class SteerQueue: @unchecked Sendable {
         if let file, let d = try? Data(contentsOf: file), let a = try? JSONDecoder().decode([SteerTap].self, from: d) { _taps = Array(a.suffix(Self.maxTaps)) }
     }
     public var taps: [SteerTap] { lock.lock(); defer { lock.unlock() }; return _taps }
+    /// Sign-out: the waiting taps go with the account, memory and file (a tap in flight is not re-queued: it is removed only when answered).
+    public func wipe() {
+        lock.lock(); _taps = []; _state = "idle"; lock.unlock()
+        if let file { try? FileManager.default.removeItem(at: file) }
+        onChange?()
+    }
     /// idle | sent | notyet | offline
     public var state: String { lock.lock(); defer { lock.unlock() }; return _state }
 

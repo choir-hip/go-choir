@@ -168,7 +168,7 @@ public enum SegmentPrep {
     static let stripped: Set<UInt32> = Set((0x202A...0x202E).map { UInt32($0) } + (0x2066...0x2069).map { UInt32($0) } + [0x200E, 0x200F, 0x061C, 0x200B, 0xFEFF])
 
     /// One clean line: controls and newlines become spaces, runs of space collapse, capped in bytes at a character boundary.
-    static func oneLine(_ s: String) -> String {
+    static func oneLine(_ s: String, maxBytes: Int = maxTitleBytes) -> String {
         // Controls (and newlines) become spaces; format characters (zero-width, bidi overrides) are dropped.
         var scalars = String.UnicodeScalarView()
         for u in s.unicodeScalars {
@@ -183,8 +183,19 @@ public enum SegmentPrep {
         }
         var t = String(scalars)
         t = t.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-        while t.utf8.count > maxTitleBytes { t.removeLast() }
+        while t.utf8.count > maxBytes { t.removeLast() }
         return t.trimmingCharacters(in: .whitespaces)
+    }
+    /// A stranger's longer text: bidi and zero-width characters dropped, controls other than a newline become spaces; the lines stay.
+    static func stripUnsafe(_ s: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        for u in s.unicodeScalars {
+            if u == "\n" { scalars.append(u); continue }
+            if u.properties.generalCategory == .control { scalars.append(" "); continue }
+            if Self.stripped.contains(u.value) { continue }
+            scalars.append(u)
+        }
+        return String(scalars)
     }
     /// `pub:harbour-1`, `mail:abc`: a ref, which is never shown to the listener. Known limit (review round 1, left as is): a real one-word
     /// title with a colon and no space, such as "Note:important", reads as a ref and becomes the kind's plain label.

@@ -118,9 +118,17 @@ public final class ChoirApp: @unchecked Sendable {
         signIn = ChoirSignIn(baseURL: baseURL)
         signIn.openURL = openURL
         frontCache = Self.defaultFrontCache()
+        registerAccountWipe()
         signIn.onChange = { [weak self] in
             guard let self else { return }
-            if self.signIn.current.status == "idle", self.signIn.current.signedIn, self.signIn.current.message == "signed in" { Task { await self.refresh() } }
+            if self.signIn.current.status == "idle", self.signIn.current.signedIn, self.signIn.current.message == "signed in" {
+                // The run sheet's poster was dropped at sign-out: it is rebuilt for this sign-in.
+                Task { @MainActor in
+                    if RunSheetStore.shared.poster == nil { RunSheetStore.shared.poster = RouteSheetPoster(baseURL: self.signIn.baseURL) }
+                    RunSheetStore.shared.flush()
+                }
+                Task { await self.refresh() }
+            }
             self.onChange?()
         }
         runtime.player.onRanDry = { id, played in Task { @MainActor in RunSheetPlayer.shared.documentEnded(id: id, anyPlayed: played) } }
@@ -479,15 +487,28 @@ public final class ChoirApp: @unchecked Sendable {
         onChange?()
     }
 
+    /// Sign-out, in this order: playback stops (the player reports the entry on air as `left`); the run sheet gets three seconds to post its
+    /// pending ops with the old key still held, and what is not answered then is dropped, never sent under a later account; then the local key
+    /// goes and the account wipe runs (ChoirSignIn.signOut); the revoke follows in the background.
     public func signOut() async {
-        await signIn.signOut()
         lock.lock(); loading = false; lock.unlock()
         runtime.player.pause(reason: "sign out")
         runtime.player.clearQueue()
         runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
         await MainActor.run { RunSheetPlayer.shared.stopAll() }
+        await RunSheetStore.shared.settlePending(timeout: 3)
+        await signIn.signOut()
         lock.lock(); stories = []; message = ""; lock.unlock()
         onChange?()
+    }
+
+    /// Every store of the account, wiped by one call at sign-out. The module adds the stores that live in the app target (mail).
+    public let accountWipe = AccountWipe()
+    private func registerAccountWipe() {
+        let front = frontCache, opening = openingCache
+        Task { @MainActor [accountWipe] in accountWipe.registerStandard(openingCache: opening) }
+        accountWipe.register("front-titles") { if let f = front { try? FileManager.default.removeItem(at: f) } }
+        signIn.onSignOut = { [accountWipe] in await accountWipe.run() }
     }
 
     public func playerView() -> ChoirPlayerView {

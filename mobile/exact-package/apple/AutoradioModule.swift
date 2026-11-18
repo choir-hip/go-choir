@@ -136,7 +136,7 @@ public final class AutoradioModule: ExactPackage {
         }
         ReaderStore.shared.offline = { ContentStore.shared.readerDoc(address: $0) }
         PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
-        choir.signIn.onSignOut = { ContentSync.wipeAccount() }
+        // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the app-target stores register in their register* function.
         SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         themes = ThemeStore(userDir: support.appendingPathComponent("themes"), systemScheme: { Self.systemScheme() })

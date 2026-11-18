@@ -81,6 +81,17 @@ public struct TextureEditInfo: Codable, Sendable, Equatable {
         return dir.appendingPathComponent("texture-pending.json")
     }
 
+    private var generation = 0
+    /// Sign-out: the sessions, the retry timer and the pending text (memory and file). A save in flight finds the generation changed and keeps nothing.
+    public func wipe() {
+        generation += 1
+        retryTask?.cancel(); retryTask = nil
+        for s in sessions.values { s.task?.cancel() }
+        sessions = [:]; pending = [:]
+        if let storage { try? FileManager.default.removeItem(at: storage) }
+        changed()
+    }
+
     private func savePending() {
         guard let storage else { return }
         if pending.isEmpty { try? FileManager.default.removeItem(at: storage) }
@@ -141,8 +152,10 @@ public struct TextureEditInfo: Codable, Sendable, Equatable {
         s.task?.cancel()
         s.saving = true; s.info.status = "saving"; s.info.label = "Saving"; changed()
         let merged = TextureBodyMerge.merge(original: s.base.body, originalMarkdown: s.base.content, newMarkdown: draft)
+        let gen = generation
         do {
             let r = try await api.post(docId: doc, content: draft, body: merged.body, parent: s.base.revisionId)
+            guard gen == generation else { s.saving = false; return }          // signed out meanwhile: nothing of it is kept
             s.base = TextureHead(content: draft, body: merged.body, revisionId: r.revisionId, version: r.version)
             pending[doc] = nil; savePending()
             ReaderStore.shared.invalidate("texture:" + doc)
@@ -151,6 +164,7 @@ public struct TextureEditInfo: Codable, Sendable, Equatable {
                                                source: "Texture", version: "saved-\(r.version)", pinned: true, syncedAt: Date()))      // what the owner wrote is kept and searchable at once
             s.info.status = "saved"; s.info.label = r.version > 0 ? "Saved · version \(r.version)" : "Saved"
         } catch {
+            guard gen == generation else { s.saving = false; return }
             pending[doc] = draft; savePending()
             if Self.isOffline(error) { s.info.status = "offline"; s.info.label = "Offline: kept on this phone, posts when it can"; scheduleRetry() }
             else { s.info.status = "failed"; s.info.label = "Not saved: \(FilesService.say(error))"; scheduleRetry() }

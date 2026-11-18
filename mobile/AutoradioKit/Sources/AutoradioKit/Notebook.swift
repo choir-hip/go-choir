@@ -142,6 +142,11 @@ public final class NotebookCache: @unchecked Sendable {
         if let file, let d = try? Data(contentsOf: file) { _text = String(decoding: d, as: UTF8.self) }
     }
     public var text: String? { lock.lock(); defer { lock.unlock() }; return _text }
+    /// Sign-out: the text and the file.
+    public func wipe() {
+        lock.lock(); _text = nil; lock.unlock()
+        if let file { try? FileManager.default.removeItem(at: file) }
+    }
     public func set(_ t: String) {
         lock.lock(); _text = t; lock.unlock()
         guard let file else { return }
@@ -304,11 +309,34 @@ public enum NotebookPage {
     public var loadDoc: () async -> NotebookDocLoad = { await NotebookStore.defaultLoadDoc() }
     public var loadLearning: () async -> LearningLoad = { await LearningClient(client: ChoirEnvironment.shared.client()).read(limit: 200) }
     public var steerQueued: () -> Int = { SteerQueue.shared.taps.count }
+    /// nil when the server cannot say (a timeout, a 401, a 5xx): that is not "there is no notebook".
+    public var lookupEdition: () async -> EditionInfo? = { await EditionLookup.fetch() }
+    /// Makes the notebook document; its id, or nil when it could not be made.
+    public var createNotebook: () async -> String? = { await NotebookStore.defaultCreate() }
     public init() {}
+
+    static func defaultCreate() async -> String? {
+        do {
+            let r = try await ChoirEnvironment.shared.client().postJSON("/api/texture/documents", ["title": NotebookText.title], route: "/api/texture/documents")
+            guard let id = (try r.object())["doc_id"] as? String, !id.isEmpty else { return nil }
+            return id
+        } catch { return nil }
+    }
+
+    /// Sign-out: what the page holds belongs to the account.
+    public func wipe() {
+        writing?.cancel(); writing = nil; refreshRunning = false
+        doc = .loading; learning = nil; selected = ""; lastRefresh = nil; refreshing = false
+        onChange?()
+    }
 
     public func info() -> NotebookPageInfo { NotebookPage.make(NotebookPageInput(doc: doc, learning: learning, selected: selected, steerQueued: steerQueued())) }
 
+    private var refreshRunning = false
+    private var writing: Task<Bool, Never>?
     public func refresh() async {
+        guard !refreshRunning else { return }          // one at a time: two would each see "no notebook" and make one
+        refreshRunning = true; defer { refreshRunning = false }
         // The topics written on this phone and not yet in the notebook (the marker says when they are): written now, once.
         let topics = EditionSetupSession.load(EditionText.topicsFile)?.topics ?? []
         if !topics.isEmpty { await writeTopics(topics) }
@@ -349,6 +377,15 @@ public enum NotebookPage {
     /// the document first when there is none. The local topics file stays as a cache. True when the notebook holds them afterwards.
     @discardableResult
     public func writeTopics(_ topics: [String], marker: URL? = nil) async -> Bool {
+        if let w = writing { return await w.value }      // one in flight: a second would also find nothing and make a second document
+        let t = Task { @MainActor in await self.writeTopicsNow(topics, marker: marker) }
+        writing = t
+        let r = await t.value
+        writing = nil
+        return r
+    }
+
+    private func writeTopicsNow(_ topics: [String], marker: URL?) async -> Bool {
         let marker = marker ?? TakeFiles.url("notebook-topics-written")
         let key = topics.map { EditionTopics.key($0) }.sorted().joined(separator: ",")
         guard !key.isEmpty else { return true }
@@ -356,17 +393,15 @@ public enum NotebookPage {
         let client = ChoirEnvironment.shared.client()
         guard client.hasKey else { return false }
         var address = "", current: String?
-        if let ed = await EditionLookup.fetch(), ed.found {
+        guard let ed = await lookupEdition() else { return false }        // the server cannot say: try later, never create on a guess
+        if ed.found {
             address = "texture:" + ed.docID
             let d = await ReaderStore.shared.doc(address, force: true)
             guard d.status == "ready" else { return false }
             current = d.source
         } else {
-            do {
-                let r = try await client.postJSON("/api/texture/documents", ["title": NotebookText.title], route: "/api/texture/documents")
-                guard let id = (try r.object())["doc_id"] as? String, !id.isEmpty else { return false }
-                address = "texture:" + id
-            } catch { return false }
+            guard let id = await createNotebook() else { return false }
+            address = "texture:" + id
         }
         let merged = NotebookText.merging(topics: topics, into: current)
         if merged != current {
