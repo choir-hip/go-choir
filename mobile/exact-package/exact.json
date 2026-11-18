@@ -706,7 +706,8 @@
       "id": "string",
       "kind": "string",
       "title": "string",
-      "outcome": "string"
+      "outcome": "string",
+      "builtOn": "RadioBuiltOn[]"
     },
     "RadioPageInfo": {
       "state": "string",
@@ -739,7 +740,16 @@
       "writing": "bool",
       "emptyNote": "string",
       "notice": "string",
-      "heard": "RadioHeardRow[]"
+      "heard": "RadioHeardRow[]",
+      "builtOn": "RadioBuiltOn[]",
+      "canPlay": "bool"
+    },
+    "RadioBuiltOn": {
+      "n": "number",
+      "title": "string",
+      "address": "string",
+      "role": "string",
+      "note": "string"
     },
     "ReaderRun": {
       "id": "string",
@@ -2450,7 +2460,9 @@
           "writing": false,
           "emptyNote": "",
           "notice": "",
-          "heard": []
+          "heard": [],
+          "builtOn": [],
+          "canPlay": true
         }
       }
     },

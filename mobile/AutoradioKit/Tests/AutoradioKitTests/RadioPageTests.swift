@@ -211,6 +211,47 @@ final class RadioPageTests: XCTestCase {
         XCTAssertEqual(p.kindLabel, "Podcast"); XCTAssertEqual(p.source, "Harbour Hour")
     }
 
+    // Built on: the stories an entry was built on, tappable, none drawn when there are none
+    func test15_BuiltOnListsTheStoriesTheEntryWasBuiltOn() {
+        var e = entry("h", .story, state: .onAir)
+        e.cites = [RunSheetCite(ref: "pub:harbour-barrier@v2", role: .subject, label: "The harbour barrier passes"), RunSheetCite(ref: "pub:tram-fares@v1", role: .quoted, label: "Tram fares change"),
+                   RunSheetCite(ref: "pub:harbour-barrier@v3", role: .mentioned, label: "again"), RunSheetCite(ref: "clip:x", role: .subject, label: "not a story")]
+        e.source = RunSheetSource(ref: "pub:harbour-barrier", label: "The harbour barrier passes")
+        let b = RadioPage.make(input([e])).builtOn
+        XCTAssertEqual(b.map(\.title), ["The harbour barrier passes", "Tram fares change"], "once each, in order, stories only")
+        XCTAssertEqual(b.map(\.address), ["pub:harbour-barrier", "pub:tram-fares"]); XCTAssertEqual(b.map(\.n), [0, 1])
+        XCTAssertTrue(RadioPage.make(input([entry("o", .opening, by: .phone, state: .onAir)])).builtOn.isEmpty, "an opening has none: no heading")
+        var t = entry("t", .story, state: .onAir); t.cites = [RunSheetCite(ref: "pub:x", role: .subject, label: "")]
+        XCTAssertEqual(RadioPage.make(input([t])).builtOn.first?.title, "x", "the route stands in for a missing label")
+        var heard = entry("hh", .story, state: .heard, outcome: .finished); heard.cites = e.cites
+        XCTAssertEqual(RadioPage.make(input([heard, entry("a")])).heard.first?.builtOn.count, 2)
+    }
+    func test15c_ADeskStoryTitleOpensItsSourceAndAVersionDifferenceIsNoted() {
+        var e = entry("s", .story, state: .onAir)
+        e.source = RunSheetSource(ref: "pub:harbour-barrier@v2", label: "The harbour barrier")
+        e.cites = [RunSheetCite(ref: "pub:harbour-barrier@v2", role: .subject, label: "The harbour barrier"), RunSheetCite(ref: "pub:tram-fares@v1", role: .quoted, label: "Tram fares")]
+        var i = input([e]); i.versions = ["harbour-barrier": 3, "tram-fares": 1]
+        let p = RadioPage.make(i)
+        XCTAssertEqual(p.openAddress, "pub:harbour-barrier", "a story entry (not only a page) opens its source story")
+        XCTAssertEqual(p.builtOn.map(\.note), ["cited v2, now v3", ""]); XCTAssertEqual(p.builtOn.map(\.role), ["", "quoted"])
+        XCTAssertEqual(RadioPage.make(input([e, entry("n")])).ahead.count, 1)
+    }
+    func test15b_AClipsStoryRefReachesTheEntryAsACite() {
+        var s = RunSheetEntry(id: "c", kind: .clip, placedBy: .desk, title: "Clip")
+        s.cites = [RunSheetCite(ref: "pub:harbour-barrier", role: .subject, label: "")]
+        XCTAssertEqual(RadioPage.builtOn(s).map(\.address), ["pub:harbour-barrier"])
+    }
+
+    // one state, one message: the desk is writing and the radio will start by itself: one line, no Play, no "Nothing is on air"
+    func test16b_WritingAndWantedIsOneLineWithNoPlay() {
+        var i = input([entry("h", state: .heard, outcome: .finished)]); i.writing = true; i.wants = true
+        var p = RadioPage.make(i)
+        XCTAssertEqual(p.statusLine, "Writing the next stretch. It will start by itself."); XCTAssertFalse(p.canPlay); XCTAssertFalse(p.onAir)
+        i.wants = false; p = RadioPage.make(i)
+        XCTAssertEqual(p.statusLine, "Writing the next stretch"); XCTAssertTrue(p.canPlay, "not wanted: pressing Play does something")
+        i.writing = false; XCTAssertTrue(RadioPage.make(i).canPlay)
+    }
+
     // 12 heard
     func test12_HeardIsNewestFirstWithOneWord() {
         var tail: [RunSheetEntry] = []
@@ -223,7 +264,7 @@ final class RadioPageTests: XCTestCase {
         let p = RadioPage.make(input(tail + [entry("a")]))
         let got: [String] = p.heard.map { $0.id }
         let words: [String] = p.heard.map { $0.outcome }
-        XCTAssertEqual(got, ["h6", "h5", "h4", "h3", "h2"]); XCTAssertEqual(words, ["finished", "cut", "failed", "left", "skipped"])
+        XCTAssertEqual(got, ["h6", "h5", "h3", "h2", "h1"], "h4 failed: it never made a sound, so it was not heard"); XCTAssertEqual(words, ["finished", "cut", "left", "skipped", "finished"])
     }
 
     func test12b_TheDateAndKindsRead() {
@@ -302,7 +343,7 @@ final class RadioPageTests: XCTestCase {
     // the tour's fixtures decode and say what the tour expects of them
     func test16_TheTourFixturesDecode() throws {
         let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("fixtures/demo")
-        for (name, ahead, heard) in [("runsheet-cold.json", 6, 0), ("runsheet-day.json", 9, 3), ("runsheet-answer.json", 3, 1), ("runsheet-empty.json", 0, 1)] {
+        for (name, ahead, heard) in [("runsheet-cold.json", 6, 0), ("runsheet-day.json", 9, 2), ("runsheet-answer.json", 3, 1), ("runsheet-empty.json", 0, 1)] {
             let d = try Data(contentsOf: dir.appendingPathComponent(name))
             let saved = try JSONDecoder().decode(RunSheetStore.Saved.self, from: d)
             let p = RadioPage.make(RadioPageInput(sheet: saved.sheet))

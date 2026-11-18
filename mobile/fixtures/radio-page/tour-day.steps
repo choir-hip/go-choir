@@ -33,11 +33,13 @@ clock +900 real
 clock data
 tree
 screenshot @S@/B06-why-this.png window
-tap radio-place-mail
+tap bar-mark
+clock +900 real
+tap place-mail
 clock +1500 real
 clock data
 tree
-screenshot @S@/B08-mail-place.png window
+screenshot @S@/B08-mail-by-the-mark.png window
 tap bar-now
 clock +1500 real
 clock data
@@ -48,3 +50,13 @@ clock +3000 real
 clock data
 tree
 screenshot @S@/B10-replay-from-heard.png window
+tap radio-heard-built-0
+clock +900 real
+clock data
+tree
+screenshot @S@/B11-heard-built-on.png window
+tap radio-builton-0
+clock +1500 real
+clock data
+tree
+screenshot @S@/B12-texture-opened-from-built-on.png window

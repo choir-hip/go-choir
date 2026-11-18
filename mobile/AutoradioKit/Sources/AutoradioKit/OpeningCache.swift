@@ -147,7 +147,13 @@ public final class OpeningCache: @unchecked Sendable {
         let now = clock()
         func young(_ c: CachedEntry, _ b: TimeInterval) -> Bool { let age = now.timeIntervalSince(c.writtenAt); return age >= 0 && age <= b }
         let next = r.first.flatMap { young($0, entryBound) ? $0.entry : nil }
-        if let o = r.opening, young(o, bound), dayPart(o.writtenAt) == dayPart(now) { return .opening(o.entry, next: next) }
+        if let o = r.opening, young(o, bound), dayPart(o.writtenAt) == dayPart(now) {
+            // The clock is read now, at the moment the app opens, never at write time (Moment.swift).
+            var e = o.entry
+            let text = Moment.compose(body: e.text ?? "", now: now, calendar: calendar)
+            e.text = text; e.estSeconds = RunSheetEntry.estimateSeconds(words: text)
+            return .opening(e, next: next)
+        }
         if let n = next { return .entry(n) }
         return .none
     }

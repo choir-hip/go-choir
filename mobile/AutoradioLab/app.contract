@@ -418,6 +418,8 @@ component Autoradio
     rp
     radioAll
     whyFor
+    heardOpen
+    toggleHeardBuilt
     radioToggleAll
     radioToggleWhy
     radioDo

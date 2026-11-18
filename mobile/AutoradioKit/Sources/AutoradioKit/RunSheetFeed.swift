@@ -108,6 +108,14 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
             guard let ref = s.clip, let c = clips.clip(ref.clipID) else { return nil }          // a clip the phone does not have is not played
             e.source = RunSheetSource(ref: "clip:" + c.clipID, label: c.show, url: c.audioURL.absoluteString, start: c.start, end: c.end, clipId: c.clipID)
             e.estSeconds += c.seconds
+            // The story the clip was cut for is one of the stories this entry was built on (the page's "Built on"): the phone's own clip row names it
+            // (route, version, title); the server's `story_ref` on the segment is kept too when it names another.
+            var stories: [(String, String)] = []
+            if !c.route.isEmpty { stories.append(("pub:\(c.route)@v\(c.version)", c.storyTitle)) }
+            if !ref.storyRef.isEmpty { stories.append((ref.storyRef, "")) }
+            for (r, l) in stories where !(e.cites ?? []).contains(where: { $0.ref == r || $0.ref.split(separator: "@").first == r.split(separator: "@").first }) {
+                e.cites = (e.cites ?? []) + [RunSheetCite(ref: r, role: .subject, label: SegmentPrep.label(l))]
+            }
             if e.title.isEmpty || e.title == SegmentKinds.label(s.kind) { e.title = c.episodeTitle.isEmpty ? c.show : c.episodeTitle }
         }
         return e

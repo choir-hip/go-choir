@@ -52,8 +52,17 @@ they place entries on the same run sheet, and this page shows the result.
    changed with what was on air, and its code and test ids, are deleted. The
    prompt bar and the microphone, at the bottom of every page, are the one way to
    say something.
-5. **Places.** One row of tiles: Autopaper, Books, Podcasts, Mail, Files.
-   Each opens that page in the deck. This page is the hub.
+5. **Places: removed by the owner on 2026-11-17** ("The auto radio screen shows
+   some links to different pages. We can remove those because those pages are
+   accessible from hitting the tetramark button."). The row of tiles (Autopaper,
+   Books, Podcasts, Mail, Files) and its ids are deleted; the launcher behind the
+   mark is the one way to the other pages. Instead the page shows **Built on**:
+   under the entry on air, the stories it was built on, each a tappable title
+   that opens that story's Texture in the deck (which shows its own sources), and
+   the same list on a Heard row when expanded. An entry with no stories (an
+   opening, an answer) shows no heading. The phone reads them from the entry's
+   `cites` and `source` refs (`pub:<route>[@version]`, `texture:<id>`); a podcast
+   clip's `story` ref is kept as a cite.
 6. **Heard.** The last entries that ended, newest first, each with how it
    ended in a word: finished, skipped, left. Tap to play again.
 
@@ -67,10 +76,11 @@ they place entries on the same run sheet, and this page shows the result.
   it one line: "Then back to: <the held entry's title>".
 - **You are speaking.** The status line says "Listening", and the on-air
   card dims. What you said appears as text when it is recognised.
+- **Writing ahead, nothing on air.** One line on the status line ("Writing the next stretch. It will start by itself."); no "Nothing is on air" and no Play button, because pressing it would do nothing the desk is not already doing.
+- **Heard** lists only entries that made a sound: an entry that failed to play is not heard.
 - **Cannot speak.** The reason is on the status line and on the on-air card,
   with one action when there is one ("Try again", "Use the system voice").
-- **Nothing ahead and nothing to write from.** Up next says so and offers
-  the places row.
+- **Nothing ahead and nothing to write from.** Up next says so ("Open the mark below to find a story, a page or a podcast, and add it."); there is no row of places.
 - **Offline.** What is already written plays. The status line says the desk
   cannot write ahead.
 

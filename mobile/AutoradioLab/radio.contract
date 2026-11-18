@@ -7,24 +7,10 @@
 // radio-onair-byline, radio-onair-sentence, radio-onair-sentence-number, radio-greeting, radio-heard-words, radio-cannot, radio-retry, radio-then-back,
 // radio-progress, radio-elapsed, radio-remaining, radio-play, radio-next, radio-why, radio-why-text, radio-forecast, radio-back15, radio-fwd15,
 // radio-speed, radio-speed-slider, radio-speed-down, radio-speed-up, radio-speed-reset, radio-next-list, radio-next-<n>, radio-next-play-<n>,
-// radio-next-grip-<n>, radio-next-all, radio-next-writing, radio-next-empty, radio-notice, radio-place-<name>, radio-heard-<n>.
+// radio-next-grip-<n>, radio-next-all, radio-next-writing, radio-next-empty, radio-notice, radio-builton-<n>, radio-heard-<n>, radio-heard-built-<n>, radio-heard-builton-<n>-<m>.
 use Theme, RadioPageInfo, QueueInfo from "@choir/autoradio"
 use Btn, SectionHeader, RowRule, BarClear from "./ui.contract"
 use QueueAudio, QueueScrub from "./queue.contract"
-
-// One place of the row of places: a text action in the accent colour, as the launcher's key pages are.
-component RadioPlace
-  inject
-    th: Theme
-    openPage: action
-  props
-    slug: string
-    name: string
-    address: string
-  view
-    button press=openPage(address, name) testId=`radio-place-${slug}` appearance="none" flex-shrink=0 aria-label=`Open ${name}`
-      row padding="0px 16px 0px 0px" align-items="center" min-height=44
-        text name font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.accent
 
 component RadioPage
   inject
@@ -33,6 +19,8 @@ component RadioPage
     qv: QueueInfo
     radioAll: bool
     whyFor: string
+    heardOpen: string
+    toggleHeardBuilt: action
     radioPlay: action
     nextStory: action
     queueDo: action
@@ -110,7 +98,7 @@ component RadioPage
               // nothing on air: the greeting with what is lined up, or one plain line
               if rp.greeting != ""
                 text rp.greeting font-family=th.fontText font-size="-exact-title3" line-height=1.5 color=th.fg testId="radio-greeting"
-              else if rp.state != "error"
+              else if rp.state != "error" and rp.state != "writing"
                 text "Nothing is on air." font-family=th.fontText font-size="-exact-title3" line-height=1.5 color=th.fg testId="radio-greeting"
             // what the listener said, as it was recognised
             if rp.heardWords != ""
@@ -121,12 +109,13 @@ component RadioPage
                 button press=queueDo("back15", "") testId="radio-back15" appearance="none" aria-label="Back 15 seconds" width=44 height=44
                   row width=44 height=44 align-items="center" justify-content="center" pointer-events="none"
                     image "symbol:skip-back-15" color=th.fg pointer-events="none"
-              button press=radioPlay testId="radio-play" appearance="none" width=64 height=64 aria-label=playLabel
-                row width=64 height=64 align-items="center" justify-content="center" pointer-events="none"
-                  if rp.playing
-                    image "symbol:pause-fill" width=40 height=40 color=th.accent pointer-events="none"
-                  else
-                    image "symbol:play-fill" width=40 height=40 color=th.accent pointer-events="none"
+              if rp.canPlay
+                button press=radioPlay testId="radio-play" appearance="none" width=64 height=64 aria-label=playLabel
+                  row width=64 height=64 align-items="center" justify-content="center" pointer-events="none"
+                    if rp.playing
+                      image "symbol:pause-fill" width=40 height=40 color=th.accent pointer-events="none"
+                    else
+                      image "symbol:play-fill" width=40 height=40 color=th.accent pointer-events="none"
               if qv.audio
                 button press=queueDo("fwd15", "") testId="radio-fwd15" appearance="none" aria-label="Forward 15 seconds" width=44 height=44
                   row width=44 height=44 align-items="center" justify-content="center" pointer-events="none"
@@ -146,6 +135,18 @@ component RadioPage
                   text rp.why font-family=th.fontText font-size="-exact-callout" line-height=1.4 color=th.fg testId="radio-why-text"
                 if rp.forecast != ""
                   text rp.forecast font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-forecast"
+            // the stories this entry was built on: tap one to open its Texture (which shows its own sources). Nothing is drawn for an entry with none.
+            if rp.builtOn.length > 0
+              column gap=0 width="100%" testId="radio-builton"
+                SectionHeader(label="Built on")
+                for b in rp.builtOn key=b.address
+                  button press=openPage(b.address, b.title) testId=`radio-builton-${b.n}` appearance="none" width="100%" aria-label=`Open ${b.title}`
+                    row align-items="center" gap=8 width="100%" min-height=44
+                      column flex=1 min-width=0 gap=2 align-items="flex-start"
+                        text b.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=2
+                        if b.role != "" or b.note != ""
+                          text (b.role != "" and b.note != "" ? `${b.role} · ${b.note}` : `${b.role}${b.note}`) font-family=th.fontLabel font-size="-exact-caption2" color=th.muted line-clamp=1
+                      image "symbol:forward-chevron" color=th.muted pointer-events="none"
             // a clip: keep listening to the episode it is cut from, or open the episode
             QueueAudio()
             // the reading speed, one line: the value, minus, the slider from 0.5x to 3x, plus, and 1x to reset when it is not 1x
@@ -200,15 +201,6 @@ component RadioPage
                     text (radioAll ? "Fewer" : `All of it · ${rp.aheadMore} more`) font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
               if rp.writing
                 text "The desk is writing ahead…" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-next-writing"
-          // places: this page is the hub
-          column gap=4 width="100%" testId="radio-places"
-            SectionHeader(label="Places")
-            row flex-wrap="wrap" width="100%"
-              RadioPlace(slug="autopaper", name="Autopaper", address="paper:front")
-              RadioPlace(slug="books", name="Books", address="books:")
-              RadioPlace(slug="podcasts", name="Podcasts", address="podcasts:")
-              RadioPlace(slug="mail", name="Mail", address="mailbox:inbox")
-              RadioPlace(slug="files", name="Files", address="file:/")
           // heard: what ended, newest first, with how it ended; tap to hear it again
           if rp.heard.length > 0
             column gap=0 width="100%" testId="radio-heard"
@@ -223,4 +215,14 @@ component RadioPage
                       text h.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=1
                     text h.outcome font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
                     image "symbol:forward-chevron" color=th.muted pointer-events="none"
+                if h.builtOn.length > 0
+                  button press=toggleHeardBuilt(h.id) testId=`radio-heard-built-${h.n}` appearance="none" align-self="flex-start" aria-label=(heardOpen == h.id ? "Hide the stories it was built on" : "Show the stories it was built on")
+                    row min-height=44 align-items="center"
+                      text (heardOpen == h.id ? "Hide built on" : "Built on") font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
+                  if heardOpen == h.id
+                    for b in h.builtOn key=b.address
+                      button press=openPage(b.address, b.title) testId=`radio-heard-builton-${h.n}-${b.n}` appearance="none" width="100%" aria-label=`Open ${b.title}`
+                        row align-items="center" gap=8 width="100%" min-height=44
+                          text b.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=2 flex=1 min-width=0
+                          image "symbol:forward-chevron" color=th.muted pointer-events="none"
           BarClear()

@@ -26,14 +26,67 @@ final class OpeningCacheTests: XCTestCase {
         OpeningCache(dir: dir, maxBytes: maxBytes, clock: { [unowned self] in self.now }, calendar: cal)
     }
     func at(_ h: Int, _ m: Int = 0) -> Date { cal.date(from: DateComponents(year: 2030, month: 3, day: 4, hour: h, minute: m))! }
-    func opening(_ text: String = "Good morning. This is Autoradio. The Harbour Bridge reopens today.") -> RunSheetEntry {
+    func opening(_ text: String = "This is Autoradio.\n\nThe Harbour Bridge reopens after its repairs.") -> RunSheetEntry {
         RunSheetEntry(id: "d-o1", kind: .opening, placedBy: .desk, title: "Opening", text: text, cites: [RunSheetCite(ref: "pub:harbour", role: .mentioned, label: "Harbour Bridge")], estSeconds: 8)
     }
     func story(_ id: String = "d-s1") -> RunSheetEntry {
-        RunSheetEntry(id: id, kind: .story, placedBy: .desk, title: "Tide tables", text: "The tide tables change on Monday. Fishers are asked to check.", estSeconds: 9)
+        RunSheetEntry(id: id, kind: .story, placedBy: .desk, title: "Tide tables", text: "The tide tables change at the start of the season. Fishers are asked to check.", estSeconds: 9)
     }
     func pcm(_ text: String, n: Int = 1000) -> PreparedAudio { PreparedAudio(text: text, samples: [Float](repeating: 0.25, count: n), rate: 22050) }
     func audio(_ e: RunSheetEntry, n: Int = 1000) -> [PreparedAudio] { OpeningWriteAhead.blocks(of: e).map { pcm($0, n: n) } }
+
+    // 11 the owner: the time is computed when the app opens, never taken from the cache
+    func testTheTimeAndDayPartAreThoseOfTheMomentTheAppOpensNotOfTheWrite() {
+        let c = cache()
+        now = at(21, 20)
+        let written = opening("Good evening. It is 9:20 and this is Autoradio.\n\nFrom the paper\u{2019}s front page: the Harbour Bridge reopens. Six stories are lined up for you tonight.")
+        c.put(.opening, entry: written, titles: [], audio: [], voice: "v1")
+        now = at(22, 7)
+        guard case .opening(let o, _) = c.take(voice: "v1") else { return XCTFail("an opening of the same evening plays") }
+        let spoken = o.text ?? ""
+        XCTAssertTrue(spoken.contains("10:07 PM"), spoken); XCTAssertTrue(spoken.contains("Good evening"), spoken)
+        XCTAssertFalse(spoken.contains("9:20")); XCTAssertFalse(spoken.contains("9:20 PM"))
+    }
+    func testAnOpeningHeardAfterMidnightSaysHelloAndTheTimeThen() {
+        let c = cache(); now = at(23, 50)
+        c.put(.opening, entry: opening(), titles: [], audio: [], voice: "v1")
+        now = at(23, 59)
+        XCTAssertTrue(Moment.clause(now: at(0, 53), calendar: cal).hasPrefix("Hello, it\u{2019}s 12:53 AM"))
+        XCTAssertTrue(Moment.clause(now: at(8, 5), calendar: cal).hasPrefix("Good morning, it\u{2019}s 8:05 AM"))
+    }
+    func testNothingThatDependsOnTheMomentIsPreRendered() async {
+        let c = cache(); now = at(21, 20)
+        let feed = FakeFeed()
+        let o = RunSheetEntry(id: "d-o9", kind: .opening, placedBy: .desk, title: "Opening", text: "Good evening. It is 9:20, about 45 minutes since the last one. This is Autoradio.\n\nThe harbour board met. Two stories are new today.", estSeconds: 9)
+        feed.script = [.ops([RunSheetOp(opId: "o1", by: .desk, op: .place, at: .end, entry: o, reason: "x")]), .done]
+        let store = RunSheetStore()
+        var made: [String] = []
+        let w = OpeningWriteAhead(cache: c, store: store, feed: { feed }, voice: { "v1" }, synth: { t in made.append(t); return PreparedAudio(text: t, samples: [0.1, 0.1], rate: 22050) }, clock: { [unowned self] in self.now })
+        await w.refresh(reason: "aired")
+        XCTAssertEqual(made, ["This is Autoradio.", "The harbour board met."], "only what is true whenever it is played is made ahead")
+        for t in made { XCTAssertFalse(Moment.dependsOnMoment(t), t) }
+    }
+    func testTheCachedFirstBlockIsReadyWithNoSynthesisAndTheFreshClauseIsOneShortSentence() {
+        let c = cache(); now = at(8)
+        c.put(.opening, entry: opening(), titles: [], audio: audio(opening()), voice: "v1")
+        now = at(9, 15)
+        guard case .opening(let o, _) = c.take(voice: "v1") else { return XCTFail() }
+        let blocks = OpeningWriteAhead.blocks(of: o)
+        XCTAssertEqual(blocks[0], "This is Autoradio.", "the cached constant line starts the sound at once")
+        XCTAssertNotNil(c.prepared(text: blocks[0]), "ready with no synthesis")
+        XCTAssertEqual(blocks[1], Moment.clause(now: at(9, 15), calendar: cal)); XCTAssertNil(c.prepared(text: blocks[1]), "the clause is made while the first block plays")
+        XCTAssertEqual(BarTracker.sentences(blocks[1]).count, 1); XCTAssertLessThan(blocks[1].count, 40)
+        XCTAssertNotNil(c.prepared(text: blocks[2]), "the rest of the body is cached too")
+    }
+    func testAFirstBlockThatNamesTheMomentIsKeptAsTextNotSound() async {
+        let c = cache(); now = at(8)
+        let store = RunSheetStore()
+        store.place(RunSheetEntry(id: "d-s2", kind: .story, placedBy: .desk, title: "T", text: "This morning the tide changed. More follows.", estSeconds: 9), at: .end, by: .desk, reason: "x")
+        var made: [String] = []
+        let w = OpeningWriteAhead(cache: c, store: store, feed: { nil }, voice: { "v1" }, synth: { t in made.append(t); return PreparedAudio(text: t, samples: [0.1], rate: 22050) }, clock: { [unowned self] in self.now })
+        await w.refresh(reason: "aired")
+        XCTAssertTrue(made.isEmpty); XCTAssertNotNil(c.first(voice: "v1")); XCTAssertEqual(c.first(voice: "v1")?.files.count, 0)
+    }
 
     // 1
     func testAFreshOpeningPlaysWithItsAudio() {
