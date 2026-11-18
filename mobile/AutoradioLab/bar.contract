@@ -1,5 +1,5 @@
 // The bar (round 3, owner rulings 21 and 22): a glass lens at the bottom of the screen, always visible and usable on every page, in
-// onboarding and with the launcher or the player open. It is not a floating capsule: it spans the full width, overlaps the page
+// onboarding and with the launcher open. It is not a floating capsule: it spans the full width, overlaps the page
 // (which scrolls full bleed underneath and shows through the glass), covers the bottom safe area and runs off the bottom edge;
 // only its top corners are rounded. With the keyboard up it rides on top of the keyboard (`interactive-widget` on the root).
 //
@@ -8,20 +8,21 @@
 //   the field      "Ask about this page...", aimed at the page in front (its address goes with the turn).
 //   the microphone tap to start talking, tap again to send (the lens says "Listening" plainly while it is open).
 //   play / pause   the radio; when nothing is loaded it starts the edition.
-// A line above the controls says what is going on: what is loaded when something plays or is paused (tap: the player), the
+// For a document in the Reader or an embedded web page the lens carries one more line at its top, the content row (content.contract),
+// and the page above it takes the whole screen (owner, 2026-11-16).
+// A line above the controls says what is going on: what is loaded when something plays or is paused (tap: the Autoradio page), the
 // words as heard, the holding line, a revision, an error, the setup state, or the aim while typing. A quiet count
-// ("Story · 7 in the deck") sits just above the lens. The launcher and the player rise from the lens, as sheets
+// ("Story · 7 in the deck") sits just above the lens. The launcher rises from the lens, as a sheet
 // above it, so the bar stays visible and usable under them.
 // testIds: bar-stack, bar, bar-mark, bar-field, bar-mic, bar-send, bar-play, bar-text, bar-aim, bar-setup, bar-yield, bar-progress,
-// page-indicator.
+// page-indicator, content-row (content.contract), bar-answer, bar-asked, bar-answer-text, bar-answer-working, bar-answer-note, bar-answer-retry, bar-answer-cancel, bar-answer-close.
 use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding, MailMessageView from "@choir/autoradio"
-use Mark from "./mark.contract"
+use BarMark from "./tetramark.contract"
 use Launcher from "./launcher.contract"
-use PlayerLayer from "./player.contract"
 use StackVp from "./ui.contract"
+use ContentRow from "./content.contract"
+use tRiseInOf, tRiseOutOf, tOut from "./transitions.contract"
 
-keyframes barRise
-  from opacity=0 translate="0px 6px"
 keyframes barPulse
   50% scale=1.16 opacity=0.5
 keyframes barSpin
@@ -29,10 +30,9 @@ keyframes barSpin
   to rotate="360deg"
 keyframes barBlink
   50% opacity=0.25
-keyframes sheetUp
-  from opacity=0 translate="0px 40px"
 
-// A control of the row: a glyph above a one-word caption, so each says what it will do.
+// A control of the row: the icon alone with its caption under it. On is the accent (icon and caption), off is muted: no ring, no circle, no fill
+// (owner, 2026-11-15: no pills). The icon and the caption are the same size in both states, so a state moves nothing.
 component BarGlyph
   inject
     th: Theme
@@ -40,21 +40,24 @@ component BarGlyph
     glyph: string
     caption: string
     on: bool
+  derive tone = on ? th.accent : th.muted
   view
-    column align-items="center" justify-content="center" gap=1 width=52 height=48
-      row width=34 height=28 border-radius=14 align-items="center" justify-content="center"
-        background-color=(on ? th.accent : "transparent")
-        if glyph == "mic"
-          image "symbol:microphone" color=(on ? th.onAccent : th.fg)
-        if glyph == "stop"
-          image "symbol:stop-fill" color=(on ? th.onAccent : th.fg)
-        if glyph == "play"
-          image "symbol:play-fill" color=(on ? th.onAccent : th.fg)
-        if glyph == "pause"
-          image "symbol:pause-fill" color=(on ? th.onAccent : th.fg)
-        if glyph == "send"
-          image "symbol:send" color=(on ? th.onAccent : th.fg)
-      text caption font-family=th.fontUi font-size=10 font-weight=600 color=th.muted
+    column align-items="center" justify-content="center" gap=2 width=52 height=48
+      // the state is in the shape as well as the colour: the microphone is solid when on and crossed out when off
+      if glyph == "mic"
+        if on
+          image "symbol:sf/mic.fill" color=tone
+        else
+          image "symbol:sf/mic.slash" color=tone
+      if glyph == "stop"
+        image "symbol:stop-fill" color=tone
+      if glyph == "play"
+        image "symbol:play-fill" color=tone
+      if glyph == "pause"
+        image "symbol:pause-fill" color=tone
+      if glyph == "send"
+        image "symbol:send" color=tone
+      text caption font-family=th.fontAction font-size="-exact-caption2" font-weight=600 color=tone
 
 component BarShell
   inject
@@ -70,8 +73,10 @@ component BarShell
     typing: bool
     ask: string
     micOn: bool
+    heardNow: bool
     onbd: bool
     topAddr: string
+    ctlMode: string
     moreFor: string
     moreOfThis: action
     stackCount: number
@@ -81,6 +86,10 @@ component BarShell
     sendAsk: action
     micTap: action
     micCancel: action
+    openPage: action
+    answerRetry: action
+    answerDismiss: action
+    answerCancel: action
     radioPlay: action
     toggleLauncher: action
     showLayer: action
@@ -88,36 +97,37 @@ component BarShell
     barFocus: action
     barBlur: action
   derive st = bi.state
-  // One neutral placeholder on every page (people instruct as well as ask: play, skip, open mail, rewrite this, more like this).
+  // One neutral placeholder on every page. What the field does: the words go to the Autoradio desk with the page in front (its title,
+  // text and what was just heard), and the radio answers aloud in a few sentences. Today's route (docs/reference/AUTORADIO-TURNS.md) answers
+  // and has no tools, so the wording says "ask" and promises no action.
   // The aim is shown apart, as a short label on the glass: "On: <the page's title>" (never an address). The address itself goes with
   // the turn (`aim=`), unchanged.
-  derive aim = "Prompt Autoradio…"
+  derive aim = "Ask about this page…"
   derive aimTitle = topAddr == "paper:front" ? "Front page" : ((raim.address == pg.top and raim.blockId != "") ? raim.label : frontName)
   derive onSetup = pg.top == "onboarding:setup"
-  derive setupLine = ob.step == "interview" ? (ob.paused ? "Interview paused" : ((st == "listening" or st == "talking" or st == "heard") ? "Interview: listening…" : "Interview: speaking…")) : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
-  // What the line above the controls shows.
-  derive lineMode = micOn ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (st == "playing" ? "playing" : (st == "paused" ? "paused" : (onSetup ? "setup" : (typing ? "aim" : "none"))))))))
+  derive setupLine = ob.step == "topics" ? "Choose your topics" : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
+  // What the line above the controls shows. On the Autoradio page the now-playing line is redundant (the page is what it opens), so it is not drawn there.
+  derive lineMode = heardNow ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (st == "playing" ? (topAddr == "radio:" ? "none" : "playing") : (st == "paused" ? (topAddr == "radio:" ? "none" : "paused") : (onSetup ? "setup" : (typing ? "aim" : "none"))))))))
   derive loaded = ri.title != "" ? ri.title : bi.text
-  derive yielded = ri.level != "play" and micOn
+  derive yielded = ri.level != "play" and heardNow
   derive tint = st == "error" ? th.danger : (st == "revised" ? th.success : (st == "playing" ? th.accent2 : th.accent))
   derive tintOn = (lineMode == "none" or lineMode == "aim" or lineMode == "paused" or lineMode == "listen") ? 0 : (st == "playing" ? 0.08 : 0.12)
-  derive markState = micOn ? "listening" : (st == "paused" ? "idle" : st)
-  derive isPlaying = ri.playing or st == "playing"
+  derive markState = heardNow ? "listening" : (st == "paused" ? "idle" : st)
+  // One truth for the button and the strip: the bar state decides; the radio view (which can lag a pause) only counts while the bar has no verdict.
+  derive isPlaying = st == "playing" or (st != "paused" and ri.playing)
   derive playWord = isPlaying ? "Pause" : "Play"
   derive playLabel = isPlaying ? "Pause the radio" : (st == "paused" ? "Resume the radio" : "Play the edition")
   derive still = th.reducedMotion
   derive calm = still ? 0 : 1
-  derive enter = still ? "none" : "barRise 220ms ease-out both"
+  derive enter = tRiseInOf(still)
+  derive leave = tRiseOutOf(still)
   derive panelH = vp.height * 0.62
   view
     column testId="bar-stack" position="absolute" left=0 right=0 bottom=0 z-index=20
-      // the launcher and the player rise from the lens; the lens stays under them, visible and usable
+      // the launcher rises from the lens; the lens stays under it, visible and usable
       if layer == "launcher"
-        column testId="launcher" width="100%" height=panelH animation=(still ? "none" : "sheetUp 260ms ease-out both")
+        column testId="launcher" width="100%" height=panelH animation=enter -exact-exit-animation=leave
           Launcher()
-      if layer == "player"
-        column testId="player" width="100%" height=panelH animation=(still ? "none" : "sheetUp 260ms ease-out both")
-          PlayerLayer()
       // the lens: glass over the page, full width, top corners rounded, running off the bottom edge
       column testId="bar" position="relative" width="100%" box-sizing="border-box" gap=4
         padding-top=8 padding-left=12 padding-right=12 padding-bottom="calc(env(safe-area-inset-bottom) + 6px)"
@@ -128,7 +138,7 @@ component BarShell
         // a wash of the page colour inside the glass (theme data: th.lensWash, 0 for the native glass), so the controls stay legible over busy
         // content in light and dark (the lens itself is Exact's glass material, th.lensStyle: A native glass, B none, C ultra-thin)
         box position="absolute" inset=0 pointer-events="none" z-index=-1 border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
-          background-color=th.paper opacity=th.lensWash
+          background-color=th.paper opacity=max(th.lensWash, 0.55)
         // the state's tint
         box position="absolute" inset=0 pointer-events="none" border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
           background-color=tint opacity=tintOn
@@ -138,75 +148,107 @@ component BarShell
           border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
         box position="absolute" left=0 right=0 top=1 height=14 pointer-events="none" border-top-left-radius=(th.radiusCard * 1.7) border-top-right-radius=(th.radiusCard * 1.7)
           background-image="linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0))"
+        // the content row (content.contract): for a document in the Reader or an embedded web page, one line above the "On:" line that
+        // expands upward to the page's actions. The page itself carries no header; it runs down to the top of this lens.
+        if onbd == false and layer == "" and ctlMode != ""
+          ContentRow()
         // the deck's quiet count: where you are, in a hairline of text at the top of the lens (not over the page)
         if onbd == false and layer == ""
           row width="100%" align-items="center" justify-content="space-between" gap=8
-            text `On: ${aimTitle} · ${stackCount} in the deck` testId="page-indicator" aria-label=`On ${aimTitle}. ${stackCount} pages in the deck` line-clamp=1 flex=1 min-width=0 font-family=th.fontUi font-size=10 font-weight=600 letter-spacing=0.4 color=th.muted
+            text `On: ${aimTitle} · ${stackCount} in the deck` testId="page-indicator" aria-label=`On ${aimTitle}. ${stackCount} pages in the deck` line-clamp=1 flex=1 min-width=0 font-family=th.fontLabel font-size="-exact-caption2" color=th.muted
             if topAddr.startsWith("pub:")
               button press=moreOfThis(topAddr) testId="story-more" appearance="none" aria-label="More stories like this one"
-                row padding="3px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
-                  text (moreFor == topAddr ? "Noted" : "More of this") font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
+                row padding="6px 4px" align-items="center"
+                  text (moreFor == topAddr ? "Noted" : "More of this") font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=(moreFor == topAddr ? th.muted : th.accent)
+        // ---- the conversation card (lane autoradio-talk): what the reader asked and what came back, above the line, never replacing it.
+        // working: heard, nothing yet; first: the phone's answer from the saved stories (the full one is on its way); full: the computer's
+        // answer; failed: plain words and a retry. Tapping the answer opens the conversation page, where every answer is kept.
+        if bi.answerState != "" and layer == "" and onbd == false
+          column gap=4 animation=enter -exact-exit-animation=leave padding-left=4 padding-right=4 testId="bar-answer"
+            row gap=8 align-items="center" width="100%"
+              text `You asked: ${bi.question}` testId="bar-asked" font-family=th.fontLabel font-size="-exact-caption2" color=th.muted line-clamp=1 flex=1 min-width=0
+              if bi.answerState == "working" or bi.answerState == "first"
+                button press=answerCancel testId="bar-answer-cancel" appearance="none" aria-label="Cancel this question"
+                  row padding="6px 4px" align-items="center"
+                    text "Cancel" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
+              else
+                button press=answerDismiss testId="bar-answer-close" appearance="none" aria-label="Close the answer"
+                  row padding="6px 4px" align-items="center"
+                    text "Close" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
+            if bi.answerState == "working"
+              text "Looking it up…" testId="bar-answer-working" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
+            if bi.answerState == "first" or bi.answerState == "full"
+              button press=openPage("conversation:", "Conversation") testId="bar-answer-text" appearance="none" width="100%" aria-label="Open the conversation"
+                column gap=2 align-items="flex-start" width="100%"
+                  if bi.answerLabel != ""
+                    text bi.answerLabel font-family=th.fontLabel font-size="-exact-caption2" color=th.muted
+                  text bi.answerText font-family=th.fontText font-size="-exact-subheadline" color=th.fg line-clamp=4 text-align="left"
+            if bi.answerNote != ""
+              text bi.answerNote testId="bar-answer-note" font-family=th.fontLabel font-size="-exact-footnote" color=(bi.answerState == "failed" ? th.danger : th.muted) line-clamp=3
+            if bi.canRetry
+              button press=answerRetry("") testId="bar-answer-retry" appearance="none" aria-label="Ask again"
+                row padding="6px 4px" align-items="center"
+                  text "Try again" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
         // ---- the line above the controls
+        if lineMode == "aim"
+          text `The radio answers aloud, from ${aimTitle}. Try “Summarize this” or “Who is involved?”` testId="bar-aim" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted line-clamp=2 padding-left=4 animation=enter -exact-exit-animation=leave
         if lineMode == "setup"
-          text setupLine testId="bar-setup" font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 padding-left=4 animation=enter
+          text setupLine testId="bar-setup" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-clamp=1 padding-left=4 animation=enter -exact-exit-animation=leave
         if lineMode == "playing" or lineMode == "paused"
-          column gap=4 animation=enter
-            button press=showLayer("player") testId="bar-text" appearance="none" width="100%" aria-label=`${lineMode == "playing" ? "Now playing" : "Paused"}, ${loaded}. Open the player`
-              row gap=8 align-items="center" width="100%" padding-left=4 min-height=30
+          column gap=4 animation=enter -exact-exit-animation=leave
+            button press=openPage("radio:", "Autoradio") testId="bar-now" appearance="none" width="100%" aria-label=`${lineMode == "playing" ? "Now playing" : "Paused"}, ${loaded}. Open the Autoradio page`
+              row gap=8 align-items="center" width="100%" padding-left=4 min-height=30 testId="bar-text"
                 if lineMode == "playing"
                   image "symbol:waveform" color=th.accent
                 if lineMode == "paused"
                   image "symbol:pause" color=th.accent
                 column flex=1 min-width=0 gap=1 align-items="flex-start"
-                  text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontUi font-size=9 font-weight=700 letter-spacing=0.8 color=th.muted
-                  text loaded font-family=th.fontUi font-size=14 font-weight=600 color=th.fg line-clamp=1 text-align="left"
+                  text (lineMode == "playing" ? "NOW PLAYING" : "PAUSED") font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.8 color=th.muted
+                  text loaded font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg line-clamp=1 text-align="left"
                 image "symbol:forward-chevron" color=th.muted
-            box testId="bar-progress" height=2 border-radius=1 background-color="transparent" opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
-              box height=2 border-radius=1 width=`${floor(bi.progress * 100)}%` background-color=th.accent
+            box testId="bar-progress" height=2 background-color="transparent" opacity=(ri.level == "play" ? 1 : 0.4) transition=`opacity ${th.motionFastMs}ms ease`
+              box height=2 width=`${floor(bi.progress * 100)}%` background-color=th.accent
         if lineMode == "listen"
-          column gap=3 animation=enter padding-left=4
+          column gap=3 animation=enter -exact-exit-animation=leave padding-left=4
             if yielded
               row gap=5 align-items="center" testId="bar-yield" height=16
-                box width=6 height=6 border-radius=3 background-color=th.accent animation=(still ? "none" : "barBlink 1.1s ease-in-out infinite")
-                text (ri.level == "pause" ? "Radio paused while you speak" : "Radio lowered while you speak") font-family=th.fontUi font-size=11 color=th.muted
+                box width=3 height=12 background-color=th.accent animation=(still ? "none" : "barBlink 1.1s ease-in-out infinite")
+                text (ri.level == "pause" ? "Radio paused while you speak" : "Radio lowered while you speak") font-family=th.fontLabel font-size="-exact-caption2" color=th.muted
             row gap=6 align-items="center" width="100%"
-              box width=8 height=8 border-radius=4 background-color=th.danger animation=(still ? "none" : "barBlink 1s ease-in-out infinite")
-              text "Listening" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing=0.6 color=th.danger flex=1
+              box width=3 height=12 background-color=th.danger animation=(still ? "none" : "barBlink 1s ease-in-out infinite")
+              text "Listening" font-family=th.fontLabel font-size="-exact-caption2" color=th.danger flex=1
               button press=micCancel testId="bar-cancel" appearance="none" aria-label="Cancel listening"
-                row padding="4px 10px" border-radius=th.radiusPill border-width=1 border-style="solid" border-color=th.rule align-items="center"
-                  text "Cancel" font-family=th.fontUi font-size=12 font-weight=600 color=th.fg
-            text ((bi.text == "" or bi.text.startsWith("Listening")) ? "Tap the microphone again to send." : bi.text) testId="bar-text" font-family=th.fontRead font-size=15 font-style="italic" color=th.fg line-clamp=3
+                row padding="8px 4px" align-items="center"
+                  text "Cancel" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
+            text bi.text testId="bar-text" font-family=th.fontText font-size="-exact-subheadline" font-style="italic" color=th.fg line-clamp=3
         if lineMode == "heard"
-          text bi.text testId="bar-text" font-family=th.fontRead font-size=15 color=th.fg line-clamp=3 padding-left=4 animation=enter
+          text bi.text testId="bar-text" font-family=th.fontText font-size="-exact-subheadline" color=th.fg line-clamp=3 padding-left=4 animation=enter -exact-exit-animation=leave font-style="italic"
         if lineMode == "holding"
-          text bi.text testId="bar-text" font-family=th.fontUi font-size=14 color=th.fg line-clamp=2 padding-left=4 animation=enter
+          text bi.text testId="bar-text" font-family=th.fontText font-size="-exact-subheadline" color=th.fg line-clamp=2 padding-left=4 animation=enter -exact-exit-animation=leave font-style="italic"
         if lineMode == "revised"
-          button press=showLayer("player") testId="bar-text" appearance="none" aria-label="Revised. Show" animation=enter
+          button press=openPage("radio:", "Autoradio") testId="bar-text" appearance="none" aria-label="Revised. Show" animation=enter -exact-exit-animation=leave
             row gap=6 align-items="center" padding-left=4 min-height=30
               image "symbol:sparkles" color=th.success
-              text bi.text font-family=th.fontUi font-size=14 font-weight=600 color=th.fg
+              text bi.text font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
         if lineMode == "error"
-          row gap=6 align-items="center" animation=enter padding-left=4
+          row gap=6 align-items="center" animation=enter -exact-exit-animation=leave padding-left=4
             image "symbol:alert" color=th.danger
-            text bi.text testId="bar-text" font-family=th.fontUi font-size=14 color=th.fg line-clamp=3 flex=1
+            text bi.text testId="bar-text" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-clamp=3 flex=1
         // ---- the controls
         row align-items="center" gap=6
           button testId="bar-mark" press=toggleLauncher appearance="none" width=48 height=48 aria-label=(layer == "launcher" ? "Close the launcher" : "Open the launcher")
             column width=48 height=48 align-items="center" justify-content="center"
-              Mark(state=markState)
-          input appearance="none" value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=aim aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
-            font-family=th.fontRead font-size=17 color=th.fg padding="8px 6px" border-width=0 background-color="transparent"
+              BarMark()
+          input appearance="none" value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=(vp.width < 360 ? "Ask…" : aim) aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
+            font-family=(ask == "" ? th.fontLabel : th.fontText) font-size=(vp.width < 360 ? 16 : 17) color=th.fg padding="8px 6px" border-width=0 background-color="transparent"
             ::placeholder
               color=th.muted
           if typing
             button testId="bar-send" press=sendAsk appearance="none" width=52 height=48 aria-label="Send"
               BarGlyph(glyph="send", caption="Send", on=true)
           else
-            button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label=(micOn ? "Stop listening and send" : "Talk")
+            button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label=(micOn ? "Hands-free on. Turn it off" : "Hands-free off. Turn it on")
               box position="relative" width=52 height=48
-                if micOn
-                  box position="absolute" left=9 top=3 width=34 height=28 border-radius=14 border-width=2 border-style="solid" border-color=th.danger pointer-events="none"
-                    animation=(still ? "none" : "barPulse 1.1s ease-in-out infinite")
-                BarGlyph(glyph=(micOn ? "stop" : "mic"), caption=(micOn ? "Send" : "Talk"), on=micOn)
+                BarGlyph(glyph="mic", caption=(micOn ? "Voice on" : "Voice off"), on=micOn)
           button testId="bar-play" press=radioPlay appearance="none" width=52 height=48 aria-label=playLabel
-            BarGlyph(glyph=(isPlaying ? "pause" : "play"), caption=playWord, on=false)
+            BarGlyph(glyph=(isPlaying ? "pause" : "play"), caption=playWord, on=isPlaying)

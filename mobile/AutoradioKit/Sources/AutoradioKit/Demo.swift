@@ -40,6 +40,32 @@ public enum Demo {
         env.keys = keys()
     }
 
+    /// TEST AFFORDANCE, inside demo mode only (not a product switch: nothing ships on or off by it). The launch default `AutoradioDemoSheet <name>`
+    /// (set like `AutoradioDemo`) loads the bundled fixture `runsheet-<name>` as the run sheet for this launch: the station does not start by itself
+    /// and the desk is not asked, so a tour photographs exactly that sheet. Names: cold, day, answer, empty (fixtures/demo/runsheet-<name>.json).
+    public static let sheetKey = "AutoradioDemoSheet"
+    public static var sheetName: String? {
+        guard isOn, let n = UserDefaults.standard.string(forKey: sheetKey), !n.isEmpty else { return nil }
+        return n
+    }
+    @MainActor public static func runSheet(_ name: String) -> RunSheet? {
+        guard let d = fixture("runsheet-" + name) else { return nil }
+        return lossySheet(d)
+    }
+
+    /// The sheet of a saved file, entry by entry: an entry that does not decode is dropped and the rest load (one bad entry never empties the page).
+    @MainActor static func lossySheet(_ data: Data) -> RunSheet? {
+        guard let top = try? JSONSerialization.jsonObject(with: data) as? [String: Any], var sheet = top["sheet"] as? [String: Any] else { return nil }
+        let raw = (sheet["entries"] as? [Any]) ?? []
+        let good: [Any] = raw.filter { e in
+            guard JSONSerialization.isValidJSONObject(e), let d = try? JSONSerialization.data(withJSONObject: e) else { return false }
+            return (try? JSONDecoder().decode(RunSheetEntry.self, from: d)) != nil
+        }
+        sheet["entries"] = good
+        guard let d = try? JSONSerialization.data(withJSONObject: sheet) else { return nil }
+        return try? JSONDecoder().decode(RunSheet.self, from: d)
+    }
+
     public static func fixture(_ name: String) -> Data? { DemoFixtureData.files[name].map { Data($0.utf8) } }
 
     /// The demo front page as stories, for pages that list them without a request.
@@ -65,7 +91,11 @@ final class DemoURLProtocol: URLProtocol {
         if url.path == "/api/autoradio/programme", request.httpMethod == "POST" {
             let resp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/event-stream"])!
             client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data(DemoStretch.sse.utf8))
+            var sent = request.httpBody ?? Data()
+            if let st = request.httpBodyStream { st.open(); var buf = [UInt8](repeating: 0, count: 4096)
+                while st.hasBytesAvailable { let n = st.read(&buf, maxLength: buf.count); if n <= 0 { break }; sent.append(buf, count: n) }; st.close() }
+            let cause = ((try? JSONSerialization.jsonObject(with: sent)) as? [String: Any])?["cause"] as? String ?? "open"
+            client?.urlProtocol(self, didLoad: Data(DemoStretch.body(cause: cause).utf8))
             client?.urlProtocolDidFinishLoading(self)
             return
         }
@@ -73,6 +103,21 @@ final class DemoURLProtocol: URLProtocol {
         var sent = request.httpBody ?? Data()
         if let st = request.httpBodyStream { st.open(); var buf = [UInt8](repeating: 0, count: 4096)
             while st.hasBytesAvailable { let n = st.read(&buf, maxLength: buf.count); if n <= 0 { break }; sent.append(buf, count: n) }; st.close() }
+        // A Texture revision posted from the phone's editor: demo mode keeps it and answers the new head (TextureDemo.posted).
+        if request.httpMethod == "POST", let answer = TextureDemo.post(path: url.path, body: sent) {
+            let resp = HTTPURLResponse(url: url, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: answer)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+        if let (status, body) = TakesDemo.answer(method: request.httpMethod ?? "GET", path: url.path + ((url.query ?? "").contains("mine=1") ? "?mine" : ""), body: sent) {
+            let resp = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: body)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         // Mail (lane 6) needs the method and the body, so it answers first; every other route is the one switch below.
         let (status, body) = MailDemo.answer(method: request.httpMethod ?? "GET", path: url.path, query: items,
                                              body: (try? JSONSerialization.jsonObject(with: sent)) as? [String: Any] ?? [:]) ?? Self.route(path: url.path, query: items)
@@ -88,6 +133,9 @@ final class DemoURLProtocol: URLProtocol {
         switch path {
         case "/api/platform/publications/front": if let d = Demo.fixture("front") { return (200, d) }
         case "/api/compute/status": if let d = Demo.fixture("status") { return (200, d) }
+        case "/api/autoradio/learning": if let d = Demo.fixture("learning") { return (200, d) }          // station L6: the scorecard (a fixture; the real route is the server's)
+        case "/api/texture/edition": if let d = Demo.fixture("texture-edition") { return (200, d) }      // the demo notebook
+        case "/api/autoradio/steer": return (200, Data("{}".utf8))
         case "/api/platform/publications/resolve": if let d = Demo.fixture("resolve-" + TextureDemo.bareRoute(q("route"))) { return (200, d) }
         case "/api/platform/publications/related": if let d = Demo.fixture("related-" + TextureDemo.bareRoute(q("route"))) { return (200, d) }
         default: if let d = TextureDemo.route(path) { return (200, d) }
@@ -99,13 +147,20 @@ final class DemoURLProtocol: URLProtocol {
 /// `pub:<route>` as plain paragraphs, from the network, or the fixtures in demo mode (the session is the stub).
 /// The spine's text renderer shows it; lane 3 replaces it with the real reader and its own source.
 public struct PublicationTextSource: PageSource {
+    nonisolated(unsafe) public static var offline: (@Sendable (String) -> ReaderDoc?)?
     public init() {}
     public func handles(_ address: String) -> Bool { address.hasPrefix("pub:") }
     public func load(_ address: String) async throws -> PageModel {
         let route = PageAddress.rest(of: address)
-        let r = try await ChoirEnvironment.shared.client().send("GET", "/api/platform/publications/resolve", query: ["route": route],
-                                                                  authenticated: false, route: "/api/platform/publications/resolve")
-        let o = try r.object()
+        let o: [String: Any]
+        do {
+            o = try await ChoirEnvironment.shared.client().send("GET", "/api/platform/publications/resolve", query: ["route": route],
+                                                                  authenticated: false, route: "/api/platform/publications/resolve").object()
+        } catch {
+            // No network: the story the phone holds (the ContentStore) is read from there.
+            if let d = Self.offline?(address) { return PageModel(address: address, kind: "reader", title: d.title, status: "ready", lines: d.lines) }
+            throw error
+        }
         let title = ((o["publication"] as? [String: Any])?["title"] as? String) ?? "Story"
         let text = ((o["payload"] as? [String: Any])?["text"] as? String) ?? ""
         return PageModel(address: address, kind: "reader", title: title, status: "ready", lines: ChoirText.paragraphs(text))

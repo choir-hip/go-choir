@@ -10,6 +10,11 @@ udid=$($SIMCTL list devices 2>/dev/null | grep -F "    $NAME (" | head -1 | sed 
 if [ -z "$udid" ]; then
   runtime=$($SIMCTL list runtimes 2>/dev/null | grep -o 'com.apple.CoreSimulator.SimRuntime.iOS-[0-9-]*' | tail -1)
   udid=$($SIMCTL create "$NAME" com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro "$runtime" 2>/dev/null)
+  # A new simulator is slimmed before its first use (sim-slim.sh refuses the default name, autoradio-lab).
+  # No simslim binary, or a failed slim, leaves a stock simulator and says so.
+  if [ "$NAME" != autoradio-lab ]; then
+    "$(dirname "$0")/sim-slim.sh" "$udid" >&2 || echo "sim-device: $NAME is not slimmed (see mobile/README.md, Slim simulators)" >&2
+  fi
 fi
 if ! $SIMCTL list devices 2>/dev/null | grep -F "$udid" | grep -q Booted; then $SIMCTL boot "$udid" >/dev/null 2>&1 || true; fi
 echo "$udid"

@@ -28,8 +28,20 @@ public struct BarInfo: Codable, Sendable, Equatable {
     public var playing = false
     public var talking = false
     public var signedIn = false
+    /// Hands-free is on (the microphone is open and turns open and close by themselves) or off (nothing is heard). Kept across launches.
+    public var handsFree = false
     /// 0...1 along the current programme; the hairline rule on the bar's lower edge.
     public var progress = 0.0
+    /// The conversation card (Conversation.swift): what the reader asked, what came back, and where it came from. Empty `answerState`:
+    /// no card. working (heard, nothing yet) | first (from saved stories, the full answer is on its way) | full | failed.
+    public var question = ""
+    public var answerText = ""
+    /// "From your saved stories: From the paper's story on X" when the answer shown is the phone's first answer; empty for the full one.
+    public var answerLabel = ""
+    public var answerState = ""
+    /// Plain words about a failure or a cut-off answer.
+    public var answerNote = ""
+    public var canRetry = false
     public init() {}
 }
 
@@ -55,6 +67,8 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     /// play | dip | pause: what the yield policy is doing to the programme right now.
     public var level = "play"
     public var speed = "1"
+    /// The same speed as a number, for the slider (0.5 to 3).
+    public var speedValue = 1.0
     public var speedChoices: [String] = ["0.8", "1", "1.25", "1.5"]
     /// button | open | hybrid
     public var mode = ""
@@ -104,12 +118,18 @@ public final class BarTracker: @unchecked Sendable {
     private var errorText = ""
     private var lastMessage = ""
     private var clock = BlockClock()
+    /// Sign-out: the held words (a message, a revision summary, the holding line) are the account's.
+    public func wipe() {
+        lock.lock(); holdingLine = ""; revisedAt = nil; revisedSummary = ""; errorAt = nil; errorText = ""; lastMessage = ""; lock.unlock()
+    }
     public private(set) var speed = 1.0
     private var level = 0.0
     /// The audio's own position in the block (set by the runtime). Without one the estimate from play time is used.
     public var positionSource: (@Sendable () -> RenderPosition?)?
     /// Told when the listener picks a speed, so the audio can apply it.
     public var speedSink: (@Sendable (Double) -> Void)?
+    /// Others that follow the speed (remote audio).
+    public var speedObservers: [@Sendable (Double) -> Void] = []
 
     public init() {}
 
@@ -144,6 +164,11 @@ public final class BarTracker: @unchecked Sendable {
         }
     }
 
+    /// A plain line from the app itself (not an engine event): it holds the bar for the error window like any other.
+    public func say(_ line: String, now: Date = Date()) {
+        lock.lock(); errorAt = now; errorText = line; lock.unlock()
+    }
+
     static func plain(stage: String, message m: String) -> String {
         if m.contains("not signed in") { return "Sign in to talk to your computer." }
         if m.contains("429") { return "Your computer is busy right now. Try again in a moment." }
@@ -157,8 +182,9 @@ public final class BarTracker: @unchecked Sendable {
     }
 
     public func setSpeed(_ s: Double) {
-        lock.lock(); speed = s.isNaN ? 1 : min(max(s, 0.5), 2.0); let v = speed; let sink = speedSink; lock.unlock()
+        lock.lock(); speed = PlaybackSpeed.snap(s); let v = speed; let sink = speedSink; lock.unlock()
         sink?(v)
+        for o in speedObservers { o(v) }
     }
 
     /// When the bar's timed states next end, so the host can ask once more then (nil: nothing is timed).
@@ -173,9 +199,33 @@ public final class BarTracker: @unchecked Sendable {
     // MARK: Views
 
     public func barInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, now: Date = Date()) -> BarInfo {
+        var b = baseInfo(player: p, snapshot: s, now: now)
+        Self.decorate(&b, with: Conversation.shared.visible())
+        return b
+    }
+
+    /// The conversation card for the entry on show (nil: none).
+    static func decorate(_ b: inout BarInfo, with e: ConversationEntry?) {
+        guard let e else { return }
+        b.question = e.question
+        let saved = e.firstSource.isEmpty ? e.first : e.firstSource + ": " + e.first
+        switch e.status {
+        case "failed":
+            b.answerState = "failed"; b.answerNote = e.note; b.canRetry = true
+        case "answered", "answering":
+            if !e.answer.isEmpty { b.answerState = "full"; b.answerText = e.answer }
+            else { b.answerState = "first"; b.answerText = saved; b.answerLabel = "From your saved stories" }
+            b.answerNote = e.note; b.canRetry = e.status == "answered" && !e.note.isEmpty
+        default:   // asking
+            if e.first.isEmpty { b.answerState = "working" }
+            else { b.answerState = "first"; b.answerText = saved; b.answerLabel = "From your saved stories" }
+        }
+    }
+
+    func baseInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, now: Date = Date()) -> BarInfo {
         lock.lock(); defer { lock.unlock() }
         var b = BarInfo()
-        b.signedIn = p.signedIn; b.playing = p.playing
+        b.signedIn = p.signedIn; b.playing = p.playing; b.handsFree = HandsFreeSwitch.shared.isOn
         if s.blockCount > 0 { b.progress = min(1, (Double(s.blockIndex) + clockProgress(s, doc: nil, now: now)) / Double(s.blockCount)) }
         // A message from the listener path (sign-in, the programme) is new once; it holds the bar for the error window.
         if !p.message.isEmpty, p.message != lastMessage, p.message != "Pick a story below." {
@@ -229,7 +279,7 @@ public final class BarTracker: @unchecked Sendable {
         return sentences.count - 1
     }
 
-    public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument, route: String, now: Date = Date()) -> RadioInfo {
+    public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument, route: String, nextTitle: String = "", now: Date = Date()) -> RadioInfo {
         lock.lock(); defer { lock.unlock() }
         var r = RadioInfo()
         let bp = clockProgress(s, doc: d, now: now)
@@ -237,17 +287,18 @@ public final class BarTracker: @unchecked Sendable {
         let idx = n == 0 ? 0 : min(max(s.blockIndex, 0), n - 1)
         r.title = d.title; r.source = route
         r.index = idx; r.count = n
-        r.position = n == 0 ? "" : "\(idx + 1) of \(n)"
-        // A programme (station P1): the header, the position and the list are the segments; the passage below is still the block.
+        // No "N of M": the bar shows what is on air and its progress. The entry on air is one segment: its title, kind and sources head the player.
+        r.position = ""
         let seg = n == 0 ? nil : d.segmentIndex(containingBlock: idx)
         if let si = seg {
             let np = ProgrammeNowPlaying.describe(document: d, blockIndex: idx)
             r.title = np.title; r.kind = np.kind; r.sources = np.sources
-            r.index = si; r.count = d.segments.count
-            r.position = "\(si + 1) of \(d.segments.count)"
+            r.index = 0; r.count = 1
+            // The station speaking between two entries: the line says what it is leading into.
+            if d.segments[si].kind == "transition", !nextTitle.isEmpty { r.kind = "Next: " + nextTitle }
         }
         r.playing = p.playing; r.paused = n > 0 && !p.playing
-        r.level = s.level; r.speed = Self.speedName(speed)
+        r.level = s.level; r.speed = Self.speedName(speed); r.speedValue = speed
         r.mode = s.addressing
         r.micOpen = s.micActive
         r.micLevel = (level * 100).rounded() / 100
@@ -261,19 +312,12 @@ public final class BarTracker: @unchecked Sendable {
             let text = b.spokenText ?? b.summary
             r.sentences = Self.sentences(text)
             r.sentenceIndex = Self.sentenceIndex(r.sentences, progress: bp)
-            if let si = seg {
-                // The programme list is the segments: a window of at most 40 that holds the current one.
-                if si + 1 < d.segments.count { r.next = d.segments[si + 1].title }
-                let m = d.segments.count
-                let lo = max(0, min(si - 5, m - 40)), hi = min(m, lo + 40)
-                for i in lo..<hi {
-                    var it = RadioItem()
-                    it.i = i; it.current = i == si; it.done = i < si; it.text = d.segments[i].title; it.kind = "speech"
-                    r.items.append(it)
-                }
+            if seg != nil {
+                // The next is the run sheet's next entry, never the paper's neighbour; there is no list of segments to jump in.
+                r.next = nextTitle
                 return r
             }
-            if idx + 1 < n { r.next = d.blocks[idx + 1].spokenText ?? d.blocks[idx + 1].summary }
+            r.next = nextTitle
             // A window of at most 40 items that always holds the current block.
             let lo = max(0, min(idx - 5, n - 40)), hi = min(n, lo + 40)
             for i in lo..<hi {
@@ -283,6 +327,7 @@ public final class BarTracker: @unchecked Sendable {
                 case .speech(let t): it.text = t; it.kind = "speech"
                 case .listenerPassage(let t, _): it.text = t; it.kind = "you"
                 case .clip: it.text = d.blocks[i].summary; it.kind = "clip"
+                case .podcastClip: it.text = "Podcast clip"; it.kind = "clip"
                 }
                 r.items.append(it)
             }
@@ -290,7 +335,7 @@ public final class BarTracker: @unchecked Sendable {
         return r
     }
 
-    static func speedName(_ s: Double) -> String { s == s.rounded() ? String(Int(s)) : String(s) }
+    static func speedName(_ s: Double) -> String { PlaybackSpeed.name(s) }
 }
 
 public enum BarState {

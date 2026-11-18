@@ -3,29 +3,45 @@
 // the next page showing beneath it with depth) sends it to the BOTTOM of the deck and brings the next to the top; keep swiping and
 // the whole deck cycles round. Nothing is closed by a swipe. Opening a page (a story, a Texture, a file, a message, a section)
 // puts it on top; if it is in the deck already it moves to the top (no duplicates). The launcher brings any page to the top and
-// removes opened pages; the five key pages (Paper, Textures, Files, Mail, Settings) cannot be removed.
+// removes opened pages; the six key pages (Autoradio, Paper, Textures, Files, Mail, Settings) cannot be removed.
 // `pan` on the deck with `touch-action="pan-y"` so a vertical drag still scrolls the page.
 //
 // `order` is the deck, top first. The Kit's OpenPages (pg.rows, pg.top) is the open set and the focus that every page's resources
 // read; the deck keeps the ORDER, which the Kit does not model. A move updates `order` at once and tells the Kit (pageOpen); the
 // page on top is drawn for real only when the Kit's focus has caught up (pg.top == the top), a placard before. If the Kit's focus is
 // ever somewhere else for half a second (something outside the deck opened a page) the deck follows it (task syncTop).
-use pageOpen, pageClose from "@choir/autoradio"
+use pageOpen, pageClose, readerPrefetch from "@choir/autoradio"
+use ReaderAck from "@choir/autoradio"
 use StackVp, stackName, isFixed, kindOf, kindWord from "./ui.contract"
 
 members Autoradio
   resource vp = exactViewport() as shape StackVp
-  state order = ["paper:front", "textures:", "file:/", "mailbox:inbox", "settings:root"]
+  state order = ["radio:", "paper:front", "textures:", "file:/", "mailbox:inbox", "settings:root"]
   state px = 0
   state pdrag = false
   state flying = false
+  state flyDir = 1
+  // The neighbours of the card on top are fetched and decoded ahead (readerPrefetch), so a swipe finds them held.
+  mutation rpf as shape ReaderAck
 
-  // Onboarding (the setup page and the interview) takes over the deck as before: one page, nothing to swipe.
+  // Onboarding (the setup page and the edition topics) takes over the deck as before: one page, nothing to swipe.
   derive onbd = pg.top.startsWith("onboarding:")
   derive topAddr = order.slice(0, 1).join("")
   derive stackAddrs = order
   derive stackCount = order.length
-  derive deckWin = order.slice(0, 3)
+  // An open paper article is a card in a stack of the front page's articles (owner, 2026-11-15, item 1): a swipe goes to the next
+  // article (leftwards) or the previous one (rightwards) and never wraps or returns to the front page. The list is the front
+  // page's reading order for the VIEW the reader is in (Front page, My edition or a category: `paperView`, Kit: PaperFront.routes); the view is state, so it
+  // is still the open view while an article is on top.
+  // A page that is not in that list (a Texture, a file) keeps the deck's own cycle.
+  derive curIdx = topAddr.startsWith("pub:") ? pfront.routes.indexOf(topAddr.slice(4)) : 0 - 1
+  derive inStack = curIdx >= 0
+  derive prevAddr = (inStack and curIdx > 0) ? `pub:${pfront.routes.slice(curIdx - 1, curIdx).join("")}` : ""
+  derive nextAddr = (inStack and curIdx < pfront.routes.length - 1) ? `pub:${pfront.routes.slice(curIdx + 1, curIdx + 2).join("")}` : ""
+  derive prevTitle = inStack ? pfront.titles.slice(max(curIdx - 1, 0), max(curIdx, 0)).join("") : ""
+  derive nextTitle = inStack ? pfront.titles.slice(curIdx + 1, curIdx + 2).join("") : ""
+  derive belowAddr = px > 0 ? prevAddr : nextAddr
+  derive deckWin = inStack ? (belowAddr == "" ? [topAddr] : [topAddr, belowAddr]) : order.slice(0, 3)
   derive shown = topAddr
   derive frontName = stackName(pg.rows, topAddr)
   derive frontKind = kindWord(kindOf(topAddr), topAddr)
@@ -34,8 +50,11 @@ members Autoradio
   derive prog = min(pxAbs / max(vp.width * 0.5, 1), 1)
 
   // Bring a page to the top of the deck (opening it when it is new).
+  // A file (not a folder) is opened by the Kit, which may answer with another page (a PDF is a Reader document, text a Texture document, either
+  // possibly already in the deck): the deck does not take the `file:` address on top, it follows the focus the Kit lands on (followOpen).
   action openPage(address: string, title: string)
-    order = address.startsWith("onboarding:") ? order : [address].concat(order.filter(a => a != address))
+    awaiting = (address.startsWith("file:") and address.endsWith("/") == false) ? address : ""
+    order = (address.startsWith("onboarding:") or awaiting != "") ? order : [address].concat(order.filter(a => a != address))
     px = 0
     pdrag = false
     flying = false
@@ -64,8 +83,10 @@ members Autoradio
     pdrag = false
     if flying == false
       let far = px > vp.width * 0.25 or px < 0 - vp.width * 0.25 or vx > 700 or vx < 0 - 700
-      if far and stackCount > 1
-        let right = px > 0 or (px == 0 and vx > 0)
+      let right = px > 0 or (px == 0 and vx > 0)
+      let canGo = inStack ? (right ? prevAddr != "" : nextAddr != "") : stackCount > 1
+      if far and canGo
+        flyDir = right ? 0 - 1 : 1
         px = right ? vp.width * 1.3 : 0 - vp.width * 1.3
         flying = true
       else
@@ -74,11 +95,47 @@ members Autoradio
   task flyEnd when flying key=flying
     after(230, cycleDeck)
   action cycleDeck
-    let nxt = order.slice(1, 2).join("")
-    order = order.slice(1).concat(order.slice(0, 1))
-    px = 0
-    flying = false
-    send pm = pageOpen(address=nxt, title="")
+    if inStack
+      // The article is left behind (closed, not sent to the bottom): the stack is the paper's list, not the deck.
+      let go = flyDir < 0 ? prevAddr : nextAddr
+      let gone = topAddr
+      order = [go].concat(order.filter(a => a != go and a != gone))
+      px = 0
+      flying = false
+      send pm = pageOpen(address=go, title=(flyDir < 0 ? prevTitle : nextTitle))
+      send pc = pageClose(address=gone)
+    else
+      let nxt = order.slice(1, 2).join("")
+      order = order.slice(1).concat(order.slice(0, 1))
+      px = 0
+      flying = false
+      send pm = pageOpen(address=nxt, title="")
+
+  // The file the Kit is opening, until its page is in front: the deck follows the Kit's focus to whatever page that open lands on, whether the
+  // deck had it already or not. It is cleared when that happens, when another page is asked for, and after 20 seconds (a failed open: the bar says why).
+  state awaiting = ""
+  task followOpen when awaiting != "" and pg.top != "" and pg.top != topAddr key=pg.top
+    after(1, followOpenNow)
+  action followOpenNow
+    if awaiting != "" and pg.top != "" and pg.top != topAddr
+      order = [pg.top].concat(order.filter(a => a != pg.top))
+      awaiting = ""
+  task awaitingTimeout when awaiting != "" key=awaiting
+    after(20000, clearAwaiting)
+  action clearAwaiting
+    awaiting = ""
+
+  // A page in front of the deck that the Kit does not have open, or a deck whose top is not the Kit's focus for long, shows only a placard (the
+  // page's resources read the Kit's focus). Whichever it is, the deck is made to agree with the Kit: a top the Kit does not have is dropped, and a
+  // top the Kit has is asked for again.
+  task reconcileTop when pg.top != "" and topAddr != pg.top and awaiting == "" and onbd == false key=`${topAddr}|${pg.top}`
+    after(2500, reconcileTopNow)
+  action reconcileTopNow
+    if pg.top != "" and topAddr != pg.top and awaiting == "" and onbd == false
+      if pg.rows.filter(r => r.address == topAddr).length == 0
+        order = [pg.top].concat(order.filter(a => a != pg.top and a != topAddr))
+      else
+        send pm = pageOpen(address=topAddr, title="")
 
   // The deck takes in a page the Kit opened that the deck does not know (something outside the deck opened it). A focus that is only
   // behind the deck (the answer to a move still on its way) is never followed: that would undo a swipe.
@@ -87,3 +144,12 @@ members Autoradio
   action syncDeck
     if pg.top != "" and order.includes(pg.top) == false and pg.top.startsWith("onboarding:") == false
       order = [pg.top].concat(order.filter(a => a != pg.top))
+
+  // Whenever a story is on top, the story before it and the one after it are fetched now (the Kit holds them; at most 40 stories).
+  // The paper's list may arrive after the story was opened, so the task also waits on the list (key: the top and the count).
+  derive warmKey = `${topAddr}|${pfront.count}`
+  task warmStack when inStack key=warmKey
+    after(1, warmNeighbours)
+  action warmNeighbours
+    if inStack
+      send rpf = readerPrefetch(prev=prevAddr, next=nextAddr)

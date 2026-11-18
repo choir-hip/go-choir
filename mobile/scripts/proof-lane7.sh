@@ -167,7 +167,7 @@ must "activity: a revision from the changelog" 'Revision saved'
 must "activity: the computer's update" 'Your computer finished updating and restarted.'
 must "activity: unseen count" '2 new since you last looked'
 must "components: restyled page still works" '[page-title] "Components"'
-must "components: talk control kept" '[lab-talk]'
+must "components: phase line kept" '[lab-phase]'
 must "trace: restyled page still works" '[page-title] "Trace"'
 [ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 30 ] || fail "screenshots" "fewer than 30 in $SHOTS"
 echo "ok: screenshots in $SHOTS"

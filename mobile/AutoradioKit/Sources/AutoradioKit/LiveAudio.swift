@@ -51,7 +51,44 @@ public final class LiveAudio: @unchecked Sendable {
     private let lock = NSLock()
     private var bus: AudioBus?
     private var clock: LabClock?
-    private var wantMic = false
+    /// The microphone may be used at all (permission granted) and is wanted now (voice is on): the tap exists only while both hold.
+    /// Samples handed to the programme node since the engine was made (what the output was given to play).
+    private var samplesHanded = 0
+    public var programmeSamplesHanded: Int { lock.lock(); defer { lock.unlock() }; return samplesHanded }
+    /// One voice at a time. While a voice line (acknowledgement, holding line, answer) is being heard, the programme node is held: it is the lower
+    /// rank. It goes on when the last voice line ends, if the programme is still wanted. Under the lock.
+    private var voiceLines = 0
+    private var heldForVoice = false
+    /// True while a voice line is audible (tests and the on-air line read it).
+    public var voiceIsSpeaking: Bool { lock.lock(); defer { lock.unlock() }; return voiceLines > 0 }
+    /// True when the programme node is audible or may be heard now: wanted, and no voice line speaking.
+    /// The first voice line began (true) or the last ended (false): other sound outside this engine (remote audio) is held with the programme.
+    public var onVoiceHold: (@Sendable (Bool) -> Void)?
+    private func voiceBegan(reason: String) {
+        lock.lock(); voiceLines += 1; let first = voiceLines == 1; lock.unlock()
+        guard first else { return }
+        onVoiceHold?(true)
+        if virtual { if !virtualPaused { lock.lock(); heldForVoice = true; lock.unlock(); virtualPaused = true } }
+        else if running, programmeNode.isPlaying { lock.lock(); heldForVoice = true; lock.unlock(); programmeNode.pause() }
+        if heldForVoice { print("AUTORADIO hold programme reason=\(reason)") }
+    }
+    /// The session is being reconfigured: the same hold as a voice line, so what is on air is paused (and remote audio held) and goes on after.
+    public func holdForSessionSwitch(_ on: Bool) { if on { voiceBegan(reason: "session switch") } else { voiceEnded() } }
+    private func voiceEnded() {
+        lock.lock(); voiceLines = max(0, voiceLines - 1); let last = voiceLines == 0; let held = heldForVoice; if last { heldForVoice = false }; lock.unlock()
+        if last { onVoiceHold?(false) }
+        guard last, held, wantPlaying else { return }
+        if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false }
+        print("AUTORADIO resume programme reason=voice line ended")
+    }
+    private var micPermitted = false
+    private var micWanted = false
+    /// Another app has the session, or this app is in the background: the microphone is not taken (and not fought for) until it is given back.
+    private let suspendedBox = Locked<Bool>(false)
+    public var micSuspended: Bool { get { suspendedBox.value } set { suspendedBox.write { $0 = newValue } } }
+    /// The input rate of the tap now installed (0: none), for the log line of voice on.
+    public private(set) var micTapRate = 0.0
+    private var wantMic: Bool { micPermitted && micWanted && !micSuspended }
     private var observer: NSObjectProtocol?
     /// Flags the audio thread, the notification queue, background tasks and the main thread all read: one lock (the repair of the
     /// app review; `running` was polled by `playProgramme` while `bring` and `takeDown` wrote it).
@@ -95,6 +132,12 @@ public final class LiveAudio: @unchecked Sendable {
         engine.connect(voiceNode, to: engine.mainMixerNode, format: playFmt)
     }
 
+    /// The listener's answer to the microphone question, when voice is turned on after the engine started.
+    public func permitMic(_ ok: Bool) { micPermitted = ok }
+
+    /// Whether the microphone is already allowed (no prompt).
+    public static func micPermissionGranted() -> Bool { AVAudioApplication.shared.recordPermission == .granted }
+
     public static func requestMicPermission() async -> Bool {
         await withCheckedContinuation { c in AVAudioApplication.requestRecordPermission { c.resume(returning: $0) } }
     }
@@ -105,9 +148,11 @@ public final class LiveAudio: @unchecked Sendable {
 
     // MARK: Start, stop, restart
 
-    public func start(bus: AudioBus, clock: LabClock, wantMic: Bool, voiceProcessing: Bool = false, virtual: Bool = false) throws {
+    /// `wantMic`: the microphone is permitted. `mic`: it is wanted now (voice is on); nil means as permitted. A playback-only session has no
+    /// input: a tap on its input node makes the engine fail to start, and nothing is then ever heard.
+    public func start(bus: AudioBus, clock: LabClock, wantMic: Bool, mic: Bool? = nil, voiceProcessing: Bool = false, virtual: Bool = false) throws {
         if running { return }
-        self.bus = bus; self.clock = clock; self.wantMic = wantMic; self.virtual = virtual
+        self.bus = bus; self.clock = clock; self.micPermitted = wantMic; self.micWanted = mic ?? wantMic; self.virtual = virtual
         if virtual { running = true; down = false; micActive = true; return }
         try bring(voiceProcessing: voiceProcessing)
         observe()
@@ -123,10 +168,15 @@ public final class LiveAudio: @unchecked Sendable {
     }
 
     /// Bring the engine back up after a category change; `voiceProcessing` for the talking state.
-    public func resume(voiceProcessing vp: Bool) throws {
+    /// `mic`: the microphone tap is wanted (voice is on); without it the engine only plays.
+    public func resume(voiceProcessing vp: Bool, mic: Bool? = nil) throws {
         guard !virtual, bus != nil else { return }
+        if let mic { micWanted = mic }
         try bring(voiceProcessing: vp)
     }
+
+    /// The engine should be making sound or ready to, and is not: it was taken down (interruption, failed restart) or never came back.
+    public var needsRecovery: Bool { !virtual && bus != nil && (down || !running) }
 
     /// Restart in place (route change, interruption end): the same voice processing setting.
     public func recover(reason: String) {
@@ -144,10 +194,19 @@ public final class LiveAudio: @unchecked Sendable {
         lock.lock(); generation += 1; lock.unlock()
         freezePlayhead()
         running = false; micActive = false
-        nodeStopped = true; releaseWaiters(); engine = AVAudioEngine(); programmeNode = AVAudioPlayerNode(); voiceNode = AVAudioPlayerNode(); timePitch = AVAudioUnitTimePitch()
-        wire()
+        nodeStopped = true; releaseWaiters(); replaceEngine()
         do { try bring(voiceProcessing: voiceProcessing); observe(); onNotice?("engine", "rebuilt after media services reset") }
         catch { down = true; onNotice?("error", "engine rebuild failed: \(error)") }
+    }
+
+    /// A new engine and nodes, wired as the old ones were. The caller starts it. Notifications of the old engine are dropped.
+    private func replaceEngine() {
+        if let o = observer { NotificationCenter.default.removeObserver(o); observer = nil }
+        let old = engine
+        if old.isRunning { old.stop() }
+        engine = AVAudioEngine(); programmeNode = AVAudioPlayerNode(); voiceNode = AVAudioPlayerNode(); timePitch = AVAudioUnitTimePitch()
+        wire()
+        observe()
     }
 
     public func stop() {
@@ -191,9 +250,14 @@ public final class LiveAudio: @unchecked Sendable {
 
     private func bring(voiceProcessing vp: Bool) throws {
         guard let bus, let clock else { return }
+        // Voice processing belongs to the input node and stays with the engine object: a playback-only engine after a talking one is a
+        // new engine, so nothing of the voice-processing unit is left in the output path.
+        if !wantMic, voiceProcessing { replaceEngine() }
         voiceProcessing = false
         if wantMic {
-            #if os(iOS)
+            // Voice processing I/O (echo cancellation) is on the iPhone and on the Mac alike: AVAudioIONode.h declares
+            // setVoiceProcessingEnabled(_:) for macOS 10.15 and iOS 13, with the same rule (the engine stopped, both IO nodes switch together).
+            #if os(iOS) || os(macOS)
             do { try engine.inputNode.setVoiceProcessingEnabled(vp); voiceProcessing = vp }
             catch { onNotice?("error", "voice processing \(vp ? "on" : "off") failed: \(error)") }
             #endif
@@ -204,8 +268,13 @@ public final class LiveAudio: @unchecked Sendable {
                     let s = rs.convert(buf)
                     if !s.isEmpty { bus.pushMic(AudioFrame(samples: s, sampleRate: busSampleRate, t: clock.now)) }
                 }
-                micActive = true
-            } else { onNotice?("error", "input format has sample rate 0 (no microphone available)") }
+                micActive = true; micTapRate = inFmt.sampleRate
+                micRetries = 0
+            } else {
+                micTapRate = 0
+                onNotice?("error", "input format has sample rate 0 (no microphone available)")
+                scheduleMicRetry()
+            }
         }
         let mixFmt = engine.mainMixerNode.outputFormat(forBus: 0)
         let rr = Resampler(rate: busSampleRate)
@@ -213,6 +282,9 @@ public final class LiveAudio: @unchecked Sendable {
             let s = rr.convert(buf)
             if !s.isEmpty { bus.pushReference(AudioFrame(samples: s, sampleRate: busSampleRate, t: clock.now)) }
         }
+        // A test affordance for the Mac proof, not a feature: with -AutoradioProofSilent YES (or that default set) the output is muted, and
+        // the samples are still rendered and counted, so the proof does not play through the owner's speakers.
+        if UserDefaults.standard.bool(forKey: "AutoradioProofSilent") { engine.mainMixerNode.outputVolume = 0 }
         engine.prepare()
         do { try engine.start() } catch {
             if micActive { engine.inputNode.removeTap(onBus: 0); micActive = false }
@@ -223,7 +295,22 @@ public final class LiveAudio: @unchecked Sendable {
         running = true; down = false
         lastRestart = clock.now
         programmeNode.volume = volume
-        if wantPlaying { programmeNode.play(); nodeStopped = false }
+        if wantPlaying, !voiceIsSpeaking { programmeNode.play(); nodeStopped = false }
+        onNotice?("engine", "up: mic \(micActive), voice processing \(voiceProcessing), programme wanted \(wantPlaying)")
+    }
+
+    /// A route that is still settling (Bluetooth A2DP to the hands-free profile) reports no input for a moment: the tap is tried again, a few times,
+    /// instead of leaving the microphone silent for good.
+    private var micRetries = 0
+    private func scheduleMicRetry() {
+        guard micRetries < 6, !virtual else { return }
+        micRetries += 1
+        let wait = 0.4 * Double(1 << (micRetries - 1))
+        DispatchQueue.global().asyncAfter(deadline: .now() + wait) { [weak self] in
+            guard let self, self.wantMic, !self.micActive, !self.restarting else { return }
+            print("AUTORADIO voice mic retry \(self.micRetries): the input was not there yet")
+            self.recover(reason: "microphone input not available yet")
+        }
     }
 
     /// The engine stops itself when the route changes (AirPods in or out); restart it once, after the burst settles.
@@ -250,12 +337,17 @@ public final class LiveAudio: @unchecked Sendable {
 
     // MARK: Programme node, guarded
 
-    public func programmePlay() { wantPlaying = true; if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false } }
+    public func programmePlay() {
+        wantPlaying = true
+        if voiceIsSpeaking { lock.lock(); heldForVoice = true; lock.unlock(); return }      // the voice line has the output; the programme goes on after it
+        if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false }
+    }
     public func programmePause() { wantPlaying = false; if virtual { virtualPaused = true } else if running { programmeNode.pause() } }
     public func programmeStop() { wantPlaying = false; if virtual { virtualPaused = true } else { programmeNode.stop(); nodeStopped = true; releaseWaiters() } }
-    /// Speed of the programme, 0.5 to 2, pitch kept. Applies at once, also to what is already scheduled.
+    /// Speed of the programme, 0.5 to 3, pitch kept (`PlaybackSpeed`). Applies at once, also to what is already scheduled. The time-pitch
+    /// unit takes 1/32 to 32, so 3 is well inside it; every voice is played through this unit, so none has a lower ceiling.
     public func setProgrammeRate(_ r: Double) {
-        let c = r.isNaN ? 1 : min(2, max(0.5, r))
+        let c = PlaybackSpeed.clamp(r)
         lock.lock(); rate = c; lock.unlock()
         timePitch.rate = Float(c)
     }
@@ -277,7 +369,9 @@ public final class LiveAudio: @unchecked Sendable {
     // MARK: Playing
 
     /// Play voice frames now (acknowledgement, holding lines). Returns when the last frame has been heard.
-    public func playVoice(_ frames: AsyncThrowingStream<AudioFrame, Error>) async {
+    public func playVoice(_ frames: AsyncThrowingStream<AudioFrame, Error>, reason: String = "a voice line") async {
+        voiceBegan(reason: reason)
+        defer { voiceEnded() }
         if virtual {
             var secs = 0.0
             do { for try await f in frames { secs += f.duration } } catch {}
@@ -317,15 +411,25 @@ public final class LiveAudio: @unchecked Sendable {
         timer.cancel()
     }
 
+    /// Stop the voice node at once and release whoever waits on it (the listener spoke over the radio).
+    public func stopVoice() {
+        guard !virtual, running else { return }
+        voiceNode.stop()
+        releaseWaiters()
+    }
+
     /// Schedule a buffer on the programme node and wait until it has played. If the engine is restarted meanwhile
     /// (a session switch, a route change), carry on from the frames already rendered once it is back.
     func playProgramme(_ samples: [Float], rate: Double, tag: Int = -1) async {
+        lock.lock(); samplesHanded += samples.count; lock.unlock()
         if virtual {
             let total = Int(Double(samples.count) / rate * LiveAudio.playRate)
             lock.lock(); var h = Playhead(tag: tag, totalFrames: total); h.frozen = 0; playhead = h; lock.unlock()
             var played = 0.0                                      // source seconds
             let length = Double(samples.count) / rate
-            while played < length, !Task.isCancelled {
+            // A block always ends: a virtual engine that stays paused gives up at ten times the block's own length (and at least a minute).
+            let deadline = Date().addingTimeInterval(max(60, length * 10))
+            while played < length, !Task.isCancelled, Date() < deadline {
                 try? await Task.sleep(nanoseconds: 50_000_000)
                 if !virtualPaused {
                     lock.lock(); let sp = self.rate; lock.unlock()
@@ -357,7 +461,7 @@ public final class LiveAudio: @unchecked Sendable {
                 await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
                     once.arm(c)
                     programmeNode.scheduleBuffer(ob, completionCallbackType: .dataPlayedBack) { _ in once.resume(()) }
-                    if wantPlaying, !programmeNode.isPlaying { programmeNode.play(); nodeStopped = false }
+                    if wantPlaying, !voiceIsSpeaking, !programmeNode.isPlaying { programmeNode.play(); nodeStopped = false }
                 }
             } onCancel: { once.resume(()) }
             waiters.write { $0[wid] = nil }
@@ -399,6 +503,22 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var userPaused: Bool { st.read { $0.userPaused } }
     public var rate: Double { st.read { $0.rate } }
     public var onChange: (@Sendable () -> Void)?
+    /// The loop ran out of blocks and nothing is queued behind it: (the document's id, whether any block of this run made sound).
+    /// A programme whose stretch is still arriving also runs dry between segments; the host decides what that means (autoplay).
+    public var onRanDry: (@Sendable (String, Bool) -> Void)?
+    /// The lock screen's next and previous: the host may take them as story moves (true: handled); else they skip a passage or segment.
+    public var onNextTrack: (@Sendable () -> Bool)?
+    public var onPreviousTrack: (@Sendable () -> Bool)?
+    /// The lock screen's play, pause and toggle: the host may take them (true: handled) when something other than this player is playing (remote audio).
+    public var onTransport: (@Sendable (String) -> Bool)?
+    /// True when a system pause arriving now is the system reacting to the radio's own session change (a reclaim, a switch): it is not the listener's.
+    public var ignoreSystemPause: (@Sendable () -> Bool)?
+    public var msSinceSessionChange: (@Sendable () -> Int)?
+    /// Play was pressed: the host makes sure the audio session is claimed and active and the engine is up before sound is expected (it takes
+    /// the claim again when the session was doubted or the engine is down). Play does not wait for it: the node plays as the engine comes up.
+    public var onNeedsSession: (@Sendable () -> Void)?
+    /// The yield level changed (a hands-free turn lowered or paused the programme): remote audio follows it.
+    public var onLevel: (@Sendable (PlayLevel) -> Void)?
     /// Where playback is, per segment (station P1): P2 observes it.
     public let playback = SegmentTracker()
     /// Tests only: runs in the loop after its last look at the document and before the write that ends it (the window of review finding R3).
@@ -416,6 +536,23 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         installRemoteCommands()
     }
     public func setConfiguration(_ c: LabConfiguration) { lock.lock(); configuration = c; lock.unlock() }
+    /// Audio made before it was wanted, by the block's text (the host sets it from `OpeningCache.prepared`). Nil or no answer: the block is made.
+    public var preparedSpeech: (@Sendable (String) -> PreparedAudio?)?
+    /// The chosen voice, as the cache keys it: a changed voice is another key.
+    public var voiceKey: String { lock.lock(); defer { lock.unlock() }; return String(describing: configuration.setting(.voice)) }
+    /// Load the chosen voice by making one short line (never played, never timed into the launch line).
+    public func warmVoice() async -> Bool {
+        lock.lock(); let cfg = configuration; lock.unlock()
+        var why = ""
+        return await synthesize("Ready.", with: cfg, why: &why, timed: false) != nil
+    }
+    /// Make the audio of one block for the cache: the chosen voice only (a fall back to the system voice would be cached under the wrong name).
+    public func synthesizeForCache(_ text: String) async -> PreparedAudio? {
+        lock.lock(); let cfg = configuration; lock.unlock()
+        var why = ""
+        guard let m = await synthesize(text, with: cfg, why: &why, timed: false) else { return nil }
+        return PreparedAudio(text: text, samples: m.samples, rate: m.rate)
+    }
     /// Per-document state dies with the document: the block index, where the loop ran dry (`resumeAt`), and the tracker's open and
     /// closed segments.
     public func setDocument(_ d: ProgrammeDocument) {
@@ -432,12 +569,17 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             let first = s.resumeAt.flatMap { $0 < s.document.blocks.count ? $0 : nil }
             return (s.level, s.loop != nil, first ?? s.blockIndex)
         }
+        onNeedsSession?()
         if lvl != .pause { audio.programmePlay() }
         playback.paused(false)
         if !hasLoop { start(at: at) }
         publishNowPlaying(); onChange?()
     }
-    public func pause() { st.write { $0.userPaused = true }; audio.programmePause(); playback.paused(true); publishNowPlaying(); onChange?() }
+    /// `reason` names who asked: every pause is on the console, never silent.
+    public func pause(reason: String = "listener") {
+        print("AUTORADIO paused reason=\(reason)")
+        st.write { $0.userPaused = true }; audio.programmePause(); playback.paused(true); publishNowPlaying(); onChange?()
+    }
     public func next() {
         let (i, doc) = st.read { ($0.blockIndex, $0.document) }
         let count = doc.blocks.count
@@ -453,19 +595,36 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public func previous() {
         let (i, doc) = st.read { ($0.blockIndex, $0.document) }
         if let si = doc.segmentIndex(containingBlock: i) {
-            // The start of this segment, or the one before when already at its start.
+            // The start of this segment, or the one before when the segment has barely begun (the first block, under 3 seconds in).
             let here = doc.segments[si].firstBlock
-            start(at: i > here || si == 0 ? here : doc.segments[si - 1].firstBlock)
+            let seconds = renderPosition()?.seconds ?? 0
+            start(at: StoryCursor.previousRestartsCurrent(blockIndex: i - here, secondsIntoBlock: seconds) || si == 0 ? here : doc.segments[si - 1].firstBlock)
             return
         }
         start(at: max(i - 1, 0))
     }
+    /// How far into the story the listener is: the block and the seconds in it (0 when nothing has been scheduled yet or the player is paused at the start).
+    public func storyPosition() -> (block: Int, seconds: Double) { (blockIndex, renderPosition()?.seconds ?? 0) }
     /// The segment now playing; nil for a single article.
     public var currentSegmentIndex: Int? { st.read { $0.document.segmentIndex(containingBlock: $0.blockIndex) } }
     /// Go to the first block of segment `i`. Outside the list: nothing.
     public func jumpToSegment(_ i: Int) {
         guard let at = st.read({ s in s.document.segments.indices.contains(i) ? s.document.segments[i].firstBlock : nil }) else { return }
         start(at: at)
+    }
+
+    /// Say no more than the block being spoken now: what follows it in this document is cut off. A block is whole sentences, so no word is cut.
+    public func endAfterCurrentBlock() {
+        st.write { s in
+            let keep = s.blockIndex + 1
+            guard keep < s.document.blocks.count else { return }
+            s.document.blocks = Array(s.document.blocks.prefix(keep))
+            s.document.segments = s.document.segments.compactMap { seg in
+                guard seg.firstBlock < keep else { return nil }
+                var x = seg; x.blockCount = min(x.blockCount, keep - x.firstBlock); x.unitServerBlocks = Array(x.unitServerBlocks.prefix(x.blockCount)); return x
+            }
+        }
+        onChange?()
     }
 
     /// Add a segment to the end of the programme being played, if `documentID` is still the document it was made for (a late segment of an
@@ -484,7 +643,20 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         return ok
     }
 
+    /// Start playing from block `i` now. The listener asked for it (a story chosen, next, previous), so a pause is over: the pause flag is
+    /// cleared before the loop first reads it. (`start(at:)` then `play()` raced: the loop could pause the audio after `play()` had started it,
+    /// and nothing started it again.)
+    func begin(at i: Int) {
+        st.write { $0.userPaused = false }
+        playback.paused(false)
+        start(at: i)
+        publishNowPlaying(); onChange?()
+    }
+
+    private var startedAt = Date()
+    private var firstTag = 0
     func start(at i: Int) {
+        lock.lock(); startedAt = Date(); firstTag = i; lock.unlock()
         let (old, my) = st.write { s -> (Task<Void, Never>?, Int) in
             let o = s.loop; s.epoch += 1; s.blockIndex = i; s.loop = nil; s.resumeAt = nil; return (o, s.epoch)
         }
@@ -494,6 +666,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         let task = Task { [weak self] in
             guard let self else { return }
             var n = i
+            var anyPlayed = false                // a block of this run made sound: only then did the story "finish"
             outer: while !Task.isCancelled {
                 while !Task.isCancelled {
                     // One look at the state per block: the block to play, and whether this loop is still the current one.
@@ -508,6 +681,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                     self.playback.unitBegan(n, in: doc)
                     let played = await self.playBlock(block, index: n)
                     if Task.isCancelled { break }
+                    if played { anyPlayed = true }
                     self.playback.unitEnded(n, played: played, in: self.st.read { $0.document })
                     n += 1
                 }
@@ -521,7 +695,15 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                 }
                 if tail == 1 { continue outer }
                 // The story is over: what the listener asked to hear comes next, like the next story.
-                if tail == 2 { if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) } else { self.onChange?() } }
+                if tail == 2 {
+                    if let q = self.dequeue() { self.setDocument(q); self.start(at: 0) }
+                    else {
+                        let id = self.st.read { $0.document.id }
+                        self.onChange?()
+                        // The empty document of a stop ends at once: nothing ran dry, and nothing is told.
+                        if id != "none" { print("AUTORADIO ran dry doc=\(id) played=\(anyPlayed)"); self.onRanDry?(id, anyPlayed) }
+                    }
+                }
                 break
             }
         }
@@ -532,9 +714,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
 
     // MARK: Speed
 
-    /// Programme speed, 0.5 to 2, pitch kept (time-pitch in the audio engine). Applies to what is playing and to what follows.
+    /// Programme speed, 0.5 to 3, pitch kept (time-pitch in the audio engine). Applies to what is playing and to what follows.
     public func setRate(_ r: Double) {
-        let c = r.isNaN ? 1 : min(2, max(0.5, r))
+        let c = PlaybackSpeed.clamp(r)
         st.write { $0.rate = c }; audio.setProgrammeRate(c); publishNowPlaying(); onChange?()
     }
 
@@ -549,7 +731,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// not running; it plays when the radio starts). Returns false for text with nothing to say.
     @discardableResult
     public func speakText(address: String, text: String, title: String? = nil, startNow: Bool = false, play: Bool = true) -> Bool {
-        let paras = Array(ChoirText.paragraphs(text).prefix(200))
+        let paras = Array(ChoirText.paragraphs(text, maxChars: ChoirText.speechChars).prefix(600))
         guard !paras.isEmpty else { return false }
         let name = title ?? paras[0].split(separator: " ").prefix(6).joined(separator: " ")
         let doc = ProgrammeDocument(id: "text:\(address)", title: name, blocks: paras.map { .speech(text: $0) })
@@ -581,18 +763,37 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     func playBlock(_ b: ProgrammeBlock, index tag: Int) async -> Bool {
         switch b {
         case .speech(let t), .listenerPassage(let t, _):
-            lock.lock(); let cfg = configuration; lock.unlock()
-            guard let voice = try? registry.make(.voice, as: Voice.self, cfg) else { return false }
-            var samples: [Float] = []; var rate = 22050.0
-            var failed = false
-            do { for try await f in voice.speak(AsyncStream { $0.yield(t); $0.finish() }) { samples += f.samples; rate = f.sampleRate } } catch {
-                log.emit(.error(stage: "voice", message: "\(error)")); failed = true
+            // The block after this one is synthesised while this one plays (`lookahead`), so a long story starts after its first short
+            // block and then runs without a gap; the voice itself falls back to the system voice line by line (`makeSpeaker`).
+            lock.lock(); let current = configuration; lock.unlock()
+            let key = Self.lookaheadKey(t, current)
+            let hit = ahead.write { a -> Task<Synthesized?, Never>? in
+                guard let x = a, x.key == key else { return nil }
+                a = nil; return x.task
             }
+            let made: Synthesized?
+            var source = "live"
+            // Audio written ahead of the launch (OpeningCache): the block's samples are handed over instead of made; the rest of the path is the same.
+            if let p = preparedSpeech?(t) { made = Synthesized(samples: p.samples, rate: p.rate); source = "cached" }
+            else if let hit { made = await hit.value } else { made = await synthesize(t) }
             if Task.isCancelled { return false }
-            if failed || samples.isEmpty { return false }
+            guard let made else {
+                if tag == firstTag { print("AUTORADIO on air \(st.read { $0.document.id }) FAILED \(speakFailure ?? "no sound")") }
+                return false
+            }
+            if tag == firstTag {
+                let ms = Int((Date().timeIntervalSince(startedAt)) * 1000)
+                print("AUTORADIO on air \(st.read { $0.document.id }) voice=\(current.setting(.voice)?.id ?? "") samples=\(made.samples.count) first_audio_ms=\(ms)")
+                LaunchTimings.shared.printLine(source: source)
+            } else {
+                print("AUTORADIO on air \(st.read { $0.document.id }) block=\(tag) samples=\(made.samples.count)")
+            }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
-            await audio.playProgramme(samples, rate: rate, tag: tag)
+            startLookahead(after: tag)
+            await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
             return true
+        case .podcastClip:
+            return false                                     // a podcast clip is a run sheet entry, played by the run sheet player
         case .clip(let url, let start, let end, _):
             guard let u = FixtureResources.resolve(url), let all = try? AudioFiles.readMono(u, rate: 16_000) else {
                 log.emit(.error(stage: "player", message: "clip not found: \(url)")); return false
@@ -601,6 +802,84 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             if a < z { log.emit(.programmeAudioStart(block: tag)); await audio.playProgramme(Array(all[a..<z]), rate: 16_000, tag: tag); return true }
             return false
         }
+    }
+
+    // MARK: Synthesis and lookahead
+
+    struct Synthesized: Sendable { var samples: [Float]; var rate: Double }
+    private let ahead = Locked<(key: String, task: Task<Synthesized?, Never>)?>(nil)
+
+    static func lookaheadKey(_ text: String, _ cfg: LabConfiguration) -> String {
+        "\(String(describing: cfg.setting(.voice)))|\(text)"
+    }
+
+    /// Make the audio of one block with the configured voice (the neural voice, the system voice as its fall back). nil when nothing could be
+    /// made; the failure is on the log (the trace's "voice" errors).
+    func synthesize(_ text: String) async -> Synthesized? {
+        lock.lock(); let cfg = configuration; lock.unlock()
+        let want = cfg.setting(.voice)?.id ?? ""
+        var failure = ""
+        if let made = await synthesize(text, with: cfg, why: &failure) { setFailure(nil); return made }
+        if Task.isCancelled { return nil }
+        // The chosen voice made nothing: the system voice speaks instead, and the listener is told why.
+        if VoiceCatalog.neuralStageIDs.contains(want) {   // a chosen on-device voice; any other id that cannot be made is an error, not a guess
+            log.emit(.note("voice: \(want) made no sound (\(failure)); the system voice speaks"))
+            var system = cfg
+            system.set(.voice, StageSetting(id: VoiceCatalog.fallbackStageID))
+            var second = ""
+            if let made = await synthesize(text, with: system, why: &second) { setFailure(nil); return made }
+            if !second.isEmpty { failure += "; the system voice: \(second)" }
+        }
+        setFailure(failure)
+        return nil
+    }
+
+    private func setFailure(_ f: String?) { lock.lock(); speakFailureText = f; lock.unlock() }
+    private var speakFailureText: String?
+    /// Why the last block could not be spoken (nil: it was).
+    public var speakFailure: String? { lock.lock(); defer { lock.unlock() }; return speakFailureText }
+
+    /// True while a block of speech is being made (the vector job waits on it).
+    public var synthesisBusy: Bool { synthDepth.read { $0 > 0 } }
+    private let synthDepth = Locked(0)
+    private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String, timed: Bool = true) async -> Synthesized? {
+        synthDepth.write { $0 += 1 }; defer { synthDepth.write { $0 -= 1 } }
+        let voice: Voice
+        let t0 = Date()
+        var loaded = t0
+        defer { if timed { LaunchTimings.shared.mark("synth", ms: Date().timeIntervalSince(loaded) * 1000) } }
+        do { voice = try registry.makeSpeaker(cfg, log: log); loaded = Date(); if timed { LaunchTimings.shared.mark("voice_load", ms: loaded.timeIntervalSince(t0) * 1000) } } catch {
+            why = "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)"
+            log.emit(.error(stage: "voice", message: why)); return nil
+        }
+        var samples: [Float] = []; var rate = 22050.0
+        var failed = false
+        do { for try await f in voice.speak(AsyncStream { $0.yield(text); $0.finish() }) { samples += f.samples; rate = f.sampleRate } } catch {
+            why = "\(error)"; log.emit(.error(stage: "voice", message: "\(error)")); failed = true
+        }
+        if Task.isCancelled { return nil }
+        if samples.isEmpty && !failed { why = "the voice made no sound for this block"; log.emit(.error(stage: "voice", message: why)) }
+        if failed || samples.isEmpty { return nil }
+        return Synthesized(samples: samples, rate: rate)
+    }
+
+    /// Start making the next speech block now, so it is ready when this one ends.
+    private func startLookahead(after tag: Int) {
+        let next = st.read { s -> String? in
+            let i = tag + 1
+            guard s.document.blocks.indices.contains(i) else { return nil }
+            return s.document.blocks[i].spokenText
+        }
+        guard let text = next, !text.isEmpty else { return }
+        lock.lock(); let cfg = configuration; lock.unlock()
+        let key = Self.lookaheadKey(text, cfg)
+        let task = Task { [weak self] in await self?.synthesize(text) }
+        let old = ahead.write { a -> Task<Synthesized?, Never>? in let o = a; a = (key, task); return o?.task }
+        old?.cancel()
+    }
+    private func cancelLookahead() {
+        let old = ahead.write { a -> Task<Synthesized?, Never>? in let o = a; a = nil; return o?.task }
+        old?.cancel()
     }
 
     // MARK: PlaybackControl
@@ -618,8 +897,17 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
               let full = doc.blocks[i].spokenText, let p = audio.programmePosition(tag: i), p.fraction < 1 else { return nil }
         return SpokenCut(blockIndex: i, full: full, spoken: SpeechCut.text(of: full, upTo: p.fraction), fraction: p.fraction)
     }
+    /// What of the document is still to be said, from the start of the block being spoken (a block is a sentence or a short run of them).
+    public func remainingText() -> String? {
+        st.read { s -> String? in
+            guard s.document.blocks.indices.contains(s.blockIndex) else { return nil }
+            let t = s.document.blocks[s.blockIndex...].compactMap { $0.spokenText }.joined(separator: " ")
+            return t.isEmpty ? nil : t
+        }
+    }
     public func setLevel(_ l: PlayLevel) async {
         let paused = st.write { s -> Bool in s.level = l; return s.userPaused }
+        if l == .pause { cancelLookahead() }          // the listener spoke: the voice is wanted for the answer, not for the next block
         playback.cut(l == .pause)
         switch l {
         case .play: audio.setProgrammeVolume(1); if !paused { audio.programmePlay() }
@@ -627,8 +915,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         case .pause: audio.programmePause()
         }
         onChange?()
+        onLevel?(l)
     }
     public func speak(_ frames: AsyncThrowingStream<AudioFrame, Error>) async { await audio.playVoice(frames) }
+    public func stopVoice() async { audio.stopVoice() }
     public func apply(_ r: Revision) async { st.write { $0.document = $0.document.applying(r); $0.jumpTo = r.fromBlock }; onChange?() }
     public func resume() async {
         let jump = st.write { s -> Int? in
@@ -643,14 +933,28 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
 
     private func installRemoteCommands() {
         let c = MPRemoteCommandCenter.shared()
-        c.playCommand.addTarget { [weak self] _ in self?.play(); return .success }
-        c.pauseCommand.addTarget { [weak self] _ in self?.pause(); return .success }
+        for cmd in [c.playCommand, c.pauseCommand, c.togglePlayPauseCommand, c.nextTrackCommand, c.previousTrackCommand] { cmd.isEnabled = true }
+        c.playCommand.addTarget { [weak self] _ in if self?.onTransport?("play") == true { return .success }; self?.play(); return .success }
+        c.pauseCommand.addTarget { [weak self] _ in
+            let since = self?.msSinceSessionChange?() ?? -1
+            if self?.ignoreSystemPause?() == true { print("AUTORADIO remote pause ignored ms_since_session_change=\(since)"); return .success }
+            print("AUTORADIO remote pause accepted ms_since_session_change=\(since)")
+            if self?.onTransport?("pause") == true { return .success }; self?.pause(reason: "remote command pause"); return .success }
         c.togglePlayPauseCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
-            if self.userPaused { self.play() } else { self.pause() }; return .success
+            if self.onTransport?("toggle") == true { return .success }
+            if self.userPaused { self.play() } else { self.pause(reason: "remote command toggle") }; return .success
         }
-        c.nextTrackCommand.addTarget { [weak self] _ in self?.next(); return .success }
-        c.previousTrackCommand.addTarget { [weak self] _ in self?.previous(); return .success }
+        c.nextTrackCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            if self.onNextTrack?() != true { self.next() }
+            return .success
+        }
+        c.previousTrackCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            if self.onPreviousTrack?() != true { self.previous() }
+            return .success
+        }
     }
     func publishNowPlaying() {
         let (doc, idx, paused, speed) = st.read { ($0.document, $0.blockIndex, $0.userPaused, $0.rate) }
@@ -659,6 +963,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             MPMediaItemPropertyTitle: np.title, MPMediaItemPropertyArtist: np.artist,
             MPNowPlayingInfoPropertyPlaybackRate: paused ? 0.0 : speed,
         ]
+        MPNowPlayingInfoCenter.default().playbackState = paused ? .paused : .playing
     }
 }
 
@@ -673,4 +978,10 @@ public enum FixtureResources {
         if let d = directory, FileManager.default.fileExists(atPath: d.appendingPathComponent(name).path) { return d.appendingPathComponent(name) }
         return FixtureClip.materialise(name: name)
     }
+}
+
+/// When the microphone permission is asked for: only with voice on, and only when it is not granted yet. Voice is off unless the listener
+/// turns it on, and with it off the radio never uses the microphone, so it does not ask.
+public enum MicAsk {
+    public static func shouldRequest(voiceOn: Bool, granted: Bool) -> Bool { voiceOn && !granted }
 }

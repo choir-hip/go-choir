@@ -3,12 +3,12 @@
 import AVFoundation
 import ExactPackage
 import Foundation
-import UIKit
 
 /// Adapts Exact's session claims to the kit's AudioSessionOwner. One standing capture claim at a time:
 /// listening (mode default, A2DP, speaker, no voice processing) or talking (voiceChat, HFP, speaker). A change of
 /// state is release, then claim, because the first claim's mode wins in Exact (AudioSession.swift:238-262). Options
 /// are always explicit: an empty list silently means defaultToSpeaker + allowBluetoothHFP (NativeHatches.swift:239-243).
+#if os(iOS)
 final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
     private let context: ExactPackageContext
     private var claim: ExactSubscription?
@@ -20,6 +20,7 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
 
     static func spec(_ s: AudioState) -> (mode: String, options: [String], expected: AVAudioSession.Mode) {
         switch s {
+        case .playing: return ("speech-playback", [], .spokenAudio)   // a playback session, no microphone (Exact's speech claim: .playback, spokenAudio, runs in the background)
         case .listening: return ("default", ["defaultToSpeaker", "allowBluetoothA2DP"], .default)
         case .talking: return ("voiceChat", ["defaultToSpeaker", "allowBluetoothHFP"], .voiceChat)
         }
@@ -30,6 +31,7 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
     func claim(_ state: AudioState, preferBuiltInMic: Bool, reason: String) async throws {
         let ok: Bool = await MainActor.run {
             if claim != nil, held == state { return true }
+            if claim != nil { print("AUTORADIO released reason=state change \(held?.rawValue ?? "?") -> \(state.rawValue)") }
             claim?.cancel(); claim = nil; held = nil          // release first: the first claim's mode wins
             let spec = Self.spec(state)
             claim = context.audioSession.claim(mode: spec.mode, options: spec.options, background: true, events: { [weak self] e in
@@ -44,10 +46,19 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
             if s.mode != spec.expected && !context.agent { note("MODE MISMATCH: asked \(spec.mode), session has \(s.mode.rawValue)") }
             return true
         }
-        if !ok { throw LabError.unavailable("Exact refused the audio session claim for \(state.rawValue)") }
+        if !ok {
+            // Exact answers 0 without the system's reason: ask the session once, so the notice and the log carry the real code.
+            var code = ""
+            do { try AVAudioSession.sharedInstance().setActive(true) } catch { let ns = error as NSError; code = " (setActive: \(ns.domain) \(ns.code))" }
+            throw LabError.unavailable("Exact refused the audio session claim for \(state.rawValue)\(code)")
+        }
     }
+    func holds(_ state: AudioState) -> Bool { lock.lock(); defer { lock.unlock() }; return claim != nil && held == state }
+    /// Assert the session again without giving the claim up (the claim is Exact's; this only asks the system to be active).
+    func reassert() async throws { try await MainActor.run { try AVAudioSession.sharedInstance().setActive(true) } }
     func release() {
-        DispatchQueue.main.async { [self] in claim?.cancel(); claim = nil; held = nil; note("released") }
+        let drop = { [self] in claim?.cancel(); claim = nil; held = nil; note("released") }
+        if Thread.isMainThread { drop() } else { DispatchQueue.main.async(execute: drop) }       // in order with the claim that follows
     }
     func describe() -> String {
         let s = AVAudioSession.sharedInstance()
@@ -57,14 +68,24 @@ final class ExactSessionOwner: AudioSessionOwner, @unchecked Sendable {
     }
 }
 
+#endif
+
 /// A handler for one source or send name. Lanes register theirs from their own AutoradioModule+<Lane>.swift.
 public typealias AutoradioHandler = ([String: Any], @escaping ([String: Any]) -> Void) -> Void
 
 public final class AutoradioModule: ExactPackage {
     // Internal (not private) so the per-lane extension files can reach them.
     let context: ExactPackageContext
+    /// The folder on disk that a page reads as `app:/cache/files`. Not `context.file(...)`: that names a file and answers nil for a path that is
+    /// an existing folder, so on every launch after the first the copy went to a folder no page can read, and a PDF, a picture or a recording
+    /// opened from Files or the Reader drew a blank frame (owner, 2026-11-18).
+    var filesCacheDisk: URL {
+        let u = context.cache.appendingPathComponent("files", isDirectory: true)
+        try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+        return u
+    }
     var runtime: LabRuntime!
-    var owner: ExactSessionOwner!
+    var owner: PlatformSessionOwner!
     var choir: ChoirApp!
     /// The spine's shared kit objects: every lane reads these and none replaces them.
     var pages: OpenPages!
@@ -76,13 +97,22 @@ public final class AutoradioModule: ExactPackage {
     private var dirty = Set<String>()
     private var scheduled = false
     private var turnArg: [String: Any] = [:]
+    /// The page the bar opened in place (a URL typed in the bar); lane autoradio-queue.
+    var barWebURL = ""
 
     public init(context: ExactPackageContext) {
         self.context = context
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
-        owner = ExactSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s) }
-        runtime = LabRuntime(supportDir: support, session: owner)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth", "barState"]) } }
+        #if os(macOS)
+        ConsoleFile.install(directory: support)
+        owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); print("AUTORADIO \(s)") }
+        #else
+        ConsoleFile.install(directory: support)
+        owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
+        #endif
+        runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
+        HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState"], now: true) } }
         // Demo mode first: the Choir environment then talks to the bundled fixtures, signed in as the demo listener.
         if Demo.isOn { Demo.install() }
         // The listener path: sign-in (Keychain), the front page, the real stages.
@@ -93,11 +123,39 @@ public final class AutoradioModule: ExactPackage {
             ProofKey.importIfPresent(documents: docs, into: appKeys)
         }
         #endif
-        choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in DispatchQueue.main.async { UIApplication.shared.open(url) } })
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "labState", "barState"]) } }
+        choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "labState", "barState", "radioView"]) } }
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
         pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
+        // The phone's own content store (Kit/ContentStore.swift): one source for the index, the offline pages and "play that".
+        // Nothing here touches the store on the launch path: it opens in a background task, and a store that cannot open leaves the app as it was.
+        ContentSync.enabled = true
+        Task.detached(priority: .utility) {
+            if ContentBoot.start() { ContentSync.shared.audioBusy = { await MainActor.run { RunSheetPlayer.shared.isRemote } } }
+            if ContentStore.shared.usable {                // vectors for the same items: BM25 alone until the model is there and the backlog embedded
+                Task { @MainActor in          // remote audio on air: the player is main-actor state, so its flag is copied across every two seconds
+                    while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
+                }
+                EmbeddingService.shared.attach(corpus: .shared, store: .shared)
+            }
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            SavedCorpus.shared.refresh()          // the index warm-up, long after the front page has drawn
+        }
+        ReaderStore.shared.offline = { ContentStore.shared.readerDoc(address: $0) }
+        PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
+        // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the stores below live in this target.
+        // Kit methods called: Signals.wipe(), OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
+        let filesCache = filesCacheDisk
+        // The folder the old lookup fell back to: copies no page could read. Removed once; nothing writes there now.
+        try? FileManager.default.removeItem(at: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files"))
+        choir.accountWipe.register("signals") { [signals] in signals?.wipe() }
+        choir.accountWipe.register("open-pages") { [pages] in pages?.wipe() }
+        choir.accountWipe.register("app-files") {
+            AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })
+            AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
+        }
+        SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         themes = ThemeStore(userDir: support.appendingPathComponent("themes"), systemScheme: { Self.systemScheme() })
         pageSources.register(NotYetPageSource())
@@ -113,27 +171,42 @@ public final class AutoradioModule: ExactPackage {
         registerSettings()
         registerOnboarding()
         registerMark()
+        registerVoice()
+        registerQueue()          // lane autoradio-queue
+        registerRadioPage()      // the Autoradio page
+        registerTakes()          // takes: record, review, publish (station L7)
+        registerNotebook()       // my notebook (station L6)
+        registerBooks()   // lane autoradio-reader
+        registerTalk()
+        registerTextureEdit()   // your own Texture documents in rich text
+        registerPodcasts()      // lane autoradio-podcasts
+        registerJoins()         // lane autoradio-joins
         Task { [choir] in await choir?.refresh() }
     }
 
     /// The system's appearance, read from the first window (main thread).
-    static func systemScheme() -> String {
-        let read: () -> String = {
-            let style = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first?.traitCollection.userInterfaceStyle
-            return style == .dark ? "dark" : "light"
-        }
-        return Thread.isMainThread ? read() : DispatchQueue.main.sync(execute: read)
-    }
+    static func systemScheme() -> String { Platform.systemScheme() }
 
     /// Register a handler for a source or send name.
     func handle(_ name: String, _ h: @escaping AutoradioHandler) { handlers[name] = h }
 
     /// Coalesce change notifications to a few per second. `names` are source names without the "autoradio." prefix.
-    func touch(_ names: [String]) {
+    /// `now`: the change goes out on the next turn of the main loop instead of after the 0.2 s coalescing wait (the page list: a swipe
+    /// must not wait for it; the open-page list changes once per gesture, so there is no storm to coalesce).
+    func touch(_ names: [String], now: Bool = false) {
         // `dirty` is only touched on the main thread: a background caller (found by a real-data run: readServerBuild called this from a
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
-        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names) }; return }
+        if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
         dirty.formUnion(names)
+        if names.contains(where: { $0 == "radioView" || $0 == "queueView" || $0 == "barState" }) { dirty.insert("radioPage") }   // the Autoradio page reads all three
+        if now {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let d = self.dirty; self.dirty = []
+                for n in d { self.context.changed("autoradio.\(n)") }
+            }
+            return
+        }
         guard !scheduled else { return }
         scheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
@@ -147,6 +220,11 @@ public final class AutoradioModule: ExactPackage {
     func json<T: Encodable>(_ v: T) -> [String: Any] {
         guard let d = try? JSONEncoder().encode(v), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
         return o
+    }
+
+    /// The app came back to the foreground. Voice is not touched: it stays as the listener left it (off unless they turned it on). Main thread.
+    public func foreground(_ shown: Bool) {
+        if shown { touch(["barState"], now: true) }
     }
 
     public func later(_ name: String, _ args: [String: Any], preferred: Any?, reply: @escaping ([String: Any]) -> Void) {
@@ -194,13 +272,15 @@ public final class AutoradioModule: ExactPackage {
             }
             reply(["path": shared, "documents": u.path, "name": u.lastPathComponent])
         case "labStop": runtime.stop(); reply(state())
-        case "labTalkDown": runtime.talkDown(); reply(state())
-        case "labTalkUp": runtime.talkUp(); reply(state())
         case "labPlayPause": if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }; reply(state())
         // Skip and previous move the programme: the player's view and the bar read the new position (found in the P1 simulator drive:
         // with the engine paused nothing else asked for them again, so the view kept the old segment).
-        case "labNext": runtime.player.next(); touch(["radioView", "barState"]); reply(state())
-        case "labPrevious": runtime.player.previous(); touch(["radioView", "barState"]); reply(state())
+        // While remote audio plays, the passage buttons are its 15 second skips (lane autoradio-queue).
+        case "labNext" where onMainThread({ RunSheetPlayer.shared.isRemote }): onMainThread { RunSheetPlayer.shared.seek(by: 15) }; reply(state())
+        case "labPrevious" where onMainThread({ RunSheetPlayer.shared.isRemote }): onMainThread { RunSheetPlayer.shared.seek(by: -15) }; reply(state())
+        // Next and previous are the run sheet's: `skip(on air)` and `previous`, not a passage of the entry.
+        case "labNext": onMainThread { RunSheetPlayer.shared.next() }; touch(["radioView", "barState"]); reply(state())
+        case "labPrevious": onMainThread { RunSheetPlayer.shared.previous() }; touch(["radioView", "barState"]); reply(state())
         case "labSelectStage":
             if let k = StageKind(rawValue: args["kind"] as? String ?? ""), let id = args["id"] as? String {
                 runtime.setStage(k, id: id)
@@ -226,12 +306,10 @@ public final class AutoradioModule: ExactPackage {
         case "choirCancelSignIn": choir.signIn.cancel(); reply(state())
         case "choirSignOut": Task { [choir] in await choir?.signOut() }; reply(state())
         case "choirOpenApproval":
-            if let u = URL(string: choir.authView().verificationURL) { DispatchQueue.main.async { UIApplication.shared.open(u) } }
+            if let u = URL(string: choir.authView().verificationURL) { Platform.open(u) }
             reply(state())
         case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
         case "choirPlayPause": Task { [choir] in await choir?.playPause() }; reply(state())
-        case "choirTalkDown": Task { [choir] in await choir?.talkDown() }; reply(state())
-        case "choirTalkUp": runtime.talkUp(); reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
         case "choirPlay": let r = args["route"] as? String ?? ""; Task { [choir] in await choir?.play(route: r) }; reply(state())
         default: reply(["error": "NotSupportedError"])

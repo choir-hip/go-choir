@@ -231,7 +231,7 @@ final class FilesServiceTests: XCTestCase {
 
     func testOpenTextImageCsv() async throws {
         let md = await service.open(address: "file:/Documents/Harbor notes.md")
-        XCTAssertEqual(md.status, "ready"); XCTAssertEqual(md.kind, "markdown"); XCTAssertTrue(md.text.hasPrefix("# Harbor notes"))
+        XCTAssertEqual(md.status, "ready"); XCTAssertEqual(md.kind, "markdown"); XCTAssertEqual(md.src, "", "Files shows no text: it opens in Texture")
         let png = await service.open(address: "file:/Pictures/Harbor test card.png")
         XCTAssertEqual(png.kind, "image"); XCTAssertEqual(png.width, 640); XCTAssertEqual(png.height, 400)
         XCTAssertTrue(png.src.hasPrefix("app:/cache/files/") && png.src.hasSuffix("/Harbor-test-card.png"), png.src)
@@ -282,37 +282,12 @@ final class FilesServiceTests: XCTestCase {
 
     // failure 4: a changed file is a different cache entry
     func testCacheKeyChangesWithTheFile() async throws {
-        let a = await service.open(address: "file:/Documents/Key list.txt")
-        let tmpFile = tmp.appendingPathComponent("new.txt"); try Data("changed\n".utf8).write(to: tmpFile)
-        _ = await service.upload(from: tmpFile, name: "Key list.txt", into: "/Documents")
-        let b = await service.open(address: "file:/Documents/Key list.txt")
-        XCTAssertNotEqual(a.src, b.src); XCTAssertEqual(b.text, "changed\n")
+        let a = await service.open(address: "file:/Documents/Budget 2026.csv")
+        let tmpFile = tmp.appendingPathComponent("new.csv"); try Data("a,b\n1,2\n".utf8).write(to: tmpFile)
+        _ = await service.upload(from: tmpFile, name: "Budget 2026.csv", into: "/Documents")
+        let b = await service.open(address: "file:/Documents/Budget 2026.csv")
+        XCTAssertNotEqual(a.src, b.src); XCTAssertEqual(b.rows.first?.cells, ["a", "b"])
     }
-
-    func testEpubAndChapters() async {
-        let i = await service.open(address: "file:/Books/The Lantern Keeper.epub")
-        XCTAssertEqual(i.status, "ready"); XCTAssertEqual(i.title, "The Lantern Keeper"); XCTAssertEqual(i.author, "A. Ferris (invented)")
-        XCTAssertEqual(i.chapters.count, 3)
-        let c = await service.chapter(address: i.address, index: 1)
-        XCTAssertEqual(c.title, "Three visitors"); XCTAssertEqual(c.count, 3); XCTAssertTrue(c.markdown.contains("What the boy asked"))
-        let past = await service.chapter(address: i.address, index: 99)
-        XCTAssertEqual(past.index, 2, "an index past the end clamps to the last chapter")
-        let none = await service.chapter(address: "file:/Documents/Key list.txt", index: 0)
-        XCTAssertEqual(none.status, "error")
-    }
-
-    #if canImport(PDFKit)
-    func testPdfPagesAndSearch() async {
-        let i = await service.open(address: "file:/Documents/Council minutes.pdf")
-        XCTAssertEqual(i.status, "ready"); XCTAssertEqual(i.pages, 3); XCTAssertEqual(i.title, "Harbor Council minutes")
-        let hit = await service.findPages(address: i.address, query: "lamps")
-        XCTAssertEqual(hit.pages, [2])
-        let none = await service.findPages(address: i.address, query: "unicorn")
-        XCTAssertEqual(none.pages, []); XCTAssertFalse(none.message.isEmpty)
-        let empty = await service.findPages(address: i.address, query: "  ")
-        XCTAssertEqual(empty.pages, [])
-    }
-    #endif
 
     // failures 2, 11, 12
     func testChanges() async throws {

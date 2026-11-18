@@ -3,8 +3,9 @@
 // search field filters them. A document opens in the reader (`texture:<doc>`). "New document" is a prompt, not an empty editor.
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
 use Theme, TextureList, TextureRow, Onboarding from "@choir/autoradio"
-use PageScroll, Card, Btn from "./ui.contract"
-use FirstRunCard from "./onboarding.contract"
+use PageScroll, Card, Btn, RowRule from "./ui.contract"
+use SkeletonRows from "./transitions.contract"
+use FirstRunCard, EditEditionLink from "./onboarding.contract"
 
 component TextureRowView
   inject
@@ -18,14 +19,14 @@ component TextureRowView
       Card(level=(pinned ? 2 : 1), testId=`textures-card-${r.address}`, minHeight=0)
         column padding=16 gap=6 align-items="flex-start" width="100%"
           if pinned
-            text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
-          text r.title font-family=th.fontRead font-size=21 font-weight=700 line-height=1.2 color=th.fg text-align="left"
+            text "YOUR EDITION" font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing="0.08em" color=th.muted
+          text r.title font-family=th.fontHead font-size="-exact-title3" font-weight=600 line-height=1.2 color=th.fg text-align="left"
           row align-items="center" gap=8
             if r.revising
               // A still glyph, not a spinner: a looping indeterminate progress on this page kept a sideways swipe from reaching the deck
               // (the deck did not cycle past Textures while a document was being revised).
               image "symbol:sparkles" color=th.accent aria-label="Being revised"
-            text r.meta font-family=th.fontUi font-size=13 color=th.muted text-align="left"
+            text r.meta font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left"
 
 component TexturesPage
   inject
@@ -45,31 +46,35 @@ component TexturesPage
     q = v
   view
     PageScroll(id="textures")
-      text "Textures" role="heading" aria-level=1 font-family=th.fontRead font-size=30 font-weight=700 testId="page-title" color=th.fg
+      text "Textures" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 testId="page-title" color=th.fg
       input type="search" value=q input=editQ placeholder="Search your documents" aria-label="Search your documents" testId="textures-search"
-        font-family=th.fontUi padding="10px 4px"
+        font-family=th.fontText font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+        ::placeholder
+          color=th.muted
+      RowRule(indent=0)
       // The generic "Make your edition" card is this page's own card below (found with real data: both showed, one under the other).
       if ob.card != "Make your edition"
         FirstRunCard()
       if tlist.status == "loading"
-        progress aria-label="Loading" width=24 height=24 color=th.accent
+        SkeletonRows(rows=5, testId="textures-skeleton")
       if tlist.status == "error"
-        text tlist.message testId="textures-message" font-family=th.fontUi color=th.muted
+        text tlist.message testId="textures-message" font-family=th.fontLabel color=th.muted
       if tlist.status == "ready" and tlist.hasEdition == false and q == ""
         Card(level=2, testId="textures-make-edition-card", minHeight=0)
           column padding=18 gap=8 align-items="flex-start" width="100%" box-sizing="border-box"
-            text "YOUR EDITION" font-family=th.fontUi font-size=11 font-weight=700 letter-spacing="0.08em" color=th.accent
-            text "Make your edition" font-family=th.fontRead font-size=22 font-weight=700 color=th.fg
-            text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontRead font-size=16 line-height=1.45 color=th.muted width="100%"
+            text "YOUR EDITION" font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing="0.08em" color=th.muted
+            text "Make your edition" font-family=th.fontHead font-size="-exact-title2" font-weight=700 color=th.fg
+            text "A front page written for you each morning from the sources you follow. Say what you want in it." font-family=th.fontText font-size="-exact-callout" line-height=1.45 color=th.muted width="100%"
             button press=editAsk("Make my edition: ") testId="textures-make-edition" appearance="none"
-              Btn(label="Make your edition", primary=true, wide=false)
+              Btn(label="Make your edition", primary=false, wide=false)
+      EditEditionLink()
       for r in edition key=r.address
         TextureRowView(r=r, pinned=true)
       if others.length > 0
-        text "Recent" font-family=th.fontUi font-size=13 font-weight=600 color=th.muted margin-top=6
+        text "Recent" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted margin-top=6
       for r in others key=r.address
         TextureRowView(r=r, pinned=false)
       if tlist.status == "ready" and shown.length == 0 and q != ""
-        text "No documents match." font-family=th.fontUi color=th.muted testId="textures-none"
+        text "No documents match." font-family=th.fontLabel color=th.muted testId="textures-none"
       button press=editAsk("New document: ") testId="textures-new" appearance="none"
         Btn(label="New document", primary=false, wide=false)

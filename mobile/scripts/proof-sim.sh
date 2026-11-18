@@ -1,7 +1,7 @@
 #!/bin/sh
 # End-to-end proof of the spine on a simulator, driven through Exact's agent socket (no human, no device), in demo mode
 # (bundled fixtures, no network, no microphone): the glass bar over a full-bleed page; two pages open and the pile shows
-# two cards; switch; one closes by swipe; the theme switches (Depth, Newsprint, dark); play/pause and a hold-to-talk on
+# two cards; switch; one closes by swipe; the theme switches (Depth, Newsprint, dark); play/pause on
 # the bar; the Components page (a talk turn through the injected fixture path, with the stub stages) and the Trace page.
 # Screenshots go to a directory the script prints (PROOF_SHOTS=dir to choose). Last line: PROOF OK, or PROOF FAILED at <step>.
 # Elements are found by test id, never by position.
@@ -67,17 +67,15 @@ while :; do
     "tap bar-voice down" "tap up" "clock +1500 real" "clock data" tree "screenshot $SHOTS/11-playing.png" \
     logs > "$OUT" 2>&1
   rc=$?
-  # Second drive, plain taps (under --touch platform a held press is one scripted touch): hold to talk, Components, Trace.
+  # Second drive, plain taps (under --touch platform a held press is one scripted touch): Components, Trace.
   # The open pages and the theme are kept from the first drive.
   [ $rc -eq 0 ] && "$HERE/exact.sh" agent ios \
     "clock data" "clock +1500 real" "clock data" \
     "tap bar-field" "clock +800 real" "clock data" "screenshot $SHOTS/12a-bar-field-focused.png window" \
-    "tap bar-voice down" "clock +900 real" "clock data" tree "screenshot $SHOTS/12-talking.png" "tap up" "clock +800 real" "clock data" \
     "tap settings-components" "clock +700 real" "clock data" tree "screenshot $SHOTS/13-components.png" \
     "tap stage-addressing-hybrid" "tap stage-transcriber-scripted" "tap stage-system1-fixed" "tap stage-holder-local-ack" \
       "tap stage-desk-stub-echo" "tap stage-programme-fixture" "tap ack-immediate" "clock data" \
     "tap start" "clock +1500 real" "clock data" tree \
-    "tap lab-talk down" "clock +700 real" "clock data" tree "tap up" "clock +1500 real" \
     "tap inject" "clock +3000 real" "clock data" tree \
     "clock +9000 real" "clock data" "tap open-trace" "clock +700 real" "clock data" tree "screenshot $SHOTS/14-trace.png" \
     logs >> "$OUT" 2>&1
@@ -116,9 +114,8 @@ must "theme switch: Depth dark" 'Showing Depth (dark)'
 must "theme switch: back to Depth light" 'Showing Depth (light)'
 must "pull the bar up: the launcher opens" '[launcher-layer]'
 must "play: tap on the voice button starts the radio (bar shows what plays)" '[bar-text]'
-must "hold to talk: the bar shows the listening state" 'Listening'
 must "components: reachable as a page" '[page-title] "Components"'
-must "components: talk control" '[lab-talk]'
+must "components: phase line" '[lab-phase]'
 must "components: acknowledgement timing choice" '[ack-immediate]'
 must "components: stub configuration selected explicitly" '"● System 1'
 must "components: audio state line" '[audio-state]'
@@ -129,7 +126,6 @@ must "trace: export control" '[trace-export]'
 must "start audio: listening claim" 'State listening'
 must "start audio: virtual engine" 'engine virtual'
 must "start audio: microphone on" 'Phase: playing'
-must "hold to talk (lab): phase leaves playing" 'Phase: addressed'
 must "audio switch events recorded" 'audio switch listening -> talking in'
 grep -qE '\[trace-id\] "turn-' "$OUT" || fail "trace: turn record" "no live turn record in Trace"
 echo "ok: trace: live turn record"

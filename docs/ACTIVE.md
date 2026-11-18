@@ -20,7 +20,7 @@ exact... the whole point is the codebase is shared, using EXACT". Goal:
 2026-11-18T12:50Z: the app's pages build and draw on an Android emulator with
 nothing behind them; the first page (the paper) is being moved to TypeScript;
 the app's own Exact loop takes a minute per edit and is being made fast; the
-owner's iPhone runs `lane/autoradio-integ20`; the phone work is not on main.
+owner's iPhone runs `lane/autoradio-integ20`, which is on main since 2026-11-18.
 The rule is in CLAUDE.md, Product. The station below is a checkpoint.
 
 ## Checkpoint (2026-11-18): Autoradio learns from its listener
@@ -31,8 +31,8 @@ built now, TestFlight this week. Goal:
 (stations L1 to L10). State at 2026-11-18T10:15Z: settlement (L1 to L3) is
 deployed and proven on the drill computer; the takes server (L7) is deployed and proven
 on the drill computer; the notebook (L4, L5) is in a repair round after review;
-the phone build `lane/autoradio-integ19` is on the owner's phone and the
-phone lanes are not on main. What is built is in
+the phone build `lane/autoradio-integ19` was on the owner's phone and the
+phone lanes were not on main (they landed later that day). What is built is in
 [`current-architecture.md`](current-architecture.md). Incomplete: the owner
 cleared it on 2026-11-18 for the cutover above, which carries its open work.
 The station below is superseded by it.

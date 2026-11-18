@@ -1,0 +1,11 @@
+// Lane members file (My notebook, station L6): the notebook page reads `nb` and sends `notebookDo`. Source and send are declared in exact-package/interface/notebook.json.
+use notebookPage, notebookAct from "@choir/autoradio"
+use NotebookPageInfo from "@choir/autoradio"
+
+members Autoradio
+  resource nb = notebookPage() as shape NotebookPageInfo else empty()
+  mutation nbm as shape NotebookPageInfo
+
+  // refresh | select (arg is a line id; the same again clears it)
+  action notebookDo(op: string, arg: string)
+    send nbm = notebookAct(op=op, arg=arg)

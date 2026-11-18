@@ -1,0 +1,12 @@
+// Lane members file (Takes, station L7): the Takes section of the Autoradio page. Source and send are declared in exact-package/interface/takes.json.
+// The page (radio.contract) only reads `tp` and sends `takesDo`.
+use takesPage, takesAct from "@choir/autoradio"
+use TakesPageInfo from "@choir/autoradio"
+
+members Autoradio
+  resource tp = takesPage() as shape TakesPageInfo else empty()
+  mutation tpm as shape TakesPageInfo
+
+  // record | stop | preview | rerecord | discard | publish | delete | mute | unmute | refresh; arg is a take id or a publisher handle
+  action takesDo(op: string, arg: string)
+    send tpm = takesAct(op=op, arg=arg)

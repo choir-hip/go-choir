@@ -1,0 +1,70 @@
+{
+ "shapes": {
+  "ConversationRow": {
+   "id": "string",
+   "question": "string",
+   "first": "string",
+   "firstSource": "string",
+   "answer": "string",
+   "status": "string",
+   "note": "string",
+   "canRetry": "bool"
+  },
+  "ConversationInfo": {
+   "rows": "ConversationRow[]",
+   "empty": "bool"
+  },
+  "VoiceProfile": {
+   "learned": "bool",
+   "heard": "number",
+   "needed": "number",
+   "ready": "bool",
+   "line": "string",
+   "credit": "string"
+  }
+ },
+ "names": [
+  {
+   "source": "conversationInfo",
+   "live": true,
+   "answers": "ConversationInfo",
+   "substitute": {
+    "default": {
+     "rows": [],
+     "empty": true
+    }
+   }
+  },
+  {
+   "send": "answerAction",
+   "options": {
+    "action": "string",
+    "id": "string"
+   },
+   "answers": "SettingsAck"
+  },
+  {
+   "source": "voiceProfile",
+   "live": true,
+   "answers": "VoiceProfile",
+   "substitute": {
+    "default": {
+     "learned": false,
+     "heard": 0,
+     "needed": 3,
+     "ready": false,
+     "line": "",
+     "credit": ""
+    }
+   }
+  },
+  {
+   "send": "voiceLearn",
+   "answers": "SettingsAck"
+  },
+  {
+   "send": "voiceForget",
+   "answers": "SettingsAck"
+  }
+ ]
+}

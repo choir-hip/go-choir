@@ -2,19 +2,40 @@
 // one per-frame task lives here and writes `mkT`; MarkAt and the wait read it through `inject` (names in lane 9's band of
 // `provide`). The task runs only while a mark is moving: per frame while the bar is not idle, a sign-in or onboarding
 // screen is up or a motion page is open; five times a second for the idle drift; not at all under Reduce Motion.
+use tRest, tCapture, tat from "./tetramark.contract"
+
 members Autoradio
   state mkT = 0
   state mkFrames = 0
   state mkSince = 0
   state galSince = 0
   state waitSince = 0
-  derive mkHot = th.reducedMotion == false and (bi.state != "idle" or au.signedIn == false or pg.top == "lab:motion" or pg.top == "lab:wait" or pg.top.startsWith("onboarding"))
+  // The bar's mark (tetramark.contract; the model is AutoradioKit/TetraMarkMotion.swift): the motion now (`mkCur`), the one before
+  // it, when it began (ms on this clock) and the pose that was on screen then (`mkFrom`, 24 numbers), so a change never jumps.
+  state mkCur = "idle"
+  state mkPrev = "idle"
+  state mkFrom = tRest()
+  state mkPressAt = -100000
+  state mkCloseAt = -100000
+  // The motion the app's state asks for: a press first, then listening, the desk working (a turn in flight), the tray (open, or
+  // turning back), the radio playing, else the slow breath.
+  derive mkPressed = mkT - mkPressAt < 420
+  derive mkBase = bi.state == "listening" or bi.state == "talking" ? "listening" : (bi.state == "holding" or bi.state == "heard" ? "working" : (layer == "launcher" ? "trayOpen" : (mkT - mkCloseAt < 700 ? "trayClose" : (bi.state == "playing" ? "playing" : "idle"))))
+  derive mkMotion = mkPressed ? "pressed" : mkBase
+  // Frames: per frame while the mark moves (any state but idle, a one-shot in its first second, a sign-in or onboarding screen, the
+  // galleries), five a second for the idle breath, none under Reduce Motion once the 300 ms cross-fade is over. The mark is not
+  // drawn off screen (the page deck) and a backgrounded app has no display link, so neither costs a frame.
+  derive mkHot = (th.reducedMotion == false and (bi.state != "idle" or au.signedIn == false or mkT - mkSince < 1000 or pg.top == "lab:motion" or pg.top == "lab:mark" or pg.top == "lab:wait" or pg.top.startsWith("onboarding"))) or (th.reducedMotion and mkT - mkSince < 400)
   derive mkIdle = th.reducedMotion == false and mkHot == false
   action mkStep
     mkT = performanceNow()
     mkFrames = mkFrames + 1
   action mkEntered
-    mkSince = performanceNow()
+    let now = performanceNow()
+    mkFrom = tCapture(mkCur, now - mkSince, mkFrom, ri.micLevel)
+    mkPrev = mkCur
+    mkCur = mkMotion
+    mkSince = now
   action galReplay
     galSince = performanceNow()
   action waitReplay
@@ -23,5 +44,32 @@ members Autoradio
     every(frame, mkStep)
   task markIdle when mkIdle
     every(200, mkStep)
-  task markEnter when true key=bi.state
+  task markEnter when true key=mkMotion
     after(1, mkEntered)
+
+  // The mark gallery (`lab:mark`): one mark on its own motion, or held at the sliders' pose.
+  state gmMotion = "idle"
+  state gmPrev = "idle"
+  state gmSince = 0
+  state gmFrom = tRest()
+  state gmV = tRest()
+  state gmManual = false
+  state gmLevel = 0.6
+  derive gmLo = [-6.2832, -6.2832, -3.1416, -1.5708, 0, 0.3, 0.2, -0.5, -0.5, -1.5, -0.4, 0.4, 0.4, 0, -1.5, -0.4, 0.4, 0.4, 0, -1.5, -0.4, 0.4, 0.4, 0]
+  derive gmHi = [6.2832, 6.2832, 3.1416, 1.5708, 1, 1.4, 1, 0.5, 0.5, 1.5, 0.6, 1.8, 1.6, 1, 1.5, 0.6, 1.8, 1.6, 1, 1.5, 0.6, 1.8, 1.6, 1]
+  action gmPlay(m: string)
+    let now = performanceNow()
+    gmFrom = gmManual ? gmV : tCapture(gmMotion, now - gmSince, gmFrom, gmLevel)
+    gmManual = false
+    gmPrev = gmMotion
+    gmMotion = m
+    gmSince = now
+  action gmRest
+    gmPlay("settle")
+  action gmLevelSet(v: number)
+    gmLevel = v
+  // A slider drags relative to its last event, as the speed slider does: a drag across 280 points is the whole range.
+  action gmMove(i: number, dx: number, dy: number)
+    let base = gmManual ? gmV : tCapture(gmMotion, performanceNow() - gmSince, gmFrom, gmLevel)
+    gmV = base.map((v, k) => k == i ? min(max(v + dx / 280 * (tat(gmHi, k) - tat(gmLo, k)), tat(gmLo, k)), tat(gmHi, k)) : v)
+    gmManual = true

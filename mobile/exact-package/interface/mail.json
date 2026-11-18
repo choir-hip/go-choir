@@ -118,6 +118,27 @@
    }
   },
   {
+   "source": "mailFrame",
+   "live": true,
+   "answers": "MailBoxView",
+   "options": {
+    "address": "string"
+   },
+   "substitute": {
+    "default": {
+     "status": "",
+     "message": "",
+     "folder": "",
+     "title": "",
+     "unread": 0,
+     "total": 0,
+     "cached": false,
+     "rows": [],
+     "folders": []
+    }
+   }
+  },
+  {
    "source": "mailMessage",
    "live": true,
    "answers": "MailMessageView",

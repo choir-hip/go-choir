@@ -8,7 +8,6 @@
 //   aboutInfo                     the app and server builds
 // The spine's themeSet and schemeSet are wrapped (not replaced) so the cards and the scale repaint with them.
 import Foundation
-import UIKit
 
 /// The lane's state, held here because an extension cannot add stored properties to the module.
 final class SettingsLane: @unchecked Sendable {
@@ -78,10 +77,9 @@ extension AutoradioModule {
 
         // Reduce Motion is the system's: the theme's reduced values apply while it is on.
         themes.reduceMotion = {
-            let read: () -> Bool = { UIAccessibility.isReduceMotionEnabled }
-            return Thread.isMainThread ? read() : DispatchQueue.main.sync(execute: read)
+            Platform.reduceMotion()
         }
-        NotificationCenter.default.addObserver(forName: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: Platform.reduceMotionChanged, object: nil, queue: .main) { [weak self] _ in
             self?.touch(["theme", "themeExtras", "themeCards"])
         }
 
@@ -96,8 +94,7 @@ extension AutoradioModule {
             }
         }
 
-        // The talk mode applies at launch and when set; the gesture meanings are Settings' too, handed to lane 4's Preferences.
-        lane.settings.apply(to: runtime)
+        // The gesture meanings are Settings' too, handed to lane 4's Preferences. (The talk mode is gone: voice is hands-free.)
         syncGestureMeanings()
 
         // ---- themes
@@ -162,7 +159,6 @@ extension AutoradioModule {
         handle("settingSet") { [unowned self] args, reply in
             let id = args["id"] as? String ?? "", value = args["value"] as? String ?? ""
             let ok = lane.settings.set(id, value)
-            if ok, id == "talkMode" { lane.settings.apply(to: runtime); touch(["radioView", "barState"]) }   // the bar and the player read it
             if ok, id == "swipeLeft" || id == "swipeRight" { syncGestureMeanings(); touch(["toldPaper"]) }
             touch(["settingRows"]); reply(ack(ok, ok ? "" : "That is not one of the choices."))
         }

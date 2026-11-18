@@ -4,7 +4,7 @@
 use openPages, pageModel, theme, themeList, barState, demoInfo from "@choir/autoradio"
 use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord, demoSet from "@choir/autoradio"
 use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autoradio"
-use choirAsk, choirTalkCancel from "@choir/autoradio"
+use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 members Autoradio
   resource pg = openPages() as shape PageList else empty()
@@ -14,20 +14,22 @@ members Autoradio
   resource bi = barState() as shape BarInfo else empty()
   resource dm = demoInfo() as shape DemoInfo else empty()
   mutation pm as shape PageList
+  // A second handle, for an action that opens one page and closes another in the same step.
+  mutation pc as shape PageList
 
-  // The layer above the page: "" (none), "launcher" (the stack's pages and the destinations), "player" (the expanded player, a
-  // sheet over the page with the bar still under it).
+  // The layer above the page: "" (none), "launcher" (the stack's pages and the destinations). The expanded player is gone: the
+  // Autoradio page (radio.contract, the deck's first card) is where the radio is read.
   state layer = ""
   // The Ask field in the bar.
   state ask = ""
-  // The microphone button: a tap starts talking, a tap again sends. (The hold-to-talk of the first build is gone, owner 2026-11-11.)
-  state voiceTalking = false
-
   action showLayer(name: string)
     layer = name
   action hideLayer
     layer = ""
   action toggleLauncher
+    mkPressAt = performanceNow()
+    if layer == "launcher"
+      mkCloseAt = performanceNow()
     layer = layer == "launcher" ? "" : "launcher"
   action pinPage(address: string)
     send pm = pagePin(address=address)
@@ -47,21 +49,19 @@ members Autoradio
   action editAsk(v: string)
     ask = v
   // A typed ask is aimed at the page in front: its address goes with the turn (`aim`). The engine side reads `args["aim"]` of
-  // choirAsk and choirTalkDown and puts the page's address, title and text in the Autoradio desk request.
+  // choirAsk and puts the page's address, title and text in the Autoradio desk request.
   action sendAsk
     send pm = signalRecord(kind="ask", subject=pg.top, detail=ask)
     send acct = choirAsk(text=ask, aim=pg.top)
     ask = ""
-  derive micOn = voiceTalking or bi.state == "listening" or bi.state == "talking"
+  // The microphone button is the hands-free switch (owner, 2026-11-15): ON, the microphone is open and turns open and close by
+  // themselves; OFF, nothing is heard. One state, OFF at every launch and on until the listener has been quiet for three minutes or taps it off (bi.handsFree, owner 2026-11-16); no tap to talk, no push to talk.
+  derive micOn = bi.handsFree
+  // The listening state shows only when the engine has good reason to think the reader began saying something meant for the radio
+  // (sustained speech with words, ListeningVisibility). It is an addition to the bar, never a replacement.
+  derive heardNow = bi.handsFree and bi.state == "talking"
   action micTap
-    if micOn
-      voiceTalking = false
-      send up = choirTalkUp()
-    else
-      voiceTalking = true
-      send down = choirTalkDown(aim=pg.top)
-  // Cancel: the microphone closes and the turn is discarded, not sent: the engine drops the audio and the words and calls nothing
-  // (choirTalkCancel; Send is micTap again).
+    send up = choirHandsFreeToggle()
+  // Cancel: drop this turn, nothing is sent, hands-free stays on (choirTalkCancel).
   action micCancel
-    voiceTalking = false
     send up = choirTalkCancel()

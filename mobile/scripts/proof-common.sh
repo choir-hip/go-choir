@@ -26,7 +26,7 @@ reset_state() { # [light|dark] [onboarding]
   CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
   if [ -n "$CONT" ]; then
     S="$CONT/Library/Application Support/Autoradio"
-    rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/interview.json" "$S/voice-setup.json" "$S/interview.md" "$S/signals.jsonl" "$S/recent-files.json"
+    rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
     rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
     # The app's own preferences (what it wrote itself: theme, mode, talk mode, gestures) outlive a `defaults write` made from outside
     # (the earlier lanes' runs left Signal in dark there), so the app's own file goes too.

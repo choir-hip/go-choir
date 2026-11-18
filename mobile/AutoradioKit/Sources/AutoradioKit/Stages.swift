@@ -9,12 +9,14 @@ public enum ProgrammeBlock: Codable, Sendable, Equatable {
     case speech(text: String)
     case clip(url: String, start: Double, end: Double?, source: String)
     case listenerPassage(text: String, afterBlock: Int?)
+    /// A podcast clip the DJ introduces (lane autoradio-dj-clips): played from the publisher's URL, looked up by id in the clip set the phone fetched.
+    case podcastClip(clipID: String)
 
     public var spokenText: String? {
         switch self {
         case .speech(let t): return t
         case .listenerPassage(let t, _): return t
-        case .clip: return nil
+        case .clip, .podcastClip: return nil
         }
     }
     public var summary: String {
@@ -22,6 +24,7 @@ public enum ProgrammeBlock: Codable, Sendable, Equatable {
         case .speech(let t): return "speech: " + String(t.prefix(60))
         case .clip(let u, let s, let e, _): return "clip \(URL(string: u)?.lastPathComponent ?? u) \(s)-\(e.map { String($0) } ?? "end")"
         case .listenerPassage(let t, _): return "listener: " + String(t.prefix(60))
+        case .podcastClip(let id): return "podcast clip \(id)"
         }
     }
 }
@@ -113,11 +116,17 @@ public struct HolderInput: Sendable {
     public var pageAddress: String
     /// The text of the page the phone has (fetched by the holder when it needs it; nil: none).
     public var pageText: (@Sendable () async -> String)?
+    /// What the phone retrieved for this turn (Retrieval.swift), built once by the engine so the local model and the server desk see the same passages.
+    public var retrieved: RetrievalContext?
     public init(listenerWords: String, answers: [System1Answer], pageTitle: String = "", pageKind: String = "", pageAddress: String = "",
-                pageText: (@Sendable () async -> String)? = nil) {
+                pageText: (@Sendable () async -> String)? = nil, retrieved: RetrievalContext? = nil) {
         self.listenerWords = listenerWords; self.answers = answers; self.pageTitle = pageTitle; self.pageKind = pageKind; self.pageAddress = pageAddress; self.pageText = pageText
+        self.retrieved = retrieved
     }
 }
+
+public struct DeskCandidate: Codable, Sendable, Equatable { public var route: String, title: String
+    public init(route: String, title: String) { self.route = route; self.title = title } }
 
 public struct DeskTurn: Codable, Sendable {
     public var turnID: String
@@ -131,6 +140,10 @@ public struct DeskTurn: Codable, Sendable {
     public var cutBlockIndex: Int?
     /// The page in front when the listener asked (address, title, and the text the phone has), for a desk that answers about it.
     public var page: DeskPage?
+    /// The play queue as the wire's `queue` object (JSON bytes) and the paper stories the DJ may add (`candidates`, up to 40). Both optional:
+    /// a server that ignores them behaves as before.
+    public var queue: Data?
+    public var candidates: [DeskCandidate] = []
     public init(turnID: String, programmeID: String, blockIndex: Int, listenerWords: String,
                 interrupted: Bool = false, spokenText: String = "", cutBlockIndex: Int? = nil, page: DeskPage? = nil) {
         self.turnID = turnID; self.programmeID = programmeID; self.blockIndex = blockIndex; self.listenerWords = listenerWords
@@ -160,6 +173,8 @@ public enum DeskEvent: Sendable, Equatable {
     case failed(spoken: String, reason: String)
     /// The last event. `status`: completed, failed or interrupted. `serverFirstSentenceMs` and `serverDoneMs`: the server's own clock.
     case done(status: String, sentences: Int, serverFirstSentenceMs: Double?, serverDoneMs: Double?)
+    /// The server's `queue_ops` event, its JSON unread: handed to the queue lane's apply. Nothing is spoken for it (the server speaks).
+    case queueOps(json: Data)
 }
 
 /// A desk that answers as a stream of spoken sentences (the Autoradio desk's `POST /api/autoradio/turns`). The engine speaks each
@@ -262,8 +277,18 @@ public protocol Holder: Stage {
     func diagnostics() -> String
     /// What the local model's generation cost (prompt tokens, how many were already cached), for the trace.
     func report() -> GenerationReport?
+    /// True when what the holder is saying is itself an answer (from the reader's saved stories): the desk's answer waits for it to end
+    /// instead of cutting it at a sentence. False: the holder only fills the wait and is cut when the desk speaks.
+    var keepsSpeakingForDesk: Bool { get }
+    /// Search what the phone holds for this question (nil: this holder does not retrieve). The engine calls it once per turn and hands the result to
+    /// the holder (HolderInput.retrieved) and to the server desk (DeskContext), so both answer from the same passages.
+    func retrieve(words: String, pageTitle: String, pageAddress: String) async -> RetrievalContext?
 }
 public extension Holder {
+    func retrieve(words: String, pageTitle: String, pageAddress: String) async -> RetrievalContext? { nil }
+}
+public extension Holder {
+    var keepsSpeakingForDesk: Bool { false }
     func lines(for input: HolderInput, later: @escaping @Sendable () async -> [System1Answer]) -> AsyncStream<String> { lines(for: input) }
     func cancel() {}
     func diagnostics() -> String { "" }

@@ -1,0 +1,125 @@
+{
+ "shapes": {
+  "RadioPageRow": {
+   "n": "number",
+   "id": "string",
+   "kind": "string",
+   "title": "string",
+   "length": "string",
+   "by": "string",
+   "byWord": "string",
+   "note": "string",
+   "builtOn": "RadioBuiltOn[]"
+  },
+  "RadioHeardRow": {
+   "n": "number",
+   "id": "string",
+   "kind": "string",
+   "title": "string",
+   "outcome": "string",
+   "builtOn": "RadioBuiltOn[]",
+   "publisher": "string"
+  },
+  "RadioPageInfo": {
+   "state": "string",
+   "statusLine": "string",
+   "dim": "bool",
+   "playing": "bool",
+   "dateLine": "string",
+   "onAir": "bool",
+   "kindLabel": "string",
+   "title": "string",
+   "source": "string",
+   "published": "string",
+   "sentence": "string",
+   "sentenceNumber": "number",
+   "sentenceCount": "number",
+   "elapsed": "string",
+   "remaining": "string",
+   "fraction": "number",
+   "thenBack": "string",
+   "openAddress": "string",
+   "why": "string",
+   "forecast": "string",
+   "canWhy": "bool",
+   "cannotSpeak": "string",
+   "action": "string",
+   "heardWords": "string",
+   "greeting": "string",
+   "ahead": "RadioPageRow[]",
+   "aheadMore": "number",
+   "writing": "bool",
+   "emptyNote": "string",
+   "notice": "string",
+   "heard": "RadioHeardRow[]",
+   "builtOn": "RadioBuiltOn[]",
+   "canPlay": "bool",
+   "takePublisher": "string",
+   "takeTranscript": "string",
+   "takeRecord": "string"
+  },
+  "RadioBuiltOn": {
+   "n": "number",
+   "title": "string",
+   "address": "string",
+   "role": "string",
+   "note": "string"
+  }
+ },
+ "names": [
+  {
+   "source": "radioPage",
+   "live": true,
+   "answers": "RadioPageInfo",
+   "substitute": {
+    "default": {
+     "state": "ready",
+     "statusLine": "",
+     "dim": false,
+     "playing": false,
+     "dateLine": "",
+     "onAir": false,
+     "kindLabel": "",
+     "title": "",
+     "source": "",
+     "published": "",
+     "sentence": "",
+     "sentenceNumber": 0,
+     "sentenceCount": 0,
+     "elapsed": "",
+     "remaining": "",
+     "fraction": 0,
+     "thenBack": "",
+     "openAddress": "",
+     "why": "",
+     "forecast": "",
+     "canWhy": false,
+     "cannotSpeak": "",
+     "action": "",
+     "heardWords": "",
+     "greeting": "",
+     "ahead": [],
+     "aheadMore": 0,
+     "writing": false,
+     "emptyNote": "",
+     "notice": "",
+     "heard": [],
+     "builtOn": [],
+     "canPlay": true,
+     "takePublisher": "",
+     "takeTranscript": "",
+     "takeRecord": ""
+    }
+   }
+  },
+  {
+   "send": "radioPageAct",
+   "options": {
+    "op": "string",
+    "arg": "string",
+    "to": "string"
+   },
+   "answers": "RadioPageInfo"
+  }
+ ]
+}
