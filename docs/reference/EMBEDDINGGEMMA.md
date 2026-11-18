@@ -212,6 +212,68 @@ swift build -c release                                          # through the Ma
 Weights: `ggml-org/embeddinggemma-2-GGUF` `embeddinggemma-2-Q8_0.gguf`; `EverPaper/embeddinggemma-2-coreai` text asset, tokenizer, config and
 Swift sources (the Swift sources are vendored unmodified in `mobile/EmbedTrial/Sources/EmbeddingGemma2CoreAI/`, Apache-2.0).
 
+## 0.8 On the server: feasibility for the corpus, x86 (study of 2026-11-18, nothing measured on x86 yet)
+
+The owner, 2026-11-18: "now may be the time where we should start looking
+into doing embeddings and vector search over our corpus. I think we can use
+embedding Gemma 2 and run all that in x86. But we should do a feasibility
+study for sure." Why: [the corpus search audit](../problems/research-does-not-start-from-the-corpus-2026-11-18.md).
+External facts below were fetched on 2026-11-18 from the pages in
+"Sources"; the rest is arithmetic on stated assumptions.
+
+**Verdict: feasible on Node B for stories and the lead of each captured
+page; not for every page's whole text.** The unknown that decides it is
+tokens per second on our CPU, which nobody has published.
+
+- **Hardware.** Node B: Xeon E-2236, 6 cores and 12 threads, AVX2, no
+  AVX-512, 31 GB (18 GB available), load about 3.7, no GPU. The build VM is
+  the same CPU with 8 vCPU, 3 GB and 20 GB of disk.
+- **Where it runs.** A computer's VM has 2 vCPU and 2 or 4 GiB
+  (`internal/vmctl/ownership.go`), so the embedder is a host service that
+  computers call, like the gateway, under a CPU and memory ceiling. One
+  embedder per computer would cost 2 vCPU each on the same host.
+- **Runtime without cgo.** llama.cpp's server with the official Q8_0 GGUF
+  (310 MB), called over HTTP. The model's architecture is in llama.cpp;
+  whether the nixpkgs `llama-cpp` version has it is not checked.
+  text-embeddings-inference does not list the architecture. Pure-Go
+  inference is for much smaller models.
+- **Speed.** No x86 figure exists. One published single-vCPU PyTorch run:
+  130 to 155 tokens a second. Our Mac, CPU, four threads: 160. Planning
+  range 100 to 300 tokens a second per core.
+- **The job** (assumed: 8,000 stories of 250 tokens; 250,000 captured
+  pages, the first 512 tokens of each). On three cores: stories 1 to 2
+  hours; page leads 31 to 93 hours; all page text (about 0.9 billion
+  tokens) 12 to 35 days. Steady state: under a fifth of a core for new
+  pages.
+- **Storage** for 258,000 vectors: 0.8 GB at 768 float32; 66 MB at 256
+  dimensions int8 (the model is trained to be cut to 256; quality 60.4
+  against 61.4 on the multilingual benchmark).
+- **Index.** Brute force in process is enough to about a million vectors
+  at 256 int8. pgvector 0.8 is in nixpkgs and was the owner's stated
+  direction when Qdrant was removed (2026-10-30). `modernc.org/sqlite/vec`
+  exists without cgo; not verified at our pin.
+- **Whose index.** One public index for stories and the paper's captured
+  pages, beside corpusd, which stays custodian. A listener's files and mail
+  are indexed inside that listener's computer, never in the shared one.
+- **Licence.** Apache 2.0 on the Hub with no gate on the page; the card
+  adds the Gemma Prohibited Use Policy. Whether that policy binds a hosted
+  product is the owner's reading.
+- **Alternatives looked at.** Qwen3-Embedding-0.6B (Apache 2.0, scores
+  higher, about twice the compute); the Jina v5 small models (non-commercial
+  licence, ruled out).
+- **Not shown anywhere:** that a French query lands near an English
+  document. Our measurement has to show it.
+- **What vectors are for here.** Finding held sources worded differently
+  from the query; proposing that a story overlaps an existing one; proposing
+  that a radio story is about an event already heard. In the last two a
+  model judges; similarity only proposes.
+
+**How we will know** (claims C132 and C133 in the calibration ledger):
+query = a published story's headline; relevant = the pages that story
+cites; compare today's title-only search, BM25 over page text, vectors, and
+both; by language. Indexing page text for BM25 is the cheap rival: if it
+gets most of the gain, embeddings wait.
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image
