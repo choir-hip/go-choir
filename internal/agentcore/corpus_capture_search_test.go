@@ -379,17 +379,67 @@ func TestSearchWireCorpusReturnsMatchingEventsFirst(t *testing.T) {
 // A search_wire_corpus result that carries a verbatim page passage carries
 // the capture floor (owner_private:capture), as ReadCapture of the same bytes
 // does: publish-auto admission keys on that floor. A result with no passage
-// stays world_untrusted only.
+// stays world_untrusted only; one the host cannot read fails closed.
 func TestCorpusSearchResultWithAPassageCarriesTheCaptureFloor(t *testing.T) {
-	with := json.RawMessage(`{"captures":[{"capture_id":"c1","title":"t"},{"capture_id":"c2","passage":"the amber treaty was read aloud"}]}`)
-	got, reads := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, with)
+	result := func(c ...researchtools.CorpusCapture) json.RawMessage {
+		raw, _ := json.Marshal(struct {
+			Captures []researchtools.CorpusCapture `json:"captures"`
+		}{c})
+		return raw
+	}
+	got, reads := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, result(researchtools.CorpusCapture{CaptureID: "c1"}, researchtools.CorpusCapture{CaptureID: "c2", Passage: "the amber treaty was read aloud"}))
 	if !reads || !got.Has(types.OwnerPrivateLabel("capture")) || !got.Has(types.LabelWorldUntrusted) {
 		t.Fatalf("a result with a passage must carry the capture floor and world_untrusted: %v", got)
 	}
-	for _, without := range []string{`{"captures":[{"capture_id":"c1","title":"t"}]}`, `{"captures":[{"capture_id":"c1","passage":"  "}]}`, `{"captures":[]}`, ``, `not json`} {
-		got, reads := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, json.RawMessage(without))
+	for name, without := range map[string]json.RawMessage{
+		"no passage": result(researchtools.CorpusCapture{CaptureID: "c1", Title: "t"}),
+		"blank":      result(researchtools.CorpusCapture{CaptureID: "c1", Passage: "  "}),
+		"no hits":    result(),
+		"empty body": nil,
+	} {
+		got, reads := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, without)
 		if !reads || got.Has(types.OwnerPrivateLabel("capture")) || !got.Has(types.LabelWorldUntrusted) {
-			t.Fatalf("result %q must stay world_untrusted only: %v", without, got)
+			t.Fatalf("%s must stay world_untrusted only: %v", name, got)
 		}
+	}
+	// A result that is there and cannot be read fails closed.
+	for _, bad := range []string{`not json`, `{}`, `{"capture":[{"passage":"x"}]}`} {
+		got, reads := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, json.RawMessage(bad))
+		if !reads || !got.Has(types.OwnerPrivateLabel("capture")) || !got.Has(types.LabelWorldUntrusted) {
+			t.Fatalf("unreadable result %q must carry the capture floor: %v", bad, got)
+		}
+	}
+}
+
+// The capture floor a run takes from a search reaches the records it commits
+// and so whoever reads them, exactly as the floor a ReadCapture gives
+// (run_labels.go noteEgressRead -> taintRun; rlm_reduce.go stampRequestRecord
+// writes the accumulator on the record; labelsOfRecord reads it back for a
+// run shown the record). The two reads leave the same labels.
+func TestASearchPassageTaintsARunAsAReadCaptureDoes(t *testing.T) {
+	rt, _ := testRuntime(t)
+	raw, _ := json.Marshal(struct {
+		Captures []researchtools.CorpusCapture `json:"captures"`
+	}{[]researchtools.CorpusCapture{{CaptureID: "c", Passage: "verbatim"}}})
+	exec := func(run string) toolregistry.ExecutionContext {
+		return toolregistry.ExecutionContext{RunID: run, OwnerID: "owner-x", ComputerID: rt.cfg.ComputerID}
+	}
+	ctx := context.Background()
+	rt.noteEgressRead(ctx, exec("run-search"), yaegikernel.ActionSearchWireCorpus, nil, raw)
+	rt.noteEgressRead(ctx, exec("run-read"), yaegikernel.ActionReadCapture, nil, json.RawMessage(`{"capture_id":"c"}`))
+	for _, run := range []string{"run-search", "run-read"} {
+		set := rt.runLabelSet(run)
+		if !set.Has(types.OwnerPrivateLabel("capture")) || !set.Has(types.LabelWorldUntrusted) {
+			t.Fatalf("%s accumulated %v", run, set)
+		}
+		// What stampRequestRecord writes is what labelsOfRecord reads back.
+		rec := types.CommitmentRecord{}
+		rec.Provenance.Labels = set.Strings()
+		if got := labelsOfRecord(rec); !got.Has(types.OwnerPrivateLabel("capture")) {
+			t.Fatalf("%s: a record it committed does not carry the floor: %v", run, got)
+		}
+	}
+	if a, b := rt.runLabelSet("run-search"), rt.runLabelSet("run-read"); strings.Join(a, ",") != strings.Join(b, ",") {
+		t.Fatalf("search leaves %v, ReadCapture leaves %v", a, b)
 	}
 }
