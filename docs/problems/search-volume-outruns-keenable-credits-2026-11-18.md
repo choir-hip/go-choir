@@ -101,6 +101,36 @@ question whose answers it already holds.
   pages cannot be told: the logs do not say which run a search belongs to
   or which pages were read.
 
+## The owner's principle (2026-11-18): research on the corpus, search only the diff
+
+"Are we correctly searching the corpus? More stories should be citing
+existing stories and captured sources. Need to check for story duplication,
+but not only duplication. Too much story overlap is wasteful."
+
+"remember that we can add on to existing stories rather than make new
+stories. So rather than making a new story that has 80% overlap with an
+existing story, we should revise that existing story."
+
+"The point is that research should substantially be upon our existing
+corpus, because as the corpus grows, the likelihood that relevant sources in
+the corpus exist for any new bit of information is very high. And then the
+search should be all on the diff between the existing corpus and the world."
+
+This changes what the fix is. The design below (mark results new or held,
+reuse within half an hour, stop rewording) makes each web search cheaper to
+waste. The principle says most of them should not be asked: a research run
+starts from what the computer holds (the existing story on the event, the
+related stories, the captured sources and their text), states what is
+missing or stale, and searches the web only for that. What a search brings
+back is captured, so the next run holds it. An overlapping candidate becomes
+a revision of the existing story, decided before research starts.
+
+Not yet known, under investigation the same day: what the corpus search
+indexes and whether captured source text is findable at all; whether research
+runs call it and what it returns; how many published stories overlap an
+earlier one at 80% or more; where the pipeline decides new story or
+revision.
+
 ## Ceramic measured before landing: it cannot carry the paper (2026-11-18)
 
 Live calls ([reference](../reference/CERAMIC.md), "Measured") show Ceramic's

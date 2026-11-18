@@ -266,7 +266,8 @@ stations:
   review: one seat on the merge; the parts were reviewed in lanes on 2026-11-18
   depends_on: []
   carrier: lane/phone-main
-  status: working
+  status: landed
+  landed: 33cf20826 on 2026-11-18T13:11Z; CI run 44311266775 green; staging reports the commit (deployed 13:20Z); the paper was publishing at 13:43Z
 decisions_for_the_owner:
 - id: D1
   question: 'Is the order right: the paper page, then sign-in, then the deck under the Swift player, then the radio''s decisions, then the other pages in parallel?'
