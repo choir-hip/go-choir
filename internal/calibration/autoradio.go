@@ -116,9 +116,12 @@ type AutoradioForecastInput struct {
 	// Cause is the cause class of design 12.1; CausedBy is the model's full
 	// ref (empty or the class word for the classes without a ref); LessonID
 	// is the lesson's id when, and only when, the cause is a lesson.
-	Cause      string
-	CausedBy   string
-	LessonID   string
+	Cause    string
+	CausedBy string
+	LessonID string
+	// TakeID is the take a take segment leads in: required when, and only
+	// when, Kind is "take", and tagged take:<id> (design 11.5).
+	TakeID     string
 	TextSHA256 string // 64 lower-case hex digits
 	Blocks     int
 	// StretchStart is the stretch start record's time; the deadline derives
@@ -146,6 +149,9 @@ func checkAutoradioInput(in AutoradioForecastInput) (criterionRef string, err er
 		if unicode.IsControl(r) {
 			return "", invalid("title contains a control character")
 		}
+	}
+	if (in.Kind == AutoradioKindTake) != (in.TakeID != "") || (in.TakeID != "" && !types.TakeIDRe.MatchString(in.TakeID)) {
+		return "", invalid("a take forecast names its take (take-<16 hex>), and no other kind does")
 	}
 	if !sha256HexRe.MatchString(in.TextSHA256) {
 		return "", invalid("text hash must be 64 lower-case hex digits")
@@ -204,6 +210,9 @@ func NewAutoradioForecast(in AutoradioForecastInput, now time.Time) (types.Commi
 	if in.Cause == CauseLesson {
 		tags = append(tags, "lesson:"+in.LessonID)
 	}
+	if in.TakeID != "" {
+		tags = append(tags, "take:"+in.TakeID)
+	}
 	tags = append(tags, "sha:"+in.TextSHA256[:32], fmt.Sprintf("blocks:%d", in.Blocks))
 	p := in.P
 	rec, err := NewClaimRecord(ClaimRequest{
@@ -231,6 +240,13 @@ func stampAutoradio(rec types.CommitmentRecord, kind string) types.CommitmentRec
 	rec.SubjectRefs = map[string]string{"desk": AutoradioDesk, "record_kind": kind}
 	rec.Provenance.Labels = types.NewLabelSet(label).Strings()
 	return rec
+}
+
+// IsAutoradioSettlement reports whether rec is an autoradio.settlement record
+// the Autoradio desk stamped. Callers outside this file ask here instead of
+// naming the kind (the reserved-writer guard keeps the literal in one place).
+func IsAutoradioSettlement(rec types.CommitmentRecord) bool {
+	return rec.SubjectRefs["desk"] == AutoradioDesk && rec.SubjectRefs["record_kind"] == "autoradio.settlement"
 }
 
 var errNotServerForecast = errors.New("not a forecast claim the Autoradio server wrote")

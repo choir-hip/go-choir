@@ -28,7 +28,11 @@ const (
 	// programmeInstructionMax bounds each instruction's and each note's text in
 	// the prompt (design 12.7).
 	programmeInstructionMax = 1000
+	// programmeMuteNotesRead is how many notebook notes are read for mutes.
+	programmeMuteNotesRead = 500
 )
+
+func (in *programmeInput) hasTakes() bool { return len(in.takeByID) > 0 }
 
 type programmeInstruction struct {
 	Ref   string
@@ -48,6 +52,11 @@ type programmeInput struct {
 	// usedClips are the clips a podcast_clip segment has already placed in
 	// this stretch: a clip plays once.
 	usedClips map[string]bool
+	// takeByID names every take the call may offer: the request's takes less
+	// the listener's own and those of a muted publisher. usedTakes are the
+	// takes a take segment has already placed in this stretch.
+	takeByID  map[string]*programmeCandidate
+	usedTakes map[string]bool
 
 	// aheadCount is the number of titles the request lists as ahead; nextSeg is
 	// the number the next segment will take (set by the handler before each
@@ -63,15 +72,9 @@ type clipRef struct {
 // buildInput reads what the call's input lists from the tape and the request.
 func (c *programmeCall) buildInput(ctx context.Context) (*programmeInput, error) {
 	in := &programmeInput{
-		candidates: c.req.Candidates, turnIDs: map[string]bool{}, noteIDs: map[string]bool{}, lessonIDs: map[string]bool{},
-		byRef: map[string]*programmeCandidate{}, clipByID: map[string]clipRef{},
+		turnIDs: map[string]bool{}, noteIDs: map[string]bool{}, lessonIDs: map[string]bool{},
+		byRef: map[string]*programmeCandidate{}, clipByID: map[string]clipRef{}, takeByID: map[string]*programmeCandidate{},
 		aheadCount: len(c.req.AheadTitles),
-	}
-	for i := range in.candidates {
-		in.byRef[in.candidates[i].ref] = &in.candidates[i]
-		for _, k := range in.candidates[i].Clips {
-			in.clipByID[k.ClipID] = clipRef{cand: &in.candidates[i], clip: k}
-		}
 	}
 	if text := strings.TrimSpace(c.req.EditionText); text != "" {
 		in.edition = calibration.SplitBlocks(text)
@@ -85,9 +88,40 @@ func (c *programmeCall) buildInput(ctx context.Context) (*programmeInput, error)
 		in.turnIDs[id] = true
 		in.instructions = append(in.instructions, programmeInstruction{Ref: "instruction:turn/" + id, Words: r.Directive.Body})
 	}
-	notes, err := c.listNotices(ctx, kindNote, noteRecordPrefix, programmeInstructionsShown)
+	allNotes, err := c.listNotices(ctx, kindNote, noteRecordPrefix, programmeMuteNotesRead)
 	if err != nil {
 		return nil, err
+	}
+	notes := allNotes
+	if len(notes) > programmeInstructionsShown {
+		notes = notes[:programmeInstructionsShown]
+	}
+	// A take is offered to a listener only when its publisher is not that
+	// listener and is not muted by a line of their notebook (design 11.7).
+	// The phone filters too; this is the check that does not depend on it.
+	muted := map[string]bool{}
+	for _, r := range allNotes {
+		for _, m := range programmeMuteRe.FindAllStringSubmatch(r.Directive.Body, -1) {
+			muted[strings.ToLower(m[1])] = true
+		}
+	}
+	own := types.TakePublisherHandle(c.ownerID)
+	for _, cand := range c.req.Candidates {
+		if cand.isTake() && (cand.Publisher == own || muted[cand.Publisher]) {
+			continue
+		}
+		in.candidates = append(in.candidates, cand)
+	}
+	for i := range in.candidates {
+		cand := &in.candidates[i]
+		if cand.isTake() {
+			in.takeByID[cand.TakeID] = cand
+			continue
+		}
+		in.byRef[cand.ref] = cand
+		for _, k := range cand.Clips {
+			in.clipByID[k.ClipID] = clipRef{cand: cand, clip: k}
+		}
 	}
 	for _, r := range notes {
 		id := strings.TrimPrefix(r.RecordID, noteRecordPrefix)
@@ -164,6 +198,18 @@ func (c *programmeCall) frame(in *programmeInput, local string) (stable, volatil
 			line("(There are no candidates; write only openings and transitions.)")
 		}
 		for _, cand := range in.candidates {
+			if cand.isTake() {
+				line("take: %s | publisher: %s | %.0f seconds | title: %s", cand.TakeID, cand.Publisher, cand.DurationSeconds, safeLine(cand.Title))
+				if cand.Record != "" {
+					line("record: %s", safeLine(cand.Record))
+				}
+				if r := cand.RespondsTo; r != nil {
+					line("responds to: %s", safeLine(r.Title))
+				}
+				line("transcript: %s", safeLine(cand.Transcript))
+				line("")
+				continue
+			}
 			line("ref: %s", cand.ref)
 			line("title: %s", safeLine(cand.Title))
 			if strings.TrimSpace(cand.Dek) != "" {

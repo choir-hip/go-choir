@@ -90,6 +90,17 @@ func ProgrammeClipsPrompt() (string, bool) {
 	return string(raw), true
 }
 
+// ProgrammeTakesPrompt is the section appended to the programme prompt only
+// when the call lists a take, so a request with none sends the prompt it
+// always did (docs/reference/AUTORADIO-TAKES.md).
+func ProgrammeTakesPrompt() (string, bool) {
+	raw, err := firstPartyPrompts.ReadFile("firstparty_prompts/autoradio_programme_takes.md")
+	if err != nil {
+		return "", false
+	}
+	return string(raw), true
+}
+
 // ProgrammePrompt is the prompt of the Autoradio programme call (role
 // autoradio_programme, design docs/design/autoradio-learning-engine-2026-11-14.md
 // section 3), shipped with the image beside the desk's own prompt. It is the

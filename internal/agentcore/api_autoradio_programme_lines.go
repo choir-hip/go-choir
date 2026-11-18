@@ -30,7 +30,7 @@ const (
 // Only what station L1 can legitimately produce is accepted: mail and
 // podcast_note wait for their sources (programme design slices 3 and 6), and
 // answer and result belong to the turn route and the hand-offs.
-var programmeContentKinds = map[string]bool{"story": true, "update": true, "headlines": true}
+var programmeContentKinds = map[string]bool{"story": true, "update": true, "headlines": true, "take": true}
 var programmeOtherKinds = map[string]bool{"opening": true, "transition": true, "podcast_clip": true}
 
 // programmeKindAliases are the old names of the two station kinds. A line that
@@ -46,7 +46,7 @@ var programmeLaterKinds = map[string]bool{"mail": true, "podcast_note": true, "a
 // steers, and are generous for twenty minutes of speech (about 150 words a
 // minute across ten to fifteen segments).
 var programmeTextRange = map[string]int{
-	"story": 8000, "update": 4000, "headlines": 3000, "transition": 500, "opening": 1500, "podcast_clip": 800,
+	"story": 8000, "update": 4000, "headlines": 3000, "transition": 500, "opening": 1500, "podcast_clip": 800, "take": programmeTakeLeadMax,
 }
 
 var (
@@ -76,6 +76,9 @@ type programmeSegment struct {
 	// ClipID and ClipSeconds name the clip a podcast_clip segment leads in.
 	ClipID      string
 	ClipSeconds float64
+	// TakeID and TakeSeconds name the take a take segment leads in.
+	TakeID      string
+	TakeSeconds float64
 
 	lineNo int // the line this segment came from, for the index's notes
 
@@ -231,6 +234,9 @@ func (in *programmeInput) checkLine(line string) (*programmeSegment, lineClass, 
 	if kind == "podcast_clip" {
 		return in.checkClipLine(seg, raw)
 	}
+	if kind == "take" {
+		return in.checkTakeLine(seg, raw)
+	}
 	cites, reason := in.checkCites(raw["cites"], content)
 	if reason != "" {
 		return invalidf("%s", reason)
@@ -296,6 +302,60 @@ func (in *programmeInput) checkClipLine(seg *programmeSegment, raw map[string]js
 	in.usedClips[id] = true
 	seg.ClipID, seg.ClipSeconds = id, ref.clip.Seconds
 	seg.Cites = []programmeCite{{Ref: ref.cand.ref, Role: "quoted", Label: truncate(oneLine(ref.cand.Title), programmeMaxLabel)}}
+	return seg, lineOK, ""
+}
+
+// checkTakeLine finishes a take line (design 11.5). The line names a take of
+// the request and carries the DJ's lead-in as its text; it has the forecast of
+// a story (p_heard and caused_by, validated as a story's), and its cites are
+// filled here and never taken from the model: the take itself, and the story
+// it responds to when the request lists that story. A take of the listener's
+// own, or by a muted publisher, is not in the request's set (buildInput
+// removes it), so no line can name it.
+func (in *programmeInput) checkTakeLine(seg *programmeSegment, raw map[string]json.RawMessage) (*programmeSegment, lineClass, string) {
+	var id string
+	if err := json.Unmarshal(raw["take"], &id); err != nil || id == "" {
+		return invalidf("a take line names its take in the take field")
+	}
+	cand, ok := in.takeByID[id]
+	if !ok {
+		return invalidf("take %q is not one of this request's takes", truncate(id, 60))
+	}
+	if in.usedTakes[id] {
+		return invalidf("take %q is already used in this stretch", truncate(id, 60))
+	}
+	if _, has := raw["p_heard"]; !has {
+		return invalidf("p_heard is missing")
+	}
+	p, reason := parseP(raw["p_heard"])
+	if reason != "" {
+		return invalidf("%s", reason)
+	}
+	if _, has := raw["caused_by"]; !has {
+		return invalidf("caused_by is missing")
+	}
+	var causedBy string
+	if err := json.Unmarshal(raw["caused_by"], &causedBy); err != nil {
+		return invalidf("caused_by is not a string")
+	}
+	if reason := in.checkCause(seg, causedBy); reason != "" {
+		return invalidf("%s", reason)
+	}
+	seg.P = p
+	if in.usedTakes == nil {
+		in.usedTakes = map[string]bool{}
+	}
+	in.usedTakes[id] = true
+	seg.TakeID, seg.TakeSeconds = id, cand.DurationSeconds
+	seg.Cites = []programmeCite{{Ref: cand.ref, Role: "subject", Label: truncate(oneLine(cand.Title), programmeMaxLabel)}}
+	if r := cand.RespondsTo; r != nil {
+		for _, story := range in.candidates {
+			if !story.isTake() && story.Route == r.Route {
+				seg.Cites = append(seg.Cites, programmeCite{Ref: story.ref, Role: "mentioned", Label: truncate(oneLine(story.Title), programmeMaxLabel)})
+				break
+			}
+		}
+	}
 	return seg, lineOK, ""
 }
 

@@ -143,3 +143,19 @@ func TestValidID(t *testing.T) {
 		}
 	}
 }
+
+// A take is an entry kind: words to speak (the DJ's lead-in), a forecast like a
+// story's, and the publisher's audio named by its source ref (design 11.5 of
+// docs/design/autoradio-learned-document-2026-11-17.md); the Swift twin is
+// RunSheetKind.take.
+func TestTakeIsAnEntryKind(t *testing.T) {
+	var e Entry
+	raw := `{"id":"e1","kind":"take","placed_by":"desk","state":"ahead","title":"A voice","text":"A listener recorded this.","est_seconds":20,
+		"source":{"ref":"take:take-0123456789abcdef","label":"voice-3fa2c1"},"forecast":{"p_heard":0.6,"caused_by":"explore","claim_id":"c1"}}`
+	if err := json.Unmarshal([]byte(raw), &e); err != nil || e.Kind != KindTake || !e.Kind.TextRequired() {
+		t.Fatalf("take entry: %+v %v", e, err)
+	}
+	if err := json.Unmarshal([]byte(`{"kind":"takes"}`), &e); err == nil {
+		t.Fatal("an unknown kind decoded")
+	}
+}
