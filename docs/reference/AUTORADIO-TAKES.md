@@ -85,6 +85,31 @@ Drill: an outcome from a computer in `test_computers` or
 a computer's key, is marked `drill`, shown on a separate line, never counted.
 A drill take is listed only to drill computers.
 
+## A take on the run sheet
+
+The programme route places a take segment on the server run sheet as the phone
+builds it (`RunSheetEntry.take` in `Takes.swift` on `origin/lane/autoradio-integ16`):
+kind `take`, placed by the desk, id `d-<segment_id>`, the model's title, the
+DJ lead-in as `text`, `source` `{ref: "take:<id>", label: <publisher handle>}`,
+`cites` the stories it was built on (the story it responds to, role mentioned;
+never the take itself), `est_seconds` the lead-in's estimate plus the take's
+own seconds, and `forecast` `{p_heard, caused_by, claim_id}` like any desk
+entry. `settleEnded` ignores the kind, so the listener's own end op settles it
+and `calibration.TakeOutcomeFromSettlement` reads the settlement. The learning
+read names the take (`take_id`).
+
+Validation: a take line must carry a lead-in (an empty `text` is dropped by the
+programme validator), so Go's `runsheet` keeps `take` in `TextRequired`; the
+phone's twin (`RunSheetKind.textRequired`) is looser and allows a take with no
+text. No server path writes one, so there is no disagreement to fixture.
+
+Two notes. Outcome rows written before the publisher key was added to them
+(an earlier build of this lane) are invisible to a record read; nothing is
+deployed, so re-run the drill if an earlier store is reused. The first two
+commits' `Security-Effect` text says the length is 3 to 60 s; publish already
+stored the header's 2.5 to 62.0 s, and the third commit's wording is the
+statement that counts.
+
 ## After a delete or a yank
 
 The take row stays, with its id, handle, times, size, hash and state
