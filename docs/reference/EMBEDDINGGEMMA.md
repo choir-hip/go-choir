@@ -274,6 +274,79 @@ cites; compare today's title-only search, BM25 over page text, vectors, and
 both; by language. Indexing page text for BM25 is the cheap rival: if it
 gets most of the gain, embeddings wait.
 
+## 0.9 Measured for the corpus (2026-11-18): retrieval on Autopaper's own stories, and speed on x86 and the Mac
+
+Result files are in the lead's scratch directory (`embed-eval/`), not in
+the repo. Claims C132 and C133 in the calibration ledger.
+
+### Retrieval
+
+200 published stories (all English; no non-English story was found on the
+front), query = the headline, relevant = the pages the story cites (6.3 a
+story), pool = 1,253 cited pages. **Page text was not available**: no
+public route serves it, so each page is its title plus the paragraphs the
+story quoted from it. That flatters every method that reads text and it
+cannot compare full pages with page leads (1.22 passages a page).
+
+| Method | Recall at 10 | Recall at 40 | MRR |
+|---|---|---|---|
+| Today's capture search (title and host words) | 0.273 | 0.273 | 0.669 |
+| BM25 over title and text | 0.800 | 0.877 | 0.948 |
+| Vectors, 768 dimensions | 0.927 | 0.979 | 0.983 |
+| Vectors, 256 dimensions int8 | 0.918 | 0.979 | 0.985 |
+| Both, reciprocal rank fusion (k 60) | 0.856 | 0.967 | 0.964 |
+| Vector order with BM25's top three guaranteed a place | 0.926 | 0.979 | 0.983 |
+
+- Vectors beat BM25 by 12.7 points of recall at 10 (95% interval 9.4 to
+  16.1). About half of that is other languages: of 209 cited pages not in
+  English (French, Russian, Spanish, Japanese), vectors put 72% in the top
+  ten and BM25 33%; today's search 3%. This is the first evidence we hold
+  that the model matches an English query to a page in another language.
+- Reciprocal rank fusion is worse than vectors alone, as on 2026-11-17.
+  Vector order with BM25's best hits kept is the combination to build.
+- Cutting to 256 dimensions int8 costs one point.
+- With a short keyword query of the kind the research desk writes: BM25
+  0.756, vectors 0.857.
+- BM25 wins where a page's title is empty or the match is a rare exact
+  term.
+
+### Story against story (headline plus standfirst, 200 stories)
+
+The 30 closest pairs, read by hand: eight the same event told twice
+(cosine 0.764 to 0.954), two updates (0.872 to 0.927), seventeen related
+but different (0.738 to 0.858), three unrelated (0.748 to 0.801). Every
+pair at 0.86 or above was a duplicate or an update but one. Below that the
+groups overlap. So similarity proposes and a model must judge.
+
+### Speed
+
+| Where | Tokens a second |
+|---|---|
+| Build VM (Xeon E-2236), one thread, load about 10 | 164 (192 passages; later runs under heavier load: 50 and 97) |
+| Build VM, two threads | 276 (1.69 times one) |
+| The lead's Mac (M1), CPU, four threads | about 1,390 |
+| The lead's Mac, Metal | about 3,000 |
+
+The VM was saturated by other work, so four threads and batching have no
+fair figure. Vectors from the VM match the Mac's (cosine 0.9999). Query
+latency on one x86 thread: 120 ms median. Node A is the same CPU as Node B
+and was at load 9.6.
+
+### What it means for the plan
+
+- One x86 thread embeds about half a 300-token passage a second. That is
+  enough for the steady state and slow for a first pass over everything.
+- First pass over 250,000 pages: at the lead of each page (about 400
+  tokens) roughly 9 hours on the Mac with Metal, or 37 to 68 hours on Node
+  B on six or three cores. At whole pages the answer depends on a number
+  we do not have, the tokens of extracted text per page. At the 3,600
+  earlier assumed: 83 hours on the Mac with Metal, 14 days on six cores of
+  Node B.
+- Steady state at whole pages (4,500 pages a day at 3,600 tokens) is about
+  190 tokens a second: a little over one x86 thread, all day.
+- Not measured: full page against lead (needs the real page text), any
+  non-English story, a quiet x86 machine.
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image
