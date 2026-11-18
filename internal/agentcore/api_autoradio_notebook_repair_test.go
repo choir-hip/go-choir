@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
@@ -407,5 +408,29 @@ func TestS8_TheDocumentHintIsTheLatestAppliedPatchesDocument(t *testing.T) {
 	}
 	if got := NotebookDocHint(context.Background(), rt.store, progOwner, rt.cfg.ComputerID); got != "doc-new" {
 		t.Errorf("(S8) hint %q", got)
+	}
+}
+
+// A take's forecast can be caused by a lesson line like any other segment's,
+// and carries both the take tag and the line tag.
+func TestATakeForecastCanBeCausedByALessonLine(t *testing.T) {
+	fake := &fakeNotebook{}
+	fake.push("appagent", notebook.DeskLabel, "# My notebook\n\n## What Autoradio has learned\n- Short voices are heard. [L1 · heard 0 of 0]\n")
+	fake.found = true
+	rt, _ := radioRuntime(t, linesScript(takeLine(map[string]any{"caused_by": "lesson:L1"})))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	rec := httptest.NewRecorder()
+	progServe(h, rec, progBody(withRequestID("r-take"), withTakes(takeFixture(takeA)), func(m map[string]any) { delete(m, "edition_text") }))
+	evs := parseSSE(t, rec.Body.String())
+	if len(takeSegments(evs)) != 1 {
+		t.Fatalf("the take was dropped: %+v", eventsNamed(evs, "done"))
+	}
+	var tags []string
+	for _, c := range stretchClaims(t, rt, stretchIDOf(t, evs)) {
+		tags = c.Calibration.Claim.Tags
+	}
+	if !hasStr(tags, "take:"+takeA) || !hasStr(tags, "line:lesson:L1") || !hasStr(tags, "cause:lesson") {
+		t.Errorf("tags %v", tags)
 	}
 }
