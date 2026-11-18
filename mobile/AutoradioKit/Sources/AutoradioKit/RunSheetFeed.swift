@@ -82,7 +82,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     }
 
     /// The entry a segment becomes; nil when it cannot be one (a clip the phone does not have).
-    static func entry(from s: IncomingSegment, clips: ClipStore) -> RunSheetEntry? {
+    static func entry(from s: IncomingSegment, clips: ClipStore, takes: TakeStore = .shared) -> RunSheetEntry? {
         let text = StretchCandidates.cut(s.text.trimmingCharacters(in: .whitespacesAndNewlines), bytes: RunSheetBounds.maxTextBytes)
         guard !text.isEmpty else { return nil }
         let kind: RunSheetKind
@@ -90,6 +90,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         case "opening", "ident": kind = .opening
         case "transition", "bridge": kind = .transition
         case "podcast_clip": kind = .clip
+        case "take": kind = .take
         case "answer": kind = .answer
         case "result": kind = .result
         default: kind = .story                            // story, update, headlines, mail, podcast_note
@@ -118,6 +119,17 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
             }
             if e.title.isEmpty || e.title == SegmentKinds.label(s.kind) { e.title = c.episodeTitle.isEmpty ? c.show : c.episodeTitle }
         }
+        if kind == .take {
+            // A take the phone does not hold (not in the list it read for this request) is not played.
+            guard let id = s.takeID, let t = takes.take(id) else { return nil }
+            var cs = e.cites ?? []
+            if let r = t.respondsTo, !cs.contains(where: { $0.ref.hasPrefix("pub:" + r.route) }) { cs.append(RunSheetCite(ref: "pub:" + r.route, role: .mentioned, label: SegmentPrep.label(r.title))) }
+            e.cites = cs.isEmpty ? nil : cs
+            e.source = RunSheetSource(ref: "take:" + t.takeID, label: t.publisher)
+            e.estSeconds += t.duration
+            e.title = t.title
+        }
+        if let f = s.forecast { e.forecast = f }
         return e
     }
 }

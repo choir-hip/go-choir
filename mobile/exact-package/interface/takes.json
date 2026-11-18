@@ -1,0 +1,73 @@
+{
+ "shapes": {
+  "TakeMineRow": {
+   "id": "string",
+   "title": "string",
+   "length": "string",
+   "state": "string"
+  },
+  "TakeMutedRow": {
+   "handle": "string",
+   "line": "string"
+  },
+  "TakesPageInfo": {
+   "state": "string",
+   "elapsed": "string",
+   "limit": "string",
+   "fraction": "number",
+   "canRecord": "bool",
+   "canStop": "bool",
+   "canPublish": "bool",
+   "canDiscard": "bool",
+   "previewing": "bool",
+   "transcript": "string",
+   "respondsTo": "string",
+   "publishLine": "string",
+   "rightsLine": "string",
+   "notice": "string",
+   "justPublished": "string",
+   "mine": "TakeMineRow[]",
+   "muted": "TakeMutedRow[]",
+   "record": "string",
+   "handle": "string"
+  }
+ },
+ "names": [
+  {
+   "source": "takesPage",
+   "live": true,
+   "answers": "TakesPageInfo",
+   "substitute": {
+    "default": {
+     "state": "idle",
+     "elapsed": "0:00",
+     "limit": "1:00",
+     "fraction": 0,
+     "canRecord": true,
+     "canStop": false,
+     "canPublish": false,
+     "canDiscard": false,
+     "previewing": false,
+     "transcript": "",
+     "respondsTo": "",
+     "publishLine": "",
+     "rightsLine": "",
+     "notice": "",
+     "justPublished": "",
+     "mine": [],
+     "muted": [],
+     "record": "",
+     "handle": ""
+    }
+   }
+  },
+  {
+   "send": "takesAct",
+   "options": {
+    "op": "string",
+    "arg": "string"
+   },
+   "answers": "TakesPageInfo"
+  }
+ ]
+}

@@ -66,6 +66,20 @@ they place entries on the same run sheet, and this page shows the result.
 6. **Heard.** The last entries that ended, newest first, each with how it
    ended in a word: finished, skipped, left. Tap to play again.
 
+7. **Takes** (station L7; [the learned document](autoradio-learned-document-2026-11-17.md) section 11). Below Heard: a **Record a take**
+   action. Pressing it pauses the radio (the same pause a turn makes), turns hands-free off for the while, takes the capture session and
+   records an `.m4a` (AAC-LC, mono, 24 kHz, 32 kbit/s) with the time against the 1:00 bound; Stop ends it, and so does the bound, which says
+   so. A take of under 3 s is not kept. If an entry was on air, its story is the take's `responds_to`, shown as "Answering: <title>". Review
+   shows the transcript (made on the phone from the file, **not editable**), Play back, Re-record, Discard and, only with a transcript,
+   Publish, with the line "Your voice will be offered to other Autoradio listeners. You can delete it at any time." and the rights line.
+   The radio stays paused through the review and goes on when the take is published, discarded or fails. Under it: the listener's own takes
+   (Delete), the **Muted voices** (each with Undo) and "Your record: heard through by 7 of 11 listeners over 5 takes" (or "new: no outcomes
+   yet"). A take on air shows the publisher's handle, the transcript, the publisher's record, **Built on** rows for its cites, and **Mute
+   voice-xxxxxx** (also on its Heard row). The phone offers at most 3 takes to the DJ as candidates (never its own, never a muted
+   publisher's); a take plays as lead-in then the publisher's audio fetched signed-in, and ends through the same `aired` op as any entry.
+   Built: the model is `TakesPage.swift` and `TakeSession.swift`; the wire is `Choir/Takes.swift` (`TakesClient`). A mute is kept on the phone
+   only: the notebook line ("Never play takes by voice-xxxxxx.") has no route to be written through yet.
+
 ## States
 
 - **Cold start, nothing played yet.** On air shows a greeting and what is

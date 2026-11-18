@@ -108,6 +108,7 @@ extension RunSheetEntry {
         case .transition: return "transition"
         case .story: return "story"
         case .clip: return "clip"
+        case .take: return "take"
         case .episode: return "audio"
         case .page: return paperRoute != nil ? "story" : "page"
         case .document: return "book"

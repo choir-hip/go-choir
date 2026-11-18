@@ -17,7 +17,8 @@
    "kind": "string",
    "title": "string",
    "outcome": "string",
-   "builtOn": "RadioBuiltOn[]"
+   "builtOn": "RadioBuiltOn[]",
+   "publisher": "string"
   },
   "RadioPageInfo": {
    "state": "string",
@@ -52,7 +53,10 @@
    "notice": "string",
    "heard": "RadioHeardRow[]",
    "builtOn": "RadioBuiltOn[]",
-   "canPlay": "bool"
+   "canPlay": "bool",
+   "takePublisher": "string",
+   "takeTranscript": "string",
+   "takeRecord": "string"
   },
   "RadioBuiltOn": {
    "n": "number",
@@ -101,7 +105,10 @@
      "notice": "",
      "heard": [],
      "builtOn": [],
-     "canPlay": true
+     "canPlay": true,
+     "takePublisher": "",
+     "takeTranscript": "",
+     "takeRecord": ""
     }
    }
   },

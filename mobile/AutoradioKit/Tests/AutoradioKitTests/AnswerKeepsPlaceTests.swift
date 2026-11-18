@@ -120,6 +120,9 @@ final class SoundPathsTests: XCTestCase {
             "LiveAudio.swift": ["AVAudioPlayerNode("],
             "RemoteAudioPlayer.swift": ["AVPlayer("],
             "AppleStages.swift": ["AVSpeechSynthesizer("],
+            // The take's review playback (the listener's own recording): played only while the take holds the gate (the radio is paused, hands-free
+            // off, the capture session taken: TakeGate), stopped by Re-record, Discard and Publish.
+            "TakeSession.swift": ["AVAudioPlayer("],
         ]
         XCTAssertEqual(found.mapValues { $0 }, known, "a new place that makes sound must go behind the single-voice gate (LiveAudio.holdForSessionSwitch / onVoiceHold) and be named here")
         let apple = try String(contentsOf: dir.appendingPathComponent("AppleStages.swift"), encoding: .utf8)
