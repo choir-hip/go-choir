@@ -125,6 +125,12 @@ question whose answers it already holds.
   letters or digits is refused. What sends the bare `x` is not found: the only
   host path to the gateway is the desk's `choir.SearchStart`, and nothing in
   the repo sends `x`, so it was a cell the model wrote.
+- Log lines for the corpus audit
+  (`research-does-not-start-from-the-corpus-2026-11-18`): the `corpus search`
+  line ends `run= desk= conv= published= events= captures= capped=`; a
+  `corpus read` line per Read and ReadCapture (run, capture id, held, verb); a
+  `management story choice` line per management record sent to a story (run,
+  feed or open, the fed story's id, candidate stories shown). Ids and counts.
 - Ask once for many: `choir.SearchAll`, and research prompt v14.
 - Check after landing: `scripts/status-paper-search-quality` for the story
   count and mean cited sources against the days before, and the `search run=`
