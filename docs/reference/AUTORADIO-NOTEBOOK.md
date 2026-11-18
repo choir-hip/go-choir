@@ -276,3 +276,13 @@ not written (an id could be minted twice).
 - Promotion at `m >= 10`, the consolidation suggestion above 15 listener
   lines, and the trying-line retirement by rule after 20 stretches are not
   built.
+
+## Residual: the notebook is read without a privacy label (2026-11-18, review of the impact rows)
+
+`NotebookRead` returns the document as plain strings and the programme
+handler sets no `owner_private` label on the run that reads it. The DJ
+therefore consumes the listener's own text with no label, and a later
+outbound act in that run would not see it as owner-private. No such act
+exists on the programme route today. To be closed when the route gains any
+outbound act: label the read as `texture.search` labels its snippets.
+
