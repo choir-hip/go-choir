@@ -42,7 +42,9 @@ extension RunSheetEntry {
         return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .page, placedBy: by, title: t, source: RunSheetSource(ref: "url:" + url.absoluteString, label: url.host ?? t, url: url.absoluteString))
     }
     public static func book(id: String, title: String, at: Int, by: RunSheetBy = .listener) -> RunSheetEntry {
-        RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .document, placedBy: by, title: cleanTitle(title), source: RunSheetSource(ref: "doc:" + id, label: cleanTitle(title), start: Double(at)))
+        // A book is a file on the phone: its own title is not posted (the same rule as a `doc:` read-aloud).
+        let neutral = localOnlyTitle(address: "doc:" + id) ?? "Read aloud"
+        return RunSheetEntry(id: mintId(by == .listener ? "l-" : "p-"), kind: .document, placedBy: by, title: neutral, source: RunSheetSource(ref: "doc:" + id, label: neutral, start: Double(at)))
     }
     /// A page's words, read aloud on the listener's asking (Listen on a page, "Read it to me" on a message): the address says what it is.
     public static func readAloud(address: String, title: String, by: RunSheetBy = .listener) -> RunSheetEntry {

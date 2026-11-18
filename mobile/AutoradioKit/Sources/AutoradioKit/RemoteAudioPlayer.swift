@@ -25,6 +25,29 @@ import MediaPlayer
     /// When the player itself last paused or resumed (a hold, a level change, the reader's pause): the observer reports that pause a moment later.
     private var ownPauseAt: DispatchTime = .init(uptimeNanoseconds: 0)
     private func ownPause() { ownPauseAt = .now() }
+    /// How long after its own pause the player ignores a reported pause (seconds); a test shortens it.
+    var ownPauseWindow = 1.5
+    /// The system paused it while a voice line held it: on release it is not resumed, the pause is reported instead.
+    private var pausedWhileHeld = false
+    private var recheckTask: Task<Void, Never>?
+    /// Whether the player is paused now (a test replaces it).
+    var isPausedNow: () -> Bool = { false }      // set in init
+    private func scheduleRecheck(after s: Double) {
+        guard recheckTask == nil else { return }
+        recheckTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, s) * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            self.recheckTask = nil
+            guard self.player != nil, self.wantPlaying, !self.held, self.level != .pause, self.isPausedNow() else { return }
+            self.checkSystemPause()
+        }
+    }
+    private func reportSystemPause() {
+        wantPlaying = false
+        note?("remote: paused by the system at \(Int(position()?.elapsed ?? 0)) s")
+        publish()
+        onSystemPause?()
+    }
 
     /// The generation that ended (the item's own end or the clip's end).
     public var onEnded: ((Int) -> Void)?
@@ -37,7 +60,7 @@ import MediaPlayer
     public var note: ((String) -> Void)?
     private var controlObserver: NSKeyValueObservation?
 
-    public init() {}
+    public init() { isPausedNow = { [weak self] in self?.player?.timeControlStatus == .paused } }
 
     public var isLoaded: Bool { player != nil }
     public var isPlaying: Bool { wantPlaying && level != .pause }
@@ -65,7 +88,10 @@ import MediaPlayer
             note?("remote: the stream did not become ready (\(it.error.map { "\($0)" } ?? "status \(it.status.rawValue)"))")
             stop(); return false
         }
-        if let s = start, s > 0 { await p.seek(to: CMTime(seconds: s, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
+        if let s = start, s > 0 {
+            await p.seek(to: CMTime(seconds: s, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+            guard token == startToken else { return false }             // stopped or replaced during the seek: this player is an orphan
+        }
         if let e = end { setBoundary(e) }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: it, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.fire() }
@@ -128,19 +154,20 @@ import MediaPlayer
 
     /// The player paused and the reader did not ask for it: not at the end of the item, not for a hands-free turn.
     func checkSystemPause() {
-        guard player != nil, wantPlaying, level != .pause, !held else { return }
+        guard player != nil, wantPlaying, level != .pause else { return }
         // A pause this player made itself (a voice line's hold, a session switch) is reported after it ended too: it is not the system's.
-        if DispatchTime.now().uptimeNanoseconds &- ownPauseAt.uptimeNanoseconds < 1_500_000_000 { return }
+        // At the end of that window it is looked at once more, so a real pause inside it is not lost.
+        let since = Double(DispatchTime.now().uptimeNanoseconds &- ownPauseAt.uptimeNanoseconds) / 1e9
+        if since < ownPauseWindow { if !held { scheduleRecheck(after: ownPauseWindow - since + 0.02) }; return }
+        if held { pausedWhileHeld = true; return }                       // reported when the hold ends, which does not resume it
         if let pos = position(), let d = pos.duration, pos.elapsed >= d - 0.75 { return }      // it reached its end
         if let e = boundaryEnd, (position()?.elapsed ?? 0) >= e - 0.25 { return }               // a clip reached its end
-        wantPlaying = false
-        note?("remote: paused by the system at \(Int(position()?.elapsed ?? 0)) s")
-        publish()
-        onSystemPause?()
+        reportSystemPause()
     }
 
     public func stop() {
         startToken &+= 1
+        recheckTask?.cancel(); recheckTask = nil; pausedWhileHeld = false
         clearBoundary()
         if let t = tick { player?.removeTimeObserver(t); tick = nil }
         if let o = endObserver { NotificationCenter.default.removeObserver(o); endObserver = nil }
@@ -183,6 +210,10 @@ import MediaPlayer
         guard h != held else { return }
         held = h
         ownPause()
+        if !h, pausedWhileHeld {
+            pausedWhileHeld = false
+            if player != nil, wantPlaying { reportSystemPause(); return }        // the system paused it under the hold: not restarted into a call
+        }
         guard let p = player, wantPlaying else { return }
         if h { p.pause() } else if level != .pause { p.rate = Float(rate) }
         publish()

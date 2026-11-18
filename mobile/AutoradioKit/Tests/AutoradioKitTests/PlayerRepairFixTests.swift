@@ -92,4 +92,50 @@ final class PlayerRepairFixTests: XCTestCase {
         r.setRate(1.5); r.setLevel(.play)
         XCTAssertEqual(r.playerRateForTest, 0, "paused under a voice line stays paused")
     }
+
+    // review 1: a real pause inside the window is reported when it closes; an ordinary hold and release is not
+    func testARealPauseInsideTheWindowIsReportedWhenItCloses() async {
+        let r = RemoteAudioPlayer(); r.installPlayerForTest(); r.ownPauseWindow = 0.1
+        var told = 0; r.onSystemPause = { told += 1 }
+        r.isPausedNow = { true }
+        r.setHeld(true); r.setHeld(false)
+        r.checkSystemPause()
+        XCTAssertEqual(told, 0, "inside the window it waits")
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(told, 1, "still paused at the end of the window: the system's pause")
+        XCTAssertFalse(r.isPlaying)
+    }
+    func testAnOrdinaryHoldAndReleaseIsNotReportedWhenTheWindowCloses() async {
+        let r = RemoteAudioPlayer(); r.installPlayerForTest(); r.ownPauseWindow = 0.1
+        var told = 0; r.onSystemPause = { told += 1 }
+        r.isPausedNow = { false }                      // it went on playing after the release
+        r.setHeld(true); r.setHeld(false)
+        r.checkSystemPause()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(told, 0); XCTAssertTrue(r.isPlaying)
+    }
+    // review 3: a system pause seen during a hold is not undone by the release
+    func testASystemPauseDuringAHoldIsReportedAtReleaseNotResumed() async {
+        let r = RemoteAudioPlayer(); r.installPlayerForTest(); r.ownPauseWindow = 0.05
+        var told = 0; r.onSystemPause = { told += 1 }
+        r.setHeld(true)
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        r.checkSystemPause()                           // the pause arrives well after the hold began
+        XCTAssertEqual(told, 0)
+        r.setHeld(false)
+        XCTAssertEqual(told, 1); XCTAssertFalse(r.isPlaying)
+        XCTAssertEqual(r.playerRateForTest, 0, "not restarted into a call")
+    }
+    // review 4: a book's title is not posted
+    func testABooksTitleIsNotPosted() async {
+        let (p, s, _) = make()
+        let poster = Capture(); s.poster = poster
+        p.registerTextSource(kind: "document") { _, _ in ["Block one."] }
+        p.playNow(.book(id: "b1", title: "Confidential Merger Memoir", at: 2)); await p.settle()
+        await s.flushTask?.value; s.flush(); await s.flushTask?.value
+        let all = poster.ops.map { String(decoding: (try? JSONEncoder().encode($0)) ?? Data(), as: UTF8.self).lowercased() }.joined()
+        XCTAssertFalse(poster.ops.isEmpty)
+        for w in ["confidential", "merger", "memoir"] { XCTAssertFalse(all.contains(w), all) }
+        XCTAssertTrue(all.contains("doc:b1"))
+    }
 }
