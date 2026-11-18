@@ -121,7 +121,7 @@ question whose answers it already holds.
 - The desk is told: pages marked new, held or read; "N of M pages new" in the
   cell result; a query with the same terms (`internal/searchquery.Key`) as a
   search of the same run in the last 30 minutes is answered from it with no
-  call; the gateway cache uses the same key. A query with no word of two
+  call; the gateway cache keeps its own key. A query with no word of two
   letters or digits is refused. What sends the bare `x` is not found: the only
   host path to the gateway is the desk's `choir.SearchStart`, and nothing in
   the repo sends `x`, so it was a cell the model wrote.
@@ -131,7 +131,13 @@ question whose answers it already holds.
   `corpus read` line per Read and ReadCapture (run, capture id, held, verb); a
   `management story choice` line per management record sent to a story (run,
   feed or open, the fed story's id, candidate stories shown). Ids and counts.
-- Ask once for many: `choir.SearchAll`, and research prompt v14.
+- Ask once for many: `choir.SearchAll`, and research prompt v15. After the
+  two-seat review of 2026-11-18: the normaliser keeps years, dates, quoted
+  phrases and capitalised acronyms as terms; `fresh` sends a held search; a
+  running match is waited on and a failed or empty one is not reused; news
+  queries reuse for 10 minutes; a failed wording is a failure, not an empty
+  result. Residual: the search store holds every search of a session and is
+  not pruned.
 - Check after landing: `scripts/status-paper-search-quality` for the story
   count and mean cited sources against the days before, and the `search run=`
   lines for pages_new against pages_returned.

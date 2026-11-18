@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Ask once for many (search-reuse commit 3, docs/problems/search-volume-outruns-keenable-credits-2026-11-18.md).
@@ -22,6 +23,17 @@ import (
 //  5. The merged list repeats a page, or loses the new/held mark of a page.
 //  6. A wording with no word of two or more letters is sent.
 //  7. The existing single-search calls change.
+// From the review of f7df119fb:
+//  8. A wording where no provider answered, or where the host refused, is
+//     called an empty result ("stopped yielding") instead of a failure; or
+//     two failures in a row do not end the call with the failure's reason and
+//     the remaining wordings named as not sent because of it.
+//  9. A broader wording is skipped because an earlier one has more terms.
+//  10. A wording answered from a held search adds nothing to the merged list
+//     and the line does not say how many pages it holds.
+//  11. The call has no total deadline, and past it the remaining wordings
+//     are not all named.
+//  12. After the stop, a wording left out cannot be sent (fresh).
 
 func pagesN(host string, from, to int) []string {
 	var out []string
@@ -36,33 +48,33 @@ func TestSearchAllStopsWhenTheQuestionStopsYielding(t *testing.T) {
 	first := pagesN("h", 1, 10)
 	f.urlsFor = map[string][]string{
 		"harbor strike mauritius union":  first,
-		"harbor strike":                  pagesN("never", 1, 10),
-		"port workers walkout mauritius": append(append([]string{}, first[:9]...), "https://h.example/p11"),
+		"harbor strike":                  pagesN("b", 1, 10), // broader: sent, not skipped
+		"port workers walkout mauritius": append(append([]string{}, pagesN("b", 1, 9)...), "https://h.example/p11"),
 		"dockers mauritius":              pagesN("never", 1, 10),
 	}
 	cell, _ := searchCell(t, f)
-	out := cell(`r, err := choir.SearchAll("the harbor strike", []string{"harbor strike mauritius union", "Strike harbor", "port workers walkout mauritius", "dockers mauritius"})
+	out := cell(`r, err := choir.SearchAll("the harbor strike", []string{"harbor strike mauritius union", "harbor strike", "port workers walkout mauritius", "dockers mauritius"})
 fmt.Println(err)
 fmt.Println(r)
 n, held := 0, 0
 for _, h := range r.Results { n++; if h.Held { held++ } }
 fmt.Println("merged", n, "held", held)`)
-	if f.searchCalls.Load() != 2 {
-		t.Fatalf("host asked to start %d searches, want 2 (one covered, one after the stop):\n%s", f.searchCalls.Load(), out.Stdout)
+	if f.searchCalls.Load() != 3 {
+		t.Fatalf("host asked to start %d searches, want 3 (the broader wording is sent; the last is after the stop):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
 	for _, want := range []string{
 		`1 "harbor strike mauritius union": sent s1 (10 new in first 10, 10 of 10 pages new)`,
-		`2 "Strike harbor": not sent (covered by wording 1)`,
-		`3 "port workers walkout mauritius": sent s2 (1 new in first 10, 1 of 10 pages new)`,
+		`2 "harbor strike": sent s2 (10 new in first 10, 10 of 10 pages new)`,
+		`3 "port workers walkout mauritius": sent s3 (1 new in first 10, 1 of 10 pages new)`,
 		`4 "dockers mauritius": not sent (the question had stopped yielding after wording 3)`,
-		"merged 11 held 0",
+		"merged 21 held 0",
 	} {
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
 		}
 	}
-	if st := out.SearchStats; st == nil || st.Started != 2 || st.NotSent["covered"] != 1 || st.NotSent["stopped_yielding"] != 1 {
-		t.Fatalf("stats = %+v, want 2 started, 1 covered, 1 stopped_yielding", st)
+	if st := out.SearchStats; st == nil || st.Started != 3 || st.NotSent["stopped_yielding"] != 1 || st.NotSent["covered"] != 0 {
+		t.Fatalf("stats = %+v, want 3 started and 1 stopped_yielding", st)
 	}
 }
 
@@ -80,6 +92,58 @@ fmt.Println(r)`)
 	}
 }
 
+// An error is not an empty result: a failed wording between an empty one and a
+// good one does not make "two empties in a row".
+func TestSearchAllNamesAFailureAndDoesNotCountItAsEmpty(t *testing.T) {
+	f := newResearchFixture(t)
+	f.urlsFor = map[string][]string{"alpha one": pagesN("a", 1, 10), "gamma three": {}, "delta four": pagesN("d", 1, 10)}
+	f.failFor = map[string]string{"beta two": "provider timed out"}
+	cell, _ := searchCell(t, f)
+	out := cell(`r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three", "delta four"})
+fmt.Println(r)`)
+	if f.searchCalls.Load() != 4 {
+		t.Fatalf("host asked to start %d searches, want all 4:\n%s", f.searchCalls.Load(), out.Stdout)
+	}
+	for _, want := range []string{
+		`2 "beta two": FAILED (no provider answered: provider timed out)`,
+		`3 "gamma three": sent s3 (0 new in first 0, 0 of 0 pages new)`,
+		`4 "delta four": sent s4`,
+	} {
+		if !strings.Contains(out.Stdout, want) {
+			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
+		}
+	}
+	if strings.Contains(out.Stdout, "stopped yielding") {
+		t.Fatalf("a failure was called a yield stop:\n%s", out.Stdout)
+	}
+}
+
+func TestSearchAllStopsAfterTwoFailuresWithTheReason(t *testing.T) {
+	f := newResearchFixture(t)
+	f.failFor = map[string]string{"alpha one": "provider timed out"}
+	f.hostErr = map[string]string{"beta two": "gateway search: status 502"}
+	cell, _ := searchCell(t, f)
+	out := cell(`r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three", "delta four"})
+fmt.Println(r)`)
+	for _, want := range []string{
+		`1 "alpha one": FAILED (no provider answered: provider timed out)`,
+		`2 "beta two": FAILED (`,
+		`3 "gamma three": not sent (search is failing: `,
+		`4 "delta four": not sent (search is failing: `,
+		"gateway search: status 502",
+	} {
+		if !strings.Contains(out.Stdout, want) {
+			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
+		}
+	}
+	if f.searchCalls.Load() != 2 {
+		t.Fatalf("host asked to start %d searches, want 2", f.searchCalls.Load())
+	}
+	if st := out.SearchStats; st == nil || st.NotSent["failing"] != 2 {
+		t.Fatalf("stats = %+v, want 2 not sent because of failure", st)
+	}
+}
+
 func TestSearchAllKeepsGoingWhileWordingsStillFindPages(t *testing.T) {
 	f := newResearchFixture(t)
 	first := pagesN("h", 1, 10)
@@ -90,8 +154,7 @@ func TestSearchAllKeepsGoingWhileWordingsStillFindPages(t *testing.T) {
 	}
 	cell, _ := searchCell(t, f)
 	out := cell(`r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three"})
-fmt.Println(r)
-for _, h := range r.Results { if h.Held { fmt.Println("held:", h.URL) } }`)
+fmt.Println(r)`)
 	if f.searchCalls.Load() != 3 {
 		t.Fatalf("host asked to start %d searches, want all 3:\n%s", f.searchCalls.Load(), out.Stdout)
 	}
@@ -100,17 +163,21 @@ for _, h := range r.Results { if h.Held { fmt.Println("held:", h.URL) } }`)
 	}
 }
 
-func TestSearchAllNamesWhyAWordingWasNotSent(t *testing.T) {
+func TestSearchAllNamesWhyAWordingWasNotSentAndMergesHeldPages(t *testing.T) {
 	f := newResearchFixture(t)
 	cell, _ := searchCell(t, f)
 	out := cell(`choir.SearchStart("harbor strike")
 r, _ := choir.SearchAll("q", []string{"x", "strike harbor", "harbor strike mauritius", ""})
-fmt.Println(r)`)
+fmt.Println(r)
+held := 0
+for _, h := range r.Results { if h.Held { held++ } }
+fmt.Println("merged", len(r.Results), "held", held)`)
 	for _, want := range []string{
 		`1 "x": not sent (no word of two or more letters or digits)`,
-		`2 "strike harbor": not sent (answered from your search s1, under a minute ago)`,
+		`2 "strike harbor": not sent (answered from your search s1, under a minute ago; its 5 pages are in the list, marked held; send it alone with fresh)`,
 		`3 "harbor strike mauritius": sent s2`,
 		`4 "": not sent (empty)`,
+		"merged 10 held 5",
 	} {
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
@@ -132,5 +199,46 @@ for _, h := range r.Results { fmt.Println(h.URL, h.Held) }`)
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
 		}
+	}
+}
+
+// A first wording whose first ten pages are already 80% held ends the call;
+// the wording left out can still be sent alone with fresh.
+func TestSearchAllFirstWordingHeldThenAWordingSentWithFresh(t *testing.T) {
+	f := newResearchFixture(t)
+	seed := pagesN("h", 1, 10)
+	f.urlsFor = map[string][]string{"seed words": seed, "alpha one": append(append([]string{}, seed[:9]...), "https://h.example/p11"), "dockers mauritius": pagesN("d", 1, 10)}
+	cell, _ := searchCell(t, f)
+	out := cell(`choir.SearchStart("seed words")
+r, _ := choir.SearchAll("q", []string{"alpha one", "dockers mauritius"})
+fmt.Println(r)
+d, _ := choir.Search("dockers mauritius", true)
+fmt.Println("alone:", d.ID, len(d.Results), d.NewPages)`)
+	for _, want := range []string{
+		`1 "alpha one": sent s2 (1 new in first 10, 1 of 10 pages new)`,
+		`2 "dockers mauritius": not sent (the question had stopped yielding after wording 1)`,
+		"alone: s3 10 10",
+	} {
+		if !strings.Contains(out.Stdout, want) {
+			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
+		}
+	}
+}
+
+func TestSearchAllNamesEveryWordingPastItsDeadline(t *testing.T) {
+	f := newResearchFixture(t)
+	saved := searchAllDeadline
+	searchAllDeadline = -time.Second
+	t.Cleanup(func() { searchAllDeadline = saved })
+	cell, _ := searchCell(t, f)
+	out := cell(`r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three"})
+fmt.Println(r)`)
+	for _, want := range []string{`1 "alpha one": not sent (the call's -1-second deadline passed`, `3 "gamma three": not sent (the call's -1-second deadline passed`} {
+		if !strings.Contains(out.Stdout, want) {
+			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
+		}
+	}
+	if f.searchCalls.Load() != 0 {
+		t.Fatalf("a call past its deadline sent %d searches", f.searchCalls.Load())
 	}
 }

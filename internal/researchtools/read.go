@@ -99,7 +99,7 @@ func newReadTool(deps Dependencies) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
-			log.Print(corpusReadLine(ctx, out.CaptureID, !out.New, "read"))
+			log.Print(corpusReadLine(ctx, out.CaptureID, runCaptureState(ctx, out.CaptureID, out.New), "read"))
 			return toolregistry.ResultJSON(out)
 		}}
 }
