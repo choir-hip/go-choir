@@ -48,7 +48,7 @@ func TestTrackStoreRoundTripAndRefusesBadIDs(t *testing.T) {
 		}
 	}
 	if s.Save("ep-none", Result{}) != nil {
-		t.Fatal("a result with no track is an error")
+		t.Fatal("saving a result with no track failed; it should store nothing and succeed")
 	}
 	if _, err := s.Load("ep-none"); err == nil {
 		t.Fatal("a track appeared from nothing")
@@ -61,30 +61,31 @@ func TestTrackStoreRoundTripAndRefusesBadIDs(t *testing.T) {
 }
 
 func TestMatcherFingerprintsAClipFromTheKeptTrack(t *testing.T) {
-	b := newFakeMatch()
 	s := &TrackStore{Dir: t.TempDir()}
-	// ep-1 has a track of 400 s; the pad episodes have none.
 	frames := podcastfp.Frames(podcastfp.FixturePCM(16000 * 400))
 	if err := s.Save("ep-1", Result{Track: frames, File: podcastfp.FileInfo{Bytes: 9 << 20, BitrateKbps: 128, SeekableByBitrate: true, Seconds: 400}}); err != nil {
 		t.Fatal(err)
 	}
 	var logs []string
-	m := newMatcher(b, &logs)
+	m := newMatcher(newFakeMatch(), &logs)
 	m.Tracks = s
-	if _, err := m.Run(context.Background()); err != nil || len(b.puts) != 1 {
-		t.Fatalf("run: %v puts %v logs %v", err, b.puts, logs)
+	fp := m.fingerprint("ep-1", 100, 140)
+	if fp == nil || fp.Validate() != nil || fp.Start != 100 || fp.End != 140 || !fp.SeekableByBitrate || fp.BitrateKbps != 128 {
+		t.Fatalf("fingerprint %+v logs %v", fp, logs)
 	}
-	c := b.puts[0][0]
-	fp := c.Fingerprint
-	if fp == nil || fp.Validate() != nil || fp.Start != c.Start || fp.End != c.End || !fp.SeekableByBitrate || fp.BitrateKbps != 128 {
-		t.Fatalf("clip %+v fingerprint %+v", c, fp)
+	if m.fingerprint("ep-2", 100, 140) != nil {
+		t.Fatal("a fingerprint for an episode with no track")
 	}
-	// No track: the clip is still written, with no fingerprint.
-	b2 := newFakeMatch()
-	m2 := newMatcher(b2, &logs)
-	m2.Tracks = &TrackStore{Dir: t.TempDir()}
-	if _, err := m2.Run(context.Background()); err != nil || len(b2.puts) != 1 || b2.puts[0][0].Fingerprint != nil {
-		t.Fatalf("no track: %v %+v", err, b2.puts)
+	// A clip under 24 s is written without one, with the reason logged.
+	if m.fingerprint("ep-1", 100, 120.5) != nil || !strings.Contains(strings.Join(logs, "\n"), "shorter than 24 s") {
+		t.Fatalf("a 20.5 s clip: logs %v", logs)
+	}
+	// Through a run: the clip is written whatever its length, fingerprint or not.
+	b := newFakeMatch()
+	m2 := newMatcher(b, &logs)
+	m2.Tracks = s
+	if _, err := m2.Run(context.Background()); err != nil || len(b.puts) != 1 {
+		t.Fatalf("run: %v puts %v", err, b.puts)
 	}
 }
 
@@ -139,7 +140,10 @@ type fakeRepair struct {
 	windows   int
 	spansSeen [][]Span
 	engineErr error
-	audio     func(sp Span) SpanAudio
+	wholeErr  error              // the engine fails on a whole-file span only
+	partial   bool               // a whole-file transcription does not cover the file
+	said      map[float64]string // seconds -> words spoken there in the served file
+	pcm       []int16
 }
 
 func (f *fakeRepair) Front(context.Context, int) ([]FrontStory, error) { return f.front, nil }
@@ -152,6 +156,13 @@ func (f *fakeRepair) Transcript(_ context.Context, _, guid string) ([]Segment, e
 func (f *fakeRepair) Clips(context.Context, []string) ([]HeldClip, error) { return f.held, nil }
 func (f *fakeRepair) PutClipsEach(_ context.Context, c []ClipIn) []error {
 	f.puts = append(f.puts, c...)
+	for _, in := range c {
+		for i := range f.held {
+			if f.held[i].Route == in.StoryRoute && f.held[i].Start == in.Start {
+				f.held[i].Fingerprint = in.Fingerprint
+			}
+		}
+	}
 	return make([]error, len(c))
 }
 func (f *fakeRepair) DeleteClips(_ context.Context, ids []string) error {
@@ -164,11 +175,27 @@ func (f *fakeRepair) Windows(_ context.Context, _ string, spans []Span) (podcast
 	if f.engineErr != nil {
 		return podcastfp.FileInfo{}, nil, f.engineErr
 	}
+	filler := "Today we discuss gardens and weather and the long history of local fairs."
 	var out []SpanAudio
 	for _, sp := range spans {
-		out = append(out, f.audio(sp))
+		whole := sp.T0 == 0 && sp.T1 == 0
+		if whole && f.wholeErr != nil {
+			return podcastfp.FileInfo{}, nil, f.wholeErr
+		}
+		t1 := sp.T1
+		if whole {
+			t1 = float64(len(f.pcm)) / 16000
+		}
+		ws := spokenWords(filler, sp.T0, 0.5)
+		for at, text := range f.said {
+			if at >= sp.T0 && at+10 <= t1 {
+				ws = append(ws, spokenWords(text, at, 0.4)...)
+			}
+		}
+		n := min(int((t1-sp.T0)*16000), len(f.pcm)-int(sp.T0*16000))
+		out = append(out, SpanAudio{T0: sp.T0, Words: ws, Track: podcastfp.Frames(f.pcm[int(sp.T0*16000) : int(sp.T0*16000)+n]), Complete: whole && !f.partial})
 	}
-	return podcastfp.FileInfo{Bytes: 5 << 20, BitrateKbps: 128, SeekableByBitrate: true, Seconds: 1500}, out, nil
+	return podcastfp.FileInfo{Bytes: 5 << 20, BitrateKbps: 128, SeekableByBitrate: true, Seconds: float64(len(f.pcm)) / 16000}, out, nil
 }
 
 const q1 = "The harbor reopened this morning after weeks of repairs."
@@ -184,19 +211,10 @@ func newFakeRepair() *fakeRepair {
 		{ClipID: "clip-a", Route: "/pub/texture/ferry", FeedURL: "f", GUID: "g1", Start: 395, End: 435, Quote: q1, Support: 0.8},
 		{ClipID: "clip-b", Route: "/pub/texture/ferry", FeedURL: "f", GUID: "g1", Start: 1295, End: 1330, Quote: q2, Support: 0.7},
 	}
-	// The served file now: 17 s of ad before the first quote, and the second
-	// quote is gone (edited out).
-	pcm := podcastfp.FixturePCM(16000 * 700)
-	f.audio = func(sp Span) SpanAudio {
-		var ws []Word
-		filler := "Today we discuss gardens and weather and the long history of local fairs."
-		ws = append(ws, spokenWords(filler, sp.T0, 0.5)...)
-		if sp.T0 <= 417 && sp.T1 >= 440 {
-			ws = append(ws, spokenWords(q1, 417, 0.4)...)
-		}
-		n := int((sp.T1 - sp.T0) * 16000)
-		return SpanAudio{T0: sp.T0, Words: ws, Track: podcastfp.Frames(pcm[:min(n, len(pcm))])}
-	}
+	// The served file now is 3200 s long: 17 s of ad before the first quote;
+	// the second quote is nowhere (edited out).
+	f.pcm = podcastfp.FixturePCM(16000 * 3200)
+	f.said = map[float64]string{417: q1}
 	return f
 }
 
@@ -204,17 +222,18 @@ func newRepairer(f *fakeRepair, logs *[]string) *Repairer {
 	return &Repairer{B: f, Eng: f, Now: func() time.Time { return matchNow }, Logf: func(s string, a ...any) { *logs = append(*logs, fmt.Sprintf(s, a...)) }}
 }
 
-func TestRepairFingerprintsWhereTheQuoteIsNowAndDeletesTheEditedClip(t *testing.T) {
+func TestRepairFingerprintsWhereTheQuoteIsNowAndDeletesOnlyAfterTheWholeFileIsSearched(t *testing.T) {
 	f := newFakeRepair()
 	var logs []string
 	rep, err := newRepairer(f, &logs).Run(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.windows != 1 {
-		t.Fatalf("%d downloads for one episode, want 1: %v", f.windows, f.spansSeen)
+	// One download for the two windows, one more for the whole file (clip-b's
+	// quote was not in its window).
+	if f.windows != 2 || len(f.spansSeen[1]) != 1 || f.spansSeen[1][0] != (Span{}) {
+		t.Fatalf("%d downloads, spans %v", f.windows, f.spansSeen)
 	}
-	// Clips at 395-435 and 1295-1330 with a 300 s margin make two far-apart spans.
 	if len(f.spansSeen[0]) != 2 || f.spansSeen[0][0].T0 != 95 || f.spansSeen[0][0].T1 != 735 {
 		t.Fatalf("spans %v", f.spansSeen[0])
 	}
@@ -239,18 +258,87 @@ func TestRepairFingerprintsWhereTheQuoteIsNowAndDeletesTheEditedClip(t *testing.
 	}
 }
 
-func TestRepairLeavesClipsAloneOnAnEngineFailureAndBacksOff(t *testing.T) {
+func TestRepairFindsAQuoteFarOutsideTheWindowInTheWholeFileAndDeletesNothing(t *testing.T) {
 	f := newFakeRepair()
-	f.engineErr = errors.New("download: status 503")
+	f.said[3000] = q2 // 1700 s from where it was: a long block was added
+	var logs []string
+	rep, err := newRepairer(f, &logs).Run(context.Background())
+	if err != nil || len(f.deleted) != 0 || rep.Fingerprinted != 2 {
+		t.Fatalf("%+v %v deleted %v logs %v", rep, err, f.deleted, logs)
+	}
+	for _, p := range f.puts {
+		if p.Quote == q2 && (p.Fingerprint.Start != 2995 || p.Start != 1295) {
+			t.Fatalf("clip-b: %+v %+v", p, p.Fingerprint)
+		}
+	}
+}
+
+func TestRepairDeletesNothingWhenTheWholeFileWasNotFullyTranscribedOrCouldNotBeSearched(t *testing.T) {
+	for name, set := range map[string]func(f *fakeRepair){
+		"partial transcription": func(f *fakeRepair) { f.partial = true },
+		"whole-file failure":    func(f *fakeRepair) { f.wholeErr = errors.New("download: status 503") },
+	} {
+		f := newFakeRepair()
+		set(f)
+		var logs []string
+		r := newRepairer(f, &logs)
+		rep, err := r.Run(context.Background())
+		if err != nil || len(f.deleted) != 0 || rep.Deleted != 0 || rep.Fingerprinted != 1 || rep.Skipped != 1 {
+			t.Fatalf("%s: %+v %v deleted %v logs %v", name, rep, err, f.deleted, logs)
+		}
+		before := f.windows
+		r.Run(context.Background())
+		if f.windows != before { // clip-a is done; clip-b is skipped: nothing is fetched again
+			t.Fatalf("%s: the skipped clip was fetched again (%d to %d downloads)", name, before, f.windows)
+		}
+	}
+}
+
+func TestRepairLeavesAClipWhoseFingerprintCannotBeCutRatherThanDeletingIt(t *testing.T) {
+	f := newFakeRepair()
+	f.said = map[float64]string{3185: q1, 3190: q2} // found, but 2785 s later: the clip then runs past the end
+	var logs []string
+	rep, err := newRepairer(f, &logs).Run(context.Background())
+	if err != nil || len(f.deleted) != 0 || rep.Deleted != 0 || len(f.puts) != 0 {
+		t.Fatalf("%+v %v deleted %v puts %v logs %v", rep, err, f.deleted, f.puts, logs)
+	}
+	if rep.Skipped != 2 {
+		t.Fatalf("both clips should be skipped: %+v", rep)
+	}
+}
+
+func TestRepairBudgetEndsARunWithoutDeletingAnything(t *testing.T) {
+	f := newFakeRepair()
 	var logs []string
 	r := newRepairer(f, &logs)
+	r.Budget = time.Nanosecond
+	time.Sleep(time.Millisecond)
 	rep, err := r.Run(context.Background())
-	if err != nil || rep.Failed != 2 || len(f.deleted) != 0 || len(f.puts) != 0 {
-		t.Fatalf("%+v %v deleted %v puts %v", rep, err, f.deleted, f.puts)
+	if err != nil || f.windows != 0 || len(f.deleted) != 0 || len(f.puts) != 0 {
+		t.Fatalf("%+v %v downloads %d", rep, err, f.windows)
 	}
-	rep, _ = r.Run(context.Background())
-	if f.windows != 1 || rep.Skipped != 2 {
-		t.Fatalf("retried at once: %d downloads, %+v", f.windows, rep)
+}
+
+func TestRepairRecordsASkipForAClipWhoseEpisodeIsNotListed(t *testing.T) {
+	f := newFakeRepair()
+	f.eps = nil
+	var logs []string
+	r := newRepairer(f, &logs)
+	r.Run(context.Background())
+	n := len(logs)
+	r.Run(context.Background())
+	for _, l := range logs[n:] {
+		if strings.Contains(l, "not in the episode list") {
+			t.Fatalf("logged again: %s", l)
+		}
+	}
+}
+
+func TestQuoteStartFindsAQuoteThatRunsAcrossTwoSegments(t *testing.T) {
+	segs := []Segment{{Start: 10, End: 14, Text: "Intro words."}, {Start: 20, End: 24, Text: "The harbor reopened this"}, {Start: 25, End: 30, Text: "morning after weeks of repairs."}}
+	h := HeldClip{Start: 15, End: 40, Quote: "The harbor reopened this morning after weeks"}
+	if at := quoteStart(segs, h); at != 20 {
+		t.Fatalf("quote start %v, want 20 (the segment holding its first word)", at)
 	}
 }
 
@@ -266,15 +354,60 @@ func TestRepairIgnoresFingerprintedClipsAndDryRunWritesNothing(t *testing.T) {
 	}
 }
 
+func TestRepairLeavesClipsAloneOnAnEngineFailureAndBacksOff(t *testing.T) {
+	f := newFakeRepair()
+	f.engineErr = errors.New("download: status 503")
+	var logs []string
+	r := newRepairer(f, &logs)
+	rep, err := r.Run(context.Background())
+	if err != nil || rep.Failed != 2 || len(f.deleted) != 0 || len(f.puts) != 0 {
+		t.Fatalf("%+v %v deleted %v puts %v", rep, err, f.deleted, f.puts)
+	}
+	rep, _ = r.Run(context.Background())
+	if f.windows != 1 || rep.Skipped != 2 {
+		t.Fatalf("retried at once: %d downloads, %+v", f.windows, rep)
+	}
+}
+
 func TestRepairMergesNearbyClipsIntoOneSpan(t *testing.T) {
 	f := newFakeRepair()
 	f.held[1].Start, f.held[1].End = 500, 540
 	f.segs["g1"][2] = Segment{Start: 505, End: 515, Text: q2}
+	f.said[515] = q2
 	var logs []string
-	if _, err := newRepairer(f, &logs).Run(context.Background()); err != nil {
+	rep, err := newRepairer(f, &logs).Run(context.Background())
+	if err != nil || len(f.spansSeen[0]) != 1 || rep.Fingerprinted != 2 || f.windows != 1 {
+		t.Fatalf("%+v %v spans %v downloads %d", rep, err, f.spansSeen, f.windows)
+	}
+}
+
+// B5: a new worker against an old platform.
+func TestMatcherRetriesAClipWithoutItsFingerprintWhenThePlatformRefusesTheField(t *testing.T) {
+	b := newFakeMatch()
+	b.putErr = func(c ClipIn) error {
+		if c.Fingerprint != nil {
+			return &HTTPError{Method: "PUT", Path: "/clips", Status: 400, Body: "invalid request body"}
+		}
+		return nil
+	}
+	var logs []string
+	m := newMatcher(b, &logs)
+	rec, err := podcastfp.Cut(podcastfp.Frames(podcastfp.FixturePCM(16000*100)), 0, 10, 50, podcastfp.FileInfo{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.spansSeen[0]) != 1 {
-		t.Fatalf("spans %v, want one", f.spansSeen[0])
+	fresh := []ClipIn{{StoryRoute: "/a", EpisodeID: "ep-1", Start: 10, End: 50, Quote: "q", Fingerprint: rec}, {StoryRoute: "/b", EpisodeID: "ep-1", Start: 10, End: 50, Quote: "q", Fingerprint: rec}}
+	errs := m.putClips(context.Background(), fresh)
+	if errs[0] != nil || errs[1] != nil || fresh[0].Fingerprint != nil || fresh[1].Fingerprint != nil {
+		t.Fatalf("errors %v clips %+v", errs, fresh)
+	}
+	if n := strings.Count(strings.Join(logs, "\n"), "took it without one"); n != 1 {
+		t.Fatalf("the downgrade is logged %d times, want once: %v", n, logs)
+	}
+	// A clip refused even without the fingerprint stays refused.
+	b.putErr = func(ClipIn) error { return &HTTPError{Method: "PUT", Path: "/clips", Status: 400, Body: "no"} }
+	withFP := []ClipIn{{StoryRoute: "/a", EpisodeID: "ep-1", Start: 10, End: 50, Quote: "q", Fingerprint: rec}}
+	if errs := m.putClips(context.Background(), withFP); errs[0] == nil {
+		t.Fatal("a refused clip counted as written")
 	}
 }

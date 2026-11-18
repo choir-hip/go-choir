@@ -67,9 +67,18 @@ func (s *TrackStore) Save(episodeID string, r Result) error {
 }
 
 func writeAtomic(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(path), ".track-*")
+	if err != nil {
 		return err
+	}
+	tmp := f.Name()
+	_, werr := f.Write(data)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		os.Remove(tmp)
+		return werr
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)

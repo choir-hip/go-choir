@@ -106,16 +106,20 @@ func TestPodcastClipFingerprintIsStoredValidatedAndServed(t *testing.T) {
 	for _, c := range got.Clips {
 		ids = append(ids, c.ClipID)
 	}
+	// Warm the cache, then refuse a request whose first id is good: the good
+	// one must not have been deleted.
+	f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0)
 	if _, err := f.svc.DeletePodcastClips(ctx, []string{ids[0], "not-a-clip"}); !errors.Is(err, ErrPodcastInvalid) {
 		t.Fatalf("bad id: %v", err)
 	}
+	f.svc.podcastCache.reset() // read the store, not the cache the delete should have emptied
 	if again, _ := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0); len(again.Clips) != 2 {
 		t.Fatalf("a refused delete removed clips: %d left", len(again.Clips))
 	}
 	if n, err := f.svc.DeletePodcastClips(ctx, []string{ids[0], "clip-000000000000000000000000"}); err != nil || n != 2 {
 		t.Fatalf("delete: %d %v", n, err)
 	}
-	left, _ := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0)
+	left, _ := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0) // no manual reset: the delete must have emptied the cache
 	if len(left.Clips) != 1 || left.Clips[0].ClipID == ids[0] {
 		t.Fatalf("after the delete: %+v", left.Clips)
 	}

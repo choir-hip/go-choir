@@ -27,6 +27,9 @@ func TrackFromWAV(r io.Reader) ([]byte, error) {
 		size := int64(binary.LittleEndian.Uint32(ck[4:]))
 		switch string(ck[:4]) {
 		case "fmt ":
+			if size < 16 || size > 1024 {
+				return nil, errors.New("podcastfp: the WAV format chunk is not a plain PCM one")
+			}
 			f := make([]byte, size)
 			if _, err := io.ReadFull(r, f); err != nil {
 				return nil, err

@@ -127,7 +127,7 @@ func degrade(pcm []int16, gain float64, noise float64, seed int64) []int16 {
 
 func TestLocateFindsAShiftedNoisyQuieterClip(t *testing.T) {
 	src := signal(1, 120)
-	start, end := 40.0, 52.0
+	start, end := 40.0, 70.0
 	track := Frames(src)
 	rec, err := Cut(track, 0, start, end, FileInfo{})
 	if err != nil {
@@ -150,7 +150,7 @@ func TestLocateFindsAShiftedNoisyQuieterClip(t *testing.T) {
 }
 
 func TestLocateRefusesAClipThatIsNotThere(t *testing.T) {
-	rec, _ := Cut(Frames(signal(1, 120)), 0, 40, 52, FileInfo{})
+	rec, _ := Cut(Frames(signal(1, 120)), 0, 40, 70, FileInfo{})
 	head, _ := Unpack(rec.Head)
 	m, ok := Locate(head, Frames(signal(2, 100)))
 	if !ok || m.Found() || m.Peak >= FoundPeak {
@@ -177,26 +177,32 @@ func TestAnAdInsideTheClipPutsHeadAndTailAtDifferentOffsets(t *testing.T) {
 	}
 }
 
-func TestCutShortClipAndBounds(t *testing.T) {
-	track := Frames(signal(4, 30))
-	rec, err := Cut(track, 0, 10, 18, FileInfo{})
+func TestCutRefusesAClipUnder24SecondsAndOneOutsideTheTrack(t *testing.T) {
+	track := Frames(signal(4, 60))
+	for _, c := range [][2]float64{{10, 18}, {10, 33.9}} {
+		if _, err := Cut(track, 0, c[0], c[1], FileInfo{}); err == nil {
+			t.Fatalf("a %.1f s clip was cut", c[1]-c[0])
+		}
+	}
+	rec, err := Cut(track, 0, 10, 34, FileInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	h, _ := Unpack(rec.Head)
-	if len(h)/Bands != 80 || rec.HeadAt != 10 || rec.TailAt != 10 {
-		t.Fatalf("an 8 s clip: %d frames, head_at %v tail_at %v", len(h)/Bands, rec.HeadAt, rec.TailAt)
+	tl, _ := Unpack(rec.Tail)
+	if len(h)/Bands != 120 || len(tl)/Bands != 120 || rec.HeadAt != 10 || rec.TailAt != 22 {
+		t.Fatalf("a 24 s clip: head %d frames, tail %d, head_at %v tail_at %v", len(h)/Bands, len(tl)/Bands, rec.HeadAt, rec.TailAt)
 	}
 	if err := rec.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Cut(track, 0, 25, 40, FileInfo{}); err == nil {
+	if _, err := Cut(track, 0, 50, 75, FileInfo{}); err == nil {
 		t.Fatal("a clip past the track was cut")
 	}
 }
 
 func TestValidateRefusesBadRecords(t *testing.T) {
-	rec, _ := Cut(Frames(signal(4, 30)), 0, 5, 25, FileInfo{})
+	rec, _ := Cut(Frames(signal(4, 40)), 0, 5, 35, FileInfo{})
 	bad := *rec
 	bad.Head = append([]byte{2}, bad.Head[1:]...)
 	if bad.Validate() == nil {
@@ -206,6 +212,12 @@ func TestValidateRefusesBadRecords(t *testing.T) {
 	bad.Tail = bad.Tail[:len(bad.Tail)-1]
 	if bad.Validate() == nil {
 		t.Fatal("a truncated tail accepted")
+	}
+	bad = *rec
+	short, _ := Pack(Frames(signal(4, 3))[:10*Bands])
+	bad.Head = short
+	if bad.Validate() == nil {
+		t.Fatal("a 10-frame head accepted")
 	}
 	bad = *rec
 	bad.SeekableByBitrate = true
@@ -265,7 +277,9 @@ func TestTrackFromWAVEqualsFramesOfThePCM(t *testing.T) {
 	}
 }
 
-func mp3File(t *testing.T, id3 int, frames int, kbpsAt func(i int) byte, tail int) string {
+func mp3File(t *testing.T, id3 int, frames int, kbpsAt func(i int) byte, tail int, padded ...bool) string {
+	isPadded := len(padded) > 0 && padded[0]
+	padded_ := isPadded
 	var b bytes.Buffer
 	if id3 > 0 {
 		b.WriteString("ID3\x03\x00\x00")
@@ -274,13 +288,16 @@ func mp3File(t *testing.T, id3 int, frames int, kbpsAt func(i int) byte, tail in
 		b.Write(make([]byte, n))
 	}
 	for i := 0; i < frames; i++ {
-		idx := kbpsAt(i) // 9 = 128 kbps, 10 = 160 kbps at 44.1 kHz, no padding
-		length := 417
+		idx := kbpsAt(i) // 9 = 128 kbps, 10 = 160 kbps at 44.1 kHz
+		length, pad := 417, byte(0)
 		if idx == 10 {
 			length = 522
 		}
+		if padded_ && i%2 == 1 { // 128 kbps at 44.1 kHz: 417.96 bytes, so 417 and 418 alternate
+			length, pad = length+1, 2
+		}
 		fr := make([]byte, length)
-		fr[0], fr[1], fr[2], fr[3] = 0xFF, 0xFB, idx<<4, 0x00
+		fr[0], fr[1], fr[2], fr[3] = 0xFF, 0xFB, idx<<4|pad, 0x00
 		b.Write(fr)
 	}
 	b.Write(make([]byte, tail))
@@ -314,9 +331,92 @@ func TestAnalyzeMP3(t *testing.T) {
 	if info.SeekableByBitrate {
 		t.Fatalf("a lost sync long before the end is not CBR: %+v", info)
 	}
+	info, _ = AnalyzeMP3(mp3File(t, 10, 300, cbr, 128, true))
+	if !info.SeekableByBitrate || info.BitrateKbps != 128 || info.Bytes != 10+150*417+150*418+128 {
+		t.Fatalf("CBR with padded frames (417 and 418 bytes alternating): %+v", info)
+	}
 	p := filepath.Join(t.TempDir(), "x.m4a")
 	os.WriteFile(p, bytes.Repeat([]byte{0x00, 0x00, 0x00, 0x20, 'f', 't', 'y', 'p'}, 2000), 0o600)
 	if info, _ := AnalyzeMP3(p); info.SeekableByBitrate {
 		t.Fatalf("not MP3: %+v", info)
+	}
+}
+
+// naiveFrames is a second, deliberately plain implementation written from the
+// spec page alone: an O(N^2) DFT with cos and sin per term, band edges from
+// 100*38^(b/8) Hz, its own dB and quantiser. The fixture must come out of it
+// as well as out of Frames.
+func naiveFrames(pcm []int16) []byte {
+	var edges [9]int
+	for b := 0; b <= 8; b++ {
+		edges[b] = int(math.Floor(100*math.Pow(38, float64(b)/8)/15.625 + 0.5))
+	}
+	var out []byte
+	for k := 0; (k+0)*1600+1024 <= len(pcm); k++ {
+		x := make([]float64, 1024)
+		for n := range x {
+			w := 0.5 - 0.5*math.Cos(2*math.Pi*float64(n)/1024)
+			x[n] = float64(pcm[k*1600+n]) / 32768 * w
+		}
+		for b := 0; b < 8; b++ {
+			sum := 0.0
+			for bin := edges[b]; bin < edges[b+1]; bin++ {
+				var re, im float64
+				for n, v := range x {
+					a := 2 * math.Pi * float64(bin) * float64(n) / 1024
+					re += v * math.Cos(a)
+					im -= v * math.Sin(a)
+				}
+				sum += re*re + im*im
+			}
+			mean := sum / float64(edges[b+1]-edges[b]) / (1024.0 * 1024.0)
+			db := 10 * math.Log(mean+1e-10) / math.Ln10
+			q := int(math.Floor((db+100)*2.55 + 0.5))
+			if q < 0 {
+				q = 0
+			}
+			if q > 255 {
+				q = 255
+			}
+			out = append(out, byte(q))
+		}
+	}
+	return out
+}
+
+func TestFixtureIsReproducedByAnIndependentNaiveReference(t *testing.T) {
+	raw, err := os.ReadFile(filepath.FromSlash(fixturePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f fixtureFile
+	if err := json.Unmarshal(raw, &f); err != nil {
+		t.Fatal(err)
+	}
+	for b, e := range []int{6, 10, 16, 25, 39, 62, 98, 154, 243} {
+		if f.BandBins[b] != e {
+			t.Fatalf("band edge %d: fixture %d, spec table %d", b, f.BandBins[b], e)
+		}
+	}
+	got := naiveFrames(FixturePCM(f.Samples))
+	want, _ := hex.DecodeString(f.FramesHex)
+	if !bytes.Equal(got, want) {
+		for i := range got {
+			if got[i] != want[i] {
+				t.Fatalf("naive reference differs from the fixture at byte %d (frame %d band %d): %d against %d", i, i/8, i%8, got[i], want[i])
+			}
+		}
+		t.Fatalf("naive reference has %d bytes, fixture %d", len(got), len(want))
+	}
+	for b := 0; b <= 8; b++ {
+		if e := int(math.Floor(100*math.Pow(38, float64(b)/8)/15.625 + 0.5)); e != BandBins[b] {
+			t.Fatalf("BandBins[%d] = %d, the formula gives %d", b, BandBins[b], e)
+		}
+	}
+	pk, _ := hex.DecodeString(f.Locate.PackHex)
+	n := f.Locate.To - f.Locate.From
+	manual := append([]byte{1, 8, byte(n >> 8), byte(n)}, want[f.Locate.From*8:f.Locate.To*8]...)
+	if !bytes.Equal(pk, manual) {
+		t.Fatal("pack_hex is not the version, band count, frame count and frames")
 	}
 }

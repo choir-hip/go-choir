@@ -865,7 +865,10 @@ func (s *Service) DeletePodcastClips(ctx context.Context, ids []string) (int, er
 	now := time.Now().UTC()
 	s.podcastFeedMu.Lock()
 	defer s.podcastFeedMu.Unlock()
-	n := 0
+	defer s.podcastCache.reset() // whatever happened, no stale read
+	// Every id is checked and fetched before the first write, so a refused
+	// request has deleted nothing.
+	var live []objectgraph.Object
 	for _, id := range ids {
 		if !strings.HasPrefix(id, "clip-") || len(id) > 64 {
 			return 0, podcastInvalid("%q is not a clip id", truncatePodcast(id, 80))
@@ -877,21 +880,19 @@ func (s *Service) DeletePodcastClips(ctx context.Context, ids []string) (int, er
 		obj, err := og.GetObject(ctx, canonical)
 		if err != nil {
 			if isNotFound(err) {
-				n++
 				continue
 			}
 			return 0, err
 		}
-		if obj.Tombstone {
-			n++
-			continue
+		if !obj.Tombstone {
+			live = append(live, obj)
 		}
+	}
+	for _, obj := range live {
 		obj.Tombstone, obj.UpdatedAt = true, now
 		if err := og.PutObject(corpusdWriter(ctx), obj); err != nil {
 			return 0, err
 		}
-		n++
 	}
-	s.podcastCache.reset()
-	return n, nil
+	return len(ids), nil
 }

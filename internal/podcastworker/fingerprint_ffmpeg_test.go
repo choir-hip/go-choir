@@ -87,7 +87,7 @@ func TestFingerprintSurvivesAnMP3EncodeAndAnInsertedAd(t *testing.T) {
 		return wavTrack(filepath.Join(dir, n+"16.wav"))
 	}
 	ta, tb := track("a"), track("b")
-	rec, err := podcastfp.Cut(ta, 0, 40, 60, podcastfp.FileInfo{})
+	rec, err := podcastfp.Cut(ta, 0, 40, 70, podcastfp.FileInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}
