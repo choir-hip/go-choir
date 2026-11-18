@@ -47,6 +47,11 @@ type fakeNotebook struct {
 	chain   []notebook.Revision // newest first
 	patches []notebook.Patch
 	n       int
+	// staleN makes the next NotebookApply calls answer stale (a lost race); cut
+	// and readErr make a read report a too-long chain or fail.
+	staleN  int
+	cut     bool
+	readErr error
 }
 
 func (f *fakeNotebook) head() notebook.Revision { return f.chain[0] }
@@ -54,10 +59,13 @@ func (f *fakeNotebook) head() notebook.Revision { return f.chain[0] }
 func (f *fakeNotebook) NotebookRead(_ context.Context, _, _ string) (notebook.State, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.readErr != nil {
+		return notebook.State{}, f.readErr
+	}
 	if !f.found {
 		return notebook.State{}, nil
 	}
-	st := notebook.State{Found: true, DocID: "doc-nb", Head: f.head()}
+	st := notebook.State{Found: true, DocID: "doc-nb", Head: f.head(), ChainCut: f.cut}
 	for _, r := range f.chain {
 		st.Chain = append(st.Chain, r)
 		if r.IsDesk() {
@@ -70,6 +78,10 @@ func (f *fakeNotebook) NotebookRead(_ context.Context, _, _ string) (notebook.St
 func (f *fakeNotebook) NotebookApply(_ context.Context, _, _ string, p notebook.Patch) (notebook.Result, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.staleN > 0 {
+		f.staleN--
+		return notebook.Result{Status: notebook.StatusStale}, nil
+	}
 	doc := notebook.Fresh()
 	if f.found {
 		if f.head().RevisionID != p.BaseRevisionID {

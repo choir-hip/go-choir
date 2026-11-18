@@ -2,11 +2,8 @@ package textureowner
 
 import (
 	"net/http"
-	"sort"
 	"strings"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/editiondoc"
 )
 
 // The edition read surface (Autoradio lane S, item 4). The listener's edition
@@ -55,17 +52,16 @@ func (h *Handler) HandleEdition(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	computerID := strings.TrimSpace(h.Core.TextureComputerID())
-	docs, err := h.Store.ListDocumentsByScope(asTextureReader(r.Context()), ownerID, computerID, algorithm2DocLimit)
+	// The same function the Autoradio desk finds the notebook with, so the
+	// phone and the DJ cannot be given two documents.
+	d, found, _, err := h.notebookDoc(asTextureReader(r.Context()), ownerID, computerID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the documents could not be listed"})
 		return
 	}
-	sort.SliceStable(docs, func(i, j int) bool { return docs[i].UpdatedAt.After(docs[j].UpdatedAt) })
-	for _, d := range docs {
-		if d.ArchivedAt == nil && editiondoc.IsEditionTitle(d.Title) {
-			writeAPIJSON(w, http.StatusOK, editionAnswer{Found: true, DocID: d.DocID, RevisionID: d.CurrentRevisionID, UpdatedAt: utcPtr(d.UpdatedAt)})
-			return
-		}
+	if found {
+		writeAPIJSON(w, http.StatusOK, editionAnswer{Found: true, DocID: d.DocID, RevisionID: d.CurrentRevisionID, UpdatedAt: utcPtr(d.UpdatedAt)})
+		return
 	}
 	writeAPIJSON(w, http.StatusOK, editionAnswer{})
 }

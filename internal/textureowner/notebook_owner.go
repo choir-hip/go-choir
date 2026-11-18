@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/editiondoc"
 	"github.com/yusefmosiah/go-choir/internal/lease"
@@ -65,13 +66,24 @@ func notebookDocID(ownerID, computerID string) string {
 // owner archived it: the desk reads and writes nothing then (un-archiving is
 // the owner's act).
 func (h *Handler) notebookDoc(ctx context.Context, ownerID, computerID string) (doc types.Document, found, archived bool, err error) {
-	if d, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, notebookDocID(ownerID, computerID)); err == nil {
-		if d.ArchivedAt != nil {
-			return types.Document{}, false, true, nil
+	// The identity is persisted: the document the latest applied patch wrote
+	// (its result record names it), then the deterministic id, then the title.
+	// HandleEdition and the desk's reads and writes all come through here, so
+	// the phone can never edit one document while the DJ reads another.
+	ids := []string{notebookDocID(ownerID, computerID)}
+	if hint := agentcore.NotebookDocHint(ctx, h.Store, ownerID, computerID); hint != "" && hint != ids[0] {
+		ids = []string{hint, ids[0]}
+	}
+	for _, id := range ids {
+		d, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, id)
+		if err == nil {
+			if d.ArchivedAt != nil {
+				return types.Document{}, false, true, nil
+			}
+			return d, true, false, nil
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return types.Document{}, false, false, fmt.Errorf("look up the notebook by id: %w", err)
 		}
-		return d, true, false, nil
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return types.Document{}, false, false, fmt.Errorf("look up the notebook by id: %w", err)
 	}
 	docs, err := h.Store.ListDocumentsByScope(asTextureReader(ctx), ownerID, computerID, algorithm2DocLimit)
 	if err != nil {
@@ -156,6 +168,7 @@ func (h *Handler) NotebookRead(ctx context.Context, ownerID, caller string) (not
 	}
 	st := notebook.State{Found: true, DocID: doc.DocID}
 	id := doc.CurrentRevisionID
+	reached := false
 	for i := 0; id != "" && i < notebookChainMax; i++ {
 		rev, err := h.Store.GetLifecycleRevision(ctx, ownerID, doc.ComputerID, id)
 		if err != nil {
@@ -167,10 +180,15 @@ func (h *Handler) NotebookRead(ctx context.Context, ownerID, caller string) (not
 		}
 		st.Chain = append(st.Chain, nr)
 		if nr.IsDesk() {
+			reached = true
 			break
 		}
 		id = rev.ParentRevisionID
 	}
+	// The cap reached before a desk revision (and not the document's first
+	// revision) means the edits cannot be compared: the caller must not skip
+	// strikes silently.
+	st.ChainCut = !reached && id != ""
 	return st, nil
 }
 

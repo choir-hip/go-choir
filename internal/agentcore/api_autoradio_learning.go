@@ -195,7 +195,7 @@ func (h *APIHandler) HandleAutoradioLearning(w http.ResponseWriter, r *http.Requ
 		}
 		rows = append(rows, row)
 	}
-	ans := map[string]any{"scorecard": cs, "rows": rows, "truncated": card.Truncated || len(nvs) >= learningMaxNoVerdicts, "notebook": h.learningNotebook(ctx, ownerID, led, allClaims)}
+	ans := map[string]any{"scorecard": cs, "rows": rows, "truncated": card.Truncated || len(nvs) >= learningMaxNoVerdicts, "notebook": h.learningNotebook(ctx, ownerID, led, allClaims, card.Truncated)}
 	if end < len(card.Claims) && end > start {
 		ans["next"] = card.Claims[end-1].ID
 	}
