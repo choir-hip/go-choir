@@ -67,9 +67,10 @@ fileprivate struct PcmContainer: ClipContainer {
 fileprivate final class ServedFile: ClipRangeFetching, @unchecked Sendable {
     let bytes: Data, status: Int
     private(set) var calls = 0
+    private(set) var lastRange: ClosedRange<Int>?
     init(_ pcm: [Int16], status: Int = 206) { bytes = wav(pcm); self.status = status }
     func fetch(url: URL, range: ClosedRange<Int>, deadline: TimeInterval) async throws -> Data {
-        calls += 1
+        calls += 1; lastRange = range
         guard status == 206 else { throw ClipFetchError.status(status) }
         let lo = min(range.lowerBound, bytes.count), hi = min(range.upperBound + 1, bytes.count)
         return bytes.subdata(in: lo..<hi)
@@ -84,9 +85,9 @@ func fpRecord(of source: [Int16], start: Double = 100, end: Double = 130) -> Cli
     return ClipFingerprintRecord(version: 1, head: cut(f0, f0 + n), tail: cut(f1 - n, f1), headAt: Double(f0) / 10, tailAt: Double(f1 - n) / 10, start: start, end: end,
                                  fileBytes: Int64(source.count * 2 + 44), fileSeconds: Double(source.count) / 16_000, firstFrameOffset: 44, bitrateKbps: 256, seekableByBitrate: true)
 }
-fileprivate func clip(_ rec: ClipFingerprintRecord?, id: String = "clip-0000000000c1") -> PodcastClip {
+fileprivate func clip(_ rec: ClipFingerprintRecord?, id: String = "clip-0000000000c1", topStart: Double? = nil, topEnd: Double? = nil) -> PodcastClip {
     PodcastClip(clipID: id, route: "a", version: 1, storyTitle: "S", show: "Show", episodeTitle: "Ep", episodeGUID: "g", feedURL: nil, published: "", audioURL: URL(string: "https://example.test/ep.mp3")!,
-                duration: 200, start: rec?.start ?? 100, end: rec?.end ?? 130, quote: "q", support: 0.9, fingerprint: rec)
+                duration: 200, start: topStart ?? rec?.start ?? 100, end: topEnd ?? rec?.end ?? 130, quote: "q", support: 0.9, fingerprint: rec)
 }
 fileprivate func tmpDir() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("clip-" + UUID().uuidString) }
 
@@ -133,7 +134,7 @@ final class ClipLocatorTests: XCTestCase {
         func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02x", $0) }.joined() }
         XCTAssertEqual(hex(frames), j["frames_hex"] as? String)
         let loc = try XCTUnwrap(j["locate"] as? [String: Any])
-        let from = loc["From"] as! Int, to = loc["To"] as! Int
+        let from = loc["from"] as! Int, to = loc["to"] as! Int
         let pack = try XCTUnwrap(ClipFingerprint.pack(Array(frames[(from * 8)..<(to * 8)])))
         XCTAssertEqual(hex(pack), loc["pack_hex"] as? String)
         let m = try XCTUnwrap(ClipFingerprint.locate(template: try XCTUnwrap(ClipFingerprint.unpack(pack)), in: frames))
@@ -226,13 +227,40 @@ final class ClipLocatorTests: XCTestCase {
         XCTAssertTrue(why.contains("disagree"), why)
     }
 
+    // 3b: a repaired clip. The record was cut in a fresh download at 100 to 130 s; the top-level times are the old file's, 200 s earlier.
+    func test3b_ARepairedClipIsPlayedFromTheRecordNotFromTheTopLevelTimes() async throws {
+        let source = synth(seconds: 400, seed: 11)
+        let rec = fpRecord(of: source, start: 300, end: 330)
+        let served = synth(seconds: 1.5, seed: 4) + source
+        let dir = tmpDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let c = clip(rec, topStart: 100, topEnd: 130)
+        let l = locator(ServedFile(served), dir: dir); l.margin = 60
+        let r = await l.locate(c)
+        guard case .located(let got) = r else { return XCTFail("\(r)") }
+        XCTAssertEqual(got.offsetSeconds, 1.5, accuracy: 0.5)
+        XCTAssertEqual(got.seconds, 30, accuracy: 0.3)
+        let kept = try AVClipDecoder().pcm16k(file: got.file)
+        let m = try XCTUnwrap(ClipFingerprint.locate(template: try XCTUnwrap(ClipFingerprint.unpack(rec.head)), in: ClipFingerprint.track(kept)))
+        XCTAssertLessThanOrEqual(m.pos, 3); XCTAssertGreaterThan(m.peak, 0.9, "what was kept is the record's clip, not the file at 100 to 130 s")
+        // a window centred on the top-level start (100) would hold nothing of it: the fetch asked near the record's start
+        let f = ServedFile(served); _ = await locator(f, dir: dir).locate(c)
+        XCTAssertEqual(f.lastRange?.lowerBound, 44 + (300 - 40) * 32_000)
+    }
+
+    func test3c_ARecordWithAShortHeadIsNotRelocatable() {
+        var r = fpRecord(of: synth(seconds: 40, seed: 3), start: 5, end: 15)         // 10 s: 100 frames
+        XCTAssertFalse(r.isUsable)
+        r = fpRecord(of: synth(seconds: 40, seed: 3), start: 5, end: 35)
+        XCTAssertTrue(r.isUsable)
+    }
+
     // 8
     func test8_TheNewFieldsDecodeAdditivelyAndABadObjectIsDropped() throws {
-        let rec = fpRecord(of: synth(seconds: 20, seed: 3), start: 5, end: 15)
+        let rec = fpRecord(of: synth(seconds: 60, seed: 3), start: 5, end: 35)
         var row: [String: Any] = ["clip_id": "clip-0000000000a1", "story": ["route": "/a", "version": 1, "title": "S"], "show": "Show", "audio_url": "https://example.test/x.mp3",
-                                  "duration_seconds": 900, "start": 5, "end": 15, "quote": "q", "support": 0.9]
+                                  "duration_seconds": 900, "start": 5, "end": 35, "quote": "q", "support": 0.9]
         XCTAssertNil(PodcastClip.parse(row)?.fingerprint); XCTAssertEqual(PodcastClip.parse(row)?.isRelocatable, false, "an old record")
-        row["fingerprint"] = ["version": 1, "head": Data(rec.head).base64EncodedString(), "tail": Data(rec.tail).base64EncodedString(), "head_at": 5.0, "tail_at": 5.0 + 0, "start": 5.0, "end": 15.0,
+        row["fingerprint"] = ["version": 1, "head": Data(rec.head).base64EncodedString(), "tail": Data(rec.tail).base64EncodedString(), "head_at": rec.headAt, "tail_at": rec.tailAt, "start": 5.0, "end": 35.0,
                               "file_bytes": 1000, "file_seconds": 20.0, "first_frame_offset": 44, "bitrate_kbps": 256, "seekable_by_bitrate": true] as [String: Any]
         let c = try XCTUnwrap(PodcastClip.parse(row))
         XCTAssertEqual(c.fingerprint?.bitrateKbps, 256); XCTAssertEqual(c.fingerprint?.head, rec.head); XCTAssertTrue(c.isRelocatable)
@@ -256,7 +284,7 @@ fileprivate final class FakeLocator: ClipLocating, @unchecked Sendable {
 
 @MainActor
 final class ClipPlayerTests: XCTestCase {
-    func relocatable(_ id: String) -> PodcastClip { clip(fpRecord(of: synth(seconds: 20, seed: 3), start: 5, end: 15), id: id) }
+    func relocatable(_ id: String) -> PodcastClip { clip(fpRecord(of: synth(seconds: 60, seed: 3), start: 5, end: 35), id: id) }
     func make(_ clips: [PodcastClip], _ loc: ClipLocating) -> (RunSheetPlayer, RunSheetStore, FakeEngine, ClipStore) {
         let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
         let cs = ClipStore(); cs.replace(clips); p.clips = cs; p.locator = loc
@@ -318,5 +346,27 @@ final class ClipPlayerTests: XCTestCase {
         XCTAssertEqual(s.sheet.entries.first?.state, .skipped)
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
         XCTAssertTrue(e.log.contains("stopRemote"))
+    }
+}
+
+// MARK: Live check (never in the normal suite)
+
+/// A real host, the real URLSession, mp3 alignment, decode, locate and cut. Skipped unless AR_CLIP_LIVE names a JSON file holding one clip
+/// record (the platform's podcast-clips row, with `audio_url` and `fingerprint`):
+///   AR_CLIP_LIVE=/path/clip.json swift test --package-path AutoradioKit --filter ClipLiveTests
+final class ClipLiveTests: XCTestCase {
+    func testLive_ARealHostRealFetchAndDecode() async throws {
+        guard let path = ProcessInfo.processInfo.environment["AR_CLIP_LIVE"], !path.isEmpty else { throw XCTSkip("AR_CLIP_LIVE is not set") }
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        var o = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        if let rows = o["clips"] as? [[String: Any]], let first = rows.first { o = first }
+        let c = try XCTUnwrap(PodcastClip.parse(o), "not a clip record")
+        XCTAssertTrue(c.isRelocatable, "the record has no usable fingerprint")
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("clip-live-\(UUID().uuidString)")
+        let r = await ClipLocator(directory: dir).locate(c)        // prints the AUTORADIO clip locate line
+        switch r {
+        case .located(let l): print("AUTORADIO clip live file=\(l.file.path) seconds=\(l.seconds) bytes=\(l.bytes)")
+        case .refused(let why): XCTFail("refused: \(why)")
+        }
     }
 }

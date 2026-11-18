@@ -81,9 +81,12 @@ public struct ClipFingerprintRecord: Sendable, Equatable {
     public var bitrateKbps: Int
     public var seekableByBitrate: Bool
 
+    /// A head or tail is always 120 frames (12 s).
+    public static let frames = 120
     public var isUsable: Bool {
-        version == ClipFingerprint.version && seekableByBitrate && bitrateKbps > 0 && end > start
-            && ClipFingerprint.unpack(head) != nil && ClipFingerprint.unpack(tail) != nil
+        guard version == ClipFingerprint.version, seekableByBitrate, bitrateKbps > 0, end > start,
+              let h = ClipFingerprint.unpack(head), let t = ClipFingerprint.unpack(tail) else { return false }
+        return h.count == Self.frames * ClipFingerprint.bands && t.count == Self.frames * ClipFingerprint.bands      // 12 s each; a shorter clip has none
     }
     /// The byte of a file, by its constant bitrate: first audio frame offset plus seconds at bitrate (spec section 3).
     public func byte(at seconds: Double) -> Int { firstFrameOffset + Int((max(0, seconds) * Double(bitrateKbps) * 125).rounded()) }

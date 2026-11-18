@@ -196,7 +196,7 @@ public final class ClipLocator: ClipLocating, @unchecked Sendable {
               let head = ClipFingerprint.unpack(rec.head), let tail = ClipFingerprint.unpack(rec.tail) else { return refuse(clip, "the clip has no usable fingerprint") }
         let t0 = Date()
         func ms(_ since: Date) -> Int { Int(Date().timeIntervalSince(since) * 1000) }
-        let from = max(0, rec.start - margin), to = rec.end + margin
+        let from = max(0, rec.start - margin), to = rec.start + margin          // centred on the RECORD's start, never the clip's top-level times
         var hi = rec.byte(at: to)
         if rec.fileBytes > 0 { hi = min(hi, Int(rec.fileBytes) - 1) }
         let lo = rec.byte(at: from)
@@ -225,16 +225,16 @@ public final class ClipLocator: ClipLocating, @unchecked Sendable {
             return refuse(clip, "the window is shorter than the fingerprint", bytes: aligned.count, fetchMs: fetchMs, decodeMs: decodeMs, fpMs: ms(t2))
         }
         let fpMs = ms(t2)
-        let startByHead = h.seconds - (rec.headAt - rec.start), startByTail = t.seconds - (rec.tailAt - rec.start)
-        let est = from + startByHead - rec.start
+        // Spec section 2: off = window_t0 + pos/10 - head_at (tail_at); played from head_at + off_head to tail_at + 12 + off_tail.
+        let offHead = h.seconds - rec.headAt, offTail = t.seconds - rec.tailAt
+        let est = from + offHead
         func fail(_ why: String) -> ClipLocation { refuse(clip, why, bytes: aligned.count, fetchMs: fetchMs, decodeMs: decodeMs, fpMs: fpMs, h: h, t: t, offset: est) }
         guard h.found else { return fail("the head of the clip is not in the window") }
         guard t.found else { return fail("the tail of the clip is not in the window") }
-        guard abs(startByHead - startByTail) <= ClipFingerprint.agreeSeconds else { return fail("head and tail disagree by \(String(format: "%.1f", abs(startByHead - startByTail))) s (something is inside the clip)") }
-        let length = rec.end - rec.start
-        let s = max(0, startByHead)
-        guard startByHead > -0.5, s + length <= Double(pcm.count) / 16_000 + 0.2 else { return fail("the clip runs past the window") }
-        guard let bytes = container.cut(aligned, from: s, to: s + length) else { return fail("no whole frames for the clip") }
+        guard abs(offHead - offTail) <= ClipFingerprint.agreeSeconds else { return fail("head and tail disagree by \(String(format: "%.1f", abs(offHead - offTail))) s (something is inside the clip)") }
+        let s0 = h.seconds, s1 = t.seconds + Double(tail.count / ClipFingerprint.bands) / ClipFingerprint.fps, length = s1 - s0
+        guard length > 0, s1 <= Double(pcm.count) / 16_000 + 0.2 else { return fail("the clip runs past the window") }
+        guard let bytes = container.cut(aligned, from: s0, to: s1) else { return fail("no whole frames for the clip") }
         let file = path(clip.clipID, container.fileExtension)
         do { try bytes.write(to: file) } catch { return fail("could not keep the clip (\((error as NSError).localizedDescription))") }
         log("AUTORADIO clip locate id=\(clip.clipID) bytes=\(aligned.count) fetch_ms=\(fetchMs) decode_ms=\(decodeMs) fp_ms=\(fpMs) head_peak=\(f(h.peak)) head_margin=\(f(h.margin)) tail_peak=\(f(t.peak)) offset_s=\(f(est)) ok=true why=")
