@@ -1971,6 +1971,9 @@ type mockVMManager struct {
 	reattachCfgs []VMManagerConfig
 	recovers     []string
 	refreshes    []string
+	// onRefresh runs after RefreshVM records the call (a test's seam to act
+	// while a refresh is in flight).
+	onRefresh func(vmID string)
 	recoverCfgs  []VMManagerConfig
 	refreshCfgs  []VMManagerConfig
 	// maintenanceImage, when set, makes RefreshVM run the config's
@@ -2061,7 +2064,11 @@ func (m *mockVMManager) ResumeVM(vmID string) (*VMInstanceInfo, error) {
 		}
 	})
 	release := m.resumeRelease
+	hook := m.onRefresh
 	m.mu.Unlock()
+	if hook != nil {
+		hook(vmID)
+	}
 	if release != nil {
 		<-release
 	}

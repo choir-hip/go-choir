@@ -20,13 +20,23 @@ type ringManager struct {
 	current, commit string
 	byVM            map[string]GuestReleaseVMStatus
 	pinner          RingWalkPinner
+	// After flipAfter reads of the current release the link answers flipID
+	// (a link that moves between two reads of one tick).
+	reads, flipAfter int
+	flipID           string
 }
 
 func (m *ringManager) GuestReleases() (json.RawMessage, error) { return json.RawMessage(`{}`), nil }
 func (m *ringManager) GuestReleaseHealth() (string, map[string]GuestReleaseVMStatus) {
 	return m.current, m.byVM
 }
-func (m *ringManager) CurrentGuestReleaseInfo() (string, string) { return m.current, m.commit }
+func (m *ringManager) CurrentGuestReleaseInfo() (string, string) {
+	m.reads++
+	if m.flipAfter > 0 && m.reads > m.flipAfter {
+		return m.flipID, "commit-" + m.flipID
+	}
+	return m.current, m.commit
+}
 func (m *ringManager) LayeredGuestReleaseInfo() (string, string) { return "", "" }
 func (m *ringManager) GuestLayeredComputer(string) bool          { return false }
 func (m *ringManager) GuestReleaseInfoFor(id string) (string, string) {
