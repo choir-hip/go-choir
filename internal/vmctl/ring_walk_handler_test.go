@@ -81,8 +81,11 @@ func newRingHandlerFixture(t *testing.T) *ringFixture {
 	return f
 }
 
+// deploy moves the link and restarts vmctl: the fixture's vmctl is the new
+// one, which starts on the moved link (release_hold.go).
 func (f *ringFixture) deploy(id, commit string) {
 	f.mgr.current, f.mgr.commit = id, commit
+	f.h.adoptCurrentRelease()
 }
 
 func getPlan(t *testing.T, h *Handler) deployRefreshPlan {

@@ -232,6 +232,10 @@ type Handler struct {
 	ringHealthProbe func(context.Context, VMOwnership) ringHealth
 	// ringWaker replaces the R0 wake in tests.
 	ringWaker func(ringAction)
+	// replacement is the release this vmctl started on and the hold that
+	// stands the walk and the sweep down while the link has moved
+	// (release_hold.go).
+	replacement releaseHold
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.

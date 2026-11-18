@@ -105,3 +105,43 @@ func TestReleaseHoldEndsWhenTheLinkReturns(t *testing.T) {
 		t.Fatalf("want one started and one ended line:\n%s", out)
 	}
 }
+
+// The deploy died after the link moved and never restarted vmctl: the hold
+// ends at its bound, says so once, and the sweep runs.
+func TestReleaseHoldExpiresAtItsBound(t *testing.T) {
+	f := newRingHandlerFixture(t)
+	logs := captureLog(t)
+	clock := time.Now()
+	f.h.replacement.now = func() time.Time { return clock }
+	ctx := context.Background()
+	f.moveLink("r2", "commit-r2")
+	f.enrollDeEarlier(f.h, "commit-r2")
+	f.h.SweepDeployRefreshPending(ctx)
+	clock = clock.Add(releaseHoldBound - time.Minute)
+	f.h.SweepDeployRefreshPending(ctx)
+	if len(f.mgr.refreshes) != 0 {
+		t.Fatalf("held inside its bound, yet refreshed: %v", f.mgr.refreshes)
+	}
+	clock = clock.Add(2 * time.Minute)
+	f.h.SweepDeployRefreshPending(ctx)
+	f.h.SweepDeployRefreshPending(ctx)
+	if len(f.mgr.refreshes) != 1 {
+		t.Fatalf("past the bound the sweep must run: marks %v refreshes %v", f.fake.marks, f.mgr.refreshes)
+	}
+	out := logs.String()
+	if strings.Count(out, "refresh hold: started") != 1 || strings.Count(out, "without a restart") != 1 {
+		t.Fatalf("want one started line and one expiry line:\n%s", out)
+	}
+}
+
+// The hold stands down only the ticker's paths: the deploy's own request
+// (served by whichever vmctl answers it) is unchanged.
+func TestReleaseHoldLeavesTheDeploysOwnRefreshAlone(t *testing.T) {
+	f := newRingHandlerFixture(t)
+	f.moveLink("r2", "commit-r2")
+	f.h.TickRingWalk(context.Background())
+	code, resp := postDeployRefresh(t, f.h, `{"user_id":"ring-de","desktop_id":"primary","target":"commit-r2"}`)
+	if code != 200 || resp.Outcome != deployRefreshRefreshed {
+		t.Fatalf("the deploy's own refresh during a hold: %d %+v", code, resp)
+	}
+}
