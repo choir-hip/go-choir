@@ -14,10 +14,17 @@ must be run by scripts/gates or by scripts/land, or be exempted by name in
 scripts/gates-ci-exemptions.txt with a reason. `go build`, `go vet` and
 `go test` are not repo programs and need nothing.
 
-Converse: every executable scripts/check-*, scripts/selftest-* and
-.github/scripts/*-test must be run by CI, by scripts/gates or by scripts/land,
+Converse: every executable scripts/check-*, scripts/selftest-*,
+scripts/test-* and .github/scripts/*-test must be run by CI, by scripts/gates or by scripts/land,
 or be exempted by name with a reason (an orphan guard is a gate nothing runs:
 docs/problems/store-schema-floor-guard-is-not-run-2026-11-15.md).
+
+What scripts/land runs, it runs only under a condition (`.github/scripts/*-test`
+on a .github/ change, the shard runners when agentcore and textureowner both
+change). The checker cannot read those conditions reliably, so each such
+program or glob needs a `land-conditional <key> <condition>` line, which
+is printed on success; a line for something land does not run, or the gates do
+run, fails.
 
 An exemption fails when it is stale (the program is neither run by a CI job
 nor an existing orphan candidate), when it has no reason, or when
@@ -51,13 +58,13 @@ import re
 import sys
 
 PROG_RE = re.compile(r"^(?:\.github/scripts|frontend/scripts|scripts)/[A-Za-z0-9_][A-Za-z0-9._-]*$")
+REPO_LIKE_RE = re.compile(r"(?<![\w.-])(?:\.github/scripts/|frontend/scripts/|scripts/|\./cmd/)[A-Za-z0-9_*?]")
 GLOB_RE = re.compile(r"^(?:\.github/scripts|frontend/scripts|scripts)/[A-Za-z0-9_.*?-]*[*?][A-Za-z0-9_.*?-]*$")
 VARPFX_RE = re.compile(r"^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/")
 ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 SKIP = {"run", "if", "then", "else", "elif", "do", "while", "until", "!", "{", "}", "time", "exec", "command", "sudo", "nohup", "setsid", "env"}
 INTERP = {"bash", "sh", "python3", "python", "node"}
 KNOWN_TOOLS = {("go", "test"), ("go", "list"), ("go", "vet"), ("go", "build")}
-PRIVATE = "checker"
 
 
 class ParseError(Exception):
@@ -179,27 +186,89 @@ def clean(word):
     return w
 
 
+def repo_like(w):
+    return REPO_LIKE_RE.search(w) is not None
+
+
+def interpreter(words, i, name):
+    """words[i:] follow an interpreter word. -> (kind, value, next index)."""
+    n = len(words)
+    c_flag = syntax = mod = code = False
+    while i < n and words[i][:1] in "-+" and len(words[i]) > 1:
+        opt = words[i]
+        i += 1
+        if opt == "--":
+            break
+        if opt.startswith("--"):
+            if opt in ("--eval", "--print"):
+                code = True
+                i += 1
+            elif opt in ("--require", "--import", "--rcfile", "--init-file"):
+                i += 1
+            continue
+        letters = opt[1:]
+        shell = name in ("bash", "sh")
+        if shell:
+            if "c" in letters:
+                c_flag = True
+            if "n" in letters:
+                syntax = True
+            if "o" in letters or "O" in letters:
+                i += 1  # -o NAME and -O NAME take an argument (-euo pipefail)
+        elif name in ("python3", "python"):
+            if "c" in letters:
+                code = True
+                i += 1
+            elif "m" in letters:
+                mod = True
+                i += 1
+            elif "W" in letters or "X" in letters:
+                i += 1
+        else:  # node
+            if letters in ("e", "p"):
+                code = True
+                i += 1
+            elif letters == "r":
+                i += 1
+    if syntax:
+        return ("syntax", None, n)
+    if c_flag:
+        if i < n:
+            return ("payload", words[i], n)
+        return ("opaque", "%s -c with no command" % name, n)
+    if code or mod:
+        return ("opaque", "%s with -c, -e or -m" % name, n)
+    return ("go", None, i)
+
+
 def resolve(words):
-    """-> ("prog", path) | ("tool", (a,b)) | ("none", None) | ("unknown", word)."""
+    """-> (kind, value): prog, tool, none, payload (value is shell text),
+    opaque (an interpreter form whose program cannot be determined) or
+    other (an ordinary command; value is its command word)."""
     i, n = 0, len(words)
     while i < n:
         w = words[i]
         if "${{" in w and not ASSIGN_RE.match(w):
-            raise ParseError("a command word is built from an expression: %r (the checker cannot know what runs)" % w)
+            raise ParseError("a command word is built from an expression: %r (the checker cannot know what runs; failing closed)" % w)
         if w == "timeout":
             i += 1
             while i < n and (words[i].startswith("-") or re.match(r"^[0-9.]+[smhd]?$", words[i])):
                 i += 1
             continue
+        if w == "env":
+            i += 1
+            while i < n and words[i].startswith("-"):
+                i += 2 if words[i] in ("-u", "-C", "-S") else 1
+            continue
         if w in SKIP or ASSIGN_RE.match(w):
             i += 1
             continue
         if w in INTERP:
-            i += 1
-            while i < n and words[i].startswith("-"):
-                if words[i] in ("-c", "-m", "-e") or (words[i] == "-n" and w in ("bash", "sh")):
-                    return ("unknown", " ".join(words[i - 1:i + 1]))
-                i += 1
+            kind, val, i = interpreter(words, i + 1, w)
+            if kind == "syntax":
+                return ("none", None)
+            if kind != "go":
+                return (kind, val)
             continue
         if w == "go" and i + 1 < n:
             if words[i + 1] == "run":
@@ -215,18 +284,17 @@ def resolve(words):
         w = clean(w)
         if PROG_RE.match(w):
             return ("prog", w)
-        return ("unknown", w)
+        return ("other", w)
     return ("none", None)
 
 
-def scan(text, strict=False, echo_payload=False):
+def scan(text, strict=False, echo_payload=False, in_payload=False):
     """Programs invoked in shell text, and glob patterns from for-in lines."""
     progs, globs = [], []
     for words in commands(text):
-        if "${{" in " ".join(words):
-            for w in words:
-                if "${{" in w and re.search(r"(?:scripts|\./cmd)/\S*\$\{\{", w):
-                    raise ParseError("a script path is built from an expression: %r" % w)
+        for w in words:
+            if "${{" in w and re.search(r"(?:scripts|\./cmd)/\S*\$\{\{", w):
+                raise ParseError("a script path is built from an expression: %r (failing closed)" % w)
         if words[0] == "for" and len(words) > 3 and words[2] == "in":
             globs += [w for w in words[3:] if GLOB_RE.match(w)]
             continue
@@ -238,10 +306,22 @@ def scan(text, strict=False, echo_payload=False):
         kind, val = resolve(words)
         if kind == "prog":
             progs.append(val)
-        elif kind == "unknown" and strict and "run" in words[:1]:
-            raise ParseError("not understood: `%s` (a `run` line must name a program or go test, list, vet or build)" % " ".join(words))
-        elif kind == "unknown" and strict and "${{" in val:
-            raise ParseError("not understood: %s" % val)
+        elif kind == "payload":
+            if re.match(r"^\$", val.strip()):
+                raise ParseError("an interpreter runs a command taken from a variable: `%s` (failing closed)" % " ".join(words))
+            p, g = scan(val, strict=strict, in_payload=True)
+            progs += p
+            globs += g
+        elif kind == "opaque":
+            if any(repo_like(w) for w in words):
+                raise ParseError("cannot determine the program of `%s` and it names a repo path (failing closed)" % " ".join(words))
+        elif kind == "other":
+            if repo_like(val) and not val.startswith("$RUNNER_TEMP"):
+                raise ParseError("a repo path in command position that is not a recognised program form: `%s` (failing closed)" % val)
+            if (strict or in_payload) and (words[0] == "run" or in_payload) and val.startswith("$"):
+                raise ParseError("not understood: `%s` (the command is a variable; failing closed)" % " ".join(words))
+            if strict and words[0] == "run":
+                raise ParseError("not understood: `%s` (a `run` line must name a program or go test, list, vet or build; failing closed)" % " ".join(words))
     return progs, globs
 
 
@@ -352,16 +432,24 @@ def parse_workflow(text):
 
 def parse_exemptions(text):
     ex, errs = {}, []
+    ex_land = {}
     for no, raw in enumerate(text.split("\n"), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
+            continue
+        if line.split(None, 1)[0] == "land-conditional":
+            lp = line.split(None, 2)
+            if len(lp) < 3 or len(lp[2].strip()) < 10:
+                errs.append("exemptions line %d: land-conditional %s needs the condition (10+ characters)" % (no, lp[1] if len(lp) > 1 else "?"))
+            else:
+                ex_land[lp[1]] = lp[2]
             continue
         parts = line.split(None, 1)
         if len(parts) < 2 or len(parts[1].strip()) < 10:
             errs.append("exemptions line %d: %s has no reason (10+ characters)" % (no, parts[0]))
             continue
         ex[parts[0]] = parts[1]
-    return ex, errs
+    return ex, ex_land, errs
 
 
 def normalise(path, root):
@@ -374,7 +462,7 @@ def normalise(path, root):
 
 def candidates(root):
     out = []
-    for d, pat in (("scripts", ("check-*", "selftest-*")), (".github/scripts", ("*-test",))):
+    for d, pat in (("scripts", ("check-*", "selftest-*", "test-*")), (".github/scripts", ("*-test",))):
         full = os.path.join(root, d)
         if not os.path.isdir(full):
             continue
@@ -408,18 +496,29 @@ def main():
     except ParseError as e:
         print("check-gates-cover-ci: FAIL: cannot parse the workflow (failing closed): %s" % e, file=sys.stderr)
         return 1
-    exempt, e2 = parse_exemptions(ex_text)
+    exempt, exempt_land, e2 = parse_exemptions(ex_text)
     errs += e2
-    covering, globs = set(), []
+    covering, globs, by_file = set(), [], {}
     for label, text, strict, echo in (("scripts/gates", gates_text, True, False), ("scripts/land", land_text, False, True)):
         try:
             p, g = scan(text, strict=strict, echo_payload=echo)
+            by_file[label] = ({normalise(x, a.root) for x in p}, set(g))
         except ParseError as e:
             print("check-gates-cover-ci: FAIL: cannot read %s (failing closed): %s" % (label, e), file=sys.stderr)
             return 1
         covering |= {normalise(x, a.root) for x in p}
         globs += g
-    gates_progs = {normalise(x, a.root) for x in scan(gates_text, strict=True)[0]}
+
+    gates_progs = by_file["scripts/gates"][0]
+    land_items = (by_file["scripts/land"][0] | by_file["scripts/land"][1]) - gates_progs
+    for item in sorted(land_items):
+        if item not in exempt_land:
+            errs.append("%s is run only by scripts/land, and only under a condition: add `land-conditional %s <the condition, read from scripts/land>` to scripts/gates-ci-exemptions.txt (conditional in scripts/land)" % (item, item))
+    for key in sorted(exempt_land):
+        if key in gates_progs:
+            errs.append("land-conditional %s: scripts/gates runs it (delete the exemption)" % key)
+        elif key not in land_items:
+            errs.append("land-conditional %s: stale (scripts/land does not run it)" % key)
 
     def covered(p):
         return p in covering or any(fnmatch.fnmatch(p, g) for g in globs)
@@ -465,6 +564,8 @@ def main():
             print("check-gates-cover-ci: FAIL: " + e, file=sys.stderr)
         return 1
     print("check-gates-cover-ci: ok (%d jobs, %d programs, %d exempt)" % (len(jobs), len(needed), len(exempt)))
+    for key in sorted(exempt_land):
+        print("  conditional in scripts/land: %s: %s" % (key, exempt_land[key]))
     return 0
 
 

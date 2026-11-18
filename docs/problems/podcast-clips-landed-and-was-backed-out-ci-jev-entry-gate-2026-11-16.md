@@ -135,7 +135,22 @@ writes (the payload of its `echo` lines) and its
 `for t in .github/scripts/*-test` glob, so the CI classifier tests in the
 `plan` job are covered by the landing script on `.github/` changes.
 
-Converse: every executable `scripts/check-*`, `scripts/selftest-*` and
+Land coverage is conditional, and the file says so: `scripts/land` emits the
+`.github/scripts/*-test` glob only on a `.github/` change (`GH=1`) and the shard
+runners (`go-test-runtime-shards`, `go-test-with-timing`) only when agentcore
+and textureowner both changed and not `--local` (`SHARD=1`). Each carries a
+`land-conditional` line with its condition, which the check prints; a program
+only land runs without such a line fails.
+
+Interpreter forms are parsed, not skipped: `bash -e`, `-euo pipefail`,
+`-o NAME`, `sh -c '...'` (the payload is scanned as a command line),
+`env -i`; `bash -n` runs nothing. A form whose program cannot be determined
+(`python3 -m`, `-c`, `node -e`, a `-c` with a variable) that names a repo
+path, or a repo path in command position that is not a recognised form,
+fails closed, in CI steps and in `scripts/gates` alike.
+
+Converse: every executable `scripts/check-*`, `scripts/selftest-*`,
+`scripts/test-*` and
 `.github/scripts/*-test` must be run by CI, `scripts/gates` or `scripts/land`
 or be named in the exemption file. A guard nothing runs can no longer sit
 unseen. "Invoked" is one rule for all sides (the command word after
@@ -151,8 +166,9 @@ selftests of the kernel, desk-names, store-handles, owner-files,
 switch-registry, guest-token and Jev-entry gates (1 to 5 s each),
 `go run ./cmd/lockscope` about 1 s, `check-store-schema-floor.sh` and its
 selftest under 1 s (the second incident's guard, now run here and in CI's
-Vocabulary Gates), `check-package-export`, and
-`selftest-test-computer-create`. `scripts/gates` went from 88 s to about two
+Vocabulary Gates), `check-package-export`,
+`selftest-test-computer-create`, and the tests `test-check-guest-app-layer.sh`,
+`test-guest-tool-exec-wrapper.sh` and `test-node-b-deploy-disk-preflight.sh`. `scripts/gates` went from 88 s to about two
 minutes.
 
 Still exempt, with reasons in the file: CI-only gates that need nix,
@@ -162,5 +178,7 @@ PostgreSQL, a merge base or a Linux userland, or take about a minute
 Orphans the converse check found, exempted because they need the network or
 nix and nothing runs them: `check-curated-go-modules`,
 `check-guest-app-layer.sh`, `check-guest-data-fstrim.sh`,
-`check-host-firecracker-pin.sh`. After it, a new CI gate cannot be added, and
+`check-host-firecracker-pin.sh`; and four `scripts/test-*` that need a Linux
+userland or are tools (`test-computer-create`, `test-node-b-growth-meter.sh`,
+`-host-disk-alarm.sh`, `-nix-retention.sh`). After it, a new CI gate cannot be added, and
 a new guard cannot be left unrun, without the exemption file saying why.

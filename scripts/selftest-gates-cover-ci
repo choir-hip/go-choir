@@ -140,7 +140,7 @@ YAML
 expect "go run ./cmd/x in a build job fails" 1 './cmd/lockscope'
 
 # findings: forms the first version missed
-for form in './scripts/check-delta' '$ROOT/scripts/check-delta' '"$root"/scripts/check-delta' '${root}/scripts/check-delta' 'bash scripts/check-delta' 'FOO=1 python3 -I scripts/check-delta' 'echo hi && scripts/check-delta' 'timeout 60 scripts/check-delta' 'if scripts/check-delta; then echo ok; fi'; do
+for form in 'bash -e scripts/check-delta' 'bash -euo pipefail scripts/check-delta' 'bash -o pipefail scripts/check-delta' 'sh -c '"'"'scripts/check-delta'"'"'' 'bash -lc "scripts/check-delta --x"' 'python3 -I -u scripts/check-delta' 'env -i FOO=1 scripts/check-delta' './scripts/check-delta' '$ROOT/scripts/check-delta' '"$root"/scripts/check-delta' '${root}/scripts/check-delta' 'bash scripts/check-delta' 'FOO=1 python3 -I scripts/check-delta' 'echo hi && scripts/check-delta' 'timeout 60 scripts/check-delta' 'if scripts/check-delta; then echo ok; fi'; do
 	wfstep "$form"
 	expect "CI form [$form] is seen" 1 'scripts/check-delta'
 	printf 'run scripts/check-delta\n' >>"$gates"
@@ -150,6 +150,15 @@ for form in './scripts/check-delta' '"$root"/scripts/check-delta' 'bash scripts/
 	wfstep 'scripts/check-delta'
 	printf 'run %s\n' "$form" >>"$gates"
 	expect "gates form [run $form] counts as run" 0
+done
+# belt and braces: a form the parser cannot resolve may never drop a repo path
+for form in 'python3 -m pytest scripts/check-delta' "python3 -c 'import os; os.system(\"scripts/check-delta\")'" "node -e 'run(\"scripts/check-delta\")'" 'sh -c "$cmd scripts/check-delta"' '$REPO/../scripts/check-delta' 'sh -c "$cmd"'; do
+	wfstep "$form"
+	expect "CI form [$form] cannot be resolved, so it fails closed" 1 'closed'
+done
+for form in 'bash -n .github/scripts/*' 'bash -n scripts/check-delta' 'python3 -c "print(1)"' "sh -c 'echo hi'" 'python3 -m json.tool x.json'; do
+	wfstep "$form"
+	expect "CI form [$form] runs no repo program and passes" 0
 done
 wfstep '${{ matrix.script }}'
 expect "a command from an expression fails closed" 1 'expression'
@@ -186,18 +195,35 @@ printf 'run "$t"\n' >>"$gates"
 expect "an unrecognised run form in the gates file fails closed" 1 'not understood'
 reset; wfstep 'scripts/check-delta'
 printf 'run bash -c "scripts/check-delta"\n' >>"$gates"
-expect "bash -c in the gates file fails closed" 1 'not understood'
+expect "bash -c with a literal payload in the gates file counts" 0
+reset; wfstep 'scripts/check-delta'
+printf 'run bash -c "$cmd"\n' >>"$gates"
+expect "bash -c with a variable payload in the gates file fails closed" 1 'closed'
 printf "run scripts/check-delta 'unclosed\n" >"$gates"
 expect "an unbalanced quote in the gates file fails closed" 1 'quote'
 
 # land
 wfstep 'scripts/check-delta'
 printf "echo 'run scripts/check-delta' >>\"\$1\"\n" >"$land"
-expect "a script land runs through its generated runner counts" 0
+expect "a script only land runs needs a land-conditional line" 1 'conditional in scripts/land'
+printf 'land-conditional scripts/check-delta only when SHARD=1\n' >"$ex"
+expect "a land-conditional line makes it count" 0
+printf 'land-conditional scripts/check-delta\n' >"$ex"
+expect "a land-conditional line needs its condition" 1 'condition'
+printf 'land-conditional scripts/check-delta only when SHARD=1\nland-conditional scripts/check-gone only when X=1 and more\n' >"$ex"
+expect "a land-conditional line for something land does not run is stale" 1 'stale'
+printf 'land-conditional scripts/check-delta only when SHARD=1\n' >"$ex"
+printf 'run scripts/check-delta\n' >>"$gates"
+expect "a land-conditional line for something the gates run fails" 1 'runs it'
+reset; wfstep 'scripts/check-delta'
+printf "echo 'run scripts/check-delta' >>\"\$1\"\n" >"$land"
+printf 'land-conditional scripts/check-delta only when SHARD=1\n' >"$ex"
 wfstep '.github/scripts/some-test'
 printf 'for t in .github/scripts/*-test; do echo "$t"; done\n' >"$land"
+printf 'land-conditional .github/scripts/*-test only on a .github/ change\n' >"$ex"
 expect "a for-in glob in land covers a matching program" 0
 printf 'for t in .github/scripts/*-gate; do echo "$t"; done\n' >"$land"
+printf 'land-conditional .github/scripts/*-gate only on a .github/ change\n' >"$ex"
 expect "a glob that does not match covers nothing" 1 'some-test'
 
 # converse: executable checks nothing runs
@@ -206,13 +232,15 @@ mkdir -p "$tmp/scripts" "$tmp/.github/scripts"
 printf '#!/bin/sh\n' >"$tmp/scripts/check-orphan"; chmod +x "$tmp/scripts/check-orphan"
 printf '#!/bin/sh\n' >"$tmp/scripts/selftest-orphan"; chmod +x "$tmp/scripts/selftest-orphan"
 printf '#!/bin/sh\n' >"$tmp/.github/scripts/thing-test"; chmod +x "$tmp/.github/scripts/thing-test"
+printf '#!/bin/sh\n' >"$tmp/scripts/test-orphan.sh"; chmod +x "$tmp/scripts/test-orphan.sh"
 printf '#!/bin/sh\n' >"$tmp/scripts/check-not-executable"
 expect "an executable check nothing runs is an orphan" 1 'scripts/check-orphan is not run by CI'
 expect "an orphan selftest is named too" 1 'scripts/selftest-orphan is not run'
 expect "an orphan .github test is named too" 1 '.github/scripts/thing-test is not run'
+expect "an orphan scripts/test-* is named too" 1 'scripts/test-orphan.sh is not run'
 printf 'run scripts/check-orphan\n' >>"$gates"
 expect "the gates running it removes it from the orphans" 1 'selftest-orphan'
-printf 'scripts/selftest-orphan a long-running drill, run by hand\n.github/scripts/thing-test run by hand only\n' >"$ex"
+printf 'scripts/selftest-orphan a long-running drill, run by hand\n.github/scripts/thing-test run by hand only\nscripts/test-orphan.sh run by hand only\n' >"$ex"
 expect "orphans exempted by name pass" 0
 rm "$tmp/scripts/selftest-orphan"
 expect "an exemption for a script that is gone is stale" 1 'stale'

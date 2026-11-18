@@ -681,6 +681,10 @@ jobs:
           if [[ -z "$base" ]]; then
             base="$(git rev-list -1 --first-parent --before=8.days HEAD)"
           fi
+          if [[ -z "$base" ]]; then
+            echo "store-floor: FAIL: no base commit could be chosen" >&2
+            exit 1
+          fi
           if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
             git fetch --no-tags --depth=1 origin "$base" || true
           fi
