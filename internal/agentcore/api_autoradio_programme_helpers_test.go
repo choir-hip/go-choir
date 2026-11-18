@@ -287,6 +287,38 @@ type wrapLedger struct {
 	// panicClaimAppend panics instead of appending a claim: the process dies
 	// between the segment record and its claim.
 	panicClaimAppend bool
+	// failListKind makes the list of that record_kind fail; listCalls counts
+	// the lists by record_kind.
+	failListKind string
+	listCalls    map[string]int
+}
+
+func (l *wrapLedger) noteList(key, value string) error {
+	if key != "record_kind" {
+		return nil
+	}
+	if l.listCalls == nil {
+		l.listCalls = map[string]int{}
+	}
+	l.listCalls[value]++
+	if l.failListKind != "" && l.failListKind == value {
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
+func (l *wrapLedger) ListCommitmentRecordsBySubjectRef(ctx context.Context, ownerID, computerID, key, value string, limit int) ([]types.CommitmentRecord, error) {
+	if err := l.noteList(key, value); err != nil {
+		return nil, err
+	}
+	return l.autoradioLedger.ListCommitmentRecordsBySubjectRef(ctx, ownerID, computerID, key, value, limit)
+}
+
+func (l *wrapLedger) ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context, ownerID, computerID, key, value string, limit int) ([]types.CommitmentRecord, int, int, error) {
+	if err := l.noteList(key, value); err != nil {
+		return nil, 0, 0, err
+	}
+	return l.autoradioLedger.ListCommitmentRecordsBySubjectRefOfComputer(ctx, ownerID, computerID, key, value, limit)
 }
 
 // errWriter is a ResponseWriter whose writes fail after the first okWrites
