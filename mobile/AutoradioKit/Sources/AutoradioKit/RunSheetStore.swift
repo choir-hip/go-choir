@@ -295,6 +295,25 @@ public struct RouteSheetPoster: RunSheetPoster {
         }
     }
 
+    // MARK: Sign-out
+
+    /// Sign-out, after playback stopped: wait up to `timeout` seconds for the pending ops (the "left" report among them) to reach the computer
+    /// while the old key is still held. What is not answered by then is dropped by `wipe()`: pending ops are never sent under a later account.
+    public func settlePending(timeout: TimeInterval) async {
+        flush()
+        let end = Date().addingTimeInterval(timeout)
+        while !pending.isEmpty, Date() < end { try? await Task.sleep(nanoseconds: 50_000_000) }
+    }
+
+    /// Sign-out: the sheet, its heard tail, the pending ops and the epoch go, in memory and on disk; the poster goes too (it is rebuilt at the
+    /// next sign-in), so nothing of this account is posted afterwards.
+    public func wipe() {
+        retryTask?.cancel(); retryTask = nil
+        sheet = RunSheet(); pending = []; sheetEpoch = 0; poster = nil
+        if let storage { try? FileManager.default.removeItem(at: storage) }
+        onChange?()
+    }
+
     // MARK: Saving
 
     struct Saved: Codable { var sheet: RunSheet; var pending: [RunSheetOp]; var epoch: Int64? }

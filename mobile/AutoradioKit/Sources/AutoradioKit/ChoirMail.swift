@@ -411,6 +411,12 @@ public final class MailService: @unchecked Sendable {
     public init(environment: ChoirEnvironment = .shared) { self.environment = environment }
 
     private func client() -> ChoirClient { environment.client() }
+    /// Sign-out: the cached rows, drafts, alias and original documents in memory, and the `mail-*.html` files written for "Show original" in `originalsIn`.
+    public func wipe(originalsIn dir: URL? = nil) {
+        lock.lock(); cache = [:]; drafts = []; aliasCache = nil; htmlByID = [:]; lock.unlock()
+        guard let dir, let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return }
+        for n in names where n.hasPrefix("mail-") && n.hasSuffix(".html") { try? FileManager.default.removeItem(at: dir.appendingPathComponent(n)) }
+    }
     private func cached(_ f: String) -> (rows: [MailSummary], total: Int, unread: Int)? { lock.lock(); defer { lock.unlock() }; return cache[f] }
     private func store(_ f: String, _ v: (rows: [MailSummary], total: Int, unread: Int)) { lock.lock(); cache[f] = v; lock.unlock() }
 

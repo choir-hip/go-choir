@@ -20,6 +20,9 @@ extension AutoradioModule {
         }
         service.offlineNote = { ContentStore.shared.syncedWords(.mail) ?? "never synced" }
         pageSources.register(MailPageSource(service: service))
+        // Sign-out: the cached rows, drafts and original documents in memory, and the mail-*.html files written to the cache folder.
+        let mailOriginals = context.file("app:/cache/mail-x.html")?.deletingLastPathComponent()
+        choir.accountWipe.register("mail") { service.wipe(originalsIn: mailOriginals) }
 
         handle("mailBox") { [weak self] args, reply in
             let address = args["address"] as? String ?? ""

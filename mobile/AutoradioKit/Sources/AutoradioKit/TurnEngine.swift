@@ -371,7 +371,7 @@ public actor TurnEngine {
             env.log.emit(.addressed(by: by)); await claimTalking()
             await runTurn(t, transcript: text)
         default:
-            env.log.emit(.notATurn(reason: "candidate speech did not count: \"\(text)\""))
+            env.log.emit(.notATurn(reason: "candidate speech did not count (\(text.count) chars)"))
             await dropTurn(reason: nil, notATurn: true)
         }
     }

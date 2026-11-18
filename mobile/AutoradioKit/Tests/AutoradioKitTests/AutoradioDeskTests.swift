@@ -297,6 +297,7 @@ final class StreamedDeskEngineTests: XCTestCase {
     }
 
     func testWhatWasSaidAloudBecomesTheNextRequestsHistory() async throws {
+        TurnHistory.shared.clear()          // the shared history carries lines from the hands-free tests that ran before
         let m = FakeLocalModel(pieces: ["The front page has a strike story."])
         let (engine, log, _, t) = try make(model: m, deskDelay: 1.0)
         await engine.runPipeline(t, transcript: "what is the top story", endedAt: log.clock.now)

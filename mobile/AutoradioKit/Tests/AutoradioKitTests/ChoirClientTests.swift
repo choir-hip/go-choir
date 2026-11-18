@@ -173,6 +173,7 @@ final class ChoirClientTests: XCTestCase {
         try? keys.set("k1", account: KeyAccount.keyID)
         let si = ChoirSignIn(env: env)
         await si.signOut()
+        await si.waitForRevoke()
         XCTAssertNil(keys.get(KeyAccount.apiKey)); XCTAssertNil(keys.get(KeyAccount.computerID))
         XCTAssertEqual(StubProtocol.seen.first?.method, "DELETE")
         XCTAssertEqual(StubProtocol.seen.first?.path, "/auth/api-keys/k1")

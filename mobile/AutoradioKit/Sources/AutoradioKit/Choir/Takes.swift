@@ -152,7 +152,7 @@ public struct Take: Equatable, Sendable {
     /// The first line of the transcript, cut to 120 bytes.
     public var title: String {
         let first = transcript.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? transcript
-        return StretchCandidates.cut(StretchCandidates.oneLine(first), bytes: TakeBounds.maxTitleBytes)
+        return StretchCandidates.cut(SegmentPrep.oneLine(first, maxBytes: TakeBounds.maxTitleBytes), bytes: TakeBounds.maxTitleBytes)
     }
 
     static let iso: ISO8601DateFormatter = { let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f }()
@@ -164,7 +164,7 @@ public struct Take: Equatable, Sendable {
         guard let id = o["take_id"] as? String, validID(id), let who = o["publisher"] as? String, validHandle(who) else { return nil }
         let state = (o["state"] as? String) ?? "live"
         guard state == "live" else { return nil }
-        let t = StretchCandidates.cut((o["transcript"] as? String) ?? "", bytes: TakeBounds.maxTranscriptBytes)
+        let t = StretchCandidates.cut(SegmentPrep.stripUnsafe((o["transcript"] as? String) ?? ""), bytes: TakeBounds.maxTranscriptBytes)
         let d = (o["duration_seconds"] as? NSNumber)?.doubleValue ?? 0
         return Take(takeID: id, publisher: who, publishedAt: date(o["published_at"] as? String), duration: d.isFinite ? max(0, d) : 0, transcript: t,
                     respondsTo: TakeResponds.parse(o["responds_to"]), record: TakeRecordSummary.parse(o["record"]),
@@ -194,7 +194,7 @@ public struct MyTake: Equatable, Sendable {
         let state = (o["state"] as? String) ?? ""
         if state == "deleted" || state == "yanked" { return nil }
         let d = (o["duration_seconds"] as? NSNumber)?.doubleValue ?? 0
-        return MyTake(takeID: id, duration: d.isFinite ? max(0, d) : 0, transcript: StretchCandidates.cut((o["transcript"] as? String) ?? "", bytes: TakeBounds.maxTranscriptBytes),
+        return MyTake(takeID: id, duration: d.isFinite ? max(0, d) : 0, transcript: StretchCandidates.cut(SegmentPrep.stripUnsafe((o["transcript"] as? String) ?? ""), bytes: TakeBounds.maxTranscriptBytes),
                       published: (o["published"] as? Bool) ?? ((o["published_at"] as? String) != nil), publisher: (o["publisher"] as? String) ?? "",
                       at: Take.date((o["published_at"] as? String) ?? (o["created_at"] as? String)))
     }
@@ -323,6 +323,11 @@ public final class TakeOwn: @unchecked Sendable {
         lock.lock(); ids.insert(id); if Take.validHandle(handle) { _handle = handle }; lock.unlock(); save()
     }
     public func remove(id: String) { lock.lock(); ids.remove(id); lock.unlock(); save() }
+    /// Sign-out: the ids and the handle are the account's.
+    public func wipe() {
+        lock.lock(); ids = []; _handle = ""; lock.unlock()
+        if let file { try? FileManager.default.removeItem(at: file) }
+    }
     private func save() {
         guard let file else { return }
         lock.lock(); let o: [String: Any] = ["ids": Array(ids).sorted(), "handle": _handle]; lock.unlock()
@@ -341,6 +346,11 @@ public final class TakeMutes: @unchecked Sendable {
         if let file, let d = try? Data(contentsOf: file), let a = (try? JSONSerialization.jsonObject(with: d)) as? [String] { handles = a.filter(Take.validHandle) }
     }
     public var all: [String] { lock.lock(); defer { lock.unlock() }; return handles }
+    /// Sign-out: the muted voices are the account's.
+    public func wipe() {
+        lock.lock(); handles = []; lock.unlock()
+        if let file { try? FileManager.default.removeItem(at: file) }
+    }
     public func isMuted(_ h: String) -> Bool { lock.lock(); defer { lock.unlock() }; return handles.contains(h) }
     @discardableResult public func mute(_ h: String) -> Bool {
         guard Take.validHandle(h) else { return false }
@@ -370,6 +380,7 @@ public final class TakeStore: @unchecked Sendable {
     public init() {}
     public func replace(_ takes: [Take]) { lock.lock(); byID = Dictionary(takes.map { ($0.takeID, $0) }, uniquingKeysWith: { a, _ in a }); lock.unlock() }
     public func take(_ id: String) -> Take? { lock.lock(); defer { lock.unlock() }; return byID[id] }
+    public func wipe() { lock.lock(); byID = [:]; lock.unlock() }
 }
 
 // MARK: Candidates (11.5 step 1)

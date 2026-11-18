@@ -189,6 +189,11 @@ public final class ClipLocator: ClipLocating, @unchecked Sendable {
     }
 
     private func path(_ id: String, _ ext: String) -> URL { directory.appendingPathComponent(id.filter { $0.isLetter || $0.isNumber || $0 == "-" } + "." + ext) }
+    /// Sign-out: every window file the locator holds.
+    public func wipe() {
+        try? FileManager.default.removeItem(at: directory)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
     public func discard(_ clip: PodcastClip) { try? FileManager.default.removeItem(at: path(clip.clipID, container.fileExtension)) }
 
     public func locate(_ clip: PodcastClip) async -> ClipLocation {

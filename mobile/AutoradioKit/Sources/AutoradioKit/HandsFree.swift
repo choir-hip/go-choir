@@ -291,7 +291,7 @@ extension TurnEngine {
         let gate = env.speakerGate
         if call == .unknown, gate.learned, gate.canListen { call = await gate.judge(samples) }
         if call == .mismatch {
-            env.log.emit(.notATurn(reason: "another voice: \"\(text)\""))
+            env.log.emit(.notATurn(reason: "another voice (\(text.count) chars)"))
             hf.cut = nil
             await setLevelTo(.play, reason: .resume)
             await hfFeed(.turnDiscarded)

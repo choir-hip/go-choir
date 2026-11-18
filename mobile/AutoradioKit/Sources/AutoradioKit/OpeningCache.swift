@@ -113,6 +113,13 @@ public final class OpeningCache: @unchecked Sendable {
     /// True when an opening that `take` would play is ready (the launch does not wait for the network).
     public func isReady(voice: String) -> Bool { if case .none = peek(voice: voice) { return false }; return true }
 
+    /// Sign-out: the record, every audio file and what is held in memory.
+    public func wipe() {
+        lock.lock(); held = [:]; lock.unlock()
+        try? FileManager.default.removeItem(at: manifest)
+        prune(keeping: [])
+    }
+
     // MARK: Writing
 
     public enum Slot: Sendable { case opening, first }
