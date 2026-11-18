@@ -254,7 +254,7 @@ func TestReleaseHoldExpiresAtTheBoundOnAnUnreadableLink(t *testing.T) {
 	f.h.replacement.now = func() time.Time { return clock }
 	ctx := context.Background()
 	f.moveLink("r2", "commit-r2")
-	f.h.SweepDeployRefreshPending(ctx) // the hold starts
+	f.h.TickRingWalk(ctx) // the hold starts
 	f.moveLink("", "")
 	clock = clock.Add(releaseHoldBound + time.Minute)
 	f.enrollDeEarlier(f.h, "commit-r2")
