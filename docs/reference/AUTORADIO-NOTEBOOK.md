@@ -219,6 +219,17 @@ patch answers `refused: your notebook is archived` (un-archiving is the owner's 
 writes the document's text from the notebook grammar: **rich-text formatting in the document is
 flattened to the grammar by a patch.** Lesson text may not hold a link or a URL.
 
+## Whose a tag is, and what is a tap
+
+A tag is the desk's only when a lesson record with that id exists and was not retired. A
+bullet that parses as a tagged line without one (the listener retyped a tag) is their words:
+the patch writes it back as a plain bullet (the `untag` op), a strike record of kind
+`foreign_tag` says why, and it is never counted, cited or retired. A *tap line* is told by the
+whole grammar the desk writes, `More like this: "<title>" (<d Mon HH:MM>)` (or `Less`); a
+listener's own line that merely begins `More like this: ` is theirs, is not counted toward the
+page, and is never cut by the steering cap. If the lesson records cannot be read, the patch is
+not written (an id could be minted twice).
+
 ## Limits and residuals, named
 
 - The desk compares the listener's edits with its own last revision by walking back at most 60
@@ -232,6 +243,9 @@ flattened to the grammar by a patch.** Lesson text may not hold a link or a URL.
   Autoradio package manifest (`internal/appdesk/firstparty.json`), which has no grant field.
   Install review therefore does not see them. This is a named residual: the manifest should
   name them when the package manifest can carry a grant.
+- Cost per extend (named, not fixed): the lesson records are read once, but the tap map, the
+  deferred-steering scan and two ledger scorecard reads (the input's and the patch's) each read
+  up to the store's record cap. They are not yet shared.
 - No wake of a model for a notebook-titled document, whether published through the Texture
   root or not (`reconcileAgentWakeLockedFor`).
 

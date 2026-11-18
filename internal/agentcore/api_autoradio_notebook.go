@@ -104,8 +104,18 @@ func (c *programmeCall) loadNotebook(ctx context.Context, in *programmeInput) er
 			return err
 		}
 		var all []nbLine
+		// A tag counts as the desk's only with a lesson record behind it; a
+		// failed read of the records only affects what is displayed here (the
+		// patch itself stops on it).
+		known := map[string]bool(nil)
+		if ix, err := c.lessonIndex(ctx); err == nil {
+			known = ix.known
+		}
 		for _, sl := range in.nbDoc.AllLines() {
 			l := sl.Line
+			if known != nil && l.Tag != "" && !known[l.Tag] {
+				l.Tag, l.Heard, l.Of = "", 0, 0
+			}
 			ref := l.Ref()
 			if sl.Section == notebook.SecSteering && l.Tag == "" {
 				if id, ok := taps[l.Text]; ok {
@@ -495,11 +505,37 @@ func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbD
 		d.patch.Ops = p.Ops
 		return true
 	}
+	ix, err := c.lessonIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// 0. A tag is the desk's only when a lesson record with that id exists. A
+	// tagged line without one is the listener's words in the shape of a lesson
+	// (they retyped a tag): it is written back as their plain bullet, so it is
+	// never counted, cited or retired, and a strike record says why.
+	foreign := map[string]bool{}
+	if st.Found {
+		var tags []string
+		for tag := range doc.Tagged() {
+			if !ix.known[tag] {
+				tags = append(tags, tag)
+			}
+		}
+		sort.Strings(tags)
+		for _, tag := range tags {
+			l := doc.Tagged()[tag]
+			if trial(notebook.Op{Op: "untag", ID: tag, Text: l.Text}) {
+				foreign[tag] = true
+				d.strikes = append(d.strikes, nbStrike{Tag: tag, Text: l.Text, Kind: "foreign_tag",
+					Reason: fmt.Sprintf("the tag [%s · heard %d of %d] matches no lesson record of the desk: the words are the listener's, the tag is removed", tag, l.Heard, l.Of)})
+			}
+		}
+	}
 	// removal captures a line at the moment it goes: its text and its live
 	// numbers, so a retired lesson keeps the evidence that contradicted it.
 	removal := func(id, why, replacedBy string) {
 		line, ok := doc.Tagged()[id]
-		if !ok {
+		if !ok || foreign[id] {
 			return
 		}
 		hm := counts[line.Ref()]
@@ -510,6 +546,9 @@ func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbD
 	// model may not erase a contradiction by citing unrelated cases.
 	named := func(ids, cites []string) string {
 		for _, id := range ids {
+			if foreign[id] {
+				return fmt.Sprintf("%s is not a live line of the desk's: its tag is the listener's", id)
+			}
 			line, ok := doc.Tagged()[id]
 			if !ok {
 				continue
@@ -531,9 +570,9 @@ func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbD
 		return ""
 	}
 	// 1. The listener's edits since the desk's last revision (design 2.3).
-	d.strikes = detectStrikes(st)
-	for i := range d.strikes {
-		s := &d.strikes[i]
+	detected := detectStrikes(st)
+	for i := range detected {
+		s := &detected[i]
 		s.Cites, _ = c.lessonCites(ctx, s.Tag)
 		if s.Kind != "corrected" {
 			continue
@@ -548,6 +587,7 @@ func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbD
 			s.Reason += "; it could not be untagged either"
 		}
 	}
+	d.strikes = append(d.strikes, detected...)
 	struck, err := c.struckCites(ctx)
 	if err != nil {
 		return nil, err
@@ -573,7 +613,7 @@ func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbD
 		}
 	}
 	// 2. The model's proposals.
-	next := map[string]int{"L": maxInt(doc.MaxTag("L"), c.maxLessonTag(ctx, "L")), "T": maxInt(doc.MaxTag("T"), c.maxLessonTag(ctx, "T"))}
+	next := map[string]int{"L": maxInt(doc.MaxTag("L"), ix.maxL), "T": maxInt(doc.MaxTag("T"), ix.maxT)}
 	live := map[string]bool{}
 	for _, l := range doc.AllLines() {
 		live[l.Line.Text] = true
@@ -890,26 +930,53 @@ func (c *programmeCall) recordStrikes(ctx context.Context, st notebook.State, ss
 	return nil
 }
 
-// maxLessonTag is the highest number a lesson record has used for a letter, so
-// a retired line's id is never minted again.
-func (c *programmeCall) maxLessonTag(ctx context.Context, letter string) int {
+// lessonIndex is the lesson records read once: which ids the desk wrote and
+// still stands behind (a record that was not retired), and the highest number
+// each letter has used, retired ids included, so an id is never minted twice.
+type lessonIndex struct {
+	known      map[string]bool
+	maxL, maxT int
+}
+
+func (c *programmeCall) lessonIndex(ctx context.Context) (*lessonIndex, error) {
 	recs, err := c.ledger.ListCommitmentRecordsBySubjectRef(ctx, c.ownerID, c.rt.cfg.ComputerID, "record_kind", kindLesson, 5000)
 	if err != nil {
-		return 0
+		return nil, fmt.Errorf("read the lesson records: %w", err)
 	}
-	max := 0
+	ix := &lessonIndex{known: map[string]bool{}}
+	live, gone := map[string]bool{}, map[string]bool{}
 	for _, r := range recs {
 		id := strings.TrimPrefix(r.RecordID, lessonRecordPrefix)
 		if i := strings.Index(id, ":"); i >= 0 {
 			id = id[:i]
 		}
-		if strings.HasPrefix(id, letter) {
-			if n, err := strconv.Atoi(id[1:]); err == nil && n > max {
-				max = n
-			}
+		if len(id) < 2 {
+			continue
+		}
+		n, err := strconv.Atoi(id[1:])
+		if err != nil {
+			continue
+		}
+		switch id[0] {
+		case 'L':
+			ix.maxL = maxInt(ix.maxL, n)
+		case 'T':
+			ix.maxT = maxInt(ix.maxT, n)
+		default:
+			continue
+		}
+		if r.SubjectRefs["retired"] != "" {
+			gone[id] = true
+		} else {
+			live[id] = true
 		}
 	}
-	return max
+	for id := range live {
+		if !gone[id] {
+			ix.known[id] = true
+		}
+	}
+	return ix, nil
 }
 
 // lineCounts is heard h of m per line ref: of the settled forecasts whose
@@ -1225,10 +1292,14 @@ func (h *APIHandler) learningNotebook(ctx context.Context, ownerID string, led a
 	}
 	// What each patch became: the revision of an applied one.
 	applied := map[string]string{}
+	failed := map[string]bool{}
 	var patches []map[string]any
-	for _, r := range list(kindPatch, 400) {
-		if r.SubjectRefs["status"] == notebook.StatusApplied {
+	for _, r := range list(kindPatch, 5000) {
+		switch r.SubjectRefs["status"] {
+		case notebook.StatusApplied, notebook.StatusNoop:
 			applied[r.SubjectRefs["patch_id"]] = r.SubjectRefs["revision_id"]
+		case notebook.StatusStale, notebook.StatusRefused, "not_applied", "error":
+			failed[r.SubjectRefs["patch_id"]] = true
 		}
 		if len(patches) < 40 {
 			patches = append(patches, map[string]any{"patch_id": r.SubjectRefs["patch_id"], "status": r.SubjectRefs["status"], "stretch_id": r.SubjectRefs["stretch_id"],
@@ -1243,8 +1314,8 @@ func (h *APIHandler) learningNotebook(ctx context.Context, ownerID string, led a
 			live[r.SubjectRefs["line_id"]] = r
 			continue
 		}
-		if _, ok := applied[r.SubjectRefs["patch_id"]]; !ok {
-			continue // its patch never landed: the line was not removed
+		if failed[r.SubjectRefs["patch_id"]] {
+			continue // its patch did not land: the line was not removed
 		}
 		heard, _ := strconv.Atoi(r.SubjectRefs["heard"])
 		of, _ := strconv.Atoi(r.SubjectRefs["of"])
