@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // Research searches the computer's own corpus before the web: the corpus
@@ -372,5 +373,23 @@ func TestSearchWireCorpusReturnsMatchingEventsFirst(t *testing.T) {
 	}
 	if got := searchCorpusAsCell(t, deps, owner, computer, `{"query":"zebra"}`); len(got.Captures) != 0 {
 		t.Fatalf("unexpected captures %+v", got.Captures)
+	}
+}
+
+// A search_wire_corpus result that carries a verbatim page passage carries
+// the capture floor (owner_private:capture), as ReadCapture of the same bytes
+// does: publish-auto admission keys on that floor. A result with no passage
+// stays world_untrusted only.
+func TestCorpusSearchResultWithAPassageCarriesTheCaptureFloor(t *testing.T) {
+	with := json.RawMessage(`{"captures":[{"capture_id":"c1","title":"t"},{"capture_id":"c2","passage":"the amber treaty was read aloud"}]}`)
+	got, reads := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, with)
+	if !reads || !got.Has(types.OwnerPrivateLabel("capture")) || !got.Has(types.LabelWorldUntrusted) {
+		t.Fatalf("a result with a passage must carry the capture floor and world_untrusted: %v", got)
+	}
+	for _, without := range []string{`{"captures":[{"capture_id":"c1","title":"t"}]}`, `{"captures":[{"capture_id":"c1","passage":"  "}]}`, `{"captures":[]}`, ``, `not json`} {
+		got, reads := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, json.RawMessage(without))
+		if !reads || got.Has(types.OwnerPrivateLabel("capture")) || !got.Has(types.LabelWorldUntrusted) {
+			t.Fatalf("result %q must stay world_untrusted only: %v", without, got)
+		}
 	}
 }
