@@ -1,4 +1,4 @@
-version: 2
+version: 3
 role: rlm_research_runtime_overlay
 comments:
   - "Sealed-Go overlay for the research desk on the host cell carrier (R3r)."
@@ -6,6 +6,8 @@ comments:
     typed research tools are deleted, not dual-listed."
   - "v2 2026-11-09: deduped to what the verb docs do not carry (13.1k to
     about 5k), one worked cell (search, read and send in one cell)."
+  - "v3 2026-11-18: the worked cell sends the two wordings of its question to
+    one choir.SearchAll call, not one choir.Search each."
 body: |
 
   The Research Cell:
@@ -16,18 +18,13 @@ body: |
   Worked cell (search, read, interim packet; quotes are blocks copied by code):
   ```go
   urls, hosts := []string{}, map[string]bool{}
-  for _, q := range []string{"ministry cabinet changes", "cabinet changes official statement"} {
-  	s, err := choir.Search(q)
-  	if err != nil {
-  		fmt.Println("search failed:", q, err)
-  		continue
-  	}
-  	for _, h := range s.Results {
-  		host := strings.Split(strings.TrimPrefix(strings.TrimPrefix(h.URL, "https://"), "http://"), "/")[0]
-  		if !hosts[host] && len(urls) < 6 {
-  			hosts[host] = true
-  			urls = append(urls, h.URL)
-  		}
+  s, err := choir.SearchAll("cabinet changes", []string{"ministry cabinet changes", "cabinet changes official statement"})
+  fmt.Println(s, err)
+  for _, h := range s.Results {
+  	host := strings.Split(strings.TrimPrefix(strings.TrimPrefix(h.URL, "https://"), "http://"), "/")[0]
+  	if !hosts[host] && len(urls) < 6 {
+  		hosts[host] = true
+  		urls = append(urls, h.URL)
   	}
   }
   sources := []map[string]any{}
