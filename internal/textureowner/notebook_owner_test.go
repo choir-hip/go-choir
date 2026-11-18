@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/notebook"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Failure list: notebook_owner.go (N1-N7).
@@ -112,5 +113,45 @@ func TestNotebookAdoptsTheEdition(t *testing.T) {
 	}
 	if _, got, _ := getEdition(f, "user-1"); got["doc_id"] != "doc-edition" {
 		t.Errorf("(N2) the edition route: %v", got)
+	}
+}
+
+// N4: a document a model agent wrote is not adopted, and an archived notebook
+// is reported and never written to.
+func TestNotebookDoesNotAdoptAModelsDocumentOrWriteToAnArchivedOne(t *testing.T) {
+	f := newAlgoFixture(t, "x")
+	ctx := context.Background()
+	body, _, projected, err := markdownLineageStructuredRevision("doc-model", "rev-doc-model-0", "# My notebook\n\n- hello\n", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startObservationLifecycle(t, f.core.Store(), func(r *types.StartLifecycleRequest) {
+		r.CommandID, r.TrajectoryID = "start-doc-model", "trajectory-doc-model"
+		r.SubjectRefs = map[string]string{"artifact": "texture://document/doc-model", "doc_id": "doc-model"}
+		r.InitialWork.WorkItemID = "work-doc-model"
+		r.InitialDocument = types.Document{DocID: "doc-model", Title: "My notebook"}
+		r.InitialRevision = types.Revision{RevisionID: "rev-doc-model-0", AuthorKind: types.AuthorAppAgent, AuthorLabel: "texture", Content: projected, BodyDoc: body}
+		r.Agent = types.AgentRecord{AgentID: "texture:doc-model", Profile: "texture", Role: "texture", ChannelID: "doc-model"}
+	})
+	st, err := f.handler.NotebookRead(ctx, "user-1", "desk:autoradio")
+	if err != nil || st.Found {
+		t.Fatalf("(N4) a model's document was adopted: %+v %v", st, err)
+	}
+	// The listener's own, archived: reported, nothing written.
+	_ = startTextDoc(t, f.core.Store(), "doc-mine", "My notebook", "# My notebook\n")
+	settleAndArchive(t, f, "doc-mine")
+	st, err = f.handler.NotebookRead(ctx, "user-1", "desk:autoradio")
+	if err != nil || st.Found || !st.Archived {
+		t.Fatalf("(N4) archived: %+v %v", st, err)
+	}
+	res, err := f.handler.NotebookApply(ctx, "user-1", "desk:autoradio", notebook.Patch{PatchID: "z1", Ops: []notebook.Op{nbAddOp("L1", "X.")}})
+	if err != nil || res.Status != notebook.StatusRefused || !strings.Contains(res.Reason, "archived") {
+		t.Errorf("(N4) write to an archived notebook: %+v %v", res, err)
+	}
+	docs, _ := f.core.Store().ListDocumentsByScope(ctx, "user-1", "autoputer-test", 100)
+	for _, d := range docs {
+		if d.DocID != "doc-model" && d.DocID != "doc-mine" && strings.Contains(d.Title, "notebook") {
+			t.Errorf("(N4) a second notebook was made: %s", d.DocID)
+		}
 	}
 }

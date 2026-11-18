@@ -50,15 +50,21 @@ type programmeInput struct {
 	// The notebook (L5): its parsed head, the lines the call is shown with their
 	// refs, the trying ids, the words of each listed turn (a steer quotes one
 	// verbatim) and the marked cases (settled forecasts, by claim id).
-	nbFound   bool
-	nbRevID   string
-	nbDoc     notebook.Doc
-	nbLines   []nbLine
-	nbRefs    map[string]bool
-	tryIDs    map[string]bool
-	turnWords map[string]string
-	cases     []nbCase
-	caseIDs   map[string]nbCase
+	nbFound bool
+	// nbArchived: the listener archived their notebook; nothing is read or written.
+	nbArchived bool
+	// nbTotal is the number of lines the notebook has; nbLines those the prompt
+	// copy holds (the receipt says both). liveCounts is heard h of m by ref.
+	nbTotal    int
+	liveCounts map[string][2]int
+	nbRevID    string
+	nbDoc      notebook.Doc
+	nbLines    []nbLine
+	nbRefs     map[string]bool
+	tryIDs     map[string]bool
+	turnWords  map[string]string
+	cases      []nbCase
+	caseIDs    map[string]nbCase
 	// nbReceipt is the hash and length of the notebook text the model was shown
 	// (stored on the tape in place of the text).
 	nbReceiptSHA string
