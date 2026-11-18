@@ -100,13 +100,27 @@ func TestB4_TheHardWordCap(t *testing.T) {
 	if w := d.WrittenWords(); w >= HardWords || w < 400 {
 		t.Fatalf("setup: %d words", w)
 	}
-	// Reach past the cap through the listener-free sections: 10 taps of 100 chars.
+	// Taps are never refused for the page's words, but they count.
 	var taps []Op
 	for i := 0; i < 10; i++ {
-		taps = append(taps, Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: strings.Repeat("w ", 60)})
+		taps = append(taps, Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "More like this: \"" + strings.Repeat("w ", 60) + "\""})
 	}
-	if _, err := d.Apply(Patch{Ops: taps}); err == nil {
+	d2, err := d.Apply(Patch{Ops: taps})
+	if err != nil {
+		t.Fatalf("(N6) taps refused for words: %v", err)
+	}
+	if d2.WrittenWords() <= HardWords {
+		t.Fatalf("setup: %d words", d2.WrittenWords())
+	}
+	// An add that would leave the page over the cap is refused.
+	if _, err := d2.Apply(Patch{Ops: []Op{{Op: "add", Section: "learned", ID: "L13", Text: "Merged.", Replaces: []string{"L1"}}}}); err == nil {
 		t.Error("(B4) the page passed 1,000 words")
+	}
+	// The listener's own bullets are never counted.
+	lis := "# My notebook\n\n## What you asked for\n" + strings.Repeat("- "+strings.Repeat("mine ", 100)+"\n", 20)
+	d3, err := Parse(lis).Apply(Patch{Ops: []Op{{Op: "add", Section: "learned", ID: "L1", Text: "Fine."}}})
+	if err != nil || d3.WrittenWords() > 10 {
+		t.Errorf("(N6) listener words refused or counted: %v %d", err, d3.WrittenWords())
 	}
 }
 
@@ -122,6 +136,41 @@ func TestB5_StewardingKeepsTheNewestTen(t *testing.T) {
 	ls := d.Lines(SecSteering)
 	if len(ls) != MaxSteering || !strings.Contains(ls[len(ls)-1].Text, "t12") || strings.Contains(ls[0].Text, "\"t0\"") {
 		t.Errorf("(B5) %d lines, first %q last %q", len(ls), ls[0].Text, ls[len(ls)-1].Text)
+	}
+}
+
+func TestN7_TheSteeringCapCutsOnlyAutoradiosLines(t *testing.T) {
+	d := Parse("# My notebook\n\n## Recent steering\n- my own note about steering\n")
+	for i := 0; i < 12; i++ {
+		var err error
+		d, err = d.ApplyOp(Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "Less like this: \"t" + itoa(i) + "\" (1 Jan)"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	ls := d.Lines(SecSteering)
+	if len(ls) != MaxSteering+1 || ls[0].Text != "my own note about steering" {
+		t.Errorf("(N7) %d lines, first %q", len(ls), ls[0].Text)
+	}
+}
+
+func TestN8_NoLinksInALesson(t *testing.T) {
+	for _, text := range []string{"See https://example.com now", "a [link](x) here", "www.example.com is heard", "<https://x.y>"} {
+		if CheckText(text) == nil {
+			t.Errorf("(N8) %q accepted", text)
+		}
+	}
+}
+
+func TestN9_UntagMakesTheListenersWordsTheirOwn(t *testing.T) {
+	d := fresh(t, Op{Op: "add", Section: "learned", ID: "L4", Text: "Mine to lose."})
+	d2, err := d.Apply(Patch{Ops: []Op{{Op: "untag", ID: "L4", Text: "I reworded this [L9 oddly"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ls := d2.Lines(SecLearned)
+	if len(ls) != 1 || ls[0].Tag != "" || ls[0].Text != "I reworded this [L9 oddly" || len(d2.Tagged()) != 0 {
+		t.Errorf("(N9) %+v", ls)
 	}
 }
 

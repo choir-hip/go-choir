@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -51,27 +52,80 @@ func notebookCaller(caller, grant string) error {
 	return nil
 }
 
-// notebookDoc finds the owner's notebook (or legacy edition) document.
-func (h *Handler) notebookDoc(ctx context.Context, ownerID, computerID string) (types.Document, bool, error) {
+// notebookDocID is the deterministic id of the notebook this handler creates
+// for one owner on one computer.
+func notebookDocID(ownerID, computerID string) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:notebook:"+ownerID+":"+computerID+":document")).String()
+}
+
+// notebookDoc finds the owner's notebook. The deterministic id is looked up
+// first; then the owner's own non-archived documents titled My notebook (or
+// the legacy My edition) that no model agent wrote. A listing that fails is an
+// error, never "not found". archived is true when the notebook exists and the
+// owner archived it: the desk reads and writes nothing then (un-archiving is
+// the owner's act).
+func (h *Handler) notebookDoc(ctx context.Context, ownerID, computerID string) (doc types.Document, found, archived bool, err error) {
+	if d, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, notebookDocID(ownerID, computerID)); err == nil {
+		if d.ArchivedAt != nil {
+			return types.Document{}, false, true, nil
+		}
+		return d, true, false, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return types.Document{}, false, false, fmt.Errorf("look up the notebook by id: %w", err)
+	}
 	docs, err := h.Store.ListDocumentsByScope(asTextureReader(ctx), ownerID, computerID, algorithm2DocLimit)
 	if err != nil {
-		return types.Document{}, false, err
+		return types.Document{}, false, false, fmt.Errorf("list the owner's documents: %w", err)
 	}
 	norm := func(t string) string { return strings.Join(strings.Fields(t), " ") }
-	var best types.Document
-	found := false
+	var cands []types.Document
 	for _, d := range docs {
-		if d.ArchivedAt != nil || !editiondoc.IsEditionTitle(d.Title) {
+		if !editiondoc.IsEditionTitle(d.Title) {
 			continue
 		}
-		// A document already titled as the notebook beats a legacy one; then
-		// the most recently updated wins.
-		cur, bst := strings.EqualFold(norm(d.Title), editiondoc.Title), strings.EqualFold(norm(best.Title), editiondoc.Title)
-		if !found || (cur && !bst) || (cur == bst && d.UpdatedAt.After(best.UpdatedAt)) {
-			best, found = d, true
+		if d.ArchivedAt != nil {
+			archived = true
+			continue
+		}
+		cands = append(cands, d)
+	}
+	// A document already titled as the notebook beats a legacy one; then the
+	// most recently updated wins.
+	sort.SliceStable(cands, func(i, j int) bool {
+		ci, cj := strings.EqualFold(norm(cands[i].Title), editiondoc.Title), strings.EqualFold(norm(cands[j].Title), editiondoc.Title)
+		if ci != cj {
+			return ci
+		}
+		return cands[i].UpdatedAt.After(cands[j].UpdatedAt)
+	})
+	for _, d := range cands {
+		ok, err := h.notebookAdoptable(ctx, ownerID, d)
+		if err != nil {
+			return types.Document{}, false, false, err
+		}
+		if ok {
+			return d, true, false, nil
 		}
 	}
-	return best, found, nil
+	return types.Document{}, false, archived, nil
+}
+
+// notebookAdoptable tells a document the listener (or this desk) wrote from one
+// a model agent made: any revision in its chain by an agent other than the
+// desk's own label means a model wrote it, and it is not adopted.
+func (h *Handler) notebookAdoptable(ctx context.Context, ownerID string, d types.Document) (bool, error) {
+	id := d.CurrentRevisionID
+	for i := 0; id != "" && i < notebookChainMax; i++ {
+		rev, err := h.Store.GetLifecycleRevision(ctx, ownerID, d.ComputerID, id)
+		if err != nil {
+			return false, fmt.Errorf("read the revisions of %s: %w", d.DocID, err)
+		}
+		if rev.AuthorKind == types.AuthorAppAgent && rev.AuthorLabel != notebook.DeskLabel {
+			return false, nil
+		}
+		id = rev.ParentRevisionID
+	}
+	return true, nil
 }
 
 func notebookRevision(r types.Revision) notebook.Revision {
@@ -90,9 +144,15 @@ func (h *Handler) NotebookRead(ctx context.Context, ownerID, caller string) (not
 	}
 	computerID := strings.TrimSpace(h.Core.TextureComputerID())
 	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_document")
-	doc, found, err := h.notebookDoc(ctx, ownerID, computerID)
-	if err != nil || !found {
+	doc, found, archived, err := h.notebookDoc(ctx, ownerID, computerID)
+	if err != nil {
 		return notebook.State{}, err
+	}
+	if archived {
+		return notebook.State{Archived: true}, nil
+	}
+	if !found {
+		return notebook.State{}, nil
 	}
 	st := notebook.State{Found: true, DocID: doc.DocID}
 	id := doc.CurrentRevisionID
@@ -129,9 +189,12 @@ func (h *Handler) NotebookApply(ctx context.Context, ownerID, caller string, p n
 	defer h.textureEditMu.Unlock()
 	computerID := strings.TrimSpace(h.Core.TextureComputerID())
 	ctx = objectgraph.WithCustodianReader(ctx, "choir.texture_document")
-	doc, found, err := h.notebookDoc(ctx, ownerID, computerID)
+	doc, found, archived, err := h.notebookDoc(ctx, ownerID, computerID)
 	if err != nil {
 		return notebook.Result{}, err
+	}
+	if archived {
+		return notebook.Result{Status: notebook.StatusRefused, Reason: "your notebook is archived"}, nil
 	}
 	if !found {
 		if p.BaseRevisionID != "" {
@@ -242,7 +305,7 @@ func (h *Handler) commitNotebook(ctx context.Context, ownerID string, doc types.
 // listener's edit.
 func (h *Handler) startNotebook(ctx context.Context, ownerID, computerID string, p notebook.Patch, next notebook.Doc) (notebook.Result, error) {
 	key := "choir:notebook:" + ownerID + ":" + computerID
-	docID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":document")).String()
+	docID := notebookDocID(ownerID, computerID)
 	trajectoryID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":trajectory")).String()
 	workID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":work")).String()
 	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("choir:notebook:"+docID+":"+p.PatchID)).String()
