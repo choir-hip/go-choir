@@ -236,16 +236,21 @@ passage are pruned; the rarest are kept while their postings sum to at most
 are pruned; then, of those kept, the 32 rarest are searched and the most
 common are capped away. A question keeps the words that name its subject and
 loses "week" and "decided" on a large index. A small index prunes nothing.
-The result names the pruned, capped, excluded and phrase-fallback words
-(`pruned`, `term_capped`, `excluded`, `phrase_fallbacks`), and the tool's note
-and `capture_words_dropped` carry them to the model.
+corpusd's answer names the pruned, capped, excluded and phrase-fallback words
+(`pruned`, `term_capped`, `excluded`, `phrase_fallbacks`). The research tool's
+`capture_words_dropped` carries exactly two kinds: the pruned words (in no
+page, or too common to weigh) and the capped ones. Excluded words and phrase
+fallbacks are told in `captures_note`, which also carries the pruned and capped
+words, the half-relevance rule of `recent` order, and the candidate cap when it
+was hit (`capped` in corpusd's answer, read by the guest).
 
 **Candidates.** Passages are taken by score, whatever the order: at most 300
 candidate passages, at most 3 (`MaxPassagesPerPage`) from any one page, so a
 long page cannot take the slots of the pages that answer the question. The
 order is then applied to the candidates: `relevance` by score; `recent` by
 time among the pages at least half as relevant as the best one (so the newest
-page that says one common word does not lead).
+page that says one common word does not lead). The note of a `recent` result
+says so, and the note says when only the best 300 passages were ranked.
 
 **Write path.** `Store.indexCaptures` (called by `PutObject`, `PutBatch` and
 `InsertObjectIfAbsent`) writes the text after the projection: read the text
@@ -379,6 +384,41 @@ the one to copy.
   search rides that route, so both now also turn the text half off, with the
   title half falling back to the window. They are a residual to remove, not to
   extend; nothing new reads them.
+- **The search hides owner-private captures from every caller, the research
+  desk included**, though `ReadCapture` would serve that desk: a capture whose
+  record carries an owner-private label is not indexed (corpusd,
+  `captureFullTextPage`), is not returned by a text hit (corpusd re-reads the
+  record), and is not listed by the title and label half either (the guest's
+  `dropOwnerPrivate`, `researchtools/corpus_search.go`), with the corpusd
+  switches on or off.
+- **Where the capture label goes.** A search result that carries a passage is
+  labelled `owner_private:capture` beside `world_untrusted`
+  (`agentcore/run_labels.go:233`), and a result the host cannot read fails
+  closed to the same. The call folds that into the research run's accumulator
+  (`tools_desk.go:707` and `:1454` call `noteEgressRead`, `run_labels.go:332`,
+  which calls `taintRun` at `:338`), exactly as a `ReadCapture` does. Every
+  record the run commits is stamped with the accumulator
+  (`rlm_reduce.go:1588`), and a run shown such a record reads the stamp back
+  (`labelsOfRecord`, `run_labels.go:359`, folded by `labelsThrough`, `:373`):
+  that is how the label reaches a publishing run that is shown the research
+  run's records. At publish-auto admission `owner_private:capture` is in the
+  admitted subset (`publish_auto_admission.go:42`, checked at `:63`) when the
+  story's provenance walk holds; any other owner-private label still asks.
+  What does not carry the label is the research child's **Report** returned
+  through `choir.Research`: it is labelled by the child's role
+  (`run_labels.go:199`, world-only for a web child), whatever the child read.
+  That is the same for a search and a `ReadCapture`, is older than this change,
+  and is not touched here (the lead records it as its own problem). Pinned by
+  `TestASearchPassageTaintsARunAsAReadCaptureDoes` (a search and a ReadCapture
+  leave the same run labels, and a record stamped with them reads back with the
+  floor) beside `TestARunThatReadACaptureCarriesItsLabelIntoEveryAct`
+  (`run_labels_test.go:48`, ReadCapture through to the committed acts).
+- A phrase made only of stop words (`"the of"`) is searched as words and
+  reports no fallback.
+- A catch-up write failure is counted and logged like an inline one (one line
+  a window); a walk stops after 20 failures in a row (a full or failing disk,
+  not 20 bad pages), leaves `complete` false, and the next attempt waits 5
+  minutes, doubling to an hour.
 - Punctuation inside a word splits it (`C++` is `c`, `AT&T` is `t`); the shared
   tokenizer was left alone because it also serves the published-stories index.
   The tool text says so and what to write instead.
