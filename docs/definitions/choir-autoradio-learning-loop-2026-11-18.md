@@ -243,9 +243,9 @@ owner_rulings:
 
 now:
   status: working
-  slice: "L1 to L3 (settlement) are landed, deployed and proven on d@e, with a follow-up; L7's server (takes) landed as ce719fe1a and is in CI and deploy, its proof on d@e to run; L4 and L5 (the notebook) are on lane/learn-notebook in a repair round after both seats returned REPAIR; the phone build lane/autoradio-integ19 (014d71f7f) is installed on the owner's phone, unlaunched, and none of the phone lanes are on main"
+  slice: "L1 to L3 (settlement) are landed, deployed and proven on d@e, with a follow-up; L7's server (takes) is landed, deployed and proven on d@e (ce719fe1a); L4 and L5 (the notebook) are on lane/learn-notebook in a repair round after both seats returned REPAIR; the phone build lane/autoradio-integ19 (014d71f7f) is installed on the owner's phone, unlaunched, and none of the phone lanes are on main"
   source_ref: "origin/main at the commit that carries this file"
-  deploy_identity: "staging 843ee5d80 at 2026-11-18T08:35Z; ce719fe1a deploying"
+  deploy_identity: "staging ce719fe1a at 2026-11-18T10:13Z"
   candidate:
     id: none
     state: none
@@ -274,7 +274,7 @@ now:
     main_uncertainty: "whether the phone's posted ops settle forecasts for a real listener as they do for the proof script, and whether a recording made by the phone passes the server's audio check"
     next_observation: "the owner's first listening session on integ19: the scorecard route on the owner's computer before and after (read only)"
   blocker_or_risk: "the phone lanes (about 150 commits) are not on main and were first reviewed on 2026-11-18 (docs/problems/autoradio-phone-code-unreviewed-for-three-days-2026-11-18.md); TestFlight needs the owner's paid team (D3); nothing about sound has been checked on the device"
-  next_action: "run scripts/prove-autoradio-takes on d@e when staging reports ce719fe1a and settle C124; re-review and land lane/learn-notebook; merge the phone lanes into main; the Android experiment (L10) after the owner's 05:45 check-in"
+  next_action: "re-review and land lane/learn-notebook; merge the phone lanes into main; the Android experiment (L10) after the owner's 05:45 check-in"
 
 receipts:
   - station: L1-L3
@@ -287,9 +287,9 @@ receipts:
   - station: L7 (server)
     what: "takes: publish, list, audio, record, delete, outcome; a take as a programme candidate and a take entry on the run sheet"
     landed: [3f3cfdb7b, 9edf286b8, a1c3ac93a, ce719fe1a]
-    ci: ["44280975897 (running when this was written)"]
-    deployed: "not yet"
-    proof: "scripts/prove-autoradio-takes, not yet run (ledger C124)"
+    ci: ["44280975897"]
+    deployed: "ce719fe1a at 2026-11-18T10:13Z"
+    proof: "scripts/prove-autoradio-takes PASS on d@e, first run, eight checks (ledger C124)"
     review: "five rounds: seat 1 ACCEPT in round 1; seat 2 REPAIR, REPAIR, ACCEPT, REPAIR (after the rebase onto settlement), ACCEPT"
 ---
 
