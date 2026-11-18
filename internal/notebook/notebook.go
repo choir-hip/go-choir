@@ -264,6 +264,14 @@ func IsTapLine(text string) bool {
 	return strings.HasPrefix(text, "More like this: ") || strings.HasPrefix(text, "Less like this: ")
 }
 
+// tapKey is a tap line without its trailing time: "More like this: "T"".
+func tapKey(text string) string {
+	if i := strings.LastIndex(text, " ("); i > 0 {
+		return text[:i]
+	}
+	return text
+}
+
 // WrittenWords counts the words of the lines Autoradio wrote: the tagged lines
 // of learned and trying, and its tap lines under steering (design 2.4). A
 // bullet the listener wrote, wherever it stands, is not counted: their text
@@ -495,6 +503,13 @@ func (d Doc) ApplyOp(op Op) (Doc, error) {
 		}
 		sec := out.section(SecSteering)
 		line := strings.TrimSpace(op.Text)
+		// The notebook already holds this tap (same verb and title, whatever
+		// the time): a re-sent or deferred tap is a no-op.
+		for _, l := range sec.Lines {
+			if l.Bullet && l.Tag == "" && IsTapLine(l.Text) && tapKey(l.Text) == tapKey(line) {
+				return out, nil
+			}
+		}
 		sec.Lines = append(sec.Lines, Line{Raw: "- " + line, Bullet: true, Text: line})
 		// Only the lines Autoradio wrote are cut, oldest first; a bullet the
 		// listener put under this heading is never removed.

@@ -18,7 +18,9 @@ import (
 //	   moved to "What you asked for";
 //	B7 counts are written to a line the patch does not name, or a count changes
 //	   any text;
-//	B8 render(parse(x)) changes a document the listener edited by hand.
+//	B8 render(parse(x)) changes a document the listener edited by hand;
+//	B9 a tap cuts a bullet the listener put under Recent steering, or the same
+//	   tap twice writes two lines (TestN7, TestN7_ARepeatedTapIsOneLine).
 
 func fresh(t *testing.T, ops ...Op) Doc {
 	t.Helper()
@@ -103,7 +105,7 @@ func TestB4_TheHardWordCap(t *testing.T) {
 	// Taps are never refused for the page's words, but they count.
 	var taps []Op
 	for i := 0; i < 10; i++ {
-		taps = append(taps, Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "More like this: \"" + strings.Repeat("w ", 60) + "\""})
+		taps = append(taps, Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "More like this: \"t" + itoa(i) + " " + strings.Repeat("w ", 60) + "\""})
 	}
 	d2, err := d.Apply(Patch{Ops: taps})
 	if err != nil {
@@ -212,3 +214,16 @@ func TestB8_RoundTripOfAHandEditedDocument(t *testing.T) {
 }
 
 func itoa(i int) string { return strconv.Itoa(i) }
+
+func TestN7_ARepeatedTapIsOneLine(t *testing.T) {
+	d := Fresh()
+	for _, text := range []string{`Less like this: "Harbor fees rise" (1 Jan 08:00)`, `Less like this: "Harbor fees rise" (1 Jan 08:07)`, `More like this: "Harbor fees rise" (1 Jan 08:09)`} {
+		var err error
+		if d, err = d.ApplyOp(Op{Op: "tap", Ref: "tap:e", Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := len(d.Lines(SecSteering)); n != 2 {
+		t.Errorf("(B9) %d lines, want the less and the more", n)
+	}
+}
