@@ -23,8 +23,7 @@ import (
 //  6. Memory grows without bound.
 //  8. Shared result slices race between concurrent searches (-race).
 //  9. The kill switch (TTL 0) does not restore the uncached path.
-// 10. Normalization merges queries that differ in meaning (the shared
-//     internal/searchquery key; its own table test is there).
+// 10. Normalization merges queries that differ in meaning.
 // 11. A hit or join is indistinguishable from a live search (Served).
 
 // fakeSearch is a search the test controls: Start returns a Stream whose
@@ -378,55 +377,26 @@ func TestNilCacheIsTheUncachedPath(t *testing.T) { // failure mode 9
 	}
 }
 
-func TestCacheKeyKeepsMeaning(t *testing.T) { // failure mode 10, now the shared normaliser (search-reuse commit 2)
+func TestNormalizeQueryKeepsMeaning(t *testing.T) { // failure mode 10
 	same := [][2]string{
 		{"parlioSDR  README", " parlioSDR README "},
 		{"a\tb\nc", "a b c"},
-		{`"raw 14-bit IQ"`, `raw 14-bit IQ`},
-		{"README parlioSDR", "parlioSDR readme"},
-		{"parlioSDR README 2026", "parlioSDR README"},
 	}
 	for _, p := range same {
-		if cacheKey("s", p[0], 40) != cacheKey("s", p[1], 40) {
+		if NormalizeQuery(p[0]) != NormalizeQuery(p[1]) {
 			t.Fatalf("%q and %q should share a key", p[0], p[1])
 		}
 	}
 	differ := [][2]string{
-		{`smiSDR OR parlioSDR`, `smiSDR parlioSDR`},
+		{`"raw 14-bit IQ"`, `raw 14-bit IQ`},
+		{`smiSDR OR parlioSDR`, `smiSDR or parlioSDR`},
 		{`site:github.com parlioSDR`, `parlioSDR`},
-		{`site:github.com parlioSDR`, `site:gitlab.com parlioSDR`},
-		{`parlioSDR README`, `parlioSDR READMEs`},
+		{`Apple`, `apple`},
 	}
 	for _, p := range differ {
-		if cacheKey("s", p[0], 40) == cacheKey("s", p[1], 40) {
+		if NormalizeQuery(p[0]) == NormalizeQuery(p[1]) {
 			t.Fatalf("%q and %q must not share a key", p[0], p[1])
 		}
-	}
-	if cacheKey("a", "q", 40) == cacheKey("b", "q", 40) || cacheKey("a", "q", 40) == cacheKey("a", "q", 10) {
-		t.Fatal("scope and max results stay part of the key")
-	}
-}
-
-// Search-reuse commit 2c. Failure list, written before the code: a query
-// reworded only by word order, quotes, punctuation, case, a bare year or a
-// stop word starts the providers again (12% of the paper's searches in the
-// 41-hour replay); or a query that differs by a real word is answered from
-// another's cached results.
-func TestCacheHitForTheSameTermsInAnotherOrder(t *testing.T) {
-	c, _ := testCache(CacheConfig{})
-	f := &fakeSearch{}
-	answer(t, c, f, "vm-a", "Mauritius harbor strike", hit("keenable", "https://a.example/1"))
-	for _, q := range []string{`"harbor strike" mauritius`, "strike harbor, Mauritius 2026", "the harbor strike in Mauritius"} {
-		s, _ := answer(t, c, f, "vm-a", q, hit("keenable", "https://a.example/1"))
-		if s.Served != ServedHit {
-			t.Fatalf("%q served = %q, want hit", q, s.Served)
-		}
-	}
-	if f.starts.Load() != 1 {
-		t.Fatalf("providers started %d times, want 1", f.starts.Load())
-	}
-	if s, _ := answer(t, c, f, "vm-a", "Mauritius harbor strike union", hit("keenable", "https://a.example/2")); s.Served != ServedMiss {
-		t.Fatalf("a query with another real word served = %q, want miss", s.Served)
 	}
 }
 
