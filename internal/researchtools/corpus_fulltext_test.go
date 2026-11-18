@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // The corpus search over captured pages' full text, from the research
@@ -350,6 +351,73 @@ func TestCorpusSearchNamesTheWordsItDidNotSearch(t *testing.T) {
 	none := &CaptureTextInfo{Used: false, Reason: "the query has no searchable words"}
 	_, note, _, _ = searchCapturesFor(context.Background(), Dependencies{Captures: textAnswerSink{info: none}}, "o", "c", corpusRequest{Query: "!!!"}, 10)
 	if !strings.Contains(note, "no searchable words") {
+		t.Fatalf("note %q", note)
+	}
+}
+
+// The label test marshals the real result struct, so a renamed field breaks it.
+func TestCorpusResultCarriesPassageReadsTheRealResult(t *testing.T) {
+	with, _ := json.Marshal(wireCorpusResult{Captures: []CorpusCapture{{CaptureID: "c1"}, {CaptureID: "c2", Passage: "verbatim page text"}}})
+	if carries, ok := CorpusResultCarriesPassage(with); !carries || !ok {
+		t.Fatalf("a real result with a passage: carries %v understood %v: %s", carries, ok, with)
+	}
+	without, _ := json.Marshal(wireCorpusResult{Captures: []CorpusCapture{{CaptureID: "c1", Title: "t"}}})
+	if carries, ok := CorpusResultCarriesPassage(without); carries || !ok {
+		t.Fatalf("a real result with no passage: carries %v understood %v", carries, ok)
+	}
+	empty, _ := json.Marshal(wireCorpusResult{})
+	if carries, ok := CorpusResultCarriesPassage(empty); carries || !ok {
+		t.Fatalf("a real empty result (captures is []): carries %v understood %v: %s", carries, ok, empty)
+	}
+	for _, bad := range []string{`not json`, `{}`, `{"capture":[{"passage":"x"}]}`, `[]`} {
+		if _, ok := CorpusResultCarriesPassage([]byte(bad)); ok {
+			t.Fatalf("%q must not be understood", bad)
+		}
+	}
+}
+
+// The search hides owner-private captures from every caller: the title and
+// label half as well as the text half.
+func TestCorpusSearchNeverListsAnOwnerPrivateCapture(t *testing.T) {
+	for _, mode := range []string{"", "window"} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			t.Setenv(corpusSearchModeEnv, mode)
+			w := newFTWorld(t, true)
+			now := time.Now().UTC().Truncate(time.Second)
+			private := w.page(t, "private", "Secret harbor memo", "The harbor memo says the quorum met in private.\n\n", now.Add(-time.Hour))
+			private.Metadata = types.StampMetadataLabels(private.Metadata, types.NewLabelSet(types.OwnerPrivateLabel("capture")))
+			open := w.page(t, "open", "Public harbor memo", "The harbor memo says the quorum met in public.\n\n", now.Add(-2*time.Hour))
+			if err := w.og.PutBatch(context.Background(), objectgraph.Batch{Objects: []objectgraph.Object{private, open}}); err != nil {
+				t.Fatal(err)
+			}
+			got, _, _ := w.search(t, corpusRequest{Query: "harbor memo"})
+			if len(got) != 1 || got[0].CaptureID != open.CanonicalID {
+				t.Fatalf("an owner-private capture was listed (or the open one lost): %v", ids(got))
+			}
+		})
+	}
+}
+
+func TestCorpusSearchTellsTheModelWhatRecentOrderAndTheCapMean(t *testing.T) {
+	t.Setenv(corpusSearchModeEnv, "")
+	info := &CaptureTextInfo{Used: true, Indexed: 3, Captures: 3, Capped: true}
+	_, note, got, err := searchCapturesFor(context.Background(), Dependencies{Captures: textAnswerSink{info: info}}, "o", "c",
+		corpusRequest{Query: "harbor strike", Terms: corpusQueryTerms("harbor strike"), Order: "recent"}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"at least half as relevant", "best 300 passages"} {
+		if !strings.Contains(note, want) {
+			t.Fatalf("the note lacks %q: %q", want, note)
+		}
+	}
+	if !got.Capped {
+		t.Fatal("the text search's cap must reach the capped field")
+	}
+	// Relevance order does not claim the half-relevance rule.
+	_, note, _, _ = searchCapturesFor(context.Background(), Dependencies{Captures: textAnswerSink{info: &CaptureTextInfo{Used: true}}}, "o", "c",
+		corpusRequest{Query: "harbor", Terms: []string{"harbor"}}, 10)
+	if strings.Contains(note, "half as relevant") {
 		t.Fatalf("note %q", note)
 	}
 }
