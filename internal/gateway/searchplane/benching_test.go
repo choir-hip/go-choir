@@ -219,7 +219,7 @@ func TestPacing_SecondCallWaitsForItsSlot(t *testing.T) {
 func TestPacing_SkipsBeyondWaitWithoutStrike(t *testing.T) {
 	store := NewMemoryHealthStore()
 	brave := delayedProvider("brave", 0, 1)
-	keen := delayedProvider("keenable", 0, 1)
+	keen := delayedProvider("ceramic", 0, 1)
 	router := pacedRouter(store, 100*time.Millisecond, time.Hour, brave, keen)
 	s1, _ := router.Start(context.Background(), "a", 5)
 	drain(t, s1)
@@ -227,7 +227,7 @@ func TestPacing_SkipsBeyondWaitWithoutStrike(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(s2.Providers, ",") != "keenable" {
+	if strings.Join(s2.Providers, ",") != "ceramic" {
 		t.Fatalf("providers = %v, want brave left out of N while paced", s2.Providers)
 	}
 	if len(s2.Cooling) != 1 || s2.Cooling[0].Provider != "brave" || s2.Cooling[0].State != StatePaced || s2.Cooling[0].Reason != "paced" {

@@ -2563,6 +2563,7 @@ in
       #   PARALLEL_API_KEY=...
       #   SERPAPI_API_KEY=...
       #   KEENABLE_API_KEY=...
+      #   CERAMIC_API_KEY=...
       EnvironmentFile = "-/var/lib/go-choir/gateway-provider.env";
       LoadCredential = internalTokenCredential;
       ReadWritePaths = [ "/var/lib/go-choir" ];
@@ -2628,10 +2629,13 @@ in
         # is first in the provider list, so this absorbs the majority of
         # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
         "SEARXNG_URL=http://127.0.0.1:8888"
-        # Keenable is not paced against a monthly allowance (owner,
-        # 2026-11-08); the gateway holds it to 8/s (default
-        # CHOIR_SEARCH_PROVIDER_RPS brave=1,keenable=8, under its plan's 10)
-        # and its own 429 / quota answers cool it.
+        # Ceramic (prepaid) starts every search; the gateway holds it to
+        # 15/s (default CHOIR_SEARCH_PROVIDER_RPS ceramic=15, under its
+        # plan's 20). Keenable joins only when Ceramic's answer is short,
+        # under a daily cap of 800 calls (default
+        # CHOIR_SEARCH_PROVIDER_DAILY_CAPS keenable=800; owner, 2026-11-18:
+        # its remaining credits must last to 2026-12-05) and 8/s (default
+        # CHOIR_SEARCH_PROVIDER_RPS keenable=8, under its plan's 10).
         internalAuthEnv
       ];
     };

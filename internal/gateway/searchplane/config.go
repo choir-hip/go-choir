@@ -73,6 +73,12 @@ type Tier string
 const (
 	// TierFree providers are always started.
 	TierFree Tier = "free"
+	// TierFirst providers are also started by every search, and are policed
+	// like TierFree (one error does not bench them; a bench ends in one
+	// probe), but they are not free: they are prepaid (Ceramic, 2026-11-18).
+	// A spent balance is a quota_limited bench like any provider's, and the
+	// search then falls through to the cheapest paid provider at once.
+	TierFirst Tier = "first"
 	// TierPaid providers are metered; they join cheapest first on shortfall.
 	TierPaid Tier = "paid"
 	// TierConstrained providers share a limit with something more important
@@ -87,10 +93,15 @@ type ProviderTier struct {
 	Cost float64
 }
 
-// rank orders tiers for escalation: free, paid, constrained.
+// startsSearch reports whether every search starts this provider (free and
+// first tiers), and whether the policy for a provider with nothing behind
+// it applies: transient failures are a streak, not a bench.
+func (t ProviderTier) startsSearch() bool { return t.Tier == TierFree || t.Tier == TierFirst }
+
+// rank orders tiers for escalation: free and first, paid, constrained.
 func (t ProviderTier) rank() int {
 	switch t.Tier {
-	case TierFree:
+	case TierFree, TierFirst:
 		return 0
 	case TierConstrained:
 		return 2
@@ -108,9 +119,17 @@ const UnknownProviderCost = 1000
 // billing pages); caps bound each paid provider to a few dollars a day.
 // Brave is free on its Free AI plan within its pacing (1 request/s); it has
 // no cap: on that plan a spent month is quota_limited, not billed.
+//
+// Ceramic (prepaid, $0.25 per 1,000) starts every search; Keenable is the
+// cheapest provider that joins on shortfall (owner, 2026-11-18,
+// docs/problems/search-volume-outruns-keenable-credits-2026-11-18.md).
+//
+// The keenable=800 cap is an owner-set spending cap (owner, 2026-11-18):
+// the remaining Keenable credits must last to 2026-12-05. Resize or remove
+// it on 2026-12-05, when the plan renews.
 const (
-	DefaultProviderTiers  = "keenable=free,searxng=free,brave=free,serper=paid:1,parallel=paid:5,tavily=paid:8,serpapi=paid:15,chatgpt=constrained"
-	DefaultDailyCaps      = "serper=150,parallel=150,tavily=150,serpapi=100,chatgpt=50"
+	DefaultProviderTiers  = "ceramic=first:0.25,searxng=free,brave=free,keenable=paid:0.5,serper=paid:1,parallel=paid:5,tavily=paid:8,serpapi=paid:15,chatgpt=constrained"
+	DefaultDailyCaps      = "keenable=800,serper=150,parallel=150,tavily=150,serpapi=100,chatgpt=50"
 	DefaultMinResults     = 10
 	DefaultDeepMinResults = 30
 	DefaultMaxPaid        = 2
@@ -131,10 +150,12 @@ func EscalationWindow(cfg Config) time.Duration {
 	return cfg.EscalateWindow
 }
 
-// DefaultProviderRPS paces Brave to its Free AI plan's one request a second
-// and Keenable to 8 a second, under its plan's 10
-// (docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md).
-const DefaultProviderRPS = "brave=1,keenable=8"
+// DefaultProviderRPS paces Brave to its Free AI plan's one request a second,
+// Keenable to 8 a second, under its plan's 10
+// (docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md),
+// and Ceramic to 15 a second, under its Pay As You Go plan's 20
+// (docs/reference/CERAMIC.md).
+const DefaultProviderRPS = "brave=1,keenable=8,ceramic=15"
 
 // DefaultPaceWait is the default PaceWait.
 const DefaultPaceWait = 3 * time.Second
@@ -229,7 +250,7 @@ func parseProviderRPS(raw string) map[string]time.Duration {
 	return out
 }
 
-// ParseProviderTiers reads "name=free,name=paid:8,name=constrained"; a later
+// ParseProviderTiers reads "name=free,name=first:0.25,name=paid:8,name=constrained"; a later
 // entry for a name replaces an earlier one. A paid or constrained entry
 // without a cost is priced at UnknownProviderCost; malformed entries are
 // left out.
@@ -244,7 +265,7 @@ func ParseProviderTiers(raw string) map[string]ProviderTier {
 		tierName, costRaw, hasCost := strings.Cut(strings.TrimSpace(value), ":")
 		tier := ProviderTier{Tier: Tier(strings.ToLower(strings.TrimSpace(tierName)))}
 		switch tier.Tier {
-		case TierFree, TierPaid, TierConstrained:
+		case TierFree, TierFirst, TierPaid, TierConstrained:
 		default:
 			continue
 		}

@@ -1,8 +1,9 @@
 // Package gateway implements web search across SearXNG (self-hosted, free),
-// Tavily, Brave, Parallel, Serper, SerpAPI, Keenable and ChatGPT/Codex
-// hosted web search.
+// Tavily, Brave, Parallel, Serper, SerpAPI, Ceramic, Keenable and
+// ChatGPT/Codex hosted web search.
 //
-// A search starts the free providers, adds paid ones cheapest first only
+// A search starts Ceramic (prepaid) and the free providers, adds paid ones
+// (Keenable first, under a daily cap) cheapest first only
 // when the free answers fall short (budget routing; CHOIR_SEARCH_ROUTING=fanout
 // starts every eligible provider at once), and streams each provider's
 // results as that provider answers (search_plane.go, searchplane/router.go).
@@ -103,6 +104,7 @@ func NewSearchClient() *SearchClient {
 		&ParallelProvider{},
 		&SerperProvider{},
 		&SerpAPIProvider{},
+		&CeramicProvider{},
 		&KeenableProvider{},
 		NewChatGPTSearchProviderFromEnv(),
 	}
@@ -156,6 +158,8 @@ func searchProviderEndpoint(provider string) string {
 		return "https://google.serper.dev/search"
 	case "serpapi":
 		return "https://serpapi.com/search.json"
+	case "ceramic":
+		return ceramicSearchURL
 	case "keenable":
 		return keenableSearchURL
 	case "chatgpt":

@@ -61,37 +61,37 @@ func TestKeenableTimeoutOutageIsBenchedFromCompletion(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			clock := newFakeClock()
 			fail := context.DeadlineExceeded
-			keen := slowFailing("keenable", clock, 30*time.Second, fail)
+			keen := slowFailing("ceramic", clock, 30*time.Second, fail)
 			router := NewRouter([]Provider{keen}, store, Config{Routing: RoutingBudget, RequestTimeout: 30 * time.Second})
 			router.now = clock.Now
 			for i := 1; i <= TransientStrikesBeforeCooldown; i++ {
 				stream, _ := startAndDrain(t, router)
-				if cooling(stream, "keenable") {
+				if cooling(stream, "ceramic") {
 					t.Fatalf("search %d skipped keenable before the run of %d", i, TransientStrikesBeforeCooldown)
 				}
 			}
 			calls := keen.searchCnt.Load()
 			stream, got := startAndDrain(t, router)
-			if !cooling(stream, "keenable") || len(got) != 0 || keen.searchCnt.Load() != calls {
+			if !cooling(stream, "ceramic") || len(got) != 0 || keen.searchCnt.Load() != calls {
 				t.Fatalf("sixth search called keenable (cooling=%v arrivals=%d); the bench was over before it began", stream.Cooling, len(got))
 			}
 			clock.Advance(TransientBackoff + time.Second)
 			// The probe fails again: benched again from its completion.
-			if stream, _ = startAndDrain(t, router); cooling(stream, "keenable") || keen.searchCnt.Load() != calls+1 {
+			if stream, _ = startAndDrain(t, router); cooling(stream, "ceramic") || keen.searchCnt.Load() != calls+1 {
 				t.Fatalf("no probe after the bench: cooling=%v calls=%d", stream.Cooling, keen.searchCnt.Load())
 			}
-			if stream, _ = startAndDrain(t, router); !cooling(stream, "keenable") {
+			if stream, _ = startAndDrain(t, router); !cooling(stream, "ceramic") {
 				t.Fatalf("a failed probe did not bench again")
 			}
 			// A success resets the run.
 			clock.Advance(TransientBackoff + time.Second)
-			keen.searchFn = func(ctx context.Context, q string, max int) ([]Result, error) { return manyResults("keenable", 3), nil }
+			keen.searchFn = func(ctx context.Context, q string, max int) ([]Result, error) { return manyResults("ceramic", 3), nil }
 			if _, got = startAndDrain(t, router); len(got) != 1 || !got[0].Answered() {
 				t.Fatalf("probe arrivals = %+v, want an answer", got)
 			}
 			keen.searchFn = func(ctx context.Context, q string, max int) ([]Result, error) { return nil, errors.New(keenable404) }
 			startAndDrain(t, router)
-			if stream, _ = startAndDrain(t, router); cooling(stream, "keenable") {
+			if stream, _ = startAndDrain(t, router); cooling(stream, "ceramic") {
 				t.Fatalf("keenable benched on the second failure after a success")
 			}
 		})
@@ -131,9 +131,9 @@ func TestEmptyAndTransientStreaksAreSeparate(t *testing.T) {
 			}
 			// Nine empties, then one 404: one error, no bench.
 			for i := 0; i < EmptyStreakBeforeCooldown-1; i++ {
-				rec("keenable", OutcomeSuccessEmpty, true)
+				rec("ceramic", OutcomeSuccessEmpty, true)
 			}
-			if r := rec("keenable", OutcomeError, true); !IsEligible(r, at) || r.StrikeCount != 1 {
+			if r := rec("ceramic", OutcomeError, true); !IsEligible(r, at) || r.StrikeCount != 1 {
 				t.Fatalf("nine empties then one error: %+v, want one strike and no bench", r)
 			}
 			// Five errors (benched), then five empties: not the empty bench.
@@ -165,7 +165,7 @@ func TestOneProbeAfterBench(t *testing.T) {
 	store := NewMemoryHealthStore()
 	release := make(chan struct{})
 	started := make(chan struct{}, 8)
-	keen := &stubProvider{name: "keenable"}
+	keen := &stubProvider{name: "ceramic"}
 	router := NewRouter([]Provider{keen}, store, Config{Routing: RoutingBudget, RequestTimeout: 30 * time.Second})
 	router.now = clock.Now
 	for i := 0; i < TransientStrikesBeforeCooldown; i++ {
@@ -175,7 +175,7 @@ func TestOneProbeAfterBench(t *testing.T) {
 	keen.searchFn = func(ctx context.Context, q string, max int) ([]Result, error) {
 		started <- struct{}{}
 		<-release
-		return manyResults("keenable", 3), nil
+		return manyResults("ceramic", 3), nil
 	}
 	first, err := router.Start(context.Background(), "q", 5)
 	if err != nil {
@@ -186,7 +186,7 @@ func TestOneProbeAfterBench(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cooling(second, "keenable") || len(second.Providers) != 0 {
+	if !cooling(second, "ceramic") || len(second.Providers) != 0 {
 		t.Fatalf("second search while the probe is out: providers=%v cooling=%v, want it to skip keenable", second.Providers, second.Cooling)
 	}
 	drain(t, second)
@@ -195,7 +195,7 @@ func TestOneProbeAfterBench(t *testing.T) {
 		t.Fatalf("probe arrivals = %+v", got)
 	}
 	third, _ := startAndDrain(t, router)
-	if cooling(third, "keenable") {
+	if cooling(third, "ceramic") {
 		t.Fatalf("keenable still skipped after the probe answered: %v", third.Cooling)
 	}
 }

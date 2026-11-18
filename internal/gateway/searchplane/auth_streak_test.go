@@ -20,7 +20,7 @@ func failing403ThenOK(failures int32) *stubProvider {
 		if n <= failures {
 			return nil, errors.New(keenable403)
 		}
-		return manyResults("keenable", 3), nil
+		return manyResults("ceramic", 3), nil
 	}
 	return p
 }
@@ -35,11 +35,11 @@ func TestOneKeenable403IsAnsweredByKeenableNextSearch(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, first := startAndDrain(t, router)
-			if len(first) != 1 || first[0].Provider != "keenable" || first[0].Answered() {
+			if len(first) != 1 || first[0].Provider != "ceramic" || first[0].Answered() {
 				t.Fatalf("first search arrivals = %+v, want one failed keenable call", first)
 			}
 			stream, second := startAndDrain(t, router)
-			if cooling(stream, "keenable") {
+			if cooling(stream, "ceramic") {
 				t.Fatalf("keenable skipped after one 403: %+v", stream.Cooling)
 			}
 			if len(second) != 1 || !second[0].Answered() {
@@ -53,24 +53,24 @@ func TestFive403sBenchBriefAndOneProbeGoesOut(t *testing.T) {
 	for name, store := range stores(t) {
 		t.Run(name, func(t *testing.T) {
 			clock := newFakeClock()
-			keen := slowFailing("keenable", clock, time.Second, errors.New(keenable403))
+			keen := slowFailing("ceramic", clock, time.Second, errors.New(keenable403))
 			router := NewRouter([]Provider{keen}, store, Config{Routing: RoutingBudget, RequestTimeout: 30 * time.Second})
 			router.now = clock.Now
 			for i := 1; i <= TransientStrikesBeforeCooldown; i++ {
-				if stream, _ := startAndDrain(t, router); cooling(stream, "keenable") {
+				if stream, _ := startAndDrain(t, router); cooling(stream, "ceramic") {
 					t.Fatalf("search %d skipped keenable before the run of %d", i, TransientStrikesBeforeCooldown)
 				}
 			}
-			rec, _ := store.Get("keenable")
+			rec, _ := store.Get("ceramic")
 			if rec.CooldownUntil == nil || rec.CooldownUntil.Sub(clock.Now()) != TransientBackoff {
 				t.Fatalf("after five 403s: %+v, want a bench of %s", rec, TransientBackoff)
 			}
 			calls := keen.searchCnt.Load()
-			if stream, _ := startAndDrain(t, router); !cooling(stream, "keenable") || keen.searchCnt.Load() != calls {
+			if stream, _ := startAndDrain(t, router); !cooling(stream, "ceramic") || keen.searchCnt.Load() != calls {
 				t.Fatalf("keenable called during the bench")
 			}
 			clock.Advance(TransientBackoff + time.Second)
-			if !router.needsProbe(mustGet(t, store, "keenable")) {
+			if !router.needsProbe(mustGet(t, store, "ceramic")) {
 				t.Fatalf("needsProbe false for a five-403 streak")
 			}
 			// Exactly one probe: it is out, a concurrent search skips.
@@ -87,7 +87,7 @@ func TestFive403sBenchBriefAndOneProbeGoesOut(t *testing.T) {
 			}
 			<-started
 			second, _ := router.Start(context.Background(), "q2", 5)
-			if !cooling(second, "keenable") {
+			if !cooling(second, "ceramic") {
 				t.Fatalf("second search called keenable while the probe was out")
 			}
 			drain(t, second)
@@ -97,7 +97,7 @@ func TestFive403sBenchBriefAndOneProbeGoesOut(t *testing.T) {
 			if got := keen.searchCnt.Load(); got != calls+1 {
 				t.Fatalf("calls = %d, want %d (one probe)", got, calls+1)
 			}
-			rec, _ = store.Get("keenable")
+			rec, _ = store.Get("ceramic")
 			if rec.CooldownUntil == nil || !rec.CooldownUntil.After(clock.Now()) {
 				t.Fatalf("failed probe did not bench again: %+v", rec)
 			}
@@ -135,7 +135,7 @@ func TestAuthAndTransientFailuresAreOneStreak(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			at := time.Now()
 			rec := func(class OutcomeClass) ProviderHealth {
-				r, err := store.RecordOutcome(Outcome{Provider: "keenable", Class: class, Uncapped: true, Error: keenable403, At: at})
+				r, err := store.RecordOutcome(Outcome{Provider: "ceramic", Class: class, Uncapped: true, Error: keenable403, At: at})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -193,7 +193,7 @@ func TestRefusalAndUncappedStreakDoNotShareStrikes(t *testing.T) {
 					at := time.Now()
 					rec := func(class OutcomeClass) ProviderHealth {
 						at = at.Add(time.Minute)
-						r, err := store.RecordOutcome(Outcome{Provider: "keenable", Class: class, Uncapped: true, Error: "status 4xx", At: at})
+						r, err := store.RecordOutcome(Outcome{Provider: "ceramic", Class: class, Uncapped: true, Error: "status 4xx", At: at})
 						if err != nil {
 							t.Fatal(err)
 						}

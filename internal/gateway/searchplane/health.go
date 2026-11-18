@@ -169,6 +169,13 @@ func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, no
 				d = TransientBackoff
 			}
 		}
+		if outcome.Class == OutcomeRateLimited && outcome.RetryAfter > 0 {
+			// The provider said how long: honour it, within the class's bound.
+			d = max(outcome.RetryAfter, time.Second)
+			if limit := policy.MaxByClass[OutcomeRateLimited]; limit > 0 && d > limit {
+				d = limit
+			}
+		}
 		if d > 0 {
 			rec.State = StateCoolingDown
 			until := now.Add(d)

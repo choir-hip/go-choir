@@ -13,8 +13,9 @@ import (
 	"time"
 )
 
-// Keenable's rate limit and the failure log line. Keenable has no monthly
-// pace or daily cap (owner, 2026-11-08); see keenable_unpaced_test.go.
+// Keenable's rate limit and the failure log line. Keenable has a daily cap
+// of 800 since 2026-11-18 (ceramic_routing_test.go); before that it had none
+// (owner, 2026-11-08).
 // Ways it can fail:
 //  6. Keenable is called faster than 8 a second (above its 10/s limit) by
 //     concurrent searches from many computers.
@@ -31,8 +32,8 @@ func mustDay(s string) time.Time {
 	return t
 }
 
-func countingKeenable() *stubProvider {
-	return &stubProvider{name: "keenable", searchFn: func(ctx context.Context, q string, max int) ([]Result, error) {
+func countingCeramic() *stubProvider {
+	return &stubProvider{name: "ceramic", searchFn: func(ctx context.Context, q string, max int) ([]Result, error) {
 		return manyResults("k", 12), nil
 	}}
 }
@@ -81,8 +82,8 @@ func TestConfigFromEnv_KeenableRate(t *testing.T) { // 9
 	if cfg.MinInterval["keenable"] != 125*time.Millisecond || cfg.MinInterval["brave"] != time.Second {
 		t.Fatalf("default pacing = %v", cfg.MinInterval)
 	}
-	if _, ok := cfg.DailyCaps["keenable"]; ok {
-		t.Fatal("keenable has a daily cap; it has none (owner, 2026-11-08)")
+	if cfg.DailyCaps["keenable"] != 800 {
+		t.Fatalf("keenable cap = %d, want 800 (owner, 2026-11-18; supersedes 2026-11-08)", cfg.DailyCaps["keenable"])
 	}
 
 	t.Setenv("CHOIR_SEARCH_PROVIDER_RPS", "brave=2")

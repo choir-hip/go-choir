@@ -101,7 +101,7 @@ func TestHandleSearch_BudgetEscalationStreamAndLogLine(t *testing.T) { // 8, log
 	logs := captureLog(t)
 	var serperCalls, tavilyCalls atomic.Int32
 	client := budgetSearchClient([]SearchProvider{
-		answering("keenable", 0, results("k", 3)...),
+		answering("ceramic", 0, results("k", 3)...),
 		countingProvider("tavily", &tavilyCalls, results("t", 20)...),
 		countingProvider("serper", &serperCalls, results("s", 20)...),
 	}, map[string]int{"serper": 5})
@@ -111,7 +111,7 @@ func TestHandleSearch_BudgetEscalationStreamAndLogLine(t *testing.T) { // 8, log
 		t.Fatalf("line types = %s", got)
 	}
 	start, done := lines[0], lines[3]
-	if fmt.Sprint(start["providers"]) != "[keenable]" || start["routing"] != "budget" || fmt.Sprint(start["reserve"]) != "[serper tavily]" {
+	if fmt.Sprint(start["providers"]) != "[ceramic]" || start["routing"] != "budget" || fmt.Sprint(start["reserve"]) != "[serper tavily]" {
 		t.Fatalf("start = %v", start)
 	}
 	if lines[2]["provider"] != "serper" {
@@ -123,7 +123,7 @@ func TestHandleSearch_BudgetEscalationStreamAndLogLine(t *testing.T) { // 8, log
 	if serperCalls.Load() != 1 || tavilyCalls.Load() != 0 {
 		t.Fatalf("serper=%d tavily=%d", serperCalls.Load(), tavilyCalls.Load())
 	}
-	want := "answered 2 of 2 providers (0 cooling, 0 pending) skipped=[] served=miss results=23 unique=23 seen=0 routing=budget escalated=short(3):serper paid_calls=1 today=[keenable=1 serper=1/5]"
+	want := "answered 2 of 2 providers (0 cooling, 0 pending) skipped=[] served=miss results=23 unique=23 seen=0 routing=budget escalated=short(3):serper paid_calls=1 today=[ceramic=1 serper=1/5]"
 	if !strings.Contains(logs.String(), want) {
 		t.Fatalf("log = %s\nwant %s", logs.String(), want)
 	}
@@ -133,7 +133,7 @@ func TestHandleSearch_BudgetFreeSufficientNoPaidCalls(t *testing.T) { // 1
 	logs := captureLog(t)
 	var serperCalls atomic.Int32
 	client := budgetSearchClient([]SearchProvider{
-		answering("keenable", 0, results("k", 12)...),
+		answering("ceramic", 0, results("k", 12)...),
 		countingProvider("serper", &serperCalls, results("s", 20)...),
 	}, nil)
 	lines := readLines(t, budgetPoster(t, client)(SearchRequest{Query: "q", MaxResults: 40}))
@@ -143,7 +143,7 @@ func TestHandleSearch_BudgetFreeSufficientNoPaidCalls(t *testing.T) { // 1
 	if _, ok := lines[2]["escalated"]; ok {
 		t.Fatalf("done = %v", lines[2])
 	}
-	if !strings.Contains(logs.String(), "routing=budget escalated=no paid_calls=0 today=[keenable=1]") {
+	if !strings.Contains(logs.String(), "routing=budget escalated=no paid_calls=0 today=[ceramic=1]") {
 		t.Fatalf("log = %s", logs.String())
 	}
 }
@@ -152,7 +152,7 @@ func TestHandleSearch_CappedProviderNamedWithReason(t *testing.T) { // 5
 	logs := captureLog(t)
 	var serperCalls atomic.Int32
 	client := budgetSearchClient([]SearchProvider{
-		answering("keenable", 0, results("k", 1)...),
+		answering("ceramic", 0, results("k", 1)...),
 		countingProvider("serper", &serperCalls, results("s", 20)...),
 	}, map[string]int{"serper": 0})
 	lines := readLines(t, budgetPoster(t, client)(SearchRequest{Query: "q", MaxResults: 40}))
@@ -163,36 +163,36 @@ func TestHandleSearch_CappedProviderNamedWithReason(t *testing.T) { // 5
 	if serperCalls.Load() != 0 {
 		t.Fatal("capped provider called")
 	}
-	if !strings.Contains(logs.String(), "(1 cooling, 0 pending) skipped=[serper=capped]") || !strings.Contains(logs.String(), "today=[keenable=1 serper=0/0]") {
+	if !strings.Contains(logs.String(), "(1 cooling, 0 pending) skipped=[serper=capped]") || !strings.Contains(logs.String(), "today=[ceramic=1 serper=0/0]") {
 		t.Fatalf("log = %s", logs.String())
 	}
 }
 
 func TestHandleSearch_DeepIsNotAnsweredFromAnOrdinaryCachedSearch(t *testing.T) { // 7
-	var keenableCalls, serperCalls atomic.Int32
+	var ceramicCalls, serperCalls atomic.Int32
 	client := budgetSearchClient([]SearchProvider{
-		countingProvider("keenable", &keenableCalls, results("k", 40)...),
+		countingProvider("ceramic", &ceramicCalls, results("k", 40)...),
 		countingProvider("serper", &serperCalls, results("s", 5)...),
 	}, nil)
 	post := budgetPoster(t, client)
 	readLines(t, post(SearchRequest{Query: "q", MaxResults: 40}))
 	client.cache.WaitIdleForTest()
 	readLines(t, post(SearchRequest{Query: "q", MaxResults: 40}))
-	if keenableCalls.Load() != 1 || serperCalls.Load() != 0 {
-		t.Fatalf("ordinary repeat: keenable=%d serper=%d, want a cache hit", keenableCalls.Load(), serperCalls.Load())
+	if ceramicCalls.Load() != 1 || serperCalls.Load() != 0 {
+		t.Fatalf("ordinary repeat: ceramic=%d serper=%d, want a cache hit", ceramicCalls.Load(), serperCalls.Load())
 	}
 	lines := readLines(t, post(SearchRequest{Query: "q", MaxResults: 40, Depth: "deep"}))
-	if keenableCalls.Load() != 2 || serperCalls.Load() != 1 {
-		t.Fatalf("deep: keenable=%d serper=%d, want a live deep search", keenableCalls.Load(), serperCalls.Load())
+	if ceramicCalls.Load() != 2 || serperCalls.Load() != 1 {
+		t.Fatalf("deep: ceramic=%d serper=%d, want a live deep search", ceramicCalls.Load(), serperCalls.Load())
 	}
-	if fmt.Sprint(lines[0]["providers"]) != "[keenable serper]" {
+	if fmt.Sprint(lines[0]["providers"]) != "[ceramic serper]" {
 		t.Fatalf("deep start = %v", lines[0])
 	}
 }
 
 func TestHandleSearch_GuestDecoderReadsAnEscalatedStream(t *testing.T) { // 8
 	client := budgetSearchClient([]SearchProvider{
-		&mockSearchProvider{name: "keenable", available: true, searchFunc: func(ctx context.Context, q string, max int) ([]SearchResult, error) {
+		&mockSearchProvider{name: "ceramic", available: true, searchFunc: func(ctx context.Context, q string, max int) ([]SearchResult, error) {
 			return nil, errors.New("status 500")
 		}},
 		answering("serper", 0, results("s", 20)...),
@@ -217,14 +217,14 @@ func TestHandleSearch_GuestDecoderReadsAnEscalatedStream(t *testing.T) { // 8
 	if !ok || done.Total != 2 || done.Answered != 1 || len(done.Pending) != 0 {
 		t.Fatalf("done = %+v", done)
 	}
-	if fmt.Sprint(stream.Start.Providers) != "[keenable]" || fmt.Sprint(got) != "[keenable=server_error serper=success]" {
+	if fmt.Sprint(stream.Start.Providers) != "[ceramic]" || fmt.Sprint(got) != "[ceramic=server_error serper=success]" {
 		t.Fatalf("start=%v arrivals=%v", stream.Start.Providers, got)
 	}
 }
 
 func TestHandleSearchHealth_ReportsDailyCalls(t *testing.T) {
 	client := budgetSearchClient([]SearchProvider{
-		answering("keenable", 0, results("k", 1)...),
+		answering("ceramic", 0, results("k", 1)...),
 		answering("serper", 0, results("s", 20)...),
 	}, map[string]int{"serper": 150})
 	readLines(t, budgetPoster(t, client)(SearchRequest{Query: "q", MaxResults: 40}))
@@ -247,8 +247,8 @@ func TestHandleSearchHealth_ReportsDailyCalls(t *testing.T) {
 	if got := body.DailyCalls["serper"]; got != (SearchDailyCalls{Day: today, Calls: 1, Cap: 150, Tier: "paid"}) {
 		t.Fatalf("serper = %+v", got)
 	}
-	if got := body.DailyCalls["keenable"]; got != (SearchDailyCalls{Day: today, Calls: 1, Cap: -1, Tier: "free"}) {
-		t.Fatalf("keenable = %+v", got)
+	if got := body.DailyCalls["ceramic"]; got != (SearchDailyCalls{Day: today, Calls: 1, Cap: -1, Tier: "first"}) {
+		t.Fatalf("ceramic = %+v", got)
 	}
 }
 

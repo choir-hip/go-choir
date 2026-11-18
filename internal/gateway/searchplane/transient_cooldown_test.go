@@ -34,11 +34,11 @@ const keenable404 = "status 404 Not Found: no such route"
 
 func failingThenOK(failures int32) *stubProvider {
 	var n atomic.Int32
-	return &stubProvider{name: "keenable", searchFn: func(ctx context.Context, q string, max int) ([]Result, error) {
+	return &stubProvider{name: "ceramic", searchFn: func(ctx context.Context, q string, max int) ([]Result, error) {
 		if n.Add(1) <= failures {
 			return nil, errors.New(keenable404)
 		}
-		return manyResults("keenable", 3), nil
+		return manyResults("ceramic", 3), nil
 	}}
 }
 
@@ -89,16 +89,16 @@ func TestOneKeenableErrorIsAnsweredByKeenableNextSearch(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, first := startAndDrain(t, router)
-			if len(first) != 1 || first[0].Provider != "keenable" || first[0].Answered() {
+			if len(first) != 1 || first[0].Provider != "ceramic" || first[0].Answered() {
 				t.Fatalf("first search arrivals = %+v, want one failed keenable call", first)
 			}
 			stream, second := startAndDrain(t, router)
 			for _, c := range stream.Cooling {
-				if c.Provider == "keenable" {
+				if c.Provider == "ceramic" {
 					t.Fatalf("keenable skipped after one error: %+v", c)
 				}
 			}
-			if len(second) != 1 || second[0].Provider != "keenable" || !second[0].Answered() {
+			if len(second) != 1 || second[0].Provider != "ceramic" || !second[0].Answered() {
 				t.Fatalf("second search arrivals = %+v, want keenable's answer", second)
 			}
 			if got := keen.searchCnt.Load(); got != 2 {
@@ -111,7 +111,7 @@ func TestOneKeenableErrorIsAnsweredByKeenableNextSearch(t *testing.T) {
 // Failure mode 2: the rule follows the tier, so every free-tier provider is
 // covered and no name is special.
 func TestTransientErrorOfAFreeTierProviderIsNotACooldown(t *testing.T) {
-	for _, name := range []string{"keenable", "searxng", "brave"} {
+	for _, name := range []string{"ceramic", "searxng", "brave"} {
 		store := NewMemoryHealthStore()
 		p := &stubProvider{name: name}
 		router := NewRouter([]Provider{p}, store, Config{Routing: RoutingBudget, RequestTimeout: time.Second})
@@ -152,10 +152,10 @@ func TestUncappedProviderRealRefusalStillBacksOff(t *testing.T) {
 	for _, class := range []OutcomeClass{OutcomeRateLimited, OutcomeQuotaLimited} {
 		for name, store := range stores(t) {
 			t.Run(string(class)+"/"+name, func(t *testing.T) {
-				if _, err := store.RecordOutcome(Outcome{Provider: "keenable", Class: class, Uncapped: true, Error: "status 4xx", At: time.Now()}); err != nil {
+				if _, err := store.RecordOutcome(Outcome{Provider: "ceramic", Class: class, Uncapped: true, Error: "status 4xx", At: time.Now()}); err != nil {
 					t.Fatal(err)
 				}
-				rec, _ := store.Get("keenable")
+				rec, _ := store.Get("ceramic")
 				if rec.State != StateCoolingDown || rec.CooldownUntil == nil {
 					t.Fatalf("keenable after %s: %+v, want cooling", class, rec)
 				}
@@ -170,7 +170,7 @@ func TestUncappedProviderRepeatedFailuresBackOffShortAndFixed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			at := time.Now()
 			fail := func(class OutcomeClass) ProviderHealth {
-				rec, err := store.RecordOutcome(Outcome{Provider: "keenable", Class: class, Uncapped: true, Error: keenable404, At: at})
+				rec, err := store.RecordOutcome(Outcome{Provider: "ceramic", Class: class, Uncapped: true, Error: keenable404, At: at})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -197,7 +197,7 @@ func TestUncappedProviderRepeatedFailuresBackOffShortAndFixed(t *testing.T) {
 				t.Fatalf("second backoff = %+v, want fixed %s", rec, TransientBackoff)
 			}
 			// A success clears the run.
-			rec, _ = store.RecordOutcome(Outcome{Provider: "keenable", Class: OutcomeSuccess, Uncapped: true, Results: 3, At: at})
+			rec, _ = store.RecordOutcome(Outcome{Provider: "ceramic", Class: OutcomeSuccess, Uncapped: true, Results: 3, At: at})
 			if rec.StrikeCount != 0 || rec.State != StateActive {
 				t.Fatalf("after success: %+v", rec)
 			}
@@ -216,7 +216,7 @@ func TestKeenableFailureIsStillLogged(t *testing.T) {
 	defer log.SetOutput(prev)
 	router := NewRouter([]Provider{failingThenOK(1)}, NewMemoryHealthStore(), Config{RequestTimeout: time.Second})
 	startAndDrain(t, router)
-	if want := "searchplane: keenable call failed class=error http_status=404 stage=http_status"; !strings.Contains(buf.String(), want) {
+	if want := "searchplane: ceramic call failed class=error http_status=404 stage=http_status"; !strings.Contains(buf.String(), want) {
 		t.Fatalf("log = %q, want it to contain %q", buf.String(), want)
 	}
 }

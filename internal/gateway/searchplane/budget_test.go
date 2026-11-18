@@ -100,20 +100,20 @@ func reasons(route RouteSummary) string {
 func TestBudget_FreeSufficientMakesNoPaidCalls(t *testing.T) { // 1
 	var l callLog
 	tavily, serper := logged(&l, "tavily", 0, 5), logged(&l, "serper", 0, 5)
-	router := NewRouter([]Provider{tavily, logged(&l, "keenable", 0, 12), serper}, NewMemoryHealthStore(), budgetConfig())
+	router := NewRouter([]Provider{tavily, logged(&l, "ceramic", 0, 12), serper}, NewMemoryHealthStore(), budgetConfig())
 	stream, err := router.Start(context.Background(), "q", 40)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := drain(t, stream)
-	if names(got) != "keenable" {
-		t.Fatalf("arrivals = %s, want keenable only", names(got))
+	if names(got) != "ceramic" {
+		t.Fatalf("arrivals = %s, want ceramic only", names(got))
 	}
 	if tavily.searchCnt.Load()+serper.searchCnt.Load() != 0 {
 		t.Fatalf("paid providers called: %s", l.String())
 	}
 	route := stream.Route.Summary()
-	if fmt.Sprint(stream.Providers) != "[keenable]" || route.PaidCalls != 0 || len(route.Escalations) != 0 {
+	if fmt.Sprint(stream.Providers) != "[ceramic]" || route.PaidCalls != 0 || len(route.Escalations) != 0 {
 		t.Fatalf("providers=%v route=%+v", stream.Providers, route)
 	}
 	// Held in reserve, cheapest first; not cooling.
@@ -127,7 +127,7 @@ func TestBudget_ShortEscalatesOneAtATimeCheapestFirst(t *testing.T) { // 2, 3
 	providers := []Provider{
 		logged(&l, "tavily", 20*time.Millisecond, 3),
 		logged(&l, "serpapi", 20*time.Millisecond, 3),
-		logged(&l, "keenable", 0, 3),
+		logged(&l, "ceramic", 0, 3),
 		logged(&l, "serper", 20*time.Millisecond, 3),
 		logged(&l, "parallel", 20*time.Millisecond, 3),
 	}
@@ -138,17 +138,17 @@ func TestBudget_ShortEscalatesOneAtATimeCheapestFirst(t *testing.T) { // 2, 3
 	}
 	got := drain(t, stream)
 	// 3 → serper 6 → parallel 9 → tavily 12 ≥ 10: serpapi never called.
-	if names(got) != "keenable,serper,parallel,tavily" {
+	if names(got) != "ceramic,serper,parallel,tavily" {
 		t.Fatalf("arrivals = %s", names(got))
 	}
-	if want := "+keenable -keenable +serper -serper +parallel -parallel +tavily -tavily"; l.String() != want {
+	if want := "+ceramic -ceramic +serper -serper +parallel -parallel +tavily -tavily"; l.String() != want {
 		t.Fatalf("calls = %q, want one paid provider at a time, cheapest first: %q", l.String(), want)
 	}
 	route := stream.Route.Summary()
 	if reasons(route) != "short:serper,short:parallel,short:tavily" || route.PaidCalls != 3 {
 		t.Fatalf("route = %+v", route)
 	}
-	if fmt.Sprint(route.Started) != "[keenable serper parallel tavily]" {
+	if fmt.Sprint(route.Started) != "[ceramic serper parallel tavily]" {
 		t.Fatalf("started = %v", route.Started)
 	}
 }
@@ -157,18 +157,18 @@ func TestBudget_MaxPaidBoundsEscalation(t *testing.T) { // 3
 	var l callLog
 	cfg := budgetConfig()
 	cfg.MaxPaid = 1
-	router := NewRouter([]Provider{logged(&l, "keenable", 0, 1), logged(&l, "serper", 0, 1), logged(&l, "parallel", 0, 1)}, NewMemoryHealthStore(), cfg)
+	router := NewRouter([]Provider{logged(&l, "ceramic", 0, 1), logged(&l, "serper", 0, 1), logged(&l, "parallel", 0, 1)}, NewMemoryHealthStore(), cfg)
 	stream, _ := router.Start(context.Background(), "q", 40)
-	if got := names(drain(t, stream)); got != "keenable,serper" {
+	if got := names(drain(t, stream)); got != "ceramic,serper" {
 		t.Fatalf("arrivals = %s, want one paid provider", got)
 	}
 }
 
 func TestBudget_MinResultsIsBoundedByMaxResults(t *testing.T) {
 	var l callLog
-	router := NewRouter([]Provider{logged(&l, "keenable", 0, 5), logged(&l, "serper", 0, 5)}, NewMemoryHealthStore(), budgetConfig())
+	router := NewRouter([]Provider{logged(&l, "ceramic", 0, 5), logged(&l, "serper", 0, 5)}, NewMemoryHealthStore(), budgetConfig())
 	stream, _ := router.Start(context.Background(), "q", 5)
-	if got := names(drain(t, stream)); got != "keenable" {
+	if got := names(drain(t, stream)); got != "ceramic" {
 		t.Fatalf("arrivals = %s: five results answer a five-result search", got)
 	}
 }
@@ -185,18 +185,18 @@ func TestBudget_DuplicateURLsDoNotCount(t *testing.T) {
 			return out, nil
 		}}
 	}
-	router := NewRouter([]Provider{logged(&l, "keenable", 0, 6), same("brave"), logged(&l, "serper", 0, 6)}, NewMemoryHealthStore(), func() Config {
+	router := NewRouter([]Provider{logged(&l, "ceramic", 0, 6), same("brave"), logged(&l, "serper", 0, 6)}, NewMemoryHealthStore(), func() Config {
 		c := budgetConfig()
-		c.Tiers["keenable"] = ProviderTier{Tier: TierFree}
+		c.Tiers["ceramic"] = ProviderTier{Tier: TierFree}
 		return c
 	}())
-	// keenable's six and brave's six are distinct sets: 12 ≥ 10.
+	// ceramic's six and brave's six are distinct sets: 12 ≥ 10.
 	stream, _ := router.Start(context.Background(), "q", 40)
 	if got := names(drain(t, stream)); strings.Contains(got, "serper") {
 		t.Fatalf("arrivals = %s", got)
 	}
 	// Two free providers returning the same six URLs are six, not twelve.
-	router = NewRouter([]Provider{same("keenable"), same("brave"), logged(&l, "serper", 0, 6)}, NewMemoryHealthStore(), budgetConfig())
+	router = NewRouter([]Provider{same("ceramic"), same("brave"), logged(&l, "serper", 0, 6)}, NewMemoryHealthStore(), budgetConfig())
 	stream, _ = router.Start(context.Background(), "q", 40)
 	drain(t, stream)
 	if route := stream.Route.Summary(); reasons(route) != "short:serper" || route.Escalations[0].Unique != 6 {
@@ -206,9 +206,9 @@ func TestBudget_DuplicateURLsDoNotCount(t *testing.T) {
 
 func TestBudget_FailedFreeEscalates(t *testing.T) { // 2
 	var l callLog
-	router := NewRouter([]Provider{failing(&l, "keenable"), logged(&l, "serper", 0, 12)}, NewMemoryHealthStore(), budgetConfig())
+	router := NewRouter([]Provider{failing(&l, "ceramic"), logged(&l, "serper", 0, 12)}, NewMemoryHealthStore(), budgetConfig())
 	stream, _ := router.Start(context.Background(), "q", 40)
-	if got := names(drain(t, stream)); got != "keenable,serper" {
+	if got := names(drain(t, stream)); got != "ceramic,serper" {
 		t.Fatalf("arrivals = %s", got)
 	}
 	if r := reasons(stream.Route.Summary()); r != "failed:serper" {
@@ -219,15 +219,15 @@ func TestBudget_FailedFreeEscalates(t *testing.T) { // 2
 func TestBudget_NoFreeProviderStartsTheCheapestPaidAtOnce(t *testing.T) { // 2
 	var l callLog
 	store := NewMemoryHealthStore()
-	if _, err := store.RecordOutcome(Outcome{Provider: "keenable", Class: OutcomeQuotaLimited, Error: "432 usage limit"}); err != nil {
+	if _, err := store.RecordOutcome(Outcome{Provider: "ceramic", Class: OutcomeQuotaLimited, Error: "432 usage limit"}); err != nil {
 		t.Fatal(err)
 	}
-	router := NewRouter([]Provider{logged(&l, "keenable", 0, 12), logged(&l, "parallel", 0, 12), logged(&l, "serper", 0, 12)}, store, budgetConfig())
+	router := NewRouter([]Provider{logged(&l, "ceramic", 0, 12), logged(&l, "parallel", 0, 12), logged(&l, "serper", 0, 12)}, store, budgetConfig())
 	stream, _ := router.Start(context.Background(), "q", 40)
 	if fmt.Sprint(stream.Providers) != "[serper]" {
 		t.Fatalf("start providers = %v, want the cheapest paid provider named on the start line", stream.Providers)
 	}
-	if len(stream.Cooling) != 1 || stream.Cooling[0].Provider != "keenable" || stream.Cooling[0].Reason != string(OutcomeQuotaLimited) {
+	if len(stream.Cooling) != 1 || stream.Cooling[0].Provider != "ceramic" || stream.Cooling[0].Reason != string(OutcomeQuotaLimited) {
 		t.Fatalf("cooling = %+v", stream.Cooling)
 	}
 	if got := names(drain(t, stream)); got != "serper" {
@@ -242,10 +242,10 @@ func TestBudget_SlowFreeEscalatesAtTheSoftDeadline(t *testing.T) { // 2
 	var l callLog
 	cfg := budgetConfig()
 	cfg.EscalateAfter = 50 * time.Millisecond
-	router := NewRouter([]Provider{logged(&l, "keenable", time.Second, 12), logged(&l, "serper", 0, 3)}, NewMemoryHealthStore(), cfg)
+	router := NewRouter([]Provider{logged(&l, "ceramic", time.Second, 12), logged(&l, "serper", 0, 3)}, NewMemoryHealthStore(), cfg)
 	stream, _ := router.Start(context.Background(), "q", 40)
 	got := drain(t, stream)
-	if names(got) != "serper,keenable" {
+	if names(got) != "serper,ceramic" {
 		t.Fatalf("arrivals = %s, want serper before the hanging free provider", names(got))
 	}
 	if r := reasons(stream.Route.Summary()); r != "slow:serper" {
@@ -257,9 +257,9 @@ func TestBudget_NoEscalationAfterTheWindow(t *testing.T) { // 10
 	var l callLog
 	cfg := budgetConfig()
 	cfg.EscalateWindow = 30 * time.Millisecond
-	router := NewRouter([]Provider{logged(&l, "keenable", 100*time.Millisecond, 1), logged(&l, "serper", 0, 12)}, NewMemoryHealthStore(), cfg)
+	router := NewRouter([]Provider{logged(&l, "ceramic", 100*time.Millisecond, 1), logged(&l, "serper", 0, 12)}, NewMemoryHealthStore(), cfg)
 	stream, _ := router.Start(context.Background(), "q", 40)
-	if got := names(drain(t, stream)); got != "keenable" {
+	if got := names(drain(t, stream)); got != "ceramic" {
 		t.Fatalf("arrivals = %s, want no paid provider after the window", got)
 	}
 }
@@ -268,12 +268,12 @@ func TestBudget_DeepStartsTheCheapestPaidWithTheFreeTier(t *testing.T) {
 	var l callLog
 	cfg := budgetConfig()
 	cfg.DeepMinResults = 30
-	router := NewRouter([]Provider{logged(&l, "keenable", 20*time.Millisecond, 40), logged(&l, "parallel", 0, 5), logged(&l, "serper", 0, 5)}, NewMemoryHealthStore(), cfg)
+	router := NewRouter([]Provider{logged(&l, "ceramic", 20*time.Millisecond, 40), logged(&l, "parallel", 0, 5), logged(&l, "serper", 0, 5)}, NewMemoryHealthStore(), cfg)
 	stream, err := router.StartRequest(context.Background(), Request{Query: "q", MaxResults: 40, Deep: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(stream.Providers) != "[keenable serper]" {
+	if fmt.Sprint(stream.Providers) != "[ceramic serper]" {
 		t.Fatalf("start providers = %v", stream.Providers)
 	}
 	drain(t, stream)
@@ -288,20 +288,20 @@ func TestBudget_CapSkipsWithReasonAndNoStrike(t *testing.T) { // 5
 	cfg.DailyCaps = map[string]int{"serper": 1}
 	store := NewMemoryHealthStore()
 	serper := logged(&l, "serper", 0, 1)
-	router := NewRouter([]Provider{logged(&l, "keenable", 0, 1), serper, logged(&l, "parallel", 0, 20)}, store, cfg)
+	router := NewRouter([]Provider{logged(&l, "ceramic", 0, 1), serper, logged(&l, "parallel", 0, 20)}, store, cfg)
 
 	first, _ := router.Start(context.Background(), "a", 40)
-	if got := names(drain(t, first)); got != "keenable,serper,parallel" {
+	if got := names(drain(t, first)); got != "ceramic,serper,parallel" {
 		t.Fatalf("first arrivals = %s", got)
 	}
 	second, _ := router.Start(context.Background(), "b", 40)
-	if fmt.Sprint(second.Providers) != "[keenable]" {
+	if fmt.Sprint(second.Providers) != "[ceramic]" {
 		t.Fatalf("a capped provider is in N: %v", second.Providers)
 	}
 	if len(second.Cooling) != 1 || second.Cooling[0].Provider != "serper" || second.Cooling[0].State != StateCapped || second.Cooling[0].Reason != "capped" {
 		t.Fatalf("cooling = %+v, want serper capped", second.Cooling)
 	}
-	if got := names(drain(t, second)); got != "keenable,parallel" {
+	if got := names(drain(t, second)); got != "ceramic,parallel" {
 		t.Fatalf("second arrivals = %s, want parallel in place of capped serper", got)
 	}
 	if n := serper.searchCnt.Load(); n != 1 {
@@ -350,11 +350,11 @@ func TestBudget_ProviderCappedBenchedOrPacedAtEscalationYieldsToTheNext(t *testi
 			store := NewMemoryHealthStore()
 			release := make(chan struct{})
 			serper := logged(&l, "serper", 0, 20)
-			router := NewRouter([]Provider{gatedFree("keenable", release), serper, logged(&l, "parallel", 0, 20)}, store, cfg)
+			router := NewRouter([]Provider{gatedFree("ceramic", release), serper, logged(&l, "parallel", 0, 20)}, store, cfg)
 			stream, _ := router.Start(context.Background(), "q", 40)
 			tc.mutate(router, store)
 			close(release)
-			if got := names(drain(t, stream)); got != "keenable,parallel" {
+			if got := names(drain(t, stream)); got != "ceramic,parallel" {
 				t.Fatalf("arrivals = %s", got)
 			}
 			if serper.searchCnt.Load() != 0 {
@@ -385,7 +385,7 @@ func TestBudget_ConcurrentSearchesNeverOvershootACap(t *testing.T) { // 4, 11
 				t.Fatal(err)
 			}
 			defer store.Close()
-			router := NewRouter([]Provider{logged(&l, "keenable", time.Millisecond, 1), serper, parallel}, store, cfg)
+			router := NewRouter([]Provider{logged(&l, "ceramic", time.Millisecond, 1), serper, parallel}, store, cfg)
 			var wg sync.WaitGroup
 			for i := 0; i < 40; i++ {
 				wg.Add(1)
@@ -410,7 +410,7 @@ func TestBudget_ConcurrentSearchesNeverOvershootACap(t *testing.T) { // 4, 11
 			for _, c := range counts {
 				byName[c.Provider] = c
 			}
-			if byName["keenable"].Calls != 40 || byName["serper"].Calls != 5 || byName["parallel"].Calls != 3 || byName["keenable"].Cap != NoCap {
+			if byName["ceramic"].Calls != 40 || byName["serper"].Calls != 5 || byName["parallel"].Calls != 3 || byName["ceramic"].Cap != NoCap {
 				t.Fatalf("counts = %+v", counts)
 			}
 		})
@@ -476,9 +476,9 @@ func TestBudget_FanoutStartsEveryEligibleProvider(t *testing.T) { // 9
 	var l callLog
 	cfg := budgetConfig()
 	cfg.Routing = RoutingFanout
-	router := NewRouter([]Provider{logged(&l, "keenable", 0, 40), logged(&l, "serper", 0, 1), logged(&l, "chatgpt", 0, 1)}, NewMemoryHealthStore(), cfg)
+	router := NewRouter([]Provider{logged(&l, "ceramic", 0, 40), logged(&l, "serper", 0, 1), logged(&l, "chatgpt", 0, 1)}, NewMemoryHealthStore(), cfg)
 	stream, _ := router.Start(context.Background(), "q", 40)
-	if fmt.Sprint(stream.Providers) != "[keenable serper chatgpt]" {
+	if fmt.Sprint(stream.Providers) != "[ceramic serper chatgpt]" {
 		t.Fatalf("providers = %v", stream.Providers)
 	}
 	drain(t, stream)
@@ -490,12 +490,12 @@ func TestBudget_FanoutStartsEveryEligibleProvider(t *testing.T) { // 9
 func TestBudget_CacheHitAndJoinMakeNoProviderCalls(t *testing.T) { // 7
 	var l callLog
 	release := make(chan struct{})
-	keenable := &stubProvider{name: "keenable", searchFn: func(ctx context.Context, q string, max int) ([]Result, error) {
+	ceramic := &stubProvider{name: "ceramic", searchFn: func(ctx context.Context, q string, max int) ([]Result, error) {
 		<-release
 		return manyResults("k", 2), nil
 	}}
 	serper := logged(&l, "serper", 0, 12)
-	router := NewRouter([]Provider{keenable, serper}, NewMemoryHealthStore(), budgetConfig())
+	router := NewRouter([]Provider{ceramic, serper}, NewMemoryHealthStore(), budgetConfig())
 	c := NewCache(CacheConfig{TTL: time.Minute, Bound: 10 * time.Second})
 	start := func(ctx context.Context) (*Stream, error) { return router.Start(ctx, "q", 40) }
 
@@ -509,10 +509,10 @@ func TestBudget_CacheHitAndJoinMakeNoProviderCalls(t *testing.T) { // 7
 	}
 	close(release)
 	// The joiner receives the leader's escalated provider too.
-	if got := names(drain(t, joiner)); got != "keenable,serper" {
+	if got := names(drain(t, joiner)); got != "ceramic,serper" {
 		t.Fatalf("joiner arrivals = %s", got)
 	}
-	if got := names(drain(t, leader)); got != "keenable,serper" {
+	if got := names(drain(t, leader)); got != "ceramic,serper" {
 		t.Fatalf("leader arrivals = %s", got)
 	}
 	if joiner.Served != ServedJoined || joiner.Route != leader.Route {
@@ -525,8 +525,8 @@ func TestBudget_CacheHitAndJoinMakeNoProviderCalls(t *testing.T) { // 7
 	if hit.Served != ServedHit || hit.Route != nil {
 		t.Fatalf("served=%s route=%v", hit.Served, hit.Route)
 	}
-	if keenable.searchCnt.Load() != 1 || serper.searchCnt.Load() != 1 {
-		t.Fatalf("calls keenable=%d serper=%d, want one each for three searches", keenable.searchCnt.Load(), serper.searchCnt.Load())
+	if ceramic.searchCnt.Load() != 1 || serper.searchCnt.Load() != 1 {
+		t.Fatalf("calls ceramic=%d serper=%d, want one each for three searches", ceramic.searchCnt.Load(), serper.searchCnt.Load())
 	}
 	counts, _ := router.DailyCounts()
 	for _, cnt := range counts {
@@ -538,7 +538,7 @@ func TestBudget_CacheHitAndJoinMakeNoProviderCalls(t *testing.T) { // 7
 
 func TestBudget_ConcurrentMixedSearchesRace(t *testing.T) { // 11
 	var short atomic.Bool
-	keenable := &stubProvider{name: "keenable", searchFn: func(ctx context.Context, q string, max int) ([]Result, error) {
+	ceramic := &stubProvider{name: "ceramic", searchFn: func(ctx context.Context, q string, max int) ([]Result, error) {
 		if short.Load() {
 			return manyResults(q, 2), nil
 		}
@@ -551,7 +551,7 @@ func TestBudget_ConcurrentMixedSearchesRace(t *testing.T) { // 11
 	}
 	cfg := budgetConfig()
 	cfg.EscalateAfter = 5 * time.Millisecond
-	router := NewRouter([]Provider{keenable, paid("serper"), paid("parallel"), paid("tavily")}, NewMemoryHealthStore(), cfg)
+	router := NewRouter([]Provider{ceramic, paid("serper"), paid("parallel"), paid("tavily")}, NewMemoryHealthStore(), cfg)
 	var wg sync.WaitGroup
 	for i := 0; i < 60; i++ {
 		wg.Add(1)
@@ -586,7 +586,7 @@ func TestConfigFromEnv_BudgetDefaultsAndSwitches(t *testing.T) {
 	if cfg.Routing != RoutingBudget || cfg.DailyCaps["tavily"] != 150 || cfg.DailyCaps["chatgpt"] != 50 {
 		t.Fatalf("defaults: routing=%s caps=%v", cfg.Routing, cfg.DailyCaps)
 	}
-	if _, ok := cfg.DailyCaps["keenable"]; ok {
+	if _, ok := cfg.DailyCaps["ceramic"]; ok {
 		t.Fatal("free provider capped by default")
 	}
 	if cfg.Tiers["brave"].Tier != TierFree || cfg.Tiers["chatgpt"].Tier != TierConstrained || cfg.Tiers["serper"].Cost != 1 {

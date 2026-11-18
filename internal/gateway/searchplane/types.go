@@ -18,7 +18,15 @@ const (
 	// StateCapped is never stored: the provider reached its daily call cap
 	// (Config.DailyCaps) and is skipped until UTC midnight. Not a failure.
 	StateCapped ProviderState = "capped"
+	// StateDeclined is never stored: the provider cannot take this query
+	// (QueryDecliner), so the search did not call it. Not a failure and not
+	// a strike; the reason is ReasonUnsupportedQuery.
+	StateDeclined ProviderState = "declined"
 )
+
+// ReasonUnsupportedQuery is the Cooling reason of a provider that declined
+// the query.
+const ReasonUnsupportedQuery = "unsupported_query"
 
 // OutcomeClass classifies a single provider call for backoff policy.
 type OutcomeClass string
@@ -53,6 +61,12 @@ type Result struct {
 type Provider interface {
 	Name() string
 	Search(ctx context.Context, query string, maxResults int) ([]Result, error)
+}
+
+// QueryDecliner is implemented by a provider that cannot take some queries
+// (Ceramic: non-Latin text). The router asks before it counts or calls.
+type QueryDecliner interface {
+	DeclinesQuery(query string) bool
 }
 
 // ProviderHealth is the durable health snapshot for one provider.
@@ -90,4 +104,7 @@ type Outcome struct {
 	// refusals (rate limit, quota) back it off as for any provider, each
 	// counted from its own first strike.
 	Uncapped bool
+	// RetryAfter is the wait the provider asked for with a rate limit
+	// (zero: none); it replaces the default bench for rate_limited.
+	RetryAfter time.Duration
 }

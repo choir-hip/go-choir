@@ -48,7 +48,8 @@ BEDROCK_DAILY_LIMIT = 20.0   # flag line for the projected day, USD
 RIVER_DAILY_LIMIT = 1.0      # flag line for River today, USD
 DEVIN_SHARE_MIN = 0.5
 PAID_SEARCH = ("tavily", "brave", "parallel", "serper", "serpapi")   # the paid search providers
-SEARCH_ZERO_SHARE = 0.05     # flag when more than this share of requests got no provider (Keenable, uncapped, answers nearly all; a few time out)
+SEARCH_ZERO_SHARE = 0.05     # flag when more than this share of requests got no provider (Ceramic starts every search; a few time out)
+KEENABLE_CAP_HOUR = 18       # flag when Keenable reaches its daily cap before this UTC hour (owner, 2026-11-18: its credits must last to 2026-12-05)
 SEARCH_QUOTA_SHARE = 0.8     # flag when every paid provider is quota_limited in more lines than this
 PUBLISHING_WINDOW_MIN = 20
 
@@ -60,6 +61,7 @@ PACER_RE = re.compile(r"devin pacing hour=(\S+) .*?shed_share=(\d+)% shed_calls=
 SEARCH_RE = re.compile(r"answered (\d+) of (\d+) providers.*?skipped=\[([^\]]*)\]")
 SEARCH_RESULTS_RE = re.compile(r"\bresults=(\d+)")
 SEARCH_TODAY_RE = re.compile(r"\btoday=\[([^\]]*)\]")
+TODAY_CAP_RE = re.compile(r"^(\d+)/(\d+)$")
 STAMP_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) ")
 ERROR_KINDS = (("429", re.compile(r"\b429\b")), ("quota", re.compile(r"quota", re.I)),
                ("hold", re.compile(r"\bhold", re.I)), ("error", re.compile(r"error", re.I)))
@@ -160,6 +162,7 @@ def search_health(text):
     req = zero = with_results = 0
     by = {}
     answered_by = {}
+    caps = {}   # provider -> [calls today, cap], the newest today=[name=calls/cap] seen
     for ln in text.splitlines():
         m = SEARCH_RE.search(ln)
         if not m:
@@ -180,13 +183,19 @@ def search_health(text):
                 name = item.partition("=")[0]
                 if name not in skipped_names:
                     answered_by[name] = answered_by.get(name, 0) + 1
+        if tm:
+            for item in tm.group(1).split():
+                name, _, count = item.partition("=")
+                cm = TODAY_CAP_RE.match(count)
+                if cm:
+                    caps[name] = [int(cm.group(1)), int(cm.group(2))]
         for item in m.group(3).split():
             name, _, reason = item.partition("=")
             if reason in ("quota_limited", "capped", "error"):
                 d = by.setdefault(name, {"quota_limited": 0, "capped": 0, "error": 0})
                 d[reason] += 1
     return {"requests": req, "with_results": with_results, "zero": zero, "zero_share": (zero / req) if req else None,
-            "answered_by": answered_by, "by": by}
+            "answered_by": answered_by, "by": by, "caps": caps}
 
 
 DEVIN_LINE_RE = re.compile(r"provider=devin|provider devin model")
@@ -260,6 +269,12 @@ def compute(raw):
     if sr["requests"] and all(sr["by"].get(n, {}).get("quota_limited", 0) > SEARCH_QUOTA_SHARE * sr["requests"]
                               for n in PAID_SEARCH):
         f.append("search: every paid provider quota_limited in over 80% of requests")
+    kc = sr["caps"].get("keenable")
+    capped_now = sr["by"].get("keenable", {}).get("capped", 0) > 0
+    hour_utc = (now - day0) // 3600
+    if hour_utc < KEENABLE_CAP_HOUR and ((kc and kc[0] >= kc[1]) or capped_now):
+        f.append("search: keenable reached its daily cap at %02d UTC, before %d:00 (cap %s)"
+                 % (hour_utc, KEENABLE_CAP_HOUR, kc[1] if kc else "?"))
     if lines20 == 0:
         f.append("paper not publishing (0 lines in %d min)" % PUBLISHING_WINDOW_MIN)
     if today["synthetic_calls"]:
@@ -311,6 +326,9 @@ def render(r):
         # from today=[...] minus skipped=[...] (see search_health).
         if sr["answered_by"]:
             o.append("    answered by (inferred from today=[...] minus skipped=[...]): " + ", ".join("%s %d" % (n, c) for n, c in sorted(sr["answered_by"].items(), key=lambda x: -x[1])))
+        for n in sorted(sr["caps"]):
+            c, cap = sr["caps"][n]
+            o.append("    %-10s calls today %5d of cap %5d%s" % (n, c, cap, "  (AT CAP)" if c >= cap else ""))
         for n in sorted(sr["by"]):
             d = sr["by"][n]
             o.append("    %-10s quota_limited %5d  capped %5d  error %5d" % (n, d["quota_limited"], d["capped"], d["error"]))

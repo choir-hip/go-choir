@@ -59,7 +59,8 @@ type SearchCoolingProvider struct {
 	State    string `json:"state"`
 	Until    string `json:"until,omitempty"`
 	// Reason is the failure class that benched it (quota_limited,
-	// rate_limited, ...) or "paced"; never an error summary.
+	// rate_limited, ...), "paced", "capped" or "unsupported_query" (the
+	// provider cannot take this query); never an error summary.
 	Reason string `json:"reason,omitempty"`
 }
 
@@ -94,6 +95,13 @@ type searchProviderAdapter struct {
 }
 
 func (a searchProviderAdapter) Name() string { return a.inner.Name() }
+
+// DeclinesQuery forwards a provider's refusal of a query it cannot take
+// (searchplane.QueryDecliner).
+func (a searchProviderAdapter) DeclinesQuery(query string) bool {
+	d, ok := a.inner.(interface{ DeclinesQuery(string) bool })
+	return ok && d.DeclinesQuery(query)
+}
 
 func (a searchProviderAdapter) Search(ctx context.Context, query string, maxResults int) ([]searchplane.Result, error) {
 	hits, err := a.inner.Search(ctx, query, maxResults)
@@ -188,7 +196,7 @@ func (c *SearchClient) StreamFor(ctx context.Context, computerID string, req Sea
 		return nil, fmt.Errorf("query is required")
 	}
 	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, KEENABLE_API_KEY, or CHATGPT_AUTH_PATH)")
+		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, CERAMIC_API_KEY, KEENABLE_API_KEY, or CHATGPT_AUTH_PATH)")
 	}
 	if err := c.ensurePlane(); err != nil {
 		return nil, fmt.Errorf("search plane: %w", err)
@@ -294,7 +302,7 @@ func searchEscalations(route searchplane.RouteSummary) []SearchEscalation {
 // routing mode, each escalation as reason(unique<min):provider, the paid
 // calls this request caused (none for a cache hit or a join: the leader's
 // line counts them), and today's count per provider touched
-// ("serper=14/150", "keenable=812" without a cap).
+// ("serper=14/150", "ceramic=812" without a cap).
 func searchRouteSummary(stream *searchplane.Stream) string {
 	if stream.Route == nil {
 		return "routing=cache escalated=no paid_calls=0 today=[]"

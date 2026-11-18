@@ -114,7 +114,7 @@ func TestHandleSearch_CacheHitReplaysTheSameStreamShape(t *testing.T) { // 7, 11
 	logs := captureLog(t)
 	var calls atomic.Int32
 	client := cachedSearchClient([]SearchProvider{
-		countingProvider("keenable", &calls, SearchResult{Title: "k", URL: "https://k.example/1"}, SearchResult{Title: "k2", URL: "https://k.example/2"}),
+		countingProvider("ceramic", &calls, SearchResult{Title: "k", URL: "https://k.example/1"}, SearchResult{Title: "k2", URL: "https://k.example/2"}),
 	}, false)
 	search := searchAs(t, client, "vm-a")
 	first := search("vm-a", "parlioSDR README")
@@ -151,7 +151,7 @@ func TestHandleSearch_CacheHitReplaysTheSameStreamShape(t *testing.T) { // 7, 11
 
 func TestHandleSearch_CacheIsPerComputerByDefault(t *testing.T) { // 3
 	var calls atomic.Int32
-	client := cachedSearchClient([]SearchProvider{countingProvider("keenable", &calls, SearchResult{Title: "k", URL: "https://k.example/"})}, false)
+	client := cachedSearchClient([]SearchProvider{countingProvider("ceramic", &calls, SearchResult{Title: "k", URL: "https://k.example/"})}, false)
 	search := searchAs(t, client, "vm-a", "vm-b")
 	search("vm-a", "q")
 	client.cache.WaitIdleForTest()
@@ -165,7 +165,7 @@ func TestHandleSearch_CacheIsPerComputerByDefault(t *testing.T) { // 3
 
 func TestHandleSearch_SharedScopeAnswersAcrossComputers(t *testing.T) {
 	var calls atomic.Int32
-	client := cachedSearchClient([]SearchProvider{countingProvider("keenable", &calls, SearchResult{Title: "k", URL: "https://k.example/"})}, true)
+	client := cachedSearchClient([]SearchProvider{countingProvider("ceramic", &calls, SearchResult{Title: "k", URL: "https://k.example/"})}, true)
 	search := searchAs(t, client, "vm-a", "vm-b")
 	search("vm-a", "q")
 	client.cache.WaitIdleForTest()
@@ -177,7 +177,7 @@ func TestHandleSearch_SharedScopeAnswersAcrossComputers(t *testing.T) {
 
 func TestHandleSearch_CacheOffCallsProvidersEveryTime(t *testing.T) { // 9
 	var calls atomic.Int32
-	client := testSearchClient([]SearchProvider{countingProvider("keenable", &calls, SearchResult{Title: "k", URL: "https://k.example/"})})
+	client := testSearchClient([]SearchProvider{countingProvider("ceramic", &calls, SearchResult{Title: "k", URL: "https://k.example/"})})
 	search := searchAs(t, client, "vm-a")
 	search("vm-a", "q")
 	if lines := search("vm-a", "q"); lines[0]["cached_at"] != nil {

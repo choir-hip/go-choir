@@ -2,6 +2,7 @@ package searchplane
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -98,8 +99,8 @@ func (r *Router) TierOf(provider string) ProviderTier {
 }
 
 // capOf is a provider's daily cap, or NoCap: the configured DailyCaps
-// entry. Keenable has none (owner, 2026-11-08); it is limited by its
-// per-second rate and its own refusals.
+// entry. Ceramic has none; it is limited by its per-second rate and its own
+// refusals. Keenable's cap of 800 is the owner's (2026-11-18, DefaultDailyCaps).
 func (r *Router) capOf(provider string, now time.Time) int {
 	if n, ok := r.config.DailyCaps[provider]; ok {
 		return n
@@ -352,7 +353,7 @@ type launch struct {
 // needsProbe reports whether rec is an uncapped provider whose run of
 // transient failures has benched it (the bench may have ended since).
 func (r *Router) needsProbe(rec ProviderHealth) bool {
-	return r.TierOf(rec.Provider).Tier == TierFree &&
+	return r.TierOf(rec.Provider).startsSearch() &&
 		rec.StrikeCount >= TransientStrikesBeforeCooldown && uncappedStreakClass(OutcomeClass(rec.LastFailureClass))
 }
 
@@ -392,7 +393,7 @@ func (r *Router) admit(p Provider, now time.Time, route *Route) (launch, *Coolin
 	calls, ok, err := r.counter.ReserveCall(name, day, limit)
 	if err != nil {
 		log.Printf("searchplane: count call for %s: %v", name, err)
-		if tier.Tier != TierFree {
+		if !tier.startsSearch() {
 			return launch{}, &Cooling{Provider: name, State: StateCapped, Reason: "count_error"}
 		}
 		ok = true
@@ -401,7 +402,30 @@ func (r *Router) admit(p Provider, now time.Time, route *Route) (launch, *Coolin
 	if !ok {
 		return launch{}, &Cooling{Provider: name, State: StateCapped, Until: until, Reason: string(StateCapped)}
 	}
-	return launch{provider: p, slot: slot, paid: tier.Tier != TierFree, at: now}, nil
+	// paid counts the calls a search chose to add (Route.PaidCalls); the
+	// providers every search starts are not a choice.
+	return launch{provider: p, slot: slot, paid: !tier.startsSearch(), at: now}, nil
+}
+
+// declines reports whether p cannot take the query at all (a language or
+// syntax it does not support). Such a search skips p without calling it,
+// counting it or striking it.
+func declines(p Provider, query string) bool {
+	d, ok := p.(QueryDecliner)
+	return ok && d.DeclinesQuery(query)
+}
+
+func declinedCooling(name string) Cooling {
+	return Cooling{Provider: name, State: StateDeclined, Reason: ReasonUnsupportedQuery}
+}
+
+// retryAfter is the wait a provider asked for in its refusal, or zero.
+func retryAfter(err error) time.Duration {
+	var ra interface{ RetryAfter() time.Duration }
+	if err != nil && errors.As(err, &ra) {
+		return ra.RetryAfter()
+	}
+	return 0
 }
 
 func nextUTCDay(t time.Time) time.Time {
@@ -451,7 +475,11 @@ func (r *Router) StartRequest(ctx context.Context, req Request) (*Stream, error)
 			stream.Cooling = append(stream.Cooling, skipped)
 			continue
 		}
-		if budget && r.TierOf(name).Tier != TierFree {
+		if declines(p, req.Query) {
+			stream.Cooling = append(stream.Cooling, declinedCooling(name))
+			continue
+		}
+		if budget && !r.TierOf(name).startsSearch() {
 			if limit, until := r.limitAt(name, now); limit >= 0 && todays[name] >= limit {
 				route.noteCount(DailyCount{Provider: name, Day: DayOf(now), Calls: todays[name], Cap: r.capOf(name, now), Tier: r.TierOf(name)})
 				stream.Cooling = append(stream.Cooling, Cooling{Provider: name, State: StateCapped, Until: until, Reason: string(StateCapped)})
@@ -601,6 +629,10 @@ func (co *coordinator) escalate(reason string, newStep bool) bool {
 			co.route.noteSkipped(skipped)
 			continue
 		}
+		if declines(p, co.req.Query) {
+			co.route.noteSkipped(declinedCooling(p.Name()))
+			continue
+		}
 		l, skip := co.r.admit(p, now, co.route)
 		if skip != nil {
 			co.route.noteSkipped(*skip)
@@ -742,13 +774,14 @@ func (r *Router) call(ctx context.Context, provider Provider, query string, maxR
 		// call benched the provider is the same episode and adds no strike
 		// (sameEpisode).
 		_, _ = r.store.RecordOutcome(Outcome{
-			Provider:  name,
-			Class:     class,
-			Results:   len(hits),
-			Error:     arrival.Error,
-			At:        r.now(),
-			StartedAt: now,
-			Uncapped:  r.TierOf(name).Tier == TierFree,
+			Provider:   name,
+			Class:      class,
+			Results:    len(hits),
+			Error:      arrival.Error,
+			At:         r.now(),
+			StartedAt:  now,
+			Uncapped:   r.TierOf(name).startsSearch(),
+			RetryAfter: retryAfter(err),
 		})
 	}
 	return arrival

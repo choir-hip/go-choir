@@ -30,6 +30,9 @@
 #       $1; devin share under half; paper not publishing; any Synthetic or
 #       River call from the paper; exit code is not non-zero with a flag
 #   P11 empty input divides by zero or crashes
+#   P12 search: a capped provider's calls today against its cap (the newest
+#       today=[name=calls/cap]) are not printed, or Keenable at its cap before
+#       18:00 UTC is not flagged, or is flagged after 18:00 or below its cap
 #  storage
 #   S1  free MiB is not the Available column of df -Pm /
 #   S2  the latest forecast, fast drain and growers lines are not shown, or the
@@ -317,6 +320,36 @@ check "G3b search: 5 requests, 3 with results, 1 zero, answered by keenable 4 an
 runpaper
 check "G3b text: results and provider lines" 'grep -q "5 requests, 3 returned results (60%), 1 got no provider answer" "$root/out" && grep -q "minus skipped=\[...\]): keenable 4" "$root/out"'
 check "G3 serper erroring means not every paid provider is quota_limited" '! jq_ "d[\"flags\"]" | grep -q "every paid"'
+# P12 Ceramic starts every search; Keenable (cap 800) joins and is held to its cap
+python3 - "$root/paper.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+line = "answered 1 of 1 providers (1 cooling, 0 pending) skipped=[keenable=capped] served=miss results=%d unique=%d seen=0 routing=budget escalated=no paid_calls=0 today=[ceramic=%d keenable=%s]"
+d["search_lines"] = "\n".join([line % (20, 20, 4000, "799/800"), line % (20, 20, 4001, "800/800")]) + "\n"
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runpaper --json
+check "P12 caps: keenable 800 of 800 (the newest line), ceramic answered" '[ "$(jq_ "d[\"search\"][\"caps\"][\"keenable\"]")" = "[800, 800]" ] && [ "$(jq_ "\"ceramic\" in d[\"search\"][\"answered_by\"]")" = True ]'
+check "P12 keenable at its cap at 02:00 UTC is flagged" 'jq_ "d[\"flags\"]" | grep -q "keenable reached its daily cap at 02 UTC, before 18:00"'
+runpaper
+check "P12 text: calls today against the cap" 'grep -q "keenable  *calls today   800 of cap   800  (AT CAP)" "$root/out"'
+python3 - "$root/paper.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["now"] = d["now"] + 17 * 3600   # 19:00 UTC
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runpaper --json
+check "P12 keenable at its cap at 19:00 UTC is not flagged" '! jq_ "d[\"flags\"]" | grep -q "keenable reached"'
+python3 - "$root/paper.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["now"] = d["now"] - 17 * 3600
+d["search_lines"] = d["search_lines"].replace("800/800", "412/800").replace("skipped=[keenable=capped]", "skipped=[]")
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runpaper --json
+check "P12 keenable below its cap is not flagged" '! jq_ "d[\"flags\"]" | grep -q "keenable reached"'
 mkstore 77926 '78 + 0.25 * h' 3
 python3 - "$root/store.json" <<'PY'
 import json, sys
