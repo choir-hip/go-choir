@@ -114,8 +114,7 @@ re-download: head found at 430.5, tail at 458.5. `off_head = 430.5 - 412 =
 A clip shorter than 24 s gets no fingerprint (its 12 s head and tail would
 overlap, so an ad inside it could not be seen). The automatic matcher's minimum
 is 24 s, so every clip it writes is relocatable; a shorter clip written before
-that stays valid and unfingerprinted, and the repair pass skips it and deletes
-nothing for being short.
+that stays valid and unfingerprinted, and the repair pass skips it.
 
 ## 3. The record on the platform
 
@@ -141,16 +140,15 @@ bitrate at most 640; seekable needs a bitrate and a length.
 
 `PUT /api/platform/operator/podcasts/clips` takes the same object as
 `fingerprint` on a clip; the same clip (story, episode, start second) written
-again replaces the row. `DELETE` on that route with `{"clip_ids": [...]}`
-tombstones clips (the worker's repair pass; the public read skips them). The
-write route has a 6 MB body bound and 200 clips a request. The clip row is an
+again replaces the row. There is no delete route: nothing in this design
+deletes a clip. The write route has a 6 MB body bound and 200 clips a request. The clip row is an
 object-graph row of kind `choir.podcast_clip`, not the tape; the route is
 operator only. Old servers refuse unknown fields (the decoder disallows them):
 a new worker against an old platform would have its whole clip refused. The
 matcher therefore retries such a refused clip once without the fingerprint,
 logs the downgrade once, and marks the clip written only when a request
 succeeds; the old platform stores it unfingerprinted and the repair pass
-upgrades it later (against an old platform that pass's PUT and its DELETE are
+upgrades it later (against an old platform that pass's PUT is
 refused and skipped for 6 hours). Deploy the platform first all the same.
 
 ## 4. Where fingerprints come from
@@ -174,15 +172,18 @@ refused and skipped for 6 hours). Deploy the platform first all the same.
   shifted place; the clip's stored start and end are not changed (they are
   its identity). The audio is deleted after use; `--min-free-gb` and the work
   directory bound apply. If the quote is not found, or the shifted clip runs
-  past the audio, nothing is decided yet: the episode is downloaded once more
-  and the whole file is transcribed. Only when that transcription covers the
-  file (within 3 s of its length) and the quote is still not in it is the clip
-  deleted, with the reason logged (one of 34 was such a case on 2026-11-17: the
-  episode had been re-edited). Any failure, an incomplete transcription, or a
-  clip that cannot be cut where its quote now is leaves the clip as it is and
-  skips it for 6 hours; so does a clip whose episode left the 14-day listing.
-  A run has a 20 minute wall-time budget: the episode in hand when it ends
-  writes and deletes nothing. No model service is called.
+  past the audio, the episode is downloaded once more and the whole file is
+  transcribed, but only when the served file is no longer than the worker's
+  `--max-minutes` recogniser bound (90 minutes by default; a longer file is
+  logged and not searched whole). A clip whose quote is still not found stays
+  valid and unfingerprinted, recorded as not found and not looked at again for
+  24 hours; a failed download or search, or a clip that cannot be cut where its
+  quote now is, skips it for 6 hours; so does a clip whose episode left the
+  14-day listing. **The repair pass deletes nothing**: a clip without a
+  fingerprint is dropped from the phone's feed by the phone, and clips leave the
+  list with their stories (one of 34 held clips was such a case on 2026-11-17:
+  its episode had been re-edited). A run has a 20 minute wall-time budget: the
+  episode in hand when it ends writes nothing. No model service is called.
 
 ## 5. What is not known
 
