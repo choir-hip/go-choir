@@ -1,0 +1,100 @@
+// The app's named transitions: the one place durations and curves are written (docs/design/app-motion-2026-11-18.md).
+// The rule: the frame never leaves. A page's title, tab row and bars are drawn from state that needs no fetch and sit
+// outside every Swap; only the content inside a Swap changes, and it changes at the tap, not when the answer arrives:
+// the Swap's token changes with the action, so the old content starts to leave at once and a skeleton (no words) holds
+// the place until the new content is ready, when a second token change plays the incoming half.
+//
+//   Name        Time    Curve                      Used for
+//   tabIn/Out   160-220 ease-out / ease-in         content under a tab or segment: slides 24 pt in the tab's direction and fades
+//   fade        160     ease-out                   Reduce Motion, and any change with no direction (a skeleton to content)
+//   rise        260     cubic-bezier(.16,1,.3,1)   a detail or sheet entering from below; leaves in 200
+//   layout      240     ease                       rows inserted, removed or reordered (-exact-layout-transition)
+//   press       120     ease (th.motionFastMs)     colour, underline and glyph state at a tap
+//   swapMs      180     ease-in-out                a bar or entry whose text or glyph changes in place
+//
+// Reduce Motion (th.reducedMotion, the system setting) turns every slide and rise into a cross-fade and every layout
+// transition off. Every one of these is a compositor animation (transition, keyframes, exit animation, layout transition):
+// nothing runs a frame loop, nothing waits on input, and a new tap replaces the running one.
+use Theme from "@choir/autoradio"
+
+keyframes tabInR
+  from opacity=0 translate="24px 0px"
+keyframes tabInL
+  from opacity=0 translate="-24px 0px"
+keyframes tabOutL
+  to opacity=0 translate="-24px 0px"
+keyframes tabOutR
+  to opacity=0 translate="24px 0px"
+keyframes tFadeIn
+  from opacity=0
+keyframes tFadeOut
+  to opacity=0
+keyframes tRiseIn
+  from opacity=0 translate="0px 16px"
+keyframes tRiseOut
+  to opacity=0 translate="0px 8px"
+keyframes tSkel
+  50% opacity=0.45
+
+// The durations and curves as functions, so a page names a transition and never a number.
+fn tIn(still: bool, dir: number): string = still ? "tFadeIn 160ms ease-out both" : (dir > 0 ? "tabInR 220ms cubic-bezier(0.16, 1, 0.3, 1) both" : (dir < 0 ? "tabInL 220ms cubic-bezier(0.16, 1, 0.3, 1) both" : "tFadeIn 160ms ease-out both"))
+fn tOut(still: bool, dir: number): string = still ? "tFadeOut 120ms ease-in both" : (dir > 0 ? "tabOutL 160ms ease-in both" : (dir < 0 ? "tabOutR 160ms ease-in both" : "tFadeOut 120ms ease-in both"))
+fn tRiseInOf(still: bool): string = still ? "tFadeIn 160ms ease-out both" : "tRiseIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both"
+fn tRiseOutOf(still: bool): string = still ? "tFadeOut 120ms ease-in both" : "tRiseOut 200ms ease-in both"
+fn tLayout(still: bool): string = still ? "none" : "240ms ease"
+fn tSwapMs(still: bool): string = still ? "0ms" : "180ms"
+
+// The content area of a page: change `token` with the action (the tab's name, with "-wait" while its answer is awaited) and the
+// old children leave in the direction (`dir`: 1 the new place is to the right, -1 to the left, 0 none) while the new ones enter.
+component Swap
+  inject
+    th: Theme
+  props
+    token: string
+    dir: number
+  slot
+  view
+    column width="100%" min-width=0 position="relative"
+      for t in [token] key=t
+        column width="100%" min-width=0 box-sizing="border-box"
+          animation=tIn(th.reducedMotion, dir)
+          -exact-exit-animation=tOut(th.reducedMotion, dir)
+          children
+
+// The shape of a list while it arrives: quiet bars that breathe, no words. `rows` lines of a sender, a subject and a preview.
+component SkeletonRows
+  inject
+    th: Theme
+  props
+    rows: number
+    testId: string
+  derive lines = [0, 1, 2, 3, 4, 5, 6, 7].slice(0, rows)
+  view
+    column testId=testId width="100%" aria-hidden=true
+      for i in lines key=i
+        column gap=8 padding="14px 0" width="100%" border-top-width=1 border-right-width=0 border-bottom-width=0 border-left-width=0 border-style="solid" border-color=th.rule
+          animation=(th.reducedMotion ? "none" : `tSkel 1.2s ${i * 90}ms ease-in-out infinite`)
+          box height=12 width=`${40 + (i * 13) % 30}%` border-radius=2 background-color=th.paper2
+          box height=12 width=`${70 + (i * 7) % 25}%` border-radius=2 background-color=th.paper2
+          box height=10 width="90%" border-radius=2 background-color=th.paper2
+
+// A page's body shape while it opens: a title-sized bar and a few lines, no words (the page's real title is in the frame).
+component SkeletonBody
+  inject
+    th: Theme
+  props
+    testId: string
+  view
+    column testId=testId width="100%" gap=12 padding="8px 0" aria-hidden=true
+      animation=(th.reducedMotion ? "none" : "tSkel 1.2s ease-in-out infinite")
+      for w in [92, 98, 86, 95, 60] key=w
+        box height=14 width=`${w}%` border-radius=2 background-color=th.paper2
+
+// One quiet line where a single value is on its way (an account line): same breathing as the rows.
+component SkeletonLine
+  inject
+    th: Theme
+  props
+    testId: string
+  view
+    box testId=testId height=12 width="60%" border-radius=2 background-color=th.paper2 animation=(th.reducedMotion ? "none" : "tSkel 1.2s ease-in-out infinite")

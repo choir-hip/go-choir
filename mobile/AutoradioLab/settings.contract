@@ -16,6 +16,7 @@
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth, VoiceProfile from "@choir/autoradio"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
+use SkeletonLine from "./transitions.contract"
 
 component SettingsPage
   props
@@ -364,7 +365,7 @@ component AccountScreen
       if acctInfo.message != ""
         text acctInfo.message testId="settings-account-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
       if acctInfo.status == "loading"
-        text "Asking the server who this phone is…" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
+        SkeletonLine(testId="settings-account-skeleton")
       text "This phone holds its own key. Signing out removes the key from this phone and ends it on the server. Your computer and your documents stay where they are." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
       row gap=12 width="100%"
         button press=refreshAccount testId="settings-account-refresh" appearance="none"

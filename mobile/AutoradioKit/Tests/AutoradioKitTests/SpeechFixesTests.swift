@@ -17,7 +17,7 @@ import XCTest
 // S3  Failures on the Play path leave no trace and no words on the Play control.
 //       S3a ProgrammePlayer.playBlock swallows a failure to make the voice (try?): it must emit an error event for stage "voice"
 //       S3b a start failure and a voice failure must reach the player's message (ChoirApp.plain, by stage "start" and "voice"),
-//           not the generic "Something went wrong loading the radio."
+//           not the generic "Something went wrong with the radio."
 //       S3c a voice that yields no samples at all is a "voice" error too, not a silent false
 //     (The engine-start failure is already logged by LabRuntime.start as stage "start"; only its presentation was missing.)
 
@@ -96,8 +96,8 @@ final class SpeechFixesTests: XCTestCase {
     func testS3b_StartAndVoiceFailuresHaveTheirOwnWordsForThePlayControl() {
         let start = ChoirApp.plain(stage: "start", message: "start failed: boom")
         let voice = ChoirApp.plain(stage: "voice", message: "unknownStage")
-        XCTAssertNotEqual(start, "Something went wrong loading the radio.")
-        XCTAssertNotEqual(voice, "Something went wrong loading the radio.")
+        XCTAssertNotEqual(start, "Something went wrong with the radio.")
+        XCTAssertNotEqual(voice, "Something went wrong with the radio.")
         XCTAssertNotEqual(start, voice)
         XCTAssertTrue(ChoirApp.surfacedErrorStages.isSuperset(of: ["start", "voice"]))
     }

@@ -216,7 +216,7 @@ component ContentRow
           row width="100%" align-items="center" gap=8 min-height=36 padding-left=4
             text ctlTitle testId=((ctlMode == "doc" or ctlMode == "texture") ? "content-title" : `${pre}-host`) font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg flex=1 min-width=0 line-clamp=1 text-align="left"
             if ctlBusy
-              progress aria-label="Loading" width=16 height=16 color=th.accent
+              progress aria-label="Busy" width=16 height=16 color=th.accent
             if ctlPos != ""
               text ctlPos testId=(ctlMode == "texture" ? "texture-saved" : "content-position") font-family=th.fontLabel font-size="-exact-footnote" color=th.muted font-variant-numeric="tabular-nums"
             text (ctlUp ? "Less" : "More") testId="content-more" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent

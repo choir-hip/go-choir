@@ -6,7 +6,8 @@
 // files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
 use Theme, FileListing, FileInfo, FileRow from "@choir/autoradio"
 use PageScroll, Card, RowRule, PlainList from "./ui.contract"
-use Chip, ChoiceChip, NoPreview, ImageViewer, VideoViewer, AudioViewer, CsvViewer from "./viewers.contract"
+use Swap, SkeletonRows, SkeletonBody from "./transitions.contract"
+use Chip, ChoiceChip, NoPreview, FileWaiting, ImageViewer, VideoViewer, AudioViewer, CsvViewer from "./viewers.contract"
 
 component FilePage
   inject
@@ -19,7 +20,7 @@ component FilePage
     if isFolder
       FilesPlace()
     else if fvInfo.address != address or fvInfo.status == "loading"
-      NoPreview(address=address, title=title, message="Opening…")
+      FileWaiting(address=address, title=title)
     else if fvInfo.status == "notfound" or fvInfo.status == "error" or fvInfo.status == "toolarge"
       NoPreview(address=address, title=title, message=fvInfo.message)
     else if fvInfo.kind == "image"
@@ -29,11 +30,11 @@ component FilePage
     else if fvInfo.kind == "audio"
       AudioViewer()
     else if fvInfo.kind == "pdf" or fvInfo.kind == "epub"
-      NoPreview(address=address, title=title, message="Opening…")
+      FileWaiting(address=address, title=title)
     else if fvInfo.kind == "csv"
       CsvViewer()
     else if fvInfo.kind == "markdown" or fvInfo.kind == "text" or fvInfo.kind == "code"
-      NoPreview(address=address, title=title, message="Opening…")
+      FileWaiting(address=address, title=title)
     else
       NoPreview(address=address, title=title, message="There is no viewer for this kind of file yet, so it cannot be previewed here.")
 
@@ -182,7 +183,7 @@ component FilesPlace
         Card(level=2, testId="files-banner", minHeight=0)
           text fsNote font-family=th.fontLabel font-size="-exact-footnote" color=th.fg padding="10px 14px" testId="files-banner-text"
       if fsList.status == "loading"
-        text "Loading…" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="files-loading"
+        SkeletonRows(rows=6, testId="files-skeleton")
       if fsList.status == "error"
         Card(level=1, testId="files-error", minHeight=0)
           text fsList.message font-family=th.fontLabel font-size="-exact-subheadline" color=th.danger padding=16

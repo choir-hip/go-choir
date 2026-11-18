@@ -11,6 +11,7 @@
 use Theme, RadioPageInfo, QueueInfo from "@choir/autoradio"
 use Btn, SectionHeader, RowRule, BarClear from "./ui.contract"
 use QueueAudio, QueueScrub from "./queue.contract"
+use tIn, tOut, tLayout, tRiseInOf, tRiseOutOf from "./transitions.contract"
 
 component RadioPage
   inject
@@ -65,17 +66,18 @@ component RadioPage
           // on air: the largest thing on the page; it dims while the listener speaks
           column gap=14 width="100%" testId="radio-onair" opacity=(rp.dim ? 0.4 : 1) transition=(th.reducedMotion ? "none" : `opacity ${th.motionFastMs}ms ease`)
             if rp.onAir
-              column gap=8 width="100%" align-items="flex-start"
-                text rp.kindLabel font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted testId="radio-onair-kind"
-                if rp.openAddress != ""
-                  button press=openPage(rp.openAddress, rp.title) testId="radio-onair-open" appearance="none" width="100%" aria-label=`Open ${rp.title}`
-                    row gap=8 align-items="center" width="100%"
-                      text rp.title font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.15 color=th.fg text-align="left" text-wrap="balance" flex=1 min-width=0 testId="radio-onair-title" role="heading" aria-level=2
-                      image "symbol:forward-chevron" color=th.muted pointer-events="none"
-                else
-                  text rp.title font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.15 color=th.fg text-align="left" text-wrap="balance" testId="radio-onair-title" role="heading" aria-level=2
-                if byline != ""
-                  text byline font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-onair-byline"
+              for entryKey in [rp.title] key=entryKey
+                column gap=8 width="100%" align-items="flex-start" animation=tIn(th.reducedMotion, 0) -exact-exit-animation=tOut(th.reducedMotion, 0)
+                  text rp.kindLabel font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted testId="radio-onair-kind"
+                  if rp.openAddress != ""
+                    button press=openPage(rp.openAddress, rp.title) testId="radio-onair-open" appearance="none" width="100%" aria-label=`Open ${rp.title}`
+                      row gap=8 align-items="center" width="100%"
+                        text rp.title font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.15 color=th.fg text-align="left" text-wrap="balance" flex=1 min-width=0 testId="radio-onair-title" role="heading" aria-level=2
+                        image "symbol:forward-chevron" color=th.muted pointer-events="none"
+                  else
+                    text rp.title font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.15 color=th.fg text-align="left" text-wrap="balance" testId="radio-onair-title" role="heading" aria-level=2
+                  if byline != ""
+                    text byline font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-onair-byline"
               // the sentence being spoken, moving as the voice moves
               if rp.sentence != ""
                 column gap=6 width="100%"
@@ -182,7 +184,7 @@ component RadioPage
             else
               list id="radio-next" testId="radio-next-list" appearance="none" virtualized=true reorderdrop=radioDrop width="100%" height=(shownRows.length * 64) overflow-x="hidden"
                 for r in shownRows key=r.id
-                  row testId=`radio-next-${r.n}` swipeleft=radioDo("remove", r.id) touch-action="pan-y" height=64 align-items="center" gap=8 width="100%"
+                  row testId=`radio-next-${r.n}` -exact-layout-transition=tLayout(th.reducedMotion) -exact-exit-animation=tOut(th.reducedMotion, 0) swipeleft=radioDo("remove", r.id) touch-action="pan-y" height=64 align-items="center" gap=8 width="100%"
                     button press=radioDo("play", r.id) testId=`radio-next-play-${r.n}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
                       column gap=2 align-items="flex-start" width="100%"
                         row gap=6 align-items="baseline"
@@ -208,7 +210,7 @@ component RadioPage
               for h, k in rp.heard key=h.id
                 if k > 0
                   RowRule(indent=0)
-                button press=radioDo("replay", h.id) testId=`radio-heard-${h.n}` appearance="none" width="100%" aria-label=`Play ${h.title} again`
+                button press=radioDo("replay", h.id) testId=`radio-heard-${h.n}` appearance="none" width="100%" animation=tIn(th.reducedMotion, 0) -exact-layout-transition=tLayout(th.reducedMotion) -exact-exit-animation=tOut(th.reducedMotion, 0) aria-label=`Play ${h.title} again`
                   row align-items="center" gap=8 width="100%" min-height=52
                     column flex=1 min-width=0 gap=2 align-items="flex-start"
                       text h.kind font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing=0.8 text-transform="uppercase" color=th.muted
@@ -216,12 +218,12 @@ component RadioPage
                     text h.outcome font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
                     image "symbol:forward-chevron" color=th.muted pointer-events="none"
                 if h.builtOn.length > 0
-                  button press=toggleHeardBuilt(h.id) testId=`radio-heard-built-${h.n}` appearance="none" align-self="flex-start" aria-label=(heardOpen == h.id ? "Hide the stories it was built on" : "Show the stories it was built on")
+                  button press=toggleHeardBuilt(h.id) testId=`radio-heard-built-${h.n}` appearance="none" -exact-layout-transition=tLayout(th.reducedMotion) align-self="flex-start" aria-label=(heardOpen == h.id ? "Hide the stories it was built on" : "Show the stories it was built on")
                     row min-height=44 align-items="center"
                       text (heardOpen == h.id ? "Hide built on" : "Built on") font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
                   if heardOpen == h.id
                     for b in h.builtOn key=b.address
-                      button press=openPage(b.address, b.title) testId=`radio-heard-builton-${h.n}-${b.n}` appearance="none" width="100%" aria-label=`Open ${b.title}`
+                      button press=openPage(b.address, b.title) testId=`radio-heard-builton-${h.n}-${b.n}` appearance="none" width="100%" animation=tRiseInOf(th.reducedMotion) -exact-exit-animation=tRiseOutOf(th.reducedMotion) -exact-layout-transition=tLayout(th.reducedMotion) aria-label=`Open ${b.title}`
                         row align-items="center" gap=8 width="100%" min-height=44
                           text b.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=2 flex=1 min-width=0
                           image "symbol:forward-chevron" color=th.muted pointer-events="none"

@@ -7,6 +7,7 @@
 // testIds here: reader-import, reader-list, reader-row-<id>, reader-empty, reader-note, doc-block-<n>, doc-remove, doc-frame, doc-pages,
 // doc-prev-end, doc-next-end; page-title on the places and on a document that is opening or missing.
 use Theme, PageList, ShelfListing, ShelfDocInfo, ShelfChapter, ShelfFollowInfo, ShelfBlock from "@choir/autoradio"
+use SkeletonBody from "./transitions.contract"
 use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, PlainList, LineRow, ChipFace, Btn, EmptyState, dyn from "./ui.contract"
 
 component BooksPage
@@ -83,7 +84,8 @@ component DocPage
     if ldInfo.address != address or ldInfo.status == "loading"
       PageScroll(id="doc-loading")
         Emerge(delay=0)
-          PageHeader(title=title, subtitle="Opening…", subId="doc-sub")
+          PageHeader(title=title, subtitle="", subId="doc-sub")
+        SkeletonBody(testId="doc-skeleton")
     else if ldInfo.status != "ready"
       PageScroll(id="doc-missing")
         Emerge(delay=0)

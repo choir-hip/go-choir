@@ -4,6 +4,7 @@
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
 use Theme, TextureList, TextureRow, Onboarding from "@choir/autoradio"
 use PageScroll, Card, Btn, RowRule from "./ui.contract"
+use SkeletonRows from "./transitions.contract"
 use FirstRunCard, EditEditionLink from "./onboarding.contract"
 
 component TextureRowView
@@ -55,7 +56,7 @@ component TexturesPage
       if ob.card != "Make your edition"
         FirstRunCard()
       if tlist.status == "loading"
-        progress aria-label="Loading" width=24 height=24 color=th.accent
+        SkeletonRows(rows=5, testId="textures-skeleton")
       if tlist.status == "error"
         text tlist.message testId="textures-message" font-family=th.fontLabel color=th.muted
       if tlist.status == "ready" and tlist.hasEdition == false and q == ""
