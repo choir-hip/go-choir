@@ -46,7 +46,7 @@ type feedList struct {
 
 func main() {
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Fprintln(os.Stderr, "usage: podcast-worker {intake|transcribe|run|serve|candidates|put-clips|match|match-eval} [flags]")
+		fmt.Fprintln(os.Stderr, "usage: podcast-worker {intake|transcribe|run|serve|candidates|put-clips|match|match-eval|repair} [flags]")
 		os.Exit(2)
 	}
 	cmd := os.Args[1]
@@ -75,16 +75,21 @@ func main() {
 	minScore := fs.Float64("min-score", podcastmatch.DefaultParams.MinScore, "match: the clip's BM25 as a share of a perfect passage's")
 	minMargin := fs.Float64("min-margin", podcastmatch.DefaultParams.MinMargin, "match: how far the story's score must exceed the next story's, as a fraction")
 	minShare := fs.Float64("min-entity-share", podcastmatch.DefaultParams.MinEntityShare, "match: the share of the story's distinctive terms the clip must carry")
+	trackDir := fs.String("track-dir", "", "transcribe, match, serve: where each episode's fingerprint track is kept (default: beside the match state)")
 	intakeEvery := fs.Duration("intake-every", 30*time.Minute, "serve: how often the feeds are polled")
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		os.Exit(2)
 	}
-	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "candidates" && cmd != "put-clips" && cmd != "match" && cmd != "match-eval" {
+	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "candidates" && cmd != "put-clips" && cmd != "match" && cmd != "match-eval" && cmd != "repair" {
 		log.Fatalf("unknown command %q", cmd)
 	}
 	if *matchState == "" {
 		*matchState = podcastworker.DefaultMatchStatePath(*workDir)
 	}
+	if *trackDir == "" {
+		*trackDir = podcastworker.DefaultTrackDir(*workDir)
+	}
+	tracks := &podcastworker.TrackStore{Dir: *trackDir}
 	params := podcastmatch.DefaultParams
 	params.MinScore, params.MinMargin, params.MinEntityShare = *minScore, *minMargin, *minShare
 	if cmd == "match-eval" {
@@ -124,10 +129,13 @@ func main() {
 		ctx, stop = signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
-		matcher := &podcastworker.Matcher{B: client, Params: params, StatePath: *matchState, Logf: log.Printf}
+		matcher := &podcastworker.Matcher{B: client, Params: params, StatePath: *matchState, Logf: log.Printf, Tracks: tracks}
+		repairer := &podcastworker.Repairer{B: client, Eng: t, Logf: log.Printf}
 		cfg := podcastworker.ServeConfig{
-			Match: func(ctx context.Context) error { _, err := matcher.Run(ctx); return err },
-			Since: time.Duration(*sinceHours) * time.Hour, ListLimit: *maxEpisodes, IntakeEvery: *intakeEvery,
+			Match:  func(ctx context.Context) error { _, err := matcher.Run(ctx); return err },
+			Repair: func(ctx context.Context) error { _, err := repairer.Run(ctx); return err },
+			Stored: func(ep podcastworker.PendingEpisode, res podcastworker.Result) { keepTrack(tracks, ep.EpisodeID, res) },
+			Since:  time.Duration(*sinceHours) * time.Hour, ListLimit: *maxEpisodes, IntakeEvery: *intakeEvery,
 			Intake: func(ctx context.Context) error {
 				// Free space is logged at each intake, so a filling disk is seen.
 				log.Print(podcastworker.DescribeFreeSpace(*workDir))
@@ -147,9 +155,21 @@ func main() {
 	if cmd == "match" {
 		ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
-		m := &podcastworker.Matcher{B: client, Params: params, DryRun: *dryRun, StatePath: *matchState, Out: os.Stdout, Logf: log.Printf}
+		m := &podcastworker.Matcher{B: client, Params: params, DryRun: *dryRun, StatePath: *matchState, Out: os.Stdout, Logf: log.Printf, Tracks: tracks}
 		if _, err := m.Run(ctx); err != nil {
 			log.Fatalf("match: %v", err)
+		}
+		return
+	}
+	if cmd == "repair" {
+		if *model == "" || *vad == "" {
+			log.Fatal("repair needs --model and --vad-model")
+		}
+		ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
+		if _, err := (&podcastworker.Repairer{B: client, Eng: t, DryRun: *dryRun, Logf: log.Printf}).Run(ctx); err != nil {
+			log.Fatalf("repair: %v", err)
 		}
 		return
 	}
@@ -199,7 +219,7 @@ func main() {
 			log.Fatal("transcribe needs --model and --vad-model")
 		}
 		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
-		if err := transcribe(ctx, client, t, time.Duration(*sinceHours)*time.Hour, *maxEpisodes); err != nil {
+		if err := transcribe(ctx, client, t, tracks, time.Duration(*sinceHours)*time.Hour, *maxEpisodes); err != nil {
 			log.Fatalf("transcribe: %v", err)
 		}
 	}
@@ -249,7 +269,16 @@ func intake(ctx context.Context, c *podcastworker.Client, path string, perFeed i
 	return err
 }
 
-func transcribe(ctx context.Context, c *podcastworker.Client, t *podcastworker.Transcriber, since time.Duration, max int) error {
+// keepTrack stores an episode's fingerprint track for the matcher, and drops
+// tracks older than the clips' story window by a margin.
+func keepTrack(tracks *podcastworker.TrackStore, episodeID string, res podcastworker.Result) {
+	if err := tracks.Save(episodeID, res); err != nil {
+		log.Printf("episode %s: fingerprint track not kept (its clips will be written without a fingerprint): %v", episodeID, err)
+	}
+	tracks.Prune(10 * 24 * time.Hour)
+}
+
+func transcribe(ctx context.Context, c *podcastworker.Client, t *podcastworker.Transcriber, tracks *podcastworker.TrackStore, since time.Duration, max int) error {
 	pending, err := c.PendingEpisodes(ctx, time.Now().Add(-since), max)
 	if err != nil {
 		return err
@@ -274,6 +303,7 @@ func transcribe(ctx context.Context, c *podcastworker.Client, t *podcastworker.T
 			log.Printf("episode %s (%s): not stored: %v", ep.EpisodeID, ep.Show, err)
 			continue
 		}
+		keepTrack(tracks, ep.EpisodeID, res)
 		done++
 		log.Printf("episode %s (%s): %d segments, %.0f s of audio in %.0f s", ep.EpisodeID, ep.Show, len(res.Segments), res.Seconds, time.Since(started).Seconds())
 	}

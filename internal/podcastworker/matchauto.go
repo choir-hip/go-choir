@@ -18,6 +18,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -28,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/podcastfp"
 	"github.com/yusefmosiah/go-choir/internal/podcastmatch"
 )
 
@@ -64,6 +66,12 @@ type Matcher struct {
 	Out       io.Writer // dry-run lines
 	Now       func() time.Time
 	Logf      func(string, ...any)
+	// Tracks, when set, gives each clip its fingerprint from the track kept
+	// when the episode was transcribed; a clip of an episode with no track is
+	// written without one (the repair pass makes it later).
+	Tracks interface {
+		Load(episodeID string) (*Track, error)
+	}
 
 	state       *matchState
 	transcripts map[string][]podcastmatch.Segment
@@ -349,7 +357,9 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 			rep.AlreadyWritten++
 			continue
 		}
-		fresh = append(fresh, ClipIn{StoryRoute: a.StoryID, EpisodeID: a.EpisodeKey, Start: a.Start, End: a.End, Quote: a.Quote, Support: a.Support})
+		in := ClipIn{StoryRoute: a.StoryID, EpisodeID: a.EpisodeKey, Start: a.Start, End: a.End, Quote: a.Quote, Support: a.Support}
+		in.Fingerprint = m.fingerprint(a.EpisodeKey, a.Start, a.End)
+		fresh = append(fresh, in)
 		freshKeys = append(freshKeys, key)
 		if m.DryRun && m.Out != nil {
 			e := info[a.EpisodeKey]
@@ -390,6 +400,26 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	m.save()
 	done()
 	return rep, nil
+}
+
+// fingerprint cuts a clip's fingerprint from the episode's kept track, or nil.
+func (m *Matcher) fingerprint(episodeID string, start, end float64) *podcastfp.ClipRecord {
+	if m.Tracks == nil {
+		return nil
+	}
+	tr, err := m.Tracks.Load(episodeID)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			m.logf("podcast-worker match: episode %s: track unreadable, clip written without a fingerprint: %v", episodeID, err)
+		}
+		return nil
+	}
+	rec, err := tr.FingerprintClip(start, end)
+	if err != nil {
+		m.logf("podcast-worker match: episode %s: no fingerprint for %.0f-%.0f: %v", episodeID, start, end, err)
+		return nil
+	}
+	return rec
 }
 
 func (m *Matcher) report(r MatchReport) {

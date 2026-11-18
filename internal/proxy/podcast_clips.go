@@ -19,6 +19,7 @@ import (
 //	POST /api/platform/operator/podcasts/episodes           the worker's feed items
 //	PUT  /api/platform/operator/podcasts/transcripts        one episode's timed transcript
 //	PUT  /api/platform/operator/podcasts/clips              clips for stories
+//	DELETE /api/platform/operator/podcasts/clips            {"clip_ids": [...]}: remove clips
 //
 // The operator routes pass authorizePlatformOperator (a passkey session, or
 // an API key not bound to a computer, whose account is on the platform
@@ -38,7 +39,7 @@ const (
 var podcastOperatorRoutes = map[string]map[string]string{
 	podcastOperatorPrefix + "episodes":     {http.MethodGet: platform.PodcastEpisodesPath, http.MethodPost: platform.PodcastEpisodesPath},
 	podcastOperatorPrefix + "transcripts":  {http.MethodPut: platform.PodcastTranscriptsPath},
-	podcastOperatorPrefix + "clips":        {http.MethodPut: platform.PodcastClipsWritePath},
+	podcastOperatorPrefix + "clips":        {http.MethodPut: platform.PodcastClipsWritePath, http.MethodDelete: platform.PodcastClipsWritePath},
 	podcastOperatorPrefix + "feeds/listed": {http.MethodPut: platform.PodcastFeedsListedPath},
 }
 

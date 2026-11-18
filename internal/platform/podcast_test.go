@@ -310,11 +310,11 @@ func TestPodcastRoutesRefuseAnyoneButTheHost(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("%s %s from a guest address answered %d, want 403", tc.method, tc.path, rec.Code)
 		}
-		wrong := httptest.NewRequest(http.MethodDelete, tc.path, nil)
+		wrong := httptest.NewRequest(http.MethodPatch, tc.path, nil)
 		rec = httptest.NewRecorder()
 		tc.fn(rec, wrong)
 		if rec.Code != http.StatusMethodNotAllowed {
-			t.Fatalf("DELETE %s answered %d, want 405", tc.path, rec.Code)
+			t.Fatalf("PATCH %s answered %d, want 405", tc.path, rec.Code)
 		}
 	}
 }
