@@ -168,6 +168,9 @@ type corpusSearchInfo struct {
 	Body, Title, Both, LabelsOnly int
 	// Capped: a candidate bound was hit (the index's or the window's).
 	Capped bool
+	// Dropped are the query words the text search did not look for (pruned
+	// for weight, or capped), named to the model in the note and the result.
+	Dropped []string
 }
 
 // searchCaptures is the title-and-label search alone (the words kept by
@@ -247,7 +250,7 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 		}
 		objs = window
 		if len(objs) >= corpusCaptureScan {
-			capped = true
+			info.Capped = true
 			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
 		}
 	}
@@ -262,6 +265,16 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 		case ft.Used:
 			info.TextUsed, info.TextIndexed, info.Captures = true, ft.Indexed, ft.Captures
 			textHalf = textHitCaptures(answer, labels)
+			info.Dropped = append(append([]string(nil), ft.Pruned...), ft.TermCapped...)
+			if len(info.Dropped) > 0 {
+				notes = append(notes, "words not searched in page text (found in no page, or so common they carry no weight): "+strings.Join(info.Dropped, ", "))
+			}
+			if len(ft.Excluded) > 0 {
+				notes = append(notes, "excluded from page text: "+strings.Join(ft.Excluded, ", ")+" (a passage holding one is not returned)")
+			}
+			if len(ft.PhraseFallbacks) > 0 {
+				notes = append(notes, "no page holds the phrase "+strings.Join(ft.PhraseFallbacks, ", ")+"; its words were searched instead")
+			}
 			if ft.Indexed < int64(ft.Captures) {
 				notes = append(notes, fmt.Sprintf("the page text of %d of this computer's %d captures is searchable so far; the rest are found by title and labels only", ft.Indexed, ft.Captures))
 			}
@@ -554,15 +567,16 @@ func parseCorpusWindow(query, since, until, order string) (string, corpusWindow,
 	for _, word := range strings.Fields(query) {
 		lower := strings.ToLower(word)
 		switch {
-		case strings.HasPrefix(lower, "since:"):
+		// An operator has a value; "order:" alone is the word order.
+		case strings.HasPrefix(lower, "since:") && len(word) > len("since:"):
 			if since == "" {
 				since = word[len("since:"):]
 			}
-		case strings.HasPrefix(lower, "until:"):
+		case strings.HasPrefix(lower, "until:") && len(word) > len("until:"):
 			if until == "" {
 				until = word[len("until:"):]
 			}
-		case strings.HasPrefix(lower, "order:"):
+		case strings.HasPrefix(lower, "order:") && len(word) > len("order:"):
 			if order == "" {
 				order = word[len("order:"):]
 			}

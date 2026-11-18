@@ -53,7 +53,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 		Order   string `json:"order,omitempty"`
 	}
 	return toolregistry.Tool{Name: "search_wire_corpus",
-		Description: "Search this computer's own corpus by topic, title, outlet, keywords or a whole question: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at, and passage: the part of the page's own text that matched), strongest first. A capture's full text is searched, not only its title: a fact that appears only in a page's body is found. since and until (a date such as 2026-11-18) restrict captures to pages published or, when the publish time is not known, fetched in that window; order recent lists the newest first. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
+		Description: "Search this computer's own corpus by topic, title, outlet, keywords or a whole question: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at, and passage: the part of the page's own text that matched), strongest first. A capture's full text is searched, not only its title: a fact that appears only in a page's body is found. The page-text search takes every word you write (stop words such as the, of, was are dropped), a \"quoted phrase\" as a phrase (searched as its words when no page holds it), and -word or -\"a phrase\" as an exclusion (a passage holding it is not returned). Words found in no page, or so common they carry no weight, are not searched, and the result names them (capture_words_dropped, and captures_note). Punctuation splits words: C++ is searched as c and AT&T as t, so put the distinctive word beside them. since and until (a date such as 2026-11-18, also written since:2026-11-18) restrict captures to pages published or, when the publish time is not known, fetched in that window; order recent (or order:recent) lists the newest first among the pages that are relevant. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, outlet, or keywords"},
 			"limit":    map[string]any{"type": "integer", "description": "Max results per list (default 10, at most 25)"},
@@ -103,12 +103,12 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			// Published Autopaper stories and opinion pieces, from every
 			// computer: citable once Read captures their read_url.
 			published, publishedNote := searchPublished(ctx, deps, query, limit)
-			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events), info)
+			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events), info.Capped, info)
 			body := wireCorpusResult{
 				Query:     query,
 				Published: published, PublishedCount: len(published), PublishedNote: publishedNote,
 				Events: events, EventCount: len(events), EventsNote: eventsNote,
-				Captures: captures, CaptureCount: len(captures), CapturesNote: note,
+				Captures: captures, CaptureCount: len(captures), CapturesNote: note, CaptureWordsDropped: info.Dropped,
 			}
 			if len(published) > 0 {
 				body.PublishedFirstNote = publishedFirstNote
@@ -137,8 +137,11 @@ type wireCorpusResult struct {
 	EventCount         int              `json:"event_count"`
 	EventsNote         string           `json:"events_note,omitempty"`
 	Captures           []CorpusCapture  `json:"captures"`
-	CaptureCount       int              `json:"capture_count"`
-	CapturesNote       string           `json:"captures_note,omitempty"`
+	// CaptureWordsDropped are the query words the page-text search did not
+	// look for (see CapturesNote).
+	CaptureWordsDropped []string `json:"capture_words_dropped,omitempty"`
+	CaptureCount        int      `json:"capture_count"`
+	CapturesNote        string   `json:"captures_note,omitempty"`
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -165,7 +168,11 @@ func universalWirePlatformOwnerID() string {
 // docs/archive/reports/object-graph-retrieval-research-2026-10-14.md): the query,
 // both halves' latency and counts, and the capture ids returned, so the
 // retrieval eval set can be grown from real searches and their hits.
-func logCorpusSearch(ctx context.Context, query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string, published, events int, info corpusSearchInfo) {
+func logCorpusSearch(ctx context.Context, query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string, published, events int, capped bool, infos ...corpusSearchInfo) {
+	var info corpusSearchInfo
+	if len(infos) > 0 {
+		info = infos[0]
+	}
 	ids := make([]string, 0, len(captures))
 	for i, c := range captures {
 		if i == 10 {
@@ -177,8 +184,8 @@ func logCorpusSearch(ctx context.Context, query, computerID string, capturesElap
 		query = query[:200]
 	}
 	run, desk, conv := corpusAttribution(ctx)
-	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_captures=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t",
-		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","), run, desk, conv, published, events, info.Capped)
+	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t",
+		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped)
 }
 
 // corpusAttribution is the run, desk and conversation of a call, cleaned for
