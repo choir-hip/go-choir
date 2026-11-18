@@ -170,6 +170,14 @@ stations:
     depends_on: [L6, L7, L8]
     carrier: not started
     status: pending
+  - id: L10
+    name: Android experiment
+    scope: "after the owner unplugs the iPhone (about 05:45 local on 2026-11-18): see whether Exact builds the app for Android and runs on the owner's old Android phone (broken screen, mirrored on the Mac); an experiment in how far Exact for Android goes, not a product build; on-device models are not expected to fit; read docs/reference/exact first and record what works in a reference page"
+    class: orange
+    review: none until something is kept
+    depends_on: []
+    carrier: not started
+    status: pending
 
 decisions_for_the_owner:
   - id: D1
@@ -228,6 +236,10 @@ owner_rulings:
     decision: D6
     said: "for the second review seat, use Sonnet subagents."
     read_as: "tier-2 review is DeepSeek v4.1 flash plus a Claude Sonnet subagent that did not write the change; red stations land when both accept"
+  - on: 2026-11-18
+    decision: L10
+    said: "i want to see if we can build for android... exact for android is still a bit early compared to ios. thats really what i want to test out... the android stuff should wait to the morning, once i check in around 5:45 am and unplug my iphone."
+    read_as: "no Android work before the owner's 05:45 check-in; until then the iPhone build comes first; Android building happens while the owner is out"
 
 now:
   status: working
