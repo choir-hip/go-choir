@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -33,8 +34,6 @@ const (
 	// TitleWeight is how much a title word counts against a body word in the
 	// BM25 score (the published-pieces index counts a title word three times).
 	TitleWeight = 3.0
-	// candidatePassages is how many best passages one search ranks pages from.
-	candidatePassages = 300
 	// DefaultLimit and MaxLimit bound the pages a search returns.
 	DefaultLimit = 10
 	MaxLimit     = 100
@@ -125,11 +124,18 @@ type Hit struct {
 // Result is a search's answer.
 type Result struct {
 	Hits []Hit
-	// Terms are the index terms the query looked up; Pruned are terms of the
-	// query left out of the search because they occur in so many passages
-	// that they carry almost no weight and cost a scan (see pruneTerms).
-	Terms  []string
-	Pruned []string
+	// Terms are the index terms the search looked up (words and the words of
+	// phrases); the snippet and the title match use them.
+	Terms []string
+	// Pruned are query words left out because no passage holds them or they
+	// occur in so many passages that they carry almost no weight and cost a
+	// scan (the scan budget, see pruneTerms). TermCapped are the most common
+	// words dropped to keep the query to MaxQueryTerms terms. Excluded are the
+	// words and phrases the query excluded (-word): a passage holding one is
+	// not returned. PhraseFallbacks are quoted phrases found nowhere, whose
+	// words were searched instead. Note says why a search did not run.
+	Pruned, TermCapped, Excluded, PhraseFallbacks []string
+	Note                                          string
 	// Pages is how many pages the ranked passages came from, before Limit.
 	Pages int
 	// Capped is true when more passages matched than were ranked.
@@ -164,11 +170,11 @@ type scopeDB struct {
 	passages atomic.Int64
 	refs     int
 	used     int64
-	// df caches how many passages hold a term; it is cleared when the
-	// scope's size has changed by a tenth, since only its magnitude is used.
+	// df caches how many passages hold a term (see termDF).
 	dfMu     sync.Mutex
 	df       map[string]int
-	dfAtSize int64
+	dfAt     time.Time
+	dfBudget int
 }
 
 // Open opens (creating dir if needed) the index at dir. Files are created
@@ -298,6 +304,7 @@ func (ix *Index) releaser(s *scopeDB) func() {
 	return func() {
 		ix.mu.Lock()
 		s.refs--
+		ix.evictLocked()
 		ix.mu.Unlock()
 	}
 }
@@ -551,14 +558,29 @@ func (ix *Index) Pages(scope Scope) int64 {
 	return s.pages.Load()
 }
 
+// candidatePassages is how many best passages one search ranks pages from; a
+// variable so tests can use a small one. MaxPassagesPerPage is the most of
+// those one page may hold, so a long page cannot take the slots of the pages
+// that answer the question.
+var candidatePassages = 300
+
+const MaxPassagesPerPage = 3
+
+// recentFloor is how relevant a page must be, against the best page's score,
+// to be listed in recency order: relevance chooses the pages, time orders them.
+const recentFloor = 0.5
+
 // Search ranks the scope's pages for the query: BM25 over passages, the
-// best passage of a page standing for the page.
+// best passage of a page standing for the page. See Plan for what the query
+// text may say.
 func (ix *Index) Search(ctx context.Context, scope Scope, q Query) (Result, error) {
 	if !scope.valid() {
 		return Result{}, errors.New("capturefts: owner and computer are required")
 	}
-	res := Result{Terms: QueryTerms(q.Text)}
-	if len(res.Terms) == 0 {
+	plan := PlanQuery(q.Text)
+	res := Result{Excluded: plan.Excluded}
+	if plan.Empty() {
+		res.Note = "the query has no searchable words (punctuation, or only words that are excluded)"
 		return res, nil
 	}
 	limit := q.Limit
@@ -571,27 +593,69 @@ func (ix *Index) Search(ctx context.Context, scope Scope, q Query) (Result, erro
 		return res, err
 	}
 	if s == nil {
+		res.Terms = plan.Positive
 		return res, nil
 	}
 	defer release()
 	res.Indexed = s.pages.Load()
-	searchTerms, pruned, err := s.pruneTerms(ctx, res.Terms)
+
+	// A phrase found nowhere is searched as its words.
+	positives := append([]string(nil), plan.Positive...)
+	var phrases [][]string
+	for _, ph := range plan.Phrases {
+		var one int
+		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM passages_fts WHERE passages_fts MATCH ? LIMIT 1`, `"`+strings.Join(ph, " ")+`"`).Scan(&one)
+		switch {
+		case err == nil:
+			phrases = append(phrases, ph)
+		case errors.Is(err, sql.ErrNoRows):
+			res.PhraseFallbacks = append(res.PhraseFallbacks, strings.Join(ph, " "))
+			seen := map[string]bool{}
+			for _, t := range positives {
+				seen[t] = true
+			}
+			for _, t := range ph {
+				if !seen[t] && !queryStopwords[t] {
+					seen[t] = true
+					positives = append(positives, t)
+				}
+			}
+		default:
+			return res, fmt.Errorf("capturefts: search: %w", err)
+		}
+	}
+	kept, pruned, capped, err := s.pruneTerms(ctx, positives)
 	if err != nil {
 		return res, fmt.Errorf("capturefts: search: %w", err)
 	}
-	res.Pruned = pruned
-	if len(searchTerms) == 0 {
+	res.Pruned, res.TermCapped = pruned, capped
+	seenTerm := map[string]bool{}
+	for _, t := range kept {
+		seenTerm[t] = true
+		res.Terms = append(res.Terms, t)
+	}
+	for _, ph := range phrases {
+		for _, t := range ph {
+			if !seenTerm[t] {
+				seenTerm[t] = true
+				res.Terms = append(res.Terms, t)
+			}
+		}
+	}
+	match := plan.Match(kept, phrases)
+	if match == "" {
 		return res, nil
 	}
-	quoted := make([]string, len(searchTerms))
-	for i, t := range searchTerms {
-		quoted[i] = `"` + t + `"`
-	}
-	sqlText := `SELECT p.id, p.capture_id, p.ordinal, p.start_byte, p.end_byte, p.eff, -bm25(passages_fts, ?, 1.0) AS score,
-			pg.title, pg.text_hash, pg.passages, pg.fetched_at, pg.published_at
-		FROM passages_fts JOIN passages p ON p.id = passages_fts.rowid JOIN pages pg ON pg.capture_id = p.capture_id
-		WHERE passages_fts MATCH ?`
-	args := []any{TitleWeight, strings.Join(quoted, " OR ")}
+	// Candidates come by score, whatever the order asked for; the order is
+	// applied to them below.
+	sqlText := `WITH m AS MATERIALIZED (SELECT rowid AS id, -bm25(passages_fts, ?, 1.0) AS score FROM passages_fts WHERE passages_fts MATCH ?)
+		SELECT id, capture_id, ordinal, start_byte, end_byte, eff, score, title, text_hash, passages, fetched_at, published_at FROM (
+			SELECT p.id AS id, p.capture_id AS capture_id, p.ordinal AS ordinal, p.start_byte AS start_byte, p.end_byte AS end_byte, p.eff AS eff, m.score AS score,
+				pg.title AS title, pg.text_hash AS text_hash, pg.passages AS passages, pg.fetched_at AS fetched_at, pg.published_at AS published_at,
+				ROW_NUMBER() OVER (PARTITION BY p.capture_id ORDER BY m.score DESC, p.id) AS rn
+			FROM m JOIN passages p ON p.id = m.id JOIN pages pg ON pg.capture_id = p.capture_id
+			WHERE 1 = 1`
+	args := []any{TitleWeight, match}
 	if !q.Since.IsZero() {
 		sqlText += ` AND p.eff >= ?`
 		args = append(args, q.Since.Unix())
@@ -600,19 +664,17 @@ func (ix *Index) Search(ctx context.Context, scope Scope, q Query) (Result, erro
 		sqlText += ` AND p.eff < ?`
 		args = append(args, q.Until.Unix())
 	}
-	if q.Order == ByRecency {
-		sqlText += ` ORDER BY p.eff DESC, score DESC, p.id`
-	} else {
-		sqlText += ` ORDER BY score DESC, p.eff DESC, p.id`
-	}
-	sqlText += ` LIMIT ?`
-	args = append(args, candidatePassages)
+	sqlText += `) WHERE rn <= ? ORDER BY score DESC, eff DESC, id LIMIT ?`
+	args = append(args, MaxPassagesPerPage, candidatePassages)
 	rows, err := s.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return res, fmt.Errorf("capturefts: search: %w", err)
 	}
 	defer rows.Close()
 	titleTerms := map[string]bool{}
+	for _, t := range res.Terms {
+		titleTerms[t] = true
+	}
 	best := map[string]*Hit{}
 	var order []string
 	n := 0
@@ -642,20 +704,25 @@ func (ix *Index) Search(ctx context.Context, scope Scope, q Query) (Result, erro
 	if err := rows.Err(); err != nil {
 		return res, err
 	}
-	for _, t := range res.Terms {
-		titleTerms[t] = true
-	}
 	res.Capped = n >= candidatePassages
 	res.Pages = len(order)
+	top := 0.0
 	for _, id := range order {
 		h := best[id]
+		top = max(top, h.Score)
 		for _, t := range Terms(h.Title) {
 			if titleTerms[t] {
 				h.TitleMatch = true
 				break
 			}
 		}
-		res.Hits = append(res.Hits, *h)
+	}
+	for _, id := range order {
+		h := *best[id]
+		if q.Order == ByRecency && h.Score < recentFloor*top {
+			continue
+		}
+		res.Hits = append(res.Hits, h)
 	}
 	sort.SliceStable(res.Hits, func(i, j int) bool {
 		a, b := res.Hits[i], res.Hits[j]
@@ -693,13 +760,15 @@ func (ix *Index) Scopes(ctx context.Context) ([]Scope, error) {
 	for _, f := range files {
 		db, err := sql.Open("sqlite", "file:"+f+"?mode=ro&_pragma=busy_timeout(30000)")
 		if err != nil {
-			return nil, err
+			log.Printf("capturefts: cannot open %s: %v", filepath.Base(f), err)
+			continue
 		}
 		var stored string
 		err = db.QueryRowContext(ctx, `SELECT v FROM meta WHERE k = 'scope'`).Scan(&stored)
 		_ = db.Close()
 		if err != nil {
-			continue // not an index file we wrote, or not yet initialised
+			log.Printf("capturefts: %s is not an index file (no scope row): %v", filepath.Base(f), err)
+			continue
 		}
 		owner, computer, ok := strings.Cut(stored, "\x00")
 		if ok {
@@ -736,6 +805,10 @@ func (ix *Index) PageIDs(ctx context.Context, scope Scope, after string, n int) 
 const (
 	// minKeptTerms is how many of a query's rarest terms are always kept.
 	minKeptTerms = 3
+	// dfTTL is how long a cached document frequency is used. Only its
+	// magnitude matters (it ranks terms by rarity and spends a budget), so it
+	// is not refreshed as the index grows, in a catch-up or otherwise.
+	dfTTL = time.Hour
 )
 
 // DefaultScanBudget is how many postings (passages holding a query term) one
@@ -762,12 +835,14 @@ func (ix *Index) budget() int {
 	return ix.scanBudget
 }
 
-// termDF is how many passages hold the term, cached.
+// termDF is how many passages hold the term, counted up to the scan budget
+// plus one (so a count never scans past what a search may read), cached for
+// dfTTL.
 func (s *scopeDB) termDF(ctx context.Context, term string) (int, error) {
-	size := s.passages.Load()
+	budget := s.ix.budget()
 	s.dfMu.Lock()
-	if s.df == nil || size > s.dfAtSize+s.dfAtSize/10 || size < s.dfAtSize-s.dfAtSize/10 || len(s.df) > 50000 {
-		s.df, s.dfAtSize = map[string]int{}, size
+	if s.df == nil || time.Since(s.dfAt) > dfTTL || s.dfBudget != budget || len(s.df) > 50000 {
+		s.df, s.dfAt, s.dfBudget = map[string]int{}, time.Now(), budget
 	}
 	if n, ok := s.df[term]; ok {
 		s.dfMu.Unlock()
@@ -775,7 +850,7 @@ func (s *scopeDB) termDF(ctx context.Context, term string) (int, error) {
 	}
 	s.dfMu.Unlock()
 	var n int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM passages_fts WHERE passages_fts MATCH ?`, `"`+term+`"`).Scan(&n); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM (SELECT 1 FROM passages_fts WHERE passages_fts MATCH ? LIMIT ?)`, `"`+term+`"`, budget+1).Scan(&n); err != nil {
 		return 0, err
 	}
 	s.dfMu.Lock()
@@ -784,13 +859,15 @@ func (s *scopeDB) termDF(ctx context.Context, term string) (int, error) {
 	return n, nil
 }
 
-// pruneTerms drops the terms that are in no passage (they cannot match)
-// and keeps the rarest of the rest while their postings fit scanBudget,
-// always keeping the minKeptTerms rarest. A question keeps the words that
-// name its subject and loses "week" and "decided" on a large index: BM25
-// gave those words almost no weight anyway, and each costs a scan of every
-// passage that holds it. A small index prunes nothing.
-func (s *scopeDB) pruneTerms(ctx context.Context, terms []string) (kept, pruned []string, err error) {
+// pruneTerms ranks the terms by rarity and returns those to search, those
+// pruned and those capped. A term in no passage cannot match and is pruned.
+// Of the rest, the rarest are kept while their postings fit the scan budget,
+// always keeping the minKeptTerms rarest; the others are pruned. Then, if
+// more than MaxQueryTerms remain, the most common are capped away. A question
+// keeps the words that name its subject and loses "week" and "decided" on a
+// large index: BM25 gave those words almost no weight anyway, and each costs a
+// scan of every passage that holds it. A small index prunes nothing.
+func (s *scopeDB) pruneTerms(ctx context.Context, terms []string) (kept, pruned, capped []string, err error) {
 	type td struct {
 		term string
 		n    int
@@ -800,7 +877,7 @@ func (s *scopeDB) pruneTerms(ctx context.Context, terms []string) (kept, pruned 
 	for i, t := range terms {
 		n, err := s.termDF(ctx, t)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if n == 0 {
 			pruned = append(pruned, t)
@@ -808,31 +885,30 @@ func (s *scopeDB) pruneTerms(ctx context.Context, terms []string) (kept, pruned 
 		}
 		present = append(present, td{t, n, i})
 	}
-	if len(present) <= minKeptTerms {
-		for _, x := range present {
-			kept = append(kept, x.term)
-		}
-		return kept, pruned, nil
-	}
 	byRarity := append([]td(nil), present...)
 	sort.SliceStable(byRarity, func(i, j int) bool { return byRarity[i].n < byRarity[j].n })
 	drop := map[string]bool{}
-	spent := 0
 	budget := s.ix.budget()
+	spent, keptN := 0, 0
 	for i, x := range byRarity {
-		if i < minKeptTerms || spent+x.n <= budget {
+		switch {
+		case len(present) > minKeptTerms && i >= minKeptTerms && spent+x.n > budget:
+			drop[x.term] = true
+			pruned = append(pruned, x.term)
+		case keptN >= MaxQueryTerms:
+			drop[x.term] = true
+			capped = append(capped, x.term)
+		default:
 			spent += x.n
-			continue
+			keptN++
 		}
-		drop[x.term] = true
-		pruned = append(pruned, x.term)
 	}
 	for _, x := range present {
 		if !drop[x.term] {
 			kept = append(kept, x.term)
 		}
 	}
-	return kept, pruned, nil
+	return kept, pruned, capped, nil
 }
 
 // Dir is the directory the index keeps its files in.
