@@ -1,6 +1,7 @@
 package yaegikernel
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -146,5 +147,116 @@ func TestAPlainSearchOfAFreshRunHasNoUnreadNote(t *testing.T) {
 	out := cell(`choir.SearchStart("plain one")`)
 	if strings.Contains(strings.Join(out.Searches, "\n"), "not read") {
 		t.Fatalf("a run with no unread pages is told nothing: %v", out.Searches)
+	}
+}
+
+// From the review of 56c96bf09 (seat 2). The unread count stuck: a page was
+// unread until a Read of it succeeded, so a dead link, a 403, a page read only
+// with ReadCapture or under another form of its URL never lowered it, and a
+// question whose 15 unread pages could not be loaded was withheld for the whole
+// run. The rule is "pages returned that the run has not yet tried". Failure
+// list, written before the code:
+//  8. 40 hits whose reads all fail leave the question withheld.
+//  9. A hit read through ReadCapture (a capture made from the page) leaves it
+//     counted unread.
+//  10. A hit read under another form of its URL (host case, fragment, trailing
+//     slash: the one form searchHitKey folds) leaves it counted unread.
+//  11. A run that tried every returned page is still refused its next wording.
+//  12. The withheld text and the plain-search note do not name fresh, nor say
+//     that a page that will not load counts once it was tried.
+//  13. tagQuestion on a search the store does not hold says nothing, so the
+//     gate fails open unseen.
+
+func searchAllTwice(t *testing.T, f *researchFixture, between string) (calls int64, out SessionResult) {
+	t.Helper()
+	f.urlsFor = map[string][]string{"w1 alpha": pagesN("a", 1, 40), "w2 beta": pagesN("b", 1, 40)}
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchAll("the harbor strike", []string{"w1 alpha"})`)
+	cell(between)
+	out = cell(`r, _ := choir.SearchAll("the harbor strike", []string{"w2 beta"})
+fmt.Println(r)`)
+	return f.searchCalls.Load(), out
+}
+
+func TestUnreadCountFallsWhenReadsFail(t *testing.T) {
+	f := newResearchFixture(t)
+	f.failing = map[string]string{}
+	for i := 1; i <= 40; i++ {
+		f.failing[fmt.Sprintf("https://a.example/p%d", i)] = "HTTP 403"
+	}
+	calls, out := searchAllTwice(t, f, `for i := 1; i <= 30; i++ { choir.Read(fmt.Sprintf("https://a.example/p%d", i)) }`)
+	if calls != 2 || !strings.Contains(out.Stdout, `1 "w2 beta": sent s2`) {
+		t.Fatalf("a page that will not load counts once tried: calls = %d, stdout:\n%s", calls, out.Stdout)
+	}
+}
+
+func TestUnreadCountFallsWhenAHitIsReadWithReadCapture(t *testing.T) {
+	f := newResearchFixture(t)
+	calls, out := searchAllTwice(t, f, `for i := 1; i <= 30; i++ { choir.ReadCapture(fmt.Sprintf("cap:https://a.example/p%d", i), 0, 0) }`)
+	if calls != 2 || !strings.Contains(out.Stdout, `1 "w2 beta": sent s2`) {
+		t.Fatalf("calls = %d, stdout:\n%s", calls, out.Stdout)
+	}
+}
+
+func TestUnreadCountFallsWhenAHitIsReadUnderAnotherURLForm(t *testing.T) {
+	f := newResearchFixture(t)
+	calls, out := searchAllTwice(t, f, `for i := 1; i <= 30; i++ { choir.Read(fmt.Sprintf("https://A.example/p%d/#top", i)) }`)
+	if calls != 2 || !strings.Contains(out.Stdout, `1 "w2 beta": sent s2`) {
+		t.Fatalf("calls = %d, stdout:\n%s", calls, out.Stdout)
+	}
+}
+
+func TestARunThatTriedEveryReturnedPageIsNeverWithheld(t *testing.T) {
+	f := newResearchFixture(t)
+	f.failing = map[string]string{}
+	for i := 1; i <= 40; i += 3 {
+		f.failing[fmt.Sprintf("https://a.example/p%d", i)] = "HTTP 403"
+	}
+	calls, out := searchAllTwice(t, f, `for i := 1; i <= 40; i++ {
+	switch i % 3 {
+	case 0:
+		choir.Read(fmt.Sprintf("https://a.example/p%d", i))
+	case 1:
+		choir.Read(fmt.Sprintf("https://a.example/p%d", i))
+	default:
+		choir.ReadCapture(fmt.Sprintf("cap:https://a.example/p%d/", i), 0, 0)
+	}
+}`)
+	if calls != 2 || !strings.Contains(out.Stdout, `1 "w2 beta": sent s2`) {
+		t.Fatalf("calls = %d, stdout:\n%s", calls, out.Stdout)
+	}
+}
+
+func TestTheWithheldTextAndTheNoteNameFreshAndTried(t *testing.T) {
+	f := newResearchFixture(t)
+	f.urlsFor = map[string][]string{"w1 alpha": pagesN("a", 1, 40), "w2 beta": pagesN("b", 1, 40), "plain two": pagesN("p", 1, 5)}
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchAll("the harbor strike", []string{"w1 alpha"})`)
+	out := cell(`r, _ := choir.SearchAll("the harbor strike", []string{"w2 beta"})
+fmt.Println(r)
+choir.Search("plain two")`)
+	both := out.Stdout + "\n" + strings.Join(out.Searches, "\n")
+	if n := strings.Count(both, "fresh"); n < 2 {
+		t.Fatalf("fresh named %d times, want in the withheld text and in the note:\n%s", n, both)
+	}
+	if n := strings.Count(both, "counts once you have tried it"); n < 2 {
+		t.Fatalf("'a page that will not load counts once you have tried it' named %d times, want 2:\n%s", n, both)
+	}
+}
+
+func TestTagQuestionSaysWhenItCannotTag(t *testing.T) {
+	st := newSearchStore()
+	if st.tagQuestion("s99", "harbor strike") {
+		t.Fatal("tagQuestion of a search the store does not hold must say it did not tag")
+	}
+	st.apply(SearchFrame{ID: "s1", Kind: SearchFrameStart, Query: "x one"})
+	if !st.tagQuestion("s1", "harbor strike") {
+		t.Fatal("tagQuestion of a held search must say it tagged")
+	}
+	var a SearchStats
+	a.Add(SearchStats{Untagged: 2})
+	a.Add(SearchStats{Untagged: 1})
+	if a.Untagged != 3 || a.IsZero() {
+		t.Fatalf("stats = %+v, want untagged summed", a)
 	}
 }
