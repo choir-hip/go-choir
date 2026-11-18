@@ -90,8 +90,8 @@ func TestBriefThreadsAreTheObjectivePlusFiveAndNameWhatIsLeftOut(t *testing.T) {
 	if len(threads) != 6 || threads[0].Kind != "objective" || threads[0].Text != "Did the harbor strike end?" {
 		t.Fatalf("threads = %+v", threads)
 	}
-	if len(left) != 3 {
-		t.Fatalf("threads left out = %+v (objective + 3 + 2 + 2 = 8 threads, 6 kept)", left)
+	if len(left) != 2 {
+		t.Fatalf("threads left out = %+v (8 threads, 6 kept)", left)
 	}
 	// Free text only: the objective alone.
 	plain := types.CommitmentRecord{Kind: types.CommitmentKindDirective, Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "Just this"}}
@@ -137,7 +137,7 @@ func TestBriefBoundsEachThreadAndNeverRepeatsAPage(t *testing.T) {
 }
 
 func TestBriefOverTheTokenBoundDropsWholeThreadsFromTheLastAndNamesThem(t *testing.T) {
-	big := strings.Repeat("harbor ", 60) // a whole passage, never cut
+	big := strings.Repeat("harbor ", 150) // a whole passage, never cut
 	n := 0
 	search := func(context.Context, string) (json.RawMessage, error) {
 		var caps []map[string]any
@@ -231,7 +231,7 @@ func TestBriefKeepsThreadsSearchedBeforeTheDeadline(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-	if res.outcome != briefDelivered || !strings.Contains(res.text, "first thread page") || !strings.Contains(res.text, "not searched") {
+	if res.outcome != briefDelivered || !strings.Contains(res.text, "first thread page") || !strings.Contains(res.text, "Not searched") {
 		t.Fatalf("a partial brief is not delivered with what was not searched named:\n%s", res.text)
 	}
 }
@@ -317,7 +317,7 @@ func briefRunRecord(owner, computer, doc, runID string) *types.RunRecord {
 		AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, State: types.RunRunning}
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
+func briefCaptureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := log.Writer()
@@ -332,7 +332,7 @@ func TestResearchBriefSearchesAsTheRunsOwnerAndComputerAndSaysItIsTheBrief(t *te
 	seedResearchCast(t, s, owner, computer, doc, "Did the harbor strike end?", `{"kind":"question","summary":"s","questions":["Who signed?"]}`)
 	probe := &briefProbe{result: briefResult([]map[string]any{briefCapture(1, "workers voted")}, 1)}
 	rt.researchBriefSearch = probe.search
-	logs := captureLog(t)
+	logs := briefCaptureLog(t)
 	rec := briefRunRecord(owner, computer, doc, "run-brief-1")
 	b := rt.researchBriefOpening(context.Background(), rec)
 	if b == nil || !strings.Contains(b.openingText(), "workers voted") {
@@ -403,7 +403,7 @@ func TestResearchBriefOnAResumedRunSearchesNothingAndLogsNothing(t *testing.T) {
 	if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{RunID: rec.RunID, OwnerID: owner, Kind: types.RunMemoryEntryMessage, Role: "user", Message: msg}); err != nil {
 		t.Fatal(err)
 	}
-	logs := captureLog(t)
+	logs := briefCaptureLog(t)
 	if b := rt.researchBriefOpening(ctx, rec); b != nil || b.openingText() != "" {
 		t.Fatalf("a resumed run was handed a brief: %+v", b)
 	}
@@ -419,7 +419,7 @@ func TestResearchBriefIsOnlyForResearchDeskRuns(t *testing.T) {
 	owner, computer := "owner-brief-4", rt.cfg.ComputerID
 	probe := &briefProbe{result: briefResult(nil, 1)}
 	rt.researchBriefSearch = probe.search
-	logs := captureLog(t)
+	logs := briefCaptureLog(t)
 	other := &types.RunRecord{RunID: "run-brief-4", OwnerID: owner, ComputerID: computer, AgentID: "texture:doc-4", AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture}
 	if b := rt.researchBriefOpening(context.Background(), other); b != nil {
 		t.Fatalf("a Texture run got a brief: %+v", b)
@@ -435,7 +435,7 @@ func TestResearchBriefWithNoObjectiveIsSkippedAndLogged(t *testing.T) {
 	owner, computer := "owner-brief-5", rt.cfg.ComputerID
 	probe := &briefProbe{result: briefResult(nil, 1)}
 	rt.researchBriefSearch = probe.search
-	logs := captureLog(t)
+	logs := briefCaptureLog(t)
 	// No record in the inbox: the wake had nothing to search for.
 	rec := briefRunRecord(owner, computer, "doc-5", "run-brief-5")
 	b := rt.researchBriefOpening(context.Background(), rec)
@@ -453,7 +453,7 @@ func TestResearchBriefWithNoSearchHostStartsTheRunWithOneSentence(t *testing.T) 
 	owner, computer := "owner-brief-6", rt.cfg.ComputerID
 	seedResearchCast(t, s, owner, computer, "doc-6", "Harbor?", "")
 	rt.researchDeps = nil
-	logs := captureLog(t)
+	logs := briefCaptureLog(t)
 	b := rt.researchBriefOpening(context.Background(), briefRunRecord(owner, computer, "doc-6", "run-brief-6"))
 	if !strings.Contains(b.openingText(), "No corpus brief:") || !strings.Contains(logs.String(), "outcome=failed") {
 		t.Fatalf("text=%q log=%s", b.openingText(), logs.String())
