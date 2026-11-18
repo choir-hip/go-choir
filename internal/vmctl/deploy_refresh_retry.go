@@ -530,6 +530,11 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 	if h.registry.hostStopping.Load() {
 		return
 	}
+	// A vmctl the deploy is about to replace starts no refresh
+	// (release_hold.go).
+	if h.standDownForReplacement() {
+		return
+	}
 	for _, entry := range h.pendingDeployRefreshes() {
 		if ctx.Err() != nil {
 			return
