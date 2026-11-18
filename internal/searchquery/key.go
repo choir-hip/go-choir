@@ -54,6 +54,37 @@ func Terms(q string) []string {
 	return uniqueSorted(kept)
 }
 
+// Covers reports whether a later wording of a question asks nothing an
+// earlier one did not: every term of later is a term of earlier, and later
+// keeps every restriction of earlier (a site: or other word:value operator, a
+// -exclusion), because dropping one asks a broader question.
+func Covers(earlier, later string) bool {
+	e, l := Terms(earlier), Terms(later)
+	if len(e) == 0 || len(l) == 0 {
+		return false
+	}
+	inE, inL := map[string]bool{}, map[string]bool{}
+	for _, t := range e {
+		inE[t] = true
+	}
+	for _, t := range l {
+		inL[t] = true
+		if !inE[t] {
+			return false
+		}
+	}
+	for _, t := range e {
+		if isRestriction(t) && !inL[t] {
+			return false
+		}
+	}
+	return true
+}
+
+func isRestriction(term string) bool {
+	return strings.HasPrefix(term, "-") || strings.Contains(term, ":")
+}
+
 // HasRealWord reports whether q has a run of two or more letters or digits.
 // A query without one ("x") is a slip, not a question.
 func HasRealWord(q string) bool {
