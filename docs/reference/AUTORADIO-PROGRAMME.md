@@ -53,7 +53,7 @@ refused (400), so a request carrying `heard`, `after` or `interview_notes` answe
 | `cause` | required; `open`, `extend`, `turn` or `result` |
 | `local_time`, `tz` | optional; RFC 3339, and an IANA name (at most 64 bytes). A name the computer cannot resolve is not refused: the time is shown by its own offset |
 | `candidates` | optional; at most 40 items `{route, version, title, dek, text?, clips?}`, ordered by importance, highest first. `route` has no space, `@` or `#`; `version` is a whole number or a short string; `title` one line of at most 300 bytes; `dek` required, at most 1000 bytes; `text` at most 8 KB and only on the first ten items. A candidate's cite ref is `pub:<route>@v<version>`. `clips` (at most 3) are the podcast clips that source the story, copied by the phone from `GET /api/platform/podcast-clips` (see below). Over a bound is 400 |
-| `edition_text` | optional; at most 32 KB; its paragraphs (blank-line split, `calibration.SplitBlocks`) are numbered `edition:P1`, `edition:P2` and so on |
+| `edition_text` | optional; at most 32 KB; its paragraphs (blank-line split, `calibration.SplitBlocks`) are numbered `edition:P1`, `edition:P2` and so on. **Only when the computer has no notebook:** when it has one, the server's notebook is the input and `edition_text` is ignored ([AUTORADIO-NOTEBOOK.md](AUTORADIO-NOTEBOOK.md)) |
 
 Refusals are plain JSON `{"error": "..."}` before the stream starts: 401 no
 owner, 405 not POST, 400 bad body, 409 the `request_id` is being answered now or
@@ -83,7 +83,7 @@ over-long text, a content segment with no title, a title that is not one line
 of at most 200 bytes, a cite outside the candidate set, `p_heard` missing or
 outside [0, 1], `caused_by` missing or not one of `importance`, `explore`,
 `lesson:L<n>`, `instruction:turn/<id>`, `instruction:note/<id>`, `edition:P<n>`
-that resolves against this call's input, a forecast field on `ident` or `bridge`, a kind that is not `story`, `update`, `headlines`, `ident` or `bridge`. Three invalid lines in a row end the call. Lesson lines
+that resolves against this call's input, a forecast field on `ident` or `bridge`, a kind that is not `story`, `update`, `headlines`, `ident` or `bridge`. Three invalid lines in a row end the call. The refs `try:T<n>`, `mine:<8 hex>` and `tap:<entry id>` resolve against the notebook the call was shown (cause `trying`, `instruction`, `instruction`). Notebook lines (`{"kind":"notebook",...}`) are collected, not counted as entries, and read after the stream ([AUTORADIO-NOTEBOOK.md](AUTORADIO-NOTEBOOK.md), "Proposals"). Old lesson lines
 are recognised and ignored until station L3.
 
 ## Opening and ahead (slice C)
@@ -237,3 +237,19 @@ settlement and the learning route".
   given); a listener's or the phone's own entry is never removed. The sheet's
   heard/skipped tail keeps 50 (the reducer's rule); settlement is written when
   the op applies, so a trimmed entry loses no evidence.
+
+
+## The notebook in the input (stations L4 and L5, 2026-11-18, lane `learn-notebook`)
+
+The stable, cached part of the user message gains a fenced `notebook` section
+between the instructions and the candidates, when the computer has a notebook;
+it replaces the `lessons` and `edition` sections. The volatile part gains a
+fenced `settled` section (the last 40 settled forecasts, newest first, each
+with its claim id) on every request but `open`. The done event carries
+`notebook: {proposals, status, revision_id, dropped, strikes}` when the stretch
+ended `completed`; the stretch index record carries the same as `notebook`;
+the stretch start record carries the input receipt (`notebook_revision_id`,
+`notebook_sha256`, `notebook_bytes`, `marked_cases`: the hash and length of the
+notebook rows the model was shown, never the text). Station L5's claim tags gain
+`line:<ref>` (within 64 bytes). Full rules, grammar, bounds, grants and routes:
+[AUTORADIO-NOTEBOOK.md](AUTORADIO-NOTEBOOK.md).
