@@ -1,0 +1,109 @@
+{
+ "name": "34_aired_on_air_takes_over_a_stale_on_air_entry",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "b",
+   "op": "aired",
+   "op_id": "o1",
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "o2",
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "o3",
+   "state": "heard"
+  }
+ ],
+ "results": [
+  {
+   "applied": true,
+   "op_id": "o1",
+   "version": 1
+  },
+  {
+   "applied": true,
+   "op_id": "o2",
+   "version": 2
+  },
+  {
+   "applied": true,
+   "op_id": "o3",
+   "version": 3
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 0
+ },
+ "want": {
+  "applied_ops": [
+   "o1",
+   "o2",
+   "o3"
+  ],
+  "entries": [
+   {
+    "ended": {
+     "at": "",
+     "last_block": 0,
+     "outcome": "left"
+    },
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of b",
+    "title": "T b"
+   },
+   {
+    "ended": {
+     "at": "",
+     "last_block": 0,
+     "outcome": "finished"
+    },
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "text": "words of a",
+    "title": "T a"
+   }
+  ],
+  "position_seconds": 0,
+  "version": 3
+ }
+}
