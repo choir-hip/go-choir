@@ -2064,11 +2064,7 @@ func (m *mockVMManager) ResumeVM(vmID string) (*VMInstanceInfo, error) {
 		}
 	})
 	release := m.resumeRelease
-	hook := m.onRefresh
 	m.mu.Unlock()
-	if hook != nil {
-		hook(vmID)
-	}
 	if release != nil {
 		<-release
 	}
@@ -2138,7 +2134,11 @@ func (m *mockVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstance
 	release := m.refreshRelease
 	refreshError := m.refreshError
 	response := m.refreshResponse
+	hook := m.onRefresh
 	m.mu.Unlock()
+	if hook != nil {
+		hook(vmID)
+	}
 	if release != nil {
 		<-release
 	}
