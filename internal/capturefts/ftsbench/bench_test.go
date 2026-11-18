@@ -31,7 +31,14 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 )
 
-func TestMain(m *testing.M) { os.Exit(dbxtest.Main(m)) }
+// TestMain starts nothing unless the benchmark is asked for: a skipped run
+// must not start a Postgres cluster.
+func TestMain(m *testing.M) {
+	if os.Getenv("CHOIR_FTS_BENCH_DOCS") == "" {
+		os.Exit(m.Run())
+	}
+	os.Exit(dbxtest.Main(m))
+}
 
 const (
 	vocab       = 150000
