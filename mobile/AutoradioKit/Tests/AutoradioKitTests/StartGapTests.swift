@@ -171,10 +171,10 @@ final class StartGapTests: XCTestCase {
         XCTAssertNil(old.forecast, "13 hours: lapsed; never settled as heard")
     }
     func testTheServerAlreadyHavingTheKeptEntryLeavesTheLocalCopyToAir() {
-        let s = RunSheetStore(); s.place(story("d-k"), at: .end, by: .phone)
+        let s = RunSheetStore(); s.place(story("d-k"), at: .now, by: .phone)
         let op = s.pending[0]
-        s.acknowledge([op], [RunSheetResult(opId: op.opId, applied: false, dropped: RunSheetDropped.duplicate, version: 1)])
-        XCTAssertEqual(s.entry("d-k")?.state, .ahead, "the same id: the server's copy is the one aired, no second is placed")
+        s.acknowledge([op], [RunSheetResult(opId: op.opId, applied: false, dropped: RunSheetDropped.duplicateId, version: 1)])
+        XCTAssertEqual(s.entry("d-k")?.state, .onAir, "the same id: the server's copy is the one aired, no second is placed")
     }
 
     // B2
@@ -212,14 +212,57 @@ final class StartGapTests: XCTestCase {
         var idle = 0; w.onIdle = { idle += 1 }
         f.hold = true
         w.open(); try? await Task.sleep(nanoseconds: 50_000_000)
+        let done = Task { @MainActor in await w.settle() }
         w.stop()
-        XCTAssertEqual(idle, 0)
         f.release()
+        await done.value
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(idle, 0)
     }
     func testASecondBeginDoesNotMoveTheBaseline() {
         var c = Date(timeIntervalSince1970: 100)
         let t = LaunchTimings(start: Date(timeIntervalSince1970: 0)); t.clock = { c }
         t.begin(); c = Date(timeIntervalSince1970: 101); t.mark("engine"); t.begin()
         XCTAssertEqual(t.value("engine"), 1000); XCTAssertEqual(Int(t.sinceStart()), 1000)
+    }
+
+    // item 1: a place-now dropped as duplicate_id still airs the server's copy
+    final class DupPoster: RunSheetPoster, @unchecked Sendable {
+        let lock = NSLock(); private(set) var posted: [[RunSheetOp]] = []
+        func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome {
+            lock.lock(); posted.append(ops); let first = posted.count == 1; lock.unlock()
+            return .answered(ops.map { first && $0.op == .place ? RunSheetResult(opId: $0.opId, applied: false, dropped: RunSheetDropped.duplicateId, version: 1) : RunSheetResult(opId: $0.opId, applied: true, dropped: nil, version: 1) })
+        }
+    }
+    func testAPlaceNowDroppedAsDuplicateIdPostsAiredOnAirThenTheEndOnce() async {
+        let s = RunSheetStore(); let poster = DupPoster(); s.poster = poster
+        s.place(story("d-k"), at: .now, by: .phone)
+        await s.settlePending(timeout: 2)
+        s.airedEnded("d-k", as: .heard, outcome: .finished)
+        await s.settlePending(timeout: 2)
+        let ops = poster.posted.flatMap { $0 }.map { "\($0.op.rawValue):\($0.state?.rawValue ?? "-")" }
+        XCTAssertEqual(ops, ["place:-", "aired:on_air", "aired:heard"])
+    }
+    // item 3: the kept next story placed at .next is not deleted when the server has the id
+    func testADuplicateIdOnAnAheadCopyKeepsIt() {
+        let s = RunSheetStore(); s.place(story("d-n"), at: .next, by: .desk, reason: "x")
+        let op = s.pending.first ?? RunSheetOp(opId: "q", by: .desk, op: .place, at: .next, entry: story("d-n"))
+        s.acknowledge([op], [RunSheetResult(opId: op.opId, applied: false, dropped: RunSheetDropped.duplicateId, version: 1)])
+        XCTAssertEqual(s.entry("d-n")?.state, .ahead)
+    }
+    // item 5
+    func testTheOnAirEntryChangingDuringAnEmptyAskAsksAgain() async {
+        let (p, s, w, f) = rig()
+        p.open(PhoneOpening.entry(lines: []))
+        let first = s.onAir()!.id
+        s.place(story("d-x"), at: .end, by: .desk, reason: "x")
+        f.hold = true; f.script = [.done]
+        w.openAhead()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        f.hold = false
+        s.airedEnded(first, as: .heard, outcome: .finished); s.airedOnAir("d-x")
+        f.release()
+        await w.settle(); await w.settle()
+        XCTAssertEqual(f.calls.count, 2)
     }
 }

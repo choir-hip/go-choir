@@ -57,7 +57,7 @@ public final class OpeningCache: @unchecked Sendable {
     private let lock = NSLock()
     private var held: [String: PreparedAudio] = [:]
 
-    /// The server's forecast lapse (internal/calibration AutoradioLapse).
+    /// The phone's copy of the server's `calibration.AutoradioLapse` (internal/calibration/autoradio.go:35, 12 h): keep the two together.
     static let forecastLapse: TimeInterval = 12 * 3600
     public static let defaultBound: TimeInterval = 2 * 3600
     public static let defaultEntryBound: TimeInterval = 36 * 3600
