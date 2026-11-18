@@ -1,6 +1,7 @@
 # Exact: the UI model
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**
+Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against `de212e671` on
+2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**
 verified by running (simulator), **[src]** read from source, **[doc]** from
 Exact's docs, **[seen]** observed by the builders of our app (see EXACT.md,
 "Evidence marks"), **[unrun]** reasoned. Doc paths are in the Exact repo; the
@@ -84,10 +85,14 @@ Answers are produced by the **data module** `app.ts`
 by a Rust crate, or by a package (our `later`). TypeScript on Hermes gets
 `fetch`, `structuredClone`, Streams, `crypto.subtle` (digests, ECDSA P-256),
 `TextDecoder`, `Intl.NumberFormat/DateTimeFormat/Collator`, timers inside an
-answer, `scheduler.yield()` [doc: reference.md:976-1010]. Storage is
-SQLite plus a file store under grants declared in `export const grants`
-(`fs.read app:/data`, `sqlite.open app:/data/x.db`, `net.fetch https://host`)
-[doc: reference.md:1190-1230]. Our spike's grants (microphone) live there:
+answer, `scheduler.yield()` [doc: `reference.md:2061-2230` at `de212e671`].
+Storage is SQLite plus a file store under grants declared in `export const
+grants` (`fs.read app:/data`, `sqlite.open app:/data/x.db`, `net.fetch
+https://host`) [doc: `reference.md:2324-2345`]. A server stream is `fetch` with
+`exactStream` (`reference.md:2605`), a secret is `store.get`/`store.set` under
+`secret.keep` (`reference.md:5159`), and there is no `setInterval`, `Date.now()`
+or `Math.random()` (`reference.md:2299`): the whole list, with the per-host
+`frozen` table, is in `EXACT.md`, "How Exact means an app to be built". Our spike's grants (microphone) live there:
 
 ```ts
 export const grants = `device.microphone purpose.microphone\ndevice.microphone-background purpose.recordingInBackground`;

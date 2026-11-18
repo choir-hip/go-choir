@@ -1,7 +1,48 @@
 # Exact: native Swift modules and packages
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**,
-**[src]**, **[doc]**, **[unrun]** as in the main page.
+Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against
+`de212e671` on 2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked).
+Marks: **[run]**, **[src]**, **[doc]**, **[unrun]** as in the main page.
+
+## When to write a package at all
+
+Only for what the platform alone knows: the audio session and its claims, the
+microphone, on-device models, a system object, a platform widget. The recipe's
+own example is the device's thermal state, "which TypeScript cannot" read
+(`docs/recipes/native-module.md:4-5`) [doc]. Network calls, streams from a
+server, storage, secrets, sign-in, sync, parsing and every decision about what
+to do next are `app.ts` (`EXACT.md`, "How Exact means an app to be built"). A
+package is a narrow interface between shared code and the platform; the wider
+it is, the more there is to implement again on Android. A package that
+carries the app's logic is the defect recorded in
+`docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md`: the
+Apple implementation is the only one, so Android has nothing behind the pages.
+
+**Android's shape** [src, `host/android/README.md:796-806`, de212e671]. A package
+has one interface (`exact.json`, `"kind": "interface"`) and one implementation
+per platform, each under its own folder and exported from `package.json`
+(`"./apple"`, `"./android"`, `"./web"`). An Android implementation is
+`android/exact.json` (`"platform": "android"`, `"implements": "@pkg@^1.0"`,
+`"sources": {"kotlin": [...]}`, `"class": "pkg.Module"`) and a Kotlin class that
+subclasses `ExactExtension`: `later(name, args, reply)` for each source and
+send, `release`, `dispose`, `foreground(shown)`, `resumed()`, `preferred`, and
+an `ExtensionContext` with `data`, `cache`, `temporary` (the directories behind
+`app:/data`, `app:/cache`, `app:/tmp`), `changed(topic)` (ask the topic's
+readers again, the Android twin of Swift's `context.changed`), `wake`,
+`requestPermissions`, `startActivityForResult` and a track table. The build
+compiles it into the APK when the app binds the package; Maven libraries are
+declared in the package and locked (`README.md:845-886`). A whole one is
+`packages/geolocation/android/Geolocation.kt` (`GeolocationModule(context:
+ExtensionContext) : ExactExtension(context)`). Android runs one session a
+process. Native views are Kotlin `ExactExtension.view`
+(`docs/contract-for-agents.md:3315-3325`).
+
+What a platform does with an interface name it has no implementation for:
+Exact's standard packages answer `NotSupportedError` and `available: false`
+(`docs/reference.md:3143`), and under the agent an interface that is its own
+substitute answers (`host/android/README.md:832-834`). For *our* interface on
+a platform with no implementation outside the agent, the source states
+nothing [unknown].
 
 ## Two ways in; only one reaches the audio session
 
@@ -50,7 +91,7 @@ Files (real, in `mobile/exact-spike/package/`):
 `package.json` exports `"."` and `"./apple"`. The app's `package.json` lists
 `"@choir/spike": "file:../spikepkg"`, then `bun install`. The app's Contract
 imports names with `use spikeStatus, spikeMode, SpikeStatus from "@choir/spike"`.
-No `app.json` entry is needed for a package [doc: contract-for-agents.md:2349].
+No `app.json` entry is needed for a package [doc: `contract-for-agents.md:3315-3317` at `de212e671`].
 
 Swift skeleton:
 
@@ -188,7 +229,13 @@ printed; see the open problem in `testing-and-debugging.md`.
 
 - What is the real coalescing behaviour of `changed` at 20 Hz?
 - Can a package hold a long-lived background task (wake-word detector) across
-  a locked screen without Exact's foreground logic dropping it?
+  a locked screen without Exact's foreground logic dropping it? Exact's rule
+  for shared code: `page.frozen` becomes true on iOS in the background unless
+  active audio with the background audio mode keeps execution eligible ("a
+  configured playback category alone grants nothing"), and on Android when the
+  Activity stops with no promoted foreground-service claim; macOS, Linux and
+  Windows never freeze (`docs/contract-for-agents.md:4923-4932`,
+  `recipes/suspending-feed.md:35-41`). Unrun on a phone.
 
 ## Native views and mutation results
 

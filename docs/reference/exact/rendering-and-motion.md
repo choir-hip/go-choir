@@ -1,6 +1,7 @@
 # Exact: rendering, motion, 3D and drawing
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[src]**
+Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against `de212e671` on
+2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[src]**
 read in source at the pinned commit, **[doc]** stated in Exact's docs only,
 **[seen]** observed by the builders of our app on the simulator, not read in
 source (EXACT.md, "Evidence marks"), **[test]** read in a fixture or test that exists in the tree (not run by us),
@@ -53,8 +54,10 @@ toolchain** [inferred].
 
 Where code runs: Contract expressions, derives, actions and tasks run in the
 runner VM, not in Hermes. "App JavaScript executed before first pixel: none"
-(`README.md` budgets table) [doc]. `app.ts` runs on a separate Hermes thread
-(`internals.md`), so a canvas `draw` is JavaScript on every frame it runs.
+(`README.md` budgets table) [doc]. `app.ts` runs in its own Hermes engine
+(`internals.md`; on the main thread by default at `de212e671`, on a worker if
+`typescript.placement` says so), so a canvas `draw` is JavaScript on every frame
+it runs.
 
 The GPU canvas can host Contract children, captured by the host and
 composited by the shader (`apps/caltrain/gpu/src/glass.rs:1-10`;

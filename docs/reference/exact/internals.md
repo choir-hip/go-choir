@@ -1,6 +1,7 @@
 # Exact: internals
 
-Part of [EXACT.md](../EXACT.md). Pinned commit `76cd50f9e`. Marks: **[run]**,
+Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against `de212e671` on
+2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**,
 **[src]**, **[doc]**, **[unrun]**. Figures from Exact's own docs stay marked
 **[doc, relayed]** and are not promoted to measured.
 
@@ -31,23 +32,33 @@ spec we can read.
   "executes and compiles nothing" and no app JavaScript runs before first pixel
   [doc: README.md].
 - `app.ts` runs in a separate Hermes engine ("hermes-lean-sys", pinned bundle
-  `hermes-vanilla-d412d3bd8512-v5`) behind **one door**: `__exact_host` in the
+  `hermes-vanilla-d412d3bd8512-v5` at `76cd50f9e`; the set is v6 at `de212e671`,
+  with Android arm64 among them, `docs/reference.md:30-34`) behind **one door**: `__exact_host` in the
   prelude calls `host_door(ctx, op, a, b, out)` in `js/src/door.rs:6-22`. Ops
   are fetch, storage, native calls, timers, crypto; each is grant-checked.
-- Work is split into **turns**: an answer runs in turns with a budget (100 ms
-  per native call from TS; `scheduler.yield()` ends a turn and continues in a
-  new one) (`js/src/turn.rs`, `turns.rs`; `docs/reference.md:477-478`,
-  `:1004`) [src, doc]. `turn.rs:1-6` holds a turn to its budget in the calling
+- Work is split into **turns**: each turn of an answer (its call, or its
+  resumption after a `fetch`, storage step or yield it awaited) has 100 ms of its
+  own CPU time, and at most ten budgets (1 s) of wall clock; `scheduler.yield()`
+  ends a turn and continues in a new one with a budget of its own. An overrun
+  fails the resource, which is asked again at 250 ms, then 1 s
+  (`docs/reference.md:2208-2226` at `de212e671`). A *synchronous native
+  `call`* has its own 100 ms on the main thread
+  (`docs/recipes/native-module.md:72`). Earlier text here ran the two together
+  (`js/src/turn.rs`, `turns.rs`) [src, doc]. `turn.rs:1-6` holds a turn to its budget in the calling
   thread's **CPU time** with a wall-clock backstop, because a wall-clock budget
   once refused a 60 ms turn that read 247 ms under load.
 - Answers are **checked against the shape Contract declared** before the view
   sees them. A failing source shows the resource's `else` placeholder.
-- Native hosts queue fetch/storage in one FIFO: up to 128 queued requests and
-  64 MiB of buffers; reads marked `exactIndependentHttp` run up to six at a
-  time; `exactStream` keeps a response open and counts twice its ceiling on
-  the budget [doc: reference.md:1050-1075]. Relevant to streaming model replies
-  into the lab. Sockets exist (`js/src/socket.rs`; `ws:` needs a grant)
-  [src].
+- Native hosts: a resource's plain HTTP requests overlap, up to six at a time,
+  replies delivered in the order asked; a mutation's answer hands over one
+  request at a time; storage runs in one queue in issue order; resource `GET`s
+  keep 128 queued, running or unconsumed requests and 64 MiB of buffers;
+  `exactIndependentHttp` reads leave the sequence; `exactStream` keeps a
+  response open and counts twice its ceiling on that budget
+  (`docs/reference.md:2138-2190, 2482-2510` at `de212e671`). A Hermes module has
+  a 64 MiB heap (`:2198`). Relevant to streaming model replies into the lab.
+  Sockets exist (`js/src/socket.rs`; `ws:` needs a `net.websocket` grant)
+  [src, doc].
 - Rust data sources implement `exact_runner::DataSource`; on iOS a replaced
   Rust module runs interpreted (`wasmi`) in development only [doc].
 - Swift packages talk to the runner through the same seam: `later` answers
@@ -90,10 +101,12 @@ Measured by us [run, simulator, debug "development" build]:
 | Spike claim call, simulator | 363 ms from request to `PlayAndRecord` |
 | Driver tree for the spike | 16 nodes |
 
-Relayed from Exact's README [doc, relayed; **not** verified by us]: cold
-start to interactive first frame 100 ms p50; dev edit-to-present 100 ms p50;
-touch one line, rebuild crate 30 s; whole blocking check suite 65 s; web
-runtime about 20 KB. Exact says each budget "is tracked on every commit"
+Relayed from Exact's README at `de212e671` (`README.md:135-141, 155-156`) [doc,
+relayed; **not** verified by us]: cold start to interactive first frame 100 ms
+p50; dev edit-to-present 100 ms p50 (a saved Contract or TypeScript edit in the
+page in 99 ms on a fresh app, web); touch one line, rebuild crate 30 s; the
+blocking gate, warm after a one-crate edit, 30 s (`76cd50f9e` read 65 s for the
+whole suite); web runtime about 20 KB. Exact says each budget "is tracked on every commit"
 (`rules/RULES.md`).
 
 Not measured: cold start on the phone, resident memory, frame timing under a
@@ -103,8 +116,11 @@ live-updating timeline, battery, Hermes turn cost per answer. `perf` and
 
 ## Concurrency model [src]
 
-Main thread: runner, kernel, UIKit, all module entry points. Hermes: its own
-engine thread (`js/src/engine.rs`). Package and module work: our queues;
+Main thread: runner, kernel, UIKit, all module entry points. Hermes: an engine
+thread (`js/src/engine.rs`) at `76cd50f9e`; at `de212e671` the manifest's
+`typescript.placement` is `main` (the default) or `worker`, and `worker` makes
+answers arrive `Later`, outside the action's transaction (`docs/reference.md:4665`;
+`docs/agent-pitfalls.md:956-958`). Package and module work: our queues;
 replies from any thread are copied and hopped to main
 (`NativeModule.swift:55-60`). A stale (destroyed-instance) nonce is dropped
 and logged.
