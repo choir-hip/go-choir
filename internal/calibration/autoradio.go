@@ -268,7 +268,9 @@ type HeardLedger interface {
 // limit (older settlements may exist and are not read).
 type HeardRead struct {
 	Rows, Undecodable, Limit int
-	Full                     bool
+	// Unparsable counts matching settlements whose settled time did not parse.
+	Unparsable int
+	Full       bool
 }
 
 // ListAutoradioHeard reads the newest settlements of the heard rule that say
