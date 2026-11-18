@@ -264,7 +264,11 @@ func TestReleaseHoldExpiresAtTheBoundOnAnUnreadableLink(t *testing.T) {
 		t.Fatalf("an expired hold must let the sweep run: %v\n%s", f.mgr.refreshes, logs.String())
 	}
 	f.moveLink("r2", "commit-r2")
+	f.enrollDeEarlier(f.h, "commit-r2")
 	f.h.SweepDeployRefreshPending(ctx)
+	if len(f.mgr.refreshes) != 2 {
+		t.Fatalf("the moved release is the baseline now: the sweep must run, not hold again: %v", f.mgr.refreshes)
+	}
 	out := logs.String()
 	if strings.Count(out, "refresh hold: started") != 1 || strings.Count(out, "without a restart") != 1 {
 		t.Fatalf("want one started and one expiry line, no second hold:\n%s", out)
@@ -297,6 +301,10 @@ func TestReplacementVmctlRefreshesWhatTheHeldOneSkipped(t *testing.T) {
 		if own.UserID == "ring-de" {
 			own.ComputerID = ringProofComputer
 		}
+		if own.UserID == "ring-other" {
+			// Protected, so a deploy refresh of it spends a grant.
+			own.WarmnessClass = WarmnessClassPublicPlatform
+		}
 		mgr.byVM[own.VMID] = GuestReleaseVMStatus{GuestRelease: "r1"}
 	}
 	if err := reg.writePersistenceLocked(); err != nil {
@@ -325,6 +333,10 @@ func TestReplacementVmctlRefreshesWhatTheHeldOneSkipped(t *testing.T) {
 		t.Fatalf("the held vmctl refreshed: %v", mgr.refreshes)
 	}
 
+	if got := reg.GetOwnershipForDesktop("ring-other", "primary"); len(got.DeployGrants) != 0 {
+		t.Fatalf("the held vmctl spent a grant: %+v", got.DeployGrants)
+	}
+
 	// The replacement: new registry from the file, new handler over the same
 	// state directory, the manager already on r2.
 	reg2 := NewOwnershipRegistry("")
@@ -346,6 +358,9 @@ func TestReplacementVmctlRefreshesWhatTheHeldOneSkipped(t *testing.T) {
 	h2.guestServedCommit = func(context.Context, VMOwnership) string { return "" }
 	h2.PrimeRingWalk()
 	reg2.ReattachManagedVMs(context.Background(), allowAllRoutes)
+	if got := reg2.GetOwnershipForDesktop("ring-other", "primary"); got == nil || len(got.DeployGrants) != 0 {
+		t.Fatalf("the replacement must load the grants unspent: %+v", got)
+	}
 	pending := h2.pendingDeployRefreshes()
 	if len(pending) != 2 {
 		t.Fatalf("the replacement must load both pending entries from disk: %+v", pending)
@@ -365,5 +380,8 @@ func TestReplacementVmctlRefreshesWhatTheHeldOneSkipped(t *testing.T) {
 	h2.SweepDeployRefreshPending(context.Background())
 	if len(mgr2.refreshes) != 2 {
 		t.Fatalf("the replacement must refresh both computers the held vmctl skipped: %v", mgr2.refreshes)
+	}
+	if got := reg2.GetOwnershipForDesktop("ring-other", "primary"); len(got.DeployGrants) != 1 || got.DeployGrants[0].Target != "commit-r2" {
+		t.Fatalf("the replacement must spend the protected computer's grant as a normal refresh does: %+v", got.DeployGrants)
 	}
 }
