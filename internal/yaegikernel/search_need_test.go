@@ -38,10 +38,10 @@ fmt.Println(r)`)
 		t.Fatalf("host asked to start %d searches, want 1:\n%s", f.searchCalls.Load(), out.Stdout)
 	}
 	for _, want := range []string{
-		`1 "w1 alpha": sent s1 (40 new in first 10`,
+		`1 "w1 alpha": sent s1 (10 new in first 10, 40 of 40 pages new)`,
 		`2 "w2 beta": not sent (this question already holds 40 pages new to this run that you have not read`,
 		`5 "w5 omega": not sent (this question already holds 40 pages`,
-		"read the ones that matter, then search again for what is still missing, naming it",
+		"then search again for what is still missing, naming it",
 	} {
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)

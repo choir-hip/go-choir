@@ -115,6 +115,10 @@ type ChoirScope struct {
 	notSentStat map[string]int
 	notes       []string
 	reuseQuiet  bool
+	// allStat counts SearchAll for the run summary; unreadNoted is set once a
+	// cell has told the desk it holds unread pages (search_need.go).
+	allStat     allCounts
+	unreadNoted bool
 	// ledger is this session's read ledger (read_ledger.go): every Read, its
 	// capture or its error, so a failed Read is never invisible.
 	ledger readLedger
