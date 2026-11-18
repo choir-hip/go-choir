@@ -899,3 +899,56 @@ read in code. The same hour Node B's free disk read 94 GiB on the
 forecast's 18:02Z row and 150 GiB live at 18:43Z; the paper's snapshot root
 is stamped 18:02:04Z. Whether the snapshot explains the 55 GiB dip is not
 checked.
+
+### Cause, read in code and logs the same day (a Sonnet investigator, read-only; not yet re-checked by a second reader)
+
+**The race.** vmctl does not wait to be told the deploy target. Its
+one-minute ticker reads the guest-release link (`/var/lib/go-choir/guest`,
+`internal/vmctl/ring_walk_handler.go`, `currentReleasePair`), enrolls ring
+members and refreshes them (`deploy_refresh_retry.go`). The link moves
+inside the deploy's "nixos switch" phase (`nix/node-b.nix`, the activation
+snippet); vmctl has `restartIfChanged=false` and is restarted later by the
+deploy script (`.github/scripts/node-b-ci-deploy`, the "vmctl restart"
+block), and the script's `ring-walk/expedite` call comes only after that.
+In between, the old vmctl walks one ring a minute toward the new release.
+On this deploy it refreshed two other computers at 18:04:37 and 18:05:39
+and reached the paper's ring (R5) at 18:06:26, thirty seconds before it was
+replaced.
+
+**The marker.** It was written (guest console, 18:06:26: "host requested a
+planned restart") and consumed by the boot of epoch 13728 (18:06:35: "boot
+follows a planned restart"), which the new vmctl then closed. The next boot
+had none. The restart rule held to the letter; the deploy spent the marker
+on a boot it killed.
+
+**The open rounds.** 5,093 of the closed rounds are conversations
+`conv:management:<owner>|texture:<doc>`, opened when management casts to
+`texture:new` (`story_open.go`, `planStoryOpenings`). A round closes on the
+recipient's final Report or a system closure; `closeRoundsOfEndedRun`
+(`internal/agentcore/inbox_records.go`) handles researcher, admitter and
+performer runs and returns for Texture. So nothing but a crash boot closes
+a management-to-Texture round whose Texture turn ended without a final
+Report. About 5,100 in 21 hours is ten times the stories the paper
+publishes in a day, so most cannot be live work. Not confirmed: no read of
+the heads' ages or of whether their documents are published.
+
+**The cost.** Each boot closure is its own `CommitInboxRecords` (global
+`trajectoryMu`, a replay lookup, one batch write), 190 to 220 a minute. At
+250 new open rounds an hour, a crash boot after a quiet week would hold the
+paper for about three and a half hours.
+
+**The disk dip** is probably the deploy's own nix build, freed by
+`go-choir-nix-gc-after-deploy` ten minutes later, not the snapshot (a
+reflink). The fast-drain warning compares two single readings and cannot
+tell. Inferred; the 18:02Z ledger row's breakdown was not read.
+
+**Fixes started 2026-11-18** (each its own lane and review):
+
+1. vmctl does not start a refresh toward a release while its own
+   replacement by the deploy is pending (red: vmctl, deploy routing). No
+   resumer and no second marker.
+2. The crash-boot closure commits its closures in batches (red: boot path).
+3. Open, a design question, not started: what closes a management-to-Texture
+   round in normal operation. Closing it with a Report would wake
+   management about 250 more times an hour, so the answer is not "send a
+   Report".
