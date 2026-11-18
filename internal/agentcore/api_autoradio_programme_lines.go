@@ -79,6 +79,11 @@ type programmeSegment struct {
 
 	lineNo int // the line this segment came from, for the index's notes
 
+	// ClaimID is the forecast claim of a content segment (set when the claim
+	// is written, or read back on a replay): the segment event and the run
+	// sheet entry carry it.
+	ClaimID string
+
 	// BetweenAfter and BetweenBefore name the neighbours a transition was
 	// written for: a segment_id of this stretch, or ahead:<n>, the n-th
 	// (1-based) title of the request's ahead_titles. Both set or both empty.

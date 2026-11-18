@@ -1,7 +1,9 @@
 # The server run sheet: `/api/autoradio/sheet`
 
 Status: built in slice D1 (lane `runsheet-server`, 2026-11-16, revised after
-the two-seat review); not deployed, not proven. Types, reducer and fixtures:
+the two-seat review); deployed 2026-11-17 and proven (ledger C114). The desk
+entries, settlement and learning route below are the settlement slice
+(2026-11-17): built and tested on the build VM, not deployed. Types, reducer and fixtures:
 `internal/runsheet` and `mobile/fixtures/runsheet/`. Code:
 `internal/agentcore/api_autoradio_sheet.go`. Proof script:
 `scripts/prove-autoradio-sheet` (run by the lead on d@e).
@@ -232,3 +234,73 @@ today). A public master sheet is another sheet id under another owner
 principal; its records take the id prefix `<sheet id>:` (never inside an
 `op_id`), and the same store, reducer, replay and stream serve it. Only the
 authorisation (a read without an owner session) is new.
+
+## Desk entries, settlement and the learning route (2026-11-17)
+
+**Desk entries.** The programme route places each committed segment on this
+sheet in process, by the desk (see AUTORADIO-PROGRAMME.md "On the run
+sheet"). Entry id `d-<segment_id>`; a content segment's entry carries
+`forecast.claim_id`, which is the settlement's key. `forecast` is the existing
+entry field, so the record bounds above are unchanged (its fields are inside
+the 32 KB entry bound; `TestL9` places one with maximal forecast fields).
+
+**Settlement (the op log is the air log).** When the reducer applies an op
+that moves an entry from `on_air` to `heard` or `skipped` (an `aired`, a
+`skip`, or a `place`/`move` at `now` that cuts it), and the entry is
+desk-placed and carries a claim id, `settleEnded`
+(`internal/agentcore/api_autoradio_settle.go`) acts before the op record is
+appended. The settler is this path on the listener's device-keyed op; the
+programme route has no path to it (`TestF41`). The rule reads
+`ended.outcome` as the reducer stored it, never the entry `state` (a `left`
+entry has state `heard`):
+
+| `ended.outcome` | Result |
+|---|---|
+| `finished` | settled true (heard through) |
+| `skipped`, `cut` | settled false |
+| `left`, `failed` | no verdict: an `autoradio.no_verdict` record, nothing settled |
+| none (crash, app killed) | no op, nothing written; the forecast stays open and lapses at its deadline |
+
+- **Heard through** is `finished`: the phone's end-of-entry report. The
+  design's extra check (final block began) is not applied: the op's
+  `last_block` is kept on the tape and in the ledger row, not tested.
+- **Settlement record:** the existing `calibration.SettleAutoradio` /
+  `NewAutoradioSettlementRecord`: id `<claim id>:settle:rule:autoradio-heard`,
+  `scorer rule autoradio_heard`, evidence `air:<op_id>` (the op that settled
+  it), `resolved_at` the op's own time (`ended.at`, never later than arrival
+  and never before the claim). Written once by its fixed id; a repeat, a
+  reordered batch or a later contrary op finds it and writes nothing. A
+  settlement is never changed.
+- **Late:** an op whose own time is after the claim's deadline (stretch start
+  plus 12 h) is recorded as `no_verdict` reason `late` and settles nothing.
+  An offline phone that delivers early-timed ops later settles on arrival.
+- **No verdict record:** kind `autoradio.no_verdict`, id
+  `<claim id>:noverdict:<op id>`, owner-private notice; subject refs `claim_id`,
+  `op_id`, `entry_id`, `reason` (`left`, `failed`, `late`), `outcome` (what the
+  op said), `last_block`, `position_seconds`; body the same as JSON with
+  `position_source` (`op` or `sheet`) and `ended_at`.
+- **Order:** the settlement is written before the op record, so a failed
+  append leaves a harmless settlement (fixed id) and a replayed op, answered
+  from the tape, can never need one. A tape failure fails the op unacknowledged
+  as any append failure does. Replay at boot reads and settles nothing.
+- A claim id on an entry that is not that segment's own entry (`seg:` tag
+  against `d-<segment>`), or on an entry not placed by the desk, settles
+  nothing (`TestL7`).
+
+**Learning route.** `GET /api/autoradio/learning?limit=<1..200, default 50>&after=<claim id>`,
+authenticated as the sheet's routes are, read only. Answer
+`{scorecard, rows, next?, truncated}`. `scorecard`: `forecasts`, `settled`,
+`heard_through`, `heard_through_rate`, `brier`, `open`, `overdue`,
+`no_verdict`, `no_verdict_reasons`, `by_kind` (the claim's project) and
+`by_cause`, from `calibration.Reader.Scorecard`, which is `Summarize` over the
+same joined claims as `Reader.Summary` (no second scoring path). `rows`, newest
+forecast first: `claim_id`, `stretch_id`, `segment_id`, `entry_id`, `kind`,
+`title`, `p_heard`, `caused_by`, `forecast_at`, `deadline`, `status`
+(`settled`, `no_verdict`, `open`, `overdue`), `outcome`, `heard_through`,
+`brier`, `settled_at`, `no_verdict_reason`, and `op` (`op_id`, `by`,
+`outcome`, `last_block`, `ended_at`, `position_seconds`, `version`) read from
+the op's tape record. It reads every forecast of the computer by cursor, at
+most 200,000 records (`truncated` says so) and at most 5,000 no-verdict
+records. It does not yet list turns, segments' text or the ops themselves
+beyond the settling op (the design's wider ledger route).
+Proof: `scripts/prove-autoradio-learning`.

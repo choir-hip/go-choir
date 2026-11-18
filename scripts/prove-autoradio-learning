@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Proof: do the listener's ops settle the DJ's forecasts, once, by rule?
+
+On the drill computer (d@e) only. Opens a programme and extends it until at
+least six forecast-bearing entries exist (each is on the server's run sheet:
+the segment event names its entry_id and claim_id), then posts ops as a phone
+would: finish three entries, skip two, leave one (ended.outcome "left", entry
+state "heard"). Reads GET /api/autoradio/learning and asserts, for those six
+forecasts: three settled true, two settled false, one no verdict (and no
+settlement). Then posts the same ops again and asserts nothing was settled
+twice (the scorecard's settled count and every row are unchanged). Prints the
+ledger rows. Exit 0 when all hold, 1 otherwise, 2 on bad arguments.
+
+The key goes only in the Authorization header and is never printed. An
+owner-wide key names no computer: pass --computer (X-Choir-Computer).
+
+  scripts/prove-autoradio-learning --host choir.news --api-key-file ~/key \\
+      --computer <the drill computer>
+
+Shapes: docs/reference/AUTORADIO-PROGRAMME.md, AUTORADIO-SHEET.md.
+"""
+import argparse
+import http.client
+import json
+import sys
+import uuid
+from datetime import datetime, timezone
+
+STORIES = [
+    ("harbour-reopens", "Harbour reopens", "Repairs to the harbour wall are finished and ferries sail again."),
+    ("ferry-timetable", "Ferry timetable", "Two extra sailings are added on weekdays from Monday."),
+    ("budget-vote", "Budget vote", "The council votes on next year's budget on Monday."),
+    ("school-strike", "School strike ends", "Staff in Nancy return to work after three weeks."),
+    ("rain-weekend", "Rain this weekend", "The weather service expects rain across the region through Sunday."),
+    ("bridge-works", "Bridge works", "Night closures of the north bridge begin next week."),
+]
+
+
+def read_key(path):
+    try:
+        with open(path) as f:
+            key = "".join(f.read().split())
+    except OSError as e:
+        sys.exit("cannot read the key file: %s" % e.strerror)
+    if not key:
+        sys.exit("the key file is empty")
+    return key
+
+
+class Api:
+    def __init__(self, args, key):
+        self.args, self.key = args, key
+
+    def call(self, method, path, body=None, stream=False):
+        a = self.args
+        cls = http.client.HTTPConnection if a.insecure_http else http.client.HTTPSConnection
+        conn = cls(a.host, timeout=a.timeout or None)
+        h = {"Authorization": "Bearer " + self.key, "Content-Type": "application/json"}
+        if a.computer:
+            h["X-Choir-Computer"] = a.computer
+        try:
+            conn.request(method, path, json.dumps(body) if body is not None else None, h)
+            resp = conn.getresponse()
+            raw = resp.read().decode("utf-8", "replace")
+            if resp.status != 200:
+                sys.exit("%s %s: HTTP %d %s" % (method, path, resp.status, raw[:200]))
+            return raw if stream else json.loads(raw)
+        finally:
+            conn.close()
+
+    def programme(self, cause):
+        now = datetime.now(timezone.utc).astimezone()
+        body = {"request_id": "learn-%s-%s" % (cause, uuid.uuid4().hex[:10]), "cause": cause,
+                "local_time": now.isoformat(timespec="seconds"), "tz": "Europe/Paris",
+                "candidates": [{"route": r, "version": 1, "title": t, "dek": d, "text": d} for r, t, d in STORIES]}
+        if cause == "extend":
+            body["ahead_titles"] = []
+        raw = self.call("POST", "/api/autoradio/programme", body, stream=True)
+        segs, event = [], None
+        for line in raw.splitlines():
+            if line.startswith("event: "):
+                event = line[7:]
+            elif line.startswith("data: ") and event == "segment":
+                segs.append(json.loads(line[6:]))
+            elif line.startswith("data: ") and event == "error":
+                print("  programme error: %s" % line[6:200])
+        return segs
+
+    def ops(self, ops):
+        return self.call("POST", "/api/autoradio/sheet/ops", {"ops": ops})
+
+    def learning(self):
+        return self.call("GET", "/api/autoradio/learning?limit=200")
+
+
+def phone_ops(tag, entry_id, state, outcome, last):
+    at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return [
+        {"op_id": "pl-%s-on" % tag, "by": "phone", "op": "aired", "id": entry_id, "state": "on_air", "base_version": 0, "position_seconds": 0},
+        {"op_id": "pl-%s-end" % tag, "by": "phone", "op": "aired", "id": entry_id, "state": state, "base_version": 0,
+         "ended": {"outcome": outcome, "at": at, "last_block": last}, "position_seconds": 9.5},
+    ]
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Prove the Autoradio forecasts settle from the listener's ops, once.")
+    ap.add_argument("--host", required=True)
+    ap.add_argument("--api-key-file", required=True)
+    ap.add_argument("--computer", default="")
+    ap.add_argument("--timeout", type=float, default=0.0)
+    ap.add_argument("--insecure-http", action="store_true")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+    key = read_key(args.api_key_file)
+    if args.dry_run:
+        print("ok: arguments and key file read; nothing sent")
+        return 0
+    api = Api(args, key)
+    before = api.learning()["scorecard"]
+    segs = api.programme("open") + []
+    content = []
+    for _ in range(5):
+        segs += api.programme("extend")
+        content = [s for s in segs if s.get("claim_id")]
+        if len(content) >= 6:
+            break
+    print("entries %d, with a forecast %d" % (len(segs), len(content)))
+    if len(content) < 6:
+        print("FAIL: fewer than six forecast-bearing entries")
+        return 1
+    run = uuid.uuid4().hex[:8]
+    plan = [("finished", "heard", "finished", 1)] * 3 + [("skipped", "skipped", "skipped", 0)] * 2 + [("left", "heard", "left", 0)]
+    ops, claims = [], {}
+    for i, (s, (name, state, outcome, last)) in enumerate(zip(content[:6], plan)):
+        ops += phone_ops("%s-%d" % (run, i), s["entry_id"], state, outcome, last)
+        claims[s["claim_id"]] = name
+    res = api.ops(ops)
+    dropped = [r for r in res["results"] if not r.get("applied")]
+    mid = api.learning()
+    again = api.ops(ops)
+    after = api.learning()
+
+    def rows(doc):
+        return {r["claim_id"]: r for r in doc["rows"] if r["claim_id"] in claims}
+
+    r1, r2 = rows(mid), rows(after)
+    ok = not dropped
+    if dropped:
+        print("dropped ops: %s" % [(r["op_id"], r.get("dropped")) for r in dropped])
+    want = {"finished": ("settled", "true"), "skipped": ("settled", "false"), "left": ("no_verdict", "")}
+    for cid, name in claims.items():
+        r = r1.get(cid)
+        good = r is not None and (r["status"], r.get("outcome", "")) == want[name]
+        ok = ok and good
+        print("  %-8s %s status=%s outcome=%s title=%r op=%s %s" % (
+            name, cid[-12:], r and r["status"], r and r.get("outcome"), r and r["title"], r and r.get("op", {}).get("op_id"), "" if good else "WRONG"))
+    delta = mid["scorecard"]["settled"] - before["settled"]
+    print("settled +%d (want 5); no_verdict +%d (want 1)" % (delta, mid["scorecard"]["no_verdict"] - before["no_verdict"]))
+    ok = ok and delta == 5 and mid["scorecard"]["no_verdict"] - before["no_verdict"] == 1
+    twice = after["scorecard"]["settled"] != mid["scorecard"]["settled"] or r1 != r2
+    print("repeat of the same ops: %d applied again, settled %d -> %d, rows %s" % (
+        sum(1 for r in again["results"] if r.get("applied")), mid["scorecard"]["settled"], after["scorecard"]["settled"],
+        "changed" if r1 != r2 else "unchanged"))
+    ok = ok and not twice
+    print("scorecard: %s" % json.dumps({k: after["scorecard"][k] for k in ("forecasts", "settled", "heard_through", "heard_through_rate", "brier", "no_verdict")}))
+    print("PASS" if ok else "FAIL")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

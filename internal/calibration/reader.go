@@ -100,3 +100,51 @@ func (r Reader) Summary(ctx context.Context, ownerID, computerID string, groupBy
 	sum.Truncated = truncated
 	return sum, nil
 }
+
+// CauseStats is the scores of the forecasts that stated one cause class
+// (the tag cause:<class>, design 12.1).
+type CauseStats struct {
+	Cause string `json:"cause"`
+	GroupStats
+}
+
+// Scorecard is the listener's view of the DJ's forecasts: the overall
+// summary, the summary by segment kind (the claim's project) and by cause
+// class, and every claim joined with its settlements, newest first. It is
+// Summarize over the same joined claims as Summary: there is no second
+// scoring path.
+type Scorecard struct {
+	Overall   GroupStats
+	ByKind    []GroupStats
+	ByCause   []CauseStats
+	Claims    []ClaimView
+	Truncated bool
+}
+
+// Scorecard reads the reserved namespace once and scores it.
+func (r Reader) Scorecard(ctx context.Context, ownerID, computerID string, now time.Time) (Scorecard, error) {
+	records, truncated, err := r.Records(ctx, ownerID, computerID)
+	if err != nil {
+		return Scorecard{}, err
+	}
+	views := JoinClaims(records, now)
+	opts := SummaryOptions{GroupBy: []string{"project"}, Filters: Filters{Agent: AutoradioAgent}}
+	sum := Summarize(views, opts, now)
+	card := Scorecard{Overall: sum.Overall, ByKind: sum.Groups, Claims: views, Truncated: truncated}
+	for _, cause := range []string{CauseInstruction, CauseEdition, CauseImportance, CauseLesson, CauseExplore} {
+		var sub []ClaimView
+		for _, v := range views {
+			for _, t := range v.Tags {
+				if t == "cause:"+cause {
+					sub = append(sub, v)
+					break
+				}
+			}
+		}
+		if len(sub) == 0 {
+			continue
+		}
+		card.ByCause = append(card.ByCause, CauseStats{Cause: cause, GroupStats: Summarize(sub, opts, now).Overall})
+	}
+	return card, nil
+}

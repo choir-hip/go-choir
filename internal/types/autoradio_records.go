@@ -35,6 +35,12 @@ var AutoradioRecordKinds = []AutoradioRecordKind{
 	{"autoradio.note", "autoradio_note"},
 	{"autoradio.sheet_op", "autoradio_sheet_op"},
 	{"autoradio.sheet_snapshot", "autoradio_sheet_snapshot"},
+	// no_verdict: an applied op reported the end of a desk entry whose forecast
+	// it does not settle (the listener left, the entry failed to play, or the
+	// op is later than the forecast's deadline). Written by the run sheet's
+	// reducer path only; it carries the op and its position so the rule can be
+	// revisited with data. Not in the design's 12.2 table (docs/reference/AUTORADIO-SHEET.md).
+	{"autoradio.no_verdict", "autoradio_no_verdict"},
 }
 
 // AutoradioKindPrefix begins every Autoradio record_kind.

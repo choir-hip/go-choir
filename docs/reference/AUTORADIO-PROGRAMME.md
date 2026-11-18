@@ -70,7 +70,7 @@ was used with another `cause`, 413 body too large, 503 no streaming model bound.
   `subject`, `quoted` or `mentioned`; label defaults to the candidate's title).
   `block_count` is the server's `SplitBlocks` count of `text`, the one the heard
   route will check; the phone never recomputes it. `title` may be empty on an
-  `ident` or `bridge`. The event carries no forecast.
+  `ident` or `bridge`. The event carries no probability or cause (they are written to the tape and never sent). It carries `entry_id` (`d-<segment_id>`, characters outside `[A-Za-z0-9_.-]` made `-`, 64 bytes: the phone's own grammar, so the phone's entry and the server's are one) and, for a content segment, `claim_id` (its forecast claim).
 - A `podcast_clip` segment is a `segment` event with two differences: `cut_at` is `segment` (real audio is cut only between segments) and it carries `clip: {clip_id, story_ref, seconds}`. Its `text` is the DJ's lead-in, which the phone speaks; the phone then plays the clip, finding `audio_url`, `start` and `end` for `clip.clip_id` in the clip set it fetched. `cites` is the one story the clip is for (role `quoted`), filled by the server.
 - `done`: `{stretch_id, status: "completed", replayed, segments, claims, dropped, provider, model, index_record_id, timings_ms, members_tried, usage}`.
 - `error`: `{stretch_id, spoken, reason, status}` instead of `done`: a claim
@@ -209,3 +209,29 @@ request's, or is already used in this stretch (a clip plays once), `clip` or `ti
 `caused_by`. A `podcast_clip` writes a segment record (with `clip_id` and
 `clip_seconds`, so a replay returns it) and no forecast claim (residual R2 of the
 design). The segment cap and the invalid-run rule count it like any line.
+
+## On the run sheet (settlement slice, 2026-11-17)
+
+Status: built and tested on the build VM (`TestL1` to `TestL9`); not deployed;
+the proof is `scripts/prove-autoradio-learning` on d@e. Settlement and the
+listener's read route: [AUTORADIO-SHEET.md](AUTORADIO-SHEET.md) "Desk entries,
+settlement and the learning route".
+
+- When the route commits a segment (its claim written first) it places the
+  entry on the listener's sheet in process (`applySheetOps`, `by: desk`,
+  `at: end`, the reducer and its bounds, no second sheet), with
+  `forecast {p_heard, caused_by, claim_id}` for a content segment and
+  `origin: programme/<stretch_id>`. The op id is `o` plus the entry id (the
+  phone's own formula). The entry is placed before the `segment` event is sent.
+- A replay of a `request_id` places the stored segments again: an op already
+  on the tape answers from it and writes nothing; one whose first placement
+  failed is repaired. A `place` of the same id by the phone (an older build
+  never posts one) is dropped `duplicate_id`.
+- A placement failure is logged and counted in `done.place_failed`
+  (`done.placed` counts the rest); it never stops the stretch.
+- An entry the phone never plays stays ahead and its forecast lapses at its
+  deadline, unsettled. When a call finds 94 or more entries ahead it removes
+  the desk entries of stretches more than 12 hours old (desk `remove`, reason
+  given); a listener's or the phone's own entry is never removed. The sheet's
+  heard/skipped tail keeps 50 (the reducer's rule); settlement is written when
+  the op applies, so a trimmed entry loses no evidence.

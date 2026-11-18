@@ -193,7 +193,7 @@ func TestAutoradioTurnRecordsReadPaths(t *testing.T) {
 
 // ---- the one-caller test by reference, go/ast ----
 
-// The reserved settle method and the records only the heard route may write are
+// The reserved settle method and the records only the run sheet's settle path may write are
 // found by what the code refers to, not by call syntax: any identifier use of
 // SettleAutoradio or NewAutoradioSettlementRecord, any NewSettlementRecord
 // call that passes the heard rule, any use of AutoradioHeardRule, and any
@@ -202,12 +202,12 @@ func TestAutoradioTurnRecordsReadPaths(t *testing.T) {
 func TestReservedWritersAreReferencedOnlyByTheirOwners(t *testing.T) {
 	root := filepath.Join("..", "..")
 	owners := map[string]map[string]bool{
-		"SettleAutoradio":              {"internal/calibration/autoradio.go": true, "internal/agentcore/api_autoradio_heard.go": true},
+		"SettleAutoradio":              {"internal/calibration/autoradio.go": true, "internal/agentcore/api_autoradio_settle.go": true},
 		"NewAutoradioSettlementRecord": {"internal/calibration/autoradio.go": true},
-		"AutoradioHeardRule":           {"internal/calibration/autoradio.go": true, "internal/agentcore/api_autoradio_heard.go": true},
-		`"autoradio_heard"`:            {"internal/calibration/autoradio.go": true, "internal/agentcore/api_autoradio_heard.go": true},
-		`"autoradio.settlement"`:       {"internal/calibration/autoradio.go": true, "internal/types/autoradio_records.go": true, "internal/agentcore/api_autoradio_heard.go": true},
-		`"autoradio.air"`:              {"internal/types/autoradio_records.go": true, "internal/agentcore/api_autoradio_heard.go": true},
+		"AutoradioHeardRule":           {"internal/calibration/autoradio.go": true, "internal/agentcore/api_autoradio_settle.go": true},
+		`"autoradio_heard"`:            {"internal/calibration/autoradio.go": true, "internal/agentcore/api_autoradio_settle.go": true},
+		`"autoradio.settlement"`:       {"internal/calibration/autoradio.go": true, "internal/types/autoradio_records.go": true, "internal/agentcore/api_autoradio_settle.go": true},
+		`"autoradio.air"`:              {"internal/types/autoradio_records.go": true, "internal/agentcore/api_autoradio_settle.go": true},
 	}
 	var offenders []string
 	fset := token.NewFileSet()
