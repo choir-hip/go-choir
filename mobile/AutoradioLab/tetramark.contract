@@ -53,14 +53,24 @@ fn tCapture(m: string, ms: number, from: number[], lv: number): number[] = tPose
 fn tStill(m: string, a: number): number[] = tRest().map((v, k) => k == 0 ? (m == "trayOpen" ? 2.0943951 : 0) : (k == 6 ? a : v))
 
 // ---- the drawing ----
-fn tpt3(ax: number, ay: number, bx: number, by: number, bz: number, w: number, ln: number, cx: number, cy: number, ux: number, uy: number, ct: number, st: number, s: number, rho: number): number[] = [s * ((tl(ax, bx, w) + ((tl(ax, bx, w) - cx) * (0 - uy) + (tl(ay, by, w) - cy) * ux) * (ln - 1) * (0 - uy)) * ct - (tl(ay, by, w) + ((tl(ax, bx, w) - cx) * (0 - uy) + (tl(ay, by, w) - cy) * ux) * (ln - 1) * ux) * st) + rho * ux, s * ((tl(ax, bx, w) + ((tl(ax, bx, w) - cx) * (0 - uy) + (tl(ay, by, w) - cy) * ux) * (ln - 1) * (0 - uy)) * st + (tl(ay, by, w) + ((tl(ax, bx, w) - cx) * (0 - uy) + (tl(ay, by, w) - cy) * ux) * (ln - 1) * ux) * ct) + rho * uy, s * w * bz]
-fn tproj(p: number[], m: number[], sc: number, dx: number, dy: number): string = `${256 + 256 * (sc * (tat(m, 0) * tat(p, 0) + tat(m, 1) * tat(p, 1) + tat(m, 2) * tat(p, 2)) * 8 / max(8 - (tat(m, 6) * tat(p, 0) + tat(m, 7) * tat(p, 1) + tat(m, 8) * tat(p, 2)), 4) + dx)},${256 + 256 * (sc * (tat(m, 3) * tat(p, 0) + tat(m, 4) * tat(p, 1) + tat(m, 5) * tat(p, 2)) * 8 / max(8 - (tat(m, 6) * tat(p, 0) + tat(m, 7) * tat(p, 1) + tat(m, 8) * tat(p, 2)), 4) + dy)}`
-fn tblade(axs: number[], ays: number[], bxs: number[], bys: number[], bzs: number[], w: number, ln: number, cx: number, cy: number, ux: number, uy: number, ph: number, s: number, rho: number, m: number[], sc: number, dx: number, dy: number): string = axs.map((ax, j) => tproj(tpt3(ax, tat(ays, j), tat(bxs, j), tat(bys, j), tat(bzs, j), w, ln, cx, cy, ux, uy, cos(ph), sin(ph), s, rho), m, sc, dx, dy)).join(" ")
-fn tface(vx: number[], vy: number[], vz: number[], idx: number[], m: number[], sc: number, dx: number, dy: number): string = idx.map(v => tproj([tat(vx, v), tat(vy, v), tat(vz, v)], m, sc, dx, dy)).join(" ")
-fn tnrm(n: number[], m: number[], r: number): number = tat(m, 3 * r) * tat(n, 0) + tat(m, 3 * r + 1) * tat(n, 1) + tat(m, 3 * r + 2) * tat(n, 2)
-fn tlit(n: number[], m: number[]): number = 0.5 + 0.5 * (tnrm(n, m, 2) >= 0 ? 1 : -1) * (tnrm(n, m, 0) * -0.42 + tnrm(n, m, 1) * -0.52 + tnrm(n, m, 2) * 0.74)
-fn tbop(n: number[], m: number[], w: number, al: number): number = al * (1 - w * 0.45 * (1 - tlit(n, m)))
-fn tfop(n: number[], m: number[], fb: number, al: number): number = al * fb * (tnrm(n, m, 2) >= 0 ? 0.2 + 0.3 * tlit(n, m) : 0.1)
+// Staged through lists, never through nested calls (see `turn` in mark.contract: a call's arguments are written out again wherever
+// the function uses them, and a derive holding one number is written out at every read). mq is the turn: the nine numbers of
+// `m`, then the scale, dx and dy.
+shape TetraPoly
+  id: number
+  pts: string
+  fill: string
+  op: number
+
+// One blade's points: blended between the poles (w), stretched along its own axis (ln), rolled (ct, st), scaled and moved
+// outward. bp = [w, ln, cx, cy, ux, uy, cos ph, sin ph, s, rho].
+fn tbladePts(axs: number[], ays: number[], bxs: number[], bys: number[], bzs: number[], bp: number[]): number[][] = axs.map((ax, i) => [tl(ax, tat(bxs, i), tat(bp, 0)), tl(tat(ays, i), tat(bys, i), tat(bp, 0)), tat(bp, 8) * tat(bp, 0) * tat(bzs, i)]).map(q => [tat(q, 0), tat(q, 1), tat(q, 2), ((tat(q, 0) - tat(bp, 2)) * (0 - tat(bp, 5)) + (tat(q, 1) - tat(bp, 3)) * tat(bp, 4)) * (tat(bp, 1) - 1)]).map(q => [tat(bp, 8) * ((tat(q, 0) + tat(q, 3) * (0 - tat(bp, 5))) * tat(bp, 6) - (tat(q, 1) + tat(q, 3) * tat(bp, 4)) * tat(bp, 7)) + tat(bp, 9) * tat(bp, 4), tat(bp, 8) * ((tat(q, 0) + tat(q, 3) * (0 - tat(bp, 5))) * tat(bp, 7) + (tat(q, 1) + tat(q, 3) * tat(bp, 4)) * tat(bp, 6)) + tat(bp, 9) * tat(bp, 5), tat(q, 2)])
+fn tfacePts(vx: number[], vy: number[], vz: number[], idx: number[]): number[][] = idx.map(v => [tat(vx, v), tat(vy, v), tat(vz, v)])
+fn tprojs(ps: number[][], mq: number[]): string = ps.map(p => `${256 + 256 * (tat(mq, 9) * (tat(mq, 0) * tat(p, 0) + tat(mq, 1) * tat(p, 1) + tat(mq, 2) * tat(p, 2)) * 8 / max(8 - (tat(mq, 6) * tat(p, 0) + tat(mq, 7) * tat(p, 1) + tat(mq, 8) * tat(p, 2)), 4) + tat(mq, 10))},${256 + 256 * (tat(mq, 9) * (tat(mq, 3) * tat(p, 0) + tat(mq, 4) * tat(p, 1) + tat(mq, 5) * tat(p, 2)) * 8 / max(8 - (tat(mq, 6) * tat(p, 0) + tat(mq, 7) * tat(p, 1) + tat(mq, 8) * tat(p, 2)), 4) + tat(mq, 11))}`).join(" ")
+// Facing: each normal turned by m, seen against a light at the upper left: [x, y, z, lit], 1 bright, 0 dark.
+fn tfacing(ns: number[][], mq: number[]): number[][] = ns.map(n => [tat(mq, 0) * tat(n, 0) + tat(mq, 1) * tat(n, 1) + tat(mq, 2) * tat(n, 2), tat(mq, 3) * tat(n, 0) + tat(mq, 4) * tat(n, 1) + tat(mq, 5) * tat(n, 2), tat(mq, 6) * tat(n, 0) + tat(mq, 7) * tat(n, 1) + tat(mq, 8) * tat(n, 2)]).map(v => [tat(v, 0), tat(v, 1), tat(v, 2), 0.5 + 0.5 * (tat(v, 2) >= 0 ? 1 : -1) * (tat(v, 0) * -0.42 + tat(v, 1) * -0.52 + tat(v, 2) * 0.74)])
+// The faces (when the blades are together), then the blades back to front (ord).
+fn tscene(pose: number[], mq: number[], ws: number[], fb: number, ord: number[], cxs: number[], cys: number[], nT: number[][], vx: number[], vy: number[], vz: number[], fcs: number[][], AX: number[][], AY: number[][], BX: number[][], BY: number[][], BZ: number[][], RU: number[][], fill2: string, fill: string): TetraPoly[] = (fb > 0.01 ? [0, 1, 2, 3].map(f => TetraPoly(id=f, pts=tprojs(tfacePts(vx, vy, vz, tarr(fcs, f)), mq), fill=fill2, op=tat(pose, 6) * fb * (tat(tarr(nT, f), 2) >= 0 ? 0.2 + 0.3 * tat(tarr(nT, f), 3) : 0.1))) : []).concat(ord.map(i => TetraPoly(id=4 + i, pts=tprojs(tbladePts(tarr(AX, i), tarr(AY, i), tarr(BX, i), tarr(BY, i), tarr(BZ, i), [tat(ws, i), tat(pose, 11 + 5 * i), tat(cxs, i), tat(cys, i), tat(tarr(RU, i), 0), tat(tarr(RU, i), 1), cos(tat(pose, 9 + 5 * i)), sin(tat(pose, 9 + 5 * i)), tat(pose, 12 + 5 * i), tat(pose, 10 + 5 * i)]), mq), fill=fill, op=tat(pose, 6) * (1 - tat(ws, i) * 0.45 * (1 - tat(tarr(nT, i), 3))))))
 
 // One pose at any size. The blades are drawn back to front by the depth of their centres.
 component TetraMarkFace
@@ -105,12 +115,9 @@ component TetraMarkFace
   derive depth = [0, 1, 2].map(i => tat(m, 6) * tat(cxs, i) + tat(m, 7) * tat(cys, i) + tat(m, 8) * tat(ws, i) * tat(zms, i))
   derive rank = [0, 1, 2].map(i => [0, 1, 2].filter(j => tat(depth, j) < tat(depth, i) or (tat(depth, j) == tat(depth, i) and j < i)).length)
   derive order = [0, 1, 2].map(k => sum([0, 1, 2].filter(i => tat(rank, i) == k)))
-  derive p0 = tblade(ax0, ay0, bx0, by0, bz0, w0, tat(pose, 11), tat(cxs, 0), tat(cys, 0), tat(ru0, 0), tat(ru0, 1), tat(pose, 9), tat(pose, 12), tat(pose, 10), m, sc, dx, dy)
-  derive p1 = tblade(ax1, ay1, bx1, by1, bz1, w1, tat(pose, 16), tat(cxs, 1), tat(cys, 1), tat(ru1, 0), tat(ru1, 1), tat(pose, 14), tat(pose, 17), tat(pose, 15), m, sc, dx, dy)
-  derive p2 = tblade(ax2, ay2, bx2, by2, bz2, w2, tat(pose, 21), tat(cxs, 2), tat(cys, 2), tat(ru2, 0), tat(ru2, 1), tat(pose, 19), tat(pose, 22), tat(pose, 20), m, sc, dx, dy)
-  derive pts = [p0, p1, p2]
-  derive ops = [tbop(on0, m, w0, al), tbop(on1, m, w1, al), tbop(on2, m, w2, al)]
   derive fcs = [[0, 2, 3], [1, 0, 3], [2, 1, 3], [0, 1, 2]]
+  derive mq = m.concat([sc, dx, dy])
+  derive polys = tscene(pose, mq, ws, fb, order, cxs, cys, tfacing(ons, mq), vx, vy, vz, fcs, [ax0, ax1, ax2], [ay0, ay1, ay2], [bx0, bx1, bx2], [by0, by1, by2], [bz0, bz1, bz2], [ru0, ru1, ru2], th.accent2, th.accent)
   derive ons = [on0, on1, on2, on3]
   // BEGIN tetramark-data (generated by mobile/scripts/gen-tetramark.py from frontend/src/lib/tetramark.ts; do not edit)
   derive ax0 = [0.0536, 0.01, -0.0223, -0.0168, 0.0257, 0.0759, 0.1284, 0.1374, 0.2032, 0.4724, 0.6578, 0.7572, 0.8588, 0.7091, 0.4076, 0.2837, 0.1374]
@@ -154,11 +161,8 @@ component TetraMarkFace
   view
     box testId=testId width=size height=size position="relative" role="img" aria-label="TetraMark"
       svg viewBox="0 0 512 512" width=size height=size overflow="visible"
-        if fb > 0.01
-          for f in [0, 1, 2, 3] key=f
-            polygon points=tface(vx, vy, vz, tarr(fcs, f), m, sc, dx, dy) fill=th.accent2 fill-opacity=tfop(tarr(ons, f), m, fb, al)
-        for i in order key=i
-          polygon points=tstr(pts, i) fill=th.accent fill-opacity=tat(ops, i)
+        for p in polys key=p.id
+          polygon points=p.pts fill=p.fill fill-opacity=p.op
 
 // The bar's mark: the 48 pt button face. The root keeps the motion (members-mark.contract): the current motion, the motion
 // before it, when it began and the pose that was on screen then.

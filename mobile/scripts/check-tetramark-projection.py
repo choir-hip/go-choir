@@ -16,8 +16,8 @@ CONTRACT = (ROOT / "mobile/AutoradioLab/mark.contract").read_text()
 LIMIT = 1.15
 EYE = 8
 
-for needle in ("max(8 - rxz(", "0.2 * sin(3.1416 * rise(0.02 * i, 0.34 + 0.02 * i, u))", "0.17 * (1 - ue)", "-26 * sin(3.1416 * rise(0.3, 0.8, u))",
-               "r * (0.04 + 0.14 * amp)", "6.2832 * tfa", "0.25 * sin(3.1416 * rise(0.52, 0.8, u))", "1 + (0.05) * amp * r", "1 - 0.3 * sin(3.1416 * rise(0.02 * i, 0.34 + 0.02 * i, u))"):
+for needle in ("max(8 - at0(p, 2), 4)", "0.2 * sin(3.1416 * rise(0.02 * i, 0.34 + 0.02 * i, at0(tv, 3)))", "0.17 * (1 - at0(tv, 4))", "-26 * sin(3.1416 * rise(0.3, 0.8, at0(tv, 3)))",
+               "at0(tv, 1) * (0.04 + 0.14 * at0(tv, 2))", "6.2832 * at0(tw, 0)", "0.25 * sin(3.1416 * rise(0.52, 0.8, at0(tv, 3)))", "1 + (0.05) * at0(tv, 2) * at0(tv, 1)", "1 - 0.3 * sin(3.1416 * rise(0.02 * i, 0.34 + 0.02 * i, at0(tv, 3)))"):
     if needle not in CONTRACT:
         sys.exit(f"mark.contract no longer carries `{needle}`; update this script and the contract together")
 
