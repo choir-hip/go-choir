@@ -120,13 +120,17 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	}
 	flat := strings.Join(strings.Fields(prompt.Content), " ")
 	for _, want := range []string{
-		"Search its own corpus first",
+		"The first message ends with a corpus brief",
+		"Search the corpus yourself with choir.SearchWireCorpus",
+		"names the threads it left out",
+		"a published story carries no date there",
 		"each thread of the objective as held (with its capture ids), stale or missing",
 		"Search the web only for the stale and missing threads, one question at a time",
 		"read what it returns before you search again",
 		"the wordings of one missing question",
 		"choir.SearchAll(question, wordings)",
-		"sends the next only while the question still lacks pages to read",
+		"sends the next only while the question holds fewer than 15 pages new to you that you have not tried to read",
+		"a page that will not load counts once you have tried it",
 		"then search again for what is still missing, naming it",
 		"mark each page new or held",
 		"can be sent alone with fresh",
