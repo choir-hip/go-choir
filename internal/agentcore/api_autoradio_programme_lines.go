@@ -81,6 +81,9 @@ type programmeSegment struct {
 	TakeSeconds   float64
 	TakePublisher string // the publisher's handle: the take entry's source label
 
+	// Telling is full or followup, as the DJ wrote it (anything else is full).
+	Telling string
+
 	lineNo int // the line this segment came from, for the index's notes
 
 	// ClaimID is the forecast claim of a content segment (set when the claim
@@ -248,6 +251,12 @@ func (in *programmeInput) checkLine(line string) (*programmeSegment, lineClass, 
 		return invalidf("%s", reason)
 	}
 	seg.Cites = cites
+	if content {
+		var telling string
+		if json.Unmarshal(raw["telling"], &telling) == nil && strings.TrimSpace(telling) == tellingFollowup {
+			seg.Telling = tellingFollowup
+		}
+	}
 
 	_, hasP := raw["p_heard"]
 	_, hasC := raw["caused_by"]
