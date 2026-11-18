@@ -212,7 +212,7 @@ design). The segment cap and the invalid-run rule count it like any line.
 
 ## On the run sheet (settlement slice, 2026-11-17)
 
-Status: built and tested on the build VM (`TestL1` to `TestL12`); not deployed;
+Status: built and tested on the build VM (`TestL1` to `TestL15`); not deployed;
 the proof is `scripts/prove-autoradio-learning` on d@e. Settlement and the
 listener's read route: [AUTORADIO-SHEET.md](AUTORADIO-SHEET.md) "Desk entries,
 settlement and the learning route".
