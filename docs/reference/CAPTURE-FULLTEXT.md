@@ -83,16 +83,17 @@ flatters its inserts. 20,000 pages = 26.2 million tokens.
 With the production code (`TestProductionPath`: the real `Put`, tokenizer and
 `Search`) the passage index had 82,321 passages for 20,000 pages (4.1 a page),
 a size of 124 MiB and 4.2 ms to index a page. Windowed to the newest tenth,
-a 12-word query ran 75 / 122 ms; in recency order 609 / 847 ms (it must order
-every matching passage by time). The scan budget (100,000 postings) is 8% of the 1.25 million passages of a
+a 12-word query ran 75 / 122 ms; in recency order 609 / 847 ms (that run ordered every matching passage by time; the repaired search takes candidates by score, see section 2). The scan budget (100,000 postings) is 8% of the 1.25 million passages of a
 250,000-page index; to see what it does there, the same corpus was run with a
-budget of 8,000 (`CHOIR_FTS_BENCH_BUDGET=8000`), 8% of its 82,321 passages: a
+budget of 8,000 (`CHOIR_FTS_BENCH_BUDGET=8000`), 9.7% of its 82,321 passages (a little above the 8%, so a little slower than the larger index would be): a
 12-word query ran **80 / 112 ms**, 12 words with the common ones kept 66 /
 132 ms, windowed to the newest tenth 35 / 53 ms, in recency order 97 / 135 ms,
 4 words 57 / 204 ms (indexing was 10 ms a page in that run, the VM being busy
 again). This is the evidence for the claim that a search stays near 100 ms and
-under half a second at 250,000 pages and at a million: its cost is its
-postings budget, not the index size.
+under half a second at 250,000 pages; at a million pages it is an
+**extrapolation**, not a measurement: the budget bounds the postings read,
+but the index no longer fits the machine's page cache, and nothing was run
+at that size.
 
 What decided it:
 
@@ -126,8 +127,12 @@ What decided it:
   rest (section 2). The lead's leaning was (a); the numbers agree with it.
 
 **Memory of (a), configured.** Each open file keeps at most 3 connections of
-8 MiB page cache; at most 4 files are open: 96 MiB, whatever the corpus, and
-about 24 MiB while only the paper's computer is searched. The document-
+8 MiB of SQLite page cache (`cache_size`, a limit on the cache and not on
+SQLite's other allocations: sorter, statements); the code enforces at most 4
+open files, evicting on release as well as on open. That bounds the page cache
+at 96 MiB, about 24 MiB while only the paper's computer is searched; the
+process's total is that plus working memory, which no code here limits but
+which does not grow with the corpus. The document-
 frequency cache is at most 50,000 small entries per file.
 
 ### 1.3 The unit: passages, not pages
@@ -208,23 +213,54 @@ score, then capture id): both total orders, so repeatable. `since` is inclusive
 and `until` exclusive, on the page's published time when known, else its
 fetched time.
 
-**Pruning.** The cost of an OR query is a scan of every passage that holds any
-of its terms, and FTS5 has no early exit for `ORDER BY bm25`. So terms that
-are in no passage are dropped and, when more than three remain, the rarest are
-kept while their postings sum to at most 100,000 (`DefaultScanBudget`), always
-keeping the three rarest. A question keeps the words that name its subject and
-loses "week" and "decided" on a large index; BM25 gave those words almost no
-weight anyway. Document frequencies are counted once per term and cached
-(cleared when the scope grows or shrinks by a tenth). A small index prunes
-nothing. The result says which terms were pruned.
+**What a query may say** (`capturefts.PlanQuery`). Words are searched, any of
+them, stop words dropped. A "quoted phrase" is searched as a phrase (its tokens
+adjacent, in order); when no passage holds it, its words are searched instead
+and the result says so (`phrase_fallbacks`). `-word` and `-"a phrase"` are
+exclusions: never searched for, and a passage that holds one is not returned
+(at the passage, not the page: another passage of the same page may still be).
+Everything else is punctuation, and nothing of the text reaches FTS5 as syntax:
+`C++` is searched as `c`, `AT&T` as `t` (`at` is a stop word), `NEAR/3` as
+`near` and `3`, `title:` as the word `title`. The tokenizer is the shared one
+(it also serves the published-stories index) and was left alone; write the
+distinctive word beside such a term. A word with nothing after the colon
+(`order:`) is the word. A query with no searchable word answers with a note,
+not as a search with no hits.
+
+**Pruning and the cap.** The cost of an OR query is a scan of every passage
+that holds any of its terms, and FTS5 has no early exit for `ORDER BY bm25`.
+So the terms are ranked by rarity (document frequency, counted once, up to the
+scan budget, and cached for an hour: only its size matters). Terms in no
+passage are pruned; the rarest are kept while their postings sum to at most
+100,000 (`DefaultScanBudget`), always keeping the three rarest, and the rest
+are pruned; then, of those kept, the 32 rarest are searched and the most
+common are capped away. A question keeps the words that name its subject and
+loses "week" and "decided" on a large index. A small index prunes nothing.
+The result names the pruned, capped, excluded and phrase-fallback words
+(`pruned`, `term_capped`, `excluded`, `phrase_fallbacks`), and the tool's note
+and `capture_words_dropped` carry them to the model.
+
+**Candidates.** Passages are taken by score, whatever the order: at most 300
+candidate passages, at most 3 (`MaxPassagesPerPage`) from any one page, so a
+long page cannot take the slots of the pages that answer the question. The
+order is then applied to the candidates: `relevance` by score; `recent` by
+time among the pages at least half as relevant as the best one (so the newest
+page that says one common word does not lead).
 
 **Write path.** `Store.indexCaptures` (called by `PutObject`, `PutBatch` and
 `InsertObjectIfAbsent`) writes the text after the projection: read the text
 blob (at most 256 KiB), tokenize, one transaction per page. A tombstoned or
 superseded capture is removed, `DeleteObject` removes its page. A failed write
-is logged with the capture id (`corpusd capture fulltext write failed
-capture=<id>`), sets a dirty flag and wakes the catch-up; the capture is
-stored regardless.
+is counted, and logged at most once in 30 seconds with the count, the number
+suppressed and the first capture id (`corpusd capture fulltext write failed
+count= suppressed= capture=`); it sets a dirty flag, marks the index not
+complete, and asks for a catch-up at most once in 5 minutes; the capture is
+stored regardless. A capture whose record carries an owner-private label is
+not indexed, is removed by the catch-up if it was, and is never returned (the
+capture read gate would refuse its body to a non-custodian); the research
+tool's result, which carries a passage, is labelled `owner_private:capture`
+beside `world_untrusted` (`agentcore/run_labels.go`), the floor publish-auto
+admission keys on.
 
 **Search path.** `POST /internal/platform/captures/search` takes `query`,
 `since`, `until`, `order`, `limit` beside the old `words`, `need`, `ids`. The
@@ -245,7 +281,7 @@ count. The tool takes `since`, `until`, `order`, or the same as words in the
 query (`since:2026-11-10 order:recent`), which is how a cell that passes only
 a query reaches them. The window also filters the old half. The note says how
 much of the computer's text is searchable so far. The journal line adds
-`text_index`, `text_indexed`, `computer_captures`, `by_body`, `by_title`,
+`text_index`, `text_indexed`, `computer_pages`, `by_body`, `by_title`,
 `by_both`, `by_labels_only`, and still only capture ids.
 
 ## 3. Resources at 250,000 and a million pages
@@ -259,7 +295,7 @@ is a configured bound; **CPU** is measured per page and per search.
 | Passages | 82,321 | 0.85 M | 1.03 M | 4.1 M |
 | Index on disk | 124 MiB (6.35 KB a page, WAL included) | 1.28 GiB | 1.55 GiB | 6.2 GiB |
 | For scale: the pages' text blobs | 112 MiB | 1.6 GB | 1.9 GB | 7.8 GB |
-| Memory of the index | at most 96 MiB | same | same | same |
+| Page cache of the index | at most 96 MiB (a limit on the cache, section 1.2) | same | same | same |
 | Indexing one captured page (inline, in the capture write) | 4 to 10 ms | same | same | same |
 | Catching up every existing page | 84 s to 3.4 min of CPU | 14 to 35 CPU-minutes; about 43 to 105 minutes wall at a third of a core | 17 to 42 CPU-minutes; 52 to 125 min wall | 1.2 to 2.8 CPU-hours; 3.5 to 8.4 h wall |
 | A 12-word search | 196 / 271 ms with no pruning (the whole index is under the budget) | 80 / 112 ms with the budget | same order, bounded by the budget | same order |
@@ -279,8 +315,10 @@ Search CPU is small: research runs about 190 corpus searches an hour
 and once a day. It pages `og_objects` by primary key, 100 captures a batch,
 asks the index which of them it does not hold from that text
 (`Index.Missing`), indexes those, and after the forward pass removes index
-pages whose capture is gone. It is idempotent (a second pass writes nothing)
-and safe to kill.
+pages whose capture is gone. It is idempotent (a second pass writes nothing) and safe to kill, and,
+like `ReconcileCaptureIndex`, it skips the walk when nothing failed since the
+last one and the captures minus the indexed pages are still the gap that walk
+measured (captures that cannot be indexed: no text blob, owner-private).
 
 **Why this is not "resuming work" (CLAUDE.md, Restarts).** It opens no run, no
 work item and no obligation, closes none, reads no marker, and restores no
@@ -335,17 +373,27 @@ the one to copy.
 - A query of one very common word on the paper's index scans every passage
   that holds it; the 8 s deadline bounds it and the guest falls back to the
   title half with a note. Measured latencies are in section 1.2.
-- The two switches that already exist on the capture search, `CHOIR_CORPUS_SEARCH=window` (guest) and
-  `CORPUSD_CAPTURE_SEARCH=off` (corpusd), also turn the text half off, since
-  they stop the guest from asking or the route from answering. This change adds
-  no switch.
+- Two settings exist that this change did not add and reads no further than
+  before: `CHOIR_CORPUS_SEARCH=window` (the guest never asks corpusd's capture
+  route) and `CORPUSD_CAPTURE_SEARCH=off` (corpusd's route refuses). The text
+  search rides that route, so both now also turn the text half off, with the
+  title half falling back to the window. They are a residual to remove, not to
+  extend; nothing new reads them.
+- Punctuation inside a word splits it (`C++` is `c`, `AT&T` is `t`); the shared
+  tokenizer was left alone because it also serves the published-stories index.
+  The tool text says so and what to write instead.
+- The tool and surface text edit moves the guest floor digest
+  (`internal/yaegikernel` is a floor path), so a guest image built from this
+  change cold-boots hibernated computers.
+- The tests were committed with the code, not before it. What was seen: the
+  first round's tests failed against a stubbed index (10 of 11 engine tests,
+  7 of 8 corpusd tests, 4 of 6 research tests); the repair round's tests each
+  failed against a copy with its repair reverted, then passed.
 - Not measured: the real size distribution of the paper's text blobs (1.1 has
   the query); the index on the paper's 207,000 pages (the claim to enter in
   `calibration/claude-ledger.md` before landing: the catch-up reaches
   `remaining=0` and a body-only fact is found on staging); the Postgres rows at
   20,000 pages; query latency on an idle machine.
-- Latency of the recency order grows with the matches (it orders every
-  matching passage by time, 97 / 135 ms at a budget of 8,000); the budget bounds it.
 - Disk headroom on Node B is the recurring risk (`scripts/status-storage`):
   section 3 gives the index's size.
 
