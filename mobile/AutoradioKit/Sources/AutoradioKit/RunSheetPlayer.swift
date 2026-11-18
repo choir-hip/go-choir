@@ -518,15 +518,17 @@ extension PlaybackEngine {
         guard playingId == entry.id else { return }            // a newer start took over while the session was made ready
         guard seq == beginSeq else { return }                  // a later begin of this entry (a retry, Play, the foreground) is the one that goes on
         if let why = notReady { await hold(entry, why: why); return }
+        if reason != "play", sessionHeldFor == entry.id, spokenPausedByListener() {
+            // The listener paused (or the route was lost) while the entry was held, at its start or in the middle: it stays held, and only their Play
+            // goes on. Neither the timer nor the foreground undoes a pause.
+            print("AUTORADIO on air \(entry.id) stays held: the listener paused")
+            changed(); return
+        }
         if heldMidEntry {
             // The session is back: the entry goes on from the block that did not play (not from the start, and not finished).
             heldMidEntry = false
             sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
             message = ""
-            if reason != "play", spokenPausedByListener() {      // the listener paused meanwhile (the system's pause is not theirs): their Play starts at the block that did not play
-                print("AUTORADIO on air \(entry.id) is no longer held: the listener paused")
-                changed(); return
-            }
             paused = false
             print("AUTORADIO on air \(entry.id) resumes at the block that did not play")
             engine?.resumeSpoken()

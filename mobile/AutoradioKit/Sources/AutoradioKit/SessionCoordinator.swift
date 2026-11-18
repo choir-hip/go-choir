@@ -242,6 +242,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
             lastFailure = "\(ns.domain) \(ns.code): \(ns.localizedDescription)"
             print("AUTORADIO claim FAILED \(state.rawValue) (\(reason)) \(ns.domain) \(ns.code): \(ns.localizedDescription)")
             log.emit(.error(stage: "audio-session", message: "claim \(state.rawValue) failed (\(reason)): \(error)"))
+            try? audio.resume(voiceProcessing: state == .talking, mic: state != .playing, fresh: true)       // as `switchTo` does: the engine is put back, and observed again
             onChange?()
             return false
         }

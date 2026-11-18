@@ -194,9 +194,9 @@ public final class SessionWatcher: @unchecked Sendable {
     /// B6: back in front. A programme that should be playing and has no engine gets its session again; failing that, it says paused.
     /// A podcast the system paused is already marked paused. Nothing starts by itself.
     func returnedToForeground() {
-        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
         let rt = runtime
-        guard programmePlaying else { return }
+        guard programmePlaying else { return }                  // a paused programme (the listener's, or an interruption that gave no go-ahead) is not revived by opening the app
+        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
         if !rt.audio.needsRecovery { if rt.audio.programmeAudible { rt.coordinator.confirmHealthy() }; return }
         Task { @MainActor in
             let ok = await rt.ensureSessionReady(reason: "foreground")
