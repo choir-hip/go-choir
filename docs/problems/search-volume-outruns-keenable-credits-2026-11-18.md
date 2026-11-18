@@ -216,3 +216,44 @@ chooses to buy.
   balance, so the reading is a number a person copies from the usage page;
   the flag does not know what was spent since. First run, 16:20Z: 7,479
   calls so far today, 13,647 projected, against 1,032 a day.
+
+## First 35 minutes after search reuse deployed (2026-11-18, 20:05Z to 20:40Z)
+
+Deployed 20:03:32Z (`38d86121e`: the search-reuse commits and the floor
+list fix). Read from the gateway journal and the paper's console; the new
+lines make this readable for the first time.
+
+- 332 searches, every one carrying its run and desk (all `desk=research`,
+  29 runs: median 7 a run, most 50). 44 answered by the gateway cache; 291
+  reached Keenable, about 470 an hour. The day's average before the deploy
+  was about 460 an hour and the morning's peak 670. **No halving is
+  visible.**
+- The per-run summary line (24 runs): 296 searches started, **2 answered
+  from held results, 4 not sent** (three "stopped yielding", one failing).
+  The two mechanisms this change added fired on 2% of searches.
+- Why: within a run, a new wording does find new pages. Pages returned
+  11,480, new to the run 9,481 (83%). The replay that predicted a 44% saving
+  counted pages already returned to anyone that day; inside one run the
+  overlap is small, so "stop when wordings stop finding new pages" rarely
+  stops.
+- **What is wasted is not repeats, it is results nobody reads.** The same
+  24 runs read 456 pages of the 9,481 new ones returned: under 5%. One run
+  made 29 searches, was handed 1,036 new pages and read 13.
+- Page reads by where the page came from (1,561 `corpus read` lines): 47%
+  were captures the computer held before the run, 38% the run's own earlier
+  fetches, 15% new fetches. So nearly half of what research reads is already
+  held, while it still searches the web first.
+
+Belief now: claim C129 (6,500 or fewer searches on the first full day) is
+unlikely to settle true; it stays as entered and is scored on the day. The
+lever is not novelty but need: a run should say what it lacks before it
+searches, and a search's forty results should not be forty reasons for
+another search. That is stations S1 and S3 of the
+[design proposal](../design/corpus-first-retrieval-and-research-2026-11-18.md)
+(research reads a corpus brief first and searches only for stated gaps),
+now with a measured baseline: 12 searches a run, 19 pages read a run, 47%
+of reads already held.
+
+Remaining error: 35 minutes right after a restart, one sample; `from_held`
+counts only reuse inside a run; the gateway cache's 44 hits are not split
+by cause.
