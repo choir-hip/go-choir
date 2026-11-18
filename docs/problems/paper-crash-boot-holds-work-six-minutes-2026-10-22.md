@@ -958,12 +958,12 @@ tell. Inferred; the 18:02Z ledger row's breakdown was not read.
 Mutation class of this section: green. The fix it records is red (vmctl
 refresh scheduling). Read again in code before building: the claims above
 hold. The link moves in the `go-choir-guest-image` activation
-(`nix/node-b.nix:2975` on, `ln`/`mv -T` of `$target`, `$next`); the unit has
+(`system.activationScripts.go-choir-guest-image` in `nix/node-b.nix`, its `ln`/`mv -T` of `$target` and `$next`); the unit has
 `restartIfChanged = false`; the deploy restarts vmctl in its "vmctl restart"
-block (`node-b-ci-deploy:546`) and calls `ring-walk/expedite` after it
-(`:659`); the ticker runs `TickRingWalk` then `SweepDeployRefreshPending`
-(`deploy_refresh_retry.go:624`), and the old vmctl's `trackedDeployRefresh`
-calls `GrantDeployRetry` (`deploy_refresh.go:474`), which is how the retry
+block (the "vmctl restart" block of `node-b-ci-deploy`) and calls `ring-walk/expedite` after it
+(the "Ring-Expedite" block); the ticker runs `TickRingWalk` then `SweepDeployRefreshPending`
+(`StartDeployRefreshRetry`), and the old vmctl's `trackedDeployRefresh`
+calls `GrantDeployRetry` (`trackedDeployRefresh`), which is how the retry
 re-armed at 18:06:26. One correction to the record: the sweep, not only the
 ring walk, starts the refresh, so both are held.
 
@@ -982,7 +982,7 @@ written or re-issued, nothing resumes, no setting.
 
 Why not (a), the deploy's pending file: it adds a state that a deploy dying
 between the write and the restart (the script has many `exit` points between
-the switch at `:336` and the restart at `:553`) leaves behind, and needs pid
+the nixos switch and the vmctl restart) leaves behind, and needs pid
 checks to be safe; (b) has no such file and its worst case is bounded by one
 constant. Why not (c), moving the link after the restart: the new vmctl
 reads the link at start (`PrimeRingWalk`, before first boot) and the guest
@@ -1008,9 +1008,7 @@ ring fixture's `deploy()` now models the restart.
 
 Rollback: revert the fix commit. Residual: a computer the old vmctl refreshed
 before this ships is not helped; the 18:06 case had the old vmctl 30 seconds
-from replacement, which the hold covers from the first tick after the
-switch, but a refresh the old vmctl began before the link moved is the
-deploy's ordinary planned refresh of the old release. Fixes 2 and 3 above
+from replacement. Fixes 2 and 3 above
 are not in this change.
 
 Staging proof plan: a deploy that moves the link shows, in the old vmctl's
@@ -1019,3 +1017,21 @@ line, then no `deploy refresh caller=retry-sweep` and no ring-walk enrol; the
 new vmctl's journal shows no hold line, `ring-walk/expedite` applied, and
 each refresh `planned_restart=true`. A deploy with no link move shows no hold
 line at all.
+
+**Repair after review seat 1 (same lane).** The hold is decided before each
+entry of the sweep and before each ring wake, and one tick reads the link
+once for the hold and the walk. What it covers: no refresh or wake starts
+after the link is seen moved. What it does not: a refresh already in flight
+when the link moves is not interrupted. It is bounded by one refresh (guest
+quiesce, kill and boot, up to minutes), and the link move that follows it
+precedes the vmctl restart by the deploy's service-activation phase, so a
+planned refresh begun just before the move can still be closed by the
+replacement. Named residual. A link that does not resolve at start is no
+baseline (the first readable release becomes it); an unreadable link later is
+no information: it starts no hold and ends none, and the sweep behaves as
+before the fix.
+
+Residual, named: the owner-update (`owner_update.go`), the operator restart
+and the manual `HandleRefresh` are owner or operator acts, not the ticker's,
+so they are not held and stay possible in the gap; an act in the gap meets
+the replacement's close-and-fresh-boot, as recorded in the wake record.
