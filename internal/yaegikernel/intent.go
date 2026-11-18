@@ -981,7 +981,7 @@ type CellHooks struct {
 	// "choir.Verb refused: ..." lines.
 	Refusals func() []string
 	// SearchCounts returns one count line per async search with arrivals
-	// the desk has not been told about ("s3: 3/4 answered, +2 new").
+	// the desk has not been told about ("s3: 3/4 answered, +2 in, 12 of 40 pages new").
 	SearchCounts func() []string
 	// SearchStats returns what the cell added to the search counts (nil:
 	// nothing); the host sums them into the run's one summary line.

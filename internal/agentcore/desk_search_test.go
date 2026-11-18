@@ -177,7 +177,7 @@ fmt.Println("arrivals", len(r.Arrivals), "answered", r.Answered, "done", r.Done)
 	if !strings.Contains(out.Stdout, "s1 started: 2 providers (1 cooling: cold)") || !strings.Contains(out.Stdout, "arrivals 2 answered 2 done true") {
 		t.Fatalf("the running cell did not see both providers: %q", out.Stdout)
 	}
-	if got := strings.Join(out.Searches, "|"); got != "s1: 2/2 answered, +2 new, done" {
+	if got := strings.Join(out.Searches, "|"); got != "s1: 2/2 answered, +2 in, 2 of 2 pages new, done" {
 		t.Fatalf("count lines = %q", got)
 	}
 	if strings.Contains(out.Stdout, "alpha.example") {
