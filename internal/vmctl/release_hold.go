@@ -60,7 +60,9 @@ func (h *Handler) adoptCurrentRelease() {
 	r := &h.replacement
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.baseline, r.have, r.since = pair, true, time.Time{}
+	// A link or release that does not resolve is no baseline: the first
+	// readable pair becomes it (standDownForPair).
+	r.baseline, r.have, r.since = pair, pair.Single != "", time.Time{}
 }
 
 // standDownForReplacement reports whether the walk and the sweep must not
@@ -70,11 +72,21 @@ func (h *Handler) standDownForReplacement() bool {
 	if _, ok := h.registry.VMManagerHandle().(guestReleaseReader); !ok {
 		return false
 	}
-	pair := h.currentReleasePair()
+	return h.standDownForPair(h.currentReleasePair())
+}
+
+// standDownForPair decides on a pair the caller read once, so a tick's hold
+// and its walk observation cannot see two different links. An empty reading
+// (the link or release does not resolve) is no information: it starts no
+// hold and ends none, and a hold in force stays.
+func (h *Handler) standDownForPair(pair ringReleasePair) bool {
 	r := &h.replacement
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := r.clock()
+	if pair.Single == "" {
+		return !r.since.IsZero()
+	}
 	if !r.have {
 		r.baseline, r.have = pair, true
 		return false
