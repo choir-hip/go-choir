@@ -49,7 +49,13 @@ is read by hand (PyYAML is not guaranteed on a runner or the Mac): `jobs:`,
 jobs at two spaces, `steps:` at four, items at six, keys at eight; `run:` plain
 or as a `|` / `>` block.
 
-  scripts/check-gates-cover-ci [--workflow F] [--gates F] [--land F] [--exemptions F] [--root D]
+  scripts/check-gates-cover-ci [--ci] [--workflow F] [--gates F] [--land F] [--exemptions F] [--root D]
+
+--ci (CI's step): the land script is not opened; the land-conditional lines of
+the exemption file are the statement of what it runs. Without it (the local
+run in scripts/gates) the land script is read and those lines are verified
+against it, so an edit that drops a program fails the next local run, never
+CI's verdict.
 """
 import argparse
 import fnmatch
@@ -478,14 +484,22 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--workflow", default=os.path.join(root, ".github/workflows/ci.yml"))
     ap.add_argument("--gates", default=os.path.join(root, "scripts/gates"))
+    # The land script's path is built from parts on purpose. CI runs this check
+    # with --ci and does not read the land script: CI's verdict must not depend
+    # on a file whose edits do not trigger CI. The path is not spelled whole
+    # because .github/scripts/ci-impact-classify-test traces script names
+    # textually, and its case nix-docs-and-dev-scripts-do-not-select-it keeps the
+    # land script a developer script. The local run (no flag, from scripts/gates)
+    # opens it and verifies the land-conditional lines against it.
     ap.add_argument("--land", default=os.path.join(root, "scripts", "land"))
+    ap.add_argument("--ci", action="store_true", help="do not open the land script; its land-conditional lines in the exemption file say what it runs")
     ap.add_argument("--exemptions", default=os.path.join(root, "scripts/gates-ci-exemptions.txt"))
     ap.add_argument("--root", default=root)
     a = ap.parse_args()
     try:
         wf = open(a.workflow).read()
         gates_text = open(a.gates).read()
-        land_text = open(a.land).read()
+        land_text = "" if a.ci else open(a.land).read()
         ex_text = open(a.exemptions).read()
     except OSError as e:
         print("check-gates-cover-ci: FAIL: cannot read %s" % e, file=sys.stderr)
@@ -508,16 +522,22 @@ def main():
             return 1
         covering |= {normalise(x, a.root) for x in p}
         globs += g
+    if a.ci:
+        for key in exempt_land:
+            if "*" in key or "?" in key:
+                globs.append(key)
+            else:
+                covering.add(normalise(key, a.root))
 
     gates_progs = by_file["scripts/gates"][0]
     land_items = (by_file["the land script"][0] | by_file["the land script"][1]) - gates_progs
-    for item in sorted(land_items):
+    for item in sorted([] if a.ci else land_items):
         if item not in exempt_land:
             errs.append("%s is run only by the land script, and only under a condition: add `land-conditional %s <the condition, read from the land script>` to scripts/gates-ci-exemptions.txt (conditional in the land script)" % (item, item))
     for key in sorted(exempt_land):
         if key in gates_progs:
             errs.append("land-conditional %s: scripts/gates runs it (delete the exemption)" % key)
-        elif key not in land_items:
+        elif not a.ci and key not in land_items:
             errs.append("land-conditional %s: stale (the land script does not run it)" % key)
 
     def covered(p):

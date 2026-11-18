@@ -258,5 +258,39 @@ expect "a quoted run value fails closed" 1 'failing closed'
 printf 'jobs:\n  a:\n    steps:\n      - uses: x\n' >"$wf"
 expect "a workflow with no run step fails closed" 1 'failing closed'
 
+# --ci: the land script is not opened; land-conditional lines say what it runs
+expect_ci() { # NAME WANT [pattern]
+	local name=$1 want=$2 pat=${3:-} got=0 out
+	out=$("$check" --ci --workflow "$wf" --gates "$gates" --land "$tmp/no-such-land" --exemptions "$ex" --root "$tmp" 2>&1) || got=$?
+	if [ "$got" != "$want" ]; then
+		echo "FAIL: $name: exit $got, want $want"; echo "$out" | head -5; fails=$((fails + 1))
+	elif [ -n "$pat" ] && ! grep -q -- "$pat" <<<"$out"; then
+		echo "FAIL: $name: output lacks $pat"; echo "$out" | head -5; fails=$((fails + 1))
+	else
+		echo "ok: $name"
+	fi
+}
+wfstep 'scripts/check-delta'
+printf 'land-conditional scripts/check-delta only when SHARD=1\n' >"$ex"
+expect_ci "--ci does not open the land script (a missing path passes)" 0
+rm -f "$land"
+expect "without --ci a missing land script fails" 1 'cannot read'
+: >"$land"
+printf 'run scripts/check-delta\n' >>"$gates"
+expect_ci "--ci still fails a land-conditional line for something the gates run" 1 'runs it'
+base_gates
+printf '# none\n' >"$ex"
+expect_ci "--ci: not in gates and no land-conditional line fails" 1 'scripts/check-delta'
+printf 'scripts/check-delta needs a database for its run in CI\n' >"$ex"
+expect_ci "--ci: an ordinary exemption still passes" 0
+printf 'scripts/check-delta needs a database for its run in CI\nland-conditional scripts/check-delta only when SHARD=1\n' >"$ex"
+expect_ci "--ci: an exemption for what a land-conditional line covers fails" 1 'runs it'
+wfstep '.github/scripts/some-test'
+printf 'land-conditional .github/scripts/*-test only on a .github/ change\n' >"$ex"
+expect_ci "--ci: a land-conditional glob covers a matching program" 0
+printf 'land-conditional scripts/check-gone only when X=1 and more\n' >"$ex"
+: >"$land"
+expect "default mode still reports a stale land-conditional line" 1 'stale'
+
 if [ "$fails" != 0 ]; then echo "selftest-gates-cover-ci: $fails FAILED"; exit 1; fi
 echo "selftest-gates-cover-ci: all passed"
