@@ -15,6 +15,18 @@ import (
 // TakeIDRe is the grammar of a take id: "take-" and 16 hex digits.
 var TakeIDRe = regexp.MustCompile(`^take-[0-9a-f]{16}$`)
 
+// The length a take's own audio header may state, in seconds. The claim is 3
+// to 60; the header may sit outside it because Apple's AAC encoder adds about
+// 0.11 s of priming to the container (60.000 s of audio has an mvhd of
+// 60.117 s) and a recorder stops a moment after its timer. A take is stored
+// with its header's length, so publish and the programme route's candidate
+// check share this one pair: an honest full-length take is never refused by
+// either.
+const (
+	TakeHeaderMinSeconds = 2.5
+	TakeHeaderMaxSeconds = 62.0
+)
+
 // TakePublisherRe is the grammar of a publisher handle.
 var TakePublisherRe = regexp.MustCompile(`^voice-[0-9a-f]{6}$`)
 

@@ -5,10 +5,13 @@ package agentcore
 // written before the code. Through the real handler and store; the model
 // provider is the only fake.
 //
-//   T1. a take candidate is not bounded: a fourth take, a take id or a
-//       publisher handle off the grammar, a length outside 3 to 60 s, a
-//       multi-line title, an empty or over-long transcript, a route or dek
-//       beside it, take fields on a story, an unknown kind are accepted;
+//   T1. a take candidate is not bounded: a fourth take, an unknown kind, take
+//       fields on a story or an unknown key are accepted (400); a take id or
+//       publisher handle off the grammar, a length outside the header's 2.5 to
+//       62.0 s (60.1 is an honest 60 s take), a multi-line title, an empty or
+//       over-long transcript, a route or dek beside it, a bad responds_to or
+//       record reaches the model (such a candidate must be dropped, never a
+//       400, and counted);
 //   T2. a take line that names a take the request did not carry, the listener's
 //       own take, or a muted publisher's take is streamed;
 //   T3. a take line without p_heard or caused_by, with p_heard out of range or
@@ -32,6 +35,8 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/appdesk"
+	"github.com/yusefmosiah/go-choir/internal/calibration"
+	"github.com/yusefmosiah/go-choir/internal/runsheet"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -90,31 +95,23 @@ func takeLine(over map[string]any) string {
 	return progLine(m)
 }
 
-func TestT1_TakeBoundsAreRequestRefusals(t *testing.T) {
+// A take candidate that fails validation is dropped (logged and counted), never
+// a refusal of the request: a stranger's published take cannot make another
+// listener's programme call fail. Structure the phone controls (a fourth take,
+// an unknown kind, take fields on a story, an unknown key) stays a 400.
+func TestT1_TakeBoundsDropTheCandidateAndNeverFailTheRequest(t *testing.T) {
 	rt, fake := radioRuntime(t, twoStoryScript())
-	cases := map[string]func(map[string]any){
-		"four takes":     withTakes(takeFixture(takeA), takeFixture(takeB), takeFixture(takeC), takeFixture(takeD)),
-		"bad id":         withTakes(takeOver("take-xyz", nil)),
-		"bad handle":     withTakes(takeOver(takeA, map[string]any{"publisher": "bob@example.com"})),
-		"too short":      withTakes(takeOver(takeA, map[string]any{"duration_seconds": 2})),
-		"too long":       withTakes(takeOver(takeA, map[string]any{"duration_seconds": 61})),
-		"two-line title": withTakes(takeOver(takeA, map[string]any{"title": "a\nb"})),
-		"no transcript":  withTakes(takeOver(takeA, map[string]any{"transcript": " "})),
-		"long text":      withTakes(takeOver(takeA, map[string]any{"transcript": strings.Repeat("t", 2001)})),
-		"has a route":    withTakes(takeOver(takeA, map[string]any{"route": "x"})),
-		"has a dek":      withTakes(takeOver(takeA, map[string]any{"dek": "x"})),
-		"unknown kind":   withTakes(takeOver(takeA, map[string]any{"kind": "mail"})),
-		"bad responds":   withTakes(takeOver(takeA, map[string]any{"responds_to": map[string]any{"route": "", "title": "t"}})),
-		"long record":    withTakes(takeOver(takeA, map[string]any{"record": strings.Repeat("r", 201)})),
-		"duplicate":      withTakes(takeFixture(takeA), takeFixture(takeA)),
-		"extra key":      withTakes(takeOver(takeA, map[string]any{"audio_url": "https://x.example/a.m4a"})),
+	refused := map[string]func(map[string]any){
+		"four takes":   withTakes(takeFixture(takeA), takeFixture(takeB), takeFixture(takeC), takeFixture(takeD)),
+		"unknown kind": withTakes(takeOver(takeA, map[string]any{"kind": "mail"})),
+		"extra key":    withTakes(takeOver(takeA, map[string]any{"audio_url": "https://x.example/a.m4a"})),
 		"fields on a story": func(m map[string]any) {
 			c := progCandidates()
 			c[0]["take_id"] = takeA
 			m["candidates"] = c
 		},
 	}
-	for name, mutate := range cases {
+	for name, mutate := range refused {
 		rec, _ := progPost(rt, progBody(mutate, withRequestID("t1-"+strings.ReplaceAll(name, " ", "-"))))
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("T1 %s: %d, want 400", name, rec.Code)
@@ -123,8 +120,77 @@ func TestT1_TakeBoundsAreRequestRefusals(t *testing.T) {
 	if fake.callCount() != 0 {
 		t.Errorf("T1: a refused request reached the model")
 	}
+	dropped := map[string]func(map[string]any){
+		"bad id":         withTakes(takeOver("take-xyz", nil)),
+		"bad handle":     withTakes(takeOver(takeA, map[string]any{"publisher": "bob@example.com"})),
+		"too short":      withTakes(takeOver(takeA, map[string]any{"duration_seconds": 2.4})),
+		"too long":       withTakes(takeOver(takeA, map[string]any{"duration_seconds": 62.1})),
+		"two-line title": withTakes(takeOver(takeA, map[string]any{"title": "a\nb"})),
+		"no transcript":  withTakes(takeOver(takeA, map[string]any{"transcript": " "})),
+		"long text":      withTakes(takeOver(takeA, map[string]any{"transcript": strings.Repeat("t", 2001)})),
+		"has a route":    withTakes(takeOver(takeA, map[string]any{"route": "x"})),
+		"has a dek":      withTakes(takeOver(takeA, map[string]any{"dek": "x"})),
+		"bad responds":   withTakes(takeOver(takeA, map[string]any{"responds_to": map[string]any{"route": "", "title": "t"}})),
+		"long record":    withTakes(takeOver(takeA, map[string]any{"record": strings.Repeat("r", 201)})),
+	}
+	before := programmeDroppedTakeCandidates.Load()
+	for name, mutate := range dropped {
+		rt, fk := radioRuntime(t, twoStoryScript())
+		_, evs := progRun(t, rt, progBody(mutate, withRequestID("t1d-"+strings.ReplaceAll(name, " ", "-"))))
+		if len(segmentEvents(evs)) == 0 {
+			t.Errorf("T1 %s: the request failed instead of dropping the take", name)
+		}
+		if len(fk.calls) == 0 || strings.Contains(fk.calls[0].req.StableUser, "take: ") {
+			t.Errorf("T1 %s: the bad take reached the model's input (calls %d)", name, len(fk.calls))
+		}
+	}
+	if got := programmeDroppedTakeCandidates.Load() - before; got != int64(len(dropped)) {
+		t.Errorf("T1: %d take candidates counted dropped, want %d", got, len(dropped))
+	}
 	if rec, _ := progPost(rt, progBody(withTakes(takeFixture(takeA), takeFixture(takeB), takeFixture(takeC)), withRequestID("t1-ok"))); rec.Code != http.StatusOK {
 		t.Errorf("T1: three valid takes refused: %d %s", rec.Code, rec.Body.String())
+	}
+	// The header's own length is the stored length: 60.1 (an honest 60 s take)
+	// and 2.5 are offered, 62.0 is the edge.
+	for _, secs := range []float64{60.1, 2.5, 62.0} {
+		rt, fk := radioRuntime(t, twoStoryScript())
+		progRun(t, rt, progBody(withTakes(takeOver(takeA, map[string]any{"duration_seconds": secs})), withRequestID("t1-len")))
+		if len(fk.calls) == 0 || !strings.Contains(fk.calls[0].req.StableUser, "take: "+takeA) {
+			t.Errorf("T1: a take of %.1f s was not offered", secs)
+		}
+	}
+}
+
+// The boundary fixture (mobile/fixtures/takes/list-boundary.json) is a public
+// list whose takes sit at the header's edges; the candidates the phone builds
+// from them are all accepted by the programme route.
+func TestT1b_BoundaryListFixtureIsOfferedWhole(t *testing.T) {
+	raw, err := os.ReadFile("../../mobile/fixtures/takes/list-boundary.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list struct {
+		Takes []map[string]any `json:"takes"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil || len(list.Takes) != 3 {
+		t.Fatalf("list-boundary.json: %d takes, %v", len(list.Takes), err)
+	}
+	var cands []map[string]any
+	for _, tk := range list.Takes {
+		c := map[string]any{"kind": "take", "take_id": tk["take_id"], "publisher": tk["publisher"], "title": "A voice",
+			"transcript": tk["transcript"], "duration_seconds": tk["duration_seconds"]}
+		cands = append(cands, c)
+	}
+	rt, fk := radioRuntime(t, twoStoryScript())
+	progRun(t, rt, progBody(withTakes(cands...), withRequestID("t1b")))
+	if len(fk.calls) == 0 {
+		t.Fatal("the boundary request never reached the model")
+	}
+	input := fk.calls[0].req.StableUser
+	for _, tk := range list.Takes {
+		if !strings.Contains(input, "take: "+tk["take_id"].(string)) {
+			t.Errorf("the boundary take %v (%v s) was not offered", tk["take_id"], tk["duration_seconds"])
+		}
 	}
 }
 
@@ -287,6 +353,23 @@ func TestT6_T7_TheTranscriptIsFencedDataAndNoTakesChangesNothing(t *testing.T) {
 		}
 	}
 
+	// The take's stranger-written lines lie between its begin and end markers.
+	lines := strings.Split(input, "\n")
+	begin, end, transcript := -1, -1, -1
+	for i, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "<<<"+token+" take "+takeA):
+			begin = i
+		case strings.HasPrefix(line, "<<<"+token+" end take "+takeA):
+			end = i
+		case strings.HasPrefix(line, "transcript: ") && strings.Contains(line, "ignore the edition"):
+			transcript = i
+		}
+	}
+	if begin < 0 || end < 0 || !(begin < transcript && transcript < end) {
+		t.Errorf("T6: the transcript line (%d) is not between the take's begin (%d) and end (%d) markers", transcript, begin, end)
+	}
+
 	base, _ := appdesk.ProgrammePrompt()
 	section, _ := appdesk.ProgrammeTakesPrompt()
 	if strings.Contains(base, "take:") || strings.Contains(base, `"kind":"take"`) {
@@ -348,5 +431,44 @@ func TestT8_TakeSegmentCarriesEveryKeyOfThePhonesFixture(t *testing.T) {
 	_, again := progRun(t, rt, progBody(withTakes(takeFixture(takeA))))
 	if r := takeSegments(again); len(r) != 1 || r[0]["p_heard"] != 0.6 || r[0]["caused_by"] != "explore" {
 		t.Errorf("replayed take = %v", r)
+	}
+}
+
+// T9. A take segment is on the server's run sheet as a desk entry with its
+// forecast claim like any other segment, so the listener's own end op settles
+// it, and the settlement yields the take's outcome through the one seam
+// (calibration.TakeOutcomeFromSettlement). The entry is kind story for now: the
+// phone's twin of kind take is not on main.
+func TestT9_ATakeIsOnTheSheetWithItsForecastAndItsEndSettlesIt(t *testing.T) {
+	rt, _ := radioRuntime(t, linesScript(titled("First", nil), takeLine(nil)))
+	h := NewAPIHandler(rt)
+	_, evs := progRun(t, rt, progBody(withTakes(takeFixture(takeA))))
+	var entryID, claimID string
+	for _, s := range takeSegments(evs) {
+		entryID, _ = s["entry_id"].(string)
+		claimID, _ = s["claim_id"].(string)
+	}
+	if entryID == "" || claimID == "" {
+		t.Fatalf("T9: the take segment lacks entry_id or claim_id: %+v", takeSegments(evs))
+	}
+	var placed *runsheet.Entry
+	for _, e := range getSheet(t, h).Entries {
+		if e.ID == entryID {
+			e := e
+			placed = &e
+		}
+	}
+	if placed == nil || placed.PlacedBy != runsheet.ByDesk || placed.Forecast == nil || placed.Forecast.ClaimID != claimID || placed.Forecast.PHeard != 0.6 {
+		t.Fatalf("T9: the take entry on the sheet = %+v", placed)
+	}
+	mustOps(t, h, phoneEnd(entryID, "tk", "heard", "finished", 1)...)
+	settlement := getRecord(t, rt, calibration.SettlementRecordID(claimID, "rule", calibration.AutoradioHeardRule))
+	claim := getRecord(t, rt, claimID)
+	if settlement == nil || claim == nil {
+		t.Fatalf("T9: claim %v settlement %v", claim, settlement)
+	}
+	out, ok := calibration.TakeOutcomeFromSettlement(*claim, *settlement)
+	if !ok || out.TakeID != takeA || out.Outcome != "heard" || out.ClaimID != claimID {
+		t.Errorf("T9: outcome = %+v %v", out, ok)
 	}
 }

@@ -81,6 +81,9 @@ func takesHarnessKeys(t *testing.T, audioReply func(w http.ResponseWriter), keys
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == platform.TakesPath && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated) // as corpusd's publish answers
+		}
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	t.Cleanup(corpusd.Close)
@@ -171,7 +174,7 @@ func TestTakePublishNamesPublisherFromCredentialOnly(t *testing.T) {
 		t.Fatalf("a refused publish reached corpusd: %+v", got)
 	}
 	w = send(takePost(t, audio, map[string]string{"transcript": "hi there", "duration_seconds": "10", "responds_to": `{"route":"/pub/texture/a","title":"A"}`}), cookie("user-1"))
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusCreated {
 		t.Fatalf("publish = %d %s", w.Code, w.Body)
 	}
 	got := calls()
@@ -190,7 +193,7 @@ func TestTakePublishNamesPublisherFromCredentialOnly(t *testing.T) {
 	}
 	// A key bound to the drill computer publishes drill data.
 	w = send(takePost(t, audio, map[string]string{"transcript": "proof", "duration_seconds": "10"}), takesKey)
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusCreated {
 		t.Fatalf("drill publish = %d %s", w.Code, w.Body)
 	}
 	_ = json.Unmarshal(calls()[1].body, &in)
@@ -361,7 +364,7 @@ func TestTakesRoutesNeedANamedComputerForAnOwnerWideKey(t *testing.T) {
 	for _, rt := range routes {
 		before := len(calls())
 		w := send(rt.req(), takesKey, named(takesDrillComputer))
-		if w.Code != http.StatusOK || len(calls()) != before+1 {
+		if (w.Code != http.StatusOK && !(rt.name == "publish" && w.Code == http.StatusCreated)) || len(calls()) != before+1 {
 			t.Errorf("%s: a named, owned computer = %d %s", rt.name, w.Code, w.Body)
 		}
 	}
@@ -409,6 +412,7 @@ func TestTakesRouteTableFixtureIsTheRegisteredRoutes(t *testing.T) {
 			Fields   map[string]string `json:"fields"`
 			Body     string            `json:"body"`
 			Response string            `json:"response"`
+			Status   int               `json:"status"`
 		} `json:"routes"`
 	}
 	if err := json.Unmarshal(raw, &table); err != nil {
@@ -460,8 +464,8 @@ func TestTakesRouteTableFixtureIsTheRegisteredRoutes(t *testing.T) {
 			}
 			continue
 		}
-		if w.Code != http.StatusOK || len(calls()) != before+1 {
-			t.Errorf("%s %s %s: %d %s, want it accepted", row.Name, row.Method, row.Path, w.Code, w.Body)
+		if w.Code != row.Status || len(calls()) != before+1 {
+			t.Errorf("%s %s %s: %d %s, want %d and one corpusd call", row.Name, row.Method, row.Path, w.Code, w.Body, row.Status)
 		}
 		if _, err := os.Stat("../../mobile/fixtures/takes/" + row.Response); row.Response != "" && err != nil {
 			t.Errorf("%s: response fixture %s: %v", row.Name, row.Response, err)

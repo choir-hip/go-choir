@@ -60,8 +60,8 @@ const (
 	// timer. An honest full-length take must never be refused for container
 	// padding or stop latency, so the header may be 2.5 to 62.0 s while the
 	// claim stays 3 to 60 and the claim-to-header slack stays 2 s.
-	TakeHeaderMinSeconds = 2.5
-	TakeHeaderMaxSeconds = 62.0
+	TakeHeaderMinSeconds = types.TakeHeaderMinSeconds
+	TakeHeaderMaxSeconds = types.TakeHeaderMaxSeconds
 	// takeScan bounds the rows one scan reads (live takes, one publisher's
 	// takes); a scan that reaches it is logged, never silent.
 	takeScan        = 2000
@@ -136,13 +136,16 @@ type takeAudioRow struct {
 }
 
 type takeOutcomeRow struct {
-	TakeID      string `json:"take_id"`
-	Publisher   string `json:"publisher"`
-	ListenerKey string `json:"listener_key"`
-	Outcome     string `json:"outcome"`
-	At          string `json:"at"`
-	Drill       bool   `json:"drill"`
-	ClaimID     string `json:"claim_id,omitempty"`
+	TakeID    string `json:"take_id"`
+	Publisher string `json:"publisher"`
+	// PublisherKey keys the record: the handle is display only, and two
+	// publishers can share one.
+	PublisherKey string `json:"publisher_key"`
+	ListenerKey  string `json:"listener_key"`
+	Outcome      string `json:"outcome"`
+	At           string `json:"at"`
+	Drill        bool   `json:"drill"`
+	ClaimID      string `json:"claim_id,omitempty"`
 }
 
 // Take is the public shape of a take: every field of choir.take except the
@@ -453,7 +456,7 @@ func (s *Service) PublishTake(ctx context.Context, in TakeIn) (*Take, error) {
 		return nil, err
 	}
 	if len(mine) >= takeScan {
-		log.Printf("corpusd: takes: one publisher's takes reached the scan bound %d; the daily count may be low", takeScan)
+		takeBoundLog("corpusd: takes: one publisher's takes reached the scan bound %d; the daily count may be low", takeScan)
 	}
 	cutoff := time.Now().UTC().Add(-24 * time.Hour)
 	recent := 0
@@ -488,27 +491,57 @@ func (s *Service) PublishTake(ctx context.Context, in TakeIn) (*Take, error) {
 	return &t, nil
 }
 
-// liveTakes reads the live takes by their state metadata, newest first, so
-// deleted and yanked rows never take a place in the window. The scan is bounded
-// by takeScan; reaching it is logged.
-func (s *Service) liveTakes(ctx context.Context, og *ObjectGraphStore) ([]takeRow, error) {
-	objs, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.state", TakeStateLive, takeScan)
-	if err != nil {
-		return nil, err
+// takeBoundLog logs that a scan reached its bound, at most once a minute.
+var (
+	takeBoundLogMu   sync.Mutex
+	takeBoundLogLast time.Time
+)
+
+func takeBoundLog(format string, args ...any) {
+	takeBoundLogMu.Lock()
+	defer takeBoundLogMu.Unlock()
+	if time.Since(takeBoundLogLast) < time.Minute {
+		return
 	}
-	if len(objs) >= takeScan {
-		log.Printf("corpusd: takes: the live-take scan reached its bound %d; older live takes are not listed", takeScan)
-	}
-	var out []takeRow
-	for _, o := range objs {
-		var r takeRow
-		if o.Tombstone || json.Unmarshal(o.Body, &r) != nil || r.State != TakeStateLive {
-			continue
+	takeBoundLogLast = time.Now()
+	log.Printf(format, args...)
+}
+
+// liveTakes reads the live takes of the window by their state metadata, newest
+// first (the store orders by updated_at, and a live take is written once, so
+// that is publication order), so deleted and yanked rows never take a place in
+// the window. It asks the store for a small number of rows first and widens only
+// when drill rows or the window's cut leave fewer than limit: a list of 50 does
+// not hydrate 2,000 bodies. The widest scan is takeScan; reaching it is logged.
+func (s *Service) liveTakes(ctx context.Context, og *ObjectGraphStore, limit int, includeDrill bool, cutoff time.Time) ([]takeRow, error) {
+	for n := limit * 2; ; n *= 4 {
+		if n > takeScan {
+			n = takeScan
 		}
-		out = append(out, r)
+		objs, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.state", TakeStateLive, n)
+		if err != nil {
+			return nil, err
+		}
+		var out []takeRow
+		for _, o := range objs {
+			var r takeRow
+			if o.Tombstone || json.Unmarshal(o.Body, &r) != nil || r.State != TakeStateLive || (r.Drill && !includeDrill) {
+				continue
+			}
+			if at, err := time.Parse(time.RFC3339, r.PublishedAt); err != nil || at.Before(cutoff) {
+				continue
+			}
+			out = append(out, r)
+		}
+		sort.SliceStable(out, func(i, j int) bool { return out[i].PublishedAt > out[j].PublishedAt })
+		if len(out) >= limit || len(objs) < n {
+			return out, nil
+		}
+		if n >= takeScan {
+			takeBoundLog("corpusd: takes: the live-take scan reached its bound %d; older live takes are not listed", takeScan)
+			return out, nil
+		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].PublishedAt > out[j].PublishedAt })
-	return out, nil
 }
 
 // ListTakes is the public list: the newest live takes of the last 7 days,
@@ -525,29 +558,26 @@ func (s *Service) ListTakes(ctx context.Context, limit int, includeDrill bool) (
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.liveTakes(ctx, og)
+	cutoff := time.Now().UTC().Add(-takeListWindow)
+	rows, err := s.liveTakes(ctx, og, limit, includeDrill, cutoff)
 	if err != nil {
 		return nil, err
 	}
-	cutoff := time.Now().UTC().Add(-takeListWindow)
 	records := map[string]*TakeRecordSummary{}
 	resp := &TakesResponse{GeneratedAt: time.Now().UTC(), Takes: []Take{}}
 	for _, r := range rows {
-		if at, err := time.Parse(time.RFC3339, r.PublishedAt); err != nil || at.Before(cutoff) || (r.Drill && !includeDrill) {
-			continue
-		}
 		if len(resp.Takes) >= limit {
 			break
 		}
 		t := r.public()
-		rec, ok := records[r.Publisher]
+		rec, ok := records[r.PublisherKey]
 		if !ok {
-			full, err := s.takeRecord(ctx, og, r.Publisher, "")
+			full, err := s.takeRecord(ctx, og, r.Publisher, r.PublisherKey, false)
 			if err != nil {
 				return nil, err
 			}
 			rec = &full.Summary
-			records[r.Publisher] = rec
+			records[r.PublisherKey] = rec
 		}
 		t.Record = rec
 		resp.Takes = append(resp.Takes, t)
@@ -581,7 +611,7 @@ func (s *Service) ListMyTakes(ctx context.Context, publisherKey string) (*TakesR
 	per := map[string]*TakeOutcomeCounts{}
 	if len(rows) > 0 {
 		// One publisher: one record read covers every take of theirs.
-		full, err := s.takeRecord(ctx, og, rows[0].Publisher, publisherKey)
+		full, err := s.takeRecord(ctx, og, rows[0].Publisher, publisherKey, true)
 		if err != nil {
 			return nil, err
 		}
@@ -746,10 +776,10 @@ func (s *Service) RecordTakeOutcome(ctx context.Context, in TakeOutcomeIn) (stor
 	if err != nil {
 		return false, err
 	}
-	out := takeOutcomeRow{TakeID: in.TakeID, Publisher: row.Publisher, ListenerKey: lk, Outcome: in.Outcome,
+	out := takeOutcomeRow{TakeID: in.TakeID, Publisher: row.Publisher, PublisherKey: row.PublisherKey, ListenerKey: lk, Outcome: in.Outcome,
 		At: time.Now().UTC().Format(time.RFC3339), Drill: row.Drill || listenerDrill, ClaimID: in.ClaimID}
 	obj, err := podcastObject(ogKindTakeOutcome, in.TakeID+"|"+lk, out, map[string]any{
-		"take_id": in.TakeID, "publisher": row.Publisher, "drill": out.Drill,
+		"take_id": in.TakeID, "publisher": row.Publisher, "publisher_key": row.PublisherKey, "drill": out.Drill,
 	}, time.Now().UTC())
 	if err != nil {
 		return false, err
@@ -767,35 +797,48 @@ func (s *Service) TakeRecord(ctx context.Context, publisher, asPublisherKey stri
 	if err != nil {
 		return nil, err
 	}
-	return s.takeRecord(ctx, og, publisher, asPublisherKey)
-}
-
-// takeRecord computes a handle's record. Per-listener rows are returned only
-// when ownerKey (the caller's publisher key, empty for none) owns takes, and
-// then only the rows of takes that key published: a 24-bit handle collision
-// never widens the read.
-func (s *Service) takeRecord(ctx context.Context, og *ObjectGraphStore, publisher, ownerKey string) (*TakeRecord, error) {
-	var own map[string]bool
-	if len(ownerKey) == 64 {
-		mine, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.publisher_key", ownerKey, takeScan)
-		if err != nil {
-			return nil, err
-		}
-		if len(mine) >= takeScan {
-			log.Printf("corpusd: takes: one publisher's takes reached the scan bound %d; their record rows may be short", takeScan)
-		}
-		own = map[string]bool{}
-		for _, o := range mine {
-			var r takeRow
-			if json.Unmarshal(o.Body, &r) == nil && r.PublisherKey == ownerKey && r.Publisher == publisher {
-				own[r.TakeID] = true
-			}
-		}
-	}
-	withRows := len(own) > 0
-	objs, err := og.ListObjectsByMetadata(ctx, string(ogKindTakeOutcome), "$.publisher", publisher, takeOutcomeScan)
+	// A handle names a publisher for display; the record is keyed by the
+	// publisher's key. A caller who published under this handle reads their own
+	// record, with its rows. Anyone else reads the record of the key that most
+	// recently published under it (a 24-bit handle can be shared; the counts of
+	// two publishers are never pooled).
+	objs, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.publisher", publisher, takeScan)
 	if err != nil {
 		return nil, err
+	}
+	if len(objs) >= takeScan {
+		takeBoundLog("corpusd: takes: a handle's takes reached the scan bound %d", takeScan)
+	}
+	key, newest := "", ""
+	for _, o := range objs {
+		var r takeRow
+		if json.Unmarshal(o.Body, &r) != nil || r.Publisher != publisher {
+			continue
+		}
+		if len(asPublisherKey) == 64 && r.PublisherKey == asPublisherKey {
+			key, newest = asPublisherKey, "\xff"
+			break
+		}
+		if r.PublishedAt > newest {
+			key, newest = r.PublisherKey, r.PublishedAt
+		}
+	}
+	return s.takeRecord(ctx, og, publisher, key, key != "" && key == asPublisherKey)
+}
+
+// takeRecord computes a publisher key's record. publisher is the display
+// handle. Per-listener rows are returned only with withRows (the caller is the
+// publisher). An empty key is a publisher with no takes: a new record.
+func (s *Service) takeRecord(ctx context.Context, og *ObjectGraphStore, publisher, key string, withRows bool) (*TakeRecord, error) {
+	var objs []objectgraph.Object
+	if key != "" {
+		var err error
+		if objs, err = og.ListObjectsByMetadata(ctx, string(ogKindTakeOutcome), "$.publisher_key", key, takeOutcomeScan); err != nil {
+			return nil, err
+		}
+		if len(objs) >= takeOutcomeScan {
+			takeBoundLog("corpusd: takes: a publisher's outcome scan reached its bound %d; their record undercounts", takeOutcomeScan)
+		}
 	}
 	rec := &TakeRecord{}
 	listeners, takes := map[string]bool{}, map[string]bool{}
@@ -805,7 +848,7 @@ func (s *Service) takeRecord(ctx context.Context, og *ObjectGraphStore, publishe
 		if json.Unmarshal(o.Body, &r) != nil {
 			continue
 		}
-		if withRows && own[r.TakeID] {
+		if withRows {
 			rows = append(rows, TakeOutcomeView{TakeID: r.TakeID, ListenerKey: r.ListenerKey, Outcome: r.Outcome, At: r.At, Drill: r.Drill})
 		}
 		if r.Drill {
