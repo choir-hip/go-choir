@@ -79,7 +79,12 @@ func (h *Handler) syncRingWalk() {
 	if _, ok := h.registry.VMManagerHandle().(guestReleaseReader); !ok {
 		return
 	}
-	h.ringWalkRunner().observe(h.currentReleasePair(), time.Now().UTC())
+	h.syncRingWalkTo(h.currentReleasePair())
+}
+
+// syncRingWalkTo is syncRingWalk on a pair the caller already read.
+func (h *Handler) syncRingWalkTo(pair ringReleasePair) {
+	h.ringWalkRunner().observe(pair, time.Now().UTC())
 }
 
 // guestReleaseFor is the release a cold boot of computerID launches now and
@@ -243,10 +248,12 @@ func (h *Handler) TickRingWalk(ctx context.Context) {
 	if _, ok := h.registry.VMManagerHandle().(guestReleaseReader); !ok {
 		return
 	}
-	if h.standDownForReplacement() {
+	// One read of the link serves the hold and the walk.
+	pair := h.currentReleasePair()
+	if h.standDownForPair(pair) {
 		return
 	}
-	h.syncRingWalk()
+	h.syncRingWalkTo(pair)
 	obs := h.ringObservations(ctx, true)
 	now := time.Now().UTC()
 	actions := h.ringWalkRunner().stepWith(now, obs)
@@ -265,6 +272,11 @@ func (h *Handler) applyRingActions(now time.Time, actions []ringAction) {
 		case ringActionForget:
 			t.forget(a.UserID, a.DesktopID)
 		case ringActionWake:
+			// A wake is a boot: not started once the link has moved. The walk
+			// asks again on a later tick.
+			if h.standDownForReplacement() {
+				continue
+			}
 			h.ringWake(a)
 		}
 	}

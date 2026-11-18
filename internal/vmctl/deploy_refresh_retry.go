@@ -530,13 +530,14 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 	if h.registry.hostStopping.Load() {
 		return
 	}
-	// A vmctl the deploy is about to replace starts no refresh
-	// (release_hold.go).
-	if h.standDownForReplacement() {
-		return
-	}
 	for _, entry := range h.pendingDeployRefreshes() {
 		if ctx.Err() != nil {
+			return
+		}
+		// A vmctl the deploy is about to replace starts no refresh
+		// (release_hold.go). Checked before each entry: one refresh takes
+		// minutes, and the link can move while it runs.
+		if h.standDownForReplacement() {
 			return
 		}
 		own := h.registry.GetOwnershipForDesktop(entry.UserID, entry.DesktopID)
