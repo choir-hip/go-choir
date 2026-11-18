@@ -50,6 +50,12 @@ const (
 	noVerdictSuperseded = "superseded"
 	noVerdictRefused    = "refused"
 	noVerdictUnplaced   = "unplaced"
+	// desk_caused: the op that ended the entry was the desk's, or came through
+	// the trusted in-process door. The forecaster never settles.
+	noVerdictDeskCaused = "desk_caused"
+	// no_outcome: the phone ended the entry as heard without saying how
+	// (no ended.outcome). Nothing in the op says it was heard through.
+	noVerdictNoOutcome = "no_outcome"
 
 	// settleMaxBackdate bounds how far back an op's own ended.at may reach:
 	// arrival minus this. The listener's own device can still backdate within it.
@@ -75,7 +81,15 @@ func claimTag(claim types.CommitmentRecord, prefix string) string {
 // before is the sheet the op was applied to and after the result. It returns
 // only a failed tape read or write (the caller evicts the sheet and does not
 // acknowledge the op); a claim it cannot use is logged and left alone.
-func (ls *liveSheet) settleEnded(ctx context.Context, env sheetEnv, before, after runsheet.RunSheet, op runsheet.Op, now time.Time) error {
+//
+// Rule 1 is checked here, not left to the shape of the programme route's ops:
+// an ending settles only when the op that caused it was posted over the
+// untrusted HTTP path by the listener's session (by phone or listener). An
+// ending caused by a desk op, or by any op of the trusted in-process door the
+// desk uses, writes a no-verdict record (desk_caused) and nothing else, so a
+// forecaster that cut its own entry could not settle its own forecast.
+func (ls *liveSheet) settleEnded(ctx context.Context, env sheetEnv, before, after runsheet.RunSheet, op runsheet.Op, now time.Time, trusted bool) error {
+	byListener := !trusted && (op.By == runsheet.ByPhone || op.By == runsheet.ByListener)
 	was := map[string]runsheet.State{}
 	for _, e := range before.Entries {
 		was[e.ID] = e.State
@@ -90,6 +104,12 @@ func (ls *liveSheet) settleEnded(ctx context.Context, env sheetEnv, before, afte
 		// An aired on_air for another entry closed this one: its own end op
 		// was lost. No verdict, with that reason.
 		superseded := op.Op == runsheet.OpAired && op.State == runsheet.StateOnAir && op.ID != e.ID
+		if !byListener {
+			if err := ls.writeNoVerdict(ctx, env, e.Forecast.ClaimID, before.PositionSeconds, e, op, endedOutcome(e), noVerdictDeskCaused, now); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := ls.settleEntry(ctx, env, before.PositionSeconds, e, op, now, superseded); err != nil {
 			return err
 		}
@@ -142,6 +162,10 @@ func (ls *liveSheet) settleEntry(ctx context.Context, env sheetEnv, sheetPositio
 		reason = noVerdictSuperseded
 	case claim.Calibration.Claim != nil && claim.Calibration.Claim.Deadline != "" && deadlinePassed(claim.Calibration.Claim.Deadline, opAt):
 		reason = noVerdictLate
+	case op.Op == runsheet.OpAired && op.Ended == nil && e.State == runsheet.StateHeard:
+		// The reducer synthesises Ended{finished} for aired heard; the op
+		// itself said nothing, so a true settlement would have no evidence.
+		reason = noVerdictNoOutcome
 	case outcome == runsheet.OutcomeLeft:
 		reason = noVerdictLeft
 	case outcome == runsheet.OutcomeFailed:
@@ -165,8 +189,10 @@ func deadlinePassed(deadline string, at time.Time) bool {
 	return err == nil && at.After(d)
 }
 
-// endedOutcome is the outcome the reducer stored on an ended entry; the entry
-// state is never read for it (a left ending is stored with state heard).
+// endedOutcome is the outcome the reducer stored on an ended entry. The entry
+// state is read only when no ended was stored (an old sheet), never to make a
+// left ending finished (a left ending is stored with state heard). Whether the
+// op itself stated the outcome is judged separately (settleEntry, no_outcome).
 func endedOutcome(e runsheet.Entry) runsheet.Outcome {
 	if e.Ended != nil {
 		return e.Ended.Outcome

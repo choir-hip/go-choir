@@ -35,7 +35,13 @@ type learningOp struct {
 	LastBlock       int     `json:"last_block"`
 	EndedAt         string  `json:"ended_at,omitempty"`
 	PositionSeconds float64 `json:"position_seconds"`
-	Version         int64   `json:"version,omitempty"`
+	// PositionSource says where position_seconds came from: "op" (the phone
+	// said it) or "sheet" (the sheet's own position when the op applied).
+	PositionSource string `json:"position_source,omitempty"`
+	// Cutting is true when the evidence op is the listener's place or move at
+	// now that cut this entry: the op is the cutting op, not the entry's own.
+	Cutting bool  `json:"cutting,omitempty"`
+	Version int64 `json:"version,omitempty"`
 }
 
 type learningRow struct {
@@ -97,16 +103,26 @@ func (h *APIHandler) HandleAutoradioLearning(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	led := h.programmeLedger()
-	nvs, err := led.ListCommitmentRecordsBySubjectRef(ctx, ownerID, computer, "record_kind", kindNoVerdict, learningMaxNoVerdicts)
+	nvs, _, _, err := led.ListCommitmentRecordsBySubjectRefOfComputer(ctx, ownerID, computer, "record_kind", kindNoVerdict, learningMaxNoVerdicts)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "cannot read the no-verdict records"})
 		return
+	}
+	// An `unplaced` notice is stale once the entry is on the sheet (a replay
+	// placed it): the live sheet wins over it.
+	onSheet := map[string]bool{}
+	if ls, serr := h.rt.sheetStore().get(ctx, h, ownerID, sheetOwnerID); serr == nil {
+		ls.mu.Lock()
+		for _, e := range ls.sheet.Entries {
+			onSheet[e.ID] = true
+		}
+		ls.mu.Unlock()
 	}
 	nvByClaim := map[string]types.CommitmentRecord{}
 	reasons := map[string]int{}
 	for _, nv := range nvs {
 		id := nv.SubjectRefs["claim_id"]
-		if id == "" {
+		if id == "" || (nv.SubjectRefs["reason"] == noVerdictUnplaced && onSheet[nv.SubjectRefs["entry_id"]]) {
 			continue
 		}
 		if prev, ok := nvByClaim[id]; !ok || nv.Provenance.CommittedAt > prev.Provenance.CommittedAt {
@@ -194,8 +210,23 @@ func (h *APIHandler) learningRow(ctx context.Context, led autoradioLedger, owner
 		row.Status, row.Reason, opID = "no_verdict", nv.SubjectRefs["reason"], nv.SubjectRefs["op_id"]
 		row.SettledAt = nv.Provenance.CommittedAt
 	}
+	if opID == "unplaced" {
+		opID = "" // a pseudo op: there is no record to read
+	}
+	if nv, ok := nvByClaim[v.ID]; ok && row.Status == "no_verdict" {
+		// What the no-verdict record kept: where the position came from.
+		var body struct {
+			Position float64 `json:"position_seconds"`
+			Source   string  `json:"position_source"`
+		}
+		if nv.Directive != nil && json.Unmarshal([]byte(nv.Directive.Body), &body) == nil && opID != "" {
+			row.Op = &learningOp{OpID: opID, PositionSeconds: body.Position, PositionSource: body.Source}
+		}
+	}
 	if opID != "" {
-		row.Op = &learningOp{OpID: opID}
+		if row.Op == nil {
+			row.Op = &learningOp{OpID: opID}
+		}
 		rec, err := led.GetCommitmentRecord(ctx, ownerID, computer, sheetOpRecordPrefix+opID)
 		if err != nil {
 			return row, err
@@ -211,8 +242,12 @@ func (h *APIHandler) learningRow(ctx context.Context, led autoradioLedger, owner
 				} else if b.Op.State == runsheet.StateHeard {
 					row.Op.Outcome = string(runsheet.OutcomeFinished)
 				}
+				if b.Op.Op == runsheet.OpPlace || b.Op.Op == runsheet.OpMove {
+					// The settlement's evidence is the op that cut this entry.
+					row.Op.Outcome, row.Op.Cutting = string(runsheet.OutcomeCut), true
+				}
 				if b.Op.PositionSeconds != nil {
-					row.Op.PositionSeconds = *b.Op.PositionSeconds
+					row.Op.PositionSeconds, row.Op.PositionSource = *b.Op.PositionSeconds, "op"
 				}
 			}
 		}

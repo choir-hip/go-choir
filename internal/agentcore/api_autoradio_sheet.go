@@ -729,7 +729,7 @@ func (ls *liveSheet) applyBatch(ctx context.Context, env sheetEnv, rt *Runtime, 
 					// harmless, whereas an op recorded with its settlement lost
 					// could never be settled again (a replayed op is answered
 					// from the tape and reaches no rule).
-					rerr = ls.settleEnded(ctx, env, ls.sheet, next, op, settleNow())
+					rerr = ls.settleEnded(ctx, env, ls.sheet, next, op, settleNow(), trusted)
 					if rerr == nil {
 						_, rerr = env.led.AppendCommitmentRecord(ctx, ls.ownerID, env.computer, rec)
 					}
