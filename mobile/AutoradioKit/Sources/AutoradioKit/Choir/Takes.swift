@@ -4,23 +4,20 @@ import CryptoKit
 // Takes, the phone's side (docs/design/autoradio-learned-document-2026-11-17.md section 11, on origin/lane/learn-design; station L7).
 // A take is the listener's recorded voice, published so another listener's DJ may play it.
 //
-// THE WIRE. Every route and field below is the spec's (11.3, 11.4, 11.5, 11.6) except where marked ASSUMED. All of it goes through
-// `TakesClient`: when the server's real shapes differ, only that type and the fixtures in mobile/fixtures/takes change.
-//   POST   /api/autoradio/takes               the listener's own computer. ASSUMED multipart/form-data: `audio` (take.m4a, audio/mp4),
-//                                             `transcript`, `duration_seconds`, `sha256`, `responds_to` (a JSON object, absent when none).
-//                                             Answers `{take_id}` (spec: "the computer answers the take_id").
-//   GET    /api/autoradio/takes               ASSUMED: the listener's own takes, `{takes:[{take_id, duration_seconds, transcript, published,
-//                                             publisher, published_at}]}` (the spec has the list, 11.7, and no route for it).
-//   DELETE /api/autoradio/takes/{take_id}     ASSUMED: an unpublished take on the computer (the platform delete covers a published one).
-//   POST   /api/platform/takes                `{take_id}`; answers the take object (ASSUMED bare, or wrapped as `{take:{...}}`).
-//   GET    /api/platform/takes?limit=50       `{takes:[...]}` (ASSUMED wrapper key; a bare array is read too). Each take: every field of
-//                                             `choir.take` but `publisher_key`, plus `audio_url` and `record`.
-//   GET    /api/platform/takes/{id}/audio     the .m4a bytes, audio/mp4; 404 once deleted or yanked.
-//   DELETE /api/platform/takes/{id}           the publisher deletes their own take.
-//   GET    /api/platform/takes/record?publisher=<handle>   the publisher's whole record. ASSUMED counts: offered, heard, skipped, listeners,
-//                                             takes (and a `summary` string when the server writes one).
-// The outcome route (POST .../outcome) is the listener's computer's, not the phone's: the phone's `aired` op settles the claim, and the
-// computer reports it (11.5 step 6).
+// THE WIRE, as built on origin/lane/takes-server (docs/reference/AUTORADIO-TAKES.md). Every route goes through the signed-in proxy with the
+// device key (`Authorization: Bearer`, `X-Choir-Computer`), as the clips list does. All of it is `TakesClient`.
+//   POST   /api/platform/takes                multipart/form-data: `audio` (take.m4a, audio/mp4; a real MP4 whose `mvhd` is 3 to 60 s and within 2 s of
+//                                             the claim), `transcript` (1 to 2,000 bytes), `duration_seconds`, `sha256`, `responds_to` (JSON {route,title},
+//                                             absent when none). Any other field is refused. 201 answers the take. 400 and 429 carry `{error}`, shown plainly.
+//                                             There is no separate upload to the listener's computer.
+//   GET    /api/platform/takes?limit=50       `{generated_at, takes:[...]}`: every `choir.take` field but the publisher key, plus `audio_url`, `record`.
+//   GET    /api/platform/takes?mine=1         the caller's own live takes `{takes:[... state, published_at, outcomes{heard,skipped,drill_*}]}`.
+//   GET    /api/platform/takes/{id}/audio     audio/mp4 bytes; 404 once deleted or yanked.
+//   DELETE /api/platform/takes/{id}           the publisher deletes their own take (409 once already gone).
+//   GET    /api/platform/takes/record?publisher=<handle>   flat: publisher, new, offered, heard, skipped, listeners, takes, summary (+ drill, rows for the publisher).
+//   POST   /api/platform/takes/{id}/outcome   NOT the phone's: it refuses a browser session and wants an API key naming the listener's computer; the
+//                                             listener's computer posts it after settlement. The phone never calls it.
+// A 404 on the takes routes means the server is not deployed yet: `TakesUnavailable`.
 //
 // Ways this can fail (written before the code; each is a test in TakesTests):
 //   T1  the 3 s floor, the 60 s ceiling, the 512 KB bound and the 2,000 byte transcript bound are the spec's, and only those
@@ -31,6 +28,44 @@ import CryptoKit
 //   T5  the upload is a multipart body whose audio, transcript and sha256 agree; the audio is never put in a log
 //   T6  a mute is kept on the phone, listed, undone, and survives a relaunch; the same handle twice is one mute
 //   T7  the listener's own record is read by their own handle; an unknown handle reads as "no outcomes yet", not a failure
+
+/// The server does not have the takes routes yet (404).
+public struct TakesUnavailable: Error, CustomStringConvertible, Equatable, Sendable {
+    public init() {}
+    public var description: String { "Takes are not available yet." }
+}
+/// The server's own refusal of a take, in its words.
+public struct TakesRefused: Error, CustomStringConvertible, Equatable, Sendable {
+    public var description: String
+    public init(_ d: String) { description = d }
+}
+
+/// The length the file's own `moov/mvhd` box states: what the server checks the claim against. Nil when the file is not a readable MP4.
+public enum Mp4Header {
+    public static func durationSeconds(_ d: Data) -> Double? {
+        func u32(_ o: Int) -> Int? { o >= 0 && o + 4 <= d.count ? d[o..<o+4].reduce(0) { $0 << 8 | Int($1) } : nil }
+        func u64(_ o: Int) -> Int? { o >= 0 && o + 8 <= d.count ? d[o..<o+8].reduce(0) { $0 << 8 | Int($1) } : nil }
+        func find(_ type: String, _ from: Int, _ to: Int) -> (body: Int, end: Int)? {
+            var o = from
+            while o + 8 <= to {
+                guard var size = u32(o) else { return nil }
+                var head = 8
+                if size == 1 { guard let big = u64(o + 8) else { return nil }; size = big; head = 16 } else if size == 0 { size = to - o }
+                guard size >= head, o + size <= to else { return nil }
+                if String(decoding: d[o+4..<o+8], as: UTF8.self) == type { return (o + head, o + size) }
+                o += size
+            }
+            return nil
+        }
+        guard d.count >= 12, String(decoding: d[4..<8], as: UTF8.self) == "ftyp", let moov = find("moov", 0, d.count), let mv = find("mvhd", moov.body, moov.end),
+              mv.body < d.count else { return nil }
+        let v = d[mv.body]
+        let scale: Int?, dur: Int?
+        if v == 1 { scale = u32(mv.body + 20); dur = u64(mv.body + 24) } else { scale = u32(mv.body + 12); dur = u32(mv.body + 16) }
+        guard let sc = scale, sc > 0, let du = dur else { return nil }
+        return Double(du) / Double(sc)
+    }
+}
 
 public enum TakeBounds {
     public static let minSeconds = 3.0, maxSeconds = 60.0
@@ -198,26 +233,27 @@ public struct TakesClient: Sendable {
         return (d, "multipart/form-data; boundary=\(boundary)")
     }
 
-    /// Store the take on the listener's own computer; its id.
-    public func upload(_ u: Upload) async throws -> String {
-        guard u.audio.count <= TakeBounds.maxBytes else { throw ChoirError.decode("the take is over \(TakeBounds.maxBytes / 1024) KB") }
-        let m = Self.multipart(u)
-        let r = try await client.send("POST", "/api/autoradio/takes", body: m.body, route: "/api/autoradio/takes", timeout: 120, contentType: m.contentType)
-        guard let id = (try r.object())["take_id"] as? String, Take.validID(id) else { throw ChoirError.decode("no take id") }
-        return id
-    }
+    /// 404 on a takes route is a server that does not have them yet.
+    static func unavailable(_ r: ChoirResponse) throws { if r.status == 404 { throw TakesUnavailable() } }
 
-    /// Copy a stored take to the platform. The take as published (its handle is the listener's own `publisher`).
-    public func publish(takeID: String) async throws -> Take {
-        let r = try await client.postJSON("/api/platform/takes", ["take_id": takeID], route: "/api/platform/takes", timeout: 120)
-        let o = try r.object()
-        guard let t = Take.parse((o["take"] as? [String: Any]) ?? o) else { throw ChoirError.decode("not a take") }
+    /// Publish a take: one multipart POST that carries the audio. The server's own refusal (a bound, the daily limit of 10) is thrown as its words.
+    public func publish(_ u: Upload) async throws -> Take {
+        guard u.audio.count <= TakeBounds.maxBytes else { throw TakesRefused("The take is over \(TakeBounds.maxBytes / 1024) KB.") }
+        let m = Self.multipart(u)
+        let r = try await client.send("POST", "/api/platform/takes", body: m.body, route: "/api/platform/takes", timeout: 120, okStatuses: [400, 404, 409, 413, 429], contentType: m.contentType)
+        try Self.unavailable(r)
+        guard (200..<300).contains(r.status) else {
+            let msg = ((try? r.json()) as? [String: Any])?["error"] as? String ?? ""
+            throw TakesRefused(msg.isEmpty ? "The server refused the take (HTTP \(r.status))." : String(msg.prefix(300)))
+        }
+        guard let t = Take.parse((try r.object())) else { throw ChoirError.decode("not a take") }
         return t
     }
 
     /// The newest live takes of the last 7 days.
     public func list() async throws -> [Take] {
-        let r = try await client.send("GET", "/api/platform/takes", query: ["limit": String(TakeBounds.listLimit)], route: "/api/platform/takes")
+        let r = try await client.send("GET", "/api/platform/takes", query: ["limit": String(TakeBounds.listLimit)], route: "/api/platform/takes", okStatuses: [404])
+        try Self.unavailable(r)
         return Self.takes(try r.json())
     }
     static func takes(_ json: Any) -> [Take] {
@@ -226,25 +262,25 @@ public struct TakesClient: Sendable {
         return rows.compactMap { Take.parse($0) }.filter { seen.insert($0.takeID).inserted }
     }
 
-    /// The listener's own takes, from their computer.
+    /// The listener's own live takes.
     public func mine() async throws -> [MyTake] {
-        let r = try await client.send("GET", "/api/autoradio/takes", route: "/api/autoradio/takes")
+        let r = try await client.send("GET", "/api/platform/takes", query: ["mine": "1"], route: "/api/platform/takes?mine", okStatuses: [404])
+        try Self.unavailable(r)
         let json = try r.json()
         let rows = ((json as? [String: Any])?["takes"] as? [[String: Any]]) ?? (json as? [[String: Any]]) ?? []
         return rows.compactMap { MyTake.parse($0) }
     }
 
-    /// Delete a take: the platform copy (404 is fine: it was never published, or is gone), then the computer's.
+    /// Delete a take (404 and 409: it is already gone).
     public func delete(takeID: String) async throws {
         let id = PathSegment.encode(takeID)
-        try await client.send("DELETE", "/api/platform/takes/\(id)", route: "/api/platform/takes/{id}", okStatuses: [404])
-        try await client.send("DELETE", "/api/autoradio/takes/\(id)", route: "/api/autoradio/takes/{id}", okStatuses: [404])
+        try await client.send("DELETE", "/api/platform/takes/\(id)", route: "/api/platform/takes/{id}", okStatuses: [404, 409])
     }
 
     /// A publisher's whole record. A handle with no outcomes reads as new, not as a failure.
     public func record(publisher: String) async throws -> TakeRecordSummary {
         let r = try await client.send("GET", "/api/platform/takes/record", query: ["publisher": publisher], route: "/api/platform/takes/record", okStatuses: [404])
-        if r.status == 404 { return TakeRecordSummary() }
+        if r.status == 404 { return TakeRecordSummary() }       // an unknown handle, or no server yet: no outcomes
         let o = try r.object()
         return TakeRecordSummary.parse((o["record"] as? [String: Any]) ?? o) ?? TakeRecordSummary()
     }

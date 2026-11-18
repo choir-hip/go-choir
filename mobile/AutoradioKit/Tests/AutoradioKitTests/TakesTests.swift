@@ -139,40 +139,64 @@ final class TakesClientTests: XCTestCase {
     }
     func fx(_ n: String) throws -> Any { try JSONSerialization.jsonObject(with: Data(contentsOf: TakesTests.mobile.appendingPathComponent("fixtures/takes/\(n)"))) }
 
-    func testUploadPostsMultipartToTheComputerAndReturnsTheId() async throws {
-        StubProtocol.handler = { _ in .init(json: ["take_id": "take-00000000000000b6"]) }
-        let id = try await client.upload(.init(audio: Data(repeating: 7, count: 100), transcript: "hi", duration: 4, respondsTo: nil))
-        XCTAssertEqual(id, "take-00000000000000b6")
+    func testPublishPostsOneMultipartToThePlatformAndReturnsTheTake() async throws {
+        StubProtocol.handler = { _ in .init(status: 201, json: (try? self.fx("publish.json")) ?? [:]) }
+        let t = try await client.publish(.init(audio: Data(repeating: 7, count: 100), transcript: "hi", duration: 4, respondsTo: nil))
+        XCTAssertEqual(t.takeID, "take-00000000000000b6"); XCTAssertEqual(t.publisher, "voice-me0001")
         let r = try XCTUnwrap(StubProtocol.seen.last)
-        XCTAssertEqual(r.method, "POST"); XCTAssertEqual(r.path, "/api/autoradio/takes")
+        XCTAssertEqual(r.method, "POST"); XCTAssertEqual(r.path, "/api/platform/takes"); XCTAssertEqual(StubProtocol.seen.count, 1, "one call: the audio rides in it")
         XCTAssertTrue(r.headers["content-type"]?.hasPrefix("multipart/form-data; boundary=") ?? false)
-        XCTAssertEqual(r.headers["x-choir-computer"], "comp-1")
+        XCTAssertEqual(r.headers["authorization"], "Bearer k")
     }
 
-    func testUploadOverTheBoundIsRefusedBeforeTheNetwork() async {
-        do { _ = try await client.upload(.init(audio: Data(count: TakeBounds.maxBytes + 1), transcript: "hi", duration: 4, respondsTo: nil)); XCTFail() } catch {}
+    func testPublishOverTheBoundIsRefusedBeforeTheNetwork() async {
+        do { _ = try await client.publish(.init(audio: Data(count: TakeBounds.maxBytes + 1), transcript: "hi", duration: 4, respondsTo: nil)); XCTFail() } catch {}
         XCTAssertTrue(StubProtocol.seen.isEmpty)
     }
 
-    func testPublishListMineRecordDelete() async throws {
+    func testPublishShowsTheServersRefusalPlainly() async throws {
+        StubProtocol.handler = { _ in .init(status: 429, json: (try? self.fx("refused-daily.json")) ?? [:]) }
+        do { _ = try await client.publish(.init(audio: Data(count: 10), transcript: "hi", duration: 4, respondsTo: nil)); XCTFail() }
+        catch let e as TakesRefused { XCTAssertEqual(e.description, "invalid take: 10 takes in the last 24 hours, the limit is 10") }
+    }
+
+    func testAServerWithoutTakesIsNotAvailableYet() async {
+        StubProtocol.handler = { _ in .init(status: 404) }
+        do { _ = try await client.publish(.init(audio: Data(count: 10), transcript: "hi", duration: 4, respondsTo: nil)); XCTFail() } catch { XCTAssertEqual(error as? TakesUnavailable, TakesUnavailable()) }
+        do { _ = try await client.list(); XCTFail() } catch { XCTAssertEqual(error as? TakesUnavailable, TakesUnavailable()) }
+        do { _ = try await client.mine(); XCTFail() } catch { XCTAssertEqual(error as? TakesUnavailable, TakesUnavailable()) }
+    }
+
+    func testListMineRecordDelete() async throws {
         StubProtocol.handler = { r in
             switch (r.method, r.path) {
-            case ("POST", "/api/platform/takes"): return .init(json: ["take_id": r.body["take_id"] as Any, "publisher": "voice-me0001", "state": "live"])
+            case ("GET", "/api/platform/takes") where r.query["mine"] == "1": return .init(json: (try? self.fx("mine.json")) ?? [:])
             case ("GET", "/api/platform/takes"): return .init(json: (try? self.fx("list.json")) ?? [:])
-            case ("GET", "/api/autoradio/takes"): return .init(json: (try? self.fx("mine.json")) ?? [:])
             case ("GET", "/api/platform/takes/record"): return .init(json: (try? self.fx("record.json")) ?? [:])
-            default: return .init(status: 204)
+            default: return .init(status: 200, json: ["take_id": "take-00000000000000a5", "state": "deleted"])
             }
         }
-        let t = try await client.publish(takeID: "take-00000000000000b6")
-        XCTAssertEqual(t.publisher, "voice-me0001")
         let all = try await client.list(); XCTAssertEqual(all.count, 4)
         XCTAssertEqual(StubProtocol.seen.last?.query["limit"], "50")
-        let mine = try await client.mine(); XCTAssertEqual(mine.map(\.published), [true, false])
+        let mine = try await client.mine(); XCTAssertEqual(mine.map(\.published), [true]); XCTAssertEqual(mine.first?.publisher, "voice-me0001")
+        XCTAssertEqual(StubProtocol.seen.last?.query["mine"], "1")
         let rec = try await client.record(publisher: "voice-me0001"); XCTAssertEqual(rec.words, "heard through by 7 of 11 listeners over 5 takes")
         XCTAssertEqual(StubProtocol.seen.last?.query["publisher"], "voice-me0001")
-        try await client.delete(takeID: "take-00000000000000b6")
-        XCTAssertEqual(StubProtocol.seen.suffix(2).map { $0.method + " " + $0.path }, ["DELETE /api/platform/takes/take-00000000000000b6", "DELETE /api/autoradio/takes/take-00000000000000b6"])
+        try await client.delete(takeID: "take-00000000000000a5")
+        XCTAssertEqual(StubProtocol.seen.last.map { $0.method + " " + $0.path }, "DELETE /api/platform/takes/take-00000000000000a5")
+    }
+
+    func testTheRecordIsFlatWithItsSummaryLine() throws {
+        let o = try JSONSerialization.jsonObject(with: Data(#"{"publisher":"voice-1","offered":11,"heard":7,"skipped":4,"listeners":5,"takes":3,"new":false,"summary":"heard through 7 of 11 times, by 5 distinct listeners, over 3 takes","drill":{"heard":0,"skipped":0,"drill_heard":0,"drill_skipped":0}}"#.utf8))
+        XCTAssertEqual(TakeRecordSummary.parse(o)?.words, "heard through 7 of 11 times, by 5 distinct listeners, over 3 takes")
+    }
+
+    func testTheMp4HeaderGivesTheLengthTheServerReads() {
+        func box(_ t: String, _ b: [UInt8]) -> [UInt8] { let n = UInt32(8 + b.count); return [UInt8(n >> 24), UInt8(n >> 16 & 255), UInt8(n >> 8 & 255), UInt8(n & 255)] + Array(t.utf8) + b }
+        let mvhd = [UInt8](repeating: 0, count: 12) + [0, 0, 0x03, 0xE8] + [0, 0, 0x30, 0x39] + [UInt8](repeating: 0, count: 80)   // v0, timescale 1000, 12345
+        let f = Data(box("ftyp", Array("M4A ".utf8) + [0, 0, 0, 0]) + box("moov", box("mvhd", mvhd)))
+        XCTAssertEqual(Mp4Header.durationSeconds(f) ?? 0, 12.345, accuracy: 0.0001)
+        XCTAssertNil(Mp4Header.durationSeconds(Data("RIFFxxxxWAVEfmt ".utf8)), "a WAV is not an MP4")
     }
 
     func testT7AnUnknownPublisherReadsAsNew() async throws {

@@ -154,13 +154,11 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
         preview.stop(); previewing = false
         state = .publishing; notice = ""; changed()
         do {
-            let id: String
-            if let s = storedID { id = s } else {
-                guard let data = try? Data(contentsOf: url) else { throw ChoirError.decode("the recording is gone") }
-                id = try await c.upload(.init(audio: data, transcript: transcript, duration: duration, respondsTo: respondsTo))
-                storedID = id
-            }
-            let t = try await c.publish(takeID: id)
+            guard let data = try? Data(contentsOf: url) else { throw ChoirError.decode("the recording is gone") }
+            // The server reads the length from the file's own header and holds the claim to within 2 s of it: claim what the file says.
+            let claimed = Mp4Header.durationSeconds(data).flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? duration
+            let t = try await c.publish(.init(audio: data, transcript: transcript, duration: claimed, respondsTo: respondsTo))
+            let id = t.takeID
             own.add(id: id, handle: t.publisher)
             published = t
             dropFile(); storedID = nil; transcript = ""; duration = 0
@@ -170,19 +168,24 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
             await refresh()
         } catch {
             state = .review
-            notice = "Could not publish: \(Self.why(error)). Try again."
+            // The recording is kept (state review, file on disk): nothing is lost when the server is not there yet or refuses.
+            if error is TakesUnavailable { notice = "Takes are not available yet. Your recording is kept; publish it again later." }
+            else if let r = error as? TakesRefused { notice = "\(r.description) Your recording is kept." }
+            else { notice = "Could not publish: \(Self.why(error)). Your recording is kept; try again." }
             print("AUTORADIO take publish failed: \(Self.why(error))")
             changed()
         }
     }
 
-    static func why(_ e: Error) -> String { (e as? ChoirError).map { $0.description } ?? "the connection failed" }
+    static func why(_ e: Error) -> String { (e as? ChoirError).map { $0.description } ?? (e as? TakesUnavailable).map { $0.description } ?? "the connection failed" }
 
     // MARK: The listener's takes and record
 
     public func refresh() async {
         guard let c = client() else { return }
-        if let m = try? await c.mine() { mine = m; for t in m { own.add(id: t.takeID, handle: t.publisher) } }
+        do { let m = try await c.mine(); mine = m; for t in m { own.add(id: t.takeID, handle: t.publisher) } }
+        catch is TakesUnavailable { notice = "Takes are not available yet."; changed(); return }
+        catch {}
         let h = own.handle
         if !h.isEmpty { myRecord = try? await c.record(publisher: h) }
         changed()

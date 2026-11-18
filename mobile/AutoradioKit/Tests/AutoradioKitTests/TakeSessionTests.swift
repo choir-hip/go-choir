@@ -31,7 +31,6 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         StubProtocol.seen = []
         StubProtocol.handler = { r in
             switch (r.method, r.path) {
-            case ("POST", "/api/autoradio/takes"): return .init(json: ["take_id": "take-00000000000000c1"])
             case ("POST", "/api/platform/takes"): return .init(json: ["take_id": "take-00000000000000c1", "publisher": "voice-me0001", "state": "live"])
             case ("GET", _): return .init(json: ["takes": []])
             default: return .init(status: 204)
@@ -103,31 +102,46 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         await s.publish(); XCTAssertTrue(StubProtocol.seen.isEmpty)
     }
 
-    func testR5PublishUploadsThenPublishesAndRemembersIt() async {
+    func testR5PublishIsOneMultipartPostAndRemembersIt() async {
         responds = TakeResponds(route: "harbor-fees", title: "Harbor fees rise")
         let s = session(); await s.start(); clock += 10; await s.stop()
         XCTAssertEqual(s.respondsTo?.route, "harbor-fees")
         await s.publish()
-        XCTAssertEqual(StubProtocol.seen.prefix(2).map { $0.method + " " + $0.path }, ["POST /api/autoradio/takes", "POST /api/platform/takes"])
-        XCTAssertEqual(StubProtocol.seen[1].body["take_id"] as? String, "take-00000000000000c1")
+        XCTAssertEqual(StubProtocol.seen.prefix(2).map { $0.method + " " + $0.path }, ["POST /api/platform/takes", "GET /api/platform/takes"])
+        XCTAssertEqual(s.published?.takeID, "take-00000000000000c1")
         XCTAssertEqual(s.state, .idle); XCTAssertEqual(s.published?.publisher, "voice-me0001"); XCTAssertEqual(gate.given, 1); XCTAssertEqual(files(), [])
         XCTAssertEqual(own.handle, "voice-me0001")
         let raw = String(decoding: StubProtocol.seen[0].raw, as: UTF8.self)
         XCTAssertTrue(raw.contains("harbor-fees"))
     }
 
-    func testR5AFailureAfterTheUploadKeepsTheIdSoARetryDoesNotUploadTwice() async {
+    func testR5AFailedPublishKeepsTheRecordingAndARetryPublishesOnce() async {
         var fail = true
         StubProtocol.handler = { r in
-            if r.path == "/api/autoradio/takes", r.method == "POST" { return .init(json: ["take_id": "take-00000000000000c1"]) }
-            if r.path == "/api/platform/takes", r.method == "POST" { return fail ? .init(status: 500) : .init(json: ["take_id": "take-00000000000000c1", "publisher": "voice-me0001"]) }
+            if r.path == "/api/platform/takes", r.method == "POST" { return fail ? .init(status: 500) : .init(status: 201, json: ["take_id": "take-00000000000000c1", "publisher": "voice-me0001", "state": "live"]) }
             return .init(json: ["takes": []])
         }
         let s = session(); await s.start(); clock += 10; await s.stop()
-        await s.publish(); XCTAssertEqual(s.state, .review); XCTAssertTrue(s.notice.contains("Could not publish")); XCTAssertEqual(gate.given, 0)
+        await s.publish(); XCTAssertEqual(s.state, .review); XCTAssertTrue(s.notice.contains("Could not publish")); XCTAssertTrue(s.notice.contains("kept")); XCTAssertEqual(gate.given, 0)
+        XCTAssertEqual(files().count, 1, "the recording is still on the phone")
         fail = false; await s.publish()
-        XCTAssertEqual(StubProtocol.seen.filter { $0.method == "POST" && $0.path == "/api/autoradio/takes" }.count, 1)
-        XCTAssertEqual(s.state, .idle)
+        XCTAssertEqual(StubProtocol.seen.filter { $0.method == "POST" && $0.path == "/api/platform/takes" }.count, 2)
+        XCTAssertEqual(s.state, .idle); XCTAssertEqual(own.handle, "voice-me0001")
+    }
+
+    func testAServerNotDeployedYetKeepsTheTakeAndSaysSo() async {
+        StubProtocol.handler = { _ in .init(status: 404) }
+        let s = session(); await s.start(); clock += 10; await s.stop()
+        await s.publish()
+        XCTAssertEqual(s.state, .review); XCTAssertEqual(s.notice, "Takes are not available yet. Your recording is kept; publish it again later.")
+        XCTAssertEqual(files().count, 1); XCTAssertFalse(s.transcript.isEmpty)
+        await s.refresh(); XCTAssertEqual(s.notice, "Takes are not available yet.")
+    }
+
+    func testTheDailyLimitIsShownInTheServersWords() async {
+        StubProtocol.handler = { _ in .init(status: 429, json: ["error": "invalid take: 10 takes in the last 24 hours, the limit is 10"]) }
+        let s = session(); await s.start(); clock += 10; await s.stop(); await s.publish()
+        XCTAssertTrue(s.notice.hasPrefix("invalid take: 10 takes in the last 24 hours, the limit is 10")); XCTAssertEqual(s.state, .review)
     }
 
     func testR6NoEntryOnAirMeansNoRespondsTo() async {
@@ -222,13 +236,12 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
 /// The demo routes answer the whole take path from fixtures (the tour's server).
 final class TakesDemoTests: XCTestCase {
     func testDemoPublishListDelete() throws {
-        let up = TakesDemo.answer(method: "POST", path: "/api/autoradio/takes", body: Data("--B\r\nContent-Disposition: form-data; name=\"transcript\"\r\n\r\nhello demo\r\n--B--".utf8))
-        let id = try XCTUnwrap(((try JSONSerialization.jsonObject(with: try XCTUnwrap(up).1)) as? [String: Any])?["take_id"] as? String)
-        let pub = TakesDemo.answer(method: "POST", path: "/api/platform/takes", body: Data("{\"take_id\":\"\(id)\"}".utf8))
-        XCTAssertEqual(pub?.0, 200)
-        let mine = try JSONSerialization.jsonObject(with: try XCTUnwrap(TakesDemo.answer(method: "GET", path: "/api/autoradio/takes", body: Data())).1) as? [String: Any]
-        XCTAssertTrue((mine?["takes"] as? [[String: Any]])?.contains { $0["transcript"] as? String == "hello demo" && $0["published"] as? Bool == true } ?? false)
-        _ = TakesDemo.answer(method: "DELETE", path: "/api/autoradio/takes/\(id)", body: Data())
-        XCTAssertFalse(String(decoding: try XCTUnwrap(TakesDemo.answer(method: "GET", path: "/api/autoradio/takes", body: Data())).1, as: UTF8.self).contains(id))
+        let pub = TakesDemo.answer(method: "POST", path: "/api/platform/takes", body: Data("--B\r\nContent-Disposition: form-data; name=\"transcript\"\r\n\r\nhello demo\r\n--B--".utf8))
+        XCTAssertEqual(pub?.0, 201)
+        let id = try XCTUnwrap(((try JSONSerialization.jsonObject(with: try XCTUnwrap(pub).1)) as? [String: Any])?["take_id"] as? String)
+        let mine = try JSONSerialization.jsonObject(with: try XCTUnwrap(TakesDemo.answer(method: "GET", path: "/api/platform/takes?mine", body: Data())).1) as? [String: Any]
+        XCTAssertTrue((mine?["takes"] as? [[String: Any]])?.contains { $0["transcript"] as? String == "hello demo" && $0["state"] as? String == "live" } ?? false)
+        _ = TakesDemo.answer(method: "DELETE", path: "/api/platform/takes/\(id)", body: Data())
+        XCTAssertFalse(String(decoding: try XCTUnwrap(TakesDemo.answer(method: "GET", path: "/api/platform/takes?mine", body: Data())).1, as: UTF8.self).contains(id))
     }
 }

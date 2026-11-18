@@ -316,7 +316,7 @@ final class ClipPlayerTests: XCTestCase {
         let (p, s, e, _) = make([c], loc)
         p.playNow(story("l-a")); await p.settle()
         p.queue(c.clipEntry)
-        await Task.yield(); await Task.yield()
+        for _ in 0..<200 where loc.calls.isEmpty { try? await Task.sleep(nanoseconds: 10_000_000) }   // bounded wait (about 2 s), not two yields
         XCTAssertEqual(loc.calls, [c.clipID], "located while the story is on air")
         p.next(); await p.settle()
         XCTAssertEqual(loc.calls, [c.clipID], "once")

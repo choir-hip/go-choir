@@ -111,7 +111,7 @@ final class DemoURLProtocol: URLProtocol {
             client?.urlProtocolDidFinishLoading(self)
             return
         }
-        if let (status, body) = TakesDemo.answer(method: request.httpMethod ?? "GET", path: url.path, body: sent) {
+        if let (status, body) = TakesDemo.answer(method: request.httpMethod ?? "GET", path: url.path + ((url.query ?? "").contains("mine=1") ? "?mine" : ""), body: sent) {
             let resp = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
             client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: body)

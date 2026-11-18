@@ -1,3 +1,2 @@
 event: segment
-data: {"kind":"take","segment_id":"s1/2","stretch_id":"s1","title":"A voice on the harbor","text":"Here is a neighbour on the harbor fee.","take":"take-00000000000000a1","p_heard":0.6,"caused_by":"you stayed with two harbor stories"}
-
+data: {"kind":"take","segment_id":"s1/2","stretch_id":"s1","title":"A voice on the harbor","text":"Here is a neighbour on the harbor fee.","cites":[{"ref":"pub:harbor-fees","role":"mentioned","label":"Harbor fees rise"}],"block_count":1,"est_seconds":3,"cut_at":"segment","take":{"take_id":"take-00000000000000a1","story_ref":"pub:harbor-fees","seconds":14.2},"p_heard":0.6,"caused_by":"you stayed with two harbor stories"}
