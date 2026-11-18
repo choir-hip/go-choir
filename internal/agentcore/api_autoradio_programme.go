@@ -449,6 +449,12 @@ type programmeCall struct {
 	writeErr error       // the first write error: the client went away
 	prompt   string
 
+	// The heard index (api_autoradio_heard.go): the scorecard and the segment
+	// list, each read once per call, and the follow-ups the DJ wrote.
+	card      *calibration.Scorecard
+	segRecs   map[string]types.CommitmentRecord
+	followups int
+
 	// The notebook (L5): Texture's service, the notebook lines the model wrote
 	// (raw, read after the stream), the title of the entry on air, and the
 	// summary the done event and the index carry.
@@ -960,6 +966,9 @@ func (c *programmeCall) commit(seg *programmeSegment) bool {
 			return c.failStore(err)
 		}
 		c.claimIDs = append(c.claimIDs, claim.RecordID)
+		if seg.Telling == tellingFollowup {
+			c.followups++
+		}
 		seg.ClaimID = claim.RecordID
 	}
 	// The entry goes on the server's run sheet before the phone hears of it,
@@ -985,7 +994,7 @@ func (c *programmeCall) commit(seg *programmeSegment) bool {
 func (c *programmeCall) forecastInput(s *programmeSegment) calibration.AutoradioForecastInput {
 	return calibration.AutoradioForecastInput{
 		StretchID: c.stretchID, SegmentID: s.ID, Kind: s.Kind, Title: s.Title, Model: c.memberName(), P: s.P,
-		Cause: s.Cause, CausedBy: s.CausedBy, LessonID: s.LessonID, TakeID: s.TakeID, TextSHA256: s.SHA256, Blocks: s.Blocks, StretchStart: c.startedAt,
+		Cause: s.Cause, CausedBy: s.CausedBy, LessonID: s.LessonID, TakeID: s.TakeID, Telling: s.Telling, TextSHA256: s.SHA256, Blocks: s.Blocks, StretchStart: c.startedAt,
 	}
 }
 
@@ -1035,6 +1044,7 @@ func (c *programmeCall) finish(ctx context.Context, status, reason string, index
 		}
 	}
 	done := time.Now()
+	c.logHeard()
 	log.Printf("autoradio programme: stretch=%s request=%s status=%s member=%s segments=%d claims=%d dropped=%d tokens_in=%d tokens_out=%d ms{first_segment=%d done=%d} stretches_total=%d model_calls_total=%d",
 		c.stretchID, c.req.RequestID, status, c.memberName(), c.segCount, len(c.claimIDs), len(c.dropped), c.usage.InputTokens, c.usage.OutputTokens,
 		c.timings(done)["first_segment"], c.timings(done)["done"], programmeStretchesTotal.Load(), programmeCallsTotal.Load())
