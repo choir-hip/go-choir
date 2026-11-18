@@ -164,9 +164,18 @@ not joined.
   carries an event or cluster id. The related route links same-event stories
   by entity where entities exist (a Yemen group of four: yes) and falls back
   to title words where they do not.
-- **A fifth of stories have no entities.** corpusd refused 664 entity writes
-  from the paper in 72 hours ("is not a published Autopaper story of owner
-  ..."), about 220 a day. Cause under investigation.
+- **A fifth of stories have no entities** (21 of 100 front rows). The lead
+  first tied this to 664 refusals in corpusd's log ("is not a published
+  Autopaper story"); that was wrong. The refusals are 656 distinct stories,
+  nearly all refused once: the desk's first entity write arrives before the
+  story publishes and is expected to be refused; the export at publish
+  follows. The candidate cause is elsewhere: the export at each published
+  revision rebuilds the entities from the newest 10,000 events of a channel
+  (`system1ChannelTape`, `ListAcknowledgedEventsByChannel`), so on a busy
+  computer an older story's record falls out of the window. In a sample the
+  stories without entities were the many-version ones (3, 4, 6 and 25
+  versions). Not proven in production; lane `entity-export-window` verifies
+  the chain before repairing it.
 - **Entity ids are not merged**: "U.S." and "United States", "Trump" and
   "Donald Trump" are separate, so groups split; generic entities ("Drone",
   "Woman") join unrelated stories.
