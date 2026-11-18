@@ -122,8 +122,26 @@ waste. The principle says most of them should not be asked: a research run
 starts from what the computer holds (the existing story on the event, the
 related stories, the captured sources and their text), states what is
 missing or stale, and searches the web only for that. What a search brings
-back is captured, so the next run holds it. An overlapping candidate becomes
-a revision of the existing story, decided before research starts.
+back is captured, so the next run holds it. A story that would overlap an
+existing one mostly becomes a revision of it.
+
+Corrected the same day. The lead first wrote that the choice between a new
+story and a revision is "decided before research starts". The owner: "it
+doesn't really make sense to, before research starts, revise the story.
+Like, how do you know you should revise it versus making a new story before
+research starts?" The choice needs what research finds. Where in the
+pipeline it belongs is open.
+
+The owner then widened the question: "I'm realizing this is a bigger design
+and architecture thing than I had initially thought. And we should audit how
+our graph traversal and BM25 search is currently working. And now may be the
+time where we should start looking into doing embeddings and vector search
+over our corpus. I think we can use embedding Gemma 2 and run all that in
+x86. But we should do a feasibility study for sure." Two read-only studies
+were started on that: an audit of the corpus search as built (BM25, graph
+traversal, whether research runs use them and what they return), and a
+feasibility study of embeddings and vector search on the x86 hardware we
+have. No design is settled until both report.
 
 Not yet known, under investigation the same day: what the corpus search
 indexes and whether captured source text is findable at all; whether research
