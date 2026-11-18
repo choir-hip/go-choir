@@ -277,9 +277,11 @@ func (s *Store) RetrievalLive() map[string]bool {
 		return map[string]bool{}
 	}
 	return map[string]bool{
-		"lookup_keys":            s.retrievalState.lookupKeyLive.Load(),
-		"capture_index":          s.retrievalState.captureIndexReady.Load(),
-		"capture_index_complete": s.retrievalState.captureIndexComplete.Load(),
+		"lookup_keys":               s.retrievalState.lookupKeyLive.Load(),
+		"capture_index":             s.retrievalState.captureIndexReady.Load(),
+		"capture_index_complete":    s.retrievalState.captureIndexComplete.Load(),
+		"capture_fulltext":          s.fullText.Load() != nil,
+		"capture_fulltext_complete": s.fullText.Load() != nil && s.fullText.Load().complete.Load(),
 	}
 }
 
