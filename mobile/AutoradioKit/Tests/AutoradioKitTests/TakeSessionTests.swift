@@ -147,6 +147,26 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         await s.delete("take-00000000000000a5"); XCTAssertEqual(s.mine.count, 0)
     }
 
+    /// The on-air Take control (radio-take-start) sends the same `record` action as the Takes section: one flow. From idle it cites the on-air entry,
+    /// the model shows the panel's states in turn (recording, review with a transcript and Publish), and a take with nothing on air cites nothing.
+    func testTheOnAirTakeControlStartsTheSameFlowAndCitesTheEntryOnAir() async {
+        let s = session()
+        var p = TakesPage.make(session: s, mutes: [], own: own)
+        XCTAssertEqual(p.state, "idle"); XCTAssertTrue(p.canRecord, "the Take control is offered when nothing is under way")
+        responds = TakeResponds(route: "harbor-fees", title: "Harbor fees rise")
+        await s.start(); clock += 5
+        p = TakesPage.make(session: s, mutes: [], own: own)
+        XCTAssertEqual(p.state, "recording"); XCTAssertFalse(p.canRecord, "the control gives way to Stop"); XCTAssertTrue(p.canStop)
+        XCTAssertEqual(p.respondsTo, "Answering: Harbor fees rise"); XCTAssertEqual(s.respondsTo?.route, "harbor-fees")
+        await s.stop()
+        p = TakesPage.make(session: s, mutes: [], own: own)
+        XCTAssertEqual(p.state, "review"); XCTAssertEqual(p.transcript, "A neighbour speaking."); XCTAssertTrue(p.canPublish); XCTAssertTrue(p.canDiscard)
+        s.discard()
+        responds = nil
+        let t = session(); await t.start()
+        XCTAssertNil(t.respondsTo); XCTAssertEqual(TakesPage.make(session: t, mutes: [], own: own).respondsTo, "")
+    }
+
     func testPageModelFollowsTheState() async {
         let s = session(); var p = TakesPage.make(session: s, mutes: ["voice-1"], own: own)
         XCTAssertTrue(p.canRecord); XCTAssertFalse(p.canStop); XCTAssertEqual(p.muted.first?.line, "Never play takes by voice-1.")
