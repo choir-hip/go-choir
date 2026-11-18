@@ -1,7 +1,7 @@
 ---
 definition_version: 7
 
-readiness: executable
+readiness: drafted  # was executable until the owner cleared the goal on 2026-11-18; a checkpointed file is not executable
 
 review:
   reviewer: none
