@@ -246,6 +246,12 @@ not written (an id could be minted twice).
 - Cost per extend (named, not fixed): the lesson records are read once, but the tap map, the
   deferred-steering scan and two ledger scorecard reads (the input's and the patch's) each read
   up to the store's record cap. They are not yet shared.
+- Residuals named, not fixed: the prompt's display of tags (`loadNotebook`) reads the lesson index
+  again instead of sharing the patch's; and a listener who types the exact tap grammar
+  (`More like this: "<title>" (<d Mon HH:MM>)`) writes a line the desk reads as its own tap.
+- A read of the lesson or patch records that returns the cap (5,000) refuses the patch instead of
+  drafting from an incomplete list; the done event says why and the log carries the owner and
+  stretch ids. A retire record counts as gone only once its patch landed (applied or noop).
 - No wake of a model for a notebook-titled document, whether published through the Texture
   root or not (`reconcileAgentWakeLockedFor`).
 
