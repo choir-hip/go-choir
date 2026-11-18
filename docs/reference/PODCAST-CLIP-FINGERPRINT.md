@@ -40,13 +40,13 @@ file time `t0` lies at `t0 + k/10` s.
 
 **Packed fingerprint** (what is stored): byte 0 = version (1), byte 1 = band
 count (8), bytes 2-3 = frame count n (uint16, big endian), then n frames of 8
-bytes. A clip fingerprint has n = min(120, clip length in frames): at most
-4 + 960 = 964 bytes, about 1.3 KB in base64.
+bytes. A clip fingerprint has n = 120 frames, always: 4 + 960 = 964 bytes, about
+1.3 KB in base64.
 
 **Cutting** (`podcastfp.Cut`): for a clip `[start, end]` in a file with a track
 whose frame 0 is at `t0` (a whole second, so frames fall on the 0.1 s grid of
 the file): `f0 = round((start - t0) * 10)`, `f1 = round((end - t0) * 10)`,
-`n = min(120, f1 - f0)`. **Head** = frames `[f0, f0 + n)`, **tail** = frames
+`n = 120` (a clip with `f1 - f0 < 240`, under 24 s, is refused). **Head** = frames `[f0, f0 + n)`, **tail** = frames
 `[f1 - n, f1)`. `head_at = t0 + f0/10`, `tail_at = t0 + (f1 - n)/10`.
 
 **Conformance.** The fixture's signal is integer only: LCG `x = x*1664525 +
@@ -80,15 +80,40 @@ to `m - n`: normalised cross-correlation over all `8n` values,
 re-encode cost a little peak (a 64 kbps re-encode with a 9.4 s ad in front
 measured peak 0.999). Time of the match in the window = `pos / 10`.
 
-**Using it.** Fetch a window of the served file around the expected place
-(the measurement says +-240 s, 4 to 7 MB at 128 kbps), decode, build the track,
-locate the head and the tail. Offsets: `off_head = window_t0 + pos_head/10 -
-head_at`, `off_tail = window_t0 + pos_tail/10 - tail_at`. Both found and
-`|off_head - off_tail| <= 0.3` s: the clip plays at `start + off_head` through
-`end + off_head`. One missing, or the offsets differ (an ad inside the clip):
-refuse the clip. Times in the record (`head_at`, `tail_at`, `start`, `end`) are
-in the file the fingerprint was cut from; they are the reference, not the
-clip's top-level `start` and `end` (section 4).
+**Using it.** Every time in the `fingerprint` record (`start`, `end`, `head_at`,
+`tail_at`) is seconds in the file the fingerprint was cut from. The clip's
+top-level `start` and `end` are its identity and, for a repaired clip, seconds
+in an older file: the phone never plays from them. Steps:
+
+1. Fetch a window of the served file centred on the record's `start`:
+   `window_t0 = record.start - 240` (at least 0) to `record.start + 240`
+   (4 to 7 MB at 128 kbps), decode to 16 kHz mono, build the track.
+2. Locate the head and the tail (both must be Found).
+3. `off_head = window_t0 + pos_head/10 - head_at` and
+   `off_tail = window_t0 + pos_tail/10 - tail_at`.
+4. If `|off_head - off_tail| <= 0.3` s: play from `head_at + off_head` to
+   `tail_at + 12 + off_tail` (12 s is the tail's length, always 120 frames).
+   One not found, or the offsets differ (an ad inside the clip): refuse the clip.
+
+Worked example, fresh clip: stored `start` 400, `end` 440, the record has
+`start` 400, `end` 440, `head_at` 400, `tail_at` 428. Window [160, 640]. The
+served file has a 17 s ad in front: the head is found at `pos` 2570 (time
+417.0 in the file, 257.0 s into the window) and the tail at `pos` 2850 (445.0).
+`off_head = 160 + 257.0 - 400 = 17.0`, `off_tail = 160 + 285.0 - 428 = 17.0`:
+play 417.0 to `428 + 12 + 17.0 = 457.0`.
+
+Worked example, repaired clip: stored top-level `start` 395, `end` 435 (the
+file downloaded long ago); the worker found its quote 17 s later in a fresh
+download and cut the record there: `start` 412, `end` 452, `head_at` 412,
+`tail_at` 440. The phone centres on 412, not 395: window [172, 652]. The
+file it is served has 1.5 s more ahead of the clip than the worker's
+re-download: head found at 430.5, tail at 458.5. `off_head = 430.5 - 412 =
+18.5` and `off_tail = 458.5 - 440 = 18.5`: play 430.5 to `440 + 12 + 18.5 =
+470.5`.
+
+A clip shorter than 24 s gets no fingerprint (its 12 s head and tail would
+overlap, so an ad inside it could not be seen); the matcher's own minimum is
+20 s, so a clip of 20 to 24 s is valid and not relocatable.
 
 ## 3. The record on the platform
 
@@ -108,8 +133,8 @@ relocatable):
 | `seekable_by_bitrate` | true only for an MP3 whose frames, from the first to within 4 KiB of the end, are all of one bitrate and with no tag in the middle; then `byte = first_frame_offset + seconds * bitrate_kbps * 125`. False (and `bitrate_kbps` 0) for anything else: the phone needs a probe |
 
 Platform checks (`podcastfp.ClipRecord.Validate` and the write route): version
-1; head and tail unpack and are at most 964 bytes; every time finite and in a
-day; `end > start`; the fingerprint's `end - start` within 1 s of the clip's;
+1; head and tail unpack and have exactly 120 frames (964 bytes); every time finite and in a
+day; `end - start` at least 24 s and `tail_at` at least 12 s after `head_at`; the fingerprint's `end - start` within 1 s of the clip's;
 bitrate at most 640; seekable needs a bitrate and a length.
 
 `PUT /api/platform/operator/podcasts/clips` takes the same object as
@@ -118,8 +143,13 @@ again replaces the row. `DELETE` on that route with `{"clip_ids": [...]}`
 tombstones clips (the worker's repair pass; the public read skips them). The
 write route has a 6 MB body bound and 200 clips a request. The clip row is an
 object-graph row of kind `choir.podcast_clip`, not the tape; the route is
-operator only. Old servers refuse unknown fields (the decoder disallows them),
-so the platform deploys before the worker sends fingerprints.
+operator only. Old servers refuse unknown fields (the decoder disallows them):
+a new worker against an old platform would have its whole clip refused. The
+matcher therefore retries such a refused clip once without the fingerprint,
+logs the downgrade once, and marks the clip written only when a request
+succeeds; the old platform stores it unfingerprinted and the repair pass
+upgrades it later (against an old platform that pass's PUT and its DELETE are
+refused and skipped for 6 hours). Deploy the platform first all the same.
 
 ## 4. Where fingerprints come from
 
@@ -133,7 +163,7 @@ so the platform deploys before the worker sends fingerprints.
 - **Held clips with none** (`podcast-worker repair`, and in `serve` whenever
   the transcription queue is drained, at most every 30 minutes). For each such
   clip: download the episode again once per episode; find where the clip's
-  quote begins in the stored transcript (the segment holding it); cut
+  quote begins in the stored transcript (the segment holding its first word, found over the clip's segments joined, so a quote may run across two); cut
   `[start - 300 s, end + 300 s]` (nearby clips share a span), transcribe it
   with the worker's own recogniser, and find the quote (`FindQuote`: longest
   common subsequence of words, at least 75% of the quote's words in order;
@@ -142,9 +172,15 @@ so the platform deploys before the worker sends fingerprints.
   shifted place; the clip's stored start and end are not changed (they are
   its identity). The audio is deleted after use; `--min-free-gb` and the work
   directory bound apply. If the quote is not found, or the shifted clip runs
-  past the audio, the clip is deleted and the reason is logged (one of 34 was
-  such a case on 2026-11-17: the episode had been re-edited). An episode that
-  fails to download is skipped for 6 hours; no model service is called.
+  past the audio, nothing is decided yet: the episode is downloaded once more
+  and the whole file is transcribed. Only when that transcription covers the
+  file (within 3 s of its length) and the quote is still not in it is the clip
+  deleted, with the reason logged (one of 34 was such a case on 2026-11-17: the
+  episode had been re-edited). Any failure, an incomplete transcription, or a
+  clip that cannot be cut where its quote now is leaves the clip as it is and
+  skips it for 6 hours; so does a clip whose episode left the 14-day listing.
+  A run has a 20 minute wall-time budget: the episode in hand when it ends
+  writes and deletes nothing. No model service is called.
 
 ## 5. What is not known
 

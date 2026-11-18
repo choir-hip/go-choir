@@ -35,6 +35,7 @@ const (
 )
 
 // Span is a stretch of an episode's file, in whole seconds from its start.
+// {0, 0} is the whole file.
 type Span struct{ T0, T1 float64 }
 
 // SpanAudio is a transcribed span: words with times in file seconds, and the
@@ -43,6 +44,10 @@ type SpanAudio struct {
 	T0    float64
 	Words []Word
 	Track []byte
+	// Complete: the span was the whole file (T1 0) and it was transcribed to
+	// within 3 s of the file's length. Only then does a missing quote prove
+	// the episode no longer says it.
+	Complete bool
 }
 
 // WindowEngine fetches an episode once and transcribes spans of it.
@@ -65,6 +70,10 @@ type Repairer struct {
 	B      RepairBackend
 	Eng    WindowEngine
 	DryRun bool
+	// Budget is the wall time one Run may spend (default 20 minutes): when it
+	// is spent the episode in hand is dropped (nothing from it is written or
+	// deleted) and the rest wait for the next run.
+	Budget time.Duration
 	Now    func() time.Time
 	Logf   func(string, ...any)
 
@@ -146,7 +155,8 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 	for _, h := range todo {
 		e, ok := byKey[h.FeedURL+"\x00"+h.GUID]
 		if !ok {
-			r.logf("podcast-worker repair: clip %s: its episode is not in the episode list; left as it is", h.ClipID)
+			r.logf("podcast-worker repair: clip %s: its episode is not in the episode list; left as it is, not looked at again for %s", h.ClipID, repairSkip)
+			r.skipUntil[h.ClipID] = r.now().Add(repairSkip)
 			rep.Skipped++
 			continue
 		}
@@ -155,6 +165,12 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 		}
 		byEpisode[e.EpisodeID] = append(byEpisode[e.EpisodeID], h)
 	}
+	budget := r.Budget
+	if budget <= 0 {
+		budget = 20 * time.Minute
+	}
+	bctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
 	var puts []ClipIn
 	var putIDs []string
 	var gone []string
@@ -162,21 +178,32 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 		if err := ctx.Err(); err != nil {
 			return rep, err
 		}
+		if bctx.Err() != nil {
+			r.logf("podcast-worker repair: the run's %s is spent; the remaining episodes wait for the next run", budget)
+			break
+		}
 		clips := byEpisode[id]
 		e := byKey[clips[0].FeedURL+"\x00"+clips[0].GUID]
 		if r.now().Before(r.skipUntil[id]) {
 			rep.Skipped += len(clips)
 			continue
 		}
-		in, ids, del, err := r.repairEpisode(ctx, e, clips)
+		in, ids, del, skipped, err := r.repairEpisode(bctx, e, clips)
 		if err != nil {
 			if ctx.Err() != nil {
 				return rep, ctx.Err()
+			}
+			if bctx.Err() != nil {
+				continue // the budget ended it: nothing from this episode is used
 			}
 			rep.Failed += len(clips)
 			r.skipUntil[id] = r.now().Add(repairSkip)
 			r.logf("podcast-worker repair: episode %s (%s): %d clips left as they are, retried after %s: %v", id, e.Show, len(clips), repairSkip, err)
 			continue
+		}
+		for _, c := range skipped {
+			r.skipUntil[c] = r.now().Add(repairSkip)
+			rep.Skipped++
 		}
 		puts, putIDs, gone = append(puts, in...), append(putIDs, ids...), append(gone, del...)
 	}
@@ -206,12 +233,15 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 	return rep, nil
 }
 
-// repairEpisode makes the clip writes and the deletions for one episode, from
-// one download.
-func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []HeldClip) (puts []ClipIn, putIDs, gone []string, err error) {
+// repairEpisode makes the clip writes, the deletions and the skips for one
+// episode. A clip is deleted only when the whole served file was transcribed
+// completely and its quote is not in it; a quote missed in the window around
+// the stored place gets one search of the whole file (a second download), and
+// any failure leaves the clip as it is.
+func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []HeldClip) (puts []ClipIn, putIDs, gone, skipped []string, err error) {
 	segs, err := r.B.Transcript(ctx, e.FeedURL, e.GUID)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("stored transcript: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("stored transcript: %w", err)
 	}
 	// Where each clip's quote begins in the stored transcript: the start of the
 	// segment holding it (a segment starts at its first word).
@@ -227,11 +257,27 @@ func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []Hel
 	spans := mergeSpans(items, func(i int) Span { return items[i].span })
 	file, audio, err := r.Eng.Windows(ctx, e.EnclosureURL, spans)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if len(audio) != len(spans) {
-		return nil, nil, nil, fmt.Errorf("engine returned %d spans for %d", len(audio), len(spans))
+		return nil, nil, nil, nil, fmt.Errorf("engine returned %d spans for %d", len(audio), len(spans))
 	}
+	// place fingerprints a clip whose quote was heard at time at in sa.
+	place := func(it item, sa *SpanAudio, file podcastfp.FileInfo, at, score float64) {
+		offset := at - it.oldAt
+		start, end := it.h.Start+offset, it.h.End+offset
+		rec, cerr := podcastfp.Cut(sa.Track, sa.T0, start, end, file)
+		if cerr != nil {
+			// Not evidence that the quote is gone: the clip stays as it is.
+			r.logf("podcast-worker repair: clip %s left as it is: its quote is found %+.1f s from where it was, but it cannot be fingerprinted there: %v", it.h.ClipID, offset, cerr)
+			skipped = append(skipped, it.h.ClipID)
+			return
+		}
+		r.logf("podcast-worker repair: clip %s: quote found %+.1f s from its stored place (match %.2f), fingerprinted at %.1f-%.1f s", it.h.ClipID, offset, score, start, end)
+		puts = append(puts, ClipIn{StoryRoute: it.h.Route, EpisodeID: e.EpisodeID, Start: it.h.Start, End: it.h.End, Quote: it.h.Quote, Support: it.h.Support, Fingerprint: rec})
+		putIDs = append(putIDs, it.h.ClipID)
+	}
+	var missed []item
 	for _, it := range items {
 		var sa *SpanAudio
 		for i := range spans {
@@ -241,28 +287,45 @@ func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []Hel
 			}
 		}
 		if sa == nil {
-			return nil, nil, nil, errors.New("a clip fits none of the spans")
+			return nil, nil, nil, nil, errors.New("a clip fits none of the spans")
 		}
 		at, score := FindQuote(sa.Words, it.h.Quote, it.oldAt)
 		if score < QuoteFoundScore {
-			r.logf("podcast-worker repair: clip %s deleted: its quote %q is not in the episode as served now (best match %.2f of %.2f needed; story %s, stored %.0f-%.0f s, searched %.0f-%.0f s): the episode was edited",
-				it.h.ClipID, truncateRunes(it.h.Quote, 60), score, QuoteFoundScore, it.h.Route, it.h.Start, it.h.End, sa.T0, sa.T0+float64(len(sa.Track)/podcastfp.Bands)/podcastfp.FPS)
-			gone = append(gone, it.h.ClipID)
+			missed = append(missed, it)
 			continue
 		}
-		offset := at - it.oldAt
-		start, end := it.h.Start+offset, it.h.End+offset
-		rec, cerr := podcastfp.Cut(sa.Track, sa.T0, start, end, file)
-		if cerr != nil {
-			r.logf("podcast-worker repair: clip %s deleted: its quote is found %+.1f s from where it was, and the clip then runs past the audio: %v", it.h.ClipID, offset, cerr)
-			gone = append(gone, it.h.ClipID)
-			continue
-		}
-		r.logf("podcast-worker repair: clip %s: quote found %+.1f s from its stored place (match %.2f), fingerprinted at %.1f-%.1f s", it.h.ClipID, offset, score, start, end)
-		puts = append(puts, ClipIn{StoryRoute: it.h.Route, EpisodeID: e.EpisodeID, Start: it.h.Start, End: it.h.End, Quote: it.h.Quote, Support: it.h.Support, Fingerprint: rec})
-		putIDs = append(putIDs, it.h.ClipID)
+		place(it, sa, file, at, score)
 	}
-	return puts, putIDs, gone, nil
+	if len(missed) == 0 {
+		return puts, putIDs, gone, skipped, nil
+	}
+	file2, whole, werr := r.Eng.Windows(ctx, e.EnclosureURL, []Span{{}})
+	if werr != nil || len(whole) != 1 {
+		if ctx.Err() != nil {
+			return nil, nil, nil, nil, ctx.Err()
+		}
+		r.logf("podcast-worker repair: episode %s: %d clips not found near their stored place and the whole file could not be searched (%v); left as they are", e.EpisodeID, len(missed), werr)
+		for _, it := range missed {
+			skipped = append(skipped, it.h.ClipID)
+		}
+		return puts, putIDs, gone, skipped, nil
+	}
+	sa := &whole[0]
+	for _, it := range missed {
+		at, score := FindQuote(sa.Words, it.h.Quote, it.oldAt)
+		switch {
+		case score >= QuoteFoundScore:
+			place(it, sa, file2, at, score)
+		case sa.Complete:
+			r.logf("podcast-worker repair: clip %s deleted: its quote %q is not anywhere in the %.0f s of the episode as served now (best match %.2f of %.2f needed; story %s, stored %.0f-%.0f s): the episode was edited",
+				it.h.ClipID, truncateRunes(it.h.Quote, 60), file2.Seconds, score, QuoteFoundScore, it.h.Route, it.h.Start, it.h.End)
+			gone = append(gone, it.h.ClipID)
+		default:
+			r.logf("podcast-worker repair: clip %s left as it is: its quote is not in the audio transcribed, which did not cover the whole file", it.h.ClipID)
+			skipped = append(skipped, it.h.ClipID)
+		}
+	}
+	return puts, putIDs, gone, skipped, nil
 }
 
 func mergeSpans[T any](items []T, span func(i int) Span) []Span {
@@ -282,14 +345,35 @@ func mergeSpans[T any](items []T, span func(i int) Span) []Span {
 	return out
 }
 
+// quoteStart is where the clip's quote begins in the stored transcript: the
+// start of the segment holding its first word, found over the clip's segments
+// joined (a quote may run across two).
 func quoteStart(segs []Segment, h HeldClip) float64 {
 	quote := strings.Join(strings.Fields(h.Quote), " ")
+	var joined strings.Builder
+	var starts []int
+	var times []float64
 	for _, s := range segs {
-		if s.End > h.Start-0.5 && s.Start < h.End+0.5 && strings.Contains(strings.Join(strings.Fields(s.Text), " "), quote) {
-			return s.Start
+		if s.End > h.Start-0.5 && s.Start < h.End+0.5 {
+			if joined.Len() > 0 {
+				joined.WriteByte(' ')
+			}
+			starts = append(starts, joined.Len())
+			times = append(times, s.Start)
+			joined.WriteString(strings.Join(strings.Fields(s.Text), " "))
 		}
 	}
-	return h.Start
+	idx := strings.Index(joined.String(), quote)
+	if idx < 0 || quote == "" {
+		return h.Start
+	}
+	at := h.Start
+	for i, off := range starts {
+		if off <= idx {
+			at = times[i]
+		}
+	}
+	return at
 }
 
 func truncateRunes(s string, n int) string {
@@ -323,8 +407,11 @@ func (t *Transcriber) Windows(ctx context.Context, enclosureURL string, spans []
 	var out []SpanAudio
 	for i, sp := range spans {
 		wav := fmt.Sprintf("%s/span%d.wav", dir, i)
-		args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-protocol_whitelist", "file", "-ss", fmt.Sprint(sp.T0), "-t", fmt.Sprint(sp.T1 - sp.T0),
-			"-i", src, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav}
+		args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-protocol_whitelist", "file", "-ss", fmt.Sprint(sp.T0)}
+		if sp.T1 > 0 {
+			args = append(args, "-t", fmt.Sprint(sp.T1-sp.T0))
+		}
+		args = append(args, "-i", src, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav)
 		if o, err := exec.CommandContext(ctx, t.FFmpeg, args...).CombinedOutput(); err != nil {
 			return file, nil, fmt.Errorf("ffmpeg: %v: %s", err, tail(o))
 		}
@@ -341,7 +428,8 @@ func (t *Transcriber) Windows(ctx context.Context, enclosureURL string, spans []
 		for j, w := range parsed.Words {
 			words[j] = Word{W: w.W, Start: w.Start + sp.T0, End: w.End + sp.T0}
 		}
-		out = append(out, SpanAudio{T0: sp.T0, Words: words, Track: track})
+		complete := sp.T0 == 0 && sp.T1 == 0 && file.Seconds > 0 && float64(len(track)/podcastfp.Bands)/podcastfp.FPS >= file.Seconds-3
+		out = append(out, SpanAudio{T0: sp.T0, Words: words, Track: track, Complete: complete})
 	}
 	return file, out, nil
 }

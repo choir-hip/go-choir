@@ -36,12 +36,17 @@ type ClipRecord struct {
 // seconds of the file (t0 is a whole number of seconds, so frames fall on the
 // 0.1 s grid). The head is the clip's first min(12 s, length) from
 // round(start*10), the tail the last as many frames ending at round(end*10).
+// A clip under 24 s is refused: its head and tail would overlap.
 func Cut(track []byte, t0, start, end float64, file FileInfo) (*ClipRecord, error) {
 	total := len(track) / Bands
 	f0 := int(math.Round((start - t0) * FPS))
 	f1 := int(math.Round((end - t0) * FPS))
-	n := min(ClipFrames, f1-f0)
-	if n < 10 || f0 < 0 || f1 > total {
+	n := f1 - f0
+	if n < 2*ClipFrames {
+		return nil, fmt.Errorf("podcastfp: clip %.1f-%.1f s is shorter than %d s: its head and tail would overlap, and an ad inside it could not be seen", start, end, 2*ClipFrames/FPS)
+	}
+	n = ClipFrames
+	if f0 < 0 || f1 > total {
 		return nil, fmt.Errorf("podcastfp: clip %.1f-%.1f s is outside the %.1f s of track starting at %.1f s", start, end, float64(total)/FPS, t0)
 	}
 	head, err := Pack(track[f0*Bands : (f0+n)*Bands])
@@ -67,20 +72,27 @@ func (r *ClipRecord) Validate() error {
 	if r.Version != Version {
 		return fmt.Errorf("fingerprint version %d is not %d", r.Version, Version)
 	}
-	for name, p := range map[string][]byte{"head": r.Head, "tail": r.Tail} {
-		if len(p) > MaxPackedBytes {
-			return fmt.Errorf("fingerprint %s is over %d bytes", name, MaxPackedBytes)
+	for _, f := range []struct {
+		name string
+		p    []byte
+	}{{"head", r.Head}, {"tail", r.Tail}} {
+		frames, err := Unpack(f.p)
+		if err != nil {
+			return fmt.Errorf("fingerprint %s: %w", f.name, err)
 		}
-		if _, err := Unpack(p); err != nil {
-			return fmt.Errorf("fingerprint %s: %w", name, err)
+		if len(frames)/Bands != ClipFrames {
+			return fmt.Errorf("fingerprint %s has %d frames, not %d", f.name, len(frames)/Bands, ClipFrames)
 		}
 	}
-	for name, v := range map[string]float64{"head_at": r.HeadAt, "tail_at": r.TailAt, "start": r.Start, "end": r.End, "file_seconds": r.Seconds} {
-		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 24*3600 {
-			return fmt.Errorf("fingerprint %s is not a time in a day", name)
+	for _, f := range []struct {
+		name string
+		v    float64
+	}{{"head_at", r.HeadAt}, {"tail_at", r.TailAt}, {"start", r.Start}, {"end", r.End}, {"file_seconds", r.Seconds}} {
+		if math.IsNaN(f.v) || math.IsInf(f.v, 0) || f.v < 0 || f.v > 24*3600 {
+			return fmt.Errorf("fingerprint %s is not a time in a day", f.name)
 		}
 	}
-	if r.End <= r.Start || r.TailAt < r.HeadAt {
+	if r.End-r.Start < 2*ClipFrames/FPS || r.TailAt < r.HeadAt+ClipFrames/FPS {
 		return errors.New("fingerprint times are out of order")
 	}
 	if r.Bytes < 0 || r.FirstFrameOffset < 0 || r.BitrateKbps < 0 || r.BitrateKbps > 640 || r.FirstFrameOffset > r.Bytes && r.Bytes > 0 {

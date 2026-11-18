@@ -73,6 +73,7 @@ type Matcher struct {
 		Load(episodeID string) (*Track, error)
 	}
 
+	downgraded  bool // the fingerprint downgrade was logged this process
 	state       *matchState
 	transcripts map[string][]podcastmatch.Segment
 }
@@ -371,7 +372,7 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	if m.DryRun {
 		rep.WouldWrite = len(fresh)
 	} else if len(fresh) > 0 {
-		errs := m.B.PutClipsEach(ctx, fresh)
+		errs := m.putClips(ctx, fresh)
 		for i, err := range errs {
 			switch {
 			case err == nil:
@@ -400,6 +401,31 @@ func (m *Matcher) Run(ctx context.Context) (MatchReport, error) {
 	m.save()
 	done()
 	return rep, nil
+}
+
+// putClips writes clips. A platform that does not know the fingerprint field
+// refuses the whole clip; such a clip is sent once more without it (and the
+// slice entry is changed to match), so it is stored unfingerprinted (the
+// repair pass upgrades it) and not lost.
+func (m *Matcher) putClips(ctx context.Context, fresh []ClipIn) []error {
+	errs := m.B.PutClipsEach(ctx, fresh)
+	for i, err := range errs {
+		if err == nil || !IsRefusal(err) || fresh[i].Fingerprint == nil {
+			continue
+		}
+		plain := fresh[i]
+		plain.Fingerprint = nil
+		retry := m.B.PutClipsEach(ctx, []ClipIn{plain})
+		if len(retry) != 1 {
+			continue
+		}
+		if retry[0] == nil && !m.downgraded {
+			m.downgraded = true
+			m.logf("podcast-worker match: the platform refused a clip with a fingerprint and took it without one; is the platform older than the worker? (logged once)")
+		}
+		errs[i], fresh[i] = retry[0], plain
+	}
+	return errs
 }
 
 // fingerprint cuts a clip's fingerprint from the episode's kept track, or nil.
