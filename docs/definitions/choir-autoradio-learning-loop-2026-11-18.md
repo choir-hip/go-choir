@@ -242,7 +242,7 @@ owner_rulings:
     read_as: "no Android work before the owner's 05:45 check-in; until then the iPhone build comes first; Android building happens while the owner is out"
 
 now:
-  status: working
+  status: checkpoint_incomplete
   slice: "L1 to L3 (settlement) are landed, deployed and proven on d@e, with a follow-up; L7's server (takes) is landed, deployed and proven on d@e (ce719fe1a); L4 and L5 (the notebook) are on lane/learn-notebook in a repair round after both seats returned REPAIR; the phone build lane/autoradio-integ19 (014d71f7f) is installed on the owner's phone, unlaunched, and none of the phone lanes are on main"
   source_ref: "origin/main at the commit that carries this file"
   deploy_identity: "staging ce719fe1a at 2026-11-18T10:13Z"
@@ -274,7 +274,7 @@ now:
     main_uncertainty: "whether the phone's posted ops settle forecasts for a real listener as they do for the proof script, and whether a recording made by the phone passes the server's audio check"
     next_observation: "the owner's first listening session on integ19: the scorecard route on the owner's computer before and after (read only)"
   blocker_or_risk: "the phone lanes (about 150 commits) are not on main and were first reviewed on 2026-11-18 (docs/problems/autoradio-phone-code-unreviewed-for-three-days-2026-11-18.md); TestFlight needs the owner's paid team (D3); nothing about sound has been checked on the device"
-  next_action: "re-review and land lane/learn-notebook; merge the phone lanes into main; the Android experiment (L10) after the owner's 05:45 check-in"
+  next_action: "none here. Mission incomplete; checkpoint landed. The owner cleared this goal on 2026-11-18 and opened docs/definitions/choir-autoradio-exact-cutover-2026-11-18.md, which carries the open work: K1 (the iPhone repairs), K2 (the notebook, stations L4 and L5), K3 (the phone work onto main). L8 (trust), L9 (TestFlight) and L10 (Android, now the cutover itself) are not done. Conjecture K1 (ledger C120) stays open."
 
 receipts:
   - station: L1-L3

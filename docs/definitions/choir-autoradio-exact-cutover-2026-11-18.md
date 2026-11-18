@@ -241,7 +241,7 @@ stations:
 
 decisions_for_the_owner:
   - id: D1
-    question: Is the order right: the paper page, then sign-in and the client, then the run sheet and the radio, then background play, then the other pages in parallel?
+    question: "Is the order right: the paper page, then sign-in and the client, then the run sheet and the radio, then background play, then the other pages in parallel?"
     why: it decides when Android first shows real data (after X2), when it first plays (after X4) and how long the owner's iPhone carries two kinds of code
     options: as stated; the radio first with the system voice and sign-in after; sign-in first
     default: as stated
