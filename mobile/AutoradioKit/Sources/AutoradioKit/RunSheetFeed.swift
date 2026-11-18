@@ -154,6 +154,8 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
     public var onNotice: ((String?) -> Void)?
     /// Told when a write starts and ends (the host shows "the desk is writing what comes next").
     public var onWriting: ((Bool) -> Void)?
+    /// Told when an ask has ended and the writer is idle (not on `stop`: a sign-out is not an idle writer).
+    public var onIdle: (() -> Void)?
     /// True when the last ask returned nothing new (a repeat, or nothing), and no ask is in flight: only then is "nothing is coming" true.
     public private(set) var dry = false
     public var onDry: ((Bool) -> Void)?
@@ -248,11 +250,13 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
             if added > 0 { self.quietOn = nil; self.setNotice(nil) }
             else {
                 // An answer the player dropped is not "the desk has nothing more": it must not hold back the next extend.
-                if dropped == 0 { self.quietOn = airId }
+                // Only a dropped OPENING (an `open` ask) is not "the desk has nothing more"; a repeat dropped from an extend is exactly that.
+                if !(cause == "open" && dropped > 0) { self.quietOn = airId }
                 // The desk answered but everything it wrote is already on the sheet (a repeat): that is not a failure.
                 if received > 0 && failure == nil { self.setNotice(nil) }
                 else if failure != nil || cause == "open" { self.setNotice(self.noticeWords(failure)) }
             }
+            defer { self.onIdle?() }
             if added > 0 { self.checkAhead() }
             else if failure != nil, let fill = self.offlineFill, self.store.ahead(limit: Int.max).filter({ $0.kind != .transition }).count < 2 {
                 for e in fill() { self.store.place(e, at: .end, by: .phone, reason: "the desk could not be reached: a story held on this phone") }

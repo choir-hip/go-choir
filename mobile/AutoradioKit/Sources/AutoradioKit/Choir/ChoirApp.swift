@@ -189,10 +189,9 @@ public final class ChoirApp: @unchecked Sendable {
             w.admit = { op, cause in RunSheetPlayer.shared.admitDesk(op, cause: cause) }
             w.onNotice = { n in RunSheetPlayer.shared.deskNotice = n }
             w.onDry = { d in RunSheetPlayer.shared.deskDry = d }
-            w.onWriting = { [weak me] on in
-                RunSheetPlayer.shared.deskWriting = on
-                if !on { Task { @MainActor in await me?.writeAhead?.writerIdle() } }          // a refused write-ahead runs now; a missing kept first entry is kept
-            }
+            w.onWriting = { on in RunSheetPlayer.shared.deskWriting = on }
+            // An ask ended (never sign-out's stop): a refused write-ahead runs now; a missing kept first entry is kept.
+            w.onIdle = { [weak me] in Task { @MainActor in await me?.writeAhead?.writerIdle() } }
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
             RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
@@ -422,7 +421,15 @@ public final class ChoirApp: @unchecked Sendable {
     /// own the desk is asked to `extend` (the stretch is written while the opening plays). `open` is asked only when a kept first entry
     /// starts the radio: the desk's opening then follows it as a transition.
     @MainActor static func placeLaunch(plan: OpeningPlan, lines: [PhoneOpening.Line], player p: RunSheetPlayer, store: RunSheetStore, writer: RunSheetWriter?) {
-        @MainActor func fresh(_ e: RunSheetEntry) -> RunSheetEntry? { var x = e; x.state = .ahead; x.ended = nil; return store.entry(x.id) == nil ? x : nil }
+        // A restored sheet still holds the id of a kept entry. Ahead: the copy is stale and `open` removes it, the kept one plays. On air, heard or
+        // skipped: the listener has had it, never replay it (the phone's opening plays; the reason is logged).
+        @MainActor func fresh(_ e: RunSheetEntry) -> RunSheetEntry? {
+            var x = e; x.state = .ahead; x.ended = nil
+            guard let have = store.entry(x.id) else { return x }
+            if have.state == .ahead { return x }
+            print("AUTORADIO kept first entry not played: its copy on the sheet is \(have.state.rawValue)")
+            return nil
+        }
         switch plan {
         case .opening(let o, let next):
             var o = o; o.placedBy = .phone; o.state = .ahead; o.ended = nil

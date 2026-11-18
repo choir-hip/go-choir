@@ -57,6 +57,8 @@ public final class OpeningCache: @unchecked Sendable {
     private let lock = NSLock()
     private var held: [String: PreparedAudio] = [:]
 
+    /// The server's forecast lapse (internal/calibration AutoradioLapse).
+    static let forecastLapse: TimeInterval = 12 * 3600
     public static let defaultBound: TimeInterval = 2 * 3600
     public static let defaultEntryBound: TimeInterval = 36 * 3600
     public static let defaultMaxBytes = 6_000_000
@@ -159,7 +161,15 @@ public final class OpeningCache: @unchecked Sendable {
         guard let r = load(), r.voice == voice else { return .none }
         let now = clock()
         func young(_ c: CachedEntry, _ b: TimeInterval) -> Bool { let age = now.timeIntervalSince(c.writtenAt); return age >= 0 && age <= b }
-        let next = r.first.flatMap { young($0, entryBound) ? $0.entry : nil }
+        // A forecast lapses 12 hours after its stretch starts (the server: calibration AutoradioLapse): a kept story older than that is played
+        // without its claim, so replaying yesterday's samples never settles a lapsed claim as heard. The server's own copy, when it still has
+        // the id, answers the phone's place as a duplicate and ends under its own rule (`late`, no verdict).
+        let next = r.first.flatMap { c -> RunSheetEntry? in
+            guard young(c, entryBound) else { return nil }
+            var e = c.entry
+            if now.timeIntervalSince(c.writtenAt) >= Self.forecastLapse { e.forecast = nil }
+            return e
+        }
         if let o = r.opening, young(o, bound), dayPart(o.writtenAt) == dayPart(now) {
             // The clock is read now, at the moment the app opens, never at write time (Moment.swift).
             var e = o.entry
@@ -290,6 +300,7 @@ public final class LaunchTimings: @unchecked Sendable {
         sink("AUTORADIO launch engine_ms=\(value("engine")) session_ms=\(value("session")) sheet_ms=\(value("sheet")) request_ms=\(value("request")) first_segment_ms=\(value("first_segment")) voice_load_ms=\(value("voice_load")) synth_ms=\(value("synth")) first_audio_ms=\(first) source=\(source) play_ms=\(play) since_play_ms=\(sincePlay)")
     }
     /// The radio opens: every mark is milliseconds from here, not from the process (a host process can be hours old).
-    public func begin() { lock.lock(); start = clock(); marks = [:]; printed = false; lock.unlock() }
-    public func reset() { lock.lock(); marks = [:]; printed = false; lock.unlock() }
+    public func begin() { lock.lock(); defer { lock.unlock() }; guard !begun else { return }; begun = true; start = clock() }
+    private var begun = false
+    public func reset() { lock.lock(); marks = [:]; printed = false; begun = false; lock.unlock() }
 }

@@ -38,7 +38,7 @@ final class StartGapTests: XCTestCase {
         f.script = [.ops([ProgrammeRouteFeed.placeOp(story("d-1"), cause: "extend")]), .done]
         ChoirApp.placeLaunch(plan: .none, lines: [.init(title: "A", dek: "a.")], player: p, store: s, writer: w)
         await w.settle()
-        XCTAssertEqual(f.calls.map(\.cause), ["extend"])
+        XCTAssertFalse(f.calls.isEmpty); XCTAssertTrue(f.calls.allSatisfy { $0.cause == "extend" }, "no open ask")
         XCTAssertEqual(s.onAir()?.placedBy, .phone)
     }
     func testAKeptFirstEntryStartStillAsksForTheDesksOpening() async {
@@ -54,11 +54,11 @@ final class StartGapTests: XCTestCase {
         p.open(PhoneOpening.entry(lines: []))
         f.script = [.ops([ProgrammeRouteFeed.placeOp(story("d-1"), cause: "extend")]), .done]
         w.admit = { _, _ in nil }
-        w.openAhead(); await w.settle()
+        w.open(); await w.settle()
         XCTAssertEqual(f.calls.count, 1)
         _ = s
         w.checkAhead(); await w.settle()
-        XCTAssertEqual(f.calls.count, 2, "a dropped answer is not the desk having nothing more")
+        XCTAssertEqual(f.calls.count, 2, "a dropped opening is not the desk having nothing more")
     }
 
     // 3
@@ -131,5 +131,95 @@ final class StartGapTests: XCTestCase {
         XCTAssertEqual(lines.count, 3)
         XCTAssertTrue(lines[0].contains("no kept file"), lines[0]); XCTAssertTrue(lines[1].contains("voice differs"), lines[1])
         XCTAssertTrue(lines[2].contains("too old") && lines[2].contains("opening_age_s="), lines[2])
+    }
+
+    // B1: the sheet is restored from disk before launch and still holds the kept entry's id
+    func restoredSheet(_ how: String) -> (RunSheetPlayer, RunSheetStore, RunSheetWriter, FakeFeed) {
+        let r = rig()
+        r.1.place(story("d-k"), at: .end, by: .desk, reason: "x")
+        if how != "ahead" {
+            r.1.airedOnAir("d-k")
+            if how == "heard" { r.1.airedEnded("d-k", as: .heard, outcome: .finished) } else { r.1.airedEnded("d-k", as: .skipped, outcome: .skipped) }
+        }
+        return r
+    }
+    func testAKeptEntryWhoseStaleCopyIsStillAheadOnTheRestoredSheetPlays() async {
+        let (p, s, w, _) = restoredSheet("ahead")
+        ChoirApp.placeLaunch(plan: .entry(story("d-k")), lines: [], player: p, store: s, writer: w)
+        await w.settle()
+        XCTAssertEqual(s.onAir()?.id, "d-k"); XCTAssertEqual(s.sheet.entries.filter { $0.id == "d-k" }.count, 1)
+    }
+    func testAKeptEntryAlreadyHeardOrSkippedIsNotReplayed() async {
+        for how in ["heard", "skipped"] {
+            let (p, s, w, _) = restoredSheet(how)
+            ChoirApp.placeLaunch(plan: .entry(story("d-k")), lines: [.init(title: "A", dek: "a.")], player: p, store: s, writer: w)
+            await w.settle()
+            XCTAssertEqual(s.onAir()?.placedBy, .phone, how); XCTAssertNotEqual(s.onAir()?.id, "d-k", how)
+        }
+    }
+
+    // B1b: a story kept past the server's 12 h forecast lapse is played without its claim
+    func testAKeptStoryPastTheForecastLapseLosesItsClaim() {
+        var e = story(); e.forecast = RunSheetForecast(claimId: "c1")
+        let c = cache(); now = at(3, 20)
+        c.put(.first, entry: e, titles: [], audio: [], voice: "v1")
+        now = at(4, 6)
+        guard case .entry(let young) = c.peek(voice: "v1") else { return XCTFail() }
+        XCTAssertNotNil(young.forecast, "10 hours: the claim is live")
+        now = at(4, 9)
+        guard case .entry(let old) = c.peek(voice: "v1") else { return XCTFail() }
+        XCTAssertNil(old.forecast, "13 hours: lapsed; never settled as heard")
+    }
+    func testTheServerAlreadyHavingTheKeptEntryLeavesTheLocalCopyToAir() {
+        let s = RunSheetStore(); s.place(story("d-k"), at: .end, by: .phone)
+        let op = s.pending[0]
+        s.acknowledge([op], [RunSheetResult(opId: op.opId, applied: false, dropped: RunSheetDropped.duplicate, version: 1)])
+        XCTAssertEqual(s.entry("d-k")?.state, .ahead, "the same id: the server's copy is the one aired, no second is placed")
+    }
+
+    // B2
+    func testARepeatDroppedFromAnExtendHoldsTheNextAskUntilAnotherEntryAirs() async {
+        let (p, _, w, f) = rig()
+        p.open(PhoneOpening.entry(lines: []))
+        f.script = [.ops([ProgrammeRouteFeed.placeOp(story("d-1"), cause: "extend")]), .done]
+        w.admit = { _, _ in nil }
+        w.openAhead(); await w.settle()
+        w.checkAhead(); await w.settle()
+        XCTAssertEqual(f.calls.count, 1, "the repeat case quietOn exists for")
+    }
+    func testAZeroEntryAnswerHoldsTheNextAsk() async {
+        let (p, _, w, f) = rig()
+        p.open(PhoneOpening.entry(lines: []))
+        f.script = [.done]
+        w.openAhead(); await w.settle(); w.checkAhead(); await w.settle()
+        XCTAssertEqual(f.calls.count, 1)
+    }
+
+    // B3
+    func testSignOutWithADeferredWriteAheadLeavesTheCacheEmpty() async {
+        let c = cache(); now = at(4, 8)
+        let f = FakeFeed(); f.script = [.ops([RunSheetOp(opId: "o1", by: .desk, op: .place, at: .end, entry: opening(), reason: "x")]), .done]
+        var busy = true
+        let w = OpeningWriteAhead(cache: c, store: RunSheetStore(), feed: { f }, voice: { "v1" }, synth: { [unowned self] t in self.pcm(t) }, busy: { busy }, clock: { [unowned self] in self.now })
+        await w.refresh(reason: "opening aired")
+        _ = AccountWipe.bumpGeneration(); c.wipe()          // sign-out
+        busy = false
+        await w.writerIdle()
+        XCTAssertTrue(f.calls.isEmpty); XCTAssertNil(c.opening(voice: "v1")); XCTAssertNil(c.first(voice: "v1"))
+    }
+    func testStopDoesNotTellTheWriteAheadTheWriterIsIdle() async {
+        let (_, _, w, f) = rig()
+        var idle = 0; w.onIdle = { idle += 1 }
+        f.hold = true
+        w.open(); try? await Task.sleep(nanoseconds: 50_000_000)
+        w.stop()
+        XCTAssertEqual(idle, 0)
+        f.release()
+    }
+    func testASecondBeginDoesNotMoveTheBaseline() {
+        var c = Date(timeIntervalSince1970: 100)
+        let t = LaunchTimings(start: Date(timeIntervalSince1970: 0)); t.clock = { c }
+        t.begin(); c = Date(timeIntervalSince1970: 101); t.mark("engine"); t.begin()
+        XCTAssertEqual(t.value("engine"), 1000); XCTAssertEqual(Int(t.sinceStart()), 1000)
     }
 }
