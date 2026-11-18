@@ -42,9 +42,9 @@ not set its version from a `results[].version` that is below its own.
 ## Dropped reasons
 
 The reducer's, returned as they are: `duplicate`, `not_ahead`, `not_on_air`,
-`not_phone`, `bad_transition`, `other_on_air`, `unknown_id`, `stale_version`,
+`not_phone`, `bad_transition`, `unknown_id`, `stale_version`,
 `no_previous`, `duplicate_id`, `reason_required`, `invalid`, `ahead_full`
-(from `previous`, see below). The route adds:
+(from `previous`, see below). `other_on_air` is retired: see "Takeover" below. The route adds:
 
 | Reason | When |
 |---|---|
@@ -249,7 +249,9 @@ that moves an entry from `on_air` to `heard` or `skipped` (an `aired`, a
 `skip`, or a `place`/`move` at `now` that cuts it), and the entry is
 desk-placed and carries a claim id, `settleEnded`
 (`internal/agentcore/api_autoradio_settle.go`) acts before the op record is
-appended. The settler is this path on the listener's device-keyed op; the
+appended. The settler is this path acting on an op the owner's authenticated session
+posted with `by: phone` (that is all that is checked: the sheet route cannot
+tell the app from any other client of the owner's session); the
 programme route has no path to it (`TestF41`). The rule reads
 `ended.outcome` as the reducer stored it, never the entry `state` (a `left`
 entry has state `heard`):
@@ -258,7 +260,7 @@ entry has state `heard`):
 |---|---|
 | `finished` | settled true (heard through) |
 | `skipped`, `cut` | settled false |
-| `left`, `failed` | no verdict: an `autoradio.no_verdict` record, nothing settled |
+| `left`, `failed` | no verdict: an `autoradio.no_verdict` record, nothing settled (a `left` ending is stored with entry state `heard`) |
 | none (crash, app killed) | no op, nothing written; the forecast stays open and lapses at its deadline |
 
 - **Heard through** is `finished`: the phone's end-of-entry report. The
@@ -274,9 +276,26 @@ entry has state `heard`):
 - **Late:** an op whose own time is after the claim's deadline (stretch start
   plus 12 h) is recorded as `no_verdict` reason `late` and settles nothing.
   An offline phone that delivers early-timed ops later settles on arrival.
+  **The deadline is judged on the op's own time**, `ended.at`: not on its
+  arrival and not before the claim was made. The time is the listener's own
+  device's word, so the listener's device can backdate it; that is allowed
+  (the listener's world is theirs, and a settlement can only be what they say).
+  The server bounds the reach: `ended.at` earlier than arrival minus 7 days is
+  taken as arrival minus 7 days (`TestL11`); an `ended.at` later than arrival
+  is taken as arrival. An op with no `ended.at` is judged at arrival.
+- **Cut is false at once and stays false.** `cut` (the entry on air replaced
+  by a `place` or `move` at `now`) settles false the moment it is applied.
+  If the listener later steps `previous` and hears the entry through, the
+  settlement does not change: a settlement never changes. This is a known bias
+  against the DJ (owner's default rule: cut in on = not heard). The same holds
+  for `left`: it records no verdict at once, and a `left` entry that the
+  listener restores with `previous` and finishes later settles true, since no
+  settlement stood in its way (the no-verdict record stays on the tape; the
+  ledger row shows the settlement).
 - **No verdict record:** kind `autoradio.no_verdict`, id
   `<claim id>:noverdict:<op id>`, owner-private notice; subject refs `claim_id`,
-  `op_id`, `entry_id`, `reason` (`left`, `failed`, `late`), `outcome` (what the
+  `op_id`, `entry_id`, `reason` (`left`, `failed`, `late`, `superseded`,
+  `refused`, `unplaced`), `outcome` (what the
   op said), `last_block`, `position_seconds`; body the same as JSON with
   `position_source` (`op` or `sheet`) and `ended_at`.
 - **Order:** the settlement is written before the op record, so a failed
@@ -284,8 +303,33 @@ entry has state `heard`):
   from the tape, can never need one. A tape failure fails the op unacknowledged
   as any append failure does. Replay at boot reads and settles nothing.
 - A claim id on an entry that is not that segment's own entry (`seg:` tag
-  against `d-<segment>`), or on an entry not placed by the desk, settles
-  nothing (`TestL7`).
+  against `d-<segment>`) settles nothing and is recorded as no verdict
+  `refused`, as is a settlement the rule refuses to validate or a claim that
+  cannot be read (`TestL7`, `TestL12`). An entry not placed by the desk is not
+  a forecast entry and writes nothing.
+- **`unplaced`:** when the programme route cannot put a content segment's
+  entry on the sheet (the ahead list is full, a failed append), no op can ever
+  end it; the route writes a no-verdict record for its claim, reason
+  `unplaced` (op id `unplaced`). It is a notice, not an outcome: the route
+  still never settles (`TestL12`).
+
+**Takeover (a lost end op).** An `aired on_air` by the phone for entry B while
+entry A is on air no longer drops `other_on_air`: the reducer first closes A
+as `heard` with `ended {outcome: left, at: "", last_block: 0}` (nothing is
+claimed about when or how far), then puts B on air. Without it a killed app
+leaves A on air for ever and every later end op drops as `bad_transition`.
+The settle path sees an op that ended an entry other than its own target
+and records A as no verdict, reason `superseded`; B settles on its own end
+op. Both orders work: A closed `failed` by the phone on relaunch then B on
+air (A: no verdict `failed`), or B on air with A still on air (A:
+`superseded`). A replay changes nothing (`TestL10`). **Swift reducer:** in
+`aired`, when the target is `ahead`, the new state is `on_air` and another
+entry is `on_air`, set that entry to `heard` with `ended = {outcome: left,
+at: "", last_block: 0}` and clear `on_air`, then continue as for a free slot,
+instead of returning `other_on_air`. The shared fixtures: `19_aired_lifecycle`
+no longer holds the `other_on_air` op, and
+`34_aired_on_air_takes_over_a_stale_on_air_entry` is new; the Swift tests read
+both.
 
 **Learning route.** `GET /api/autoradio/learning?limit=<1..200, default 50>&after=<claim id>`,
 authenticated as the sheet's routes are, read only. Answer
@@ -300,7 +344,8 @@ forecast first: `claim_id`, `stretch_id`, `segment_id`, `entry_id`, `kind`,
 `brier`, `settled_at`, `no_verdict_reason`, and `op` (`op_id`, `by`,
 `outcome`, `last_block`, `ended_at`, `position_seconds`, `version`) read from
 the op's tape record. It reads every forecast of the computer by cursor, at
-most 200,000 records (`truncated` says so) and at most 5,000 no-verdict
-records. It does not yet list turns, segments' text or the ops themselves
+most 200,000 records and at most 5,000 no-verdict records (`truncated` says
+if either bound was hit). An `after` that is not a forecast of the listener is
+a `400`. It does not yet list turns, segments' text or the ops themselves
 beyond the settling op (the design's wider ledger route).
 Proof: `scripts/prove-autoradio-learning`.

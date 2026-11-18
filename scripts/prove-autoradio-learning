@@ -2,12 +2,16 @@
 """Proof: do the listener's ops settle the DJ's forecasts, once, by rule?
 
 On the drill computer (d@e) only. Opens a programme and extends it until at
-least six forecast-bearing entries exist (each is on the server's run sheet:
+least nine forecast-bearing entries exist (each is on the server's run sheet:
 the segment event names its entry_id and claim_id), then posts ops as a phone
-would: finish three entries, skip two, leave one (ended.outcome "left", entry
-state "heard"). Reads GET /api/autoradio/learning and asserts, for those six
-forecasts: three settled true, two settled false, one no verdict (and no
-settlement). Then posts the same ops again and asserts nothing was settled
+would: finish two, finish one with the op's own time set 30 days back (the
+server bounds it at seven days, so it still settles), skip two, cut one
+(state skipped, outcome cut), leave one (outcome "left", entry state "heard"),
+and, NOT back to back, put one entry on air and then another before the first
+one's end op (the app was killed): the first is closed as no verdict
+(superseded), the second finishes. Reads GET /api/autoradio/learning and
+asserts for those nine forecasts: seven settled (four true, three false) and
+two no verdict. Then posts the same ops again and asserts nothing was settled
 twice (the scorecard's settled count and every row are unchanged). Prints the
 ledger rows. Exit 0 when all hold, 1 otherwise, 2 on bad arguments.
 
@@ -24,7 +28,7 @@ import http.client
 import json
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 STORIES = [
     ("harbour-reopens", "Harbour reopens", "Repairs to the harbour wall are finished and ferries sail again."),
@@ -93,13 +97,14 @@ class Api:
         return self.call("GET", "/api/autoradio/learning?limit=200")
 
 
-def phone_ops(tag, entry_id, state, outcome, last):
-    at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    return [
-        {"op_id": "pl-%s-on" % tag, "by": "phone", "op": "aired", "id": entry_id, "state": "on_air", "base_version": 0, "position_seconds": 0},
-        {"op_id": "pl-%s-end" % tag, "by": "phone", "op": "aired", "id": entry_id, "state": state, "base_version": 0,
-         "ended": {"outcome": outcome, "at": at, "last_block": last}, "position_seconds": 9.5},
-    ]
+def op_on(tag, entry_id):
+    return {"op_id": "pl-%s-on" % tag, "by": "phone", "op": "aired", "id": entry_id, "state": "on_air", "base_version": 0, "position_seconds": 0}
+
+
+def op_end(tag, entry_id, state, outcome, last, ago_days=0):
+    at = (datetime.now(timezone.utc) - timedelta(days=ago_days)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return {"op_id": "pl-%s-end" % tag, "by": "phone", "op": "aired", "id": entry_id, "state": state, "base_version": 0,
+            "ended": {"outcome": outcome, "at": at, "last_block": last}, "position_seconds": 9.5}
 
 
 def main():
@@ -122,18 +127,26 @@ def main():
     for _ in range(5):
         segs += api.programme("extend")
         content = [s for s in segs if s.get("claim_id")]
-        if len(content) >= 6:
+        if len(content) >= 9:
             break
     print("entries %d, with a forecast %d" % (len(segs), len(content)))
-    if len(content) < 6:
-        print("FAIL: fewer than six forecast-bearing entries")
+    if len(content) < 9:
+        print("FAIL: fewer than nine forecast-bearing entries")
         return 1
     run = uuid.uuid4().hex[:8]
-    plan = [("finished", "heard", "finished", 1)] * 3 + [("skipped", "skipped", "skipped", 0)] * 2 + [("left", "heard", "left", 0)]
+    # name -> (state, outcome, last_block, days back the op's own time is set)
+    plan = [("finished", "heard", "finished", 1, 0)] * 2 + [("backdated", "heard", "finished", 1, 30)] \
+        + [("skipped", "skipped", "skipped", 0, 0)] * 2 + [("cut", "skipped", "cut", 0, 0), ("left", "heard", "left", 0, 0)]
     ops, claims = [], {}
-    for i, (s, (name, state, outcome, last)) in enumerate(zip(content[:6], plan)):
-        ops += phone_ops("%s-%d" % (run, i), s["entry_id"], state, outcome, last)
+    for i, (s, (name, state, outcome, last, ago)) in enumerate(zip(content, plan)):
+        tag = "%s-%d" % (run, i)
+        ops += [op_on(tag, s["entry_id"]), op_end(tag, s["entry_id"], state, outcome, last, ago)]
         claims[s["claim_id"]] = name
+    # The app was killed with X on air: on_air for Y arrives before X's end, which never comes.
+    x, y = content[len(plan)], content[len(plan) + 1]
+    ops += [op_on("%s-x" % run, x["entry_id"]), op_on("%s-y" % run, y["entry_id"]),
+            op_end("%s-y" % run, y["entry_id"], "heard", "finished", 1)]
+    claims[x["claim_id"]], claims[y["claim_id"]] = "superseded", "finished"
     res = api.ops(ops)
     dropped = [r for r in res["results"] if not r.get("applied")]
     mid = api.learning()
@@ -147,16 +160,18 @@ def main():
     ok = not dropped
     if dropped:
         print("dropped ops: %s" % [(r["op_id"], r.get("dropped")) for r in dropped])
-    want = {"finished": ("settled", "true"), "skipped": ("settled", "false"), "left": ("no_verdict", "")}
+    want = {"finished": ("settled", "true"), "backdated": ("settled", "true"), "skipped": ("settled", "false"), "cut": ("settled", "false"),
+            "left": ("no_verdict", ""), "superseded": ("no_verdict", "")}
+    reason = {"left": "left", "superseded": "superseded"}
     for cid, name in claims.items():
         r = r1.get(cid)
-        good = r is not None and (r["status"], r.get("outcome", "")) == want[name]
+        good = r is not None and (r["status"], r.get("outcome", "")) == want[name] and r.get("no_verdict_reason") == reason.get(name)
         ok = ok and good
         print("  %-8s %s status=%s outcome=%s title=%r op=%s %s" % (
             name, cid[-12:], r and r["status"], r and r.get("outcome"), r and r["title"], r and r.get("op", {}).get("op_id"), "" if good else "WRONG"))
     delta = mid["scorecard"]["settled"] - before["settled"]
-    print("settled +%d (want 5); no_verdict +%d (want 1)" % (delta, mid["scorecard"]["no_verdict"] - before["no_verdict"]))
-    ok = ok and delta == 5 and mid["scorecard"]["no_verdict"] - before["no_verdict"] == 1
+    print("settled +%d (want 7); no_verdict +%d (want 2)" % (delta, mid["scorecard"]["no_verdict"] - before["no_verdict"]))
+    ok = ok and delta == 7 and mid["scorecard"]["no_verdict"] - before["no_verdict"] == 2
     twice = after["scorecard"]["settled"] != mid["scorecard"]["settled"] or r1 != r2
     print("repeat of the same ops: %d applied again, settled %d -> %d, rows %s" % (
         sum(1 for r in again["results"] if r.get("applied")), mid["scorecard"]["settled"], after["scorecard"]["settled"],

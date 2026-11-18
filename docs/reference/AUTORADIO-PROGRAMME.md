@@ -212,7 +212,7 @@ design). The segment cap and the invalid-run rule count it like any line.
 
 ## On the run sheet (settlement slice, 2026-11-17)
 
-Status: built and tested on the build VM (`TestL1` to `TestL9`); not deployed;
+Status: built and tested on the build VM (`TestL1` to `TestL12`); not deployed;
 the proof is `scripts/prove-autoradio-learning` on d@e. Settlement and the
 listener's read route: [AUTORADIO-SHEET.md](AUTORADIO-SHEET.md) "Desk entries,
 settlement and the learning route".
@@ -228,7 +228,9 @@ settlement and the learning route".
   failed is repaired. A `place` of the same id by the phone (an older build
   never posts one) is dropped `duplicate_id`.
 - A placement failure is logged and counted in `done.place_failed`
-  (`done.placed` counts the rest); it never stops the stretch.
+  (`done.placed` counts the rest); it never stops the stretch. A forecast whose entry could not be placed gets a
+  no-verdict record, reason `unplaced`, so no forecast is silently
+  unsettleable (a notice only: the route writes no outcome).
 - An entry the phone never plays stays ahead and its forecast lapses at its
   deadline, unsettled. When a call finds 94 or more entries ahead it removes
   the desk entries of stretches more than 12 hours old (desk `remove`, reason

@@ -136,12 +136,16 @@ func (h *APIHandler) HandleAutoradioLearning(w http.ResponseWriter, r *http.Requ
 
 	start := 0
 	if after != "" {
-		start = len(card.Claims)
+		start = -1
 		for i, v := range card.Claims {
 			if v.ID == after {
 				start = i + 1
 				break
 			}
+		}
+		if start < 0 {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "after: not a forecast of this listener"})
+			return
 		}
 	}
 	end := start + limit
@@ -157,7 +161,7 @@ func (h *APIHandler) HandleAutoradioLearning(w http.ResponseWriter, r *http.Requ
 		}
 		rows = append(rows, row)
 	}
-	ans := map[string]any{"scorecard": cs, "rows": rows, "truncated": card.Truncated}
+	ans := map[string]any{"scorecard": cs, "rows": rows, "truncated": card.Truncated || len(nvs) >= learningMaxNoVerdicts}
 	if end < len(card.Claims) && end > start {
 		ans["next"] = card.Claims[end-1].ID
 	}
