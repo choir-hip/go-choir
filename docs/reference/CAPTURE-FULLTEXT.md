@@ -321,9 +321,8 @@ the one to copy.
 
 ## 6. Follow-ups and residuals
 
-- **Remove the term table's search role** (`proj_capture_terms`, about
-  `captureterms` columns per capture, and `SearchCaptures`' `Words` path)
-  once the catch-up has reported `remaining=0` on the paper's computer and a
+- **Remove the term table's search role** (`proj_capture_terms` and
+  `SearchCaptures`' `Words` path) once the catch-up has reported `remaining=0` on the paper's computer and a
   week of `by_labels_only` counts show the full-text half finds what the
   title half does. It is not deleted here. `proj_capture_index` stays: the
   URL lookup and the title half read it.
@@ -336,6 +335,17 @@ the one to copy.
 - A query of one very common word on the paper's index scans every passage
   that holds it; the 8 s deadline bounds it and the guest falls back to the
   title half with a note. Measured latencies are in section 1.2.
+- The two switches that already exist on the capture search, `CHOIR_CORPUS_SEARCH=window` (guest) and
+  `CORPUSD_CAPTURE_SEARCH=off` (corpusd), also turn the text half off, since
+  they stop the guest from asking or the route from answering. This change adds
+  no switch.
+- Not measured: the real size distribution of the paper's text blobs (1.1 has
+  the query); the index on the paper's 207,000 pages (the claim to enter in
+  `calibration/claude-ledger.md` before landing: the catch-up reaches
+  `remaining=0` and a body-only fact is found on staging); the Postgres rows at
+  20,000 pages; query latency on an idle machine.
+- Latency of the recency order grows with the matches (it orders every
+  matching passage by time, 97 / 135 ms at a budget of 8,000); the budget bounds it.
 - Disk headroom on Node B is the recurring risk (`scripts/status-storage`):
   section 3 gives the index's size.
 
