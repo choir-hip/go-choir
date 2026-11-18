@@ -324,6 +324,14 @@ func TestL10_ALostEndOpDoesNotWedgeTheOnAirSlot(t *testing.T) {
 	if settlementOf(t, rt, claims[1]) != "true" || settlementOf(t, rt, claims[0]) != "" || noVerdicts(t, rt)[claims[0]] != "superseded" {
 		t.Fatalf("(L10) %q %q %v", settlementOf(t, rt, claims[1]), settlementOf(t, rt, claims[0]), noVerdicts(t, rt))
 	}
+	if _, out := learningGet(t, h, ""); true {
+		for _, r := range out["rows"].([]any) {
+			m := r.(map[string]any)
+			if m["claim_id"] == claims[0] && (m["op"].(map[string]any)["position_source"] != "sheet") {
+				t.Errorf("(L10) superseded row position source: %v", m)
+			}
+		}
+	}
 	// The slot is free: a later entry settles. Replay changes nothing.
 	mustOps(t, h, phoneEnd(entries[2], "c", "skipped", "skipped", 0)...)
 	if settlementOf(t, rt, claims[2]) != "false" {
@@ -410,6 +418,13 @@ func TestL13_AnEndingTheDeskCausedSettlesNothing(t *testing.T) {
 	}
 	if settlementOf(t, rt, claims[1]) != "" || noVerdicts(t, rt)[claims[1]] != "desk_caused" {
 		t.Errorf("(L13) the desk settled its own forecast: %q %v", settlementOf(t, rt, claims[1]), noVerdicts(t, rt))
+	}
+	_, out := learningGet(t, h, "")
+	for _, r := range out["rows"].([]any) {
+		m := r.(map[string]any)
+		if m["claim_id"] == claims[1] && m["op"].(map[string]any)["position_source"] != "sheet" {
+			t.Errorf("(L13) desk_caused row position source: %v", m)
+		}
 	}
 }
 

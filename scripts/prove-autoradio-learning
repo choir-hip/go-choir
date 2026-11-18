@@ -17,6 +17,10 @@ three no verdict. Then posts the same ops again and asserts nothing was settled
 twice (the scorecard's settled count and every row are unchanged). Prints the
 ledger rows. Exit 0 when all hold, 1 otherwise, 2 on bad arguments.
 
+Rerun ceiling: each run leaves about ten entries on the sheet's 100 ahead
+places and the desk removes only entries older than 12 hours, so about eight
+runs in 12 hours fill them; the next run then fails loudly (unplaced).
+
 The key goes only in the Authorization header and is never printed. An
 owner-wide key names no computer: pass --computer (X-Choir-Computer).
 
@@ -142,7 +146,7 @@ def main():
         if len(content) >= 10:
             break
     print("entries %d, with a forecast %d" % (len(segs), len(content)))
-    if len(content) < 9:
+    if len(content) < 10:
         print("FAIL: fewer than ten forecast-bearing entries")
         return 1
     run = uuid.uuid4().hex[:8]
