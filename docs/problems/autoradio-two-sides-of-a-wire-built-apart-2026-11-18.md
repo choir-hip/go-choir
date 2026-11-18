@@ -100,3 +100,18 @@ on the owner's phone.
   Only the simulator build catches it, and only the lead runs that build.
 - A take's sheet entry has no shared fixture (instance 6): the server's test
   pins the server's fields and the phone's test pins the phone's.
+
+## Found at the merge to main, 2026-11-18: three server fixtures the phone never reads
+
+Merging the phone work into main, four shared fixtures differed and main's
+(the server side's, newer) were kept. The phone's suite passed on the merged
+tree, 1,236 tests, but for three of the four that proves nothing: no phone
+test or source reads `mobile/fixtures/learning/programme_stream.json`,
+`mobile/fixtures/takes/list-boundary.json` or
+`mobile/fixtures/takes/routes.json`. Only `learning/stretch_lines.json` has
+a reader (`ProgrammePlayerTests`). So for the programme stream, the takes
+list at its boundaries and the takes route table, the phone is still held to
+its own private test data. Named residual: the shared client of the Exact
+cutover (stations X3 and X5) reads these three as it is written; until then
+a change to those wires is checked on the phone by hand.
+
