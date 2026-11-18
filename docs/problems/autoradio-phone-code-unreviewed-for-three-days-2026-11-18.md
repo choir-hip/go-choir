@@ -21,7 +21,7 @@ On 2026-11-18 the lead ran three review seats over the installed candidate
 (cf229bf49) for the first time. All three returned REPAIR. Defects a suite and
 a tour had not shown:
 
-- **Words that must stay on the phone were posted.** A message or an imported
+- **(Not a defect; see the correction at the end.)** *Words that must stay on the phone were posted.* A message or an imported
   file read aloud put its title, and the rest of a passage cut by an answer,
   into the run sheet ops posted to the listener's computer. The standing rule
   is that mail passages and local-only files never go to the server desk.
@@ -72,3 +72,37 @@ private words stay on the phone or that a sign-out is complete.
   loses its place; the embedding store rewrites its whole file.
 - Nothing here has been checked on the device by a person. Sound, Bluetooth,
   a real phone call and a real sign-out are the owner's to try.
+
+## Correction, 2026-11-18: the rule behind the first finding was never the owner's
+
+The finding "words that must stay on the phone were posted" measured the
+code against a rule that did not exist. Its history:
+
+- 2026-11-17T02:44Z, the owner: "we should keep mail on the phone, and we
+  should keep everything on the phone as much as we can". This is about the
+  phone holding copies so it works well, not about what may leave it.
+- 2026-11-17T17:41Z, the lead, briefing a builder to send retrieved passages
+  to the server desk: mail passages and local-only files are not sent. The
+  lead told the owner it was "a boundary I added without asking".
+- From there it was copied, each time more firmly: into the learning-loop
+  goal as a must-preserve, into reviewers' briefs as "the standing rule",
+  into this record as a defect, into the morning letter as "your rule", and
+  into the cutover goal as a reason to keep native PDF code.
+- 2026-11-18, the owner: "there is no rule that local files can't go to
+  server... Not sure where these ideas came from. The whole point is that
+  autoradio is an interface into user's own choir vm".
+
+What it cost: code that withholds mail and file passages from the
+listener's own computer's desk, lets a local answer stand where the server
+would have revised it, and posts a neutral title ("Read aloud", "A message")
+for what the listener heard (`LocalEntryKeep`, `DeskContext`); review rounds
+spent enforcing it; one wrong decision in the cutover plan. That code is
+being removed (lane `no-withholding`).
+
+What changes in how the lead works: a boundary the lead adds is written as
+the lead's, every time it is repeated, until the owner says it. An "owner
+rule" in a brief, a goal file or a review prompt carries the owner's words
+and date, or it is not called one. Goal files already separate `said` from
+`read_as`; must-preserve lists did not, and the cutover goal's now mark
+which entries are the lead's defaults.
+

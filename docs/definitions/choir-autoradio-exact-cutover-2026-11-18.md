@@ -92,8 +92,8 @@ boundaries:
   - 'no switches: a station replaces the Swift for its area and deletes it in the same change; nothing selects the old or the new path'
   - the owner's iPhone app does not get worse; Swift repairs for daily use are allowed until that page moves
   - only the listener's phone op settles a forecast; an entry that made no sound is never reported heard; a late or lost report is no verdict
-  - mail and local-only files never go to the server desk; the mail store on the phone is encrypted at rest and wiped at sign-out; sign-out leaves nothing of the account
-  - logs carry ids and counts, never words spoken, titles or mail
+  - 'Autoradio is an interface into the listener''s own Choir computer (owner, 2026-11-18): mail, files and anything else the phone holds may go to that computer and its desks; the phone keeps copies so it works offline. Nothing is withheld from the listener''s own computer. (Lead''s defaults, not owner rulings, which the owner may strike: the mail copy on the phone is encrypted at rest; sign-out removes the account''s data from the phone.)'
+  - logs carry ids and counts, never words spoken, titles or mail (lead's default, not an owner ruling)
   - one voice at a time; Autoradio does not take the microphone or the audio session from another app without the listener's press
   - no limit on our own model calls; the phone asks the desk as rarely as the job allows
   - one fixture set per wire, written by the server side and read by every implementation
@@ -194,7 +194,7 @@ stations:
   status: pending
 - id: X8
   name: Files, the reader and books
-  scope: the files page, viewers, the shelf, EPUB in TypeScript; read-aloud goes through the deck; PDF text stays a native call (decision D4); book positions are moved
+  scope: the files page, viewers, the shelf, EPUB in TypeScript; read-aloud goes through the deck; a PDF's text is read by the listener's computer (decision D4) and PDFKit is deleted; book positions are moved
   class: orange
   review: one seat
   depends_on:
@@ -284,10 +284,10 @@ decisions_for_the_owner:
   options: as stated; carry nothing and set the phone up again; migrate the key and mail in place too
   default: as stated, each loss announced the day before
 - id: D4
-  question: Where is the text of a local PDF read?
-  why: Exact has no PDF text reader; local files must not go to the server desk
-  options: keep one native call per platform for PDF text; a JavaScript PDF library in shared code; published documents only, by the server
-  default: keep the native call until a shared reader is measured on a phone
+  question: Where is the text of a PDF read?
+  why: Exact has no PDF text reader, and the phone is an interface into the listener's computer, which can read any file
+  options: the listener's computer reads it and the phone asks for the text; a JavaScript PDF library in shared code; keep one native call per platform
+  default: the listener's computer reads it; the native PDF code is deleted. A PDF opened with no connection waits for one
 - id: D5
   question: Do the lab pages (the voice lab, the motion gallery) leave the product app?
   why: they are part of what makes the pages slow to compile and they ship to listeners
@@ -337,6 +337,10 @@ owner_rulings:
   decision: R5
   said: Let's make a new goal file for this cutover from swift to exact
   read_as: this file; the learning-loop file is a checkpoint, with its open stations carried here as K1 to K3
+- 'on': '2026-11-18'
+  decision: R6
+  said: Just to be clear, there is no rule that local files can't go to server. And that's unrelated to native code vs exact anyway. Not sure where these ideas came from. The whole point is that autoradio is an interface into user's own choir vm
+  read_as: nothing the phone holds is withheld from the listener's own computer; the withholding built on 2026-11-17 and 2026-11-18 is removed; where logic runs (native or shared) is a separate question from where data may go
 now:
   status: working
   slice: X1 (the loop is fast) and X2 (the paper page) are being built in lanes; K3 (the phone work onto main) is being merged; K1 is in its third review round and K2 in its last fixes; X0's device tests wait for the owner's phone

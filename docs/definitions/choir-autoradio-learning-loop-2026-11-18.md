@@ -91,7 +91,7 @@ boundaries:
     - "three outcomes: heard through is true; skipped or cut in on is false; closing the app, sign-out, a crash or a failed entry is no verdict, recorded with its position"
     - "Texture is the only writer of the document; the Autoradio desk owns the ledger and asks Texture for each revision"
     - "no extra model call where the stretch call can carry the question; no limits on our own model calls"
-    - "mail and local-only files never leave the phone"
+    - "(struck 2026-11-18: 'mail and local-only files never leave the phone' was the lead's boundary, never the owner's; the owner: 'there is no rule that local files can't go to server')"
     - "drills on the drill computer only; never the paper or the owner's computer"
     - "no switches: each station ships on"
   excluded: [importance and coverage scoring, a server vector store, the master stream, opening takes to anyone beyond invited testers, a semantic index by category]

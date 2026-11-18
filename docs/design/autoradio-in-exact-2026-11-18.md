@@ -233,6 +233,16 @@ the voice, which die, by file. `ClipFingerprint` is signal processing: it
 stays native and is named in the voice list. The Mac app builds from the
 same commit and is checked at the last station.
 
+### Where data may go (owner, 2026-11-18)
+
+Autoradio is an interface into the listener's own Choir computer. Nothing
+the phone holds (mail, an imported file, a book) is withheld from that
+computer or its desks. An earlier note in the review of this design said a
+PDF's text could not come from the server because local files must not go
+there; no such rule exists, and step 5's plan ("PDF text from the server,
+deleting PDFKit") stands. Where logic runs and where data may go are
+separate questions.
+
 ### The gate
 
 Lines and names can be gamed by one generic call. The gate runs the pages on
