@@ -248,7 +248,17 @@ public struct RouteSheetPoster: RunSheetPoster {
         let byId = Dictionary(results.map { ($0.opId, $0) }, uniquingKeysWith: { a, _ in a })
         var changed = false
         for op in batch where op.op == .place {
-            guard let r = byId[op.opId], !r.applied, r.dropped != RunSheetDropped.duplicate, let id = op.entry?.id,
+            guard let r = byId[op.opId], !r.applied, let id = op.entry?.id else { continue }
+            if r.dropped == RunSheetDropped.duplicateId {
+                // The server already has this id (a kept entry, written by the desk): its copy stays, and so does ours. A place-now put ours on
+                // air here, but the server only airs an entry through `aired on_air` (its takeover rule); without it the server's copy would stay
+                // ahead forever and the later end op would be refused (ahead -> heard is bad_transition). It goes first among what is pending.
+                if op.at == .now, sheet.entry(id) != nil {
+                    pending.insert(RunSheetOp(opId: mintOpId(), by: .phone, op: .aired, id: id, state: .onAir, positionSeconds: 0), at: 0)
+                }
+                continue
+            }
+            guard r.dropped != RunSheetDropped.duplicate,
                   let i = sheet.entries.firstIndex(where: { $0.id == id }), sheet.entries[i].state == .ahead else { continue }
             sheet.entries.remove(at: i); changed = true
         }

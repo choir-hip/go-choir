@@ -113,6 +113,7 @@ public final class ChoirApp: @unchecked Sendable {
 
     public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL, openURL: (@Sendable (URL) -> Void)?) {
         self.runtime = runtime
+        LaunchTimings.shared.begin()
         ChoirEnvironment.shared.keys = keys
         ChoirEnvironment.shared.log = runtime.log
         signIn = ChoirSignIn(baseURL: baseURL)
@@ -191,6 +192,8 @@ public final class ChoirApp: @unchecked Sendable {
             w.onNotice = { n in RunSheetPlayer.shared.deskNotice = n }
             w.onDry = { d in RunSheetPlayer.shared.deskDry = d }
             w.onWriting = { on in RunSheetPlayer.shared.deskWriting = on }
+            // An ask ended (never sign-out's stop): a refused write-ahead runs now; a missing kept first entry is kept.
+            w.onIdle = { [weak me] in Task { @MainActor in await me?.writeAhead?.writerIdle() } }
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
             RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
@@ -409,28 +412,43 @@ public final class ChoirApp: @unchecked Sendable {
         let lines = frontLines()
         let plan = openingCache.take(voice: runtime.player.voiceKey)
         await MainActor.run {
-            let p = RunSheetPlayer.shared
-            @MainActor func fresh(_ e: RunSheetEntry) -> RunSheetEntry? { var x = e; x.state = .ahead; x.ended = nil; return RunSheetStore.shared.entry(x.id) == nil ? x : nil }
-            switch plan {
-            case .opening(let o, let next):
-                var o = o; o.placedBy = .phone; o.state = .ahead; o.ended = nil
-                p.open(o)
-                if let n = next.flatMap(fresh) { RunSheetStore.shared.place(n, at: .next, by: .desk, reason: "written ahead and kept for this launch") }
-                writer?.openAhead()
-                print("AUTORADIO opening from the written-ahead cache \(o.id)")
-            case .entry(let n):
-                if let n = fresh(n) {
-                    p.open(n, asOpening: false)
-                    print("AUTORADIO first entry from the written-ahead cache \(n.id); the live opening follows as a transition")
-                    writer?.open()
-                } else { p.open(PhoneOpening.entry(lines: lines)); writer?.open() }
-            case .none:
-                p.open(PhoneOpening.entry(lines: lines))
-                writer?.open()
-            }
+            Self.placeLaunch(plan: plan, lines: lines, player: RunSheetPlayer.shared, store: RunSheetStore.shared, writer: writer)
             LaunchTimings.shared.mark("sheet")
         }
         onChange?()                                   // the entry's own start begins the player (speakEntry); nothing here plays a document
+    }
+
+    /// What the radio puts on air at launch and what it asks the desk for. The phone's own opening needs no model; the desk's `open` answer is
+    /// exactly one opening line, which the player drops when the phone's is on air ("one per start"), so when the phone has an opening of its
+    /// own the desk is asked to `extend` (the stretch is written while the opening plays). `open` is asked only when a kept first entry
+    /// starts the radio: the desk's opening then follows it as a transition.
+    @MainActor static func placeLaunch(plan: OpeningPlan, lines: [PhoneOpening.Line], player p: RunSheetPlayer, store: RunSheetStore, writer: RunSheetWriter?) {
+        // A restored sheet still holds the id of a kept entry. Ahead: the copy is stale and `open` removes it, the kept one plays. On air, heard or
+        // skipped: the listener has had it, never replay it (the phone's opening plays; the reason is logged).
+        @MainActor func fresh(_ e: RunSheetEntry) -> RunSheetEntry? {
+            var x = e; x.state = .ahead; x.ended = nil
+            guard let have = store.entry(x.id) else { return x }
+            if have.state == .ahead { return x }
+            print("AUTORADIO kept first entry not played: its copy on the sheet is \(have.state.rawValue)")
+            return nil
+        }
+        switch plan {
+        case .opening(let o, let next):
+            var o = o; o.placedBy = .phone; o.state = .ahead; o.ended = nil
+            p.open(o)
+            if let n = next.flatMap(fresh) { store.place(n, at: .next, by: .desk, reason: "written ahead and kept for this launch") }
+            writer?.openAhead()
+            print("AUTORADIO opening from the written-ahead cache \(o.id)")
+        case .entry(let n):
+            if let n = fresh(n) {
+                p.open(n, asOpening: false)
+                print("AUTORADIO first entry from the written-ahead cache \(n.id); the live opening follows as a transition")
+                writer?.open()
+            } else { p.open(PhoneOpening.entry(lines: lines)); writer?.openAhead() }
+        case .none:
+            p.open(PhoneOpening.entry(lines: lines))
+            writer?.openAhead()
+        }
     }
 
     /// A fresh opening is kept: the launch need not wait for the sign-in or the first load.
