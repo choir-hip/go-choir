@@ -1,31 +1,33 @@
-# Programs CI's gate jobs run that scripts/gates does not, and jobs that are
-# not gates. Read by scripts/check-gates-cover-ci. One entry per line:
-#   <program path> <reason>        (a reason is required)
-#   not-a-gate <job id> <reason>   (the job plans, builds, tests, publishes or deploys)
-# Every job not named here is a gate job. A line that CI no longer needs, or
-# that names something scripts/gates runs, fails the check.
+# Programs and jobs the landing script does not run, each with its reason.
+# Read by scripts/check-gates-cover-ci. One entry per line: <key> <reason>.
+# A key is a program path, ./cmd/x, job:<id> (a job that uses a reusable
+# workflow and has no steps) or ./.github/actions/x (a local action).
+# No job is excluded wholesale: every job's run steps are scanned. A line the
+# check no longer needs, or for a program scripts/gates or scripts/land runs,
+# fails the check.
 
-# Jobs that are not gates: they plan the run, build, test the Go suites
-# (scripts/land runs those on the build machine) or publish and deploy.
-not-a-gate plan CI planning and the tests of the CI classifiers; they run when .github/scripts changes, and the classifier decides what a landing needs
-not-a-gate go-vet-build Go vet and build; scripts/land runs the build on the build machine
-not-a-gate go-test Go test shards; scripts/land runs the Go suites on the build machine
-not-a-gate go-test-runtime Go test shards for agentcore and textureowner; scripts/land runs them on the build machine
-not-a-gate go-test-scale Go test of the quarantined load-sensitive tests; scripts/land owns the Go suites
-not-a-gate govulncheck report-only vulnerability scan, never fails a landing
-not-a-gate check aggregate of the Go vet, test and build jobs
-not-a-gate sbom-candidate builds the differential SBOM candidate for the deploy
-not-a-gate sbom accepts the differential SBOMs for the deploy
-not-a-gate build-frontend frontend build and Playwright, run on the build machine and in CI, not by the landing gates
-not-a-gate deploy-impact classifies what the deploy needs
-not-a-gate flakehub-publish publishes the rolling flake after a deploy
-not-a-gate prebuild-staging prebuilds the deploy artifacts on Node B
-not-a-gate deploy-staging the staging deploy
-
-# Programs a gate job runs that scripts/gates does not.
-scripts/selftest-guest-security-epoch takes 59 s on the Mac, over the budget; it runs when that gate script changes, and scripts/gates runs the check itself
+# Run by a CI gate job; not by scripts/gates or scripts/land.
+scripts/selftest-guest-security-epoch takes 59 s on the Mac, over the budget; scripts/gates runs the check itself
 scripts/test-node-b-guest-release-retention.sh fails on macOS (BSD touch has no -d with this date form; 7 of 43 cases) and passes on the Linux runner
 scripts/test-guest-floor-commit-free needs nix to evaluate the guest under two commit stamps
 scripts/receipts-index-swap-test needs a throwaway PostgreSQL
 scripts/fuzz-broker-protocol.sh a fixed-time fuzz run (15 s plus a build), run in CI's Desk Protocol Lock job
 frontend/scripts/sdk-surface.mjs needs the frontend install and a CI merge base; the Package Modularity job runs it when the SDK changes
+scripts/go-test-non-runtime-shards CI's shard runner for the Go suites; scripts/land shards the Go suites itself on the build machine
+scripts/go-test-integration CI's integration-tagged Go smoke; a Go suite, which scripts/land owns
+scripts/ci-prune-go-cache CI build-cache housekeeping before the cache save; no gate
+scripts/ci-find-green-pr-run CI planning: finds a green pull-request run of the same commit; no gate
+.github/scripts/ci-impact-classify CI planning: decides which jobs run; its -test runs in scripts/land on .github/ changes
+.github/scripts/deploy-base-select picks the deploy base on Node B; its -test runs in scripts/land on .github/ changes
+.github/scripts/deploy-impact-classify classifies what a deploy needs; its -test runs in scripts/land on .github/ changes
+.github/scripts/build-sboms-differential builds the differential SBOMs for the deploy; its -test runs in scripts/land on .github/ changes
+.github/scripts/verify-sbom-candidate verifies the SBOM candidate for the deploy; its -test runs in scripts/land on .github/ changes
+./.github/actions/install-postgres a local action that installs PostgreSQL on the runner for the Go suites; an environment step, not a gate
+./.github/actions/setup-go-build-cache a local action that restores the Go build cache; no gate
+
+# Executable checks and selftests nothing runs (the converse check). Each is a
+# guard that is not a landing gate today; the reason says why it is not run.
+scripts/check-curated-go-modules needs the network (the module proxy and the checksum database); run by hand for each change to internal/gomodule/curated.txt
+scripts/check-guest-app-layer.sh needs a built layered guest image (nix build); a deploy-record step nothing calls yet
+scripts/check-guest-data-fstrim.sh a nix evaluation of the guest config; no job or landing step runs nix evals of it
+scripts/check-host-firecracker-pin.sh a nix evaluation of the host config; no job or landing step runs it (its -test is not executable)
