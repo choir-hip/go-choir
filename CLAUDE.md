@@ -254,6 +254,12 @@ record lands alone first. See
   run only in the lead's build tree and refuse elsewhere. A lane's Swift
   package build folder is the only build output a builder makes, and
   `scripts/gc-build-output` deletes it once the lane has been idle a day.
+  What a lane may run (2026-11-18, for the move to shared logic): the Exact
+  loop that needs no native build, against the lead's one Exact checkout:
+  `EXACT2=<build tree>/mobile/.exact-src`, then `scripts/sync-exact-package.sh`,
+  `bun install`, and `bun exact.mjs contract build`, `test web`, `agent web`
+  and `bun test` in `mobile/AutoradioLab`. That writes megabytes, not
+  gigabytes. Native builds, simulators and emulators stay with the lead.
   The lead runs `scripts/gc-build-output` at the start of a session and
   before a device build, and removes a lane with `lane rm` when its branch
   lands or is dropped. Every builder's brief says so.
