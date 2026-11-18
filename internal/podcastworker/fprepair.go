@@ -336,6 +336,23 @@ func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []Hel
 	return puts, putIDs, notFound, skipped, nil
 }
 
+func mergeSpans[T any](items []T, span func(i int) Span) []Span {
+	ss := make([]Span, len(items))
+	for i := range items {
+		ss[i] = span(i)
+	}
+	sort.Slice(ss, func(i, j int) bool { return ss[i].T0 < ss[j].T0 })
+	var out []Span
+	for _, s := range ss {
+		if n := len(out); n > 0 && s.T0 <= out[n-1].T1 {
+			out[n-1].T1 = math.Max(out[n-1].T1, s.T1)
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 // quoteStart is where the clip's quote begins in the stored transcript: the
 // start of the segment holding its first word, found over the clip's segments
 // joined (a quote may run across two).
