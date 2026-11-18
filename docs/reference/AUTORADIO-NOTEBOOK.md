@@ -193,7 +193,10 @@ note_id}`. A spoken instruction is the `steer` op above.
 lines id, heard, of, cites, replaces, patch_id, revision_id), `struck`,
 `patches` (the asked and answered `notebook_patch` records), `steering` (the
 steer notes), `inputs` (per stretch: `notebook_revision_id`,
-`notebook_sha256`, `notebook_bytes`, `marked_cases`). `?line=<ref>` (for
+`notebook_sha256`, `notebook_bytes`, `marked_cases`, and `heard`: the heard
+counts of that stretch's input, ids and counts only, described in
+[AUTORADIO-PROGRAMME.md](AUTORADIO-PROGRAMME.md), "The heard receipt"; a stretch
+of a computer with no notebook is listed too when it has a `heard` object). `?line=<ref>` (for
 example `lesson:L7`) narrows `rows` to the forecasts that line caused: the
 rows behind a line. Record kinds this adds: `autoradio.notebook_patch` (new in
 the table), and first writers of `autoradio.lesson` (id `autoradio-lesson:L<n>`;

@@ -115,6 +115,10 @@ func (c *programmeCall) writeStart(ctx context.Context) error {
 		startRefs["notebook_lines_shown"] = fmt.Sprint(len(c.input.nbLines))
 		startRefs["notebook_lines_total"] = fmt.Sprint(c.input.nbTotal)
 	}
+	// The heard receipt (additive): counts and ids, never a title or words.
+	for k, v := range c.heardReceiptRefs() {
+		startRefs[k] = v
+	}
 	start, err := c.noticeRecord(stretchStartRecordPrefix+c.stretchID, kindStretchStart, startRefs, "stretch "+c.stretchID+" started", "", nil, now)
 	if err != nil {
 		return err
