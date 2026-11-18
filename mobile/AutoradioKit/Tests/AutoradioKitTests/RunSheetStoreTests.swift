@@ -11,7 +11,7 @@ import XCTest
 //  7  a desk that is slow does not swap a story in: the opening keeps playing
 //  8  only a play changes what is on air (reads and views change nothing)
 //  9  a transition whose neighbours changed is shown stale
-// 10  a skipped clip ends as skipped and its sound stops; a clip of another file is skipped without being spoken
+// 10  a skipped clip ends as skipped and its sound stops; a clip is found in the served file by fingerprint (ClipLocatorTests)
 // 11  pending ops survive a relaunch, stay while the route says "not yet", and go when it answers
 // 12  the old kind names map: ident, bridge, update, headlines, podcast_clip
 // 13  the ahead list is bounded at 100; a listener's own placement is never refused
@@ -293,18 +293,7 @@ final class RunSheetStoreTests: XCTestCase {
         p.remoteEnded(generation: p.generation)
         XCTAssertEqual(s.entry(c.id)?.state, .heard)
     }
-    func test10_AClipOfAnotherFileIsSkippedWithoutBeingSpoken() async {
-        let (p, s, e) = make()
-        let store = ClipStore(); store.replace([PodcastClip.parse(["clip_id": "clip-0000000000a1", "story": ["route": "/a", "version": 1, "title": "S"], "show": "Show",
-            "audio_url": "https://example.test/x.mp3", "duration_seconds": 900, "start": 10, "end": 70, "quote": "q", "support": 0.9])!])
-        e.duration = 1200                                        // not the transcribed file
-        let ok = await p.preflight("clip-0000000000a1", store: store)
-        XCTAssertFalse(ok); XCTAssertTrue(store.isMismatch("clip-0000000000a1"))
-        e.duration = 901
-        let ok2 = await p.preflight("clip-0000000000a1", store: ClipStore())
-        XCTAssertFalse(ok2, "an unknown clip")
-        _ = s
-    }
+    // (a clip of another file is no longer judged by its length: ClipLocatorTests)
 
     // 11
     final class FakePoster: RunSheetPoster, @unchecked Sendable {
@@ -342,7 +331,7 @@ final class RunSheetStoreTests: XCTestCase {
     // 12
     func test12_TheOldKindNamesMap() {
         let clips = ClipStore(); clips.replace([PodcastClip.parse(["clip_id": "clip-0000000000b1", "story": ["route": "/a", "version": 1, "title": "S"], "show": "Show",
-            "audio_url": "https://example.test/b.mp3", "duration_seconds": 900, "start": 10, "end": 70, "quote": "q", "support": 0.9])!])
+            "audio_url": "https://example.test/b.mp3", "duration_seconds": 900, "start": 10, "end": 70, "quote": "q", "support": 0.9, "fingerprint": testFingerprintJSON()])!])
         func seg(_ id: String, _ kind: String, clip: String? = nil, between: IncomingBetween? = nil) -> IncomingSegment {
             IncomingSegment(stretchID: "st", segmentID: id, kind: kind, title: "Title \(id)", text: "Words for \(id).", cites: [ProgrammeCite(ref: "pub:a@v2", role: "subject", label: "A")],
                             blockCount: nil, clip: clip.map { ProgrammeClipRef(clipID: $0) }, between: between)
