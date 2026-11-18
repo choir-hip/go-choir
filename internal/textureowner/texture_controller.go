@@ -518,7 +518,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 func (rt *Handler) reconcileAgentWakeLockedFor(ctx context.Context, doc types.Document, textureAgentID string, root *textureRootWake) (*types.RunRecord, error) {
 	// The listener's notebook is written by patch, without a model (design
 	// autoradio-learned-document 3.2, failure N6): no revision of it wakes the desk.
-	if root == nil && editiondoc.IsEditionTitle(doc.Title) {
+	if editiondoc.IsEditionTitle(doc.Title) {
 		return nil, nil
 	}
 	ownerID := strings.TrimSpace(doc.OwnerID)

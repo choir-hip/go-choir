@@ -32,6 +32,9 @@ type State struct {
 	DocID    string     `json:"doc_id,omitempty"`
 	Head     Revision   `json:"head"`
 	Chain    []Revision `json:"chain,omitempty"`
+	// ChainCut: the chain was read to its cap without reaching a desk
+	// revision, so the listener's edits cannot be compared with the desk's.
+	ChainCut bool `json:"chain_cut,omitempty"`
 }
 
 // Result is Texture's answer to a patch: applied, stale, refused with a
