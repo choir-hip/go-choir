@@ -1351,25 +1351,80 @@ func (rt *Runtime) closeOpenRoundsAfterCrash(ctx context.Context) {
 		return
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, conversation := range open {
+	started := time.Now()
+	closed, commits := 0, 0
+	for start := 0; start < len(open); start += bootRoundClosureBatch {
+		end := start + bootRoundClosureBatch
+		if end > len(open) {
+			end = len(open)
+		}
+		n, c := rt.closeRoundsChunkAfterCrash(ctx, ownerID, computerID, open[start:end], now)
+		closed, commits = closed+n, commits+c
+	}
+	log.Printf("runtime: crash boot round closure: closed %d of %d open rounds in %d commits dur=%s", closed, len(open), commits, time.Since(started).Round(time.Millisecond))
+}
+
+// bootRoundClosureBatch is how many rounds one crash-boot commit closes. The
+// closures of one commit share one transaction, one plan held in memory and
+// one tape event on the projection path, so the bound is the size of that
+// write, not a rate: a closure is about 1 KiB of record plus one command
+// object, so 200 is about 400 KiB and under a thousand objects per
+// transaction, small beside a Texture turn's batch. The paper's 5,229 open
+// rounds (2026-11-18) take 27 commits; one commit per round took 25 minutes
+// (190 to 220 a minute). It is a constant, not a setting: a larger number buys
+// seconds, a smaller one only more commits.
+const bootRoundClosureBatch = 200
+
+// closeRoundsChunkAfterCrash closes one chunk of open rounds in one commit
+// and returns how many it closed and how many commits that took. Each round
+// keeps exactly the record, command id ("boot-closure:"), fate and console
+// line it had when it committed alone (CommitInboxRecordsBatch keeps every
+// command's own receipt). A batch the store refuses writes nothing, so the
+// chunk's rounds are then closed one at a time: one conversation the store
+// refuses cannot block the others.
+func (rt *Runtime) closeRoundsChunkAfterCrash(ctx context.Context, ownerID, computerID string, chunk []types.ConversationHead, now string) (closed, commits int) {
+	var reqs []types.CommitInboxRecordsRequest
+	var rounds []types.ConversationHead
+	for _, conversation := range chunk {
 		closure := types.NewRoundClosureRecord(conversation.CasterInbox, conversation.RecipientInbox, conversation.Round, types.ClosureReasonInterruptedByRestart, now)
 		closure.ComputerID = computerID
 		req := types.CommitInboxRecordsRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "boot-closure:" + closure.RecordID, Records: []types.CommitmentRecord{closure}}
+		var err error
 		if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
 			log.Printf("runtime: crash boot round closure %s: %v", closure.RecordID, err)
 			continue
 		}
-		// The closure is the kernel's own act, for any desk's conversation. When
-		// the conversation is a management task's, the batch also settles the
-		// task and its dispositions, which the counters then read as the
-		// kernel crossing into management's kinds.
-		if _, err := rt.store.CommitInboxRecords(withKernelWriter(ctx), req); err != nil {
-			log.Printf("runtime: crash boot round closure %s: %v", closure.RecordID, err)
-			continue
-		}
+		reqs, rounds = append(reqs, req), append(rounds, conversation)
+	}
+	if len(reqs) == 0 {
+		return 0, 0
+	}
+	// The closure is the kernel's own act, for any desk's conversation. When
+	// the conversation is a management task's, the batch also settles the
+	// task and its dispositions, which the counters then read as the
+	// kernel crossing into management's kinds.
+	done := func(conversation types.ConversationHead) {
 		rt.bootTally.add(deskOfInbox(conversation.RecipientInbox))
 		log.Printf("runtime: closed round %d of %s after a crash restart", conversation.Round, conversation.ConversationID)
 	}
+	if _, err := rt.store.CommitInboxRecordsBatch(withKernelWriter(ctx), reqs); err == nil {
+		for _, conversation := range rounds {
+			done(conversation)
+		}
+		return len(rounds), 1
+	} else {
+		log.Printf("runtime: crash boot round closure: a batch of %d closures failed and wrote nothing (%v); closing them one at a time", len(reqs), err)
+	}
+	for i, req := range reqs {
+		if _, err := rt.store.CommitInboxRecords(withKernelWriter(ctx), req); err != nil {
+			log.Printf("runtime: crash boot round closure %s: %v", req.Records[0].RecordID, err)
+			continue
+		}
+		commits++
+		closed++
+		done(rounds[i])
+	}
+	return closed, commits
 }
 
 // closeRoundsOfEndedRun closes the rounds a research or management run

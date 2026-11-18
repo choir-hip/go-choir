@@ -122,6 +122,10 @@ type Store struct {
 	eventSource  atomic.Pointer[eventSourceHolder]
 	jsonPatchMu  sync.Mutex
 	trajectoryMu sync.Mutex
+	// inboxCommits counts inbox command batches written by this process
+	// (InboxCommitsWritten): one per CommitInboxRecords that wrote, one per
+	// CommitInboxRecordsBatch that wrote.
+	inboxCommits atomic.Int64
 	// runLabelsMu serializes the read-modify-write of UnionRunLabels.
 	runLabelsMu sync.Mutex
 	// graphHomeMu serializes every engineering-slot claim and release in both
