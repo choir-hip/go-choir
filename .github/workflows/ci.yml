@@ -661,6 +661,31 @@ jobs:
           scripts/selftest-gates-cover-ci
           scripts/check-gates-cover-ci
 
+      # A commit may not lower storeschema.Version without a Store-Floor-Override
+      # trailer (docs/problems/store-schema-floor-guard-is-not-run-2026-11-15.md).
+      # The base is chosen as the Jev check's is.
+      - name: Check the store schema floor
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PLAN_BASE: ${{ needs.plan.outputs.base }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          scripts/selftest-store-schema-floor
+          case "$EVENT_NAME" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="$PLAN_BASE" ;;
+            *) base="" ;;
+          esac
+          if [[ -z "$base" ]]; then
+            base="$(git rev-list -1 --first-parent --before=8.days HEAD)"
+          fi
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$base" || true
+          fi
+          scripts/check-store-schema-floor.sh --base "$base" --head HEAD
+
       - name: Check the Jev entry point
         shell: bash
         env:

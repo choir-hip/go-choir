@@ -119,38 +119,48 @@ could deploy. The fix for the cluster (`lane/gates-cover-ci`) is in its
 last review.
 Built (yellow): `scripts/check-gates-cover-ci`, run by `scripts/gates`
 and by CI's Vocabulary Gates job, with its selftest
-`scripts/selftest-gates-cover-ci`. It reads `.github/workflows/ci.yml` (by
-hand, narrowly; an unparsable workflow fails closed), takes every repo
-program a gate job's `run:` step names (`scripts/`, `frontend/scripts/`,
-`.github/scripts/`, `go run ./cmd/...`) and fails, naming job, step and
-program, when `scripts/gates` neither runs it nor
-`scripts/gates-ci-exemptions.txt` lists it with a reason. A stale
-exemption, one for a program `scripts/gates` runs, and a reasonless one each
-fail, so the list cannot rot.
+`scripts/selftest-gates-cover-ci`. It reads `.github/workflows/ci.yml` by hand
+(narrowly; a shape it does not know fails closed) and compares it with
+`scripts/gates` and `scripts/land` in both directions.
 
-The rule for a gate job: every job is one, except a job the exemption file
-names on a `not-a-gate` line with a reason. A new job is covered by default.
-Not gates (14): plan, go-vet-build, go-test, go-test-runtime, go-test-scale,
-govulncheck, check, sbom-candidate, sbom, build-frontend, deploy-impact,
-flakehub-publish, prebuild-staging, deploy-staging (they plan, build, test the
-Go suites, publish or deploy; `scripts/land` owns the Go suites). Gate jobs
-(10): doccheck, heresy-detector, v1-inventory (Vocabulary Gates),
-base-packages-listed, guest-floor-commit-free, boot-prune-unit,
-receipts-index-swap, package-modularity, desk-protocol, npm-audit. The `plan`
-job also runs the tests of the CI classifiers; it is listed as not a gate
-because the classifier, not the landing, decides when they matter.
+Forward: **every job's `run:` steps are scanned; no job is excluded**. (The
+first version let a job be named "not a gate"; that hid
+`go run ./cmd/lockscope`, a ratchet that refuses a push, inside
+`go-vet-build`, and the line is gone.) Each repo program a step invokes
+(`scripts/`, `frontend/scripts/`, `.github/scripts/`, `go run ./cmd/...`)
+must be run by `scripts/gates` or `scripts/land`, or be named in
+`scripts/gates-ci-exemptions.txt` with a reason. `go build`, `go vet` and
+`go test` are not repo programs. `scripts/land` counts through the runner it
+writes (the payload of its `echo` lines) and its
+`for t in .github/scripts/*-test` glob, so the CI classifier tests in the
+`plan` job are covered by the landing script on `.github/` changes.
 
-Added to `scripts/gates` (wall time on the Mac): `scripts/doccheck` 26 s,
-`scripts/check-heresies.sh --fail-on-regression` 5 s (report to a temp file),
-`scripts/check-base-packages` under 1 s, and the selftests of the kernel,
-desk-names, store-handles, owner-files, switch-registry, guest-token and
-Jev-entry gates (1 to 5 s each), plus the new check. `scripts/gates` went from
-88 s to about 2 minutes.
+Converse: every executable `scripts/check-*`, `scripts/selftest-*` and
+`.github/scripts/*-test` must be run by CI, `scripts/gates` or `scripts/land`
+or be named in the exemption file. A guard nothing runs can no longer sit
+unseen. "Invoked" is one rule for all sides (the command word after
+`run`, `bash`, `python3 -I`, `node`, `env`, `VAR=x`, `timeout`; `./x`, `$ROOT/x`
+and `"$root"/x` count; a path in an assignment, an `echo` or a comment does not).
+Fail closed: a command or script path built from `${{ }}`, a job with
+`uses:` and no steps, a local action, an unbalanced quote, and a `run` line in
+`scripts/gates` that is not a program or `go test|list|vet|build`.
 
-Still exempt, with reasons in the file: `selftest-guest-security-epoch` (59 s,
-over the budget), `test-node-b-guest-release-retention.sh` (fails on macOS:
-BSD `touch -d`; 7 of 43 cases), `test-guest-floor-commit-free` (needs nix),
-`receipts-index-swap-test` (needs PostgreSQL), `fuzz-broker-protocol.sh`
-(fixed-time fuzz) and `frontend/scripts/sdk-surface.mjs` (frontend install and
-a merge base). After it, a new CI gate cannot be added without the landing
-script learning of it or the exemption file saying why not.
+Added to `scripts/gates` (Mac wall time): `scripts/doccheck` 26 s, the heresy
+detector 5 s (report to a temp file), `check-base-packages` under 1 s, the
+selftests of the kernel, desk-names, store-handles, owner-files,
+switch-registry, guest-token and Jev-entry gates (1 to 5 s each),
+`go run ./cmd/lockscope` about 1 s, `check-store-schema-floor.sh` and its
+selftest under 1 s (the second incident's guard, now run here and in CI's
+Vocabulary Gates), `check-package-export`, and
+`selftest-test-computer-create`. `scripts/gates` went from 88 s to about two
+minutes.
+
+Still exempt, with reasons in the file: CI-only gates that need nix,
+PostgreSQL, a merge base or a Linux userland, or take about a minute
+(`selftest-guest-security-epoch` 59 s); CI planning and deploy programs whose
+`-test` runs in `scripts/land`; the Go shard runners; two local actions.
+Orphans the converse check found, exempted because they need the network or
+nix and nothing runs them: `check-curated-go-modules`,
+`check-guest-app-layer.sh`, `check-guest-data-fstrim.sh`,
+`check-host-firecracker-pin.sh`. After it, a new CI gate cannot be added, and
+a new guard cannot be left unrun, without the exemption file saying why.
