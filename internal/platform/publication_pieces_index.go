@@ -106,28 +106,7 @@ func pieceTokens(text string) []string {
 	return toks
 }
 
-func foldPlural(t string) string {
-	n := len(t)
-	if n < 4 {
-		return t
-	}
-	for i := 0; i < n; i++ {
-		if t[i] < 'a' || t[i] > 'z' {
-			return t
-		}
-	}
-	switch {
-	case strings.HasSuffix(t, "ies") && n > 4:
-		return t[:n-3] + "y"
-	case strings.HasSuffix(t, "sses"), strings.HasSuffix(t, "xes"), strings.HasSuffix(t, "ches"), strings.HasSuffix(t, "shes"):
-		return t[:n-2]
-	case strings.HasSuffix(t, "ss"), strings.HasSuffix(t, "us"), strings.HasSuffix(t, "is"):
-		return t
-	case strings.HasSuffix(t, "s"):
-		return t[:n-1]
-	}
-	return t
-}
+func foldPlural(t string) string { return captureterms.PluralFold(t) }
 
 func distinctQueryTerms(query string) []string {
 	var out []string
