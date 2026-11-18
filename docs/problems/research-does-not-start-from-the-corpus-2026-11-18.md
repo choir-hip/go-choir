@@ -103,6 +103,46 @@ holds the owner's other words on this and the web-search numbers.
    and Ahmad); a French or German source against an English story. This is
    the case for embeddings, under study the same day.
 
+## Direction from the owner (2026-11-18, after the audit)
+
+"Wow, you say pages are not indexed, only headlines. Ah, that's the big
+problem. So I guess we'll need to use vector embeddings to index the pages.
+I mean, can we use BM25 for that as well? we should be thinking resource
+aware, but I think we should be able to do hybrid vectors and BM25 and graph
+traversal across entities and events. And time windowing."
+
+"keep looking into running embedding Gemma 2, we should be doing full page
+indexing for both BM25 and for vectors. And if we can't do the embedding on
+node B, maybe we can do it on node A, or we can rent a big AWS machine for
+it. But I think we can do it on our own existing infrastructure... And we
+can also think about running it on the Mac for the initial indexing, if that
+would help."
+
+"But yes, we should be doing full page indexing for everything with BM25
+immediately as well."
+
+On linking stories by event, which the lead had said the radio lacks: "I
+thought we had been doing that for a couple weeks at least. We should look
+into this because there may be some code on an old branch or something
+half-built or something weird going on, because we should already be linking
+stories by events, by entities, etc." The audit above did find an events
+layer, labels and a related-stories walk on main; what it found missing is
+any reader of them in research, at the feed-or-open choice, on the front row
+or in the radio. The lead's sentence was too loose. A separate
+investigation is finding everything built, half-built or dropped.
+
+What is being done:
+
+- Lane `capture-fulltext`: every captured page's full text in the corpus
+  search by BM25, with time windowing, on passages the vector index will
+  share. Old title search stays until the backfill completes.
+- The embeddings measurement now covers full pages, Node B, Node A and the
+  Mac for the first indexing (claims C132, C133).
+- The investigation of event and entity linking, as above.
+- The target the owner named: hybrid retrieval over full pages (BM25 and
+  vectors), graph traversal across entities and events, and time windows.
+  Its design waits for those three results.
+
 ## Remaining error
 
 - Share of a story's sources already held before its research began: not
