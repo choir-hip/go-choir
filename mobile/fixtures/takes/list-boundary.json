@@ -1,0 +1,5 @@
+{"generated_at":"2026-11-18T01:00:00Z","takes":[
+ {"take_id":"take-00000000000000c1","publisher":"voice-3fa2c1","published_at":"2026-11-18T00:50:00Z","duration_seconds":60.1,"sha256":"dd","bytes":240000,"transcript":"An honest full-length take: 60.000 s of audio has a header of 60.117 s.","state":"live","audio_url":"/api/platform/takes/take-00000000000000c1/audio","record":{"publisher":"voice-3fa2c1","new":true,"offered":0,"heard":0,"skipped":0,"listeners":0,"takes":0,"summary":"new: no outcomes yet"}},
+ {"take_id":"take-00000000000000c2","publisher":"voice-9b0e44","published_at":"2026-11-18T00:40:00Z","duration_seconds":2.5,"sha256":"ee","bytes":12000,"transcript":"The shortest header the server stores.","state":"live","audio_url":"/api/platform/takes/take-00000000000000c2/audio"},
+ {"take_id":"take-00000000000000c3","publisher":"voice-77aa10","published_at":"2026-11-18T00:30:00Z","duration_seconds":62,"sha256":"ff","bytes":250000,"transcript":"The longest header the server stores.","state":"live","audio_url":"/api/platform/takes/take-00000000000000c3/audio"}
+]}
