@@ -357,7 +357,7 @@ extension PlaybackEngine {
         keptSeen.formUnion(store.sheet.entries.map(\.id))
         let live = Set(store.sheet.entries.filter { $0.state == .ahead || $0.state == .onAir }.map(\.id) + (remembered.map { [$0.id] } ?? []))
         let gone = keptSeen.subtracting(live)
-        if !gone.isEmpty { LocalEntryKeep.shared.remove(ids: gone); keptSeen.subtract(gone) }
+        if !gone.isEmpty { HeldRest.shared.remove(ids: gone); keptSeen.subtract(gone) }
         changed()
         aheadChanged?()
     }
@@ -404,16 +404,15 @@ extension PlaybackEngine {
             c.start = max(a.start ?? 0, engine?.remotePosition()?.elapsed ?? 0)
             remembered = .audio(c, by: .phone)
             print("AUTORADIO kept place \(old.id) at \(Int(c.start ?? 0)) s while an answer speaks")
-        } else if old.wordsStayOnPhone, let rest = engine?.spokenRemainder(), !rest.isEmpty {
-            // A message, book or file: the rest of the passage is held here and never posted. The continuation is an entry that names the same
-            // address with no words (as the original did); its words are the phone's, like any read-aloud's.
+        } else if old.wordsComeFromThePhone, let rest = engine?.spokenRemainder(), !rest.isEmpty {
+            // A message, book or file: the rest of the passage is held here. The continuation is an entry that names the same address with no
+            // words (as the original did); the phone reads the words from its own store.
             let id = "c-" + UUID().uuidString.prefix(8).lowercased()
             var c = RunSheetEntry(id: id, kind: old.kind == .mail ? .mail : .page, placedBy: .phone, title: old.title, estSeconds: RunSheetEntry.estimateSeconds(words: rest))
             c.source = old.source
             provided[id] = (old.title, [rest])
-            // The words also go to the keep, so a relaunch before it finishes still has them (they never leave the phone).
-            let k = LocalEntryKeep.shared.row(old.id)
-            LocalEntryKeep.shared.put(id: id, title: k?.title ?? old.title, label: k?.label ?? old.source?.label ?? "", rest: rest)
+            // The words are also held on disk, so a relaunch before it finishes still has them.
+            HeldRest.shared.put(id: id, rest: rest)
             remembered = c
             print("AUTORADIO kept place \(old.id) as \(c.id) on the phone while an answer speaks")
         } else if let rest = engine?.spokenRemainder(), !rest.isEmpty {
@@ -551,7 +550,7 @@ extension PlaybackEngine {
             ok = await engine.speak(documentID: doc, entry: entry, paragraphs: [entry.text ?? ""])
         case .page, .mail:
             engine.stopRemote()
-            if let w = provided[entry.id] ?? LocalEntryKeep.shared.row(entry.id)?.rest.map({ (entry.title, [$0]) }) {
+            if let w = provided[entry.id] ?? HeldRest.shared.row(entry.id).map({ (entry.title, [$0.rest]) }) {
                 let doc = "rs:" + entry.id
                 playingDocument = doc
                 ok = await engine.speak(documentID: doc, entry: entry, paragraphs: w.paragraphs)
@@ -591,7 +590,7 @@ extension PlaybackEngine {
             if spec == nil, let address = entry.filesAddress {
                 let url: URL?
                 if let known = localFiles[entry.id] { url = known } else { url = await fileResolver?(address) }
-                if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.shownTitle(), show: LocalEntryKeep.shared.row(entry.id)?.label ?? entry.source?.label ?? "Files") }
+                if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.displayTitle, show: entry.source?.label ?? "Files") }
             }
             guard let a = spec else { break }
             if entry.kind == .clip, entry.source?.clipId != nil {
@@ -647,7 +646,7 @@ extension PlaybackEngine {
         if played { store.airedEnded(id, as: .heard, outcome: .finished, report: r) }
         else { store.airedEnded(id, as: .skipped, outcome: .failed) }
         provided[id] = nil
-        LocalEntryKeep.shared.remove(id)
+        HeldRest.shared.remove(id)
         leadInDone.remove(id)
         dropLocated(id)
         if let e = store.entry(id) { onEntryEnded?(e, played) }

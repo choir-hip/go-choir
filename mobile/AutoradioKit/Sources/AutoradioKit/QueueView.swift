@@ -37,7 +37,7 @@ extension RunSheetPlayer {
     public func info(clips: ClipStore = .shared) -> QueueInfo {
         var q = QueueInfo()
         let air = store.onAir()
-        q.current = air?.shownTitle() ?? ""
+        q.current = air?.displayTitle ?? ""
         q.currentKind = air?.kindWord ?? ""
         q.audio = isRemote
         q.playing = q.audio && !paused

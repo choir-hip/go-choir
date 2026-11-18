@@ -223,7 +223,7 @@ public enum RadioPage {
         let minutes = max(1, Int((said.reduce(0) { $0 + $1.estSeconds } / 60).rounded()))
         let things = n == 1 ? "One thing is ready" : "\(word(n).prefix(1).uppercased() + word(n).dropFirst()) things are ready"
         let about = minutes == 1 ? "about a minute" : "about \(word(minutes)) minutes"
-        let start = first.kind == .opening ? "the opening" : first.shownTitle()
+        let start = first.kind == .opening ? "the opening" : first.displayTitle
         return "\(hello). \(things), \(about). Press play and I\u{2019}ll start with \(start)."
     }
 
@@ -304,7 +304,7 @@ public enum RadioPage {
         if let e = air {
             o.onAir = true
             o.kindLabel = kindLabel(e)
-            o.title = e.shownTitle()
+            o.title = e.displayTitle
             o.source = e.audioSpec?.show.isEmpty == false ? e.audioSpec!.show : (e.source?.label ?? "")
             o.published = i.published
             o.openAddress = openAddress(e)
@@ -323,7 +323,7 @@ public enum RadioPage {
                 let done = e.estSeconds * o.fraction
                 o.elapsed = QueueClock.label(done); o.remaining = "-" + QueueClock.label(max(0, e.estSeconds - done))
             }
-            if e.kind == .answer, let h = held(in: i.sheet) { o.thenBack = "Then back to: \(h.shownTitle())" }
+            if e.kind == .answer, let h = held(in: i.sheet) { o.thenBack = "Then back to: \(h.displayTitle)" }
             // Why this: the desk's own cause and forecast when the entry carries them (the programme route sends neither today), else a sentence
             // built from what the entry does carry: who placed it, what it draws on, the entry it leads into.
             if let f = e.forecast {
@@ -338,7 +338,7 @@ public enum RadioPage {
         // up next
         let rows: [RadioPageRow] = ahead.enumerated().map { k, e in
             var r = RadioPageRow()
-            r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.shownTitle(); r.length = length(e.estSeconds)
+            r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.displayTitle; r.length = length(e.estSeconds)
             r.by = e.placedBy.rawValue; r.byWord = e.placedBy == .listener ? "You" : (e.placedBy == .desk ? "Desk" : "Phone")
             if i.stale.contains(e.id) { r.note = "Written for other neighbours" }
             r.builtOn = builtOn(e, versions: i.versions)
@@ -355,7 +355,7 @@ public enum RadioPage {
         let sounded = tail.filter { $0.ended?.outcome != .failed }
         o.heard = sounded.reversed().prefix(heardShown).enumerated().map { k, e in
             var r = RadioHeardRow()
-            r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.shownTitle(); r.outcome = outcomeWord(e); r.publisher = e.kind == .take ? (e.source?.label ?? "") : ""; r.builtOn = builtOn(e, versions: i.versions)
+            r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.displayTitle; r.outcome = outcomeWord(e); r.publisher = e.kind == .take ? (e.source?.label ?? "") : ""; r.builtOn = builtOn(e, versions: i.versions)
             return r
         }
 

@@ -107,11 +107,8 @@ public extension SavedCorpus {
             let sheet = await MainActor.run { RunSheetStore.shared.sheet }
             let r = RetrievalSources.runSheet(sheet)
             hold(group: "runsheet", r.docs); onAirHint = r.onAirTitle
-            // The brief goes to the server desk: a message being read aloud is private (its subject stays here).
-            let mailIDs = Set(sheet.entries.filter { $0.kind == .mail || ($0.source?.ref.hasPrefix("mail:") ?? false) }.map { "runsheet:" + $0.id })
-            let ahead = r.docs.filter { $0.source == "Up next" && !mailIDs.contains($0.id) }.prefix(4).map(\.title)
-            let airPrivate = r.docs.contains { $0.source == "On air" && mailIDs.contains($0.id) }
-            onAirBrief = (r.onAirTitle.isEmpty ? "Nothing is on air." : (airPrivate ? "A mail message is on air." : "On air now: \(r.onAirTitle).")) + (ahead.isEmpty ? "" : " Up next: " + ahead.joined(separator: "; ") + ".")
+            let ahead = r.docs.filter { $0.source == "Up next" }.prefix(4).map(\.title)
+            onAirBrief = (r.onAirTitle.isEmpty ? "Nothing is on air." : "On air now: \(r.onAirTitle).") + (ahead.isEmpty ? "" : " Up next: " + ahead.joined(separator: "; ") + ".")
         }
     }
 }
