@@ -34,6 +34,7 @@ func TestKeyTable(t *testing.T) {
 		{`"harbor strike" mauritius`, `mauritius "Harbor  Strike"`},
 		{"harbor strike 2026", "2026 harbor strike"},
 		{"c++ compiler", "compiler C++"},
+		{"US tariffs", "us tariffs"},
 	}
 	for _, c := range same {
 		if a, b := Key(c[0]), Key(c[1]); a != b || a == "" {
@@ -54,6 +55,10 @@ func TestKeyTable(t *testing.T) {
 		{"IT strike", "it strike"},
 		{"US strike", "strike"},
 		{"WHO report", "report"},
+		{"us tariffs", "tariffs"},
+		{"strike -IS", "strike IS"},
+		{"strike -US", "strike US"},
+		{"strike -IS", "strike"},
 		{"strike AT harbor", "strike harbor"},
 		{"harbor strike", "harbor strike site:example.com"},
 		{"harbor strike site:a.example", "harbor strike site:b.example"},

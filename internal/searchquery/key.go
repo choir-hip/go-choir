@@ -8,7 +8,7 @@
 // small English words. It keeps as terms what changes the answer: a year or a
 // date, a quoted phrase (one marked term), a symbol that is part of a word
 // (C++, C#), an acronym written in capitals that is a small word in lower case
-// (IT, US, WHO, AT), and operators.
+// (IT, WHO, AT), and operators.
 package searchquery
 
 import (
@@ -19,12 +19,14 @@ import (
 )
 
 // stopWords are dropped from a key when written in lower or mixed case. "or"
-// and "not" are not here: they change what a provider returns.
+// and "not" are not here: they change what a provider returns. "us" is not
+// here: a model often writes the country in lower case, and "us tariffs" is
+// not "tariffs".
 var stopWords = map[string]bool{
 	"a": true, "an": true, "the": true, "of": true, "in": true, "on": true, "at": true,
 	"to": true, "for": true, "and": true, "with": true, "by": true, "from": true,
 	"is": true, "are": true, "was": true, "were": true, "be": true, "about": true,
-	"as": true, "it": true, "its": true, "this": true, "that": true, "us": true, "who": true,
+	"as": true, "it": true, "its": true, "this": true, "that": true, "who": true,
 }
 
 var (
@@ -69,21 +71,20 @@ func Terms(q string) []string {
 		neg := strings.HasPrefix(clean, "-") && len(clean) > 1
 		for _, w := range words(tok) {
 			term := strings.ToLower(w)
+			keep := !stopWords[term]
 			if isAcronym(w) && stopWords[term] {
 				term = strings.ToUpper(w) // IT is not "it"
-				kept = append(kept, term)
-				all = append(all, term)
-				continue
+				keep = true
 			}
-			if neg {
+			if neg { // an excluded word is a term of its own, acronym or not
 				term = "-" + term
 				neg = false
+				keep = true
 			}
 			all = append(all, term)
-			if stopWords[term] {
-				continue
+			if keep {
+				kept = append(kept, term)
 			}
-			kept = append(kept, term)
 		}
 	}
 	if len(kept) == 0 {
