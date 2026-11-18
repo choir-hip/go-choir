@@ -324,18 +324,26 @@ groups overlap. So similarity proposes and a model must judge.
 |---|---|
 | Build VM (Xeon E-2236), one thread, load about 10 | 164 (192 passages; later runs under heavier load: 50 and 97) |
 | Build VM, two threads | 276 (1.69 times one) |
+| Build VM, one thread, 520 passages (163,818 tokens), second run, load 1.6 rising to 5 | 127 |
+| Build VM, four threads, 400 passages, load 3 to 7 | 349 (2.74 times one) |
+| Build VM, four threads, batches of four, load 7 to 11 | 301 (batching did not help) |
 | The lead's Mac (M1), CPU, four threads | about 1,390 |
 | The lead's Mac, Metal | about 3,000 |
 
-The VM was saturated by other work, so four threads and batching have no
-fair figure. Vectors from the VM match the Mac's (cosine 0.9999). Query
-latency on one x86 thread: 120 ms median. Node A is the same CPU as Node B
+The first runs were on a saturated VM. The second run (same day, 520
+passages) started at load 1.6 but other work arrived during it, so no figure
+here is from a quiet machine; eight threads was skipped at load 11.5.
+Vectors from the VM match the Mac's (cosine 0.9999). Query latency on x86:
+one thread 145 ms median and 182 ms at the 95th percentile, four threads 56
+and 80 ms (50 queries, load 11; the first run gave 120 ms median). Node A is the same CPU as Node B
 and was at load 9.6.
 
 ### What it means for the plan
 
-- One x86 thread embeds about half a 300-token passage a second. That is
-  enough for the steady state and slow for a first pass over everything.
+- One x86 thread embeds about 0.4 to 0.5 of a 300-token passage a second
+  (127 to 164 tokens a second on a shared machine); four threads about 1.1
+  passages a second. That is enough for the steady state and slow for a
+  first pass over everything.
 - First pass over 250,000 pages: at the lead of each page (about 400
   tokens) roughly 9 hours on the Mac with Metal, or 37 to 68 hours on Node
   B on six or three cores. At whole pages the answer depends on a number
@@ -343,7 +351,8 @@ and was at load 9.6.
   earlier assumed: 83 hours on the Mac with Metal, 14 days on six cores of
   Node B.
 - Steady state at whole pages (4,500 pages a day at 3,600 tokens) is about
-  190 tokens a second: a little over one x86 thread, all day.
+  190 tokens a second: one and a half x86 threads at the lower measured
+  rate, all day.
 - Not measured: full page against lead (needs the real page text), any
   non-English story, a quiet x86 machine.
 
