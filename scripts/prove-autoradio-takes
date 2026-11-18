@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Proof: takes, end to end on the drill computer d@e.
+
+Publishes one generated fixture as a take (drill data: the key names d@e, so
+the proxy marks the take drill, lists it only to drill computers and counts
+nothing from it), then asserts, in order:
+
+  1. publish answers 2xx with a take id and the fixture's own sha256;
+  2. the public list has the take with an audio_url and a record of "new";
+  3. the audio route serves the fixture back, byte for byte, as audio/mp4;
+  4. the take is in the publisher's own list (?mine=1);
+  5. the programme route, given the take as a candidate by the listener's own
+     handle, does NOT offer it (a publisher is never offered their own take);
+  6. given as a stand-in publisher's take (plumbing only: d@e has no second
+     listener), the programme route plays it as a `take` segment that cuts at
+     the segment, names the take, and carries a forecast claim (up to
+     --attempts tries: the model chooses whether to place it);
+  7. the publisher's own outcome on it is refused (403: rule 1);
+  8. delete answers 2xx, the audio answers 404 and the list no longer holds it.
+
+The take is deleted at the end whatever happened. Exit 0 when every check held,
+1 otherwise, 2 on bad arguments. The fixture is structurally an m4a (ftyp,
+moov/mvhd, mdat) and carries no sound: it is never a real take.
+
+The key goes only in the Authorization header and is never printed. An
+owner-wide key names no computer: pass --computer (X-Choir-Computer), which
+must be d@e (computer-59c902c5d46caecc0a180a8557164e72).
+
+  scripts/prove-autoradio-takes --host choir.news --api-key-file ~/key \\
+      --computer computer-59c902c5d46caecc0a180a8557164e72
+
+Run it from a host off Node B. Shapes: docs/reference/AUTORADIO-TAKES.md.
+"""
+import argparse
+import hashlib
+import http.client
+import json
+import struct
+import sys
+import uuid
+from datetime import datetime, timezone
+
+DRILL = "computer-59c902c5d46caecc0a180a8557164e72"
+STAND_IN = "voice-000000"
+
+
+def box(name, *payload):
+    body = b"".join(payload)
+    return struct.pack(">I", 8 + len(body)) + name + body
+
+
+def fixture(seconds=10):
+    mvhd = bytearray(100)
+    struct.pack_into(">I", mvhd, 12, 1000)
+    struct.pack_into(">I", mvhd, 16, seconds * 1000)
+    return (box(b"ftyp", b"M4A \x00\x00\x00\x00M4A mp42isom") + box(b"moov", box(b"mvhd", bytes(mvhd)))
+            + box(b"mdat", b"drill-fixture-" + uuid.uuid4().bytes * 4))
+
+
+class Client:
+    def __init__(self, args, key):
+        self.args, self.key = args, key
+
+    def call(self, method, path, body=None, headers=None, stream=False):
+        h = {"Authorization": "Bearer " + self.key, "X-Choir-Computer": self.args.computer}
+        h.update(headers or {})
+        cls = http.client.HTTPConnection if self.args.insecure_http else http.client.HTTPSConnection
+        conn = cls(self.args.host, timeout=self.args.timeout or None)
+        try:
+            conn.request(method, path, body, h)
+            resp = conn.getresponse()
+            raw = resp.read()
+            return resp.status, resp.getheader("Content-Type") or "", raw
+        finally:
+            conn.close()
+
+    def json(self, method, path, body=None):
+        data = json.dumps(body) if body is not None else None
+        status, _, raw = self.call(method, path, data, {"Content-Type": "application/json"} if data else None)
+        try:
+            return status, json.loads(raw) if raw else None
+        except ValueError:
+            return status, None
+
+
+def multipart(audio, fields):
+    boundary = "----take" + uuid.uuid4().hex
+    parts = []
+    for k, v in fields.items():
+        parts.append(('--%s\r\nContent-Disposition: form-data; name="%s"\r\n\r\n%s\r\n' % (boundary, k, v)).encode())
+    parts.append(('--%s\r\nContent-Disposition: form-data; name="audio"; filename="take.m4a"\r\nContent-Type: audio/mp4\r\n\r\n' % boundary).encode()
+                 + audio + b"\r\n")
+    parts.append(("--%s--\r\n" % boundary).encode())
+    return b"".join(parts), {"Content-Type": "multipart/form-data; boundary=" + boundary}
+
+
+def programme(client, args, candidate_publisher, take):
+    now = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    body = {
+        "request_id": "proof-take-%s" % uuid.uuid4().hex[:10], "cause": "extend", "local_time": now, "tz": "Europe/Paris",
+        "candidates": [
+            {"route": "harbour-reopens", "version": 1, "title": "Harbour reopens", "dek": "Repairs are done.", "text": "The harbour wall is repaired and ferries sail again."},
+            {"kind": "take", "take_id": take["take_id"], "publisher": candidate_publisher, "title": "I think the harbour matters",
+             "transcript": take["transcript"], "duration_seconds": take["duration_seconds"],
+             "responds_to": {"route": "harbour-reopens", "title": "Harbour reopens"}, "record": "new: no outcomes yet"},
+        ],
+        "ahead_titles": ["Ferry timetable"],
+    }
+    status, ctype, raw = client.call("POST", "/api/autoradio/programme", json.dumps(body),
+                                      {"Content-Type": "application/json", "Accept": "text/event-stream"})
+    segs, done, event = [], None, None
+    for line in raw.decode("utf-8", "replace").splitlines():
+        if line.startswith("event: "):
+            event = line[7:]
+        elif line.startswith("data: "):
+            try:
+                data = json.loads(line[6:])
+            except ValueError:
+                continue
+            if event == "segment":
+                segs.append(data)
+            elif event == "done":
+                done = data
+    return status, segs, done
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Prove takes on the drill computer.")
+    ap.add_argument("--host", required=True)
+    ap.add_argument("--api-key-file", required=True)
+    ap.add_argument("--computer", default=DRILL)
+    ap.add_argument("--attempts", type=int, default=3, help="programme calls to get the take placed")
+    ap.add_argument("--timeout", type=float, default=0.0)
+    ap.add_argument("--insecure-http", action="store_true")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+    if args.computer != DRILL:
+        ap.error("takes are proven on the drill computer d@e only (%s)" % DRILL)
+    try:
+        with open(args.api_key_file) as f:
+            key = "".join(f.read().split())
+    except OSError as e:
+        sys.exit("cannot read the key file: %s" % e.strerror)
+    if not key:
+        sys.exit("the key file is empty")
+    if args.dry_run:
+        print("ok: arguments and key file read; nothing sent")
+        return 0
+
+    client = Client(args, key)
+    failures = []
+
+    def check(name, cond, detail=""):
+        print("%s %s%s" % ("PASS" if cond else "FAIL", name, (" - " + detail) if detail and not cond else ""))
+        if not cond:
+            failures.append(name)
+        return cond
+
+    audio = fixture()
+    sha = hashlib.sha256(audio).hexdigest()
+    take = None
+    try:
+        body, hdr = multipart(audio, {"transcript": "Drill take: I think the harbour matters more than they say.",
+                                       "duration_seconds": "10", "sha256": sha,
+                                       "responds_to": json.dumps({"route": "harbour-reopens", "title": "Harbour reopens"})})
+        status, ctype, raw = client.call("POST", "/api/platform/takes", body, hdr)
+        try:
+            take = json.loads(raw)
+        except ValueError:
+            take = None
+        if not check("1 publish", 200 <= status < 300 and take and take.get("take_id", "").startswith("take-") and take.get("sha256") == sha,
+                     "HTTP %d %s" % (status, raw[:200])):
+            return 1
+        tid = take["take_id"]
+
+        status, listing = client.json("GET", "/api/platform/takes?limit=100")
+        found = [t for t in (listing or {}).get("takes", []) if t.get("take_id") == tid]
+        check("2 listed with audio_url and a new record", status == 200 and len(found) == 1
+              and found[0].get("audio_url", "").endswith("/audio") and (found[0].get("record") or {}).get("new") is True,
+              "HTTP %d, %d matches" % (status, len(found)))
+        own_handle = found[0]["publisher"] if found else take["publisher"]
+
+        status, ctype, got = client.call("GET", "/api/platform/takes/%s/audio" % tid)
+        check("3 audio served byte for byte as audio/mp4", status == 200 and ctype.startswith("audio/mp4") and got == audio,
+              "HTTP %d %s %d bytes" % (status, ctype, len(got)))
+
+        status, mine = client.json("GET", "/api/platform/takes?mine=1")
+        check("4 in the publisher's own list", status == 200 and any(t.get("take_id") == tid for t in (mine or {}).get("takes", [])))
+
+        status, segs, done = programme(client, args, own_handle, take)
+        check("5 the publisher's own take is not offered", status == 200 and not any(s.get("kind") == "take" for s in segs),
+              "HTTP %d, kinds %s" % (status, [s.get("kind") for s in segs]))
+
+        placed = None
+        for _ in range(max(1, args.attempts)):
+            status, segs, done = programme(client, args, STAND_IN, take)
+            placed = next((s for s in segs if s.get("kind") == "take"), None)
+            if placed:
+                break
+        content = [s for s in segs if s.get("kind") in ("story", "update", "headlines", "take")]
+        check("6 a stand-in publisher's take plays as a take segment with a forecast",
+              bool(placed) and placed.get("cut_at") == "segment" and (placed.get("take") or {}).get("take_id") == tid
+              and done is not None and done.get("claims") == len(content),
+              "HTTP %d, kinds %s, done %s" % (status, [s.get("kind") for s in segs], json.dumps(done)[:200]))
+
+        status, resp = client.json("POST", "/api/platform/takes/%s/outcome" % tid, {"outcome": "heard", "claim_id": "claim-proof-" + uuid.uuid4().hex[:12]})
+        check("7 the publisher's own outcome is refused", status == 403, "HTTP %d" % status)
+    finally:
+        if take and take.get("take_id"):
+            tid = take["take_id"]
+            status, _ = client.json("DELETE", "/api/platform/takes/" + tid)
+            check("8 delete answers 2xx", 200 <= status < 300, "HTTP %d" % status)
+            status, _, _ = client.call("GET", "/api/platform/takes/%s/audio" % tid)
+            _, listing = client.json("GET", "/api/platform/takes?limit=100")
+            check("8 audio is 404 and the list no longer holds it", status == 404
+                  and not any(t.get("take_id") == tid for t in (listing or {}).get("takes", [])), "audio HTTP %d" % status)
+    print("RESULT %s" % ("PASS" if not failures else "FAIL: " + "; ".join(failures)))
+    return 0 if not failures else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

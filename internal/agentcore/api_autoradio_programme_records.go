@@ -139,6 +139,9 @@ func (c *programmeCall) writeSegment(ctx context.Context, s *programmeSegment) e
 	if s.ClipID != "" {
 		refs["clip_id"], refs["clip_seconds"] = s.ClipID, fmt.Sprint(s.ClipSeconds)
 	}
+	if s.TakeID != "" {
+		refs["take_id"], refs["take_seconds"] = s.TakeID, fmt.Sprint(s.TakeSeconds)
+	}
 	rec, err := c.noticeRecord(segmentRecordID(c.stretchID, s.ID), kindSegment, refs, s.Title, s.Text, nil, time.Now())
 	if err != nil {
 		return err
@@ -222,6 +225,10 @@ func (c *programmeCall) readSegments(ctx context.Context, stretchID string, n in
 		if id := rec.SubjectRefs["clip_id"]; id != "" {
 			s.ClipID = id
 			_, _ = fmt.Sscanf(rec.SubjectRefs["clip_seconds"], "%g", &s.ClipSeconds)
+		}
+		if id := rec.SubjectRefs["take_id"]; id != "" {
+			s.TakeID = id
+			_, _ = fmt.Sscanf(rec.SubjectRefs["take_seconds"], "%g", &s.TakeSeconds)
 		}
 		if s.Content {
 			// A content segment is streamed only with its claim: the segment
