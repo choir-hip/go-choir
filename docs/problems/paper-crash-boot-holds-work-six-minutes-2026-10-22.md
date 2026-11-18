@@ -855,3 +855,47 @@ Residuals:
 - R-C3: the header list over all conversation heads of the owner grows
   with conversations, not records. If it ever matters, an `open` field in
   the head's metadata lets closed heads skip the point read.
+
+## Seen again, worse: a deploy's refresh became a crash boot and the closure took 25 minutes (2026-11-18)
+
+Found by the hourly status at 18:43Z ("paper not publishing", and Node B's
+liveness probe: no inference call since 17:57:24Z). Read-only, from vmctl's
+journal and the paper's console log. Status: open; no fix yet.
+
+What happened, deploy of `d21930b76`:
+
+| time (UTC) | event |
+|---|---|
+| 18:06:26 | the old vmctl (running since 16:18:26) kills the paper, `cause=refresh epoch=13727`, and starts its boot of epoch 13728 |
+| 18:06:56 | the deploy restarts vmctl; the new vmctl finds that boot in flight and closes it (`interrupted-by-vmctl-restart`, as built on 2026-10-22: close, not adopt) |
+| 18:07:27 | fresh boot, epoch 13729; the guest reads `restart kind=crash_or_stop` |
+| 18:07:28 to 18:32:54 | `close_open_obligations_after_crash dur=25m26.212s`: `management_task=1 research=24 texture=5196 unregistered=8` |
+| 18:33:07 | source schedules "stay active"; next ticks 18:48Z to 19:32Z |
+
+So the paper made no model call for at least 51 minutes, and every run in
+flight at 18:06 was closed rather than resumed.
+
+Two separate things, both hypotheses until read in code:
+
+1. **The deploy's refresh raced the deploy's own vmctl restart.** The old
+   vmctl acted on the new target 30 seconds before it was replaced. It
+   happened once before in the journal's 14 days (2026-11-17T21:02:29); in
+   the other deploys of 2026-11-18 the refresh ran after vmctl's restart
+   and was planned (`planned_restart=true`, seven times). A planned refresh
+   that the deploy itself turns into a crash breaks the restart rule's
+   intent: the marker was spent on a boot the deploy killed.
+2. **The closure's cost grows with the time since the last crash boot.**
+   5,229 open obligations, almost all Texture's, 21 hours after the last
+   crash boot (2026-11-17T21:02), is about 250 an hour left open, and each
+   closure cost about 0.29 s (residual R-C1 said 150 ms a run and "bounded
+   by the open and parked runs at the crash"; the bound is not small).
+   Whether those obligations are live work or rounds nobody will ever
+   answer is not known. If they are dead, the leak is the defect and the
+   boot is where it is paid.
+
+Remaining error: the count of deploys affected is from one journal query;
+the per-closure cost is the phase time over the count; nothing here was
+read in code. The same hour Node B's free disk read 94 GiB on the
+forecast's 18:02Z row and 150 GiB live at 18:43Z; the paper's snapshot root
+is stamped 18:02:04Z. Whether the snapshot explains the 55 GiB dip is not
+checked.
