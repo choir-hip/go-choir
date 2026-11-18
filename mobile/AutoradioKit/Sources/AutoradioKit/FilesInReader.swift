@@ -28,19 +28,26 @@ public struct FilesInReader: Sendable {
     public static func etag(_ e: FileEntry) -> String { "\(e.size)|\(e.modified.map { String($0.timeIntervalSince1970) } ?? "")" }
 
     /// The Reader document for the Files address; throws what the Reader says when it cannot be opened.
-    public func open(address: String) async throws -> ShelfDoc {
+    public func open(address: String) async throws -> ShelfDoc { try await openReporting(address: address).doc }
+
+    /// The same, with where the bytes came from ("cache": the Reader already held this exact file; "network": fetched from the computer now, or
+    /// "cache" when the Files download cache had it) and how many.
+    public func openReporting(address: String) async throws -> (doc: ShelfDoc, from: String, bytes: Int64) {
         guard Self.opensInReader(address), let (path, _) = FilePath.fromAddress(address) else { throw ShelfError.notSupported }
         guard let entry = await files.entry(path: path) else { throw ShelfError.unreadable(FilesError.notFound.description) }
         let tag = Self.etag(entry)
         let lib = shelf()
-        if let d = lib.doc(origin: path), d.etag == tag { files.noteOpened(entry); return d }
+        // A library row whose original file is gone from disk is not "had": the page would draw nothing. It is fetched and taken in again.
+        if let d = lib.doc(origin: path), d.etag == tag, lib.fileURL(d.id) != nil, lib.text(d.id) != nil { files.noteOpened(entry); return (d, "cache", entry.size) }
+        if let d = lib.doc(origin: path), lib.fileURL(d.id) == nil { lib.remove(id: d.id) }          // the same bytes would be "already in the library" and the original never restored
+        let from = files.isCached(entry) ? "cache" : "network"
         let url: URL
         do { url = try await files.download(entry, maxBytes: Int64(ReaderShelf.maxBytes)) }
         catch let e as FilesError { if case .tooLarge = e { throw ShelfError.tooLarge }; throw ShelfError.unreadable(e.description) }
         catch { throw ShelfError.download }
         let doc = try await Task.detached { try lib.importFile(at: url, name: entry.name) }.value
         files.noteOpened(entry)
-        return lib.adopt(id: doc.id, origin: path, etag: tag) ?? doc
+        return (lib.adopt(id: doc.id, origin: path, etag: tag) ?? doc, from, entry.size)
     }
 
     /// An audio file in Files as a run sheet entry, and the phone's own copy of it (kept locally by entry id, never posted); nil for anything

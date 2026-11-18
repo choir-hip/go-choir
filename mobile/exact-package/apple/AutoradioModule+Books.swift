@@ -42,7 +42,8 @@ extension AutoradioModule {
                 try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 try? FileManager.default.copyItem(at: from, to: to)
             }
-            return "app:/cache/files/reader-\(d.id)/doc.pdf"
+            // A copy that did not happen is not a source: the page would be a blank frame. "" makes the page read the extracted text instead.
+            return FileManager.default.fileExists(atPath: to.path) ? "app:/cache/files/reader-\(d.id)/doc.pdf" : ""
         }
         /// The document's own file for the share sheet (any kind): a copy of the original under the cache, made once.
         func shareable(_ d: ShelfDoc) -> String {
@@ -82,8 +83,11 @@ extension AutoradioModule {
                 return reply(blank.merging(["id": id, "status": "notfound", "message": "This document is not in Reader any more."]) { $1 })
             }
             let sections: [[String: Any]] = t.sections.enumerated().map { ["index": $0.offset, "title": $0.element.title] }
+            let src = shown(d)
+            let note = d.kind == "pdf" && src.isEmpty ? "The original PDF could not be shown, so its text is here." : ""
+            print(FilesOpen.pageLine(kind: d.kind, pages: t.sections.count, shown: !src.isEmpty))
             reply(["address": a, "id": id, "title": d.title, "author": d.author, "kind": d.kind, "kindLabel": d.kind == "pdf" ? "PDF" : "Book",
-                   "status": "ready", "message": "", "src": shown(d), "shareSrc": shareable(d), "sections": sections, "blockCount": d.length, "position": d.position,
+                   "status": "ready", "message": note, "src": src, "shareSrc": shareable(d), "sections": sections, "blockCount": d.length, "position": d.position,
                    "resumeSection": t.section(of: d.position), "resumeBlock": d.position])
         }
 

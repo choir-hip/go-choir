@@ -132,7 +132,7 @@ extension AutoradioModule {
             Task { @MainActor in await TextureEditor.shared.flushAll() }      // leaving a page posts what was typed on it
             // A PDF or an e-book in Files opens in Reader and text in Texture: the document's own page, never a `file:` page for it (Kit/FilesOpen.swift).
             if let address = args["address"] as? String, FilesOpen.resolvesElsewhere(address) {
-                BarTracker.shared.say("Opening \(FilePath.name(FilePath.fromAddress(address)?.path ?? address))…")
+                // No "Opening…" line: the bar's line channel is the error one (red icon, held for seconds), and it was never cleared on success.
                 Task { [weak self] in
                     guard let self else { return }
                     if case .failed(let line) = await FilesOpen.open(address: address, title: args["title"] as? String, pages: self.pages) { BarTracker.shared.say(line) }

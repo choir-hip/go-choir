@@ -99,6 +99,8 @@ component DocPage
     else
       PageScroll(id="doc")
         SectionHeader(label=ldChap.title)
+        if ldInfo.message != ""
+          text ldInfo.message testId="doc-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         Emerge(delay=0)
           column width="100%" max-width=620 gap=2
             for b in ldChap.blocks key=b.n
