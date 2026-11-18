@@ -158,7 +158,8 @@ func (s *ChoirScope) ReadAll(urls []string) []Page {
 // searchWaitMs bounds the wait of one choir.Search.
 const searchWaitMs = 15000
 
-// Search starts one search, waits for it (at most 15 seconds) and returns it:
+// Search starts one search, waits for it (at most 15 seconds, after at most
+// 15 more for an equal search of this run that is still running) and returns it:
 // SearchStart, SearchWait and Searches.Get in one call. Results are every
 // arrival's hits, each URL once. Done false means a provider was still
 // pending; read choir.Searches.Get(id) later for more.
