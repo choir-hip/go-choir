@@ -1,5 +1,14 @@
 # Autoradio on the four-stroke learning engine (2026-11-14)
 
+> **Superseded in part, 2026-11-17**, by
+> [autoradio-learned-document-2026-11-17.md](autoradio-learned-document-2026-11-17.md)
+> (its section 1). Superseded here: 3.1's `edition` and `instruction:note`
+> causes; 4.1 to 4.2 and 12.3 to 12.4 (the heard route, air events and their
+> classes; the run sheet op log is now the air log); section 5's guard 1 as
+> it applies to per-lesson counts; 6.2 to 6.3 (lesson records as the
+> notebook, the notebook route); section 8 (the edition becomes part of the
+> notebook); and the literals of 12.1 to 12.7 that name those. The rest stands.
+
 How the DJ learns one listener. This is the first place the
 [four-stroke learning engine](../learning-engine.md) is built whole: forecast,
 outcome, lesson, trust. The goal file that runs it is

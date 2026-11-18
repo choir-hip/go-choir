@@ -124,15 +124,15 @@ stations:
     status: working
   - id: L4
     name: The document and its writer
-    scope: "one Texture document per listener within a one-page budget; the DJ proposes lesson lines in the stretch call from the settled rows it is shown; Texture writes the revision; a confirmation raises a count and adds no text; a new line displaces or merges older ones when the page is full; the listener's edits and strikes hold"
+    scope: "design sections 2 and 3: one Texture document per listener titled My notebook (editiondoc.Title changes; My edition is adopted, not duplicated); four sections (what you asked for, learned at most 12 lines, trying at most 3, recent steering at most 10 taps); the line grammar with [L<n> · heard h of m] tags, counts computed from the ledger by rule; target about 400 words, hard cap 1,000 words for desk sections; the DJ proposes notebook lines in the extend call, cites only settled rows it was shown, must name what it displaces when a section is full; the Autoradio handler appends an autoradio.notebook_patch record and calls textureowner.ApplyNotebookPatch, which writes one AuthorAppAgent revision labelled app:autoradio with no model call; listener edits detected by revision author and recorded as strikes; a struck line is never rewritten from the same cites; first writer of autoradio.lesson"
     class: red
     review: two seats
     depends_on: [L2]
-    carrier: "lane/learn-design (design docs/design/autoradio-learned-document-2026-11-17.md), then a builder lane"
-    status: working
+    carrier: "design on lane/learn-design (docs/design/autoradio-learned-document-2026-11-17.md), then a builder lane"
+    status: pending
   - id: L5
     name: The DJ reads the document
-    scope: "the document goes into the programme input; caused_by points at its lines so a settled forecast credits or discredits the line that caused the pick; candidate order uses it"
+    scope: "design section 4: the notebook replaces the lessons and edition sections of the stable prefix, each line shown with its ref; marked cases (the last 40 settled forecasts) in the volatile part; caused_by accepts lesson:L<n>, try:T<n>, mine:<8 hex>, tap:<entry id> resolved against that call's notebook, and claims carry a line:<ref> tag, so a settlement moves that line's count at the next revision; edition_text is deleted from the request; candidate order stays the phone's front-list order (re-ranking by the notebook is deferred: it needs another call or an index)"
     class: red
     review: two seats
     depends_on: [L4]
@@ -140,7 +140,7 @@ stations:
     status: pending
   - id: L6
     name: The phone
-    scope: "a page for the document, the scorecard and the rows behind a line; spoken and typed steering and the more and less taps become the listener's own lines; the topic list moves into the document; the phone sends edition text"
+    scope: "design sections 6 to 8: one page with the notebook (editable as a Texture), the scorecard and the ledger rows behind a tapped line; more and less taps posted to POST /api/autoradio/steer and shown under recent steering; spoken steering quoted verbatim into what you asked for by the next extend call; the onboarding topic list written once as the first lines of what you asked for (an AuthorUser revision); a crash is never synthesised as left; consolidation of the listener's lines only on their Yes; promotion of a lesson with at least 10 settled rows to what you asked for on their Yes"
     class: orange
     review: one seat
     depends_on: [L3, L4]
@@ -152,7 +152,7 @@ stations:
     class: red
     review: two seats on the server side, one on the phone side
     depends_on: [L2]
-    carrier: "specification first in lane/learn-design, then a server lane and a phone lane in parallel"
+    carrier: "specification: design section 11, pushed first at origin/lane/learn-design 4be932ad5; then a server lane and a phone lane in parallel"
     status: working
   - id: L8
     name: The evening's fixes reach the phone and main
@@ -164,7 +164,7 @@ stations:
     status: working
   - id: L9
     name: TestFlight
-    scope: "the owner's paid team, an App Store Connect record, a distribution profile, usage strings, the privacy manifest, the encryption declaration, a sign-in a tester can complete; an archive that uploads"
+    scope: "the list under 'TestFlight this week' below: paid team, App Store Connect record, distribution profile and owner acts; privacy manifest, encryption declaration, version and build number, a sign-in a new tester can complete, account deletion; usage strings, background audio and icon are present; an archive that uploads"
     class: orange
     review: one seat
     depends_on: [L6, L7, L8]
@@ -181,7 +181,7 @@ decisions_for_the_owner:
     question: What is the document called for the listener?
     why: the theory calls it the notebook; the phone needs one name
     options: the notebook; My edition; another name
-    default: the notebook, replacing "My edition"
+    default: "the notebook; the Texture title is My notebook, and an existing My edition document is adopted under the new title"
   - id: D3
     question: Which Apple developer team and bundle id go to TestFlight?
     why: only the owner can enrol, create the app record and accept Apple's terms
@@ -196,7 +196,13 @@ decisions_for_the_owner:
     question: What does a publisher with no record get?
     why: a new publisher cannot earn distribution without being offered once
     options: a small number of first offers; none until someone follows them
-    default: a small, stated number of first offers, labelled as a trial by the DJ's cause
+    default: "a trial: a take with fewer than 3 counted outcomes is always among the phone's 3 take candidates while it is listed; the DJ forecasts it on the transcript, cause explore when nothing else decided it (design 11.6)"
+
+  - id: D6
+    question: Who is the second review seat while seat 1 is out?
+    why: "CLAUDE.md blocks tier-2 review until the owner names a replacement; L1, L2, L4, L5 and the L7 server side are red and need two seats"
+    options: a named replacement model; land red stations on one seat with the owner's word; wait
+    default: "wait for the named seat; meanwhile red candidates are built, reviewed by seat 2, frozen and proved on the drill computer from the lane, and do not land on main"
 
 owner_rulings:
   - on: 2026-11-17
@@ -217,7 +223,7 @@ owner_rulings:
 
 now:
   status: working
-  slice: "L1 to L3 are with one builder on lane/learn-settle, whose first act is to confirm from the drill computer's records that outcomes are dropped today; the design for L4 to L7 is being written on lane/learn-design with the takes specification first; the phone candidate lane/autoradio-integ9 is in its simulator build"
+  slice: "L1 to L3 are with one builder on lane/learn-settle, whose first act is to confirm from the drill computer's records that outcomes are dropped today; the design for L4 to L7 is on lane/learn-design (takes first, 4be932ad5); the phone candidate lane/autoradio-integ9 is in its simulator build"
   source_ref: "origin/main at the commit that carries this file"
   deploy_identity: "staging 90f258bb4"
   candidate:
@@ -239,7 +245,7 @@ now:
     evidence_refs: []
   decision:
     what: "the document is the canonical representation and Texture writes it; the DJ proposes lines inside the stretch call; the run sheet op log is the only evidence; build every station now and revise together"
-    kind: architectural
+    kind: architecture
     status: settled
     evidence_ref: this file, owner_rulings
     owner_ratification_ref: "the owner's messages of 2026-11-17"
@@ -247,7 +253,7 @@ now:
     believed_state: "one stroke of four runs; the pieces for the second and third exist unconnected; no document and no take exist"
     main_uncertainty: "whether outcomes are in fact dropped on the server today, and whether a one-page document can carry enough to change the DJ's picks"
     next_observation: "the learn-settle builder's read of the drill computer's sheet records"
-  blocker_or_risk: "four red stations need two review seats each, which sets the pace; TestFlight needs the owner's paid team (D3)"
+  blocker_or_risk: "five red stations need two review seats each, and two-seat review is blocked until the owner names a replacement for seat 1 (CLAUDE.md, Review; D6); TestFlight needs the owner's paid team (D3)"
   next_action: "review and land L1 to L3 when lane/learn-settle is pushed; start the L7 server and phone builders when the takes specification is pushed; install lane/autoradio-integ9 when its tours pass"
 
 receipts: []
@@ -283,5 +289,25 @@ is what earns distribution.
 stations run in parallel where their dependencies allow. The earlier design,
 [autoradio-learning-engine-2026-11-14.md](../design/autoradio-learning-engine-2026-11-14.md),
 stands where the rulings above do not change it; the revision is
-`docs/design/autoradio-learned-document-2026-11-17.md`, on its way from
-lane/learn-design.
+[autoradio-learned-document-2026-11-17.md](../design/autoradio-learned-document-2026-11-17.md).
+
+## TestFlight this week
+
+From the repo on 2026-11-18 (`mobile/README.md`, `mobile/AutoradioLab/app.json`,
+`mobile/scripts/make-profile.sh`, `docs/reference/exact/build-and-ship.md`,
+`docs/reference/exact/gaps.md`). App Store rules are not restated here.
+
+| Item | State | Evidence or act |
+|---|---|---|
+| Paid developer programme team | owner act | signed today by a free personal team whose profiles last seven days (`make-profile.sh:2-3,7`; `build-and-ship.md:100,132,182-184`) |
+| Bundle id | present, owner decision | `news.choir.autoradio.lab` (`app.json:5,9`); a public build may want another id (D3) |
+| App Store Connect app record | owner act | nothing in the repo |
+| Distribution certificate and profile | owner act, then wiring | Exact makes no profiles (`build-and-ship.md:102`); the release path takes `EXACT_IDENTITY` and `EXACT_PROFILE` (`:196-198`); upload "not exercised" (`:205`) |
+| Microphone and speech usage strings | present | `mobile/AutoradioLab/strings/en.json:2,4`; `app.ts:4,6` |
+| Background audio | present | `app.json:20`; locked-screen playback not yet proved on a phone (`README.md:460`) |
+| Privacy manifest (`PrivacyInfo.xcprivacy`) | missing | not in the repo; the app stores preferences, Keychain data and voice, and takes publish a voice |
+| Encryption declaration (`ITSAppUsesNonExemptEncryption`) | missing | not in the repo |
+| Version and build number | missing | none in `app.json`; `mobile/EXACT_PIN` not yet created (`build-and-ship.md:226-227`) |
+| A sign-in a new tester can complete | missing | device code approved by passkey for an existing account (`README.md:136-138`); no sign-up path and no review account; a new account's computer appears only after the first status call (`README.md:211`) |
+| Account deletion | missing | sign-out only (`README.md:144,159,214`); needed once a tester can create an account in the app |
+| App icon | present | `app.json:12-14` and `appicon/` |
