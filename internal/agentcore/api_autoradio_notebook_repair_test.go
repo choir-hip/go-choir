@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"testing"
@@ -280,5 +281,131 @@ func TestN10_ALessonWhoseRecordCannotBeWrittenIsNotApplied(t *testing.T) {
 	_, evs := serve(t, h, "r-2")
 	if fake.found || !strings.Contains(fmt.Sprint(doneNotebook(t, evs)["error"]), "lesson record") {
 		t.Errorf("(N10) applied without its record: found=%v %v", fake.found, doneNotebook(t, evs))
+	}
+}
+
+func TestSB2_ARefusedTapLeavesNoNote(t *testing.T) {
+	fake := &fakeNotebook{}
+	rt, _ := radioRuntime(t, notebookScript(nil))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	for i := 0; i < 2; i++ {
+		if rec := steerPost(h, `{"entry_id":"d-x-1","direction":"less","title":"a [L1 b"}`); rec.Code != 422 {
+			t.Errorf("(S-B2) %d", rec.Code)
+		}
+	}
+	if n := len(tape(t, rt, kindNote)); n != 0 {
+		t.Errorf("(S-B2) %d orphan notes", n)
+	}
+}
+
+func TestSB3_ATapThatLostEveryRaceIsAddedByTheNextPatch(t *testing.T) {
+	noCadence(t)
+	fake := &fakeNotebook{}
+	rt, _ := radioRuntime(t, notebookScript(nil))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	_, evs := serve(t, h, "r-1")
+	entry := segmentEvents(evs)[0]["entry_id"].(string)
+	fake.staleN = 3
+	rec := steerPost(h, `{"entry_id":"`+entry+`","direction":"less"}`)
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), "deferred") {
+		t.Fatalf("(S-B3) %d %s", rec.Code, rec.Body.String())
+	}
+	if fake.found {
+		t.Fatal("the tap was written through three lost races")
+	}
+	serve(t, h, "r-2")
+	if got := notebook.Parse(fake.text()).Lines(notebook.SecSteering); len(got) != 1 || !strings.HasPrefix(got[0].Text, `Less like this: "Story A"`) {
+		t.Fatalf("(S-B3) after the next extend:\n%s", fake.text())
+	}
+	serve(t, h, "r-3")
+	if got := notebook.Parse(fake.text()).Lines(notebook.SecSteering); len(got) != 1 {
+		t.Errorf("(S-B3) the tap was added twice: %d", len(got))
+	}
+	if n := len(tape(t, rt, kindNote)); n != 2 { // the tap's note and its done marker
+		t.Errorf("(S-B3) %d notes", n)
+	}
+}
+
+func TestS3_TooManyListenerRevisionsAreReportedNotSkipped(t *testing.T) {
+	fake := &fakeNotebook{}
+	fake.push("appagent", notebook.DeskLabel, "# My notebook\n\n## What Autoradio has learned\n- A. [L1 · heard 0 of 0]\n")
+	fake.found, fake.cut = true, true
+	rt, _ := radioRuntime(t, notebookScript(nil))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	_, evs := serve(t, h, "r-1")
+	if nb := doneNotebook(t, evs); nb["status"] != "not_applied" || !strings.Contains(fmt.Sprint(nb["reason"]), "too many") {
+		t.Errorf("(S3) %v", nb)
+	}
+	_, out := learningGet(t, h, "")
+	nbv := out["notebook"].(map[string]any)
+	ps := nbv["patches"].([]any)
+	if nbv["chain_cut"] != true || len(ps) != 1 || !strings.Contains(fmt.Sprint(ps[0]), "too many") {
+		t.Errorf("(S3) route: %v", nbv)
+	}
+}
+
+func TestS5_AReadErrorIsAnErrorOnTheRoute(t *testing.T) {
+	fake := &fakeNotebook{readErr: errors.New("texture store down")}
+	rt, _ := radioRuntime(t, notebookScript(nil))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	_, out := learningGet(t, h, "")
+	nbv := out["notebook"].(map[string]any)
+	if nbv["error"] == nil || nbv["found"] != false {
+		t.Errorf("(S5) %v", nbv)
+	}
+}
+
+func TestS9_ALessonKeepsAtMostFiveCites(t *testing.T) {
+	noCadence(t)
+	fake := &fakeNotebook{}
+	rt, _ := radioRuntime(t, notebookScript(map[int]func(provideriface.TextStreamRequest, []string) []string{
+		1: func(provideriface.TextStreamRequest, []string) []string { return sixStoriesLines() },
+		2: func(req provideriface.TextStreamRequest, shown []string) []string {
+			return []string{titled("Story G", nil), nbAdd("Six cites.", shown[:6], nil), nbAdd("Five cites.", shown[:5], nil)}
+		},
+	}))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	firstStretch(t, h, "r-1", []string{"finished", "finished", "finished", "finished", "skipped", "skipped"})
+	serve(t, h, "r-2")
+	if text := fake.text(); strings.Contains(text, "Six cites") || !strings.Contains(text, "Five cites") {
+		t.Errorf("(S9)\n%s", text)
+	}
+}
+
+func TestS10b_RowsBehindALineIncludeTheNoVerdictOnes(t *testing.T) {
+	fake := &fakeNotebook{}
+	fake.push("appagent", notebook.DeskLabel, "# My notebook\n\n## What Autoradio has learned\n- A. [L1 · heard 0 of 0]\n")
+	fake.found = true
+	rt, _ := radioRuntime(t, linesScript(titled("Story A", map[string]any{"caused_by": "lesson:L1"})))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	_, evs := serve(t, h, "r-1")
+	entry := segmentEvents(evs)[0]["entry_id"].(string)
+	mustOps(t, h, phoneEnd(entry, "left", "heard", "left", 0)...)
+	_, out := learningGet(t, h, "?line=L1")
+	rows := out["rows"].([]any)
+	if len(rows) != 1 || rows[0].(map[string]any)["status"] != "no_verdict" {
+		t.Errorf("(S10b) %v", rows)
+	}
+}
+
+func TestS8_TheDocumentHintIsTheLatestAppliedPatchesDocument(t *testing.T) {
+	rt, _ := radioRuntime(t, notebookScript(nil))
+	h := NewAPIHandler(rt)
+	led := h.programmeLedger()
+	for i, doc := range []string{"doc-old", "doc-new"} {
+		rec := ownerRecord(kindPatch, fmt.Sprintf("autoradio-notebook-patch:p%d:result:applied", i), progOwner, rt.cfg.ComputerID,
+			map[string]string{"patch_id": fmt.Sprint("p", i), "status": "applied", "doc_id": doc}, "x", "", time.Now().Add(time.Duration(i)*time.Second))
+		if _, err := led.AppendCommitmentRecord(context.Background(), progOwner, rt.cfg.ComputerID, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := NotebookDocHint(context.Background(), rt.store, progOwner, rt.cfg.ComputerID); got != "doc-new" {
+		t.Errorf("(S8) hint %q", got)
 	}
 }

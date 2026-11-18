@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/notebook"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -153,5 +154,29 @@ func TestNotebookDoesNotAdoptAModelsDocumentOrWriteToAnArchivedOne(t *testing.T)
 		if d.DocID != "doc-model" && d.DocID != "doc-mine" && strings.Contains(d.Title, "notebook") {
 			t.Errorf("(N4) a second notebook was made: %s", d.DocID)
 		}
+	}
+}
+
+// S8: the edition route and the desk choose the same document.
+// S10a: no wake for a notebook, root or not.
+func TestNotebookEditionRouteAgreesAndNothingWakesIt(t *testing.T) {
+	f := newAlgoFixture(t, "x")
+	ctx := context.Background()
+	_ = startTextDoc(t, f.core.Store(), "doc-a", "My notebook", "# My notebook\n- a\n")
+	time.Sleep(20 * time.Millisecond)
+	_ = startTextDoc(t, f.core.Store(), "doc-b", "My Edition", "# old\n")
+	st, err := f.handler.NotebookRead(ctx, "user-1", "desk:autoradio")
+	if err != nil || st.DocID != "doc-a" {
+		t.Fatalf("read: %+v %v", st, err)
+	}
+	if _, got, _ := getEdition(f, "user-1"); got["doc_id"] != st.DocID {
+		t.Errorf("(S8) the edition route says %v, the desk reads %s", got["doc_id"], st.DocID)
+	}
+	doc, err := f.core.Store().GetLifecycleDocument(ctx, "user-1", "autoputer-test", "doc-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec, err := f.handler.reconcileAgentWakeLockedFor(ctx, doc, "texture:doc-a", &textureRootWake{Full: true}); rec != nil || err != nil {
+		t.Errorf("(S10a) a root wake of the notebook: %v %v", rec, err)
 	}
 }
