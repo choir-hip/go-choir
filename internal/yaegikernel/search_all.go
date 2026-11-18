@@ -3,6 +3,7 @@ package yaegikernel
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/searchquery"
 )
@@ -24,8 +25,11 @@ const (
 	searchAllHeldPercent = 80
 	// searchAllLook is how many of a wording's pages are judged.
 	searchAllLook = 10
-	// searchAllEmptyRun is how many wordings in a row may return nothing.
+	// searchAllEmptyRun is how many wordings in a row may return nothing
+	// (a provider answered, with no page); searchAllFailRun how many may
+	// fail (no provider answered).
 	searchAllEmptyRun = 2
+	searchAllFailRun  = 2
 )
 
 // SearchAllWording is what became of one wording.
@@ -67,7 +71,9 @@ func (r SearchAllResult) String() string {
 	}
 	fmt.Fprintf(&b, "SearchAll %q: %d of %d wordings sent, %d pages, %d new\n", r.Question, sent, len(r.Wordings), len(r.Results), fresh)
 	for i, w := range r.Wordings {
-		if w.Sent {
+		if !w.Sent && strings.HasPrefix(w.Why, "FAILED") {
+			fmt.Fprintf(&b, "%d %q: %s\n", i+1, w.Wording, w.Why)
+		} else if w.Sent {
 			fmt.Fprintf(&b, "%d %q: sent %s (%d new in first %d, %d of %d pages new)\n", i+1, w.Wording, w.SearchID, w.NewInFirst, min(w.Returned, searchAllLook), w.NewPages, w.Returned)
 		} else {
 			fmt.Fprintf(&b, "%d %q: not sent (%s)\n", i+1, w.Wording, w.Why)
@@ -79,12 +85,22 @@ func (r SearchAllResult) String() string {
 	return b.String()
 }
 
+// searchAllDeadline is the total time one SearchAll call may spend before it
+// names the wordings it has not reached as not sent. Each search already waits
+// up to 15 seconds and a research cell has no host deadline, so without a
+// bound a call with many wordings and a slow provider holds the cell for
+// minutes; 120 seconds is eight full waits. A var so a test can shorten it.
+var searchAllDeadline = 120 * time.Second
+
 // SearchAll sends the wordings of one question to the web one at a time and
-// returns the merged pages. It drops a wording whose terms an earlier wording
-// covers (searchquery.Covers), answers one it already holds from the held
-// search, and stops sending when a wording's first ten pages are at least 80%
-// held or two wordings in a row return nothing. Each search waits at most
-// 15 seconds, as choir.Search does.
+// returns the merged pages. A wording whose terms equal an earlier search's
+// is answered from that search (its pages join the list, marked held). The
+// call stops sending when a wording's first ten pages are at least 80% held or
+// two wordings in a row return nothing (a provider answered, with no page),
+// and when two wordings in a row fail (no provider answered, or the host
+// refused): a failure is named with its reason and is never an empty result.
+// Each search waits at most 15 seconds, as choir.Search does, and the whole
+// call at most searchAllDeadline.
 func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllResult, error) {
 	if s == nil || s.searches == nil {
 		return SearchAllResult{}, fmt.Errorf("choir: SearchAll: no searches in this session")
@@ -103,10 +119,24 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 	}()
 	res := SearchAllResult{Question: strings.TrimSpace(question), Results: []SearchHit{}}
 	seen := map[string]bool{}
-	empties, stoppedAfter := 0, 0
+	addPages := func(hits []SearchHit, held bool) {
+		for _, h := range hits {
+			if key := searchHitKey(h.URL); !seen[key] {
+				seen[key] = true
+				if held {
+					h.Held = true
+				}
+				res.Results = append(res.Results, h)
+			}
+		}
+	}
+	start := time.Now()
+	empties, failures, stoppedAfter := 0, 0, 0
+	failReason := ""
+	stopWhy, stopStat := "", ""
 	for i, raw := range wordings {
 		w := SearchAllWording{Wording: strings.TrimSpace(raw)}
-		note := func(why, stat string) {
+		notSent := func(why, stat string) {
 			w.Why = why
 			if stat != "" {
 				s.noteNotSent(stat)
@@ -115,35 +145,68 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 		}
 		switch {
 		case w.Wording == "":
-			note("empty", "")
+			notSent("empty", "")
 			continue
-		case stoppedAfter > 0:
-			note(fmt.Sprintf("the question had stopped yielding after wording %d", stoppedAfter), "stopped_yielding")
+		case stopWhy != "":
+			notSent(stopWhy, stopStat)
+			continue
+		case time.Since(start) > searchAllDeadline:
+			stopWhy, stopStat = fmt.Sprintf("the call's %d-second deadline passed; send the rest alone or in another call", int(searchAllDeadline.Seconds())), "deadline"
+			notSent(stopWhy, stopStat)
 			continue
 		case !searchquery.HasRealWord(w.Wording):
-			note("no word of two or more letters or digits", "refused")
-			continue
-		}
-		if by := coveredBy(wordings[:i], w.Wording); by > 0 {
-			note(fmt.Sprintf("covered by wording %d", by), "covered")
+			notSent("no word of two or more letters or digits", "refused")
 			continue
 		}
 		stub, err := s.SearchStart(w.Wording)
 		if err != nil {
-			note("refused: "+err.Error(), "")
+			failures, empties = failures+1, 0
+			failReason = err.Error()
+			w.Why = "FAILED (" + failReason + ")"
+			res.Wordings = append(res.Wordings, w)
+			if failures >= searchAllFailRun {
+				stopWhy, stopStat = "search is failing: "+failReason, "failing"
+			}
 			continue
 		}
 		if stub.Reused != "" {
-			note(strings.Replace(stub.Reused, " (same terms)", "", 1), "")
+			// Held: its pages join the list, marked held, with their true count.
+			if got, err := s.searches.Get(stub.ID); err == nil {
+				addPages(got.Results, true)
+				w.Returned = len(got.Results)
+			}
+			w.SearchID = stub.ID
+			notSent(fmt.Sprintf("%s; its %d pages are in the list, marked held; send it alone with fresh",
+				strings.TrimSuffix(strings.Replace(stub.Reused, " (same terms); send it anyway with fresh", "", 1), ""), w.Returned), "")
 			continue
 		}
 		if _, err := s.SearchWait(stub.ID, searchWaitMs); err != nil {
+			why := "the search wait failed: " + err.Error()
+			w.Why = "FAILED (" + why + ")"
+			res.Wordings = append(res.Wordings, w)
+			for _, rest := range wordings[i+1:] {
+				res.Wordings = append(res.Wordings, SearchAllWording{Wording: strings.TrimSpace(rest), Why: why})
+				s.noteNotSent("failing")
+			}
 			return res, err
 		}
 		got, err := s.searches.Get(stub.ID)
 		if err != nil {
 			return res, err
 		}
+		if got.Answered == 0 {
+			// No provider answered: a failure, whatever the page count.
+			failures, empties = failures+1, 0
+			failReason = "no provider answered: " + searchFailureText(got)
+			w.SearchID = stub.ID
+			w.Why = "FAILED (" + failReason + ")"
+			res.Wordings = append(res.Wordings, w)
+			if failures >= searchAllFailRun {
+				stopWhy, stopStat = "search is failing: "+failReason, "failing"
+			}
+			continue
+		}
+		failures = 0
 		w.Sent, w.SearchID = true, stub.ID
 		w.Returned, w.NewPages = len(got.Results), got.NewPages
 		first := got.Results[:min(len(got.Results), searchAllLook)]
@@ -155,12 +218,7 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 		}
 		w.NewInFirst = len(first) - held
 		res.Wordings = append(res.Wordings, w)
-		for _, h := range got.Results {
-			if key := searchHitKey(h.URL); !seen[key] {
-				seen[key] = true
-				res.Results = append(res.Results, h)
-			}
-		}
+		addPages(got.Results, false)
 		if len(got.Results) == 0 {
 			empties++
 		} else {
@@ -168,18 +226,22 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 		}
 		if (len(first) > 0 && held*100 >= searchAllHeldPercent*len(first)) || empties >= searchAllEmptyRun {
 			stoppedAfter = i + 1
+			stopWhy, stopStat = fmt.Sprintf("the question had stopped yielding after wording %d", stoppedAfter), "stopped_yielding"
 		}
 	}
 	return res, nil
 }
 
-// coveredBy returns the 1-based index of the first earlier wording that
-// covers later, or 0.
-func coveredBy(earlier []string, later string) int {
-	for j, e := range earlier {
-		if searchquery.HasRealWord(e) && searchquery.Covers(e, later) {
-			return j + 1
+// searchFailureText is why a search no provider answered says it failed: the
+// first provider error, the search's own error, or that none arrived.
+func searchFailureText(s Search) string {
+	for _, a := range s.Arrivals {
+		if a.Error != "" {
+			return a.Error
 		}
 	}
-	return 0
+	if s.Error != "" {
+		return s.Error
+	}
+	return "no provider arrived within the wait"
 }

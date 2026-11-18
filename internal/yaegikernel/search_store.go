@@ -187,13 +187,19 @@ type SearchStore struct {
 	// readKeys returns the searchHitKey of every page this run read; nil
 	// means the store knows no read ledger.
 	readKeys func() map[string]bool
+	// pos is a search's index in order; first is, for each page key a search
+	// of this run returned, the lowest index that returned it: a page is held
+	// in search i when first[key] < i. Both make one search's marks cost its
+	// own results, not the store's (search_marks.go).
+	pos   map[string]int
+	first map[string]int
 	// counted is what the host has been told (takeStats).
 	startedCounted int
 	counted        map[string][2]int
 }
 
 func newSearchStore() *SearchStore {
-	return &SearchStore{searches: map[string]*Search{}, changed: make(chan struct{})}
+	return &SearchStore{searches: map[string]*Search{}, changed: make(chan struct{}), pos: map[string]int{}, first: map[string]int{}}
 }
 
 // apply writes one frame. It is called only by the worker's reader loop.
@@ -207,6 +213,7 @@ func (st *SearchStore) apply(f SearchFrame) {
 	if s == nil {
 		s = &Search{ID: f.ID, startedAt: st.nowTime()}
 		st.searches[f.ID] = s
+		st.pos[f.ID] = len(st.order)
 		st.order = append(st.order, f.ID)
 	}
 	switch f.Kind {
@@ -223,6 +230,7 @@ func (st *SearchStore) apply(f SearchFrame) {
 				s.Providers = append(s.Providers, f.Arrival.Provider)
 			}
 			s.Arrivals = append(s.Arrivals, *f.Arrival)
+			st.noteKeysLocked(st.pos[f.ID], f.Arrival.Results)
 			if f.Arrival.Answered() {
 				s.Answered++
 			}
@@ -255,12 +263,7 @@ func (st *SearchStore) Get(id string) (Search, error) {
 	if st.searches[id] == nil {
 		return Search{}, st.unknownLocked(id)
 	}
-	for _, c := range st.markedLocked() {
-		if c.ID == id {
-			return c, nil
-		}
-	}
-	return Search{}, st.unknownLocked(id)
+	return st.markOneLocked(st.pos[id], st.readSet()), nil
 }
 
 // List returns a copy of every search in this session, oldest first.
@@ -373,12 +376,7 @@ func (st *SearchStore) wait(id string, d time.Duration) (SearchCount, error) {
 			st.mu.Unlock()
 			return SearchCount{}, err
 		}
-		count := countOf(s)
-		for _, c := range st.markedLocked() {
-			if c.ID == s.ID {
-				count = countOfMarked(c)
-			}
-		}
+		count := countOfMarked(st.markOneLocked(st.pos[s.ID], st.readSet()))
 		changed := st.changed
 		st.mu.Unlock()
 		if count.Done {
@@ -454,7 +452,7 @@ func searchHitKey(raw string) string {
 // SearchStart asks the host to start a search on every eligible provider
 // and returns as soon as the host has named them; it never waits for an
 // answer. Each provider's answer lands in choir.Searches as it arrives.
-func (s *ChoirScope) SearchStart(query string) (SearchStub, error) {
+func (s *ChoirScope) SearchStart(query string, fresh ...bool) (SearchStub, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return SearchStub{}, fmt.Errorf("choir: SearchStart needs a query")
@@ -463,8 +461,11 @@ func (s *ChoirScope) SearchStart(query string) (SearchStub, error) {
 		s.noteNotSent("refused")
 		return SearchStub{}, fmt.Errorf("choir: SearchStart refused: %q has no word of two or more letters or digits, so it is not a question; send the words of the question", query)
 	}
-	if stub, ok := s.reuseSearch(query); ok {
-		return stub, nil
+	// fresh sends the search although this run holds one with the same terms.
+	if len(fresh) == 0 || !fresh[0] {
+		if stub, ok := s.reuseSearch(query); ok {
+			return stub, nil
+		}
 	}
 	var out SearchStartResult
 	if err := s.call(ActionSearchStart, SearchStartPayload{Query: query}, &out); err != nil {

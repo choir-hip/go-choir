@@ -1,31 +1,39 @@
 package searchquery
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
-// One normaliser for "is this the same question" (search-reuse commit 2,
-// docs/problems/search-volume-outruns-keenable-credits-2026-11-18.md): the desk's
-// search store and the gateway's result cache both key on Key. Failure list,
-// written before the code:
-//  1. Word order, case, quotes or punctuation make two queries differ
-//     (a reordered or re-quoted query missed the cache: 12% of searches).
-//  2. A bare year, or a stop word, makes two queries differ.
-//  3. A real word, a site: operator, an OR or a -exclusion is dropped, so
-//     two different questions collide and the second is answered from the first.
-//  4. A query made only of dropped words has an empty key and collides with
-//     every other such query.
+// One normaliser for "is this the same question" inside one run (search-reuse;
+// the desk's search store is its only user: the gateway cache keeps its own
+// key, because a merge there is silent to the caller). Failure list, written
+// before the code, from the review of f7df119fb:
+//  1. A year or a date is dropped, so "harbor strike 2025" and "... 2026"
+//     (or two dates) are one query and the second gets last year's results.
+//  2. A quoted phrase equals the same words unquoted, though a search engine
+//     answers an exact phrase differently.
+//  3. "C++" folds to "C" and "C#" to "C".
+//  4. "IT", "US", "WHO", "AT" written in capitals fold into the stop words
+//     "it", "us", "who", "at" and vanish.
+//  5. Order, case of ordinary words, extra whitespace and punctuation
+//     between words stop folding (the safe merges are lost).
+//  6. A real word, a site: operator, an OR or a -exclusion is dropped.
+//  7. A query of only dropped words has an empty key.
 func TestKeyTable(t *testing.T) {
 	same := [][2]string{
 		{"Harbor Strike Mauritius", "mauritius harbor strike"},
-		{`"harbor strike" mauritius`, "harbor strike mauritius"},
+		{"HARBOR STRIKE", "harbor strike"},
 		{"harbor, strike! (mauritius)", "harbor strike mauritius"},
 		{"harbor  strike\tmauritius\n", "harbor strike mauritius"},
-		{"harbor strike mauritius 2026", "mauritius harbor strike"},
-		{"2026 harbor strike", "harbor strike"},
 		{"the strike at the harbor", "harbor strike"},
 		{"harbor strike site:Example.com", "site:example.com harbor strike"},
 		{"harbor strike site:example.com.", "harbor strike site:example.com"},
 		{"Café Münster", "münster café"},
 		{"harbor-strike", "harbor strike"},
+		{`"harbor strike" mauritius`, `mauritius "Harbor  Strike"`},
+		{"harbor strike 2026", "2026 harbor strike"},
+		{"c++ compiler", "compiler C++"},
 	}
 	for _, c := range same {
 		if a, b := Key(c[0]), Key(c[1]); a != b || a == "" {
@@ -34,13 +42,25 @@ func TestKeyTable(t *testing.T) {
 	}
 	differ := [][2]string{
 		{"harbor strike", "harbor strikes"},
+		{"harbor strike 2025", "harbor strike 2026"},
+		{"harbor strike 2026", "harbor strike"},
+		{"harbor strike 2026-11-18", "harbor strike 2025-11-18"},
+		{"harbor strike 2026-11-18", "harbor strike 2026-11-17"},
+		{`"harbor strike" mauritius`, "harbor strike mauritius"},
+		{`"harbor strike"`, `"strike harbor"`},
+		{"C++", "C"},
+		{"C#", "C"},
+		{"IT strike", "strike"},
+		{"IT strike", "it strike"},
+		{"US strike", "strike"},
+		{"WHO report", "report"},
+		{"strike AT harbor", "strike harbor"},
 		{"harbor strike", "harbor strike site:example.com"},
 		{"harbor strike site:a.example", "harbor strike site:b.example"},
-		{"harbor strike", "harbor strike 2026 results"},
+		{"harbor strike", "harbor strike results"},
 		{"cats or dogs", "cats dogs"},
 		{"cats -dogs", "cats dogs"},
 		{"filetype:pdf harbor", "harbor"},
-		{"2026", "2027"},
 		{"the", "a"},
 		{"x", "y"},
 	}
@@ -49,11 +69,8 @@ func TestKeyTable(t *testing.T) {
 			t.Errorf("Key(%q) = Key(%q) = %q, want different", c[0], c[1], a)
 		}
 	}
-	for _, q := range []string{"2026", "the of", "   ", ""} {
-		_ = Key(q) // never panics
-	}
-	if Key("2026") != "2026" || Key("the of") != "of the" {
-		t.Errorf("a query of only dropped words keeps its words: %q, %q", Key("2026"), Key("the of"))
+	if Key("the of") != "of the" {
+		t.Errorf("a query of only dropped words keeps its words: %q", Key("the of"))
 	}
 	if Key("") != "" || Key(" \t") != "" {
 		t.Errorf("an empty query has an empty key")
@@ -68,30 +85,29 @@ func TestHasRealWord(t *testing.T) {
 	}
 }
 
-// Search-reuse commit 3. Covers decides whether a later wording of one
-// question asks nothing an earlier wording did not. Failure list, written
-// before the code: a wording with a word the earlier lacks is dropped (it
-// asks more); a wording that drops the earlier's site: or - restriction is
-// dropped (it asks a broader question); a reworded duplicate is sent.
-func TestCovers(t *testing.T) {
-	cases := []struct {
-		earlier, later string
-		want           bool
-	}{
-		{"harbor strike mauritius union", "harbor strike", true},
-		{"harbor strike", "strike harbor", true},
-		{`"harbor strike"`, "harbor strike 2026", true},
-		{"harbor strike", "harbor strike mauritius", false},
-		{"harbor site:a.example", "harbor", false},
-		{"harbor", "harbor site:a.example", false},
-		{"harbor site:a.example", "site:a.example", true},
-		{"harbor strike -union", "harbor strike", false},
-		{"harbor strike", "port workers walkout", false},
-		{"", "harbor", false},
-	}
-	for _, c := range cases {
-		if got := Covers(c.earlier, c.later); got != c.want {
-			t.Errorf("Covers(%q, %q) = %v, want %v", c.earlier, c.later, got, c.want)
+// IsTimeSensitive is the one function the desk's reuse window and the
+// gateway cache's fresh TTL both ask.
+func TestIsTimeSensitive(t *testing.T) {
+	for q, want := range map[string]bool{
+		"breaking harbor strike": true, "harbor strike today": true, "latest harbor news": true,
+		"strike in March": true, "harbor strike history": false, "harbor strike": false,
+	} {
+		if got := IsTimeSensitive(q); got != want {
+			t.Errorf("IsTimeSensitive(%q) = %v, want %v", q, got, want)
 		}
 	}
+}
+
+func TestKeyIsSafeForConcurrentUse(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				_ = Key(`"Harbor Strike" C++ IT 2026-11-18 site:a.example`)
+			}
+		}()
+	}
+	wg.Wait()
 }

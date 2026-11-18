@@ -144,15 +144,15 @@ func corpusLimit(limit int) int {
 // the index refuses (or CHOIR_CORPUS_SEARCH=window), from the window of
 // its newest corpusCaptureScan captures. A note says which, and when the
 // capture store is not configured or a bound was hit.
-func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID string, terms []string, limit int) ([]CorpusCapture, string, error) {
+func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID string, terms []string, limit int) (_ []CorpusCapture, note string, capped bool, err error) {
 	if deps.Captures == nil {
-		return nil, "captures not searched: the shared capture store is not configured", nil
+		return nil, "captures not searched: the shared capture store is not configured", false, nil
 	}
 	if strings.TrimSpace(computerID) == "" {
-		return nil, "captures not searched: the run names no computer", nil
+		return nil, "captures not searched: the run names no computer", false, nil
 	}
 	if len(terms) == 0 {
-		return nil, "captures not searched: the query has no search words", nil
+		return nil, "captures not searched: the query has no search words", false, nil
 	}
 	labels := map[string]store.CaptureLabel{}
 	var notes []string
@@ -171,6 +171,7 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 		if err == nil {
 			objs, searched = answer.Objects, true
 			if answer.Capped {
+				capped = true
 				notes = append(notes, fmt.Sprintf("searched all %d captures of this computer; ranked the strongest, newest %d of the %d that match enough words", answer.Searched, corpusIndexCandidates, answer.Matched))
 			}
 		} else {
@@ -180,14 +181,15 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 	if !searched {
 		window, err := deps.Captures.ListCaptures(ctx, ownerID, computerID, corpusCaptureScan)
 		if err != nil {
-			return nil, "", err
+			return nil, "", false, err
 		}
 		objs = window
 		if len(objs) >= corpusCaptureScan {
+			capped = true
 			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
 		}
 	}
-	return rankCaptures(objs, labels, terms, limit), strings.Join(notes, "; "), nil
+	return rankCaptures(objs, labels, terms, limit), strings.Join(notes, "; "), capped, nil
 }
 
 // corpusIndexCandidates bounds the candidates corpusd returns for ranking.

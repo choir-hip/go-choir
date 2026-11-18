@@ -158,7 +158,7 @@ func TestCorpusSearchOverAllHistory(t *testing.T) {
 	deps := Dependencies{Store: guest, Captures: sink}
 	search := func(query string) ([]CorpusCapture, string) {
 		t.Helper()
-		got, note, err := searchCaptures(ctx, deps, owner, computer, corpusQueryTerms(query), corpusMaxLimit)
+		got, note, _, err := searchCaptures(ctx, deps, owner, computer, corpusQueryTerms(query), corpusMaxLimit)
 		if err != nil {
 			t.Fatalf("searchCaptures %q: %v", query, err)
 		}

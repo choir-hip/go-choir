@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
@@ -24,7 +25,13 @@ import (
 //  3. A Read of a capture the computer already held is not logged with the
 //     run and capture id, so "share of a story's sources held before the
 //     run began" is not countable.
-//  4. The old fields (computer, captures_ms, captures, note, query,
+//  5. held= is true for a capture this run made itself (its own earlier
+//     Read), so the share of sources held before the run began is overstated:
+//     held= is true only for a capture that existed before this run's first
+//     Read of it, own for one this run made, false for the Read that made it.
+//  6. capped= is parsed from the note's prose instead of coming from the
+//     search; or the line repeats captures=.
+//  7. The old fields (computer, captures_ms, captures, note, query,
 //     capture_ids) change, or the line carries more than ids and counts
 //     beyond the query it already logged.
 
@@ -60,8 +67,7 @@ func TestCorpusSearchLineCarriesRunDeskAndCounts(t *testing.T) {
 	for _, want := range []string{
 		"corpus search computer=computer-1 captures_ms=",
 		`query="harbor strike" capture_ids=`,
-		" run=run-5 desk=research conv=chan7 published=2 events=0 captures=",
-		" capped=false",
+		" run=run-5 desk=research conv=chan7 published=2 events=0 capped=false",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("corpus search line lacks %q:\n%s", want, out)
@@ -72,25 +78,89 @@ func TestCorpusSearchLineCarriesRunDeskAndCounts(t *testing.T) {
 	}
 }
 
-func TestCorpusCapturesCappedFromTheNote(t *testing.T) {
-	for note, want := range map[string]bool{
-		"":                        false,
-		"label hints not read: x": false,
-		"searched all 900 captures of this computer; ranked the strongest, newest 500 of the 700 that match enough words": true,
-		"searched this computer's newest 2000 captures; older captures were not searched":                                 true,
+// capped comes from the search itself: the index said it ranked only its
+// strongest candidates, or the window of newest captures was full.
+type cappedSearcher struct {
+	CaptureSink
+	capped bool
+}
+
+func (c cappedSearcher) SearchCaptures(ctx context.Context, q CaptureSearchQuery) (CaptureSearchAnswer, error) {
+	return CaptureSearchAnswer{Capped: c.capped, Searched: 900, Matched: 700}, nil
+}
+
+type windowSink struct {
+	CaptureSink
+	n int
+}
+
+func (w windowSink) ListCaptures(ctx context.Context, ownerID, computerID string, limit int) ([]objectgraph.Object, error) {
+	return make([]objectgraph.Object, w.n), nil
+}
+
+func TestSearchCapturesReportsCappedAsABool(t *testing.T) {
+	ctx := context.Background()
+	for name, c := range map[string]struct {
+		sink CaptureSink
+		want bool
+	}{
+		"index capped":     {cappedSearcher{capped: true}, true},
+		"index not capped": {cappedSearcher{capped: false}, false},
+		"window full":      {windowSink{n: corpusCaptureScan}, true},
+		"window not full":  {windowSink{n: 3}, false},
 	} {
-		if got := capturesCapped(note); got != want {
-			t.Errorf("capturesCapped(%q) = %v, want %v", note, got, want)
+		t.Setenv(corpusSearchModeEnv, "")
+		if name[:6] == "window" {
+			t.Setenv(corpusSearchModeEnv, "window")
 		}
+		_, note, capped, err := searchCaptures(ctx, Dependencies{Captures: c.sink}, "owner-1", "computer-1", []string{"harbor"}, 10)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if capped != c.want {
+			t.Errorf("%s: capped = %v, want %v (note %q)", name, capped, c.want, note)
+		}
+	}
+}
+
+func TestCorpusSearchLineHasOneCapturesField(t *testing.T) {
+	var buf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(prev)
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "run-5"})
+	logCorpusSearch(ctx, "harbor", "computer-1", 0, nil, "", 1, 2, true)
+	if got := strings.Count(buf.String(), "captures="); got != 1 { // captures_ms= is a different key
+		t.Fatalf("captures= appears %d times, want exactly one:\n%s", got, buf.String())
+	}
+	if !strings.Contains(buf.String(), "capped=true") {
+		t.Fatalf("line: %s", buf.String())
 	}
 }
 
 func TestCorpusReadLineFormat(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "run-5", Profile: "research"})
-	if got := corpusReadLine(ctx, "cap-1", true, "read_capture"); got != "corpus read run=run-5 desk=research conv=- capture=cap-1 held=true via=read_capture" {
+	if got := corpusReadLine(ctx, "cap-1", "true", "read_capture"); got != "corpus read run=run-5 desk=research conv=- capture=cap-1 held=true via=read_capture" {
 		t.Fatalf("line = %q", got)
 	}
-	if got := corpusReadLine(context.Background(), "cap-2", false, "read"); got != "corpus read run=- desk=- conv=- capture=cap-2 held=false via=read" {
+	if got := corpusReadLine(context.Background(), "cap-2", "false", "read"); got != "corpus read run=- desk=- conv=- capture=cap-2 held=false via=read" {
 		t.Fatalf("a call with no run = %q", got)
+	}
+}
+
+func TestRunCaptureStateSeparatesOwnFromBefore(t *testing.T) {
+	a := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "run-a"})
+	b := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "run-b"})
+	if got := runCaptureState(a, "c1", true); got != "false" {
+		t.Fatalf("the read that made a capture = %q, want false", got)
+	}
+	if got := runCaptureState(a, "c1", false); got != "own" {
+		t.Fatalf("this run's later read = %q, want own", got)
+	}
+	if got := runCaptureState(b, "c1", false); got != "true" {
+		t.Fatalf("another run's read = %q, want true (held before it began)", got)
+	}
+	if got := runCaptureState(context.Background(), "c1", false); got != "true" {
+		t.Fatalf("a call with no run = %q, want true", got)
 	}
 }
