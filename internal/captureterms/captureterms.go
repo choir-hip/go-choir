@@ -173,3 +173,98 @@ func QueryParts(word string) []Part {
 func PrefixUpper(prefix string) string {
 	return prefix + string(utf8.MaxRune)
 }
+
+// PluralFold lightly folds an ASCII plural to its singular ("harbors" to
+// "harbor", "stories" to "story"); every other token is returned as it is.
+// The published-pieces index and the capture full-text index both fold with
+// it, so a query finds the same words in a story and in a captured page.
+func PluralFold(t string) string {
+	n := len(t)
+	if n < 4 {
+		return t
+	}
+	for i := 0; i < n; i++ {
+		if t[i] < 'a' || t[i] > 'z' {
+			return t
+		}
+	}
+	switch {
+	case strings.HasSuffix(t, "ies") && n > 4:
+		return t[:n-3] + "y"
+	case strings.HasSuffix(t, "sses"), strings.HasSuffix(t, "xes"), strings.HasSuffix(t, "ches"), strings.HasSuffix(t, "shes"):
+		return t[:n-2]
+	case strings.HasSuffix(t, "ss"), strings.HasSuffix(t, "us"), strings.HasSuffix(t, "is"):
+		return t
+	case strings.HasSuffix(t, "s"):
+		return t[:n-1]
+	}
+	return t
+}
+
+// TokenSpan is one term of a text and where it sits in it: Start and End
+// are byte offsets into the text as given. A term of an anywhere script
+// (Han, Arabic and the like) is a character unigram or bigram, as Tokens
+// makes it, so its span is one or two characters.
+type TokenSpan struct {
+	Term       string
+	Start, End int
+}
+
+// TokenSpans returns Tokens(text) with offsets. It lowercases rune by rune
+// (unicode.ToLower), so offsets stay those of the original text; for text
+// whose lowercase has the same rune count as strings.ToLower gives, the
+// terms are Tokens(text) exactly.
+func TokenSpans(text string) []TokenSpan {
+	var out []TokenSpan
+	type run struct {
+		runes    []rune
+		offs     []int // byte offset of each rune, plus the end
+		anywhere bool
+	}
+	var cur run
+	flush := func() {
+		if len(cur.runes) == 0 {
+			return
+		}
+		if !cur.anywhere {
+			out = append(out, TokenSpan{Term: clip(cur.runes), Start: cur.offs[0], End: cur.offs[len(cur.runes)]})
+		} else {
+			for i := range cur.runes {
+				out = append(out, TokenSpan{Term: string(cur.runes[i]), Start: cur.offs[i], End: cur.offs[i+1]})
+				if i+1 < len(cur.runes) {
+					out = append(out, TokenSpan{Term: string(cur.runes[i : i+2]), Start: cur.offs[i], End: cur.offs[i+2]})
+				}
+			}
+		}
+		cur = run{}
+	}
+	for at, r := range text {
+		if r == utf8.RuneError {
+			// An invalid byte or a real U+FFFD: a separator.
+			flush()
+			continue
+		}
+		r = unicode.ToLower(r)
+		if !wordRune(r) {
+			flush()
+			continue
+		}
+		anywhere := Anywhere(r)
+		if len(cur.runes) > 0 && anywhere != cur.anywhere {
+			flush()
+		}
+		cur.anywhere = anywhere
+		if len(cur.runes) == 0 {
+			cur.offs = append(cur.offs[:0], at)
+		}
+		cur.runes = append(cur.runes, r)
+		cur.offs = append(cur.offs, at+runeWidth(text[at:]))
+	}
+	flush()
+	return out
+}
+
+func runeWidth(s string) int {
+	_, n := utf8.DecodeRuneInString(s)
+	return n
+}
