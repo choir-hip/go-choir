@@ -433,6 +433,10 @@ func TestF40_TheProductionWiring(t *testing.T) {
 	}
 }
 
+// TestF41 holds only that the programme route's own source names no settle
+// identifier and writes no outcome-record literal. It is not the guard: the
+// guard is settleEnded's own check that the ending op is the listener's, on the
+// untrusted path (TestL13 drives a trusted desk cut and asserts no settlement).
 func TestF41_TheProgrammeHandlerHasNoPathToAnOutcome(t *testing.T) {
 	files, _ := filepath.Glob("api_autoradio_programme*.go")
 	scanned := 0

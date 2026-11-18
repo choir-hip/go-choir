@@ -19,6 +19,9 @@ package agentcore
 //	    (review B1): the stale entry must close as no verdict (superseded) and
 //	    the new one settle, in both orders, replay-safe;
 //	L11 an op may reach back more than seven days before its arrival (N1);
+//	L13 a desk op, or the trusted door, that ends a forecast-bearing entry
+//	    settles it (rule 1: only the listener's own op settles);
+//	L14 a heard end with no ended.outcome settles true;
 //	L12 a refused settlement, or an entry the sheet had no room for, leaves
 //	    no record (N3, N4); an unknown `after` cursor is silently an empty page (N6).
 
@@ -210,6 +213,13 @@ func TestL3toL5_TheOpsSettleTheForecasts(t *testing.T) {
 	if r4 := byClaim[claims[4]]; r4["status"] != "no_verdict" || r4["no_verdict_reason"] != "left" || r4["op"].(map[string]any)["position_seconds"].(float64) != 12.5 {
 		t.Errorf("(L8) row 4: %v", r4)
 	}
+	// The cut row says it was cut, and that its evidence op is the cutting op.
+	if op3 := byClaim[claims[3]]["op"].(map[string]any); op3["outcome"] != "cut" || op3["cutting"] != true || byClaim[claims[3]]["status"] != "settled" {
+		t.Errorf("(L8) cut row: %v", byClaim[claims[3]])
+	}
+	if op4 := byClaim[claims[4]]["op"].(map[string]any); op4["position_source"] != "op" {
+		t.Errorf("(L8) position source: %v", op4)
+	}
 	// Paging.
 	_, p1 := learningGet(t, h, "?limit=4")
 	if len(p1["rows"].([]any)) != 4 || p1["next"] == nil {
@@ -383,5 +393,32 @@ func TestL12_AnEntryTheSheetHadNoRoomForIsRecordedUnplaced(t *testing.T) {
 		if c != "" && nv[c] != "unplaced" {
 			t.Errorf("(L12) claim %s: %q", c, nv[c])
 		}
+	}
+}
+
+func TestL13_AnEndingTheDeskCausedSettlesNothing(t *testing.T) {
+	rt, _ := radioRuntime(t, twoStoryScript())
+	h := NewAPIHandler(rt)
+	_, entries, claims, _ := runStretch(t, rt)
+	mustOps(t, h, phoneEnd(entries[1], "on", "heard", "finished", 1)[0]) // on air, not ended
+	// The forecaster cuts its own on-air entry through the trusted door.
+	res, err := h.applySheetOps(context.Background(), progOwner, sheetOwnerID, []runsheet.Op{{OpID: "o-desk-cut", By: runsheet.ByDesk, Op: runsheet.OpPlace, At: runsheet.AtNow, Reason: "test", Entry: entryOf(t, storyEntry("d-cutter", "desk"))}}, true)
+	if err != nil || !res[0].Applied {
+		t.Fatalf("(L13) the desk's cut did not apply: %v %+v", err, res)
+	}
+	if settlementOf(t, rt, claims[1]) != "" || noVerdicts(t, rt)[claims[1]] != "desk_caused" {
+		t.Errorf("(L13) the desk settled its own forecast: %q %v", settlementOf(t, rt, claims[1]), noVerdicts(t, rt))
+	}
+}
+
+func TestL14_AHeardEndThatStatesNoOutcomeSettlesNothing(t *testing.T) {
+	rt, _ := radioRuntime(t, twoStoryScript())
+	h := NewAPIHandler(rt)
+	_, entries, claims, _ := runStretch(t, rt)
+	ops := phoneEnd(entries[1], "bare", "heard", "finished", 1)
+	delete(ops[1], "ended") // an older or buggy client: heard, and no word how
+	mustOps(t, h, ops...)
+	if settlementOf(t, rt, claims[1]) != "" || noVerdicts(t, rt)[claims[1]] != "no_outcome" {
+		t.Errorf("(L14) %q %v", settlementOf(t, rt, claims[1]), noVerdicts(t, rt))
 	}
 }

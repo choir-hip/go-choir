@@ -44,7 +44,7 @@ not set its version from a `results[].version` that is below its own.
 The reducer's, returned as they are: `duplicate`, `not_ahead`, `not_on_air`,
 `not_phone`, `bad_transition`, `unknown_id`, `stale_version`,
 `no_previous`, `duplicate_id`, `reason_required`, `invalid`, `ahead_full`
-(from `previous`, see below). `other_on_air` is retired: see "Takeover" below. The route adds:
+(from `previous`, see below). `other_on_air` is no longer produced: see "Takeover" below. `DroppedOtherOnAir` stays defined in Go for the Swift twin's constant. The route adds:
 
 | Reason | When |
 |---|---|
@@ -79,7 +79,7 @@ Measured maxima, in commitment-record bytes
 record of a maximal entry, a maximal `rewrite` and a 151-entry snapshot with a
 full `applied_ops`, for each of a control character, `<`, `>`, `&`, a quote, a
 backslash, a multi-byte character, U+2028 and plain text): the largest op
-record is **58,414 bytes**, the largest snapshot record **4,982,465 bytes**, the
+record is **58,414 bytes** (measured before desk entries carried a `forecast`: a lower bound now, still far inside the bound; `TestL9` places the maximal forecast), the largest snapshot record **4,982,465 bytes**, the
 largest sheet on the wire 4,921,601 bytes.
 
 Bounds by construction, in **commitment-record bytes** (the record's real
@@ -249,10 +249,16 @@ that moves an entry from `on_air` to `heard` or `skipped` (an `aired`, a
 `skip`, or a `place`/`move` at `now` that cuts it), and the entry is
 desk-placed and carries a claim id, `settleEnded`
 (`internal/agentcore/api_autoradio_settle.go`) acts before the op record is
-appended. The settler is this path acting on an op the owner's authenticated session
-posted with `by: phone` (that is all that is checked: the sheet route cannot
-tell the app from any other client of the owner's session); the
-programme route has no path to it (`TestF41`). The rule reads
+appended. The settler is this path, and it settles only when the op that caused the
+ending came over the untrusted HTTP path from the owner's authenticated
+session with `by: phone` or `by: listener` (a skip or a place at now is the
+listener's): `settleEnded` checks `op.By` and the trusted flag, and an ending
+caused by a desk op, or by any op of the in-process door the desk uses, writes
+a no-verdict record `desk_caused` and nothing else (`TestL13` drives a trusted
+desk `place at now` that cuts a forecast-bearing on-air entry). What is not
+checked: the sheet route cannot tell the phone app from any other client of
+the owner's session. `TestF41` only holds that the programme route's own
+source names no settle identifier; it is not the guard. The rule reads
 `ended.outcome` as the reducer stored it, never the entry `state` (a `left`
 entry has state `heard`):
 
@@ -260,6 +266,7 @@ entry has state `heard`):
 |---|---|
 | `finished` | settled true (heard through) |
 | `skipped`, `cut` | settled false |
+| `heard` with no `ended` on the op | no verdict `no_outcome`: the reducer stores `finished` for it, but the op said nothing, so there is no evidence of heard-through (`TestL14`) |
 | `left`, `failed` | no verdict: an `autoradio.no_verdict` record, nothing settled (a `left` ending is stored with entry state `heard`) |
 | none (crash, app killed) | no op, nothing written; the forecast stays open and lapses at its deadline |
 
@@ -295,7 +302,7 @@ entry has state `heard`):
 - **No verdict record:** kind `autoradio.no_verdict`, id
   `<claim id>:noverdict:<op id>`, owner-private notice; subject refs `claim_id`,
   `op_id`, `entry_id`, `reason` (`left`, `failed`, `late`, `superseded`,
-  `refused`, `unplaced`), `outcome` (what the
+  `refused`, `unplaced`, `desk_caused`, `no_outcome`), `outcome` (what the
   op said), `last_block`, `position_seconds`; body the same as JSON with
   `position_source` (`op` or `sheet`) and `ended_at`.
 - **Order:** the settlement is written before the op record, so a failed
@@ -344,8 +351,12 @@ forecast first: `claim_id`, `stretch_id`, `segment_id`, `entry_id`, `kind`,
 `brier`, `settled_at`, `no_verdict_reason`, and `op` (`op_id`, `by`,
 `outcome`, `last_block`, `ended_at`, `position_seconds`, `version`) read from
 the op's tape record. It reads every forecast of the computer by cursor, at
-most 200,000 records and at most 5,000 no-verdict records (`truncated` says
-if either bound was hit). An `after` that is not a forecast of the listener is
+most 200,000 records and at most 5,000 no-verdict records of this computer (`truncated` says
+if either bound was hit). A real cut reads as `cut`: its row's `op` is the
+listener's place or move at now (`cutting: true`), the op that ended the
+entry, not an op of the entry's own. A no-verdict row's `op` carries
+`position_seconds` and `position_source` (`op` or `sheet`). An `unplaced`
+notice is ignored once the entry is on the sheet. An `after` that is not a forecast of the listener is
 a `400`. It does not yet list turns, segments' text or the ops themselves
 beyond the settling op (the design's wider ledger route).
 Proof: `scripts/prove-autoradio-learning`.

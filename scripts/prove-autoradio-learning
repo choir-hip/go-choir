@@ -5,8 +5,9 @@ On the drill computer (d@e) only. Opens a programme and extends it until at
 least nine forecast-bearing entries exist (each is on the server's run sheet:
 the segment event names its entry_id and claim_id), then posts ops as a phone
 would: finish two, finish one with the op's own time set 30 days back (the
-server bounds it at seven days, so it still settles), skip two, cut one
-(state skipped, outcome cut), leave one (outcome "left", entry state "heard"),
+server bounds it at seven days and then at the claim's own time, so it still
+settles; the seven-day bound alone is TestL11's, a drill claim is minutes old), skip two, cut one
+(a real cut: the listener places another entry at now), leave one (outcome "left", entry state "heard"),
 and, NOT back to back, put one entry on air and then another before the first
 one's end op (the app was killed): the first is closed as no verdict
 (superseded), the second finishes. Reads GET /api/autoradio/learning and
@@ -93,12 +94,22 @@ class Api:
     def ops(self, ops):
         return self.call("POST", "/api/autoradio/sheet/ops", {"ops": ops})
 
+    def sheet(self):
+        return self.call("GET", "/api/autoradio/sheet")
+
     def learning(self):
         return self.call("GET", "/api/autoradio/learning?limit=200")
 
 
 def op_on(tag, entry_id):
     return {"op_id": "pl-%s-on" % tag, "by": "phone", "op": "aired", "id": entry_id, "state": "on_air", "base_version": 0, "position_seconds": 0}
+
+
+def op_place_now(tag, entry_id):
+    """The listener's place at now: it cuts the entry on air and puts this one on air."""
+    return {"op_id": "pl-%s-cut" % tag, "by": "listener", "op": "place", "at": "now", "base_version": 0,
+            "entry": {"id": entry_id, "kind": "story", "placed_by": "listener", "state": "ahead", "title": "prove cut",
+                      "text": "A short note placed by the proof script.", "est_seconds": 5}}
 
 
 def op_end(tag, entry_id, state, outcome, last, ago_days=0):
@@ -136,11 +147,20 @@ def main():
     run = uuid.uuid4().hex[:8]
     # name -> (state, outcome, last_block, days back the op's own time is set)
     plan = [("finished", "heard", "finished", 1, 0)] * 2 + [("backdated", "heard", "finished", 1, 30)] \
-        + [("skipped", "skipped", "skipped", 0, 0)] * 2 + [("cut", "skipped", "cut", 0, 0), ("left", "heard", "left", 0, 0)]
+        + [("skipped", "skipped", "skipped", 0, 0)] * 2 + [("cut", "", "", 0, 0), ("left", "heard", "left", 0, 0)]
+    # A stale desk entry already on air (a killed app) is taken over by the
+    # first on_air below and adds one superseded no-verdict of its own.
+    stale = [e for e in api.sheet().get("entries", []) if e.get("state") == "on_air" and (e.get("forecast") or {}).get("claim_id")]
     ops, claims = [], {}
     for i, (s, (name, state, outcome, last, ago)) in enumerate(zip(content, plan)):
         tag = "%s-%d" % (run, i)
-        ops += [op_on(tag, s["entry_id"]), op_end(tag, s["entry_id"], state, outcome, last, ago)]
+        if name == "cut":
+            # A real cut: on air, then the listener places another at now. The
+            # placed entry is then ended by the phone like any other.
+            lid = "L-prove-%s" % run
+            ops += [op_on(tag, s["entry_id"]), op_place_now(tag, lid), op_end(tag + "L", lid, "heard", "finished", 1)]
+        else:
+            ops += [op_on(tag, s["entry_id"]), op_end(tag, s["entry_id"], state, outcome, last, ago)]
         claims[s["claim_id"]] = name
     # The app was killed with X on air: on_air for Y arrives before X's end, which never comes.
     x, y = content[len(plan)], content[len(plan) + 1]
@@ -170,8 +190,10 @@ def main():
         print("  %-8s %s status=%s outcome=%s title=%r op=%s %s" % (
             name, cid[-12:], r and r["status"], r and r.get("outcome"), r and r["title"], r and r.get("op", {}).get("op_id"), "" if good else "WRONG"))
     delta = mid["scorecard"]["settled"] - before["settled"]
-    print("settled +%d (want 7); no_verdict +%d (want 2)" % (delta, mid["scorecard"]["no_verdict"] - before["no_verdict"]))
-    ok = ok and delta == 7 and mid["scorecard"]["no_verdict"] - before["no_verdict"] == 2
+    want_nv = 2 + len(stale)
+    print("settled +%d (want 7); no_verdict +%d (want %d, %d stale on-air entries taken over)" % (
+        delta, mid["scorecard"]["no_verdict"] - before["no_verdict"], want_nv, len(stale)))
+    ok = ok and delta == 7 and mid["scorecard"]["no_verdict"] - before["no_verdict"] == want_nv
     twice = after["scorecard"]["settled"] != mid["scorecard"]["settled"] or r1 != r2
     print("repeat of the same ops: %d applied again, settled %d -> %d, rows %s" % (
         sum(1 for r in again["results"] if r.get("applied")), mid["scorecard"]["settled"], after["scorecard"]["settled"],
