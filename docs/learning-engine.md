@@ -199,7 +199,10 @@ identity labels: "you said 0.8 on these and 5 of 9 held", not "over-confident".
 Fastest and best teacher first.
 
 1. **Autoradio.** The DJ forecasts each segment. The listener's act settles
-   it. Lessons go in a notebook the listener can read and edit. See
+   it. Lessons will go in a notebook the listener can read and edit; on
+   2026-11-18 only the forecast is built, and nothing settles one or writes a
+   lesson yet
+   ([goal](definitions/choir-autoradio-learning-loop-2026-11-18.md)). See
    [design/autoradio-learning-engine-2026-11-14.md](design/autoradio-learning-engine-2026-11-14.md).
 2. **Autopaper.** A source's dated claim is a forecast and the world settles
    it. For one reader, a story's importance is a forecast and that reader's
@@ -344,7 +347,7 @@ makes the plurality argument in the repo.
 3. **Who is "someone else"?** Two judges from one model family share blind
    spots.
 4. **The home of a lesson.** No kind, no custodian and no reader exists yet.
-   Autoradio's notebook is the first.
+   Autoradio's notebook is designed to be the first; it does not exist yet.
 5. **A forecast open at a crash.** Today it closes as interrupted and is
    excluded. The engine says nothing more.
 6. **The actor's read route.** Rule 2 needs one. `GET /api/trust` is an owner
