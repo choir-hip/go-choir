@@ -11,7 +11,7 @@ import (
 )
 
 // The capture full-text index (docs/reference/CAPTURE-FULLTEXT.md). Failure
-// modes guarded here, written before the code (the numbers are the brief's):
+// modes guarded here, guarded (the numbers are the brief's):
 //   1. a fact only in a page's body is not found, or comes with no passage;
 //   2. a long natural-language query returns nothing (an all-words gate);
 //   3. a page is not found at rank 1 by its own title;

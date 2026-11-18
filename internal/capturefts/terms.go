@@ -85,36 +85,6 @@ var queryStopwords = func() map[string]bool {
 	return m
 }()
 
-// MaxQueryTerms bounds a query's distinct index terms. A Han, Arabic or
-// similar query is unigrams and bigrams, so this is larger than the number
-// of words a model writes.
-const MaxQueryTerms = 32
-
-// QueryTerms are the distinct terms a query looks up: its Terms without
-// stop words (unless the query is nothing but stop words), in order of
-// first appearance, at most MaxQueryTerms.
-func QueryTerms(query string) []string {
-	var all, kept []string
-	seen := map[string]bool{}
-	for _, t := range Terms(query) {
-		if seen[t] {
-			continue
-		}
-		seen[t] = true
-		all = append(all, t)
-		if !queryStopwords[t] {
-			kept = append(kept, t)
-		}
-	}
-	if len(kept) == 0 {
-		kept = all
-	}
-	if len(kept) > MaxQueryTerms {
-		kept = kept[:MaxQueryTerms]
-	}
-	return kept
-}
-
 // MatchedTerms are the query terms that occur in text, in the query's order.
 func MatchedTerms(text string, terms []string) []string {
 	have := map[string]bool{}
