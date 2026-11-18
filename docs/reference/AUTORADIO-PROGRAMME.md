@@ -275,24 +275,35 @@ publication said, and the words are shown so the DJ can judge). The index is
 the computer's, so every device of the listener gets the same marks.
 
 **Reads per programme call, for the heard index** (the same on `open` and
-`extend`): two lists, read at the same time, either failing meaning "history
-unavailable". (1) The computer's newest segment records with the forecast flag
-(content segments only, so openings and transitions do not use up the page),
-at most 2,000 (`heardSegmentsRead`). (2) The computer's newest heard
-settlements, at most 2,000 (`heardSettlementsRead`): the query itself holds
-rule method, the heard rule, outcome true, so the false settlements that
-skipped and cut entries write do not use up the page, and the 2,000 are 2,000
-heard ones. An `air:` evidence ref is checked on each row. The join is by the
-claim id a segment names; no claim or scorecard read. Both limits apply after
-the computer filter (`store.ListCommitmentRecordsByBodyOfComputer`).
+`extend`): two lists, read at the same time, either failing (or panicking: each
+reading goroutine recovers and logs `autoradio heard: read panicked`) meaning
+"history unavailable". Both are bounded by time in the query: only rows last
+written in the last 14 days (the heard window) are read, on the
+(kind, owner, updated_at) index, so a sparse history does not walk the owner's
+whole commitment kind. (1) The computer's newest segment records with the
+forecast flag and no `take_id` (content segments only: openings, transitions
+and takes are left out by predicate), at most 2,000 (`heardSegmentsRead`).
+(2) The computer's newest heard settlements, at most 2,000
+(`heardSettlementsRead`): the query itself holds rule method, the heard rule,
+outcome true, so the false settlements that skipped and cut entries write do
+not use up the page. A take's heard settlement cannot be told from a story's
+by the settlement row, so takes (at most three per request) do count in that
+page. An `air:` evidence ref is checked on each row. The join is by the claim id
+a segment names; no claim or scorecard read. All limits apply after the
+computer filter (`store.ListCommitmentRecordsByBodyOfComputer`).
 
-Past the caps: a story heard before the newest 2,000 heard settlements, or whose
-segment is older than the newest 2,000 content segments (unheard content
-segments use up that page; it is the weaker of the two bounds), reads `heard:
-never`, and the call logs `autoradio heard: read full kind= rows= undecodable=
-unparsable= limit=` so the gap is visible. A settlement whose settled time does
-not parse is skipped and counted (`unparsable=` on that line and on the call's
-line); an undecodable row is counted and never fails the read.
+Past the caps and the window: a story whose heard settlement or segment was
+written more than 14 days ago, or older than the newest 2,000 of either page
+(unheard content segments use up the segment page; it is the weaker of the two
+bounds), reads `heard: never`, and a full page is logged: `autoradio heard:
+read full kind= rows= undecodable= unparsable= limit=`. (The words of a match
+are cut at the same 14 days, so the key no longer outlives the words by more
+than the gap between a row's write time and its settlement.) A settlement
+whose settled time does not parse is skipped and counted (`unparsable=` on that
+line and on the call's line); an undecodable row is counted and never fails
+the read. Sparse case on the runner, 2026-11-18: 20,000 other commitment
+records of the same kind (half older than the window) and 3 heard settlements:
+the read took 71 ms and returned 3 rows (128 ms, 4 rows with no window).
 
 The notebook keeps its own scorecard read as before, now through the call's
 ledger: `extend`, `turn` and `result` only, never `open`; when it fails, the
@@ -342,8 +353,8 @@ those calls are counted.
 calls (there is still one model call). Words of a matched candidate: 600
 characters, cut at a sentence end. Recent list: 14 days, 12 rows, title 100
 characters, words 160 characters. The words of a matched candidate follow the
-same 14 days; older than that the candidate is still marked heard with its day
-and the line says the words are no longer kept. With 40 candidates the heard
+same 14 days; a candidate whose heard record is older than that reads `heard:
+never` (see the window above). With 40 candidates the heard
 text is at most 40 x 600 + 12 x 400 characters.
 
 **The DJ's choice.** The prompt gains one paragraph, "What the listener already
