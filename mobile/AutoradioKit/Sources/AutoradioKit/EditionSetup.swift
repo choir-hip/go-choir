@@ -385,6 +385,11 @@ public final class EditionSetupSession: @unchecked Sendable {
     }
 
     public var topics: [String] { lock.lock(); defer { lock.unlock() }; return selection.topics }
+    /// Sign-out: the selection, the topics seen and the saved file.
+    public func wipe() {
+        lock.lock(); selection = EditionSelection(); ownSeen = []; lock.unlock()
+        if let file { try? FileManager.default.removeItem(at: file) }
+    }
     public var hasSaved: Bool { guard let f = file else { return false }; return FileManager.default.fileExists(atPath: f.path) }
 
     public func setLiveSections(_ live: [String]) {

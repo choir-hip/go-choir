@@ -313,6 +313,8 @@ public enum NotebookPage {
     public var lookupEdition: () async -> EditionInfo? = { await EditionLookup.fetch() }
     /// Makes the notebook document; its id, or nil when it could not be made.
     public var createNotebook: () async -> String? = { await NotebookStore.defaultCreate() }
+    /// Where the notebook text is kept on the phone (tests pass their own).
+    public var notebookCache: NotebookCache = .shared
     public init() {}
 
     static func defaultCreate() async -> String? {
@@ -393,23 +395,26 @@ public enum NotebookPage {
         let client = ChoirEnvironment.shared.client()
         guard client.hasKey else { return false }
         var address = "", current: String?
-        guard let ed = await lookupEdition() else { return false }        // the server cannot say: try later, never create on a guess
+        let gen = AccountWipe.generation          // every write below is dropped if the account was wiped meanwhile
+        guard let ed = await lookupEdition(), gen == AccountWipe.generation else { return false }        // the server cannot say: try later, never create on a guess
         if ed.found {
             address = "texture:" + ed.docID
             let d = await ReaderStore.shared.doc(address, force: true)
-            guard d.status == "ready" else { return false }
+            guard d.status == "ready", gen == AccountWipe.generation else { return false }
             current = d.source
         } else {
-            guard let id = await createNotebook() else { return false }
+            guard let id = await createNotebook(), gen == AccountWipe.generation else { return false }
             address = "texture:" + id
         }
         let merged = NotebookText.merging(topics: topics, into: current)
+        guard gen == AccountWipe.generation else { return false }
         if merged != current {
             await TextureEditor.shared.edit(address: address, markdown: merged)
             await TextureEditor.shared.flush(address: address)
             guard TextureEditor.shared.info(address: address).status == "saved" else { return false }
         }
-        NotebookCache.shared.set(merged)
+        guard gen == AccountWipe.generation else { return false }
+        notebookCache.set(merged)
         if let marker { try? FileManager.default.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true); try? Data(key.utf8).write(to: marker, options: .atomic) }
         return true
     }

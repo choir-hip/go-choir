@@ -14,6 +14,14 @@ public final class AccountWipe: @unchecked Sendable {
     private var items: [(name: String, run: @Sendable () async -> Void)] = []
     public init() {}
 
+    // The ONE account generation. `run()` bumps it first. Every writer of an account store captures it when its work starts and checks it before
+    // each put, flush, save or markSynced; a write whose captured generation is no longer the current one is dropped.
+    private static let genLock = NSLock()
+    nonisolated(unsafe) private static var _generation = 0
+    public static var generation: Int { genLock.lock(); defer { genLock.unlock() }; return _generation }
+    @discardableResult
+    public static func bumpGeneration() -> Int { genLock.lock(); defer { genLock.unlock() }; _generation += 1; return _generation }
+
     public var names: [String] { lock.lock(); defer { lock.unlock() }; return items.map(\.name) }
 
     /// A store's wipe, by name. A second registration under a name replaces the first.
@@ -22,6 +30,7 @@ public final class AccountWipe: @unchecked Sendable {
     }
 
     public func run() async {
+        Self.bumpGeneration()
         lock.lock(); let all = items; lock.unlock()
         for i in all { await i.run() }
     }
@@ -46,7 +55,14 @@ public final class AccountWipe: @unchecked Sendable {
         texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
         content: ContentStore = .shared,
-        corpus: SavedCorpus = .shared
+        corpus: SavedCorpus = .shared,
+        mailReading: MailReading = .shared,
+        conversation: Conversation = .shared,
+        acks: AckHistory = .shared,
+        bar: BarTracker = .shared,
+        reader: ReaderStore = .shared,
+        keptTurns: KeptTurnStore? = nil,
+        voice: SpeakerGate = .shared
     ) {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
@@ -66,7 +82,20 @@ public final class AccountWipe: @unchecked Sendable {
         register("podcasts") { podcasts.wipe() }
         register("texture") { await MainActor.run { texture.wipe() } }
         register("playing") { environment.wipePlaying() }
+        register("mail-reading") { mailReading.wipe() }
+        register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe(); EditionSetupSession.shared?.wipe(); EditionSetupSession.shared = nil }
+        register("reader") { reader.wipe() }
+        // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
+        register("voice-profile") { voice.forget() }
+        if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
         register("content") { ContentSync.wipeAccount(store: content, corpus: corpus) }
+    }
+
+    /// For the app target's stores that are files (one-line registrations in AutoradioModule): delete these paths.
+    public static func removeFiles(_ urls: [URL]) { for u in urls { try? FileManager.default.removeItem(at: u) } }
+    /// Delete what is inside a folder and keep the folder.
+    public static func removeContents(of dir: URL) {
+        for n in (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [] { try? FileManager.default.removeItem(at: dir.appendingPathComponent(n)) }
     }
 
     /// Recordings the listener abandoned (`takes/`) and the take being played (`take-play-*.m4a`).

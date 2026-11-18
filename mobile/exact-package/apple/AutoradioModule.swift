@@ -136,7 +136,15 @@ public final class AutoradioModule: ExactPackage {
         }
         ReaderStore.shared.offline = { ContentStore.shared.readerDoc(address: $0) }
         PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
-        // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the app-target stores register in their register* function.
+        // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the stores below live in this target.
+        // Kit methods called: Signals.wipe(), OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
+        let filesCache = context.file("app:/cache/files") ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files")
+        choir.accountWipe.register("signals") { [signals] in signals?.wipe() }
+        choir.accountWipe.register("open-pages") { [pages] in pages?.wipe() }
+        choir.accountWipe.register("app-files") {
+            AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })
+            AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
+        }
         SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         themes = ThemeStore(userDir: support.appendingPathComponent("themes"), systemScheme: { Self.systemScheme() })

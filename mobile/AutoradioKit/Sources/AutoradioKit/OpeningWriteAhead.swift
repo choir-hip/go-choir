@@ -24,6 +24,7 @@ import Foundation
     /// A kept opening younger than this is not asked for again on a background (the part of the day still has to match).
     public var refreshAfter: TimeInterval
     public private(set) var inFlight = false
+    private var gen = 0
     public private(set) var requests: [String] = []
     public private(set) var synthesised: [String] = []
 
@@ -45,6 +46,7 @@ import Foundation
         guard !inFlight else { return }
         inFlight = true
         defer { inFlight = false }
+        gen = AccountWipe.generation          // a put after the account was wiped is dropped
         let v = voice()
         // The first entry: no request, only the first block made. Done on every trigger.
         await keepFirstEntry(voice: v)
@@ -73,6 +75,7 @@ import Foundation
             synthesised.append(b)
             audio.append(a)
         }
+        guard gen == AccountWipe.generation else { return }
         cache.put(.opening, entry: o, titles: (o.cites ?? []).map(\.label).filter { !$0.isEmpty }, audio: audio, voice: v)
     }
 
@@ -84,6 +87,7 @@ import Foundation
         guard let b = Self.blocks(of: e).first else { return }
         let a = Moment.dependsOnMoment(b) ? nil : await synth(b)             // a first block that names the moment is kept as text, not as sound
         if a != nil { synthesised.append(b) }
+        guard gen == AccountWipe.generation else { return }
         cache.put(.first, entry: e, titles: (e.cites ?? []).map(\.label).filter { !$0.isEmpty }, audio: a.map { [$0] } ?? [], voice: v)
     }
 }

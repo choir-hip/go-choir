@@ -171,6 +171,7 @@ public final class ChoirApp: @unchecked Sendable {
                 return ProgrammeRouteFeed(source: me.stretchSource?() ?? RouteStretchSource(baseURL: me.frontBaseURL()))
             }
             me.writer = w
+            me.accountWipe.register("writer") { await MainActor.run { w.stop() } }
             w.offlineFill = { LocalStories.entries(from: .shared, sheet: .shared) }       // the desk cannot be reached: stories held on the phone
             let wa = OpeningWriteAhead(cache: me.openingCache, store: .shared,
                                        feed: { [weak me] in me.map { ProgrammeRouteFeed(source: $0.stretchSource?() ?? RouteStretchSource(baseURL: $0.frontBaseURL())) } },
@@ -495,7 +496,7 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.player.pause(reason: "sign out")
         runtime.player.clearQueue()
         runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
-        await MainActor.run { RunSheetPlayer.shared.stopAll() }
+        await MainActor.run { RunSheetPlayer.shared.stopAll(); self.writer?.stop() }
         await RunSheetStore.shared.settlePending(timeout: 3)
         await signIn.signOut()
         lock.lock(); stories = []; message = ""; lock.unlock()
@@ -505,8 +506,9 @@ public final class ChoirApp: @unchecked Sendable {
     /// Every store of the account, wiped by one call at sign-out. The module adds the stores that live in the app target (mail).
     public let accountWipe = AccountWipe()
     private func registerAccountWipe() {
-        let front = frontCache, opening = openingCache
-        Task { @MainActor [accountWipe] in accountWipe.registerStandard(openingCache: opening) }
+        let front = frontCache, opening = openingCache, kept = runtime.store
+        // Registered at once (not in a later task): a sign-out before the main actor ran a task would wipe nothing.
+        onMainThread { [accountWipe] in accountWipe.registerStandard(openingCache: opening, keptTurns: kept) }
         accountWipe.register("front-titles") { if let f = front { try? FileManager.default.removeItem(at: f) } }
         signIn.onSignOut = { [accountWipe] in await accountWipe.run() }
     }

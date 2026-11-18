@@ -156,12 +156,10 @@ public final class PodcastService: @unchecked Sendable {
 
     // MARK: Sign-out
 
-    private var epoch = 0
     /// Sign-out: the library (subscriptions, positions, removed and synced sets), every cached feed and transcript, and the files
-    /// (`podcasts-library.json`, `podcast-feeds/`). A sync or feed load in flight finds the epoch changed and keeps nothing.
+    /// (`podcasts-library.json`, `podcast-feeds/`). A sync or feed load in flight finds the account generation changed and keeps nothing.
     public func wipe() {
         lock.lock()
-        epoch += 1
         lib = LibraryFile(); feeds = [:]; known = [:]; inflight = []; failed = [:]; hints = [:]
         transcripts = [:]; transcriptAsked = [:]; playedKeys = []
         searchTask?.cancel(); searchTask = nil; searchQuery = ""; searchState = .idle
@@ -222,8 +220,9 @@ public final class PodcastService: @unchecked Sendable {
         saveLocked(); lock.unlock()
         changed()
         if let hooks = syncHooks, hooks.signedIn() {
+            let gen = AccountWipe.generation
             Task { [weak self] in
-                if await hooks.push(s) { self?.markSynced(n) }
+                if await hooks.push(s), gen == AccountWipe.generation { self?.markSynced(n) }
             }
         }
         reportFeeds()
@@ -315,6 +314,7 @@ public final class PodcastService: @unchecked Sendable {
     public func load(_ feedURL: String, norm n: String) async {
         var candidates = [PodcastText.https(feedURL)]
         if candidates[0] != feedURL { candidates.append(feedURL) }
+        let gen = AccountWipe.generation
         var lastError = "The feed could not be reached."
         var result: PodcastFeed?
         for c in candidates {
@@ -328,6 +328,7 @@ public final class PodcastService: @unchecked Sendable {
             catch { lastError = "The feed could not be reached. Check your connection." }
         }
         lock.lock()
+        if gen != AccountWipe.generation { lock.unlock(); return }          // signed out while the feed was fetched: it is not kept
         inflight.remove(n)
         if var f = result {
             // Keep what the subscription knew (a title from the directory beats a feed with none).
@@ -408,13 +409,13 @@ public final class PodcastService: @unchecked Sendable {
         lock.lock()
         let now = clock()
         if syncing || (syncAt > 0 && now - syncAt < 600) { lock.unlock(); return }
-        syncing = true; syncAt = now; let startEpoch = epoch; lock.unlock()
+        syncing = true; syncAt = now; let startEpoch = AccountWipe.generation; lock.unlock()
         Task { [weak self] in
             guard let self else { return }
             var note = ""
             if let list = await hooks.pull() {
                 self.lock.lock()
-                if self.epoch != startEpoch { self.lock.unlock(); return }          // signed out meanwhile: this is not the account that asked
+                if AccountWipe.generation != startEpoch { self.lock.unlock(); return }          // signed out meanwhile: this is not the account that asked
                 let removed = Set(self.lib.removed.map(PodcastKey.feed))
                 var added: [PodcastShow] = []
                 for s in list {
@@ -430,7 +431,7 @@ public final class PodcastService: @unchecked Sendable {
                 self.lock.unlock()
                 var failedPush = 0
                 for s in toPush {
-                    self.lock.lock(); let same = self.epoch == startEpoch; self.lock.unlock()
+                    self.lock.lock(); let same = AccountWipe.generation == startEpoch; self.lock.unlock()
                     if !same { return }
                     if await hooks.push(s) { self.markSynced(PodcastKey.feed(s.feedURL)) } else { failedPush += 1 } }
                 note = failedPush == 0 ? "In step with your computer's podcasts." : "Some shows could not be sent to your computer yet."
