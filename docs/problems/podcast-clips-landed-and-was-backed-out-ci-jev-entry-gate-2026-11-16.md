@@ -88,10 +88,40 @@ that `scripts/gates` does not name):
 | Package Modularity | the SDK surface scripts | when the frontend SDK changes |
 | Desk Protocol Lock | `scripts/fuzz-broker-protocol.sh` | fixed-time fuzz |
 
-Fix being built (yellow): a check, run by `scripts/gates` and by CI, that
-reads the workflow's gate jobs and fails when a script a gate job runs is
-neither run by `scripts/gates` nor named in a short exemption list that
-gives the reason (needs PostgreSQL, needs nix, selftest of an unchanged
-gate). The gates CI has and the landing lacks are added to `scripts/gates`
-in the same change. After it, a new CI gate cannot be added without the
-landing script learning of it.
+Built (yellow): `scripts/check-gates-cover-ci`, run by `scripts/gates`
+and by CI's Vocabulary Gates job, with its selftest
+`scripts/selftest-gates-cover-ci`. It reads `.github/workflows/ci.yml` (by
+hand, narrowly; an unparsable workflow fails closed), takes every repo
+program a gate job's `run:` step names (`scripts/`, `frontend/scripts/`,
+`.github/scripts/`, `go run ./cmd/...`) and fails, naming job, step and
+program, when `scripts/gates` neither runs it nor
+`scripts/gates-ci-exemptions.txt` lists it with a reason. A stale
+exemption, one for a program `scripts/gates` runs, and a reasonless one each
+fail, so the list cannot rot.
+
+The rule for a gate job: every job is one, except a job the exemption file
+names on a `not-a-gate` line with a reason. A new job is covered by default.
+Not gates (14): plan, go-vet-build, go-test, go-test-runtime, go-test-scale,
+govulncheck, check, sbom-candidate, sbom, build-frontend, deploy-impact,
+flakehub-publish, prebuild-staging, deploy-staging (they plan, build, test the
+Go suites, publish or deploy; `scripts/land` owns the Go suites). Gate jobs
+(10): doccheck, heresy-detector, v1-inventory (Vocabulary Gates),
+base-packages-listed, guest-floor-commit-free, boot-prune-unit,
+receipts-index-swap, package-modularity, desk-protocol, npm-audit. The `plan`
+job also runs the tests of the CI classifiers; it is listed as not a gate
+because the classifier, not the landing, decides when they matter.
+
+Added to `scripts/gates` (wall time on the Mac): `scripts/doccheck` 26 s,
+`scripts/check-heresies.sh --fail-on-regression` 5 s (report to a temp file),
+`scripts/check-base-packages` under 1 s, and the selftests of the kernel,
+desk-names, store-handles, owner-files, switch-registry, guest-token and
+Jev-entry gates (1 to 5 s each), plus the new check. `scripts/gates` went from
+88 s to about 2 minutes.
+
+Still exempt, with reasons in the file: `selftest-guest-security-epoch` (59 s,
+over the budget), `test-node-b-guest-release-retention.sh` (fails on macOS:
+BSD `touch -d`; 7 of 43 cases), `test-guest-floor-commit-free` (needs nix),
+`receipts-index-swap-test` (needs PostgreSQL), `fuzz-broker-protocol.sh`
+(fixed-time fuzz) and `frontend/scripts/sdk-surface.mjs` (frontend install and
+a merge base). After it, a new CI gate cannot be added without the landing
+script learning of it or the exemption file saying why not.
