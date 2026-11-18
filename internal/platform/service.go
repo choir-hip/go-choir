@@ -46,6 +46,9 @@ type Service struct {
 	podcastClipRowHook func(clipID string) error
 	// podcastFeedMu serialises writes to the feed rows and indexes (podcast_feeds.go).
 	podcastFeedMu sync.Mutex
+	// takeMu serialises writes to takes (takes.go): the daily bound and a
+	// delete are read-then-write.
+	takeMu sync.Mutex
 	// The notice sequence (publication_links.go): seeded from storage before
 	// the first one is issued or read.
 	seedMu        sync.Mutex

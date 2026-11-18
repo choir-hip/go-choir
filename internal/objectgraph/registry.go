@@ -242,6 +242,12 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.podcast_feed", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastFeedRow"},
 		{Kind: "choir.podcast_index", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastIndexDoc"},
 		{Kind: "choir.podcast_clip", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.podcastClipRow"},
+		// Takes (docs/design/autoradio-learned-document-2026-11-17.md section 11):
+		// a listener's recorded voice, its bytes apart from its metadata, and
+		// one outcome row per listener per take. corpusd is the only writer.
+		{Kind: "choir.take", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.takeRow"},
+		{Kind: "choir.take_audio", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.takeAudioRow"},
+		{Kind: "choir.take_outcome", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.takeOutcomeRow"},
 		// A published software release record (P7). Retired: its routes are
 		// deleted and nothing writes one (docs/design/package-install-2026-11-04.md);
 		// the records it left stay readable.

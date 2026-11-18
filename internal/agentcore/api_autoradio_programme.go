@@ -23,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/calibration"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // POST /api/autoradio/programme: the Autoradio desk's programme call (station
@@ -93,6 +94,11 @@ var programmePrompt = appdesk.ProgrammePrompt
 // the request lists clips.
 var programmeClipsPrompt = appdesk.ProgrammeClipsPrompt
 
+// programmeTakesPrompt is the section added when, and only when, the call's
+// input lists a take (after the publisher's own takes and the muted ones are
+// removed).
+var programmeTakesPrompt = appdesk.ProgrammeTakesPrompt
+
 func (r programmeRequest) hasClips() bool {
 	for _, c := range r.Candidates {
 		if len(c.Clips) > 0 {
@@ -116,8 +122,28 @@ type programmeCandidate struct {
 	// from GET /api/platform/podcast-clips (docs/design/podcast-clips-2026-11-15.md 4.2).
 	Clips []programmeClip `json:"clips,omitempty"`
 
+	// A take candidate (kind "take", design 11.5 of
+	// docs/design/autoradio-learned-document-2026-11-17.md) is a listener's
+	// recorded voice, published and listed by GET /api/platform/takes. It
+	// carries no route, version or dek; the audio address stays on the phone.
+	Kind            string             `json:"kind,omitempty"`
+	TakeID          string             `json:"take_id,omitempty"`
+	Publisher       string             `json:"publisher,omitempty"`
+	Transcript      string             `json:"transcript,omitempty"`
+	DurationSeconds float64            `json:"duration_seconds,omitempty"`
+	RespondsTo      *programmeResponds `json:"responds_to,omitempty"`
+	Record          string             `json:"record,omitempty"`
+
 	ref string
 }
+
+// programmeResponds is the story on air when a take was recorded.
+type programmeResponds struct {
+	Route string `json:"route"`
+	Title string `json:"title"`
+}
+
+func (c programmeCandidate) isTake() bool { return c.Kind == "take" }
 
 // programmeClip is what the call knows of a clip: enough to introduce it,
 // never its audio address (the phone holds that).
@@ -131,6 +157,11 @@ type programmeClip struct {
 }
 
 const (
+	programmeMaxTakes        = 3
+	programmeTakeMinSeconds  = 3
+	programmeTakeMaxSeconds  = 60
+	programmeTakeLeadMax     = 400
+	programmeTakeTextMax     = 2000
 	programmeMaxClipsPerCand = 3
 	programmeClipMinSeconds  = 5
 	programmeClipMaxSeconds  = 300
@@ -139,6 +170,9 @@ const (
 )
 
 var programmeClipIDRe = regexp.MustCompile(`^clip-[0-9a-f]{12,64}$`)
+
+// programmeMuteRe reads a mute from a notebook line (design 11.7).
+var programmeMuteRe = regexp.MustCompile(`(?i)never play takes by (voice-[0-9a-f]{6})`)
 
 type programmeRequest struct {
 	RequestID   string               `json:"request_id"`
@@ -205,10 +239,16 @@ func parseProgrammeRequest(body []byte) (programmeRequest, error) {
 	}
 	seen := map[string]bool{}
 	clipSeen := map[string]bool{}
+	takes := 0
 	for i := range req.Candidates {
 		c := &req.Candidates[i]
 		if err := c.check(i); err != nil {
 			return req, err
+		}
+		if c.isTake() {
+			if takes++; takes > programmeMaxTakes {
+				return req, fmt.Errorf("candidates carries more than %d takes", programmeMaxTakes)
+			}
 		}
 		if seen[c.ref] {
 			return req, fmt.Errorf("candidates[%d] repeats the ref %s", i, c.ref)
@@ -252,7 +292,52 @@ func (k *programmeClip) check(i, j int) error {
 	return nil
 }
 
+// checkTake validates a take candidate: what the phone copies from the takes
+// list. A take has no route, version, dek, text or clips.
+func (c *programmeCandidate) checkTake(i int) error {
+	at := fmt.Sprintf("candidates[%d]", i)
+	if c.Route != "" || len(c.Version) > 0 || c.Dek != "" || c.Text != "" || len(c.Clips) > 0 {
+		return fmt.Errorf("%s is a take, which has no route, version, dek, text or clips", at)
+	}
+	if !types.TakeIDRe.MatchString(c.TakeID) {
+		return fmt.Errorf("%s.take_id is not a take id", at)
+	}
+	if !types.TakePublisherRe.MatchString(c.Publisher) {
+		return fmt.Errorf("%s.publisher is not a voice- handle", at)
+	}
+	c.Title = strings.TrimSpace(c.Title)
+	if c.Title == "" || len(c.Title) > 300 || hasControl(c.Title) {
+		return fmt.Errorf("%s.title must be one line of 1 to 300 bytes", at)
+	}
+	if c.Transcript = strings.TrimSpace(c.Transcript); c.Transcript == "" || len(c.Transcript) > programmeTakeTextMax {
+		return fmt.Errorf("%s.transcript must be 1 to %d bytes", at, programmeTakeTextMax)
+	}
+	if !(c.DurationSeconds >= programmeTakeMinSeconds && c.DurationSeconds <= programmeTakeMaxSeconds) {
+		return fmt.Errorf("%s.duration_seconds must be %d to %d", at, programmeTakeMinSeconds, programmeTakeMaxSeconds)
+	}
+	if r := c.RespondsTo; r != nil {
+		r.Route, r.Title = strings.TrimSpace(r.Route), strings.TrimSpace(r.Title)
+		if r.Route == "" || len(r.Route) > 300 || len(r.Title) > 300 || hasControl(r.Route) || hasControl(r.Title) {
+			return fmt.Errorf("%s.responds_to must be {route, title} of one line each", at)
+		}
+	}
+	if c.Record = strings.TrimSpace(c.Record); len(c.Record) > 200 || hasControl(c.Record) {
+		return fmt.Errorf("%s.record must be one line of at most 200 bytes", at)
+	}
+	c.ref = "take:" + c.TakeID
+	return nil
+}
+
 func (c *programmeCandidate) check(i int) error {
+	if c.Kind != "" {
+		if c.Kind != "take" {
+			return fmt.Errorf("candidates[%d].kind must be absent or take", i)
+		}
+		return c.checkTake(i)
+	}
+	if c.TakeID != "" || c.Publisher != "" || c.Transcript != "" || c.DurationSeconds != 0 || c.RespondsTo != nil || c.Record != "" {
+		return fmt.Errorf("candidates[%d] carries take fields without kind take", i)
+	}
 	if c.Route == "" || len(c.Route) > 256 || strings.ContainsAny(c.Route, "@#") ||
 		strings.IndexFunc(c.Route, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
 		return fmt.Errorf("candidates[%d].route must be 1 to 256 bytes with no space, control character, @ or #", i)
@@ -438,6 +523,19 @@ func (c *programmeCall) segmentEvent(s programmeSegment) map[string]any {
 		}
 		ev["clip"] = map[string]any{"clip_id": s.ClipID, "story_ref": storyRef, "seconds": s.ClipSeconds}
 	}
+	if s.TakeID != "" {
+		// The publisher's audio is played whole, between segments, never cut.
+		ev["cut_at"] = "segment"
+		storyRef := ""
+		for _, c := range cites {
+			if c.Role == "mentioned" {
+				storyRef = c.Ref
+			}
+		}
+		ev["take"] = map[string]any{"take_id": s.TakeID, "story_ref": storyRef, "seconds": s.TakeSeconds}
+		// The forecast rides flat on the segment, as the phone reads it.
+		ev["p_heard"], ev["caused_by"] = s.P, s.CausedBy
+	}
 	return ev
 }
 
@@ -537,6 +635,15 @@ func (h *APIHandler) HandleAutoradioProgramme(w http.ResponseWriter, r *http.Req
 		log.Printf("autoradio programme: request %s: reading the listener's record: %v", req.RequestID, err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "cannot read the listener's record"})
 		return
+	}
+	if c.input.hasTakes() {
+		takes, ok := programmeTakesPrompt()
+		if !ok || strings.TrimSpace(takes) == "" {
+			log.Printf("autoradio programme: request %s: the takes prompt is not shipped", req.RequestID)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the programme prompt is not available"})
+			return
+		}
+		c.prompt = strings.TrimRight(c.prompt, "\n") + "\n\n" + strings.TrimSpace(takes) + "\n"
 	}
 	c.stretchID = mintStretchID()
 	if err := c.writeStart(ctx); err != nil {
@@ -831,7 +938,7 @@ func (c *programmeCall) commit(seg *programmeSegment) bool {
 func (c *programmeCall) forecastInput(s *programmeSegment) calibration.AutoradioForecastInput {
 	return calibration.AutoradioForecastInput{
 		StretchID: c.stretchID, SegmentID: s.ID, Kind: s.Kind, Title: s.Title, Model: c.memberName(), P: s.P,
-		Cause: s.Cause, CausedBy: s.CausedBy, LessonID: s.LessonID, TextSHA256: s.SHA256, Blocks: s.Blocks, StretchStart: c.startedAt,
+		Cause: s.Cause, CausedBy: s.CausedBy, LessonID: s.LessonID, TakeID: s.TakeID, TextSHA256: s.SHA256, Blocks: s.Blocks, StretchStart: c.startedAt,
 	}
 }
 

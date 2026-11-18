@@ -64,6 +64,7 @@ const (
 	KindTransition Kind = "transition"
 	KindStory      Kind = "story"
 	KindClip       Kind = "clip"
+	KindTake       Kind = "take"
 	KindEpisode    Kind = "episode"
 	KindPage       Kind = "page"
 	KindDocument   Kind = "document"
@@ -72,7 +73,7 @@ const (
 	KindAnswer     Kind = "answer"
 )
 
-var kinds = map[Kind]bool{KindOpening: true, KindTransition: true, KindStory: true, KindClip: true,
+var kinds = map[Kind]bool{KindOpening: true, KindTransition: true, KindStory: true, KindClip: true, KindTake: true,
 	KindEpisode: true, KindPage: true, KindDocument: true, KindMail: true, KindResult: true, KindAnswer: true}
 
 func (k Kind) valid() bool { return kinds[k] }
@@ -83,7 +84,7 @@ func (k *Kind) UnmarshalJSON(b []byte) error {
 // TextRequired reports whether entries of this kind carry words to speak.
 func (k Kind) TextRequired() bool {
 	switch k {
-	case KindOpening, KindTransition, KindStory, KindAnswer, KindResult:
+	case KindOpening, KindTransition, KindStory, KindTake, KindAnswer, KindResult:
 		return true
 	}
 	return false
