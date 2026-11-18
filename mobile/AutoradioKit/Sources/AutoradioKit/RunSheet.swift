@@ -7,7 +7,7 @@ import Foundation
 //
 // Interpretations of the frozen interface (the same list is in internal/runsheet/apply.go):
 //  - duplicate detection needs memory, so RunSheet carries `applied_ops` (the last 512 applied op_ids); a dropped op is not remembered;
-//  - dropped reasons: duplicate, not_ahead, not_on_air, not_phone, bad_transition, other_on_air, unknown_id, stale_version,
+//  - dropped reasons: duplicate, not_ahead, not_on_air, not_phone, bad_transition, other_on_air (no longer produced: a takeover), unknown_id, stale_version,
 //    no_previous, duplicate_id, reason_required, invalid;
 //  - the reducer reads no clock: ended.at is whatever the op carried ("" when nothing); skip and `now` take at and last_block from op.ended;
 //  - skip, previous and aired never promote an entry to on_air: only an `aired` op from the phone does;
@@ -504,7 +504,12 @@ extension RunSheet {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return RunSheetDropped.unknownId }
         let cur = entries[i].state
         if cur == .ahead && to == .onAir {
-            if entries.contains(where: { $0.state == .onAir }) { return RunSheetDropped.otherOnAir }
+            // Takeover (twin of internal/runsheet aired): the entry on air lost its end op; close it as heard, outcome left, no time, no block.
+            if let oi = entries.firstIndex(where: { $0.state == .onAir }) {
+                entries[oi].state = .heard
+                entries[oi].ended = RunSheetEnded(outcome: .left)
+                onAir = nil
+            }
             var e = entries.remove(at: i)
             e.state = .onAir
             e.ended = nil
