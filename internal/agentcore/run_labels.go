@@ -229,8 +229,25 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 			}
 		}
 		return nil, false
+	case yaegikernel.ActionSearchWireCorpus:
+		// A capture hit carries a verbatim passage of the owner's stored copy:
+		// the same bytes ReadCapture labels owner_private:capture, the floor
+		// publish-auto admission keys on. A result with no passage is titles
+		// and metadata, the world's.
+		var body struct {
+			Captures []struct {
+				Passage string `json:"passage"`
+			} `json:"captures"`
+		}
+		_ = json.Unmarshal(result, &body)
+		for _, c := range body.Captures {
+			if strings.TrimSpace(c.Passage) != "" {
+				return captureReadLabels.Union(worldReadLabels), true
+			}
+		}
+		return worldReadLabels, true
 	case yaegikernel.ActionRead, yaegikernel.ActionPollSource, yaegikernel.ActionSourceAPI,
-		yaegikernel.ActionSearchStart, yaegikernel.ActionSearchWireCorpus:
+		yaegikernel.ActionSearchStart:
 		return worldReadLabels, true
 	case yaegikernel.ActionReadEvidence:
 		// An evidence object carries the labels its writer's run held.
