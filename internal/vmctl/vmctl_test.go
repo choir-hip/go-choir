@@ -1973,9 +1973,9 @@ type mockVMManager struct {
 	refreshes    []string
 	// onRefresh runs after RefreshVM records the call (a test's seam to act
 	// while a refresh is in flight).
-	onRefresh func(vmID string)
-	recoverCfgs  []VMManagerConfig
-	refreshCfgs  []VMManagerConfig
+	onRefresh   func(vmID string)
+	recoverCfgs []VMManagerConfig
+	refreshCfgs []VMManagerConfig
 	// maintenanceImage, when set, makes RefreshVM run the config's
 	// OfflineMaintenance on it before "booting", as vmmanager does.
 	maintenanceImage string
