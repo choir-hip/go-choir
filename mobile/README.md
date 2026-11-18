@@ -107,6 +107,44 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 - The slow relaunch (round 1 drive): a temporary probe (not committed) timed the path in the simulator on two launches, one fresh and one with kept storage, in demo mode: `refresh` to `loadProgramme` returned in 0.04 s, and the request plus first segment took 0.01 s. So the stretch path itself is not slow, and the more than 9 seconds seen earlier did not reproduce; the Mac's load average was in the tens to the nineties then, which is the only explanation left (not proven). Real latency against a computer is unmeasured until L1 deploys the route; a computer slower than the 8-second deadline leaves the listener on the article for that load.
 - The deadline covers the request and the first segment, not the article fetch after it. Some tests wait with short sleeps and polling.
 
+## Player controls: speed to 3x, next and previous story, autoplay, the DJ's candidates (ways it can fail, written before the code)
+
+Owner QA round 1, 2026-11-15. Tests: `PlayerControlsTests.swift` (the numbers are in the test names).
+
+### Speed (0.5x to 3x, a slider)
+1. A speed outside the range, or NaN, reaches the audio: it clamps to 0.5...3 in the one place (`PlaybackSpeed.clamp`) that the tracker, the player and the audio all call; NaN is 1.
+2. The slider sends a value that is not on a step (1.2345): it snaps to 0.05, so the label and the stored value agree.
+3. Speed changes mid-sentence: the time-pitch unit sits after the player node, so the position (counted in source frames) does not jump or restart; the fraction never goes backwards.
+4. 3x with a voice that cannot go that fast: every voice (the system voice, Kokoro, Pocket, LFM) is rendered to buffers and played through the one time-pitch unit (`LiveAudio.timePitch`, range 1/32 to 32), so the voice's own rate is never used and no voice has a lower ceiling than 3x. The ceiling is the unit's, and the audio's, not the synthesizer's.
+5. The chosen speed is forgotten at the next launch: it is saved (`SpeedStore`) and applied at start.
+6. A saved speed that is garbage (0, negative, 99, a string) is ignored and the speed is 1.
+
+### Next and previous story
+7. Next at the last story does nothing and does not wrap; previous at the first story restarts it.
+8. Previous within the first 3 seconds of a story goes to the previous story; later it restarts the current one.
+9. The current story is not in the list (opened from search, or a text from mail): the buttons do not guess; a list is only taken for a story that is in it.
+10. The list is the paper's article stack order when the story was started from the paper; the front list when no stack was seen; a programme (the DJ) skips by segment.
+11. Lock-screen next and previous do the same as the buttons.
+
+### Autoplay
+12. A story ends and the next in the list starts by itself; no setting.
+13. The reader paused: nothing starts. The reader is talking to the radio (a turn is open): nothing starts over them; it starts when the turn is over, once.
+14. The next story fails to load: skip to the one after it, once, and say so; if that fails too, stop and say so.
+15. Nothing was played (the voice failed for every block): the story did not "finish"; autoplay does not run through the whole list failing.
+16. The last story ends: stop cleanly.
+17. A text queued behind the story (mail's "Read it to me") plays before the next story is chosen (the player's queue runs first). Known limit: when the text ends nothing continues the list; a text is not a story of it.
+18. The app is in the background: the audio session keeps the app alive; the loop is the same as in the foreground (nothing to build; to check on the phone).
+
+### The DJ's candidates (the programme request)
+19. The request carried no `candidates`, so the server's prompt said "write only ident and bridge segments": the listener got station breaks, never a story. The request now carries the front list, ordered by the paper's weight, with the text of the first ten.
+20. A candidate the server would refuse (no dek, a route with a space, @ or #, a title over 300 bytes, text over 8 KB, a 41st item) is shaped or dropped on the phone so one bad story does not make the whole request 400.
+21. The text of a story cannot be fetched: that candidate goes without text; the request still goes.
+22. No candidates at all (the front list did not load): no request is made; the front page's story plays, as before.
+23. A stretch ends (the stream is done and the last segment played): one more request with cause `extend`, with the routes already told left out; nothing left to tell: stop.
+24. "Start the radio" after onboarding (owner, 2026-11-15) spoke "there's nothing to report now, so I'm just going to let the music play": the request had no candidates, the server's prompt then says "write only ident and bridge segments", and the model wrote a station break. Fixed at the request (19) and by holding breaks until the first story, update or headlines arrives; a stretch of only breaks is not a programme and the paper's story plays instead.
+25. Play pressed before any programme was loaded (sign-in just done, the launch load slow or failed) played the Lab's fixture edition ("written only to test the radio"): Play and Start the radio now wait for a load in flight, or load, and never play the fixture or an empty document.
+26. No network and nothing cached: the words are "I can't reach the paper right now", never an announcement that there is nothing to report.
+
 ## Acknowledgement timing (`ackTiming`): ways it can fail (written before the code)
 
 `LabConfiguration.ackTiming` is `immediate` (default) or `afterSystem1`. Measured on staging, the acknowledgement
@@ -139,7 +177,7 @@ The app is called Autoradio and opens to the radio. No stage names, ids or jargo
 4. The Player has loaded the newest story from choir.news. It shows the story title, the passage being read, "3 of 12", a large Play button, and below it a list of stories.
 5. Taps Play. The first tap starts audio (the microphone permission prompt appears here, once). The passage is read aloud, block by block.
 6. Taps a story in the list: it loads and plays from its start.
-7. Holds the big "Hold to talk" button and speaks; the programme dips then pauses; the screen shows what the radio heard. On release the radio says it is on it, then the revised text from the listener's computer is read from the point that changed.
+7. Speaks (voice is off until the Voice control is tapped; there is no press-and-hold); the programme dips then pauses; the screen shows what the radio heard. On release the radio says it is on it, then the revised text from the listener's computer is read from the point that changed.
 8. If anything fails, one plain sentence appears on the Player ("Could not reach choir.news. Check your connection.", "Your sign-in is no longer accepted. Please sign in again.", "Your computer is busy right now."). Nothing falls back to a stub silently. The details are in the Lab tab, Trace.
 9. Sign out is in the Lab tab, under Account. It removes the key from the phone and asks the server to revoke it.
 10. The Lab tab (stages, parameters, configurations, kept turns, replay, Trace) is the old lab, unchanged. The default configuration there is named "listener" (choir-front, choir-system1, choir-desk, Apple speech and voice, button to talk); the stubs and the fixture programme stay selectable.
@@ -346,7 +384,7 @@ All Xcode/Swift commands run outside the Nix shell through `mobile/scripts/xe.sh
 
 `AutoradioLab/` is an Exact app (Contract screens: Player, Lab, Trace; no SwiftUI, no UIKit views of ours). AutoradioKit is attached as the Exact package `@choir/autoradio` (`exact-package/`): `scripts/sync-exact-package.sh` copies the kit sources in and writes `exact-package/apple/exact.json`; `scripts/gen-exact-interface.py` writes the interface.
 
-Pinned Exact: `expo/exact` at `76cd50f9e863129b3fc75db1673d6ad4bbf79258`, checked out at `mobile/.exact-src` (gitignored), Bun 1.4.2 at `~/.bun-1.4.2`. Commands: `mobile/scripts/exact.sh ios` (simulator), `mobile/scripts/exact.sh ios --device --phone 00008120-00114DE80A90C01E`.
+Pinned Exact: `expo/exact` at `de212e671a69f4fea18bed67d5b73b259ddf3061` (moved from 76cd50f9e on 2026-11-17), checked out at `mobile/.exact-src` (gitignored), Bun 1.4.2 at `~/.bun-1.4.2`. Commands: `mobile/scripts/exact.sh ios` (simulator), `mobile/scripts/exact.sh ios --device --phone 00008120-00114DE80A90C01E`.
 
 Signing: the free provisioning team is `QSGU6VRJL6` ("Yusef Nathanson (Personal Team)"); `N9HKM55LWY` is only the certificate's person id. Exact needs an installed profile for `news.choir.autoradio.lab`; `scripts/make-profile.sh` obtains one with a stub Xcode project and `-allowProvisioningUpdates`.
 
@@ -526,7 +564,7 @@ if it adds a name a child component must `inject`).
 `<lane>-<thing>[-<id>]`, lower case, every interactive element has one, ids built from addresses keep the address as is.
 Existing: `bar-stack`, `bar` (the glass lens), `bar-mark` (opens the launcher), `bar-field`, `bar-mic` (tap to talk, tap to send), `bar-send`, `bar-play`,
 `bar-text` (the now-playing line), `bar-progress`, `page-indicator`, `mark`, `page-deck` (the pan surface), `deck-slot-<address>`, `story-more`, `launcher`,
-`launcher-layer`, `launcher-open-<address>` (bring to the top), `launcher-close-<address>` (remove from the deck), `layer-scrim`, `place-<slug>`, `player`, `player-play`, `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
+`launcher-layer`, `launcher-open-<address>` (bring to the top), `launcher-close-<address>` (remove from the deck), `layer-scrim`, `place-<slug>`, `radio-page` (the Autoradio page, the first deck card), the Takes section (`radio-takes`, `takes-record`, `takes-stop`, `takes-review`, `takes-transcript`, `takes-publish`, `takes-mine-<n>`, `takes-muted-<n>`, `radio-take-mute`; tour `fixtures/tours/takes-record-publish.steps`, wire in `Choir/Takes.swift`), the notebook page (`notebook-page`, `notebook-line-<id>`, `notebook-score-<n>`, `notebook-behind`, `notebook-held-<n>`, `radio-notebook`, `place-notebook`; tour `fixtures/tours/notebook-page.steps`, wire in `Choir/Learning.swift`, model in `Notebook.swift`, fixtures `fixtures/learning/`), `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
 `settings-theme-<id>`, `settings-mode-<light|dark|system>`, `settings-demo`, `settings-components`, `page-title` (every page's heading), plus the
 integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ...), unchanged. Keep an id or update `scripts/proof-sim.sh` in the same commit.
 
@@ -541,7 +579,7 @@ integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ..
 | 5 Files and viewers | `files.contract`, `viewers.contract`, `members-files.contract`, `AutoradioModule+Files.swift`, `Kit/ChoirFiles.swift`, `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift`, `interface/files.json` | its band in `provide` |
 | 6 Mail | `mail.contract`, `members-mail.contract`, `AutoradioModule+Mail.swift`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift`, `interface/mail.json` | its band in `provide` |
 | 7 Settings, themes, accounts | `settings.contract`, `activity.contract`, `members-settings.contract`, `AutoradioModule+Settings.swift`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`, `interface/settings.json` | its band in `provide` |
-| 8 Onboarding and the interview | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `Kit/Interview.swift`, `mobile/interview/questions.md`, `interface/onboarding.json` | its band in `provide` |
+| 8 Onboarding and the edition topics | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `interface/onboarding.json` | its band in `provide` |
 | 9 Motion and the mark | `mark.contract`, `mark.ts` (if a canvas is used), `AutoradioModule+Mark.swift`, `interface/mark.json`, motion tokens in the themes | its band in `provide` |
 | Integrator | engine, `lab.contract`, `components.contract` (Components and Trace pages), audio session, `Kit/*` engine files | none |
 | Spine (done) | `app.contract` view, `spine.contract`, `ui.contract`, `pages.contract`, `AutoradioModule.swift`, `AutoradioModule+Spine.swift`, `Pages.swift`, `Demo.swift`, `scripts/*` | - |
@@ -600,7 +638,7 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 
 `mobile/scripts/proof-sim.sh` (build, then drives the app in demo mode on a simulator of its own; `NOBUILD=1` to skip the build; prints the screenshot directory):
 launch in demo mode, the bar visible, open a second page, the pile with two cards, switch through the launcher, close by swipe, pull the bar up for the
-launcher, Settings, theme Newsprint, dark, Depth, light, play on the bar, hold to talk, Components (a talk turn through the injected fixture path with
+launcher, Settings, theme Newsprint, dark, Depth, light, play on the bar, Components (a talk turn through the injected fixture path with
 the stub stages) and Trace. `mobile/scripts/proof-replay.sh` and `swift test` (30 tests, 7 of them the spine's) still pass.
 
 ## Lane 3: the Texture reader and the Textures place
@@ -647,8 +685,8 @@ and again in dark. The scheme really switches: the Settings mode control (`setti
 Decisions made at the seams:
 - **Generated files** (`BundledThemes.generated.swift`, `DemoFixtures.generated.swift`, `exact-package/exact.json`) are never hand-merged: take a side and
   run `python3 scripts/embed-assets.py` / `gen-exact-interface.py`. The build runs both again.
-- **One owner per thing.** Talk mode: Settings (`AppSettings` `talkMode`); the bar and the interview read the engine's addressing stage that Settings
-  applies (the interview no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
+- **One owner per thing.** Talk mode: Settings (`AppSettings` `talkMode`); the bar and the topics step read the engine's addressing stage that Settings
+  applies (the setup no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
   (`syncGestureMeanings`), and lane 4's own buttons write back to Settings. "What the paper has learned": `PreferencesLearned`, over lane 4's acts.
 - **Signed out** the paper is the root; sign-in is a code screen over the app that appears when `au.status == "pending"` (the paper's Sign in button).
 - **Bar**: a page-colour backing under the glass (`th.paper`, 0.82), the aim reads `readerAim` (a block of the open document) and `ob.aim` before setup;

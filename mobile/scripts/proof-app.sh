@@ -20,6 +20,7 @@ echo "screenshots: $SHOTS"
 python3 -I "$HERE/embed-assets.py" > "$SCRATCH/embed.txt" 2>&1 || { tail -20 "$SCRATCH/embed.txt"; fail "embed assets"; }
 python3 -I "$HERE/gen-exact-interface.py" > "$SCRATCH/iface.txt" 2>&1 || { tail -20 "$SCRATCH/iface.txt"; fail "exact interface"; }
 python3 -I "$HERE/check-strings.py" > "$SCRATCH/strings.txt" 2>&1 || { tail -20 "$SCRATCH/strings.txt"; fail "strings"; }
+python3 -I "$HERE/check-no-loading.py" > "$SCRATCH/noloading.txt" 2>&1 || { cat "$SCRATCH/noloading.txt"; fail "a Loading or Opening string"; }
 python3 -I "$HERE/check-tetramark-projection.py" > "$SCRATCH/tmproj.txt" 2>&1 || { cat "$SCRATCH/tmproj.txt"; fail "tetramark projection bound"; }
 python3 -I "$HERE/gen-tetramark.py" --check > "$SCRATCH/tetramark.txt" 2>&1 || { cat "$SCRATCH/tetramark.txt"; fail "tetramark drift"; }
 echo "ok: assets, interface, strings, tetramark data"
@@ -28,7 +29,6 @@ echo "ok: assets, interface, strings, tetramark data"
 C="$HERE/../AutoradioLab"
 grep -q 'send up = choirTalkCancel()' "$C/spine.contract" || fail "wiring" "micCancel does not call choirTalkCancel (a cancelled turn would be sent)"
 grep -q 'choirAsk(text=ask, aim=pg.top)' "$C/spine.contract" || fail "wiring" "a typed ask does not carry the aim"
-grep -q 'choirTalkDown(aim=pg.top)' "$C/spine.contract" || fail "wiring" "a spoken turn does not carry the aim"
 if grep -rIniE --exclude-dir=target --exclude-dir=node_modules --exclude-dir=.exact 'hold to talk|hold or tap|modeLabel|setLensStyle|lens-[abc]\b' "$C" "$HERE/../exact-package/interface" "$HERE/../AutoradioKit/Sources" > "$SCRATCH/banned.txt" 2>&1; then
   head -5 "$SCRATCH/banned.txt"; fail "wiring" "hold-to-talk wording, RadioInfo.modeLabel or the lens-variant switch is still in the app"
 fi
@@ -84,8 +84,7 @@ goto "pub:demo-grid-storage"; view light-02e-story-back-after-swipe 900
 # the bar's explicit controls: play starts the edition, the line above names what is loaded, a tap on it opens the player sheet
 step "tap bar-play"; wait_ 1800
 step tree; shot light-02b-bar-playing
-step "tap bar-text"; view light-03-player 900
-step "tap player-close"; wait_ 700
+step "tap bar-now"; view light-03-radio-page 900
 # the mic: a tap talks, a tap again sends
 step "tap bar-mic"; view light-03b-mic-listening 900
 step "tap bar-cancel"; view light-03c-mic-cancelled 900
@@ -203,7 +202,7 @@ place settings 900
 step "tap settings-nav-talk"; wait_ 700
 step "tap settings-choice-talkMode-open"; view light-16-settings-talk-open 700
 step "tap bar-play"; wait_ 1800
-step "tap bar-text"; view light-17-player-open-mode 900
+step "tap bar-now"; view light-17-radio-page 900
 step logs
 run_drive talk light "" --touch platform
 
@@ -220,7 +219,7 @@ step "tap open-trace"; view light-33-trace-timeline 1500
 step logs
 run_drive ask light "" --touch platform
 
-# ---- 4b. voice setup and the interview (the page opens at launch by a defaults flag), light
+# ---- 4b. voice setup and the edition topics (the page opens at launch by a defaults flag), light
 step "clock data"; wait_ 1500; step tree; shot light-20-onboarding-welcome
 step "tap ob-begin"; view light-21-setup-downloading 1200
 step "clock +3500 real"; step "clock data"; step tree; shot light-22-setup-stalled
@@ -231,14 +230,11 @@ step "clock +7500 real"; step "clock data"; step tree; shot light-24-mic-ask
 step "tap ob-mic-ask"; wait_ 1800
 step "tap ob-mic-next"; view light-25-hearing 600
 step "tap ob-hearing-yes"; wait_ 600
-step "tap ob-interview"; view light-26-interview-q1 800
-step "tap ob-demo-next"; wait_ 1200
-step "tap ob-demo-next"; wait_ 1200
-step "tap ob-demo-next"; view light-27-interview-paused 1200
-step "tap ob-continue"; view light-28-interview-continued 700
+step "tap ob-topics-start"; view light-26-topics 800
+step "tap ob-topic-World"; wait_ 600
+step "tap ob-demo-say"; view light-27-topics-spoken 1200
 # on to the edition and "Start the radio" (this check is fatal: the radio must really start from the edition page)
-for i in 1 2 3 4 5 6 7; do step "tap ob-demo-next"; wait_ 1200; done
-step "tap ob-demo-next"; view light-29-writing 900
+step "tap ob-topics-done"; view light-29-writing 900
 wait_ 3200; step "tap ob-edition-retry"; wait_ 1200
 wait_ 3500; step tree; shot light-31-edition-done
 step "tap ob-edition-open"; wait_ 900
@@ -258,8 +254,7 @@ goto "paper:front"; view dark-02-paper-front 700
 step "tap paper-scroll drag 0 -260"; wait_ 700
 step "tap paper-story-demo-grid-storage"; view dark-03-paper-story-reader 1000
 step "tap bar-play"; wait_ 1800
-step "tap bar-text"; view dark-04-player 900
-step "tap player-close"; wait_ 700
+step "tap bar-now"; view dark-04-radio-page 900
 step "tap bar-mic"; view dark-04b-mic-listening 900
 step "tap bar-cancel"; view dark-04c-mic-cancelled 900
 step "tap bar-mic"; wait_ 900
@@ -310,13 +305,9 @@ step "tap ob-fallback-transcriber"; wait_ 8400; step tree; shot dark-22-mic-ask
 step "tap ob-mic-ask"; wait_ 2300; step tree; shot dark-23-mic-heard
 step "tap ob-mic-next"; view dark-24-hearing 600
 step "tap ob-hearing-yes"; wait_ 600
-step "tap ob-interview"; wait_ 800
-step "tap ob-demo-next"; wait_ 1200
-step "tap ob-demo-next"; view dark-25-interview-interrupted 1200
-step "tap ob-demo-next"; view dark-26-interview-paused 1200
-step "tap ob-continue"; wait_ 700
-for i in 1 2 3 4 5; do step "tap ob-demo-next"; wait_ 1200; done
-step "tap ob-demo-next"; view dark-27-readback 1200
+step "tap ob-topics-start"; wait_ 800
+step "tap ob-demo-say"; view dark-25-topics-spoken 1200
+step "tap ob-topics-done"; view dark-27-writing 1200
 step "tap bar-mark"; wait_ 600; step "tap place-settings"; wait_ 900
 step "tap settings-mode-light"; wait_ 900; step tree
 step logs
@@ -342,7 +333,7 @@ must "deck: the pages" '[page-deck]'
 must "deck: a story has a visible More of this" '[story-more]'
 must "launcher: the deck is listed" '[launcher-open-pub:demo-grid-storage]'
 nomust "no raw reader-facing address as a title" 'pub:/pub/'
-must "player: opens from the bar" '[player-title]'
+must "radio page: opens from the bar" '[radio-onair-title]'
 must "launcher: places" '[place-files]'
 must "files: list" '[files-row-/Documents]'
 must "files: the PDF viewer" '[pdf-frame]'
@@ -367,12 +358,13 @@ done
 must "voice: welcome" '[ob-begin]'
 must "voice: setup rows" '[ob-row-transcriber]'
 must "voice: microphone check" '[ob-mic-ask]'
-must "interview: listening" '[ob-listening]'
+must "topics: the chips" '[ob-topics]'
+must "topics: the explanation" '[ob-explainer]'
 must "bar: tells the setup state" '[bar-setup]'
-must "bar: tells the interview state" 'Interview: '
+must "bar: tells the topics step" 'Choose your topics'
 must "voice: the edition is done" '[ob-start-radio]'
 if grep -qF 'NOW PLAYING' "$SHOTS/drive-voice.txt" 2>/dev/null; then echo "ok: Start the radio from the edition page starts it (the bar says NOW PLAYING)"; else echo "MISSING: Start the radio did not start the radio within 5 s"; FAILS="$FAILS [start the radio]"; fi
-must "interview: pause card" '[ob-paused]'
+must "topics: the selection is shown" '[ob-selection]'
 must "first run: the card on the paper" '[firstrun-card]'
 if grep -qF 'local reply text ready' "$SHOTS/drive-ask.txt" 2>/dev/null; then echo "ok: trace: the timing steps are listed"; else echo "note: the trace page did not list the timing steps in the demo run (no turn record yet, or the path moved)"; fi
 if grep -qF 'Got it' "$SHOTS/drive-ask.txt" 2>/dev/null; then echo "UNWANTED: a stock phrase was spoken"; FAILS="$FAILS [stock phrase]"; fi

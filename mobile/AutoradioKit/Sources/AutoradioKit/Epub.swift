@@ -53,6 +53,8 @@ public struct EpubBook: Sendable, Equatable {
 
 public enum EpubError: Error, CustomStringConvertible, Equatable {
     case notAZip, truncated, unsupported(String), tooLarge(String), corrupt(String), missing(String)
+    /// An encryption.xml that covers content (DRM). Font obfuscation alone is not protection.
+    case protected
     public var description: String {
         switch self {
         case .notAZip: return "This is not a readable e-book (not a ZIP)."
@@ -61,6 +63,7 @@ public enum EpubError: Error, CustomStringConvertible, Equatable {
         case .tooLarge(let m): return "This e-book is too large to open: \(m)."
         case .corrupt(let m): return "This e-book is damaged: \(m)."
         case .missing(let m): return "This e-book is incomplete: \(m) is missing."
+        case .protected: return "This book is protected and cannot be opened."
         }
     }
 }
@@ -185,6 +188,47 @@ private final class OpfParser: NSObject, XMLParserDelegate {
         default: if language.isEmpty { language = t }
         }
         capture = nil
+    }
+}
+
+// The table of contents: an EPUB 3 nav document (<nav epub:type="toc"> anchors) or an EPUB 2 NCX (navPoint, navLabel/text, content src).
+// Titles are keyed by the target file's path (fragment dropped); the first title for a file wins.
+private final class TocParser: NSObject, XMLParserDelegate {
+    let base: String
+    var titles: [String: String] = [:]
+    // nav
+    private var inNav = false, navDone = false, anchorHref: String? = nil, anchorText = ""
+    // ncx
+    private var labelText = "", inLabel = false, pendingLabel = ""
+    init(base: String) { self.base = base }
+    private func add(_ href: String, _ title: String) {
+        let t = title.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        guard !t.isEmpty, !href.isEmpty else { return }
+        let path = Epub.resolve(base, href)
+        if titles[path] == nil { titles[path] = t }
+    }
+    func parser(_ p: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes a: [String: String]) {
+        switch Epub.local(name) {
+        case "nav":
+            let type = (a["epub:type"] ?? a["type"] ?? "")
+            if !navDone, type.isEmpty || type.contains("toc") { inNav = true }
+        case "a": if inNav { anchorHref = a["href"]; anchorText = "" }
+        case "navlabel": inLabel = true; labelText = ""
+        case "content": if let src = a["src"] { add(src, pendingLabel) }
+        default: break
+        }
+    }
+    func parser(_ p: XMLParser, foundCharacters s: String) {
+        if anchorHref != nil { anchorText += s }
+        if inLabel { labelText += s }
+    }
+    func parser(_ p: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        switch Epub.local(name) {
+        case "nav": if inNav { inNav = false; navDone = true }
+        case "a": if let h = anchorHref { add(h, anchorText); anchorHref = nil }
+        case "navlabel": inLabel = false; pendingLabel = labelText
+        default: break
+        }
     }
 }
 
@@ -323,6 +367,20 @@ public enum Epub {
         return parts.joined(separator: "/")
     }
 
+    /// True when encryption.xml names any method other than the two font-obfuscation algorithms (IDPF and Adobe), which are not DRM.
+    static func isProtected(encryptionXML: Data) -> Bool {
+        final class P: NSObject, XMLParserDelegate {
+            var algorithms: [String] = []
+            func parser(_ p: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes a: [String: String]) {
+                if Epub.local(name) == "encryptionmethod" { algorithms.append(a["Algorithm"] ?? a["algorithm"] ?? "") }
+            }
+        }
+        let p = P(); let x = XMLParser(data: encryptionXML); x.delegate = p; x.parse()
+        let fonts: Set<String> = ["http://www.idpf.org/2008/embedding", "http://ns.adobe.com/pdf/enc#RC"]
+        if p.algorithms.isEmpty { return String(decoding: encryptionXML, as: UTF8.self).contains("EncryptedData") }   // unparseable but names encrypted data
+        return p.algorithms.contains { !fonts.contains($0) }
+    }
+
     public static func parse(data: Data) throws -> EpubBook {
         let entries = try Zip.entries(data)
         var byName: [String: ZipEntry] = [:], byLower: [String: ZipEntry] = [:]
@@ -330,6 +388,7 @@ public enum Epub {
             byName[e.name] = e; byLower[e.name.lowercased()] = e
         }
         func find(_ n: String) -> ZipEntry? { byName[n] ?? byLower[n.lowercased()] }
+        if let enc = find("META-INF/encryption.xml"), let raw = try? Zip.read(data, enc), isProtected(encryptionXML: raw) { throw EpubError.protected }
         func xml(_ n: String) throws -> String {
             guard let e = find(n) else { throw EpubError.missing(n) }
             return String(decoding: try Zip.read(data, e), as: UTF8.self)
@@ -344,6 +403,15 @@ public enum Epub {
         guard ox.parse() || !op.spine.isEmpty else { throw EpubError.corrupt("the package file") }
         let base = opfPath.split(separator: "/").dropLast().joined(separator: "/")
 
+        // Chapter titles from the book's own contents (nav or NCX), when it has them.
+        var toc: [String: String] = [:]
+        for item in op.manifest.values where item.props.split(separator: " ").contains("nav") || item.type.contains("ncx") {
+            let path = resolve(base, item.href)
+            guard let e = find(path), let raw = try? Zip.read(data, e) else { continue }
+            let tp = TocParser(base: path.split(separator: "/").dropLast().joined(separator: "/"))
+            let tx = XMLParser(data: Data(cleanXHTML(String(decoding: raw, as: UTF8.self)).utf8)); tx.delegate = tp; tx.parse()
+            for (k, v) in tp.titles where toc[k] == nil { toc[k] = v }
+        }
         var warnings: [String] = []
         var chapters: [EpubChapter] = []
         let readable = op.spine.compactMap { ref -> (String, OpfParser.Item)? in
@@ -361,7 +429,7 @@ public enum Epub {
             if !px.parse() { warnings.append("\(path) is not well formed; showing what could be read") }
             if h.blocks.isEmpty { continue }
             let headTitle = h.blocks.first(where: { $0.kind == "heading" })?.text
-            let t = (headTitle ?? (h.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Chapter \(chapters.count + 1)" : h.title.trimmingCharacters(in: .whitespacesAndNewlines)))
+            let t = (toc[path] ?? headTitle ?? (h.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Chapter \(chapters.count + 1)" : h.title.trimmingCharacters(in: .whitespacesAndNewlines)))
                 .replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "*", with: "").replacingOccurrences(of: "`", with: "")
             chapters.append(EpubChapter(id: id, href: path, title: t, blocks: h.blocks))
         }

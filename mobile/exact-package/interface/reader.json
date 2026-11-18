@@ -99,7 +99,11 @@
    "permalink": "string",
    "plain": "string",
    "textBlocks": "number",
-   "markdown": "string"
+   "markdown": "string",
+   "hearIt": "HearItRow[]",
+   "editable": "bool",
+   "source": "string",
+   "docId": "string"
   },
   "TextureRow": {
    "address": "string",
@@ -164,7 +168,11 @@
      "permalink": "",
      "plain": "",
      "textBlocks": 0,
-     "markdown": ""
+     "markdown": "",
+     "hearIt": [],
+     "editable": false,
+     "source": "",
+     "docId": ""
     }
    }
   },
@@ -233,9 +241,24 @@
    "answers": "ReaderAck"
   },
   {
+   "send": "readerOpenExternal",
+   "options": {
+    "url": "string"
+   },
+   "answers": "ReaderAck"
+  },
+  {
    "send": "readerReload",
    "options": {
     "address": "string"
+   },
+   "answers": "ReaderAck"
+  },
+  {
+   "send": "readerPrefetch",
+   "options": {
+    "prev": "string",
+    "next": "string"
    },
    "answers": "ReaderAck"
   },
@@ -247,5 +270,15 @@
    },
    "answers": "ReaderFollowInfo"
   }
- ]
+ ],
+ "views": {
+  "web-page": {
+   "props": {
+    "page": "string"
+   },
+   "events": [
+    "message"
+   ]
+  }
+ }
 }

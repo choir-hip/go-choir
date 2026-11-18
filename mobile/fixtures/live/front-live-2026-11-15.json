@@ -1,0 +1,1192 @@
+{
+ "stories": [
+  {
+   "publication_id": "pub-f91e89de2333079a2b8bba741e4d8827",
+   "title": "Women pardoned for abortion offences are to have records expunged in England and Wales",
+   "updated_at": "2026-11-15T23:07:40.580920989Z",
+   "version_count": 2,
+   "latest_revision": 4,
+   "route": {
+    "bare": "/pub/texture/women-pardoned-for-abortion-offences-are-to-have-records-expunged-in-england-and-wales-pubf91e89de2",
+    "permalink": "/pub/texture/women-pardoned-for-abortion-offences-are-to-have-records-expunged-in-england-and-wales-pubf91e89de2/v4"
+   },
+   "importance": 7,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 6,
+   "words": 649,
+   "entities": [
+    {
+     "id": "ent:ae318a81df0fe276e7910ee9",
+     "label": "England"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-db3e98d3e1e89bedf318a334456a4634",
+   "title": "Russia barred from U20 World Junior Championship in Canada",
+   "updated_at": "2026-11-15T23:05:46.38443977Z",
+   "version_count": 1,
+   "latest_revision": 3,
+   "route": {
+    "bare": "/pub/texture/russia-barred-from-u20-world-junior-championship-in-canada-pubdb3e98d3e",
+    "permalink": "/pub/texture/russia-barred-from-u20-world-junior-championship-in-canada-pubdb3e98d3e/v3"
+   },
+   "importance": 6,
+   "section": "world",
+   "sections": [
+    "world",
+    "sports"
+   ],
+   "source_count": 2,
+   "words": 143
+  },
+  {
+   "publication_id": "pub-c665bef5d6101361c6c97bfa7f176668",
+   "title": "Coles probes cyber security incident, says no evidence customer data compromised",
+   "updated_at": "2026-11-15T23:05:33.329330056Z",
+   "version_count": 4,
+   "latest_revision": 6,
+   "route": {
+    "bare": "/pub/texture/coles-probes-cyber-security-incident-says-no-evidence-customer-data-compromised-pubc665bef5d",
+    "permalink": "/pub/texture/coles-probes-cyber-security-incident-says-no-evidence-customer-data-compromised-pubc665bef5d/v6"
+   },
+   "importance": 6,
+   "section": "tech_ai",
+   "sections": [
+    "world",
+    "business",
+    "tech_ai"
+   ],
+   "source_count": 4,
+   "words": 243,
+   "entities": [
+    {
+     "id": "ent:68efa7fa4f495d133be1e731",
+     "label": "Coles"
+    },
+    {
+     "id": "ent:b4519ce0a1c690c33801bd31",
+     "label": "Cyber Security"
+    },
+    {
+     "id": "ent:0274af43946b5777ca3f63a0",
+     "label": "Data"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-bd19341d521e5749efad3516eb9ee450",
+   "title": "Old Bitly Links Are Being Hijacked",
+   "updated_at": "2026-11-15T22:58:19.601882744Z",
+   "version_count": 3,
+   "latest_revision": 6,
+   "route": {
+    "bare": "/pub/texture/old-bitly-links-are-being-hijacked-pubbd19341d5",
+    "permalink": "/pub/texture/old-bitly-links-are-being-hijacked-pubbd19341d5/v6"
+   },
+   "importance": 6,
+   "section": "tech_ai",
+   "sections": [
+    "tech_ai"
+   ],
+   "source_count": 3,
+   "words": 966
+  },
+  {
+   "publication_id": "pub-cb4ac865d1b2b0624a89c1957ec0315d",
+   "title": "IRGC says two tankers hit sea mines in Strait of Hormuz",
+   "updated_at": "2026-11-15T22:57:58.664566998Z",
+   "version_count": 21,
+   "latest_revision": 23,
+   "route": {
+    "bare": "/pub/texture/irgc-says-two-tankers-hit-sea-mines-in-strait-of-hormuz-pubcb4ac865d",
+    "permalink": "/pub/texture/irgc-says-two-tankers-hit-sea-mines-in-strait-of-hormuz-pubcb4ac865d/v23"
+   },
+   "importance": 8,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 19,
+   "words": 547,
+   "entities": [
+    {
+     "id": "ent:b1868d91b65589661c9f94f5",
+     "label": "Iranian"
+    },
+    {
+     "id": "ent:ac08dc46cddfb2a40c3bbcc9",
+     "label": "IRGC"
+    },
+    {
+     "id": "ent:901a64834ca85485d4f71cfe",
+     "label": "Iran"
+    },
+    {
+     "id": "ent:8bad7fc056883cf708d12e07",
+     "label": "Strait of Hormuz"
+    },
+    {
+     "id": "ent:869542caa75ad6f4b38fe079",
+     "label": "Fire"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-437b5eb28338a1527a0ac71614869db1",
+   "title": "Strasbourg's 'Homme de Fer' tram stop to close at times during the Christmas market",
+   "updated_at": "2026-11-15T22:54:52.682404434Z",
+   "version_count": 2,
+   "latest_revision": 6,
+   "route": {
+    "bare": "/pub/texture/strasbourgs-homme-de-fer-tram-stop-to-close-at-times-during-the-christmas-market-pub437b5eb28",
+    "permalink": "/pub/texture/strasbourgs-homme-de-fer-tram-stop-to-close-at-times-during-the-christmas-market-pub437b5eb28/v6"
+   },
+   "importance": 4,
+   "section": "world",
+   "sections": [
+    "world"
+   ],
+   "source_count": 4,
+   "words": 373,
+   "entities": [
+    {
+     "id": "ent:897b393ba7baee4a71e7f17b",
+     "label": "Strasbourg"
+    },
+    {
+     "id": "ent:51f93b9f4803ac4d5e70bb8a",
+     "label": "Christmas"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-7ba7a594eb9a72a7a119b444373b3bf9",
+   "title": "A Democratic Congress has a press-freedom agenda, not a package of new bills",
+   "updated_at": "2026-11-15T22:53:44.990537314Z",
+   "version_count": 3,
+   "latest_revision": 5,
+   "route": {
+    "bare": "/pub/texture/a-democratic-congress-has-a-press-freedom-agenda-not-a-package-of-new-bills-pub7ba7a594e",
+    "permalink": "/pub/texture/a-democratic-congress-has-a-press-freedom-agenda-not-a-package-of-new-bills-pub7ba7a594e/v5"
+   },
+   "importance": 5,
+   "section": "us",
+   "sections": [
+    "us",
+    "politics"
+   ],
+   "source_count": 4,
+   "words": 425,
+   "entities": [
+    {
+     "id": "ent:004c1edab6158a4b39591b90",
+     "label": "Democrats"
+    },
+    {
+     "id": "ent:92c9c94e2eac28c557b4c5ad",
+     "label": "House Democrats"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-b185df4f3d9e0ecbd429848cd8d32b1f",
+   "title": "S\u00e1nchez and Feij\u00f3o renew the fight for first place in Spain's snap election",
+   "updated_at": "2026-11-15T22:52:31.167999202Z",
+   "version_count": 13,
+   "latest_revision": 17,
+   "route": {
+    "bare": "/pub/texture/s\u00e1nchez-and-feij\u00f3o-renew-the-fight-for-first-place-in-spains-snap-election-pubb185df4f3",
+    "permalink": "/pub/texture/s\u00e1nchez-and-feij\u00f3o-renew-the-fight-for-first-place-in-spains-snap-election-pubb185df4f3/v17"
+   },
+   "importance": 8,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 14,
+   "words": 835,
+   "entities": [
+    {
+     "id": "ent:7a829198bc08cd65cd930da3",
+     "label": "Alberto N\u00fa\u00f1ez Feij\u00f3o"
+    },
+    {
+     "id": "ent:b0c75fb97566fbeb71f3d730",
+     "label": "Spain"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-a12fb1483b53299ed810917969485500",
+   "title": "England beats Spain 3-2 in Madrid, ending the world champions' 43-match unbeaten run",
+   "updated_at": "2026-11-15T22:48:34.445926202Z",
+   "version_count": 5,
+   "latest_revision": 7,
+   "route": {
+    "bare": "/pub/texture/england-beats-spain-3-2-in-madrid-ending-the-world-champions-43-match-unbeaten-run-puba12fb1483",
+    "permalink": "/pub/texture/england-beats-spain-3-2-in-madrid-ending-the-world-champions-43-match-unbeaten-run-puba12fb1483/v7"
+   },
+   "importance": 5,
+   "section": "sports",
+   "sections": [
+    "world",
+    "sports"
+   ],
+   "source_count": 5,
+   "words": 275,
+   "entities": [
+    {
+     "id": "ent:4df44a96746e606b7027d2e7",
+     "label": "Nations League"
+    },
+    {
+     "id": "ent:ae318a81df0fe276e7910ee9",
+     "label": "England"
+    },
+    {
+     "id": "ent:b0c75fb97566fbeb71f3d730",
+     "label": "Spain"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-30302d9808da35e5b8b5ded0fd9f728e",
+   "title": "Paris police ban undeclared gatherings within 100 metres of 10 schools and five universities",
+   "updated_at": "2026-11-15T22:48:34.316562549Z",
+   "version_count": 5,
+   "latest_revision": 7,
+   "route": {
+    "bare": "/pub/texture/paris-police-ban-undeclared-gatherings-within-100-metres-of-10-schools-and-five-universities-pub30302d980",
+    "permalink": "/pub/texture/paris-police-ban-undeclared-gatherings-within-100-metres-of-10-schools-and-five-universities-pub30302d980/v7"
+   },
+   "importance": 6,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 6,
+   "words": 547,
+   "entities": [
+    {
+     "id": "ent:207ed81e5f978e6545096641",
+     "label": "Paris"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-0ab1ec3c1edc5b0998537dd08b19ff6d",
+   "title": "Western diplomats stay put in Kyiv as Russia keeps striking",
+   "updated_at": "2026-11-15T22:47:21.258501185Z",
+   "version_count": 1,
+   "latest_revision": 3,
+   "route": {
+    "bare": "/pub/texture/western-diplomats-stay-put-in-kyiv-as-russia-keeps-striking-pub0ab1ec3c1",
+    "permalink": "/pub/texture/western-diplomats-stay-put-in-kyiv-as-russia-keeps-striking-pub0ab1ec3c1/v3"
+   },
+   "importance": 4,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 3,
+   "words": 267
+  },
+  {
+   "publication_id": "pub-56496f14ef5d6a96ba6b31e9c0037608",
+   "title": "Stanton urges Democrats to use federal spending power to change Russia policy",
+   "updated_at": "2026-11-15T22:45:32.204924201Z",
+   "version_count": 2,
+   "latest_revision": 4,
+   "route": {
+    "bare": "/pub/texture/stanton-urges-democrats-to-use-federal-spending-power-to-change-russia-policy-pub56496f14e",
+    "permalink": "/pub/texture/stanton-urges-democrats-to-use-federal-spending-power-to-change-russia-policy-pub56496f14e/v4"
+   },
+   "importance": 5,
+   "section": "politics",
+   "sections": [
+    "world",
+    "us",
+    "politics"
+   ],
+   "source_count": 4,
+   "words": 349,
+   "entities": [
+    {
+     "id": "ent:004c1edab6158a4b39591b90",
+     "label": "Democrats"
+    },
+    {
+     "id": "ent:ee7e9921992c72b650207ca1",
+     "label": "Russia"
+    },
+    {
+     "id": "ent:7149bc222f9501a39e13d1c9",
+     "label": "U.S."
+    },
+    {
+     "id": "ent:b6a5005645b4eee4497a0806",
+     "label": "Greg Stanton"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-69843029200fbe1db685b9b4f92e4502",
+   "title": "Four nonprofits sue Anthropic, Google, Meta, OpenAI and SpaceXSI to freeze AI development",
+   "updated_at": "2026-11-15T22:36:33.988241835Z",
+   "version_count": 6,
+   "latest_revision": 8,
+   "route": {
+    "bare": "/pub/texture/four-nonprofits-sue-anthropic-google-meta-openai-and-spacexsi-to-freeze-ai-development-pub698430292",
+    "permalink": "/pub/texture/four-nonprofits-sue-anthropic-google-meta-openai-and-spacexsi-to-freeze-ai-development-pub698430292/v8"
+   },
+   "importance": 8,
+   "section": "tech_ai",
+   "sections": [
+    "us",
+    "business",
+    "tech_ai"
+   ],
+   "source_count": 5,
+   "words": 489,
+   "entities": [
+    {
+     "id": "ent:7149bc222f9501a39e13d1c9",
+     "label": "U.S."
+    },
+    {
+     "id": "ent:8c51d4d0d66853610092a6ec",
+     "label": "Development"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-0be48d714bcb9931f5d4866d9f36614e",
+   "title": "The Journal tallies Trump's press secretaries and weighs who could be next",
+   "updated_at": "2026-11-15T22:36:13.772317387Z",
+   "version_count": 1,
+   "latest_revision": 7,
+   "route": {
+    "bare": "/pub/texture/the-journal-tallies-trumps-press-secretaries-and-weighs-who-could-be-next-pub0be48d714",
+    "permalink": "/pub/texture/the-journal-tallies-trumps-press-secretaries-and-weighs-who-could-be-next-pub0be48d714/v7"
+   },
+   "importance": 4,
+   "section": "us",
+   "sections": [
+    "us",
+    "politics"
+   ],
+   "source_count": 4,
+   "words": 354,
+   "entities": [
+    {
+     "id": "ent:387a9e70390b6218145f42c4",
+     "label": "Trump"
+    },
+    {
+     "id": "ent:94776303cba716d7dfa885fb",
+     "label": "Journal"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-aa953339262c359c392edc3210214ab3",
+   "title": "OpenAI and GPT-6 Astra propose a candidate lattice definition of the Standard Model",
+   "updated_at": "2026-11-15T22:35:48.386219532Z",
+   "version_count": 3,
+   "latest_revision": 5,
+   "route": {
+    "bare": "/pub/texture/openai-and-gpt-6-astra-propose-a-candidate-lattice-definition-of-the-standard-model-pubaa9533392",
+    "permalink": "/pub/texture/openai-and-gpt-6-astra-propose-a-candidate-lattice-definition-of-the-standard-model-pubaa9533392/v5"
+   },
+   "importance": 9,
+   "section": "science",
+   "sections": [
+    "tech_ai",
+    "science"
+   ],
+   "source_count": 7,
+   "words": 517,
+   "entities": [
+    {
+     "id": "ent:9a04fba48127a165f6c6fd00",
+     "label": "OpenAI"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-6bf61acf62e273b75518d3f5921b6d20",
+   "title": "Iran\u2019s bentonite industry has production and export potential, but output is mostly consumed at home",
+   "updated_at": "2026-11-15T22:35:38.580071172Z",
+   "version_count": 4,
+   "latest_revision": 6,
+   "route": {
+    "bare": "/pub/texture/irans-bentonite-industry-has-production-and-export-potential-but-output-is-mostly-consumed-at-ho-pub6bf61acf6",
+    "permalink": "/pub/texture/irans-bentonite-industry-has-production-and-export-potential-but-output-is-mostly-consumed-at-ho-pub6bf61acf6/v6"
+   },
+   "importance": 2,
+   "promo": true,
+   "section": "business",
+   "sections": [
+    "world",
+    "business"
+   ],
+   "source_count": 4,
+   "words": 385,
+   "entities": [
+    {
+     "id": "ent:901a64834ca85485d4f71cfe",
+     "label": "Iran"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-4a0e9571bd2c6c71d87b0e3bf65cab92",
+   "title": "TF1 did not air the 13 November tribute at the Stade de France; viewers call the omission a \"shame\"",
+   "updated_at": "2026-11-15T22:35:29.252460968Z",
+   "version_count": 3,
+   "latest_revision": 10,
+   "route": {
+    "bare": "/pub/texture/tf1-did-not-air-the-13-november-tribute-at-the-stade-de-france-viewers-call-the-omission-a-shame-pub4a0e9571b",
+    "permalink": "/pub/texture/tf1-did-not-air-the-13-november-tribute-at-the-stade-de-france-viewers-call-the-omission-a-shame-pub4a0e9571b/v10"
+   },
+   "importance": 6,
+   "section": "world",
+   "sections": [
+    "world",
+    "culture"
+   ],
+   "source_count": 5,
+   "words": 403,
+   "entities": [
+    {
+     "id": "ent:da78365bf5311cf966765723",
+     "label": "TF1"
+    },
+    {
+     "id": "ent:9d8edfe86fd9c2c22b8c96b3",
+     "label": "France"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-971e645bcefeac39e4195e03256985b6",
+   "title": "Nationwide FAA ground stop lifted; North Texas still working through thousands of cancellations",
+   "updated_at": "2026-11-15T22:34:48.076765629Z",
+   "version_count": 18,
+   "latest_revision": 20,
+   "route": {
+    "bare": "/pub/texture/nationwide-faa-ground-stop-lifted-north-texas-still-working-through-thousands-of-cancellations-pub971e645bc",
+    "permalink": "/pub/texture/nationwide-faa-ground-stop-lifted-north-texas-still-working-through-thousands-of-cancellations-pub971e645bc/v20"
+   },
+   "importance": 6,
+   "section": "us",
+   "sections": [
+    "us"
+   ],
+   "source_count": 15,
+   "words": 659,
+   "entities": [
+    {
+     "id": "ent:6c11a2c9bca38366bed4ddad",
+     "label": "Federal Aviation Administration"
+    },
+    {
+     "id": "ent:ea325d2ece95b6ca396adc82",
+     "label": "FAA"
+    },
+    {
+     "id": "ent:47704418e233e8eaa1b94d9e",
+     "label": "Texas"
+    },
+    {
+     "id": "ent:c733a8ef0838972edbf9b2d4",
+     "label": "Nationwide FAA"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-ff5beb2b70f5a8bea87ec0ace4c79a12",
+   "title": "Teenager killed by car during illegal street race near Clermont-Ferrand; driver has since turned himself in",
+   "updated_at": "2026-11-15T22:33:21.726880537Z",
+   "version_count": 2,
+   "latest_revision": 4,
+   "route": {
+    "bare": "/pub/texture/teenager-killed-by-car-during-illegal-street-race-near-clermont-ferrand-driver-has-since-turned-pubff5beb2b7",
+    "permalink": "/pub/texture/teenager-killed-by-car-during-illegal-street-race-near-clermont-ferrand-driver-has-since-turned-pubff5beb2b7/v4"
+   },
+   "importance": 5,
+   "section": "world",
+   "sections": [
+    "world"
+   ],
+   "source_count": 6,
+   "words": 261
+  },
+  {
+   "publication_id": "pub-57e36a4224cce0f1766d7dd2891a5f11",
+   "title": "GOP's lame-duck Senate agenda: confirming Trump's judges, funding the Pentagon",
+   "updated_at": "2026-11-15T22:29:42.301644349Z",
+   "version_count": 4,
+   "latest_revision": 6,
+   "route": {
+    "bare": "/pub/texture/gops-lame-duck-senate-agenda-confirming-trumps-judges-funding-the-pentagon-pub57e36a422",
+    "permalink": "/pub/texture/gops-lame-duck-senate-agenda-confirming-trumps-judges-funding-the-pentagon-pub57e36a422/v6"
+   },
+   "importance": 5,
+   "section": "us",
+   "sections": [
+    "us",
+    "politics"
+   ],
+   "source_count": 5,
+   "words": 320
+  },
+  {
+   "publication_id": "pub-2c94847999bf808efc1b484f2a7df85a",
+   "title": "UK will have 'voice' but no vote on EU food rules in Brexit reset",
+   "updated_at": "2026-11-15T22:28:17.676065166Z",
+   "version_count": 6,
+   "latest_revision": 8,
+   "route": {
+    "bare": "/pub/texture/uk-will-have-voice-but-no-vote-on-eu-food-rules-in-brexit-reset-pub2c9484799",
+    "permalink": "/pub/texture/uk-will-have-voice-but-no-vote-on-eu-food-rules-in-brexit-reset-pub2c9484799/v8"
+   },
+   "importance": 7,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 6,
+   "words": 449,
+   "entities": [
+    {
+     "id": "ent:1274fdb2b608613bb133f963",
+     "label": "UK EU"
+    },
+    {
+     "id": "ent:bc3af35f6ff234966290bbd6",
+     "label": "Britain"
+    },
+    {
+     "id": "ent:62969b8592d68248f617cc4e",
+     "label": "UK"
+    },
+    {
+     "id": "ent:9a8c2db70274f74478803f8f",
+     "label": "EU"
+    },
+    {
+     "id": "ent:d362c97befc90316387c7710",
+     "label": "Vote"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-084329d221915fd27016fd5897089e4c",
+   "title": "Best Buy starts Nov. 6, Walmart Nov. 12 \u2014 Black Friday 2026 is weeks of early sales before Nov. 27",
+   "updated_at": "2026-11-15T22:27:11.722492158Z",
+   "version_count": 21,
+   "latest_revision": 23,
+   "route": {
+    "bare": "/pub/texture/best-buy-starts-nov-6-walmart-nov-12-black-friday-2026-is-weeks-of-early-sales-before-nov-27-pub084329d22",
+    "permalink": "/pub/texture/best-buy-starts-nov-6-walmart-nov-12-black-friday-2026-is-weeks-of-early-sales-before-nov-27-pub084329d22/v23"
+   },
+   "importance": 3,
+   "section": "business",
+   "sections": [
+    "us",
+    "business"
+   ],
+   "source_count": 19,
+   "words": 535
+  },
+  {
+   "publication_id": "pub-1d7780b4eff6747163b259b4569ae1ed",
+   "title": "Zelensky reportedly unveils US proposal: Donbass territory in exchange for NATO membership",
+   "updated_at": "2026-11-15T22:27:11.598715157Z",
+   "version_count": 4,
+   "latest_revision": 8,
+   "route": {
+    "bare": "/pub/texture/zelensky-reportedly-unveils-us-proposal-donbass-territory-in-exchange-for-nato-membership-pub1d7780b4e",
+    "permalink": "/pub/texture/zelensky-reportedly-unveils-us-proposal-donbass-territory-in-exchange-for-nato-membership-pub1d7780b4e/v8"
+   },
+   "importance": 9,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 4,
+   "words": 440,
+   "entities": [
+    {
+     "id": "ent:3fd5e4bcb979c51255bd389e",
+     "label": "NATO"
+    },
+    {
+     "id": "ent:f2821bf250c383c42135d826",
+     "label": "Volodymyr Zelensky"
+    },
+    {
+     "id": "ent:76798446f08e026bb7f96b50",
+     "label": "Ukraine"
+    },
+    {
+     "id": "ent:9b87e2b899a63086bf48a8db",
+     "label": "Donbass"
+    },
+    {
+     "id": "ent:7149bc222f9501a39e13d1c9",
+     "label": "U.S."
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-1fd812264954f9d914bcd762733545f5",
+   "title": "Teddy Riner declares 2027 presidential candidacy; Rapha\u00ebl Glucksmann mocks \"neither right nor left\" stance",
+   "updated_at": "2026-11-15T22:26:56.773402168Z",
+   "version_count": 15,
+   "latest_revision": 17,
+   "route": {
+    "bare": "/pub/texture/teddy-riner-declares-2027-presidential-candidacy-rapha\u00ebl-glucksmann-mocks-neither-right-nor-lef-pub1fd812264",
+    "permalink": "/pub/texture/teddy-riner-declares-2027-presidential-candidacy-rapha\u00ebl-glucksmann-mocks-neither-right-nor-lef-pub1fd812264/v17"
+   },
+   "importance": 8,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 15,
+   "words": 373,
+   "entities": [
+    {
+     "id": "ent:ee194efc36f7a69e1bc4b2ea",
+     "label": "Teddy Riner"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-d35f40e32da587ef98666a83673dba19",
+   "title": "UK Conservatives pledge to halt screen-based school exams and cut coursework",
+   "updated_at": "2026-11-15T22:25:05.245018814Z",
+   "version_count": 3,
+   "latest_revision": 5,
+   "route": {
+    "bare": "/pub/texture/uk-conservatives-pledge-to-halt-screen-based-school-exams-and-cut-coursework-pubd35f40e32",
+    "permalink": "/pub/texture/uk-conservatives-pledge-to-halt-screen-based-school-exams-and-cut-coursework-pubd35f40e32/v5"
+   },
+   "importance": 6,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics",
+    "tech_ai"
+   ],
+   "source_count": 4,
+   "words": 436,
+   "entities": [
+    {
+     "id": "ent:4a3597f0e32326dad22a65ea",
+     "label": "UK Conservative Party"
+    },
+    {
+     "id": "ent:62969b8592d68248f617cc4e",
+     "label": "UK"
+    },
+    {
+     "id": "ent:3216ca5ce55f6209f5455f85",
+     "label": "Conservative Party"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-212149e73d0a789b4178668cc4f3b06f",
+   "title": "Ukraine and EU agree on reform steps to advance accession talks in 2027",
+   "updated_at": "2026-11-15T22:24:28.065885813Z",
+   "version_count": 3,
+   "latest_revision": 6,
+   "route": {
+    "bare": "/pub/texture/ukraine-and-eu-agree-on-reform-steps-to-advance-accession-talks-in-2027-pub212149e73",
+    "permalink": "/pub/texture/ukraine-and-eu-agree-on-reform-steps-to-advance-accession-talks-in-2027-pub212149e73/v6"
+   },
+   "importance": 7,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 6,
+   "words": 468,
+   "entities": [
+    {
+     "id": "ent:62590158b7a9292f1cca009e",
+     "label": "Union"
+    },
+    {
+     "id": "ent:76798446f08e026bb7f96b50",
+     "label": "Ukraine"
+    },
+    {
+     "id": "ent:9a8c2db70274f74478803f8f",
+     "label": "EU"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-db58f2ea4cf7f626e5c2b03875b7d183",
+   "title": "Prince Harry attends Invictus Games in Lviv, praising wounded Ukrainian servicemen",
+   "updated_at": "2026-11-15T22:23:31.685293384Z",
+   "version_count": 4,
+   "latest_revision": 8,
+   "route": {
+    "bare": "/pub/texture/prince-harry-attends-invictus-games-in-lviv-praising-wounded-ukrainian-servicemen-pubdb58f2ea4",
+    "permalink": "/pub/texture/prince-harry-attends-invictus-games-in-lviv-praising-wounded-ukrainian-servicemen-pubdb58f2ea4/v8"
+   },
+   "importance": 5,
+   "section": "world",
+   "sections": [
+    "world",
+    "sports"
+   ],
+   "source_count": 3,
+   "words": 330
+  },
+  {
+   "publication_id": "pub-9a90dc438cd84d710638abb67b9403d2",
+   "title": "Madrid tenants' union rallies 8,000 at Vistalegre after first housing strike in 14 years",
+   "updated_at": "2026-11-15T22:21:39.81002163Z",
+   "version_count": 3,
+   "latest_revision": 7,
+   "route": {
+    "bare": "/pub/texture/madrid-tenants-union-rallies-8000-at-vistalegre-after-first-housing-strike-in-14-years-pub9a90dc438",
+    "permalink": "/pub/texture/madrid-tenants-union-rallies-8000-at-vistalegre-after-first-housing-strike-in-14-years-pub9a90dc438/v7"
+   },
+   "importance": 6,
+   "section": "world",
+   "sections": [
+    "world"
+   ],
+   "source_count": 5,
+   "words": 443,
+   "entities": [
+    {
+     "id": "ent:4dab1674a31258c60b400070",
+     "label": "Sindicato de Inquilinas"
+    },
+    {
+     "id": "ent:3751aaf06165c608029d031e",
+     "label": "Madrid"
+    },
+    {
+     "id": "ent:62590158b7a9292f1cca009e",
+     "label": "Union"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-1d079cf4650ba525b2a835e0187028e2",
+   "title": "Kremlin confirms Trump, Putin and Xi will meet in China on November 19",
+   "updated_at": "2026-11-15T22:21:37.164272574Z",
+   "version_count": 13,
+   "latest_revision": 20,
+   "route": {
+    "bare": "/pub/texture/kremlin-confirms-trump-putin-and-xi-will-meet-in-china-on-november-19-pub1d079cf46",
+    "permalink": "/pub/texture/kremlin-confirms-trump-putin-and-xi-will-meet-in-china-on-november-19-pub1d079cf46/v20"
+   },
+   "importance": 8,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 9,
+   "words": 353
+  },
+  {
+   "publication_id": "pub-add04b4c731ff33dc206fca5f324ea8b",
+   "title": "Trump says he wants Tim Cook to lead Nvidia after Jensen Huang's resignation",
+   "updated_at": "2026-11-15T22:18:55.640790906Z",
+   "version_count": 18,
+   "latest_revision": 20,
+   "route": {
+    "bare": "/pub/texture/trump-says-he-wants-tim-cook-to-lead-nvidia-after-jensen-huangs-resignation-pubadd04b4c7",
+    "permalink": "/pub/texture/trump-says-he-wants-tim-cook-to-lead-nvidia-after-jensen-huangs-resignation-pubadd04b4c7/v20"
+   },
+   "importance": 3,
+   "section": "tech_ai",
+   "sections": [
+    "us",
+    "business",
+    "tech_ai"
+   ],
+   "source_count": 15,
+   "words": 544,
+   "entities": [
+    {
+     "id": "ent:387a9e70390b6218145f42c4",
+     "label": "Trump"
+    },
+    {
+     "id": "ent:a4da923feb8893d0a886d767",
+     "label": "Apple CEO Tim Cook"
+    },
+    {
+     "id": "ent:0579b667a73258b4ab8b7a4f",
+     "label": "Huang"
+    },
+    {
+     "id": "ent:3077e555e16ebc78af6d4f4e",
+     "label": "Donald Trump"
+    },
+    {
+     "id": "ent:77e227fa33e901d880f6f39a",
+     "label": "Nvidia"
+    },
+    {
+     "id": "ent:a44d49445ec1f9e6128d7c3a",
+     "label": "Nvidia CEO"
+    },
+    {
+     "id": "ent:adf4fe71859015735cf6e003",
+     "label": "Jensen Huang"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-981acad7bbdb71ea06310d4a6a1e1135",
+   "title": "Four countries press Israel to open Gaza crossings as winter aid waits at the border",
+   "updated_at": "2026-11-15T22:18:19.992688015Z",
+   "version_count": 2,
+   "latest_revision": 6,
+   "route": {
+    "bare": "/pub/texture/four-countries-press-israel-to-open-gaza-crossings-as-winter-aid-waits-at-the-border-pub981acad7b",
+    "permalink": "/pub/texture/four-countries-press-israel-to-open-gaza-crossings-as-winter-aid-waits-at-the-border-pub981acad7b/v6"
+   },
+   "importance": 8,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 4,
+   "words": 235
+  },
+  {
+   "publication_id": "pub-ddfdfea4dd2b345534b94e34c9c703f2",
+   "title": "Lutnick pressed for narrower chip rules covering data centers tied to his family's firm",
+   "updated_at": "2026-11-15T22:17:07.267431632Z",
+   "version_count": 7,
+   "latest_revision": 9,
+   "route": {
+    "bare": "/pub/texture/lutnick-pressed-for-narrower-chip-rules-covering-data-centers-tied-to-his-familys-firm-pubddfdfea4d",
+    "permalink": "/pub/texture/lutnick-pressed-for-narrower-chip-rules-covering-data-centers-tied-to-his-familys-firm-pubddfdfea4d/v9"
+   },
+   "importance": 7,
+   "section": "politics",
+   "sections": [
+    "us",
+    "politics",
+    "business",
+    "tech_ai"
+   ],
+   "source_count": 6,
+   "words": 516,
+   "entities": [
+    {
+     "id": "ent:7c84ed1b5d0051eed433ab73",
+     "label": "Howard Lutnick"
+    },
+    {
+     "id": "ent:7149bc222f9501a39e13d1c9",
+     "label": "U.S."
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-f6f2058596e9862172d86aae703f4cfd",
+   "title": "Nvidia CEO Jensen Huang reported stepped down amid relationship scandal; security chief had quietly left in August",
+   "updated_at": "2026-11-15T22:11:04.205422895Z",
+   "version_count": 10,
+   "latest_revision": 25,
+   "route": {
+    "bare": "/pub/texture/nvidia-ceo-jensen-huang-reported-stepped-down-amid-relationship-scandal-security-chief-had-quiet-pubf6f205859",
+    "permalink": "/pub/texture/nvidia-ceo-jensen-huang-reported-stepped-down-amid-relationship-scandal-security-chief-had-quiet-pubf6f205859/v25"
+   },
+   "importance": 7,
+   "section": "tech_ai",
+   "sections": [
+    "us",
+    "business",
+    "tech_ai"
+   ],
+   "source_count": 17,
+   "words": 555
+  },
+  {
+   "publication_id": "pub-52f31dfbd603fd82fd45828a57f67a93",
+   "title": "Israel arrests Bat Yam man over Bulgaria killing of 83-year-old Andrey Atanasov",
+   "updated_at": "2026-11-15T22:02:16.752813136Z",
+   "version_count": 3,
+   "latest_revision": 5,
+   "route": {
+    "bare": "/pub/texture/israel-arrests-bat-yam-man-over-bulgaria-killing-of-83-year-old-andrey-atanasov-pub52f31dfbd",
+    "permalink": "/pub/texture/israel-arrests-bat-yam-man-over-bulgaria-killing-of-83-year-old-andrey-atanasov-pub52f31dfbd/v5"
+   },
+   "importance": 5,
+   "section": "world",
+   "sections": [
+    "world"
+   ],
+   "source_count": 5,
+   "words": 264,
+   "entities": [
+    {
+     "id": "ent:bd2dd832c88212ff93a4fb94",
+     "label": "Israel"
+    },
+    {
+     "id": "ent:3f536d0f5b5ace2ef07595ee",
+     "label": "Bulgaria"
+    },
+    {
+     "id": "ent:9acfdc9ce071091ef0faf65e",
+     "label": "Andrey Atanasov"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-56d6dac80b235759cc5ac2c2b1142da7",
+   "title": "Foiled Paris attack on Bank of America traced from Li\u00e8ge couriers to Iran-backed suspects, one held in New York",
+   "updated_at": "2026-11-15T21:58:51.444863228Z",
+   "version_count": 3,
+   "latest_revision": 4,
+   "route": {
+    "bare": "/pub/texture/foiled-paris-attack-on-bank-of-america-traced-from-li\u00e8ge-couriers-to-a-suspected-iran-linked-su-pub56d6dac80",
+    "permalink": "/pub/texture/foiled-paris-attack-on-bank-of-america-traced-from-li\u00e8ge-couriers-to-a-suspected-iran-linked-su-pub56d6dac80/v4"
+   },
+   "importance": 7,
+   "section": "world",
+   "sections": [
+    "world"
+   ],
+   "source_count": 7,
+   "words": 483
+  },
+  {
+   "publication_id": "pub-5a48241d30260bc4b6fab9b4d09ae304",
+   "title": "US and eight allies sign \"San Francisco Declaration\" to protect AI supply chains from China",
+   "updated_at": "2026-11-15T21:57:34.62690707Z",
+   "version_count": 6,
+   "latest_revision": 8,
+   "route": {
+    "bare": "/pub/texture/us-and-allies-sign-san-francisco-declaration-to-protect-ai-supply-chains-from-china-ft-reports-pub5a48241d3",
+    "permalink": "/pub/texture/us-and-allies-sign-san-francisco-declaration-to-protect-ai-supply-chains-from-china-ft-reports-pub5a48241d3/v8"
+   },
+   "importance": 7,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics",
+    "business",
+    "tech_ai"
+   ],
+   "source_count": 4,
+   "words": 471,
+   "entities": [
+    {
+     "id": "ent:7149bc222f9501a39e13d1c9",
+     "label": "U.S."
+    },
+    {
+     "id": "ent:3f0d52c7460b37890d716bcc",
+     "label": "Chinese"
+    },
+    {
+     "id": "ent:02b2a32d68ee83d36e1ac3dd",
+     "label": "China"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-46c07268b3ce741df0052aa6c2ef3207",
+   "title": "Israeli opposition fears Netanyahu could provoke Iran to block Eisenkot as Mossad chief lobbies Trump in Washington",
+   "updated_at": "2026-11-15T21:52:25.971239916Z",
+   "version_count": 13,
+   "latest_revision": 14,
+   "route": {
+    "bare": "/pub/texture/israeli-opposition-fears-netanyahu-could-provoke-iran-to-block-eisenkot-as-mossad-chief-lobbies-pub46c07268b",
+    "permalink": "/pub/texture/israeli-opposition-fears-netanyahu-could-provoke-iran-to-block-eisenkot-as-mossad-chief-lobbies-pub46c07268b/v14"
+   },
+   "importance": 7,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 10,
+   "words": 552
+  },
+  {
+   "publication_id": "pub-f7ac89dbee043fc039e769d01c84c53d",
+   "title": "Italy offers Germany observer status in GCAP talks; Berlin wants full role",
+   "updated_at": "2026-11-15T21:50:41.881788185Z",
+   "version_count": 2,
+   "latest_revision": 4,
+   "route": {
+    "bare": "/pub/texture/italy-offers-germany-observer-status-in-gcap-talks-berlin-wants-full-role-pubf7ac89dbe",
+    "permalink": "/pub/texture/italy-offers-germany-observer-status-in-gcap-talks-berlin-wants-full-role-pubf7ac89dbe/v4"
+   },
+   "importance": 7,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 3,
+   "words": 510,
+   "entities": [
+    {
+     "id": "ent:cf9637f7a297b9ce71de4d27",
+     "label": "Germany"
+    },
+    {
+     "id": "ent:504a05e153d4c2243a23e41c",
+     "label": "GCAP"
+    },
+    {
+     "id": "ent:d9df7df77dc7578bf1c1eb3c",
+     "label": "Italy"
+    },
+    {
+     "id": "ent:d5655cf6cb4ee056c134671e",
+     "label": "German"
+    },
+    {
+     "id": "ent:deaab0822913abb71eb82890",
+     "label": "Global Combat Air Programme"
+    },
+    {
+     "id": "ent:451baa865a2863c905d3d96a",
+     "label": "Italian"
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-76179d198c5b8c0353540b6089f26aac",
+   "title": "Iran says it targeted a US military site in Bahrain; Strait of Hormuz tanker and missile claims remain unverified",
+   "updated_at": "2026-11-15T21:46:46.365697949Z",
+   "version_count": 11,
+   "latest_revision": 17,
+   "route": {
+    "bare": "/pub/texture/iran-claims-drone-strike-on-us-radar-in-bahrain-says-strait-of-hormuz-stays-closed-pub76179d198",
+    "permalink": "/pub/texture/iran-claims-drone-strike-on-us-radar-in-bahrain-says-strait-of-hormuz-stays-closed-pub76179d198/v17"
+   },
+   "importance": 8,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 6,
+   "words": 192,
+   "entities": [
+    {
+     "id": "ent:b1868d91b65589661c9f94f5",
+     "label": "Iranian"
+    },
+    {
+     "id": "ent:ac08dc46cddfb2a40c3bbcc9",
+     "label": "IRGC"
+    },
+    {
+     "id": "ent:f3d81c537203056493bffdc2",
+     "label": "Port"
+    },
+    {
+     "id": "ent:901a64834ca85485d4f71cfe",
+     "label": "Iran"
+    },
+    {
+     "id": "ent:8bad7fc056883cf708d12e07",
+     "label": "Strait of Hormuz"
+    },
+    {
+     "id": "ent:7149bc222f9501a39e13d1c9",
+     "label": "U.S."
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-b7bc9a38699033674f69c6c4906c317d",
+   "title": "Ukraine declares ballistic-threat red alert for Kyiv and other regions",
+   "updated_at": "2026-11-15T21:45:55.835178566Z",
+   "version_count": 1,
+   "latest_revision": 6,
+   "route": {
+    "bare": "/pub/texture/ukraine-declares-ballistic-threat-red-alert-for-kyiv-and-other-regions-pubb7bc9a386",
+    "permalink": "/pub/texture/ukraine-declares-ballistic-threat-red-alert-for-kyiv-and-other-regions-pubb7bc9a386/v6"
+   },
+   "importance": 8,
+   "section": "world",
+   "sections": [
+    "world",
+    "politics"
+   ],
+   "source_count": 3,
+   "words": 140
+  }
+ ],
+ "sections": [
+  {
+   "id": "world",
+   "label": "World"
+  },
+  {
+   "id": "us",
+   "label": "U.S."
+  },
+  {
+   "id": "politics",
+   "label": "Politics"
+  },
+  {
+   "id": "business",
+   "label": "Business"
+  },
+  {
+   "id": "tech_ai",
+   "label": "Technology"
+  },
+  {
+   "id": "science",
+   "label": "Science"
+  },
+  {
+   "id": "health",
+   "label": "Health"
+  },
+  {
+   "id": "climate",
+   "label": "Climate"
+  },
+  {
+   "id": "culture",
+   "label": "Culture"
+  },
+  {
+   "id": "sports",
+   "label": "Sports"
+  }
+ ]
+}

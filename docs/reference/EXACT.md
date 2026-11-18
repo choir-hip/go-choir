@@ -1,14 +1,19 @@
 # EXACT: the reference for building Autoradio's app on Exact
 
-Written against `expo/exact` at commit `76cd50f9e863129b3fc75db1673d6ad4bbf79258`
-(2026-11-10), Xcode 27.1, iOS 27 simulator, on an M1 Mac. **Corrected on
-2026-11-18 against the checkout at `de212e671` (2026-11-16).** That is the
-source these pages were checked against; `mobile/scripts/setup-exact.sh` still
-pins `76cd50f9e`, and the pin moves in its own commit with a rebuild (rule 2).
-A `file:line` in these pages is at `76cd50f9e` unless it says `de212e671`; many
-lines have moved, so find the sentence, not the number. `94b8671` is stale. Exact is
-pre-1.0 with "no API stability, no backwards compatibility, no migration guide,
-by design" (Exact `README.md`). Pin a commit and move the pin on purpose.
+Pinned: `expo/exact` at commit `de212e671a69f4fea18bed67d5b73b259ddf3061`
+(upstream `main`, 2026-11-16 17:10 -0800; `mobile/exact.pin`), moved on 2026-11-17
+from `76cd50f9e863129b3fc75db1673d6ad4bbf79258` (2026-11-10), 3018 commits.
+Observed with Xcode 27.1, iOS 27 simulator, on an M1 Mac. The subpages and the
+examples below were written and their `file:line` read at the old pin, then
+**corrected on 2026-11-18 against the checkout at `de212e671`**: a `file:line`
+in these pages is at `76cd50f9e` unless it says `de212e671`; many lines have
+moved, so find the sentence, not the number. The section "Pin move, 2026-11-17"
+says what was re-read at the new pin. `94b8671` is stale. Exact is pre-1.0 with
+"no API stability, no backwards compatibility, no migration guide, by design"
+(Exact `README.md`). Pin a commit and move the pin on purpose. We carry no fork:
+local changes to the pinned source are patch files in `mobile/exact-patches/`
+(applied by `mobile/scripts/setup-exact.sh`; each one explained in that
+directory's README and, for the Markdown editor, in `exact/capabilities.md`).
 
 Owner ruling (2026-11-10): the app shell is built on Exact, with no SwiftUI
 host ("no swiftui please. lets do all exact"). This page and the subpages are
@@ -180,6 +185,63 @@ about 57 s for a TypeScript-only change, 12 to 40 s for a Contract-only change,
 from the lane reports; `scripts/build-lab.sh` always syncs the kit and runs the
 whole `ios` verb, and no run of an app following the web loop is recorded). The
 pages follow Exact's grain; the logic does not.
+
+## Pin move, 2026-11-17 (76cd50f9e to de212e671)
+
+What was done (read, not built: **[src]** unless marked; the first builds at the new pin are the lead's):
+
+- **The Markdown patch stays.** `mobile/exact-patches/0001-markdown-editor-hides-all-syntax.patch` passes `git apply --check`
+  at the new pin and `setup-exact.sh` applies it from the pin's checkout. Upstream's `host/apple/Sources/ExactMarkdown` changed only in
+  `MarkupAtoms.swift` and `MarkupRuns.swift` (atom icons), and `markdown/src/style.rs` gained `Paragraph.content` and
+  `Styled.delimiters` (matched emphasis, code and strike delimiters) but still no option that hides all syntax, so the patch is not
+  replaced. `Styled.delimiters` is the new upstream hook a later version of the patch could use instead of the hidden-range walk.
+- **Manifest and interface.** Every key our `app.json` uses (`host.ios.launchImage|minimumOS|deviceFamily|backgroundModes`,
+  `deploy.store`, `audio_session`) is still in `scripts/app.schema.json`; `audio_session` gained `playback-mix`. Package
+  `exact.json` (implementation) and the interface format are unchanged in shape; `targets` takes `["ios","macos"]`.
+- **Package seam** (`host/apple/modules/ExactPackage.swift`): additive only. New context members (`label`, `data`, `cache`,
+  `temporary`, `directory`, `credentials`, `push`, `hostEvents`), `ExactPackageImplementation`; `ExactPackage` protocol unchanged.
+  Our module needed no change for it.
+- **A package's Swift now loads as a framework of its own, at first use** (LLP 1067.000.001, `4e1b0e245`). "A package whose type
+  the app's Swift imports still loads at launch": our `Models_*.swift` import `ExactPkg_autoradio`, so ours does. **[unrun]**
+  whether the app module's `import ExactPkg_autoradio` still resolves; the first iOS build says.
+- **The audio session owner was rewritten** (`ExactKit/AudioSession.swift`): background execution now needs an activated, running
+  owner, a `playback` or `playAndRecord` category and `audio` in `UIBackgroundModes`; a call's session stays the call's until the system
+  deactivates it; holders reuse an active session without querying `AVAudioSession`. Our claims (`speech-playback`, `default`,
+  `voiceChat`, `background: true`) are unchanged in name. **[unrun]** whether the programme keeps playing with the phone locked: re-prove
+  it on the phone after the move.
+- **Contract language**: the retired spellings the migrator rewrites are `syntax-list-type`, `syntax-method-form`,
+  `syntax-view-keyword` (`when`/`each` for `if`/`for`), `syntax-else-keyword`, and press paints moved into an active part. Our contracts
+  use `if`/`else if`/`for`; `bun exact.mjs contract migrate app.contract` rewrites any other. `tamber` is renamed `forma`
+  (`app.tamber` is now `app.forma`); we use neither. A package view now holds an enum to the cases it declares (`393202fae`): an
+  `enum<...>` prop needs a state typed with every case. **[unrun]** all of these for our contracts: `contract build` is the check.
+- **Toolchain**: Bun stays exactly 1.4.2 (`packageManager`, `engines`). Rust moves from 1.97.0 to 1.99.1 (`rust-toolchain.toml`; rustup
+  installs it on demand; this Mac has it). Xcode 27.1 or later (unchanged). The Hermes receipt schema changed
+  (`vendor/ibex/crates/hermes-lean-sys/receipt_schema.rs`): if the build asks for Hermes bundles, `bun exact.mjs setup`. Nothing is
+  installed system-wide by this change.
+- **Readiness `setup-exact.sh` now provides** (found by the first builds at this pin, 2026-11-17): (1) Exact's own `node_modules`
+  (`bun install --frozen-lockfile` in `.exact-src`, stamped with the pin; every build's type check imports rolldown from it);
+  (2) the pinned Rust toolchain's targets, read from `.exact-src/rust-toolchain.toml` (not a literal): `aarch64-apple-ios-sim`,
+  `aarch64-apple-ios` and `aarch64-apple-darwin`, each added with `rustup target add` and printed when added (the build says "--ios needs
+  Rust's aarch64-apple-ios-sim std" without them); (3) the Hermes JS engine bundles for those three triples, run through Exact's
+  `hermes-lean-sys-installer` (`--check` first, offline; the install only when a pinned bundle is not cached). Exact's CLI sets
+  `HERMES_LEAN_SYS_OFFLINE=1` for every build it spawns (`scripts/app-cli.mjs`), so a build never downloads; a missing bundle stops it with
+  "is not cached ... and offline mode is enabled". Bundles are sha256-pinned by Exact and live in `~/.cargo/hermes-lean-sys/`.
+  (4) `exact-package/apple/exact.json` is generated by `sync-exact-package.sh` (its file list changes with every Kit file) and is
+  gitignored, so a build leaves the tree clean. `bun exact.mjs update` and `lock` are for scaffolding drift and Rust locks: not run, our launcher
+  `AutoradioLab/exact.mjs` still matches `run({ dir, name, exact2, args })`.
+
+### The Mac host at the new pin (re-checked against the investigator's plan)
+
+- **Still true [src]:** `mac` (spelling) / `macos` (manifest key) builds the AppKit host with the same package for both platforms
+  (`app-cli.mjs` `mac: ['host/apple/build.mjs', ...]`); `host.macos` takes `minimumOS` (never below "14.0"), `window` with
+  `width`, `height`, `minWidth`, `minHeight`, `keepRunning`, `presenter`, `activationPolicy`, `team`, `infoPlist`, `entitlements`,
+  `link` and more; `ExactPackagePlatformView` is `NSView`; **the Mac has no audio session** (`AudioSession.swift` is `#if os(iOS) ||
+  os(tvOS)`; the engine starts with no category and a capture's claim composes nothing; `docs/reference.md` "The Mac has no session").
+- **New [src]:** `mac --sandbox` signs the App Sandbox and the agent drives it; `exact appstore` builds the Mac App Store package; a
+  production Mac build captures its own windows; `test macos` and `agent macos` exist; `app-cli.mjs` refreshes the contract's
+  declaration on `ios`/`mac`. None is used by us yet.
+- **How we build for macOS** (`mobile/scripts/build-lab.sh mac --run`) and what the app does not support there: see "Building for
+  the Mac" below.
 
 ## What Exact is, in three paragraphs
 
@@ -362,7 +424,8 @@ caveats.
    command registrations.
 7. **Bun must be 1.4.2 exactly.** 1.3.14 is refused (`scripts/bun.mjs:19`)
    [run]. And `exact.mjs setup` downloaded Hermes for every platform (Android,
-   Linux, Windows, tvOS, about 190 MB each) and stalled for us at `76cd50f9e`;
+   Linux, Windows, tvOS, about 190 MB each) and stalled for us at `76cd50f9e`
+   (`mobile/scripts/setup-exact.sh` now installs only the host and Apple bundles through Exact's installer, see "Pin move");
    `docs/reference.md:35-41` at `de212e671` says it installs the host bundle
    and, on macOS, the iOS and tvOS ones, while `README.md:790` says it adds the
    Android bundle "with the target". For Android we installed the bundle by hand
@@ -467,3 +530,79 @@ branches `lane/ar-integrate`, `lane/ar-models` and `lane/ar-ui` (2026-11-10;
 `lane/ar-spine` was not on origin), from the `mobile/README.md` of
 `lane/ar-app` and the builders' notes of 2026-11-11 (marked [seen]), and from the 2026-11-10 contract and
 animation research.
+
+## Building for the Mac
+
+**[unrun]** until the first Mac build is seen: this is the plan as built in the `mac-app` lane.
+
+- Command: `mobile/scripts/build-lab.sh mac --run` (add `ALLOW_NO_MODELS=1` until the macOS slices of the model libraries exist).
+  It takes `~/.cache/autoradio-mac-build.lock` itself for the build. The window is `host.macos.window` in `AutoradioLab/app.json`
+  (430 by 900, minimum 360 by 560), `minimumOS` 15.0 (the Kit needs macOS 15).
+- The module is the same Swift as on the phone. Every UIKit or `AVAudioSession` call goes through `AutoradioModule+Platform.swift`
+  (`Platform.open`, `systemScheme`, `reduceMotion`, `outputName`, the notices); on the Mac the session owner is `MacSessionOwner`, which
+  holds no claim and reports "ready", because the Mac has no session.
+- Not supported on the Mac yet: lock-screen and background playback concepts (`host.ios.backgroundModes`, `audio_session` are iOS-only
+  words), echo cancellation until the engine's voice processing is wired on the Mac, the phone's route names, and anything the
+  Mac-specific work would add (menus, keyboard shortcuts, a centred column).
+
+### The model libraries on the Mac
+
+- FluidAudio and llama.cpp reach the Exact app only as static xcframeworks, and each needs a `macos` arm64 slice for `mac`
+  (`scripts/ensure-deps.sh macos` checks `Info.plist` for it; an iOS-only copy is "missing" for the Mac, as Exact says "has no macos
+  arm64 slice in its Info.plist"). `build-xcframeworks.sh fluidaudio` builds three slices (`sim`, `dev`, `mac`:
+  `--triple arm64-apple-macos15.0`, about 10 minutes each on a loaded Mac) and `build-llama-xcframework.sh` builds the macOS one itself
+  (cmake, arm64 only, macOS 15.0, the release script's own options; the release script is not used for macOS because it deletes the other
+  `build-*` directories and builds universal at 13.3). **[unrun]** until the lead's first run: where SwiftPM puts the macOS product (the
+  script finds `libFluidAudio.a` instead of assuming `Release-<sdk>`).
+- Where things live on the Mac: models under `~/Library/Application Support/Autoradio/models` (the app is not sandboxed in a development
+  build), exports under `~/Documents/AutoradioExports`.
+- Permissions **[src]** (`runner/src/device.rs`): `device.microphone` writes `NSMicrophoneUsageDescription` and `device.speech-recognition`
+  `NSSpeechRecognitionUsageDescription` for macOS from `strings/en.json`; `device.microphone-background` needs nothing on a Mac. A
+  development build is ad hoc signed with no hardened runtime, so the first microphone use shows the system prompt and nothing else is
+  required; an `exact release` build derives the hardened-runtime audio-input entitlement from the grant.
+
+### Audio, sign-in and files on the Mac
+
+- **Audio [src]:** the engine runs with no session: `AutoradioKit`'s `LiveAudio` asks `AVAudioInputNode.setVoiceProcessingEnabled(_:)` on macOS
+  as on iOS (`AVAudioIONode.h` in the macOS SDK declares it for macOS 10.15; both IO nodes switch together, and only while the engine is
+  stopped, which `bring(voiceProcessing:)` already honours). Play, pause and the single-voice hold live in the engine and the run sheet, not
+  in a session. Device changes (headphones in or out) arrive as `AVAudioEngineConfigurationChange`, which `LiveAudio.observe()` already
+  handles. **[unrun]** by ear: echo cancellation with speakers, and whether the voice-processing input node's format (it can be more
+  than one channel on a Mac) converts to the mono bus (`Resampler`).
+- **Sign-in:** the approval page opens through `Platform.open` (`NSWorkspace`). The key is stored in the Keychain without the iOS-only
+  `kSecAttrAccessible` class on the Mac. **[unrun]** whether an ad hoc signed app can write the login keychain without a prompt.
+- **Files and the Reader:** the picker is Exact's `input type="file"` (the host opens `NSOpenPanel` on the Mac); PDFKit and ImageIO are
+  present on macOS. The Reader's web view is our `WebPageView` (`WKWebView`; `drawsBackground` is false on the Mac).
+- **Proof:** `mobile/scripts/proof-mac.sh` drives the Mac app through `agent macos` and prints what a person must check by ear.
+
+### Apple privacy manifests (required-reason APIs) at this pin
+
+**[src]** `host/apple/privacy.mjs`, `docs/reference.md` "Apple privacy manifests". An iOS build scans every binary of a bundle (the app,
+Exact's `libexact_*.dylib` and our `libExactPkg_autoradio.dylib` together) for required-reason APIs and stops with, for example,
+"uses disk-space APIs without an audited reason" when one lacks a declaration. It audits five categories (file timestamp, system boot time,
+disk space, active keyboards, user defaults) and refuses `getattrlist` without an audit; Exact seeds its own reasons for the first, second,
+fourth and fifth, never for disk space. macOS skips the check (Apple's reporting excludes it). An app declares its own in
+`PrivacyInfo.xcprivacy` beside `app.json`; reasons are merged, each must be one of Apple's approved codes for the category, and only
+categories the binaries really use are written.
+
+Ours is `mobile/AutoradioLab/PrivacyInfo.xcprivacy`, with codes read from Apple's "NSPrivacyAccessedAPIType" page (2026-11-17):
+
+| Category | Our use | Code |
+| --- | --- | --- |
+| Disk space | `volumeAvailableCapacityForImportantUsage` in `VoiceSetup` and `Configurator`: the setup plan and model downloads depend on free space | `E174.1` (check there is sufficient space to write files) |
+| File timestamp | `attributesOfItem` size and modification date in `ModelStore`, `PaperSource`, `ChoirFiles`, `ReaderShelf`: files in the app container | `C617.1` |
+| System boot time | `ProcessInfo.systemUptime` for intervals and frame times inside the app | `35F9.1` |
+| User defaults | `UserDefaults.standard` for the app's own settings | `CA92.1` |
+
+Not declared: active keyboards (we never read them; Exact declares its own). The disk-space and boot-time information must not leave the
+device: it does not, except that turn timings in an export the person shares are intervals, not boot time. Re-run this table when a new use
+of one of these APIs is added.
+
+### The pin is checked, not trusted
+
+The pin is one file, `mobile/exact.pin`. `scripts/setup-exact.sh` reads it, fetches that exact sha from the clone's origin when an older
+clone lacks it, takes the local patches off, checks out the pin, reapplies the patches, and exits non-zero with a `setup-exact:` line on any
+failure. `scripts/check-exact-pin.sh` is called first by `build-lab.sh` (every target) and `exact.sh` (the common entry to Exact's CLI): it
+refuses to go on unless `.exact-src` HEAD equals the pin and every patch is applied, printing both shas. Reason: a checkout left at the old
+pin once printed `fatal: unable to read tree` from setup and then built an iOS app against the OLD Exact, exit 0. Moving the pin is a change to
+`exact.pin` (and this page), never to a script.

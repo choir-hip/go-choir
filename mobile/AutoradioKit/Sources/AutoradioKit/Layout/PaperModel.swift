@@ -20,11 +20,15 @@ public struct PaperStory: Sendable, Equatable {
     public var kind: String
     public var author: String
     public var entities: [PaperEntity]
+    /// Every section the story belongs to (the front list's `sections`, house ids such as "world", "politics"); `section` is the primary one.
+    /// The server's own `?section=` filter uses this list, so a story is in a category when the category is in it. Empty from an older server.
+    public var sections: [String]
 
     public init(route: String, title: String, dek: String = "", section: String = "", words: Int = 0, importance: Int = 5, sources: Int = 0,
-                versions: Int = 1, updated: Date? = nil, kind: String = "", author: String = "", entities: [PaperEntity] = []) {
+                versions: Int = 1, updated: Date? = nil, kind: String = "", author: String = "", entities: [PaperEntity] = [], sections: [String] = []) {
         self.route = route; self.title = title; self.dek = dek; self.section = section; self.words = words; self.importance = importance
         self.sources = sources; self.versions = versions; self.updated = updated; self.kind = kind; self.author = author; self.entities = entities
+        self.sections = sections
     }
 
     public var isOpinion: Bool { kind.lowercased() == "opinion" || section.lowercased() == "opinion" }
@@ -54,7 +58,8 @@ public struct PaperStory: Sendable, Equatable {
         return PaperStory(route: route, title: title, dek: tidy(s["dek"] as? String ?? ""), section: s["section"] as? String ?? "",
                           words: int("words") ?? 0, importance: int("importance") ?? 5, sources: int("source_count") ?? 0,
                           versions: max(1, int("version_count") ?? 1), updated: Self.date(s["updated_at"] as? String),
-                          kind: s["kind"] as? String ?? "", author: s["author"] as? String ?? "", entities: ents)
+                          kind: s["kind"] as? String ?? "", author: s["author"] as? String ?? "", entities: ents,
+                          sections: ((s["sections"] as? [Any]) ?? []).compactMap { $0 as? String }.filter { !$0.isEmpty })
     }
 
     /// The real dek is cut from sentences joined with a space before each stop ("Abu Dhabi . The Kremlin", "earlier: ."); say it the way it is read.
@@ -119,15 +124,44 @@ public struct PaperFront: Codable, Sendable, Equatable {
     public var composition: String       // "lead+cluster+pair+briefs+river": the modules the rules chose
     public var dateLine: String
     public var updated: String
-    public var sectionId: String
+    public var sectionId: String         // the open category's id; "" on the front page and on My edition
     public var sectionLabel: String
+    /// Which view this answer is for: "front", "mine" or a category id; and its name for the masthead.
+    public var viewId: String
+    public var viewLabel: String
+    /// My edition: "ready" (arranged around the picks), "nopicks" (nothing picked yet) or "nomatch" (picks, but nothing in the paper matches today);
+    /// "" in every other view. For the last two the bands are the general front page and `note` says why.
+    public var mineState: String
+    /// My edition: what it is built from, one line ("Technology, AI, Space"). "" when nothing is picked.
+    public var mineFrom: String
+    public var note: String
     public var count: Int
+    /// The switcher's categories after "Front page" and "My edition": the live house sections, in house order.
     public var sections: [PaperSection]
     public var bands: [PaperBand]
+    /// The stories of this page in reading order (band by band, item by item), each once. An open article is a card in the stack
+    /// these make: a swipe goes to the next or previous route here. `titles[i]` is the title of `routes[i]`.
+    public var routes: [String]
+    public var titles: [String]
+
+    /// The card a swipe from `route` lands on: `step` +1 is the next article, -1 the previous. Nil when `route` is not in the
+    /// stack or the swipe runs past either end (the card springs back; the stack never wraps and never leaves for the front page).
+    public func neighbor(of route: String, step: Int) -> Int? {
+        guard let i = routes.firstIndex(of: route) else { return nil }
+        let j = i + step
+        return routes.indices.contains(j) ? j : nil
+    }
+
+    /// Flatten bands into the stack order. A route in two bands is listed once, at its first place.
+    public static func stack(of bands: [PaperBand]) -> (routes: [String], titles: [String]) {
+        var seen = Set<String>(), routes: [String] = [], titles: [String] = []
+        for b in bands { for it in b.items where !it.route.isEmpty && seen.insert(it.route).inserted { routes.append(it.route); titles.append(it.title) } }
+        return (routes, titles)
+    }
 
     public static func empty(status: String = "empty", message: String = "") -> PaperFront {
         PaperFront(status: status, message: message, edition: "", layout: "", composition: "", dateLine: "", updated: "", sectionId: "", sectionLabel: "",
-                   count: 0, sections: [], bands: [])
+                   viewId: "", viewLabel: "", mineState: "", mineFrom: "", note: "", count: 0, sections: [], bands: [], routes: [], titles: [])
     }
 }
 

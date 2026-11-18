@@ -1,0 +1,17 @@
+// Lane members file (autoradio-joins): what a clip row's Play, Queue and Open episode do. One send, `clipAct`, for every place that shows
+// clips (the article page's "Hear it", a show page's "Clips"). Answered by exact-package/apple/AutoradioModule+Joins.swift (Kit: ClipActions).
+use showClips, clipAct from "@choir/autoradio"
+use ClipRows, ClipAck from "@choir/autoradio"
+
+members Autoradio
+  resource shClips = showClips(address=pg.top) as shape ClipRows else empty()
+  mutation clipAck as shape ClipAck
+
+  // The note belongs to the page it was said on ("" none).
+  state clipNoteFor = ""
+  derive clipNoteRaw = match clipAck { case some(a) => a.message, case none => "" }
+  derive clipNote = clipNoteFor == pg.top ? clipNoteRaw : ""
+
+  action clipDo(op: string, id: string)
+    clipNoteFor = pg.top
+    send clipAck = clipAct(op=op, id=id)

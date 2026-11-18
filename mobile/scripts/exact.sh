@@ -5,6 +5,7 @@
 # Exact allows one app per bundle id per simulator and a launch replaces a running copy, so two people driving
 # the same simulator kill each other's app ("the app hung up (exit code 0)", "never opened its agent socket").
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
+"$HERE/scripts/check-exact-pin.sh" || exit 1      # the wrong Exact must never build quietly (see exact.pin)
 BUN="${BUN:-$HOME/.bun-1.4.2/bin/bun}"
 cd "$HERE/AutoradioLab" || exit 1
 exec env -i HOME="$HOME" USER="$USER" TMPDIR="${TMPDIR:-/tmp}" BUN="$BUN" ${EXACT_SIM:+EXACT_SIM="$EXACT_SIM"} \

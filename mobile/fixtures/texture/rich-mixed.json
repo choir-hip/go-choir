@@ -1,0 +1,301 @@
+{
+ "title": "Quarterly notes",
+ "body_doc": {
+  "schema": "choir.texture_doc.v1",
+  "doc": {
+   "type": "doc",
+   "attrs": {
+    "id": "d-1"
+   },
+   "content": [
+    {
+     "type": "heading",
+     "attrs": {
+      "id": "h1",
+      "level": 1
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Quarterly notes"
+      }
+     ]
+    },
+    {
+     "type": "paragraph",
+     "attrs": {
+      "id": "p1"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Sales rose "
+      },
+      {
+       "type": "text",
+       "text": "sharply",
+       "marks": [
+        {
+         "type": "strong"
+        }
+       ]
+      },
+      {
+       "type": "text",
+       "text": " in the east, see "
+      },
+      {
+       "type": "source_ref",
+       "attrs": {
+        "id": "s1",
+        "source_entity_id": "e1",
+        "display_mode": "numbered_ref"
+       }
+      },
+      {
+       "type": "source_ref",
+       "attrs": {
+        "id": "s2",
+        "source_entity_id": "e2",
+        "display_mode": "numbered_ref"
+       }
+      }
+     ]
+    },
+    {
+     "type": "embed",
+     "attrs": {
+      "id": "emb1",
+      "kind": "image",
+      "src": "https://example.test/a.png",
+      "caption": "A chart"
+     }
+    },
+    {
+     "type": "bullet_list",
+     "attrs": {
+      "id": "l1"
+     },
+     "content": [
+      {
+       "type": "list_item",
+       "attrs": {
+        "id": "li1"
+       },
+       "content": [
+        {
+         "type": "paragraph",
+         "attrs": {
+          "id": "lp1"
+         },
+         "content": [
+          {
+           "type": "text",
+           "text": "East"
+          }
+         ]
+        },
+        {
+         "type": "bullet_list",
+         "attrs": {
+          "id": "l2"
+         },
+         "content": [
+          {
+           "type": "list_item",
+           "attrs": {
+            "id": "li2"
+           },
+           "content": [
+            {
+             "type": "paragraph",
+             "attrs": {
+              "id": "lp2"
+             },
+             "content": [
+              {
+               "type": "text",
+               "text": "Harbour"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "type": "list_item",
+       "attrs": {
+        "id": "li3"
+       },
+       "content": [
+        {
+         "type": "paragraph",
+         "attrs": {
+          "id": "lp3"
+         },
+         "content": [
+          {
+           "type": "text",
+           "text": "West"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "table",
+     "attrs": {
+      "id": "t1"
+     },
+     "content": [
+      {
+       "type": "table_row",
+       "content": [
+        {
+         "type": "table_cell",
+         "content": [
+          {
+           "type": "text",
+           "text": "Region"
+          }
+         ]
+        },
+        {
+         "type": "table_cell",
+         "content": [
+          {
+           "type": "text",
+           "text": "Units"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "blockquote",
+     "attrs": {
+      "id": "q1"
+     },
+     "content": [
+      {
+       "type": "paragraph",
+       "attrs": {
+        "id": "qp1"
+       },
+       "content": [
+        {
+         "type": "text",
+         "text": "Numbers are not the story.",
+         "marks": [
+          {
+           "type": "emphasis"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "future_widget",
+     "attrs": {
+      "id": "fw1",
+      "x": 1
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "unknown node"
+      }
+     ]
+    },
+    {
+     "type": "code_block",
+     "attrs": {
+      "id": "c1"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "let x = 1\n\nprint(x)"
+      }
+     ]
+    },
+    {
+     "type": "horizontal_rule",
+     "attrs": {
+      "id": "hr1"
+     }
+    },
+    {
+     "type": "ordered_list",
+     "attrs": {
+      "id": "ol1",
+      "start": 3
+     },
+     "content": [
+      {
+       "type": "list_item",
+       "attrs": {
+        "id": "oi1"
+       },
+       "content": [
+        {
+         "type": "paragraph",
+         "attrs": {
+          "id": "op1"
+         },
+         "content": [
+          {
+           "type": "text",
+           "text": "third"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "type": "list_item",
+       "attrs": {
+        "id": "oi2"
+       },
+       "content": [
+        {
+         "type": "paragraph",
+         "attrs": {
+          "id": "op2"
+         },
+         "content": [
+          {
+           "type": "text",
+           "text": "fourth"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "paragraph",
+     "attrs": {
+      "id": "p9"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Last line."
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

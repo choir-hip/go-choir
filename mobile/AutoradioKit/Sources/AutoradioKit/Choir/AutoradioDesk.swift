@@ -91,6 +91,14 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
     }
 
     /// The request body: exactly the contract's fields, each inside its bound. `text_sha256` is omitted on purpose.
+    /// The paper's stories the DJ may add, as the desk takes them: at most 40, a route with no space, `@` or `#` and at most 256 bytes
+    /// (anything else is a 400 for the whole turn, so it is left out), a title of at most 300 bytes.
+    static func wireCandidates(_ all: [DeskCandidate]) -> [[String: String]] {
+        func title(_ s: String) -> String { var o = "", n = 0; for ch in s { let c = String(ch).utf8.count; if n + c > 300 { break }; o.append(ch); n += c }; return o }
+        return all.filter { c in !c.route.isEmpty && c.route.utf8.count <= 256 && !c.route.contains(where: { $0 == "@" || $0 == "#" || $0.isWhitespace }) }
+            .prefix(40).map { ["route": $0.route, "title": title($0.title)] }
+    }
+
     static func body(_ turn: DeskTurn, id: String, history: [TurnHistory.Line]) -> [String: Any] {
         var b: [String: Any] = ["turn_id": id, "words": String(decoding: Array(turn.listenerWords.trimmingCharacters(in: .whitespacesAndNewlines).utf8.prefix(2000)), as: UTF8.self)]
         if let p = turn.page, !(p.address.isEmpty && p.title.isEmpty && p.text.isEmpty) {
@@ -106,6 +114,10 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
         }
         if !turn.programmeID.isEmpty, turn.programmeID.utf8.count <= 128 { b["programme"] = turn.programmeID }
         if !history.isEmpty { b["history"] = history.map { ["role": $0.role, "text": $0.text] } }
+        // The queue and the stories the DJ may add (docs/design/autoradio-queue-desk-2026-11-15.md; `/api/autoradio/turns` only).
+        if let q = turn.queue, let obj = (try? JSONSerialization.jsonObject(with: q)) as? [String: Any], q.count <= 100_000 { b["queue"] = obj }
+        let cands = Self.wireCandidates(turn.candidates)
+        if !cands.isEmpty { b["candidates"] = cands }
         return b
     }
 
@@ -172,6 +184,9 @@ public final class AutoradioDeskStage: StreamingDesk, @unchecked Sendable {
                             let t = obj["timings_ms"] as? [String: Any]
                             deliver(.done(status: obj["status"] as? String ?? "completed", sentences: obj["sentences"] as? Int ?? sentences,
                                           serverFirstSentenceMs: (t?["first_sentence"] as? NSNumber)?.doubleValue, serverDoneMs: (t?["done"] as? NSNumber)?.doubleValue))
+                        case "queue_ops":
+                            deliver(.queueOps(json: Data(e.data.utf8)))             // handed to the queue lane's apply, unread
+                            continue
                         default: continue                                    // handoff (reserved), anything unknown
                         }
                         if sawDone { return }

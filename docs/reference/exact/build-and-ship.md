@@ -41,7 +41,7 @@ exactly**, Xcode 27.1 or later, and Hermes bundles.
 
 ```sh
 git clone --depth 1 https://github.com/expo/exact exact-checkout
-cd exact-checkout && git fetch --depth 1 origin 76cd50f9e863129b3fc75db1673d6ad4bbf79258 && git checkout FETCH_HEAD
+cd exact-checkout && git fetch --depth 1 origin de212e671a69f4fea18bed67d5b73b259ddf3061 && git checkout FETCH_HEAD   # our pin: mobile/exact.pin
 
 # Bun 1.4.2 beside any other Bun. 1.3.14 is refused:
 #   "error: Bun 1.3.14 is older than 1.4.2 or unavailable; set BUN=~/.bun-1.4.2/bin/bun"

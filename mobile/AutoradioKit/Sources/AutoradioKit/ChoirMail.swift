@@ -398,6 +398,10 @@ public final class MailService: @unchecked Sendable {
     public static let folders: [(name: String, label: String)] = [("inbox", "Inbox"), ("drafts", "Drafts"), ("sent", "Sent"), ("quarantine", "Quarantine")]
     public static let demoStates: Set<String> = ["demo-empty", "demo-loading", "demo-offline", "demo-error"]
 
+    /// Mail held on this phone (the ContentStore), used when the network cannot be reached. Set by the app.
+    public var offlineRows: (@Sendable (String) -> [MailSummary])?
+    public var offlineDetail: (@Sendable (String) -> MailDetail?)?
+    public var offlineNote: (@Sendable () -> String)?
     private let lock = NSLock()
     private var cache: [String: (rows: [MailSummary], total: Int, unread: Int)] = [:]
     private var drafts: [MailDraftInfo] = []
@@ -407,6 +411,12 @@ public final class MailService: @unchecked Sendable {
     public init(environment: ChoirEnvironment = .shared) { self.environment = environment }
 
     private func client() -> ChoirClient { environment.client() }
+    /// Sign-out: the cached rows, drafts, alias and original documents in memory, and the `mail-*.html` files written for "Show original" in `originalsIn`.
+    public func wipe(originalsIn dir: URL? = nil) {
+        lock.lock(); cache = [:]; drafts = []; aliasCache = nil; htmlByID = [:]; lock.unlock()
+        guard let dir, let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return }
+        for n in names where n.hasPrefix("mail-") && n.hasSuffix(".html") { try? FileManager.default.removeItem(at: dir.appendingPathComponent(n)) }
+    }
     private func cached(_ f: String) -> (rows: [MailSummary], total: Int, unread: Int)? { lock.lock(); defer { lock.unlock() }; return cache[f] }
     private func store(_ f: String, _ v: (rows: [MailSummary], total: Int, unread: Int)) { lock.lock(); cache[f] = v; lock.unlock() }
 
@@ -432,10 +442,11 @@ public final class MailService: @unchecked Sendable {
 
     // MARK: Mailbox
 
-    public func box(address: String, now: Date = Date()) async -> MailBoxView {
+    /// The page's constant frame, answered at once with no fetch: the title and the four tabs (the inbox's unread count when it is known).
+    /// `box` starts from this same value, so the frame is identical before, during and after a load.
+    public func frame(address: String) -> MailBoxView {
         var v = MailBoxView()
         let folder = PageAddress.rest(of: address)
-        guard address.hasPrefix("mailbox:") else { v.status = "idle"; return v }
         v.folder = folder.isEmpty ? "inbox" : folder
         v.title = Self.folders.first { $0.name == v.folder }?.label ?? "Mail"
         v.folders = Self.folders.map { f in
@@ -443,6 +454,18 @@ public final class MailService: @unchecked Sendable {
             if f.name == "inbox", let c = cached("inbox"), c.unread > 0 { r.badge = "\(c.unread)" }
             return r
         }
+        return v
+    }
+
+    /// The last list this session fetched for a folder, as rows (empty when none): a return visit shows it at once and refreshes underneath.
+    public func cachedRows(folder: String, now: Date = Date()) -> [MailRow]? {
+        guard let c = cached(folder) else { return nil }
+        return MailThreads.rows(c.rows, now: now)
+    }
+
+    public func box(address: String, now: Date = Date()) async -> MailBoxView {
+        guard address.hasPrefix("mailbox:") else { var i = MailBoxView(); i.status = "idle"; return i }
+        var v = frame(address: address)
         if Self.demoStates.contains(v.folder) { return await demoState(v) }
         do {
             if v.folder == "drafts" {
@@ -457,6 +480,9 @@ public final class MailService: @unchecked Sendable {
                 let o = try await client().send("GET", "/api/email/messages", query: ["folder": v.folder], route: "/api/email/messages").object()
                 let l = MailParse.list(o)
                 store(v.folder, l)
+                for row in l.rows where !row.id.isEmpty && !ContentStore.shared.has("mail:" + row.id) {          // a row seen is kept at once; its body follows from the sync
+                    ContentStore.shared.put(ContentStore.mailItem(row, text: "", folder: v.folder, syncedAt: Date()))
+                }
                 v.rows = MailThreads.rows(l.rows, now: now); v.total = l.total; v.unread = l.unread
                 if v.folder == "inbox" { for i in v.folders.indices where v.folders[i].name == "inbox" { v.folders[i].badge = l.unread > 0 ? "\(l.unread)" : "" } }
             }
@@ -468,6 +494,9 @@ public final class MailService: @unchecked Sendable {
             v.status = w.status; v.message = w.message
             if let c = cached(v.folder) {   // failure 3: keep the last good rows under the banner
                 v.rows = MailThreads.rows(c.rows, now: now); v.total = c.total; v.unread = c.unread; v.cached = true
+            } else if let off = offlineRows?(v.folder), !off.isEmpty {       // never opened this session: the phone still holds the mail
+                v.rows = MailThreads.rows(off, now: now); v.total = off.count; v.cached = true
+                v.message = "Offline. Showing mail saved on this phone" + (offlineNote.map { ", " + $0() } ?? "") + "."
             }
         }
         return v
@@ -511,9 +540,15 @@ public final class MailService: @unchecked Sendable {
         guard !rest.isEmpty, rest != "new", !rest.hasPrefix("reply/"), !rest.hasPrefix("draft/") else { v.status = "idle"; return v }
         v.id = rest; v.address = address
         do {
-            let o = try await client().send("GET", "/api/email/messages/" + PathSegment.encode(rest),
-                                            route: "/api/email/messages/{id}").object()
-            let d = MailParse.detail(o)
+            let d: MailDetail
+            do {
+                d = MailParse.detail(try await client().send("GET", "/api/email/messages/" + PathSegment.encode(rest), route: "/api/email/messages/{id}").object())
+                ContentStore.shared.put(ContentStore.mailItem(d.summary, text: d.text, folder: ContentStore.shared.get("mail:" + rest)?.meta["folder"] ?? "inbox", syncedAt: Date(), to: d.to))
+            } catch is CancellationError { throw CancellationError() }
+            catch {
+                guard let off = offlineDetail?(rest) else { throw error }          // no network: the message the phone holds
+                d = off; v.message = "Offline. Showing mail saved on this phone" + (offlineNote.map { ", " + $0() } ?? "") + "."
+            }
             if cached("inbox") == nil { if let l = try? await client().send("GET", "/api/email/messages", query: ["folder": "inbox"], route: "/api/email/messages").object() { store("inbox", MailParse.list(l)) } }
             let s = d.summary
             v.subject = s.subject.isEmpty ? "(no subject)" : s.subject
@@ -733,6 +768,8 @@ public final class MailReading: @unchecked Sendable {
         get { lock.lock(); defer { lock.unlock() }; return _handler }
         set { lock.lock(); _handler = newValue; lock.unlock() }
     }
+    /// Sign-out: the last mail read aloud is the account's.
+    public func wipe() { lock.lock(); _last = nil; lock.unlock() }
     public func request(address: String, text: String) {
         lock.lock(); _last = (address, text); let h = _handler; lock.unlock()
         h?(address, text)

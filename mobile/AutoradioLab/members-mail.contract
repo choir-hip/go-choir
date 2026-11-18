@@ -5,11 +5,20 @@
 // address, so only the page in front does any work: mbx (a mailbox), mmsg (a message), mcmp (a compose page: a reply,
 // a new message, or an existing draft). The compose fields are local state that takes the resource's seed (the
 // reply's recipient, subject and quoted text) the first time the person edits; after that the person's words win.
-use mailBox, mailMessage, mailCompose, mailSaveDraft, mailApprovalEmail, mailOpenReview, mailRead, mailMarkUnread, mailAsk from "@choir/autoradio"
+use mailBox, mailFrame, mailMessage, mailCompose, mailSaveDraft, mailApprovalEmail, mailOpenReview, mailRead, mailMarkUnread, mailAsk from "@choir/autoradio"
 use MailBoxView, MailMessageView, MailComposeView, MailAck from "@choir/autoradio"
 
 members Autoradio
-  resource mbx = mailBox(address=pg.top) as shape MailBoxView else empty()
+  // The mailbox's tab is page state, not a page: tapping a tab changes `mboxSel` in the same action, so the frame (title, tabs, counts)
+  // never leaves and the content under it starts its transition at the tap (transitions.contract). `mfr` answers at once from the
+  // cache (the tabs, their counts, the last list seen); `mbx` is the fetch, newest request wins.
+  state mboxFor = ""
+  state mboxSel = ""
+  state mboxDir = 0
+  derive mboxAddr = (mboxFor == pg.top and mboxSel != "") ? mboxSel : pg.top
+  derive mboxName = mboxAddr.startsWith("mailbox:") ? mboxAddr.slice(8) : "inbox"
+  resource mbx = mailBox(address=mboxAddr) as shape MailBoxView else empty()
+  resource mfr = mailFrame(address=mboxAddr) as shape MailBoxView else empty()
   resource mmsg = mailMessage(address=pg.top) as shape MailMessageView else empty()
   resource mcmp = mailCompose(address=pg.top) as shape MailComposeView else empty()
   mutation mdr as shape MailComposeView refreshes mbx
@@ -88,6 +97,11 @@ members Autoradio
   action askMail(q: string)
     mailNoteFor = pg.top
     send mak = mailAsk(address=pg.top, question=q)
+  // Tap a tab: synchronous. The direction is the new tab's side of the old one; the outgoing content leaves at once.
+  action mailTab(name: string)
+    mboxDir = (["inbox", "drafts", "sent", "quarantine"].indexOf(name) > ["inbox", "drafts", "sent", "quarantine"].indexOf(mboxName)) ? 1 : -1
+    mboxFor = pg.top
+    mboxSel = `mailbox:${name}`
   action retryMail
     refresh mbx
     refresh mmsg

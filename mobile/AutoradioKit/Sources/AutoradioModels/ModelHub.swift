@@ -21,6 +21,7 @@ public enum ModelHub {
         registry.register(.transcriber, ParakeetTDTTranscriber.self) { ParakeetTDTTranscriber($0) }
         registry.register(.voice, KokoroVoice.self) { KokoroVoice($0) }
         registry.register(.voice, PocketTTSVoice.self) { PocketTTSVoice($0) }
+        registry.register(.voice, PhononVoice.self) { PhononVoice($0) }
         registry.register(.transcriber, LFM3Transcriber.self) { LFM3Transcriber($0) }
         registry.register(.voice, LFM3Voice.self) { LFM3Voice($0) }
         registerLlamaStages(registry)
@@ -106,8 +107,10 @@ public final class AutoradioModelsRegistrar: NSObject {
         ModelProviders.current = HubModelProvider.shared          // voice setup fetches and checks through this
         #if canImport(llama)
         LocalLanguage.model = LlamaLocalModel.shared              // the acknowledgement is written by this
+        EmbeddingService.loader = { try await LlamaEmbedder.shared(download: false) }      // the vectors of the phone's content (EmbeddingService)
         #endif
         ModelProof.runFromLaunchArguments()
-        fputs("autoradio models: registered \(ModelHub.catalog.count) models, \(r.all.count) stages\n", stderr)
+        print("AUTORADIO models registered n=\(ModelHub.catalog.count) stages=\(r.all.count) names=\(r.all.map { "\($0.kind.rawValue):\($0.id)" }.sorted().joined(separator: ","))")
+        EmbedDeviceTrial.runFromLaunchArguments()                 // `-EmbedTrial 1`: one device measurement of the embedder, otherwise nothing
     }
 }

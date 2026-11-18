@@ -113,14 +113,18 @@ final class RoundThreeEngineTests: XCTestCase {
         XCTAssertTrue(log.events.contains { if case .turnCancelled = $0.event { return true } else { return false } })
     }
 
-    // 6
-    func testNoHandoverSoundWhenTheDeskFailsWithoutSpeaking() async throws {
+    // 6 (changed 2026-11-15, autoradio-talk): a desk that fails with nothing said no longer leaves the reader in silence. The failure is
+    // said in plain words after the local sentence in flight, so the hand-over sound leads into a spoken line, never into silence.
+    func testTheDeskFailingWithoutSpeakingIsSaidInPlainWordsAndKept() async throws {
+        Conversation.shared.clear()
         LocalLanguage.model = FakeLocalModel(pieces: Self.pieces.prefix(2).map { $0 }, pieceDelay: 0.05)
         let (engine, log, t) = try make(desk: "failing-stream-desk")
         await engine.runPipeline(t, transcript: "what is the top story", endedAt: log.clock.now)
         let local = log.events.filter { if case .localSentenceStarted = $0.event { return true } else { return false } }
         XCTAssertFalse(local.isEmpty, "the local voice did speak")
-        XCTAssertFalse(log.events.contains { if case .transitionPlayed = $0.event { return true } else { return false } }, "no hand-over into silence")
+        let desk = log.events.compactMap { e -> String? in if case .deskSentenceStarted(let t, _) = e.event { return t } else { return nil } }
+        XCTAssertEqual(desk.count, 1, "the failure is spoken once, in plain words")
+        XCTAssertEqual(Conversation.shared.entries().last?.status, "failed")
         XCTAssertTrue(log.events.contains { if case .error(let st, _) = $0.event { return st == "desk" } else { return false } })
     }
 }

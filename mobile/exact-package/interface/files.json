@@ -34,10 +34,6 @@
     "CsvRow": {
       "cells": "string[]"
     },
-    "FileChapterRef": {
-      "index": "number",
-      "title": "string"
-    },
     "FileInfo": {
       "address": "string",
       "path": "string",
@@ -53,27 +49,10 @@
       "message": "string",
       "src": "string",
       "local": "string",
-      "text": "string",
       "truncated": "bool",
       "rows": "CsvRow[]",
-      "pages": "number",
       "width": "number",
-      "height": "number",
-      "title": "string",
-      "author": "string",
-      "chapters": "FileChapterRef[]"
-    },
-    "FileChapter": {
-      "index": "number",
-      "count": "number",
-      "title": "string",
-      "markdown": "string",
-      "status": "string"
-    },
-    "FilePages": {
-      "query": "string",
-      "pages": "number[]",
-      "message": "string"
+      "height": "number"
     }
   },
   "names": [
@@ -127,49 +106,10 @@
           "message": "",
           "src": "",
           "local": "",
-          "text": "",
           "truncated": false,
           "rows": [],
-          "pages": 0,
           "width": 0,
-          "height": 0,
-          "title": "",
-          "author": "",
-          "chapters": []
-        }
-      }
-    },
-    {
-      "source": "fileChapter",
-      "live": true,
-      "answers": "FileChapter",
-      "options": {
-        "address": "string",
-        "index": "number"
-      },
-      "substitute": {
-        "default": {
-          "index": 0,
-          "count": 0,
-          "title": "",
-          "markdown": "",
-          "status": "loading"
-        }
-      }
-    },
-    {
-      "source": "filePages",
-      "live": true,
-      "answers": "FilePages",
-      "options": {
-        "address": "string",
-        "query": "string"
-      },
-      "substitute": {
-        "default": {
-          "query": "",
-          "pages": [],
-          "message": ""
+          "height": 0
         }
       }
     },

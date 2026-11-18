@@ -119,7 +119,7 @@ final class LayoutTests: XCTestCase {
         let s = try fixture("front-even")
         let front = compose(s)
         XCTAssertTrue(front.sections.contains { $0.id == "tech-and-ai" })
-        let page = PaperComposer.front(stories: s, section: "culture", width: 393, engine: engine)
+        let page = PaperComposer.front(stories: s, view: "culture", width: 393, engine: engine)
         XCTAssertEqual(page.sectionLabel, "Culture")
         XCTAssertTrue(page.bands.flatMap(\.items).allSatisfy { $0.section == "Culture" })
     }

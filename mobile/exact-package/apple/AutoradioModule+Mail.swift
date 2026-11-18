@@ -6,16 +6,34 @@
 // The phone never talks to a mail provider: every call goes to the listener's computer (the Mail agent is the sole
 // custodian of email there) through MailService in the kit.
 import Foundation
-import UIKit
 
 extension AutoradioModule {
     func registerMail() {
         let service = MailService()
+        // No network: the mail the phone holds (ContentStore) is shown, with when it was last synced.
+        service.offlineRows = { ContentStore.shared.mailSummaries(folder: $0) }
+        service.offlineDetail = { id in
+            guard let it = ContentStore.shared.get("mail:" + id), it.version == "body" else { return nil }
+            var d = MailDetail(); d.summary = ContentStore.summary(it); d.text = it.text
+            d.to = (it.meta["to"] ?? "").components(separatedBy: ", ").filter { !$0.isEmpty }
+            return d
+        }
+        service.offlineNote = { ContentStore.shared.syncedWords(.mail) ?? "never synced" }
         pageSources.register(MailPageSource(service: service))
+        // Sign-out: the cached rows, drafts and original documents in memory, and the mail-*.html files written to the cache folder.
+        let mailOriginals = context.file("app:/cache/mail-x.html")?.deletingLastPathComponent()
+        choir.accountWipe.register("mail") { service.wipe(originalsIn: mailOriginals) }
 
         handle("mailBox") { [weak self] args, reply in
             let address = args["address"] as? String ?? ""
-            Task { let v = await service.box(address: address); reply(self?.json(v) ?? [:]) }
+            Task { let v = await service.box(address: address); reply(self?.json(v) ?? [:]); DispatchQueue.main.async { self?.touch(["mailFrame"]) } }
+        }
+
+        // The page's frame and the last list seen for this folder, answered at once with no fetch (the tabs, their counts, the cached rows).
+        handle("mailFrame") { [weak self] args, reply in
+            var v = service.frame(address: args["address"] as? String ?? "")
+            if let rows = service.cachedRows(folder: v.folder) { v.rows = rows; v.status = "cached" } else { v.status = "frame" }
+            reply(self?.json(v) ?? [:])
         }
 
         // The message, and beside it the sanitised original document ("Show original") written where an iframe can read it.
@@ -27,7 +45,7 @@ extension AutoradioModule {
                     try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try? Data(html.utf8).write(to: url, options: .atomic)
                 }
-                if v.status == "ready" { DispatchQueue.main.async { self?.touch(["mailBox"]) } }   // the read mark changed the counts
+                if v.status == "ready" { DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame"]) } }   // the read mark changed the counts
                 reply(self?.json(v) ?? [:])
             }
         }
@@ -41,7 +59,7 @@ extension AutoradioModule {
             Task {
                 let v = await service.saveDraft(address: args["address"] as? String ?? "", to: args["recipients"] as? String ?? "",
                                                 subject: args["subject"] as? String ?? "", body: args["body"] as? String ?? "")
-                if v.status == "saved" { DispatchQueue.main.async { self?.touch(["mailBox"]) } }
+                if v.status == "saved" { DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame"]) } }
                 reply(self?.json(v) ?? [:])
             }
         }
@@ -54,10 +72,14 @@ extension AutoradioModule {
             }
         }
 
-        // Open the approval page in the browser, only on the configured Choir host (same scheme, host and port), over https.
+        // Open the approval page in the app's own web view like any web link (SourceLink: http and https are in-app; mailto, tel, sms and
+        // facetime go to the system; anything else is refused), only on the configured Choir host (same scheme, host and port), over https.
         handle("mailOpenReview") { [weak self] args, reply in
             if let u = URL(string: args["url"] as? String ?? ""), u.scheme == "https", RemoteHost.allows(u) {
-                DispatchQueue.main.async { UIApplication.shared.open(u) }
+                DispatchQueue.main.async { [weak self] in
+                    self?.barWebURL = u.absoluteString; EmbeddedPage.shared.opened(u.absoluteString)
+                    self?.touch(["queueView", "barState"], now: true)
+                }
                 reply(["status": "opened", "message": ""])
             } else {
                 reply(["status": "refused", "message": "That link is not on your computer's address."])
@@ -90,7 +112,7 @@ extension AutoradioModule {
             let address = args["address"] as? String ?? ""
             Task {
                 let ok = await service.setRead(id: PageAddress.rest(of: address), read: false)
-                DispatchQueue.main.async { self?.touch(["mailBox", "mailMessage"]) }
+                DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame", "mailMessage"]) }
                 reply(["status": ok ? "ok" : "error", "message": ok ? "" : "Could not mark it unread."])
             }
         }

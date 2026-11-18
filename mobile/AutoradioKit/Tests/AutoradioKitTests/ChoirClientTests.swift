@@ -3,7 +3,7 @@ import XCTest
 
 /// A local stand-in for choir.news: every request goes to `handler`; no network.
 final class StubProtocol: URLProtocol, @unchecked Sendable {
-    struct Req { let method: String; let path: String; let query: [String: String]; let headers: [String: String]; let body: [String: Any] }
+    struct Req { let method: String; let path: String; let query: [String: String]; let headers: [String: String]; let body: [String: Any]; var raw = Data() }
     struct Resp { var status = 200; var headers: [String: String] = [:]; var json: Any = [String: Any](); var raw: String?; var dropAfter = false }
     nonisolated(unsafe) static var handler: (Req) -> Resp = { _ in Resp() }
     nonisolated(unsafe) static var seen: [Req] = []
@@ -22,7 +22,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         var q: [String: String] = [:]; for i in comps.queryItems ?? [] { q[i.name] = i.value ?? "" }
         var h: [String: String] = [:]; for (k, v) in request.allHTTPHeaderFields ?? [:] { h[k.lowercased()] = v }
         let req = Req(method: request.httpMethod ?? "GET", path: comps.path, query: q, headers: h,
-                      body: (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:])
+                      body: (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:], raw: data)
         Self.lock.lock(); Self.seen.append(req); Self.lock.unlock()
         let r = Self.handler(req)
         let resp = HTTPURLResponse(url: request.url!, statusCode: r.status, httpVersion: "HTTP/1.1", headerFields: r.headers)!
@@ -173,6 +173,7 @@ final class ChoirClientTests: XCTestCase {
         try? keys.set("k1", account: KeyAccount.keyID)
         let si = ChoirSignIn(env: env)
         await si.signOut()
+        await si.waitForRevoke()
         XCTAssertNil(keys.get(KeyAccount.apiKey)); XCTAssertNil(keys.get(KeyAccount.computerID))
         XCTAssertEqual(StubProtocol.seen.first?.method, "DELETE")
         XCTAssertEqual(StubProtocol.seen.first?.path, "/auth/api-keys/k1")
@@ -191,10 +192,10 @@ final class ChoirClientTests: XCTestCase {
         }
     }
 
-    func testFrontProgrammeLoadsBlocksWithoutAKey() async throws {
+    func testFrontStoryLoadsBlocksWithoutAKey() async throws {
         keys.delete(KeyAccount.apiKey)
         StubProtocol.handler = frontHandler
-        let doc = try await ChoirFrontProgramme(StageParams()).load()
+        let doc = try await ChoirFront.load(route: "/p/harbour", client: env.client())
         XCTAssertEqual(doc.blocks.map { $0.spokenText ?? "" }, ["Harbour", "The cranes moved inland.", "Residents said the quiet was strange. Then they stopped noticing it."])
         XCTAssertEqual(env.playing(doc.id)?.publicationVersionID, "pv-1")
         XCTAssertTrue(StubProtocol.seen.allSatisfy { $0.headers["authorization"] == nil })
@@ -202,14 +203,15 @@ final class ChoirClientTests: XCTestCase {
 
     func testEmptyFrontPage() async {
         StubProtocol.handler = { _ in .init(json: ["stories": []]) }
-        do { _ = try await ChoirFrontProgramme(StageParams()).load(); XCTFail() } catch { XCTAssertEqual(error as? ChoirError, .empty("the front page")) }
+        let list = try? await ChoirFront.stories(client: env.client())
+        XCTAssertEqual(list?.isEmpty, true)
     }
 
     // MARK: Desk
 
     func testDeskForksThenFollowsStreamAndSpeaksOnlyTheDesksRevision() async throws {
         StubProtocol.handler = frontHandler
-        let doc = try await ChoirFrontProgramme(StageParams()).load()
+        let doc = try await ChoirFront.load(route: "/p/harbour", client: env.client())
         nonisolated(unsafe) var streamPolls = 0
         StubProtocol.handler = { req in
             switch req.path {
