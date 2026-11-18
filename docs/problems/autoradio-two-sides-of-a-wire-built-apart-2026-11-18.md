@@ -1,7 +1,7 @@
-# Autoradio: the two sides of a wire were built apart and disagreed, four times in one night (2026-11-18)
+# Autoradio: the two sides of a wire were built apart and disagreed, six times in one night (2026-11-18)
 
 Status: open. This is the clustering assessment the contract asks for after
-three bugs of one kind in a week; the four instances are each fixed or being
+three bugs of one kind in a week; the six instances are each fixed or being
 fixed, the cause is not. Class when fixed: yellow (a shared fixture and two
 tests per wire). Owner: the Autoradio learning-loop mission
 (docs/definitions/choir-autoradio-learning-loop-2026-11-18.md).
@@ -45,6 +45,21 @@ tests marked its own work.
    running them. The lead now writes tours with the driver's real operations
    and reads every screenshot.
 
+5. **The app target called a Kit type that no file defined.** The first-run
+   microphone check's wiring (`AutoradioModule+Onboarding.swift`, app target)
+   called `MicCheckMeter`; the builder's lane defined only `MicCheck`. The Kit
+   suite was green because it does not compile the app target; the simulator
+   build of candidate integ16 failed. Found by the lead's build; the lead
+   added the type and a test. The next round's brief asked the builder to list
+   every Kit member the app-target file calls, and the reviewer checked each.
+6. **The server and the phone built a take's run sheet entry differently.**
+   The server placed a take segment as kind `story` with the answered story as
+   its source and the lead-in's length; the phone builds the same entry id as
+   kind `take`, source `take:<id>`, the lead-in plus the take's length. Each
+   side's tests passed. Found by review seat 2 in round 4 of the takes server,
+   after a rebase onto the settlement code made the entry matter. Fixed in
+   lane/takes-server (the server copies the phone's fields; T9 pins them).
+
 Separately seen tonight, a different kind: `ClipPlayerTests.test7…` gives a
 background task two scheduler turns and then asserts; it failed twice under
 load (once alone). Being fixed in lane/takes-wire by waiting on the condition.
@@ -78,5 +93,10 @@ on the owner's phone.
   exposed to instance 2.
 - The driver still accepts a tour with an unknown operation (not checked
   tonight beyond the builders' reports; the lead's tours avoid it).
-- Instance 3 is open on the phone: the Swift reducer must mirror the takeover
-  before lane/learn-settle and the phone lanes meet on main.
+- Instance 3 is repaired in lane/reducer-twin (the Swift reducer mirrors the
+  takeover; fixtures 19 and 34 pass on both sides) and is in the build on the
+  owner's phone; it is not on main, because none of the phone lanes are.
+- Instance 5 has no mechanical guard: a Kit suite cannot see the app target.
+  Only the simulator build catches it, and only the lead runs that build.
+- A take's sheet entry has no shared fixture (instance 6): the server's test
+  pins the server's fields and the phone's test pins the phone's.
