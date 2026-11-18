@@ -16,7 +16,7 @@ throughline (`skills/throughline/SKILL.md`). Direction:
 Owner, 2026-11-18: "only the voice stuff should be swift. the rest should be
 exact... the whole point is the codebase is shared, using EXACT". Goal:
 [`definitions/choir-autoradio-exact-cutover-2026-11-18.md`](definitions/choir-autoradio-exact-cutover-2026-11-18.md)
-(stations X0 to X11, and K1 to K3 carried from the learning loop). State at
+(stations X0 to X12, and K1 to K3 carried from the learning loop). State at
 2026-11-18T12:50Z: the app's pages build and draw on an Android emulator with
 nothing behind them; the first page (the paper) is being moved to TypeScript;
 the app's own Exact loop takes a minute per edit and is being made fast; the

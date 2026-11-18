@@ -1429,7 +1429,7 @@ nodes:
       work of choir-autoradio-learning-engine-2026-11-14 forward as built
       stations; conjecture K1 is ledger C120.
   - id: choir-autoradio-exact-cutover-2026-11-18
-    title: Autoradio, the cutover from Swift to Exact — one shared codebase for iPhone and Android, only voice native (stations X0 to X11, K1 to K3)
+    title: Autoradio, the cutover from Swift to Exact — one shared codebase for iPhone and Android, only voice native (stations X0 to X12, K1 to K3)
     path: docs/definitions/choir-autoradio-exact-cutover-2026-11-18.md
     status: working  # 2026-11-18 live station; X1 and X2 in lanes
     kind: station

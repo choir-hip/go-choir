@@ -1,6 +1,8 @@
 # Moving Autoradio's logic into Exact: a design
 
-Status: proposed, 2026-11-18. Written by an Opus design pass from the pinned
+Status: proposed, 2026-11-18; reviewed by two seats the same day, both
+"repair, the frame is right". The section "After review" at the end
+governs where it differs from the text above it. Written by an Opus design pass from the pinned
 Exact source (`mobile/.exact-src` at de212e671) and `lane/autoradio-integ20`;
 nothing in it was run. Every claim about Exact cites the file it was read
 from. Station 0's four tests (section 5) decide whether the order stands.
@@ -143,3 +145,109 @@ The rules hold throughout: no switches, each station deletes the Swift for its a
 - **Saves:** perhaps tens of seconds on cold and Swift-touching builds (inferred, not measured); the copy-and-generate step for most names; and logic tests, which run in seconds under Bun.
 - **Does not change:** the 15-minute cold build, the Rust host, the model libraries or the 12 GiB build tree.
 - **Adds:** an Android build (Gradle, NDK, Rust for Android). Whether it can run on the Linux build VM instead of the Mac is untested.
+
+## After review (2026-11-18)
+
+Two seats read this design and the mission file against the Swift it
+replaces and the server (seat 1, a Sonnet reviewer who also checked the
+Exact citations; seat 2, DeepSeek). Both returned REPAIR with the frame
+upheld. What changes:
+
+### The deck applies named rules; it does not "decide nothing"
+
+Shared code may be frozen when the deck needs an answer, so the deck carries
+these rules itself, and only these. They are data-driven where they can be:
+shared code states the rule on the item, the deck applies it.
+
+| Rule | Why it cannot wait for shared code | Today's code |
+|---|---|---|
+| A transition item plays only if the item before it was heard to its end | a skip on the lock screen must not play a line that refers to what was skipped | `RunSheetPlayer.nextToAir` |
+| When the audio session cannot be taken, the item stays on air with no outcome and the deck retries at 1, 2, 4, 8, 15 s | shared timers exist only inside an answer | `RunSheetPlayer` hold, `SessionCoordinator` |
+| Interruption: resume only on the system's word or the listener's press; route loss pauses and never falls to the speaker | native audio policy | `PlaybackContinuity` |
+| Barge-in: the voice lowers or pauses the deck and the deck reports the block and position it stopped at | only the engine knows the remainder | `rememberPlace`, `spokenRemainder` |
+| Two items in a row that made no sound stop the deck | a dead engine must not burn the queue | `RunSheetPlayer` |
+| One voice at a time: the voice owns the deck's level | enforced native to native | `SessionCoordinator` |
+
+The deck holds one state for "why it is silent" (playing, paused by the
+listener, paused by the system, held for the session, held for the engine,
+stopped, empty), not a set of flags. Three review rounds on the Swift repair
+of 2026-11-18 each found a new pair of flags that disagreed.
+
+### The journal is the evidence
+
+The deck writes an ordered journal: for each item, started and ended, with
+the device's time, the block and position reached, and whether audio was
+rendered (samples reached the output, not "the utterance finished"). The
+journal survives a kill. Shared code reads it before it restores the run
+sheet (today a restart closes the on-air entry as failed before anything
+else runs, which would lose a verdict) and posts each op with the journal's
+own time, since the server judges lateness on the op's `ended.at`. An item
+with no rendered audio is never posted as heard.
+
+### What shared code may assume on a locked phone
+
+On iPhone shared code stays live only while audio is actually sounding
+(`docs/contract-for-agents.md:4929`: "an idle playback category grants
+nothing"). In a gap between items, while a block is being synthesised, or
+after a pause, it can freeze and its stream closes; a stream belongs to a
+resource in a view and nothing reconnects it but an action. So: the deck
+keeps the session through gaps and holds two or three items; the run sheet's
+feed is designed as a long poll first (`exactLongPoll`, host-managed
+back-off) and a stream second; and whether a deck event can cause an op to
+be posted with no touch is unproven. Station X0's locked-phone test decides
+it. If it cannot, ops are posted when shared code next runs, with the
+journal's times, and anything past the server's lapse is no verdict.
+
+### Order
+
+The deck comes before the decisions move. The Swift player is first made to
+drive the engine through the deck (journal, rules, one state), and that
+passes a locked hour on the owner's phone. Only then do the decisions move
+to shared code. The owner's daily phone never runs a new decision layer
+over an unproven deck.
+
+### Sign-in
+
+Station X3 moves sign-in, accounts and the proof key. It does not delete
+`ChoirClient`: twenty-seven Swift files use it until their own stations, so
+it is fed the identity by one call and goes at the end. Three things are
+decided before X3 starts: the secret store's behaviour on a locked phone
+(today's key is readable after first unlock; a locked hour must still post),
+that shared code is not updated over the air while it holds the key
+(`deploy.store` stays `"0"`), and one sign-out wipe across both languages
+with the generation passed to shared code. The old Keychain item is deleted
+at the move, not kept for a revert.
+
+### Honest outcomes on Android
+
+An emulator with no sound cannot produce `heard`. The emulator proves the
+transport and the reducer: a muted deck yields no verdict. The first `heard`
+from Android needs a person listening.
+
+### What each station also carries
+
+What local state it moves and what is fetched again (run sheet ops pending,
+podcast subscriptions and positions, book positions, settings, voice, speed
+and theme, the kept opening); which Swift tests are ported, which stay with
+the voice, which die, by file. `ClipFingerprint` is signal processing: it
+stays native and is named in the voice list. The Mac app builds from the
+same commit and is checked at the last station.
+
+### Where data may go (owner, 2026-11-18)
+
+Autoradio is an interface into the listener's own Choir computer. Nothing
+the phone holds (mail, an imported file, a book) is withheld from that
+computer or its desks. An earlier note in the review of this design said a
+PDF's text could not come from the server because local files must not go
+there; no such rule exists, and step 5's plan ("PDF text from the server,
+deleting PDFKit") stands. Where logic runs and where data may go are
+separate questions.
+
+### The gate
+
+Lines and names can be gamed by one generic call. The gate runs the pages on
+the web host with a fake native side that answers only the voice list, scans
+every shipped source including the app target, refuses an interface entry
+that takes an opaque payload, requires the interface to equal the voice
+list at the end, and carries a planted violation it must catch.
+

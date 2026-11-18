@@ -89,6 +89,37 @@ bar saying NOW PLAYING with a Pause button meanwhile.
 - Removed at the owner's word: the "Why this" button. Added: text labels in
   the Tetramark tray (lane `ui-morning`).
 
+## Structural assessment: why the audio repair took three review rounds
+
+The repair for item 4 (`lane/audio-held`) was sent back three times on
+2026-11-18. Each round fixed what the last one named and each review found a
+new defect of the same shape: two facts about silence that disagreed.
+
+- Round 1: the engine's failure was not known to the block loop, so a block
+  that made no sound waited 45 s and was counted.
+- Round 2: a hold at the start of an entry existed, a loss in the middle of
+  one did not; a take could release the session under the radio.
+- Round 3: the system's pause and the listener's pause are one flag, so the
+  first Play after a phone call does nothing; two resumes can overlap and
+  restart the entry; a barge-in counts cut words as played; sign-out reports
+  a silent entry as heard.
+
+The cause is not any one of these. "Why is the radio silent" is held as at
+least seven separate flags in five files (`userPaused`, `_awaitingPlay`,
+`heldMidEntry`, `isWaitingForSession`, `wantPlaying`, `engineLostFlag`,
+`_engineOK`), each set and cleared by different callers. Any pair can
+disagree, and every repair adds a flag.
+
+What changes: the fourth round, if there is one, is not another flag. The
+state becomes one value with a reason (playing; paused by the listener;
+paused by the system; held for the session; held for the engine; stopped;
+empty), owned by one type, and "did this item make sound" is recorded once
+where audio is rendered. That is the deck of the Exact cutover
+([design](../design/autoradio-in-exact-2026-11-18.md), "After review"), and
+it is why the deck lands under the Swift player before anything else moves
+(station X4). Round 3's fixes are still taken, because the owner's phone
+needs them before X4 exists.
+
 ## Remaining error
 
 - Items 2 and 3 are inferences until a start is logged with the new lines.
