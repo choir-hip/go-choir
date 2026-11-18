@@ -29,9 +29,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// steerSameTap is the window in which a second tap on the same entry in the
-// same direction, sent without a client id, is taken for the first.
-const steerSameTap = 10 * time.Minute
+// A deferred tap is picked up by the next patch for this long, at most this many.
+const (
+	steerDeferredWindow = 24 * time.Hour
+	steerDeferredMax    = 10
+	steerDonePrefix     = "autoradio-steer-done:"
+)
 
 const (
 	kindStrike = "autoradio.strike"
@@ -294,9 +297,11 @@ type nbDraft struct {
 	patch   notebook.Patch
 	cites   map[string][]string // minted id -> cites
 	removed map[string]nbRemoved
-	dropped []string
-	strikes []nbStrike
-	changed bool // anything beyond what the head already says
+	// deferred are the steer notes this patch adds a line for.
+	deferred []string
+	dropped  []string
+	strikes  []nbStrike
+	changed  bool // anything beyond what the head already says
 }
 
 // nbRemoved is a line a patch removes, with the numbers it had at that moment
@@ -337,6 +342,15 @@ func (c *programmeCall) settleNotebook(ctx context.Context) {
 		}
 		if st.Archived {
 			sum["status"], sum["reason"] = "archived", "your notebook is archived"
+			return
+		}
+		if st.ChainCut {
+			// More revisions than the desk can walk back through lie between
+			// its last revision and the head: strikes cannot be told, so the
+			// desk writes nothing, and says so where the listener reads it.
+			reason := fmt.Sprintf("the listener's edits since the desk's last revision are too many to compare (more than %d revisions): no patch until they can be", 60)
+			sum["status"], sum["reason"] = "not_applied", reason
+			c.recordPatchResult(ctx, notebook.Patch{PatchID: "nbp-" + c.stretchID + "-cut"}, notebook.Result{Status: "not_applied", Reason: reason})
 			return
 		}
 		d, err := c.draftPatch(ctx, st)
@@ -385,6 +399,15 @@ func (c *programmeCall) settleNotebook(ctx context.Context) {
 		}
 		if res.Status == notebook.StatusStale {
 			continue // the listener edited while the call ran: rebuild on the new head
+		}
+		if res.Status == notebook.StatusApplied || res.Status == notebook.StatusNoop {
+			for _, id := range d.deferred {
+				rec := ownerRecord(kindNote, steerDonePrefix+strings.TrimPrefix(id, steerRecordPrefix), c.ownerID, c.rt.cfg.ComputerID,
+					map[string]string{"for": id, "patch_id": d.patch.PatchID, "revision_id": res.RevisionID}, "steering added", "", time.Now())
+				if err := c.append(ctx, rec); err != nil {
+					log.Printf("autoradio notebook: stretch %s: steer done marker %s: %v", c.stretchID, id, err)
+				}
+			}
 		}
 		return
 	}
@@ -454,7 +477,7 @@ func (c *programmeCall) recordLessons(ctx context.Context, d *nbDraft) error {
 // apply it with, one at a time, so a refused op is dropped here and named.
 func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbDraft, error) {
 	d := &nbDraft{cites: map[string][]string{}, removed: map[string]nbRemoved{}}
-	counts, err := c.lineCounts(ctx)
+	counts, truncated, err := c.lineCounts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -534,6 +557,21 @@ func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbD
 			struck[k] = true
 		}
 	}
+	// 1b. Taps that lost every head race are added now (design 6: at the next
+	// notebook write). The tap op is a no-op when the line is already there.
+	deferred, err := c.deferredSteering(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range deferred {
+		op := notebook.Op{Op: "tap", Ref: "tap:" + n.SubjectRefs["entry_id"], Text: n.Directive.Body}
+		if n.SubjectRefs["direction"] == "mute" {
+			op = notebook.Op{Op: "ask", Text: n.Directive.Body}
+		}
+		if trial(op) {
+			d.deferred = append(d.deferred, n.RecordID)
+		}
+	}
 	// 2. The model's proposals.
 	next := map[string]int{"L": maxInt(doc.MaxTag("L"), c.maxLessonTag(ctx, "L")), "T": maxInt(doc.MaxTag("T"), c.maxLessonTag(ctx, "T"))}
 	live := map[string]bool{}
@@ -576,6 +614,10 @@ func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbD
 			cites, why := c.checkCitesShown(p.Cites)
 			if why != "" {
 				fail(why)
+				continue
+			}
+			if len(cites) > nbMaxCites {
+				fail(fmt.Sprintf("a line keeps at most %d cites; this one has %d", nbMaxCites, len(cites)))
 				continue
 			}
 			if len(cites) < 2 {
@@ -656,6 +698,13 @@ func (c *programmeCall) draftPatch(ctx context.Context, st notebook.State) (*nbD
 	}
 	d.patch.Counts = notebook.Counts{}
 	countChanged := false
+	if truncated {
+		// The ledger read hit its cap: a count from it would shrink. The
+		// document keeps the counts it has, and the route says so.
+		d.dropped = append(d.dropped, "counts not written: the ledger read was truncated")
+		d.patch.Counts = nil
+		after = notebook.Fresh()
+	}
 	for tag, l := range after.Tagged() {
 		hm := counts[l.Ref()]
 		d.patch.Counts[tag] = hm
@@ -865,12 +914,44 @@ func (c *programmeCall) maxLessonTag(ctx context.Context, letter string) int {
 
 // lineCounts is heard h of m per line ref: of the settled forecasts whose
 // caused_by named the line, how many were heard through.
-func (c *programmeCall) lineCounts(ctx context.Context) (map[string][2]int, error) {
+func (c *programmeCall) lineCounts(ctx context.Context) (map[string][2]int, bool, error) {
 	card, err := calibration.Reader{Ledger: c.rt.store}.Scorecard(ctx, c.ownerID, c.rt.cfg.ComputerID, time.Now())
 	if err != nil {
-		return nil, fmt.Errorf("read the settled forecasts: %w", err)
+		return nil, false, fmt.Errorf("read the settled forecasts: %w", err)
 	}
-	return countsOf(card.Claims), nil
+	return countsOf(card.Claims), card.Truncated, nil
+}
+
+// deferredSteering are the steer notes of the last day (at most ten) whose tap
+// lost every head race and has no done marker yet.
+func (c *programmeCall) deferredSteering(ctx context.Context) ([]types.CommitmentRecord, error) {
+	notes, err := c.listNotices(ctx, kindNote, steerRecordPrefix, 200)
+	if err != nil {
+		return nil, err
+	}
+	done, err := c.listNotices(ctx, kindNote, steerDonePrefix, 500)
+	if err != nil {
+		return nil, err
+	}
+	marked := map[string]bool{}
+	for _, m := range done {
+		marked[m.SubjectRefs["for"]] = true
+	}
+	var out []types.CommitmentRecord
+	for _, n := range notes {
+		at, _ := time.Parse(time.RFC3339Nano, n.Provenance.CommittedAt)
+		if n.SubjectRefs["status"] == "deferred" && !marked[n.RecordID] && time.Since(at) < steerDeferredWindow {
+			out = append(out, n)
+		}
+	}
+	// oldest first, so the lines land in the order the taps were made
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	if len(out) > steerDeferredMax {
+		out = out[len(out)-steerDeferredMax:]
+	}
+	return out, nil
 }
 
 func countsOf(views []calibration.ClaimView) map[string][2]int {
@@ -980,44 +1061,34 @@ func (h *APIHandler) HandleAutoradioSteer(w http.ResponseWriter, r *http.Request
 	}
 	led := h.programmeLedger()
 	computer := h.rt.cfg.ComputerID
-	// The same tap twice is one tap: by the client's id when it sends one, else
-	// a tap on the same entry (or publisher) in the same direction within
-	// steerSameTap. The note is written only once the patch is in, so a retry
-	// cannot leave an orphan note.
-	id := ""
-	if req.ID != "" {
-		id = steerRecordPrefix + req.ID
-	} else {
-		recs, err := led.ListCommitmentRecordsBySubjectRef(ctx, ownerID, computer, "record_kind", kindNote, 5000)
-		if err != nil {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "cannot read the steering"})
-			return
-		}
-		for _, n := range recs {
-			at, _ := time.Parse(time.RFC3339Nano, n.Provenance.CommittedAt)
-			if strings.HasPrefix(n.RecordID, steerRecordPrefix) && n.SubjectRefs["direction"] == req.Direction && now.Sub(at) < steerSameTap &&
-				n.SubjectRefs["entry_id"] == noteRefs["entry_id"] && n.SubjectRefs["publisher"] == noteRefs["publisher"] {
-				id = n.RecordID
-				break
-			}
-		}
-		if id == "" {
-			id = fmt.Sprintf("%s%d", steerRecordPrefix, now.UnixNano())
-		}
+	// A tap's identity is the client's id when it sends one, else the entry and
+	// the direction (a mute: the publisher). The same tap twice is one tap, and
+	// the tap op is itself a no-op when the notebook already holds the tap. The
+	// op is validated before anything is written, and the note is written once
+	// the line is in (or, deferred, when it could not be put in yet), so a
+	// refused or retried tap leaves no orphan.
+	id := steerRecordPrefix + req.ID
+	if req.ID == "" {
+		id = steerRecordPrefix + sha256Hex(req.Direction + "\x00" + noteRefs["entry_id"] + "\x00" + noteRefs["publisher"])[:24]
 	}
 	if prior, err := led.GetCommitmentRecord(ctx, ownerID, computer, id); err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "cannot read the steering"})
 		return
-	} else if prior != nil {
-		writeAPIJSON(w, http.StatusOK, map[string]any{"status": "applied", "duplicate": true, "line": prior.SubjectRefs["line"], "note_id": id})
+	} else if prior != nil && prior.SubjectRefs["status"] != "deferred" {
+		writeAPIJSON(w, http.StatusOK, map[string]any{"status": "applied", "duplicate": true, "line": prior.Directive.Body, "note_id": id})
 		return
 	}
 	patchID := "nbs-" + sha256Hex(id)[:20]
 	var res notebook.Result
 	for attempt := 0; attempt < 3; attempt++ {
+		ctx := ctx
 		st, err := h.notebook.NotebookRead(ctx, ownerID, notebookCaller)
 		if err != nil {
 			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "cannot read the notebook"})
+			return
+		}
+		if st.Archived {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "your notebook is archived"})
 			return
 		}
 		p := notebook.Patch{PatchID: patchID, BaseRevisionID: st.Head.RevisionID, Ops: []notebook.Op{op}}
@@ -1037,25 +1108,52 @@ func (h *APIHandler) HandleAutoradioSteer(w http.ResponseWriter, r *http.Request
 			break
 		}
 	}
-	if res.Status == notebook.StatusApplied || res.Status == notebook.StatusNoop {
-		noteRefs["revision_id"], noteRefs["patch_id"] = res.RevisionID, patchID
+	write := func(status string) bool {
+		noteRefs["status"], noteRefs["patch_id"], noteRefs["revision_id"] = status, patchID, res.RevisionID
 		if _, err := led.AppendCommitmentRecord(ctx, ownerID, computer, autoradioNote(id, ownerID, computer, noteRefs, op.Text, now)); err != nil {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the line is in the notebook but the note could not be recorded; send the same id again"})
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "the note could not be recorded; send the same tap again"})
+			return false
+		}
+		return true
+	}
+	switch res.Status {
+	case notebook.StatusApplied, notebook.StatusNoop:
+		if !write("applied") {
 			return
 		}
+		if res.DocID != "" { // the document's identity is persisted on the patch result
+			rec := ownerRecord(kindPatch, patchRecordPrefix+patchID+":result:"+res.Status, ownerID, computer, map[string]string{
+				"patch_id": patchID, "status": res.Status, "revision_id": res.RevisionID, "doc_id": res.DocID, "stretch_id": "",
+			}, "notebook patch "+patchID+" "+res.Status, "", now)
+			_, _ = led.AppendCommitmentRecord(ctx, ownerID, computer, rec)
+		}
+	case notebook.StatusStale:
+		// Three head races lost: the tap is on the tape and the next extend's
+		// patch adds the line. Never "200, nothing happened".
+		if !write("deferred") {
+			return
+		}
+		writeAPIJSON(w, http.StatusAccepted, map[string]any{"status": "deferred", "reason": "the notebook moved under the tap; the next patch will add the line", "line": op.Text, "note_id": id})
+		return
 	}
 	writeAPIJSON(w, http.StatusOK, map[string]any{"status": res.Status, "reason": res.Reason, "doc_id": res.DocID, "revision_id": res.RevisionID, "line": op.Text, "note_id": id})
 }
 
 func autoradioNote(id, ownerID, computerID string, refs map[string]string, text string, at time.Time) types.CommitmentRecord {
-	label, _ := types.AutoradioKindLabel(kindNote)
-	out := map[string]string{"desk": autoradioDesk, "record_kind": kindNote}
+	return ownerRecord(kindNote, id, ownerID, computerID, refs, "steering", text, at)
+}
+
+// ownerRecord builds an owner-private Autoradio record outside a programme call
+// (the steer route's).
+func ownerRecord(kind, id, ownerID, computerID string, refs map[string]string, objective, body string, at time.Time) types.CommitmentRecord {
+	label, _ := types.AutoradioKindLabel(kind)
+	out := map[string]string{"desk": autoradioDesk, "record_kind": kind}
 	for k, v := range refs {
 		out[k] = v
 	}
 	return types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective, Discrepancy: types.DiscrepancyUnresolved,
-		Directive:   &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Objective: "steering", Body: text},
+		Directive:   &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNotice, Objective: objective, Body: body},
 		Provenance:  types.CommitmentProvenance{AgentID: autoradioDesk + ":" + ownerID, CommittedAt: at.UTC().Format(time.RFC3339Nano), Labels: types.NewLabelSet(label).Strings()},
 		EmitterKind: types.CommitmentEmitterAgent, ComputerID: computerID, SubjectRefs: out,
 	}
@@ -1107,8 +1205,12 @@ func (h *APIHandler) sheetOnAirTitle(ctx context.Context, ownerID string) string
 // since the line was written, settled or not, so a count over the few
 // forecasts the DJ chose to name the line on shows as such (see "What the
 // counts do not prove" in AUTORADIO-NOTEBOOK.md).
-func (h *APIHandler) learningNotebook(ctx context.Context, ownerID string, led autoradioLedger, claims []calibration.ClaimView) map[string]any {
+func (h *APIHandler) learningNotebook(ctx context.Context, ownerID string, led autoradioLedger, claims []calibration.ClaimView, truncated bool) map[string]any {
 	out := map[string]any{"found": false}
+	if truncated {
+		out["counts_truncated"] = true
+		out["counts_note"] = "the ledger read hit its cap: the document's counts are not rewritten and live counts may be low"
+	}
 	computer := h.rt.cfg.ComputerID
 	list := func(kind string, limit int) []types.CommitmentRecord {
 		recs, err := led.ListCommitmentRecordsBySubjectRef(ctx, ownerID, computer, "record_kind", kind, 5000)
@@ -1159,6 +1261,8 @@ func (h *APIHandler) learningNotebook(ctx context.Context, ownerID string, led a
 	if h.notebook != nil {
 		st, err := h.notebook.NotebookRead(ctx, ownerID, notebookCaller)
 		switch {
+		case err != nil:
+			out["error"] = "the notebook could not be read: " + err.Error()
 		case err == nil && st.Archived:
 			out["archived"], out["summary"] = true, "your notebook is archived: Autoradio reads and writes nothing until you restore it"
 		case err == nil && st.Found:
@@ -1198,6 +1302,9 @@ func (h *APIHandler) learningNotebook(ctx context.Context, ownerID string, led a
 			}
 			out["found"], out["doc_id"], out["revision_id"], out["lines"] = true, st.DocID, st.Head.RevisionID, lines
 			out["written_words"] = doc.WrittenWords()
+			if st.ChainCut {
+				out["chain_cut"], out["chain_cut_note"] = true, "more revisions than the desk can walk back through lie after its last one: it writes nothing until they can be compared"
+			}
 		}
 	}
 	var struck []map[string]any
@@ -1228,4 +1335,23 @@ func nonNilRows(m []map[string]any) []map[string]any {
 		return []map[string]any{}
 	}
 	return m
+}
+
+// NotebookDocHint is the document id the latest applied notebook patch wrote
+// (its result record names it), or "". Texture finds the notebook by this
+// first, so a notebook adopted by title stays the same document.
+func NotebookDocHint(ctx context.Context, led interface {
+	ListCommitmentRecordsBySubjectRef(ctx context.Context, ownerID, computerID, key, value string, limit int) ([]types.CommitmentRecord, error)
+}, ownerID, computerID string) string {
+	recs, err := led.ListCommitmentRecordsBySubjectRef(ctx, ownerID, computerID, "record_kind", kindPatch, 5000)
+	if err != nil {
+		return ""
+	}
+	sortRecordsNewestFirst(recs)
+	for _, r := range recs {
+		if r.SubjectRefs["status"] == notebook.StatusApplied && r.SubjectRefs["doc_id"] != "" {
+			return r.SubjectRefs["doc_id"]
+		}
+	}
+	return ""
 }

@@ -173,10 +173,16 @@ sheet with a title) or `{"direction":"mute","publisher":"voice-xxxxxx"}`. It
 writes an `autoradio.note` (id prefix `autoradio-steer:`) and patches at once:
 a tap appends `More like this: "<title>" (<d Mon HH:MM>)` (or `Less`) to
 Recent steering, keeping 10; a mute appends `Never play takes by <handle>.`
-to What you asked for. An optional client `id` makes a re-send the same tap; without one, a tap
-on the same entry (or publisher) in the same direction within 10 minutes is the same tap. The
-patch id derives from the note id, and the note is written once the patch is in, so a retry
-cannot leave an orphan note. Only Autoradio's own tap lines are cut at 10; a bullet the
+to What you asked for. A tap's identity is the optional client `id`, else the entry and the
+direction (a mute: the publisher); a re-send is answered `duplicate`, and the `tap` op is itself
+a no-op when the notebook already holds a tap line with the same verb and title. The op is
+validated before anything is written (a title that fails validation is `422` and leaves no
+note), and the note is written once the line is in. A tap that loses three head races is
+recorded as a `deferred` note and answered `202 {"status":"deferred"}`, never `200`; the next
+extend's patch adds a line for every deferred note of the last 24 hours (at most 10) and writes a
+done marker (`autoradio-steer-done:`). The title is the phone's when the server's sheet lacks the
+entry: an unverified, one-lined, bounded title becomes a steering line in a canonical document and
+reaches the model's prompt, fenced as data. Only Autoradio's own tap lines are cut at 10; a bullet the
 listener put under Recent steering is never cut. Answer `{status, reason, doc_id, revision_id, line,
 note_id}`. A spoken instruction is the `steer` op above.
 
@@ -192,13 +198,19 @@ example `lesson:L7`) narrows `rows` to the forecasts that line caused: the
 rows behind a line. Record kinds this adds: `autoradio.notebook_patch` (new in
 the table), and first writers of `autoradio.lesson` (id `autoradio-lesson:L<n>`;
 `...:retired:<patch>` for a retired or replaced line) and `autoradio.strike`.
-All are owner-private, and all are on that route. The document is read through
+All are owner-private, and all are on that route: the lines (with lineage and live numbers),
+the last 50 retired lines with their numbers, the strikes, the last 40 patches asked and answered
+with their reasons (a refused patch included), the steering notes and the input receipts. The
+rows behind a line (`?line=L1`) include the forecasts it caused that ended with no verdict. The document is read through
 Texture's own routes.
 
 ## Finding the document
 
-The notebook is looked up by its deterministic document id first (`notebookDocID`, from the
-owner and the computer), then among the owner's own non-archived documents titled `My notebook`
+One function, `Handler.notebookDoc`, serves `GET /api/texture/edition`, `NotebookRead` and
+`NotebookApply`, so the phone and the DJ cannot be given two documents. It looks first for the
+document the latest applied patch wrote (its result record's `doc_id`: the identity is
+persisted, so a notebook adopted by title stays that document), then the deterministic id
+(`notebookDocID`, from the owner and the computer), then among the owner's own non-archived documents titled `My notebook`
 or `My edition` whose revisions no model agent wrote (any revision by an agent whose label is
 not `app:autoradio` makes a document not adoptable: that is how a document a Texture model made
 in the same turn is told from the listener's). A failure to list is an error, never "not found".
@@ -206,6 +218,22 @@ If the notebook is archived the desk reads and writes nothing; the route says `a
 patch answers `refused: your notebook is archived` (un-archiving is the owner's act). A patch
 writes the document's text from the notebook grammar: **rich-text formatting in the document is
 flattened to the grammar by a patch.** Lesson text may not hold a link or a URL.
+
+## Limits and residuals, named
+
+- The desk compares the listener's edits with its own last revision by walking back at most 60
+  revisions. Past that without reaching a desk revision, the state says `chain_cut`; the patch
+  is not applied (status `not_applied`, reason recorded on a patch record), and the learning
+  route shows `chain_cut`. Strikes are never skipped silently.
+- A ledger read that hit its record cap (`card.Truncated`) writes no counts and the route says
+  `counts_truncated`.
+- A notebook read that fails is an `error` on the learning route, never "no notebook".
+- **The grants are declared in the lease grant table** (`internal/lease/grants.go`), not in the
+  Autoradio package manifest (`internal/appdesk/firstparty.json`), which has no grant field.
+  Install review therefore does not see them. This is a named residual: the manifest should
+  name them when the package manifest can carry a grant.
+- No wake of a model for a notebook-titled document, whether published through the Texture
+  root or not (`reconcileAgentWakeLockedFor`).
 
 ## Choices where the design was silent or the code differed
 
