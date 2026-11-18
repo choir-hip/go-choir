@@ -68,6 +68,7 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/autoradio/sheet/ops",
 		"/api/autoradio/sheet/stream",
 		"/api/autoradio/learning",
+		"/api/autoradio/steer",
 		"/api/trust",
 	} {
 		path := path

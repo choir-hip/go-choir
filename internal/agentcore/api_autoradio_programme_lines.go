@@ -106,6 +106,8 @@ const (
 	lineInvalid
 	// lineLesson is a lesson line: recognised and not processed (station L3).
 	lineLesson
+	// lineNotebook is a notebook line: collected, validated after the stream.
+	lineNotebook
 )
 
 // lineReader assembles the model's deltas into lines. A line over the bound
@@ -182,6 +184,9 @@ func (in *programmeInput) checkLine(line string) (*programmeSegment, lineClass, 
 	}
 	if kind == "lesson" {
 		return nil, lineLesson, ""
+	}
+	if kind == "notebook" {
+		return nil, lineNotebook, ""
 	}
 	if renamed, ok := programmeKindAliases[kind]; ok {
 		kind = renamed
@@ -458,6 +463,17 @@ func (in *programmeInput) checkCause(seg *programmeSegment, causedBy string) str
 		}
 		seg.Cause, seg.CausedBy, seg.LessonID = calibration.CauseLesson, causedBy, id
 		return ""
+	case strings.HasPrefix(causedBy, "try:"):
+		id := strings.TrimPrefix(causedBy, "try:")
+		if !in.tryIDs[id] {
+			return fmt.Sprintf("caused_by names %s, which is not a trying line in this call's input", truncate(id, 20))
+		}
+		seg.Cause, seg.CausedBy, seg.LessonID = calibration.CauseTrying, causedBy, id
+		return ""
+	case strings.HasPrefix(causedBy, "mine:"), strings.HasPrefix(causedBy, "tap:"):
+		if !in.nbRefs[causedBy] {
+			return fmt.Sprintf("caused_by %q is not a line of this call's notebook", truncate(causedBy, 60))
+		}
 	case strings.HasPrefix(causedBy, "instruction:turn/"):
 		id := strings.TrimPrefix(causedBy, "instruction:turn/")
 		if !autoradioTurnID.MatchString(id) {

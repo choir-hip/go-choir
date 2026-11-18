@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/editiondoc"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -515,6 +516,11 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 // Texture root digest on the master document (PD3 S1), whose run names the
 // digest's documents. No wake on the master reactivates a parked run.
 func (rt *Handler) reconcileAgentWakeLockedFor(ctx context.Context, doc types.Document, textureAgentID string, root *textureRootWake) (*types.RunRecord, error) {
+	// The listener's notebook is written by patch, without a model (design
+	// autoradio-learned-document 3.2, failure N6): no revision of it wakes the desk.
+	if root == nil && editiondoc.IsEditionTitle(doc.Title) {
+		return nil, nil
+	}
 	ownerID := strings.TrimSpace(doc.OwnerID)
 	docID := strings.TrimSpace(doc.DocID)
 	activationEligible, err := rt.textureLifecycleActivationEligible(ctx, doc)
