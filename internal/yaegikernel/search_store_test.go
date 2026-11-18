@@ -122,7 +122,7 @@ func TestSearchCountLinesOncePerSearchWithNewArrivals(t *testing.T) {
 	store.apply(SearchFrame{ID: "s2", Kind: SearchFrameStart, Query: "q2", Providers: []string{"a"}})
 	store.apply(providerFrame("s1", "a", true, "https://a.example"))
 	store.apply(providerFrame("s1", "b", false))
-	if got := strings.Join(scope.searchCountLines(), "|"); got != "s1: 1/4 answered, +2 new" {
+	if got := strings.Join(scope.searchCountLines(), "|"); got != "s1: 1/4 answered, +2 in, 1 of 1 pages new" {
 		t.Fatalf("first cell's count lines = %q", got)
 	}
 	if got := scope.searchCountLines(); len(got) != 0 {
@@ -131,7 +131,7 @@ func TestSearchCountLinesOncePerSearchWithNewArrivals(t *testing.T) {
 	store.apply(providerFrame("s2", "a", true, "https://a.example"))
 	store.apply(SearchFrame{ID: "s2", Kind: SearchFrameDone})
 	store.apply(providerFrame("s1", "c", true))
-	if got := strings.Join(scope.searchCountLines(), "|"); got != "s1: 2/4 answered, +1 new|s2: 1/1 answered, +1 new, done" {
+	if got := strings.Join(scope.searchCountLines(), "|"); got != "s1: 2/4 answered, +1 in, 1 of 1 pages new|s2: 1/1 answered, +1 in, 0 of 1 pages new, done" {
 		t.Fatalf("third cell's count lines = %q", got)
 	}
 	for _, line := range []string{"https://a.example"} {
