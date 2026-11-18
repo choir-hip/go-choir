@@ -47,12 +47,18 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 		Query   string `json:"query"`
 		Limit   int    `json:"limit,omitempty"`
 		OwnerID string `json:"owner_id,omitempty"`
+		Since   string `json:"since,omitempty"`
+		Until   string `json:"until,omitempty"`
+		Order   string `json:"order,omitempty"`
 	}
 	return toolregistry.Tool{Name: "search_wire_corpus",
-		Description: "Search this computer's own corpus by topic, title, outlet or keywords: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at), strongest and newest matches first. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
+		Description: "Search this computer's own corpus by topic, title, outlet, keywords or a whole question: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at, and passage: the part of the page's own text that matched), strongest first. A capture's full text is searched, not only its title: a fact that appears only in a page's body is found. since and until (a date such as 2026-11-18) restrict captures to pages published or, when the publish time is not known, fetched in that window; order recent lists the newest first. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, outlet, or keywords"},
 			"limit":    map[string]any{"type": "integer", "description": "Max results per list (default 10, at most 25)"},
+			"since":    map[string]any{"type": "string", "description": "Only captures published (else fetched) on or after this date, e.g. 2026-11-10. The query may also say since:2026-11-10"},
+			"until":    map[string]any{"type": "string", "description": "Only captures published (else fetched) before this date, e.g. 2026-11-18. The query may also say until:2026-11-18"},
+			"order":    map[string]any{"type": "string", "description": "relevance (default) or recent (newest first). The query may also say order:recent"},
 			"owner_id": map[string]any{"type": "string", "description": "Scope to owner when the call carries no run (default: this computer's owner)"},
 		}, []string{"query"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -63,7 +69,10 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode search_wire_corpus args: %w", err)
 			}
-			query := strings.TrimSpace(in.Query)
+			query, window, err := parseCorpusWindow(in.Query, in.Since, in.Until, in.Order)
+			if err != nil {
+				return "", err
+			}
 			if query == "" {
 				return "", fmt.Errorf("query is required")
 			}
@@ -73,11 +82,12 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			// A capture-store outage keeps the rest and says so; it never
 			// reads as "no captures".
 			capturesStart := time.Now()
-			captures, note, err := searchCaptures(ctx, deps, ownerID, exec.ComputerID, corpusQueryTerms(query), limit)
+			captures, note, info, err := searchCapturesFor(ctx, deps, ownerID, exec.ComputerID,
+				corpusRequest{Query: query, Terms: corpusQueryTerms(query), Since: window.Since, Until: window.Until, Order: window.Order}, limit)
 			if err != nil {
 				captures, note = nil, "captures not searched: "+err.Error()
 			}
-			logCorpusSearch(query, exec.ComputerID, time.Since(capturesStart), captures, note)
+			logCorpusSearch(query, exec.ComputerID, time.Since(capturesStart), captures, note, info)
 			if captures == nil {
 				captures = []CorpusCapture{}
 			}
@@ -153,7 +163,7 @@ func universalWirePlatformOwnerID() string {
 // docs/archive/reports/object-graph-retrieval-research-2026-10-14.md): the query,
 // both halves' latency and counts, and the capture ids returned, so the
 // retrieval eval set can be grown from real searches and their hits.
-func logCorpusSearch(query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string) {
+func logCorpusSearch(query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string, info corpusSearchInfo) {
 	ids := make([]string, 0, len(captures))
 	for i, c := range captures {
 		if i == 10 {
@@ -164,6 +174,6 @@ func logCorpusSearch(query, computerID string, capturesElapsed time.Duration, ca
 	if len(query) > 200 {
 		query = query[:200]
 	}
-	log.Printf("corpus search computer=%s captures_ms=%d captures=%d note=%q query=%q capture_ids=%s",
-		computerID, capturesElapsed.Milliseconds(), len(captures), note, query, strings.Join(ids, ","))
+	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_captures=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s",
+		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","))
 }
