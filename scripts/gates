@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The repo gates a landing must pass, run from a worktree root:
 # the CI vocabulary gates, the desk protocol lock and the guest security epoch
-# check against origin/main. scripts/land runs this; run it by hand any time.
+# check against origin/main. The landing script runs this; run it by hand any time.
 # Prints "ALL GATES PASS" and exits 0, or names each failing gate and exits 1.
 # It never adds or edits a commit trailer: a missing reviewer trailer is
 # reported by check-guest-security-epoch and the landing stops there.

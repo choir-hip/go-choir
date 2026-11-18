@@ -3,25 +3,25 @@
 # A key is a program path, ./cmd/x, job:<id> (a job that uses a reusable
 # workflow and has no steps) or ./.github/actions/x (a local action).
 # No job is excluded wholesale: every job's run steps are scanned. A line the
-# check no longer needs, or for a program scripts/gates or scripts/land runs,
+# check no longer needs, or for a program scripts/gates or the land script runs,
 # fails the check.
 
-# Run by a CI gate job; not by scripts/gates or scripts/land.
+# Run by a CI gate job; not by scripts/gates or the land script.
 scripts/selftest-guest-security-epoch takes 59 s on the Mac, over the budget; scripts/gates runs the check itself
 scripts/test-node-b-guest-release-retention.sh fails on macOS (BSD touch has no -d with this date form; 7 of 43 cases) and passes on the Linux runner
 scripts/test-guest-floor-commit-free needs nix to evaluate the guest under two commit stamps
 scripts/receipts-index-swap-test needs a throwaway PostgreSQL
 scripts/fuzz-broker-protocol.sh a fixed-time fuzz run (15 s plus a build), run in CI's Desk Protocol Lock job
 frontend/scripts/sdk-surface.mjs needs the frontend install and a CI merge base; the Package Modularity job runs it when the SDK changes
-scripts/go-test-non-runtime-shards CI's shard runner for the Go suites; scripts/land shards the Go suites itself on the build machine
-scripts/go-test-integration CI's integration-tagged Go smoke; a Go suite, which scripts/land owns
+scripts/go-test-non-runtime-shards CI's shard runner for the Go suites; the land script shards the Go suites itself on the build machine
+scripts/go-test-integration CI's integration-tagged Go smoke; a Go suite, which the land script owns
 scripts/ci-prune-go-cache CI build-cache housekeeping before the cache save; no gate
 scripts/ci-find-green-pr-run CI planning: finds a green pull-request run of the same commit; no gate
-.github/scripts/ci-impact-classify CI planning: decides which jobs run; its -test runs in scripts/land on .github/ changes
-.github/scripts/deploy-base-select picks the deploy base on Node B; its -test runs in scripts/land on .github/ changes
-.github/scripts/deploy-impact-classify classifies what a deploy needs; its -test runs in scripts/land on .github/ changes
-.github/scripts/build-sboms-differential builds the differential SBOMs for the deploy; its -test runs in scripts/land on .github/ changes
-.github/scripts/verify-sbom-candidate verifies the SBOM candidate for the deploy; its -test runs in scripts/land on .github/ changes
+.github/scripts/ci-impact-classify CI planning: decides which jobs run; its -test runs in the land script on .github/ changes
+.github/scripts/deploy-base-select picks the deploy base on Node B; its -test runs in the land script on .github/ changes
+.github/scripts/deploy-impact-classify classifies what a deploy needs; its -test runs in the land script on .github/ changes
+.github/scripts/build-sboms-differential builds the differential SBOMs for the deploy; its -test runs in the land script on .github/ changes
+.github/scripts/verify-sbom-candidate verifies the SBOM candidate for the deploy; its -test runs in the land script on .github/ changes
 ./.github/actions/install-postgres a local action that installs PostgreSQL on the runner for the Go suites; an environment step, not a gate
 ./.github/actions/setup-go-build-cache a local action that restores the Go build cache; no gate
 
@@ -36,8 +36,8 @@ scripts/test-node-b-growth-meter.sh needs a Linux userland: 1 of 51 cases fails 
 scripts/test-node-b-host-disk-alarm.sh needs a Linux userland: 1 of 17 cases fails on macOS; nothing in CI runs it
 scripts/test-node-b-nix-retention.sh needs a Linux userland: BSD touch rejects its date form, 8 of 48 cases fail on macOS; nothing in CI runs it
 
-# Conditional in scripts/land: land runs these only under the condition read
-# from scripts/land (the check prints them). Not covered by scripts/gates.
-land-conditional .github/scripts/*-test only when the change touches .github/ (GH=1, scripts/land line 187)
+# Conditional in the land script: land runs these only under the condition read
+# from the land script (the check prints them). Not covered by scripts/gates.
+land-conditional .github/scripts/*-test only when the change touches .github/ (GH=1, the land script line 187)
 land-conditional scripts/go-test-runtime-shards only when agentcore and textureowner are both changed importers and not --local (SHARD=1, line 224)
 land-conditional scripts/go-test-with-timing only when agentcore and textureowner are both changed importers and not --local (SHARD=1, line 224)
