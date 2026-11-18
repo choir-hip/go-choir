@@ -22,24 +22,31 @@ import (
 // The vmctl decides by itself, from what it already reads each tick: the
 // release it started on (PrimeRingWalk takes it before the first boot) against
 // the release the link names now. A link that moved under a running vmctl
-// holds TickRingWalk and SweepDeployRefreshPending; nothing else, so the
-// deploy's own requests (plan, expedite, refresh) and every boot and wake are
-// unchanged. The replacement vmctl starts on the moved link, takes it as its
+// holds, item by item, the ticker's ring walk (TickRingWalk), the wakes it asks
+// for (applyRingActions) and each entry of the retry sweep
+// (SweepDeployRefreshPending). Not held: the deploy's own HTTP requests (plan,
+// expedite, refresh), an owner's or operator's acts (owner update, operator
+// restart, manual refresh), and a user's request for their own computer (the
+// wake path, which the replacement closes and boots fresh). The replacement vmctl starts on the moved link, takes it as its
 // baseline and walks as before. No marker is written, none is re-issued, and
 // nothing resumes: this only declines to start a refresh.
 //
-// The hold cannot outlast the deploy: it ends when the link returns (a
-// rollback), when this vmctl is replaced, or at releaseHoldBound, the deploy
-// job's own timeout (ci.yml deploy-staging, 60 minutes), when the moved link
-// becomes the baseline and the line says so. A link moved by something other
-// than a deploy that restarts vmctl is therefore held for at most that long.
+// A hold ends when the link returns (a rollback), when this vmctl is replaced,
+// or at releaseHoldBound after the first tick that saw the move, whatever the
+// link reads then; the moved release becomes the baseline and the line says
+// so. The 60 minutes is the deploy job's timeout (ci.yml deploy-staging) used
+// as a generous upper bound on the gap, not a guarantee about the job: the
+// clock starts at the first tick after the move, inside the job, so it can
+// outlast it by up to one tick. A link moved by something other than a deploy
+// that restarts vmctl is held for at most that long.
 const releaseHoldBound = 60 * time.Minute
 
 type releaseHold struct {
 	mu       sync.Mutex
 	baseline ringReleasePair
 	have     bool
-	since    time.Time // zero unless holding
+	since    time.Time       // zero unless holding
+	moved    ringReleasePair // the last readable pair seen while holding
 	now      func() time.Time
 }
 
@@ -84,6 +91,19 @@ func (h *Handler) standDownForPair(pair ringReleasePair) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := r.clock()
+	// A hold in force expires at the bound whatever the link reads. On an
+	// empty reading the baseline becomes the last readable moved release, so
+	// the same release reading again later starts no second hold.
+	if !r.since.IsZero() && now.Sub(r.since) >= releaseHoldBound {
+		taken := pair
+		if taken.Single == "" {
+			taken = r.moved
+		}
+		log.Printf("vmctl: refresh hold: ended after %s without a restart: taking %q as this vmctl's release; refreshes proceed",
+			now.Sub(r.since).Round(time.Second), taken.Single)
+		r.baseline, r.have, r.since = taken, true, time.Time{}
+		return false
+	}
 	if pair.Single == "" {
 		return !r.since.IsZero()
 	}
@@ -99,17 +119,12 @@ func (h *Handler) standDownForPair(pair ringReleasePair) bool {
 		}
 		return false
 	}
+	r.moved = pair
 	if r.since.IsZero() {
 		r.since = now
 		log.Printf("vmctl: refresh hold: started: the guest release link moved from %q to %q while this vmctl runs; the deploy restarts vmctl next and no refresh starts before it does (at most %s)",
 			r.baseline.Single, pair.Single, releaseHoldBound)
 		return true
-	}
-	if now.Sub(r.since) >= releaseHoldBound {
-		log.Printf("vmctl: refresh hold: ended after %s without a restart: taking %q as this vmctl's release; refreshes proceed",
-			now.Sub(r.since).Round(time.Second), pair.Single)
-		r.baseline, r.since = pair, time.Time{}
-		return false
 	}
 	return true
 }

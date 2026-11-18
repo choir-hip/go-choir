@@ -974,10 +974,13 @@ start nothing while the link names another release (compared by id): a link
 that moved under a running vmctl means the deploy replaces it next. The
 replacement starts on the moved link, takes it as its baseline and walks as
 before. The hold logs `refresh hold: started` once and `refresh hold: ended`
-once; it ends when the link returns (a rollback), or at 60 minutes (the
-deploy job's own timeout) with a line saying no restart came and the moved
-link is now the baseline. Held: the ticker's two paths only. Not held: the
-deploy's own HTTP requests, boots, wakes, the manual refresh. No marker is
+once; it ends when the link returns (a rollback), or at 60 minutes after the first tick that saw the move (the deploy job's
+timeout used as a generous bound on the gap; the clock starts inside the job,
+so it can outlast it by a tick), whatever the link reads then with a line saying no restart came and the moved
+link is now the baseline. Held, item by item: the ticker's ring walk, the
+wakes it asks for, and each entry of the retry sweep. Not held: the
+deploy's own HTTP requests, an owner's or operator's acts, and a user's
+request for their own computer. No marker is
 written or re-issued, nothing resumes, no setting.
 
 Why not (a), the deploy's pending file: it adds a state that a deploy dying
@@ -1035,3 +1038,11 @@ Residual, named: the owner-update (`owner_update.go`), the operator restart
 and the manual `HandleRefresh` are owner or operator acts, not the ticker's,
 so they are not held and stay possible in the gap; an act in the gap meets
 the replacement's close-and-fresh-boot, as recorded in the wake record.
+
+**Repair after review seat 2 (same lane).** A hold in force expires at its
+bound even when the link reads empty; the baseline then becomes the last
+readable moved release, so the same release reading again starts no second
+hold. A test builds a second registry and handler over the same state
+directory (pending set and ownerships from disk, the deploy's expedite) and
+shows it refreshes both computers the held vmctl skipped, with counters as
+left.
