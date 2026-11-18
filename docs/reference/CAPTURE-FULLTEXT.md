@@ -250,7 +250,10 @@ long page cannot take the slots of the pages that answer the question. The
 order is then applied to the candidates: `relevance` by score; `recent` by
 time among the pages at least half as relevant as the best one (so the newest
 page that says one common word does not lead). The note of a `recent` result
-says so, and the note says when only the best 300 passages were ranked.
+says so, and the note says when only the best 300 passages were ranked. The
+half-relevance floor applies to the pages found by their text only: a page
+found by its title or labels is merged in by time without it, and the note
+does not say that (review, 2026-11-18; a residual).
 
 **Write path.** `Store.indexCaptures` (called by `PutObject`, `PutBatch` and
 `InsertObjectIfAbsent`) writes the text after the projection: read the text
@@ -416,9 +419,16 @@ the one to copy.
 - A phrase made only of stop words (`"the of"`) is searched as words and
   reports no fallback.
 - A catch-up write failure is counted and logged like an inline one (one line
-  a window); a walk stops after 20 failures in a row (a full or failing disk,
-  not 20 bad pages), leaves `complete` false, and the next attempt waits 5
-  minutes, doubling to an hour.
+  a window); a walk stops after 20 failures in a row, leaves `complete`
+  false, and the next attempt waits 5 minutes, doubling to an hour. The rule
+  is meant for a full or failing disk. It does not tell that from 20 pages in
+  a row that each fail for their own reason: each attempt restarts at the
+  first page, so such a run of pages would hold back every page after it.
+  No page is known to fail that way. Residual: keep the walk's place between
+  attempts (review, 2026-11-18).
+- The result's coverage counts (`ft.Captures`, the window cap) are taken
+  before owner-private captures are dropped, so a note can overstate what
+  was searched when such captures exist (review, 2026-11-18; a residual).
 - Punctuation inside a word splits it (`C++` is `c`, `AT&T` is `t`); the shared
   tokenizer was left alone because it also serves the published-stories index.
   The tool text says so and what to write instead.
