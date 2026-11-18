@@ -252,7 +252,7 @@ func TestDeskSearchStreamsEndWithTheirSession(t *testing.T) {
 
 func TestDeskSearchStartWithoutAClientRefuses(t *testing.T) {
 	tool, ctx, _, _ := researchSearchTool(t, nil)
-	out := evalDeskCell(t, tool, ctx, `s, err := choir.SearchStart("q"); fmt.Println("err:", err, s.ID == "")`)
+	out := evalDeskCell(t, tool, ctx, `s, err := choir.SearchStart("quota"); fmt.Println("err:", err, s.ID == "")`)
 	if !strings.Contains(out.Stdout, "err:") || !strings.Contains(out.Stdout, "unavailable") || !strings.Contains(out.Stdout, "true") {
 		t.Fatalf("SearchStart without a search client = %+v, want a refusal", out)
 	}

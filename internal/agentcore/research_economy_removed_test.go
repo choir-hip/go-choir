@@ -124,7 +124,7 @@ func TestDeskSearchIgnoresTheRemovedCapsEnv(t *testing.T) {
 	t.Setenv("CHOIR_DESK_SEARCH_SNIPPET_CHARS", "300")
 	client := economySearchClient{maxResults: make(chan int, 1)}
 	tool, ctx, _, _ := researchSearchTool(t, client)
-	out := evalDeskCell(t, tool, ctx, `s, _ := choir.SearchStart("q")
+	out := evalDeskCell(t, tool, ctx, `s, _ := choir.SearchStart("quota")
 choir.SearchWait(s.ID, 5000)
 r, _ := choir.Searches.Get(s.ID)
 for _, h := range r.Results {
@@ -147,7 +147,7 @@ type economySearchClient struct{ maxResults chan int }
 
 func (c economySearchClient) Stream(ctx context.Context, query string, maxResults int) (*search.Stream, error) {
 	c.maxResults <- maxResults
-	body := `{"type":"start","query":"q","providers":["exa"],"cooling":[]}
+	body := `{"type":"start","query":"quota","providers":["exa"],"cooling":[]}
 {"type":"provider","provider":"exa","status":"success","latency_ms":1,"results":[{"title":"Full title kept","url":"https://example.test/a","snippet":"` + strings.Repeat("word ", 400) + `"}]}
 {"type":"done","answered":1,"total":1,"cooling":[]}
 `
