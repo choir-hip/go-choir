@@ -48,7 +48,7 @@ func TestR10_FalseSettlementsDoNotUseUpTheHeardPage(t *testing.T) {
 		}
 	}
 	for i := 1; i < 30; i += 2 {
-		if got := heardLine(in, fmt.Sprintf("pub:r-%d@v1", i)); got != "heard: never" {
+		if got := heardLine(in, fmt.Sprintf("pub:r-%d@v1", i)); got != heardNoRecord {
 			t.Errorf("(R10) r-%d skipped: %q", i, got)
 		}
 	}
@@ -118,7 +118,7 @@ func TestR13_AnotherComputersRecordsNeverAppear(t *testing.T) {
 	seedHeard(t, rt, heardSeed{stretch: "st-2", route: "quarry-9", version: 1, title: "Their quarry", text: "OTHERCOMPUTER quarry.", at: time.Now().Add(-26 * time.Hour)})
 	rt.cfg.ComputerID = own
 	in := djInput(t, rt, fake, nil)
-	if got := heardLine(in, "pub:harbour-1@v1"); got != "heard: never" || strings.Contains(in, "OTHERCOMPUTER") || len(recentLines(in)) != 0 {
+	if got := heardLine(in, "pub:harbour-1@v1"); got != heardNoRecord || strings.Contains(in, "OTHERCOMPUTER") || len(recentLines(in)) != 0 {
 		t.Errorf("(R13) line %q, rows %q", got, recentLines(in))
 	}
 }
@@ -180,3 +180,7 @@ func TestR16_TheAllHeardLineSaysStoryCandidatesAndTheFollowupTag(t *testing.T) {
 }
 
 func testCtx() context.Context { return context.Background() }
+
+// heardNoRecord is the mark of a candidate with no heard record in the heard
+// window: what is known, not "never".
+const heardNoRecord = "heard: not in the last 14 days"

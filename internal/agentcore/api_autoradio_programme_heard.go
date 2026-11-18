@@ -18,7 +18,7 @@ package agentcore
 // scorecard, no claim reads: the segment record names its claim by a
 // deterministic id. Both lists are bounded by heardSegmentsRead and the call
 // logs when either is full. A failed read never fails the call: the DJ is told
-// the history is unavailable and shown no mark (unknown is never "never").
+// the history is unavailable and shown no mark (unknown is never shown as "not in the last 14 days").
 
 import (
 	"context"
@@ -411,7 +411,7 @@ func (ix *heardIndex) mark(route, cv string, now time.Time) heardMark {
 // prints the version actually heard (it can be later than the candidate's).
 func (m heardMark) line(cv string, loc *time.Location, now time.Time) string {
 	if m.Kind == heardNever {
-		return "heard: never"
+		return fmt.Sprintf("heard: not in the last %d days", int(heardWindow/(24*time.Hour)))
 	}
 	var b strings.Builder
 	when := dayPhrase(loc, m.At, now)
