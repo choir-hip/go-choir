@@ -34,6 +34,9 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/calibration"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"runtime"
+	"runtime/debug"
+	"strconv"
 )
 
 const (
@@ -269,8 +272,12 @@ func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.Co
 		// are never heard-settled and would use up the page.
 		recs, segUndec, segRows, segErr = c.ledger.ListCommitmentRecordsByBodyOfComputer(ctx, c.ownerID, c.rt.cfg.ComputerID,
 			types.BodyListQuery{
-				Match:  map[string]string{"$.subject_refs.record_kind": kindSegment, "$.subject_refs.forecast": "true"},
-				Absent: []string{"$.subject_refs.take_id"}, Since: since,
+				Match: map[string]string{"$.subject_refs.record_kind": kindSegment, "$.subject_refs.forecast": "true"},
+				// A segment is written when the DJ writes it and may be heard
+				// days later (a phone offline, a buffered sheet). Its settlement
+				// is what the window bounds; the segment list reaches one
+				// window further back so a heard settlement finds its segment.
+				Absent: []string{"$.subject_refs.take_id"}, Since: since.Add(-heardWindow),
 			}, heardSegmentsRead)
 	}()
 	go func() {
@@ -303,11 +310,19 @@ func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.Co
 
 // recoverHeardRead turns a panic in a reading goroutine into the read's error
 // (history unavailable): a goroutine's panic is not the handler's to recover,
-// and would take the process down. The log line names the read and the
-// request, never the panic's words.
+// and would take the process down. The log line names the read, the request,
+// the panic's type and the stack (function names and line numbers), so a real
+// fault is findable. It prints the panic's own text only for a runtime error
+// (an index or a nil pointer: no listener's words); any other value's text
+// could carry them and is left out.
 func (c *programmeCall) recoverHeardRead(which string, errp *error) {
 	if r := recover(); r != nil {
-		log.Printf("autoradio heard: read panicked which=%s request=%s class=%T", which, c.req.RequestID, r)
+		text := ""
+		if re, ok := r.(runtime.Error); ok {
+			text = re.Error()
+		}
+		log.Printf("autoradio heard: read panicked which=%s request=%s class=%T runtime_error=%q stack=%q",
+			which, c.req.RequestID, r, text, debug.Stack())
 		*errp = fmt.Errorf("the %s read panicked", which)
 	}
 }
@@ -411,7 +426,7 @@ func (ix *heardIndex) mark(route, cv string, now time.Time) heardMark {
 // prints the version actually heard (it can be later than the candidate's).
 func (m heardMark) line(cv string, loc *time.Location, now time.Time) string {
 	if m.Kind == heardNever {
-		return fmt.Sprintf("heard: not in the last %d days", int(heardWindow/(24*time.Hour)))
+		return "heard: not in the last " + heardWindowDays() + " days"
 	}
 	var b strings.Builder
 	when := dayPhrase(loc, m.At, now)
@@ -445,3 +460,6 @@ func (c *programmeCall) logHeard() {
 	log.Printf("autoradio heard: stretch=%s request=%s candidates=%d never=%d same=%d earlier=%d recent=%d all_heard=%d unparsable=%d followups=%d",
 		c.stretchID, c.req.RequestID, n.Candidates, n.Never, n.Same, n.Earlier, n.Recent, n.AllHeard, c.heardUnparsable, c.followups)
 }
+
+// heardWindowDays is the window in whole days, as the DJ is told it.
+func heardWindowDays() string { return strconv.Itoa(int(heardWindow / (24 * time.Hour))) }
