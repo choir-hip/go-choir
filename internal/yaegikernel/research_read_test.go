@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,6 +39,13 @@ type researchFixture struct {
 	// fixes the URLs a query returns (default: five made from the query).
 	searchCalls atomic.Int32
 	urlsFor     map[string][]string
+	// failFor makes a query's one provider fail (the text is its error);
+	// hostErr makes the host refuse the query; runningFor leaves the search
+	// started with no arrival and no end, for the test to finish.
+	failFor    map[string]string
+	hostErr    map[string]string
+	runningFor map[string]bool
+	searchMu   sync.Mutex
 }
 
 func newResearchFixture(t *testing.T) *researchFixture {
@@ -60,7 +68,14 @@ func newResearchFixture(t *testing.T) *researchFixture {
 					return nil, err
 				}
 				f.searchCalls.Add(1)
+				if msg, bad := f.hostErr[in.Query]; bad {
+					return nil, fmt.Errorf("%s", msg)
+				}
+				f.searchMu.Lock()
+				defer f.searchMu.Unlock()
+				f.scope.searches.mu.Lock()
 				id := fmt.Sprintf("s%d", len(f.scope.searches.order)+1)
+				f.scope.searches.mu.Unlock()
 				urls := f.urlsFor[in.Query]
 				for _, host := range []string{"a.example", "b.example", "a.example", "c.example", "d.example"} {
 					if f.urlsFor[in.Query] == nil {
@@ -68,6 +83,16 @@ func newResearchFixture(t *testing.T) *researchFixture {
 					}
 				}
 				f.scope.searches.apply(SearchFrame{ID: id, Kind: SearchFrameStart, Query: in.Query, Providers: []string{"keenable"}})
+				if f.runningFor[in.Query] {
+					return json.RawMessage(fmt.Sprintf(`{"id":%q,"query":%q,"providers":["keenable"]}`, id, in.Query)), nil
+				}
+				if _, bad := f.failFor[in.Query]; bad {
+					arrival := providerFrame(id, "keenable", false)
+					arrival.Arrival.Error = f.failFor[in.Query]
+					f.scope.searches.apply(arrival)
+					f.scope.searches.apply(SearchFrame{ID: id, Kind: SearchFrameDone})
+					return json.RawMessage(fmt.Sprintf(`{"id":%q,"query":%q,"providers":["keenable"]}`, id, in.Query)), nil
+				}
 				f.scope.searches.apply(providerFrame(id, "keenable", true, urls...))
 				f.scope.searches.apply(SearchFrame{ID: id, Kind: SearchFrameDone})
 				return json.RawMessage(fmt.Sprintf(`{"id":%q,"query":%q,"providers":["keenable"]}`, id, in.Query)), nil

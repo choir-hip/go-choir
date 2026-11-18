@@ -24,38 +24,65 @@ func (st *SearchStore) markRunStart() {
 	}
 	st.mu.Lock()
 	st.runStart = len(st.order)
+	st.first = map[string]int{}
 	st.mu.Unlock()
 }
 
-// markedLocked returns a copy of every search, oldest first, with Held and
-// Read set on each hit and the page counts filled in. Searches of earlier
-// runs carry no marks.
-func (st *SearchStore) markedLocked() []Search {
-	out := make([]Search, 0, len(st.order))
-	held := map[string]bool{}
-	var read map[string]bool
-	if st.readKeys != nil {
-		read = st.readKeys()
+// noteKeysLocked records that search idx returned these pages, for the held
+// test. A search of an earlier run records nothing.
+func (st *SearchStore) noteKeysLocked(idx int, hits []SearchHit) {
+	if idx < st.runStart {
+		return
 	}
-	for i, id := range st.order {
-		c := copySearch(st.searches[id])
-		if i >= st.runStart {
-			for j := range c.Results {
-				key := searchHitKey(c.Results[j].URL)
-				if held[key] {
-					c.Results[j].Held = true
-					c.HeldPages++
-				} else {
-					c.NewPages++
-					held[key] = true
-				}
-				if read[key] {
-					c.Results[j].Read = true
-					c.ReadPages++
-				}
-			}
+	if st.first == nil {
+		st.first = map[string]int{}
+	}
+	for _, h := range hits {
+		key := searchHitKey(h.URL)
+		if cur, ok := st.first[key]; !ok || idx < cur {
+			st.first[key] = idx
 		}
-		out = append(out, c)
+	}
+}
+
+// readSet is the pages this run read (nil when the store has no ledger).
+func (st *SearchStore) readSet() map[string]bool {
+	if st.readKeys == nil {
+		return nil
+	}
+	return st.readKeys()
+}
+
+// markOneLocked returns a copy of search i with Held and Read set on each
+// hit and the page counts filled in; a search of an earlier run carries no
+// marks. It reads only that search's results.
+func (st *SearchStore) markOneLocked(i int, read map[string]bool) Search {
+	c := copySearch(st.searches[st.order[i]])
+	if i < st.runStart {
+		return c
+	}
+	for j := range c.Results {
+		key := searchHitKey(c.Results[j].URL)
+		if f, ok := st.first[key]; ok && f < i {
+			c.Results[j].Held = true
+			c.HeldPages++
+		} else {
+			c.NewPages++
+		}
+		if read[key] {
+			c.Results[j].Read = true
+			c.ReadPages++
+		}
+	}
+	return c
+}
+
+// markedLocked returns a copy of every search, oldest first, marked.
+func (st *SearchStore) markedLocked() []Search {
+	read := st.readSet()
+	out := make([]Search, 0, len(st.order))
+	for i := range st.order {
+		out = append(out, st.markOneLocked(i, read))
 	}
 	return out
 }
@@ -130,9 +157,12 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 	return &out
 }
 
-// searchReuseWindow is how long an earlier search of the same terms still
-// answers a query. News older than that is searched for again.
-const searchReuseWindow = 30 * time.Minute
+// Reuse windows: how long an earlier search of the same terms still answers
+// a query. News of the moment goes stale sooner (searchquery.IsTimeSensitive).
+const (
+	searchReuseWindow     = 30 * time.Minute
+	searchReuseWindowNews = 10 * time.Minute
+)
 
 func (st *SearchStore) nowTime() time.Time {
 	if st != nil && st.now != nil {
@@ -171,44 +201,66 @@ func (st *SearchStore) latestYield(n int) string {
 	return "new pages in the latest searches: " + strings.Join(parts, ", ")
 }
 
+// searchUsable reports whether a search can answer another query: it is
+// still running, or it ended with at least one provider answering and at
+// least one page. A search that failed, or found nothing, is tried again.
+func searchUsable(c *Search) bool {
+	if !c.Done {
+		return true
+	}
+	return c.Answered > 0 && searchHasResults(c)
+}
+
 // reuseSearch answers query from an earlier search of this run with the same
-// terms (searchquery.Key), started in the last 30 minutes, that has results
-// or is still on its way: no host call is made. A search that finished with
-// nothing is not reused, so a failed search is tried again.
+// terms (searchquery.Key), started within the window (10 minutes for news,
+// else 30), with no host call. A match still running is waited on (at most as
+// long as choir.Search waits) and then answered from if it did not fail or
+// come back empty. The answer names the search, its age and "fresh", the
+// argument that sends the search anyway.
 func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
 	if s == nil || s.searches == nil {
 		return SearchStub{}, false
 	}
 	st := s.searches
 	key := searchquery.Key(query)
+	window := searchReuseWindow
+	if searchquery.IsTimeSensitive(query) {
+		window = searchReuseWindowNews
+	}
 	st.mu.Lock()
-	var found *Search
+	var id string
 	var age time.Duration
 	for i := len(st.order) - 1; i >= st.runStart; i-- {
 		c := st.searches[st.order[i]]
 		d := st.nowTime().Sub(c.startedAt)
-		if c.key != key || d > searchReuseWindow {
+		if c.key != key || d > window || !searchUsable(c) {
 			continue
 		}
-		if c.Done && !searchHasResults(c) {
-			continue
-		}
-		cp := copySearch(c)
-		found, age = &cp, d
+		id, age = c.ID, d
 		break
 	}
+	running := id != "" && !st.searches[id].Done
 	st.mu.Unlock()
-	if found == nil {
+	if id == "" {
 		return SearchStub{}, false
 	}
-	why := fmt.Sprintf("answered from your search %s, %s (same terms)", found.ID, agoText(age))
+	if running {
+		_, _ = st.wait(id, time.Duration(searchWaitMs)*time.Millisecond)
+	}
+	st.mu.Lock()
+	c := copySearch(st.searches[id])
+	st.mu.Unlock()
+	if c.Done && !searchUsable(&c) {
+		return SearchStub{}, false
+	}
+	why := fmt.Sprintf("answered from your search %s, %s (same terms); send it anyway with fresh", c.ID, agoText(age))
 	s.statsMu.Lock()
 	s.heldStat++
 	if !s.reuseQuiet {
-		s.notes = append(s.notes, fmt.Sprintf("not sent: %s: answered from your search %s, %s; read it with choir.Searches.Summary(%q)", cutRunes(query, 70), found.ID, agoText(age), found.ID))
+		s.notes = append(s.notes, fmt.Sprintf("not sent: %s: answered from your search %s, %s; read it with choir.Searches.Summary(%q), or send it anyway with fresh: choir.SearchStart(query, true)", cutRunes(query, 70), c.ID, agoText(age), c.ID))
 	}
 	s.statsMu.Unlock()
-	return SearchStub{ID: found.ID, Query: query, Providers: len(found.Providers), Cooling: found.Cooling, Reused: why}, true
+	return SearchStub{ID: c.ID, Query: query, Providers: len(c.Providers), Cooling: c.Cooling, Reused: why}, true
 }
 
 func searchHasResults(c *Search) bool {

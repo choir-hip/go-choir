@@ -117,13 +117,18 @@ func TestResearchPromptSendsOneQuestionsWordingsToOneCall(t *testing.T) {
 		t.Fatalf("load research prompt: %v", err)
 	}
 	flat := strings.Join(strings.Fields(prompt.Content), " ")
-	for _, want := range []string{"all the wordings of one question", "choir.SearchAll(question, wordings)", "mark each page new or held", "a question whose wordings return held pages is answered"} {
+	for _, want := range []string{"all the wordings of one question", "choir.SearchAll(question, wordings)", "mark each page new or held", "stops when wordings stop finding pages you do not hold", "can be sent alone with fresh"} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("research prompt lacks %q", want)
 		}
 	}
 	if strings.Contains(flat, "several searches per thread") {
 		t.Error("research prompt still asks for several searches per thread")
+	}
+	// The call stops on what the code does; the prompt does not promise that a
+	// question is answered.
+	if strings.Contains(flat, "is answered") {
+		t.Error("research prompt overstates the stop rule")
 	}
 }
 
