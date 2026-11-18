@@ -443,40 +443,6 @@ final class AudioHeldTests: XCTestCase {
         XCTAssertTrue(e.speaks.isEmpty); XCTAssertTrue(q.isWaitingForSession)
     }
 
-    func testABlockPastItsBoundIsHeldNotParkedSilently() async {
-        let old = ProgrammePlayer.blockMargin; defer { ProgrammePlayer.blockMargin = old }
-        ProgrammePlayer.blockMargin = 0.3
-        let a = virtualAudio()
-        let r = StageRegistry.builtIn(); r.register(.voice, LongVoice.self) { LongVoice($0) }
-        var cfg = StageRegistry.defaultConfiguration(); cfg.set(.voice, .init(id: "long-voice"))
-        let p = ProgrammePlayer(audio: a, registry: r, log: EventLog(clock: LabClock()), configuration: cfg,
-                                document: ProgrammeDocument(id: "story", title: "S", blocks: [.speech(text: "One.")]))
-        let lost = Locked<[String]>([])
-        p.onEngineLost = { id, n in lost.write { $0.append("\(id)#\(n)") } }
-        await p.setLevel(.pause)                                    // a barge-in that never gives the level back
-        p.begin(at: 0)
-        _ = await poll(15) { !lost.value.isEmpty }
-        XCTAssertEqual(lost.value, ["story#0"])
-    }
-
-    func testAnUnpausedWaitIsNotCutShort() async {
-        // paused by the listener: the bound does not run (counted only while not paused)
-        let old = ProgrammePlayer.blockMargin; defer { ProgrammePlayer.blockMargin = old }
-        ProgrammePlayer.blockMargin = 0.3
-        let a = virtualAudio()
-        let r = StageRegistry.builtIn(); r.register(.voice, LongVoice.self) { LongVoice($0) }
-        var cfg = StageRegistry.defaultConfiguration(); cfg.set(.voice, .init(id: "long-voice"))
-        let p = ProgrammePlayer(audio: a, registry: r, log: EventLog(clock: LabClock()), configuration: cfg,
-                                document: ProgrammeDocument(id: "story", title: "S", blocks: [.speech(text: "One.")]))
-        let lost = Locked(0)
-        p.onEngineLost = { _, _ in lost.write { $0 += 1 } }
-        p.start(at: 0)
-        p.pause(reason: "listener")
-        try? await Task.sleep(nanoseconds: 9_000_000_000)           // longer than 2 x 3 s + 0.3 s of block
-        XCTAssertEqual(lost.value, 0)
-        p.pause(reason: "listener"); p.start(at: 0)                 // end the loop
-    }
-
     func testAFailedReclaimClaimPutsTheEngineBack() async throws {
         let (c, o, a, _) = rig { _ in }
         try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
@@ -485,5 +451,24 @@ final class AudioHeldTests: XCTestCase {
         let ok = await c.ensureReady(reason: "play")
         XCTAssertFalse(ok)
         XCTAssertTrue(a.running, "the engine is started again, and observed again")
+    }
+
+    @MainActor func testTheLockScreensPlayReachesAHeldEntryAndItsPauseStaysThePausers() async {
+        let old = RunSheetPlayer.sessionRetryDelays; defer { RunSheetPlayer.sessionRetryDelays = old }
+        RunSheetPlayer.sessionRetryDelays = [3600]
+        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
+        let ready = Locked(false)
+        p.sessionReady = { _ in ready.value ? nil : "the audio session could not be taken" }
+        p.playNow(RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 5)); await p.settle()
+        p.spokenPausedByListener = { true }
+        ready.value = true
+        XCTAssertTrue(p.remoteTransport("play"), "taken by the run sheet player")
+        _ = await poll { e.speaks.count == 1 }
+        XCTAssertEqual(e.speaks, ["speak:a"], "it plays once")
+        XCTAssertFalse(p.remoteTransport("pause"), "nothing held and nothing remote: the programme player pauses it")
+        let a = ProgrammePlayer(audio: virtualAudio(), registry: StageRegistry.builtIn(), log: EventLog(clock: LabClock()), configuration: StageRegistry.defaultConfiguration(),
+                                document: ProgrammeDocument(id: "none", title: "", blocks: []))
+        a.pause(reason: "remote command pause")
+        XCTAssertTrue(a.pausedByListener, "the lock screen's pause is the listener's")
     }
 }

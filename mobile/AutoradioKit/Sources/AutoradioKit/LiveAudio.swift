@@ -617,8 +617,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// has stopped at that block (`play()` starts there again); the run is not over and nothing was heard.
     public var onEngineLost: (@Sendable (String, Int) -> Void)?
     let engineLostFlag = Locked(false)
-    /// Seconds added to twice a block's length before its wait is given up.
-    nonisolated(unsafe) static var blockMargin = 10.0
     /// The lock screen's next and previous: the host may take them as story moves (true: handled); else they skip a passage or segment.
     public var onNextTrack: (@Sendable () -> Bool)?
     public var onPreviousTrack: (@Sendable () -> Bool)?
@@ -916,25 +914,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             startLookahead(after: tag)
-            // The wait is bounded: twice the block's length (the slowest speed) plus a margin, counted only while the programme is not paused (a
-            // listener's or the system's pause may last as long as it likes). A block that outlasts it (a barge-in that never gave the level back)
-            // is treated as one the engine lost: the entry is held, not left parked silently.
-            let budget = Double(made.samples.count) / made.rate * 2 + Self.blockMargin
-            let timedOut = Locked(false)
-            let audio = self.audio
-            let inner = Task { await audio.playProgramme(made.samples, rate: made.rate, tag: tag) }
-            let dog = Task { [weak self] in
-                var live = 0.0
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
-                    guard !Task.isCancelled, let self else { return }
-                    if !self.userPaused { live += 0.1 }
-                    if live > budget { timedOut.value = true; inner.cancel(); return }
-                }
-            }
-            var sounded = await withTaskCancellationHandler { await inner.value } onCancel: { inner.cancel() }
-            dog.cancel()
-            if timedOut.value { print("AUTORADIO block waited past its bound budget_s=\(Int(budget)); treated as lost"); sounded = false }
+            let sounded = await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
             if !sounded { if !Task.isCancelled { engineLostFlag.value = true }; return false }
             lastBlockEnd.write { $0 = Date() }
             return true

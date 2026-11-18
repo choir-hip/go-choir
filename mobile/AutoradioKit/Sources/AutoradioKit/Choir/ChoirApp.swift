@@ -206,16 +206,7 @@ public final class ChoirApp: @unchecked Sendable {
             Station.shared.startDJ = { [weak me] in await me?.startRadio() }       // the entry Play uses
         }
         runtime.player.onTransport = { cmd in
-            onMainThread { () -> Bool in
-                let p = RunSheetPlayer.shared
-                guard p.isRemote else { return false }
-                switch cmd {
-                case "play": p.resume()
-                case "pause": p.pause()
-                default: if p.paused { p.resume() } else { p.pause() }
-                }
-                return true
-            }
+            onMainThread { RunSheetPlayer.shared.remoteTransport(cmd) }
         }
         runtime.player.onLevel = { l in Task { @MainActor in RunSheetPlayer.shared.setLevel(l) } }
         BarTracker.shared.speedObservers.append { v in Task { @MainActor in RunSheetPlayer.shared.setRate(v) } }
