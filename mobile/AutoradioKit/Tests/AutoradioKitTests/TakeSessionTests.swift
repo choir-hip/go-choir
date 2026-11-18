@@ -2,8 +2,14 @@ import XCTest
 @testable import AutoradioKit
 
 @MainActor final class FakeRecorder: TakeRecorderEngine {
-    var seconds = 10.0, bytes = 4000, started: [URL] = [], failStart = false
-    func start(to url: URL) throws { if failStart { throw LabError.unavailable("x") }; started.append(url); try? Data(repeating: 1, count: bytes).write(to: url) }
+    var seconds = 10.0, bytes = 4000, header: Double?, started: [URL] = [], failStart = false
+    func start(to url: URL) throws { if failStart { throw LabError.unavailable("x") }; started.append(url); try? (header.map { Self.mp4(seconds: $0) } ?? Data(repeating: 1, count: bytes)).write(to: url) }
+    static func mp4(seconds: Double) -> Data {
+        func box(_ t: String, _ b: [UInt8]) -> [UInt8] { let n = UInt32(8 + b.count); return [UInt8(n >> 24), UInt8(n >> 16 & 255), UInt8(n >> 8 & 255), UInt8(n & 255)] + Array(t.utf8) + b }
+        let d = UInt32(seconds * 1000)
+        let mvhd = [UInt8](repeating: 0, count: 12) + [0, 0, 0x03, 0xE8] + [UInt8(d >> 24), UInt8(d >> 16 & 255), UInt8(d >> 8 & 255), UInt8(d & 255)] + [UInt8](repeating: 0, count: 80)
+        return Data(box("ftyp", Array("M4A ".utf8) + [0, 0, 0, 0]) + box("moov", box("mvhd", mvhd)))
+    }
     func stop() -> Double { seconds }
     func cancel() { if let u = started.last { try? FileManager.default.removeItem(at: u) } }
 }
@@ -79,6 +85,28 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         clock += 30; await s.tick(); XCTAssertEqual(s.state, .recording)
         clock += 30; await s.tick()
         XCTAssertEqual(s.state, .review); XCTAssertTrue(s.notice.contains("60 seconds"))
+    }
+
+    func testTheCeilingStopsHalfASecondEarlyAndAHeaderOf60Point3ClaimsExactly60() async throws {
+        rec.seconds = 59.5; rec.header = 60.3
+        var claimed = ""
+        StubProtocol.handler = { r in
+            if r.method == "POST" { claimed = String(decoding: r.raw, as: UTF8.self); return .init(status: 201, json: ["take_id": "take-00000000000000c1", "publisher": "voice-me0001", "state": "live"]) }
+            return .init(json: ["takes": []])
+        }
+        let s = session(); await s.start()
+        clock += 59.4; await s.tick(); XCTAssertEqual(s.state, .recording)
+        clock += 0.1; await s.tick()
+        XCTAssertEqual(s.state, .review, "auto-stop fires at 59.5 s elapsed"); XCTAssertTrue(s.notice.contains("Stopped at 60 seconds")); XCTAssertEqual(s.duration, 60.0)
+        await s.publish()
+        XCTAssertTrue(claimed.contains("name=\"duration_seconds\"\r\n\r\n60.00\r\n"), "the claim is exactly 60.00")
+        XCTAssertEqual(s.state, .idle)
+    }
+
+    func testAFileUnder3SecondsByItsHeaderIsNotKept() async {
+        rec.seconds = 3.2; rec.header = 2.9
+        let s = session(); await s.start(); clock += 3.2; await s.stop()
+        XCTAssertEqual(s.state, .idle); XCTAssertEqual(files(), [])
     }
 
     func testR2TooLargeIsNotKept() async {

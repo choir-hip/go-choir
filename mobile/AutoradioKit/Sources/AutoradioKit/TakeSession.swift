@@ -95,7 +95,7 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
 
     /// The module calls this a few times a second while recording: the ceiling stops it.
     public func tick() async {
-        guard state == .recording, elapsed >= TakeBounds.maxSeconds else { return }
+        guard state == .recording, elapsed >= TakeBounds.maxSeconds - TakeBounds.stopEarly else { return }
         await stop(auto: true)
     }
 
@@ -103,7 +103,9 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
         guard state == .recording, let url = file else { return }
         let secs = recorder.stop()
         startedAt = nil
-        duration = min(max(secs.isFinite ? secs : 0, 0), TakeBounds.maxSeconds + 1)
+        // The file's own length when it can be read (it includes the encoder's priming, about 0.11 s); the ceiling is the server's, so clamp to it.
+        let real = (try? Data(contentsOf: url)).flatMap(Mp4Header.durationSeconds) ?? secs
+        duration = min(max(real.isFinite ? real : 0, 0), TakeBounds.maxSeconds)
         if duration < TakeBounds.minSeconds {
             try? FileManager.default.removeItem(at: url); file = nil; duration = 0
             notice = "A take is at least \(Int(TakeBounds.minSeconds)) seconds. Nothing was kept."
@@ -156,7 +158,7 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
         do {
             guard let data = try? Data(contentsOf: url) else { throw ChoirError.decode("the recording is gone") }
             // The server reads the length from the file's own header and holds the claim to within 2 s of it: claim what the file says.
-            let claimed = Mp4Header.durationSeconds(data).flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? duration
+            let claimed = min(max(Mp4Header.durationSeconds(data).flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? duration, TakeBounds.minSeconds), TakeBounds.maxSeconds)
             let t = try await c.publish(.init(audio: data, transcript: transcript, duration: claimed, respondsTo: respondsTo))
             let id = t.takeID
             own.add(id: id, handle: t.publisher)

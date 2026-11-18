@@ -69,6 +69,8 @@ public enum Mp4Header {
 
 public enum TakeBounds {
     public static let minSeconds = 3.0, maxSeconds = 60.0
+    /// The recorder stops this much before the ceiling: a tick is late and the encoder adds about 0.11 s, and the server refuses a claim above 60.
+    public static let stopEarly = 0.5
     public static let maxBytes = 512 * 1024
     public static let maxTranscriptBytes = 2000
     public static let maxCandidates = 3
