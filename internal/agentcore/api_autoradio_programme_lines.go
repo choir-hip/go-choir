@@ -77,8 +77,9 @@ type programmeSegment struct {
 	ClipID      string
 	ClipSeconds float64
 	// TakeID and TakeSeconds name the take a take segment leads in.
-	TakeID      string
-	TakeSeconds float64
+	TakeID        string
+	TakeSeconds   float64
+	TakePublisher string // the publisher's handle: the take entry's source label
 
 	lineNo int // the line this segment came from, for the index's notes
 
@@ -346,7 +347,7 @@ func (in *programmeInput) checkTakeLine(seg *programmeSegment, raw map[string]js
 		in.usedTakes = map[string]bool{}
 	}
 	in.usedTakes[id] = true
-	seg.TakeID, seg.TakeSeconds = id, cand.DurationSeconds
+	seg.TakeID, seg.TakeSeconds, seg.TakePublisher = id, cand.DurationSeconds, cand.Publisher
 	seg.Cites = []programmeCite{{Ref: cand.ref, Role: "subject", Label: truncate(oneLine(cand.Title), programmeMaxLabel)}}
 	if r := cand.RespondsTo; r != nil {
 		for _, story := range in.candidates {

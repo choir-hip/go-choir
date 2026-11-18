@@ -437,8 +437,7 @@ func TestT8_TakeSegmentCarriesEveryKeyOfThePhonesFixture(t *testing.T) {
 // T9. A take segment is on the server's run sheet as a desk entry with its
 // forecast claim like any other segment, so the listener's own end op settles
 // it, and the settlement yields the take's outcome through the one seam
-// (calibration.TakeOutcomeFromSettlement). The entry is kind story for now: the
-// phone's twin of kind take is not on main.
+// (calibration.TakeOutcomeFromSettlement). The entry is the phone's: kind take.
 func TestT9_ATakeIsOnTheSheetWithItsForecastAndItsEndSettlesIt(t *testing.T) {
 	rt, _ := radioRuntime(t, linesScript(titled("First", nil), takeLine(nil)))
 	h := NewAPIHandler(rt)
@@ -461,11 +460,42 @@ func TestT9_ATakeIsOnTheSheetWithItsForecastAndItsEndSettlesIt(t *testing.T) {
 	if placed == nil || placed.PlacedBy != runsheet.ByDesk || placed.Forecast == nil || placed.Forecast.ClaimID != claimID || placed.Forecast.PHeard != 0.6 {
 		t.Fatalf("T9: the take entry on the sheet = %+v", placed)
 	}
+	// The entry is the phone's: kind take, source take:<id> labelled with the
+	// publisher's handle, the answered story only as a cite, and the take's
+	// length added to the estimate.
+	if placed.Kind != runsheet.KindTake || placed.Source == nil || placed.Source.Ref != "take:"+takeA || placed.Source.Label != otherVoice {
+		t.Errorf("T9: kind %v source %+v", placed.Kind, placed.Source)
+	}
+	if placed.EstSeconds < 24.5 {
+		t.Errorf("T9: est_seconds %v lacks the take's 24.5 s", placed.EstSeconds)
+	}
+	storyCite := false
+	for _, ct := range placed.Cites {
+		if strings.HasPrefix(ct.Ref, "take:") {
+			t.Errorf("T9: the entry cites itself: %+v", ct)
+		}
+		storyCite = storyCite || strings.HasPrefix(ct.Ref, "pub:")
+	}
+	if !storyCite {
+		t.Errorf("T9: the answered story is not a cite: %+v", placed.Cites)
+	}
 	mustOps(t, h, phoneEnd(entryID, "tk", "heard", "finished", 1)...)
 	settlement := getRecord(t, rt, calibration.SettlementRecordID(claimID, "rule", calibration.AutoradioHeardRule))
 	claim := getRecord(t, rt, claimID)
 	if settlement == nil || claim == nil {
 		t.Fatalf("T9: claim %v settlement %v", claim, settlement)
+	}
+	// The learning read says which take it was (rule 2: the listener can read
+	// what was settled).
+	_, learn := learningGet(t, h, "")
+	found := false
+	for _, r := range learn["rows"].([]any) {
+		if row := r.(map[string]any); row["claim_id"] == claimID {
+			found = row["take_id"] == takeA && row["kind"] == "take"
+		}
+	}
+	if !found {
+		t.Errorf("T9: the learning row does not name the take: %v", learn["rows"])
 	}
 	out, ok := calibration.TakeOutcomeFromSettlement(*claim, *settlement)
 	if !ok || out.TakeID != takeA || out.Outcome != "heard" || out.ClaimID != claimID {

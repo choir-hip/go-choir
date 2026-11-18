@@ -51,6 +51,7 @@ type learningRow struct {
 	EntryID    string      `json:"entry_id"`
 	Kind       string      `json:"kind"`
 	Title      string      `json:"title"`
+	TakeID     string      `json:"take_id,omitempty"` // the take a take forecast was about
 	PHeard     float64     `json:"p_heard"`
 	CausedBy   string      `json:"caused_by"`
 	ForecastAt string      `json:"forecast_at"`
@@ -191,6 +192,7 @@ func (h *APIHandler) learningRow(ctx context.Context, led autoradioLedger, owner
 		CausedBy: strings.TrimPrefix(v.Criterion, "caused_by="),
 	}
 	row.EntryID = programmeEntryID(row.SegmentID)
+	row.TakeID = tagOf(v.Tags, "take:")
 	if seg, err := led.GetCommitmentRecord(ctx, ownerID, computer, segmentRecordID(row.StretchID, row.SegmentID)); err != nil {
 		return row, err
 	} else if seg != nil && seg.Directive != nil {

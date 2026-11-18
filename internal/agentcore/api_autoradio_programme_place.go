@@ -79,6 +79,8 @@ func programmeEntryKind(kind string) runsheet.Kind {
 		return runsheet.KindTransition
 	case "podcast_clip":
 		return runsheet.KindClip
+	case "take":
+		return runsheet.KindTake
 	}
 	return runsheet.KindStory // story, update, headlines
 }
@@ -131,8 +133,21 @@ func (c *programmeCall) programmeEntry(s *programmeSegment) (runsheet.Entry, boo
 		}
 		e.Cites = append(e.Cites, runsheet.Cite{Ref: cutBytes(ct.Ref, runsheet.MaxURLBytes), Role: role, Label: cutBytes(ct.Label, runsheet.MaxRefBytes)})
 	}
+	if kind == runsheet.KindTake {
+		// The take's own cite (take:<id>, subject) is not a cite of the entry:
+		// the entry's source names the take, as the phone builds it
+		// (RunSheetEntry.take in Takes.swift); its cites are the stories it
+		// was built on.
+		kept := e.Cites[:0]
+		for _, ct := range e.Cites {
+			if !strings.HasPrefix(ct.Ref, "take:") {
+				kept = append(kept, ct)
+			}
+		}
+		e.Cites = kept
+	}
 	for _, ct := range e.Cites {
-		if strings.HasPrefix(ct.Ref, "pub:") {
+		if kind != runsheet.KindTake && strings.HasPrefix(ct.Ref, "pub:") {
 			e.Source = &runsheet.Source{Ref: ct.Ref, Label: ct.Label}
 			break
 		}
@@ -143,6 +158,12 @@ func (c *programmeCall) programmeEntry(s *programmeSegment) (runsheet.Entry, boo
 	if kind == runsheet.KindClip && s.ClipID != "" {
 		e.Source = &runsheet.Source{Ref: "clip:" + s.ClipID, Label: cutBytes(s.Title, runsheet.MaxRefBytes), ClipID: s.ClipID}
 		e.EstSeconds += s.ClipSeconds
+	}
+	if kind == runsheet.KindTake && s.TakeID != "" {
+		// The lead-in, then the publisher's voice: the source names the take and
+		// the publisher's handle, and the estimate adds the take's own length.
+		e.Source = &runsheet.Source{Ref: "take:" + s.TakeID, Label: cutBytes(s.TakePublisher, runsheet.MaxRefBytes)}
+		e.EstSeconds += s.TakeSeconds
 	}
 	if s.ClaimID != "" {
 		e.Forecast = &runsheet.Forecast{PHeard: s.P, CausedBy: cutBytes(s.CausedBy, runsheet.MaxShortBytes), ClaimID: s.ClaimID}
