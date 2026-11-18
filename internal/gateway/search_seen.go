@@ -1,7 +1,9 @@
 package gateway
 
 import (
+	"fmt"
 	"hash/fnv"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -121,4 +123,36 @@ func searchServed(stream *searchplane.Stream) string {
 		return searchplane.ServedOff
 	}
 	return stream.Served
+}
+
+// searchURLHashes lists the hashes (hex, comma-joined) of the first n result
+// URLs, in order, as the served log line carries them.
+func searchURLHashes(urls []string, n int) string {
+	if len(urls) > n {
+		urls = urls[:n]
+	}
+	parts := make([]string, 0, len(urls))
+	for _, u := range urls {
+		parts = append(parts, fmt.Sprintf("%x", searchURLKey(u)))
+	}
+	return strings.Join(parts, ",")
+}
+
+// searchAttributionValue is one attribution header cleaned for the log: no
+// space or control character, at most 64 bytes, "-" when absent. A header
+// cannot forge a second log line.
+func searchAttributionValue(r *http.Request, name string) string {
+	v := strings.Map(func(c rune) rune {
+		if c <= ' ' || c > 0x7e {
+			return -1
+		}
+		return c
+	}, r.Header.Get(name))
+	if len(v) > 64 {
+		v = v[:64]
+	}
+	if v == "" {
+		return "-"
+	}
+	return v
 }

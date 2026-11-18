@@ -188,6 +188,13 @@ func (c *gatewaySearchClient) Stream(ctx context.Context, query string, maxResul
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.token)
+	if a := AttributionFrom(ctx); a != (Attribution{}) {
+		for h, v := range map[string]string{HeaderRun: a.RunID, HeaderDesk: a.Desk, HeaderConversation: a.Conversation} {
+			if v != "" {
+				req.Header.Set(h, v)
+			}
+		}
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

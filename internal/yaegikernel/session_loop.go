@@ -130,6 +130,8 @@ type SessionResult struct {
 	// the last cell result ("s3: 3/4 answered, +2 new"): the only push of
 	// search arrivals to the model, counts and never results.
 	Searches []string `json:"searches,omitempty"`
+	// SearchStats are the cell's search counts (search_marks.go).
+	SearchStats *SearchStats `json:"search_stats,omitempty"`
 	// RecordsShown is the highest record seq a choir.Records() call in the
 	// cell returned (0: the cell never called it). The cell's commit marks
 	// read only through it (autopaper-arrivals-unanswered-2026-10-13).
@@ -222,6 +224,9 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	}
 	if hooks != nil && hooks.SearchCounts != nil {
 		out.Searches = hooks.SearchCounts()
+	}
+	if hooks != nil && hooks.SearchStats != nil {
+		out.SearchStats = hooks.SearchStats()
 	}
 	if evalErr != nil {
 		out.Error = evalErr.Error()

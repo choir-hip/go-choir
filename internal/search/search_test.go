@@ -245,3 +245,45 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
+
+// Attribution (search-reuse commit 1, docs/problems/search-volume-outruns-keenable-credits-2026-11-18.md).
+// Failure list, written before the code:
+//  1. A search carries no run, desk or conversation, so the gateway's log
+//     cannot say which run spent a search.
+//  2. An old caller (no attribution on the context) sends headers anyway,
+//     or an empty header, instead of none.
+//  3. A value with control characters or a very long value reaches the
+//     header unbounded.
+func TestStreamSendsAttributionHeadersOnlyWhenTheContextCarriesThem(t *testing.T) {
+	var got []http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Clone())
+		_, _ = io.WriteString(w, `{"type":"start","query":"q","providers":[],"cooling":[]}`+"\n"+`{"type":"done","answered":0,"total":0,"cooling":[]}`+"\n")
+	}))
+	defer server.Close()
+	client := &gatewaySearchClient{baseURL: server.URL, token: "t", httpClient: server.Client()}
+
+	ctx := WithAttribution(context.Background(), Attribution{RunID: "run-1", Desk: "research", Conversation: "conv\r\n-9"})
+	for _, c := range []context.Context{ctx, context.Background()} {
+		s, err := client.Stream(c, "q", 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = s.Close()
+	}
+	if len(got) != 2 {
+		t.Fatalf("requests = %d, want 2", len(got))
+	}
+	if got[0].Get("X-Choir-Run") != "run-1" || got[0].Get("X-Choir-Desk") != "research" || got[0].Get("X-Choir-Conversation") != "conv-9" {
+		t.Fatalf("headers = %v, want run-1/research/conv-9 (control characters dropped)", got[0])
+	}
+	for _, h := range []string{"X-Choir-Run", "X-Choir-Desk", "X-Choir-Conversation"} {
+		if _, ok := got[1][h]; ok {
+			t.Fatalf("an unattributed search sent %s", h)
+		}
+	}
+	long := WithAttribution(context.Background(), Attribution{RunID: strings.Repeat("a", 500)})
+	if a := AttributionFrom(long); len(a.RunID) != 64 {
+		t.Fatalf("run id length = %d, want 64", len(a.RunID))
+	}
+}
