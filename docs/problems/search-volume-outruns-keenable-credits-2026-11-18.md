@@ -112,6 +112,24 @@ question whose answers it already holds.
   only reorders an earlier one is answered from held results; one call
   takes all the wordings of a question and stops when they stop yielding.
 
+## Built, 2026-11-18 (lane `search-reuse`, three commits; not yet on main)
+
+- Attribution: the search request line carries `run=`, `desk=`, `conv=`; the
+  served line ends `urls=[...]`, hashes of the first ten result URLs; one
+  `search run=...` line when a run ends (searches started, from held, not
+  sent by reason, pages returned, new, read). Counts and ids only.
+- The desk is told: pages marked new, held or read; "N of M pages new" in the
+  cell result; a query with the same terms (`internal/searchquery.Key`) as a
+  search of the same run in the last 30 minutes is answered from it with no
+  call; the gateway cache uses the same key. A query with no word of two
+  letters or digits is refused. What sends the bare `x` is not found: the only
+  host path to the gateway is the desk's `choir.SearchStart`, and nothing in
+  the repo sends `x`, so it was a cell the model wrote.
+- Ask once for many: `choir.SearchAll`, and research prompt v14.
+- Check after landing: `scripts/status-paper-search-quality` for the story
+  count and mean cited sources against the days before, and the `search run=`
+  lines for pages_new against pages_returned.
+
 ## Remaining error
 
 - Ceramic is a lexical engine over English pages with no dates on results.

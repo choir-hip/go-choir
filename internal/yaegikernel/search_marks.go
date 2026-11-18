@@ -204,7 +204,7 @@ func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
 	why := fmt.Sprintf("answered from your search %s, %s (same terms)", found.ID, agoText(age))
 	s.statsMu.Lock()
 	s.heldStat++
-	{
+	if !s.reuseQuiet {
 		s.notes = append(s.notes, fmt.Sprintf("not sent: %s: answered from your search %s, %s; read it with choir.Searches.Summary(%q)", cutRunes(query, 70), found.ID, agoText(age), found.ID))
 	}
 	s.statsMu.Unlock()

@@ -338,5 +338,31 @@ PY
 runstore --json
 check "G5 receipts_since_last 0 on the newest row is a flag" '[ "$(jq_ "d[\"receipts_since_last\"]")" = 0 ] && jq_ "d[\"flags\"]" | grep -q "receipts_since_last"'
 
+# status-paper-search-quality (search-reuse). Failure list, written before the code:
+#  Q1  a story updated outside the UTC day, or an opinion piece, is counted
+#  Q2  the mean counts a story with no source_count as zero
+#  Q3  a story page that ends before the day began is not said to be incomplete
+quality="$here/status-paper-search-quality"
+python3 - "$root/front.json" <<'PY'
+import json, sys
+def row(t, n, kind=""):
+    r = {"publication_id": "p", "title": "t", "updated_at": t}
+    if n is not None: r["source_count"] = n
+    if kind: r["kind"] = kind
+    return r
+pages = [{"stories": [row("2026-11-18T01:00:00Z", 9), row("2026-11-17T23:00:00Z", 4), row("2026-11-17T12:00:00Z", 8), row("2026-11-17T11:00:00Z", None), row("2026-11-17T10:00:00Z", 99, "opinion")], "next_cursor": "c"},
+         {"stories": [row("2026-11-17T00:30:00Z", 6), row("2026-11-16T23:59:00Z", 50)]}]
+json.dump(pages, open(sys.argv[1], "w"))
+PY
+env -u BASH_ENV python3 "$quality" --day 2026-11-17 --fixture "$root/front.json" >"$root/out" 2>&1
+check "Q1/Q2 three counted stories and one without a count: 4 stories, mean of 4, 8 and 6 is 6.00" 'grep -q "stories published 4, mean distinct cited source URLs per story 6.00" "$root/out" && grep -q "1 stories have no source count" "$root/out"'
+python3 - "$root/front.json" "$root/front1.json" <<'PY'
+import json, sys
+json.dump(json.load(open(sys.argv[1]))[:1], open(sys.argv[2], "w"))
+PY
+check "Q3 a list that reaches before the day is complete" '! grep -q "may be incomplete" "$root/out"'
+env -u BASH_ENV python3 "$quality" --day 2026-11-17 --fixture "$root/front1.json" >"$root/out" 2>&1
+check "Q3 a list that ends inside the day is said to be incomplete" 'grep -q "may be incomplete" "$root/out"'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
