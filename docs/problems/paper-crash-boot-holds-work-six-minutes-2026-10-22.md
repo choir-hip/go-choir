@@ -974,10 +974,14 @@ start nothing while the link names another release (compared by id): a link
 that moved under a running vmctl means the deploy replaces it next. The
 replacement starts on the moved link, takes it as its baseline and walks as
 before. The hold logs `refresh hold: started` once and `refresh hold: ended`
-once; it ends when the link returns (a rollback), or at 60 minutes after the first tick that saw the move (the deploy job's
-timeout used as a generous bound on the gap; the clock starts inside the job,
-so it can outlast it by a tick), whatever the link reads then with a line saying no restart came and the moved
-link is now the baseline. Held, item by item: the ticker's ring walk, the
+once; it ends when the link returns (a rollback), or at 60 minutes after the
+move, whatever the link reads then, with a line saying no restart came and the
+release the link names (the original, if it is back) is now the baseline. It
+ends no later than one tick past 60 minutes after the link moved. The 60
+minutes equals the timeout of the deploy job (`ci.yml`, job `deploy-staging`,
+`timeout-minutes: 60`), so a hold cannot end while a job that moved the link
+could still be about to restart vmctl: the job dies at its start plus 60
+minutes and the link moved after its start. link is now the baseline. Held, item by item: the ticker's ring walk, the
 wakes it asks for, and each entry of the retry sweep. Not held: the
 deploy's own HTTP requests, an owner's or operator's acts, and a user's
 request for their own computer. No marker is
