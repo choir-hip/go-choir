@@ -1104,8 +1104,9 @@ the runtime: 2 x batch + 37 rounds in 3 commits; T3 second boot writes
 nothing; T4 fallback closes the 5 good rounds of 6; T5 golden against the
 one-at-a-time commits). The both-ways comparisons ignore only
 `Provenance.CommittedAt`, `Observation.ObservedAt` and the receipts'
-`CreatedAt` (clocks that differ between two runs). Which ran: see the lane's
-final report; the agentcore tests need a machine that can link that package.
+`CreatedAt` (clocks that differ between two runs). The first commit (the tests) does not compile alone: it
+uses symbols the next commit adds, so "fails on the parent" is a build failure,
+not an assertion failure. Which ran: see the lane's final report; the agentcore tests need a machine that can link that package.
 
 **Staging proof (not run).** At a crash boot of the drill computer with K
 open rounds (K > 200 so more than one commit shows), the console shows
@@ -1113,11 +1114,17 @@ open rounds (K > 200 so more than one commit shows), the console shows
 dur=` a few seconds, one "closed round" line per round, and a second crash
 boot shows `closed 0 of 0 ... in 0 commits`.
 
-**Residuals.** R-C1 as above. A management-task round in a batch is planned
-with the task rows (`planManagementTasks` shares its state across records),
-but no test here closes one in a batch; the fallback covers a refusal, not a
-wrong write. The batch is bounded by count, not bytes. Open rounds still
-accrue at about 250 an hour (below).
+**Residuals.** R-C1 as above.
+- One permanently refused round sends its whole chunk of 200 back to
+  one-at-a-time commits (about 0.29 s a round, so about a minute for that
+  chunk), signalled by one log line per chunk ("a batch of N closures failed
+  and wrote nothing"). Bisecting a refused chunk would cut it; not done.
+- A management-task round's closure carries no Tasks rows: `closeTask` builds
+  the task and capture-index objects inside `planManagementTasks`, which
+  shares its state across the records of one plan. A store test compares those
+  objects between the batch and the one-at-a-time path.
+- The batch is bounded by count, not bytes. Open rounds still accrue at about
+  250 an hour (below).
 
 ## What closes a management-to-Texture round in normal operation (read-only analysis, 2026-11-18)
 
@@ -1152,7 +1159,7 @@ management-cast round, so `closeRoundsOfEndedRun` for management matches none
 of these as recipient, and the Texture next-actor check reads one document's
 conversations. Open rounds are not read by a wake, the dispatcher or a head
 rebuild; `RebuildInboxHeads` is off the boot path. The costs are the boot
-closure (0.29 s each before this lane, milliseconds each after) and one head
+closure (0.29 s each before this lane; "milliseconds each after" is an estimate until the staging proof runs) and one head
 object plus its records per story forever. Closing a round does not make the
 header list shorter.
 
