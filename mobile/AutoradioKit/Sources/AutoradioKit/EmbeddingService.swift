@@ -96,7 +96,7 @@ public final class EmbeddingService: @unchecked Sendable {
         self.env = env
         // The job saves every few dozen slices; the app going to the background saves what is pending (the platform's own notification names).
         for n in ["UIApplicationDidEnterBackgroundNotification", "NSApplicationDidResignActiveNotification"] {
-            NotificationCenter.default.addObserver(forName: Notification.Name(n), object: nil, queue: nil) { [weak self] _ in self?.flush() }
+            NotificationCenter.default.addObserver(forName: Notification.Name(n), object: nil, queue: nil) { [weak self] _ in DispatchQueue.global(qos: .utility).async { self?.flush() } }
         }
     }
 

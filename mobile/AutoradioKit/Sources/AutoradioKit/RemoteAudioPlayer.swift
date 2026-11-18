@@ -147,6 +147,7 @@ import MediaPlayer
     public func resume() {
         guard let p = player else { return }
         wantPlaying = true
+        pausedWhileHeld = false                          // the listener's own play settles it
         if p.currentItem?.status == .failed { note?("remote: the item had failed (\(p.currentItem?.error.map { "\($0)" } ?? "unknown")); play does nothing until it is started again") }
         if level != .pause, !held { p.play() }
         publish()

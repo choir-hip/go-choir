@@ -139,6 +139,7 @@ extension PlaybackEngine {
     private var reconciling = false, again = false
     private var pendingEnd: (id: String, played: Bool)?
     private var leadInDone = Set<String>()
+    private var keptSeen = Set<String>()
     /// An answer went on air over this entry: where it was, as a continuation entry (fresh id, same source, the words still to say, or the same
     /// audio from where it was). It is placed `next` when the answers are over, unless the listener asked for something else meanwhile.
     var remembered: RunSheetEntry?
@@ -338,6 +339,11 @@ extension PlaybackEngine {
             reconcile()
         } while again
         prefetchClips()
+        // A kept row goes once its entry was on the sheet and is no longer ahead or on air (an entry made but not yet placed keeps its row).
+        keptSeen.formUnion(store.sheet.entries.map(\.id))
+        let live = Set(store.sheet.entries.filter { $0.state == .ahead || $0.state == .onAir }.map(\.id) + (remembered.map { [$0.id] } ?? []))
+        let gone = keptSeen.subtracting(live)
+        if !gone.isEmpty { LocalEntryKeep.shared.remove(ids: gone); keptSeen.subtract(gone) }
         changed()
         aheadChanged?()
     }
@@ -391,6 +397,9 @@ extension PlaybackEngine {
             var c = RunSheetEntry(id: id, kind: old.kind == .mail ? .mail : .page, placedBy: .phone, title: old.title, estSeconds: RunSheetEntry.estimateSeconds(words: rest))
             c.source = old.source
             provided[id] = (old.title, [rest])
+            // The words also go to the keep, so a relaunch before it finishes still has them (they never leave the phone).
+            let k = LocalEntryKeep.shared.row(old.id)
+            LocalEntryKeep.shared.put(id: id, title: k?.title ?? old.title, label: k?.label ?? old.source?.label ?? "", rest: rest)
             remembered = c
             print("AUTORADIO kept place \(old.id) as \(c.id) on the phone while an answer speaks")
         } else if let rest = engine?.spokenRemainder(), !rest.isEmpty {
@@ -484,7 +493,7 @@ extension PlaybackEngine {
             ok = await engine.speak(documentID: doc, entry: entry, paragraphs: [entry.text ?? ""])
         case .page, .mail:
             engine.stopRemote()
-            if let w = provided[entry.id] {
+            if let w = provided[entry.id] ?? LocalEntryKeep.shared.row(entry.id)?.rest.map({ (entry.title, [$0]) }) {
                 let doc = "rs:" + entry.id
                 playingDocument = doc
                 ok = await engine.speak(documentID: doc, entry: entry, paragraphs: w.paragraphs)
@@ -524,7 +533,7 @@ extension PlaybackEngine {
             if spec == nil, let address = entry.filesAddress {
                 let url: URL?
                 if let known = localFiles[entry.id] { url = known } else { url = await fileResolver?(address) }
-                if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.title, show: entry.source?.label ?? "Files") }
+                if let url { localFiles[entry.id] = url; spec = RunSheetAudio(url: url, title: entry.shownTitle(), show: LocalEntryKeep.shared.row(entry.id)?.label ?? entry.source?.label ?? "Files") }
             }
             guard let a = spec else { break }
             if entry.kind == .clip, entry.source?.clipId != nil {
@@ -580,6 +589,7 @@ extension PlaybackEngine {
         if played { store.airedEnded(id, as: .heard, outcome: .finished, report: r) }
         else { store.airedEnded(id, as: .skipped, outcome: .failed) }
         provided[id] = nil
+        LocalEntryKeep.shared.remove(id)
         leadInDone.remove(id)
         dropLocated(id)
         if let e = store.entry(id) { onEntryEnded?(e, played) }
