@@ -291,6 +291,10 @@ type wrapLedger struct {
 	// the lists by record_kind.
 	failListKind string
 	listCalls    map[string]int
+	// listDelay makes each record_kind list take that long; failPaged makes a
+	// scorecard page read fail.
+	listDelay time.Duration
+	failPaged bool
 }
 
 func (l *wrapLedger) noteList(key, value string) error {
@@ -301,6 +305,9 @@ func (l *wrapLedger) noteList(key, value string) error {
 		l.listCalls = map[string]int{}
 	}
 	l.listCalls[value]++
+	if l.listDelay > 0 {
+		time.Sleep(l.listDelay)
+	}
 	if l.failListKind != "" && l.failListKind == value {
 		return context.DeadlineExceeded
 	}
@@ -312,6 +319,26 @@ func (l *wrapLedger) ListCommitmentRecordsBySubjectRef(ctx context.Context, owne
 		return nil, err
 	}
 	return l.autoradioLedger.ListCommitmentRecordsBySubjectRef(ctx, ownerID, computerID, key, value, limit)
+}
+
+func (l *wrapLedger) ListCalibrationRecordsPage(ctx context.Context, ownerID, computerID, agent, after string, limit int) ([]types.CommitmentRecord, string, error) {
+	if l.failPaged {
+		return nil, "", context.DeadlineExceeded
+	}
+	return l.autoradioLedger.(interface {
+		ListCalibrationRecordsPage(ctx context.Context, ownerID, computerID, agent, after string, limit int) ([]types.CommitmentRecord, string, error)
+	}).ListCalibrationRecordsPage(ctx, ownerID, computerID, agent, after, limit)
+}
+
+// ListCommitmentRecordsByBodyOfComputer is the predicate list: the newest rows
+// of one computer whose body fields equal match.
+func (l *wrapLedger) ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) ([]types.CommitmentRecord, int, int, error) {
+	if err := l.noteList("record_kind", match["$.subject_refs.record_kind"]); err != nil {
+		return nil, 0, 0, err
+	}
+	return l.autoradioLedger.(interface {
+		ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) ([]types.CommitmentRecord, int, int, error)
+	}).ListCommitmentRecordsByBodyOfComputer(ctx, ownerID, computerID, match, limit)
 }
 
 func (l *wrapLedger) ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context, ownerID, computerID, key, value string, limit int) ([]types.CommitmentRecord, int, int, error) {

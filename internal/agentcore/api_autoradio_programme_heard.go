@@ -60,6 +60,9 @@ const (
 // variable so a test can lower it.
 var heardSegmentsRead = 2000
 
+// heardSettlementsRead bounds the heard-settlement list likewise.
+var heardSettlementsRead = 2000
+
 type heardRef struct{ Route, Version string }
 
 type heardSeg struct {
@@ -261,7 +264,7 @@ func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.Co
 			segs[r.RecordID] = r
 		}
 	}
-	heard, rd, err := calibration.ListAutoradioHeard(ctx, c.ledger, c.ownerID, c.rt.cfg.ComputerID, heardSegmentsRead)
+	heard, rd, err := calibration.ListAutoradioHeard(ctx, c.ledger, c.ownerID, c.rt.cfg.ComputerID, heardSettlementsRead)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read the heard settlements: %w", err)
 	}
