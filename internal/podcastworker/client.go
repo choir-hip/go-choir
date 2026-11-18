@@ -210,17 +210,6 @@ func (c *Client) PutClipsEach(ctx context.Context, clips []ClipIn) []error {
 	return errs
 }
 
-// DeleteClips removes clips by id (the operator route).
-func (c *Client) DeleteClips(ctx context.Context, ids []string) error {
-	for start := 0; start < len(ids); start += 200 {
-		batch := ids[start:min(start+200, len(ids))]
-		if err := c.do(ctx, http.MethodDelete, opBase+"clips", map[string]any{"clip_ids": batch}, nil); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // HeldClip is a clip the platform serves for a story.
 type HeldClip struct {
 	ClipID   string

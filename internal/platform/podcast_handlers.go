@@ -159,26 +159,8 @@ func (h *Handler) HandlePodcastTranscripts(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"segments": n, "kept": kept})
 }
 
-// HandlePodcastClipsWrite serves PUT of clips, and DELETE of clips by id.
+// HandlePodcastClipsWrite serves PUT of clips.
 func (h *Handler) HandlePodcastClipsWrite(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodDelete {
-		if h.podcastRefuse(w, r, http.MethodDelete) {
-			return
-		}
-		var req struct {
-			ClipIDs []string `json:"clip_ids"`
-		}
-		if !decodePodcastBody(w, r, &req) {
-			return
-		}
-		n, err := h.service.DeletePodcastClips(r.Context(), req.ClipIDs)
-		if err != nil {
-			podcastFail(w, "clips delete", err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]int{"deleted": n})
-		return
-	}
 	if h.podcastRefuse(w, r, http.MethodPut) {
 		return
 	}

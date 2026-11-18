@@ -4,10 +4,13 @@ package podcastworker
 // had its audio deleted long ago, and the publisher serves another file now
 // (other ads). So: download the episode again, transcribe the minutes around
 // the clip's stored time (the recogniser is the worker's own), find the clip's
-// quote in that audio, and fingerprint the clip where it now is. If the quote
-// is not found there, the episode was re-edited and the clip no longer says
-// what its quote says: it is deleted, with the reason logged. The audio is
-// deleted after use; nothing here calls a model service.
+// quote in that audio, and fingerprint the clip where it now is. A quote not
+// found there gets one search of the whole file, when the file is within the
+// recogniser's bound. A quote still not found leaves the clip valid and
+// unfingerprinted, recorded as not found and not looked at again for a day:
+// this pass never deletes anything (a clip the phone cannot relocate is
+// dropped from its feed, and clips leave the list with their stories). The
+// audio is deleted after use; nothing here calls a model service.
 
 import (
 	"context"
@@ -28,6 +31,8 @@ const (
 	// transcribed: offsets between two downloads of one episode measured -37 to
 	// +130 s, all within 240 s.
 	RepairMargin = 300.0
+	// notFoundSkip is how long a clip whose quote was not found is left alone.
+	notFoundSkip = 24 * time.Hour
 	// QuoteFoundScore is the share of the quote's words that must be heard, in
 	// order, for the clip to count as found.
 	QuoteFoundScore = 0.75
@@ -44,10 +49,6 @@ type SpanAudio struct {
 	T0    float64
 	Words []Word
 	Track []byte
-	// Complete: the span was the whole file (T1 0) and it was transcribed to
-	// within 3 s of the file's length. Only then does a missing quote prove
-	// the episode no longer says it.
-	Complete bool
 }
 
 // WindowEngine fetches an episode once and transcribes spans of it.
@@ -62,7 +63,6 @@ type RepairBackend interface {
 	Transcript(ctx context.Context, feedURL, guid string) ([]Segment, error)
 	Clips(ctx context.Context, routes []string) ([]HeldClip, error)
 	PutClipsEach(ctx context.Context, clips []ClipIn) []error
-	DeleteClips(ctx context.Context, ids []string) error
 }
 
 // Repairer is the pass.
@@ -74,15 +74,19 @@ type Repairer struct {
 	// is spent the episode in hand is dropped (nothing from it is written or
 	// deleted) and the rest wait for the next run.
 	Budget time.Duration
-	Now    func() time.Time
-	Logf   func(string, ...any)
+	// MaxSeconds is the most audio the recogniser is run over in one file (the
+	// worker's --max-minutes; 0 means no bound): a served file longer than it is
+	// not searched whole.
+	MaxSeconds float64
+	Now        func() time.Time
+	Logf       func(string, ...any)
 
 	skipUntil map[string]time.Time // episode id or clip id -> not before
 }
 
 // RepairReport is one run's counts.
 type RepairReport struct {
-	Unfingerprinted, Fingerprinted, Deleted, Failed, Skipped int
+	Unfingerprinted, Fingerprinted, NotFound, Failed, Skipped int
 }
 
 func (r *Repairer) logf(f string, a ...any) {
@@ -179,7 +183,6 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 	defer cancel()
 	var puts []ClipIn
 	var putIDs []string
-	var gone []string
 	for _, id := range order {
 		if err := ctx.Err(); err != nil {
 			return rep, err
@@ -194,7 +197,7 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 			rep.Skipped += len(clips)
 			continue
 		}
-		in, ids, del, skipped, err := r.repairEpisode(bctx, e, clips)
+		in, ids, notFound, skipped, err := r.repairEpisode(bctx, e, clips)
 		if err != nil {
 			if ctx.Err() != nil {
 				return rep, ctx.Err()
@@ -211,10 +214,14 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 			r.skipUntil[c] = r.now().Add(repairSkip)
 			rep.Skipped++
 		}
-		puts, putIDs, gone = append(puts, in...), append(putIDs, ids...), append(gone, del...)
+		for _, c := range notFound {
+			r.skipUntil[c] = r.now().Add(notFoundSkip)
+			rep.NotFound++
+		}
+		puts, putIDs = append(puts, in...), append(putIDs, ids...)
 	}
 	if r.DryRun {
-		rep.Fingerprinted, rep.Deleted = len(puts), len(gone)
+		rep.Fingerprinted = len(puts)
 		return rep, nil
 	}
 	if len(puts) > 0 {
@@ -228,23 +235,15 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 			rep.Fingerprinted++
 		}
 	}
-	if len(gone) > 0 {
-		if err := r.B.DeleteClips(ctx, gone); err != nil {
-			rep.Failed += len(gone)
-			return rep, fmt.Errorf("delete clips: %w", err)
-		}
-		rep.Deleted = len(gone)
-	}
-	r.logf("podcast-worker repair: %d clips without a fingerprint, %d fingerprinted, %d deleted, %d failed, %d skipped", rep.Unfingerprinted, rep.Fingerprinted, rep.Deleted, rep.Failed, rep.Skipped)
+	r.logf("podcast-worker repair: %d clips without a fingerprint, %d fingerprinted, %d not found, %d failed, %d skipped", rep.Unfingerprinted, rep.Fingerprinted, rep.NotFound, rep.Failed, rep.Skipped)
 	return rep, nil
 }
 
-// repairEpisode makes the clip writes, the deletions and the skips for one
-// episode. A clip is deleted only when the whole served file was transcribed
-// completely and its quote is not in it; a quote missed in the window around
-// the stored place gets one search of the whole file (a second download), and
-// any failure leaves the clip as it is.
-func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []HeldClip) (puts []ClipIn, putIDs, gone, skipped []string, err error) {
+// repairEpisode makes the clip writes and the skips for one episode. A quote
+// missed in the window around the stored place gets one search of the whole
+// file (a second download) when the file is within the recogniser's bound. It
+// deletes nothing: a clip not found, or whose search failed, stays as it is.
+func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []HeldClip) (puts []ClipIn, putIDs, notFound, skipped []string, err error) {
 	segs, err := r.B.Transcript(ctx, e.FeedURL, e.GUID)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("stored transcript: %w", err)
@@ -303,7 +302,14 @@ func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []Hel
 		place(it, sa, file, at, score)
 	}
 	if len(missed) == 0 {
-		return puts, putIDs, gone, skipped, nil
+		return puts, putIDs, notFound, skipped, nil
+	}
+	if r.MaxSeconds > 0 && (file.Seconds <= 0 || file.Seconds > r.MaxSeconds) {
+		r.logf("podcast-worker repair: episode %s: %d clips not found near their stored place; the served file (%.0f s) is longer than the %.0f s the recogniser is run over, so it is not searched whole; the clips stay as they are, not looked at again for %s", e.EpisodeID, len(missed), file.Seconds, r.MaxSeconds, notFoundSkip)
+		for _, it := range missed {
+			notFound = append(notFound, it.h.ClipID)
+		}
+		return puts, putIDs, notFound, skipped, nil
 	}
 	file2, whole, werr := r.Eng.Windows(ctx, e.EnclosureURL, []Span{{}})
 	if werr != nil || len(whole) != 1 {
@@ -314,41 +320,20 @@ func (r *Repairer) repairEpisode(ctx context.Context, e EpisodeInfo, clips []Hel
 		for _, it := range missed {
 			skipped = append(skipped, it.h.ClipID)
 		}
-		return puts, putIDs, gone, skipped, nil
+		return puts, putIDs, notFound, skipped, nil
 	}
 	sa := &whole[0]
 	for _, it := range missed {
 		at, score := FindQuote(sa.Words, it.h.Quote, it.oldAt)
-		switch {
-		case score >= QuoteFoundScore:
+		if score >= QuoteFoundScore {
 			place(it, sa, file2, at, score)
-		case sa.Complete:
-			r.logf("podcast-worker repair: clip %s deleted: its quote %q is not anywhere in the %.0f s of the episode as served now (best match %.2f of %.2f needed; story %s, stored %.0f-%.0f s): the episode was edited",
-				it.h.ClipID, truncateRunes(it.h.Quote, 60), file2.Seconds, score, QuoteFoundScore, it.h.Route, it.h.Start, it.h.End)
-			gone = append(gone, it.h.ClipID)
-		default:
-			r.logf("podcast-worker repair: clip %s left as it is: its quote is not in the audio transcribed, which did not cover the whole file", it.h.ClipID)
-			skipped = append(skipped, it.h.ClipID)
-		}
-	}
-	return puts, putIDs, gone, skipped, nil
-}
-
-func mergeSpans[T any](items []T, span func(i int) Span) []Span {
-	ss := make([]Span, len(items))
-	for i := range items {
-		ss[i] = span(i)
-	}
-	sort.Slice(ss, func(i, j int) bool { return ss[i].T0 < ss[j].T0 })
-	var out []Span
-	for _, s := range ss {
-		if n := len(out); n > 0 && s.T0 <= out[n-1].T1 {
-			out[n-1].T1 = math.Max(out[n-1].T1, s.T1)
 			continue
 		}
-		out = append(out, s)
+		r.logf("podcast-worker repair: clip %s not found: its quote %q is not in the episode as served now (best match %.2f of %.2f needed over %.0f s; story %s, stored %.0f-%.0f s); left as it is, not looked at again for %s",
+			it.h.ClipID, truncateRunes(it.h.Quote, 60), score, QuoteFoundScore, file2.Seconds, it.h.Route, it.h.Start, it.h.End, notFoundSkip)
+		notFound = append(notFound, it.h.ClipID)
 	}
-	return out
+	return puts, putIDs, notFound, skipped, nil
 }
 
 // quoteStart is where the clip's quote begins in the stored transcript: the
@@ -438,8 +423,7 @@ func (t *Transcriber) Windows(ctx context.Context, enclosureURL string, spans []
 		for j, w := range spoken {
 			words[j] = Word{W: w.W, Start: w.Start + sp.T0, End: w.End + sp.T0}
 		}
-		complete := sp.T0 == 0 && sp.T1 == 0 && file.Seconds > 0 && float64(len(track)/podcastfp.Bands)/podcastfp.FPS >= file.Seconds-3
-		out = append(out, SpanAudio{T0: sp.T0, Words: words, Track: track, Complete: complete})
+		out = append(out, SpanAudio{T0: sp.T0, Words: words, Track: track})
 	}
 	return file, out, nil
 }

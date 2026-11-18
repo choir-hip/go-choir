@@ -9,7 +9,7 @@ package podcastworker
 //      or accepts words that are not the quote;
 //   4. the repair pass fingerprints a clip at the stored place instead of
 //      where its quote is now (the shift is lost);
-//   5. a clip whose quote is gone is kept, or one whose quote is found is deleted;
+//   5. a clip whose quote is not found is deleted, or searched again at once;
 //   6. an engine failure deletes clips, or is retried at once on the next run;
 //   7. two clips of one episode cost two downloads;
 //   8. a dry run writes or deletes.
@@ -137,12 +137,10 @@ type fakeRepair struct {
 	segs      map[string][]Segment
 	held      []HeldClip
 	puts      []ClipIn
-	deleted   []string
 	windows   int
 	spansSeen [][]Span
 	engineErr error
 	wholeErr  error              // the engine fails on a whole-file span only
-	partial   bool               // a whole-file transcription does not cover the file
 	said      map[float64]string // seconds -> words spoken there in the served file
 	pcm       []int16
 }
@@ -165,10 +163,6 @@ func (f *fakeRepair) PutClipsEach(_ context.Context, c []ClipIn) []error {
 		}
 	}
 	return make([]error, len(c))
-}
-func (f *fakeRepair) DeleteClips(_ context.Context, ids []string) error {
-	f.deleted = append(f.deleted, ids...)
-	return nil
 }
 func (f *fakeRepair) Windows(_ context.Context, _ string, spans []Span) (podcastfp.FileInfo, []SpanAudio, error) {
 	f.windows++
@@ -194,7 +188,7 @@ func (f *fakeRepair) Windows(_ context.Context, _ string, spans []Span) (podcast
 			}
 		}
 		n := min(int((t1-sp.T0)*16000), len(f.pcm)-int(sp.T0*16000))
-		out = append(out, SpanAudio{T0: sp.T0, Words: ws, Track: podcastfp.Frames(f.pcm[int(sp.T0*16000) : int(sp.T0*16000)+n]), Complete: whole && !f.partial})
+		out = append(out, SpanAudio{T0: sp.T0, Words: ws, Track: podcastfp.Frames(f.pcm[int(sp.T0*16000) : int(sp.T0*16000)+n])})
 	}
 	return podcastfp.FileInfo{Bytes: 5 << 20, BitrateKbps: 128, SeekableByBitrate: true, Seconds: float64(len(f.pcm)) / 16000}, out, nil
 }
@@ -223,10 +217,11 @@ func newRepairer(f *fakeRepair, logs *[]string) *Repairer {
 	return &Repairer{B: f, Eng: f, Now: func() time.Time { return matchNow }, Logf: func(s string, a ...any) { *logs = append(*logs, fmt.Sprintf(s, a...)) }}
 }
 
-func TestRepairFingerprintsWhereTheQuoteIsNowAndDeletesOnlyAfterTheWholeFileIsSearched(t *testing.T) {
+func TestRepairFingerprintsWhereTheQuoteIsNowAndLeavesAnUnfoundClipAlone(t *testing.T) {
 	f := newFakeRepair()
 	var logs []string
-	rep, err := newRepairer(f, &logs).Run(context.Background())
+	r := newRepairer(f, &logs)
+	rep, err := r.Run(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,14 +233,8 @@ func TestRepairFingerprintsWhereTheQuoteIsNowAndDeletesOnlyAfterTheWholeFileIsSe
 	if len(f.spansSeen[0]) != 2 || f.spansSeen[0][0].T0 != 95 || f.spansSeen[0][0].T1 != 735 {
 		t.Fatalf("spans %v", f.spansSeen[0])
 	}
-	if rep.Fingerprinted != 1 || rep.Deleted != 1 {
-		t.Fatalf("report %+v logs %v", rep, logs)
-	}
-	if len(f.deleted) != 1 || f.deleted[0] != "clip-b" {
-		t.Fatalf("deleted %v", f.deleted)
-	}
-	if len(f.puts) != 1 {
-		t.Fatalf("puts %+v", f.puts)
+	if rep.Fingerprinted != 1 || rep.NotFound != 1 || len(f.puts) != 1 {
+		t.Fatalf("report %+v puts %d logs %v", rep, len(f.puts), logs)
 	}
 	p := f.puts[0]
 	fp := p.Fingerprint
@@ -254,8 +243,19 @@ func TestRepairFingerprintsWhereTheQuoteIsNowAndDeletesOnlyAfterTheWholeFileIsSe
 	if p.Start != 395 || p.End != 435 || fp == nil || fp.Start != 412 || fp.End != 452 || fp.HeadAt != 412 || fp.Validate() != nil {
 		t.Fatalf("put %+v fingerprint %+v", p, fp)
 	}
-	if !strings.Contains(strings.Join(logs, "\n"), "clip-b deleted: its quote") {
-		t.Fatalf("the deletion's reason is not logged: %v", logs)
+	if !strings.Contains(strings.Join(logs, "\n"), "clip-b not found") {
+		t.Fatalf("the reason is not logged: %v", logs)
+	}
+	// The clip not found is left alone for a day, then looked at again.
+	before := f.windows
+	if rep, _ = r.Run(context.Background()); f.windows != before || rep.Skipped != 1 {
+		t.Fatalf("looked at again at once: %d downloads, %+v", f.windows, rep)
+	}
+	now := matchNow.Add(25 * time.Hour)
+	r.Now = func() time.Time { return now }
+	r.Run(context.Background())
+	if f.windows == before {
+		t.Fatal("never looked at again after a day")
 	}
 }
 
@@ -264,8 +264,8 @@ func TestRepairFindsAQuoteFarOutsideTheWindowInTheWholeFileAndDeletesNothing(t *
 	f.said[3000] = q2 // 1700 s from where it was: a long block was added
 	var logs []string
 	rep, err := newRepairer(f, &logs).Run(context.Background())
-	if err != nil || len(f.deleted) != 0 || rep.Fingerprinted != 2 {
-		t.Fatalf("%+v %v deleted %v logs %v", rep, err, f.deleted, logs)
+	if err != nil || rep.Fingerprinted != 2 {
+		t.Fatalf("%+v %v logs %v", rep, err, logs)
 	}
 	for _, p := range f.puts {
 		if p.Quote == q2 && (p.Fingerprint.Start != 2995 || p.Start != 1295) {
@@ -274,24 +274,40 @@ func TestRepairFindsAQuoteFarOutsideTheWindowInTheWholeFileAndDeletesNothing(t *
 	}
 }
 
-func TestRepairDeletesNothingWhenTheWholeFileWasNotFullyTranscribedOrCouldNotBeSearched(t *testing.T) {
-	for name, set := range map[string]func(f *fakeRepair){
-		"partial transcription": func(f *fakeRepair) { f.partial = true },
-		"whole-file failure":    func(f *fakeRepair) { f.wholeErr = errors.New("download: status 503") },
-	} {
-		f := newFakeRepair()
-		set(f)
-		var logs []string
-		r := newRepairer(f, &logs)
-		rep, err := r.Run(context.Background())
-		if err != nil || len(f.deleted) != 0 || rep.Deleted != 0 || rep.Fingerprinted != 1 || rep.Skipped != 1 {
-			t.Fatalf("%s: %+v %v deleted %v logs %v", name, rep, err, f.deleted, logs)
-		}
-		before := f.windows
-		r.Run(context.Background())
-		if f.windows != before { // clip-a is done; clip-b is skipped: nothing is fetched again
-			t.Fatalf("%s: the skipped clip was fetched again (%d to %d downloads)", name, before, f.windows)
-		}
+func TestRepairDoesNotSearchAFileLongerThanTheRecogniserBound(t *testing.T) {
+	f := newFakeRepair()
+	var logs []string
+	r := newRepairer(f, &logs)
+	r.MaxSeconds = 90 * 60 // the served file is 3200 s: within the bound
+	if _, err := r.Run(context.Background()); err != nil || f.windows != 2 {
+		t.Fatalf("a file within the bound: %d downloads, %v", f.windows, err)
+	}
+	f = newFakeRepair()
+	logs = nil
+	r = newRepairer(f, &logs)
+	r.MaxSeconds = 1000
+	rep, err := r.Run(context.Background())
+	if err != nil || f.windows != 1 || rep.NotFound != 1 || rep.Fingerprinted != 1 {
+		t.Fatalf("a file over the bound: %d downloads %+v %v logs %v", f.windows, rep, err, logs)
+	}
+	if !strings.Contains(strings.Join(logs, "\n"), "not searched whole") {
+		t.Fatalf("the skip is not logged: %v", logs)
+	}
+}
+
+func TestRepairWholeFileFailureLeavesTheClipAndBacksOff(t *testing.T) {
+	f := newFakeRepair()
+	f.wholeErr = errors.New("download: status 503")
+	var logs []string
+	r := newRepairer(f, &logs)
+	rep, err := r.Run(context.Background())
+	if err != nil || rep.NotFound != 0 || rep.Fingerprinted != 1 || rep.Skipped != 1 || len(f.puts) != 1 {
+		t.Fatalf("%+v %v logs %v", rep, err, logs)
+	}
+	before := f.windows
+	r.Run(context.Background())
+	if f.windows != before {
+		t.Fatalf("the skipped clip was fetched again (%d to %d downloads)", before, f.windows)
 	}
 }
 
@@ -300,10 +316,10 @@ func TestRepairLeavesAClipWhoseFingerprintCannotBeCutRatherThanDeletingIt(t *tes
 	f.said = map[float64]string{3185: q1, 3190: q2} // found, but 2785 s later: the clip then runs past the end
 	var logs []string
 	rep, err := newRepairer(f, &logs).Run(context.Background())
-	if err != nil || len(f.deleted) != 0 || rep.Deleted != 0 || len(f.puts) != 0 {
-		t.Fatalf("%+v %v deleted %v puts %v logs %v", rep, err, f.deleted, f.puts, logs)
+	if err != nil || len(f.puts) != 0 {
+		t.Fatalf("%+v %v puts %v logs %v", rep, err, f.puts, logs)
 	}
-	if rep.Skipped != 2 {
+	if rep.Skipped != 2 || rep.NotFound != 0 {
 		t.Fatalf("both clips should be skipped: %+v", rep)
 	}
 }
@@ -315,7 +331,7 @@ func TestRepairBudgetEndsARunWithoutDeletingAnything(t *testing.T) {
 	r.Budget = time.Nanosecond
 	time.Sleep(time.Millisecond)
 	rep, err := r.Run(context.Background())
-	if err != nil || f.windows != 0 || len(f.deleted) != 0 || len(f.puts) != 0 {
+	if err != nil || f.windows != 0 || len(f.puts) != 0 {
 		t.Fatalf("%+v %v downloads %d", rep, err, f.windows)
 	}
 }
@@ -350,8 +366,8 @@ func TestRepairIgnoresFingerprintedClipsAndDryRunWritesNothing(t *testing.T) {
 	r := newRepairer(f, &logs)
 	r.DryRun = true
 	rep, err := r.Run(context.Background())
-	if err != nil || len(f.puts) != 0 || len(f.deleted) != 0 || rep.Unfingerprinted != 1 || rep.Deleted != 1 {
-		t.Fatalf("%+v %v puts %v deleted %v", rep, err, f.puts, f.deleted)
+	if err != nil || len(f.puts) != 0 || rep.Unfingerprinted != 1 || rep.Fingerprinted != 1 {
+		t.Fatalf("%+v %v puts %v", rep, err, f.puts)
 	}
 }
 
@@ -361,8 +377,8 @@ func TestRepairLeavesClipsAloneOnAnEngineFailureAndBacksOff(t *testing.T) {
 	var logs []string
 	r := newRepairer(f, &logs)
 	rep, err := r.Run(context.Background())
-	if err != nil || rep.Failed != 2 || len(f.deleted) != 0 || len(f.puts) != 0 {
-		t.Fatalf("%+v %v deleted %v puts %v", rep, err, f.deleted, f.puts)
+	if err != nil || rep.Failed != 2 || len(f.puts) != 0 {
+		t.Fatalf("%+v %v puts %v", rep, err, f.puts)
 	}
 	rep, _ = r.Run(context.Background())
 	if f.windows != 1 || rep.Skipped != 2 {
@@ -420,8 +436,8 @@ func TestRepairSkipsAClipUnder24SecondsAndDeletesNothing(t *testing.T) {
 	var logs []string
 	r := newRepairer(f, &logs)
 	rep, err := r.Run(context.Background())
-	if err != nil || f.windows != 0 || len(f.deleted) != 0 || len(f.puts) != 0 || rep.Skipped != 1 {
-		t.Fatalf("%+v %v downloads %d deleted %v puts %v", rep, err, f.windows, f.deleted, f.puts)
+	if err != nil || f.windows != 0 || len(f.puts) != 0 || rep.Skipped != 1 {
+		t.Fatalf("%+v %v downloads %d puts %v", rep, err, f.windows, f.puts)
 	}
 }
 
