@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -239,5 +241,129 @@ func TestUnreadableLinkAfterBaselineStartsNoHold(t *testing.T) {
 	f.h.SweepDeployRefreshPending(ctx)
 	if strings.Contains(logs.String(), "refresh hold") {
 		t.Fatalf("a read failure was taken for a move:\n%s", logs.String())
+	}
+}
+
+// Review seat 2 finding 1: a hold in force expires at the bound whatever the
+// link reads, with one line; the moved release then becomes the baseline, so
+// the same release reading again starts no second hold.
+func TestReleaseHoldExpiresAtTheBoundOnAnUnreadableLink(t *testing.T) {
+	f := newRingHandlerFixture(t)
+	logs := captureLog(t)
+	clock := time.Now()
+	f.h.replacement.now = func() time.Time { return clock }
+	ctx := context.Background()
+	f.moveLink("r2", "commit-r2")
+	f.h.SweepDeployRefreshPending(ctx) // the hold starts
+	f.moveLink("", "")
+	clock = clock.Add(releaseHoldBound + time.Minute)
+	f.enrollDeEarlier(f.h, "commit-r2")
+	f.h.SweepDeployRefreshPending(ctx)
+	f.h.SweepDeployRefreshPending(ctx)
+	if len(f.mgr.refreshes) != 1 {
+		t.Fatalf("an expired hold must let the sweep run: %v\n%s", f.mgr.refreshes, logs.String())
+	}
+	f.moveLink("r2", "commit-r2")
+	f.h.SweepDeployRefreshPending(ctx)
+	out := logs.String()
+	if strings.Count(out, "refresh hold: started") != 1 || strings.Count(out, "without a restart") != 1 {
+		t.Fatalf("want one started and one expiry line, no second hold:\n%s", out)
+	}
+}
+
+// Review seat 2 finding 3: what a real restart does. A second vmctl loads the
+// pending set from disk and the ownerships (grants, crash history) from the
+// registry file, starts on the moved link, and walks; the deploy's expedite
+// opens the rings. It refreshes every computer the first one skipped, with
+// the counters as the first left them.
+func TestReplacementVmctlRefreshesWhatTheHeldOneSkipped(t *testing.T) {
+	dir := t.TempDir()
+	ownPath := filepath.Join(dir, "ownerships.json")
+	pendPath := filepath.Join(dir, "pending.json")
+	reg := NewOwnershipRegistry("")
+	if err := reg.SetPersistencePath(ownPath); err != nil {
+		t.Fatal(err)
+	}
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
+	mgr := &ringManager{mockVMManager: &mockVMManager{}, current: "r1", commit: "commit-r1", byVM: map[string]GuestReleaseVMStatus{}}
+	reg.SetVMManager(mgr)
+	for _, user := range []string{"ring-de", "ring-other"} {
+		if _, err := reg.ResolveOrAssign(user); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg.mu.Lock()
+	for _, own := range reg.ownerships {
+		if own.UserID == "ring-de" {
+			own.ComputerID = ringProofComputer
+		}
+		mgr.byVM[own.VMID] = GuestReleaseVMStatus{GuestRelease: "r1"}
+	}
+	if err := reg.writePersistenceLocked(); err != nil {
+		reg.mu.Unlock()
+		t.Fatal(err)
+	}
+	reg.mu.Unlock()
+	h1 := NewHandler(reg)
+	if err := h1.SetDeployRefreshPendingPath(pendPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := h1.SetRingWalkPath(filepath.Join(dir, "ring-walk.json"), filepath.Join(dir, "ring-walk-history.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	h1.guestMarker = &fakeGuestMarker{mgr: mgr.mockVMManager, outcome: guestMarkWritten}
+	h1.guestServedCommit = func(context.Context, VMOwnership) string { return "" }
+	h1.PrimeRingWalk()
+	for _, user := range []string{"ring-de", "ring-other"} {
+		own := reg.GetOwnershipForDesktop(user, "primary")
+		h1.deployRefreshState().ensure(deployRefreshPendingEntry{UserID: user, DesktopID: "primary", VMID: own.VMID, ComputerID: own.ComputerID, Target: "commit-r2", LastReason: "test"})
+	}
+	mgr.current, mgr.commit = "r2", "commit-r2"
+	h1.TickRingWalk(context.Background())
+	h1.SweepDeployRefreshPending(context.Background())
+	if len(mgr.refreshes) != 0 {
+		t.Fatalf("the held vmctl refreshed: %v", mgr.refreshes)
+	}
+
+	// The replacement: new registry from the file, new handler over the same
+	// state directory, the manager already on r2.
+	reg2 := NewOwnershipRegistry("")
+	if err := reg2.SetPersistencePath(ownPath); err != nil {
+		t.Fatal(err)
+	}
+	reg2.SetCorpusdURL(testComputerCredentialIssuerURL(t))
+	mgr2 := &ringManager{mockVMManager: &mockVMManager{}, current: "r2", commit: "commit-r2", byVM: map[string]GuestReleaseVMStatus{}}
+	reg2.SetVMManager(mgr2)
+	h2 := NewHandler(reg2)
+	if err := h2.SetDeployRefreshPendingPath(pendPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := h2.SetRingWalkPath(filepath.Join(dir, "ring-walk.json"), filepath.Join(dir, "ring-walk-history.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	mgr2.pinner = h2.RingWalkPinner()
+	h2.guestMarker = &fakeGuestMarker{mgr: mgr2.mockVMManager, outcome: guestMarkWritten}
+	h2.guestServedCommit = func(context.Context, VMOwnership) string { return "" }
+	h2.PrimeRingWalk()
+	reg2.ReattachManagedVMs(context.Background(), allowAllRoutes)
+	pending := h2.pendingDeployRefreshes()
+	if len(pending) != 2 {
+		t.Fatalf("the replacement must load both pending entries from disk: %+v", pending)
+	}
+	for _, e := range pending {
+		if e.Attempts != 0 || !e.LastAttemptAt.IsZero() {
+			t.Fatalf("the held vmctl left counters changed: %+v", e)
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/internal/vmctl/ring-walk/expedite", strings.NewReader(`{"reason":"test","by":"test","release":"commit-r2"}`))
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+	h2.HandleRingWalkExpedite(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expedite: %d %s", rec.Code, rec.Body.String())
+	}
+	h2.SweepDeployRefreshPending(context.Background())
+	if len(mgr2.refreshes) != 2 {
+		t.Fatalf("the replacement must refresh both computers the held vmctl skipped: %v", mgr2.refreshes)
 	}
 }
