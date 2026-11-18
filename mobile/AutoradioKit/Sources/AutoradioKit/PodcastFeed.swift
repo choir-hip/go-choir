@@ -213,6 +213,14 @@ private final class RSSDelegate: NSObject, XMLParserDelegate {
     /// One text buffer per open element: a parent keeps its own words and takes each child's text as a paragraph (never markup), so
     /// `<description><p>Words</p></description>` reads "Words" and not the empty text of the last child.
     var buffers: [String] = []
+    /// A hostile feed cannot grow memory without limit: one element's text stops growing at this size (the rest is dropped), and elements
+    /// nested deeper than `maxDepth` are ignored with their text.
+    static let maxTextBytes = 200_000, maxDepth = 64
+    var tooDeep = 0
+    private func add(_ s: String) {
+        guard let last = buffers.indices.last, buffers[last].utf8.count < Self.maxTextBytes else { return }
+        buffers[last] += s
+    }
     static let inline: Set<String> = ["a", "b", "i", "u", "em", "strong", "span", "code", "small", "sup", "sub", "abbr", "cite", "mark", "s"]
     var item: Item?
     var title = "", author = "", artwork = "", summary = "", channelDescription = ""
@@ -220,26 +228,29 @@ private final class RSSDelegate: NSObject, XMLParserDelegate {
     var aborted = false
 
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes a: [String: String]) {
+        if path.count >= Self.maxDepth { tooDeep += 1; return }
         path.append(name); buffers.append("")
         if name == "item" { item = Item() }
         if name == "enclosure", item != nil, let u = a["url"] { item?.enclosures.append((u, (a["type"] ?? "").lowercased())) }
         if name == "media:content", item != nil, let u = a["url"] { item?.media.append((u, (a["type"] ?? a["medium"] ?? "").lowercased())) }
         if name == "itunes:image", let h = a["href"] { if item != nil { item?.image = h } else if artwork.isEmpty { artwork = h } }
     }
-    func parser(_ parser: XMLParser, foundCharacters s: String) { if !buffers.isEmpty { buffers[buffers.count - 1] += s } }
-    func parser(_ parser: XMLParser, foundCDATA data: Data) { if !buffers.isEmpty { buffers[buffers.count - 1] += String(decoding: data, as: UTF8.self) } }
+    func parser(_ parser: XMLParser, foundCharacters s: String) { if tooDeep == 0 { add(s) } }
+    func parser(_ parser: XMLParser, foundCDATA data: Data) { if tooDeep == 0 { add(String(decoding: data, as: UTF8.self)) } }
 
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        if tooDeep > 0 { tooDeep -= 1; return }
         let raw = buffers.popLast() ?? ""
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         defer {
             path.removeLast()
             if !buffers.isEmpty, name != "item" {
-                if name == "br" { buffers[buffers.count - 1] += "\n" }
-                else if Self.inline.contains(name.lowercased()) { buffers[buffers.count - 1] += raw }
+                if name == "br" { add("\n") }
+                else if Self.inline.contains(name.lowercased()) { add(raw) }
                 else if !t.isEmpty {
-                    let own = buffers[buffers.count - 1]
-                    buffers[buffers.count - 1] += (own.isEmpty || own.hasSuffix("\n") ? "" : "\n\n") + t + "\n\n"
+                    let last = buffers.count - 1                                          // in place: no copy of the parent's buffer per child
+                    let sep = buffers[last].isEmpty || buffers[last].hasSuffix("\n") ? "" : "\n\n"
+                    add(sep + t + "\n\n")
                 }
             }
         }
