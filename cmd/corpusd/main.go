@@ -249,6 +249,14 @@ func main() {
 		log.Fatalf("corpusd capture bodies: %v", err)
 	}
 	ogHandler.ConfigureCaptureIndex(store)
+	// The captured pages' full-text index, beside the capture projection:
+	// derived from the capture objects and their text blobs, rebuilt by its
+	// catch-up (docs/reference/CAPTURE-FULLTEXT.md).
+	if err := store.ConfigureCaptureFullText(platform.CaptureFullTextDir(cfg.ArtifactsRoot), ogHandler.CaptureBodyStore()); err != nil {
+		log.Printf("corpusd capture full text index unavailable: %v", err)
+	} else {
+		store.StartCaptureFullTextCatchUp(context.Background())
+	}
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
 
 	// The receipt backfill walk and the append timing line start as the

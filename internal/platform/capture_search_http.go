@@ -73,6 +73,10 @@ func (h *ObjectGraphHandler) HandleCaptureSearch(w http.ResponseWriter, r *http.
 			writeJSON(w, http.StatusServiceUnavailable, apiError{Error: err.Error()})
 			return
 		}
+		if errors.Is(err, errBadCaptureSearch) {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+			return
+		}
 		log.Printf("corpusd: capture search for %s: %v", req.ComputerID, err)
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "capture search failed"})
 		return

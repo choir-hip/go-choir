@@ -35,6 +35,11 @@ const (
 	// retrievalCaptureIndexWrite is a write, timed beside the reads: the
 	// projection's cost per capture.
 	retrievalCaptureIndexWrite = "capture_index_write"
+	// The full-text index of captured pages (capture_fulltext.go): a search,
+	// one page's write, and a catch-up batch.
+	retrievalFullTextSearch  = "capture_fulltext_search"
+	retrievalFullTextWrite   = "capture_fulltext_write"
+	retrievalFullTextCatchUp = "capture_fulltext_catchup"
 )
 
 // retrievalLogSlowOnly names operations that log only when slower than
@@ -47,6 +52,7 @@ var retrievalLogSlowOnly = map[string]bool{
 	retrievalListEdgesByKind:   true,
 	retrievalListEdgesTo:       true,
 	retrievalCaptureIndexWrite: true,
+	retrievalFullTextWrite:     true,
 }
 
 const retrievalSlowLog = 100 * time.Millisecond
