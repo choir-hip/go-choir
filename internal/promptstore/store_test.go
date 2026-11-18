@@ -105,25 +105,40 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 	}
 }
 
-// One question's wordings go to one call, and results say what is new
-// (search-reuse commit 3, docs/problems/search-volume-outruns-keenable-credits-2026-11-18.md).
-// Failure list: the prompt still asks for several searches per thread in one
-// cell with different wording (the burst that spent the credits), or does not
-// name the call that sends them in turn, or does not say a question whose
-// wordings return held pages is answered.
-func TestResearchPromptSendsOneQuestionsWordingsToOneCall(t *testing.T) {
+// Search for what the run lacks, not for what is new (docs/problems/
+// search-volume-outruns-keenable-credits-2026-11-18.md, "Why a run searches
+// again"). Failure list: the prompt does not send the desk to the corpus first
+// and to write each thread as held, stale or missing; still tells it to run
+// searches at once or to cover every open thread in each round with several
+// searches; or does not say that SearchAll sends the next wording only while
+// the question lacks pages to read, nor that a wording left out can be sent
+// alone with fresh.
+func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
 	if err != nil {
 		t.Fatalf("load research prompt: %v", err)
 	}
 	flat := strings.Join(strings.Fields(prompt.Content), " ")
-	for _, want := range []string{"all the wordings of one question", "choir.SearchAll(question, wordings)", "mark each page new or held", "stops when wordings stop finding pages you do not hold", "can be sent alone with fresh"} {
+	for _, want := range []string{
+		"Search its own corpus first",
+		"each thread of the objective as held (with its capture ids), stale or missing",
+		"Search the web only for the stale and missing threads, one question at a time",
+		"read what it returns before you search again",
+		"the wordings of one missing question",
+		"choir.SearchAll(question, wordings)",
+		"sends the next only while the question still lacks pages to read",
+		"then search again for what is still missing, naming it",
+		"mark each page new or held",
+		"can be sent alone with fresh",
+	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("research prompt lacks %q", want)
 		}
 	}
-	if strings.Contains(flat, "several searches per thread") {
-		t.Error("research prompt still asks for several searches per thread")
+	for _, absent := range []string{"several searches per thread", "To run searches at once", "Cover every open thread in each round", "all the wordings of one question", "stops when wordings stop finding pages"} {
+		if strings.Contains(flat, absent) {
+			t.Errorf("research prompt still says %q", absent)
+		}
 	}
 	// The call stops on what the code does; the prompt does not promise that a
 	// question is answered.
