@@ -199,6 +199,10 @@ func (c *programmeCall) frame(in *programmeInput, local string) (stable, volatil
 		}
 		for _, cand := range in.candidates {
 			if cand.isTake() {
+				// Each take's stranger-written lines sit between explicit
+				// begin and end markers; the fence token is derived from the
+				// whole body, so no transcript can name it.
+				body.WriteString("\x00FENCE take " + cand.TakeID + "\x00\n")
 				line("take: %s | publisher: %s | %.0f seconds | title: %s", cand.TakeID, cand.Publisher, cand.DurationSeconds, safeLine(cand.Title))
 				if cand.Record != "" {
 					line("record: %s", safeLine(cand.Record))
@@ -207,6 +211,7 @@ func (c *programmeCall) frame(in *programmeInput, local string) (stable, volatil
 					line("responds to: %s", safeLine(r.Title))
 				}
 				line("transcript: %s", safeLine(cand.Transcript))
+				body.WriteString("\x00FENCE end take " + cand.TakeID + "\x00\n")
 				line("")
 				continue
 			}
