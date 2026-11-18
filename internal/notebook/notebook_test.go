@@ -105,7 +105,7 @@ func TestB4_TheHardWordCap(t *testing.T) {
 	// Taps are never refused for the page's words, but they count.
 	var taps []Op
 	for i := 0; i < 10; i++ {
-		taps = append(taps, Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "More like this: \"t" + itoa(i) + " " + strings.Repeat("w ", 60) + "\""})
+		taps = append(taps, Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "More like this: \"t" + itoa(i) + " " + strings.Repeat("w ", 60) + "\" (1 Jan 08:00)"})
 	}
 	d2, err := d.Apply(Patch{Ops: taps})
 	if err != nil {
@@ -130,7 +130,7 @@ func TestB5_StewardingKeepsTheNewestTen(t *testing.T) {
 	d := Fresh()
 	for i := 0; i < 13; i++ {
 		var err error
-		d, err = d.ApplyOp(Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "More like this: \"t" + itoa(i) + "\" (1 Jan)"})
+		d, err = d.ApplyOp(Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "More like this: \"t" + itoa(i) + "\" (1 Jan 08:00)"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,7 +145,7 @@ func TestN7_TheSteeringCapCutsOnlyAutoradiosLines(t *testing.T) {
 	d := Parse("# My notebook\n\n## Recent steering\n- my own note about steering\n")
 	for i := 0; i < 12; i++ {
 		var err error
-		d, err = d.ApplyOp(Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "Less like this: \"t" + itoa(i) + "\" (1 Jan)"})
+		d, err = d.ApplyOp(Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "Less like this: \"t" + itoa(i) + "\" (1 Jan 08:00)"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -225,5 +225,29 @@ func TestN7_ARepeatedTapIsOneLine(t *testing.T) {
 	}
 	if n := len(d.Lines(SecSteering)); n != 2 {
 		t.Errorf("(B9) %d lines, want the less and the more", n)
+	}
+}
+
+// A2: a tap line is told by the whole grammar the desk writes (a quoted title
+// and the date stamp), not by its first words: a listener's own line that
+// begins "More like this: " is theirs, is not counted and is never cut.
+func TestA2_AListenersLineWithTheTapPrefixIsTheirs(t *testing.T) {
+	d := Parse("# My notebook\n\n## Recent steering\n- More like this: jazz in the evening\n- Less like this: \"quoted but no stamp\"\n")
+	if d.WrittenWords() != 0 {
+		t.Errorf("(A2) the listener's lines are counted: %d", d.WrittenWords())
+	}
+	for i := 0; i < 12; i++ {
+		var err error
+		d, err = d.ApplyOp(Op{Op: "tap", Ref: "tap:e" + itoa(i), Text: "More like this: \"t" + itoa(i) + "\" (1 Jan 08:00)"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	ls := d.Lines(SecSteering)
+	if len(ls) != MaxSteering+2 || ls[0].Text != "More like this: jazz in the evening" || ls[1].Text != `Less like this: "quoted but no stamp"` {
+		t.Errorf("(A2) %d lines, first %q", len(ls), ls[0].Text)
+	}
+	if !IsTapLine(`More like this: "Harbor fees rise" (17 Nov 08:12)`) || IsTapLine("More like this: jazz") {
+		t.Error("(A2) IsTapLine")
 	}
 }

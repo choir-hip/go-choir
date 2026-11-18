@@ -160,6 +160,7 @@ func TestB3_CountsRideOnlyWhenSomethingElseIsWrittenOrAnHourHasPassed(t *testing
 	rt, _ := radioRuntime(t, linesScript(lines...))
 	h := NewAPIHandler(rt)
 	h.SetNotebook(fake)
+	seedLessons(t, rt, "L1")
 	firstStretch(t, h, "r-1", []string{"finished", "finished", "skipped"})
 	serve(t, h, "r-2") // counts changed, an hour has not passed
 	if len(fake.patches) != 0 {
@@ -192,7 +193,7 @@ func TestN5_ATapSentTwiceIsOneLine(t *testing.T) {
 			t.Fatalf("send %d: %d %s", i, rec.Code, rec.Body.String())
 		}
 	}
-	// Without an id, the same entry and direction within ten minutes is the same tap.
+	// Without an id, the same entry and direction (a mute: the publisher) is the same tap.
 	for i := 0; i < 2; i++ {
 		steerPost(h, `{"entry_id":"`+entry+`","direction":"more"}`)
 	}
@@ -245,6 +246,7 @@ func TestN9_AListenersRewordingThatCannotMoveStaysTheirOwnUntagged(t *testing.T)
 	rt, _ := radioRuntime(t, notebookScript(nil))
 	h := NewAPIHandler(rt)
 	h.SetNotebook(fake)
+	seedLessons(t, rt, "L1")
 	serve(t, h, "r-1")
 	text := fake.text()
 	if strings.Contains(text, "L1 ·") || !strings.Contains(text, "- I say [L9 odd\n") {
@@ -336,6 +338,7 @@ func TestS3_TooManyListenerRevisionsAreReportedNotSkipped(t *testing.T) {
 	rt, _ := radioRuntime(t, notebookScript(nil))
 	h := NewAPIHandler(rt)
 	h.SetNotebook(fake)
+	seedLessons(t, rt, "L1")
 	_, evs := serve(t, h, "r-1")
 	if nb := doneNotebook(t, evs); nb["status"] != "not_applied" || !strings.Contains(fmt.Sprint(nb["reason"]), "too many") {
 		t.Errorf("(S3) %v", nb)
@@ -385,6 +388,7 @@ func TestS10b_RowsBehindALineIncludeTheNoVerdictOnes(t *testing.T) {
 	rt, _ := radioRuntime(t, linesScript(titled("Story A", map[string]any{"caused_by": "lesson:L1"})))
 	h := NewAPIHandler(rt)
 	h.SetNotebook(fake)
+	seedLessons(t, rt, "L1")
 	_, evs := serve(t, h, "r-1")
 	entry := segmentEvents(evs)[0]["entry_id"].(string)
 	mustOps(t, h, phoneEnd(entry, "left", "heard", "left", 0)...)
@@ -420,6 +424,7 @@ func TestATakeForecastCanBeCausedByALessonLine(t *testing.T) {
 	rt, _ := radioRuntime(t, linesScript(takeLine(map[string]any{"caused_by": "lesson:L1"})))
 	h := NewAPIHandler(rt)
 	h.SetNotebook(fake)
+	seedLessons(t, rt, "L1")
 	rec := httptest.NewRecorder()
 	progServe(h, rec, progBody(withRequestID("r-take"), withTakes(takeFixture(takeA)), func(m map[string]any) { delete(m, "edition_text") }))
 	evs := parseSSE(t, rec.Body.String())
@@ -432,5 +437,127 @@ func TestATakeForecastCanBeCausedByALessonLine(t *testing.T) {
 	}
 	if !hasStr(tags, "take:"+takeA) || !hasStr(tags, "line:lesson:L1") || !hasStr(tags, "cause:lesson") {
 		t.Errorf("tags %v", tags)
+	}
+}
+
+// A1: a retired line stays listed after any number of later patch records.
+func TestA1_TheRetiredListSurvivesManyLaterPatches(t *testing.T) {
+	fake := &fakeNotebook{}
+	fake.push("appagent", notebook.DeskLabel, "# My notebook\n\n## What Autoradio has learned\n- Kept. [L2 · heard 0 of 0]\n")
+	fake.found = true
+	rt, _ := radioRuntime(t, notebookScript(nil))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	led := h.programmeLedger()
+	put := func(rec types.CommitmentRecord) {
+		if _, err := led.AppendCommitmentRecord(context.Background(), progOwner, rt.cfg.ComputerID, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base := time.Now().Add(-time.Hour)
+	put(ownerRecord(kindLesson, lessonRecordPrefix+"L1:retired:pr", progOwner, rt.cfg.ComputerID, map[string]string{"line_id": "L1", "retired": "true", "heard": "1", "of": "4", "patch_id": "pr", "why": "retired by the DJ"}, "L1 retired", "Old lesson.", base))
+	put(ownerRecord(kindPatch, patchRecordPrefix+"pr:result:applied", progOwner, rt.cfg.ComputerID, map[string]string{"patch_id": "pr", "status": "applied", "revision_id": "rev-x", "doc_id": "doc-nb"}, "x", "", base))
+	for i := 0; i < 500; i++ {
+		put(ownerRecord(kindPatch, fmt.Sprintf("%sq%d:result:stale", patchRecordPrefix, i), progOwner, rt.cfg.ComputerID, map[string]string{"patch_id": fmt.Sprint("q", i), "status": "stale"}, "x", "", base.Add(time.Duration(i+1)*time.Second)))
+	}
+	_, out := learningGet(t, h, "")
+	ret, _ := out["notebook"].(map[string]any)["retired"].([]any)
+	if len(ret) != 1 || ret[0].(map[string]any)["id"] != "L1" || ret[0].(map[string]any)["text"] != "Old lesson." {
+		t.Errorf("(A1) retired %v", ret)
+	}
+	// A retire whose patch was refused is not listed.
+	put(ownerRecord(kindLesson, lessonRecordPrefix+"L3:retired:pf", progOwner, rt.cfg.ComputerID, map[string]string{"line_id": "L3", "retired": "true", "patch_id": "pf"}, "L3 retired", "Never left.", base))
+	put(ownerRecord(kindPatch, patchRecordPrefix+"pf:result:refused", progOwner, rt.cfg.ComputerID, map[string]string{"patch_id": "pf", "status": "refused", "reason": "x"}, "x", "", base))
+	_, out = learningGet(t, h, "")
+	if ret, _ = out["notebook"].(map[string]any)["retired"].([]any); len(ret) != 1 {
+		t.Errorf("(A1) a refused patch's retire is listed: %v", ret)
+	}
+}
+
+// A3: a tag is the desk's only when a lesson record with that id exists. The
+// listener retyping L1's tag as L9 makes L9 their words: untagged, never
+// counted, cited or retired; and L1 is struck as deleted.
+func TestA3_ATagWithNoLessonRecordIsTheListenersWords(t *testing.T) {
+	noCadence(t)
+	fake := &fakeNotebook{}
+	fake.push("appagent", notebook.DeskLabel, "# My notebook\n\n## What you asked for\n\n## What Autoradio has learned\n- Short pieces are heard. [L1 · heard 0 of 0]\n\n## What Autoradio is trying\n\n## Recent steering\n")
+	fake.found = true
+	var cite []string
+	rt, _ := radioRuntime(t, notebookScript(map[int]func(provideriface.TextStreamRequest, []string) []string{
+		1: func(provideriface.TextStreamRequest, []string) []string { return sixStoriesLines() },
+		2: func(req provideriface.TextStreamRequest, shown []string) []string {
+			cite = shown[:1]
+			return []string{titled("Story G", nil), jsonLine(map[string]any{"kind": "notebook", "op": "retire", "line": "L9", "cites": cite})}
+		},
+	}))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	led := h.programmeLedger()
+	rec := ownerRecord(kindLesson, lessonRecordPrefix+"L1", progOwner, rt.cfg.ComputerID, map[string]string{"line_id": "L1", "section": "learned", "cites": "a,b", "patch_id": "p0"}, "L1", "Short pieces are heard.", time.Now())
+	if _, err := led.AppendCommitmentRecord(context.Background(), progOwner, rt.cfg.ComputerID, rec); err != nil {
+		t.Fatal(err)
+	}
+	fake.userEdit("# My notebook\n\n## What you asked for\n\n## What Autoradio has learned\n- My own words. [L9 · heard 3 of 4]\n\n## What Autoradio is trying\n\n## Recent steering\n")
+	firstStretch(t, h, "r-1", []string{"finished", "finished", "finished", "finished", "skipped", "skipped"})
+	_, evs := serve(t, h, "r-2")
+	text := fake.text()
+	if strings.Contains(text, "L9") || !strings.Contains(text, "- My own words.\n") {
+		t.Errorf("(A3) the foreign tag stays:\n%s\n%v", text, doneNotebook(t, evs))
+	}
+	d, _ := doneNotebook(t, evs)["dropped"].([]any)
+	if !strings.Contains(fmt.Sprint(d), "not a live line") {
+		t.Errorf("(A3) a retire of the listener's words was not dropped: %v", d)
+	}
+	var kinds []string
+	for _, r := range tape(t, rt, kindStrike) {
+		kinds = append(kinds, r.SubjectRefs["line_id"]+":"+r.SubjectRefs["kind"])
+	}
+	if !hasStr(kinds, "L1:deleted") || !hasStr(kinds, "L9:foreign_tag") {
+		t.Errorf("(A3) strikes %v", kinds)
+	}
+}
+
+// a ledger whose lesson listing fails
+type lessonListFails struct{ autoradioLedger }
+
+func (l lessonListFails) ListCommitmentRecordsBySubjectRef(ctx context.Context, o, c, k, v string, n int) ([]types.CommitmentRecord, error) {
+	if v == kindLesson {
+		return nil, errors.New("tape down")
+	}
+	return l.autoradioLedger.ListCommitmentRecordsBySubjectRef(ctx, o, c, k, v, n)
+}
+
+// A4: a failed read of the lesson records stops the patch (an id could be
+// minted twice); it is not read as "no lessons".
+func TestA4_AFailedLessonReadWritesNothing(t *testing.T) {
+	noCadence(t)
+	fake := &fakeNotebook{}
+	fake.push("appagent", notebook.DeskLabel, notebook.Fresh().Render())
+	fake.found = true
+	rt, _ := radioRuntime(t, notebookScript(map[int]func(provideriface.TextStreamRequest, []string) []string{
+		1: func(provideriface.TextStreamRequest, []string) []string { return sixStoriesLines() },
+		2: func(req provideriface.TextStreamRequest, shown []string) []string {
+			return []string{titled("Story G", nil), nbAdd("Short pieces are heard through.", shown[:2], nil)}
+		},
+	}))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	firstStretch(t, h, "r-1", []string{"finished", "finished", "finished", "finished", "skipped", "skipped"})
+	h.autoradioLedgerOverride = lessonListFails{rt.store}
+	_, evs := serve(t, h, "r-2")
+	if len(fake.patches) != 0 || doneNotebook(t, evs)["error"] == nil {
+		t.Errorf("(A4) applied after a failed read: %d patches %v", len(fake.patches), doneNotebook(t, evs))
+	}
+}
+
+// seedLessons writes the lesson records of lines a test put in the notebook by
+// hand, as the desk would have when it wrote them.
+func seedLessons(t *testing.T, rt *Runtime, ids ...string) {
+	t.Helper()
+	for _, id := range ids {
+		rec := ownerRecord(kindLesson, lessonRecordPrefix+id, progOwner, rt.cfg.ComputerID, map[string]string{"line_id": id, "section": "learned", "patch_id": "p0"}, id, "seeded "+id, time.Now().Add(-time.Hour))
+		if _, err := rt.store.AppendCommitmentRecord(context.Background(), progOwner, rt.cfg.ComputerID, rec); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
