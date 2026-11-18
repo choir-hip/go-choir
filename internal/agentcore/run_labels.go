@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/maildesk"
+	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -233,15 +234,11 @@ func egressReadLabels(action yaegikernel.BrokerAction, payload, result json.RawM
 		// A capture hit carries a verbatim passage of the owner's stored copy:
 		// the same bytes ReadCapture labels owner_private:capture, the floor
 		// publish-auto admission keys on. A result with no passage is titles
-		// and metadata, the world's.
-		var body struct {
-			Captures []struct {
-				Passage string `json:"passage"`
-			} `json:"captures"`
-		}
-		_ = json.Unmarshal(result, &body)
-		for _, c := range body.Captures {
-			if strings.TrimSpace(c.Passage) != "" {
+		// and metadata, the world's. A non-empty result the host cannot read
+		// fails closed: it carries the capture floor.
+		if len(result) > 0 {
+			carries, understood := researchtools.CorpusResultCarriesPassage(result)
+			if carries || !understood {
 				return captureReadLabels.Union(worldReadLabels), true
 			}
 		}
