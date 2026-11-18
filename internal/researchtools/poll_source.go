@@ -332,7 +332,7 @@ func newReadCaptureTool(deps Dependencies) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
-			log.Print(corpusReadLine(ctx, strings.TrimSpace(in.CaptureID), true, "read_capture"))
+			log.Print(corpusReadLine(ctx, strings.TrimSpace(in.CaptureID), runCaptureState(ctx, strings.TrimSpace(in.CaptureID), false), "read_capture"))
 			return string(out), nil
 		}}
 }

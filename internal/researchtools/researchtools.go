@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/search"
@@ -73,9 +74,9 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			// A capture-store outage keeps the rest and says so; it never
 			// reads as "no captures".
 			capturesStart := time.Now()
-			captures, note, err := searchCaptures(ctx, deps, ownerID, exec.ComputerID, corpusQueryTerms(query), limit)
+			captures, note, capped, err := searchCaptures(ctx, deps, ownerID, exec.ComputerID, corpusQueryTerms(query), limit)
 			if err != nil {
-				captures, note = nil, "captures not searched: "+err.Error()
+				captures, note, capped = nil, "captures not searched: "+err.Error(), false
 			}
 			capturesElapsed := time.Since(capturesStart)
 			if captures == nil {
@@ -92,7 +93,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			// Published Autopaper stories and opinion pieces, from every
 			// computer: citable once Read captures their read_url.
 			published, publishedNote := searchPublished(ctx, deps, query, limit)
-			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events))
+			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events), capped)
 			body := wireCorpusResult{
 				Query:     query,
 				Published: published, PublishedCount: len(published), PublishedNote: publishedNote,
@@ -158,7 +159,7 @@ func universalWirePlatformOwnerID() string {
 // The line also names the run, desk and conversation that searched, how many
 // published stories and events came back beside the captures, and whether the
 // candidate cap was hit (search-reuse commit 4): ids and counts only.
-func logCorpusSearch(ctx context.Context, query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string, published, events int) {
+func logCorpusSearch(ctx context.Context, query, computerID string, capturesElapsed time.Duration, captures []CorpusCapture, note string, published, events int, capped bool) {
 	ids := make([]string, 0, len(captures))
 	for i, c := range captures {
 		if i == 10 {
@@ -170,8 +171,8 @@ func logCorpusSearch(ctx context.Context, query, computerID string, capturesElap
 		query = query[:200]
 	}
 	run, desk, conv := corpusAttribution(ctx)
-	log.Printf("corpus search computer=%s captures_ms=%d captures=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d captures=%d capped=%t",
-		computerID, capturesElapsed.Milliseconds(), len(captures), note, query, strings.Join(ids, ","), run, desk, conv, published, events, len(captures), capturesCapped(note))
+	log.Printf("corpus search computer=%s captures_ms=%d captures=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t",
+		computerID, capturesElapsed.Milliseconds(), len(captures), note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped)
 }
 
 // corpusAttribution is the run, desk and conversation of a call, cleaned for
@@ -188,17 +189,52 @@ func corpusAttribution(ctx context.Context) (run, desk, conv string) {
 	return dash(a.RunID), dash(a.Desk), dash(a.Conversation)
 }
 
-// capturesCapped reports whether a capture search's note says a bound was
-// hit: the index ranked only its strongest candidates, or the window of
-// newest captures left older ones unsearched.
-func capturesCapped(note string) bool {
-	return strings.Contains(note, "ranked the strongest") || strings.Contains(note, "older captures were not searched")
+// corpusReadLine is the journal line for one Read of a capture: the run, the
+// capture id and held, which says when the capture came to be: "false" for the
+// Read that made it, "own" for a capture this run made with an earlier Read,
+// "true" for one that existed before this run's first Read of it (see
+// runCaptureState). via is the verb.
+func corpusReadLine(ctx context.Context, captureID, held, via string) string {
+	run, desk, conv := corpusAttribution(ctx)
+	return fmt.Sprintf("corpus read run=%s desk=%s conv=%s capture=%s held=%s via=%s", run, desk, conv, captureID, held, via)
 }
 
-// corpusReadLine is the journal line for one Read of a capture: the run, the
-// capture id, and whether the computer already held it (a Read of a held
-// capture is one the run did not need the web for). via is the verb.
-func corpusReadLine(ctx context.Context, captureID string, held bool, via string) string {
-	run, desk, conv := corpusAttribution(ctx)
-	return fmt.Sprintf("corpus read run=%s desk=%s conv=%s capture=%s held=%t via=%s", run, desk, conv, captureID, held, via)
+// runCaptures remembers, per run, the captures that run's own Reads made, so a
+// later Read of one is "own", not "held before the run began". It lives in
+// this process and is cleared when it holds more than runCapturesMax runs
+// (an in-flight run then reads as "true" for its own captures: the line
+// overstates held for it, never understates).
+var runCaptures struct {
+	sync.Mutex
+	byRun map[string]map[string]bool
+}
+
+const runCapturesMax = 512
+
+func runCaptureState(ctx context.Context, captureID string, made bool) string {
+	run := toolregistry.ExecutionContextFrom(ctx).RunID
+	if run == "" {
+		if made {
+			return "false"
+		}
+		return "true"
+	}
+	runCaptures.Lock()
+	defer runCaptures.Unlock()
+	if runCaptures.byRun == nil || len(runCaptures.byRun) > runCapturesMax {
+		runCaptures.byRun = map[string]map[string]bool{}
+	}
+	set := runCaptures.byRun[run]
+	if set == nil {
+		set = map[string]bool{}
+		runCaptures.byRun[run] = set
+	}
+	switch {
+	case made:
+		set[captureID] = true
+		return "false"
+	case set[captureID]:
+		return "own"
+	}
+	return "true"
 }

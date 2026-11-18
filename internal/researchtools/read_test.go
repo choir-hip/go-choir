@@ -176,11 +176,20 @@ func TestReadFetchesAPageIntoABlockCapture(t *testing.T) {
 	// is countable.
 	for _, want := range []string{
 		"corpus read run=research-run desk=research conv=- capture=" + first.CaptureID + " held=false via=read",
-		"corpus read run=research-run desk=research conv=- capture=" + first.CaptureID + " held=true via=read",
+		"corpus read run=research-run desk=research conv=- capture=" + first.CaptureID + " held=own via=read",
 	} {
 		if !strings.Contains(readLog.String(), want) {
 			t.Fatalf("log lacks %q:\n%s", want, readLog.String())
 		}
+	}
+	// Another run reading the same page finds a capture that was held before
+	// that run began.
+	other := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{RunID: "research-run-2", OwnerID: "owner-1", ComputerID: "computer-1", Profile: agentprofile.Research})
+	if _, err := deps.HostEgress(other, "read", json.RawMessage(`{"url":"`+pages.URL+`/harbor"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if want := "corpus read run=research-run-2 desk=research conv=- capture=" + first.CaptureID + " held=true via=read"; !strings.Contains(readLog.String(), want) {
+		t.Fatalf("log lacks %q:\n%s", want, readLog.String())
 	}
 	if strings.Contains(readLog.String(), "harbor") {
 		t.Fatalf("the read line carries a URL or title:\n%s", readLog.String())
