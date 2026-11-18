@@ -25,10 +25,13 @@ func (r Revision) IsDesk() bool { return r.AuthorKind == "appagent" && r.AuthorL
 // State is what Texture answers to a read: the head and the revisions from the
 // newest desk revision to the head, newest first (the desk revision last).
 type State struct {
-	Found bool       `json:"found"`
-	DocID string     `json:"doc_id,omitempty"`
-	Head  Revision   `json:"head"`
-	Chain []Revision `json:"chain,omitempty"`
+	Found bool `json:"found"`
+	// Archived: the listener archived their notebook. Nothing is read from it
+	// or written to it; archiving is the owner's act and so is undoing it.
+	Archived bool       `json:"archived,omitempty"`
+	DocID    string     `json:"doc_id,omitempty"`
+	Head     Revision   `json:"head"`
+	Chain    []Revision `json:"chain,omitempty"`
 }
 
 // Result is Texture's answer to a patch: applied, stale, refused with a

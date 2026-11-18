@@ -175,7 +175,15 @@ func settleStretch(t *testing.T, h *APIHandler, entries []string, outcomes []str
 	mustOps(t, h, ops...)
 }
 
+func noCadence(t *testing.T) {
+	t.Helper()
+	old := nbCountCadence
+	nbCountCadence = 0
+	t.Cleanup(func() { nbCountCadence = old })
+}
+
 func TestN_TheNotebookLoop(t *testing.T) {
+	noCadence(t)
 	cites := func(shown []string) []string { return shown[:2] }
 	var fake *fakeNotebook
 	var first []string
@@ -202,8 +210,15 @@ func TestN_TheNotebookLoop(t *testing.T) {
 		},
 		// Call 3: the notebook is in the input; a story names the line.
 		3: func(req provideriface.TextStreamRequest, shown []string) []string {
-			if !strings.Contains(req.StableUser, "lesson:L1: Short pieces are heard through. (heard 0 of 0)") {
+			if !strings.Contains(req.StableUser, "lesson:L1: Short pieces are heard through.") {
 				t.Errorf("(N7) the stable input lacks the notebook:\n%s", req.StableUser)
+			}
+			// B3: the cached part carries no count; the volatile part has the table.
+			if strings.Contains(req.StableUser, "heard 0 of 0") || strings.Contains(req.StableUser, "(heard") {
+				t.Errorf("(B3) a count is in the cached part:\n%s", req.StableUser)
+			}
+			if !strings.Contains(req.User, "L1: heard 0 of 0") {
+				t.Errorf("(B3) the volatile part lacks the counts table:\n%s", req.User)
 			}
 			if strings.Contains(req.User, "lesson:L1") {
 				t.Errorf("(N7) the notebook is in the volatile part")
@@ -261,7 +276,7 @@ func TestN_TheNotebookLoop(t *testing.T) {
 		t.Errorf("(N1) dropped %v", nb["dropped"])
 	}
 	lesson := getRecord(t, rt, lessonRecordPrefix+"L1")
-	if lesson == nil || len(splitCSV(lesson.SubjectRefs["cites"])) != 2 || lesson.SubjectRefs["revision_id"] == "" {
+	if lesson == nil || len(splitCSV(lesson.SubjectRefs["cites"])) != 2 || lesson.SubjectRefs["patch_id"] == "" {
 		t.Fatalf("the lesson record: %+v", lesson)
 	}
 	if got := len(tape(t, rt, kindPatch)); got != 2 { // asked, and Texture's answer
@@ -306,6 +321,16 @@ func TestN_TheNotebookLoop(t *testing.T) {
 	}
 	if len(fake.patches) != 2 || len(fake.patches[1].Ops) != 0 {
 		t.Errorf("(N6) the count-only patch carried ops: %+v", fake.patches)
+	}
+
+	// B2: beside heard and of, the route reports the forecasts made since the
+	// line was written (settled or not) and how many of those settled.
+	_, lout := learningGet(t, h, "")
+	for _, l := range lout["notebook"].(map[string]any)["lines"].([]any) {
+		m := l.(map[string]any)
+		if m["id"] == "L1" && (m["live_forecasts"] != float64(3) || m["live_settled"] != float64(1) || m["live_of"] != float64(1) || m["live_heard"] != float64(1)) {
+			t.Errorf("(B2) L1 row: %v", m)
+		}
 	}
 
 	// The listener strikes L1; the same evidence is refused; nothing is lost.
