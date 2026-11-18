@@ -4,6 +4,7 @@
 // Type is the Autopaper's: the masthead and its double rule (paper.contract), the headline face for titles, the label face for what describes,
 // the action face for what is pressed (mobile/docs/typography.md). No second scale.
 // takes testIds: radio-takes, takes-record, takes-stop, takes-elapsed, takes-review, takes-transcript, takes-preview, takes-rerecord, takes-discard, takes-publish, takes-notice, takes-mine-<n>, takes-delete-<n>, takes-muted-<n>, takes-unmute-<n>, radio-take, radio-take-mute, radio-heard-mute-<n>.
+// notebook link: radio-notebook.
 // testIds: radio-page, radio-scroll, radio-title, radio-date, radio-status, radio-onair, radio-onair-kind, radio-onair-title, radio-onair-open,
 // radio-onair-byline, radio-onair-sentence, radio-onair-sentence-number, radio-greeting, radio-heard-words, radio-cannot, radio-retry, radio-then-back,
 // radio-progress, radio-elapsed, radio-remaining, radio-play, radio-next, radio-why, radio-why-text, radio-forecast, radio-back15, radio-fwd15,
@@ -242,6 +243,13 @@ component RadioPage
                         row align-items="center" gap=8 width="100%" min-height=44
                           text b.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=2 flex=1 min-width=0
                           image "symbol:forward-chevron" color=th.muted pointer-events="none"
+          // my notebook: what Autoradio has been told and has learned about you (station L6)
+          button press=openPage("notebook:", "My notebook") testId="radio-notebook" appearance="none" width="100%" aria-label="Open my notebook"
+            row align-items="center" gap=8 width="100%" min-height=48
+              column flex=1 min-width=0 gap=2 align-items="flex-start"
+                Btn(label="My notebook", primary=false, wide=false)
+                text "What Autoradio has learned about you, and the scorecard" font-family=th.fontLabel font-size="-exact-caption2" color=th.muted text-align="left"
+              image "symbol:forward-chevron" color=th.muted pointer-events="none"
           // takes: your own voice, offered to other listeners (design 11). Record, review, publish; your takes; the voices you muted; your record.
           column gap=8 width="100%" testId="radio-takes"
             SectionHeader(label="Takes")

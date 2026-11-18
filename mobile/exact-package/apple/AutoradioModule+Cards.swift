@@ -83,6 +83,12 @@ extension AutoradioModule {
     private func tell(_ kind: String, _ f: StoryFacts, surface: String) -> Bool {
         guard cs.prefs.record(kind: kind == "more" ? "more" : "less", f) != nil else { return false }
         gesture(kind == "more" ? SignalKind.more : SignalKind.less, f, surface: surface, meaning: kind)
+        // The tap also goes to the computer as the listener's own steering line, with the entry on air and the stories it cites (design 6).
+        Task { @MainActor in
+            if let t = SteerTap.on(entry: RunSheetPlayer.shared.store.onAir(), direction: kind == "more" ? "more" : "less", tappedStory: f.address) {
+                SteerQueue.shared.enqueue(t); await SteerQueue.shared.flush()
+            }
+        }
         setNote(Preferences.note(kind: kind, f))
         touchLearning()
         return true

@@ -95,8 +95,13 @@ public struct IncomingSegment: Sendable, Equatable {
     /// A `take` segment's take id, and the forecast the line carried (a take line without one is dropped by the server).
     public var takeID: String?
     public var forecast: RunSheetForecast?
+    /// The server's entry id for this segment (`d-<segment_id>`) and its forecast's claim id, from the `segment` event (settlement slice, not
+    /// deployed on every server: nil from an older one). The claim id is the key the server settles by.
+    public var entryID: String?
+    public var claimID: String?
     public init(stretchID: String, segmentID: String, kind: String, title: String, text: String, cites: [ProgrammeCite], blockCount: Int?, clip: ProgrammeClipRef? = nil,
-                between: IncomingBetween? = nil, takeID: String? = nil, forecast: RunSheetForecast? = nil) {
+                between: IncomingBetween? = nil, takeID: String? = nil, forecast: RunSheetForecast? = nil, entryID: String? = nil, claimID: String? = nil) {
+        self.entryID = entryID; self.claimID = claimID
         self.clip = clip; self.between = between; self.takeID = takeID; self.forecast = forecast
         self.stretchID = stretchID; self.segmentID = segmentID; self.kind = kind; self.title = title; self.text = text
         self.cites = cites; self.blockCount = blockCount
@@ -362,8 +367,11 @@ public struct StretchDecoder {
             var forecast: RunSheetForecast?
             let fo = (o["forecast"] as? [String: Any]) ?? o
             if let p = (fo["p_heard"] as? NSNumber)?.doubleValue, p.isFinite, p >= 0, p <= 1 {
-                forecast = RunSheetForecast(pHeard: p, causedBy: (fo["caused_by"] as? String) ?? "", claimId: (fo["claim_id"] as? String) ?? "")
+                forecast = RunSheetForecast(pHeard: p, causedBy: (fo["caused_by"] as? String) ?? "", claimId: (fo["claim_id"] as? String) ?? (o["claim_id"] as? String) ?? "")
             }
+            // ASSUMED wire (learn-settle 64e1b34c2): the event carries `entry_id` and, for a content segment, `claim_id`, flat on the event.
+            let entryID = (o["entry_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let claimID = ((o["claim_id"] as? String) ?? ((o["forecast"] as? [String: Any])?["claim_id"] as? String)).flatMap { $0.isEmpty ? nil : $0 }
             if kind == "take", forecast == nil { droppedCount += 1; return [] }
             let st = (o["stretch_id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? stretchID
             let id = (o["segment_id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "\(st)/\(n)"
@@ -380,7 +388,7 @@ public struct StretchDecoder {
             }
             return [.segment(IncomingSegment(stretchID: st, segmentID: id, kind: kind, title: (o["title"] as? String) ?? "", text: text, cites: cites,
                                              blockCount: Self.wholeNumber(o["block_count"]), clip: kind == "podcast_clip" ? clip : nil, between: between,
-                                             takeID: kind == "take" ? takeID : nil, forecast: forecast))]
+                                             takeID: kind == "take" ? takeID : nil, forecast: forecast, entryID: entryID, claimID: claimID))]
         case "stretch":
             if let id = o["stretch_id"] as? String, !id.isEmpty { stretchID = id }
             return []
@@ -485,14 +493,20 @@ public struct RouteStretchSource: StretchSource {
     public func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?) async throws -> AsyncThrowingStream<StretchEvent, Error> {
         try await events(cause: cause, excludingRoutes: excludingRoutes, onlyRoutes: onlyRoutes, aheadTitles: [])
     }
+    /// The request body. `edition_text` is what the phone knows about the listener: the notebook text when it holds it, else the topics as text.
+    static func requestBody(cause: String, candidates: [[String: Any]], aheadTitles: [String], editionText: String?, now: Date) -> [String: Any] {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
+        var body: [String: Any] = ["request_id": "radio-" + UUID().uuidString.prefix(12).lowercased(), "cause": cause,
+                                   "local_time": f.string(from: now), "tz": TimeZone.current.identifier, "candidates": candidates]
+        let titles = aheadTitles.prefix(20).map { StretchCandidates.cut($0, bytes: 300) }.filter { !$0.isEmpty }
+        if !titles.isEmpty { body["ahead_titles"] = Array(titles) }
+        if let t = editionText, !t.isEmpty { body["edition_text"] = t }
+        return body
+    }
     public func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?, aheadTitles: [String]) async throws -> AsyncThrowingStream<StretchEvent, Error> {
         let client = ChoirEnvironment.shared.client(baseURL: baseURL)
         let cands = try await candidates(client: client, skipping: excludingRoutes, onlyRoutes: onlyRoutes)
-        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
-        var body: [String: Any] = ["request_id": "radio-" + UUID().uuidString.prefix(12).lowercased(), "cause": cause,
-                                   "local_time": f.string(from: Date()), "tz": TimeZone.current.identifier, "candidates": cands]
-        let titles = aheadTitles.prefix(20).map { StretchCandidates.cut($0, bytes: 300) }.filter { !$0.isEmpty }
-        if !titles.isEmpty { body["ahead_titles"] = Array(titles) }
+        var body = Self.requestBody(cause: cause, candidates: cands, aheadTitles: aheadTitles, editionText: EditionText.current(), now: Date())
         // `ahead_titles` is new on the route; a server that does not know it refuses the whole body (400) before any model call. That is a
         // correctness refusal, so the request is made once more without it. Nothing else changes between the two.
         let lines: AsyncLineSequence<URLSession.AsyncBytes>

@@ -469,6 +469,47 @@
       "status": "string",
       "message": "string"
     },
+    "NotebookLineRow": {
+      "id": "string",
+      "text": "string",
+      "tag": "string",
+      "canWhy": "bool",
+      "selected": "bool"
+    },
+    "NotebookSectionRow": {
+      "key": "string",
+      "heading": "string",
+      "lines": "NotebookLineRow[]"
+    },
+    "NotebookPair": {
+      "label": "string",
+      "value": "string"
+    },
+    "NotebookEvidenceRow": {
+      "title": "string",
+      "outcome": "string",
+      "detail": "string"
+    },
+    "NotebookHeldRow": {
+      "what": "string",
+      "whereRead": "string"
+    },
+    "NotebookPageInfo": {
+      "docState": "string",
+      "docAddress": "string",
+      "docNotice": "string",
+      "sections": "NotebookSectionRow[]",
+      "scoreState": "string",
+      "scoreNotice": "string",
+      "score": "NotebookPair[]",
+      "byKind": "NotebookPair[]",
+      "noVerdict": "string",
+      "selectedText": "string",
+      "evidenceNote": "string",
+      "evidence": "NotebookEvidenceRow[]",
+      "held": "NotebookHeldRow[]",
+      "steerLine": "string"
+    },
     "SetupRowView": {
       "stage": "string",
       "name": "string",
@@ -708,7 +749,8 @@
       "kind": "string",
       "title": "string",
       "outcome": "string",
-      "builtOn": "RadioBuiltOn[]"
+      "builtOn": "RadioBuiltOn[]",
+      "publisher": "string"
     },
     "RadioPageInfo": {
       "state": "string",
@@ -743,7 +785,10 @@
       "notice": "string",
       "heard": "RadioHeardRow[]",
       "builtOn": "RadioBuiltOn[]",
-      "canPlay": "bool"
+      "canPlay": "bool",
+      "takePublisher": "string",
+      "takeTranscript": "string",
+      "takeRecord": "string"
     },
     "RadioBuiltOn": {
       "n": "number",
@@ -1136,6 +1181,37 @@
     },
     "SignalList": {
       "rows": "SignalRow[]"
+    },
+    "TakeMineRow": {
+      "id": "string",
+      "title": "string",
+      "length": "string",
+      "state": "string"
+    },
+    "TakeMutedRow": {
+      "handle": "string",
+      "line": "string"
+    },
+    "TakesPageInfo": {
+      "state": "string",
+      "elapsed": "string",
+      "limit": "string",
+      "fraction": "number",
+      "canRecord": "bool",
+      "canStop": "bool",
+      "canPublish": "bool",
+      "canDiscard": "bool",
+      "previewing": "bool",
+      "transcript": "string",
+      "respondsTo": "string",
+      "publishLine": "string",
+      "rightsLine": "string",
+      "notice": "string",
+      "justPublished": "string",
+      "mine": "TakeMineRow[]",
+      "muted": "TakeMutedRow[]",
+      "record": "string",
+      "handle": "string"
     },
     "ConversationRow": {
       "id": "string",
@@ -2107,6 +2183,37 @@
       "answers": "MailAck"
     },
     {
+      "source": "notebookPage",
+      "live": true,
+      "answers": "NotebookPageInfo",
+      "substitute": {
+        "default": {
+          "docState": "loading",
+          "docAddress": "",
+          "docNotice": "",
+          "sections": [],
+          "scoreState": "loading",
+          "scoreNotice": "",
+          "score": [],
+          "byKind": [],
+          "noVerdict": "",
+          "selectedText": "",
+          "evidenceNote": "",
+          "evidence": [],
+          "held": [],
+          "steerLine": ""
+        }
+      }
+    },
+    {
+      "send": "notebookAct",
+      "options": {
+        "op": "string",
+        "arg": "string"
+      },
+      "answers": "NotebookPageInfo"
+    },
+    {
       "source": "onboardingState",
       "live": true,
       "answers": "Onboarding",
@@ -2484,7 +2591,10 @@
           "notice": "",
           "heard": [],
           "builtOn": [],
-          "canPlay": true
+          "canPlay": true,
+          "takePublisher": "",
+          "takeTranscript": "",
+          "takeRecord": ""
         }
       }
     },
@@ -3029,6 +3139,42 @@
         "on": "string"
       },
       "answers": "PageList"
+    },
+    {
+      "source": "takesPage",
+      "live": true,
+      "answers": "TakesPageInfo",
+      "substitute": {
+        "default": {
+          "state": "idle",
+          "elapsed": "0:00",
+          "limit": "1:00",
+          "fraction": 0,
+          "canRecord": true,
+          "canStop": false,
+          "canPublish": false,
+          "canDiscard": false,
+          "previewing": false,
+          "transcript": "",
+          "respondsTo": "",
+          "publishLine": "",
+          "rightsLine": "",
+          "notice": "",
+          "justPublished": "",
+          "mine": [],
+          "muted": [],
+          "record": "",
+          "handle": ""
+        }
+      }
+    },
+    {
+      "send": "takesAct",
+      "options": {
+        "op": "string",
+        "arg": "string"
+      },
+      "answers": "TakesPageInfo"
     },
     {
       "source": "conversationInfo",

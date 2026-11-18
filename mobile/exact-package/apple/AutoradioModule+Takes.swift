@@ -94,7 +94,8 @@ extension AutoradioModule {
                 case "discard": s.discard()
                 case "publish": await s.publish()
                 case "delete": await s.delete(arg)
-                case "mute": TakeMutes.shared.mute(arg)
+                case "mute":
+                    if TakeMutes.shared.mute(arg) { SteerQueue.shared.enqueue(.mute(handle: arg)); await SteerQueue.shared.flush() }
                 case "unmute": TakeMutes.shared.unmute(arg)
                 case "refresh": await s.refresh()
                 default: break

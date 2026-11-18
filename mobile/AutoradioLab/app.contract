@@ -25,6 +25,7 @@ component Autoradio
   members "./members-queue.contract"          // lane autoradio-queue
   members "./members-radio.contract"          // the Autoradio page
   members "./members-takes.contract"          // takes (station L7)
+  members "./members-notebook.contract"       // my notebook (station L6)
   members "./members-books.contract"
   members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
   members "./members-talk.contract"
@@ -448,6 +449,9 @@ component Autoradio
     // ---- takes ----
     tp
     takesDo
+    // ---- my notebook ----
+    nb
+    notebookDo
     // ---- lane autoradio-queue ----
     qv
     qm

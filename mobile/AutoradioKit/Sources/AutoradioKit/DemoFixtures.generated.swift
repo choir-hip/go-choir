@@ -699,6 +699,39 @@ public enum DemoFixtureData {
   ]
 }
 """#,
+        "learning": #"""
+{
+ "scorecard": {
+  "forecasts": 14, "settled": 11, "heard_through": 8, "heard_through_rate": 0.7272727, "brier": 0.19,
+  "open": 2, "overdue": 0, "no_verdict": 1, "no_verdict_reasons": {"left": 1},
+  "by_kind": [
+   {"project": "story", "claims": 10, "open": 1, "overdue": 0, "settled": 8, "resolved": 8, "unresolvable": 0, "brier": 0.17, "base_rate": 0.75},
+   {"project": "podcast_clip", "claims": 4, "open": 1, "overdue": 0, "settled": 3, "resolved": 3, "unresolvable": 0, "brier": 0.25, "base_rate": 0.6667}
+  ],
+  "by_cause": [
+   {"cause": "lesson", "claims": 6, "settled": 5, "resolved": 5, "base_rate": 0.8},
+   {"cause": "importance", "claims": 8, "settled": 6, "resolved": 6, "base_rate": 0.6667}
+  ]
+ },
+ "rows": [
+  {"claim_id": "calib:autoradio-dj:s7:3", "stretch_id": "s7", "segment_id": "s7/3", "entry_id": "d-s7-3", "kind": "story", "title": "Council keeps libraries open late",
+   "p_heard": 0.7, "caused_by": "lesson:L1", "forecast_at": "2026-11-17T21:10:00Z", "deadline": "2026-11-18T09:10:00Z", "status": "open"},
+  {"claim_id": "calib:autoradio-dj:s7:2", "stretch_id": "s7", "segment_id": "s7/2", "entry_id": "d-s7-2", "kind": "story", "title": "A regional grid adds its largest battery",
+   "p_heard": 0.55, "caused_by": "lesson:L1", "forecast_at": "2026-11-17T21:10:00Z", "deadline": "2026-11-18T09:10:00Z", "status": "settled", "outcome": "true",
+   "heard_through": true, "brier": 0.2025, "settled_at": "2026-11-17T21:20:00Z",
+   "op": {"op_id": "p-a1", "by": "phone", "outcome": "finished", "last_block": 3, "ended_at": "2026-11-17T21:20:00Z", "position_seconds": 61.5, "version": 12}},
+  {"claim_id": "calib:autoradio-dj:s7:1", "stretch_id": "s7", "segment_id": "s7/1", "entry_id": "d-s7-1", "kind": "story", "title": "Harbor fees rise",
+   "p_heard": 0.8, "caused_by": "lesson:L1", "forecast_at": "2026-11-17T21:10:00Z", "deadline": "2026-11-18T09:10:00Z", "status": "settled", "outcome": "false",
+   "heard_through": false, "brier": 0.64, "settled_at": "2026-11-17T21:14:00Z",
+   "op": {"op_id": "p-a0", "by": "listener", "outcome": "skipped", "last_block": 0, "ended_at": "2026-11-17T21:14:00Z", "position_seconds": 4.0, "version": 11}},
+  {"claim_id": "calib:autoradio-dj:s6:4", "stretch_id": "s6", "segment_id": "s6/4", "entry_id": "d-s6-4", "kind": "podcast_clip", "title": "Tide tables",
+   "p_heard": 0.5, "caused_by": "mine:3fa2c1d0", "forecast_at": "2026-11-17T20:00:00Z", "deadline": "2026-11-18T08:00:00Z", "status": "no_verdict",
+   "settled_at": "2026-11-17T20:05:00Z", "no_verdict_reason": "left",
+   "op": {"op_id": "p-z9", "by": "phone", "outcome": "left", "last_block": 1, "ended_at": "2026-11-17T20:05:00Z", "position_seconds": 20, "version": 9}}
+ ],
+ "truncated": false
+}
+"""#,
         "mail-aliases": #"""
 {
  "aliases": [
@@ -2471,6 +2504,15 @@ public enum DemoFixtureData {
  "revision_count": 1
 }
 """#,
+        "texture-doc-demo-notebook": #"""
+{
+ "doc_id": "demo-notebook",
+ "title": "My notebook",
+ "current_revision_id": "nb-r1",
+ "current_version_number": 0,
+ "revision_count": 1
+}
+"""#,
         "texture-doc-demo-notes": #"""
 {
  "doc_id": "demo-notes",
@@ -2493,6 +2535,14 @@ public enum DemoFixtureData {
    "metadata": {
     "role": "edition"
    }
+  },
+  {
+   "doc_id": "demo-notebook",
+   "title": "My notebook",
+   "created_at": "2026-11-17T21:00:00Z",
+   "updated_at": "2026-11-17T21:30:00Z",
+   "revision_count": 1,
+   "current_revision_id": "nb-r1"
   },
   {
    "doc_id": "demo-draft",
@@ -2521,6 +2571,14 @@ public enum DemoFixtureData {
    "current_revision_id": "le-r1"
   }
  ]
+}
+"""#,
+        "texture-edition": #"""
+{
+ "found": true,
+ "doc_id": "demo-notebook",
+ "revision_id": "nb-r1",
+ "updated_at": "2026-11-17T21:30:00Z"
 }
 """#,
         "texture-rev-dr-r1": #"""
@@ -2565,6 +2623,17 @@ public enum DemoFixtureData {
  "author_kind": "user",
  "content": "# Letter to the library board\n\nDear board,\n\nI am writing to ask that the evening hours at the central branch be extended to ten on weekdays. Students and shift workers have nowhere else quiet to read after six.\n\nThank you for considering it.",
  "created_at": "2026-10-30T09:00:00Z"
+}
+"""#,
+        "texture-rev-nb-r1": #"""
+{
+ "revision_id": "nb-r1",
+ "doc_id": "demo-notebook",
+ "version_number": 0,
+ "author_label": "app:autoradio",
+ "author_kind": "appagent",
+ "content": "# My notebook\n\n## What you asked for\n- Mornings: world news first, then science.\n- \"Less sport.\" (you said, 17 Nov, during \"Leeds sack manager\")\n- Never play takes by voice-3fa2c1.\n\n## What Autoradio has learned\n- Long policy pieces before 8 am get skipped; short ones are heard. [L1 \u00b7 heard 9 of 11]\n- You hear podcast clips through when the clip quotes a scientist. [L9 \u00b7 heard 4 of 4]\n\n## What Autoradio is trying\n- One longer science piece after the headlines. [T2 \u00b7 heard 1 of 3]\n\n## Recent steering\n- More like this: \"The new Webb image\" (17 Nov 08:12)\n- Less like this: \"Transfer window latest\" (17 Nov 08:20)\n",
+ "created_at": "2026-11-17T21:30:00Z"
 }
 """#,
         "texture-rev-no-r1": #"""
@@ -2642,6 +2711,19 @@ public enum DemoFixtureData {
    "version_number": 0,
    "author_label": "you",
    "created_at": "2026-10-30T09:00:00Z"
+  }
+ ]
+}
+"""#,
+        "texture-revs-demo-notebook": #"""
+{
+ "revisions": [
+  {
+   "revision_id": "nb-r1",
+   "doc_id": "demo-notebook",
+   "version_number": 0,
+   "author_label": "app:autoradio",
+   "created_at": "2026-11-17T21:30:00Z"
   }
  ]
 }

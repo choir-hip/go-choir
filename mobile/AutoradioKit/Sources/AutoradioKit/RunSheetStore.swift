@@ -12,7 +12,7 @@ import Foundation
 // Ways this can fail (written before the code; each has a test in RunSheetStoreTests):
 //  1. A dropped op is posted or remembered as pending: only applied ops are.
 //  2. The ahead list grows past 100: the phone bounds it. A listener's own placement takes the last entry's place; the desk's is refused.
-//  3. A relaunch finds an entry still "on air" (the app died mid-entry): it is closed as `left`, and nothing resumes by itself.
+//  3. A relaunch finds an entry still "on air" (the app died mid-entry): it is closed as `failed` (an app failure, never `left` and never a choice), and nothing resumes by itself.
 //  4. The same op is applied twice (a retry): the reducer's op_id memory drops the second.
 //  5. A post answers 404 or fails: the ops stay pending, in order, and are sent again; none is lost or sent twice after an answer.
 //  6. A batch is over 64 ops or 256 KB: it is sent in several posts.
@@ -208,8 +208,8 @@ public struct RouteSheetPoster: RunSheetPoster {
     }
     /// The phone reports how the entry on air ended: heard (it finished, or was left or cut) or skipped.
     @discardableResult
-    public func airedEnded(_ id: String, as state: RunSheetState, outcome: RunSheetOutcome, report: AirReport = AirReport()) -> RunSheetResult {
-        apply(RunSheetOp(opId: mintOpId(), by: .phone, op: .aired, id: id, state: state, ended: RunSheetEnded(outcome: outcome, at: stamp(), lastBlock: report.block), positionSeconds: report.seconds))
+    public func airedEnded(_ id: String, as state: RunSheetState, outcome: RunSheetOutcome, report: AirReport = AirReport(), reason: String? = nil) -> RunSheetResult {
+        apply(RunSheetOp(opId: mintOpId(), by: .phone, op: .aired, id: id, state: state, ended: RunSheetEnded(outcome: outcome, at: stamp(), lastBlock: report.block), positionSeconds: report.seconds, reason: reason))
     }
 
     // MARK: Posting
@@ -304,12 +304,13 @@ public struct RouteSheetPoster: RunSheetPoster {
         if let d = try? JSONEncoder().encode(Saved(sheet: sheet, pending: pending, epoch: sheetEpoch)) { try? d.write(to: storage, options: .atomic) }
     }
 
-    /// The sheet and the pending ops from the last launch. Nothing plays. An entry that was on air when the app died is closed as `left`
-    /// (a crash restart never resumes work).
+    /// The sheet and the pending ops from the last launch. Nothing plays. An entry that was on air when the app died is closed as `failed`,
+    /// by the phone, with the reason "interrupted by a restart": a crash is not the listener leaving (`left` is sign-out) and not a choice, so
+    /// it settles nothing (the server records no verdict for `failed`). A crash restart never resumes work.
     public func restore() {
         guard let storage, let d = try? Data(contentsOf: storage), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
         sheet = s.sheet; pending = s.pending; sheetEpoch = s.epoch ?? 0
-        if let e = sheet.onAirEntry { airedEnded(e.id, as: .heard, outcome: .left) }
+        if let e = sheet.onAirEntry { airedEnded(e.id, as: .skipped, outcome: .failed, reason: "interrupted by a restart") }
         else { save() }
         onChange?()
         flush()

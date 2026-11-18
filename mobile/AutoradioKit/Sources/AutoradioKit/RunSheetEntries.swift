@@ -170,7 +170,7 @@ extension RunSheetEntry {
         }
         if let b = e.between, b.after.utf8.count > B.maxIDBytes || b.before.utf8.count > B.maxIDBytes { e.between = nil }       // written for neighbours it cannot name
         if var f = e.forecast {
-            f.pHeard = min(max(f.pHeard.isFinite ? f.pHeard : 0, 0), 1); f.causedBy = Self.cut(f.causedBy, B.maxShortBytes); f.claimId = Self.cut(f.claimId, B.maxShortBytes)
+            f.pHeard = f.pHeard.map { min(max($0.isFinite ? $0 : 0, 0), 1) }; f.causedBy = Self.cut(f.causedBy, B.maxShortBytes); f.claimId = Self.cut(f.claimId, B.maxShortBytes)
             e.forecast = f
         }
         if let en = e.ended { e.ended = en.bounded() }

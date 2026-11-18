@@ -86,11 +86,25 @@ public struct RunSheetBetween: Codable, Equatable, Sendable {
 }
 
 public struct RunSheetForecast: Codable, Equatable, Sendable {
-    public var pHeard: Double
+    /// Nil when the phone holds only the claim id: the server never sends its probability or cause on the `segment` event (they are written to
+    /// the tape and not sent), and the phone invents none.
+    public var pHeard: Double?
     public var causedBy: String
     public var claimId: String
-    public init(pHeard: Double, causedBy: String, claimId: String) { self.pHeard = pHeard; self.causedBy = causedBy; self.claimId = claimId }
+    public init(pHeard: Double?, causedBy: String, claimId: String) { self.pHeard = pHeard; self.causedBy = causedBy; self.claimId = claimId }
+    /// The claim a desk entry carries, with no number the phone does not hold.
+    public init(claimId: String) { self.pHeard = nil; self.causedBy = ""; self.claimId = claimId }
     enum CodingKeys: String, CodingKey { case pHeard = "p_heard", causedBy = "caused_by", claimId = "claim_id" }
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        pHeard = try c.decodeIfPresent(Double.self, forKey: .pHeard)
+        causedBy = try c.decodeIfPresent(String.self, forKey: .causedBy) ?? ""
+        claimId = try c.decodeIfPresent(String.self, forKey: .claimId) ?? ""
+    }
+    public func encode(to e: Encoder) throws {
+        var c = e.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(pHeard, forKey: .pHeard); try c.encode(causedBy, forKey: .causedBy); try c.encode(claimId, forKey: .claimId)
+    }
 }
 
 /// One item on the run sheet.
@@ -382,7 +396,7 @@ extension RunSheet {
         if (e.cites?.count ?? 0) > B.maxCites { return false }
         for c in e.cites ?? [] where c.ref.utf8.count > B.maxURLBytes || c.label.utf8.count > B.maxRefBytes { return false }
         if let b = e.between, b.after.utf8.count > B.maxIDBytes || b.before.utf8.count > B.maxIDBytes { return false }
-        if let f = e.forecast, !(f.pHeard >= 0 && f.pHeard <= 1) || f.causedBy.utf8.count > B.maxShortBytes || f.claimId.utf8.count > B.maxShortBytes { return false }
+        if let f = e.forecast, !((f.pHeard ?? 0) >= 0 && (f.pHeard ?? 0) <= 1) || f.causedBy.utf8.count > B.maxShortBytes || f.claimId.utf8.count > B.maxShortBytes { return false }
         return entryJSONSize(e) <= B.maxEntryJSON
     }
 

@@ -80,6 +80,20 @@ they place entries on the same run sheet, and this page shows the result.
    Built: the model is `TakesPage.swift` and `TakeSession.swift`; the wire is `Choir/Takes.swift` (`TakesClient`). A mute is kept on the phone
    only: the notebook line ("Never play takes by voice-xxxxxx.") has no route to be written through yet.
 
+8. **My notebook** (station L6; [the learned document](autoradio-learned-document-2026-11-17.md) sections 2 and 5 to 8). A row under Takes opens the page
+   `notebook:` (kind `notebook`; also a glyph in the launcher's tray, `place-notebook`). The page shows the notebook's lines by section (the document is the
+   Texture found by `GET /api/texture/edition`; **Edit the notebook** opens it in the Texture reader, which edits it as the listener's own revision),
+   the scorecard from `GET /api/autoradio/learning` (settled, heard through, still open, by kind, forecasts with no verdict), the forecasts behind a line when
+   it is tapped (the ledger rows whose `caused_by` is the line's ref: `lesson:L<n>`, `try:T<n>`, `mine:<8 hex>`), and the plain list of everything held about
+   the listener with where each is read (rule 2). With no learning route (404, 501, an unknown shape) the scorecard says "not available yet" and shows no
+   number; offline and signed-out say so. Built: `Notebook.swift` (the model and `NotebookStore`), `Choir/Learning.swift` (`LearningClient`, `SteerClient`,
+   `SteerQueue`), `AutoradioLab/notebook.contract`.
+   What the phone now sends about the listener: the `segment` event's `entry_id` and `claim_id` are kept on the entry; a relaunch that finds an entry on air
+   closes it `failed` with the reason "interrupted by a restart" (never `left`, which is sign-out); the programme request carries `edition_text` (the notebook
+   text when held, else the topics as text); the turn's `queue` carries `on_air` (`id`, `title`, `claim_id`, `stories`); more and less taps and mutes go to
+   `POST /api/autoradio/steer` through a queue that survives a relaunch and waits while the route is absent; onboarding writes the topics as the first lines of
+   "What you asked for" (the local topics file stays as a cache). Not built on the server at the time of writing: the notebook writer and the steer route.
+
 ## States
 
 - **Cold start, nothing played yet.** On air shows a greeting and what is
