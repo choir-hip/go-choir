@@ -53,7 +53,11 @@ func TestSearchAllStopsWhenTheQuestionStopsYielding(t *testing.T) {
 		"dockers mauritius":              pagesN("never", 1, 10),
 	}
 	cell, _ := searchCell(t, f)
-	out := cell(`r, err := choir.SearchAll("the harbor strike", []string{"harbor strike mauritius union", "harbor strike", "port workers walkout mauritius", "dockers mauritius"})
+	// The run has read the pages these wordings return, so the question lacks
+	// none (search_need.go) and only the novelty stop is under test.
+	out := cell(`for i := 1; i <= 11; i++ { choir.Read(fmt.Sprintf("https://h.example/p%d", i)) }
+for i := 1; i <= 10; i++ { choir.Read(fmt.Sprintf("https://b.example/p%d", i)) }
+r, err := choir.SearchAll("the harbor strike", []string{"harbor strike mauritius union", "harbor strike", "port workers walkout mauritius", "dockers mauritius"})
 fmt.Println(err)
 fmt.Println(r)
 n, held := 0, 0
