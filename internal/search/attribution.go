@@ -24,8 +24,12 @@ type attributionKey struct{}
 // WithAttribution returns ctx carrying a, each value cleaned to printable
 // characters without spaces and cut to 64.
 func WithAttribution(ctx context.Context, a Attribution) context.Context {
-	a.RunID, a.Desk, a.Conversation = cleanAttribution(a.RunID), cleanAttribution(a.Desk), cleanAttribution(a.Conversation)
-	return context.WithValue(ctx, attributionKey{}, a)
+	return context.WithValue(ctx, attributionKey{}, a.Clean())
+}
+
+// Clean returns a with each value cleaned and cut, as the log carries it.
+func (a Attribution) Clean() Attribution {
+	return Attribution{RunID: cleanAttribution(a.RunID), Desk: cleanAttribution(a.Desk), Conversation: cleanAttribution(a.Conversation)}
 }
 
 // AttributionFrom returns the attribution ctx carries (zero when none).
