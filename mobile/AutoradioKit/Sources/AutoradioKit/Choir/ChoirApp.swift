@@ -132,7 +132,7 @@ public final class ChoirApp: @unchecked Sendable {
             self.onChange?()
         }
         runtime.player.onRanDry = { id, played in Task { @MainActor in RunSheetPlayer.shared.documentEnded(id: id, anyPlayed: played) } }
-        runtime.player.onEngineLost = { id, _ in Task { @MainActor in RunSheetPlayer.shared.engineLost(documentID: id) } }
+        runtime.player.onEngineLost = { id, n in Task { @MainActor in RunSheetPlayer.shared.engineLost(documentID: id, block: n) } }
         runtime.coordinator.remoteAudioActive = { onMainThread { RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused } }
         // The lock screen's next and previous are the run sheet's: `skip(on air)` and `previous` (ChoirApp.moveStory). Always handled here.
         runtime.player.onNextTrack = { [weak self] in self?.takeRemote(.next) ?? false }
@@ -168,6 +168,7 @@ public final class ChoirApp: @unchecked Sendable {
             engine.remote.onTick = { RunSheetStore.shared.save() }
             p.turnOpen = { [weak me] in me.map { $0.runtime.snapshot().phase != "playing" } ?? false }
             p.spokenPaused = { [weak me] in me?.runtime.player.userPaused ?? false }
+            p.spokenPausedByListener = { [weak me] in me?.runtime.player.pausedByListener ?? false }
             let w = RunSheetWriter(store: .shared) { [weak me] in
                 guard let me else { return nil }
                 return ProgrammeRouteFeed(source: me.stretchSource?() ?? RouteStretchSource(baseURL: me.frontBaseURL()))

@@ -120,14 +120,18 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     private var _backgrounded = false, _interrupted = false
     private var _recordingTake = false
     /// The last switch brought the engine up (or there was none to bring).
-    private var _engineOK = true
+    var _engineOK = true
     /// A take is being recorded or reviewed: the session is the capture one (full-quality playback, no voice processing) until it is over.
     public var isRecordingTake: Bool { lock.lock(); defer { lock.unlock() }; return _recordingTake }
     /// Take the capture session for a take (`true`) or go back to what voice says (`false`). Throws when the session could not be taken.
     public func setRecordingTake(_ on: Bool) async throws {
         lock.lock(); _recordingTake = on; let has = _current != nil; lock.unlock()
-        if has { await reapply() } else if on { try await claim(.listening, preferBuiltInMic: false, reason: "take") }
-        lock.lock(); let engineOK = _engineOK; lock.unlock()
+        if has { await reapply() }
+        else if on {
+            do { try await claim(.listening, preferBuiltInMic: false, reason: "take") }
+            catch { lock.lock(); _recordingTake = false; lock.unlock(); throw error }
+        }
+        lock.lock(); let engineOK = _engineOK || !audio.needsRecovery; lock.unlock()
         if on, current != .listening || !engineOK {
             // The take must not start on a session that is not ready: the radio goes back to what it was.
             let why = engineOK ? (lastFailure.isEmpty ? "the microphone could not be taken" : lastFailure) : "the audio engine did not start"
@@ -228,6 +232,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
             print("AUTORADIO session reassert left the engine down; full release and re-claim of \(state.rawValue)")
         }
         audio.quiesce()
+        audio.detachObserver()
         print("AUTORADIO released reason=reclaim (\(reason); \(why))")
         inner.release()
         do { try await inner.claim(state, preferBuiltInMic: false, reason: "reclaim: \(reason)") }
@@ -259,7 +264,8 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         audio.holdForSessionSwitch(true)
         defer { audio.holdForSessionSwitch(false) }
         let rateBefore = audio.outputRate()
-        audio.quiesce()                                   // the category change would stop it anyway
+        audio.quiesce()
+        audio.detachObserver()                            // before the category changes: a notification of the old engine restarts nothing                                   // the category change would stop it anyway
         do { try await inner.claim(state, preferBuiltInMic: preferBuiltInMic, reason: reason) }
         catch {
             lock.lock(); _current = nil; lock.unlock()

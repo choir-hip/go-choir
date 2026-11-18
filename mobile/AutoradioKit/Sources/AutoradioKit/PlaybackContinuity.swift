@@ -152,7 +152,7 @@ public final class SessionWatcher: @unchecked Sendable {
     func interruption(began: Bool, shouldResume: Bool) {
         if began {
             memory.began(programmePlaying: programmePlaying, remotePlaying: remotePlaying)
-            if programmePlaying { runtime.player.pause(reason: "system interruption or route change") }                       // B1: the state says what is true
+            if programmePlaying { runtime.player.pause(reason: "system interruption") }                       // B1: the state says what is true
             if remotePlaying { queue.pause() }
             runtime.log.emit(.audioNotice(kind: "interruption", detail: "began; will resume programme=\(memory.programme) remote=\(memory.remote)"))
             return
@@ -173,7 +173,7 @@ public final class SessionWatcher: @unchecked Sendable {
         }
         memory.forget()
         runtime.log.emit(.audioNotice(kind: "route-lost", detail: "pausing (programme playing \(programmePlaying), remote playing \(remotePlaying))"))
-        if programmePlaying { runtime.player.pause(reason: "system interruption or route change") }
+        if programmePlaying { runtime.player.pause(reason: "route lost") }        // the listener's Play ends this one, as the system's recommendation never comes
         if remotePlaying { queue.pause() }
     }
 
