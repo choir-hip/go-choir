@@ -190,6 +190,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	scope := &ChoirScope{broker: broker, issuer: issuer, actions: actions, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: desk, slot: slot, searches: newSearchStore()}
 	scope.handleRef.Store(&handleRef)
 	scope.searches.readKeys = scope.readKeys
+	scope.searches.triedKeys = scope.triedKeys
 	return scope, nil
 }
 
@@ -813,6 +814,9 @@ func (s *ChoirScope) ReadCapture(captureID string, fromBlock, maxChars int) (JSO
 	}
 	var out JSON
 	err := s.call(ActionReadCapture, ReadCapturePayload{CaptureID: captureID, FromBlock: fromBlock, MaxChars: maxChars}, &out)
+	if err == nil {
+		s.noteCaptureRead(out)
+	}
 	return out, err
 }
 

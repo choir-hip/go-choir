@@ -24,23 +24,29 @@ const searchEnoughUnread = 15
 
 // allCounts are a cell's SearchAll counts (SearchStats.AllCalls and the rest).
 type allCounts struct {
-	calls, offered, sent, unreadNotes int
+	calls, offered, sent, unreadNotes, untagged int
 }
 
 // tagQuestion records that search id was sent for the question with this key.
-func (st *SearchStore) tagQuestion(id, qk string) {
+// It reports whether it did: false when the store does not hold the search
+// (its start frame had not arrived), and then the gate cannot see that search.
+func (st *SearchStore) tagQuestion(id, qk string) bool {
 	if st == nil || qk == "" {
-		return
+		return false
 	}
 	st.mu.Lock()
-	if s := st.searches[id]; s != nil {
-		s.question = qk
+	defer st.mu.Unlock()
+	s := st.searches[id]
+	if s == nil {
+		return false
 	}
-	st.mu.Unlock()
+	s.question = qk
+	return true
 }
 
 // unreadNew counts the pages of this run's searches that were new to the run
-// when they came and that the run has not read, each once. With a question
+// when they came and that the run has not yet tried to read, each once. A page
+// that will not load (a dead link, a 403, a paywall) counts once it was tried. With a question
 // key only the searches sent for that question count; with none, every search
 // of the run does.
 func (st *SearchStore) unreadNew(qk string) int {
@@ -49,6 +55,10 @@ func (st *SearchStore) unreadNew(qk string) int {
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	var tried map[string]bool
+	if st.triedKeys != nil {
+		tried = st.triedKeys()
+	}
 	read := st.readSet()
 	seen := map[string]bool{}
 	for i := st.runStart; i < len(st.order); i++ {
@@ -56,7 +66,7 @@ func (st *SearchStore) unreadNew(qk string) int {
 			continue
 		}
 		for _, h := range st.markOneLocked(i, read).Results {
-			if key := searchHitKey(h.URL); !h.Held && !h.Read && !seen[key] {
+			if key := searchHitKey(h.URL); !h.Held && !h.Read && !tried[key] && !seen[key] {
 				seen[key] = true
 			}
 		}
@@ -87,5 +97,5 @@ func (s *ChoirScope) noteUnreadPages() {
 	}
 	s.unreadNoted = true
 	s.allStat.unreadNotes++
-	s.notes = append(s.notes, fmt.Sprintf("this run holds %d pages new to this run that you have not read, returned by its earlier searches; the search is sent. Read the ones that matter (choir.Searches.Summary(id) lists them), then search again for what is still missing, naming it", n))
+	s.notes = append(s.notes, fmt.Sprintf("this run holds %d pages new to this run that you have not read, returned by its earlier searches; the search is sent. Read the ones that matter (choir.Searches.Summary(id) lists them), then search again for what is still missing, naming it. A page that will not load counts once you have tried it; fresh sends a search the run holds results for", n))
 }
