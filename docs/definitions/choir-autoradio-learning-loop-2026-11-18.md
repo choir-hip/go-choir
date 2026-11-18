@@ -243,9 +243,9 @@ owner_rulings:
 
 now:
   status: working
-  slice: "L1 to L3 are with one builder on lane/learn-settle, whose first act is to confirm from the drill computer's records that outcomes are dropped today; the design for L4 to L7 is on lane/learn-design (takes first, 4be932ad5); the phone candidate lane/autoradio-integ9 is in its simulator build"
+  slice: "L1 to L3 (settlement) are landed, deployed and proven on d@e, with a follow-up; L7's server (takes) landed as ce719fe1a and is in CI and deploy, its proof on d@e to run; L4 and L5 (the notebook) are on lane/learn-notebook in a repair round after both seats returned REPAIR; the phone build lane/autoradio-integ19 (014d71f7f) is installed on the owner's phone, unlaunched, and none of the phone lanes are on main"
   source_ref: "origin/main at the commit that carries this file"
-  deploy_identity: "staging 90f258bb4"
+  deploy_identity: "staging 843ee5d80 at 2026-11-18T08:35Z; ce719fe1a deploying"
   candidate:
     id: none
     state: none
@@ -270,13 +270,27 @@ now:
     evidence_ref: this file, owner_rulings
     owner_ratification_ref: "the owner's messages of 2026-11-17"
   belief:
-    believed_state: "one stroke of four runs; the pieces for the second and third exist unconnected; no document and no take exist"
-    main_uncertainty: "whether outcomes are in fact dropped on the server today, and whether a one-page document can carry enough to change the DJ's picks"
-    next_observation: "the learn-settle builder's read of the drill computer's sheet records"
-  blocker_or_risk: "five red stations need two review seats each, and two-seat review is blocked until the owner names a replacement for seat 1 (CLAUDE.md, Review; D6); TestFlight needs the owner's paid team (D3)"
-  next_action: "review and land L1 to L3 when lane/learn-settle is pushed; start the L7 server and phone builders when the takes specification is pushed; install lane/autoradio-integ9 when its tours pass"
+    believed_state: "two strokes of four run and are proven on the drill computer (forecast, outcome); the lesson stroke is built and not yet accepted by review; takes exist on both sides and have never met; trust is not built; no real listener has settled a forecast yet"
+    main_uncertainty: "whether the phone's posted ops settle forecasts for a real listener as they do for the proof script, and whether a recording made by the phone passes the server's audio check"
+    next_observation: "the owner's first listening session on integ19: the scorecard route on the owner's computer before and after (read only)"
+  blocker_or_risk: "the phone lanes (about 150 commits) are not on main and were first reviewed on 2026-11-18 (docs/problems/autoradio-phone-code-unreviewed-for-three-days-2026-11-18.md); TestFlight needs the owner's paid team (D3); nothing about sound has been checked on the device"
+  next_action: "run scripts/prove-autoradio-takes on d@e when staging reports ce719fe1a and settle C124; re-review and land lane/learn-notebook; merge the phone lanes into main; the Android experiment (L10) after the owner's 05:45 check-in"
 
-receipts: []
+receipts:
+  - station: L1-L3
+    what: "settlement: only the listener's phone op settles a forecast"
+    landed: [f710dda6c, 53537c7ca, f54e92f48, de53cb778, 843ee5d80]
+    ci: ["44257019990", "44265751276"]
+    deployed: "f54e92f48 at 2026-11-18T07:26Z; 843ee5d80 at 2026-11-18T08:35Z"
+    proof: "scripts/prove-autoradio-learning PASS on d@e, first run, twice (ledger C122, C123)"
+    review: "seat 2 REPAIR then ACCEPT, seat 1 ACCEPT; follow-up seat 2 ACCEPT in round 2"
+  - station: L7 (server)
+    what: "takes: publish, list, audio, record, delete, outcome; a take as a programme candidate and a take entry on the run sheet"
+    landed: [3f3cfdb7b, 9edf286b8, a1c3ac93a, ce719fe1a]
+    ci: ["44280975897 (running when this was written)"]
+    deployed: "not yet"
+    proof: "scripts/prove-autoradio-takes, not yet run (ledger C124)"
+    review: "five rounds: seat 1 ACCEPT in round 1; seat 2 REPAIR, REPAIR, ACCEPT, REPAIR (after the rebase onto settlement), ACCEPT"
 ---
 
 # The Autoradio learning loop

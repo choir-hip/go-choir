@@ -11,7 +11,20 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live station (2026-11-17 night): Autoradio overnight
+## Live station (2026-11-18): Autoradio learns from its listener
+
+Owner, 2026-11-17 night: the overnight work is the learning engine, takes are
+built now, TestFlight this week. Goal:
+[`definitions/choir-autoradio-learning-loop-2026-11-18.md`](definitions/choir-autoradio-learning-loop-2026-11-18.md)
+(stations L1 to L10). State at 2026-11-18T10:05Z: settlement (L1 to L3) is
+deployed and proven on the drill computer; the takes server (L7) has landed
+and is deploying; the notebook (L4, L5) is in a repair round after review;
+the phone build `lane/autoradio-integ19` is on the owner's phone and the
+phone lanes are not on main. What is built is in
+[`current-architecture.md`](current-architecture.md). The station below is
+superseded by it.
+
+## Superseded (2026-11-17 night): Autoradio overnight
 
 Owner, 2026-11-17: one voice at a time, local retrieval for the on-device
 model, the latest Exact on phone and Mac, a native Mac app, EmbeddingGemma 2
