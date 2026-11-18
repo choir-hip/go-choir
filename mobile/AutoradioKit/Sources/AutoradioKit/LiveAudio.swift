@@ -283,7 +283,26 @@ public final class LiveAudio: @unchecked Sendable {
     /// carry on from the frames already rendered (the engine restarted) or to end (a stop).
     func releaseWaiters() {
         let all = waiters.write { w -> [Once<Void>] in let x = Array(w.values); w = [:]; return x }
+        voiceWaiterIDs.write { $0 = [] }
         for o in all { o.resume(()) }
+    }
+    /// The waiters of voice lines (a subset of `waiters`): a barge-in stops these only. The programme block's wait must not be resumed by it, or
+    /// the block would return "played" with its remaining words unspoken.
+    let voiceWaiterIDs = Locked<Set<UUID>>([])
+    func releaseVoiceWaiters() {
+        let all = waiters.write { w -> [Once<Void>] in
+            let ids = voiceWaiterIDs.write { s -> Set<UUID> in let x = s; s = []; return x }
+            var out: [Once<Void>] = []
+            for id in ids { if let o = w[id] { out.append(o); w[id] = nil } }
+            return out
+        }
+        for o in all { o.resume(()) }
+    }
+
+    /// A category change is about to be made: the engine's configuration-change notifications are not listened to until the engine is started again.
+    public func detachObserver() {
+        engineGate.lock(); defer { engineGate.unlock() }
+        if let o = observer { NotificationCenter.default.removeObserver(o); observer = nil }
     }
 
     /// An error's domain and code on the console log (the phone cannot be attached), nothing else of it.
@@ -301,6 +320,7 @@ public final class LiveAudio: @unchecked Sendable {
         // (a capture session before) and for any switch of category (`fresh`).
         let rebuilt = fresh || (!wantMic && (voiceProcessing || inputTouched))
         if rebuilt { replaceEngine() }
+        defer { if !virtual, observer == nil { observe() } }
         do { try attempt(voiceProcessing: vp) }
         catch {
             Self.printFault("engine start failed (rebuilt=\(rebuilt))", error)
@@ -454,7 +474,8 @@ public final class LiveAudio: @unchecked Sendable {
         let once = Once<Void>()
         let wid = UUID()
         waiters.write { $0[wid] = once }
-        defer { waiters.write { $0[wid] = nil } }
+        voiceWaiterIDs.write { _ = $0.insert(wid) }
+        defer { waiters.write { $0[wid] = nil }; voiceWaiterIDs.write { _ = $0.remove(wid) } }
         func settle() { gate.lock(); let fire = pending == 0 && finished; gate.unlock(); if fire { once.resume(()) } }
         do {
             for try await f in frames {
@@ -482,7 +503,7 @@ public final class LiveAudio: @unchecked Sendable {
     public func stopVoice() {
         guard !virtual, running else { return }
         voiceNode.stop()
-        releaseWaiters()
+        releaseVoiceWaiters()
     }
 
     /// Schedule a buffer on the programme node and wait until it has played. If the engine is restarted meanwhile
@@ -571,6 +592,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         var blockIndex = 0
         var level: PlayLevel = .play
         var userPaused = true
+        /// The pause was the system's (an interruption began), not the listener's: a held entry goes on by itself when the session is back.
+        var systemPause = false
         var jumpTo: Int?
         /// Where the loop stopped when the programme ran dry: the first block that was never played. Play starts there when blocks have come since.
         var resumeAt: Int?
@@ -583,6 +606,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var blockIndex: Int { st.read { $0.blockIndex } }
     public var level: PlayLevel { st.read { $0.level } }
     public var userPaused: Bool { st.read { $0.userPaused } }
+    /// Paused by the listener (or by a lost route): only their Play ends it. A system interruption's pause is not this.
+    public var pausedByListener: Bool { st.read { $0.userPaused && !$0.systemPause } }
     public var rate: Double { st.read { $0.rate } }
     public var onChange: (@Sendable () -> Void)?
     /// The loop ran out of blocks and nothing is queued behind it: (the document's id, whether any block of this run made sound).
@@ -591,7 +616,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// A block could not sound because the engine is down and could not be made ready: (the document's id, the block that did not play). The loop
     /// has stopped at that block (`play()` starts there again); the run is not over and nothing was heard.
     public var onEngineLost: (@Sendable (String, Int) -> Void)?
-    private let engineLostFlag = Locked(false)
+    let engineLostFlag = Locked(false)
+    /// Seconds added to twice a block's length before its wait is given up.
+    nonisolated(unsafe) static var blockMargin = 10.0
     /// The lock screen's next and previous: the host may take them as story moves (true: handled); else they skip a passage or segment.
     public var onNextTrack: (@Sendable () -> Bool)?
     public var onPreviousTrack: (@Sendable () -> Bool)?
@@ -650,7 +677,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
 
     public func play() {
         let (lvl, hasLoop, at) = st.write { s -> (PlayLevel, Bool, Int) in
-            s.userPaused = false
+            s.userPaused = false; s.systemPause = false
             // Ran dry, and more has come since: the first unplayed block, not the last played one again. With nothing new, play replays the last block as it always did.
             let first = s.resumeAt.flatMap { $0 < s.document.blocks.count ? $0 : nil }
             return (s.level, s.loop != nil, first ?? s.blockIndex)
@@ -664,7 +691,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// `reason` names who asked: every pause is on the console, never silent.
     public func pause(reason: String = "listener") {
         print("AUTORADIO paused reason=\(reason)")
-        st.write { $0.userPaused = true }; audio.programmePause(); playback.paused(true); publishNowPlaying(); onChange?()
+        st.write { $0.userPaused = true; $0.systemPause = reason == "system interruption" }; audio.programmePause(); playback.paused(true); publishNowPlaying(); onChange?()
     }
     public func next() {
         let (i, doc) = st.read { ($0.blockIndex, $0.document) }
@@ -733,7 +760,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// cleared before the loop first reads it. (`start(at:)` then `play()` raced: the loop could pause the audio after `play()` had started it,
     /// and nothing started it again.)
     func begin(at i: Int) {
-        st.write { $0.userPaused = false }
+        st.write { $0.userPaused = false; $0.systemPause = false }
         playback.paused(false)
         start(at: i)
         publishNowPlaying(); onChange?()
@@ -747,6 +774,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             let o = s.loop; s.epoch += 1; s.blockIndex = i; s.loop = nil; s.resumeAt = nil; return (o, s.epoch)
         }
         old?.cancel()
+        engineLostFlag.value = false              // a loss noted by the loop just cancelled belongs to nothing now
         audio.programmeStop()
         audio.clearPlayhead()
         let task = Task { [weak self] in
@@ -768,6 +796,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                     let played = await self.playBlock(block, index: n)
                     if Task.isCancelled { break }
                     if self.engineLostFlag.write({ let v = $0; $0 = false; return v }) {
+                        guard self.st.read({ $0.epoch == my }) else { break outer }       // a newer start has replaced this loop: the loss is not its to report
                         let id = self.st.write { s -> String in if s.epoch == my { s.blockIndex = n; s.resumeAt = n; s.loop = nil }; return s.document.id }
                         print("AUTORADIO engine lost at doc=\(id) block=\(n); the entry is held, nothing counted as heard")
                         self.onChange?()
@@ -887,7 +916,25 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             startLookahead(after: tag)
-            let sounded = await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
+            // The wait is bounded: twice the block's length (the slowest speed) plus a margin, counted only while the programme is not paused (a
+            // listener's or the system's pause may last as long as it likes). A block that outlasts it (a barge-in that never gave the level back)
+            // is treated as one the engine lost: the entry is held, not left parked silently.
+            let budget = Double(made.samples.count) / made.rate * 2 + Self.blockMargin
+            let timedOut = Locked(false)
+            let audio = self.audio
+            let inner = Task { await audio.playProgramme(made.samples, rate: made.rate, tag: tag) }
+            let dog = Task { [weak self] in
+                var live = 0.0
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    guard !Task.isCancelled, let self else { return }
+                    if !self.userPaused { live += 0.1 }
+                    if live > budget { timedOut.value = true; inner.cancel(); return }
+                }
+            }
+            var sounded = await withTaskCancellationHandler { await inner.value } onCancel: { inner.cancel() }
+            dog.cancel()
+            if timedOut.value { print("AUTORADIO block waited past its bound budget_s=\(Int(budget)); treated as lost"); sounded = false }
             if !sounded { if !Task.isCancelled { engineLostFlag.value = true }; return false }
             lastBlockEnd.write { $0 = Date() }
             return true

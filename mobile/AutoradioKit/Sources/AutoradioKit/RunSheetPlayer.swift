@@ -81,6 +81,8 @@ extension PlaybackEngine {
     public var turnOpen: () -> Bool = { false }
     /// The listener paused the spoken radio: nothing starts by itself.
     public var spokenPaused: () -> Bool = { false }
+    /// The listener paused (or the route was lost): not the system's interruption pause. A held entry resumes by itself over the system's pause only.
+    public var spokenPausedByListener: () -> Bool = { false }
     /// Fetches a page's text; replaceable for tests.
     public var pageText: (URL, String) async -> (title: String, paragraphs: [String])? = { await PageText.fetch($0, title: $1) }
     /// Where the phone keeps its own copy of an audio file from Files, by entry id: never posted. After a relaunch it is empty and `fileResolver` finds the file again.
@@ -208,6 +210,7 @@ extension PlaybackEngine {
     public func playNow(_ e: RunSheetEntry, words: (title: String, paragraphs: [String])? = nil) {
         dropRemembered()
         wants = true
+        pressPending = true; defer { pressPending = false }       // an explicit placement is a press: it may take the session back
         if let words { provided[e.id] = words }
         let cut = store.onAir() != nil ? report(final: false) : nil
         placed(store.place(e, at: .now, cutting: cut))
@@ -233,6 +236,7 @@ extension PlaybackEngine {
         guard a.indices.contains(i) else { return }
         dropRemembered()
         wants = true
+        pressPending = true; defer { pressPending = false }
         store.move(id: a[i].id, at: .now)
     }
     public func clearUpcoming() { dropRemembered(); store.clearAhead() }
@@ -262,7 +266,14 @@ extension PlaybackEngine {
         dropRemembered()
         wants = false
         // Sign-out is not a judgement of the entry: it leaves the air as `left`, by the phone, where it was.
-        if let e = store.onAir() { let r = report(final: false); store.airedEnded(e.id, as: .heard, outcome: .left, report: r) }
+        if let e = store.onAir() {
+            let r = report(final: false)
+            // An entry that never sounded (held at its start, or lost at its first block) was not heard: `skipped` with `failed`, the phone's
+            // "could not play it", which the server settles as no verdict. One that sounded leaves as it did: `heard`, `left`.
+            let silent = (sessionHeldFor == e.id && !heldMidEntry) || (heldMidEntry && lostAtFirstBlock)
+            if silent { store.airedEnded(e.id, as: .skipped, outcome: .failed, report: r, reason: "signed out before it made a sound") }
+            else { store.airedEnded(e.id, as: .heard, outcome: .left, report: r) }
+        }
         store.clearAhead(by: .phone, reason: "signed out")
         engine?.stopRemote(); engine?.stopSpoken()
     }
@@ -422,7 +433,8 @@ extension PlaybackEngine {
             rememberPlace(of: playingId, nextKind: air.kind)
             sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil; heldMidEntry = false
             playingId = air.id; playingDocument = nil; audio = nil; pendingEnd = nil
-            startTask = Task { @MainActor in await self.begin(air) }
+            let press = pressPending
+            startTask = Task { @MainActor in await self.begin(air, reason: press ? "play" : nil) }
             return
         }
         if playingId != nil {                         // what was on air was skipped, cut or taken off: its sound stops
@@ -453,10 +465,13 @@ extension PlaybackEngine {
     /// The entry is held for the session in the middle of its speech (a block could not sound): when the session is back it goes on from the
     /// block that did not play, and it is never finished, heard or failed, meanwhile.
     private var heldMidEntry = false
+    /// The engine was lost at the entry's first block: the entry has made no sound at all.
+    private var lostAtFirstBlock = false
     /// The spoken document `documentID` lost the engine at a block: the entry on air is held like one whose start could not take the session.
-    public func engineLost(documentID: String) {
+    public func engineLost(documentID: String, block: Int? = nil) {
         guard let eid = playingId, documentID == playingDocument, let e = store.entry(eid) else { return }
         heldMidEntry = true
+        lostAtFirstBlock = block == 0
         Task { @MainActor in await self.hold(e, why: "the audio session could not be taken") }
     }
     private var retryTask: Task<Void, Never>?
@@ -466,14 +481,14 @@ extension PlaybackEngine {
     /// session (at its start or in the middle) the bar says paused, so the press means Play, and it must never be taken for a pause.
     public func playPressed() -> Bool {
         let held = isWaitingForSession
-        sessionMayBeBack()
+        sessionMayBeBack(reason: "play")
         return held
     }
     /// The app is back in front, an interruption ended, a route came back, or the listener tapped Play: try the held entry now.
-    public func sessionMayBeBack() {
+    public func sessionMayBeBack(reason: String = "resume") {
         guard let id = sessionHeldFor, playingId == id, let e = store.entry(id) else { return }
         retryTask?.cancel()
-        retryTask = Task { @MainActor in await self.begin(e, reason: "resume") }
+        retryTask = Task { @MainActor in await self.begin(e, reason: reason) }
     }
 
     /// The session or the engine is not ready: that is not this entry's failure. It stays on air, held, with no outcome recorded; the
@@ -494,19 +509,26 @@ extension PlaybackEngine {
         }
     }
 
+    private var pressPending = false
+    private var beginSeq = 0
     private func begin(_ entry: RunSheetEntry, reason: String? = nil) async {
+        beginSeq += 1
+        let seq = beginSeq
         let notReady = await sessionReady?(reason ?? entry.kind.rawValue)
         guard playingId == entry.id else { return }            // a newer start took over while the session was made ready
+        guard seq == beginSeq else { return }                  // a later begin of this entry (a retry, Play, the foreground) is the one that goes on
         if let why = notReady { await hold(entry, why: why); return }
+        if reason != "play", sessionHeldFor == entry.id, spokenPausedByListener() {
+            // The listener paused (or the route was lost) while the entry was held, at its start or in the middle: it stays held, and only their Play
+            // goes on. Neither the timer nor the foreground undoes a pause.
+            print("AUTORADIO on air \(entry.id) stays held: the listener paused")
+            changed(); return
+        }
         if heldMidEntry {
             // The session is back: the entry goes on from the block that did not play (not from the start, and not finished).
             heldMidEntry = false
             sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
             message = ""
-            if spokenPaused() {                       // the listener paused meanwhile: their Play starts at the block that did not play
-                print("AUTORADIO on air \(entry.id) is no longer held: the listener paused")
-                changed(); return
-            }
             paused = false
             print("AUTORADIO on air \(entry.id) resumes at the block that did not play")
             engine?.resumeSpoken()
