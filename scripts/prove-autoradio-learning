@@ -23,10 +23,20 @@ revision at least as new as the tap's; the page is within budget (at most 12
 learned, 3 trying, 1,000 written words); and every lesson line cites ledger
 rows that exist. Whether the model proposed a lesson in that one call is its
 own choice: it is reported, and --require-lesson makes it a failure.
+The ops are assigned by ROUTE, not by position (assign_roles, tested offline by
+--selftest): the DJ repeats stories, so the script reads each forecast entry's
+cited routes first and picks a skip route S, the least-cited route that leaves
+at least four entries not citing it, gives the four finishing roles (finished
+twice, backdated, the superseded pair's finisher) only to entries that do not
+cite S, and puts the first skip on an entry that cites S; it extends the
+programme while no such assignment exists, and fails loudly (each entry's routes
+and why) only after the bound. A cite whose role is "mentioned" is not a
+telling (the server does not count it either): the segment event carries the
+role of each cite, and routes are read from the others.
 Then the heard phase (docs/reference/AUTORADIO-PROGRAMME.md, "What the
 listener heard, in the input"): this run's story routes carry a per-run suffix,
-so what earlier runs finished does not count. It takes one entry the run
-FINISHED and one it SKIPPED, opens a stretch that offers both at the same
+so what earlier runs finished does not count. It takes the finished route F and
+the skipped-only route S the assignment chose, opens a stretch that offers both at the same
 version plus a never-seen candidate, and reads that stretch's input receipt
 (notebook.inputs[].heard: counts and ids, never words): asserts candidates 3,
 same 1 (the finished one), not_in_window 2 (the skipped one and the new one),
@@ -172,8 +182,9 @@ def op_end(tag, entry_id, state, outcome, last, ago_days=0):
 
 def main():
     ap = argparse.ArgumentParser(description="Prove the Autoradio forecasts settle from the listener's ops, once.")
-    ap.add_argument("--host", required=True)
-    ap.add_argument("--api-key-file", required=True)
+    ap.add_argument("--host")
+    ap.add_argument("--api-key-file")
+    ap.add_argument("--selftest", action="store_true", help="check the role assignment offline (no network, no key) and exit")
     ap.add_argument("--computer", default="")
     ap.add_argument("--timeout", type=float, default=0.0)
     ap.add_argument("--insecure-http", action="store_true")
@@ -181,6 +192,10 @@ def main():
     ap.add_argument("--require-lesson", action="store_true", help="fail unless the model proposed a lesson that was written")
     ap.add_argument("--require-followup", action="store_true", help="fail unless the DJ's telling of a heard story was a follow-up (or it left it out)")
     args = ap.parse_args()
+    if args.selftest:
+        return selftest()
+    if not args.host or not args.api_key_file:
+        ap.error("--host and --api-key-file are required (or --selftest)")
     key = read_key(args.api_key_file)
     if args.dry_run:
         print("ok: arguments and key file read; nothing sent")
@@ -188,16 +203,26 @@ def main():
     api = Api(args, key)
     before = api.learning()["scorecard"]
     segs = api.programme("open") + []
-    content = []
+    content, assignment, why = [], None, ""
     for _ in range(5):
         segs += api.programme("extend")
         content = [s for s in segs if s.get("claim_id")]
         if len(content) >= 10:
-            break
+            assignment, why = assign_roles([(s["claim_id"], cite_routes(s)) for s in content])
+            if assignment:
+                break
     print("entries %d, with a forecast %d" % (len(segs), len(content)))
     if len(content) < 10:
         print("FAIL: fewer than ten forecast-bearing entries")
         return 1
+    if not assignment:
+        print("FAIL: no assignment of the ops to the entries exists: %s" % why)
+        for s in content:
+            print("  entry %s cites %s" % (s["entry_id"], cite_routes(s)))
+        return 1
+    print("roles by route: skip route %s, finished route %s" % (assignment["skip_route"], assignment["fin_route"]))
+    by_role = {role: next(s for s in content if s["claim_id"] == key) for key, role in assignment["roles"]
+               if role in ("x", "y", "z")}
     run = uuid.uuid4().hex[:8]
     # name -> (state, outcome, last_block, days back the op's own time is set)
     plan = [("finished", "heard", "finished", 1, 0)] * 2 + [("backdated", "heard", "finished", 1, 30)] \
@@ -206,7 +231,9 @@ def main():
     # first on_air below and adds one superseded no-verdict of its own.
     stale = [e for e in api.sheet().get("entries", []) if e.get("state") == "on_air" and (e.get("forecast") or {}).get("claim_id")]
     ops, claims = [], {}
-    for i, (s, (name, state, outcome, last, ago)) in enumerate(zip(content, plan)):
+    by_key = {s["claim_id"]: s for s in content}
+    ordered = [by_key[key] for key, role in assignment["roles"] if role not in ("x", "y", "z")]
+    for i, (s, (name, state, outcome, last, ago)) in enumerate(zip(ordered, plan)):
         tag = "%s-%d" % (run, i)
         if name == "cut":
             # A real cut: on air, then the listener places another at now. The
@@ -217,12 +244,12 @@ def main():
             ops += [op_on(tag, s["entry_id"]), op_end(tag, s["entry_id"], state, outcome, last, ago)]
         claims[s["claim_id"]] = name
     # The app was killed with X on air: on_air for Y arrives before X's end, which never comes.
-    x, y = content[len(plan)], content[len(plan) + 1]
+    x, y = by_role["x"], by_role["y"]
     ops += [op_on("%s-x" % run, x["entry_id"]), op_on("%s-y" % run, y["entry_id"]),
             op_end("%s-y" % run, y["entry_id"], "heard", "finished", 1)]
     claims[x["claim_id"]], claims[y["claim_id"]] = "superseded", "finished"
     # A bare heard end that says nothing of how it ended: no verdict, never true.
-    z = content[len(plan) + 2]
+    z = by_role["z"]
     bare = op_end("%s-z" % run, z["entry_id"], "heard", "finished", 1)
     del bare["ended"]
     ops += [op_on("%s-z" % run, z["entry_id"]), bare]
@@ -261,7 +288,7 @@ def main():
     ok = ok and not twice
     print("scorecard: %s" % json.dumps({k: after["scorecard"][k] for k in ("forecasts", "settled", "heard_through", "heard_through_rate", "brier", "no_verdict")}))
     ok = notebook_phase(api, args, content, ok)
-    ok = heard_phase(api, args, content, claims, ok)
+    ok = heard_phase(api, args, content, assignment, ok)
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -332,13 +359,105 @@ def notebook_phase(api, args, content, ok):
 
 
 def cite_routes(seg):
-    """The routes a segment event cites (refs are pub:<route>@v<version>)."""
+    """The routes a segment event cites as a telling: refs are
+    pub:<route>@v<version>, and each cite carries a role (subject, quoted or
+    mentioned). A cite whose role is "mentioned" is skipped: the server does
+    not count a mention as a telling either. A bare string cite has no role
+    and counts."""
     out = []
     for c in seg.get("cites") or []:
-        ref = c.get("ref", "") if isinstance(c, dict) else str(c)
+        if isinstance(c, dict):
+            ref, role = c.get("ref", ""), c.get("role", "")
+        else:
+            ref, role = str(c), ""
+        if role == "mentioned":
+            continue
         if ref.startswith("pub:") and "@v" in ref:
-            out.append(ref[4:ref.rindex("@v")])
+            r = ref[4:ref.rindex("@v")]
+            if r not in out:
+                out.append(r)
     return out
+
+
+# The roles of the settle phase, by count. Four entries finish (the heard
+# ones); six do not.
+FINISHING = ["finished", "finished", "backdated", "y"]
+NOT_FINISHING = ["skipped", "skipped", "cut", "left", "x", "z"]
+
+
+def assign_roles(entries):
+    """entries: [(key, told_routes)], in order. Returns (assignment, reason).
+
+    Picks the skip route S: among routes that leave at least len(FINISHING)
+    entries not citing S, the one cited by the fewest entries (then by name).
+    No entry citing S gets a finishing role; the first skipped entry cites S;
+    the finished route F is a route of the first finisher. An entry citing two
+    routes counts for both. assignment is {"roles": [(key, role)...] in the
+    order finishing roles then the rest, "skip_route": S, "fin_route": F};
+    None with the reason when no S satisfies it."""
+    need = len(FINISHING) + len(NOT_FINISHING)
+    if len(entries) < need:
+        return None, "only %d forecast entries, %d are needed" % (len(entries), need)
+    counts = {}
+    for _, routes in entries:
+        for r in routes:
+            counts[r] = counts.get(r, 0) + 1
+    if not counts:
+        return None, "no entry cites a route"
+    why = []
+    for route in sorted(counts, key=lambda r: (counts[r], r)):
+        citing = [k for k, rs in entries if route in rs]
+        others = [(k, rs) for k, rs in entries if route not in rs]
+        if len(others) < len(FINISHING):
+            why.append("route %s is cited by %d entries, leaving %d to finish and %d are needed" % (route, len(citing), len(others), len(FINISHING)))
+            continue
+        finishers = others[:len(FINISHING)]
+        pool = citing + [k for k, _ in others[len(FINISHING):]]
+        roles = [(k, role) for (k, _), role in zip(finishers, FINISHING)] + list(zip(pool, NOT_FINISHING))
+        return {"roles": roles, "skip_route": route, "fin_route": finishers[0][1][0] if finishers[0][1] else None}, ""
+    return None, "; ".join(why)
+
+
+def selftest():
+    def run(routes):
+        return assign_roles([("e%d" % i, r) for i, r in enumerate(routes)])
+
+    def check(name, cond):
+        print("  %-62s %s" % (name, "ok" if cond else "FAIL"))
+        return cond
+
+    ok = True
+    # This run's shape: the ferry, budget, rain and strike stories, repeated.
+    shape = [["ferry"], ["budget"], ["rain"], ["ferry"], ["budget"], ["ferry"], ["budget"], ["strike"], ["rain"], ["ferry"]]
+    a, why = run(shape)
+    roles = dict(a["roles"]) if a else {}
+    ok &= check("this run's shape: assigned", a is not None)
+    ok &= check("  S is the least-cited route (strike)", a and a["skip_route"] == "strike")
+    ok &= check("  the strike entry is skipped", roles.get("e7") == "skipped")
+    ok &= check("  no entry citing S finishes", all(roles[k] not in FINISHING for k, rs in [("e%d" % i, r) for i, r in enumerate(shape)] if "strike" in rs))
+    ok &= check("  the roles have the settle phase's counts", sorted(roles.values()) == sorted(FINISHING + NOT_FINISHING))
+    ok &= check("  F is a route that is not S", a and a["fin_route"] not in (None, "strike"))
+    # Every entry cites the same route: nothing to skip that is not finished.
+    a, why = run([["ferry"]] * 10)
+    ok &= check("every entry cites one route: unsatisfiable with a reason", a is None and "leaving 0 to finish" in why)
+    # Too few entries.
+    a, why = run([["a"], ["b"]])
+    ok &= check("fewer than ten entries: unsatisfiable with a reason", a is None and "only 2" in why)
+    # Entries citing two routes: S must leave four entries free of it.
+    two = [["a"]] * 4 + [["a", "s"]] * 6
+    a, why = run(two)
+    roles = dict(a["roles"]) if a else {}
+    ok &= check("entries citing two routes: S is the one that leaves four", a is not None and a["skip_route"] == "s")
+    ok &= check("  the four entries without S are exactly the finishers", a and {k for k, r in a["roles"] if r in FINISHING} == {"e0", "e1", "e2", "e3"})
+    ok &= check("  the first skip cites S", a and "s" in two[int(next(k for k, r in a["roles"] if r == "skipped")[1:])])
+    # One entry free of every route but the others cite both: unsatisfiable.
+    a, why = run([["a"]] + [["a", "b"]] * 9)
+    ok &= check("only one entry lacks S for every S: unsatisfiable", a is None and "leaving 1 to finish" in why)
+    # Roles: a mention is not a telling, a bare string is.
+    seg = {"cites": [{"ref": "pub:r1@v1", "role": "subject"}, {"ref": "pub:r2@v1", "role": "mentioned"}, {"ref": "pub:r3@v2", "role": "quoted"}, "pub:r4@v1", "pub:r1@v1"]}
+    ok &= check("cite_routes skips mentioned, keeps subject, quoted and bare", cite_routes(seg) == ["r1", "r3", "r4"])
+    print("selftest %s" % ("PASS" if ok else "FAIL"))
+    return 0 if ok else 1
 
 
 def heard_receipt(api, stretch):
@@ -351,16 +470,11 @@ def candidate(route, version, title):
     return {"route": route, "version": version, "title": title, "dek": title + ".", "text": title + "."}
 
 
-def heard_phase(api, args, content, claims, ok):
+def heard_phase(api, args, content, assignment, ok):
     print("-- the heard index")
-    segs_by_claim = {s["claim_id"]: s for s in content}
-    finished = [cid for cid, n in claims.items() if n in ("finished", "backdated") and cid in segs_by_claim]
-    skipped = [cid for cid, n in claims.items() if n in ("skipped", "cut") and cid in segs_by_claim]
-    heard_routes = {r for cid, n in claims.items() if n in ("finished", "backdated") and cid in segs_by_claim for r in cite_routes(segs_by_claim[cid])}
-    fin_route = next((r for cid in finished for r in cite_routes(segs_by_claim[cid])), None)
-    skip_route = next((r for cid in skipped for r in cite_routes(segs_by_claim[cid]) if r not in heard_routes), None)
+    fin_route, skip_route = assignment["fin_route"], assignment["skip_route"]
     if not fin_route or not skip_route:
-        print("  FAIL: the run's entries do not give a finished story and a skipped one on different routes (finished %r, skipped %r)" % (fin_route, skip_route))
+        print("  FAIL: the assignment names no finished or skipped route (%r, %r)" % (fin_route, skip_route))
         return False
     print("  the finished story's route %s, the skipped story's route %s" % (fin_route, skip_route))
     new1 = "heard-new-%s" % api.salt

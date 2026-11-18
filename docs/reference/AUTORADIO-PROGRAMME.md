@@ -392,11 +392,11 @@ list), `all_heard` (every story candidate heard at its current version),
 `candidates = not_in_window + same + earlier`. A start record written before
 this change has no `heard` object.
 
-`scripts/prove-autoradio-learning` has a heard phase (drill computer only): it
-finishes one story and skips another, offers both at the same version plus a
+`scripts/prove-autoradio-learning` has a heard phase (drill computer only): its
+ops are assigned to the run's entries by cited route, not by position (a skip
+route S that no finishing entry cites; `--selftest` checks the assignment
+offline); it finishes one story and skips another, offers both at the same version plus a
 never-seen candidate and asserts the receipt (candidates 3, same 1,
 not_in_window 2, unavailable false), offers the finished story at a higher
 version and asserts `earlier` 1, and only reports whether the DJ's telling was
-a follow-up (`--require-followup` makes it a failure). It has no offline
-fixture test (`scripts/test-status-scripts.sh` covers other scripts); the heard
-parsing was exercised against a fake API once, by hand, and not committed.
+a follow-up (`--require-followup` makes it a failure). The assignment has an offline self-test (`--selftest`); the rest of the script has no fixture test.
