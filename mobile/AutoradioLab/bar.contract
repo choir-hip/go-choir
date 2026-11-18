@@ -17,7 +17,7 @@
 // testIds: bar-stack, bar, bar-mark, bar-field, bar-mic, bar-send, bar-play, bar-text, bar-aim, bar-setup, bar-yield, bar-progress,
 // page-indicator, content-row (content.contract), bar-answer, bar-asked, bar-answer-text, bar-answer-working, bar-answer-note, bar-answer-retry, bar-answer-cancel, bar-answer-close.
 use Theme, PageList, BarInfo, RadioInfo, ReaderAimInfo, Onboarding, MailMessageView from "@choir/autoradio"
-use Mark from "./mark.contract"
+use BarMark from "./tetramark.contract"
 use Launcher from "./launcher.contract"
 use StackVp from "./ui.contract"
 use ContentRow from "./content.contract"
@@ -240,7 +240,7 @@ component BarShell
         row align-items="center" gap=6
           button testId="bar-mark" press=toggleLauncher appearance="none" width=48 height=48 aria-label=(layer == "launcher" ? "Close the launcher" : "Open the launcher")
             column width=48 height=48 align-items="center" justify-content="center"
-              Mark(state=markState)
+              BarMark()
           input appearance="none" value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=(vp.width < 360 ? "Ask…" : aim) aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
             font-family=(ask == "" ? th.fontLabel : th.fontText) font-size=(vp.width < 360 ? 16 : 17) color=th.fg padding="8px 6px" border-width=0 background-color="transparent"
             ::placeholder

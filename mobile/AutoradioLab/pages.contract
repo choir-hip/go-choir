@@ -17,6 +17,7 @@ use ActivityPage from "./activity.contract"
 use SettingsPage from "./settings.contract"
 use ComponentsPage, TracePage from "./components.contract"
 use MotionPage, WaitPage from "./motion.contract"
+use MarkPage from "./tetramark.contract"
 use OnboardingPage, EditEditionPage from "./onboarding.contract"
 use ConversationPage from "./talk.contract"
 use PodcastPage from "./podcasts.contract"
@@ -62,6 +63,8 @@ component PageHost
         TracePage()
       if kind == "lab" and address == "lab:motion"
         MotionPage()
+      if kind == "lab" and address == "lab:mark"
+        MarkPage()
       if kind == "lab" and address == "lab:wait"
         WaitPage()
       if kind == "conversation"

@@ -411,6 +411,22 @@ component Autoradio
     mkT
     mkFrames
     mkSince
+    mkCur
+    mkPrev
+    mkFrom
+    gmMotion
+    gmPrev
+    gmSince
+    gmFrom
+    gmV
+    gmManual
+    gmLevel
+    gmLo
+    gmHi
+    gmPlay
+    gmMove
+    gmRest
+    gmLevelSet
     galSince
     waitSince
     galReplay
