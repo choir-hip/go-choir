@@ -24,6 +24,8 @@ import Foundation
     /// A kept opening younger than this is not asked for again on a background (the part of the day still has to match).
     public var refreshAfter: TimeInterval
     public private(set) var inFlight = false
+    /// A trigger refused because the writer was busy: it runs when the writer next goes idle (`writerIdle`), once.
+    private var pendingReason: String?
     private var gen = 0
     public private(set) var requests: [String] = []
     public private(set) var synthesised: [String] = []
@@ -55,7 +57,9 @@ import Foundation
             let age = clock().timeIntervalSince(k.writtenAt)
             if age >= 0, age < refreshAfter, cache.dayPart(k.writtenAt) == cache.dayPart(clock()) { return }
         }
-        guard !busy(), let feed = feed() else { return }
+        guard !busy() else { pendingReason = reason; print("AUTORADIO write-ahead deferred: writer busy"); return }
+        guard let feed = feed() else { return }
+        pendingReason = nil
         requests.append(reason)
         var opening: RunSheetEntry?
         do {
@@ -77,6 +81,19 @@ import Foundation
         }
         guard gen == AccountWipe.generation else { return }
         cache.put(.opening, entry: o, titles: (o.cites ?? []).map(\.label).filter { !$0.isEmpty }, audio: audio, voice: v)
+    }
+
+    /// The run sheet writer went idle (an ask ended). A refused trigger runs now; otherwise, when no first entry is kept (or the kept one has
+    /// been heard), the first entry ahead is kept: its first block only, with no request to the desk (the story is already written).
+    public func writerIdle() async {
+        if let r = pendingReason { await refresh(reason: r); return }
+        guard !inFlight else { return }
+        let v = voice()
+        if let k = cache.first(voice: v), store.entry(k.entry.id).map({ $0.state == .ahead }) ?? true { return }
+        inFlight = true
+        defer { inFlight = false }
+        gen = AccountWipe.generation
+        await keepFirstEntry(voice: v)
     }
 
     /// The first entry ahead on the sheet (a desk story the listener has not heard), with its first block made.

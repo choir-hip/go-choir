@@ -216,8 +216,9 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         let first0 = !launchAsked; launchAsked = true
         let airId = store.onAir()?.id
         let gen = AccountWipe.generation          // the account this ask is for
+        print("AUTORADIO ask begin cause=\(cause) ahead=\(a.aheadTitles.count)")
         task = Task { @MainActor in
-            var added = 0, received = 0, first: Date?
+            var added = 0, received = 0, dropped = 0, first: Date?
             var failure: Error?
             do {
                 let stream = try await feed.ask(a)
@@ -229,7 +230,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                         if first == nil { first = self.clock(); if first0 { LaunchTimings.shared.mark("first_segment", ms: first!.timeIntervalSince(started) * 1000) } }
                         received += ops.count
                         for op in ops {
-                            guard let admitted = self.admit?(op, cause) ?? (self.admit == nil ? op : nil) else { continue }
+                            guard let admitted = self.admit?(op, cause) ?? (self.admit == nil ? op : nil) else { dropped += 1; continue }
                             if self.store.applyFromDesk(admitted, generation: gen).applied { added += 1 }
                         }
                     case .done: break
@@ -239,13 +240,15 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
             } catch is CancellationError {
             } catch { failure = error }
             guard gen == AccountWipe.generation else { return }          // stop() already cleared the flags; a later ask owns them now
+            print("AUTORADIO ask end cause=\(cause) ms=\(Int(self.clock().timeIntervalSince(started) * 1000)) placed=\(added) dropped=\(dropped) failed=\(failure != nil)")
             if let f = first { self.latency = max(0.5, f.timeIntervalSince(started)) }
             self.inFlight = false
             self.onWriting?(false)
             self.setDry(added == 0 && failure == nil)
             if added > 0 { self.quietOn = nil; self.setNotice(nil) }
             else {
-                self.quietOn = airId
+                // An answer the player dropped is not "the desk has nothing more": it must not hold back the next extend.
+                if dropped == 0 { self.quietOn = airId }
                 // The desk answered but everything it wrote is already on the sheet (a repeat): that is not a failure.
                 if received > 0 && failure == nil { self.setNotice(nil) }
                 else if failure != nil || cause == "open" { self.setNotice(self.noticeWords(failure)) }

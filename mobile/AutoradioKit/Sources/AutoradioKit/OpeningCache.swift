@@ -7,7 +7,10 @@ import Foundation
 // `take` decides what plays:
 //   - an opening written within `bound` (2 hours) and in the same part of the same day, in the voice now chosen: it plays as the opening entry
 //     with its audio, then the first entry, which is placed after it;
-//   - otherwise an entry written within `entryBound` (6 hours): it plays at once and the live opening, when it arrives, is a transition;
+//   - otherwise an entry written within `entryBound` (36 hours): it plays at once and the live opening, when it arrives, is a transition.
+//     The rule for stale kept audio: an OPENING names the time of day and the news of that moment, so it is stale after `bound`; a STORY is
+//     not tied to the hour, so a kept first entry is still a story the morning after the evening it was written (the owner listens in the
+//     morning to what was kept the evening before). 36 hours reaches the next day's start and no further;
 //   - otherwise nothing: today's path (the phone's own opening, the desk's live one).
 // Audio reaches the sound path through the programme player's `preparedSpeech` hook, which hands the player the samples of a block whose text
 // it already holds, instead of making them. Everything after that is the ordinary path: the same entry, ops, player and output node.
@@ -49,11 +52,13 @@ public final class OpeningCache: @unchecked Sendable {
     public var maxBytes: Int
     public var clock: () -> Date
     public var calendar: Calendar
+    /// One line per decision (ids, counts, seconds; never titles or words).
+    public var log: (String) -> Void = { print($0) }
     private let lock = NSLock()
     private var held: [String: PreparedAudio] = [:]
 
     public static let defaultBound: TimeInterval = 2 * 3600
-    public static let defaultEntryBound: TimeInterval = 6 * 3600
+    public static let defaultEntryBound: TimeInterval = 36 * 3600
     public static let defaultMaxBytes = 6_000_000
 
     public init(dir: URL, bound: TimeInterval = OpeningCache.defaultBound, entryBound: TimeInterval = OpeningCache.defaultEntryBound,
@@ -143,6 +148,7 @@ public final class OpeningCache: @unchecked Sendable {
         let c = CachedEntry(entry: entry, titles: titles, writtenAt: clock(), files: files)
         if slot == .opening { r.opening = c } else { r.first = c }
         save(r)
+        log("AUTORADIO written-ahead written: kind=\(slot == .opening ? "opening" : "first") blocks=\(audio.count) files=\(files.count) samples=\(audio.reduce(0) { $0 + $1.samples.count })")
         return c
     }
 
@@ -165,9 +171,22 @@ public final class OpeningCache: @unchecked Sendable {
         return .none
     }
 
+    /// Why `peek` found nothing, in one line of ids and seconds.
+    func whyNone(voice: String) -> String {
+        guard let r = load() else { return "no kept file" }
+        guard r.voice == voice else { return "voice differs" }
+        let now = clock()
+        func age(_ c: CachedEntry?) -> String { c.map { String(Int(now.timeIntervalSince($0.writtenAt))) } ?? "-" }
+        if r.opening == nil && r.first == nil { return "nothing kept in the file" }
+        return "too old or another part of the day opening_age_s=\(age(r.opening)) first_age_s=\(age(r.first)) bound_s=\(Int(bound)) entry_bound_s=\(Int(entryBound))"
+    }
+
     /// The launch: decide, load the audio of what will play into memory, and delete the record and its files (a stale or foreign one too).
     public func take(voice: String) -> OpeningPlan {
         let plan = peek(voice: voice)
+        if case .none = plan { log("AUTORADIO written-ahead refused: \(whyNone(voice: voice))") }
+        else if case .opening(_, let n) = plan { log("AUTORADIO written-ahead taken: opening next=\(n != nil)") }
+        else { log("AUTORADIO written-ahead taken: first entry") }
         let r = load()
         lock.lock(); held = [:]; lock.unlock()
         if let r, r.voice == voice {
@@ -270,5 +289,7 @@ public final class LaunchTimings: @unchecked Sendable {
         let sincePlay = play >= 0 ? first - play : -1
         sink("AUTORADIO launch engine_ms=\(value("engine")) session_ms=\(value("session")) sheet_ms=\(value("sheet")) request_ms=\(value("request")) first_segment_ms=\(value("first_segment")) voice_load_ms=\(value("voice_load")) synth_ms=\(value("synth")) first_audio_ms=\(first) source=\(source) play_ms=\(play) since_play_ms=\(sincePlay)")
     }
+    /// The radio opens: every mark is milliseconds from here, not from the process (a host process can be hours old).
+    public func begin() { lock.lock(); start = clock(); marks = [:]; printed = false; lock.unlock() }
     public func reset() { lock.lock(); marks = [:]; printed = false; lock.unlock() }
 }
