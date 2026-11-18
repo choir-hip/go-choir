@@ -40,6 +40,10 @@ const (
 	CauseImportance  = "importance"
 	CauseLesson      = "lesson"
 	CauseExplore     = "explore"
+	// CauseTrying is a forecast a "What Autoradio is trying" line caused
+	// (ref try:T<n>); a lesson line's is CauseLesson, a listener's own line
+	// (mine:<8 hex>) or a tap (tap:<entry id>) is CauseInstruction.
+	CauseTrying = "trying"
 
 	maxCriterionRef = maxTextLen - len("caused_by=")
 	maxTitleBytes   = 200
@@ -51,8 +55,9 @@ var (
 	segmentSuffix  = regexp.MustCompile(`^\.s[0-9]{1,6}$`)
 	kindRe         = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 	lessonIDRe     = regexp.MustCompile(`^L[0-9]{1,9}$`)
+	tryIDRe        = regexp.MustCompile(`^T[0-9]{1,9}$`)
 	sha256HexRe    = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	instructionRef = regexp.MustCompile(`^instruction:(turn/[A-Za-z0-9][A-Za-z0-9_.-]{0,63}|note/[a-z0-9]{1,32})$`)
+	instructionRef = regexp.MustCompile(`^(instruction:(turn/[A-Za-z0-9][A-Za-z0-9_.-]{0,63}|note/[a-z0-9]{1,32})|mine:[0-9a-f]{8}|tap:[A-Za-z0-9][A-Za-z0-9_.-]{0,63})$`)
 	editionRef     = regexp.MustCompile(`^edition:P[1-9][0-9]{0,5}$`)
 
 	// autoradioRules is the closed registry of rule names the reserved settle
@@ -175,6 +180,10 @@ func checkAutoradioInput(in AutoradioForecastInput) (criterionRef string, err er
 		if in.LessonID != "" || !editionRef.MatchString(ref) {
 			return "", invalid("an edition cause needs a ref edition:P<n>")
 		}
+	case CauseTrying:
+		if !tryIDRe.MatchString(in.LessonID) || ref != "try:"+in.LessonID {
+			return "", invalid("a trying cause needs line id T<n> and the ref try:<id>")
+		}
 	case CauseLesson:
 		if !lessonIDRe.MatchString(in.LessonID) || ref != "lesson:"+in.LessonID {
 			return "", invalid("a lesson cause needs lesson id L<n> and the ref lesson:<id>")
@@ -212,6 +221,13 @@ func NewAutoradioForecast(in AutoradioForecastInput, now time.Time) (types.Commi
 	}
 	if in.TakeID != "" {
 		tags = append(tags, "take:"+in.TakeID)
+	}
+	// A forecast a notebook line caused names the line (design 4: line:<ref>,
+	// within 64 bytes), so the line's count is read from the ledger.
+	if strings.HasPrefix(ref, "lesson:") || strings.HasPrefix(ref, "try:") || strings.HasPrefix(ref, "mine:") || strings.HasPrefix(ref, "tap:") {
+		if t := "line:" + ref; len(t) <= 64 {
+			tags = append(tags, t)
+		}
 	}
 	tags = append(tags, "sha:"+in.TextSHA256[:32], fmt.Sprintf("blocks:%d", in.Blocks))
 	p := in.P

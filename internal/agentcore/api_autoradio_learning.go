@@ -95,6 +95,7 @@ func (h *APIHandler) HandleAutoradioLearning(w http.ResponseWriter, r *http.Requ
 		limit = v
 	}
 	after := r.URL.Query().Get("after")
+	line := r.URL.Query().Get("line") // behind a line: the forecasts it caused (design 7.3)
 	ctx := r.Context()
 	computer := h.rt.cfg.ComputerID
 	now := time.Now()
@@ -151,6 +152,15 @@ func (h *APIHandler) HandleAutoradioLearning(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	if line != "" {
+		var keep []calibration.ClaimView
+		for _, v := range card.Claims {
+			if strings.TrimPrefix(v.Criterion, "caused_by=") == line {
+				keep = append(keep, v)
+			}
+		}
+		card.Claims = keep
+	}
 	start := 0
 	if after != "" {
 		start = -1
@@ -178,7 +188,7 @@ func (h *APIHandler) HandleAutoradioLearning(w http.ResponseWriter, r *http.Requ
 		}
 		rows = append(rows, row)
 	}
-	ans := map[string]any{"scorecard": cs, "rows": rows, "truncated": card.Truncated || len(nvs) >= learningMaxNoVerdicts}
+	ans := map[string]any{"scorecard": cs, "rows": rows, "truncated": card.Truncated || len(nvs) >= learningMaxNoVerdicts, "notebook": h.learningNotebook(ctx, ownerID, led)}
 	if end < len(card.Claims) && end > start {
 		ans["next"] = card.Claims[end-1].ID
 	}

@@ -48,6 +48,20 @@ const GrantMailRead = "mail.read"
 // (appdesk.WriterFor("mail")): the custodian of mail.read.
 var WriterMail = objectgraph.Writer("desk:" + strings.TrimPrefix(deskmanifest.Mail, "app:"))
 
+// The notebook grants (docs/design/autoradio-learned-document-2026-11-17.md
+// 3.2). Texture is the custodian of the listener's notebook; the Autoradio desk
+// holds two narrow grants: to ask Texture to apply a patch to that one document
+// (notebook.patch) and to read it with the revisions since the desk's last write
+// (notebook.read). The holder is static, like texture.search's: the custodian's
+// service checks GrantHeldBy before it reads or writes, so no other desk can.
+const (
+	GrantNotebookPatch = "notebook.patch"
+	GrantNotebookRead  = "notebook.read"
+)
+
+// WriterAutoradio is the Autoradio desk's writer.
+var WriterAutoradio = objectgraph.Writer("desk:autoradio")
+
 type grantRow struct {
 	custodian objectgraph.Writer
 	// holders are the writers of the desks the table names as holders.
@@ -76,6 +90,9 @@ var grantTable = map[string]grantRow{
 		labels: []string{types.OwnerPrivateLabel("document"), types.OwnerPrivateLabel(strings.TrimPrefix(string(objectgraph.WriterTexture), "desk:"))},
 	},
 	GrantMailRead: {custodian: WriterMail, ceiling: true, byRef: true},
+	// The notebook: one document, Texture's, patched and read by the Autoradio desk.
+	GrantNotebookPatch: {custodian: objectgraph.WriterTexture, holders: []objectgraph.Writer{WriterAutoradio}},
+	GrantNotebookRead:  {custodian: objectgraph.WriterTexture, holders: []objectgraph.Writer{WriterAutoradio}},
 }
 
 // grantAdmitsLabel reports whether the grant table admits label for grant.

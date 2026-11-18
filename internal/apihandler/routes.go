@@ -16,6 +16,7 @@ import (
 // The health handler overrides the default server health handler to report
 // runtime readiness.
 func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureowner.Handler, api *Handler, desktop *desktopstate.Handler, contentOwner *content.Service, mediaOwner *mediastate.Handler, enableTestAPIs bool) {
+	h.SetNotebook(texture) // Texture's two notebook grants, in process
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/prompt-bar", texture.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/classify", texture.HandlePromptBarClassify)
@@ -33,6 +34,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/autoradio/sheet/ops", h.HandleAutoradioSheetOps)
 	s.HandleFunc("/api/autoradio/sheet/stream", h.HandleAutoradioSheetStream)
 	s.HandleFunc("/api/autoradio/learning", h.HandleAutoradioLearning)
+	s.HandleFunc("/api/autoradio/steer", h.HandleAutoradioSteer)
 	s.HandleFunc("/api/subcalls", h.HandleSubCalls)
 	s.HandleFunc("/api/trust", h.HandleTrust)
 	s.HandleFunc("/api/captures", h.HandleCaptures)

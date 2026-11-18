@@ -41,6 +41,9 @@ var AutoradioRecordKinds = []AutoradioRecordKind{
 	// reducer path only; it carries the op and its position so the rule can be
 	// revisited with data. Not in the design's 12.2 table (docs/reference/AUTORADIO-SHEET.md).
 	{"autoradio.no_verdict", "autoradio_no_verdict"},
+	// notebook_patch: the desk's ask to Texture to apply a patch to the
+	// listener's notebook, and Texture's answer (docs/reference/AUTORADIO-NOTEBOOK.md).
+	{"autoradio.notebook_patch", "autoradio_notebook_patch"},
 }
 
 // AutoradioKindPrefix begins every Autoradio record_kind.
