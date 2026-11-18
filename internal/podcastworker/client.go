@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/podcastfp"
 )
 
 // Client talks to the platform's operator podcast routes with an operator's
@@ -208,15 +210,31 @@ func (c *Client) PutClipsEach(ctx context.Context, clips []ClipIn) []error {
 	return errs
 }
 
+// DeleteClips removes clips by id (the operator route).
+func (c *Client) DeleteClips(ctx context.Context, ids []string) error {
+	for start := 0; start < len(ids); start += 200 {
+		batch := ids[start:min(start+200, len(ids))]
+		if err := c.do(ctx, http.MethodDelete, opBase+"clips", map[string]any{"clip_ids": batch}, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // HeldClip is a clip the platform serves for a story.
 type HeldClip struct {
+	ClipID   string
 	Route    string
 	FeedURL  string
 	GUID     string
 	AudioURL string
 	Start    float64
+	End      float64
 	Quote    string
+	Support  float64
 	Version  int
+	// Fingerprint is nil for a clip stored without one.
+	Fingerprint *podcastfp.ClipRecord
 }
 
 // Clips reads the clips the platform serves for the routes (the public read:
@@ -234,18 +252,22 @@ func (c *Client) Clips(ctx context.Context, routes []string) ([]HeldClip, error)
 					Route   string `json:"route"`
 					Version int    `json:"version"`
 				} `json:"story"`
-				FeedURL  string  `json:"feed_url"`
-				GUID     string  `json:"episode_guid"`
-				AudioURL string  `json:"audio_url"`
-				Start    float64 `json:"start"`
-				Quote    string  `json:"quote"`
+				ClipID      string                `json:"clip_id"`
+				FeedURL     string                `json:"feed_url"`
+				GUID        string                `json:"episode_guid"`
+				AudioURL    string                `json:"audio_url"`
+				Start       float64               `json:"start"`
+				End         float64               `json:"end"`
+				Quote       string                `json:"quote"`
+				Support     float64               `json:"support"`
+				Fingerprint *podcastfp.ClipRecord `json:"fingerprint"`
 			} `json:"clips"`
 		}
 		if err := c.do(ctx, http.MethodGet, "/api/platform/podcast-clips?"+q.Encode(), nil, &ans); err != nil {
 			return nil, err
 		}
 		for _, k := range ans.Clips {
-			out = append(out, HeldClip{Route: k.Story.Route, FeedURL: k.FeedURL, GUID: k.GUID, AudioURL: k.AudioURL, Start: k.Start, Quote: k.Quote, Version: k.Story.Version})
+			out = append(out, HeldClip{ClipID: k.ClipID, Route: k.Story.Route, FeedURL: k.FeedURL, GUID: k.GUID, AudioURL: k.AudioURL, Start: k.Start, End: k.End, Quote: k.Quote, Support: k.Support, Version: k.Story.Version, Fingerprint: k.Fingerprint})
 		}
 	}
 	return out, nil

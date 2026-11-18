@@ -30,6 +30,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/podcastfp"
 )
 
 const (
@@ -127,20 +128,25 @@ type PodcastClipIn struct {
 	End        float64 `json:"end"`
 	Quote      string  `json:"quote"`
 	Support    float64 `json:"support"`
+	// Fingerprint lets a listener's player find the clip again in a file the
+	// publisher served differently (docs/reference/PODCAST-CLIP-FINGERPRINT.md).
+	// Optional: a clip without one is valid and is not relocatable.
+	Fingerprint *podcastfp.ClipRecord `json:"fingerprint,omitempty"`
 }
 
 // podcastClipRow is a stored clip.
 type podcastClipRow struct {
-	ClipID       string  `json:"clip_id"`
-	StoryRoute   string  `json:"story_route"`
-	StoryVersion int     `json:"story_version"`
-	StoryTitle   string  `json:"story_title"`
-	EpisodeID    string  `json:"episode_id"`
-	Start        float64 `json:"start"`
-	End          float64 `json:"end"`
-	Quote        string  `json:"quote"`
-	Support      float64 `json:"support"`
-	MatchedAt    string  `json:"matched_at"`
+	ClipID       string                `json:"clip_id"`
+	StoryRoute   string                `json:"story_route"`
+	StoryVersion int                   `json:"story_version"`
+	StoryTitle   string                `json:"story_title"`
+	EpisodeID    string                `json:"episode_id"`
+	Start        float64               `json:"start"`
+	End          float64               `json:"end"`
+	Quote        string                `json:"quote"`
+	Support      float64               `json:"support"`
+	MatchedAt    string                `json:"matched_at"`
+	Fingerprint  *podcastfp.ClipRecord `json:"fingerprint,omitempty"`
 }
 
 // PodcastClipStory is the story a clip is for.
@@ -165,6 +171,9 @@ type PodcastClip struct {
 	End             float64          `json:"end"`
 	Quote           string           `json:"quote"`
 	Support         float64          `json:"support"`
+	// Fingerprint is the clip's relocation fingerprint, when the worker
+	// made one (additive: older clips have none).
+	Fingerprint *podcastfp.ClipRecord `json:"fingerprint,omitempty"`
 }
 
 // PodcastClipsResponse is the public route's answer.
@@ -704,9 +713,20 @@ func (s *Service) PutPodcastClips(ctx context.Context, in []PodcastClipIn) (int,
 		if tr == nil || !quoteInTranscript(tr, c.Start, c.End, quote) {
 			return 0, podcastInvalid("clip %d: the quote is not in the episode's transcript within the clip's times", i)
 		}
+		if fp := c.Fingerprint; fp != nil {
+			if err := fp.Validate(); err != nil {
+				return 0, podcastInvalid("clip %d: %v", i, err)
+			}
+			// The fingerprint's file may differ from the one the clip's
+			// seconds are in (a repaired clip), but the clip is as long in both.
+			if math.Abs((fp.End-fp.Start)-(c.End-c.Start)) > 1 {
+				return 0, podcastInvalid("clip %d: the fingerprint's clip is not as long as the clip", i)
+			}
+		}
 		rows = append(rows, podcastClipRow{
 			ClipID: podcastClipID(st.Route, c.EpisodeID, c.Start), StoryRoute: st.Route, StoryVersion: st.Revision, StoryTitle: st.Title,
 			EpisodeID: c.EpisodeID, Start: c.Start, End: c.End, Quote: quote, Support: c.Support, MatchedAt: now.Format(time.RFC3339),
+			Fingerprint: c.Fingerprint,
 		})
 	}
 	// Two clips of one story, episode and second are one clip: the last wins.
@@ -825,4 +845,53 @@ func quoteInTranscript(t *PodcastTranscript, start, end float64, quote string) b
 	}
 	joined := strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
 	return strings.Contains(joined, strings.Join(strings.Fields(quote), " "))
+}
+
+// podcastMaxClipDeletes bounds one delete request.
+const podcastMaxClipDeletes = 200
+
+// DeletePodcastClips tombstones clips by id (the operator's worker removes a
+// clip whose words are no longer in the episode as served). A clip already
+// gone counts as deleted. The story's index keeps the id; the read skips a
+// tombstone. It returns how many ids were handled.
+func (s *Service) DeletePodcastClips(ctx context.Context, ids []string) (int, error) {
+	if len(ids) == 0 || len(ids) > podcastMaxClipDeletes {
+		return 0, podcastInvalid("a request names 1 to %d clips", podcastMaxClipDeletes)
+	}
+	og, err := s.podcastStore()
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	s.podcastFeedMu.Lock()
+	defer s.podcastFeedMu.Unlock()
+	n := 0
+	for _, id := range ids {
+		if !strings.HasPrefix(id, "clip-") || len(id) > 64 {
+			return 0, podcastInvalid("%q is not a clip id", truncatePodcast(id, 80))
+		}
+		canonical, err := podcastCanonical(ogKindPodcastClip, id)
+		if err != nil {
+			return 0, podcastInvalid("%q is not a clip id", truncatePodcast(id, 80))
+		}
+		obj, err := og.GetObject(ctx, canonical)
+		if err != nil {
+			if isNotFound(err) {
+				n++
+				continue
+			}
+			return 0, err
+		}
+		if obj.Tombstone {
+			n++
+			continue
+		}
+		obj.Tombstone, obj.UpdatedAt = true, now
+		if err := og.PutObject(corpusdWriter(ctx), obj); err != nil {
+			return 0, err
+		}
+		n++
+	}
+	s.podcastCache.reset()
+	return n, nil
 }

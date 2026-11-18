@@ -1,6 +1,7 @@
 package podcastworker
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/podcastfp"
 )
 
 const (
@@ -205,6 +208,13 @@ type Result struct {
 	// stitches ads in answers differently each time, and a clip of such a
 	// file may not line up on the listener's copy.
 	StableFile *bool
+	// Track is the clip fingerprint frame track of the audio transcribed (frame
+	// 0 at 0 s; docs/reference/PODCAST-CLIP-FINGERPRINT.md), and File what is
+	// known of the downloaded file. A clip cut from this transcript is
+	// fingerprinted from them, with no second download, so the fingerprint is
+	// of the very file the clip's seconds are in. Nil when the WAV could not be read.
+	Track []byte
+	File  podcastfp.FileInfo
 }
 
 // Transcribe downloads the enclosure, converts it to 16 kHz mono and runs
@@ -231,6 +241,8 @@ func (t *Transcriber) Transcribe(ctx context.Context, enclosureURL string) (Resu
 	// from its feed's duration and from the next download, and a clip is valid
 	// only for this file, so the phone checks its own length against this one.
 	fileSeconds := probeSeconds(ctx, t.FFmpeg, src)
+	file, _ := podcastfp.AnalyzeMP3(src)
+	file.Seconds = fileSeconds
 	wav := filepath.Join(dir, "in.wav")
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-protocol_whitelist", "file", "-i", src}
 	if t.MaxMinutes > 0 {
@@ -246,6 +258,35 @@ func (t *Transcriber) Transcribe(ctx context.Context, enclosureURL string) (Resu
 		return Result{}, err
 	}
 	seconds := float64(info.Size()-44) / wavBytesPerSecond
+	track := wavTrack(wav)
+	parsed, err := t.runParakeet(ctx, wav)
+	if err != nil {
+		return Result{}, err
+	}
+	res := Result{Segments: Segments(parsed.Words), Seconds: seconds, FileSeconds: fileSeconds, Track: track, File: file}
+	if after := ProbeLength(ctx, client, enclosureURL); before > 0 && after > 0 {
+		stable := before == after
+		res.StableFile = &stable
+	}
+	return res, nil
+}
+
+// wavTrack is the fingerprint frame track of a 16 kHz mono WAV; nil if it
+// cannot be read (the clip is then written without a fingerprint).
+func wavTrack(wav string) []byte {
+	f, err := os.Open(wav)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	track, err := podcastfp.TrackFromWAV(bufio.NewReaderSize(f, 1<<20))
+	if err != nil {
+		return nil
+	}
+	return track
+}
+
+func (t *Transcriber) runParakeet(ctx context.Context, wav string) (*ParakeetOutput, error) {
 	threads := t.Threads
 	if threads <= 0 {
 		threads = 4
@@ -255,18 +296,9 @@ func (t *Transcriber) Transcribe(ctx context.Context, enclosureURL string) (Resu
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return Result{}, fmt.Errorf("parakeet: %v: %s", err, tail(stderr.Bytes()))
+		return nil, fmt.Errorf("parakeet: %v: %s", err, tail(stderr.Bytes()))
 	}
-	parsed, err := ParseParakeet(stdout.Bytes())
-	if err != nil {
-		return Result{}, err
-	}
-	res := Result{Segments: Segments(parsed.Words), Seconds: seconds, FileSeconds: fileSeconds}
-	if after := ProbeLength(ctx, client, enclosureURL); before > 0 && after > 0 {
-		stable := before == after
-		res.StableFile = &stable
-	}
-	return res, nil
+	return ParseParakeet(stdout.Bytes())
 }
 
 func (t *Transcriber) download(ctx context.Context, rawURL, dst string) error {
