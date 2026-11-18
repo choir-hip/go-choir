@@ -53,3 +53,45 @@ file. That changes the owner's gate and is the owner's decision.
 Other CI-only gates may exist that the landing script does not run; the
 workflow has not been compared with `scripts/gates` step by step. The
 automatic match job needs the owner's decision on the entry point.
+
+## The same class a third time, and the clustering assessment (2026-11-18)
+
+The remaining error above came true. The search-reuse landing
+(`3f52dd46a`) passed `scripts/land` and was refused by CI's Vocabulary
+Gates: `guest-floor-paths: FAIL: floor package internal/searchquery is
+imported by a floor command but is not covered by nix/guest-floor-paths.txt`.
+`scripts/gates` did not run `scripts/check-guest-floor-paths`. The deploy
+was skipped; the fix (`c29c58798`: the list entry, and the check added to
+`scripts/gates`) cost about 25 minutes of a change meant to cut search
+volume while the credits ran down.
+
+Three in a week (contract rule 3): the Jev entry gate (2026-11-16), the
+store schema floor guard (2026-11-15,
+[record](store-schema-floor-guard-is-not-run-2026-11-15.md)), the guest
+floor list (2026-11-18). Each time one line was added to `scripts/gates`.
+That is the symptom. The substrate: **`scripts/gates` is a hand-kept copy
+of the gate steps in `.github/workflows/ci.yml`, and nothing compares the
+two.**
+
+The comparison, made by the lead on 2026-11-18 (scripts a CI gate job runs
+that `scripts/gates` does not name):
+
+| CI job | Script | Matters to a landing |
+|---|---|---|
+| Docs Truth Check | `scripts/doccheck` | yes |
+| Heresy Detector | `scripts/check-heresies.sh --fail-on-regression` | yes |
+| Base Packages Are Listed | `scripts/check-base-packages` | yes, when a package directory is added |
+| Guest Floor Digest Is Commit-Free | `scripts/test-guest-floor-commit-free` | when `nix/` or the floor changes (needs nix) |
+| Vocabulary Gates | `scripts/test-node-b-guest-release-retention.sh` | when that script changes |
+| Vocabulary Gates | the selftests of the kernel, desk-names, store-handles, owner-files, switch-registry, guest-token, security-epoch and Jev-entry gates | when a gate script changes |
+| Receipts Index Swap Script | `scripts/receipts-index-swap-test` | needs a throwaway PostgreSQL |
+| Package Modularity | the SDK surface scripts | when the frontend SDK changes |
+| Desk Protocol Lock | `scripts/fuzz-broker-protocol.sh` | fixed-time fuzz |
+
+Fix being built (yellow): a check, run by `scripts/gates` and by CI, that
+reads the workflow's gate jobs and fails when a script a gate job runs is
+neither run by `scripts/gates` nor named in a short exemption list that
+gives the reason (needs PostgreSQL, needs nix, selftest of an unchanged
+gate). The gates CI has and the landing lacks are added to `scripts/gates`
+in the same change. After it, a new CI gate cannot be added without the
+landing script learning of it.
