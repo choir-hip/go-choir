@@ -46,7 +46,7 @@ type feedList struct {
 
 func main() {
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Fprintln(os.Stderr, "usage: podcast-worker {intake|transcribe|run|serve|candidates|put-clips|match|match-eval|repair} [flags]")
+		fmt.Fprintln(os.Stderr, "usage: podcast-worker {intake|transcribe|run|serve|candidates|put-clips|match|match-eval|repair|fingerprint} [flags]")
 		os.Exit(2)
 	}
 	cmd := os.Args[1]
@@ -75,12 +75,16 @@ func main() {
 	minScore := fs.Float64("min-score", podcastmatch.DefaultParams.MinScore, "match: the clip's BM25 as a share of a perfect passage's")
 	minMargin := fs.Float64("min-margin", podcastmatch.DefaultParams.MinMargin, "match: how far the story's score must exceed the next story's, as a fraction")
 	minShare := fs.Float64("min-entity-share", podcastmatch.DefaultParams.MinEntityShare, "match: the share of the story's distinctive terms the clip must carry")
+	audioURL := fs.String("audio-url", "", "fingerprint: the episode's audio URL")
+	fpStart := fs.Float64("start", -1, "fingerprint: the clip's start, seconds")
+	fpEnd := fs.Float64("end", -1, "fingerprint: the clip's end, seconds")
+	fpQuote := fs.String("quote", "", "fingerprint: words the clip begins with; the clip is found by them (needs the recogniser flags)")
 	trackDir := fs.String("track-dir", "", "transcribe, match, serve: where each episode's fingerprint track is kept (default: beside the match state)")
 	intakeEvery := fs.Duration("intake-every", 30*time.Minute, "serve: how often the feeds are polled")
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		os.Exit(2)
 	}
-	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "candidates" && cmd != "put-clips" && cmd != "match" && cmd != "match-eval" && cmd != "repair" {
+	if cmd != "intake" && cmd != "transcribe" && cmd != "run" && cmd != "serve" && cmd != "candidates" && cmd != "put-clips" && cmd != "match" && cmd != "match-eval" && cmd != "repair" && cmd != "fingerprint" {
 		log.Fatalf("unknown command %q", cmd)
 	}
 	if *matchState == "" {
@@ -103,6 +107,24 @@ func main() {
 			log.Fatalf("match-eval: %v", err)
 		}
 		fmt.Print(podcastworker.FormatEval(rows))
+		return
+	}
+	if cmd == "fingerprint" {
+		// Read only: no platform route, no API key.
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
+		if *fpQuote == "" {
+			t.Parakeet = "" // the seconds are trusted: nothing is recognised
+		} else if *model == "" || *vad == "" {
+			log.Fatal("fingerprint with --quote needs --model and --vad-model")
+		}
+		clip, err := podcastworker.LocalFingerprint(ctx, t, *audioURL, *fpStart, *fpEnd, *fpQuote)
+		if err != nil {
+			log.Fatalf("fingerprint: %v", err)
+		}
+		out, _ := json.Marshal(clip)
+		fmt.Println(string(out))
 		return
 	}
 	raw, err := os.ReadFile(*keyFile)
