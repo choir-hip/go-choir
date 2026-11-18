@@ -79,15 +79,38 @@ So demand has to fall whatever the providers are. The fix belongs in the
 caller: tell the research desk what a search added, so it stops rewording a
 question whose answers it already holds.
 
+## Design, 2026-11-18 (replayed on the same 41 hours; owner: "halve search volume and keep or improve quality... duplicate less and reuse captured results more")
+
+- **Searches are fired blind.** 87% share a second with another search:
+  one cell fires many wordings at once, so nothing a search returns can stop
+  the next. One story's burst ran 214 searches; its first three returned
+  118 new pages and the next dozen returned almost none.
+- **The desk is never told what it holds.** Each result set is kept for the
+  session with titles and snippets (`internal/yaegikernel/search_store.go`),
+  but nothing compares a new result against it; the only feedback counts
+  provider arrivals, not new pages.
+- **Reuse across runs is the smaller part.** 95% of mostly-held results fall
+  inside the same half hour. A topic revisited later finds real news (21 new
+  pages of 40 on average).
+- Replayed savings: answering a reordered or re-quoted query from held
+  results, 12% (23% with looser matching); one call that takes all the
+  wordings of a question, sends them in turn and stops when they stop
+  finding new pages, 23%; both with a stop between cells, 44% (about 5,000
+  a day), at the cost of up to 30% of first-seen pages, most of them the
+  tail of a 40-result list. Whether the desk would have read any of those
+  pages cannot be told: the logs do not say which run a search belongs to
+  or which pages were read.
+
 ## What is being done
 
 - Ceramic becomes the provider every search starts with; Keenable joins only
   when Ceramic's answer is short, under a daily cap sized so the remaining
   credits last to December 5 (an owner-set spending cap). Lane
   `search-ceramic`, claim C128.
-- The investigation above. Next: the search log line carries the run id,
-  and a design for the caller-side fix, measured on the journal sample
-  before any prompt is changed.
+- Lane `search-reuse`, claim C129: the search log line carries the run and
+  desk; results say which pages are new and which are held; a query that
+  only reorders an earlier one is answered from held results; one call
+  takes all the wordings of a question and stops when they stop yielding.
 
 ## Remaining error
 
