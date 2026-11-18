@@ -97,9 +97,9 @@ type Search struct {
 	Results []SearchHit `json:"results"`
 	// NewPages, HeldPages and ReadPages count Results: pages no earlier
 	// search of this run returned, pages one did, and pages this run read.
-	NewPages  int      `json:"new_pages"`
-	HeldPages int      `json:"held_pages"`
-	ReadPages int      `json:"read_pages"`
+	NewPages  int      `json:"new_pages,omitempty"`
+	HeldPages int      `json:"held_pages,omitempty"`
+	ReadPages int      `json:"read_pages,omitempty"`
 	Done      bool     `json:"done"`
 	Pending   []string `json:"pending,omitempty"`
 	Error     string   `json:"error,omitempty"`
@@ -119,8 +119,8 @@ type SearchCount struct {
 	Done     bool   `json:"done"`
 	// Pages are the search's distinct result pages; NewPages the ones no
 	// earlier search of this run returned.
-	Pages    int `json:"pages"`
-	NewPages int `json:"new_pages"`
+	Pages    int `json:"pages,omitempty"`
+	NewPages int `json:"new_pages,omitempty"`
 }
 
 func (c SearchCount) String() string {
