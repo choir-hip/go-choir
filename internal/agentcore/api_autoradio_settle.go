@@ -170,6 +170,10 @@ func (ls *liveSheet) settleEntry(ctx context.Context, env sheetEnv, sheetPositio
 		reason = noVerdictLeft
 	case outcome == runsheet.OutcomeFailed:
 		reason = noVerdictFailed
+	case outcome == runsheet.OutcomeFinished && e.State != runsheet.StateHeard:
+		// A skipped entry that says finished contradicts itself: true needs the
+		// entry heard as well as the outcome finished.
+		reason = noVerdictRefused
 	}
 	if reason != "" {
 		return ls.writeNoVerdict(ctx, env, claimID, sheetPosition, e, op, outcome, reason, now)
@@ -205,7 +209,9 @@ func endedOutcome(e runsheet.Entry) runsheet.Outcome {
 
 func (ls *liveSheet) writeNoVerdict(ctx context.Context, env sheetEnv, claimID string, sheetPosition float64, e runsheet.Entry, op runsheet.Op, outcome runsheet.Outcome, reason string, now time.Time) error {
 	pos, src := sheetPosition, "sheet"
-	if op.PositionSeconds != nil {
+	// The op's own position belongs to the entry the op names. An ending
+	// another entry's op caused (a takeover, a cut) carries the sheet's.
+	if op.PositionSeconds != nil && op.ID == e.ID {
 		pos, src = *op.PositionSeconds, "op"
 	}
 	last := 0

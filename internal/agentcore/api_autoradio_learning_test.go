@@ -22,6 +22,8 @@ package agentcore
 //	L13 a desk op, or the trusted door, that ends a forecast-bearing entry
 //	    settles it (rule 1: only the listener's own op settles);
 //	L14 a heard end with no ended.outcome settles true;
+//	L15 a trusted caller claiming by phone, or a skipped entry that says
+//	    finished, settles true;
 //	L12 a refused settlement, or an entry the sheet had no room for, leaves
 //	    no record (N3, N4); an unknown `after` cursor is silently an empty page (N6).
 
@@ -420,5 +422,28 @@ func TestL14_AHeardEndThatStatesNoOutcomeSettlesNothing(t *testing.T) {
 	mustOps(t, h, ops...)
 	if settlementOf(t, rt, claims[1]) != "" || noVerdicts(t, rt)[claims[1]] != "no_outcome" {
 		t.Errorf("(L14) %q %v", settlementOf(t, rt, claims[1]), noVerdicts(t, rt))
+	}
+}
+
+func TestL15_TheTrustedDoorAndAContradictoryEndSettleNothing(t *testing.T) {
+	rt, _ := radioRuntime(t, sixStories())
+	h := NewAPIHandler(rt)
+	_, entries, claims, _ := runStretch(t, rt)
+	// A trusted in-process caller that claims by phone is still not the listener.
+	mustOps(t, h, phoneEnd(entries[0], "t", "heard", "finished", 1)[0])
+	res, err := h.applySheetOps(context.Background(), progOwner, sheetOwnerID, []runsheet.Op{{
+		OpID: "o-trusted-phone", By: runsheet.ByPhone, Op: runsheet.OpAired, ID: entries[0], State: runsheet.StateHeard,
+		Ended: &runsheet.Ended{Outcome: runsheet.OutcomeFinished, At: time.Now().UTC().Format(time.RFC3339Nano), LastBlock: 1},
+	}}, true)
+	if err != nil || !res[0].Applied {
+		t.Fatalf("(L15) the trusted op did not apply: %v %+v", err, res)
+	}
+	if settlementOf(t, rt, claims[0]) != "" || noVerdicts(t, rt)[claims[0]] != "desk_caused" {
+		t.Errorf("(L15) trusted door settled: %q %v", settlementOf(t, rt, claims[0]), noVerdicts(t, rt))
+	}
+	// An end that says skipped and outcome finished is a contradiction: no true.
+	mustOps(t, h, phoneEnd(entries[1], "c", "skipped", "finished", 1)...)
+	if settlementOf(t, rt, claims[1]) != "" || noVerdicts(t, rt)[claims[1]] != "refused" {
+		t.Errorf("(L15) contradictory end: %q %v", settlementOf(t, rt, claims[1]), noVerdicts(t, rt))
 	}
 }

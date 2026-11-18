@@ -44,7 +44,7 @@ not set its version from a `results[].version` that is below its own.
 The reducer's, returned as they are: `duplicate`, `not_ahead`, `not_on_air`,
 `not_phone`, `bad_transition`, `unknown_id`, `stale_version`,
 `no_previous`, `duplicate_id`, `reason_required`, `invalid`, `ahead_full`
-(from `previous`, see below). `other_on_air` is no longer produced: see "Takeover" below. `DroppedOtherOnAir` stays defined in Go for the Swift twin's constant. The route adds:
+(from `previous`, see below). `other_on_air` is no longer produced: see "Takeover" below. `DroppedOtherOnAir` is dead in Go after the takeover and kept only until the Swift twin drops its constant. The route adds:
 
 | Reason | When |
 |---|---|
@@ -268,7 +268,14 @@ entry has state `heard`):
 | `skipped`, `cut` | settled false |
 | `heard` with no `ended` on the op | no verdict `no_outcome`: the reducer stores `finished` for it, but the op said nothing, so there is no evidence of heard-through (`TestL14`) |
 | `left`, `failed` | no verdict: an `autoradio.no_verdict` record, nothing settled (a `left` ending is stored with entry state `heard`) |
+| `finished` but the entry is not `heard` (an op that says skipped and finished) | no verdict `refused`: true needs both (`TestL15`) |
 | none (crash, app killed) | no op, nothing written; the forecast stays open and lapses at its deadline |
+
+**Precedence** when more than one row applies, first match wins: desk-caused
+(not the listener's op), refused (the claim is not that entry's forecast),
+superseded, late, no_outcome, left, failed, finished-but-not-heard, then the
+outcome table. So a late `left` is recorded `late`, and a late finished
+settles nothing.
 
 - **Heard through** is `finished`: the phone's end-of-entry report. The
   design's extra check (final block began) is not applied: the op's
@@ -329,7 +336,10 @@ The settle path sees an op that ended an entry other than its own target
 and records A as no verdict, reason `superseded`; B settles on its own end
 op. Both orders work: A closed `failed` by the phone on relaunch then B on
 air (A: no verdict `failed`), or B on air with A still on air (A:
-`superseded`). A replay changes nothing (`TestL10`). **Swift reducer:** in
+`superseded`). A replay changes nothing (`TestL10`). **Cost with two
+devices:** if a second device of the same listener puts another entry on air
+while the first still plays A, A is closed `left` and its real `finished` later
+drops `bad_transition`: a true is lost (no verdict), never a wrong verdict. **Swift reducer:** in
 `aired`, when the target is `ahead`, the new state is `on_air` and another
 entry is `on_air`, set that entry to `heard` with `ended = {outcome: left,
 at: "", last_block: 0}` and clear `on_air`, then continue as for a free slot,

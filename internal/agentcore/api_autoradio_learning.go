@@ -246,7 +246,8 @@ func (h *APIHandler) learningRow(ctx context.Context, led autoradioLedger, owner
 					// The settlement's evidence is the op that cut this entry.
 					row.Op.Outcome, row.Op.Cutting = string(runsheet.OutcomeCut), true
 				}
-				if b.Op.PositionSeconds != nil {
+				// The op's position belongs to the entry the op names.
+				if b.Op.PositionSeconds != nil && (b.Op.ID == row.EntryID || row.Status == "settled") {
 					row.Op.PositionSeconds, row.Op.PositionSource = *b.Op.PositionSeconds, "op"
 				}
 			}
