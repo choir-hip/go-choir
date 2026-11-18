@@ -316,7 +316,32 @@ runpaper --json
 check "G3b search: 5 requests, 3 with results, 1 zero, answered by keenable 4 and not brave" '[ "$(jq_ "d[\"search\"][\"requests\"]")" = 5 ] && [ "$(jq_ "d[\"search\"][\"with_results\"]")" = 3 ] && [ "$(jq_ "d[\"search\"][\"zero\"]")" = 1 ] && [ "$(jq_ "d[\"search\"][\"answered_by\"][\"keenable\"]")" = 4 ] && [ "$(jq_ "d[\"search\"][\"answered_by\"].get(\"brave\",0)")" = 0 ]'
 runpaper
 check "G3b text: results and provider lines" 'grep -q "5 requests, 3 returned results (60%), 1 got no provider answer" "$root/out" && grep -q "minus skipped=\[...\]): keenable 4" "$root/out"'
+runpaper --json   # the check below read the text report before 2026-11-18 and so passed without looking
 check "G3 serper erroring means not every paid provider is quota_limited" '! jq_ "d[\"flags\"]" | grep -q "every paid"'
+# K: Keenable credits against the plan (problem record search-volume-outruns-keenable-credits-2026-11-18).
+check "K1 keenable calls today are the largest today= count in the window, and a small day raises no flag" '[ "$(jq_ "d[\"search\"][\"keenable\"][\"today_calls\"]")" = 10 ] && ! jq_ "d[\"flags\"]" | grep -q "keenable"'
+python3 - "$root/paper.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+real = "answered 1 of 1 providers (5 cooling, 0 pending) skipped=[brave=quota_limited] served=miss results=40 unique=40 seen=6 routing=budget escalated=no paid_calls=0 today=[keenable=%d]"
+d["search_lines"] = "\n".join(real % n for n in range(801, 901)) + "\n"   # 100 answered this hour, 900 today at 02:00Z
+d["keenable_plan"] = {"credits": 17000, "read_at": "2026-11-12T12:00:00Z", "renews": "2026-11-29T12:00:00Z"}   # 1000 a day reaches renewal
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runpaper --json
+check "K2 900 today and 100 an hour with 22 h left projects 3100, over 1000 a day: flagged" '[ "$(jq_ "d[\"search\"][\"keenable\"][\"today_calls\"]")" = 900 ] && [ "$(jq_ "round(d[\"search\"][\"keenable\"][\"projected_today\"])")" = 3100 ] && [ "$(jq_ "round(d[\"search\"][\"keenable\"][\"budget_per_day\"])")" = 1000 ] && jq_ "d[\"flags\"]" | grep -q "keenable projected 3100 today, over the 1000 a day"'
+runpaper
+check "K2 text: the calls, the projection, the reading and how long it lasts" 'grep -q "keenable today UTC: 900 calls, projected 3100" "$root/out" && grep -q "17000 credits read 2026-11-12T12:00:00Z" "$root/out" && grep -q "lasts 5.5 days" "$root/out"'
+python3 - "$root/paper.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["keenable_plan"] = {"credits": 17000, "read_at": "2026-10-20T00:00:00Z", "renews": "2026-11-05T00:00:00Z"}   # the plan renewed before now
+json.dump(d, open(sys.argv[1], "w"))
+PY
+runpaper --json
+check "K3 a reading older than the renewal is shown as stale and raises no flag" '! jq_ "d[\"flags\"]" | grep -q "keenable" && [ "$(jq_ "d[\"search\"][\"keenable\"][\"stale\"]")" = True ]'
+runpaper
+check "K3 text says the reading is stale" 'grep -q "reading is stale" "$root/out"'
 mkstore 77926 '78 + 0.25 * h' 3
 python3 - "$root/store.json" <<'PY'
 import json, sys

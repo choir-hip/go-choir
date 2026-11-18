@@ -51,6 +51,12 @@ PAID_SEARCH = ("tavily", "brave", "parallel", "serper", "serpapi")   # the paid 
 SEARCH_ZERO_SHARE = 0.05     # flag when more than this share of requests got no provider (Keenable, uncapped, answers nearly all; a few time out)
 SEARCH_QUOTA_SHARE = 0.8     # flag when every paid provider is quota_limited in more lines than this
 PUBLISHING_WINDOW_MIN = 20
+# The last reading of Keenable's credits and the day the plan renews. The
+# provider reports no balance, so a person reads the usage page and edits this
+# (problem record search-volume-outruns-keenable-credits-2026-11-18). The flag
+# compares today's projected calls with the daily rate at which that reading
+# reaches the renewal; it does not know what was spent since the reading.
+KEENABLE_PLAN = {"credits": 17000, "read_at": "2026-11-18T12:38:00Z", "renews": "2026-12-05T00:00:00Z"}
 
 LINE_RE = re.compile(
     r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) .*?inference succeeded for autoputer (\S+) "
@@ -160,6 +166,7 @@ def search_health(text):
     req = zero = with_results = 0
     by = {}
     answered_by = {}
+    today_calls = {}
     for ln in text.splitlines():
         m = SEARCH_RE.search(ln)
         if not m:
@@ -175,6 +182,11 @@ def search_health(text):
         # are the called ones that were not skipped.
         skipped_names = {i.partition("=")[0] for i in m.group(3).split()}
         tm = SEARCH_TODAY_RE.search(ln)
+        if tm:
+            for item in tm.group(1).split():
+                name, _, n = item.partition("=")
+                if n.isdigit():
+                    today_calls[name] = max(today_calls.get(name, 0), int(n))
         if tm and int(m.group(1)) > 0:
             for item in tm.group(1).split():
                 name = item.partition("=")[0]
@@ -186,7 +198,27 @@ def search_health(text):
                 d = by.setdefault(name, {"quota_limited": 0, "capped": 0, "error": 0})
                 d[reason] += 1
     return {"requests": req, "with_results": with_results, "zero": zero, "zero_share": (zero / req) if req else None,
-            "answered_by": answered_by, "by": by}
+            "answered_by": answered_by, "by": by, "today_calls": today_calls}
+
+
+def iso_epoch(t):
+    return calendar.timegm(time.strptime(t, "%Y-%m-%dT%H:%M:%SZ"))
+
+
+def keenable_credits(sr, plan, now, hours_left):
+    """Keenable's calls today (the largest today=[keenable=N] in the window),
+    the day projected at the last hour's rate, and the daily rate at which the
+    plan's last credit reading reaches its renewal."""
+    today = sr["today_calls"].get("keenable")
+    if today is None:
+        return None
+    projected = today + sr["answered_by"].get("keenable", 0) * hours_left
+    read_at, renews = iso_epoch(plan["read_at"]), iso_epoch(plan["renews"])
+    stale = now >= renews
+    budget = plan["credits"] / ((renews - read_at) / 86400.0) if renews > read_at else None
+    return {"today_calls": today, "projected_today": projected, "credits": plan["credits"], "read_at": plan["read_at"],
+            "renews": plan["renews"], "budget_per_day": budget, "stale": stale,
+            "lasts_days": (plan["credits"] / projected) if projected else None}
 
 
 DEVIN_LINE_RE = re.compile(r"provider=devin|provider devin model")
@@ -255,6 +287,10 @@ def compute(raw):
     if pc and pc["trips"] > 0:
         f.append("pacer tripped %d times in hour %s" % (pc["trips"], pc["hour"]))
     sr = rep["search"]
+    kc = sr["keenable"] = keenable_credits(sr, raw.get("keenable_plan") or KEENABLE_PLAN, now, hours_left)
+    if kc and not kc["stale"] and kc["budget_per_day"] and kc["projected_today"] > kc["budget_per_day"]:
+        f.append("search: keenable projected %d today, over the %d a day that makes %d credits (read %s) reach renewal %s"
+                 % (round(kc["projected_today"]), round(kc["budget_per_day"]), kc["credits"], kc["read_at"][:10], kc["renews"][:10]))
     if sr["requests"] and sr["zero"] > SEARCH_ZERO_SHARE * sr["requests"]:
         f.append("search: %d of %d requests got no provider answer" % (sr["zero"], sr["requests"]))
     if sr["requests"] and all(sr["by"].get(n, {}).get("quota_limited", 0) > SEARCH_QUOTA_SHARE * sr["requests"]
@@ -316,6 +352,16 @@ def render(r):
             o.append("    %-10s quota_limited %5d  capped %5d  error %5d" % (n, d["quota_limited"], d["capped"], d["error"]))
     else:
         o.append("search, last hour: no requests")
+    kc = sr.get("keenable")
+    if kc:
+        o.append("    keenable today UTC: %d calls, projected %d by the end of the day" % (kc["today_calls"], round(kc["projected_today"])))
+        if kc["stale"]:
+            o.append("    keenable credits: the reading is stale (%d credits read %s, plan renewed %s): read the usage page and edit KEENABLE_PLAN"
+                     % (kc["credits"], kc["read_at"], kc["renews"]))
+        else:
+            o.append("    keenable credits: %d credits read %s; %d a day reaches renewal %s; at today's rate that reading lasts %s days"
+                     % (kc["credits"], kc["read_at"], round(kc["budget_per_day"]), kc["renews"][:10],
+                        "n/a" if kc["lasts_days"] is None else "%.1f" % kc["lasts_days"]))
     o.append("paper lines, last %d min: %d" % (PUBLISHING_WINDOW_MIN, r["paper_lines_20m"]))
     o.append("FLAGS: " + ("; ".join(r["flags"]) if r["flags"] else "none"))
     return "\n".join(o)

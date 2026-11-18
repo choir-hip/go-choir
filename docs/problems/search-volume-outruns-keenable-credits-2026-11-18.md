@@ -179,5 +179,10 @@ chooses to buy.
   fine. The landing's proof must look at results, not only at counts.
 - The Keenable cap must be lifted or resized on December 5 when the plan
   renews.
-- The hourly status needs a line for credits spent against the plan, so
-  this is seen in a day and not in a fortnight.
+- Done 2026-11-18: the hourly status prints Keenable's calls today, the
+  day's projection and how long the last credit reading lasts, and flags a
+  day projected over the rate that reaches renewal
+  (`scripts/status-paper-usage`, `KEENABLE_PLAN`). Keenable reports no
+  balance, so the reading is a number a person copies from the usage page;
+  the flag does not know what was spent since. First run, 16:20Z: 7,479
+  calls so far today, 13,647 projected, against 1,032 a day.
