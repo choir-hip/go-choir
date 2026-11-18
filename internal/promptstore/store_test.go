@@ -122,8 +122,8 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	for _, want := range []string{
 		"The first message ends with a corpus brief",
 		"Search the corpus yourself with choir.SearchWireCorpus",
-		"names the threads it left out",
-		"a published story carries no date there",
+		"for what the brief lacks or says it left out",
+		"A published story carries no date there",
 		"each thread of the objective as held (with its capture ids), stale or missing",
 		"Search the web only for the stale and missing threads, one question at a time",
 		"read what it returns before you search again",
