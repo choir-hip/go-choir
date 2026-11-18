@@ -55,6 +55,8 @@ type heardSeed struct {
 	// at is when the phone settled it; the stretch began ten minutes earlier.
 	at   time.Time
 	kind string
+	// role is the cite's role; empty is subject.
+	role string
 }
 
 // seedHeard writes, on a listener's computer, what a programme call and the
@@ -76,7 +78,7 @@ func seedHeard(t *testing.T, rt *Runtime, s heardSeed) string {
 	c := &programmeCall{rt: rt, ledger: rt.store, ownerID: s.owner, stretchID: s.stretch, startedAt: start}
 	seg := &programmeSegment{
 		ID: s.stretch + ".s0", Kind: s.kind, Title: s.title, Text: s.text, Content: true, Blocks: len(calibration.SplitBlocks(s.text)),
-		Cites: []programmeCite{{Ref: fmt.Sprintf("pub:%s@v%d", s.route, s.version), Role: "subject", Label: s.title}},
+		Cites: []programmeCite{{Ref: fmt.Sprintf("pub:%s@v%d", s.route, s.version), Role: cmpRole(s.role), Label: s.title}},
 		P:     0.7, Cause: "importance", CausedBy: "importance",
 	}
 	seg.SHA256 = sha256Hex(seg.Text)
@@ -170,7 +172,18 @@ func recentLines(in string) []string {
 	return out
 }
 
-func dayOf(at time.Time) string { return at.UTC().Format("2006-01-02") }
+func cmpRole(r string) string {
+	if r == "" {
+		return "subject"
+	}
+	return r
+}
+
+// dayOf is the listener's day: the default request's zone is Europe/Paris.
+func dayOf(at time.Time) string {
+	loc, _ := time.LoadLocation("Europe/Paris")
+	return at.In(loc).Format("2006-01-02")
+}
 
 func oneStory() radioScript { return linesScript(titled("Only", nil)) }
 
