@@ -1,0 +1,31 @@
+# Programs CI's gate jobs run that scripts/gates does not, and jobs that are
+# not gates. Read by scripts/check-gates-cover-ci. One entry per line:
+#   <program path> <reason>        (a reason is required)
+#   not-a-gate <job id> <reason>   (the job plans, builds, tests, publishes or deploys)
+# Every job not named here is a gate job. A line that CI no longer needs, or
+# that names something scripts/gates runs, fails the check.
+
+# Jobs that are not gates: they plan the run, build, test the Go suites
+# (scripts/land runs those on the build machine) or publish and deploy.
+not-a-gate plan CI planning and the tests of the CI classifiers; they run when .github/scripts changes, and the classifier decides what a landing needs
+not-a-gate go-vet-build Go vet and build; scripts/land runs the build on the build machine
+not-a-gate go-test Go test shards; scripts/land runs the Go suites on the build machine
+not-a-gate go-test-runtime Go test shards for agentcore and textureowner; scripts/land runs them on the build machine
+not-a-gate go-test-scale Go test of the quarantined load-sensitive tests; scripts/land owns the Go suites
+not-a-gate govulncheck report-only vulnerability scan, never fails a landing
+not-a-gate check aggregate of the Go vet, test and build jobs
+not-a-gate sbom-candidate builds the differential SBOM candidate for the deploy
+not-a-gate sbom accepts the differential SBOMs for the deploy
+not-a-gate build-frontend frontend build and Playwright, run on the build machine and in CI, not by the landing gates
+not-a-gate deploy-impact classifies what the deploy needs
+not-a-gate flakehub-publish publishes the rolling flake after a deploy
+not-a-gate prebuild-staging prebuilds the deploy artifacts on Node B
+not-a-gate deploy-staging the staging deploy
+
+# Programs a gate job runs that scripts/gates does not.
+scripts/selftest-guest-security-epoch takes 59 s on the Mac, over the budget; it runs when that gate script changes, and scripts/gates runs the check itself
+scripts/test-node-b-guest-release-retention.sh fails on macOS (BSD touch has no -d with this date form; 7 of 43 cases) and passes on the Linux runner
+scripts/test-guest-floor-commit-free needs nix to evaluate the guest under two commit stamps
+scripts/receipts-index-swap-test needs a throwaway PostgreSQL
+scripts/fuzz-broker-protocol.sh a fixed-time fuzz run (15 s plus a build), run in CI's Desk Protocol Lock job
+frontend/scripts/sdk-surface.mjs needs the frontend install and a CI merge base; the Package Modularity job runs it when the SDK changes

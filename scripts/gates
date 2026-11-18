@@ -9,10 +9,30 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 2
 base=${GATES_BASE:-origin/main}
 f=0
+hr_report=$(mktemp "${TMPDIR:-/tmp}/gates-heresy.XXXXXX")
+trap 'rm -f "$hr_report"' EXIT
 run() {
   local out
   out=$("$@" 2>&1) || { echo "FAIL: $*"; echo "$out" | tail -8; f=1; }
 }
+# CI's Vocabulary Gates also run each gate's selftest (they take 1-5 s each)
+run scripts/selftest-kernel-gates
+run scripts/selftest-desk-names
+run scripts/selftest-store-handles
+run scripts/selftest-owner-files-writes
+run python3 -I scripts/selftest-switch-registry
+run python3 -I scripts/selftest-guest-token
+run scripts/selftest-jev-entry
+# every script a CI gate job runs is run here or is in scripts/gates-ci-exemptions.txt
+# with its reason (a gate CI has and this script lacks refused three landings)
+run scripts/selftest-gates-cover-ci
+run scripts/check-gates-cover-ci
+# CI's Docs Truth Check (about 26 s)
+run scripts/doccheck
+# CI's Heresy Detector (about 5 s); the report goes to a temp file, not the tree
+run scripts/check-heresies.sh --fail-on-regression --report "$hr_report"
+# CI's Base Packages Are Listed: every package directory is in base-packages.json
+run scripts/check-base-packages
 run scripts/check-v1-writer-purity.sh
 run node frontend/scripts/gen-package-kinds.mjs --check
 run scripts/check-decode-roots.sh
