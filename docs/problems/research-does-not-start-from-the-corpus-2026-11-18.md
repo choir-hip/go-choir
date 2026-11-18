@@ -216,3 +216,17 @@ at publish; research that reads a corpus brief first and searches the web
 only for the gaps; the new-or-revise choice at a new story's first publish.
 A proposal with stations and the owner's decisions; not ratified.
 
+## Update, 2026-11-18: page text is searchable in the lane `capture-fulltext`
+
+The owner (2026-11-18, on reading belief 1): "we should be doing full page
+indexing for everything with BM25 immediately as well", and hybrid vectors,
+graph traversal and time windowing after. Built in the lane, not deployed:
+a BM25 index over the passages of every captured page's text, with time
+windows and a recency order, merged with the old title-and-label search
+([reference/CAPTURE-FULLTEXT.md](../reference/CAPTURE-FULLTEXT.md): facts,
+the four engines measured, resource projections, the catch-up). This record's
+beliefs 2 to 4 (research does not start from the corpus; overlap is chosen
+before research; wording and language need vectors) are untouched. The
+measurement the ledger asks for (claims C132, C133: story headline as query,
+the pages the story cites as the relevant set) is not run; the index is what
+it needs.
