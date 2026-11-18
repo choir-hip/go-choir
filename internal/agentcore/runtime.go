@@ -139,6 +139,9 @@ type Runtime struct {
 	// (run id -> *runLabelAccumulator, run_labels.go): the union of the
 	// labels of everything the run read, host-side, never in the cell.
 	runLabels sync.Map
+	// runSearch holds each running run's search counts until its summary
+	// line is logged (search_run_summary.go).
+	runSearch sync.Map
 	// calibrationRunReads holds each running run's calibration read state
 	// (run id -> *calibrationRunReads, calibration_reads.go).
 	calibrationRunReads sync.Map
@@ -760,7 +763,10 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		rt.leases = lease.New(s.Leases())
 		rt.actGate = actgate.New(rt.leases)
 		// Every terminal run write ends the run's leases, whichever path made it.
-		s.SetRunTerminalObserver(func(runID string) { rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded) })
+		s.SetRunTerminalObserver(func(runID string) {
+			rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded)
+			rt.logRunSearchSummary(runID)
+		})
 		// A closed round with a scorable desk-to-desk Cast is judged
 		// (desk_cast_judge.go).
 		s.SetDeskCastOutcomeNotifier(rt.noteDeskCastOutcome)

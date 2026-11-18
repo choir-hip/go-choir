@@ -107,6 +107,12 @@ type ChoirScope struct {
 	// search's arrivals the desk has been told about in a cell result.
 	searches   *SearchStore
 	searchTold map[string]int
+	// The cell's search counts for the host (search_marks.go takeSearchStats):
+	// pages read, searches answered from held results, wordings not sent.
+	readStat    atomic.Int64
+	statsMu     sync.Mutex
+	heldStat    int
+	notSentStat map[string]int
 	// ledger is this session's read ledger (read_ledger.go): every Read, its
 	// capture or its error, so a failed Read is never invisible.
 	ledger readLedger
@@ -177,6 +183,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	}
 	scope := &ChoirScope{broker: broker, issuer: issuer, actions: actions, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: desk, slot: slot, searches: newSearchStore()}
 	scope.handleRef.Store(&handleRef)
+	scope.searches.isRead = scope.pageRead
 	return scope, nil
 }
 
@@ -230,7 +237,9 @@ func (s *ChoirScope) BindCell() CellHooks {
 	return CellHooks{
 		Begin: func(frame SessionFrame) {
 			s.reissueHandle()
-			s.ledger.beginRun(frame.RunID)
+			if s.ledger.beginRun(frame.RunID) {
+				s.searches.markRunStart()
+			}
 			s.tray.Store(&Tray{})
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
@@ -266,6 +275,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 		},
 		Refusals:        s.takeRefusals,
 		SearchCounts:    s.cellNoteLines,
+		SearchStats:     s.takeSearchStats,
 		RecordsShown:    s.recordsShown.Load,
 		JobsAwaited:     s.takeAwaited,
 		CalibrationRead: s.calibrationRead.Load,

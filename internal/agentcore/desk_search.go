@@ -137,7 +137,9 @@ func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker
 	// The stream lives with the session, but waiting for its start line is
 	// part of this cell's call: the cell's end abandons it.
 	stopWithCell := context.AfterFunc(ctx, cancel)
-	stream, err := client.Stream(streamCtx, query, deskSearchMaxResults)
+	// The stream's context is the session's, not the cell's: the cell's
+	// run, desk and conversation ride it to the gateway's log.
+	stream, err := client.Stream(search.WithAttribution(streamCtx, search.AttributionFrom(ctx)), query, deskSearchMaxResults)
 	cellEnded := !stopWithCell()
 	if err == nil && cellEnded {
 		_ = stream.Close()
