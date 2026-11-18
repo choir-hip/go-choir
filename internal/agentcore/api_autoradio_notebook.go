@@ -154,9 +154,15 @@ func (c *programmeCall) loadNotebook(ctx context.Context, in *programmeInput) er
 		in.nbReceiptSHA, in.nbReceiptLen = sha256Hex(text), len(text)
 	}
 	if c.req.Cause != "open" {
-		card, err := c.scorecard(ctx)
+		card, err := calibration.Reader{Ledger: c.rt.store}.Scorecard(ctx, c.ownerID, c.rt.cfg.ComputerID, time.Now())
 		if err != nil {
-			return err
+			// The notebook's counts and cases are skipped for this call; the
+			// radio is not silenced by a failed read of the history.
+			log.Printf("autoradio programme: request %s: the settled forecasts could not be read, counts and cases skipped: class=%s", c.req.RequestID, errClass(err))
+			return nil
+		}
+		if card.Truncated {
+			log.Printf("autoradio programme: request %s: the settled forecasts were read only in part (truncated)", c.req.RequestID)
 		}
 		in.liveCounts = countsOf(card.Claims)
 		cases, err := c.markedCases(ctx, card.Claims)
