@@ -41,6 +41,13 @@ type CaptureSearchQuery struct {
 	Need       int      `json:"need"`
 	Candidates int      `json:"candidates"`
 	IDs        []string `json:"ids,omitempty"`
+	// Query asks corpusd to search the pages' text as well (BM25 over
+	// passages); Since, Until, Order and Limit shape that search.
+	Query string `json:"query,omitempty"`
+	Since string `json:"since,omitempty"`
+	Until string `json:"until,omitempty"`
+	Order string `json:"order,omitempty"`
+	Limit int    `json:"limit,omitempty"`
 }
 
 // CaptureSearchAnswer is corpusd's candidate captures for the guest's own
@@ -50,6 +57,40 @@ type CaptureSearchAnswer struct {
 	Matched  int                  `json:"matched"`
 	Capped   bool                 `json:"capped"`
 	Searched int                  `json:"searched"`
+	// Hits are the pages found by their text, best first; HitObjects are
+	// those captures. TermsIncomplete: corpusd's title and label projection
+	// is still building, so Objects is empty and the window covers that half.
+	Hits            []CaptureTextHit     `json:"hits,omitempty"`
+	HitObjects      []objectgraph.Object `json:"hit_objects,omitempty"`
+	FullText        *CaptureTextInfo     `json:"fulltext,omitempty"`
+	TermsIncomplete bool                 `json:"terms_incomplete,omitempty"`
+}
+
+// CaptureTextHit is one page corpusd found by its text, with the passage
+// that found it (the mirror of platform.CaptureFullTextHit).
+type CaptureTextHit struct {
+	CaptureID   string  `json:"capture_id"`
+	Title       string  `json:"title,omitempty"`
+	Score       float64 `json:"score"`
+	Ordinal     int     `json:"ordinal"`
+	Passages    int     `json:"passages"`
+	Snippet     string  `json:"snippet,omitempty"`
+	FetchedAt   string  `json:"fetched_at,omitempty"`
+	PublishedAt string  `json:"published_at,omitempty"`
+	TitleMatch  bool    `json:"title_match"`
+	BodyMatch   bool    `json:"body_match"`
+}
+
+// CaptureTextInfo says how corpusd's text search went (the mirror of
+// platform.CaptureFullTextInfo).
+type CaptureTextInfo struct {
+	Used     bool   `json:"used"`
+	Reason   string `json:"reason,omitempty"`
+	Indexed  int64  `json:"indexed"`
+	Captures int    `json:"captures"`
+	Complete bool   `json:"complete"`
+	Pages    int    `json:"pages"`
+	Capped   bool   `json:"capped,omitempty"`
 }
 
 // CaptureSearcher is a capture sink that searches the shared store's index.

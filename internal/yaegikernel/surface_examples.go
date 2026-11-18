@@ -71,7 +71,7 @@ var choirExamples = map[string]string{
 var choirFields = map[string]string{
 	"Read":             "capture_id, url, title, block_count, blocks [{id, kind, text, page}], next_block, headings",
 	"ReadCapture":      "capture_id, url, title, blocks [{id, kind, text, page}], next_block",
-	"SearchWireCorpus": "events [{event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids}], captures [{capture_id, title, url, outlet, language, topic, fetched_at}], published [{route_path, title, snippet, kind, author, read_url}]",
+	"SearchWireCorpus": "events [{event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids}], captures [{capture_id, title, url, outlet, language, topic, fetched_at, passage}], published [{route_path, title, snippet, kind, author, read_url}]",
 }
 
 // choirPitfalls are the mistakes the traces show for a verb, each with its
