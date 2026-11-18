@@ -253,3 +253,20 @@ func TestDocumentFrequencyCountIsBounded(t *testing.T) {
 		t.Fatalf("bounded df = %d, %v; want 6", n, err)
 	}
 }
+
+func TestAPhraseOfStopWordsIsItsWordsAndReportsNoFallback(t *testing.T) {
+	p := PlanQuery(`"the of"`)
+	if len(p.Phrases) != 0 || p.Match(p.Positive, p.Phrases) != `"the" OR "of"` {
+		t.Fatalf("plan %+v", p)
+	}
+	ix := newTestIndex(t)
+	put(t, ix, scopeA, "cap-1", "Page", "The end of the road.\n\n", day0)
+	res := search(t, ix, scopeA, Query{Text: `"the of"`})
+	if len(res.PhraseFallbacks) != 0 || len(res.Hits) != 1 {
+		t.Fatalf("fallbacks %v hits %v", res.PhraseFallbacks, ids(res))
+	}
+	// A phrase with a content word is still a phrase.
+	if q := PlanQuery(`"state of the union"`); len(q.Phrases) != 1 {
+		t.Fatalf("plan %+v", q)
+	}
+}

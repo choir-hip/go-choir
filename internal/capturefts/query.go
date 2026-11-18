@@ -105,7 +105,7 @@ func PlanQuery(text string) Plan {
 				excl[key] = true
 				p.Excluded = append(p.Excluded, key)
 			}
-		case phrase && len(toks) >= 2:
+		case phrase && len(toks) >= 2 && !allStopwords(toks):
 			p.Phrases = append(p.Phrases, toks)
 		default:
 			for _, t := range toks {
@@ -151,4 +151,16 @@ func (p Plan) Match(terms []string, phrases [][]string) string {
 		ex[i] = `"` + e + `"`
 	}
 	return "(" + strings.Join(items, " OR ") + ") NOT (" + strings.Join(ex, " OR ") + ")"
+}
+
+// allStopwords reports whether every term is a stop word. Such a phrase
+// ("the of") matches nearly every passage and is no phrase worth a search or
+// a fallback notice: its words are used as words.
+func allStopwords(toks []string) bool {
+	for _, t := range toks {
+		if !queryStopwords[t] {
+			return false
+		}
+	}
+	return true
 }
