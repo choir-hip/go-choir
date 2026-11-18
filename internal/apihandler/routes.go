@@ -32,6 +32,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/autoradio/sheet", h.HandleAutoradioSheet)
 	s.HandleFunc("/api/autoradio/sheet/ops", h.HandleAutoradioSheetOps)
 	s.HandleFunc("/api/autoradio/sheet/stream", h.HandleAutoradioSheetStream)
+	s.HandleFunc("/api/autoradio/learning", h.HandleAutoradioLearning)
 	s.HandleFunc("/api/subcalls", h.HandleSubCalls)
 	s.HandleFunc("/api/trust", h.HandleTrust)
 	s.HandleFunc("/api/captures", h.HandleCaptures)

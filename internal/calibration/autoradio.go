@@ -16,8 +16,9 @@ import (
 // Autoradio's forecasts live in the calibration claims store as claims of one
 // reserved agent (learning-engine design 3.3, 4.3, 12). The generic claims
 // routes refuse that namespace; the server writes it through the constructor
-// and the settle method below, and the heard route is the settle method's
-// only caller.
+// and the settle method below, and the run sheet's op path
+// (internal/agentcore/api_autoradio_settle.go) is the settle method's only
+// caller.
 
 const (
 	// AutoradioAgent is the one claimant of the namespace.
@@ -312,7 +313,8 @@ type SettleResult struct {
 
 // SettleAutoradio is the reserved settle method: the only way a rule
 // settlement of the Autoradio namespace is written. Its one caller is the
-// heard route (a test holds that). It reads the claim by id, builds the
+// run sheet's op path, acting on the listener's device-keyed op (a test holds
+// that). It reads the claim by id, builds the
 // settlement (refusing a rule outside the closed registry, a claim that is
 // not a server-written forecast of autoradio-dj, an outcome that is not
 // heard or not heard, or evidence that is not one air event), appends it

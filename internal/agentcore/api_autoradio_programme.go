@@ -337,6 +337,11 @@ type programmeCall struct {
 	timedOut atomic.Bool // a deadline ended the call
 	writeErr error       // the first write error: the client went away
 	prompt   string
+
+	// sheet is the listener's server run sheet, the door the handler binds.
+	sheet               programmeSheet
+	placed, placeFailed int
+	madeRoom            bool
 }
 
 func (c *programmeCall) memberName() string {
@@ -412,6 +417,13 @@ func (c *programmeCall) segmentEvent(s programmeSegment) map[string]any {
 	ev := map[string]any{
 		"stretch_id": c.stretchID, "segment_id": s.ID, "kind": s.Kind, "title": s.Title, "text": s.Text,
 		"cites": cites, "block_count": s.Blocks, "est_seconds": estSeconds(s.Text), "cut_at": "sentence",
+		// The entry this segment is on the listener's server run sheet (the
+		// phone's own id for it, d-<segment_id>), and, for a content segment,
+		// the forecast claim the sheet's entry carries.
+		"entry_id": programmeEntryID(s.ID),
+	}
+	if s.ClaimID != "" {
+		ev["claim_id"] = s.ClaimID
 	}
 	if s.BetweenAfter != "" {
 		ev["between"] = map[string]any{"after_segment": s.BetweenAfter, "before_segment": s.BetweenBefore}
@@ -486,6 +498,7 @@ func (h *APIHandler) HandleAutoradioProgramme(w http.ResponseWriter, r *http.Req
 	// of the request_id returns it (programme design 1.2, slice 2).
 	ctx := context.WithoutCancel(r.Context())
 	c := &programmeCall{rt: rt, ledger: h.programmeLedger(), w: w, ownerID: ownerID, req: req, received: received}
+	c.sheet = programmeSheetOf{h: h, ownerID: ownerID}
 
 	prior, err := c.get(ctx, requestRecordPrefix+req.RequestID)
 	if err != nil {
@@ -558,8 +571,11 @@ func (c *programmeCall) replay(ctx context.Context) {
 		c.event("error", map[string]any{"stretch_id": c.stretchID, "spoken": programmeFallbackLine, "reason": err.Error()})
 		return
 	}
-	for _, s := range segs {
-		c.event("segment", c.segmentEvent(s))
+	for i := range segs {
+		// A replay repairs a placement that failed the first time; a placement
+		// that landed answers by its op id and changes nothing.
+		c.placeOnSheet(ctx, &segs[i])
+		c.event("segment", c.segmentEvent(segs[i]))
 	}
 	if idx != nil && status == "completed" {
 		c.event("done", map[string]any{
@@ -790,7 +806,11 @@ func (c *programmeCall) commit(seg *programmeSegment) bool {
 			return c.failStore(err)
 		}
 		c.claimIDs = append(c.claimIDs, claim.RecordID)
+		seg.ClaimID = claim.RecordID
 	}
+	// The entry goes on the server's run sheet before the phone hears of it,
+	// so an op the phone posts about it always finds it.
+	c.placeOnSheet(ctx, seg)
 	c.segmentIDs = append(c.segmentIDs, seg.ID)
 	c.segCount++
 	c.trailing = nil
@@ -868,6 +888,7 @@ func (c *programmeCall) finish(ctx context.Context, status, reason string, index
 	data := map[string]any{
 		"stretch_id": c.stretchID, "status": "completed", "replayed": false, "segments": c.segCount, "claims": len(c.claimIDs),
 		"dropped": len(c.dropped), "provider": c.provider, "model": c.model, "index_record_id": indexID,
+		"placed": c.placed, "place_failed": c.placeFailed,
 		"timings_ms": c.timings(done), "members_tried": c.hops,
 		"usage": map[string]any{"input_tokens": c.usage.InputTokens, "output_tokens": c.usage.OutputTokens, "cached_input_tokens": c.usage.CachedInputTokens, "cache_reported": c.usage.CacheReported},
 	}

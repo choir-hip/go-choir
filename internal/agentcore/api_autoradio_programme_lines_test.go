@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -558,7 +559,14 @@ func TestF44_TheStreamIsTheFixturesStream(t *testing.T) {
 	var got []sseEvent
 	for _, e := range evs {
 		if e.Name == "stretch" || e.Name == "segment" {
-			b, _ := json.Marshal(e.Data)
+			d := map[string]any{}
+			for k, v := range e.Data {
+				d[k] = v
+			}
+			if id, ok := d["claim_id"].(string); ok && regexp.MustCompile(`^calib:autoradio-dj:[0-9a-f]{16}$`).MatchString(id) {
+				d["claim_id"] = "<claim>"
+			}
+			b, _ := json.Marshal(d)
 			var data map[string]any
 			_ = json.Unmarshal([]byte(strings.ReplaceAll(string(b), sid, "S")), &data)
 			got = append(got, sseEvent{Name: e.Name, Data: data})

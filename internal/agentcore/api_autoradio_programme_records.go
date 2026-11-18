@@ -234,6 +234,11 @@ func (c *programmeCall) readSegments(ctx context.Context, stretchID string, n in
 			if claim == nil {
 				break
 			}
+			s.ClaimID = claim.RecordID
+			if claim.Calibration != nil && claim.Calibration.Claim != nil {
+				s.P = claim.Calibration.Claim.Probability
+				s.CausedBy = strings.TrimPrefix(claim.Calibration.Claim.Criterion, "caused_by=")
+			}
 		}
 		out = append(out, s)
 	}

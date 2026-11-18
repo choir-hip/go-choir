@@ -8,6 +8,12 @@
 > it applies to per-lesson counts; 6.2 to 6.3 (lesson records as the
 > notebook, the notebook route); section 8 (the edition becomes part of the
 > notebook); and the literals of 12.1 to 12.7 that name those. The rest stands.
+>
+> What replaced them was built, and the one record kind it
+> adds (`autoradio.no_verdict`), is in
+> [AUTORADIO-SHEET.md](../reference/AUTORADIO-SHEET.md) "Desk entries,
+> settlement and the learning route" and
+> [AUTORADIO-PROGRAMME.md](../reference/AUTORADIO-PROGRAMME.md) "On the run sheet".
 
 How the DJ learns one listener. This is the first place the
 [four-stroke learning engine](../learning-engine.md) is built whole: forecast,
