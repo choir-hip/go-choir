@@ -21,6 +21,7 @@ package platform
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/capturefts"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const (
@@ -78,6 +80,70 @@ type captureFullText struct {
 	complete atomic.Bool
 	catchMu  sync.Mutex
 	started  sync.Once
+	// failures counts inline write failures; kicks counts the catch-up
+	// requests they made. failMu guards the log window and the kick time.
+	failures              atomic.Int64
+	kicks                 atomic.Int64
+	failMu                sync.Mutex
+	failLogAt, lastKickAt time.Time
+	failSuppressed        int64
+	// gap is captures minus indexed pages after the last full walk: the
+	// captures that cannot be indexed (no text blob, owner-private, no
+	// scope). -1 until a walk has measured it.
+	gap atomic.Int64
+	// writeHook, when set, replaces the index write (tests inject failures).
+	writeHook func(objectgraph.Object) error
+	// counts caches the number of captures per scope for captureCountTTL.
+	countMu sync.Mutex
+	counts  map[capturefts.Scope]cachedCount
+}
+
+type cachedCount struct {
+	n  int
+	at time.Time
+}
+
+// captureCountTTL is how long a computer's capture count, shown beside a
+// search, is reused rather than counted again.
+var captureCountTTL = time.Minute
+
+// failureLogWindow is how often a run of write failures logs a line.
+var failureLogWindow = 30 * time.Second
+
+// kickBackoff is the least time between two catch-up requests made by write
+// failures.
+var kickBackoff = 5 * time.Minute
+
+func (ft *captureFullText) resetCountCache() {
+	ft.countMu.Lock()
+	ft.counts = nil
+	ft.countMu.Unlock()
+}
+
+// noteFailure records a failed inline write: counted, logged once per window
+// with the count and the first id, and the catch-up requested at most once per
+// backoff. The index is no longer known complete.
+func (ft *captureFullText) noteFailure(id string, err error) {
+	n := ft.failures.Add(1)
+	ft.dirty.Store(true)
+	ft.complete.Store(false)
+	ft.failMu.Lock()
+	defer ft.failMu.Unlock()
+	now := time.Now()
+	if now.Sub(ft.failLogAt) >= failureLogWindow {
+		log.Printf("corpusd capture fulltext write failed count=%d suppressed=%d capture=%s err=%v (the catch-up will repair it)", n, ft.failSuppressed, id, err)
+		ft.failLogAt, ft.failSuppressed = now, 0
+	} else {
+		ft.failSuppressed++
+	}
+	if now.Sub(ft.lastKickAt) >= kickBackoff {
+		ft.lastKickAt = now
+		ft.kicks.Add(1)
+		select {
+		case ft.kick <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // ConfigureCaptureFullText opens the full-text index in dir and turns on
@@ -91,7 +157,9 @@ func (s *Store) ConfigureCaptureFullText(dir string, bodies *CaptureBodyStore) e
 	if err != nil {
 		return err
 	}
-	s.fullText.Store(&captureFullText{index: ix, bodies: bodies, kick: make(chan struct{}, 1)})
+	ft := &captureFullText{index: ix, bodies: bodies, kick: make(chan struct{}, 1)}
+	ft.gap.Store(-1)
+	s.fullText.Store(ft)
 	return nil
 }
 
@@ -119,7 +187,10 @@ func captureFullTextPage(obj objectgraph.Object) (capturefts.Scope, capturefts.P
 	if scope.Owner == "" || scope.Computer == "" {
 		return scope, capturefts.Page{}, "", ftSkip
 	}
-	if obj.Tombstone || strings.TrimSpace(obj.SupersededBy) != "" {
+	if obj.Tombstone || strings.TrimSpace(obj.SupersededBy) != "" || types.LabelsFromMetadata(obj.Metadata).OwnerPrivate() {
+		// An owner-private capture is not served to a non-custodian
+		// (agentcore capture_read_gate.go); a passage of it must not leave
+		// through the search either, so it is not indexed.
 		return scope, capturefts.Page{CaptureID: obj.CanonicalID}, "", ftRemove
 	}
 	meta, err := objectgraph.WebCaptureMetadataFromObject(obj)
@@ -139,6 +210,9 @@ func captureFullTextPage(obj objectgraph.Object) (capturefts.Scope, capturefts.P
 // writeCaptureText indexes one capture's text (or removes a removed
 // capture). It reads at most capturefts.MaxIndexedBytes of the blob.
 func (ft *captureFullText) writeCaptureText(ctx context.Context, obj objectgraph.Object) error {
+	if ft.writeHook != nil {
+		return ft.writeHook(obj)
+	}
 	scope, page, hash, action := captureFullTextPage(obj)
 	switch action {
 	case ftRemove:
@@ -170,12 +244,7 @@ func (s *Store) indexCaptureText(ctx context.Context, captures []objectgraph.Obj
 		err := ft.writeCaptureText(ctx, obj)
 		done("inline", 1, err)
 		if err != nil {
-			log.Printf("corpusd capture fulltext write failed capture=%s err=%v (the catch-up will repair it)", obj.CanonicalID, err)
-			ft.dirty.Store(true)
-			select {
-			case ft.kick <- struct{}{}:
-			default:
-			}
+			ft.noteFailure(obj.CanonicalID, err)
 		}
 	}
 }
@@ -199,8 +268,7 @@ func (s *Store) removeCaptureText(ctx context.Context, id string) {
 		err = ft.index.Remove(ctx, capturefts.Scope{Owner: owner, Computer: computer}, id)
 	}
 	if err != nil {
-		log.Printf("corpusd capture fulltext remove failed capture=%s err=%v", id, err)
-		ft.dirty.Store(true)
+		ft.noteFailure(id, fmt.Errorf("remove: %w", err))
 	}
 }
 
@@ -237,6 +305,15 @@ type CaptureFullTextInfo struct {
 	Captures int      `json:"captures"`
 	Complete bool     `json:"complete"`
 	Terms    []string `json:"terms,omitempty"`
+	// Pruned are query words not searched in page text because no page holds
+	// them or they are so common they carry no weight; TermCapped are the
+	// most common words dropped to keep the query to 32 terms; Excluded are
+	// the words and phrases excluded (-word); PhraseFallbacks are quoted
+	// phrases found nowhere, searched as their words.
+	Pruned          []string `json:"pruned,omitempty"`
+	TermCapped      []string `json:"term_capped,omitempty"`
+	Excluded        []string `json:"excluded,omitempty"`
+	PhraseFallbacks []string `json:"phrase_fallbacks,omitempty"`
 	// Pages is how many pages the ranked passages came from, before the limit.
 	Pages  int  `json:"pages"`
 	Capped bool `json:"capped,omitempty"`
@@ -301,8 +378,14 @@ func (s *Store) searchCaptureFullText(ctx context.Context, owner, computer strin
 		info.Reason = "the full-text index failed: " + err.Error()
 		return nil
 	}
+	info.Pruned, info.TermCapped, info.Excluded, info.PhraseFallbacks = res.Pruned, res.TermCapped, res.Excluded, res.PhraseFallbacks
+	if res.Note != "" {
+		// Nothing was searched: say so, do not answer as a search with no hits.
+		info.Reason = res.Note
+		return nil
+	}
 	info.Used = true
-	_ = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index WHERE owner_id = ? AND computer_id = ?`, owner, computer).Scan(&info.Captures)
+	info.Captures = ft.captureCount(ctx, s, owner, computer)
 	info.Indexed = res.Indexed
 	info.Complete = ft.complete.Load()
 	info.Terms = res.Terms
@@ -327,7 +410,11 @@ func (s *Store) searchCaptureFullText(ctx context.Context, owner, computer strin
 	}
 	have := map[string]bool{}
 	for _, o := range objs {
-		have[o.CanonicalID] = true
+		// A capture that has become owner-private since it was indexed is
+		// not served to a non-custodian; its passage does not leave here.
+		if _, _, _, action := captureFullTextPage(o); action == ftIndex {
+			have[o.CanonicalID] = true
+		}
 	}
 	for _, h := range res.Hits {
 		if !have[h.CaptureID] {
@@ -353,6 +440,30 @@ func (s *Store) searchCaptureFullText(ctx context.Context, owner, computer strin
 	}
 	resp.HitObjects = objs
 	return nil
+}
+
+// captureCount is the number of captures the projection holds for a computer,
+// cached for captureCountTTL: a scan of the projection per search is not
+// worth the coverage note it feeds.
+func (ft *captureFullText) captureCount(ctx context.Context, s *Store, owner, computer string) int {
+	key := capturefts.Scope{Owner: owner, Computer: computer}
+	ft.countMu.Lock()
+	if c, ok := ft.counts[key]; ok && time.Since(c.at) < captureCountTTL {
+		ft.countMu.Unlock()
+		return c.n
+	}
+	ft.countMu.Unlock()
+	var n int
+	if err := s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index WHERE owner_id = ? AND computer_id = ?`, owner, computer).Scan(&n); err != nil {
+		return 0
+	}
+	ft.countMu.Lock()
+	if ft.counts == nil {
+		ft.counts = map[capturefts.Scope]cachedCount{}
+	}
+	ft.counts[key] = cachedCount{n, time.Now()}
+	ft.countMu.Unlock()
+	return n
 }
 
 // ---- catch-up ----
@@ -440,6 +551,18 @@ func (s *Store) CatchUpCaptureFullText(ctx context.Context) (CaptureFullTextProg
 	if err := s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE canonical_id >= ? AND canonical_id < ? AND tombstone = FALSE`, captureIDPrefix, captureIDEnd).Scan(&prog.Total); err != nil {
 		return fail(err)
 	}
+	// The count shortcut ReconcileCaptureIndex has: when nothing failed since
+	// the last full walk and the captures minus the indexed pages are still
+	// the gap that walk measured (the captures that cannot be indexed), there
+	// is nothing to do.
+	if !dirty {
+		if gap := ft.gap.Load(); gap >= 0 {
+			if pages, err := s.indexedPageCount(ctx, ft); err == nil && int64(prog.Total)-pages == gap {
+				ft.complete.Store(true)
+				return prog, nil
+			}
+		}
+	}
 	started := time.Now()
 	lastLog := started
 	expected := map[capturefts.Scope]int64{}
@@ -470,7 +593,7 @@ func (s *Store) CatchUpCaptureFullText(ctx context.Context) (CaptureFullTextProg
 		}
 		cursor = objs[len(objs)-1].CanonicalID
 		done := s.retrievalTimer(retrievalFullTextCatchUp)
-		bp, err := s.catchUpBatch(ctx, ft, objs, dirty, expected)
+		bp, err := s.catchUpBatch(ctx, ft, objs, true, expected)
 		done("batch", bp.Indexed, err)
 		prog.Scanned += len(objs)
 		prog.Indexed += bp.Indexed
@@ -508,10 +631,26 @@ func (s *Store) CatchUpCaptureFullText(ctx context.Context) (CaptureFullTextProg
 		return fail(err)
 	}
 	if prog.Failed == 0 && !ft.dirty.Load() {
+		if pages, err := s.indexedPageCount(ctx, ft); err == nil {
+			ft.gap.Store(int64(prog.Total) - pages)
+		}
 		ft.complete.Store(true)
 	}
 	logCaptureFullTextProgress(prog, started)
 	return prog, nil
+}
+
+// indexedPageCount is the pages held across every scope's file.
+func (s *Store) indexedPageCount(ctx context.Context, ft *captureFullText) (int64, error) {
+	scopes, err := ft.index.Scopes(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	for _, scope := range scopes {
+		n += ft.index.Pages(scope)
+	}
+	return n, nil
 }
 
 func logCaptureFullTextProgress(p CaptureFullTextProgress, started time.Time) {
@@ -613,19 +752,24 @@ func (s *Store) sweepCaptureFullTextOrphans(ctx context.Context, ft *captureFull
 				args = append(args, id)
 			}
 			args = append(args, scope.Owner, scope.Computer)
-			rows, err := s.corpus().QueryContext(ctx, `SELECT canonical_id FROM og_objects WHERE canonical_id IN (?`+strings.Repeat(",?", len(ids)-1)+`)
-				AND owner_id = ? AND computer_id = ? AND tombstone = FALSE AND superseded_by = ''`, args...)
+			rows, err := s.corpus().QueryContext(ctx, `SELECT canonical_id, metadata, tombstone, superseded_by FROM og_objects WHERE canonical_id IN (?`+strings.Repeat(",?", len(ids)-1)+`)
+				AND owner_id = ? AND computer_id = ?`, args...)
 			if err != nil {
 				return removed, err
 			}
 			live := map[string]bool{}
 			for rows.Next() {
-				var id string
-				if err := rows.Scan(&id); err != nil {
+				obj := objectgraph.Object{ObjectKind: objectgraph.WebCaptureObjectKind, OwnerID: scope.Owner, ComputerID: scope.Computer}
+				var meta string
+				if err := rows.Scan(&obj.CanonicalID, &meta, &obj.Tombstone, &obj.SupersededBy); err != nil {
 					_ = rows.Close()
 					return removed, err
 				}
-				live[id] = true
+				obj.Metadata = json.RawMessage(meta)
+				// Gone, tombstoned, superseded or owner-private: not live.
+				if _, _, _, action := captureFullTextPage(obj); action == ftIndex {
+					live[obj.CanonicalID] = true
+				}
 			}
 			err = rows.Err()
 			_ = rows.Close()
