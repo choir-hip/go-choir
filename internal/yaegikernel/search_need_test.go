@@ -167,7 +167,7 @@ func TestAPlainSearchOfAFreshRunHasNoUnreadNote(t *testing.T) {
 //  13. tagQuestion on a search the store does not hold says nothing, so the
 //     gate fails open unseen.
 
-func searchAllTwice(t *testing.T, f *researchFixture, between string) (calls int64, out SessionResult) {
+func searchAllTwice(t *testing.T, f *researchFixture, between string) (calls int32, out SessionResult) {
 	t.Helper()
 	f.urlsFor = map[string][]string{"w1 alpha": pagesN("a", 1, 40), "w2 beta": pagesN("b", 1, 40)}
 	cell, _ := searchCell(t, f)

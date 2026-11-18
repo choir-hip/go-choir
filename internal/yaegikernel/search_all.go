@@ -173,7 +173,7 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 		// already holds enough unread pages is read before it is searched again.
 		if n := s.searches.unreadNew(qk); qk != "" && n >= searchEnoughUnread {
 			stopWhy, stopStat = fmt.Sprintf("this question already holds %d pages new to this run that you have not read", n), "holds_unread"
-			res.Next = "Read the ones that matter (the Results of this value; choir.Searches.Summary(id)), then search again for what is still missing, naming it. A wording left out can be sent now with fresh: choir.Search(wording, true)."
+			res.Next = "Read the ones that matter (the Results of this value; choir.Searches.Summary(id)), then search again for what is still missing, naming it. A page that will not load counts once you have tried it. A wording left out can be sent now with fresh: choir.Search(wording, true)."
 			notSent(stopWhy, stopStat)
 			continue
 		}
@@ -189,8 +189,12 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 			continue
 		}
 		if stub.Reused == "" {
-			s.searches.tagQuestion(stub.ID, qk)
+			tagged := s.searches.tagQuestion(stub.ID, qk)
 			s.statsMu.Lock()
+			if !tagged && qk != "" {
+				// The gate cannot see this search: counted so a deploy shows it.
+				s.allStat.untagged++
+			}
 			s.allStat.sent++
 			s.statsMu.Unlock()
 		}

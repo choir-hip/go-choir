@@ -104,12 +104,14 @@ type SearchStats struct {
 	AllOffered  int `json:"all_offered,omitempty"`
 	AllSent     int `json:"all_sent,omitempty"`
 	UnreadNotes int `json:"unread_notes,omitempty"`
+	// Untagged counts searches SearchAll sent that its gate could not tag.
+	Untagged int `json:"untagged,omitempty"`
 }
 
 // IsZero reports whether nothing was counted.
 func (a SearchStats) IsZero() bool {
 	return a.Started == 0 && a.FromHeld == 0 && len(a.NotSent) == 0 && a.PagesReturned == 0 && a.PagesNew == 0 && a.PagesRead == 0 &&
-		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.UnreadNotes == 0
+		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.UnreadNotes == 0 && a.Untagged == 0
 }
 
 // Add sums o into a.
@@ -123,6 +125,7 @@ func (a *SearchStats) Add(o SearchStats) {
 	a.AllOffered += o.AllOffered
 	a.AllSent += o.AllSent
 	a.UnreadNotes += o.UnreadNotes
+	a.Untagged += o.Untagged
 	for k, v := range o.NotSent {
 		if a.NotSent == nil {
 			a.NotSent = map[string]int{}
@@ -162,6 +165,7 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 	out.FromHeld, s.heldStat = s.heldStat, 0
 	out.NotSent, s.notSentStat = s.notSentStat, nil
 	out.AllCalls, out.AllOffered, out.AllSent, out.UnreadNotes = s.allStat.calls, s.allStat.offered, s.allStat.sent, s.allStat.unreadNotes
+	out.Untagged = s.allStat.untagged
 	s.allStat = allCounts{}
 	s.statsMu.Unlock()
 	if out.IsZero() {
