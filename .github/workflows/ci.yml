@@ -651,6 +651,16 @@ jobs:
       # A Jev call goes through the job entry point (owner, 2026-11-15): a direct
       # call outside the list, a second call site in a listed file, or a list that
       # grew against the base fails. The base is chosen as the epoch check's is.
+      # scripts/gates (the landing script) must run every script a gate job here
+      # runs, or the exemption file must say why not (three landings were refused
+      # by a gate it lacked: docs/problems/podcast-clips-landed-and-was-backed-out-
+      # ci-jev-entry-gate-2026-11-16.md).
+      - name: Check scripts/gates covers the CI gate jobs
+        shell: bash
+        run: |
+          scripts/selftest-gates-cover-ci
+          scripts/check-gates-cover-ci
+
       - name: Check the Jev entry point
         shell: bash
         env:

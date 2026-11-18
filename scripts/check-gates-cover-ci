@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""scripts/gates must run every script a CI gate job runs, or say why not.
+
+scripts/gates (run by scripts/land before a push) is a hand-kept copy of the
+gate steps in .github/workflows/ci.yml. Three times in a week a CI gate it did
+not run refused a landing after the push
+(docs/problems/podcast-clips-landed-and-was-backed-out-ci-jev-entry-gate-2026-11-16.md).
+This check compares the two.
+
+The rule for "gate job": EVERY job in the workflow is a gate job, except a job
+named by a `not-a-gate <job-id> <reason>` line in scripts/gates-ci-exemptions.txt
+(the jobs that plan, build, test Go suites, publish or deploy; scripts/land runs
+the Go suites itself). A new job is therefore covered until someone writes down,
+with a reason, that it is not a gate.
+
+For each `run:` step of a gate job the check extracts every repo program it
+names: scripts/..., frontend/scripts/..., .github/scripts/... and
+`go run ./cmd/...`. Each must be named in scripts/gates or listed in the
+exemption file as `<path> <reason>` (a reason is required). It also fails on an
+exemption for something CI no longer runs in a gate job, on an exemption for
+something scripts/gates does run, and on a `not-a-gate` line naming a job that
+does not exist. A workflow it cannot parse fails closed.
+
+The YAML is read by hand (PyYAML is not guaranteed on a runner or the Mac) and
+narrowly: top-level `jobs:`, jobs at two spaces, `steps:` at four, step items
+at six, `run:` at eight, plain or `|`/`>` block scalars. Anything else is an
+error, never a skip.
+
+  scripts/check-gates-cover-ci [--workflow F] [--gates F] [--exemptions F] [--root D]
+"""
+import argparse
+import os
+import re
+import sys
+
+SCRIPT_RE = re.compile(r"(?<![\w./:$-])((?:\.github/scripts|frontend/scripts|scripts)/[A-Za-z0-9_][A-Za-z0-9._-]*)")
+GORUN_RE = re.compile(r"\bgo run (\./cmd/[A-Za-z0-9_-]+)")
+
+
+class ParseError(Exception):
+    pass
+
+
+def indent_of(line):
+    return len(line) - len(line.lstrip(" "))
+
+
+def parse_workflow(text):
+    """Return [(job_id, step_name, run_text)] for every run step, and the job ids."""
+    if "\t" in text:
+        raise ParseError("workflow contains a tab")
+    lines = text.split("\n")
+    n = len(lines)
+    i = 0
+    while i < n and lines[i].rstrip() != "jobs:":
+        i += 1
+    if i >= n:
+        raise ParseError("no top-level 'jobs:' line")
+    i += 1
+    jobs = []  # job ids in order
+    runs = []
+    cur = None
+    in_steps = False
+    step_name = None
+    step_idx = 0
+    while i < n:
+        line = lines[i]
+        s = line.strip()
+        if s == "" or s.startswith("#"):
+            i += 1
+            continue
+        ind = indent_of(line)
+        if ind == 0:
+            break  # next top-level key
+        if ind == 2:
+            m = re.match(r"^  ([A-Za-z0-9_-]+):\s*(#.*)?$", line)
+            if not m:
+                raise ParseError("line %d: cannot read job header: %r" % (i + 1, line))
+            cur = m.group(1)
+            jobs.append(cur)
+            in_steps = False
+            i += 1
+            continue
+        if cur is None:
+            raise ParseError("line %d: content before the first job" % (i + 1))
+        if ind == 4:
+            in_steps = re.match(r"^    steps:\s*(#.*)?$", line) is not None
+            if in_steps:
+                # the first real line after must be a step item at six spaces
+                j = i + 1
+                while j < n and (lines[j].strip() == "" or lines[j].strip().startswith("#")):
+                    j += 1
+                if j >= n or not lines[j].startswith("      - "):
+                    raise ParseError("line %d: steps not in the 6-space list form" % (i + 1))
+                step_idx = 0
+                step_name = None
+            i += 1
+            continue
+        if not in_steps:
+            i += 1
+            continue
+        # inside steps
+        if ind < 6:
+            raise ParseError("line %d: unexpected indent inside steps" % (i + 1))
+        item = line.startswith("      - ")
+        if item:
+            step_idx += 1
+            step_name = None
+            body = line[8:]
+            key_ind = 8
+        elif ind == 8:
+            body = line[8:]
+            key_ind = 8
+        else:
+            i += 1
+            continue
+        m = re.match(r"^([A-Za-z_-]+):\s*(.*)$", body)
+        if not m or (not item and ind != 8):
+            i += 1
+            continue
+        key, val = m.group(1), m.group(2)
+        if key == "name":
+            step_name = val.strip().strip("'\"")
+        elif key == "run":
+            label = step_name or "step %d" % step_idx
+            if re.match(r"^[|>][+-]?\s*(#.*)?$", val):
+                j = i + 1
+                block = []
+                while j < n and (lines[j].strip() == "" or indent_of(lines[j]) > key_ind):
+                    block.append(lines[j])
+                    j += 1
+                runs.append((cur, label, "\n".join(block)))
+                i = j
+                continue
+            if val == "" or val[0] in "\"'[{&*!%@`":
+                raise ParseError("line %d: run value form not understood: %r" % (i + 1, val))
+            runs.append((cur, label, re.sub(r"\s+#.*$", "", val)))
+        i += 1
+    if not jobs:
+        raise ParseError("no jobs found")
+    if not runs:
+        raise ParseError("no run steps found")
+    return jobs, runs
+
+
+def programs(text):
+    """Repo programs a shell text names, comments removed."""
+    out = []
+    for line in text.split("\n"):
+        if line.lstrip().startswith("#"):
+            continue
+        out += GORUN_RE.findall(line)
+        out += SCRIPT_RE.findall(line)
+    return out
+
+
+def normalise(path, root):
+    if path.startswith("./") or path.startswith("/"):
+        return path
+    if not os.path.exists(os.path.join(root, path)) and os.path.exists(os.path.join(root, "frontend", path)):
+        return "frontend/" + path  # a step that cd'd into frontend/
+    return path
+
+
+def parse_exemptions(text):
+    scripts, nongate, errs = {}, {}, []
+    for no, raw in enumerate(text.split("\n"), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(None, 2)
+        if parts[0] == "not-a-gate":
+            if len(parts) < 3 or len(parts[2].strip()) < 10:
+                errs.append("exemptions line %d: not-a-gate %s needs a reason (10+ characters)" % (no, parts[1] if len(parts) > 1 else "?"))
+                continue
+            nongate[parts[1]] = parts[2]
+            continue
+        rest = line.split(None, 1)
+        if len(rest) < 2 or len(rest[1].strip()) < 10:
+            errs.append("exemptions line %d: %s has no reason (10+ characters)" % (no, rest[0]))
+            continue
+        scripts[rest[0]] = rest[1]
+    return scripts, nongate, errs
+
+
+def main():
+    root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--workflow", default=os.path.join(root, ".github/workflows/ci.yml"))
+    ap.add_argument("--gates", default=os.path.join(root, "scripts/gates"))
+    ap.add_argument("--exemptions", default=os.path.join(root, "scripts/gates-ci-exemptions.txt"))
+    ap.add_argument("--root", default=root)
+    a = ap.parse_args()
+    try:
+        wf = open(a.workflow).read()
+        gates_text = open(a.gates).read()
+        ex_text = open(a.exemptions).read()
+    except OSError as e:
+        print("check-gates-cover-ci: FAIL: cannot read %s" % e, file=sys.stderr)
+        return 1
+    try:
+        jobs, runs = parse_workflow(wf)
+    except ParseError as e:
+        print("check-gates-cover-ci: FAIL: cannot parse the workflow (failing closed): %s" % e, file=sys.stderr)
+        return 1
+    exempt, nongate, errs = parse_exemptions(ex_text)
+    for j in nongate:
+        if j not in jobs:
+            errs.append("not-a-gate %s: the workflow has no such job (a stale line; delete it)" % j)
+    ran = {normalise(p, a.root) for p in programs(gates_text)}
+    needed = {}  # program -> first (job, step)
+    for job, step, text in runs:
+        if job in nongate:
+            continue
+        for p in programs(text):
+            needed.setdefault(normalise(p, a.root), (job, step))
+    for p, (job, step) in sorted(needed.items()):
+        if p in ran and p in exempt:
+            errs.append("%s: exempted, but scripts/gates runs it (delete the exemption)" % p)
+        elif p not in ran and p not in exempt:
+            errs.append("job %s, step \"%s\": %s is run by CI but not by scripts/gates, and is not in scripts/gates-ci-exemptions.txt" % (job, step, p))
+    for p in sorted(exempt):
+        if p not in needed:
+            errs.append("%s: exempted, but no gate job in CI runs it (a stale exemption; delete it)" % p)
+    if errs:
+        for e in errs:
+            print("check-gates-cover-ci: FAIL: " + e, file=sys.stderr)
+        return 1
+    print("check-gates-cover-ci: ok (%d jobs, %d not gates, %d programs, %d exempt)" % (len(jobs), len(nongate), len(needed), len(exempt)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

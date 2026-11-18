@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Selftest for scripts/check-gates-cover-ci: a CI script missing from the gates
+# file fails; adding it passes; an exemption with a reason passes; one without
+# a reason, a stale one, and one for a script the gates run each fail; a new
+# job with a new script fails by default; a not-a-gate job is skipped; an
+# unparsable workflow fails closed. Writes only under mktemp -d.
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+check=$here/check-gates-cover-ci
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+fails=0
+
+wf=$tmp/ci.yml
+gates=$tmp/gates
+ex=$tmp/ex.txt
+
+write_wf() { # extra job text on stdin
+	{
+		cat <<'YAML'
+name: CI
+on:
+  push:
+    branches: [main]
+jobs:
+  vocab:
+    name: Vocabulary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Run alpha
+        run: scripts/check-alpha
+      - name: Run beta and gamma
+        run: |
+          # scripts/check-comment is only a comment
+          scripts/check-beta --base "$X"
+          go run ./cmd/gamma-lock
+YAML
+		cat
+	} >"$wf"
+}
+base_gates() {
+	printf '%s\n' '#!/usr/bin/env bash' 'run scripts/check-alpha' 'run scripts/check-beta' 'run go run ./cmd/gamma-lock' >"$gates"
+}
+reset() { write_wf </dev/null; base_gates; printf '# none\n' >"$ex"; }
+
+expect() { # NAME WANT(0|1) [grep pattern wanted in stderr]
+	local name=$1 want=$2 pat=${3:-} got=0 out
+	out=$("$check" --workflow "$wf" --gates "$gates" --exemptions "$ex" --root "$tmp" 2>&1) || got=$?
+	if [ "$got" != "$want" ]; then
+		echo "FAIL: $name: exit $got, want $want"; echo "$out" | head -5; fails=$((fails + 1))
+	elif [ -n "$pat" ] && ! grep -q -- "$pat" <<<"$out"; then
+		echo "FAIL: $name: output lacks $pat"; echo "$out" | head -5; fails=$((fails + 1))
+	else
+		echo "ok: $name"
+	fi
+}
+
+reset
+expect "everything covered passes" 0
+
+echo 'run scripts/check-alpha' >"$gates"
+expect "a CI script missing from the gates fails, naming job and script" 1 'job vocab, step "Run beta and gamma": scripts/check-beta'
+base_gates
+expect "adding it to the gates passes" 0
+
+echo 'run scripts/check-alpha' >"$gates"
+printf 'scripts/check-beta needs a throwaway database\n./cmd/gamma-lock fixed-time fuzz, too long\n' >"$ex"
+expect "an exemption with a reason passes" 0
+
+printf 'scripts/check-beta\n./cmd/gamma-lock fixed-time fuzz, too long\n' >"$ex"
+expect "an exemption without a reason fails" 1 'has no reason'
+
+base_gates
+printf 'scripts/check-gone this script left CI long ago\n' >"$ex"
+expect "a stale exemption fails" 1 'stale exemption'
+
+printf 'scripts/check-beta already run by the gates file\n' >"$ex"
+expect "an exemption for a script the gates run fails" 1 'scripts/gates runs it'
+
+reset
+write_wf <<'YAML'
+  newjob:
+    name: A new job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run delta
+        run: scripts/check-delta
+YAML
+expect "a new job with a new script fails by default" 1 'job newjob, step "Run delta": scripts/check-delta'
+
+printf 'not-a-gate newjob builds artifacts for the deploy\n' >"$ex"
+expect "a not-a-gate job is skipped" 0
+printf 'not-a-gate newjob\n' >"$ex"
+expect "a not-a-gate line without a reason fails" 1 'needs a reason'
+printf 'not-a-gate nojob builds artifacts for the deploy\nnot-a-gate newjob builds artifacts for the deploy\n' >"$ex"
+expect "a not-a-gate line for a missing job fails" 1 'no such job'
+
+reset
+printf 'jobs:\n  a:\n    steps:\n    - run: scripts/check-alpha\n' >"$wf"
+expect "an unparsable workflow (steps not in the 6-space form) fails closed" 1 'failing closed'
+printf 'name: CI\n' >"$wf"
+expect "a workflow with no jobs fails closed" 1 'failing closed'
+printf 'jobs:\n  a:\n    steps:\n      - run: "scripts/check-alpha"\n' >"$wf"
+expect "a quoted run value fails closed" 1 'failing closed'
+printf 'jobs:\n  a:\n    steps:\n      - uses: x\n' >"$wf"
+expect "a workflow with no run step fails closed" 1 'failing closed'
+
+if [ "$fails" != 0 ]; then echo "selftest-gates-cover-ci: $fails FAILED"; exit 1; fi
+echo "selftest-gates-cover-ci: all passed"
