@@ -257,22 +257,53 @@ func NewAutoradioForecast(in AutoradioForecastInput, now time.Time) (types.Commi
 	return stampAutoradio(rec, "autoradio.forecast"), nil
 }
 
-// GoverningAutoradioHeard reports whether a claim's governing rule settlement
-// is the heard rule's "heard" (outcome true, an air event as evidence): the
-// phone's finished outcome. A settlement of another method, another rule or
-// another outcome is not it. Readers outside this package ask here instead of
-// naming the rule.
-func GoverningAutoradioHeard(settlements []SettlementView) (SettlementView, bool) {
-	g, ok := Governing(settlements, types.CalibrationScorerRule)
-	if !ok || g.Scorer != AutoradioHeardRule || g.Outcome != types.CalibrationOutcomeTrue {
-		return SettlementView{}, false
+// HeardLedger is the one list the heard read needs: the computer's own rows
+// count toward the limit.
+type HeardLedger interface {
+	ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context, ownerID, computerID, key, value string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
+}
+
+// HeardRead says what a heard read saw: rows is every row the query returned,
+// undecodable those it could not decode, and Full that the page reached its
+// limit (older settlements may exist and are not read).
+type HeardRead struct {
+	Rows, Undecodable, Limit int
+	Full                     bool
+}
+
+// ListAutoradioHeard reads the newest settlements of the heard rule that say
+// "heard": rule method, the heard rule, outcome true, an air event as the
+// evidence (the phone's finished outcome, which only the run sheet's op path
+// writes). It returns the settled time by claim id. A settlement of another
+// method, another rule or another outcome is not in it. Readers outside this
+// package ask here instead of naming the rule or the record kind.
+func ListAutoradioHeard(ctx context.Context, led HeardLedger, ownerID, computerID string, limit int) (map[string]time.Time, HeardRead, error) {
+	recs, undecodable, rows, err := led.ListCommitmentRecordsBySubjectRefOfComputer(ctx, ownerID, computerID, "record_kind", "autoradio.settlement", limit)
+	if err != nil {
+		return nil, HeardRead{}, err
 	}
-	for _, e := range g.Evidence {
-		if strings.HasPrefix(e, "air:") {
-			return g, true
+	out := map[string]time.Time{}
+	for _, rec := range recs {
+		if !IsAutoradioSettlement(rec) || rec.Calibration == nil || rec.Calibration.Settlement == nil {
+			continue
 		}
+		s := rec.Calibration.Settlement
+		if s.ScorerMethod != types.CalibrationScorerRule || s.ScorerName != AutoradioHeardRule || s.Outcome != types.CalibrationOutcomeTrue {
+			continue
+		}
+		air := false
+		for _, e := range rec.EvidenceRefs {
+			if strings.HasPrefix(e, "air:") {
+				air = true
+			}
+		}
+		at, perr := time.Parse(time.RFC3339Nano, rec.Provenance.ResolvedAt)
+		if !air || perr != nil || s.ClaimID == "" {
+			continue
+		}
+		out[s.ClaimID] = at.UTC()
 	}
-	return SettlementView{}, false
+	return out, HeardRead{Rows: rows, Undecodable: undecodable, Limit: limit, Full: limit > 0 && rows >= limit}, nil
 }
 
 // stampAutoradio sets the subject refs and the owner-private label of an
