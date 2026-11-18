@@ -253,6 +253,7 @@ func buildHeardSegs(segs map[string]types.CommitmentRecord, heard map[string]tim
 // readHeard reads the two lists at the same time (neither needs the other) and
 // notes the full ones for the log. Either failing fails the read.
 func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.CommitmentRecord, heard map[string]time.Time, err error) {
+	since := time.Now().Add(-heardWindow)
 	var (
 		wg                sync.WaitGroup
 		recs              []types.CommitmentRecord
@@ -266,11 +267,14 @@ func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.Co
 		// Content segments only (the forecast flag): openings and transitions
 		// are never heard-settled and would use up the page.
 		recs, segUndec, segRows, segErr = c.ledger.ListCommitmentRecordsByBodyOfComputer(ctx, c.ownerID, c.rt.cfg.ComputerID,
-			map[string]string{"$.subject_refs.record_kind": kindSegment, "$.subject_refs.forecast": "true"}, heardSegmentsRead)
+			types.BodyListQuery{
+				Match:  map[string]string{"$.subject_refs.record_kind": kindSegment, "$.subject_refs.forecast": "true"},
+				Absent: []string{"$.subject_refs.take_id"}, Since: since,
+			}, heardSegmentsRead)
 	}()
 	go func() {
 		defer wg.Done()
-		heard, rd, heardErr = calibration.ListAutoradioHeard(ctx, c.ledger, c.ownerID, c.rt.cfg.ComputerID, heardSettlementsRead)
+		heard, rd, heardErr = calibration.ListAutoradioHeard(ctx, c.ledger, c.ownerID, c.rt.cfg.ComputerID, since, heardSettlementsRead)
 	}()
 	wg.Wait()
 	if segErr != nil {

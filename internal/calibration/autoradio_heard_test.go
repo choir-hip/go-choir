@@ -20,7 +20,7 @@ func (f fakeHeardLedger) ListCommitmentRecordsBySubjectRefOfComputer(_ context.C
 	return f.recs, f.undecodable, len(f.recs) + f.undecodable, nil
 }
 
-func (f fakeHeardLedger) ListCommitmentRecordsByBodyOfComputer(_ context.Context, _, _ string, _ map[string]string, _ int) ([]types.CommitmentRecord, int, int, error) {
+func (f fakeHeardLedger) ListCommitmentRecordsByBodyOfComputer(_ context.Context, _, _ string, _ types.BodyListQuery, _ int) ([]types.CommitmentRecord, int, int, error) {
 	return f.recs, f.undecodable, len(f.recs) + f.undecodable, nil
 }
 
@@ -51,7 +51,7 @@ func TestListAutoradioHeardCountsWhatItCannotUse(t *testing.T) {
 		},
 		undecodable: 2,
 	}
-	got, rd, err := ListAutoradioHeard(context.Background(), led, "o", "c", 100)
+	got, rd, err := ListAutoradioHeard(context.Background(), led, "o", "c", time.Time{}, 100)
 	if err != nil {
 		t.Fatalf("an undecodable row failed the read: %v", err)
 	}

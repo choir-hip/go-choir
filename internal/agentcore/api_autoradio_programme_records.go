@@ -49,7 +49,7 @@ type autoradioLedger interface {
 	// ListCommitmentRecordsByBodyOfComputer is the predicate list the heard
 	// reads use (calibration.HeardLedger); the scorecard reads page through
 	// calibration.PagedLedger.
-	ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
+	ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, q types.BodyListQuery, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
 	calibration.PagedLedger
 }
 
