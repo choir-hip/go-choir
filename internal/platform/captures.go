@@ -378,3 +378,33 @@ func (h *ObjectGraphHandler) HandleCaptureRead(w http.ResponseWriter, r *http.Re
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// Prefix returns at most max bytes from the start of a stored body, without
+// reading the rest or verifying the hash (the full read path verifies; this
+// one serves the full-text index, which reads a capped prefix).
+func (s *CaptureBodyStore) Prefix(hash string, max int) ([]byte, error) {
+	return s.Range(hash, 0, max)
+}
+
+// Range returns the bytes [start, end) of a stored body (fewer at its end),
+// without verifying the hash. A passage of the full-text index is such a range
+// of the body its page names.
+func (s *CaptureBodyStore) Range(hash string, start, end int) ([]byte, error) {
+	if len(hash) != 64 || start < 0 || end < start {
+		return nil, os.ErrNotExist
+	}
+	if _, err := hex.DecodeString(hash); err != nil {
+		return nil, os.ErrNotExist
+	}
+	f, err := os.Open(s.path(hash))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	buf := make([]byte, end-start)
+	n, err := f.ReadAt(buf, int64(start))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	return buf[:n], nil
+}

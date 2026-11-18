@@ -45,6 +45,9 @@ type Store struct {
 	// retrievalState records which retrieval indexes and projections are
 	// live (retrieval_schema.go).
 	retrievalState retrievalSchemaState
+	// fullText is the captured pages' full-text index (capture_fulltext.go);
+	// nil until ConfigureCaptureFullText.
+	fullText atomic.Pointer[captureFullText]
 	// tombstones caches computer_tape_tombstones: a tombstoned computer's
 	// tape reads and appends fail closed (tape_tombstone.go).
 	tombstones tapeTombstoneCache
