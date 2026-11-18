@@ -52,6 +52,12 @@ DATA = os.path.expanduser(os.environ.get("CLAIMS_DATA", "~/.config/choir-qa/trac
 SCORER_M1 = "e6a-m1-gemini-v0"   # one record per (scorer, target); a new judge is a new name
 SCORER_R2 = "e6a-r2-gemini-v0"
 JUDGE_MODEL = "google-antigravity/gemini-3.8-flash"
+# The judge is suspended from 2026-11-17 (Gemini Code Assist disabled on the
+# account for third-party OAuth use; docs/problems/antigravity-login-suspended-2026-11-17.md).
+# `settle` calls go through claims_lib.omp and refuse on a cache miss, so
+# `measure` still works on settlements already written. It comes back only
+# through the official `agy` CLI, interactively, never an OAuth bridge. The
+# SCORER_* names stay as registered: a new judge is a new name, not a rename.
 BINS = [("<0.5", 0.0, 0.5), ("0.5-0.7", 0.5, 0.7), ("0.7-0.85", 0.7, 0.85), ("0.85-0.95", 0.85, 0.95), (">=0.95", 0.95, 1.0000001)]
 YS = {"confirmed": 1.0, "qualified": 0.5, "contradicted": 0.0}
 COVERAGE = {"answered": 1.0, "partial": 0.5, "unanswered": 0.0}

@@ -78,10 +78,20 @@ Nothing that calls the provider again. `omp-gemini4-hydrogen` and
 the ban. Tier 2 review is blocked until the owner names a seat 1 rather than
 being downgraded to one model silently.
 
+The claims scripts carry the same note and refuse rather than call:
+`scripts/claims_lib.py` raises on a cache miss for the suspended id (cached
+results still read, so a rerun stays reproducible), and
+`scripts/l2a_window_pairs.py:judge` raises instead of returning "not served",
+which the caller would have counted as a misroute. `scripts/icrl_calibration.py`
+reads its judge through `claims_lib`, so `measure` still works on settlements
+already written.
+
 ## Next step
 
 The owner submits the appeal once, signed in to the affected account, after
 revoking third-party OAuth grants at `myaccount.google.com/connections` and
 before signing back in. A Gemini seat is rebuilt on a Vertex or AI Studio API
-key (`google/gemini-4-hydrogen`), never on the product login. A second
+key (`google/gemini-4-hydrogen`), never on the product login. The account's
+own access, if it returns, returns through the official `agy` CLI
+(`~/.local/bin/agy`, 1.5.10), interactively — never an OAuth bridge. A second
 suspension is final.

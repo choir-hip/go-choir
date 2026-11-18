@@ -35,6 +35,12 @@ import urllib.request
 HOST = "https://choir.news"
 MODEL = "google-antigravity/gemini-3.8-flash"
 SERVED = ("google-antigravity", "gemini-3.8-flash")
+# Suspended from 2026-11-17: Gemini Code Assist was disabled on the account for
+# third-party OAuth use, so `judge` refuses instead of returning "not served",
+# which would read as a misroute. Comes back only through the official `agy`
+# CLI, interactively, never an OAuth bridge.
+# See docs/problems/antigravity-login-suspended-2026-11-17.md.
+SUSPENDED = "judge suspended 2026-11-17: Gemini Code Assist was disabled on the account for third-party OAuth use; it returns only through the official agy CLI, never an OAuth bridge (docs/problems/antigravity-login-suspended-2026-11-17.md)"
 BLOCK, OVERLAP = 400, 100
 TWO_LEVEL_SUFFIXES = {"co.uk", "com.au", "co.jp", "com.tw", "org.uk", "com.br", "co.kr", "com.cn", "ne.jp", "or.jp", "gov.uk", "ac.uk"}
 CAPTURE_ID = re.compile(r"choir\.web_capture:[A-Za-z0-9:_\-]+")
@@ -273,6 +279,7 @@ def last_assistant(obj):
 
 def judge(lines):
     """One judge call; returns (groups as lists of line indexes, served ok)."""
+    raise RuntimeError(SUSPENDED)
     prompt = PROMPT + "\n".join(f"{i}. {line}" for i, line in enumerate(lines))
     out = subprocess.run(
         ["omp", "-p", "--mode", "json", "--model", MODEL, "--thinking", "high", "--no-session", "--no-tools", prompt],

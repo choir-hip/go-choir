@@ -19,6 +19,13 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUNA = "openai-codex/gpt-6-luna"
 DEEPSEEK = "opencode-go/deepseek-v4.1-flash"
 GEMINI = "google-antigravity/gemini-3.8-flash"
+# Suspended 2026-11-17: Google disabled Gemini Code Assist on the owner's
+# account for third-party OAuth use, so this id answers 403 and one more call
+# risks a permanent ban. Cached results still read, which keeps a rerun of the
+# study reproducible with no new calls; a fresh call refuses. It comes back
+# only through the official `agy` CLI, interactively, never an OAuth bridge.
+# See docs/problems/antigravity-login-suspended-2026-11-17.md.
+SUSPENDED = {GEMINI}
 ALLOWED = {LUNA, DEEPSEEK, GEMINI}
 
 # list prices (internal/llmcost/pricing.go), USD per million tokens: in, out
@@ -41,6 +48,11 @@ def omp(model, prompt, timeout=900, retries=3):
         out = json.load(open(path))
         out["cached"] = True
         return out
+    if model in SUSPENDED:
+        raise RuntimeError(
+            "suspended model, new call refused: " + model +
+            " (Gemini Code Assist was disabled on the account 2026-11-17 for third-party "
+            "OAuth use; see docs/problems/antigravity-login-suspended-2026-11-17.md)")
     last = ""
     for attempt in range(retries):
         t0 = time.time()

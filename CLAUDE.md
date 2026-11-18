@@ -93,10 +93,17 @@ A commit subject ends with its class and rollback, for example
 - Green and yellow: no model review. Orange: one seat. Red where a defect
   would be silent or irreversible: two seats. Re-review a red change after a
   blocking finding.
-- The author may not be a seat. Seat 1 is Gemini 4 Hydrogen (high) and seat
-  2 is DeepSeek v4.1 flash (max), both through OMP
-  (`--include omp-gemini4-hydrogen,omp-deepseek-v41-flash`; owner,
-  2026-11-12). Devin, Opus, Sol and Luna do not run code review.
+- The author may not be a seat. Seat 2 is DeepSeek v4.1 flash (max) through
+  OMP (`--include omp-deepseek-v41-flash`). Seat 1 was Gemini 4 Hydrogen
+  (high) through OMP until 2026-11-17, when Google disabled Gemini Code
+  Assist on that account for third-party OAuth use
+  ([problem record](docs/problems/antigravity-login-suspended-2026-11-17.md));
+  the id is removed from the panel, not re-pointed, and it comes back only
+  through the official `agy` CLI, interactively, never an OAuth bridge
+  another tool drives. Devin, Opus, Sol and Luna do not run code review.
+- Seat 1's absence is not a discount: tier 2 review (two seats) is blocked
+  until the owner names a replacement, rather than run twice on one model.
+  Re-review after a blocking finding and tier 1 both use seat 2.
 - Guest-security paths need the `Security-Effect` and
   `Security-Effect-Reviewed-By` trailers (`scripts/check-guest-security-epoch`).
   Never write a review trailer that no review backs.

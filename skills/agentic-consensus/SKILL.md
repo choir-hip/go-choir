@@ -133,7 +133,8 @@ call through that login is the violation the account was punished for.
 Do not reintroduce them, and do not reintroduce the provider under a new id.
 A Gemini seat needs a Vertex or AI Studio API key (`google/gemini-4-hydrogen`),
 which is the route Google's own appeal form recommends for third-party
-agents. Problem record:
+agents. The account's own access, if it returns, returns through the official
+`agy` CLI, interactively — not through anything OMP drives. Problem record:
 [antigravity-login-suspended-2026-11-17](../../docs/problems/antigravity-login-suspended-2026-11-17.md).
 
 `devin` left the default panel on 2026-11-12 (owner: Devin does not run code
