@@ -25,7 +25,7 @@ import (
 // The corpus search over captured pages' full text, from the research
 // desk's side: the tool, corpusd's real routes, a real Store B and a real
 // full-text index. Failure modes guarded (docs/reference/CAPTURE-FULLTEXT.md),
-// written before the code:
+// guarded:
 //   1. a fact only in a page's body is not found, or is returned with no
 //      passage and no way to cite and read the page;
 //   2. a 12-word question returns nothing;
@@ -300,5 +300,56 @@ func TestCorpusToolReturnsThePassageAndLogsCounts(t *testing.T) {
 	badRaw, _ := json.Marshal(map[string]any{"query": "amber", "since": "yesterday"})
 	if _, err := tool.Func(ctx, badRaw); err == nil {
 		t.Fatal("an unreadable date must be refused")
+	}
+}
+
+func TestParseCorpusWindowKeepsWordsThatEndInAColon(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"executive order: tariff pause", "executive order: tariff pause"},
+		{"since: the strike began", "since: the strike began"},
+		{"until: friday", "until: friday"},
+		{"executive order:recent tariff", "executive tariff"}, // a real operator is removed
+	} {
+		q, _, err := parseCorpusWindow(c.in, "", "", "")
+		if err != nil || q != c.want {
+			t.Errorf("%q -> %q, %v; want %q", c.in, q, err, c.want)
+		}
+	}
+	if _, w, _ := parseCorpusWindow("executive order: tariff pause", "", "", ""); w.Order != "relevance" {
+		t.Fatalf("a bare order: must not set an order: %+v", w)
+	}
+}
+
+type textAnswerSink struct {
+	CaptureSink
+	info *CaptureTextInfo
+}
+
+func (s textAnswerSink) SearchCaptures(ctx context.Context, q CaptureSearchQuery) (CaptureSearchAnswer, error) {
+	return CaptureSearchAnswer{FullText: s.info}, nil
+}
+
+func TestCorpusSearchNamesTheWordsItDidNotSearch(t *testing.T) {
+	t.Setenv(corpusSearchModeEnv, "")
+	info := &CaptureTextInfo{Used: true, Indexed: 3, Captures: 3, Pruned: []string{"week", "decided"}, TermCapped: []string{"zeta"},
+		Excluded: []string{"union"}, PhraseFallbacks: []string{"strike harbor"}}
+	_, note, got, err := searchCapturesFor(context.Background(), Dependencies{Captures: textAnswerSink{info: info}}, "o", "c",
+		corpusRequest{Query: `"strike harbor" -union`, Terms: corpusQueryTerms("strike harbor")}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"week", "decided", "zeta", "union", "strike harbor"} {
+		if !strings.Contains(note, want) {
+			t.Fatalf("the note lacks %q: %q", want, note)
+		}
+	}
+	if len(got.Dropped) != 3 {
+		t.Fatalf("dropped words for the model: %v", got.Dropped)
+	}
+	// No usable word: the note says so; it is not a search with no hits.
+	none := &CaptureTextInfo{Used: false, Reason: "the query has no searchable words"}
+	_, note, _, _ = searchCapturesFor(context.Background(), Dependencies{Captures: textAnswerSink{info: none}}, "o", "c", corpusRequest{Query: "!!!"}, 10)
+	if !strings.Contains(note, "no searchable words") {
+		t.Fatalf("note %q", note)
 	}
 }

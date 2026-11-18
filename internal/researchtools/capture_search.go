@@ -91,6 +91,12 @@ type CaptureTextInfo struct {
 	Complete bool   `json:"complete"`
 	Pages    int    `json:"pages"`
 	Capped   bool   `json:"capped,omitempty"`
+	// Words not searched in page text, and why (the mirror of
+	// platform.CaptureFullTextInfo).
+	Pruned          []string `json:"pruned,omitempty"`
+	TermCapped      []string `json:"term_capped,omitempty"`
+	Excluded        []string `json:"excluded,omitempty"`
+	PhraseFallbacks []string `json:"phrase_fallbacks,omitempty"`
 }
 
 // CaptureSearcher is a capture sink that searches the shared store's index.
