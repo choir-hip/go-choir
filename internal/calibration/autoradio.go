@@ -257,33 +257,41 @@ func NewAutoradioForecast(in AutoradioForecastInput, now time.Time) (types.Commi
 	return stampAutoradio(rec, "autoradio.forecast"), nil
 }
 
-// HeardLedger is the one list the heard read needs: the computer's own rows
-// count toward the limit.
+// HeardLedger is the one list the heard read needs: the newest rows of one
+// computer whose body holds every match, the matches applied in the query
+// before its limit (the store's predicate list).
 type HeardLedger interface {
-	ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context, ownerID, computerID, key, value string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
+	ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error)
 }
 
-// HeardRead says what a heard read saw: rows is every row the query returned,
-// undecodable those it could not decode, and Full that the page reached its
-// limit (older settlements may exist and are not read).
+// HeardRead says what a heard read saw: rows is every row the query returned
+// (all of them matching), undecodable those it could not decode, Unparsable
+// the matching settlements whose settled time did not parse, and Full that
+// the page reached its limit (older settlements may exist and are not read).
 type HeardRead struct {
 	Rows, Undecodable, Limit int
-	// Unparsable counts matching settlements whose settled time did not parse.
-	Unparsable int
-	Full       bool
+	Unparsable               int
+	Full                     bool
 }
 
 // ListAutoradioHeard reads the newest settlements of the heard rule that say
 // "heard": rule method, the heard rule, outcome true, an air event as the
 // evidence (the phone's finished outcome, which only the run sheet's op path
-// writes). It returns the settled time by claim id. A settlement of another
-// method, another rule or another outcome is not in it. Readers outside this
+// writes). The predicate is in the query, so the limit counts only heard
+// settlements: the false ones that skipped and cut entries write do not use
+// up the page. It returns the settled time by claim id. Readers outside this
 // package ask here instead of naming the rule or the record kind.
 func ListAutoradioHeard(ctx context.Context, led HeardLedger, ownerID, computerID string, limit int) (map[string]time.Time, HeardRead, error) {
-	recs, undecodable, rows, err := led.ListCommitmentRecordsBySubjectRefOfComputer(ctx, ownerID, computerID, "record_kind", "autoradio.settlement", limit)
+	recs, undecodable, rows, err := led.ListCommitmentRecordsByBodyOfComputer(ctx, ownerID, computerID, map[string]string{
+		"$.subject_refs.record_kind":             "autoradio.settlement",
+		"$.calibration.settlement.scorer_method": types.CalibrationScorerRule,
+		"$.calibration.settlement.scorer_name":   AutoradioHeardRule,
+		"$.calibration.settlement.outcome":       types.CalibrationOutcomeTrue,
+	}, limit)
 	if err != nil {
 		return nil, HeardRead{}, err
 	}
+	rd := HeardRead{Rows: rows, Undecodable: undecodable, Limit: limit, Full: limit > 0 && rows >= limit}
 	out := map[string]time.Time{}
 	for _, rec := range recs {
 		if !IsAutoradioSettlement(rec) || rec.Calibration == nil || rec.Calibration.Settlement == nil {
@@ -299,13 +307,17 @@ func ListAutoradioHeard(ctx context.Context, led HeardLedger, ownerID, computerI
 				air = true
 			}
 		}
+		if !air || s.ClaimID == "" {
+			continue
+		}
 		at, perr := time.Parse(time.RFC3339Nano, rec.Provenance.ResolvedAt)
-		if !air || perr != nil || s.ClaimID == "" {
+		if perr != nil {
+			rd.Unparsable++
 			continue
 		}
 		out[s.ClaimID] = at.UTC()
 	}
-	return out, HeardRead{Rows: rows, Undecodable: undecodable, Limit: limit, Full: limit > 0 && rows >= limit}, nil
+	return out, rd, nil
 }
 
 // stampAutoradio sets the subject refs and the owner-private label of an
