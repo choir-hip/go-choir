@@ -315,6 +315,19 @@ func (s *Store) ogListByOwnerAndBody(ctx context.Context, kind objectgraph.Objec
 	return store.ListObjectsByOwnerAndBody(ctx, string(kind), ownerID, matches, limit)
 }
 
+// ogListByOwnerAndBodySince is ogListByOwnerAndBody for rows last written at
+// or after since (zero: all).
+func (s *Store) ogListByOwnerAndBodySince(ctx context.Context, kind objectgraph.ObjectKind, ownerID string, matches []objectgraph.JSONFieldMatch, since time.Time, limit int) ([]objectgraph.Object, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	return store.ListObjectsByOwnerAndBodySince(ctx, string(kind), ownerID, matches, since, limit)
+}
+
 // ogPutEdge creates an edge between two objects.
 func (s *Store) ogPutEdge(ctx context.Context, fromID, toID string, kind objectgraph.EdgeKind, metadata any) error {
 	if s.og == nil {
