@@ -291,7 +291,7 @@ transcript inside its own times, on a featured feed, for a story on the front).
   .../operator/podcasts/episodes`, all episodes, with `has_transcript`) and each
   transcribed episode's blocks (the signed-in `podcast-transcript` route); ranks
   with `internal/podcastmatch` (overlapping 120 s windows on a 60 s stride, BM25
-  over normalised tokens with a tolerant match for names, a clip of 20 to 75 s on
+  over normalised tokens with a tolerant match for names, a clip of 24 to 75 s (20 to 75 s until 2026-11-17) on
   segment boundaries, a quote that is a prefix of what was said); keeps, for each
   story, the passages of episodes published from 48 hours before the story's last
   update to 6 hours after it, at most one per episode, best first; and writes

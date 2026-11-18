@@ -112,8 +112,10 @@ re-download: head found at 430.5, tail at 458.5. `off_head = 430.5 - 412 =
 470.5`.
 
 A clip shorter than 24 s gets no fingerprint (its 12 s head and tail would
-overlap, so an ad inside it could not be seen); the matcher's own minimum is
-20 s, so a clip of 20 to 24 s is valid and not relocatable.
+overlap, so an ad inside it could not be seen). The automatic matcher's minimum
+is 24 s, so every clip it writes is relocatable; a shorter clip written before
+that stays valid and unfingerprinted, and the repair pass skips it and deletes
+nothing for being short.
 
 ## 3. The record on the platform
 
