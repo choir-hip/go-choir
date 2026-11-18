@@ -161,6 +161,9 @@ func TestTheProgrammePromptSaysEveryStoryCandidateOnAnAllHeardDay(t *testing.T) 
 	if !ok {
 		t.Fatal("no programme prompt")
 	}
+	if !strings.Contains(p, "not in the last 14 days") || !strings.Contains(p, "may be told in full") {
+		t.Errorf("the prompt does not explain the not-in-the-last-14-days mark")
+	}
 	if !strings.Contains(p, "every story candidate was already heard at its current version") || strings.Contains(p, "every candidate was already heard") {
 		t.Errorf("the all-heard sentence does not say every story candidate")
 	}

@@ -53,7 +53,7 @@ type programmeInput struct {
 	heardCounts heardCounts
 	heardLoc    *time.Location
 	// heardUnavailable: the history could not be read for this call; no mark
-	// is shown (unknown is never "never") and the DJ is told so.
+	// is shown (unknown is never shown as a mark) and the DJ is told so.
 	heardUnavailable bool
 	heardClass       string
 
