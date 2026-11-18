@@ -143,6 +143,41 @@ What is being done:
   vectors), graph traversal across entities and events, and time windows.
   Its design waits for those three results.
 
+## Event and entity linking as built (investigated 2026-11-18, main at 60226a031)
+
+The owner expected stories to be linked by event and entity already. They
+partly are. Three mechanisms run, each in a different place, and they are
+not joined.
+
+| Mechanism | Links | Written by | Read by | State |
+|---|---|---|---|---|
+| World events (`store/world_event.go`, `agentcore/event_layer.go`; 2026-10-15) | a captured page to an event; an event to the one it follows | Jev, on source-poll captures (join at p 0.92 or more, tentative at 0.5, else a new event) | research's corpus search (newest 3,000 events, substring match); an owner route | running. **A story carries no event id anywhere.** Production by event (`intake.event_wakes`) is held off: it failed its false-merge bar three times |
+| Capture labels (`store/capture_label.go`, `intake_labels.go`; 2026-10-13) | a captured page to the story it reports the same event as | Jev at intake, against stories of the last 8 hours plus the newest 30 | the management inbox ("same event as story X"), capture search | running; this is the only overlap check at feed-or-open |
+| Story entities (`story_entities_default.go`, `publication_story_entities.go`; 2026-10-26, on front rows since 2026-11-10) | a story to an entity, central or incidental | the research desk's answers, exported at publish | the front row and resolve payload (`entities`); the related-stories walk | running, behind the setting `research.related_story` (default off, on for the paper) |
+| Related stories (`platform/publication_related.go`; 2026-10-19) | computed, not stored: shared cited pages, judged pairs, shared central entities, title-word filler | | one reader route, host only | running; `basis.events` is always 0 |
+
+- Nothing was removed by a refactor and no unmerged branch holds linking
+  work. What is missing was never wired: stories to events; any reader of
+  entities or the related walk in research, at the feed-or-open choice, in
+  drafting, at publish, in the front-page score, or in the radio.
+- Production, public routes: 79 of 100 front rows carry entities; none
+  carries an event or cluster id. The related route links same-event stories
+  by entity where entities exist (a Yemen group of four: yes) and falls back
+  to title words where they do not.
+- **A fifth of stories have no entities.** corpusd refused 664 entity writes
+  from the paper in 72 hours ("is not a published Autopaper story of owner
+  ..."), about 220 a day. Cause under investigation.
+- **Entity ids are not merged**: "U.S." and "United States", "Trump" and
+  "Donald Trump" are separate, so groups split; generic entities ("Drone",
+  "Woman") join unrelated stories.
+- **Events seldom cluster**: in the sampled window 63 of 74 captures minted
+  a new event and 3 joined one.
+- No call to `RelateStories` appears in the logs.
+- For the radio: a different story on an event already heard can be
+  proposed today from shared entities (each front row carries them). It
+  cannot be looked up by event id: events live on the paper's computer and
+  no story points at one.
+
 ## Remaining error
 
 - Share of a story's sources already held before its research began: not
