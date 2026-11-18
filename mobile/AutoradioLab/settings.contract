@@ -271,6 +271,8 @@ component RootScreen
         Hairline()
         NavRow(address="lab:motion", title="Motion gallery", subtitle="The mark in every state", testId="settings-motion")
         Hairline()
+        NavRow(address="lab:mark", title="Mark gallery", subtitle="Play with the tetramark: every motion, and the sliders", testId="settings-mark")
+        Hairline()
         NavRow(address="lab:wait", title="The wait", subtitle="The alive wait on its own", testId="settings-wait")
 
 // ---------------------------------------------------------------- appearance

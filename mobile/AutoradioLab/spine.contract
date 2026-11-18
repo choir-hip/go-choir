@@ -27,6 +27,9 @@ members Autoradio
   action hideLayer
     layer = ""
   action toggleLauncher
+    mkPressAt = performanceNow()
+    if layer == "launcher"
+      mkCloseAt = performanceNow()
     layer = layer == "launcher" ? "" : "launcher"
   action pinPage(address: string)
     send pm = pagePin(address=address)
