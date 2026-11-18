@@ -9,6 +9,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -295,16 +296,31 @@ type wrapLedger struct {
 	// scorecard page read fail.
 	listDelay time.Duration
 	failPaged bool
+	// panicKind makes the predicate list of that record_kind panic; barrierN
+	// (with barrier made by newBarrierLedger) holds each predicate list until
+	// that many have started; queries keeps the predicate queries.
+	panicKind string
+	barrierN  int
+	barrier   chan struct{}
+	started   int
+	mu        sync.Mutex
+	queries   []types.BodyListQuery
+}
+
+func newBarrierLedger(inner autoradioLedger, n int) *wrapLedger {
+	return &wrapLedger{autoradioLedger: inner, barrierN: n, barrier: make(chan struct{})}
 }
 
 func (l *wrapLedger) noteList(key, value string) error {
 	if key != "record_kind" {
 		return nil
 	}
+	l.mu.Lock()
 	if l.listCalls == nil {
 		l.listCalls = map[string]int{}
 	}
 	l.listCalls[value]++
+	l.mu.Unlock()
 	if l.listDelay > 0 {
 		time.Sleep(l.listDelay)
 	}
@@ -312,6 +328,42 @@ func (l *wrapLedger) noteList(key, value string) error {
 		return context.DeadlineExceeded
 	}
 	return nil
+}
+
+// noteBody counts a predicate list by its record_kind, keeps the query, and
+// applies the same delay, failure, barrier and panic as a subject-ref list.
+func (l *wrapLedger) noteBody(q types.BodyListQuery) error {
+	l.mu.Lock()
+	l.queries = append(l.queries, q)
+	l.mu.Unlock()
+	if l.panicKind != "" && l.panicKind == q.Match["$.subject_refs.record_kind"] {
+		panic("injected panic in a heard read")
+	}
+	if err := l.noteList("record_kind", q.Match["$.subject_refs.record_kind"]); err != nil {
+		return err
+	}
+	return l.waitBarrier()
+}
+
+// waitBarrier holds a list until barrierN lists have started: a read made one
+// after the other never gets past it (it times out and fails).
+func (l *wrapLedger) waitBarrier() error {
+	if l.barrierN == 0 {
+		return nil
+	}
+	l.mu.Lock()
+	l.started++
+	if l.started == l.barrierN {
+		close(l.barrier)
+	}
+	ch := l.barrier
+	l.mu.Unlock()
+	select {
+	case <-ch:
+		return nil
+	case <-time.After(2 * time.Second):
+		return errors.New("the lists were not started together")
+	}
 }
 
 func (l *wrapLedger) ListCommitmentRecordsBySubjectRef(ctx context.Context, ownerID, computerID, key, value string, limit int) ([]types.CommitmentRecord, error) {
@@ -332,13 +384,13 @@ func (l *wrapLedger) ListCalibrationRecordsPage(ctx context.Context, ownerID, co
 
 // ListCommitmentRecordsByBodyOfComputer is the predicate list: the newest rows
 // of one computer whose body fields equal match.
-func (l *wrapLedger) ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) ([]types.CommitmentRecord, int, int, error) {
-	if err := l.noteList("record_kind", match["$.subject_refs.record_kind"]); err != nil {
+func (l *wrapLedger) ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, q types.BodyListQuery, limit int) ([]types.CommitmentRecord, int, int, error) {
+	if err := l.noteBody(q); err != nil {
 		return nil, 0, 0, err
 	}
 	return l.autoradioLedger.(interface {
-		ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, match map[string]string, limit int) ([]types.CommitmentRecord, int, int, error)
-	}).ListCommitmentRecordsByBodyOfComputer(ctx, ownerID, computerID, match, limit)
+		ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, q types.BodyListQuery, limit int) ([]types.CommitmentRecord, int, int, error)
+	}).ListCommitmentRecordsByBodyOfComputer(ctx, ownerID, computerID, q, limit)
 }
 
 func (l *wrapLedger) ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context, ownerID, computerID, key, value string, limit int) ([]types.CommitmentRecord, int, int, error) {

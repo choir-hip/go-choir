@@ -59,14 +59,54 @@ func TestR10_FalseSettlementsDoNotUseUpTheHeardPage(t *testing.T) {
 
 func TestR11_TheTwoListsAreReadAtTheSameTime(t *testing.T) {
 	rt, _ := radioRuntime(t, oneStory())
-	led := &wrapLedger{autoradioLedger: rt.store, listDelay: 300 * time.Millisecond}
+	// Each list waits until both have started: read one after the other, the
+	// first never returns and the read fails.
+	led := newBarrierLedger(rt.store, 2)
 	c := &programmeCall{rt: rt, ledger: led, ownerID: progOwner, req: programmeRequest{RequestID: "r11", Cause: "open"}}
-	t0 := time.Now()
+	if _, _, err := c.readHeard(testCtx()); err != nil {
+		t.Fatalf("(R11) the two lists were not in flight together: %v", err)
+	}
+}
+
+func TestR17_APanicInAReadingGoroutineIsHistoryUnavailable(t *testing.T) {
+	for _, kind := range []string{kindSegment, "autoradio.settlement"} {
+		rt, fake := radioRuntime(t, oneStory())
+		seedHeard(t, rt, heardSeed{stretch: "st-1", route: "harbour-1", version: 1, title: "Harbour reopens", text: "The harbour reopened.", at: time.Now().Add(-26 * time.Hour)})
+		buf := heardCaptureLog(t)
+		h := NewAPIHandler(rt)
+		h.autoradioLedgerOverride = &wrapLedger{autoradioLedger: rt.store, panicKind: kind}
+		rec := httptest.NewRecorder()
+		progServe(h, rec, progBody(withRequestID("r17-"+kind)))
+		if rec.Code != 200 || len(segmentEvents(parseSSE(t, rec.Body.String()))) != 1 {
+			t.Fatalf("(R17) %s: status %d: %s", kind, rec.Code, rec.Body.String())
+		}
+		in := lastInput(fake)
+		if !strings.Contains(in, "History of what was heard is unavailable for this call") || strings.Contains(in, "\nheard: ") {
+			t.Errorf("(R17) %s: no unavailable line, or a mark shown", kind)
+		}
+		if !strings.Contains(buf.String(), "autoradio heard: read panicked") {
+			t.Errorf("(R17) %s: the panic is not logged: %q", kind, heardLogLines(buf))
+		}
+	}
+}
+
+func TestR19_BothListsAreBoundedByTheWindowAndTheSegmentListLeavesTakesOut(t *testing.T) {
+	rt, _ := radioRuntime(t, oneStory())
+	led := &wrapLedger{autoradioLedger: rt.store}
+	c := &programmeCall{rt: rt, ledger: led, ownerID: progOwner, req: programmeRequest{RequestID: "r19", Cause: "open"}}
 	if _, _, err := c.readHeard(testCtx()); err != nil {
 		t.Fatal(err)
 	}
-	if d := time.Since(t0); d > 500*time.Millisecond {
-		t.Errorf("(R11) the two lists took %v with 300ms each: read one after the other", d)
+	if len(led.queries) != 2 {
+		t.Fatalf("(R19) %d queries", len(led.queries))
+	}
+	for _, q := range led.queries {
+		if age := time.Since(q.Since); q.Since.IsZero() || age < 13*24*time.Hour || age > 15*24*time.Hour {
+			t.Errorf("(R19) %v: since %v is not about 14 days ago", q.Match, q.Since)
+		}
+		if q.Match["$.subject_refs.record_kind"] == kindSegment && (len(q.Absent) != 1 || q.Absent[0] != "$.subject_refs.take_id") {
+			t.Errorf("(R19) the segment list does not leave takes out: %v", q.Absent)
+		}
 	}
 }
 
