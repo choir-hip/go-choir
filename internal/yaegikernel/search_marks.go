@@ -98,11 +98,18 @@ type SearchStats struct {
 	PagesReturned int            `json:"pages_returned,omitempty"`
 	PagesNew      int            `json:"pages_new,omitempty"`
 	PagesRead     int            `json:"pages_read,omitempty"`
+	// SearchAll: calls made, wordings offered to them, wordings they sent;
+	// UnreadNotes counts cells that told the desk it held unread pages.
+	AllCalls    int `json:"all_calls,omitempty"`
+	AllOffered  int `json:"all_offered,omitempty"`
+	AllSent     int `json:"all_sent,omitempty"`
+	UnreadNotes int `json:"unread_notes,omitempty"`
 }
 
 // IsZero reports whether nothing was counted.
 func (a SearchStats) IsZero() bool {
-	return a.Started == 0 && a.FromHeld == 0 && len(a.NotSent) == 0 && a.PagesReturned == 0 && a.PagesNew == 0 && a.PagesRead == 0
+	return a.Started == 0 && a.FromHeld == 0 && len(a.NotSent) == 0 && a.PagesReturned == 0 && a.PagesNew == 0 && a.PagesRead == 0 &&
+		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.UnreadNotes == 0
 }
 
 // Add sums o into a.
@@ -112,6 +119,10 @@ func (a *SearchStats) Add(o SearchStats) {
 	a.PagesReturned += o.PagesReturned
 	a.PagesNew += o.PagesNew
 	a.PagesRead += o.PagesRead
+	a.AllCalls += o.AllCalls
+	a.AllOffered += o.AllOffered
+	a.AllSent += o.AllSent
+	a.UnreadNotes += o.UnreadNotes
 	for k, v := range o.NotSent {
 		if a.NotSent == nil {
 			a.NotSent = map[string]int{}
@@ -150,6 +161,8 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 	s.statsMu.Lock()
 	out.FromHeld, s.heldStat = s.heldStat, 0
 	out.NotSent, s.notSentStat = s.notSentStat, nil
+	out.AllCalls, out.AllOffered, out.AllSent, out.UnreadNotes = s.allStat.calls, s.allStat.offered, s.allStat.sent, s.allStat.unreadNotes
+	s.allStat = allCounts{}
 	s.statsMu.Unlock()
 	if out.IsZero() {
 		return nil
@@ -310,5 +323,6 @@ func (s *ChoirScope) takeNotes() []string {
 	defer s.statsMu.Unlock()
 	out := s.notes
 	s.notes = nil
+	s.unreadNoted = false
 	return out
 }

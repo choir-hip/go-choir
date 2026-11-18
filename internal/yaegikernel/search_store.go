@@ -108,6 +108,9 @@ type Search struct {
 	// terms from this search (search_marks.go reuseSearch).
 	startedAt time.Time
 	key       string
+	// question is the key of the SearchAll question that sent this search,
+	// empty for a plain search (search_need.go).
+	question string
 }
 
 // SearchCount is how far one search has come.
@@ -467,6 +470,7 @@ func (s *ChoirScope) SearchStart(query string, fresh ...bool) (SearchStub, error
 			return stub, nil
 		}
 	}
+	s.noteUnreadPages()
 	var out SearchStartResult
 	if err := s.call(ActionSearchStart, SearchStartPayload{Query: query}, &out); err != nil {
 		return SearchStub{}, err
