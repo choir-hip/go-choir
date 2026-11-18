@@ -1,4 +1,8 @@
 import Foundation
+import AVFoundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// A mutex for async code: claims must not overlap (a switch is release, then claim, then engine restart).
 final class AsyncMutex: @unchecked Sendable {
@@ -55,6 +59,23 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
             else { self?.log.emit(.audioNotice(kind: kind, detail: detail)) }
             self?.onChange?()
         }
+        audio.onNeedsEngine = { [weak self] in
+            Task.detached { _ = await self?.ensureReady(reason: "engine down at a block") }
+        }
+    }
+
+    /// Everything the console log needs when the session or the engine cannot be taken (ids, flags and numbers; no words).
+    public func failureDiagnostic() async -> String {
+        var app = "unknown"
+        #if canImport(UIKit) && !os(macOS)
+        app = await MainActor.run { switch UIApplication.shared.applicationState { case .active: "active"; case .inactive: "inactive"; case .background: "background"; @unknown default: "other" } }
+        #endif
+        var sess = ""
+        #if os(iOS)
+        let a = AVAudioSession.sharedInstance()
+        sess = " cat=\(a.category.rawValue) mode=\(a.mode.rawValue) outs=\(a.currentRoute.outputs.map { $0.portType.rawValue }) other_audio=\(a.isOtherAudioPlaying) silence_hint=\(a.secondaryAudioShouldBeSilencedHint)"
+        #endif
+        return "app=\(app)\(sess) current=\(current?.rawValue ?? "none") suspect=\(suspect) interrupted=\(isInterrupted) \(audio.diagnostic()) last=\(lastFailure)"
     }
 
     /// The state the session is in now (nil before the first claim and after `release`).
@@ -153,12 +174,21 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
             lock.lock(); _current = state; _suspect = false; _interrupted = false; lock.unlock()
             var ok = true
             if audio.needsRecovery {
-                do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing) }
-                catch { ok = false; log.emit(.error(stage: "audio-engine", message: "engine did not start after reassert of \(state.rawValue) (\(reason)): \(error)")) }
+                // The engine is down: a new one, not the old one started again.
+                do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing, fresh: true) }
+                catch {
+                    ok = false
+                    LiveAudio.printFault("engine did not start after reassert of \(state.rawValue) (\(reason))", error)
+                    log.emit(.error(stage: "audio-engine", message: "engine did not start after reassert of \(state.rawValue) (\(reason)): \(error)"))
+                }
             }
-            print("AUTORADIO session reasserted \(state.rawValue) (\(reason))")
-            onChange?()
-            return ok
+            if ok {
+                print("AUTORADIO session reasserted \(state.rawValue) (\(reason))")
+                onChange?()
+                return true
+            }
+            // Asserting the same claim again did not bring the engine back, and would not on the next try: give the claim up and take it anew.
+            print("AUTORADIO session reassert left the engine down; full release and re-claim of \(state.rawValue)")
         }
         audio.quiesce()
         print("AUTORADIO released reason=reclaim (\(reason); \(why))")
@@ -175,8 +205,8 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         }
         lock.lock(); _current = state; _suspect = false; _interrupted = false; lock.unlock()
         var ok = true
-        do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing) }
-        catch { ok = false; log.emit(.error(stage: "audio-engine", message: "engine did not start after reclaim of \(state.rawValue) (\(reason)): \(error)")) }
+        do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing, fresh: true) }
+        catch { ok = false; LiveAudio.printFault("engine did not start after reclaim of \(state.rawValue)", error); log.emit(.error(stage: "audio-engine", message: "engine did not start after reclaim of \(state.rawValue) (\(reason)): \(error)")) }
         log.emit(.audioSession(category: state.rawValue, mode: "reclaim", note: "\(reason): \(inner.describe())"))
         onChange?()
         return ok
@@ -191,6 +221,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         // never played through a mode switch.
         audio.holdForSessionSwitch(true)
         defer { audio.holdForSessionSwitch(false) }
+        let rateBefore = audio.outputRate()
         audio.quiesce()                                   // the category change would stop it anyway
         do { try await inner.claim(state, preferBuiltInMic: preferBuiltInMic, reason: reason) }
         catch {
@@ -200,8 +231,11 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
             throw error
         }
         lock.lock(); _current = state; _suspect = false; lock.unlock()
-        do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing) }
-        catch { log.emit(.error(stage: "audio-engine", message: "engine did not start after the switch to \(state.rawValue): \(error)")) }
+        // A change of category moves the hardware format and the route: the engine's graph is built again, not started again.
+        let buildsBefore = audio.engineBuilds
+        do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing, fresh: from != nil) }
+        catch { LiveAudio.printFault("engine did not start after the switch to \(state.rawValue)", error); log.emit(.error(stage: "audio-engine", message: "engine did not start after the switch to \(state.rawValue): \(error)")) }
+        print("AUTORADIO category change \(from?.rawValue ?? "none") -> \(state.rawValue) rate_before=\(rateBefore) rate_after=\(audio.outputRate()) engine_rebuilt=\(audio.engineBuilds > buildsBefore)")
         let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
         let d = inner.describe()
         log.emit(.audioSession(category: state.rawValue, mode: preferBuiltInMic ? "builtin-mic" : "route-mic", note: "\(reason): \(d)"))

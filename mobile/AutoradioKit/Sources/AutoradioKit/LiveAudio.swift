@@ -169,11 +169,31 @@ public final class LiveAudio: @unchecked Sendable {
 
     /// Bring the engine back up after a category change; `voiceProcessing` for the talking state.
     /// `mic`: the microphone tap is wanted (voice is on); without it the engine only plays.
-    public func resume(voiceProcessing vp: Bool, mic: Bool? = nil) throws {
+    /// `fresh`: the session changed category (listening to playing, or a full re-claim), so the hardware format and the route are not those the
+    /// engine's graph was built for: a new engine and nodes are made rather than the old ones restarted.
+    public func resume(voiceProcessing vp: Bool, mic: Bool? = nil, fresh: Bool = false) throws {
         guard !virtual, bus != nil else { return }
         if let mic { micWanted = mic }
-        try bring(voiceProcessing: vp)
+        try bring(voiceProcessing: vp, fresh: fresh)
     }
+
+    /// Test seam: stands in for the engine's prepare and start (no hardware is opened). Throws to fail the start.
+    var driveForTest: ((_ voiceProcessing: Bool, _ mic: Bool) throws -> Void)?
+    /// How many engines have been made (the first included): the proof that a switch built a new one.
+    private(set) var engineBuilds = 1
+    /// The programme found the engine down when a block began: the host takes the session and the engine again (the event that shows the fault).
+    public var onNeedsEngine: (@Sendable () -> Void)?
+    /// The engine's input node was asked for since this engine was made: an engine that has had one fails to start under a playback-only category.
+    private var inputTouched = false
+
+    /// Plain facts for the log when sound cannot come out (flags and numbers only).
+    public func diagnostic() -> String {
+        if virtual { return "engine=virtual" }
+        let f = engine.outputNode.outputFormat(forBus: 0)
+        return "engine running=\(running) down=\(down) builds=\(engineBuilds) out_rate=\(Int(f.sampleRate)) out_ch=\(f.channelCount)"
+    }
+    /// The output format's sample rate now (0 when not known), for the category-change line.
+    public func outputRate() -> Int { virtual ? 0 : Int(engine.outputNode.outputFormat(forBus: 0).sampleRate) }
 
     /// The engine should be making sound or ready to, and is not: it was taken down (interruption, failed restart) or never came back.
     public var needsRecovery: Bool { !virtual && bus != nil && (down || !running) }
@@ -184,7 +204,7 @@ public final class LiveAudio: @unchecked Sendable {
         restarting = true; defer { restarting = false }
         if running { quiesce() }
         do { try bring(voiceProcessing: voiceProcessing); onNotice?("engine", "restarted: \(reason)") }
-        catch { down = true; onNotice?("error", "engine restart failed (\(reason)): \(error)") }
+        catch { down = true; Self.printFault("engine restart failed (\(reason))", error); onNotice?("error", "engine restart failed (\(reason)): \(error)") }
     }
 
     /// Media services were reset: every engine object is invalid. Make new ones and start again.
@@ -196,7 +216,7 @@ public final class LiveAudio: @unchecked Sendable {
         running = false; micActive = false
         nodeStopped = true; releaseWaiters(); replaceEngine()
         do { try bring(voiceProcessing: voiceProcessing); observe(); onNotice?("engine", "rebuilt after media services reset") }
-        catch { down = true; onNotice?("error", "engine rebuild failed: \(error)") }
+        catch { down = true; Self.printFault("engine rebuild failed", error); onNotice?("error", "engine rebuild failed: \(error)") }
     }
 
     /// A new engine and nodes, wired as the old ones were. The caller starts it. Notifications of the old engine are dropped.
@@ -205,6 +225,7 @@ public final class LiveAudio: @unchecked Sendable {
         let old = engine
         if old.isRunning { old.stop() }
         engine = AVAudioEngine(); programmeNode = AVAudioPlayerNode(); voiceNode = AVAudioPlayerNode(); timePitch = AVAudioUnitTimePitch()
+        engineBuilds += 1; inputTouched = false
         wire()
         observe()
     }
@@ -248,18 +269,46 @@ public final class LiveAudio: @unchecked Sendable {
         for o in all { o.resume(()) }
     }
 
-    private func bring(voiceProcessing vp: Bool) throws {
-        guard let bus, let clock else { return }
+    /// An error's domain and code on the console log (the phone cannot be attached), nothing else of it.
+    static func printFault(_ what: String, _ error: Error) {
+        let ns = error as NSError
+        print("AUTORADIO \(what) \(ns.domain) \(ns.code)")
+    }
+
+    /// Start the engine for the state now wanted. A start that fails is tried once more on a new engine: an engine that has been through a
+    /// category change can refuse to start although a new one would not.
+    private func bring(voiceProcessing vp: Bool, fresh: Bool = false) throws {
+        guard bus != nil, clock != nil else { return }
         // Voice processing belongs to the input node and stays with the engine object: a playback-only engine after a talking one is a
-        // new engine, so nothing of the voice-processing unit is left in the output path.
-        if !wantMic, voiceProcessing { replaceEngine() }
+        // new engine, so nothing of the voice-processing unit is left in the output path. The same for an engine whose input node was used
+        // (a capture session before) and for any switch of category (`fresh`).
+        let rebuilt = fresh || (!wantMic && (voiceProcessing || inputTouched))
+        if rebuilt { replaceEngine() }
+        do { try attempt(voiceProcessing: vp) }
+        catch {
+            Self.printFault("engine start failed (rebuilt=\(rebuilt))", error)
+            replaceEngine()
+            do { try attempt(voiceProcessing: vp) }
+            catch { Self.printFault("engine start failed again on a new engine", error); throw error }
+            print("AUTORADIO engine started on a new engine after a failed start")
+        }
+    }
+
+    private func attempt(voiceProcessing vp: Bool) throws {
+        guard let bus, let clock else { return }
         voiceProcessing = false
+        if let drive = driveForTest {
+            do { try drive(vp, wantMic) } catch { down = true; throw error }
+            running = true; down = false; lastRestart = clock.now
+            return
+        }
         if wantMic {
             // Voice processing I/O (echo cancellation) is on the iPhone and on the Mac alike: AVAudioIONode.h declares
             // setVoiceProcessingEnabled(_:) for macOS 10.15 and iOS 13, with the same rule (the engine stopped, both IO nodes switch together).
+            inputTouched = true
             #if os(iOS) || os(macOS)
             do { try engine.inputNode.setVoiceProcessingEnabled(vp); voiceProcessing = vp }
-            catch { onNotice?("error", "voice processing \(vp ? "on" : "off") failed: \(error)") }
+            catch { Self.printFault("voice processing \(vp ? "on" : "off") failed", error); onNotice?("error", "voice processing \(vp ? "on" : "off") failed: \(error)") }
             #endif
             let inFmt = engine.inputNode.outputFormat(forBus: 0)
             if inFmt.sampleRate > 0 {
@@ -446,8 +495,12 @@ public final class LiveAudio: @unchecked Sendable {
         while offset < all.count, !Task.isCancelled {
             // Wait for the engine if it is down (a restart is under way); give up after 45 s.
             var waited = 0
+            if !running, !Task.isCancelled {
+                print("AUTORADIO block waits for the engine \(diagnostic())")
+                onNeedsEngine?()                      // the event that shows the fault: the host takes the session and the engine again
+            }
             while !running, !Task.isCancelled, waited < 900 { try? await Task.sleep(nanoseconds: 50_000_000); waited += 1 }
-            if !running || Task.isCancelled { return }
+            if !running || Task.isCancelled { if !running, !Task.isCancelled { print("AUTORADIO block given up: the engine did not come back in 45 s \(diagnostic())") }; return }
             lock.lock(); let gen = generation; lock.unlock()
             guard let ob = monoBuffer(Array(all[offset...]), rate: LiveAudio.playRate), ob.frameLength > 0 else { return }
             let base = renderedFrames()
@@ -788,9 +841,14 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             } else {
                 print("AUTORADIO on air \(st.read { $0.document.id }) block=\(tag) samples=\(made.samples.count)")
             }
+            if let ended = lastBlockEnd.value {
+                let gap = Int(Date().timeIntervalSince(ended) * 1000)
+                if gap > 2000 { print("AUTORADIO on air \(st.read { $0.document.id }) block=\(tag) gap_ms=\(gap) since the previous block ended") }
+            }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             startLookahead(after: tag)
             await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
+            lastBlockEnd.write { $0 = Date() }
             return true
         case .podcastClip:
             return false                                     // a podcast clip is a run sheet entry, played by the run sheet player
@@ -807,6 +865,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     // MARK: Synthesis and lookahead
 
     struct Synthesized: Sendable { var samples: [Float]; var rate: Double }
+    /// When the last spoken block's audio ended (nil before the first), for the gap line.
+    private let lastBlockEnd = Locked<Date?>(nil)
     private let ahead = Locked<(key: String, task: Task<Synthesized?, Never>)?>(nil)
 
     static func lookaheadKey(_ text: String, _ cfg: LabConfiguration) -> String {
