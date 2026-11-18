@@ -16,7 +16,7 @@ loop, `host/apple/build.mjs --ios --run --url <url>` or `bun exact.mjs android
 
 | You edit | Web (`bun exact.mjs web`) | iOS | Android |
 |---|---|---|---|
-| `app.contract` | In the page in 99 ms on a fresh app (D, `README.md:155-156`); on ours ? | Loop: plan replaced, state carried; "seconds" (D, `reference.md:1866,1877`; `recipes/app-json.md:48`); our time ?. `agent ios` / `test ios`: rebuilt as a baked plan (D, `recipes/ios-driving.md:17-19`); a Contract-only rebuild took 12 to 40 s through our build path (M). `bun exact.mjs ios`: bake and link, "compiles no Rust" (D, `reference.md:4693-4698`); "a minute or two" (D, `start-here.md:51`); a warm rebuild plus drive about 60 s (M) | Loop: plan replaced, state carried (D, `README.md:157-159`); time ?. Without the loop `test android` and `agent android` do not build; run `bun exact.mjs android` after the edit (D, `start-here.md:75`); a build after the first ? |
+| `app.contract` | In the page in 99 ms on a fresh app (D, `README.md:155-156`); on ours 57 to 90 s (M, below) | Loop: plan replaced, state carried; "seconds" (D, `reference.md:1866,1877`; `recipes/app-json.md:48`); our time ?. `agent ios` / `test ios`: rebuilt as a baked plan (D, `recipes/ios-driving.md:17-19`); a Contract-only rebuild took 12 to 40 s through our build path (M). `bun exact.mjs ios`: bake and link, "compiles no Rust" (D, `reference.md:4693-4698`); "a minute or two" (D, `start-here.md:51`); a warm rebuild plus drive about 60 s (M) | Loop: plan replaced, state carried (D, `README.md:157-159`); time ?. Without the loop `test android` and `agent android` do not build; run `bun exact.mjs android` after the edit (D, `start-here.md:75`); a build after the first ? |
 | `app.ts` or a file it imports | As above (D) | Loop: module pair replaced in the running app (D, `reference.md:1866-1868, 4718-4723`). `agent ios`: baked plan (D, `recipes/ios-driving.md:17-19`). A TypeScript-only change took about 57 s through our build path (M). A first use of a newer prelude feature raises `typescriptRuntime` and needs one new binary (D, `reference.md:2084, 2406, 2761`) | Loop: module pair replaced (D, `README.md:158-159`); time ? |
 | `app.test.contract`, `app.test.ts` | No build. Caltrain's three tests take about two seconds on the web host (D, `README.md:370-371`); ours ? | No build for `test web`; `test ios` ? | `test android` drives an APK built earlier (D, `start-here.md:75`) |
 | Swift package or app module | n/a | `bun exact.mjs ios` (D, `recipes/native-module.md:76`); a Swift change about 60 s warm (M); a cold build that adds Swift about 3 min (M); a first build in a new worktree about 5 min (M) | n/a |
@@ -129,6 +129,33 @@ The generated `Info.plist` carried [run]: `ExactAudioSession = playback`,
 `ExactCapturesInBackground = true`, `UIBackgroundModes = [audio]`,
 `NSMicrophoneUsageDescription` (from `strings/en.json`), `UIDeviceFamily`.
 
+## Our own loop is slow, and the mark is most of it [run, 2026-11-18]
+
+Measured in the build tree on `lane/autoradio-integ20`, an M1 Mac:
+
+| What | Time |
+|---|---|
+| `bun exact.mjs contract build app.contract --json --errors-only` | 64 to 66 s |
+| The same with `MarkAt`'s `view` replaced by one empty box | 16 s |
+| `bun exact.mjs web`, until the first plan is served | 38 s |
+| A one-line edit to `radio.contract` in that loop | 90 s the first time, 57 s the second |
+| `bun exact.mjs agent web … tree screenshot` (builds its own copy) | 99 s first, 39 s unchanged |
+
+Exact's figure for a fresh app is 99 ms per edit (`README.md:155-156`). Ours is
+about six hundred times that, and the Swift has no part in it: this is the
+Contract compiler on our pages. The plan is 5.9 MB with the mark and 1.3 MB
+without it; the web build reports `MarkAt: 4616382 B (29 instances)` of a
+16 MB `app.js` ("shared bodies counted per use": a component's body is
+compiled once per use). The mark is drawn in pure Contract `fn`s
+(`mobile/AutoradioLab/mark.contract`), each polygon's points a deep expression,
+and it is used 29 times, 12 of them in the motion gallery (`motion.contract`,
+a lab page).
+
+What follows: cut the mark's uses to the few the product shows, move lab pages
+out of the product app, and find a cheaper form for the mark (points computed
+once and shared, or a canvas). The remaining 16 s is still far from Exact's
+figure and is not yet explained; `Btn` has 231 uses and `Card` 93.
+
 ## Android [run, 2026-11-18, this Mac]
 
 Proven today with Exact's own Shelf sample, not with Autoradio. From the Exact
@@ -165,8 +192,21 @@ ANDROID_SERIAL=emulator-5554 bun scripts/agent.mjs android --reader --app shelf 
 The tree and the screenshot were correct. That is Exact's reader on Android
 drawing a TypeScript-data app (`host/android/README.md:256-262`).
 
-**Not yet done:** Autoradio itself on Android; a physical Android phone;
-`android --run --url` against the web loop; the time of a second Android build.
+**Autoradio itself on Android [run, 2026-11-18].** `bun exact.mjs android` in
+`mobile/AutoradioLab` (it added `"android": {}` to `app.json`'s `host`, kept on
+the local branch `android-probe` in the build tree, not landed) built and
+installed in 260 s on the first build. `bun exact.mjs agent android --storage a1
+"clock data" tree logs "screenshot <png>"` drew the deck, the bar, the mark and
+the tray with its labels. Under the driver all 114 source reads were answered
+`(substituted)` and a send failed: `autoradio.pageOpen: NotSupportedError; it
+ends unsent`. Our package has no Android implementation, so the pages have
+nothing behind them. One refusal to fix in the contracts:
+`-exact-exit-animation: refused on Android (LLP 1063)`; and the compiler warns
+that `sf/…` symbols draw only on Apple (`lower-symbol-platform`).
+
+**Not yet done:** a physical Android phone (the owner's old one never appeared
+on the USB bus); `android --run --url` against the web loop; the app outside
+the driver; the time of a second Android build.
 From Exact's own pages, not our runs: minSdk 31 unless `host.android.minimumOS`
 says `"10"` or `"11"` (`:22`, `:1545-1548`); `arm64-v8a` only (`:23`); its
 controls are the desktop painter's shapes and a sheet or chooser is refused

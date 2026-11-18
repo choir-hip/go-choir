@@ -57,6 +57,20 @@ Swift) kept in step by fixtures; an interface of 181 calls in which a field
 the declaration does not know empties a page; app-target Swift that no suite
 compiles; long builds.
 
+## A second cause of slow builds, found the same day
+
+The owner expected that using Exact as intended gives fast builds. Exact's
+loop is `bun exact.mjs web`: a Contract or `app.ts` edit is in the page in
+about a tenth of a second on a fresh app, and a phone or emulator can follow
+that loop with state kept. We never used it, because the pages' data was
+Swift. Measured on our app, the loop takes 57 to 90 s for a one-line page
+edit, and the Swift has no part in that: the Contract compiler takes 64 s on
+our pages and 16 s with the Tetramark's drawing stubbed out. The mark is 4.6
+of the plan's 5.9 MB, compiled once for each of its 29 uses. Numbers and
+commands: `docs/reference/exact/build-and-ship.md`, "Our own loop is slow".
+So the move to shared logic is necessary for fast builds and not sufficient;
+the pages must also get lighter.
+
 ## Not known
 
 - What Exact's shared layer can carry: network requests with our headers, a
