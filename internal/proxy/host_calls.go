@@ -118,7 +118,12 @@ func (h *Handler) corpusdCallHeaders(ctx context.Context, method, path, contentT
 		return 0, nil, fmt.Errorf("call corpusd: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	const callLimit = 4 << 20
+	raw, err := io.ReadAll(io.LimitReader(response.Body, callLimit+1))
+	if err == nil && len(raw) > callLimit {
+		// A limit is an error, never a truncated 200.
+		return 0, nil, fmt.Errorf("call corpusd: response over %d bytes", callLimit)
+	}
 	return response.StatusCode, raw, err
 }
 
@@ -144,7 +149,10 @@ func (h *Handler) corpusdFetch(ctx context.Context, path string, limit int64) (i
 		return 0, "", nil, fmt.Errorf("call corpusd: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, limit))
+	raw, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	if err == nil && int64(len(raw)) > limit {
+		return 0, "", nil, fmt.Errorf("call corpusd: response over %d bytes", limit)
+	}
 	return response.StatusCode, response.Header.Get("Content-Type"), raw, err
 }
 

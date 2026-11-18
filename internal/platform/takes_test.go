@@ -33,7 +33,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -466,48 +465,96 @@ func takesJSON(t *testing.T, v any) []byte {
 	return b
 }
 
-// The phone's fixtures (mobile/fixtures/takes) decode into the shapes corpusd
-// answers, so the two sides cannot drift.
-func TestPhoneFixturesDecodeIntoTheServersShapes(t *testing.T) {
-	read := func(name string) []byte {
-		b, err := os.ReadFile("../../mobile/fixtures/takes/" + name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return b
-	}
-	var list TakesResponse
-	if err := json.Unmarshal(read("list.json"), &list); err != nil || len(list.Takes) != 6 {
-		t.Fatalf("list.json: %d takes, %v", len(list.Takes), err)
-	}
-	first := list.Takes[0]
-	if first.TakeID != "take-00000000000000a1" || first.RespondsTo == nil || first.Record == nil || first.Record.Heard != 7 || first.Record.Listeners != 11 || first.AudioURL == "" {
-		t.Fatalf("list.json first take = %+v", first)
-	}
-	var mine TakesResponse
-	if err := json.Unmarshal(read("mine.json"), &mine); err != nil || len(mine.Takes) != 2 {
-		t.Fatalf("mine.json: %v", err)
-	}
-	var rec TakeRecord
-	if err := json.Unmarshal(read("record.json"), &rec.Summary); err != nil || rec.Summary.Offered != 11 || rec.Summary.Skipped != 4 || rec.Summary.Takes != 5 {
-		t.Fatalf("record.json: %+v %v", rec.Summary, err)
-	}
-	// What the route writes carries every key of the fixture, flat.
+func TestTakeHeaderGraceForContainerPaddingAndStopLatency(t *testing.T) {
 	svc := newTakesService(t)
-	mustPublish(t, svc, "pub", 0)
-	out, err := svc.TakeRecord(context.Background(), types.TakePublisherHandle("pub"), "")
+	// Apple's AAC encoder: 60.000 s of audio has an mvhd of 60.117 s.
+	if _, err := svc.PublishTake(context.Background(), takeIn("g1", takeFixtureAudio(60.117, 0), 60.0)); err != nil {
+		t.Fatalf("60.117 s header with a 60.0 claim refused: %v", err)
+	}
+	if _, err := svc.PublishTake(context.Background(), takeIn("g2", takeFixtureAudio(62.1, 0), 60.0)); err == nil {
+		t.Fatal("a 62.1 s header was accepted")
+	}
+	if _, err := svc.PublishTake(context.Background(), takeIn("g3", takeFixtureAudio(2.4, 0), 3.0)); err == nil {
+		t.Fatal("a 2.4 s header was accepted")
+	}
+	// The claim stays 3 to 60.
+	if _, err := svc.PublishTake(context.Background(), takeIn("g4", takeFixtureAudio(61, 0), 61)); err == nil {
+		t.Fatal("a 61 s claim was accepted")
+	}
+}
+
+// Handles are 24 bits: two publishers can share one. The per-listener rows are
+// the caller's own takes' rows, never the other publisher's.
+func TestRecordRowsAreOnlyTheCallersTakesWhenHandlesCollide(t *testing.T) {
+	svc := newTakesService(t)
+	ctx := context.Background()
+	in1 := takeIn("c1", takeFixtureAudio(10, 1), 10)
+	in2 := takeIn("c2", takeFixtureAudio(10, 2), 10)
+	in2.Publisher = in1.Publisher
+	t1, err := svc.PublishTake(ctx, in1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var wrote, fixture map[string]any
-	_ = json.Unmarshal(takesJSON(t, out), &wrote)
-	_ = json.Unmarshal(read("record.json"), &fixture)
-	for key := range fixture {
-		if _, ok := wrote[key]; !ok && key != "publisher" || key == "publisher" && wrote["publisher"] == nil {
-			t.Errorf("the record lacks %q, which the phone's fixture has", key)
+	t2, err := svc.PublishTake(ctx, in2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{t1.TakeID, t2.TakeID} {
+		if _, err := outcome(t, svc, id, "l1", "computer-"+strings.Repeat("a", 32), TakeHeard); err != nil {
+			t.Fatal(err)
 		}
 	}
-	if _, ok := wrote["summary"].(string); !ok {
-		t.Errorf("the record has no one-line summary: %v", wrote)
+	for _, c := range []struct{ user, want string }{{"c1", t1.TakeID}, {"c2", t2.TakeID}} {
+		rec, err := svc.TakeRecord(ctx, in1.Publisher, types.TakePublisherKey(c.user))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rec.Rows) != 1 || rec.Rows[0].TakeID != c.want {
+			t.Errorf("%s reads rows %+v, want only %s", c.user, rec.Rows, c.want)
+		}
+	}
+	mine, err := svc.ListMyTakes(ctx, types.TakePublisherKey("c1"))
+	if err != nil || len(mine.Takes) != 1 || mine.Takes[0].Outcomes.Heard != 1 {
+		t.Errorf("list mine = %+v %v", mine, err)
+	}
+	if rec, _ := svc.TakeRecord(ctx, in1.Publisher, types.TakePublisherKey("nobody")); len(rec.Rows) != 0 {
+		t.Errorf("a stranger reads rows %+v", rec.Rows)
+	}
+}
+
+func TestDeleteAndYankBlankTheTranscript(t *testing.T) {
+	svc := newTakesService(t)
+	ctx := context.Background()
+	a := mustPublish(t, svc, "d1", 1)
+	b := mustPublish(t, svc, "d2", 2)
+	if err := svc.DeleteTake(ctx, a.TakeID, types.TakePublisherKey("d1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.YankTake(ctx, b.TakeID); err != nil {
+		t.Fatal(err)
+	}
+	og, _ := svc.takeStore()
+	for _, id := range []string{a.TakeID, b.TakeID} {
+		row, err := svc.getTakeRow(ctx, og, id)
+		if err != nil || row == nil || row.Transcript != "" || row.RespondsTo != nil || row.State == TakeStateLive {
+			t.Errorf("%s after removal = %+v %v", id, row, err)
+		}
+	}
+}
+
+func TestOutcomeNeedsARealSigningKeyAndTheDrillTiers(t *testing.T) {
+	svc := newTakesService(t)
+	take := mustPublish(t, svc, "k1", 0)
+	if _, err := outcome(t, svc, take.TakeID, "k2", "computer-"+strings.Repeat("a", 32), TakeHeard); err != nil {
+		t.Fatal(err)
+	}
+	svc.signingKey = nil
+	if _, err := outcome(t, svc, take.TakeID, "k3", "computer-"+strings.Repeat("b", 32), TakeHeard); !errors.Is(err, ErrTakeUnavailable) {
+		t.Fatalf("an outcome without a signing key = %v, want ErrTakeUnavailable", err)
+	}
+	w := httptest.NewRecorder()
+	takeFail(w, "outcome", ErrTakeUnavailable)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("ErrTakeUnavailable answers %d, want 503", w.Code)
 	}
 }

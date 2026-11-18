@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"regexp"
 	"sort"
@@ -53,9 +54,19 @@ const (
 	takeListDefaultLimit = 50
 	takeListMaxLimit     = 100
 	takeDurationSlack    = 2.0 // seconds the header may differ from the claim
-	takeScan             = 500
-	takeOutcomeScan      = 5000
-	takeRespondsMax      = 300
+	// The header's own length may sit a little outside the claim's 3 to 60 s:
+	// Apple's AAC encoder adds about 0.11 s of priming to the container (60.000 s
+	// of audio has an mvhd of 60.117 s) and a recorder stops a moment after its
+	// timer. An honest full-length take must never be refused for container
+	// padding or stop latency, so the header may be 2.5 to 62.0 s while the
+	// claim stays 3 to 60 and the claim-to-header slack stays 2 s.
+	TakeHeaderMinSeconds = 2.5
+	TakeHeaderMaxSeconds = 62.0
+	// takeScan bounds the rows one scan reads (live takes, one publisher's
+	// takes); a scan that reaches it is logged, never silent.
+	takeScan        = 2000
+	takeOutcomeScan = 5000
+	takeRespondsMax = 300
 
 	TakeStateLive    = "live"
 	TakeStateDeleted = "deleted"
@@ -72,6 +83,10 @@ var (
 	ErrTakeGone       = errors.New("take is deleted or yanked")
 	ErrTakeOwn        = errors.New("a publisher's own plays never count")
 	ErrTakeRemoved    = errors.New("this take was removed and is not published again")
+	// ErrTakeUnavailable is a correctness refusal: the service cannot tell
+	// who a listener is, or whether a computer is a drill computer, so it
+	// counts nothing rather than guess.
+	ErrTakeUnavailable = errors.New("takes cannot count this outcome right now")
 )
 
 var takeClaimIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/@-]{7,199}$`)
@@ -229,29 +244,40 @@ func takeID(publisherKey, sha string) string {
 
 func (s *Service) takeStore() (*ObjectGraphStore, error) { return s.podcastStore() }
 
-func (s *Service) takeListenerKey(computerID string) string {
-	var key []byte
-	if s != nil && s.signingKey != nil {
-		key = s.signingKey.Private
+// takeListenerKey is the opaque, stable key of a listener's computer: an HMAC
+// under the platform signing key. Without a real key there is no honest key to
+// give, so it refuses (never a hash under a constant).
+func (s *Service) takeListenerKey(computerID string) (string, error) {
+	if s == nil || s.signingKey == nil || len(s.signingKey.Private) == 0 {
+		return "", fmt.Errorf("%w: no signing key", ErrTakeUnavailable)
 	}
-	if len(key) == 0 {
-		key = []byte("choir-take-listener")
-	}
-	m := hmac.New(sha256.New, key)
+	m := hmac.New(sha256.New, s.signingKey.Private)
 	m.Write([]byte("take-listener:" + computerID))
-	return hex.EncodeToString(m.Sum(nil))
+	return hex.EncodeToString(m.Sum(nil)), nil
 }
 
 var (
-	takeTiersOnce sync.Once
-	takeTiers     computertiers.Tiers
+	takeTiersMu     sync.Mutex
+	takeTiers       computertiers.Tiers
+	takeTiersLoaded bool
 )
 
 // TakeDrillComputer reports whether a computer is a drill computer: a named
-// test computer or the operator proof computer (d@e).
-func TakeDrillComputer(computerID string) bool {
-	takeTiersOnce.Do(func() { takeTiers, _ = computertiers.Load() })
-	return takeTiers.TestComputer(computerID) || takeTiers.OperatorProofComputer(computerID)
+// test computer or the operator proof computer (d@e). When the tier file
+// cannot be read it returns an error (ErrTakeUnavailable) and the caller
+// refuses: a drill computer is never counted as a real one. A failed load is
+// not remembered.
+func TakeDrillComputer(computerID string) (bool, error) {
+	takeTiersMu.Lock()
+	defer takeTiersMu.Unlock()
+	if !takeTiersLoaded {
+		t, err := computertiers.Load()
+		if err != nil {
+			return false, fmt.Errorf("%w: computer tiers: %v", ErrTakeUnavailable, err)
+		}
+		takeTiers, takeTiersLoaded = t, true
+	}
+	return takeTiers.TestComputer(computerID) || takeTiers.OperatorProofComputer(computerID), nil
 }
 
 // takeAudioSeconds reads the length from the file's own header: the mvhd box
@@ -381,8 +407,8 @@ func (s *Service) PublishTake(ctx context.Context, in TakeIn) (*Take, error) {
 	if math.IsNaN(in.DurationSeconds) || math.IsInf(in.DurationSeconds, 0) || in.DurationSeconds < TakeMinSeconds || in.DurationSeconds > TakeMaxSeconds {
 		return nil, takeInvalid("duration_seconds must be %.0f to %.0f", TakeMinSeconds, TakeMaxSeconds)
 	}
-	if secs < TakeMinSeconds-0.5 || secs > TakeMaxSeconds+0.5 {
-		return nil, takeInvalid("the audio header says %.1f seconds, outside %.0f to %.0f", secs, TakeMinSeconds, TakeMaxSeconds)
+	if secs < TakeHeaderMinSeconds || secs > TakeHeaderMaxSeconds {
+		return nil, takeInvalid("the audio header says %.1f seconds, outside %.1f to %.1f", secs, TakeHeaderMinSeconds, TakeHeaderMaxSeconds)
 	}
 	if math.Abs(secs-in.DurationSeconds) > takeDurationSlack {
 		return nil, takeInvalid("duration_seconds %.1f does not match the audio header's %.1f", in.DurationSeconds, secs)
@@ -426,6 +452,9 @@ func (s *Service) PublishTake(ctx context.Context, in TakeIn) (*Take, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(mine) >= takeScan {
+		log.Printf("corpusd: takes: one publisher's takes reached the scan bound %d; the daily count may be low", takeScan)
+	}
 	cutoff := time.Now().UTC().Add(-24 * time.Hour)
 	recent := 0
 	for _, o := range mine {
@@ -459,10 +488,16 @@ func (s *Service) PublishTake(ctx context.Context, in TakeIn) (*Take, error) {
 	return &t, nil
 }
 
+// liveTakes reads the live takes by their state metadata, newest first, so
+// deleted and yanked rows never take a place in the window. The scan is bounded
+// by takeScan; reaching it is logged.
 func (s *Service) liveTakes(ctx context.Context, og *ObjectGraphStore) ([]takeRow, error) {
-	objs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindTake, Limit: takeScan})
+	objs, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.state", TakeStateLive, takeScan)
 	if err != nil {
 		return nil, err
+	}
+	if len(objs) >= takeScan {
+		log.Printf("corpusd: takes: the live-take scan reached its bound %d; older live takes are not listed", takeScan)
 	}
 	var out []takeRow
 	for _, o := range objs {
@@ -507,7 +542,7 @@ func (s *Service) ListTakes(ctx context.Context, limit int, includeDrill bool) (
 		t := r.public()
 		rec, ok := records[r.Publisher]
 		if !ok {
-			full, err := s.takeRecord(ctx, og, r.Publisher, false)
+			full, err := s.takeRecord(ctx, og, r.Publisher, "")
 			if err != nil {
 				return nil, err
 			}
@@ -546,7 +581,7 @@ func (s *Service) ListMyTakes(ctx context.Context, publisherKey string) (*TakesR
 	per := map[string]*TakeOutcomeCounts{}
 	if len(rows) > 0 {
 		// One publisher: one record read covers every take of theirs.
-		full, err := s.takeRecord(ctx, og, rows[0].Publisher, true)
+		full, err := s.takeRecord(ctx, og, rows[0].Publisher, publisherKey)
 		if err != nil {
 			return nil, err
 		}
@@ -612,6 +647,10 @@ func (s *Service) TakeAudio(ctx context.Context, id string) ([]byte, error) {
 
 func (s *Service) removeTake(ctx context.Context, og *ObjectGraphStore, row *takeRow, state string) error {
 	row.State = state
+	// What is not needed for counts goes with the take: the transcript and
+	// the story it answered. The row keeps its id, handle, times, size, hash
+	// and state; the outcome rows stay as counts.
+	row.Transcript, row.RespondsTo = "", nil
 	if err := s.putTakeRow(ctx, og, *row, time.Now().UTC()); err != nil {
 		return err
 	}
@@ -699,9 +738,16 @@ func (s *Service) RecordTakeOutcome(ctx context.Context, in TakeOutcomeIn) (stor
 	if row.PublisherKey == in.ListenerUserKey {
 		return false, ErrTakeOwn
 	}
-	lk := s.takeListenerKey(in.ListenerComputer)
+	lk, err := s.takeListenerKey(in.ListenerComputer)
+	if err != nil {
+		return false, err
+	}
+	listenerDrill, err := TakeDrillComputer(in.ListenerComputer)
+	if err != nil {
+		return false, err
+	}
 	out := takeOutcomeRow{TakeID: in.TakeID, Publisher: row.Publisher, ListenerKey: lk, Outcome: in.Outcome,
-		At: time.Now().UTC().Format(time.RFC3339), Drill: row.Drill || TakeDrillComputer(in.ListenerComputer), ClaimID: in.ClaimID}
+		At: time.Now().UTC().Format(time.RFC3339), Drill: row.Drill || listenerDrill, ClaimID: in.ClaimID}
 	obj, err := podcastObject(ogKindTakeOutcome, in.TakeID+"|"+lk, out, map[string]any{
 		"take_id": in.TakeID, "publisher": row.Publisher, "drill": out.Drill,
 	}, time.Now().UTC())
@@ -721,24 +767,32 @@ func (s *Service) TakeRecord(ctx context.Context, publisher, asPublisherKey stri
 	if err != nil {
 		return nil, err
 	}
-	withRows := false
-	if len(asPublisherKey) == 64 {
-		objs, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.publisher", publisher, takeScan)
+	return s.takeRecord(ctx, og, publisher, asPublisherKey)
+}
+
+// takeRecord computes a handle's record. Per-listener rows are returned only
+// when ownerKey (the caller's publisher key, empty for none) owns takes, and
+// then only the rows of takes that key published: a 24-bit handle collision
+// never widens the read.
+func (s *Service) takeRecord(ctx context.Context, og *ObjectGraphStore, publisher, ownerKey string) (*TakeRecord, error) {
+	var own map[string]bool
+	if len(ownerKey) == 64 {
+		mine, err := og.ListObjectsByMetadata(ctx, string(ogKindTake), "$.publisher_key", ownerKey, takeScan)
 		if err != nil {
 			return nil, err
 		}
-		for _, o := range objs {
+		if len(mine) >= takeScan {
+			log.Printf("corpusd: takes: one publisher's takes reached the scan bound %d; their record rows may be short", takeScan)
+		}
+		own = map[string]bool{}
+		for _, o := range mine {
 			var r takeRow
-			if json.Unmarshal(o.Body, &r) == nil && r.PublisherKey == asPublisherKey {
-				withRows = true
-				break
+			if json.Unmarshal(o.Body, &r) == nil && r.PublisherKey == ownerKey && r.Publisher == publisher {
+				own[r.TakeID] = true
 			}
 		}
 	}
-	return s.takeRecord(ctx, og, publisher, withRows)
-}
-
-func (s *Service) takeRecord(ctx context.Context, og *ObjectGraphStore, publisher string, withRows bool) (*TakeRecord, error) {
+	withRows := len(own) > 0
 	objs, err := og.ListObjectsByMetadata(ctx, string(ogKindTakeOutcome), "$.publisher", publisher, takeOutcomeScan)
 	if err != nil {
 		return nil, err
@@ -751,7 +805,7 @@ func (s *Service) takeRecord(ctx context.Context, og *ObjectGraphStore, publishe
 		if json.Unmarshal(o.Body, &r) != nil {
 			continue
 		}
-		if withRows {
+		if withRows && own[r.TakeID] {
 			rows = append(rows, TakeOutcomeView{TakeID: r.TakeID, ListenerKey: r.ListenerKey, Outcome: r.Outcome, At: r.At, Drill: r.Drill})
 		}
 		if r.Drill {
