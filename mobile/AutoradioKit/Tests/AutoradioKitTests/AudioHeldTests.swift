@@ -223,4 +223,51 @@ final class AudioHeldTests: XCTestCase {
         XCTAssertFalse(ok)
         XCTAssertEqual(o.releases, 0, "a podcast is not cut by a deactivation")
     }
+
+    func testAReclaimDuringATakeReleasesNothing() async throws {
+        let (c, o, a, _) = rig { _ in }
+        try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
+        try await c.setRecordingTake(true)
+        XCTAssertEqual(c.current, .listening)
+        a.driveForTest = { _, _ in throw Boom() }
+        a.interrupted()
+        let releases = o.releases
+        let ok = await c.ensureReady(reason: "play")
+        XCTAssertFalse(ok)
+        XCTAssertEqual(o.releases, releases, "the session is not deactivated under the recorder")
+    }
+
+    func testAFailedSwitchToListeningRefusesTheTakeAndTheRadioIsAsItWas() async throws {
+        let (c, _, a, _) = rig { _ in }
+        try await c.claim(.playing, preferBuiltInMic: false, reason: "start")
+        a.driveForTest = { _, mic in if mic { throw Boom() } }       // the capture session's engine will not start
+        do { try await c.setRecordingTake(true); XCTFail("the take must not start") } catch {}
+        XCTAssertFalse(c.isRecordingTake)
+        XCTAssertEqual(c.current, .playing)
+        XCTAssertTrue(a.running, "the radio's engine is back")
+    }
+
+    @MainActor func testPlayWhileHeldRetriesAndDoesNotPause() async {
+        let old = RunSheetPlayer.sessionRetryDelays; defer { RunSheetPlayer.sessionRetryDelays = old }
+        RunSheetPlayer.sessionRetryDelays = [3600]
+        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
+        var ready = false
+        p.sessionReady = { _ in ready ? nil : "the audio session could not be taken" }
+        XCTAssertFalse(p.playPressed(), "nothing held: an ordinary press")
+        p.playNow(RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 5)); await p.settle()
+        XCTAssertTrue(p.isWaitingForSession)                          // a hold at the start
+        ready = true
+        XCTAssertTrue(p.playPressed(), "a retry only")
+        _ = await poll { e.log.contains("speak:a") }
+        XCTAssertTrue(e.log.contains("speak:a"))
+        XCTAssertFalse(p.isWaitingForSession)
+        ready = false
+        p.engineLost(documentID: "rs:a")                              // a hold in the middle
+        _ = await poll { p.isWaitingForSession }
+        ready = true
+        XCTAssertTrue(p.playPressed(), "a retry only")
+        _ = await poll { e.log.contains("resumeSpoken") }
+        XCTAssertTrue(e.log.contains("resumeSpoken"))
+        XCTAssertFalse(p.playPressed(), "no longer held: an ordinary press")
+    }
 }

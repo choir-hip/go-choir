@@ -453,7 +453,8 @@ public final class ChoirApp: @unchecked Sendable {
     /// Play/pause from the big button: starts the audio engine on first use.
     public func playPause() async {
         LaunchTimings.shared.mark("play")
-        await MainActor.run { self.continuity?.readerTapped(); RunSheetPlayer.shared.sessionMayBeBack() }       // Try again, when the session was the trouble
+        // Try again, when the session was the trouble: that press is a retry and nothing else (the bar says paused while an entry is held).
+        if await MainActor.run(body: { self.continuity?.readerTapped(); return RunSheetPlayer.shared.playPressed() }) { onChange?(); return }
         if await MainActor.run(body: { () -> Bool in
             let p = RunSheetPlayer.shared
             guard p.isRemote else { return false }

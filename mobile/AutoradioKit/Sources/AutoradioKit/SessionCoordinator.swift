@@ -119,13 +119,23 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     }
     private var _backgrounded = false, _interrupted = false
     private var _recordingTake = false
+    /// The last switch brought the engine up (or there was none to bring).
+    private var _engineOK = true
     /// A take is being recorded or reviewed: the session is the capture one (full-quality playback, no voice processing) until it is over.
     public var isRecordingTake: Bool { lock.lock(); defer { lock.unlock() }; return _recordingTake }
     /// Take the capture session for a take (`true`) or go back to what voice says (`false`). Throws when the session could not be taken.
     public func setRecordingTake(_ on: Bool) async throws {
         lock.lock(); _recordingTake = on; let has = _current != nil; lock.unlock()
         if has { await reapply() } else if on { try await claim(.listening, preferBuiltInMic: false, reason: "take") }
-        if on, current != .listening { throw LabError.unavailable(lastFailure.isEmpty ? "the microphone could not be taken" : lastFailure) }
+        lock.lock(); let engineOK = _engineOK; lock.unlock()
+        if on, current != .listening || !engineOK {
+            // The take must not start on a session that is not ready: the radio goes back to what it was.
+            let why = engineOK ? (lastFailure.isEmpty ? "the microphone could not be taken" : lastFailure) : "the audio engine did not start"
+            lock.lock(); _recordingTake = false; lock.unlock()
+            if current != nil { await reapply() }
+            print("AUTORADIO take refused: \(why)")
+            throw LabError.unavailable(why)
+        }
     }
     public var isBackgrounded: Bool { lock.lock(); defer { lock.unlock() }; return _backgrounded }
     /// Another app has the session (an interruption began and has not ended): nothing here asks for it back except a foreground, an
@@ -179,7 +189,9 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         log.emit(.audioNotice(kind: "session", detail: "reclaim \(state.rawValue) (\(reason); \(why)); was \(inner.describe())"))
         touched()
         // A claim already held in this state is asserted again, not given up: deactivating a session that audio is still running through
-        // (a podcast, the engine) is refused as busy, and from the background the claim after it is refused too. Nothing is released.
+        // (a podcast, the engine) is refused as busy, and from the background the claim after it is refused too. Nothing is released here;
+        // below, when asserting it again did not bring the engine back, the claim is given up only if no take is being recorded and no remote
+        // audio is playing.
         if inner.holds(state) {
             do { try await inner.reassert() }
             catch {
@@ -207,8 +219,8 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
                 return true
             }
             // A podcast through AVPlayer is playing: giving the claim up would be refused as busy or would cut it. The engine was already made anew.
-            if remoteAudioActive?() == true {
-                print("AUTORADIO session reassert left the engine down; remote audio is playing, the claim is not given up")
+            if remoteAudioActive?() == true || isRecordingTake {
+                print("AUTORADIO session reassert left the engine down; \(isRecordingTake ? "a take is being recorded" : "remote audio is playing"), the claim is not given up")
                 onChange?()
                 return false
             }
@@ -258,8 +270,9 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         lock.lock(); _current = state; _suspect = false; lock.unlock()
         // A change of category moves the hardware format and the route: the engine's graph is built again, not started again.
         let buildsBefore = audio.engineBuilds
+        lock.lock(); _engineOK = true; lock.unlock()
         do { try audio.resume(voiceProcessing: state == .talking, mic: state != .playing, fresh: from != nil) }
-        catch { LiveAudio.printFault("engine did not start after the switch to \(state.rawValue)", error); log.emit(.error(stage: "audio-engine", message: "engine did not start after the switch to \(state.rawValue): \(error)")) }
+        catch { lock.lock(); _engineOK = false; lock.unlock(); LiveAudio.printFault("engine did not start after the switch to \(state.rawValue)", error); log.emit(.error(stage: "audio-engine", message: "engine did not start after the switch to \(state.rawValue): \(error)")) }
         print("AUTORADIO category change \(from?.rawValue ?? "none") -> \(state.rawValue) rate_before=\(rateBefore) rate_after=\(audio.outputRate()) engine_rebuilt=\(audio.engineBuilds > buildsBefore)")
         let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
         let d = inner.describe()

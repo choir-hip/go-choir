@@ -462,6 +462,13 @@ extension PlaybackEngine {
     private var retryTask: Task<Void, Never>?
     /// The entry on air is waiting for the audio session.
     public var isWaitingForSession: Bool { sessionHeldFor != nil }
+    /// The big Play button was pressed. The held entry is retried at once. True when the press was only that: while an entry is held for the
+    /// session (at its start or in the middle) the bar says paused, so the press means Play, and it must never be taken for a pause.
+    public func playPressed() -> Bool {
+        let held = isWaitingForSession
+        sessionMayBeBack()
+        return held
+    }
     /// The app is back in front, an interruption ended, a route came back, or the listener tapped Play: try the held entry now.
     public func sessionMayBeBack() {
         guard let id = sessionHeldFor, playingId == id, let e = store.entry(id) else { return }

@@ -78,7 +78,7 @@ public final class LiveAudio: @unchecked Sendable {
         lock.lock(); voiceLines = max(0, voiceLines - 1); let last = voiceLines == 0; let held = heldForVoice; if last { heldForVoice = false }; lock.unlock()
         if last { onVoiceHold?(false) }
         guard last, held, wantPlaying else { return }
-        if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false }
+        if virtual { virtualPaused = false } else { engineGate.lock(); if running { programmeNode.play(); nodeStopped = false }; engineGate.unlock() }
         print("AUTORADIO resume programme reason=voice line ended")
     }
     private var micPermitted = false
@@ -234,6 +234,9 @@ public final class LiveAudio: @unchecked Sendable {
     /// A new engine and nodes, wired as the old ones were. The caller starts it. Notifications of the old engine are dropped.
     private func replaceEngine() {
         if let o = observer { NotificationCenter.default.removeObserver(o); observer = nil }
+        // Whoever waits on the old nodes carries on from the playhead (a changed generation), never "played through".
+        lock.lock(); generation += 1; lock.unlock()
+        releaseWaiters()
         let old = engine
         if old.isRunning { old.stop() }
         engine = AVAudioEngine(); programmeNode = AVAudioPlayerNode(); voiceNode = AVAudioPlayerNode(); timePitch = AVAudioUnitTimePitch()
@@ -404,7 +407,7 @@ public final class LiveAudio: @unchecked Sendable {
     public func programmePlay() {
         wantPlaying = true
         if voiceIsSpeaking { lock.lock(); heldForVoice = true; lock.unlock(); return }      // the voice line has the output; the programme goes on after it
-        if virtual { virtualPaused = false } else if running { programmeNode.play(); nodeStopped = false }
+        if virtual { virtualPaused = false } else { engineGate.lock(); if running { programmeNode.play(); nodeStopped = false }; engineGate.unlock() }
     }
     public func programmePause() { wantPlaying = false; if virtual { virtualPaused = true } else if running { programmeNode.pause() } }
     public func programmeStop() { wantPlaying = false; if virtual { virtualPaused = true } else { programmeNode.stop(); nodeStopped = true; releaseWaiters() } }
@@ -537,7 +540,9 @@ public final class LiveAudio: @unchecked Sendable {
                 await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
                     once.arm(c)
                     programmeNode.scheduleBuffer(ob, completionCallbackType: .dataPlayedBack) { _ in once.resume(()) }
-                    if wantPlaying, !voiceIsSpeaking, !programmeNode.isPlaying { programmeNode.play(); nodeStopped = false }
+                    engineGate.lock()
+                    if running, wantPlaying, !voiceIsSpeaking, !programmeNode.isPlaying { programmeNode.play(); nodeStopped = false }
+                    engineGate.unlock()
                 }
             } onCancel: { once.resume(()) }
             waiters.write { $0[wid] = nil }
