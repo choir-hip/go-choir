@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The landing script and CI must run the same gates, or say why not.
 
-scripts/gates (run by scripts/land before a push) is a hand-kept copy of the
+scripts/gates (run by the land script before a push) is a hand-kept copy of the
 gate steps in .github/workflows/ci.yml. Three times in a week a CI gate it did
 not run refused a landing after the push
 (docs/problems/podcast-clips-landed-and-was-backed-out-ci-jev-entry-gate-2026-11-16.md).
@@ -10,16 +10,16 @@ This check compares them, in both directions.
 Forward: EVERY job's `run:` steps are scanned (no job is excluded; a build job
 that gains `scripts/check-x` is seen). Each repo program a step invokes
 (scripts/..., frontend/scripts/..., .github/scripts/..., `go run ./cmd/...`)
-must be run by scripts/gates or by scripts/land, or be exempted by name in
+must be run by scripts/gates or by the land script, or be exempted by name in
 scripts/gates-ci-exemptions.txt with a reason. `go build`, `go vet` and
 `go test` are not repo programs and need nothing.
 
 Converse: every executable scripts/check-*, scripts/selftest-*,
-scripts/test-* and .github/scripts/*-test must be run by CI, by scripts/gates or by scripts/land,
+scripts/test-* and .github/scripts/*-test must be run by CI, by scripts/gates or by the land script,
 or be exempted by name with a reason (an orphan guard is a gate nothing runs:
 docs/problems/store-schema-floor-guard-is-not-run-2026-11-15.md).
 
-What scripts/land runs, it runs only under a condition (`.github/scripts/*-test`
+What the land script runs, it runs only under a condition (`.github/scripts/*-test`
 on a .github/ change, the shard runners when agentcore and textureowner both
 change). The checker cannot read those conditions reliably, so each such
 program or glob needs a `land-conditional <key> <condition>` line, which
@@ -28,7 +28,7 @@ run, fails.
 
 An exemption fails when it is stale (the program is neither run by a CI job
 nor an existing orphan candidate), when it has no reason, or when
-scripts/gates or scripts/land runs the program. Exemption keys: a program
+scripts/gates or the land script runs the program. Exemption keys: a program
 path, `./cmd/x`, `job:<id>` (a job that `uses:` a reusable workflow and has no
 steps) and `./.github/actions/x` (a local action step).
 
@@ -37,7 +37,7 @@ newlines outside quotes, ; & && || | and $( ), skip comments, heredoc bodies,
 and the wrappers `run if then else do ! time timeout N env VAR=x bash sh
 python3 node` with their flags, `go run`; the next word, with a leading ./,
 $VAR/ or "$var"/ removed, is the program. A path that is only an argument, an
-assignment, an echo or a comment is not invoked. In scripts/land the
+assignment, an echo or a comment is not invoked. In the land script the
 payload of an `echo` is scanned too (it writes the runner), and a
 `for x in .github/scripts/*-test` line covers the programs its glob matches.
 
@@ -478,7 +478,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--workflow", default=os.path.join(root, ".github/workflows/ci.yml"))
     ap.add_argument("--gates", default=os.path.join(root, "scripts/gates"))
-    ap.add_argument("--land", default=os.path.join(root, "scripts/land"))
+    ap.add_argument("--land", default=os.path.join(root, "scripts", "land"))
     ap.add_argument("--exemptions", default=os.path.join(root, "scripts/gates-ci-exemptions.txt"))
     ap.add_argument("--root", default=root)
     a = ap.parse_args()
@@ -499,7 +499,7 @@ def main():
     exempt, exempt_land, e2 = parse_exemptions(ex_text)
     errs += e2
     covering, globs, by_file = set(), [], {}
-    for label, text, strict, echo in (("scripts/gates", gates_text, True, False), ("scripts/land", land_text, False, True)):
+    for label, text, strict, echo in (("scripts/gates", gates_text, True, False), ("the land script", land_text, False, True)):
         try:
             p, g = scan(text, strict=strict, echo_payload=echo)
             by_file[label] = ({normalise(x, a.root) for x in p}, set(g))
@@ -510,15 +510,15 @@ def main():
         globs += g
 
     gates_progs = by_file["scripts/gates"][0]
-    land_items = (by_file["scripts/land"][0] | by_file["scripts/land"][1]) - gates_progs
+    land_items = (by_file["the land script"][0] | by_file["the land script"][1]) - gates_progs
     for item in sorted(land_items):
         if item not in exempt_land:
-            errs.append("%s is run only by scripts/land, and only under a condition: add `land-conditional %s <the condition, read from scripts/land>` to scripts/gates-ci-exemptions.txt (conditional in scripts/land)" % (item, item))
+            errs.append("%s is run only by the land script, and only under a condition: add `land-conditional %s <the condition, read from the land script>` to scripts/gates-ci-exemptions.txt (conditional in the land script)" % (item, item))
     for key in sorted(exempt_land):
         if key in gates_progs:
             errs.append("land-conditional %s: scripts/gates runs it (delete the exemption)" % key)
         elif key not in land_items:
-            errs.append("land-conditional %s: stale (scripts/land does not run it)" % key)
+            errs.append("land-conditional %s: stale (the land script does not run it)" % key)
 
     def covered(p):
         return p in covering or any(fnmatch.fnmatch(p, g) for g in globs)
@@ -544,19 +544,19 @@ def main():
             if p not in exempt:
                 errs.append("job %s, step \"%s\": %s (a reusable workflow or local action) is not in scripts/gates-ci-exemptions.txt" % (job, step, p))
         elif covered(p) and p in exempt:
-            errs.append("%s: exempted, but scripts/gates or scripts/land runs it (delete the exemption)" % p)
+            errs.append("%s: exempted, but scripts/gates or the land script runs it (delete the exemption)" % p)
         elif not covered(p) and p not in exempt:
-            errs.append("job %s, step \"%s\": %s is run by CI but not by scripts/gates or scripts/land, and is not in scripts/gates-ci-exemptions.txt" % (job, step, p))
+            errs.append("job %s, step \"%s\": %s is run by CI but not by scripts/gates or the land script, and is not in scripts/gates-ci-exemptions.txt" % (job, step, p))
     for c in orphans:
         if c in needed or covered(c):
             continue
         if c not in exempt:
-            errs.append("%s is not run by CI, scripts/gates or scripts/land, and is not in scripts/gates-ci-exemptions.txt (an orphan guard)" % c)
+            errs.append("%s is not run by CI, scripts/gates or the land script, and is not in scripts/gates-ci-exemptions.txt (an orphan guard)" % c)
         # an exempt orphan is checked below
     for p in sorted(exempt):
         if p in needed or p in orphans:
             if p not in needed and covered(p):
-                errs.append("%s: exempted, but scripts/gates or scripts/land runs it (delete the exemption)" % p)
+                errs.append("%s: exempted, but scripts/gates or the land script runs it (delete the exemption)" % p)
             continue
         errs.append("%s: stale exemption (no CI job runs it and it is not an existing orphan check; delete it)" % p)
     if errs:
@@ -565,7 +565,7 @@ def main():
         return 1
     print("check-gates-cover-ci: ok (%d jobs, %d programs, %d exempt)" % (len(jobs), len(needed), len(exempt)))
     for key in sorted(exempt_land):
-        print("  conditional in scripts/land: %s: %s" % (key, exempt_land[key]))
+        print("  conditional in the land script: %s: %s" % (key, exempt_land[key]))
     return 0
 
 

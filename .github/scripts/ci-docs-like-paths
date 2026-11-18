@@ -56,6 +56,12 @@ ci_deploy_script_path() {
     scripts/chaos/*.md) return 1 ;; # the README stays docs, whatever else the line below says
     scripts/chaos/*) return 0 ;;    # the drill scripts (already the Go lane through ci_go_script_path)
     scripts/snapshot-vault*|scripts/choir-shot*|scripts/mail-resend-setup) return 0 ;;
+    # CI's Vocabulary Gates runs check-gates-cover-ci, which reads scripts/gates
+    # (CI's step comment names it) and the exemption file: a change to either
+    # changes what a CI step checks. scripts/land stays a developer script.
+    scripts/gates|scripts/gates-ci-exemptions.txt) return 0 ;;
+    # Run by scripts/test-status-scripts.sh, which scripts/gates runs.
+    scripts/status-hourly|scripts/status-paper-usage|scripts/status-storage) return 0 ;;
     # CI runs it (the boot prune's ordering test).
     scripts/updater-prune-unit-nix-test.sh) return 0 ;;
     # Read by a gate CI runs (check-jev-entry).
