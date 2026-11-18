@@ -108,6 +108,7 @@ func (h *Handler) ringGate(own *VMOwnership, target string) string {
 // PrimeRingWalk reads the release and fills the ring cache before the first
 // boot (cmd/vmctl calls it before reattach).
 func (h *Handler) PrimeRingWalk() {
+	h.adoptCurrentRelease()
 	h.syncRingWalk()
 	obs := h.ringObservations(context.Background(), false)
 	r := h.ringWalkRunner()
@@ -240,6 +241,9 @@ func httpRingHealth(ctx context.Context, own VMOwnership) ringHealth {
 // follows performs the refreshes.
 func (h *Handler) TickRingWalk(ctx context.Context) {
 	if _, ok := h.registry.VMManagerHandle().(guestReleaseReader); !ok {
+		return
+	}
+	if h.standDownForReplacement() {
 		return
 	}
 	h.syncRingWalk()
