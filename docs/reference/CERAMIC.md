@@ -85,6 +85,41 @@ Node B (placed 2026-11-18 with
 The provider, its place in the routing order and its measured behaviour are
 written here by the change that adds it.
 
+## Measured, 2026-11-18 (18 live calls with the owner's key, from the lead's Mac)
+
+**The index does not hold recent news.** This decides how it can be used.
+
+| Query (an event and its date) | Results | Newest date found in the results' text |
+|---|---|---|
+| a college coach fired on 17 November 2026 | 20 | December 2024; the top results are his salary and his hiring |
+| the 2026 midterm results (3 November 2026) | 20 | May 2026; the top three are school papers on the 2022 midterms |
+| the 2026 World Series (late October 2026) | 20 | August 2026 |
+
+Every query returned a full page of results, so a caller that counts
+results cannot tell a stale answer from a good one. Results lean to small
+sites; none of the three news queries returned a wire service or a national
+paper in its top three.
+
+Other answers to the list below:
+
+- A French and a Spanish query (accented, Latin script) each returned 200
+  with zero results. A Cyrillic query returned 500 `internal_error`.
+- `site:apnews.com` with four more words returned zero results.
+- 51 words: 422 `invalid_parameter`, "Must contain between 1 and 50
+  space-delimited words". Not trimmed for us.
+- A slash and a number with a comma were accepted (200, results).
+- `maxResults: 40` was accepted and returned 40, though the documents say
+  20 is the most.
+- Speed: 0.1 to 0.26 s end to end.
+- No response header reports credits or limits.
+
+**Consequence.** Ceramic must not answer first for a desk that researches
+the day's news: it would hand back twenty stale pages and nothing would
+escalate. The provider built in `lane/search-ceramic` (Ceramic first,
+Keenable on a short answer) is not landed. Ceramic remains usable for
+questions about things at least some months old, if a caller can say that
+is what it is asking.
+
 ## Not known
 
 - What a credit is: one per request is assumed, not stated.
@@ -93,5 +128,4 @@ written here by the change that adds it.
   is a body field or a header (the OpenAPI file has neither).
 - What happens to a query over 50 words or with an unsupported character:
   an error, or a silent trim.
-- How fresh the index is. Autopaper searches for news of the day; this
-  matters more than anything else in this list and must be measured first.
+- What a credit is and whether an empty answer is charged (still not known).

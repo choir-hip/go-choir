@@ -101,12 +101,23 @@ question whose answers it already holds.
   pages cannot be told: the logs do not say which run a search belongs to
   or which pages were read.
 
+## Ceramic measured before landing: it cannot carry the paper (2026-11-18)
+
+Live calls ([reference](../reference/CERAMIC.md), "Measured") show Ceramic's
+index holds no recent news: for three events of the last three weeks the
+newest page it returned was months to two years old, and it always returned
+a full page. Routed first, it would have replaced fresh results with stale
+ones and the short-answer escalation to Keenable would never have fired.
+The provider is built and reviewed-ready in `lane/search-ceramic` and is
+**not landed**; claim C128 is void. Supply is therefore unchanged: Keenable
+alone, about 15,000 credits, about a day and a half at today's rate. What
+moves the date now is demand (lane `search-reuse`) and whatever the owner
+chooses to buy.
+
 ## What is being done
 
-- Ceramic becomes the provider every search starts with; Keenable joins only
-  when Ceramic's answer is short, under a daily cap sized so the remaining
-  credits last to December 5 (an owner-set spending cap). Lane
-  `search-ceramic`, claim C128.
+- (Withdrawn, see above.) Ceramic first, Keenable on a short answer under a
+  daily cap. Lane `search-ceramic`, claim C128 void.
 - Lane `search-reuse`, claim C129: the search log line carries the run and
   desk; results say which pages are new and which are held; a query that
   only reorders an earlier one is answered from held results; one call
