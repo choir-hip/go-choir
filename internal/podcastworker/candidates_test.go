@@ -7,7 +7,7 @@ package podcastworker
 //       episode with no transcript, from one published days before the story,
 //       or for an opinion piece;
 //   H2. two passages of one episode are offered for one story;
-//   H3. a clip is outside 20 to 75 s or off the segment boundaries, or its
+//   H3. a clip is outside 24 to 75 s or off the segment boundaries, or its
 //       quote is not words of its passage;
 //   H4. put-clips sends a candidate nobody judged, or one with support over 1;
 //   H5. one refused clip costs the others their request;

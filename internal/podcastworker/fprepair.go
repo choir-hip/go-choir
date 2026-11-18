@@ -136,6 +136,12 @@ func (r *Repairer) Run(ctx context.Context) (RepairReport, error) {
 				rep.Skipped++
 				continue
 			}
+			if h.End-h.Start < 2*podcastfp.ClipFrames/podcastfp.FPS {
+				// Too short to carry a fingerprint: valid, left as it is, never retried.
+				r.skipUntil[h.ClipID] = r.now().Add(100 * 365 * 24 * time.Hour)
+				rep.Skipped++
+				continue
+			}
 			todo = append(todo, h)
 		}
 	}

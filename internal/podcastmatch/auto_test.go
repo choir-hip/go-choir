@@ -8,7 +8,7 @@ package podcastmatch
 //       (the margin rule);
 //   M3. the right event discussed in an episode days before or after the story
 //       is accepted (the time rule);
-//   M4. a clip starts or ends mid-sentence, or is outside 20 to 75 seconds;
+//   M4. a clip starts or ends mid-sentence, or is outside 24 to 75 seconds;
 //   M5. a story with no distinctive term (no name, number or rare word) takes a
 //       clip;
 //   M6. two stories that are one event refuse each other (the margin rule must

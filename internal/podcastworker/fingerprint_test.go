@@ -411,3 +411,15 @@ func TestMatcherRetriesAClipWithoutItsFingerprintWhenThePlatformRefusesTheField(
 		t.Fatal("a refused clip counted as written")
 	}
 }
+
+func TestRepairSkipsAClipUnder24SecondsAndDeletesNothing(t *testing.T) {
+	f := newFakeRepair()
+	f.held = f.held[:1]
+	f.held[0].End = f.held[0].Start + 21
+	var logs []string
+	r := newRepairer(f, &logs)
+	rep, err := r.Run(context.Background())
+	if err != nil || f.windows != 0 || len(f.deleted) != 0 || len(f.puts) != 0 || rep.Skipped != 1 {
+		t.Fatalf("%+v %v downloads %d deleted %v puts %v", rep, err, f.windows, f.deleted, f.puts)
+	}
+}
