@@ -253,3 +253,59 @@ the stretch start record carries the input receipt (`notebook_revision_id`,
 notebook rows the model was shown, never the text). Station L5's claim tags gain
 `line:<ref>` (within 64 bytes). Full rules, grammar, bounds, grants and routes:
 [AUTORADIO-NOTEBOOK.md](AUTORADIO-NOTEBOOK.md).
+
+## What the listener heard, in the input (2026-11-18, lane `heard-memory`)
+
+Problem record: [autoradio-repeats-what-the-listener-already-heard-2026-11-18](../problems/autoradio-repeats-what-the-listener-already-heard-2026-11-18.md).
+Code: `agentcore/api_autoradio_heard.go`. Built in the lane, not landed or
+deployed; no phone change (the new fields are optional).
+
+**Heard means one thing**: a forecast of the Autoradio desk (kind story, update
+or headlines) whose governing rule settlement (rule `autoradio_heard`, outcome
+true, an `air:` evidence ref) exists. Only the run sheet's op path writes it,
+from the phone's `finished` outcome. A segment record alone, `skipped`/`cut`,
+`left`/`failed` (no-verdict records), a settlement by another method and
+anything in the DJ's own output are not heard. The index is derived per call
+from the listener's own records; it is the computer's, so every device of the
+listener gets the same marks. Its day is the UTC date of the settlement time
+(the op's own `ended.at`, not the time the server got it).
+
+**Reads per programme call.** Before: the scorecard (every Autoradio claim with
+its settlements; only when the notebook is bound and the cause is not `open`),
+then one record read per marked case (up to 40). After: the scorecard once, on
+every request including `open`, shared by the notebook's counts and cases and
+the heard index; one list of the segment records (at most 5,000, as the notes
+list is bounded), from which the notebook's case titles are taken too. The
+per-case reads remain only for a case whose segment is past that list.
+
+**What the DJ is shown.** In the candidates section, a `heard:` line under every
+`ref:` line: `heard: never`; `heard: at this version (v<n>) on <day>. Said
+then: <words>`; or `heard: at an earlier version (v<n>, now v<m>) on <day>.
+Said then: <words>`. A route is matched by route, the version from the `@v` in
+the cite: the same version, or a later whole-number one, is "this version". A
+fenced `heard` section (before the candidates, only when it has rows) lists
+`recent: <day> | <title> | <words>` for stories heard in the last 14 days whose
+route is not among the candidates, newest first, one row per route.
+
+**Bounds, and why.** These keep the context small; they are not a quota on
+calls (there is still one model call). Words of a matched candidate: 600
+characters, cut at a sentence end. Recent list: 14 days, 12 rows, title 100
+characters, words 160 characters. The words of a matched candidate follow the
+same 14 days; older than that the candidate is still marked heard with its day
+and version and the line says the words are no longer kept. The key lives as
+long as the segment and settlement records do. With 500 heard segments the
+section stays at most 40 x 600 + 12 x 400 characters. Both reads are bounded
+by the 5,000 segment list and the scorecard's own record cap; past them a
+heard story is not marked (named residual).
+
+**The DJ's choice.** The prompt gains one paragraph, "What the listener already
+heard": leave out a candidate heard at this version with nothing new; for one
+with something new, a short follow-up that opens by connecting to what they
+heard and says only what is new, with `"telling":"followup"` on its line;
+otherwise a full telling; never tell a heard story again as if new. No second
+call, retry or pass. The line's `telling` is optional (missing or anything
+else is `full`); each forecast claim gains the tag `telling:full` or
+`telling:followup`, and the learning route's rows show it.
+
+**Log.** One line per call: `autoradio heard: stretch= request= candidates=
+never= same= earlier= recent= followups=`, counts only.
