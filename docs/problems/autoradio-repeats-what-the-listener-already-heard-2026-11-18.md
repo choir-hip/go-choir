@@ -57,3 +57,60 @@ skip it when nothing is.
 - "Substantively new" needs a test the DJ can apply without a second model
   call: a newer version of the same publication with its changes, or a
   different publication whose sources and facts mostly match one heard.
+
+## Investigation (2026-11-18, read-only, code on main and `lane/learn-notebook`)
+
+- **Candidates are chosen on the phone from the front page.** The phone
+  fetches the front (60 rows), orders by the paper's weight and offers up to
+  40 (`RadioProgramme.swift:456`, `StretchCandidates.swift:68-89`). The
+  listener's history does not enter.
+- **The only exclusion is by route, from the live run sheet.**
+  `toldRoutes()` reads the entries now on the sheet
+  (`RunSheetFeed.swift:175-184`), which keeps the last 50 ended entries. On
+  the first request after the app opens the exclusion set is empty
+  (`RunSheetFeed.swift:214`), and when every story was told the whole list
+  is offered again (`RadioProgramme.swift:461-462`). So each morning
+  everything heard the day before is a candidate again.
+- **The DJ is told nothing about what was heard.** The programme input is
+  the listener's turns, notes and lessons plus the phone's candidates
+  (`api_autoradio_programme_input.go:82-131`,
+  `api_autoradio_programme.go:178-189`).
+- **The record already exists on the listener's computer.** Each segment the
+  DJ writes is kept with its spoken text, title and cites as
+  `pub:<route>@v<version>` (`api_autoradio_programme_records.go:130-149`);
+  its forecast is settled true only by the phone's `finished` outcome
+  (`api_autoradio_settle.go:9-15,169-182`). The learning route already joins
+  them. The programme route never reads them.
+- **Nothing links two publications on one event**: the front row has no
+  event or cluster id and only a count of sources.
+- All three causes in "Belief" are possible in the code. Which one the owner
+  heard is settled by reading the owner's segment and settlement records
+  (same route and version; same route, higher version; different route).
+
+## Design: the DJ is told what the listener heard (first slice)
+
+No new store, no new route, no second model call, no switch, nothing new in
+Swift. The fix is on the listener's computer.
+
+1. **A heard index, derived per programme call** from the Autoradio desk's
+   own records: segments whose forecast the phone settled as heard, with the
+   day, the title, the publication refs and what was said. Skipped, cut,
+   left and failed entries are not heard.
+2. **Each candidate is marked** in the DJ's input: never heard; heard at
+   this version on a day, with what was said; heard at an earlier version,
+   with what was said then. The DJ sees the candidate as it stands now
+   beside what the listener was told, so it judges what is new in the call
+   it already makes.
+3. **Recently heard stories are listed** (day, title, a short line of what
+   was said) so the DJ can recognise a different publication on an event
+   already told. This is the weak part until Autopaper links stories by
+   event; it rides the same call.
+4. **The DJ chooses and the choice is recorded**: leave it out, a short
+   follow-up that says what is new, or a full telling. The choice is a tag
+   on the entry's forecast, so the phone's outcomes settle whether
+   follow-ups are heard through more than repeats.
+5. What is kept: the key (route, highest version heard, last day) for as
+   long as the records are; the text handed to the DJ is bounded to recent
+   days.
+
+Lane `heard-memory`, on top of the notebook. Class red (forecast records).
