@@ -67,3 +67,31 @@ func TestHasRealWord(t *testing.T) {
 		}
 	}
 }
+
+// Search-reuse commit 3. Covers decides whether a later wording of one
+// question asks nothing an earlier wording did not. Failure list, written
+// before the code: a wording with a word the earlier lacks is dropped (it
+// asks more); a wording that drops the earlier's site: or - restriction is
+// dropped (it asks a broader question); a reworded duplicate is sent.
+func TestCovers(t *testing.T) {
+	cases := []struct {
+		earlier, later string
+		want           bool
+	}{
+		{"harbor strike mauritius union", "harbor strike", true},
+		{"harbor strike", "strike harbor", true},
+		{`"harbor strike"`, "harbor strike 2026", true},
+		{"harbor strike", "harbor strike mauritius", false},
+		{"harbor site:a.example", "harbor", false},
+		{"harbor", "harbor site:a.example", false},
+		{"harbor site:a.example", "site:a.example", true},
+		{"harbor strike -union", "harbor strike", false},
+		{"harbor strike", "port workers walkout", false},
+		{"", "harbor", false},
+	}
+	for _, c := range cases {
+		if got := Covers(c.earlier, c.later); got != c.want {
+			t.Errorf("Covers(%q, %q) = %v, want %v", c.earlier, c.later, got, c.want)
+		}
+	}
+}

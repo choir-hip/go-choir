@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""status-paper-search-quality: how many stories the paper published on a UTC
+day, and how many distinct cited source URLs a story carries on average.
+
+Read only. It reads the paper's public front list (no key), newest first:
+
+  GET https://choir.news/api/platform/publications/front?limit=100[&cursor=..]
+
+Each row carries updated_at and source_count, the distinct cited sources of
+the story's latest version, counted as the reader's "Sources N" counts them
+(internal/platform/publication_front.go FrontStory). It makes at most one
+request every 2 seconds and at most 60 a run, and prints two numbers.
+
+  status-paper-search-quality [--day YYYY-MM-DD] [--base URL] [--fixture FILE]
+
+--day defaults to yesterday (UTC). --fixture FILE feeds compute() a JSON list
+of front pages ({"stories": [...], "next_cursor": ...}) with no network (the
+test uses it; scripts/test-status-scripts.sh).
+
+What it cannot see: the front list shows each story by its LATEST version, so
+a story first published on the day but updated later counts on the later day,
+and a story with no structured body has no source_count (it counts as a story
+and is left out of the mean; the output says how many). Opinion pieces are
+not stories and are left out. It reads only as far back as the day it needs
+and stops at 60 requests, saying so.
+"""
+import argparse
+import datetime
+import json
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+MAX_REQUESTS = 60
+MIN_GAP_SECONDS = 2.0
+PAGE_LIMIT = 100
+
+
+def day_bounds(day):
+    start = datetime.datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
+    return start, start + datetime.timedelta(days=1)
+
+
+def parse_time(raw):
+    raw = raw.replace("Z", "+00:00")
+    t = datetime.datetime.fromisoformat(raw)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=datetime.timezone.utc)
+    return t
+
+
+def compute(pages, day):
+    """pages: front pages newest first. Returns the two numbers and caveats."""
+    start, end = day_bounds(day)
+    stories, counted, total, unknown = 0, 0, 0, 0
+    reached_before_day = False
+    for page in pages:
+        for row in page.get("stories", []):
+            if row.get("kind") == "opinion":
+                continue
+            t = parse_time(row["updated_at"])
+            if t < start:
+                reached_before_day = True
+                continue
+            if t >= end:
+                continue
+            stories += 1
+            n = row.get("source_count")
+            if n is None:
+                unknown += 1
+            else:
+                counted += 1
+                total += n
+    return {
+        "day": day,
+        "stories": stories,
+        "mean_sources": (total / counted) if counted else None,
+        "stories_without_source_count": unknown,
+        "reached_before_day": reached_before_day,
+    }
+
+
+def fetch(base, day):
+    start, _ = day_bounds(day)
+    pages, cursor, requests, last = [], "", 0, 0.0
+    while requests < MAX_REQUESTS:
+        wait = MIN_GAP_SECONDS - (time.monotonic() - last)
+        if last and wait > 0:
+            time.sleep(wait)
+        q = {"limit": str(PAGE_LIMIT)}
+        if cursor:
+            q["cursor"] = cursor
+        url = base.rstrip("/") + "/api/platform/publications/front?" + urllib.parse.urlencode(q)
+        req = urllib.request.Request(url, headers={"User-Agent": "status-paper-search-quality"})
+        last = time.monotonic()
+        requests += 1
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            page = json.load(resp)
+        pages.append(page)
+        rows = [r for r in page.get("stories", []) if r.get("kind") != "opinion"]
+        if rows and parse_time(rows[-1]["updated_at"]) < start:
+            break
+        cursor = page.get("next_cursor") or ""
+        if not cursor:
+            break
+    return pages, requests
+
+
+def main(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--day")
+    ap.add_argument("--base", default="https://choir.news")
+    ap.add_argument("--fixture")
+    args = ap.parse_args(argv)
+    day = args.day or (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    requests = 0
+    try:
+        if args.fixture:
+            with open(args.fixture) as f:
+                pages = json.load(f)
+        else:
+            pages, requests = fetch(args.base, day)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print("status-paper-search-quality: fetch failed: %s" % e, file=sys.stderr)
+        return 2
+    r = compute(pages, day)
+    mean = "n/a" if r["mean_sources"] is None else "%.2f" % r["mean_sources"]
+    print("day %s: stories published %d, mean distinct cited source URLs per story %s" % (day, r["stories"], mean))
+    if r["stories_without_source_count"]:
+        print("  %d stories have no source count and are left out of the mean" % r["stories_without_source_count"])
+    if not r["reached_before_day"]:
+        print("  the list ended or the %d-request limit was reached before the day began: the day may be incomplete" % MAX_REQUESTS)
+    if requests:
+        print("  %d requests" % requests)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
