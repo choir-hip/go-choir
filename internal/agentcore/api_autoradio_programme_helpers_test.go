@@ -337,7 +337,7 @@ func (l *wrapLedger) noteBody(q types.BodyListQuery) error {
 	l.queries = append(l.queries, q)
 	l.mu.Unlock()
 	if l.panicKind != "" && l.panicKind == q.Match["$.subject_refs.record_kind"] {
-		panic("injected panic in a heard read")
+		panic(wrapLedgerPanicWords)
 	}
 	if err := l.noteList("record_kind", q.Match["$.subject_refs.record_kind"]); err != nil {
 		return err
@@ -443,3 +443,7 @@ func (l *wrapLedger) GetCommitmentRecord(ctx context.Context, ownerID, computerI
 	}
 	return rec, err
 }
+
+// wrapLedgerPanicWords is what the injected panic says; the log must not
+// carry it (a panic value can hold a listener's words).
+const wrapLedgerPanicWords = "injected panic in a heard read ZEBRA-PANIC"

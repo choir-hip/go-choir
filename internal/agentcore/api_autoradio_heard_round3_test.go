@@ -87,6 +87,11 @@ func TestR17_APanicInAReadingGoroutineIsHistoryUnavailable(t *testing.T) {
 		if !strings.Contains(buf.String(), "autoradio heard: read panicked") {
 			t.Errorf("(R17) %s: the panic is not logged: %q", kind, heardLogLines(buf))
 		}
+		// The line carries the stack, so the fault is findable, and never
+		// the panic's own words (it is not a runtime error).
+		if out := buf.String(); !strings.Contains(out, "stack=") || !strings.Contains(out, "recoverHeardRead") || strings.Contains(out, wrapLedgerPanicWords) {
+			t.Errorf("(R17) %s: the panic line lacks the stack or carries the panic's words: %q", kind, heardLogLines(buf))
+		}
 	}
 }
 
@@ -101,8 +106,14 @@ func TestR19_BothListsAreBoundedByTheWindowAndTheSegmentListLeavesTakesOut(t *te
 		t.Fatalf("(R19) %d queries", len(led.queries))
 	}
 	for _, q := range led.queries {
-		if age := time.Since(q.Since); q.Since.IsZero() || age < 13*24*time.Hour || age > 15*24*time.Hour {
-			t.Errorf("(R19) %v: since %v is not about 14 days ago", q.Match, q.Since)
+		// The settlement list is bounded by the window; the segment list
+		// reaches one window further back (a segment heard late).
+		lo, hi := 13*24*time.Hour, 15*24*time.Hour
+		if q.Match["$.subject_refs.record_kind"] == kindSegment {
+			lo, hi = 27*24*time.Hour, 29*24*time.Hour
+		}
+		if age := time.Since(q.Since); q.Since.IsZero() || age < lo || age > hi {
+			t.Errorf("(R19) %v: since %v is %v ago, want between %v and %v", q.Match, q.Since, age, lo, hi)
 		}
 		if q.Match["$.subject_refs.record_kind"] == kindSegment && (len(q.Absent) != 1 || q.Absent[0] != "$.subject_refs.take_id") {
 			t.Errorf("(R19) the segment list does not leave takes out: %v", q.Absent)
