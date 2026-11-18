@@ -20,6 +20,7 @@ echo "screenshots: $SHOTS"
 python3 -I "$HERE/embed-assets.py" > "$SCRATCH/embed.txt" 2>&1 || { tail -20 "$SCRATCH/embed.txt"; fail "embed assets"; }
 python3 -I "$HERE/gen-exact-interface.py" > "$SCRATCH/iface.txt" 2>&1 || { tail -20 "$SCRATCH/iface.txt"; fail "exact interface"; }
 python3 -I "$HERE/check-strings.py" > "$SCRATCH/strings.txt" 2>&1 || { tail -20 "$SCRATCH/strings.txt"; fail "strings"; }
+python3 -I "$HERE/check-no-loading.py" > "$SCRATCH/noloading.txt" 2>&1 || { cat "$SCRATCH/noloading.txt"; fail "a Loading or Opening string"; }
 python3 -I "$HERE/check-tetramark-projection.py" > "$SCRATCH/tmproj.txt" 2>&1 || { cat "$SCRATCH/tmproj.txt"; fail "tetramark projection bound"; }
 python3 -I "$HERE/gen-tetramark.py" --check > "$SCRATCH/tetramark.txt" 2>&1 || { cat "$SCRATCH/tetramark.txt"; fail "tetramark drift"; }
 echo "ok: assets, interface, strings, tetramark data"

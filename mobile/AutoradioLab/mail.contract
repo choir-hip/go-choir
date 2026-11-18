@@ -3,12 +3,13 @@
 // mail provider; the Mail agent on the listener's computer is the only custodian of email, and the kit asks it (ChoirMail.swift).
 // A message reads in the theme's body face (th.fontText); the original HTML is a secondary view in a sandboxed frame with
 // scripts, remote pictures and links off. Replies and new messages are drafts; sending is the listener's own act.
-// testIds: mail-compose, mail-folder-<name>, mail-row-<id>, mail-loading, mail-empty, mail-offline, mail-error, mail-retry,
+// testIds: mail-compose, mail-folder-<name>, mail-row-<id>, mail-skeleton, mail-empty, mail-offline, mail-error, mail-retry,
 //   mail-demo-<state>, mail-from, mail-date, mail-to, mail-trust, mail-reply, mail-summarise, mail-read, mail-original-toggle,
 //   mail-unread, mail-note, mail-body, mail-quoted-toggle, mail-original-frame, mail-attachment-<id>, mail-thread-<id>,
 //   mail-field-to, mail-field-subject, mail-field-body, mail-save, mail-draft-status, mail-approval, mail-open-review.
 use Theme, DemoInfo, MailBoxView, MailMessageView, MailComposeView from "@choir/autoradio"
 use PageScroll, Card, Btn, ChoiceWord, RowRule, dyn from "./ui.contract"
+use Swap, SkeletonRows, SkeletonBody, tLayout, tOut from "./transitions.contract"
 
 // A message in a list: unread dot, sender, time, subject, a preview, a thread count.
 component MailRowItem
@@ -42,7 +43,7 @@ component MailRowItem
               text "With attachment" font-family=th.fontLabel font-size="-exact-caption1" color=th.muted
         image "symbol:forward-chevron" color=th.muted
 
-// A state that is a whole screen: loading, empty, offline, error. A sentence, and when it helps, one action.
+// A state that is a whole screen: empty, offline, error. A sentence, and when it helps, one action.
 component MailNotice
   inject
     th: Theme
@@ -61,48 +62,61 @@ component MailNotice
         button press=retryMail testId="mail-retry" appearance="none"
           Btn(label="Try again", primary=false, wide=false)
 
+fn mailLabel(n: string): string = n == "inbox" ? "Inbox" : (n == "drafts" ? "Drafts" : (n == "sent" ? "Sent" : "Quarantine"))
+
+// The mailbox: the frame (title, New message, the four tabs with their counts) is drawn from the address and the cache and never
+// depends on the fetch, so it is on screen and tappable at every moment. Only the content under it is a Swap: it starts to leave at
+// the tap, a skeleton (no words) holds the place when nothing is cached, and the list comes in when it is ready.
 component MailboxPage
   inject
     th: Theme
     mbx: MailBoxView
+    mfr: MailBoxView
     dm: DemoInfo
     devDetails: bool
     openPage: action
+    mailTab: action
+    mboxName: string
+    mboxDir: number
   props
     address: string
     title: string
-  derive here = address == `mailbox:${mbx.folder}` and mbx.status != "" and mbx.status != "idle"
-  derive rowsShown = here and mbx.rows.length > 0
+  derive liveHere = mbx.folder == mboxName and mbx.status != "" and mbx.status != "idle"
+  derive cachedHere = mfr.folder == mboxName and mfr.status == "cached"
+  derive rowsNow = liveHere ? mbx.rows : (cachedHere ? mfr.rows : [])
+  derive waiting = liveHere == false and cachedHere == false
+  derive tabs = ["inbox", "drafts", "sent", "quarantine"]
   view
     PageScroll(id="mailbox")
       row align-items="center" gap=12
         text "Mail" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 testId="page-title" flex=1
         button press=openPage("mail:new", "New message") testId="mail-compose" appearance="none"
           Btn(label="New message", primary=false, wide=false)
-      if here
-        row flex-wrap="wrap" gap=8 width="100%"
-          for f in mbx.folders key=f.name
-            button press=openPage(f.address, `Mail · ${f.label}`) testId=`mail-folder-${f.name}` appearance="none" padding="0px 12px 0px 0px"
-              ChoiceWord(label=(f.badge == "" ? f.label : `${f.label} ${f.badge}`), selected=f.current)
-      if here == false
-        MailNotice(testId="mail-loading", title="Loading your mail…", body="", retry=false)
-      if here and mbx.status == "empty"
-        MailNotice(testId="mail-empty", title=(mbx.message != "" ? mbx.message : "Nothing here"), body="", retry=false)
-      if here and mbx.status == "error"
-        MailNotice(testId="mail-error", title=(mbx.message != "" ? mbx.message : "Your mail could not be opened"), body="", retry=true)
-      if here and mbx.status == "offline"
-        MailNotice(testId="mail-offline", title=(mbx.cached ? "Offline: showing what was last loaded" : "You are offline"), body=mbx.message, retry=true)
-      if rowsShown
-        column width="100%"
-          for r in mbx.rows key=r.id
-            MailRowItem(id=r.id, address=r.address, sender=r.sender, subject=r.subject, snippet=r.snippet, stamp=r.stamp, unread=r.unread, attachment=r.hasAttachments, count=r.count)
+      row flex-wrap="wrap" gap=8 width="100%"
+        for n in tabs key=n
+          button press=mailTab(n) testId=`mail-folder-${n}` appearance="none" padding="0px 12px 0px 0px"
+            ChoiceWord(label=mailLabel(n) + mfr.folders.filter(f => f.name == n).map(f => f.badge == "" ? "" : ` ${f.badge}`).join(""), selected=(n == mboxName))
+      Swap(token=(waiting ? `${mboxName}-wait` : mboxName), dir=mboxDir)
+        if waiting
+          SkeletonRows(rows=6, testId="mail-skeleton")
+        if liveHere and mbx.status == "empty"
+          MailNotice(testId="mail-empty", title=(mbx.message != "" ? mbx.message : "Nothing here"), body="", retry=false)
+        if liveHere and mbx.status == "error"
+          MailNotice(testId="mail-error", title=(mbx.message != "" ? mbx.message : "Your mail could not be opened"), body="", retry=true)
+        if liveHere and mbx.status == "offline"
+          MailNotice(testId="mail-offline", title=(mbx.cached ? "Offline: showing what was last loaded" : "You are offline"), body=mbx.message, retry=true)
+        if rowsNow.length > 0
+          column width="100%"
+            for r in rowsNow key=r.id
+              column width="100%" -exact-layout-transition=tLayout(th.reducedMotion) -exact-exit-animation=tOut(th.reducedMotion, 0)
+                MailRowItem(id=r.id, address=r.address, sender=r.sender, subject=r.subject, snippet=r.snippet, stamp=r.stamp, unread=r.unread, attachment=r.hasAttachments, count=r.count)
       if dm.on and devDetails
         text "Demo states" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted margin-top=16
         row gap=8 flex-wrap="wrap"
           button press=openPage("mailbox:demo-empty", "Mail") testId="mail-demo-empty" appearance="none"
             Btn(label="Empty", primary=false, wide=false)
           button press=openPage("mailbox:demo-loading", "Mail") testId="mail-demo-loading" appearance="none"
-            Btn(label="Loading", primary=false, wide=false)
+            Btn(label="Slow", primary=false, wide=false)
           button press=openPage("mailbox:demo-offline", "Mail") testId="mail-demo-offline" appearance="none"
             Btn(label="Offline", primary=false, wide=false)
           button press=openPage("mailbox:demo-error", "Mail") testId="mail-demo-error" appearance="none"
@@ -305,4 +319,4 @@ component MailPage
       if isCompose == false and isMessage == false
         PageScroll(id="mail-loading-page")
           text title role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 testId="page-title"
-          MailNotice(testId="mail-loading", title="Opening…", body="", retry=false)
+          SkeletonBody(testId="mail-skeleton")

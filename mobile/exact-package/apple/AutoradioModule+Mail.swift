@@ -23,7 +23,14 @@ extension AutoradioModule {
 
         handle("mailBox") { [weak self] args, reply in
             let address = args["address"] as? String ?? ""
-            Task { let v = await service.box(address: address); reply(self?.json(v) ?? [:]) }
+            Task { let v = await service.box(address: address); reply(self?.json(v) ?? [:]); DispatchQueue.main.async { self?.touch(["mailFrame"]) } }
+        }
+
+        // The page's frame and the last list seen for this folder, answered at once with no fetch (the tabs, their counts, the cached rows).
+        handle("mailFrame") { [weak self] args, reply in
+            var v = service.frame(address: args["address"] as? String ?? "")
+            if let rows = service.cachedRows(folder: v.folder) { v.rows = rows; v.status = "cached" } else { v.status = "frame" }
+            reply(self?.json(v) ?? [:])
         }
 
         // The message, and beside it the sanitised original document ("Show original") written where an iframe can read it.
@@ -35,7 +42,7 @@ extension AutoradioModule {
                     try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try? Data(html.utf8).write(to: url, options: .atomic)
                 }
-                if v.status == "ready" { DispatchQueue.main.async { self?.touch(["mailBox"]) } }   // the read mark changed the counts
+                if v.status == "ready" { DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame"]) } }   // the read mark changed the counts
                 reply(self?.json(v) ?? [:])
             }
         }
@@ -49,7 +56,7 @@ extension AutoradioModule {
             Task {
                 let v = await service.saveDraft(address: args["address"] as? String ?? "", to: args["recipients"] as? String ?? "",
                                                 subject: args["subject"] as? String ?? "", body: args["body"] as? String ?? "")
-                if v.status == "saved" { DispatchQueue.main.async { self?.touch(["mailBox"]) } }
+                if v.status == "saved" { DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame"]) } }
                 reply(self?.json(v) ?? [:])
             }
         }
@@ -102,7 +109,7 @@ extension AutoradioModule {
             let address = args["address"] as? String ?? ""
             Task {
                 let ok = await service.setRead(id: PageAddress.rest(of: address), read: false)
-                DispatchQueue.main.async { self?.touch(["mailBox", "mailMessage"]) }
+                DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame", "mailMessage"]) }
                 reply(["status": ok ? "ok" : "error", "message": ok ? "" : "Could not mark it unread."])
             }
         }

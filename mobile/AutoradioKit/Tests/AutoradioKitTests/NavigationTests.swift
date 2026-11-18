@@ -98,7 +98,7 @@ final class NavigationTests: XCTestCase {
     // 2.1, 2.5: the Mail tabs are a wrapping row with a width.
     func testMailTabsWrapAndHaveAWidth() throws {
         let mail = try text("mail.contract")
-        XCTAssertTrue(mail.contains("row flex-wrap=\"wrap\" gap=8 width=\"100%\"\n          for f in mbx.folders"))
+        XCTAssertTrue(mail.contains("row flex-wrap=\"wrap\" gap=8 width=\"100%\"\n        for n in tabs key=n"))
         for id in ["files-sorts", "files-crumbs"] { XCTAssertTrue(try text("files.contract").contains("width=\"100%\" testId=\"\(id)\"")) }
         XCTAssertTrue(try text("paper.contract").contains("row flex-wrap=\"wrap\" gap=8 width=\"100%\" testId=\"paper-sections\""))
         XCTAssertTrue(try text("launcher.contract").contains("row flex-wrap=\"wrap\" gap=0 width=\"100%\" testId=\"launcher-key-pages\""))

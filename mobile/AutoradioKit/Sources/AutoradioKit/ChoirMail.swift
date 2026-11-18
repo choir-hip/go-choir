@@ -436,10 +436,11 @@ public final class MailService: @unchecked Sendable {
 
     // MARK: Mailbox
 
-    public func box(address: String, now: Date = Date()) async -> MailBoxView {
+    /// The page's constant frame, answered at once with no fetch: the title and the four tabs (the inbox's unread count when it is known).
+    /// `box` starts from this same value, so the frame is identical before, during and after a load.
+    public func frame(address: String) -> MailBoxView {
         var v = MailBoxView()
         let folder = PageAddress.rest(of: address)
-        guard address.hasPrefix("mailbox:") else { v.status = "idle"; return v }
         v.folder = folder.isEmpty ? "inbox" : folder
         v.title = Self.folders.first { $0.name == v.folder }?.label ?? "Mail"
         v.folders = Self.folders.map { f in
@@ -447,6 +448,18 @@ public final class MailService: @unchecked Sendable {
             if f.name == "inbox", let c = cached("inbox"), c.unread > 0 { r.badge = "\(c.unread)" }
             return r
         }
+        return v
+    }
+
+    /// The last list this session fetched for a folder, as rows (empty when none): a return visit shows it at once and refreshes underneath.
+    public func cachedRows(folder: String, now: Date = Date()) -> [MailRow]? {
+        guard let c = cached(folder) else { return nil }
+        return MailThreads.rows(c.rows, now: now)
+    }
+
+    public func box(address: String, now: Date = Date()) async -> MailBoxView {
+        guard address.hasPrefix("mailbox:") else { var i = MailBoxView(); i.status = "idle"; return i }
+        var v = frame(address: address)
         if Self.demoStates.contains(v.folder) { return await demoState(v) }
         do {
             if v.folder == "drafts" {

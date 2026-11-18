@@ -234,7 +234,7 @@ public final class ChoirApp: @unchecked Sendable {
         case "start": return "The radio could not start its audio (\(m)). Try Play again."
         case "voice": return "The radio's voice did not work, so nothing could be read aloud."
         case "listen": return "Can\u{2019}t listen: \(m)"
-        default: return "Something went wrong loading the radio."
+        default: return "Something went wrong with the radio."
         }
     }
 

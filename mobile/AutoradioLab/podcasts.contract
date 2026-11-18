@@ -6,6 +6,7 @@
 //   podcast-playing-from, podcast-retry, podcast-notes.
 use Theme, PodHomeView, PodShowView, PodEpisodeView from "@choir/autoradio"
 use PageScroll, PageHeader, SectionHeader, PlainList, LineRow, RowRule, EmptyState, Emerge from "./ui.contract"
+use SkeletonRows, SkeletonBody from "./transitions.contract"
 use ClipRow from "./clips.contract"   // lane autoradio-joins
 use ClipRows from "@choir/autoradio"
 
@@ -86,7 +87,7 @@ component PodcastsHome
       if podHome.hasQuery == false
         if podHome.status == "loading"
           Emerge(delay=0)
-            EmptyState(message="Loading your podcasts…", detail="", testId="podcasts-loading")
+            SkeletonRows(rows=4, testId="podcasts-skeleton")
         if podHome.status == "empty"
           Emerge(delay=0)
             EmptyState(message="Search for a show above and subscribe: its episodes will be here.", detail="", testId="podcasts-empty")
@@ -152,7 +153,7 @@ component PodcastShowPage
         Emerge(delay=0)
           PageHeader(title=title, subtitle="", subId="podcast-sub")
         Emerge(delay=0)
-          EmptyState(message="Opening the show…", detail="", testId="podcast-loading")
+          SkeletonRows(rows=4, testId="podcast-skeleton")
       if podShow.status == "error"
         Emerge(delay=0)
           PageHeader(title=(podShow.title != "" ? podShow.title : title), subtitle="", subId="podcast-sub")
@@ -220,7 +221,7 @@ component PodcastEpisodePage
         Emerge(delay=0)
           PageHeader(title=title, subtitle="", subId="podcast-sub")
         Emerge(delay=0)
-          EmptyState(message="Opening the episode…", detail="", testId="podcast-loading")
+          SkeletonBody(testId="podcast-skeleton")
       if podEp.status == "error"
         Emerge(delay=0)
           PageHeader(title=title, subtitle="", subId="podcast-sub")

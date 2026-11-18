@@ -319,6 +319,10 @@ component Autoradio
     fvMeasured
     // ---- lane 6: mail ----
     mbx
+    mfr
+    mailTab
+    mboxName
+    mboxDir
     mmsg
     mcmp
     mailCurTo

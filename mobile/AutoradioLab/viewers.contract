@@ -10,6 +10,7 @@
 //   e-book chapters become Markdown for `text markup="markdown"` (no EPUB element in Exact; Kit/Epub.swift parses the book)
 use Theme, FileInfo from "@choir/autoradio"
 use PageScroll, Card, RowRule, PlainList from "./ui.contract"
+use SkeletonBody from "./transitions.contract"
 
 // The one control of the Files place and the viewers, drawn as a word (no pill: owner, 2026-11-15): a text action in the accent; when `active` (a
 // chosen mode, sort or zoom) it is full strength with a short accent rule under it. `press` is an action call from the caller.
@@ -162,6 +163,18 @@ component CsvViewer
                   text c font-family=th.fontLabel font-size="-exact-footnote" color=th.fg flex=1 min-width=0 padding="8px 10px" line-clamp=2 font-variant-numeric="tabular-nums"
 
 // ---------------------------------------------------------------- nothing to open with, or a problem
+// A file that is opening: its real title in the frame, the shape of a page under it, no words.
+component FileWaiting
+  inject
+    th: Theme
+  props
+    address: string
+    title: string
+  view
+    PageScroll(id="file-waiting")
+      text title role="heading" aria-level=1 testId="page-title" font-size="-exact-title1" font-weight=700 font-family=th.fontHead
+      SkeletonBody(testId="file-skeleton")
+
 // The honest page: what the file is, and why it is not shown. `message` is the reason ("too large", "not there any more", ...).
 component NoPreview
   inject

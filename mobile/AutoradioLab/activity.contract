@@ -19,7 +19,7 @@ component ActivityPage
     ToolScroll(id="activity")
       ScreenTitle(label="Activity", back=false)
       row gap=12 align-items="center" width="100%"
-        text (act.status == "loading" ? "Looking…" : (act.unseen > 0 ? `${act.unseen} new since you last looked` : "Up to date")) testId="activity-status" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted flex=1 min-width=0
+        text (act.status == "loading" ? "" : (act.unseen > 0 ? `${act.unseen} new since you last looked` : "Up to date")) testId="activity-status" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted flex=1 min-width=0
         button press=refreshActivity testId="activity-refresh" appearance="none"
           Btn(label="Refresh", primary=false, wide=false)
       if act.message != ""
