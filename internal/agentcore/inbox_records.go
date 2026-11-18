@@ -840,6 +840,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	for i, in := range localIDs {
 		seq, opened := int64(0), ""
 		if i < len(committed.Records) {
+			rt.logManagementStoryChoice(r.scope.RunID, strings.TrimSpace(r.rec.AgentProfile), committed.Records[i])
 			seq = committed.Records[i].InboxSeq
 			if committed.Records[i].OpenedStory || in.Kind == yaegikernel.IntentDelegate {
 				// The receipt names the story a Cast to texture:new opened,

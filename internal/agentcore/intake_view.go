@@ -157,5 +157,6 @@ func (rt *Runtime) storiesEgressWithin(ctx context.Context, deskRole string, exe
 	if before.IsZero() {
 		page.Held = rt.heldCapturesTally(owner, computer)
 	}
+	rt.noteStoriesShown(exec.RunID, len(page.Stories))
 	return json.Marshal(page)
 }
