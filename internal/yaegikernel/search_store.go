@@ -190,6 +190,9 @@ type SearchStore struct {
 	// readKeys returns the searchHitKey of every page this run read; nil
 	// means the store knows no read ledger.
 	readKeys func() map[string]bool
+	// triedKeys returns the searchHitKey of every page this run tried to read,
+	// whether or not the read worked (search_need.go).
+	triedKeys func() map[string]bool
 	// pos is a search's index in order; first is, for each page key a search
 	// of this run returned, the lowest index that returned it: a page is held
 	// in search i when first[key] < i. Both make one search's marks cost its

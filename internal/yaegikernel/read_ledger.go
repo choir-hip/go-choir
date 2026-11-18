@@ -50,6 +50,10 @@ type readLedger struct {
 	packedID, packedURL map[string]bool
 	nudged              map[string]bool
 	warnings            []string
+	// captureURLs is the source URL of every capture the run read with
+	// ReadCapture: a capture made from a returned page counts as that page
+	// tried (search_need.go).
+	captureURLs []string
 }
 
 // beginRun resets the ledger when a cell of a new run binds. An empty run id
@@ -66,6 +70,7 @@ func (l *readLedger) beginRun(runID string) (changed bool) {
 	l.runID = runID
 	l.reads, l.noted, l.packetSent, l.nudged, l.warnings = nil, 0, false, nil, nil
 	l.packedID, l.packedURL = nil, nil
+	l.captureURLs = nil
 	return true
 }
 
@@ -114,6 +119,41 @@ func (s *ChoirScope) readKeys() map[string]bool {
 		}
 	}
 	return keys
+}
+
+// triedKeys is the searchHitKey of every page this run tried to read: a Read
+// that failed counts as much as one that captured the page, and so does a
+// ReadCapture of a capture whose source is the page. The same normalisation
+// as readKeys and the hits (searchHitKey).
+func (s *ChoirScope) triedKeys() map[string]bool {
+	l := &s.ledger
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	keys := make(map[string]bool, len(l.reads)+len(l.captureURLs))
+	for _, e := range l.reads {
+		keys[searchHitKey(e.URL)] = true
+	}
+	for _, u := range l.captureURLs {
+		keys[searchHitKey(u)] = true
+	}
+	return keys
+}
+
+// noteCaptureRead records the source URL of a capture read with ReadCapture.
+// A capture id does not map back to a search hit by itself (a hit carries a
+// URL, no capture id; only a Read links the two, and that URL is already
+// tried), so the capture's own url field is what is matched.
+func (s *ChoirScope) noteCaptureRead(out JSON) {
+	var r struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal(out, &r) != nil || strings.TrimSpace(r.URL) == "" {
+		return
+	}
+	l := &s.ledger
+	l.mu.Lock()
+	l.captureURLs = append(l.captureURLs, strings.TrimSpace(r.URL))
+	l.mu.Unlock()
 }
 
 // Reads returns every Read this run made, failures included.
