@@ -9,7 +9,7 @@ import Network
 // WAYS THIS CAN FAIL (each has a test in EmbeddingServiceTests):
 //  1. The model is not on the phone: it is fetched once, on Wi-Fi only, checked by SHA-256 (ModelStore); off Wi-Fi nothing is fetched and retrieval stays BM25.
 //  2. Speech is on air or being synthesised: the job waits (speech always wins). Low Power Mode or a serious thermal state: it waits.
-//  3. The app is killed: at most one slice of work is lost; the next start embeds only what the file lacks (content keys).
+//  3. The app is killed: at most about a minute of work is lost (the job saves every `savesEverySlices` slices and the app saves in the background); the next start embeds only what the file lacks (content keys).
 //  4. Sign-out: the vectors, in memory and on disk, go with the content store (`SavedCorpus.reset`). The model file stays (it is not the account's).
 //  5. The store changes while a pass runs: the pass is run again after it; nothing embeds twice.
 //  6. The vector file is made by another engine or dimension: it is ignored and rebuilt.
@@ -92,7 +92,16 @@ public final class EmbeddingService: @unchecked Sendable {
     public var modelState: ModelState { lock.lock(); defer { lock.unlock() }; return _state }
     public var progress: Progress { lock.lock(); defer { lock.unlock() }; return _progress }
 
-    public init(_ env: Environment) { self.env = env }
+    public init(_ env: Environment) {
+        self.env = env
+        // The job saves every few dozen slices; the app going to the background saves what is pending (the platform's own notification names).
+        for n in ["UIApplicationDidEnterBackgroundNotification", "NSApplicationDidResignActiveNotification"] {
+            NotificationCenter.default.addObserver(forName: Notification.Name(n), object: nil, queue: nil) { [weak self] _ in self?.flush() }
+        }
+    }
+
+    /// Write the vectors now (a no-op when nothing changed).
+    public func flush() { lock.lock(); let v = vectors; lock.unlock(); try? v?.save() }
 
     /// Wire to the corpus (and, in the app, the store): retrieval is BM25 now and becomes fused once the vectors are there.
     public func attach(corpus: SavedCorpus, store: ContentStore? = nil) {

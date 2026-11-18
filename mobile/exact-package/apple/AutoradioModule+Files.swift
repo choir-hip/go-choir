@@ -64,12 +64,18 @@ extension AutoradioModule {
             change(reply) { await service.rename(path: p, to: n) }
         }
         handle("fileUpload") { [unowned self] args, reply in
-            // `from` is the picker's copy under app:/tmp/picked (Picked.path); in demo mode it may be empty, and a small note is added.
+            // `from` is the picker's copy under app:/tmp/picked (Picked.path). Only in demo mode may it be empty (a small note is added so
+            // the flow can be seen); on a real phone an empty `from` uploads nothing and says so.
             let (from, n, d) = (str(args, "from"), str(args, "name"), str(args, "dir"))
             let url = from.isEmpty ? nil : self.context.file(from)
             change(reply) {
                 if let url { return await service.upload(from: url, name: n, into: d) }
-                // Demo mode and the agent have no picker: add a small invented note so the flow can be seen.
+                guard Demo.isOn else {
+                    var l = await service.listing(path: d, mode: "browse", sort: "name", desc: false, query: "")
+                    l.message = "Nothing was chosen to add."
+                    return l
+                }
+                // Demo mode has no picker: add a small invented note so the flow can be seen.
                 let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("added-\(UUID().uuidString).txt")
                 try? Data("Added from the phone. Invented text.\n".utf8).write(to: tmp)
                 defer { try? FileManager.default.removeItem(at: tmp) }

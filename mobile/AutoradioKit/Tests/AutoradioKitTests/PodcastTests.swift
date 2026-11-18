@@ -64,6 +64,18 @@ final class PodcastTests: XCTestCase {
         XCTAssertFalse(f.episodes[4].playable, "file: is not streamable"); XCTAssertNil(f.episodes[4].duration, "0 is unknown")
     }
 
+    func testNestedMarkupInNotesIsNotEmptied() throws {
+        func notes(_ item: String) throws -> String {
+            let x = "<rss><channel><title>S</title><item><title>T</title><guid>g</guid><enclosure url=\"https://cdn.example/a.mp3\" type=\"audio/mpeg\"/>\(item)</item></channel></rss>"
+            return try RSSFeedParser.parse(Data(x.utf8), feedURL: "x").episodes[0].notes
+        }
+        XCTAssertEqual(try notes("<description><p>In this episode we talk.</p><p>Second part.</p></description>"), "In this episode we talk.\n\nSecond part.")
+        XCTAssertEqual(try notes("<description><![CDATA[<p>In <b>this</b> episode</p>]]></description>"), "In this episode")
+        XCTAssertEqual(try notes("<itunes:summary><div>Lead <a href=\"https://x.example\">link</a> tail.</div></itunes:summary>"), "Lead link tail.")
+        XCTAssertEqual(try notes("<description>Before <p>Inside</p> after</description>"), "Before\n\nInside\n\nafter")
+        XCTAssertEqual(try notes("<content:encoded><ul><li>A</li><li>B</li></ul></content:encoded>").contains("A"), true)
+    }
+
     func testBadFeeds_6() {
         XCTAssertThrowsError(try RSSFeedParser.parse(Data("<!DOCTYPE html><html><body>hi</body></html>".utf8), feedURL: "x"))
         XCTAssertThrowsError(try RSSFeedParser.parse(Data(), feedURL: "x"))
