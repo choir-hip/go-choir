@@ -197,7 +197,7 @@ func TestH1_AStoryHeardYesterdayIsMarkedHeardAtThisVersionWithWhatWasSaid(t *tes
 		t.Errorf("(H1) harbour-1 line %q, want %q", got, want)
 	}
 	for _, ref := range []string{"pub:harbour-2@v1", "pub:budget-3@v1"} {
-		if got := heardLine(in, ref); got != "heard: never" {
+		if got := heardLine(in, ref); got != heardNoRecord {
 			t.Errorf("(H1) %s line %q, want never", ref, got)
 		}
 	}
@@ -245,7 +245,7 @@ func TestH4toH5_OnlyAFinishedSegmentIsHeard(t *testing.T) {
 	seedHeard(t, rt, heardSeed{stretch: "st-4", route: "quarry-9", version: 1, title: "Quarry fire", text: "Unsettled text.", outcome: "none", at: at})
 	in := djInput(t, rt, fake, nil)
 	for _, ref := range []string{"pub:harbour-1@v1", "pub:harbour-2@v1", "pub:budget-3@v1"} {
-		if got := heardLine(in, ref); got != "heard: never" {
+		if got := heardLine(in, ref); got != heardNoRecord {
 			t.Errorf("(H4/H5) %s line %q, want never", ref, got)
 		}
 	}
@@ -273,7 +273,7 @@ func TestH6_OnlyThePhonesSettlementCounts(t *testing.T) {
 	djInput(t, rt, fake, nil)
 	in := djInput(t, rt, fake, nil)
 	for _, ref := range []string{"pub:harbour-1@v1", "pub:harbour-2@v1", "pub:budget-3@v1"} {
-		if got := heardLine(in, ref); got != "heard: never" {
+		if got := heardLine(in, ref); got != heardNoRecord {
 			t.Errorf("(H6) %s line %q, want never", ref, got)
 		}
 	}
@@ -368,7 +368,7 @@ func TestH11_AnotherListenersRecordsNeverAppear(t *testing.T) {
 	seedHeard(t, rt, heardSeed{owner: "owner-2", stretch: "st-1", route: "harbour-1", version: 1, title: "Their harbour", text: "THEIRS words.", at: at})
 	seedHeard(t, rt, heardSeed{owner: "owner-2", stretch: "st-2", route: "quarry-9", version: 1, title: "Their quarry", text: "THEIRS quarry words.", at: at})
 	in := djInput(t, rt, fake, nil)
-	if got := heardLine(in, "pub:harbour-1@v1"); got != "heard: never" {
+	if got := heardLine(in, "pub:harbour-1@v1"); got != heardNoRecord {
 		t.Errorf("(H11) line %q", got)
 	}
 	if strings.Contains(in, "THEIRS") || strings.Contains(in, "Their ") || len(recentLines(in)) != 0 {
@@ -442,7 +442,7 @@ func TestH1b_TheOpPathMakesAStoryHeard(t *testing.T) {
 		t.Errorf("(H1b) finished: %q", got)
 	}
 	for _, ref := range []string{"pub:harbour-2@v1", "pub:budget-3@v1"} {
-		if got := heardLine(in, ref); got != "heard: never" {
+		if got := heardLine(in, ref); got != heardNoRecord {
 			t.Errorf("(H1b) %s: %q", ref, got)
 		}
 	}

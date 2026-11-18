@@ -295,7 +295,7 @@ computer filter (`store.ListCommitmentRecordsByBodyOfComputer`).
 Past the caps and the window: a story whose heard settlement or segment was
 written more than 14 days ago, or older than the newest 2,000 of either page
 (unheard content segments use up the segment page; it is the weaker of the two
-bounds), reads `heard: never`, and a full page is logged: `autoradio heard:
+bounds), reads `heard: not in the last 14 days`, and a full page is logged: `autoradio heard:
 read full kind= rows= undecodable= unparsable= limit=`. (The words of a match
 are cut at the same 14 days, so the key no longer outlives the words by more
 than the gap between a row's write time and its settlement.) A settlement
@@ -316,7 +316,8 @@ the sequential, unfiltered read on the build VM over 2,000 rows each took
 isolate the change.
 
 **What the DJ is shown.** In the candidates section, a `heard:` line under every
-`ref:` line: `heard: never`; `heard: at this version (v<n>) on <day>. Said
+`ref:` line: `heard: not in the last 14 days` (the window, `heardWindow`; no
+heard record in it, so the story may be told in full); `heard: at this version (v<n>) on <day>. Said
 then: <words>` (v<n> is the version actually heard, which can be later than the
 candidate's); or `heard: at an earlier version (v<n>, now v<m>) on <day>. Said
 then: <words>`. Routes match by route, versions from the `@v` in the cite. A
@@ -335,7 +336,7 @@ dates.
 **History unavailable.** If either list fails, the call does not fail: the log
 says `autoradio heard: unavailable ... class=<error type>` (no words), no
 `heard:` line and no recent row is shown, and the heard fence says the history
-is unavailable for this call. Unknown is never shown as "never".
+is unavailable for this call. Unknown is never shown as "not in the last 14 days".
 
 **An all-heard day.** When every story candidate (takes are never marked) is
 heard at its current version the candidates section says so in one line and
@@ -353,8 +354,7 @@ those calls are counted.
 calls (there is still one model call). Words of a matched candidate: 600
 characters, cut at a sentence end. Recent list: 14 days, 12 rows, title 100
 characters, words 160 characters. The words of a matched candidate follow the
-same 14 days; a candidate whose heard record is older than that reads `heard:
-never` (see the window above). With 40 candidates the heard
+same 14 days; a candidate whose heard record is older than that reads `heard: not in the last 14 days` (see the window above). With 40 candidates the heard
 text is at most 40 x 600 + 12 x 400 characters.
 
 **The DJ's choice.** The prompt gains one paragraph, "What the listener already

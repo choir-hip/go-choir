@@ -203,7 +203,7 @@ func TestR5_OnlyAToldStoryIsHeard(t *testing.T) {
 	seedHeard(t, rt, heardSeed{stretch: "st-1", route: "harbour-1", version: 1, title: "Mentioned only", text: "In passing, the harbour.", role: "mentioned", at: at})
 	seedHeard(t, rt, heardSeed{stretch: "st-2", route: "harbour-2", version: 1, title: "Quoted", text: "The ferry company said sailings rise.", role: "quoted", at: at})
 	in := djInput(t, rt, fake, nil)
-	if got := heardLine(in, "pub:harbour-1@v1"); got != "heard: never" {
+	if got := heardLine(in, "pub:harbour-1@v1"); got != heardNoRecord {
 		t.Errorf("(R5) mentioned: %q", got)
 	}
 	if got := heardLine(in, "pub:harbour-2@v1"); !strings.HasPrefix(got, "heard: at this version (v1)") {
@@ -242,7 +242,7 @@ func TestR7_TheSegmentCapKeepsTheNewestAndSaysSo(t *testing.T) {
 		if i >= 3 && !strings.HasPrefix(got, "heard: at this version") {
 			t.Errorf("(R7) r-%d (among the newest 5): %q", i, got)
 		}
-		if i < 3 && got != "heard: never" {
+		if i < 3 && got != heardNoRecord {
 			t.Errorf("(R7) r-%d (older than the cap): %q", i, got)
 		}
 	}
@@ -263,7 +263,7 @@ func TestR8_PinASkippedSegmentLaterFinishedIsStillNotHeard(t *testing.T) {
 	// The forecast settles on its first outcome; a replay to the end is not
 	// read back. This pins today's behaviour so the gap is visible: it is a
 	// residual in docs/reference/AUTORADIO-PROGRAMME.md.
-	if got := heardLine(in, "pub:harbour-1@v1"); got != "heard: never" {
+	if got := heardLine(in, "pub:harbour-1@v1"); got != heardNoRecord {
 		t.Errorf("(R8) %q", got)
 	}
 }
