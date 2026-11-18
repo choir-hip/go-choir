@@ -262,7 +262,7 @@ by cause.
 
 Read only: the gateway journal of Node B and the paper's console, 20:05Z to
 about 20:43Z, 32 research runs of the paper's computer, 349 gateway search
-requests (the 343 of the journal plus the last few minutes), 54 `corpus
+requests, 54 `corpus
 search` lines, 2,004 `corpus read` lines and the 28 `search run=` lines of the
 runs that had ended. Counts only; no query is quoted.
 
@@ -274,8 +274,8 @@ runs that had ended. Counts only; no query is quoted.
   searches (203 of 349) arrived in the same second as another search of the
   same run, in bursts of 2 to 8; 42% (146) arrived alone. The median run sent
   3 web searches before its first read (119 of 349 in all, 34%).
-- Reads between. In 779 of the 1,256 reads that follow a first web search, a
-  later web search of the run still came after the read. So the desk does
+- Reads between. 779 of the 1,256 reads came before the run's last web
+  search (the other 477 after it). So the desk does
   read between rounds; it does not read between the searches of a round
   (the round is a burst), and a round starts with new searches in 105 groups
   over 32 runs.
@@ -331,3 +331,49 @@ runs that had ended. Counts only; no query is quoted.
 Remaining error: one 38-minute window right after a restart; "same second"
 is the gateway's receive time, so a cached answer or a slow cell can move a
 search a second; the corpus counts are per search, not per capture read.
+
+## What was built: search for what a question lacks (2026-11-18, `lane/search-for-need`)
+
+Belief from the section above: the desk does not need a limit, it needs to
+be told what it holds unread when it is about to ask again. Built, orange,
+rollback revert:
+
+- `SearchAll` checks before each wording how many pages new to the run, from
+  the searches sent for this question (the question's terms as
+  `searchquery.Key` reads them, so a reworded question is the same one), the
+  run has not read. At 15 or more (`searchEnoughUnread`: a run reads about 19
+  pages in all and 1 to 2 of every 40 returned, and a search returns up to
+  40; 15 is nearly a run's reading spent on one question) it sends no more
+  wordings, names each as not sent with the count, and says: read the ones
+  that matter, then search again for what is still missing, naming it. The
+  count falls as the run reads, so a later call sends again. Counted in the
+  run's counts as `holds_unread`, beside `stopped_yielding` and `failing`.
+  `fresh` is unchanged. Nothing refuses a search.
+- A plain `Search` or `SearchStart` of a run holding 15 or more such pages
+  carries one note per cell with the count; the search is sent. Departure
+  from the outline: the note counts the whole run, not one question. A plain
+  call carries no question, and the only key in the repo is the exact term
+  set, which two different wordings of one question do not share; grouping
+  them would need a fuzzy matcher, which is not built.
+- Research prompt v16 and the `Search`, `SearchStart` and `SearchAll` tool
+  texts: corpus first; each thread written as held, stale or missing in the
+  first packet; the web only for stale and missing threads, one question at a
+  time, reading before searching again. The sentences that ask for searches
+  at once and to cover every open thread with all its wordings are gone.
+  Desk protocol 18.7.0 (a field `Next` on `SearchAllResult`).
+- The run summary line gains `search_all_calls= wordings_offered=
+  wordings_sent= unread_notes=`; a plain search count is `started` minus
+  `wordings_sent`.
+
+What would show it worked, from the `search run=` lines after deploy: median
+searches a run from 7 toward 4 or fewer (12 a run on average now); the share
+of offered wordings sent (`wordings_sent` over `wordings_offered`) well under
+1 for runs that use `SearchAll`; `pages_read` over `pages_returned` up from
+5%; `pages_read` a run not lower than the 19 of the baseline. If
+`search_all_calls` is near zero the desk is using `SearchStart` bursts and
+only the note and the prompt apply: then the burst, not the wording, is the
+next thing to look at.
+
+Remaining error: the constant 15 is read from one window; the note counts
+the run, not the question; a model that ignores both is not stopped, by
+design.
