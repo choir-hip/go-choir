@@ -30,7 +30,8 @@ built now, TestFlight this week. Goal:
 [`definitions/choir-autoradio-learning-loop-2026-11-18.md`](definitions/choir-autoradio-learning-loop-2026-11-18.md)
 (stations L1 to L10). State at 2026-11-18T10:15Z: settlement (L1 to L3) is
 deployed and proven on the drill computer; the takes server (L7) is deployed and proven
-on the drill computer; the notebook (L4, L5) is in a repair round after review;
+on the drill computer; the notebook (L4, L5) landed as d21930b76 at 17:45Z,
+deployed 18:07Z and proven on the drill computer at 18:10Z;
 the phone build `lane/autoradio-integ19` was on the owner's phone and the
 phone lanes were not on main (they landed later that day). What is built is in
 [`current-architecture.md`](current-architecture.md). Incomplete: the owner

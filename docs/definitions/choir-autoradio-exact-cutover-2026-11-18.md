@@ -258,7 +258,8 @@ stations:
   review: two seats
   depends_on: []
   carrier: lane/learn-notebook
-  status: working
+  status: landed
+  landed: d21930b76 on 2026-11-18T17:45Z (second attempt; the first failed on a missing trust impact row); CI run 44362158500 green; staging reports the commit (deployed 18:07Z); scripts/prove-autoradio-learning passed on the drill computer at 18:10Z
 - id: K3
   name: The phone work is on main
   scope: the installed build's branch (lane/autoradio-integ20, 162 commits, with the Exact pin and our patches) merged into main in one landing, its thirteen documentation conflicts with today's audit resolved by hand; K1's candidate lands on top when accepted. After it every station lands on main as a landing.
