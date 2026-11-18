@@ -116,8 +116,20 @@ class Api:
     def steer(self, body):
         return self.call("POST", "/api/autoradio/steer", body)
 
-    def learning(self):
-        return self.call("GET", "/api/autoradio/learning?limit=200")
+    def learning(self, line=None):
+        q = "/api/autoradio/learning?limit=200" + ("&line=" + line if line else "")
+        return self.call("GET", q)
+
+    def learning_all(self, line=None):
+        """Every page of the route (it answers `next` while rows remain): the
+        first page's scorecard and notebook, all pages' rows."""
+        first = self.learning(line)
+        doc, rows = first, list(first["rows"])
+        while doc.get("next"):
+            doc = self.call("GET", "/api/autoradio/learning?limit=200&after=%s%s" % (doc["next"], ("&line=" + line) if line else ""))
+            rows += doc["rows"]
+        first["rows"] = rows
+        return first
 
 
 def op_on(tag, entry_id):
@@ -195,9 +207,9 @@ def main():
     claims[z["claim_id"]] = "no_outcome"
     res = api.ops(ops)
     dropped = [r for r in res["results"] if not r.get("applied")]
-    mid = api.learning()
+    mid = api.learning_all()
     again = api.ops(ops)
-    after = api.learning()
+    after = api.learning_all()
 
     def rows(doc):
         return {r["claim_id"]: r for r in doc["rows"] if r["claim_id"] in claims}
@@ -264,7 +276,7 @@ def notebook_phase(api, args, content, ok):
     budget = len(learned) <= 12 and len(trying) <= 3 and nb2.get("written_words", 0) <= 1000
     print("  budget: %d learned, %d trying, %d written words: %s" % (len(learned), len(trying), nb2.get("written_words", 0), "within" if budget else "OVER"))
     ok = ok and budget
-    claims = {r["claim_id"] for r in api.learning()["rows"]}
+    claims = {r["claim_id"] for r in api.learning_all()["rows"]}
     cited_ok, wrote = True, False
     for l in learned + trying:
         cites = l.get("cites", [])
@@ -275,6 +287,21 @@ def notebook_phase(api, args, content, ok):
             print("  line %s cites %s: a cite is not a ledger row" % (l.get("id"), cites))
     print("  every lesson cites ledger rows: %s; a lesson was written by this run's model call: %s" % (cited_ok, wrote))
     ok = ok and cited_ok
+    # Each line's live count must equal what the ledger rows behind it say
+    # (the document's own count may be up to an hour old, so it is not compared);
+    # beside it, how many forecasts were made since the line was written.
+    for l in learned + trying:
+        ref = l["ref"]
+        rows = api.learning_all(ref)["rows"]
+        settled = [r for r in rows if r["status"] == "settled"]
+        heard = [r for r in settled if r.get("heard_through")]
+        agree = (l["live_of"], l["live_heard"]) == (len(settled), len(heard))
+        print("  %s: document says heard %s of %s; live heard %s of %s; ledger rows %d settled, %d heard through: %s; forecasts since written %s (settled %s)" % (
+            ref, l["heard"], l["of"], l["live_heard"], l["live_of"], len(settled), len(heard), "agree" if agree else "DISAGREE",
+            l.get("live_forecasts"), l.get("live_settled")))
+        ok = ok and agree
+    for r in nb2.get("retired", [])[:5]:
+        print("  retired %s heard %s of %s%s: %r" % (r["id"], r["heard"], r["of"], (" replaced by " + r["replaced_by"]) if r["replaced_by"] else "", r["text"][:60]))
     if args.require_lesson and not wrote:
         print("  --require-lesson: the model proposed no lesson")
         ok = False

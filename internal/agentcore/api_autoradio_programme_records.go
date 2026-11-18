@@ -107,6 +107,8 @@ func (c *programmeCall) writeStart(ctx context.Context) error {
 		startRefs["notebook_sha256"] = c.input.nbReceiptSHA
 		startRefs["notebook_bytes"] = fmt.Sprint(c.input.nbReceiptLen)
 		startRefs["marked_cases"] = fmt.Sprint(len(c.input.cases))
+		startRefs["notebook_lines_shown"] = fmt.Sprint(len(c.input.nbLines))
+		startRefs["notebook_lines_total"] = fmt.Sprint(c.input.nbTotal)
 	}
 	start, err := c.noticeRecord(stretchStartRecordPrefix+c.stretchID, kindStretchStart, startRefs, "stretch "+c.stretchID+" started", "", nil, now)
 	if err != nil {

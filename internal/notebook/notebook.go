@@ -258,17 +258,29 @@ func (d Doc) MaxTag(letter string) int {
 	return max
 }
 
-// WrittenWords counts the words of the sections Autoradio writes: learned,
-// trying and steering (design 2.4).
+// IsTapLine reports whether a bullet's text is a steering line Autoradio wrote
+// from a tap (a listener's own bullet under that heading is not).
+func IsTapLine(text string) bool {
+	return strings.HasPrefix(text, "More like this: ") || strings.HasPrefix(text, "Less like this: ")
+}
+
+// WrittenWords counts the words of the lines Autoradio wrote: the tagged lines
+// of learned and trying, and its tap lines under steering (design 2.4). A
+// bullet the listener wrote, wherever it stands, is not counted: their text
+// can never make the page refuse a patch.
 func (d Doc) WrittenWords() int {
 	n := 0
 	for _, s := range d.Sections {
-		switch strings.ToLower(s.Heading) {
-		case strings.ToLower(SecLearned), strings.ToLower(SecTrying), strings.ToLower(SecSteering):
-			for _, l := range s.Lines {
-				if l.Bullet {
-					n += len(strings.Fields(l.render()))
-				}
+		h := strings.ToLower(s.Heading)
+		for _, l := range s.Lines {
+			if !l.Bullet {
+				continue
+			}
+			switch {
+			case (h == strings.ToLower(SecLearned) || h == strings.ToLower(SecTrying)) && l.Tag != "":
+				n += len(strings.Fields(l.render()))
+			case h == strings.ToLower(SecSteering) && l.Tag == "" && IsTapLine(l.Text):
+				n += len(strings.Fields(l.render()))
 			}
 		}
 	}
@@ -293,9 +305,13 @@ func CheckText(text string) error {
 		return fmt.Errorf("the text carries a tag of its own")
 	case strings.HasPrefix(t, "-") || strings.HasPrefix(t, "#"):
 		return fmt.Errorf("the text begins like a list item or a heading")
+	case linkRe.MatchString(t):
+		return fmt.Errorf("the text holds a link or a URL")
 	}
 	return nil
 }
+
+var linkRe = regexp.MustCompile(`(?i)https?:|www\.|\]\(|<https?|\[[^\]]*\]\[`)
 
 func hasControl(s string) bool {
 	for _, r := range s {
@@ -307,9 +323,9 @@ func hasControl(s string) bool {
 }
 
 // Op is one change to the notebook. Texture applies a patch's ops in the order
-// strike, retire, add, ask, tap, whatever order they are listed in.
+// strike, untag, retire, add, ask, tap, whatever order they are listed in.
 type Op struct {
-	Op string `json:"op"` // add, retire, strike, ask, tap
+	Op string `json:"op"` // add, retire, strike, untag, ask, tap
 	// Section is learned or trying (add).
 	Section string `json:"section,omitempty"`
 	// ID is the minted tag of an add (L8, T3), or the line a retire or strike
@@ -437,6 +453,27 @@ func (d Doc) ApplyOp(op Op) (Doc, error) {
 			sec := out.section(SecAsked)
 			sec.Lines = append(sec.Lines, Line{Raw: "- " + line, Bullet: true, Text: line})
 		}
+	case "untag":
+		// The listener reworded a line Autoradio wrote and the rewording is not
+		// one a strike can move: their words stay where they put them, as their
+		// own bullet, never tagged as a lesson.
+		if _, ok := idLetter(op.ID); !ok {
+			return d, fmt.Errorf("id %q is not a line tag", op.ID)
+		}
+		s, i := out.find(op.ID)
+		if s == nil {
+			return d, fmt.Errorf("%s is not a live line", op.ID)
+		}
+		t := strings.TrimSpace(strings.Map(func(r rune) rune {
+			if r < 0x20 || r == 0x7f {
+				return ' '
+			}
+			return r
+		}, op.Text))
+		if t == "" {
+			return d, fmt.Errorf("the text is empty")
+		}
+		s.Lines[i] = Line{Raw: "- " + t, Bullet: true, Text: t}
 	case "ask":
 		if err := checkAsked(op.Text); err != nil {
 			return d, err
@@ -459,18 +496,19 @@ func (d Doc) ApplyOp(op Op) (Doc, error) {
 		sec := out.section(SecSteering)
 		line := strings.TrimSpace(op.Text)
 		sec.Lines = append(sec.Lines, Line{Raw: "- " + line, Bullet: true, Text: line})
-		for n := 0; len(sec.Lines) > 0; {
-			n = 0
-			first := -1
+		// Only the lines Autoradio wrote are cut, oldest first; a bullet the
+		// listener put under this heading is never removed.
+		for {
+			taps, first := 0, -1
 			for i, l := range sec.Lines {
-				if l.Bullet {
-					n++
+				if l.Bullet && l.Tag == "" && IsTapLine(l.Text) {
+					taps++
 					if first < 0 {
 						first = i
 					}
 				}
 			}
-			if n <= MaxSteering {
+			if taps <= MaxSteering {
 				break
 			}
 			sec.remove(first)
@@ -508,7 +546,7 @@ func (d Doc) clone() Doc {
 // then the counts, then the page budget. Any refused op refuses the patch.
 func (d Doc) Apply(p Patch) (Doc, error) {
 	cur := d
-	for _, phase := range []string{"strike", "retire", "add", "ask", "tap"} {
+	for _, phase := range []string{"strike", "untag", "retire", "add", "ask", "tap"} {
 		for i, op := range p.Ops {
 			if op.Op != phase {
 				continue
@@ -528,7 +566,15 @@ func (d Doc) Apply(p Patch) (Doc, error) {
 			}
 		}
 	}
-	if w := cur.WrittenWords(); w > HardWords {
+	hasAdd := false
+	for _, op := range p.Ops {
+		if op.Op == "add" {
+			hasAdd = true
+		}
+	}
+	// A strike, a retire or a tap is never refused for the page's words: they
+	// cannot make it longer than the lines that were already there.
+	if w := cur.WrittenWords(); hasAdd && w > HardWords {
 		return d, fmt.Errorf("the sections Autoradio writes would hold %d words, over the %d of the page", w, HardWords)
 	}
 	return cur, nil

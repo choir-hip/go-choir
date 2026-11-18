@@ -43,9 +43,11 @@ text>` for any untagged bullet, `tap:<sheet entry id>` for a steering line
 line's exact text). A line the listener edits gets a new `mine:` ref; old
 forecasts keep the old ref.
 
-**Bounds.** Target about 400 words; hard cap 1,000 words over learned, trying
-and steering together, counted by Texture at write time (a patch over it is
-refused, whole). Never a line per segment or forecast. A confirmation changes
+**Bounds.** Target about 400 words; hard cap 1,000 words over the lines
+Autoradio wrote (tagged lessons and trying lines, and its tap lines under steering),
+counted by Texture at write time. A patch that adds a line and leaves the page over it is
+refused, whole; a strike, a retire, an untag or a tap is never refused for words, and the
+listener's own bullets are never counted. Never a line per segment or forecast. A confirmation changes
 a count and adds no text. A full section takes a new line only if it names, in
 `replaces`, live lines of that section; the prompt states the budget plainly
 ("holds 12 lines and has 12"). The listener's lines are never cut.
@@ -79,8 +81,11 @@ other caller (`lease.GrantHeldBy`). `commit.texture_revision` stays Texture's.
 ## What the DJ is shown and writes
 
 Stable (cached) part of the input: the fenced `notebook` section, every line
-as `<ref>: <text>` with `(heard h of m)` on tagged ones, grouped by section
-with the listener's first, then the budget sentence. Volatile part: the fenced
+as `<ref>: <text>` (no counts: they change with every settlement and would break the
+cache), grouped by section with the listener's first, then the budget sentence. Each
+line is cut to 400 bytes and the section to 8 KB, in document order; when cut, a row says
+how many lines are not shown, and the input receipt records lines shown and held.
+Volatile part: a fenced `counts` table (`L1: heard 9 of 11`, by line id, from the ledger now), and the fenced
 `settled` section, the last 40 settled forecasts, one row each:
 `<claim id> | <kind> | <title> | p_heard <p> | caused_by <ref> | heard
 through | not heard through` (a no-verdict forecast is not a row). Not shown:
@@ -112,12 +117,32 @@ in "What you asked for". A model-sent id is ignored: the handler mints `L<n>`
 and `T<n>` above the notebook's and the lesson records' maxima, so a retired id
 is never reused.
 
-**Counts.** `heard h of m` is computed by the handler on every extend, from
-the ledger: of the settled forecasts (a no-verdict one is not settled) whose
-`caused_by` ref is the line, `h` were heard through, `m` settled. It rides the
-patch; a patch is written when there are ops, strikes to move, or any count
-differs. So there is at most one revision per extend, and a confirmation
-costs a revision but no text. The model never writes a count.
+**Counts.** `heard h of m` is computed by the handler from the ledger on every extend: of the
+settled forecasts (a no-verdict one is not settled) whose `caused_by` ref is the line, `h` were
+heard through, `m` settled. The model sees it in the volatile `counts` table and never writes
+it. The count printed in the document is a display copy: it rides along whenever a patch
+carries another op, and is otherwise rewritten only when a count changed and at least one hour
+(`nbCountCadence`) has passed since the desk's last revision. So **the document's counts can be
+up to an hour old; the learning route is live** (`live_heard`, `live_of`). This is a write
+cadence on a derived value, not a limit on model calls.
+
+**What the counts do not prove.** The DJ writes `caused_by` on its own forecasts, so it chooses
+which forecasts count toward a line: a line can be named only where the DJ expects a hit. "heard
+9 of 9" is evidence about the nine cases the DJ chose, not about the listener. The route shows,
+beside `heard` and `of`, `live_forecasts` (all the listener's forecasts made since the line was
+written, settled or not) and `live_settled`, so a line cited on 9 of 200 forecasts reads as
+that. The check the DJ cannot choose is the overall scorecard: the gap between the mean `p_heard`
+on segments heard through and on segments skipped (ledger conjecture C120). No classifier of
+"same kind or subject" is built.
+
+**Retiring a tested line.** A `retire`, or an `add` with `replaces`, of a line with `m > 0` must
+cite at least one settled forecast whose `caused_by` names that line; otherwise the op is dropped
+with a reason (in `done.notebook.dropped` and the index). The retired line's record keeps its
+text, its heard and of at that moment, its age and what replaced it; the route lists the last
+50 as `retired`, newest first, and the replacing line's row says `replaces_text` ("replaces L3
+(heard 2 of 9)"). The count of the new line restarts at 0 of 0: a reworded lesson is a new
+conjecture. Lesson records are written before the patch is asked for; if one cannot be
+appended, the patch is not applied.
 
 **caused_by.** `lesson:L<n>` (cause `lesson`), `try:T<n>` (cause `trying`),
 `mine:<8 hex>` and `tap:<id>` (cause `instruction`) resolve against the lines
@@ -135,7 +160,10 @@ record); one whose text changed is struck (kind `corrected`) and the patch's
 `strike` op moves their words verbatim to "What you asked for" with
 `(you corrected L7)`. A proposal whose every cite is a cite of a struck line
 is refused. Strike records are written even when nothing else changes.
-Untagged lines anywhere are the listener's and are never touched.
+Untagged lines anywhere are the listener's and are never touched. If their rewording of a
+tagged line fails validation as a listener line (a tag-like string, say), the patch's `untag`
+op leaves it where it stands as their own untagged bullet, and the strike record's `note` says
+why: their words are never left tagged as a lesson.
 
 ## Steering
 
@@ -145,7 +173,11 @@ sheet with a title) or `{"direction":"mute","publisher":"voice-xxxxxx"}`. It
 writes an `autoradio.note` (id prefix `autoradio-steer:`) and patches at once:
 a tap appends `More like this: "<title>" (<d Mon HH:MM>)` (or `Less`) to
 Recent steering, keeping 10; a mute appends `Never play takes by <handle>.`
-to What you asked for. Answer `{status, reason, doc_id, revision_id, line,
+to What you asked for. An optional client `id` makes a re-send the same tap; without one, a tap
+on the same entry (or publisher) in the same direction within 10 minutes is the same tap. The
+patch id derives from the note id, and the note is written once the patch is in, so a retry
+cannot leave an orphan note. Only Autoradio's own tap lines are cut at 10; a bullet the
+listener put under Recent steering is never cut. Answer `{status, reason, doc_id, revision_id, line,
 note_id}`. A spoken instruction is the `steer` op above.
 
 ## Routes (rule 2)
@@ -163,6 +195,18 @@ the table), and first writers of `autoradio.lesson` (id `autoradio-lesson:L<n>`;
 All are owner-private, and all are on that route. The document is read through
 Texture's own routes.
 
+## Finding the document
+
+The notebook is looked up by its deterministic document id first (`notebookDocID`, from the
+owner and the computer), then among the owner's own non-archived documents titled `My notebook`
+or `My edition` whose revisions no model agent wrote (any revision by an agent whose label is
+not `app:autoradio` makes a document not adoptable: that is how a document a Texture model made
+in the same turn is told from the listener's). A failure to list is an error, never "not found".
+If the notebook is archived the desk reads and writes nothing; the route says `archived` and the
+patch answers `refused: your notebook is archived` (un-archiving is the owner's act). A patch
+writes the document's text from the notebook grammar: **rich-text formatting in the document is
+flattened to the grammar by a patch.** Lesson text may not hold a link or a URL.
+
 ## Choices where the design was silent or the code differed
 
 - One commit set holds L4 and L5 together: the validators need the input's
@@ -170,8 +214,8 @@ Texture's own routes.
 - Grants are static holders in the lease grant table, not per-run leases
   (nothing issues or ends them). The custodian functions are methods on
   `textureowner.Handler`, reached through `notebook.Service`.
-- Counts refresh once per extend, not on a timer; a count-only patch is a
-  revision.
+- Counts are computed on every extend but written to the document at most once an hour when
+  nothing else is written (see Counts).
 - `Recent steering` taps are written immediately by the steer route, not
   queued for "within a minute".
 - The listener's edit path for a notebook-titled document through the
