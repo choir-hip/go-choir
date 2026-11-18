@@ -8,7 +8,7 @@ package agentcore
 //
 // Outcomes (owner, 2026-11-17), from ended.outcome as the reducer stored it:
 //
-//	finished       heard through: the forecast came true
+//	finished       heard through, and the entry heard: the forecast came true
 //	skipped, cut   the forecast was false
 //	left, failed   no verdict: the listener closed the app or signed out, or
 //	               the entry failed to play. Nothing is settled; an

@@ -259,17 +259,23 @@ desk `place at now` that cuts a forecast-bearing on-air entry). What is not
 checked: the sheet route cannot tell the phone app from any other client of
 the owner's session. `TestF41` only holds that the programme route's own
 source names no settle identifier; it is not the guard. The rule reads
-`ended.outcome` as the reducer stored it, never the entry `state` (a `left`
+`ended.outcome` as the reducer stored it; for `finished` it also requires the
+entry `heard`. The entry state never turns a `left` into a true (a `left`
 entry has state `heard`):
 
 | `ended.outcome` | Result |
 |---|---|
-| `finished` | settled true (heard through) |
+| `finished` and the entry `heard` | settled true (heard through) |
 | `skipped`, `cut` | settled false |
 | `heard` with no `ended` on the op | no verdict `no_outcome`: the reducer stores `finished` for it, but the op said nothing, so there is no evidence of heard-through (`TestL14`) |
 | `left`, `failed` | no verdict: an `autoradio.no_verdict` record, nothing settled (a `left` ending is stored with entry state `heard`) |
 | `finished` but the entry is not `heard` (an op that says skipped and finished) | no verdict `refused`: true needs both (`TestL15`) |
 | none (crash, app killed) | no op, nothing written; the forecast stays open and lapses at its deadline |
+
+Why the op's `state` is evidence for skipped but not for heard: an
+`aired skipped` with no `ended` settles false, because choosing to skip is the
+listener's whole statement, whereas `heard` only says the entry is over, and
+heard-through needs the phone to say how it ended.
 
 **Precedence** when more than one row applies, first match wins: desk-caused
 (not the listener's op), refused (the claim is not that entry's forecast),
@@ -311,7 +317,8 @@ settles nothing.
   `op_id`, `entry_id`, `reason` (`left`, `failed`, `late`, `superseded`,
   `refused`, `unplaced`, `desk_caused`, `no_outcome`), `outcome` (what the
   op said), `last_block`, `position_seconds`; body the same as JSON with
-  `position_source` (`op` or `sheet`) and `ended_at`.
+  `position_source` (`op`, `sheet`, or `none` for an `unplaced` notice, which
+  has no op) and `ended_at`.
 - **Order:** the settlement is written before the op record, so a failed
   append leaves a harmless settlement (fixed id) and a replayed op, answered
   from the tape, can never need one. A tape failure fails the op unacknowledged
@@ -365,7 +372,9 @@ most 200,000 records and at most 5,000 no-verdict records of this computer (`tru
 if either bound was hit). A real cut reads as `cut`: its row's `op` is the
 listener's place or move at now (`cutting: true`), the op that ended the
 entry, not an op of the entry's own. A no-verdict row's `op` carries
-`position_seconds` and `position_source` (`op` or `sheet`). An `unplaced`
+`position_seconds` and `position_source` (`op` or `sheet`; the one exception
+is a settled cut row, which shows the cutting op's own position when it
+carried one). An `unplaced`
 notice is ignored once the entry is on the sheet. An `after` that is not a forecast of the listener is
 a `400`. It does not yet list turns, segments' text or the ops themselves
 beyond the settling op (the design's wider ledger route).
