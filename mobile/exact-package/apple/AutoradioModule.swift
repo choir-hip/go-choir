@@ -76,6 +76,14 @@ public typealias AutoradioHandler = ([String: Any], @escaping ([String: Any]) ->
 public final class AutoradioModule: ExactPackage {
     // Internal (not private) so the per-lane extension files can reach them.
     let context: ExactPackageContext
+    /// The folder on disk that a page reads as `app:/cache/files`. Not `context.file(...)`: that names a file and answers nil for a path that is
+    /// an existing folder, so on every launch after the first the copy went to a folder no page can read, and a PDF, a picture or a recording
+    /// opened from Files or the Reader drew a blank frame (owner, 2026-11-18).
+    var filesCacheDisk: URL {
+        let u = context.cache.appendingPathComponent("files", isDirectory: true)
+        try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+        return u
+    }
     var runtime: LabRuntime!
     var owner: PlatformSessionOwner!
     var choir: ChoirApp!
@@ -138,7 +146,9 @@ public final class AutoradioModule: ExactPackage {
         PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
         // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the stores below live in this target.
         // Kit methods called: Signals.wipe(), OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
-        let filesCache = context.file("app:/cache/files") ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files")
+        let filesCache = filesCacheDisk
+        // The folder the old lookup fell back to: copies no page could read. Removed once; nothing writes there now.
+        try? FileManager.default.removeItem(at: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files"))
         choir.accountWipe.register("signals") { [signals] in signals?.wipe() }
         choir.accountWipe.register("open-pages") { [pages] in pages?.wipe() }
         choir.accountWipe.register("app-files") {

@@ -32,8 +32,7 @@ extension AutoradioModule {
 
         // The PDF page view is the Files viewer's: an iframe on a path under app:/cache/files. The reader's copy stays in Application Support
         // (the cache may be emptied); a clone is made in the cache the first time the PDF is shown.
-        let cacheDisk = context.file("app:/cache/files")
-            ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files")
+        let cacheDisk = filesCacheDisk
         func shown(_ d: ShelfDoc) -> String {
             guard d.kind == "pdf", let from = lib.fileURL(d.id) else { return "" }
             let folder = cacheDisk.appendingPathComponent("reader-\(d.id)", isDirectory: true)

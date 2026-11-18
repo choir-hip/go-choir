@@ -10,10 +10,8 @@ import Foundation
 extension AutoradioModule {
     func registerFiles() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
-        // Exact names its cache as app:/cache/...; context.file maps that to the disk path. Without it (no file roots) use Caches.
-        let disk = context.file("app:/cache/files")
-            ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files")
-        try? FileManager.default.createDirectory(at: disk, withIntermediateDirectories: true)
+        // Exact names its cache as app:/cache/...; the module's filesCacheDisk is that folder on disk.
+        let disk = filesCacheDisk
         let backend: FilesBackend = Demo.isOn ? DemoFilesBackend() : ChoirFilesBackend()
         let service = FilesService(backend: backend, cacheRoot: disk, appPrefix: "app:/cache/files",
                                    recents: RecentFiles(file: support.appendingPathComponent("recent-files.json")))

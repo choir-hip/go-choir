@@ -189,6 +189,18 @@ are what happened to us, not Exact guarantees.
   session (our radio and a media viewer pause each other this way).
 - Our Files place brings each file to `app:/cache/files/<hash>/<name>` first
   and every viewer plays from that path.
+- **The disk folder behind `app:/cache` is `context.cache`** (and `context.data`,
+  `context.temporary`); a folder under it is `context.directory("app:/cache/x")`.
+  `context.file(path)` names a FILE: it answers a URL for a path that is
+  missing or is a regular file, and nil for a path that is an existing
+  folder. We asked it for the folder `app:/cache/files` and fell back to
+  `Library/Caches/Autoradio/files` on nil, so on every launch after the one
+  that created the folder the copy went where no page can read it and the
+  frame drew blank while every check on "the copy exists" passed (owner,
+  2026-11-18, PDFs; reproduced in the simulator with empty caches).
+  **[seen]** in `modules/ExactPackage.swift` of the pinned source and on the
+  device. A simulator tour must start with empty caches, or a copy from an
+  older build hides this.
 
 ## Components, props and names (our app build)
 
