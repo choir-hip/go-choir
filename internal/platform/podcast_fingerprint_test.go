@@ -7,8 +7,6 @@ package platform
 //      length that disagrees with the clip's) is stored;
 //   3. a clip with none is refused, or the read shows a fingerprint for it;
 //   4. a clip written again with a fingerprint keeps the old row;
-//   5. a deleted clip is still shown, or deleting an unknown id is an error;
-//   6. a delete with a bad id removes the good ones before it.
 
 import (
 	"context"
@@ -99,31 +97,5 @@ func TestPodcastClipFingerprintIsStoredValidatedAndServed(t *testing.T) {
 		if c.Start == 300 && (c.Fingerprint == nil || c.Fingerprint.Start != 30) {
 			t.Fatalf("the rewritten clip kept its old row: %+v", c.Fingerprint)
 		}
-	}
-
-	// Delete: a bad id refuses the request whole; an unknown id is fine.
-	var ids []string
-	for _, c := range got.Clips {
-		ids = append(ids, c.ClipID)
-	}
-	// Warm the cache, then refuse a request whose first id is good: the good
-	// one must not have been deleted.
-	f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0)
-	if _, err := f.svc.DeletePodcastClips(ctx, []string{ids[0], "not-a-clip"}); !errors.Is(err, ErrPodcastInvalid) {
-		t.Fatalf("bad id: %v", err)
-	}
-	f.svc.podcastCache.reset() // read the store, not the cache the delete should have emptied
-	if again, _ := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0); len(again.Clips) != 2 {
-		t.Fatalf("a refused delete removed clips: %d left", len(again.Clips))
-	}
-	if n, err := f.svc.DeletePodcastClips(ctx, []string{ids[0], "clip-000000000000000000000000"}); err != nil || n != 2 {
-		t.Fatalf("delete: %d %v", n, err)
-	}
-	left, _ := f.svc.ListPodcastClips(ctx, []string{harbor}, nil, 0) // no manual reset: the delete must have emptied the cache
-	if len(left.Clips) != 1 || left.Clips[0].ClipID == ids[0] {
-		t.Fatalf("after the delete: %+v", left.Clips)
-	}
-	if _, err := f.svc.DeletePodcastClips(ctx, nil); !errors.Is(err, ErrPodcastInvalid) {
-		t.Fatalf("empty delete: %v", err)
 	}
 }

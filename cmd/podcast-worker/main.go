@@ -152,7 +152,7 @@ func main() {
 		defer stop()
 		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MaxMinutes: *maxMinutes, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
 		matcher := &podcastworker.Matcher{B: client, Params: params, StatePath: *matchState, Logf: log.Printf, Tracks: tracks}
-		repairer := &podcastworker.Repairer{B: client, Eng: t, Logf: log.Printf}
+		repairer := &podcastworker.Repairer{B: client, Eng: t, Logf: log.Printf, MaxSeconds: float64(*maxMinutes * 60)}
 		cfg := podcastworker.ServeConfig{
 			Match:  func(ctx context.Context) error { _, err := matcher.Run(ctx); return err },
 			Repair: func(ctx context.Context) error { _, err := repairer.Run(ctx); return err },
@@ -190,7 +190,7 @@ func main() {
 		ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		t := &podcastworker.Transcriber{FFmpeg: *ffmpeg, Parakeet: *parakeet, Model: *model, VAD: *vad, Threads: *threads, WorkDir: *workDir, MinFreeBytes: int64(*minFreeGB * (1 << 30))}
-		if _, err := (&podcastworker.Repairer{B: client, Eng: t, DryRun: *dryRun, Logf: log.Printf}).Run(ctx); err != nil {
+		if _, err := (&podcastworker.Repairer{B: client, Eng: t, DryRun: *dryRun, Logf: log.Printf, MaxSeconds: float64(*maxMinutes * 60)}).Run(ctx); err != nil {
 			log.Fatalf("repair: %v", err)
 		}
 		return
