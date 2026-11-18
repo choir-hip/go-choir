@@ -95,3 +95,25 @@ gives the reason (needs PostgreSQL, needs nix, selftest of an unchanged
 gate). The gates CI has and the landing lacks are added to `scripts/gates`
 in the same change. After it, a new CI gate cannot be added without the
 landing script learning of it.
+
+## A fourth time, before the fix landed (2026-11-18, 21:24Z)
+
+The train of 18 November (heard memory, full-page search, the deploy-race
+fix, the batched closure) passed `scripts/land` and pushed `7119f6ab5`; CI
+run 44400808469 then failed in "Lock scope ratchet (O12)", a gate
+`scripts/gates` does not run (it is one of the lines the fix above adds):
+
+    NEW internal/platform/capture_fulltext.go:630 Store.CatchUpCaptureFullText holds ft.catchMu across chan select
+
+Nothing deployed; staging stayed on `38d86121e`. The finding is true and the
+hold is intended: `catchMu` lets one catch-up pass run at a time. It is
+taken only by `CatchUpCaptureFullText`, whose one production caller is the
+single background goroutine started once per store; a search or an inline
+page write never takes it. What contends is a second catch-up pass, which
+must wait for the first. The rest it is held across is the pass's own pause
+between batches, and the pass returns when its context ends. The key is
+added to `cmd/lockscope/baseline.txt` with this as its reason.
+
+Cost this time: one failed CI run and about forty minutes before the train
+could deploy. The fix for the cluster (`lane/gates-cover-ci`) is in its
+last review.

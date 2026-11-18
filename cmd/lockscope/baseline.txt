@@ -3,5 +3,6 @@
 # Regenerate: go run ./cmd/lockscope -write cmd/lockscope/baseline.txt
 cmd/capsule-broker/session_worker.go | sessionWorker.eval | w.mu | chan | select
 internal/capsule/capsule.go | Capsule.Quiesce | c.mu | chan | select
+internal/platform/capture_fulltext.go | Store.CatchUpCaptureFullText | ft.catchMu | chan | select
 internal/yaegikernel/desk_session_worker.go | DeskSessionWorker.EvalFrame | w.mu | chan | select
 internal/yaegikernel/session.go | Session.Eval | s.mu | chan | select
