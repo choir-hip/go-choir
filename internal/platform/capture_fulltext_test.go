@@ -575,3 +575,37 @@ func TestFullTextAQueryWithNoUsableWordIsNotASearch(t *testing.T) {
 		t.Fatalf("a query with no usable word answered %+v", resp.FullText)
 	}
 }
+
+// A disk-full catch-up counts its failures like the inline path (one log line
+// a window, not one per capture), stops after 20 in a row, and leaves
+// complete false.
+func TestFullTextACatchUpOnAFullDiskStopsAndSaysItIsNotComplete(t *testing.T) {
+	f := newFTFixture(t, false)
+	now := time.Now().UTC()
+	var objs []objectgraph.Object
+	for i := 0; i < 150; i++ {
+		objs = append(objs, f.capture(t, "owner-a", "computer-a", fmt.Sprint("old", i), "Page", fmt.Sprintf("https://example.com/o%d", i), "text of the page.\n\n", now))
+	}
+	f.put(t, objs...)
+	f.configure(t)
+	buf := fullTextLog(t)
+	ft := f.store.fullText.Load()
+	ft.complete.Store(true) // as if an earlier pass had finished
+	ft.writeHook = func(objectgraph.Object) error { return fmt.Errorf("no space left on device") }
+	prog, err := f.store.CatchUpCaptureFullText(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "consecutive write failures") {
+		t.Fatalf("the walk must stop on a failing disk: %+v %v", prog, err)
+	}
+	if prog.Failed != captureFullTextMaxConsecutiveFailures || prog.Scanned > captureFullTextBatch {
+		t.Fatalf("stopped after %d failures, scanned %d", prog.Failed, prog.Scanned)
+	}
+	if n := strings.Count(buf.String(), "capture fulltext write failed"); n == 0 || n > 2 {
+		t.Fatalf("%d failure lines for %d failures:\n%s", n, prog.Failed, buf.String())
+	}
+	if ft.complete.Load() {
+		t.Fatal("complete must read false after a failed walk")
+	}
+	if got := ft.failures.Load(); got != int64(prog.Failed) {
+		t.Fatalf("failures counted %d, want %d", got, prog.Failed)
+	}
+}
