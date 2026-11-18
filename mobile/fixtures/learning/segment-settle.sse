@@ -1,0 +1,12 @@
+event: stretch
+data: {"stretch_id":"s7"}
+
+event: segment
+data: {"kind":"story","segment_id":"s7/1","stretch_id":"s7","title":"Harbor fees rise","text":"The harbor board voted last night to raise the fee.","cites":[{"ref":"pub:harbor-fees@v2","role":"subject","label":"Harbor fees rise"}],"block_count":1,"entry_id":"d-s7-1","claim_id":"calib:autoradio-dj:s7:1"}
+
+event: segment
+data: {"kind":"transition","segment_id":"s7/2","stretch_id":"s7","title":"","text":"And now the weather.","between":{"after_segment":"s7/1","before_segment":"s7/3"},"entry_id":"d-s7-2"}
+
+event: done
+data: {"stretch_id":"s7","status":"completed","segments":2,"claims":1,"placed":2,"place_failed":0}
+

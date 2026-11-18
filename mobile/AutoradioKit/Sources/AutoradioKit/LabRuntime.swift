@@ -57,7 +57,7 @@ public struct TraceView: Codable, Sendable {
 public struct TurnRow: Codable, Sendable { public var id, transcript, configName, outcome: String; public var ackMs, revisionMs: Double }
 
 /// Everything a host needs: the registry, the audio, the engine, kept turns, configurations.
-/// A host (the Exact module) creates one, then calls `start`, `talkDown`, `talkUp`, `setStage`, `replay` ...
+/// A host (the Exact module) creates one, then calls `start`, `setStage`, `replay` ...
 public final class LabRuntime: @unchecked Sendable {
     public let registry: StageRegistry
     public let clock = LabClock()
@@ -69,6 +69,8 @@ public final class LabRuntime: @unchecked Sendable {
     public let recorder: TurnRecorder
     public let store: KeptTurnStore
     public let configs: ConfigStore
+    /// The voice choice that survives a relaunch.
+    public let voiceStore: VoiceChoiceStore
     public let session: AudioSessionOwner
     public let coordinator: SessionCoordinator
     public var onChange: (@Sendable () -> Void)?
@@ -86,21 +88,31 @@ public final class LabRuntime: @unchecked Sendable {
     private let policyBox: PolicyBox
     private var injecting = false
 
-    public init(supportDir: URL, session: AudioSessionOwner, registry: StageRegistry = .builtIn()) {
+    /// `emptyProgramme`: the radio starts with nothing loaded (the phone and the Mac): the lab's fixture edition is for tests and the lab, and
+    /// must never be spoken on a listener's device. Everything that plays is a run sheet entry.
+    public init(supportDir: URL, session: AudioSessionOwner, registry: StageRegistry = .builtIn(), emptyProgramme: Bool = false) {
         self.registry = registry
         let log = EventLog(clock: clock)
         self.log = log
-        let cfg = StageRegistry.listenerConfiguration()
+        let voiceStore = VoiceChoiceStore(file: supportDir.appendingPathComponent("voice-choice.json"))
+        self.voiceStore = voiceStore
+        // The saved voice, or on a fresh install the neural default. The model stages register after this runs, so the stage is not checked
+        // here: `makeSpeaker` falls back to the system voice for a stage that is not registered.
+        let cfg = StageRegistry.listenerConfiguration(voice: voiceStore.current())
         self.config = cfg
         let policyBox = PolicyBox(cfg.audio)
         self.policyBox = policyBox
-        let coord = SessionCoordinator(inner: session, log: log, audio: audio, policy: { policyBox.value })
+        let override = Locked<Bool?>(nil)
+        self.overrideBox = override
+        // Voice off is a playback session with no microphone; only the tap on the Voice control (or onboarding's own screen) opens it.
+        let coord = SessionCoordinator(inner: session, log: log, audio: audio, policy: { policyBox.value },
+                                       voiceOn: { override.value ?? HandsFreeSwitch.shared.isOn })
         self.coordinator = coord
         self.session = coord
         store = KeptTurnStore(root: supportDir.appendingPathComponent("turns"))
         configs = ConfigStore(dir: supportDir.appendingPathComponent("configs"))
         FixtureTurn.install(into: store)
-        let doc = FixtureProgramme.document
+        let doc = emptyProgramme ? ProgrammeDocument(id: "none", title: "", blocks: []) : FixtureProgramme.document
         player = ProgrammePlayer(audio: audio, registry: registry, log: log, configuration: cfg, document: doc)
         recorder = TurnRecorder(bus: bus)
         let storeRef = store
@@ -115,13 +127,36 @@ public final class LabRuntime: @unchecked Sendable {
         snap.configName = cfg.name
         // Model loads show in the trace; the one store is shared with voice setup.
         Task { await ModelStore.shared.attach(log: log) }
+        // What the vector job waits for (EmbeddingService): speech on air, a voice line, or speech being made. Speech always wins the processor.
+        RadioDemand.shared.add { [audio, player] in audio.voiceIsSpeaking || audio.programmeAudible || player.synthesisBusy }
         player.onChange = { [weak self] in self?.refresh() }
+        // Play asks for the session first when the engine is down or the claim is doubted (after the background, an interruption).
+        player.ignoreSystemPause = { [coordinator] in coordinator.changedWithin(2.5) }
+        player.msSinceSessionChange = { [coordinator] in coordinator.msSinceSessionChange }
+        player.onNeedsSession = { [coordinator] in Task { await coordinator.ensureReady(reason: "play") } }
+        // The voice switch turned itself off (three quiet minutes) or was set elsewhere: the session drops the microphone.
+        HandsFreeSwitch.shared.onVoiceChange = { [coordinator, audio] in
+            Task {
+                // Turning voice on is the moment to ask for the microphone (never before); a refusal leaves voice without a microphone.
+                if !audio.virtual, MicAsk.shouldRequest(voiceOn: HandsFreeSwitch.shared.isOn, granted: LiveAudio.micPermissionGranted()) {
+                    audio.permitMic(await LiveAudio.requestMicPermission())
+                } else if HandsFreeSwitch.shared.isOn, LiveAudio.micPermissionGranted() { audio.permitMic(true) }
+                await coordinator.reapply()
+            }
+        }
         // The bar and the player read the real position from the audio, and a speed picked there reaches the audio.
         let pl = player
         BarTracker.shared.positionSource = { [weak pl] in pl?.renderPosition() }
         BarTracker.shared.speedSink = { [weak pl] v in pl?.setRate(v) }
-        // Mail's "Read it to me" speaks through the engine.
-        MailReading.shared.handler = { [weak self] address, text in Task { await self?.speakText(address: address, text: text) } }
+        // Mail's "Read it to me" is a play: it goes on the run sheet as `place now`, with the message's words held for the entry.
+        MailReading.shared.handler = { address, text in
+            Task { @MainActor in
+                let paras = ChoirText.paragraphs(text, maxChars: ChoirText.speechChars)
+                guard !paras.isEmpty else { return }
+                let title = paras[0].split(separator: " ").prefix(6).joined(separator: " ")
+                RunSheetPlayer.shared.playNow(.readAloud(address: address, title: title), words: (title, paras))
+            }
+        }
         coord.onChange = { [weak self] in self?.refresh() }
         eventTask = Task { [weak self] in
             guard let self else { return }
@@ -150,18 +185,32 @@ public final class LabRuntime: @unchecked Sendable {
         }
         if virtual { LabEnvironment.promptsAllowed = false; LabEnvironment.virtualAudio = true }
         do {
-            try await session.claim(.listening, preferBuiltInMic: true, reason: "start")
-            let micOK = virtual ? true : await LiveAudio.requestMicPermission()
+            // The coordinator decides what the claim is: a playback session while voice is off, voice processing from the start while it is on
+            // (the radio's voice is not the listener's).
+            try await session.claim(.talking, preferBuiltInMic: true, reason: "start")
+            // Voice off is the default and never touches the microphone, so it never asks for it (owner: "it's off unless you turn it on";
+            // the Mac's prompt also waits for a person, which hung Play). Voice on asks, here or when the listener turns it on (below).
+            let voiceIsOn = coordinator.current != .playing
+            let micOK = virtual ? true : (MicAsk.shouldRequest(voiceOn: voiceIsOn, granted: LiveAudio.micPermissionGranted()) ? await LiveAudio.requestMicPermission() : LiveAudio.micPermissionGranted())
             if !micOK { log.emit(.error(stage: "mic", message: "microphone permission denied; button/typing only")) }
-            try audio.start(bus: bus, clock: clock, wantMic: micOK, voiceProcessing: coordinator.current == .talking, virtual: virtual)
+            try audio.start(bus: bus, clock: clock, wantMic: micOK, mic: micOK && coordinator.current != .playing,
+                            voiceProcessing: coordinator.current == .talking, virtual: virtual)
             if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
+            LaunchTimings.shared.mark("engine"); LaunchTimings.shared.mark("session")
             let mic = bus.mic()
-            micTask = Task { [engine] in for await f in mic { await engine.ingest(f) } }
+            let echo = audio.voiceProcessing
+            let on = handsFreeOverride ?? HandsFreeSwitch.shared.isOn
+            micTask = Task { [engine] in
+                await engine.handsFreeConfigure(echoCancelled: echo)
+                await engine.handsFreeSet(on)
+                for await f in mic { await engine.ingestHandsFree(f) }      // hands-free: no button, the policy decides (HandsFree.swift); off: the engine looks at nothing
+            }
             player.play()
             lock.lock(); snap.running = true; snap.message = ""; lock.unlock()
         } catch {
-            log.emit(.error(stage: "start", message: "\(error)"))
+            let ns = error as NSError
+            log.emit(.error(stage: "start", message: "\(ns.domain) \(ns.code): \(ns.localizedDescription)"))
             lock.lock(); snap.message = "start failed: \(error)"; lock.unlock()
         }
         refresh()
@@ -172,17 +221,22 @@ public final class LabRuntime: @unchecked Sendable {
     public var startRequest: (@Sendable () async -> Void)?
 
     /// Speak arbitrary text as a programme item (mail's "Read it to me"): it queues like a story, shows in now-playing, and the
-    /// listener can cut into it like any speech. Returns false for text with nothing to say.
+    /// listener can cut into it like any speech. `now`: the listener pressed Listen on what is in front of them, so it replaces what
+    /// is playing instead of waiting behind it. Returns false for text with nothing to say.
     @discardableResult
-    public func speakText(address: String, text: String, title: String? = nil) async -> Bool {
+    public func speakText(address: String, text: String, title: String? = nil, now: Bool = false) async -> Bool {
         if !snapshot().running, let go = startRequest { await go() }
         let running = snapshot().running
         // Not running: the text is the loaded programme, played when the radio starts (the engine is not there to play it).
-        return player.speakText(address: address, text: text, title: title, startNow: !running, play: running)
+        return player.speakText(address: address, text: text, title: title, startNow: !running || now, play: running)
     }
 
+    /// The session is claimed and active and the engine is up, taking the claim again when needed. Call before anything plays.
+    @discardableResult
+    public func ensureSessionReady(reason: String) async -> Bool { await coordinator.ensureReady(reason: reason) }
+
     public func stop() {
-        player.pause()
+        player.pause(reason: "runtime stop")
         micTask?.cancel(); micTask = nil
         audio.stop(); coordinator.release(); started = false
         lock.lock(); snap.running = false; lock.unlock()
@@ -195,6 +249,9 @@ public final class LabRuntime: @unchecked Sendable {
     public var pageTextProvider: (@Sendable (String) async -> String)?
     private var warmTask: Task<Void, Never>?
     private let warmKeys = Locked<(done: String, running: String)>(("", ""))
+    /// Hands-free for one screen only (onboarding's "Talk to it" while the switch is off): not stored.
+    private let overrideBox: Locked<Bool?>
+    var handsFreeOverride: Bool? { overrideBox.value }
     static func warmKey(_ address: String, _ text: String) -> String { "\(address)|\(text.utf8.count)|\(text.hashValue)" }
     /// A page's text has arrived (or changed) while the page may already be in front: read it into the responder's cache unless that
     /// exact page and text has been read or is being read now.
@@ -239,14 +296,47 @@ public final class LabRuntime: @unchecked Sendable {
     /// `pageAddress` is the address of the page the bar was showing when the listener asked (empty: the page in front now).
     @discardableResult
     public func ask(_ text: String, pageAddress: String = "") async -> Bool {
+        // A question that cannot be asked is kept, with the reason, so it is not lost with the cleared field: the card shows it with a retry.
+        func refused(_ why: String) -> Bool {
+            let id = "ask-" + UUID().uuidString.prefix(8).lowercased()
+            Conversation.shared.begin(id: id, question: text)
+            Conversation.shared.fail(id: id, note: why)
+            return false
+        }
         if !snapshot().running, let go = startRequest { await go() }
-        guard snapshot().running else { return false }
+        guard snapshot().running else { return refused("The radio could not start, so it could not hear that. Try again.") }
         let front = pageAddress.isEmpty ? nil : frontPageResolver?(pageAddress)
-        return await engine.typedTurn(text, front: front)
+        let started = await engine.typedTurn(text, front: front)
+        if !started, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return refused("The radio was busy with another question. Try again.") }
+        return started
     }
 
-    public func talkDown() { Task { await engine.buttonDown() } }
-    public func talkUp() { Task { await engine.buttonUp() } }
+    /// Hands-free on or off (one state, off at every launch): on, the microphone is open and the turn policy opens and closes turns; off,
+    /// the engine hears nothing and an open turn is dropped now. `persist: false` is for one screen only (onboarding's "Talk to it").
+    public func setHandsFree(_ on: Bool, persist: Bool = true) {
+        if persist { overrideBox.write { $0 = nil }; HandsFreeSwitch.shared.set(on) } else { overrideBox.write { $0 = on } }
+        // The session follows the switch first (mic and voice processing only while on); then the engine is told whether the radio's own voice is
+        // cancelled from the microphone, which is what lets the listener's speech pause the programme at once.
+        Task { [engine, coordinator, audio] in
+            await coordinator.reapply()
+            await engine.handsFreeConfigure(echoCancelled: audio.voiceProcessing)
+            await engine.handsFreeSet(on)
+            if on {
+                let tap = audio.micActive ? "ok" : "fail"
+                print("AUTORADIO voice on claim=\(coordinator.describe()) rate=\(Int(audio.micTapRate)) tap=\(tap)")
+                if !audio.micActive, !audio.virtual {
+                    // The route may still be settling: look again before saying so.
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    if !audio.micActive, HandsFreeSwitch.shared.isOn { log.emit(.error(stage: "listen", message: "the microphone could not be opened (input rate \(Int(audio.micTapRate)))")) }
+                    else { print("AUTORADIO voice mic tap=ok after the route settled rate=\(Int(audio.micTapRate))") }
+                }
+            }
+        }
+        refresh()
+    }
+    /// The stored state again, after a screen's own turn-on.
+    public func restoreHandsFree() { setHandsFree(HandsFreeSwitch.shared.isOn) }
+    public var handsFreeIsOn: Bool { handsFreeOverride ?? HandsFreeSwitch.shared.isOn }
     /// Discard the turn being talked (Cancel beside Send): stop the capture, drop the audio and words, call nothing.
     public func cancelTalk() { Task { await engine.cancelTurn() } }
 
@@ -260,7 +350,7 @@ public final class LabRuntime: @unchecked Sendable {
         }
         log.emit(.note("injecting the fixture turn (\(mic.count / 16) ms) through the live engine"))
         // Press the button only when the configuration addresses by button; in open mode the audio alone must do it.
-        let useButton = ["button", "hybrid"].contains(configuration.setting(.addressing)?.id ?? "")
+        let useButton = false          // hands-free: the audio alone starts and ends the turn
         if useButton { await engine.buttonDown() }
         let n = 512   // 32 ms frames, paced in real time
         var i = 0
@@ -271,7 +361,7 @@ public final class LabRuntime: @unchecked Sendable {
             try? await Task.sleep(nanoseconds: 32_000_000)
         }
         // trailing silence so the VAD closes, then the button
-        for _ in 0..<20 {
+        for _ in 0..<50 {
             bus.pushMic(AudioFrame(samples: [Float](repeating: 0, count: n), sampleRate: busSampleRate, t: clock.now))
             try? await Task.sleep(nanoseconds: 32_000_000)
         }
@@ -285,6 +375,8 @@ public final class LabRuntime: @unchecked Sendable {
         var c = conf
         // A configuration saved before the stock-phrase holder was removed names it; it now means the local model's holder.
         if c.setting(.holder)?.id == "fixed-lines" { c.set(.holder, StageSetting(id: LocalAckHolder.stageID)) }
+        // The local holder now answers first from the saved stories (and says what it looks up when they hold nothing).
+        if c.setting(.holder)?.id == LocalAckHolder.stageID { c.set(.holder, StageSetting(id: SavedAnswerHolder.stageID)) }
         lock.lock(); config = c; snap.configName = c.name; lock.unlock()
         let policyChanged = policyBox.value != c.audio
         policyBox.value = c.audio
@@ -307,6 +399,14 @@ public final class LabRuntime: @unchecked Sendable {
         var c = configuration
         c.set(kind, StageSetting(id: id))
         setConfiguration(c)
+        if kind == .voice, let v = c.setting(.voice) { voiceStore.save(v) }       // a voice picked anywhere is the voice from now on
+    }
+    /// The listener picked a voice (the cards, setup): it speaks everything from now on and after a relaunch.
+    public func setVoice(_ o: VoiceOption) {
+        var c = configuration
+        c.set(.voice, o.setting)
+        setConfiguration(c)
+        voiceStore.save(o.setting)
     }
     public func setParam(_ kind: StageKind, name: String, value: String) {
         var c = configuration
@@ -319,6 +419,7 @@ public final class LabRuntime: @unchecked Sendable {
         }
         c.set(kind, s)
         setConfiguration(c)
+        if kind == .voice { voiceStore.save(s) }
     }
     public func saveConfiguration(name: String) throws {
         var c = configuration; c.name = name
@@ -335,7 +436,7 @@ public final class LabRuntime: @unchecked Sendable {
         let snapAudio = recorder.snapshot(from: t0, to: t1)
         lock.lock(); records[rec.id] = rec; lastID = rec.id; lock.unlock()
         let pos = ProgramPosition(programmeID: player.document.id, blockIndex: player.blockIndex, context: "")
-        let ctx = TurnContextFile(position: pos, configuration: rec.configuration)
+        let ctx = TurnContextFile(position: pos, configuration: rec.configuration, retrieval: RetrievalLog.shared.last)
         _ = try? store.save(record: rec, mic: snapAudio.mic, reference: snapAudio.reference, context: ctx)
         refresh()
     }

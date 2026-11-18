@@ -2,8 +2,7 @@
 // exact-package/interface/files.json), all answered by the kit's FilesService (Kit/ChoirFiles.swift, Kit/Epub.swift):
 //   fileList(path, mode, sort, desc, query) -> FileListing        a folder, recents, or a search
 //   fileOpen(address) -> FileInfo                                  a file brought to app:/cache/files, with what its viewer reads
-//   fileChapter(address, index) -> FileChapter                     one chapter of an e-book as Markdown
-//   filePages(address, query) -> FilePages                         the pages of a PDF that hold a word
+// A PDF or an e-book is not shown by Files: opening one (pageOpen on its `file:` address) takes it into Reader (Kit/FilesInReader.swift).
 //   fileMkdir / fileDelete / fileRename / fileUpload -> FileListing
 // Demo mode serves an in-memory tree of invented files; otherwise the listener's computer (GET/PUT/POST/PATCH/DELETE /api/files).
 import Foundation
@@ -11,14 +10,18 @@ import Foundation
 extension AutoradioModule {
     func registerFiles() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
-        // Exact names its cache as app:/cache/...; context.file maps that to the disk path. Without it (no file roots) use Caches.
-        let disk = context.file("app:/cache/files")
-            ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files")
-        try? FileManager.default.createDirectory(at: disk, withIntermediateDirectories: true)
+        // Exact names its cache as app:/cache/...; the module's filesCacheDisk is that folder on disk.
+        let disk = filesCacheDisk
         let backend: FilesBackend = Demo.isOn ? DemoFilesBackend() : ChoirFilesBackend()
         let service = FilesService(backend: backend, cacheRoot: disk, appPrefix: "app:/cache/files",
                                    recents: RecentFiles(file: support.appendingPathComponent("recent-files.json")))
         pageSources.register(FilesPageSource(service: service))
+        // One way to open a document: a PDF or an e-book in Files opens in Reader. A page left in the pile for such a file by an earlier build is closed.
+        FilesInReader.current = FilesInReader(files: service)
+        FilesInTexture.current = FilesInTexture(files: service, store: ContentStore.shared)
+        // The run sheet finds its own copy of an audio file from Files again from the Files path (after a relaunch, downloading it if need be).
+        Task { @MainActor in RunSheetPlayer.shared.fileResolver = { await FilesInReader.current?.audioURL(address: $0) } }
+        FilesOpen.purge(pages: pages)
 
         func str(_ args: [String: Any], _ k: String) -> String { args[k] as? String ?? "" }
         func num(_ args: [String: Any], _ k: String) -> Int { (args[k] as? NSNumber)?.intValue ?? Int(args[k] as? String ?? "") ?? 0 }
@@ -39,15 +42,6 @@ extension AutoradioModule {
             guard a.hasPrefix("file:"), !a.hasSuffix("/") else { return reply(self.json(FileInfo.empty)) }
             answer(reply) { await service.open(address: a) }
         }
-        handle("fileChapter") { args, reply in
-            let (a, i) = (str(args, "address"), num(args, "index"))
-            answer(reply) { await service.chapter(address: a, index: i) }
-        }
-        handle("filePages") { args, reply in
-            let (a, q) = (str(args, "address"), str(args, "query"))
-            answer(reply) { await service.findPages(address: a, query: q) }
-        }
-
         // Each change answers the refreshed listing of the folder it changed, and refreshes the live sources.
         func change(_ reply: @escaping ([String: Any]) -> Void, _ work: @escaping @Sendable () async -> FileListing) {
             Task { [weak self] in
@@ -68,12 +62,18 @@ extension AutoradioModule {
             change(reply) { await service.rename(path: p, to: n) }
         }
         handle("fileUpload") { [unowned self] args, reply in
-            // `from` is the picker's copy under app:/tmp/picked (Picked.path); in demo mode it may be empty, and a small note is added.
+            // `from` is the picker's copy under app:/tmp/picked (Picked.path). Only in demo mode may it be empty (a small note is added so
+            // the flow can be seen); on a real phone an empty `from` uploads nothing and says so.
             let (from, n, d) = (str(args, "from"), str(args, "name"), str(args, "dir"))
             let url = from.isEmpty ? nil : self.context.file(from)
             change(reply) {
                 if let url { return await service.upload(from: url, name: n, into: d) }
-                // Demo mode and the agent have no picker: add a small invented note so the flow can be seen.
+                guard Demo.isOn else {
+                    var l = await service.listing(path: d, mode: "browse", sort: "name", desc: false, query: "")
+                    l.message = "Nothing was chosen to add."
+                    return l
+                }
+                // Demo mode has no picker: add a small invented note so the flow can be seen.
                 let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("added-\(UUID().uuidString).txt")
                 try? Data("Added from the phone. Invented text.\n".utf8).write(to: tmp)
                 defer { try? FileManager.default.removeItem(at: tmp) }

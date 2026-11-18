@@ -10,13 +10,13 @@ examples in [docs/reference/EXACT.md](../../docs/reference/EXACT.md) and
   `apple/exact.json` implementation, `apple/Spike.swift`).
 - `app/`: the app (`app.contract`, `app.ts`, `app.json`, `strings/en.json`).
 
-Pinned Exact commit: `76cd50f9e863129b3fc75db1673d6ad4bbf79258`.
+Pinned Exact commit: `de212e671a69f4fea18bed67d5b73b259ddf3061` (the spike was written at 76cd50f9e).
 
 ## Build (simulator), as run on 2026-11-10
 
 ```sh
 git clone https://github.com/expo/exact exact-checkout && cd exact-checkout
-git checkout 76cd50f9e863129b3fc75db1673d6ad4bbf79258
+git checkout de212e671a69f4fea18bed67d5b73b259ddf3061
 # Bun must be 1.4.2 exactly:
 curl -fsSL https://bun.sh/install | BUN_INSTALL=$HOME/.bun-1.4.2 bash -s bun-v1.4.2
 export BUN=$HOME/.bun-1.4.2/bin/bun

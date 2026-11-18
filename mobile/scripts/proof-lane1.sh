@@ -2,7 +2,7 @@
 # Lane 1 proof (bar, radio, talk), on a simulator of its own in demo mode, driven by test id.
 # Swift tests first (BarStateTests), then the build, then three drives:
 #   A light: idle, typing and send, play from the bar, the expanded player (follow-along, jump, speed, pause), the paused bar,
-#            hold to talk (talking, then heard/holding), after release
+#            the bar's Voice control (a tap)
 #   B dark:  the same bar states in dark
 #   C light: a scripted turn through the Components page (stub stages) with the bar visible, shots at intervals
 # Screenshots go to $PROOF_SHOTS. Last line: PROOF OK or PROOF FAILED at <step>. NOBUILD=1 skips the build.
@@ -68,12 +68,10 @@ run_drive A \
   "tap bar-field" "clock +700 real" "type bar-field How did the battery do on its first week" "clock +500 real" "clock data" tree "screenshot $SHOTS/02-typing.png window" \
   "tap bar-send" "clock +700 real" "clock data" tree "screenshot $SHOTS/03-after-send.png window" \
   "tap bar-voice down" "tap up" "clock +1800 real" "clock data" tree "screenshot $SHOTS/04-playing.png" \
-  "tap bar-text" "clock +900 real" "clock data" tree "screenshot $SHOTS/05-player.png" \
-  "clock +3500 real" "clock data" tree "screenshot $SHOTS/05b-player-later.png" \
-  "tap player-seg-2" "clock +900 real" "clock data" tree "screenshot $SHOTS/05c-player-jumped.png" \
-  "tap player-speed-1.25" "clock +500 real" "clock data" tree \
-  "tap player-play" "clock +800 real" "clock data" tree "screenshot $SHOTS/06-player-paused.png" \
-  "tap player-close" "clock +800 real" "clock data" tree "screenshot $SHOTS/07-paused-bar.png" \
+  "tap bar-now" "clock +900 real" "clock data" tree "screenshot $SHOTS/05-radio-page.png" \
+  "clock +3500 real" "clock data" tree "screenshot $SHOTS/05b-radio-page-later.png" \
+  "tap radio-speed-up" "clock +500 real" "clock data" tree \
+  "tap radio-play" "clock +800 real" "clock data" tree "screenshot $SHOTS/06-radio-paused.png" \
   "tap bar-voice down" "clock +1000 real" "clock data" tree "screenshot $SHOTS/08-talking.png" "tap up" \
   "clock +300 real" "clock data" tree "screenshot $SHOTS/09-after-release.png" \
   "clock +1800 real" "clock data" tree "screenshot $SHOTS/10-later.png" \
@@ -83,11 +81,9 @@ must "idle: the Ask field with its aim (first run: the invitation)" 'label="Make
 must "typing: Send replaces the voice button" '[bar-send]'
 must "typing: the aim line above the field" '[bar-aim]'
 must "playing: the bar says what plays" 'NOW PLAYING'
-must "player: title" '[player-title]'
-must "player: the passage, sentence by sentence" '[player-sentence-0]'
-must "player: programme segments" '[player-seg-0]'
-must "player: speed choices" '[player-speed-1.25]'
-must "player: the programme rows" '[player-item-0]'
+must "radio page: title" '[radio-onair-title]'
+must "radio page: the sentence being spoken" '[radio-onair-sentence]'
+must "radio page: speed" '[radio-speed]'
 must "paused: the bar says paused" 'PAUSED'
 must "talk: the bar shows the listening state" 'Listening'
 
@@ -96,8 +92,7 @@ fresh dark
 run_drive B \
   "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/20-dark-idle.png" \
   "tap bar-voice down" "tap up" "clock +1800 real" "clock data" tree "screenshot $SHOTS/21-dark-playing.png" \
-  "tap bar-text" "clock +900 real" "clock data" tree "screenshot $SHOTS/22-dark-player.png" \
-  "tap player-close" "clock +700 real" \
+  "tap bar-now" "clock +900 real" "clock data" tree "screenshot $SHOTS/22-dark-radio-page.png" \
   "tap bar-voice down" "clock +1000 real" "clock data" tree "screenshot $SHOTS/23-dark-talking.png" "tap up" "clock +1500 real" "clock data" tree "screenshot $SHOTS/24-dark-after.png" \
   logs
 

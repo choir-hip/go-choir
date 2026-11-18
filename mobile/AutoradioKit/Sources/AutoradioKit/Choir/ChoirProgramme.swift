@@ -4,6 +4,10 @@ import Foundation
 
 public enum ChoirText {
     /// Plain spoken paragraphs from a story or revision body (markdown-ish text).
+    /// The longest a spoken block is: about two sentences, so the first sound of a story comes after one short block is made and the rest
+    /// is made while it plays. Reading pages keep the longer paragraphs.
+    public static let speechChars = 280
+
     public static func paragraphs(_ text: String, maxChars: Int = 600) -> [String] {
         var out: [String] = []
         for raw in text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n\n") {
@@ -15,8 +19,8 @@ public enum ChoirText {
     }
 
     /// Title first (unless the body already starts with it), then the paragraphs.
-    public static func blocks(title: String, text: String, maxBlocks: Int = 80) -> [String] {
-        var ps = paragraphs(text)
+    public static func blocks(title: String, text: String, maxBlocks: Int = 200) -> [String] {
+        var ps = paragraphs(text, maxChars: speechChars)
         let t = strip(title)
         if !t.isEmpty, ps.first?.lowercased() != t.lowercased() { ps.insert(t.hasSuffix(".") ? t : t + ".", at: 0) }
         return Array(ps.prefix(maxBlocks))
@@ -75,7 +79,7 @@ public enum ChoirFront {
     }
 
     /// Resolve one story into a playable document and remember it for the desk.
-    public static func load(route: String, client: ChoirClient, maxBlocks: Int = 80, env: ChoirEnvironment = .shared) async throws -> ProgrammeDocument {
+    public static func load(route: String, client: ChoirClient, maxBlocks: Int = 200, env: ChoirEnvironment = .shared) async throws -> ProgrammeDocument {
         let r = try await client.send("GET", "/api/platform/publications/resolve", query: ["route": route], authenticated: false, route: "/api/platform/publications/resolve")
         let o = try r.object()
         let payload = o["payload"] as? [String: Any]
@@ -90,36 +94,5 @@ public enum ChoirFront {
         let id = "choir:" + (versionID.isEmpty ? route : versionID)
         env.setPlaying(PlayingProgramme(programmeID: id, title: title, route: route, publicationVersionID: versionID, manifestHash: manifest, blocks: blocks))
         return ProgrammeDocument(id: id, title: title, blocks: blocks.map { .speech(text: $0) })
-    }
-}
-
-/// The public front page as a programme: the picked story (param `route`), or the first story with text.
-public final class ChoirFrontProgramme: Programme, @unchecked Sendable {
-    public static let stageID = "choir-front"
-    public static var descriptor: StageDescriptor {
-        StageDescriptor(displayName: "Choir front page", summary: "Reads a story from the public paper, block by block.",
-                        params: [.text("baseURL", "Base URL", ChoirEnvironment.defaultBaseURL),
-                                 .text("route", "Story route", "", note: "empty plays the newest story with text"),
-                                 .text("section", "Section", "", note: "e.g. world, tech_ai; empty for all"),
-                                 .number("maxBlocks", "Most blocks", 80, 5, 400)],
-                        needsNetwork: true)
-    }
-    let baseURL: String, route: String, section: String, maxBlocks: Int
-    public init(_ p: StageParams) {
-        baseURL = p.string("baseURL", ChoirEnvironment.defaultBaseURL); route = p.string("route"); section = p.string("section")
-        maxBlocks = p.int("maxBlocks", 80)
-    }
-    public func load() async throws -> ProgrammeDocument {
-        let client = ChoirEnvironment.shared.client(baseURL: baseURL)
-        if !route.isEmpty { return try await ChoirFront.load(route: route, client: client, maxBlocks: maxBlocks) }
-        let list = try await ChoirFront.stories(client: client, limit: 12, section: section)
-        if list.isEmpty { throw ChoirError.empty("the front page") }
-        var lastError: Error = ChoirError.empty("the front page")
-        for s in list {
-            do { return try await ChoirFront.load(route: s.route, client: client, maxBlocks: maxBlocks) }
-            catch is CancellationError { throw CancellationError() }
-            catch { lastError = error }   // unpublished since listed, or no text: try the next
-        }
-        throw lastError
     }
 }

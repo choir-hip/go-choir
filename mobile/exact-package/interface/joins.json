@@ -1,0 +1,17 @@
+{
+ "shapes": {
+  "HearItRow": { "clipID": "string", "show": "string", "episode": "string", "length": "string", "quote": "string", "story": "string", "episodeOnly": "bool" },
+  "ClipRows": { "rows": "HearItRow[]" },
+  "ClipAck": { "status": "string", "message": "string" }
+ },
+ "names": [
+  {
+   "source": "showClips",
+   "live": true,
+   "answers": "ClipRows",
+   "options": { "address": "string" },
+   "substitute": { "default": { "rows": [] } }
+  },
+  { "send": "clipAct", "options": { "op": "string", "id": "string" }, "answers": "ClipAck" }
+ ]
+}

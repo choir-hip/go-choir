@@ -1,0 +1,154 @@
+// Lane members file (content row, owner 2026-11-16: "for reader and for the embedded web view, the content should get the full screen
+// except for the prompt bar area at the bottom"): the one compact control row above the bar's "On:" line, for a document in the
+// Reader and for an embedded web page. Collapsed it is one line; expanded it lists the actions as words. The row itself is
+// `ContentRow` in content.contract (drawn inside the bar's lens, bar.contract); the content above it never carries a header.
+//
+// What the row is shown for (`ctlMode`): a page typed into the bar (barweb), a source page opened over a story (web), or the
+// document in front when it is open and ready (doc). Everything else has no row and no clearance.
+// `ctlClear` is how far the content's frame stops above the bottom edge (the bar's lens plus this row): 124 with the bar idle
+// (8 + the "On:" line + the controls + the row), 168 while a line shows above the controls (now playing, heard, holding, error).
+use pageOpen, pageClose, queueAdd, queueAct, shelfPlace, shelfReadAloud, shelfEnqueue, readerOpenExternal, textureEditInfo, textureEdit, textureFlush from "@choir/autoradio"
+use TextureEditInfo from "@choir/autoradio"
+
+members Autoradio
+  state ctlOpen = false
+  // The page the row was expanded for (a document's address, a web page's URL): another page in front finds it collapsed.
+  state ctlFor = ""
+  // What the expanded row shows under its actions: "" | "contents" | "find".
+  state ctlPanel = ""
+
+  // ---- your own Texture document: edited in rich text with Exact's Markdown editor (Kit/TextureEditor.swift)
+  resource edInfo = textureEditInfo(address=pg.top) as shape TextureEditInfo else empty()
+  mutation edm as shape TextureEditInfo
+  state edOn = false
+  state edFor = ""
+  state edDraft = ""
+  state edFormats = ""
+  state edUnavail = ""
+  state edCurLink = ""
+  state edUrl = ""
+  derive edReady = topAddr.startsWith("texture:") and rdoc.address == topAddr and rdoc.status == "ready" and rdoc.editable
+
+  derive ctlMode = qv.webUrl != "" ? "barweb" : ((webUrl != "" and webFor == topAddr) ? "web" : ((topAddr.startsWith("doc:") and ldInfo.address == topAddr and ldInfo.status == "ready") ? "doc" : (edReady ? "texture" : "")))
+  derive ctlKey = ctlMode == "barweb" ? qv.webUrl : (ctlMode == "web" ? webUrl : topAddr)
+  derive ctlUp = ctlMode != "" and ctlOpen and ctlFor == ctlKey
+  derive ctlClear = ctlMode == "" ? 0 : (bi.state == "idle" ? 124 : 168)
+  derive ctlTitle = ctlMode == "barweb" ? qv.webHost : (ctlMode == "web" ? webHost : (ctlMode == "texture" ? rdoc.title : ldInfo.title))
+  derive ctlBusy = (ctlMode == "barweb" or ctlMode == "web") and webBusy
+  derive ctlPos = (ctlMode == "doc" and ldInfo.sections.length > 0) ? `${(ldSec + 1).toFixed(0)} of ${ldInfo.sections.length.toFixed(0)}` : (ctlMode == "texture" ? edInfo.label : "")
+
+  action ctlToggle
+    ctlOpen = ctlUp == false
+    ctlFor = ctlKey
+    ctlPanel = ""
+  action ctlHide
+    ctlOpen = false
+    ctlPanel = ""
+  action ctlPanelOf(name: string)
+    ctlPanel = ctlPanel == name ? "" : name
+
+  // ---- a document: each one puts the row away, except stepping (a page turn is repeated) and typing in Find
+  action ctlRead
+    ctlOpen = false
+    ctlPanel = ""
+    send ldAck = shelfReadAloud(address=pg.top, section=ldSec, block=ldBlock)
+  action ctlQueueDoc
+    ctlOpen = false
+    ctlPanel = ""
+    send ldAck = shelfEnqueue(address=pg.top, section=ldSec, block=ldBlock)
+  // Share is the document's own file (a Files document keeps the file it came from): the system share sheet.
+  action ctlShare
+    ctlOpen = false
+    ctlPanel = ""
+    share(title=ldInfo.title, files=[ldInfo.shareSrc])
+  action ctlGo(n: number)
+    ldSec = max(0, min(n, max(0, ldInfo.sections.length - 1)))
+    ldToc = false
+    ldBlock = -1
+    ctlOpen = false
+    ctlPanel = ""
+    send ldAck = shelfPlace(address=pg.top, section=ldSec, block=-1)
+  action ctlStep(n: number)
+    ldSec = max(0, min(n, max(0, ldInfo.sections.length - 1)))
+    ldToc = false
+    ldBlock = -1
+    send ldAck = shelfPlace(address=pg.top, section=ldSec, block=-1)
+  action ctlJump(section: number, block: number)
+    ldSec = section
+    ldBlock = block
+    ldScrollTo = block
+    ldToc = false
+    ldText = true
+    ctlOpen = false
+    ctlPanel = ""
+    send ldAck = shelfPlace(address=pg.top, section=section, block=block)
+  action ctlSetText(on: bool)
+    ldText = on
+    ctlOpen = false
+    ctlPanel = ""
+  action ctlCloseDoc
+    let gone = topAddr
+    let nxt = order.slice(1, 2).join("")
+    ctlOpen = false
+    ctlPanel = ""
+    order = order.filter(a => a != gone)
+    px = 0
+    send pm = pageOpen(address=nxt, title="")
+    send pc = pageClose(address=gone)
+
+  // ---- a Texture document: Edit turns the reader into the editor; every keystroke is told to the Kit, which posts a revision after a pause in
+  // typing, at once on Done, and when the page is left (textureFlush). The formatting row never shows Markdown syntax; it drives `format`.
+  action edBegin
+    edOn = true
+    edFor = topAddr
+    edDraft = rdoc.source
+    edFormats = ""
+    ctlOpen = true
+    ctlFor = topAddr
+    ctlPanel = ""
+  action edDone
+    edOn = false
+    ctlOpen = false
+    ctlPanel = ""
+    send edm = textureFlush(address=pg.top)
+  action edInput(value: string)
+    edDraft = value
+    send edm = textureEdit(address=pg.top, markdown=value)
+  action edSelected(s)
+    edFormats = s.formats
+    edUnavail = s.unavailable
+    edCurLink = s.link
+  action edFormat(name: string)
+    format("texture-editor", name)
+  action edHeading
+    format("texture-editor", "heading", "2")
+  action edOpenLink
+    ctlPanel = ctlPanel == "link" ? "" : "link"
+    edUrl = edCurLink
+    focus("texture-link-url")
+  action edOpenCurLink
+    send qm = queueAct(op="openWeb", arg=edCurLink)
+  action edUrlChanged(value: string)
+    edUrl = value
+  action edApplyLink
+    format("texture-editor", "link", edUrl)
+    ctlPanel = ""
+    focus("texture-editor")
+
+  // ---- a web page
+  action ctlWebRead(u: string, h: string)
+    ctlOpen = false
+    send qm = queueAdd(mode="now", kind="page", ref=u, title=h)
+  action ctlWebLater(u: string, h: string)
+    ctlOpen = false
+    send qm = queueAdd(mode="add", kind="page", ref=u, title=h)
+  action ctlSafari(u: string)
+    ctlOpen = false
+    send rack = readerOpenExternal(url=u)
+  action ctlCloseWeb
+    ctlOpen = false
+    webUrl = ""
+    webBusy = false
+  action ctlCloseBarWeb
+    ctlOpen = false
+    send qm = queueAct(op="closeWeb", arg="")

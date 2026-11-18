@@ -5,6 +5,7 @@
 use PageDeck from "./pages.contract"
 use BarShell from "./bar.contract"
 use SignInScreen from "./onboarding.contract"
+use BarWebLayer from "./queue.contract"
 
 component Autoradio
   members "./spine.contract"
@@ -20,11 +21,27 @@ component Autoradio
   members "./members-settings.contract"
   members "./members-onboarding.contract"
   members "./members-mark.contract"
+  members "./members-voice.contract"
+  members "./members-queue.contract"          // lane autoradio-queue
+  members "./members-radio.contract"          // the Autoradio page
+  members "./members-takes.contract"          // takes (station L7)
+  members "./members-notebook.contract"       // my notebook (station L6)
+  members "./members-books.contract"
+  members "./members-content.contract"        // the content row above the bar (owner, 2026-11-16)
+  members "./members-talk.contract"
+  // ---- lane autoradio-podcasts ----
+  members "./members-podcasts.contract"
+  // ---- lane autoradio-joins ----
+  members "./members-joins.contract"
   // ---- end of members ----
 
   // What child components may `inject`. Bare names of this component's states, derives, resources and actions.
   // A lane adds the names it needs inside its own band, one name per line, and touches nothing outside it.
   provide
+    // ---- lane autoradio-joins ----
+    shClips
+    clipNote
+    clipDo
     // ---- spine ----
     th
     pg
@@ -45,6 +62,7 @@ component Autoradio
     micTap
     micCancel
     micOn
+    heardNow
     setTheme
     setMode
     setDemo
@@ -77,12 +95,11 @@ component Autoradio
     refreshRadio
     radioPlay
     playStory
+    listen
     start
     stop
     next
     previous
-    talkDown
-    talkUp
     pick
     setParam
     editCfgName
@@ -105,13 +122,19 @@ component Autoradio
     barBlur
     jumpTo
     setSpeed
-    sheetMove
-    sheetEnd
-    sheetPull
+    nextStory
+    previousStory
+    speedShown
+    speedPct
+    speedMove
+    speedEnd
+    speedNudge
+    speedReset
     // ---- lane 2: paper layout ----
     pfront
     paperLoading
-    paperSection
+    paperView
+    pickView
     paperReload
     paperFit
     pickEdition
@@ -123,12 +146,17 @@ component Autoradio
     openCites
     sheet
     sheetFor
-    sheetAnchor
+    webUrl
+    webHost
+    webFor
+    webBusy
     sideNotes
     mdMode
     toggleCite
     showSheet
-    showSource
+    closeWeb
+    webMsg
+    openExternal
     hideSheet
     jumpSources
     toggleSideNotes
@@ -166,6 +194,82 @@ component Autoradio
     pageRelease
     cycleDeck
     syncDeck
+    // ---- lane autoradio-reader: reader and documents ----
+    lbList
+    lbNote
+    lbImport
+    lbPicked
+    lbRemove
+    ldInfo
+    ldChap
+    ldFound
+    ldFollow
+    ldAck
+    ldSec
+    ldBlock
+    ldText
+    ldToc
+    ldFindDraft
+    ldFind
+    ldShowPages
+    ldGo
+    ldJump
+    ldPlace
+    ldTocToggle
+    ldSetText
+    ldEditFind
+    ldDoFind
+    ldClearFind
+    ldRead
+    ldQueue
+    ldRemove
+    // ---- the content row (members-content.contract, content.contract) ----
+    ctlOpen
+    ctlFor
+    ctlPanel
+    ctlMode
+    // ---- a Texture document in rich text (members-content.contract) ----
+    edInfo
+    edm
+    edOn
+    edFor
+    edDraft
+    edFormats
+    edUnavail
+    edCurLink
+    edUrl
+    edBegin
+    edDone
+    edInput
+    edSelected
+    edFormat
+    edHeading
+    edOpenLink
+    edOpenCurLink
+    edUrlChanged
+    edApplyLink
+    ctlKey
+    ctlUp
+    ctlClear
+    ctlTitle
+    ctlBusy
+    ctlPos
+    ctlToggle
+    ctlHide
+    ctlPanelOf
+    ctlRead
+    ctlQueueDoc
+    ctlShare
+    ctlGo
+    ctlStep
+    ctlJump
+    ctlSetText
+    ctlCloseDoc
+    ctlWebRead
+    ctlWebLater
+    ctlSafari
+    ctlCloseWeb
+    ctlCloseBarWeb
     // ---- lane 5: files and viewers ----
     fsList
     fsMode
@@ -197,19 +301,12 @@ component Autoradio
     fsRename
     fsDelete
     fvInfo
-    fvChapter
-    fvPages
     fvZoom
     fvPanX
     fvPanY
     fvHold
     fvPos
     fvDur
-    fvSeek
-    fvPage
-    fvFindDraft
-    fvChap
-    fvToc
     fvMediaTitle
     fvZoomTo
     fvCenter
@@ -221,18 +318,12 @@ component Autoradio
     fvEnded
     fvTick
     fvMeasured
-    fvNudge
-    fvRestart
-    fvSkip
-    fvSeekAt
-    fvGo
-    fvEditFind
-    fvSearch
-    fvClearFind
-    fvChapGo
-    fvTocToggle
     // ---- lane 6: mail ----
     mbx
+    mfr
+    mailTab
+    mboxName
+    mboxDir
     mmsg
     mcmp
     mailCurTo
@@ -263,7 +354,6 @@ component Autoradio
     tx
     acctInfo
     cmpt
-    talkRows
     gestureRows
     learnt
     act
@@ -282,7 +372,15 @@ component Autoradio
     refreshActivity
     devDetails
     toggleDevDetails
-    // ---- lane 8: onboarding and the interview ----
+    // ---- lane autoradio-talk: the conversation and the answer card ----
+    cv
+    answerRetry
+    answerDismiss
+    answerCancel
+    voicep
+    learnVoice
+    forgetVoice
+    // ---- lane 8: onboarding and the edition topics ----
     ob
     obBegin
     obBeginMobile
@@ -292,32 +390,111 @@ component Autoradio
     obMicNext
     obHearingYes
     obHearingNo
-    obInterview
-    obContinue
-    obDemoNext
+    obTopics
+    obToggleTopic
+    obExpandTopic
+    obAddTopic
+    editObTopic
+    obTopicText
+    obTalk
+    obTopicsDone
+    obDemoSay
     obEditionRetry
+    obContinueAnyway
+    obEditDone
+    obEditLeave
     obSkip
     obReset
     obOpenEdition
     obFinish
+    // ---- the voice cards ----
+    vc
+    vcPick
+    vcStop
+    vcContinue
     // ---- lane 9: motion and the mark ----
     mkT
     mkFrames
     mkSince
+    mkCur
+    mkPrev
+    mkFrom
+    gmMotion
+    gmPrev
+    gmSince
+    gmFrom
+    gmV
+    gmManual
+    gmLevel
+    gmLo
+    gmHi
+    gmPlay
+    gmMove
+    gmRest
+    gmLevelSet
     galSince
     waitSince
     galReplay
     waitReplay
+    // ---- the Autoradio page ----
+    rp
+    radioAll
+    whyFor
+    heardOpen
+    toggleHeardBuilt
+    radioToggleAll
+    radioToggleWhy
+    radioDo
+    radioDrop
+    // ---- takes ----
+    tp
+    takesDo
+    // ---- my notebook ----
+    nb
+    notebookDo
+    // ---- lane autoradio-queue ----
+    qv
+    qm
+    qVp
+    queuePlay
+    queueLater
+    queueDo
+    scrubLive
+    scrubShown
+    scrubPct
+    scrubMove
+    scrubEnd
+    closeBarWeb
+    // ---- lane autoradio-podcasts ----
+    podHome
+    podShow
+    podEp
+    podQ
+    podFind
+    editPodFind
+    podNote
+    editPodQ
+    podSubscribeTo
+    podUnsubscribeFrom
+    podPlayEpisode
+    podQueueEpisode
+    retryPodcasts
 
   view
     main testId="app" width="100%" height="100%" position="relative" overflow="hidden" box-sizing="border-box"
       viewport-fit="cover" interactive-widget="resizes-content"
-      background-color=th.paper color=th.fg font-family=th.fontRead
+      background-color=th.paper color=th.fg font-family=th.fontText
       // elevation 0: the deck of pages, full bleed; it steps back when a sheet is up
       column position="absolute" inset=0
         scale=(layer != "" ? th.behindScale3 : 1)
         transition=`scale -exact-spring(${th.springStiffness}, ${th.springDamping}, ${th.springMass})`
         PageDeck()
+      // lane autoradio-queue: the page a URL typed in the bar opened, in place above the bar
+      if qv.webUrl != ""
+        BarWebLayer()
+      // the content row is expanded: a tap on the page puts it away (a barely-there veil so the tap lands; the page does not dim)
+      if ctlUp and layer == ""
+        box testId="content-scrim" position="absolute" inset=0 z-index=9 background-color=th.fg opacity=0.02 press=ctlHide aria-label="Close the controls"
       // a sheet is up (the launcher or the player): the page dims behind it; a tap on it puts the sheet away
       if layer != ""
         box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=(max(th.behindDim3, 0.4)) press=hideLayer

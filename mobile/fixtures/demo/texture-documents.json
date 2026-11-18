@@ -12,6 +12,14 @@
    }
   },
   {
+   "doc_id": "demo-notebook",
+   "title": "My notebook",
+   "created_at": "2026-11-17T21:00:00Z",
+   "updated_at": "2026-11-17T21:30:00Z",
+   "revision_count": 1,
+   "current_revision_id": "nb-r1"
+  },
+  {
    "doc_id": "demo-draft",
    "title": "Notes on the council meeting",
    "created_at": "2026-11-10T09:00:00Z",

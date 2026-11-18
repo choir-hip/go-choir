@@ -90,7 +90,9 @@ public final class KeychainKeyStore: KeyStore, @unchecked Sendable {
         SecItemDelete(base(account) as CFDictionary)
         var add = base(account)
         add[kSecValueData as String] = Data(value.utf8)
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        #if os(iOS)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly   // data-protection class: iOS only (the Mac's login keychain has none)
+        #endif
         let st = SecItemAdd(add as CFDictionary, nil)
         if st != errSecSuccess { throw LabError.unavailable("keychain refused the write (\(st))") }
     }
@@ -197,6 +199,9 @@ public final class ChoirEnvironment: @unchecked Sendable {
                     trustedOrigin: URL(string: configuredBaseURL))
     }
 
+    /// Sign-out: the programmes the account was hearing.
+    public func wipePlaying() { lock.lock(); _playing = [:]; lock.unlock() }
+
     // What is playing, so the desk knows which document a turn is about.
     public func setPlaying(_ p: PlayingProgramme) { lock.lock(); _playing[p.programmeID] = p; lock.unlock() }
     public func playing(_ programmeID: String) -> PlayingProgramme? { lock.lock(); defer { lock.unlock() }; return _playing[programmeID] }
@@ -267,8 +272,8 @@ public final class ChoirClient: @unchecked Sendable {
     @discardableResult
     public func send(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
                      authenticated: Bool = true, route: String? = nil, timeout t: Double? = nil,
-                     okStatuses: Set<Int> = []) async throws -> ChoirResponse {
-        let r = try await request(method, path, query: query, body: body, authenticated: authenticated, timeout: t)
+                     okStatuses: Set<Int> = [], contentType: String = "application/json", accept: String = "application/json") async throws -> ChoirResponse {
+        let r = try await request(method, path, query: query, body: body, authenticated: authenticated, timeout: t, accept: accept, contentType: contentType)
         let label = "choir \(method) \(route ?? path)"
         let start = log?.clock.now
         let t0 = ProcessInfo.processInfo.systemUptime
@@ -299,16 +304,22 @@ public final class ChoirClient: @unchecked Sendable {
 
     /// The URLRequest for a call: the base URL, the headers, the key and the computer. The timeout is URLRequest's idle timeout.
     func request(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil, authenticated: Bool = true,
-                 timeout t: Double? = nil, accept: String = "application/json") async throws -> URLRequest {
+                 timeout t: Double? = nil, accept: String = "application/json", contentType: String = "application/json") async throws -> URLRequest {
         if authenticated, let t = trustedOrigin, !SameOrigin.matches(baseURL, t) { throw ChoirError.wrongHost(baseURL.host ?? "(none)") }
         guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { throw ChoirError.decode("bad base URL") }
         comps.percentEncodedPath = path
-        if !query.isEmpty { comps.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
+        // Names and values are encoded by hand: URLComponents leaves `&`, `+`, `=` and `;` as they are in a value, which would split or
+        // change what the server reads (a search for "AT&T" or "C++").
+        if !query.isEmpty {
+            let keep = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~/:@,")
+            func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: keep) ?? "" }
+            comps.percentEncodedQuery = query.sorted { $0.key < $1.key }.map { enc($0.key) + "=" + enc($0.value) }.joined(separator: "&")
+        }
         guard let url = comps.url else { throw ChoirError.decode("bad path") }
         var r = URLRequest(url: url, timeoutInterval: t ?? timeout)
         r.httpMethod = method
         r.setValue(accept, forHTTPHeaderField: "Accept")
-        if body != nil { r.setValue("application/json", forHTTPHeaderField: "Content-Type"); r.httpBody = body }
+        if body != nil { r.setValue(contentType, forHTTPHeaderField: "Content-Type"); r.httpBody = body }
         if authenticated {
             guard let key = keys.get(KeyAccount.apiKey) else { throw ChoirError.notSignedIn }
             r.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")

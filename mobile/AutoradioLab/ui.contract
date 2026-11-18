@@ -9,21 +9,25 @@ shape StackVp
   width: number
   height: number
 
+// A size in points that follows Dynamic Type: rem is the system body size (17 at the default setting), so this is the same number of points by default.
+fn dyn(px: number): string = `${px / 17}rem`
 fn lastPart(address: string): string = address.split("/").filter(p => p != "").slice(0 - 1).join("").split("@").slice(0, 1).join("")
 fn sentence(s: string): string = `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
 fn plainWords(s: string): string = s.replaceAll("-", " ").replaceAll("_", " ")
 // A title made from the slug of an address: dashes to spaces, sentence case ("demo-grid-storage" is "Demo grid storage").
 fn slugTitle(address: string): string = sentence(plainWords(lastPart(address.includes(":") ? address.slice(address.indexOf(":") + 1) : address)))
-fn rawTitle(t: string, a: string): bool = t == "" or t == a or t.startsWith("/") or t.includes(":/") or t.includes("/pub/") or t.startsWith("pub:") or t.startsWith("texture:") or t.startsWith("file:") or t.startsWith("mail:") or t.startsWith("mailbox:") or (t.includes(" ") == false and (t.includes("-") or t.includes("_")))
+fn rawTitle(t: string, a: string): bool = t == "" or t.startsWith("doc:") or t == a or t.startsWith("/") or t.includes(":/") or t.includes("/pub/") or t.startsWith("pub:") or t.startsWith("texture:") or t.startsWith("file:") or t.startsWith("mail:") or t.startsWith("mailbox:") or t.startsWith("podcast:") or t.startsWith("podcasts:") or (t.includes(" ") == false and (t.includes("-") or t.includes("_")))
 // The title to show: the page's own when it is a real one, else one made from the slug until the real one loads.
 fn pageName(t: string, a: string): string = rawTitle(t, a) ? slugTitle(a) : t
 fn rowTitle(rows: Page[], a: string): string = rows.filter(r => r.address == a).map(r => r.title).join("")
-fn kindOf(a: string): string = (a.startsWith("paper:") ? "paper" : (a.startsWith("pub:") or a.startsWith("texture:") ? "reader" : (a.startsWith("textures:") ? "textures" : (a.startsWith("file:") ? "file" : (a.startsWith("mailbox:") ? "mailbox" : (a.startsWith("mail:") ? "mail" : (a.startsWith("activity:") ? "activity" : (a.startsWith("settings:") ? "settings" : (a.startsWith("lab:") ? "lab" : (a.startsWith("onboarding:") ? "onboarding" : "unknown"))))))))))
+fn kindOf(a: string): string = (a.startsWith("radio:") ? "radio" : (a.startsWith("notebook:") ? "notebook" : (a.startsWith("paper:") ? "paper" : (a.startsWith("pub:") or a.startsWith("texture:") ? "reader" : (a.startsWith("textures:") ? "textures" : (a.startsWith("file:") ? "file" : (a.startsWith("mailbox:") ? "mailbox" : (a.startsWith("mail:") ? "mail" : (a.startsWith("activity:") ? "activity" : (a.startsWith("settings:") ? "settings" : (a.startsWith("lab:") ? "lab" : (a.startsWith("onboarding:") ? "onboarding" : (a.startsWith("conversation:") ? "conversation" : (a.startsWith("podcast:") or a.startsWith("podcasts:") ? "podcast" : (a.startsWith("books:") ? "books" : (a.startsWith("doc:") ? "doc" : "unknown"))))))))))))))))
 // A page kind in a word the reader knows.
-fn kindWord(kind: string, a: string): string = (kind == "reader" ? (a.startsWith("texture:") ? "Texture" : "Story") : (kind == "paper" ? "Paper" : (kind == "textures" ? "Textures" : (kind == "file" ? "File" : (kind == "mail" ? "Message" : (kind == "mailbox" ? "Mail" : (kind == "settings" ? "Settings" : (kind == "activity" ? "Activity" : (kind == "lab" ? "Tools" : (kind == "onboarding" ? "Setup" : "Page"))))))))))
+fn kindWord(kind: string, a: string): string = (kind == "radio" ? "Autoradio" : (kind == "notebook" ? "Notebook" : (kind == "reader" ? (a.startsWith("texture:") ? "Texture" : "Story") : (kind == "paper" ? "Paper" : (kind == "textures" ? "Textures" : (kind == "file" ? "File" : (kind == "mail" ? "Message" : (kind == "mailbox" ? "Mail" : (kind == "settings" ? "Settings" : (kind == "activity" ? "Activity" : (kind == "lab" ? "Tools" : (kind == "onboarding" ? "Setup" : (kind == "conversation" ? "Conversation" : (kind == "podcast" ? (a.startsWith("podcast:episode") ? "Episode" : (a.startsWith("podcast:show") ? "Show" : "Podcasts")) : (kind == "books" ? "Reader" : (kind == "doc" ? "Document" : "Page"))))))))))))))))
 // The pages that are always in the stack and cannot be closed.
-fn isFixed(a: string): bool = ["paper:front", "textures:", "file:/", "mailbox:inbox", "settings:root"].includes(a)
-fn fixedName(a: string): string = a == "paper:front" ? "Paper" : (a == "textures:" ? "Textures" : (a == "file:/" ? "Files" : (a == "mailbox:inbox" ? "Mail" : (a == "settings:root" ? "Settings" : ""))))
+fn isFixed(a: string): bool = ["radio:", "paper:front", "textures:", "file:/", "mailbox:inbox", "settings:root"].includes(a)
+fn fixedName(a: string): string = a == "radio:" ? "Autoradio" : (a == "paper:front" ? "Paper" : (a == "textures:" ? "Textures" : (a == "file:/" ? "Files" : (a == "mailbox:inbox" ? "Mail" : (a == "settings:root" ? "Settings" : "")))))
+// The title the paper's front list gives a story (its routes and titles are in step), "" when the story is not in the list.
+fn frontTitle(routes: string[], titles: string[], a: string): string = (a.startsWith("pub:") and routes.indexOf(a.slice(4)) >= 0) ? titles.slice(routes.indexOf(a.slice(4)), routes.indexOf(a.slice(4)) + 1).join("") : ""
 fn stackName(rows: Page[], a: string): string = isFixed(a) ? fixedName(a) : pageName(rowTitle(rows, a), a)
 // Section names: a display-name map (the ids the edition uses), then a title-case fallback; a name that already has spaces is kept.
 fn sectionName(s: string): string = s.includes(" ") ? s : (["tech_ai", "tech-ai", "techai", "us", "uk", "ai", "us_news", "world_news", "business_finance", "arts_culture", "science_health", "sports_games", "opinion_editorial"].indexOf(s.toLowerCase()) >= 0 ? ["Tech and AI", "Tech and AI", "Tech and AI", "US", "UK", "AI", "US news", "World news", "Business and finance", "Arts and culture", "Science and health", "Sports and games", "Opinion"].slice(["tech_ai", "tech-ai", "techai", "us", "uk", "ai", "us_news", "world_news", "business_finance", "arts_culture", "science_health", "sports_games", "opinion_editorial"].indexOf(s.toLowerCase()), ["tech_ai", "tech-ai", "techai", "us", "uk", "ai", "us_news", "world_news", "business_finance", "arts_culture", "science_health", "sports_games", "opinion_editorial"].indexOf(s.toLowerCase()) + 1).join("") : plainWords(s).split(" ").map(w => sentence(w)).join(" "))
@@ -39,11 +43,27 @@ component Card
     testId: string
     minHeight: number
   slot
-  derive glass = (level >= 3 ? th.material3 : level == 2 ? th.material2 : th.material1) == "glass"
+  // A content card is a solid surface in the theme's card colour at every level (the level only deepens its shadow): a glass card over a plain page read as a
+  // light grey slab with low contrast (owner QA, 2026-11-15). Only level 3 may be glass.
+  derive glass = level >= 3 and th.material3 == "glass"
   view
     column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard
       backgroundMaterial=(glass ? "glass" : "none")
-      background-color=(glass ? "transparent" : (level >= 2 ? th.paper : th.paper2))
+      background-color=(glass ? "transparent" : th.paper2)
+      box-shadow=(level >= 3 ? th.shadow3 : level == 2 ? th.shadow2 : th.shadow1)
+      children
+
+// A Card that fills the height its parent gives it (a card in a row of cards, whose cards should be as tall as the tallest): the same surface as Card.
+component CardFill
+  inject
+    th: Theme
+  props
+    level: number
+    testId: string
+    minHeight: number
+  slot
+  view
+    column testId=testId position="relative" flex=1 min-height=minHeight border-radius=th.radiusCard background-color=th.paper2
       box-shadow=(level >= 3 ? th.shadow3 : level == 2 ? th.shadow2 : th.shadow1)
       children
 
@@ -65,7 +85,7 @@ component Layer
       children
 
 // An opaque card: the theme's surface colour with no material, so nothing behind it reads through (the pile's cards, the
-// interview's question). The shadow and a hairline keep the depth.
+// interview's question). The shadow keeps the depth; no outline.
 component PaperCard
   inject
     th: Theme
@@ -74,12 +94,12 @@ component PaperCard
     minHeight: number
   slot
   view
-    column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard background-color=th.paper2
-      border-width=1 border-style="solid" border-color=th.rule box-shadow=th.shadow3
+    column testId=testId position="relative" min-height=minHeight border-radius=th.radiusCard background-color=th.paper2 box-shadow=th.shadow3
       children
 
-// The one button face (primary: the accent; otherwise a quiet paper button with a hairline), in theme tokens only. It is the
-// content of a `button ... appearance="none"` that keeps its own press and testId, so no button draws the system's blue.
+// The one button face. primary: THE action of the page, a flat block in the accent (radius 4 to 6, never a capsule); otherwise a text action
+// in the accent colour. Neither has an outline. It is the content of a `button ... appearance="none"` that keeps its own press and testId,
+// so no button draws the system's blue.
 component Btn
   inject
     th: Theme
@@ -88,11 +108,235 @@ component Btn
     primary: bool
     wide: bool
   view
-    row align-items="center" justify-content="center" min-height=44 padding="10px 14px" box-sizing="border-box"
-      width=(wide ? "100%" : "auto") border-radius=th.radiusControl
-      background-color=(primary ? th.accent : th.paper2)
-      border-width=1 border-style="solid" border-color=(primary ? th.accent : th.rule)
-      text label font-family=th.fontUi font-size=15 font-weight=600 color=(primary ? th.onAccent : th.fg) text-align="center"
+    row align-items="center" justify-content="center" min-height=44 padding=(primary ? "10px 16px" : "10px 4px") box-sizing="border-box"
+      width=(wide ? "100%" : "auto") border-radius=(primary ? th.radiusControl : 0)
+      background-color=(primary ? th.accent : "transparent")
+      text label font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=(primary ? th.onAccent : th.accent) text-align="center"
+
+// ================================================================ the design system (lane autoradio-design, 2026-11-15)
+// One set of values, so a page inherits the look instead of choosing its own. Pages use these components and write no look of their own.
+// THE RULE (owner, 2026-11-15: "no pills. no pills. no outlined bubbles. pills promote bad design, bad typography"):
+//   No pill, no capsule, no outline drawn around text. A control reads as a control through type, position and one consistent affordance:
+//     a choice in a set        the chosen word at full strength with a short accent rule under it, the others muted (ChoiceWord, SegmentFace)
+//     an action                a text action in the accent colour, weight 600 (Btn, not primary), or a row with a chevron (ListRow)
+//     THE action of a flow step a flat full-width block, the accent fill, radius 4 to 6 (Btn, primary), ONLY on the flow pages (onboarding, the voice step:
+//                              the page's whole job is the one action); everywhere else an action is an accent text action. A Kit test keeps this.
+//   Lists: a list that is the page is a PlainList of LineRows on the page's own left edge (Podcasts); a list among other things is a ListGroup of ListRows.
+//   Text: at most three sizes in a card or a row; one accent use per list row (the others muted).
+//     an icon control          the icon alone with a caption under it; on is the accent, off is muted: no ring, no circle (the bar)
+//     a field                  plain text on the surface with a hairline beneath, or the bar's own surface: no capsule, no box
+//     a mark of selection      a check at the trailing edge (picked), a dash (some inside picked), a quiet plus (not picked)
+//   Radii: 0 for rules and fields, 4 to 6 for blocks (th.radiusControl), 8 to 12 for content cards (th.radiusCard), never half the height.
+//   The Kit clamps every theme to these (ThemeLoader), so th.radiusPill is a block radius too; do not use it for a new look.
+//   Cards are surfaces (the theme's paper colour and shadow), not outlines. A hairline (th.rule) separates rows; it never boxes a word.
+//   A Kit test (DesignRulesTests) fails when a contract outside this file draws an outlined box or a capsule.
+//   spacing   4, 8, 12, 16, 24, 32 (the page gutter is 20, a card's padding 16, a list row's side padding 16, gaps between blocks 12 or 16)
+//   type      page title 30/700 (fontHead); section label 12/600 caps, letter-spacing 0.8, muted (fontLabel); body 17 (fontText); row title 17/600 (fontHead); a press is fontAction 600 (mobile/docs/typography.md);
+//             secondary line 15 muted; caption 13 muted (counts, times, sources); the smallest text on a surface is 11 and is never body
+//   rows      one list row is 52 tall at least, its side padding is 16, a hairline (th.rule) separates rows and is inset to the text edge
+//   selection the mark is the same size in every state: choosing never resizes or moves anything (owner, 2026-11-15)
+//   motion    content emerges with `Emerge` (a fade and a short rise, th.motionEnterMs, off under Reduce Motion); a selection animates its
+//             colour with th.motionFastMs and never its size
+// Components below are faces and frames: the caller wraps a face in `button ... appearance="none"` that keeps its press and testId.
+
+keyframes uiEmerge
+  from opacity=0 translate="0px 10px"
+
+// Content emerging: the children fade in and rise a little. `delay` is in ms (th.staggerMs times the item's place makes a stagger).
+component Emerge
+  inject
+    th: Theme
+  props
+    delay: number
+  slot
+  view
+    column width="100%" box-sizing="border-box" min-width=0 animation=(th.reducedMotion ? "none" : `uiEmerge ${th.motionEnterMs}ms ${delay}ms ease-out both`)
+      children
+
+// A page's title and one line under it (the page-title testId stays on the title). `subId` is the testId of the line.
+component PageHeader
+  inject
+    th: Theme
+  props
+    title: string
+    subtitle: string
+    subId: string
+  view
+    column gap=4 width="100%" box-sizing="border-box" min-width=0
+      text title role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.1 testId="page-title"
+      if subtitle != ""
+        text subtitle testId=subId font-family=th.fontLabel font-size="-exact-subheadline" line-height=1.35 color=th.muted
+
+// A section label above a group of rows or cards: small, capitals, muted (the accent is not a label colour).
+component SectionHeader
+  inject
+    th: Theme
+  props
+    label: string
+  view
+    text label role="heading" aria-level=2 font-family=th.fontLabel font-size="-exact-caption1" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted padding="8px 0px 0px 0px"
+
+// (RowRule) The hairline between rows, inset to the text edge (`indent` is the left margin).
+component RowRule
+  inject
+    th: Theme
+  props
+    indent: number
+  view
+    box height=1 align-self="stretch" margin-left=indent background-color=th.rule
+
+// A grouped list: rows sit in one surface (modest radius, no outline), separated by hairlines, clipped to its corners.
+component ListGroup
+  inject
+    th: Theme
+  props
+    testId: string
+  slot
+  view
+    column testId=testId width="100%" box-sizing="border-box" min-width=0 overflow="hidden" border-radius=th.radiusCard background-color=th.paper2
+      children
+
+// A plain list: rows on the page's own surface with hairlines between them, no box (the page's one left edge is the rows' left edge). Use it where a list
+// is the page (Podcasts); ListGroup is for a list that sits among other things.
+component PlainList
+  inject
+    th: Theme
+  props
+    testId: string
+  slot
+  view
+    column testId=testId width="100%" box-sizing="border-box" min-width=0
+      children
+
+// A ListRow without side padding, for a PlainList: a title, a caption under it, a quiet trailing word and an optional chevron.
+component LineRow
+  inject
+    th: Theme
+  props
+    label: string
+    detail: string
+    trailing: string
+    chevron: bool
+  view
+    row align-items="center" gap=12 min-height=56 width="100%" box-sizing="border-box" padding="8px 0px"
+      column flex=1 min-width=0 gap=2 align-items="flex-start"
+        text label font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left"
+        if detail != ""
+          text detail font-family=th.fontLabel font-size="-exact-footnote" line-height=1.3 color=th.muted text-align="left"
+      if trailing != ""
+        text trailing font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+      if chevron
+        image "symbol:forward-chevron" color=th.muted
+
+// One list row's content: a title, an optional caption under it, an optional quiet trailing word and an optional chevron. The caller wraps
+// it in a button (a row is one tap target).
+component ListRow
+  inject
+    th: Theme
+  props
+    label: string
+    detail: string
+    trailing: string
+    chevron: bool
+  view
+    row align-items="center" gap=12 min-height=52 width="100%" box-sizing="border-box" padding="8px 16px"
+      column flex=1 min-width=0 gap=2 align-items="flex-start"
+        text label font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg text-align="left"
+        if detail != ""
+          text detail font-family=th.fontLabel font-size="-exact-footnote" line-height=1.3 color=th.muted text-align="left"
+      if trailing != ""
+        text trailing font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+      if chevron
+        image "symbol:forward-chevron" color=th.muted
+
+// The selection mark, 24 points square in every state, an icon and no container: a check (picked), a dash (some of what is inside is
+// picked), a quiet plus (not picked: the sign that the row can be picked); "blank" is nothing (a single-choice list shows only the chosen row). Only the glyph changes, so choosing never resizes or moves anything.
+component SelectMark
+  inject
+    th: Theme
+  props
+    state: string
+  derive on = state == "on"
+  derive part = state == "partial"
+  derive off = state == "off"
+  view
+    row width=24 height=24 flex-shrink=0 align-items="center" justify-content="center"
+      if on
+        image "symbol:checkmark" width=16 height=16 color=th.accent
+      if part
+        box width=12 height=2 background-color=th.accent
+      if off
+        image "symbol:sf/plus" width=14 height=14 color=th.muted
+
+// A choice in a set of words (a wrapping row of sections, filters): the chosen word at full strength with a short accent rule under it, the
+// others muted. The rule's space is there in every state (transparent when not chosen), so choosing moves nothing. No capsule, no outline.
+// The caller wraps it in a button. ChipFace is the old name, kept so pages that use it take the new look without edits.
+component ChoiceWord
+  inject
+    th: Theme
+  props
+    label: string
+    selected: bool
+  view
+    column align-items="flex-start" justify-content="center" min-height=44 gap=3 flex-shrink=0
+      text label font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=(selected ? th.fg : th.muted)
+        transition=`color ${th.motionFastMs}ms ease`
+      box width=20 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
+
+// Deprecated name, kept so pages that use it take the new look without edits (use ChoiceWord for a set, Btn for an action). It draws an action
+// word: the accent when not selected (an action, or a choice not taken), full strength with the short accent rule when selected (a chosen mode).
+component ChipFace
+  inject
+    th: Theme
+  props
+    label: string
+    selected: bool
+  view
+    column align-items="flex-start" justify-content="center" min-height=44 gap=3 flex-shrink=0 padding="0px 12px 0px 0px"
+      text label font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=(selected ? th.fg : th.accent)
+        transition=`color ${th.motionFastMs}ms ease`
+      box width=20 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
+
+// A set of a few words side by side (Front page and My edition, Light and Dark and System): the track is a plain row, no box. Each face is a
+// SegmentFace in a button with `flex=1 min-width=0`; the chosen one is full strength with its rule centred beneath it. The capsule track is
+// gone; the names stay so pages that use them take the new look without edits.
+component SegmentedTrack
+  inject
+    th: Theme
+  props
+    testId: string
+  slot
+  view
+    row testId=testId gap=8 width="100%" box-sizing="border-box" align-items="flex-start"
+      children
+
+component SegmentFace
+  inject
+    th: Theme
+  props
+    label: string
+    selected: bool
+  view
+    column align-items="center" justify-content="center" min-height=44 gap=3 width="100%"
+      text label font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.accent text-align="center"
+        transition=`color ${th.motionFastMs}ms ease`
+      box width=24 height=2 background-color=(selected ? th.accent : "transparent") transition=`background-color ${th.motionFastMs}ms ease`
+
+// Nothing here, still loading or failed: a line of plain words and, when the caller adds one, a single action beneath it.
+component EmptyState
+  inject
+    th: Theme
+  props
+    message: string
+    detail: string
+    testId: string
+  slot
+  view
+    column testId=testId align-items="center" gap=12 width="100%" box-sizing="border-box" padding="32px 24px"
+      text message font-family=th.fontText font-size="-exact-body" line-height=1.4 color=th.fg text-align="center"
+      if detail != ""
+        text detail font-family=th.fontLabel font-size="-exact-footnote" line-height=1.4 color=th.muted text-align="center"
+      children
 
 // The room a scrolling page leaves at its end so nothing important sits under the bar: the bar's 56, its 8 above the home
 // indicator, the indicator, and a gap. The one place the number is written; every scroll body ends with it.
@@ -109,9 +353,9 @@ component ToolScroll
     id: string
   slot
   view
-    scroll id=id flex=1 min-height=0 width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 140px)"
+    scroll id=id overflow-x="hidden" flex=1 min-height=0 width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 140px)"
       column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 padding-bottom=24 gap=12
-        font-family=th.fontRead color=th.fg
+        font-family=th.fontText color=th.fg
         children
 
 // A full-bleed scrolling page body: starts under the status bar, ends clear of the bar
@@ -123,9 +367,9 @@ component PageScroll
     id: string
   slot
   view
-    scroll id=id testId=`${id}-scroll` flex=1 min-height=0 width="100%"
-      column padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
-        gap=12 font-family=th.fontRead color=th.fg
+    scroll id=id testId=`${id}-scroll` overflow-x="hidden" flex=1 min-height=0 width="100%"
+      column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20
+        gap=12 font-family=th.fontText color=th.fg
         children
         BarClear()
 
@@ -138,9 +382,9 @@ component PlainPage
     lines: string[]
   view
     PageScroll(id="plain")
-      text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
+      text title role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 testId="page-title" font-family=th.fontHead
       for l, i in lines key=i
-        text l font-size=17 line-height=1.5
+        text l font-size="-exact-body" line-height=1.5 font-family=th.fontText
 
 // The page behind an address nothing has built yet, or that could not be opened: one plain sentence.
 component NotYetPage
@@ -151,6 +395,6 @@ component NotYetPage
     title: string
   view
     PageScroll(id="notyet")
-      text title role="heading" aria-level=1 font-size=28 font-weight=700 testId="page-title"
-      text `${title} is not built yet.` testId="notyet" font-family=th.fontUi color=th.muted
-      text address font-family=th.fontMono font-size=13 color=th.muted
+      text title role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 testId="page-title" font-family=th.fontHead
+      text `${title} is not built yet.` testId="notyet" font-family=th.fontLabel color=th.muted
+      text address font-family=th.fontMono font-size="-exact-footnote" color=th.muted

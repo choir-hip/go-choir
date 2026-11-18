@@ -16,7 +16,7 @@ BIN="$HERE/AutoradioKit/.build/release"
 import json, sys
 ids = {(s["kind"], s["id"]) for s in json.load(open(sys.argv[1]))}
 need = {("speechBounds","silero-vad"),("transcriber","parakeet-eou"),("transcriber","parakeet-tdt"),("system1","llama-qwen3-0.6b"),
-        ("voice","kokoro"),("voice","pocket-tts"),("transcriber","lfm3-audio-live"),("voice","lfm3-audio-tts"),("holder","local-ack")}
+        ("voice","kokoro"),("voice","pocket-tts"),("voice","phonon"),("transcriber","lfm3-audio-live"),("voice","lfm3-audio-tts"),("holder","local-ack")}
 missing = need - ids
 if missing: print("PROOF FAILED: stages not listed:", sorted(missing)); sys.exit(1)
 print("stages listed:", len(need), "model stages")
@@ -38,7 +38,7 @@ if [ -n "${SETUP:-}" ]; then
   echo "PROOF OK: every setup model fetched, verified, loaded and checked"; echo "records in $OUT"; exit 0
 fi
 
-STAGES="${STAGES:-silero-vad,parakeet-eou,parakeet-tdt,llama-qwen3-0.6b,kokoro,pocket-tts}"
+STAGES="${STAGES:-silero-vad,parakeet-eou,parakeet-tdt,llama-qwen3-0.6b,kokoro,pocket-tts,phonon}"
 [ -n "${LFM3:-}" ] && STAGES="$STAGES,lfm3-audio-live,lfm3-audio-tts"
 "$BIN/autoradio-models" --turn "$HERE/fixtures/turns/plain" --stages "$STAGES" --json "$OUT/models.json" 2>"$OUT/models.err" | grep ' | load ' || true
 

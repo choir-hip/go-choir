@@ -221,9 +221,8 @@ final class AccountsTests: XCTestCase {
 final class SettingsCatalogTests: XCTestCase {
     func testValueFallsBackToTheDefaultAndRefusesAnUnknownChoice() {          // S1
         let d = freshDefaults(); let s = AppSettings(defaults: d)
-        XCTAssertEqual(s.value("talkMode"), "button"); XCTAssertEqual(s.value("swipeLeft"), "close"); XCTAssertEqual(s.value("swipeRight"), "more")
-        XCTAssertFalse(s.set("talkMode", "shout")); XCTAssertFalse(s.set("nope", "x"))
-        XCTAssertTrue(s.set("talkMode", "open")); XCTAssertEqual(s.value("talkMode"), "open")
+        XCTAssertEqual(s.value("talkMode"), "", "the talk setting is gone"); XCTAssertEqual(s.value("swipeLeft"), "close"); XCTAssertEqual(s.value("swipeRight"), "more")
+        XCTAssertFalse(s.set("talkMode", "open"), "no setting by that name any more"); XCTAssertFalse(s.set("nope", "x"))
         d.set("retired-option", forKey: AppSettings.key("swipeLeft"))
         XCTAssertEqual(s.value("swipeLeft"), "close", "a stored value that is no longer an option falls back")
     }
@@ -232,14 +231,7 @@ final class SettingsCatalogTests: XCTestCase {
         let s = AppSettings(defaults: freshDefaults()); s.set("swipeLeft", "closeLess")
         let r = s.rows(group: "gestures").first { $0.id == "swipeLeft" }!
         XCTAssertEqual(r.choices.filter(\.selected).map(\.id), ["closeLess"]); XCTAssertEqual(r.valueLabel, "Close, and less of this")
-        XCTAssertEqual(s.rows(group: "talk").count, 1); XCTAssertEqual(s.rows(group: "gestures").count, 2)
-    }
-
-    func testTalkModeMapsToTheEnginesAddressingStages() {                     // S2
-        XCTAssertEqual(AppSettings.addressingStage(forTalkMode: "button"), "button")
-        XCTAssertEqual(AppSettings.addressingStage(forTalkMode: "word"), "hybrid")
-        XCTAssertEqual(AppSettings.addressingStage(forTalkMode: "open"), "open")
-        XCTAssertEqual(AppSettings.addressingStage(forTalkMode: "?"), "button")
+        XCTAssertEqual(s.rows(group: "talk").count, 0); XCTAssertEqual(s.rows(group: "gestures").count, 2)
     }
 
     func testLearnedListIsCutAtTheNewestReset() {                              // L1, L2

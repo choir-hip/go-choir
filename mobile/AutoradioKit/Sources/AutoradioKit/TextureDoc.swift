@@ -176,6 +176,11 @@ public struct ReaderDoc: Codable, Sendable, Equatable {
     public var textBlocks: Int
     /// the same document as Markdown with citations as `[n](cite:anchor)` links (the atom-pill experiment)
     public var markdown: String
+    /// Your own document at its head: the listener may edit it. A revision, a published story and everything else are read-only.
+    public var editable: Bool = false
+    /// The document's own Markdown (`content`): what the editor opens with.
+    public var source: String = ""
+    public var docId: String = ""
 
     public init(address: String, status: String = "loading", message: String = "", title: String = "", kicker: String = "", dek: String = "",
                 byline: String = "", meta: String = "", kind: String = "document", disclosure: String = "", blocks: [ReaderBlock] = [],

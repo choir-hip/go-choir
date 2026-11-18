@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSPrivacyTracking</key>
+  <false/>
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <!-- Free space is read before a model download and for the setup plan (VoiceSetup, Configurator): the app chooses what to fetch and
+         refuses what does not fit, so its behaviour differs by free space. It stays on the device. E174.1: "check whether there is
+         sufficient disk space to write files". -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array><string>E174.1</string></array>
+    </dict>
+    <!-- Sizes and modification dates of files in the app's own container: the model store, the paper's cache file, the Files and Reader
+         caches. C617.1. (Exact declares C617.1 and 3B52.1 for its own use; the lists are merged.) -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array><string>C617.1</string></array>
+    </dict>
+    <!-- ProcessInfo.systemUptime measures elapsed time between events inside the app (turn latencies, audio frame times). 35F9.1. -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array><string>35F9.1</string></array>
+    </dict>
+    <!-- UserDefaults.standard holds the app's own settings (theme, speed, voice choice, preparation flags). CA92.1. -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array><string>CA92.1</string></array>
+    </dict>
+  </array>
+</dict>
+</plist>

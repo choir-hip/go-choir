@@ -9,17 +9,18 @@
     "PaperSection": { "id": "string", "label": "string", "count": "number", "current": "bool" },
     "PaperFront": {
       "status": "string", "message": "string", "edition": "string", "layout": "string", "composition": "string",
-      "dateLine": "string", "updated": "string", "sectionId": "string", "sectionLabel": "string", "count": "number",
-      "sections": "PaperSection[]", "bands": "PaperBand[]"
+      "dateLine": "string", "updated": "string", "sectionId": "string", "sectionLabel": "string", "viewId": "string", "viewLabel": "string",
+      "mineState": "string", "mineFrom": "string", "note": "string", "count": "number",
+      "sections": "PaperSection[]", "bands": "PaperBand[]", "routes": "string[]", "titles": "string[]"
     }
   },
   "names": [
     {
       "source": "paperFront", "live": true, "answers": "PaperFront",
-      "options": { "section": "string", "edition": "string", "width": "number" },
+      "options": { "view": "string", "edition": "string", "width": "number", "tick": "number", "focus": "string" },
       "substitute": { "default": {
         "status": "empty", "message": "", "edition": "", "layout": "", "composition": "", "dateLine": "", "updated": "",
-        "sectionId": "", "sectionLabel": "", "count": 0, "sections": [], "bands": []
+        "sectionId": "", "sectionLabel": "", "viewId": "", "viewLabel": "", "mineState": "", "mineFrom": "", "note": "", "count": 0, "sections": [], "bands": [], "routes": [], "titles": []
       } }
     }
   ]

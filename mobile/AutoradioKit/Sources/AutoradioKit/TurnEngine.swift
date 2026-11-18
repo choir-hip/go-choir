@@ -3,6 +3,9 @@ import Foundation
 // MARK: Host-supplied seams
 
 public enum AudioState: String, Codable, Sendable {
+    /// Playback only, no microphone: the state whenever voice is off. The session is a playback one (so audio goes on in the
+    /// background and with the screen locked) and nothing is recorded.
+    case playing
     /// Full-quality playback, no voice processing. Mic feeds detectors only.
     case listening
     /// Programme paused or ducked, voice processing on, so the listener can interrupt a spoken answer.
@@ -18,12 +21,18 @@ public protocol AudioSessionOwner: AnyObject, Sendable {
     func describe() -> String
     /// Give the claim up (Stop). The session falls back to what the app's own sound wants.
     func release()
+    /// The owner holds a live claim in `state`: nothing needs taking again, only asserting (no release).
+    func holds(_ state: AudioState) -> Bool
+    /// Activate the session again without giving it up (after the background, an interruption). Throws with the system's error code.
+    func reassert() async throws
     /// The system told the claim something: "interrupted", "resumed", "reset", "route" (detail: the route now).
     func observe(_ handler: @escaping @Sendable (_ kind: String, _ detail: String) -> Void)
 }
 public extension AudioSessionOwner {
     func describe() -> String { "" }
     func release() {}
+    func holds(_ state: AudioState) -> Bool { false }
+    func reassert() async throws {}
     func observe(_ handler: @escaping @Sendable (String, String) -> Void) {}
 }
 
@@ -70,8 +79,10 @@ public protocol PlaybackControl: AnyObject, Sendable {
     /// The programme line being spoken this instant and how much of it has been heard; nil when nothing is being spoken
     /// (paused, a clip, nothing playing). Asked by the engine at the moment a listener begins, so a turn knows what it cut into.
     func spoken() async -> SpokenCut?
+    /// Stop the voice (an acknowledgement, a holding line, the desk's answer) at once: the listener spoke over it.
+    func stopVoice() async
 }
-public extension PlaybackControl { func spoken() async -> SpokenCut? { nil } }
+public extension PlaybackControl { func spoken() async -> SpokenCut? { nil }; func stopVoice() async {} }
 
 /// Replay's player: nothing audible, the document is tracked.
 public final class SimulatedPlayback: PlaybackControl, @unchecked Sendable {
@@ -102,6 +113,8 @@ public struct EngineEnvironment: Sendable {
     public var device: DeviceInfo
     public var onRecord: @Sendable (TurnRecord) -> Void
     public var onOutcome: @Sendable (String, Outcome) -> Void
+    /// The reader's learned voice: with one, a hands-free turn in another voice (a TV) is not shown and not sent.
+    public var speakerGate: SpeakerGate = .shared
     /// The page in front of the listener right now (title and kind), for the acknowledgement to name. nil: none known.
     public var frontPage: @Sendable () -> FrontPage?
     /// The text of the page at an address, as far as the phone has it (the local stream may say something from it).
@@ -143,6 +156,8 @@ public actor TurnEngine {
     /// A cancelled hold's release must not start a turn.
     var ignoreNextButtonUp = false
     var pipeline: Task<Void, Never>?
+    /// Hands-free listening state (HandsFree.swift): the turn policy, the open transcription session, what the radio has said aloud.
+    var hf = HandsFreeState()
 
     final class Turn {
         let id: String
@@ -160,6 +175,8 @@ public actor TurnEngine {
         var cut: SpokenCut?
         /// The page in front when the listener asked (a typed turn names it; a spoken one is read from the environment).
         var front: FrontPage?
+        /// The audio of a hands-free turn (when a voice model listens), kept only to learn the reader's voice from a turn that was answered.
+        var speakerSamples: [Float] = []
         init(id: String, config: LabConfiguration, transcriber: Transcriber, yield: YieldPolicy, session: TranscriptionSession, firstEventIndex: Int) {
             self.id = id; self.config = config; self.transcriber = transcriber; self.yield = yield; self.session = session; self.firstEventIndex = firstEventIndex
         }
@@ -198,8 +215,13 @@ public actor TurnEngine {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { return false }
         let now = env.log.clock.now
-        if phase == .acknowledging || phase == .holding || phase == .revised { await interruptPipeline() }
+        // A question still being answered (even one whose pipeline has not yet left `ended`) is over: two questions in quick succession
+        // must not run two pipelines at once.
+        if pipeline != nil || phase == .acknowledging || phase == .holding || phase == .revised { await interruptPipeline() }
         await prepareIdle()
+        // Hands-free was listening (a TV, the room) when the reader typed: that half-heard turn is dropped, so it cannot commit a second
+        // question on top of this one. The typed words win.
+        if hf.session != nil || phase == .capturing { await hfDropTurn(requireQuiet: false) }
         guard turn == nil else { return false }
         let cfg = config
         let cut = await env.playback.spoken()
@@ -209,6 +231,7 @@ public actor TurnEngine {
             let t = Turn(id: "turn-" + UUID().uuidString.prefix(8).lowercased(), config: cfg, transcriber: transcriber, yield: yield,
                          session: EmptyTranscription(), firstEventIndex: env.log.count)
             t.cut = cut; t.addressed = true; t.addressedAt = now; t.front = front
+            HandsFreeSwitch.shared.readerSpoke()          // a typed question is the reader's turn too
             turn = t
             setPhase(.candidate)
             // The turn ends the moment it is sent; its words follow, as for a heard turn (the trace anchors on `turnEnded`).
@@ -241,6 +264,12 @@ public actor TurnEngine {
             env.log.emit(.turnCancelled)
             await interruptPipeline()
             await restoreProgramme(reason: "turn cancelled")
+            return
+        }
+        // Hands-free: the turn being heard is the session (no `turn` exists until it is committed). Drop it and stay on.
+        if hf.session != nil || phase == .capturing {
+            env.log.emit(.turnCancelled)
+            await hfDropTurn(requireQuiet: true)
             return
         }
         guard turn != nil || buttonDownAt != nil else { return }
@@ -342,7 +371,7 @@ public actor TurnEngine {
             env.log.emit(.addressed(by: by)); await claimTalking()
             await runTurn(t, transcript: text)
         default:
-            env.log.emit(.notATurn(reason: "candidate speech did not count: \"\(text)\""))
+            env.log.emit(.notATurn(reason: "candidate speech did not count (\(text.count) chars)"))
             await dropTurn(reason: nil, notATurn: true)
         }
     }
@@ -412,6 +441,7 @@ public actor TurnEngine {
         pipeline = Task { [self] in await self.runPipeline(t, transcript: transcript, endedAt: endedAt) }
     }
 
+    /// A command turn is over: shown as a one-line answer, the programme carries on, the microphone goes back to listening.
     func dropTurn(reason: String?, notATurn: Bool = false) async {
         if let r = reason { env.log.emit(.notATurn(reason: r)) }
         if let t = turn { t.session.cancel(); t.partialTask?.cancel() }
@@ -446,6 +476,7 @@ public actor TurnEngine {
 
     func interruptPipeline() async {
         pipeline?.cancel(); pipeline = nil
+        Conversation.shared.cancelOpen()
         if let l = lastFinished { env.onOutcome(l.id, .spokeAgain) }
         setPhase(.playing)
     }
@@ -470,6 +501,14 @@ public actor TurnEngine {
             await runPipelineBody(t, transcript: transcript, endedAt: endedAt, kids: kids)
         } onCancel: { kids.cancelAll() }
         kids.cancelAll()
+        if !Task.isCancelled {
+            await hfAnswerEnded(turnID: t.id)
+            // A turn that led to an answer the reader did not cancel is the reader's voice: it keeps improving the learned voice.
+            if !t.speakerSamples.isEmpty, Conversation.shared.entry(t.id)?.status == "answered" {
+                let (gate, samples) = (env.speakerGate, t.speakerSamples)
+                Task { await gate.learn(samples) }
+            }
+        }
     }
 
     private func runPipelineBody(_ t: Turn, transcript: String, endedAt: Double, kids: TaskBag) async {
@@ -478,14 +517,23 @@ public actor TurnEngine {
         let pos = await env.playback.position()
         let front = t.front ?? env.frontPage()
         setPhase(.acknowledging)
+        Conversation.shared.begin(id: t.id, question: transcript)       // the question is on screen at once, whatever else happens
 
         var system1: System1?, holder: Holder?, voice: Voice?, desk: Desk?
         do {
             system1 = try env.registry.make(.system1, as: System1.self, cfg)
             holder = try env.registry.make(.holder, as: Holder.self, cfg)
-            voice = try env.registry.make(.voice, as: Voice.self, cfg)
+            voice = try env.registry.makeSpeaker(cfg, log: log)
             desk = try env.registry.make(.desk, as: Desk.self, cfg)
         } catch { log.emit(.error(stage: "resolve", message: "\(error)")) }
+
+        // What the phone holds for this question, searched once: the local model and the server desk are shown the same passages.
+        let retrieved = await holder?.retrieve(words: transcript, pageTitle: front?.title ?? "", pageAddress: front?.address ?? "")
+        // Private material (mail) is answered here and only here: the desk is not asked, so its revision cannot replace the local answer. When no local
+        // model is loaded there is no local answer to keep, so the desk is asked as usual, with the private passages left out of what it is sent.
+        let keepLocal = DeskContext.keepsLocal(retrieved) && (LocalLanguage.model?.isLoaded ?? false)
+        if keepLocal { desk = nil }
+        print(DeskContext.turnLine(desk: desk != nil ? "server" : "local", retrieved: retrieved, reason: keepLocal ? "private" : ""))
 
         // The desk starts at once; System 1 and the acknowledgement do not wait for it.
         let revisionSeen = Flag()
@@ -495,6 +543,7 @@ public actor TurnEngine {
         var deskTask: Task<Void, Never>?
         var deskSpeakTask: Task<Void, Never>?
         let deskHeard = HeardLines()                                   // what the streamed desk said aloud
+        hfWatchHeard([heard, deskHeard])
         let localPlay = Locked<Task<Void, Never>?>(nil)                // the local stream's player and speaker: the desk's speaker waits for them
         let localSpeakerBox = Locked<LocalSpeaker?>(nil)
         var streaming = false
@@ -508,25 +557,51 @@ public actor TurnEngine {
                 let pageFetch = env.pageText
                 deskTask = Task { [self] in
                     var turnReq = baseReq
-                    if let f = front { turnReq.page = DeskPage(address: f.address, title: f.title, text: await pageFetch(f.address)) }
+                    let own = front != nil ? await pageFetch(front!.address) : ""
+                    turnReq.page = DeskContext.page(front: front, pageText: own, brief: retrieved?.brief ?? "", retrieved: retrieved)
+                    turnReq.queue = await QueueVoice.hooks.snapshot?()
+                    turnReq.candidates = (QueueVoice.hooks.candidates?() ?? []).prefix(40).map { DeskCandidate(route: $0.route, title: $0.title) }
                     var firstSeen = false
+                    // The desk's first speech (its answer or its own plain error line) ends the local holding talk, unless the local talk is
+                    // itself an answer from saved stories: that one is heard to its end and the desk speaks after it.
+                    func deskSpeaks() async {
+                        guard !firstSeen else { return }
+                        firstSeen = true
+                        log.emit(.deskFirstToken(msSinceTurnEnd: (log.clock.now - endedAt) * 1000))
+                        revisionSeen.set()
+                        if !(holder?.keepsSpeakingForDesk ?? false) { cutLocal.set(); relayTask?.cancel(); holder?.cancel() }
+                        await self.markRevised()
+                    }
                     do {
                         for try await e in sd.speech(turnReq, heard: heard) {
                             if Task.isCancelled { break }
                             switch e {
-                            case .sentence(_, let text), .failed(let text, _):
-                                if !firstSeen {
-                                    firstSeen = true
-                                    log.emit(.deskFirstToken(msSinceTurnEnd: (log.clock.now - endedAt) * 1000))
-                                    revisionSeen.set(); cutLocal.set(); relayTask?.cancel(); holder?.cancel()    // real desk speech is ready: the local stream stops
-                                    await self.markRevised()
-                                }
+                            case .sentence(_, let text):
+                                await deskSpeaks()
+                                Conversation.shared.addAnswer(id: t.id, sentence: text)
+                                deskCont.yield(text)
+                            case .failed(let text, _):
+                                await deskSpeaks()
+                                Conversation.shared.fail(id: t.id, note: text)
                                 deskCont.yield(text)
                             case .done(let status, let n, let a, let b):
                                 log.emit(.deskDone(status: status, sentences: n, serverFirstSentenceMs: a, serverDoneMs: b))
+                                Conversation.shared.finishAnswer(id: t.id, status: status)
+                            case .queueOps(let json):
+                                log.emit(.note("desk: queue_ops, \(json.count) bytes, handed to the queue"))
+                                await QueueVoice.hooks.applyServerOps?(json)         // the server speaks its own confirmation
                             }
                         }
-                    } catch { log.emit(.error(stage: "desk", message: "\(error)")) }
+                    } catch {
+                        log.emit(.error(stage: "desk", message: "\(error)"))
+                        // A failure with nothing said is said, in plain words, and kept with a way to ask again (never a silent turn).
+                        if !Task.isCancelled, Conversation.shared.entry(t.id)?.answer.isEmpty ?? true {
+                            let line = Conversation.plain(error)
+                            await deskSpeaks()
+                            Conversation.shared.fail(id: t.id, note: line)
+                            deskCont.yield(line)
+                        }
+                    }
                     deskCont.finish()
                 }
                 if let d = deskTask { kids.add(d) }
@@ -547,6 +622,7 @@ public actor TurnEngine {
                 deskTask = Task { [self] in
                     do {
                         var firstSeen = false
+                        print("AUTORADIO turn desk=\(type(of: desk).stageID) asked chars=\(transcript.count)")
                         for try await r in desk.submit(baseReq, heard: heard) {
                             if Task.isCancelled { break }       // an interrupted turn's revision is not applied
                             if !firstSeen { firstSeen = true; log.emit(.deskFirstToken(msSinceTurnEnd: (log.clock.now - endedAt) * 1000)) }
@@ -567,7 +643,7 @@ public actor TurnEngine {
         if let f = front { let fetch = env.pageText; pageTextSource = { await fetch(f.address) } }
         var earlySrc: AsyncStream<String>?
         if immediate, let holder, voice != nil {
-            earlySrc = holder.lines(for: HolderInput(listenerWords: transcript, answers: [], pageTitle: pageTitle, pageKind: pageKind, pageAddress: front?.address ?? "", pageText: pageTextSource),
+            earlySrc = holder.lines(for: HolderInput(listenerWords: transcript, answers: [], pageTitle: pageTitle, pageKind: pageKind, pageAddress: front?.address ?? "", pageText: pageTextSource, retrieved: retrieved),
                                     later: { await s1Box.value?.value ?? [] })
         }
 
@@ -598,7 +674,7 @@ public actor TurnEngine {
             // as they are ready (unless the desk speaks first). No timer decides between them.
             log.emit(.cueStarted(msSinceTurnEnd: (log.clock.now - endedAt) * 1000))
             log.emit(.ackStarted(msSinceTurnEnd: (log.clock.now - endedAt) * 1000))
-            let src = earlySrc ?? holder.lines(for: HolderInput(listenerWords: transcript, answers: answers, pageTitle: pageTitle, pageKind: pageKind, pageAddress: front?.address ?? "", pageText: pageTextSource))
+            let src = earlySrc ?? holder.lines(for: HolderInput(listenerWords: transcript, answers: answers, pageTitle: pageTitle, pageKind: pageKind, pageAddress: front?.address ?? "", pageText: pageTextSource, retrieved: retrieved))
             relayTask = Task {
                 var said = 0
                 for await l in src {
@@ -637,6 +713,7 @@ public actor TurnEngine {
                     guard Self.needsNothing(a) else { return }
                     log.emit(.ackCancelled(reason: "System 1: the listener asked for nothing", audible: true))
                     cutLocal.set(); holder.cancel(); rl?.cancel()
+                    Conversation.shared.cancelOpen()
                     if let dt { log.emit(.note("desk not engaged: System 1 said nothing was asked")); dt.cancel() }
                 }
                 if let v = verdictTask { kids.add(v) }
@@ -649,7 +726,7 @@ public actor TurnEngine {
         } else { setPhase(.holding) }
         if immediate, holder == nil || voice == nil {
             let a = await s1Task.value
-            if Self.needsNothing(a) { log.emit(.note("desk not engaged: System 1 said nothing was asked")); deskTask?.cancel() }
+            if Self.needsNothing(a) { log.emit(.note("desk not engaged: System 1 said nothing was asked")); Conversation.shared.cancelOpen(); deskTask?.cancel() }
         }
 
         // Hold until the desk's stream ends. No timer: the desk ends its stream, fails with a real error, or the listener cancels or
@@ -659,6 +736,7 @@ public actor TurnEngine {
         relayTask?.cancel()
         _ = playTask
         if Task.isCancelled { return }
+        Conversation.shared.settle(id: t.id)
 
         // The transition: if the phone spoke, a soft falling pair so the switch to the desk's answer sounds intended.
         if !streaming, let sp = speaker, sp.sentencesHeard > 0, revisionSeen.isSet {

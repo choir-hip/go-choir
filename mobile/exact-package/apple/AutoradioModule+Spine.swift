@@ -1,7 +1,6 @@
 // The spine's sources and sends: open pages, the page model, themes, the bar's state, signals and demo mode.
 // Owned by the spine. A lane does not edit this file; it registers its own handlers in AutoradioModule+<Lane>.swift.
 import Foundation
-import UIKit
 
 extension AutoradioModule {
     /// The simulator driven by the Exact agent opens no audio hardware.
@@ -60,7 +59,7 @@ extension AutoradioModule {
             guard let self else { return }
             await self.runtime.start(virtual: self.virtualEngine)
         }
-        for name in ["choirPlayPause", "choirStartRadio", "choirTalkDown", "choirPlay"] {
+        for name in ["choirPlayPause", "choirStartRadio", "choirPlay"] {
             handle(name) { [unowned self] args, reply in
                 Task { [weak self] in
                     guard let self else { return }
@@ -68,13 +67,41 @@ extension AutoradioModule {
                     switch name {
                     case "choirPlayPause": await self.choir.playPause()
                     case "choirStartRadio": await self.choir.startRadio()
-                    case "choirTalkDown":
-                        self.runtime.aimAddress = args["aim"] as? String ?? ""     // the spoken turn is about this page
-                        await self.choir.talkDown()
                     default: await self.choir.play(route: args["route"] as? String ?? "")
                     }
                     DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
                 }
+            }
+        }
+
+        // The bar's microphone: hands-free on or off, one state, off at every launch. Turning it on starts the engine if it is not running;
+        // turning it off drops an open turn at once and the engine hears nothing more.
+        handle("choirHandsFreeToggle") { [unowned self] _, reply in
+            Task { [weak self] in
+                guard let self else { return }
+                let on = !HandsFreeSwitch.shared.isOn
+                if on, !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
+                self.runtime.setHandsFree(on)
+                DispatchQueue.main.async { self.touch(["barState"], now: true); reply(self.json(self.runtime.snapshot())) }
+            }
+        }
+
+        // "Listen": the radio reads what is in front of the listener, as a run sheet entry placed now (RunSheetPlayer.playNow), with the
+        // player's own controls. The headline is read first. It replaces what is on air; what was ahead stays ahead.
+        // Text with nothing to say starts nothing.
+        handle("choirListen") { [unowned self] args, reply in
+            let address = args["address"] as? String ?? ""
+            let title = (args["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = ListenText.compose(title: title, body: args["text"] as? String ?? "")
+            guard !address.isEmpty, !text.isEmpty else { return reply(self.json(self.runtime.snapshot())) }
+            Task { [weak self] in
+                guard let self else { return }
+                let paras = ChoirText.paragraphs(text, maxChars: ChoirText.speechChars)
+                let name = title.isEmpty ? paras.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? "" : title
+                // Listen is a play: `place now` of the page in front, with the words the page held. What was ahead stays ahead.
+                await MainActor.run { RunSheetPlayer.shared.playNow(.readAloud(address: address, title: name), words: (name, paras)) }
+                self.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "listen"))
+                DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
             }
         }
 
@@ -83,6 +110,13 @@ extension AutoradioModule {
         for name in ["choirAsk"] {
             handle(name) { [unowned self] args, reply in
                 let text = args["text"] as? String ?? ""
+                // A URL in the bar is not a question: it opens in place with Read aloud and Add to queue (lane autoradio-queue; the one early branch).
+                if let url = BarURL.detect(text) {
+                    if BarURL.isDocument(url), let importer = BarURL.importDocument { importer(url); return reply(self.json(self.runtime.snapshot())) }   // a .pdf or .epub: the Reader imports it
+                    self.barWebURL = url.absoluteString; EmbeddedPage.shared.opened(url.absoluteString)
+                    self.touch(["queueView"], now: true)
+                    return reply(self.json(self.runtime.snapshot()))
+                }
                 // `aim` (lane SHELL) is the front page's address; `address` is the older name. Either may be absent.
                 let address = (args["aim"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? args["address"] as? String ?? ""
                 Task { [weak self] in
@@ -95,10 +129,21 @@ extension AutoradioModule {
 
         // Sends. Every one answers the open-page list, the shape the page host reads.
         handle("pageOpen") { [unowned self] args, reply in
-            pages.open(args["address"] as? String ?? "", title: args["title"] as? String); touch(["openPages"]); runtime.warmResponder(address: pages.list().first?.address); reply(pageList())
+            Task { @MainActor in await TextureEditor.shared.flushAll() }      // leaving a page posts what was typed on it
+            // A PDF or an e-book in Files opens in Reader and text in Texture: the document's own page, never a `file:` page for it (Kit/FilesOpen.swift).
+            if let address = args["address"] as? String, FilesOpen.resolvesElsewhere(address) {
+                // No "Opening…" line: the bar's line channel is the error one (red icon, held for seconds), and it was never cleared on success.
+                Task { [weak self] in
+                    guard let self else { return }
+                    if case .failed(let line) = await FilesOpen.open(address: address, title: args["title"] as? String, pages: self.pages) { BarTracker.shared.say(line) }
+                    DispatchQueue.main.async { self.touch(["openPages", "barState", "shelfList"], now: true); self.runtime.warmResponder(address: self.pages.list().first?.address); reply(self.pageList()) }
+                }
+                return
+            }
+            pages.open(args["address"] as? String ?? "", title: args["title"] as? String); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList())
         }
-        handle("pageClose") { [unowned self] args, reply in pages.close(args["address"] as? String ?? ""); touch(["openPages"]); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
-        handle("pageFocus") { [unowned self] args, reply in pages.focus(args["address"] as? String ?? ""); touch(["openPages"]); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
+        handle("pageClose") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.close(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
+        handle("pageFocus") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.focus(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
         handle("pagePin") { [unowned self] args, reply in pages.togglePin(args["address"] as? String ?? ""); touch(["openPages"]); reply(pageList()) }
         handle("pageReopen") { [unowned self] _, reply in pages.reopenLastClosed(); touch(["openPages"]); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
         handle("themeSet") { [unowned self] args, reply in

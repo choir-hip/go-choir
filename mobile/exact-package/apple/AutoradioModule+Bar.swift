@@ -30,10 +30,12 @@ extension AutoradioModule {
 
         // While the programme plays, the position inside the block moves: one gentle refresh, ~2.5 per second.
         DispatchQueue.main.async { [weak self] in
+            var lastBlock = -1
             let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] timer in
                 guard let self else { timer.invalidate(); return }
                 let s = self.runtime.snapshot()
                 if s.running && !s.paused { self.touch(["radioView", "barState"]) }
+                if s.blockIndex != lastBlock { lastBlock = s.blockIndex; self.touch(["queueView"]) }   // lane autoradio-joins: the DJ's coming segments moved on
             }
             RunLoop.main.add(t, forMode: .common)
         }
@@ -52,14 +54,14 @@ extension AutoradioModule {
         }
 
         handle("barState") { [unowned self] _, reply in
-            let info = tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot())
+            let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot())) }   // remote audio shows as the radio (lane autoradio-queue)
             scheduleExpiry()
             reply(json(info))
         }
 
         handle("radioView") { [unowned self] _, reply in
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            let info = tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)
+            let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: RunSheetStore.shared.ahead(limit: 1).first?.shownTitle() ?? "")) }   // lane autoradio-queue
             ReaderFeed.shared.feed(info, route: route)
             reply(json(info))
         }
@@ -72,16 +74,30 @@ extension AutoradioModule {
             }
             touch(["radioView", "barState"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.shownTitle() ?? "" })))
         }
 
-        // Reading speed. Stored and used for the sentence estimate; the audio side applies it once the engine takes a rate
-        // (see "Requests to the spine" in the lane report).
+        // Next or previous (move "next" or "previous"): the run sheet's `skip(on air)`, and its `previous` (the start of this entry when it has
+        // gone on a little, else the entry before it). The paper's list is never asked.
+        handle("radioStory") { [unowned self] args, reply in
+            let move: ChoirApp.StoryMove = (args["move"] as? String) == "previous" ? .previous : .next
+            Task { [weak self] in
+                guard let self else { return }
+                await self.choir.moveStory(move)
+                self.touch(["radioView", "barState"])
+                let route = ChoirEnvironment.shared.playing(self.runtime.player.document.id)?.route ?? ""
+                DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.shownTitle() ?? "" }))) }
+            }
+        }
+
+        // Reading speed, 0.5 to 3 in steps of 0.05. The tracker clamps and snaps it, hands it to the player (time-pitch in the audio
+        // engine, pitch kept, for every voice), and it is kept for the next launch. The saved speed is applied now.
+        if let saved = SpeedStore.standard.load() { tracker.setSpeed(saved) }
         handle("radioSpeed") { [unowned self] args, reply in
-            if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v) }
+            if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v); SpeedStore.standard.save(tracker.speed) }
             touch(["radioView"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route)))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.shownTitle() ?? "" })))
         }
     }
 }

@@ -24,7 +24,7 @@ shapes = {
     "Names": {"names": "string[]"},
     # Listener path (Choir client)
     "ChoirAuth": {"signedIn": B, "baseURL": S, "status": S, "userCode": S, "verificationURL": S, "message": S},
-    "ChoirPlayer": {"signedIn": B, "loading": B, "title": S, "passage": S, "position": S, "playing": B, "talking": B,
+    "ChoirPlayer": {"signedIn": B, "loading": B, "title": S, "passage": S, "playing": B, "talking": B,
                     "heard": S, "message": S},
     "StoryRow": {"title": S, "dek": S, "route": S, "section": S, "current": B},
     "StoryList": {"rows": "StoryRow[]"},
@@ -60,7 +60,7 @@ names = [
     src("labTurns", "TurnList", default={"rows": []}),
     src("labEvents", "Lines", default={"lines": []}),
     src("labConfigs", "Names", default={"names": []}),
-    snd("labStart"), snd("labStop"), snd("labTalkDown"), snd("labTalkUp"), snd("labPlayPause"), snd("labNext"), snd("labPrevious"),
+    snd("labStart"), snd("labStop"), snd("labPlayPause"), snd("labNext"), snd("labPrevious"),
     snd("labSelectStage", {"kind": S, "id": S}),
     snd("labSetParam", {"kind": S, "name": S, "value": S}),
     snd("labSaveConfig", {"name": S}),
@@ -68,17 +68,19 @@ names = [
     snd("labLoadConfigURL", {"url": S}),
     snd("labReplay", {"turn": S}),
     src("choirAuth", "ChoirAuth", default={"signedIn": False, "baseURL": "", "status": "idle", "userCode": "", "verificationURL": "", "message": ""}),
-    src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "", "position": "",
+    src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "",
         "playing": False, "talking": False, "heard": "", "message": ""}),
     src("choirStories", "StoryList", default={"rows": []}),
     snd("choirSignIn"), snd("choirSignOut"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
-    snd("choirPlayPause"), snd("choirStartRadio"), snd("choirTalkDown", {"aim": S}), snd("choirTalkUp"), snd("choirTalkCancel"),
+    snd("choirPlayPause"), snd("choirStartRadio"), snd("choirTalkCancel"), snd("choirHandsFreeToggle"),
     snd("choirPlay", {"route": S}),
     snd("choirAsk", {"text": S, "aim": S}),
+    snd("choirListen", {"address": S, "title": S, "text": S}),
 ]
 # Per-lane fragments: exact-package/interface/<lane>.json = {"shapes": {...}, "names": [...]}. Each lane owns its own
 # file, so no two lanes edit the same one. A shape or a source/send name declared twice is an error.
 IFACE = os.path.join(HERE, "interface")
+views = {}
 seen = {(n.get("source") or n.get("send")) for n in names}
 for f in sorted(os.listdir(IFACE)) if os.path.isdir(IFACE) else []:
     if not f.endswith(".json"): continue
@@ -90,9 +92,12 @@ for f in sorted(os.listdir(IFACE)) if os.path.isdir(IFACE) else []:
         key = n.get("source") or n.get("send")
         if key in seen: raise SystemExit("%s: name %s is declared twice" % (f, key))
         seen.add(key); names.append(n)
+    for k, v in frag.get("views", {}).items():
+        if k in views: raise SystemExit("%s: view %s is declared twice" % (f, k))
+        views[k] = v
 
 json.dump({"kind": "interface", "name": "@choir/autoradio", "version": "1.0.0", "substitute": "implementation",
-           "shapes": shapes, "names": names}, open(os.path.join(HERE, "exact.json"), "w"), indent=2)
+           "shapes": shapes, **({"views": views} if views else {}), "names": names}, open(os.path.join(HERE, "exact.json"), "w"), indent=2)
 json.dump({"name": "@choir/autoradio", "version": "1.0.0", "private": True,
            "exports": {".": "./exact.json", "./apple": "./apple/exact.json"}}, open(os.path.join(HERE, "package.json"), "w"), indent=2)
 print("wrote", HERE)

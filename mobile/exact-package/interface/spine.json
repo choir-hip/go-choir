@@ -42,6 +42,10 @@
    "fontRead": "string",
    "fontUi": "string",
    "fontMono": "string",
+   "fontHead": "string",
+   "fontText": "string",
+   "fontLabel": "string",
+   "fontAction": "string",
    "scale": "string",
    "radiusCard": "number",
    "radiusControl": "number",
@@ -93,7 +97,14 @@
    "playing": "bool",
    "talking": "bool",
    "signedIn": "bool",
-   "progress": "number"
+   "handsFree": "bool",
+   "progress": "number",
+   "question": "string",
+   "answerText": "string",
+   "answerLabel": "string",
+   "answerState": "string",
+   "answerNote": "string",
+   "canRetry": "bool"
   },
   "DemoInfo": {
    "on": "bool"
@@ -166,10 +177,14 @@
      "fontRead": "ui-serif",
      "fontUi": "system-ui",
      "fontMono": "ui-monospace",
+     "fontHead": "ui-serif",
+     "fontText": "ui-serif",
+     "fontLabel": "system-ui",
+     "fontAction": "system-ui",
      "scale": "editorial",
-     "radiusCard": 14,
-     "radiusControl": 12,
-     "radiusPill": 999,
+     "radiusCard": 12,
+     "radiusControl": 6,
+     "radiusPill": 6,
      "radiusRules": 0,
      "shadow1": "none",
      "shadow2": "none",
@@ -226,7 +241,14 @@
      "playing": false,
      "talking": false,
      "signedIn": false,
-     "progress": 0
+     "handsFree": false,
+     "progress": 0,
+     "question": "",
+     "answerText": "",
+     "answerLabel": "",
+     "answerState": "",
+     "answerNote": "",
+     "canRetry": false
     }
    }
   },

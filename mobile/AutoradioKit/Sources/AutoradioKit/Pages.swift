@@ -20,10 +20,26 @@ public struct Page: Codable, Sendable, Equatable {
 }
 
 public enum PageAddress {
+    /// The address the reader's edition opens at. The server holds no edition document that this app creates (the writer is local),
+    /// so "texture:my-edition" would be fetched as a document id and answer 404. Every open of it, and every saved page list
+    /// that holds it, lands on the local edit page instead.
+    public static let edition = "onboarding:edit"
+    /// The Autoradio page. The app opens on it, it is the first card of the deck and it cannot be closed.
+    public static let radio = "radio:"
+    /// My notebook: what Autoradio has been told and has learned about the listener (station L6).
+    public static let notebook = "notebook:"
+    public static func canonical(_ address: String) -> String {
+        // lane autoradio-reader: "doc:<id>@<block>" (a search hit) opens the document page and remembers the block once.
+        if let (id, block) = ShelfAddress.parse(address), let b = block { ShelfJump.shared.set(id, block: b); return ShelfAddress.address(id) }
+        return address.trimmingCharacters(in: .whitespaces).lowercased() == "texture:my-edition" ? edition : address
+    }
+
     /// The renderer family for an address. One line per family; a lane adds its own here only if it adds a scheme.
     public static func kind(of address: String) -> String {
         let scheme = address.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         switch scheme {
+        case "radio": return "radio"       // the Autoradio page: the deck's first card, always open
+        case "notebook": return "notebook"
         case "paper": return "paper"
         case "pub", "texture": return "reader"
         case "textures": return "textures"
@@ -33,6 +49,10 @@ public enum PageAddress {
         case "activity": return "activity"
         case "settings": return "settings"
         case "lab": return "lab"
+        case "books": return "books"      // lane autoradio-reader
+        case "doc": return "doc"
+        case "conversation": return "conversation"
+        case "podcasts", "podcast": return "podcast"
         case "onboarding": return "onboarding"      // lane 8 hook (first run); see mobile/README.md, Requests to the spine
         default: return "unknown"
         }
@@ -47,15 +67,21 @@ public enum PageAddress {
     public static func defaultTitle(_ address: String) -> String {
         let rest = rest(of: address)
         switch address {
+        case "radio:": return "Autoradio"
+        case "notebook:": return "My notebook"
         case "paper:front": return "Paper"
         case "textures:": return "Textures"
         case "activity:": return "Activity"
         case "settings:", "settings:root": return "Settings"
         case "lab:components": return "Components"
         case "lab:trace": return "Trace"
+        case "conversation:": return "Conversation"
         case "onboarding:setup": return "Make it yours"
+        case "onboarding:edit": return "My edition"
         case "mailbox:inbox": return "Mail"
+        case "podcasts:": return "Podcasts"
         case "file:/", "file:": return "Files"
+        case "books:": return "Reader"
         default: break
         }
         switch kind(of: address) {
@@ -64,6 +90,8 @@ public enum PageAddress {
         case "file": return (rest as NSString).lastPathComponent
         case "mailbox": return "Mail · " + rest
         case "mail": return "Message"
+        case "doc": return "Document"
+        case "podcast": return rest.hasPrefix("episode/") ? "Episode" : "Show"
         case "reader": return rest.isEmpty ? "Story" : rest
         default: return address
         }
@@ -72,12 +100,12 @@ public enum PageAddress {
     /// The places the launcher lists, in order (plan section 1): name, address.
     public static let places: [(name: String, address: String)] = [
         ("Paper", "paper:front"), ("Textures", "textures:"), ("Files", "file:/"),
-        ("Mail", "mailbox:inbox"), ("Activity", "activity:"), ("Settings", "settings:root"),
+        ("Mail", "mailbox:inbox"), ("Podcasts", "podcasts:"), ("Activity", "activity:"), ("Settings", "settings:root"),
     ]
 }
 
 /// The ordered set of open pages: open, close, focus, opener, pin, restored at launch from a list of addresses
-/// (never resumed work). Never empty: closing the last page opens the front page.
+/// (never resumed work). Never empty: the Autoradio page is always open and cannot be closed.
 public final class OpenPages: @unchecked Sendable {
     public static let limit = 30
     private let lock = NSLock()
@@ -92,7 +120,15 @@ public final class OpenPages: @unchecked Sendable {
     public init(file: URL?, signals: Signals? = nil) {
         self.file = file; self.signals = signals
         load()
-        if pages.isEmpty { openLocked(Page(address: "paper:front", kind: "paper", title: "Paper"), record: false) }
+        openLocked(Page(address: PageAddress.radio, kind: "radio", title: "Autoradio"), record: false)   // every launch lands on the radio
+    }
+
+    /// Sign-out: only the radio stays open; the persisted titles and addresses go.
+    public func wipe() {
+        lock.lock(); pages = []; recency = []; lastClosedPage = nil; lock.unlock()
+        if let file { try? FileManager.default.removeItem(at: file) }
+        lock.lock(); _ = openLocked(Page(address: PageAddress.radio, kind: "radio", title: "Autoradio"), record: false); lock.unlock()
+        onChange?()
     }
 
     // MARK: Reading
@@ -110,6 +146,10 @@ public final class OpenPages: @unchecked Sendable {
 
     @discardableResult
     public func open(_ address: String, title: String? = nil, opener: String? = nil) -> Page {
+        let address = PageAddress.canonical(address)
+        // One file is one slot: a PDF, an e-book, text or Markdown in Files is a Reader or Texture document, never also a `file:` page (a placeholder that
+        // stayed beside the document when the open hung or failed). Whoever asks, no such page is made; FilesOpen opens the document's own.
+        if FilesOpen.resolvesElsewhere(address) { return Page(address: address, kind: PageAddress.kind(of: address), title: title ?? PageAddress.defaultTitle(address)) }
         lock.lock()
         let p = openLocked(Page(address: address, kind: PageAddress.kind(of: address),
                                 title: (title?.isEmpty == false ? title! : PageAddress.defaultTitle(address)),
@@ -148,13 +188,12 @@ public final class OpenPages: @unchecked Sendable {
     /// Close a page. When it was in front, its opener (if still open) comes forward, else the next most recent.
     public func close(_ address: String) {
         lock.lock()
-        guard let p = pages.first(where: { $0.address == address }) else { lock.unlock(); return }
+        guard address != PageAddress.radio, let p = pages.first(where: { $0.address == address }) else { lock.unlock(); return }
         let wasFront = recency.first == address
         pages.removeAll { $0.address == address }
         recency.removeAll { $0 == address }
         lastClosedPage = p
         if wasFront, !p.opener.isEmpty, pages.contains(where: { $0.address == p.opener }) { focusLocked(p.opener) }
-        if pages.isEmpty { openLocked(Page(address: "paper:front", kind: "paper", title: "Paper"), record: false) }
         lock.unlock()
         signals?.record(SignalEvent(kind: "close", subject: address, detail: p.kind))
         changed()
@@ -183,8 +222,11 @@ public final class OpenPages: @unchecked Sendable {
     }
     private func load() {
         guard let file, let d = try? Data(contentsOf: file), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
-        pages = s.pages.map { var p = $0; p.kind = PageAddress.kind(of: p.address); return p }
-        recency = s.recency.filter { a in pages.contains { $0.address == a } }
+        var seen = Set<String>()
+        pages = s.pages.map { var p = $0; p.address = PageAddress.canonical(p.address); p.kind = PageAddress.kind(of: p.address); return p }
+            .filter { seen.insert($0.address).inserted }
+        var inRecency = Set<String>()
+        recency = s.recency.map { PageAddress.canonical($0) }.filter { a in pages.contains { $0.address == a } && inRecency.insert(a).inserted }
         for p in pages where !recency.contains(p.address) { recency.append(p.address) }
     }
 }

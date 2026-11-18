@@ -4,7 +4,7 @@
 set -eu
 B="${1:?usage: check-no-weights.sh <app bundle>}"
 [ -d "$B" ] || { echo "no such bundle: $B" >&2; exit 2; }
-BAD=$(find "$B" \( -name '*.gguf' -o -name '*.mlmodelc' -o -name '*.mlpackage' -o -name '*.mlmodel' -o -name '*.onnx' -o -name '*.safetensors' -o -name '*.bin' \) -size +100k 2>/dev/null || true)
+BAD=$(find "$B" \( -name '*.gguf' -o -name '*.mlmodelc' -o -name '*.mlpackage' -o -name '*.mlmodel' -o -name '*.aimodel' -o -name '*.aimodelc' -o -name '*.mlirb' -o -name '*.onnx' -o -name '*.safetensors' -o -name '*.bin' \) -size +100k 2>/dev/null || true)
 if [ -n "$BAD" ]; then echo "PROOF FAILED: model weights inside the app bundle:"; echo "$BAD"; exit 1; fi
 BIG=$(find "$B" -type f -size +30M 2>/dev/null | head -5 || true)
 echo "ok: no model weights in the bundle ($(du -sh "$B" | cut -f1) total)"

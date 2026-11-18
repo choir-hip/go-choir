@@ -1,14 +1,17 @@
 // Lane members file (onboarding): first run. Owned by the onboarding lane. The state is the controller's in the module
-// (AutoradioModule+Onboarding.swift): setup rows, microphone and hearing checks, the interview, the edition. The page reads
+// (AutoradioModule+Onboarding.swift): setup rows, microphone and hearing checks, the edition topics, the edition. The page reads
 // it as one resource, `ob`; every button is a send that answers the same shape.
 use onboardingState, onboardingBegin, onboardingRetry, onboardingFallback, onboardingMic, onboardingMicNext, onboardingHearing from "@choir/autoradio"
-use onboardingInterview, onboardingContinue, onboardingDemoNext, onboardingEditionRetry, onboardingSkip, onboardingReset from "@choir/autoradio"
+use onboardingTopics, onboardingTopicToggle, onboardingTopicExpand, onboardingTopicAdd, onboardingTalk, onboardingTopicsDone, onboardingDemoSay from "@choir/autoradio"
+use onboardingEditionRetry, onboardingEditDone, onboardingEditLeave, onboardingContinueAnyway, onboardingSkip, onboardingReset from "@choir/autoradio"
 use pageOpen, pageClose, choirStartRadio from "@choir/autoradio"
 use Onboarding from "@choir/autoradio"
 
 members Autoradio
   resource ob = onboardingState() as shape Onboarding else empty()
   mutation obm as shape Onboarding
+  // What the reader has typed in the "Add your own topic" field.
+  state obTopicText = ""
 
   action obBegin
     send obm = onboardingBegin(mobile="false")
@@ -26,14 +29,31 @@ members Autoradio
     send obm = onboardingHearing(ok="true")
   action obHearingNo
     send obm = onboardingHearing(ok="false")
-  action obInterview
-    send obm = onboardingInterview()
-  action obContinue
-    send obm = onboardingContinue()
-  action obDemoNext
-    send obm = onboardingDemoNext()
+  action obTopics
+    send obm = onboardingTopics()
+  action obToggleTopic(label: string)
+    send obm = onboardingTopicToggle(label=label)
+  action obExpandTopic(label: string)
+    send obm = onboardingTopicExpand(label=label)
+  action editObTopic(v: string)
+    obTopicText = v
+  action obAddTopic
+    send obm = onboardingTopicAdd(text=obTopicText)
+    obTopicText = ""
+  action obTalk
+    send obm = onboardingTalk()
+  action obTopicsDone
+    send obm = onboardingTopicsDone()
+  action obDemoSay
+    send obm = onboardingDemoSay()
   action obEditionRetry
     send obm = onboardingEditionRetry()
+  action obEditDone
+    send obm = onboardingEditDone()
+  action obEditLeave
+    send obm = onboardingEditLeave()
+  action obContinueAnyway
+    send obm = onboardingContinueAnyway()
   action obSkip
     send obm = onboardingSkip()
     send pm = pageClose(address="onboarding:setup")
@@ -41,7 +61,7 @@ members Autoradio
     send obm = onboardingReset()
   // The edition is a Texture page: open it (the reader draws it).
   action obOpenEdition
-    send pm = pageOpen(address="texture:my-edition", title="My edition")
+    send pm = pageOpen(address="onboarding:edit", title="My edition")
     layer = ""
   // Then the front page, and the first story playing.
   action obFinish

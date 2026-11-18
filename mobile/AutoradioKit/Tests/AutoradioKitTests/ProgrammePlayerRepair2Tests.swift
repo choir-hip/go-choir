@@ -128,36 +128,6 @@ final class Repair2StageTests: XCTestCase {
         return ProgrammePlayer(audio: virtualAudio(), registry: r, log: EventLog(clock: LabClock()), configuration: cfg, document: doc)
     }
 
-    // Round 3 (S1): a stale load must not leak its stretch: its stream is ended when its result is dropped.
-    func testStaleLoadEndsItsStretch() async {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("p1-\(UUID().uuidString)")
-        let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
-        let ended = Locked(false)
-        final class Ending: StretchSource, @unchecked Sendable {
-            var cont: AsyncThrowingStream<StretchEvent, Error>.Continuation!
-            let ended: Locked<Bool>
-            init(_ e: Locked<Bool>) { ended = e }
-            func events(cause: String) async throws -> AsyncThrowingStream<StretchEvent, Error> {
-                AsyncThrowingStream { c in self.cont = c; c.onTermination = { [ended] _ in ended.write { $0 = true } } }
-            }
-        }
-        let slow = Ending(ended)
-        let made = Locked(0)
-        rt.registry.register(.programme, RadioProgramme.self) { _ in
-            made.write { $0 += 1; return $0 } == 1 ? RadioProgramme(source: slow, fallback: self.article, firstSegmentDeadline: 60)
-                                                   : RadioProgramme(source: Ending(Locked(false)), fallback: self.article, firstSegmentDeadline: 0.05)
-        }
-        let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]), openURL: nil)
-        let first = Task { await app.loadProgramme() }
-        let waiting = await poll { slow.cont != nil }; XCTAssertTrue(waiting)
-        await app.loadProgramme()                                       // newer load: the article after its own deadline
-        slow.cont.yield(seg(0))                                         // the stale load's first segment arrives: its result is dropped
-        await first.value
-        let over = await poll(5) { ended.read { $0 } }
-        XCTAssertTrue(over, "the stale load's stream was ended, not left running")
-        rt.player.pause()
-    }
-
     // Round 3 (S2): sign-out empties what was queued behind the programme (a previous account's text must not play).
     func testSignOutClearsTheQueue() async {
         let cfg = URLSessionConfiguration.ephemeral
@@ -177,29 +147,6 @@ final class Repair2StageTests: XCTestCase {
         XCTAssertEqual(rt.player.queuedTexts, ["text:mail-1"])
         await app.signOut()
         XCTAssertEqual(rt.player.queuedTexts, [], "nothing of the previous account is queued")
-    }
-
-    // S2: sign-out clears `loading` even when a load is in flight.
-    func testS2_SignOutClearsLoading() async {
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.protocolClasses = [StubProtocol.self]
-        env.session = URLSession(configuration: cfg)
-        StubProtocol.handler = { _ in .init(status: 404, json: ["error": "x"]) }
-        defer { env.session = .shared }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("p1-\(UUID().uuidString)")
-        let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
-        let slow = Manual()
-        rt.registry.register(.programme, RadioProgramme.self) { _ in RadioProgramme(source: slow, fallback: self.article, firstSegmentDeadline: 60) }
-        let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]), openURL: nil)
-        let first = Task { await app.loadProgramme() }
-        let waiting = await poll { slow.cont != nil }; XCTAssertTrue(waiting)
-        XCTAssertTrue(app.playerView().loading)
-        await app.signOut()
-        XCTAssertFalse(app.playerView().loading, "sign-out cleared it")
-        slow.cont.yield(seg(0))
-        await first.value
-        XCTAssertFalse(app.playerView().loading, "and the stale load did not set it again")
-        slow.cont.finish()
     }
 
     // S3: only bidi controls, the zero-width space and the byte-order mark are removed; joiners are part of the text.

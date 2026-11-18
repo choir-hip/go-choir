@@ -111,7 +111,6 @@
       "loading": "bool",
       "title": "string",
       "passage": "string",
-      "position": "string",
       "playing": "bool",
       "talking": "bool",
       "heard": "string",
@@ -144,6 +143,7 @@
       "paused": "bool",
       "level": "string",
       "speed": "string",
+      "speedValue": "number",
       "speedChoices": "string[]",
       "mode": "string",
       "micOpen": "bool",
@@ -159,6 +159,78 @@
       "micLevel": "number",
       "kind": "string",
       "sources": "string[]"
+    },
+    "ShelfRow": {
+      "id": "string",
+      "address": "string",
+      "title": "string",
+      "author": "string",
+      "kindLabel": "string",
+      "detail": "string",
+      "progress": "number"
+    },
+    "ShelfListing": {
+      "status": "string",
+      "message": "string",
+      "count": "number",
+      "rows": "ShelfRow[]"
+    },
+    "ShelfSectionRef": {
+      "index": "number",
+      "title": "string"
+    },
+    "ShelfDocInfo": {
+      "address": "string",
+      "id": "string",
+      "title": "string",
+      "author": "string",
+      "kind": "string",
+      "kindLabel": "string",
+      "status": "string",
+      "message": "string",
+      "src": "string",
+      "shareSrc": "string",
+      "sections": "ShelfSectionRef[]",
+      "blockCount": "number",
+      "position": "number",
+      "resumeSection": "number",
+      "resumeBlock": "number"
+    },
+    "ShelfBlock": {
+      "n": "number",
+      "kind": "string",
+      "level": "number",
+      "text": "string",
+      "marker": "string"
+    },
+    "ShelfChapter": {
+      "index": "number",
+      "count": "number",
+      "title": "string",
+      "start": "number",
+      "status": "string",
+      "blocks": "ShelfBlock[]",
+      "page": "number"
+    },
+    "ShelfHit": {
+      "block": "number",
+      "section": "number",
+      "label": "string",
+      "snippet": "string"
+    },
+    "ShelfFind": {
+      "query": "string",
+      "hits": "ShelfHit[]",
+      "message": "string"
+    },
+    "ShelfFollowInfo": {
+      "address": "string",
+      "block": "number",
+      "section": "number"
+    },
+    "ShelfAck": {
+      "ok": "bool",
+      "message": "string"
     },
     "CardStory": {
       "route": "string",
@@ -219,7 +291,8 @@
       "places": "LauncherPlace[]",
       "recent": "LauncherHit[]",
       "hits": "LauncherHit[]",
-      "stories": "number"
+      "stories": "number",
+      "searchNote": "string"
     },
     "ShadeRow": {
       "route": "string",
@@ -266,10 +339,6 @@
     "CsvRow": {
       "cells": "string[]"
     },
-    "FileChapterRef": {
-      "index": "number",
-      "title": "string"
-    },
     "FileInfo": {
       "address": "string",
       "path": "string",
@@ -285,26 +354,25 @@
       "message": "string",
       "src": "string",
       "local": "string",
-      "text": "string",
       "truncated": "bool",
       "rows": "CsvRow[]",
-      "pages": "number",
       "width": "number",
-      "height": "number",
-      "title": "string",
-      "author": "string",
-      "chapters": "FileChapterRef[]"
+      "height": "number"
     },
-    "FileChapter": {
-      "index": "number",
-      "count": "number",
-      "title": "string",
-      "markdown": "string",
-      "status": "string"
+    "HearItRow": {
+      "clipID": "string",
+      "show": "string",
+      "episode": "string",
+      "length": "string",
+      "quote": "string",
+      "story": "string",
+      "episodeOnly": "bool"
     },
-    "FilePages": {
-      "query": "string",
-      "pages": "number[]",
+    "ClipRows": {
+      "rows": "HearItRow[]"
+    },
+    "ClipAck": {
+      "status": "string",
       "message": "string"
     },
     "MailRow": {
@@ -401,6 +469,47 @@
       "status": "string",
       "message": "string"
     },
+    "NotebookLineRow": {
+      "id": "string",
+      "text": "string",
+      "tag": "string",
+      "canWhy": "bool",
+      "selected": "bool"
+    },
+    "NotebookSectionRow": {
+      "key": "string",
+      "heading": "string",
+      "lines": "NotebookLineRow[]"
+    },
+    "NotebookPair": {
+      "label": "string",
+      "value": "string"
+    },
+    "NotebookEvidenceRow": {
+      "title": "string",
+      "outcome": "string",
+      "detail": "string"
+    },
+    "NotebookHeldRow": {
+      "what": "string",
+      "whereRead": "string"
+    },
+    "NotebookPageInfo": {
+      "docState": "string",
+      "docAddress": "string",
+      "docNotice": "string",
+      "sections": "NotebookSectionRow[]",
+      "scoreState": "string",
+      "scoreNotice": "string",
+      "score": "NotebookPair[]",
+      "byKind": "NotebookPair[]",
+      "noVerdict": "string",
+      "selectedText": "string",
+      "evidenceNote": "string",
+      "evidence": "NotebookEvidenceRow[]",
+      "held": "NotebookHeldRow[]",
+      "steerLine": "string"
+    },
     "SetupRowView": {
       "stage": "string",
       "name": "string",
@@ -414,11 +523,6 @@
       "canRetry": "bool",
       "canFallback": "bool"
     },
-    "TalkRow": {
-      "who": "string",
-      "text": "string",
-      "interrupted": "bool"
-    },
     "Onboarding": {
       "step": "string",
       "title": "string",
@@ -428,11 +532,6 @@
       "mic": "string",
       "heard": "string",
       "route": "string",
-      "interviewStatus": "string",
-      "pauseReason": "string",
-      "nowSaying": "string",
-      "demoNote": "string",
-      "demoKind": "string",
       "demoWords": "string",
       "editionStatus": "string",
       "writingLine": "string",
@@ -447,17 +546,30 @@
       "setupFinished": "bool",
       "setupStarted": "bool",
       "hearingOK": "bool",
-      "paused": "bool",
-      "listening": "bool",
       "demo": "bool",
       "skipped": "bool",
       "editionDone": "bool",
       "level": "number",
-      "demoLeft": "number",
       "rows": "SetupRowView[]",
       "summary": "string[]",
-      "talk": "TalkRow[]",
-      "editionLines": "string[]"
+      "editionLines": "string[]",
+      "selectionLine": "string",
+      "explainer": "string",
+      "voiceHint": "string",
+      "talking": "bool",
+      "pickedCount": "number",
+      "tree": "TopicRowView[]",
+      "editing": "bool"
+    },
+    "TopicRowView": {
+      "key": "string",
+      "label": "string",
+      "kind": "string",
+      "selected": "bool",
+      "partial": "bool",
+      "expandable": "bool",
+      "expanded": "bool",
+      "note": "string"
     },
     "PaperItem": {
       "route": "string",
@@ -502,9 +614,188 @@
       "updated": "string",
       "sectionId": "string",
       "sectionLabel": "string",
+      "viewId": "string",
+      "viewLabel": "string",
+      "mineState": "string",
+      "mineFrom": "string",
+      "note": "string",
       "count": "number",
       "sections": "PaperSection[]",
-      "bands": "PaperBand[]"
+      "bands": "PaperBand[]",
+      "routes": "string[]",
+      "titles": "string[]"
+    },
+    "PodShowRow": {
+      "feedURL": "string",
+      "address": "string",
+      "title": "string",
+      "author": "string",
+      "artwork": "string",
+      "detail": "string",
+      "latest": "string",
+      "latestStamp": "string",
+      "subscribed": "bool",
+      "unplayed": "bool",
+      "unplayedCount": "number"
+    },
+    "PodHomeView": {
+      "status": "string",
+      "message": "string",
+      "query": "string",
+      "searchNote": "string",
+      "syncNote": "string",
+      "searching": "bool",
+      "hasQuery": "bool",
+      "shows": "PodShowRow[]",
+      "results": "PodShowRow[]",
+      "suggestions": "PodShowRow[]"
+    },
+    "PodEpisodeRow": {
+      "key": "string",
+      "address": "string",
+      "title": "string",
+      "stamp": "string",
+      "duration": "string",
+      "snippet": "string",
+      "progress": "string",
+      "unplayed": "bool",
+      "playable": "bool",
+      "current": "bool"
+    },
+    "PodShowView": {
+      "status": "string",
+      "message": "string",
+      "feedURL": "string",
+      "title": "string",
+      "author": "string",
+      "artwork": "string",
+      "summary": "string",
+      "unplayedLine": "string",
+      "subscribed": "bool",
+      "refreshing": "bool",
+      "episodes": "PodEpisodeRow[]"
+    },
+    "PodEpisodeView": {
+      "status": "string",
+      "message": "string",
+      "address": "string",
+      "feedURL": "string",
+      "showTitle": "string",
+      "showAddress": "string",
+      "title": "string",
+      "stamp": "string",
+      "duration": "string",
+      "artwork": "string",
+      "playingFrom": "string",
+      "resumeLabel": "string",
+      "note": "string",
+      "notes": "string[]",
+      "subscribed": "bool",
+      "playable": "bool",
+      "current": "bool",
+      "fromClip": "bool",
+      "hasResume": "bool",
+      "transcriptState": "string",
+      "transcriptNote": "string",
+      "transcriptSource": "string",
+      "transcript": "PodTranscriptRow[]"
+    },
+    "PodAck": {
+      "status": "string",
+      "message": "string"
+    },
+    "PodTranscriptRow": {
+      "key": "string",
+      "time": "string",
+      "text": "string",
+      "seconds": "number",
+      "current": "bool",
+      "seekable": "bool"
+    },
+    "QueueInfo": {
+      "current": "string",
+      "currentKind": "string",
+      "audio": "bool",
+      "playing": "bool",
+      "clip": "bool",
+      "keepTitle": "string",
+      "canOpenEpisode": "bool",
+      "elapsed": "number",
+      "duration": "number",
+      "elapsedLabel": "string",
+      "remainingLabel": "string",
+      "fraction": "number",
+      "message": "string",
+      "notice": "string",
+      "writing": "bool",
+      "dry": "bool",
+      "webUrl": "string",
+      "webHost": "string"
+    },
+    "RadioPageRow": {
+      "n": "number",
+      "id": "string",
+      "kind": "string",
+      "title": "string",
+      "length": "string",
+      "by": "string",
+      "byWord": "string",
+      "note": "string",
+      "builtOn": "RadioBuiltOn[]"
+    },
+    "RadioHeardRow": {
+      "n": "number",
+      "id": "string",
+      "kind": "string",
+      "title": "string",
+      "outcome": "string",
+      "builtOn": "RadioBuiltOn[]",
+      "publisher": "string"
+    },
+    "RadioPageInfo": {
+      "state": "string",
+      "statusLine": "string",
+      "dim": "bool",
+      "playing": "bool",
+      "dateLine": "string",
+      "onAir": "bool",
+      "kindLabel": "string",
+      "title": "string",
+      "source": "string",
+      "published": "string",
+      "sentence": "string",
+      "sentenceNumber": "number",
+      "sentenceCount": "number",
+      "elapsed": "string",
+      "remaining": "string",
+      "fraction": "number",
+      "thenBack": "string",
+      "openAddress": "string",
+      "why": "string",
+      "forecast": "string",
+      "canWhy": "bool",
+      "cannotSpeak": "string",
+      "action": "string",
+      "heardWords": "string",
+      "greeting": "string",
+      "ahead": "RadioPageRow[]",
+      "aheadMore": "number",
+      "writing": "bool",
+      "emptyNote": "string",
+      "notice": "string",
+      "heard": "RadioHeardRow[]",
+      "builtOn": "RadioBuiltOn[]",
+      "canPlay": "bool",
+      "takePublisher": "string",
+      "takeTranscript": "string",
+      "takeRecord": "string"
+    },
+    "RadioBuiltOn": {
+      "n": "number",
+      "title": "string",
+      "address": "string",
+      "role": "string",
+      "note": "string"
     },
     "ReaderRun": {
       "id": "string",
@@ -605,7 +896,11 @@
       "permalink": "string",
       "plain": "string",
       "textBlocks": "number",
-      "markdown": "string"
+      "markdown": "string",
+      "hearIt": "HearItRow[]",
+      "editable": "bool",
+      "source": "string",
+      "docId": "string"
     },
     "TextureRow": {
       "address": "string",
@@ -811,6 +1106,10 @@
       "fontRead": "string",
       "fontUi": "string",
       "fontMono": "string",
+      "fontHead": "string",
+      "fontText": "string",
+      "fontLabel": "string",
+      "fontAction": "string",
       "scale": "string",
       "radiusCard": "number",
       "radiusControl": "number",
@@ -862,7 +1161,14 @@
       "playing": "bool",
       "talking": "bool",
       "signedIn": "bool",
-      "progress": "number"
+      "handsFree": "bool",
+      "progress": "number",
+      "question": "string",
+      "answerText": "string",
+      "answerLabel": "string",
+      "answerState": "string",
+      "answerNote": "string",
+      "canRetry": "bool"
     },
     "DemoInfo": {
       "on": "bool"
@@ -875,6 +1181,91 @@
     },
     "SignalList": {
       "rows": "SignalRow[]"
+    },
+    "TakeMineRow": {
+      "id": "string",
+      "title": "string",
+      "length": "string",
+      "state": "string"
+    },
+    "TakeMutedRow": {
+      "handle": "string",
+      "line": "string"
+    },
+    "TakesPageInfo": {
+      "state": "string",
+      "elapsed": "string",
+      "limit": "string",
+      "fraction": "number",
+      "canRecord": "bool",
+      "canStop": "bool",
+      "canPublish": "bool",
+      "canDiscard": "bool",
+      "previewing": "bool",
+      "transcript": "string",
+      "respondsTo": "string",
+      "publishLine": "string",
+      "rightsLine": "string",
+      "notice": "string",
+      "justPublished": "string",
+      "mine": "TakeMineRow[]",
+      "muted": "TakeMutedRow[]",
+      "record": "string",
+      "handle": "string"
+    },
+    "ConversationRow": {
+      "id": "string",
+      "question": "string",
+      "first": "string",
+      "firstSource": "string",
+      "answer": "string",
+      "status": "string",
+      "note": "string",
+      "canRetry": "bool"
+    },
+    "ConversationInfo": {
+      "rows": "ConversationRow[]",
+      "empty": "bool"
+    },
+    "VoiceProfile": {
+      "learned": "bool",
+      "heard": "number",
+      "needed": "number",
+      "ready": "bool",
+      "line": "string",
+      "credit": "string"
+    },
+    "TextureEditInfo": {
+      "status": "string",
+      "label": "string",
+      "address": "string",
+      "editable": "bool"
+    },
+    "VoiceCard": {
+      "id": "string",
+      "name": "string",
+      "blurb": "string",
+      "sizeLabel": "string",
+      "state": "string",
+      "note": "string",
+      "progress": "number",
+      "selected": "bool",
+      "playing": "bool"
+    },
+    "VoiceCards": {
+      "selected": "string",
+      "message": "string",
+      "cards": "VoiceCard[]"
+    }
+  },
+  "views": {
+    "web-page": {
+      "props": {
+        "page": "string"
+      },
+      "events": [
+        "message"
+      ]
     }
   },
   "names": [
@@ -1029,14 +1420,6 @@
       "answers": "LabState"
     },
     {
-      "send": "labTalkDown",
-      "answers": "LabState"
-    },
-    {
-      "send": "labTalkUp",
-      "answers": "LabState"
-    },
-    {
       "send": "labPlayPause",
       "answers": "LabState"
     },
@@ -1118,7 +1501,6 @@
           "loading": false,
           "title": "",
           "passage": "",
-          "position": "",
           "playing": false,
           "talking": false,
           "heard": "",
@@ -1165,18 +1547,11 @@
       "answers": "LabState"
     },
     {
-      "send": "choirTalkDown",
-      "options": {
-        "aim": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "choirTalkUp",
-      "answers": "LabState"
-    },
-    {
       "send": "choirTalkCancel",
+      "answers": "LabState"
+    },
+    {
+      "send": "choirHandsFreeToggle",
       "answers": "LabState"
     },
     {
@@ -1195,6 +1570,15 @@
       "answers": "LabState"
     },
     {
+      "send": "choirListen",
+      "options": {
+        "address": "string",
+        "title": "string",
+        "text": "string"
+      },
+      "answers": "LabState"
+    },
+    {
       "source": "radioView",
       "live": true,
       "answers": "RadioInfo",
@@ -1209,6 +1593,7 @@
           "paused": false,
           "level": "play",
           "speed": "1",
+          "speedValue": 1,
           "speedChoices": [
             "0.8",
             "1",
@@ -1245,6 +1630,147 @@
         "speed": "string"
       },
       "answers": "RadioInfo"
+    },
+    {
+      "send": "radioStory",
+      "options": {
+        "move": "string"
+      },
+      "answers": "RadioInfo"
+    },
+    {
+      "source": "shelfList",
+      "live": true,
+      "answers": "ShelfListing",
+      "options": {
+        "at": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "loading",
+          "message": "",
+          "count": 0,
+          "rows": []
+        }
+      }
+    },
+    {
+      "source": "shelfDoc",
+      "live": true,
+      "answers": "ShelfDocInfo",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "address": "",
+          "id": "",
+          "title": "",
+          "author": "",
+          "kind": "",
+          "kindLabel": "",
+          "status": "loading",
+          "message": "",
+          "src": "",
+          "shareSrc": "",
+          "sections": [],
+          "blockCount": 0,
+          "position": 0,
+          "resumeSection": 0,
+          "resumeBlock": -1
+        }
+      }
+    },
+    {
+      "source": "shelfChapter",
+      "live": true,
+      "answers": "ShelfChapter",
+      "options": {
+        "address": "string",
+        "index": "number"
+      },
+      "substitute": {
+        "default": {
+          "index": 0,
+          "count": 0,
+          "title": "",
+          "start": 0,
+          "status": "loading",
+          "blocks": [],
+          "page": 1
+        }
+      }
+    },
+    {
+      "source": "shelfFind",
+      "live": true,
+      "answers": "ShelfFind",
+      "options": {
+        "address": "string",
+        "query": "string"
+      },
+      "substitute": {
+        "default": {
+          "query": "",
+          "hits": [],
+          "message": ""
+        }
+      }
+    },
+    {
+      "source": "shelfFollow",
+      "live": true,
+      "answers": "ShelfFollowInfo",
+      "options": {},
+      "substitute": {
+        "default": {
+          "address": "",
+          "block": -1,
+          "section": 0
+        }
+      }
+    },
+    {
+      "send": "shelfImport",
+      "options": {
+        "from": "string",
+        "name": "string"
+      },
+      "answers": "ShelfListing"
+    },
+    {
+      "send": "shelfRemove",
+      "options": {
+        "id": "string"
+      },
+      "answers": "ShelfListing"
+    },
+    {
+      "send": "shelfPlace",
+      "options": {
+        "address": "string",
+        "section": "number",
+        "block": "number"
+      },
+      "answers": "ShelfAck"
+    },
+    {
+      "send": "shelfReadAloud",
+      "options": {
+        "address": "string",
+        "section": "number",
+        "block": "number"
+      },
+      "answers": "ShelfAck"
+    },
+    {
+      "send": "shelfEnqueue",
+      "options": {
+        "address": "string",
+        "section": "number",
+        "block": "number"
+      },
+      "answers": "ShelfAck"
     },
     {
       "source": "cardStories",
@@ -1315,7 +1841,8 @@
           "places": [],
           "recent": [],
           "hits": [],
-          "stories": 0
+          "stories": 0,
+          "searchNote": ""
         }
       }
     },
@@ -1448,49 +1975,10 @@
           "message": "",
           "src": "",
           "local": "",
-          "text": "",
           "truncated": false,
           "rows": [],
-          "pages": 0,
           "width": 0,
-          "height": 0,
-          "title": "",
-          "author": "",
-          "chapters": []
-        }
-      }
-    },
-    {
-      "source": "fileChapter",
-      "live": true,
-      "answers": "FileChapter",
-      "options": {
-        "address": "string",
-        "index": "number"
-      },
-      "substitute": {
-        "default": {
-          "index": 0,
-          "count": 0,
-          "title": "",
-          "markdown": "",
-          "status": "loading"
-        }
-      }
-    },
-    {
-      "source": "filePages",
-      "live": true,
-      "answers": "FilePages",
-      "options": {
-        "address": "string",
-        "query": "string"
-      },
-      "substitute": {
-        "default": {
-          "query": "",
-          "pages": [],
-          "message": ""
+          "height": 0
         }
       }
     },
@@ -1527,7 +2015,49 @@
       "answers": "FileListing"
     },
     {
+      "source": "showClips",
+      "live": true,
+      "answers": "ClipRows",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "rows": []
+        }
+      }
+    },
+    {
+      "send": "clipAct",
+      "options": {
+        "op": "string",
+        "id": "string"
+      },
+      "answers": "ClipAck"
+    },
+    {
       "source": "mailBox",
+      "live": true,
+      "answers": "MailBoxView",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "folder": "",
+          "title": "",
+          "unread": 0,
+          "total": 0,
+          "cached": false,
+          "rows": [],
+          "folders": []
+        }
+      }
+    },
+    {
+      "source": "mailFrame",
       "live": true,
       "answers": "MailBoxView",
       "options": {
@@ -1653,6 +2183,37 @@
       "answers": "MailAck"
     },
     {
+      "source": "notebookPage",
+      "live": true,
+      "answers": "NotebookPageInfo",
+      "substitute": {
+        "default": {
+          "docState": "loading",
+          "docAddress": "",
+          "docNotice": "",
+          "sections": [],
+          "scoreState": "loading",
+          "scoreNotice": "",
+          "score": [],
+          "byKind": [],
+          "noVerdict": "",
+          "selectedText": "",
+          "evidenceNote": "",
+          "evidence": [],
+          "held": [],
+          "steerLine": ""
+        }
+      }
+    },
+    {
+      "send": "notebookAct",
+      "options": {
+        "op": "string",
+        "arg": "string"
+      },
+      "answers": "NotebookPageInfo"
+    },
+    {
       "source": "onboardingState",
       "live": true,
       "answers": "Onboarding",
@@ -1666,18 +2227,13 @@
           "mic": "unasked",
           "heard": "",
           "route": "",
-          "interviewStatus": "notStarted",
-          "pauseReason": "",
-          "nowSaying": "",
-          "demoNote": "",
-          "demoKind": "",
           "demoWords": "",
           "editionStatus": "",
           "writingLine": "",
           "editionError": "",
           "editionTitle": "My edition",
           "editionIntro": "",
-          "editionAddress": "texture:my-edition",
+          "editionAddress": "onboarding:edit",
           "card": "",
           "cardBody": "",
           "aim": "",
@@ -1685,17 +2241,20 @@
           "setupFinished": false,
           "setupStarted": false,
           "hearingOK": false,
-          "paused": false,
-          "listening": false,
           "demo": false,
           "skipped": false,
           "editionDone": false,
           "level": 0,
-          "demoLeft": 0,
           "rows": [],
           "summary": [],
-          "talk": [],
-          "editionLines": []
+          "editionLines": [],
+          "selectionLine": "",
+          "explainer": "",
+          "voiceHint": "",
+          "talking": false,
+          "pickedCount": 0,
+          "tree": [],
+          "editing": false
         }
       }
     },
@@ -1736,19 +2295,56 @@
       "answers": "Onboarding"
     },
     {
-      "send": "onboardingInterview",
+      "send": "onboardingTopics",
       "answers": "Onboarding"
     },
     {
-      "send": "onboardingContinue",
+      "send": "onboardingTopicToggle",
+      "options": {
+        "label": "string"
+      },
       "answers": "Onboarding"
     },
     {
-      "send": "onboardingDemoNext",
+      "send": "onboardingTopicExpand",
+      "options": {
+        "label": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingTopicAdd",
+      "options": {
+        "text": "string"
+      },
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingTalk",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingTopicsDone",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingDemoSay",
       "answers": "Onboarding"
     },
     {
       "send": "onboardingEditionRetry",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingEditDone",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingEditLeave",
+      "answers": "Onboarding"
+    },
+    {
+      "send": "onboardingContinueAnyway",
       "answers": "Onboarding"
     },
     {
@@ -1764,9 +2360,11 @@
       "live": true,
       "answers": "PaperFront",
       "options": {
-        "section": "string",
+        "view": "string",
         "edition": "string",
-        "width": "number"
+        "width": "number",
+        "tick": "number",
+        "focus": "string"
       },
       "substitute": {
         "default": {
@@ -1779,11 +2377,235 @@
           "updated": "",
           "sectionId": "",
           "sectionLabel": "",
+          "viewId": "",
+          "viewLabel": "",
+          "mineState": "",
+          "mineFrom": "",
+          "note": "",
           "count": 0,
           "sections": [],
-          "bands": []
+          "bands": [],
+          "routes": [],
+          "titles": []
         }
       }
+    },
+    {
+      "source": "podcastHome",
+      "live": true,
+      "answers": "PodHomeView",
+      "options": {
+        "q": "string",
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "loading",
+          "message": "",
+          "query": "",
+          "searchNote": "",
+          "syncNote": "",
+          "searching": false,
+          "hasQuery": false,
+          "shows": [],
+          "results": [],
+          "suggestions": []
+        }
+      }
+    },
+    {
+      "source": "podcastShow",
+      "live": true,
+      "answers": "PodShowView",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "feedURL": "",
+          "title": "",
+          "author": "",
+          "artwork": "",
+          "summary": "",
+          "unplayedLine": "",
+          "subscribed": false,
+          "refreshing": false,
+          "episodes": []
+        }
+      }
+    },
+    {
+      "source": "podcastEpisode",
+      "live": true,
+      "answers": "PodEpisodeView",
+      "options": {
+        "address": "string",
+        "find": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "",
+          "message": "",
+          "address": "",
+          "feedURL": "",
+          "showTitle": "",
+          "showAddress": "",
+          "title": "",
+          "stamp": "",
+          "duration": "",
+          "artwork": "",
+          "playingFrom": "",
+          "resumeLabel": "",
+          "note": "",
+          "notes": [],
+          "subscribed": false,
+          "playable": false,
+          "current": false,
+          "fromClip": false,
+          "hasResume": false,
+          "transcriptState": "",
+          "transcriptNote": "",
+          "transcriptSource": "",
+          "transcript": []
+        }
+      }
+    },
+    {
+      "send": "podcastSubscribe",
+      "options": {
+        "feedURL": "string"
+      },
+      "answers": "PodAck"
+    },
+    {
+      "send": "podcastUnsubscribe",
+      "options": {
+        "feedURL": "string"
+      },
+      "answers": "PodAck"
+    },
+    {
+      "send": "podcastPlay",
+      "options": {
+        "address": "string",
+        "mode": "string"
+      },
+      "answers": "PodAck"
+    },
+    {
+      "send": "podcastQueue",
+      "options": {
+        "address": "string"
+      },
+      "answers": "PodAck"
+    },
+    {
+      "send": "podcastRefresh",
+      "options": {
+        "address": "string"
+      },
+      "answers": "PodAck"
+    },
+    {
+      "source": "queueView",
+      "live": true,
+      "answers": "QueueInfo",
+      "substitute": {
+        "default": {
+          "current": "",
+          "currentKind": "",
+          "audio": false,
+          "playing": false,
+          "clip": false,
+          "keepTitle": "",
+          "canOpenEpisode": false,
+          "elapsed": 0,
+          "duration": 0,
+          "elapsedLabel": "",
+          "remainingLabel": "",
+          "fraction": 0,
+          "message": "",
+          "notice": "",
+          "writing": false,
+          "dry": false,
+          "webUrl": "",
+          "webHost": ""
+        }
+      }
+    },
+    {
+      "send": "queueAdd",
+      "options": {
+        "mode": "string",
+        "kind": "string",
+        "ref": "string",
+        "title": "string"
+      },
+      "answers": "QueueInfo"
+    },
+    {
+      "send": "queueAct",
+      "options": {
+        "op": "string",
+        "arg": "string"
+      },
+      "answers": "QueueInfo"
+    },
+    {
+      "source": "radioPage",
+      "live": true,
+      "answers": "RadioPageInfo",
+      "substitute": {
+        "default": {
+          "state": "ready",
+          "statusLine": "",
+          "dim": false,
+          "playing": false,
+          "dateLine": "",
+          "onAir": false,
+          "kindLabel": "",
+          "title": "",
+          "source": "",
+          "published": "",
+          "sentence": "",
+          "sentenceNumber": 0,
+          "sentenceCount": 0,
+          "elapsed": "",
+          "remaining": "",
+          "fraction": 0,
+          "thenBack": "",
+          "openAddress": "",
+          "why": "",
+          "forecast": "",
+          "canWhy": false,
+          "cannotSpeak": "",
+          "action": "",
+          "heardWords": "",
+          "greeting": "",
+          "ahead": [],
+          "aheadMore": 0,
+          "writing": false,
+          "emptyNote": "",
+          "notice": "",
+          "heard": [],
+          "builtOn": [],
+          "canPlay": true,
+          "takePublisher": "",
+          "takeTranscript": "",
+          "takeRecord": ""
+        }
+      }
+    },
+    {
+      "send": "radioPageAct",
+      "options": {
+        "op": "string",
+        "arg": "string",
+        "to": "string"
+      },
+      "answers": "RadioPageInfo"
     },
     {
       "source": "readerDoc",
@@ -1819,7 +2641,11 @@
           "permalink": "",
           "plain": "",
           "textBlocks": 0,
-          "markdown": ""
+          "markdown": "",
+          "hearIt": [],
+          "editable": false,
+          "source": "",
+          "docId": ""
         }
       }
     },
@@ -1888,9 +2714,24 @@
       "answers": "ReaderAck"
     },
     {
+      "send": "readerOpenExternal",
+      "options": {
+        "url": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
       "send": "readerReload",
       "options": {
         "address": "string"
+      },
+      "answers": "ReaderAck"
+    },
+    {
+      "send": "readerPrefetch",
+      "options": {
+        "prev": "string",
+        "next": "string"
       },
       "answers": "ReaderAck"
     },
@@ -2141,10 +2982,14 @@
           "fontRead": "ui-serif",
           "fontUi": "system-ui",
           "fontMono": "ui-monospace",
+          "fontHead": "ui-serif",
+          "fontText": "ui-serif",
+          "fontLabel": "system-ui",
+          "fontAction": "system-ui",
           "scale": "editorial",
-          "radiusCard": 14,
-          "radiusControl": 12,
-          "radiusPill": 999,
+          "radiusCard": 12,
+          "radiusControl": 6,
+          "radiusPill": 6,
           "radiusRules": 0,
           "shadow1": "none",
           "shadow2": "none",
@@ -2201,7 +3046,14 @@
           "playing": false,
           "talking": false,
           "signedIn": false,
-          "progress": 0
+          "handsFree": false,
+          "progress": 0,
+          "question": "",
+          "answerText": "",
+          "answerLabel": "",
+          "answerState": "",
+          "answerNote": "",
+          "canRetry": false
         }
       }
     },
@@ -2287,6 +3139,142 @@
         "on": "string"
       },
       "answers": "PageList"
+    },
+    {
+      "source": "takesPage",
+      "live": true,
+      "answers": "TakesPageInfo",
+      "substitute": {
+        "default": {
+          "state": "idle",
+          "elapsed": "0:00",
+          "limit": "1:00",
+          "fraction": 0,
+          "canRecord": true,
+          "canStop": false,
+          "canPublish": false,
+          "canDiscard": false,
+          "previewing": false,
+          "transcript": "",
+          "respondsTo": "",
+          "publishLine": "",
+          "rightsLine": "",
+          "notice": "",
+          "justPublished": "",
+          "mine": [],
+          "muted": [],
+          "record": "",
+          "handle": ""
+        }
+      }
+    },
+    {
+      "send": "takesAct",
+      "options": {
+        "op": "string",
+        "arg": "string"
+      },
+      "answers": "TakesPageInfo"
+    },
+    {
+      "source": "conversationInfo",
+      "live": true,
+      "answers": "ConversationInfo",
+      "substitute": {
+        "default": {
+          "rows": [],
+          "empty": true
+        }
+      }
+    },
+    {
+      "send": "answerAction",
+      "options": {
+        "action": "string",
+        "id": "string"
+      },
+      "answers": "SettingsAck"
+    },
+    {
+      "source": "voiceProfile",
+      "live": true,
+      "answers": "VoiceProfile",
+      "substitute": {
+        "default": {
+          "learned": false,
+          "heard": 0,
+          "needed": 3,
+          "ready": false,
+          "line": "",
+          "credit": ""
+        }
+      }
+    },
+    {
+      "send": "voiceLearn",
+      "answers": "SettingsAck"
+    },
+    {
+      "send": "voiceForget",
+      "answers": "SettingsAck"
+    },
+    {
+      "source": "textureEditInfo",
+      "live": true,
+      "answers": "TextureEditInfo",
+      "options": {
+        "address": "string"
+      },
+      "substitute": {
+        "default": {
+          "status": "idle",
+          "label": "",
+          "address": "",
+          "editable": false
+        }
+      }
+    },
+    {
+      "send": "textureEdit",
+      "options": {
+        "address": "string",
+        "markdown": "string"
+      },
+      "answers": "TextureEditInfo"
+    },
+    {
+      "send": "textureFlush",
+      "options": {
+        "address": "string"
+      },
+      "answers": "TextureEditInfo"
+    },
+    {
+      "source": "voiceCards",
+      "live": true,
+      "answers": "VoiceCards",
+      "substitute": {
+        "default": {
+          "selected": "",
+          "message": "",
+          "cards": []
+        }
+      }
+    },
+    {
+      "send": "voicePick",
+      "options": {
+        "id": "string"
+      },
+      "answers": "VoiceCards"
+    },
+    {
+      "send": "voiceStop",
+      "answers": "VoiceCards"
+    },
+    {
+      "send": "voiceContinue",
+      "answers": "VoiceCards"
     }
   ]
 }

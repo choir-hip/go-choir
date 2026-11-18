@@ -35,8 +35,15 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
         case "silero-vad-v6.2.1": _ = try await SileroVAD.probabilities([Float](repeating: 0, count: 4096))
         case "parakeet-eou-120m": let s = try await ParakeetEOUTranscriber(StageParams()).begin(); s.cancel()
         case "parakeet-tdt-0.6b-v2": let s = try await ParakeetTDTTranscriber(StageParams()).begin(); s.cancel()
-        case "kokoro-82m-ane": _ = try await KokoroVoice.synthesizeOnce("Ready.")
-        case "pocket-tts": _ = try await PocketTTSVoice.firstFrameMs("Ready.")
+        case "kokoro-82m-ane":
+            _ = try await KokoroVoice.synthesizeOnce("Ready.")
+            Voices.readiness.markReady(model: id)          // fetched, compiled and heard to speak: the radio may prefer it now
+        case "pocket-tts":
+            _ = try await PocketTTSVoice.firstFrameMs("Ready.")
+            Voices.readiness.markReady(model: id)
+        case "phonon-31m":
+            _ = try await PhononVoice.firstFrameMs("Ready.")
+            Voices.readiness.markReady(model: id)
         default:
             guard KnownModels.isPinned(id) else { throw LabError.unavailable("no loader for \(id) in this build") }
             #if canImport(llama)
@@ -88,6 +95,10 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
                                 note: "The voice produced silence or almost nothing.", firstAudioMs: r.ms)       // Kokoro does not stream: first sound is the whole sentence
         case "pocket-tts":
             let r = try await PocketTTSVoice.firstFrameMs("Good morning. This is your radio.")
+            return await finish(r.seconds > 0.5, speed: r.totalMs / max(1, r.seconds * 1000), unit: "of real time", note: "The voice produced almost no audio.",
+                                firstAudioMs: r.firstMs)
+        case "phonon-31m":
+            let r = try await PhononVoice.firstFrameMs("Good morning. This is your radio.")
             return await finish(r.seconds > 0.5, speed: r.totalMs / max(1, r.seconds * 1000), unit: "of real time", note: "The voice produced almost no audio.",
                                 firstAudioMs: r.firstMs)
         default:

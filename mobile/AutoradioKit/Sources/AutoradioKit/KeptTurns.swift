@@ -9,8 +9,11 @@ public struct TurnContextFile: Codable, Sendable {
     public var inputs: [ScheduledInput]
     /// Words a fixture expects in the transcript (proof only).
     public var expectedWords: [String]?
+    /// What the phone retrieved for the on-device model on this turn: the query, its terms, the ids and scores shown (Retrieval.swift).
+    public var retrieval: RetrievalRecord?
     public init(position: ProgramPosition, preparedMaterial: String? = nil, configuration: LabConfiguration? = nil,
-                inputs: [ScheduledInput] = [], expectedWords: [String]? = nil) {
+                inputs: [ScheduledInput] = [], expectedWords: [String]? = nil, retrieval: RetrievalRecord? = nil) {
+        self.retrieval = retrieval
         self.position = position; self.preparedMaterial = preparedMaterial; self.configuration = configuration
         self.inputs = inputs; self.expectedWords = expectedWords
     }
@@ -32,6 +35,11 @@ public struct KeptTurn: Sendable {
 public final class KeptTurnStore: @unchecked Sendable {
     public let root: URL
     public init(root: URL) { self.root = root; try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) }
+    /// Sign-out: every kept turn (the audio and the words of what the listener asked).
+    public func wipe() {
+        try? FileManager.default.removeItem(at: root)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
     public func list() -> [KeptTurn] {
         let items = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
         return items.filter { FileManager.default.fileExists(atPath: $0.appendingPathComponent("mic.caf").path) }

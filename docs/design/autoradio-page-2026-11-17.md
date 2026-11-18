@@ -47,15 +47,52 @@ they place entries on the same run sheet, and this page shows the result.
    remove, tap to play now. "All of it" expands the list in place to the
    whole run sheet ahead. While the desk is writing ahead, the last row says
    so.
-4. **Say something.** A row of three or four suggestions that change with
-   what is on air: "Skip this", "More on this", "What else is new", "Read my
-   book". Tapping one sends it as a turn. The prompt bar and the microphone
-   stay where they are, at the bottom of every page; this row teaches what
-   they are for.
-5. **Places.** One row of tiles: Autopaper, Books, Podcasts, Mail, Files.
-   Each opens that page in the deck. This page is the hub.
+4. **Say something: removed by the owner on 2026-11-17** ("get rid of the say
+   something prompts. They are broken anyway."). The row of suggestions that
+   changed with what was on air, and its code and test ids, are deleted. The
+   prompt bar and the microphone, at the bottom of every page, are the one way to
+   say something.
+5. **Places: removed by the owner on 2026-11-17** ("The auto radio screen shows
+   some links to different pages. We can remove those because those pages are
+   accessible from hitting the tetramark button."). The row of tiles (Autopaper,
+   Books, Podcasts, Mail, Files) and its ids are deleted; the launcher behind the
+   mark is the one way to the other pages. Instead the page shows **Built on**:
+   under the entry on air, the stories it was built on, each a tappable title
+   that opens that story's Texture in the deck (which shows its own sources), and
+   the same list on a Heard row when expanded. An entry with no stories (an
+   opening, an answer) shows no heading. The phone reads them from the entry's
+   `cites` and `source` refs (`pub:<route>[@version]`, `texture:<id>`); a podcast
+   clip's `story` ref is kept as a cite.
 6. **Heard.** The last entries that ended, newest first, each with how it
    ended in a word: finished, skipped, left. Tap to play again.
+
+7. **Takes** (station L7; [the learned document](autoradio-learned-document-2026-11-17.md) section 11). Below Heard: a **Record a take**
+   action. Pressing it pauses the radio (the same pause a turn makes), turns hands-free off for the while, takes the capture session and
+   records an `.m4a` (AAC-LC, mono, 24 kHz, 32 kbit/s) with the time against the 1:00 bound; Stop ends it, and so does the bound, which says
+   so. A take of under 3 s is not kept. If an entry was on air, its story is the take's `responds_to`, shown as "Answering: <title>". Review
+   shows the transcript (made on the phone from the file, **not editable**), Play back, Re-record, Discard and, only with a transcript,
+   Publish, with the line "Your voice will be offered to other Autoradio listeners. You can delete it at any time." and the rights line.
+   The radio stays paused through the review and goes on when the take is published, discarded or fails. Under it: the listener's own takes
+   (Delete), the **Muted voices** (each with Undo) and "Your record: heard through by 7 of 11 listeners over 5 takes" (or "new: no outcomes
+   yet"). A take on air shows the publisher's handle, the transcript, the publisher's record, **Built on** rows for its cites, and **Mute
+   voice-xxxxxx** (also on its Heard row). The phone offers at most 3 takes to the DJ as candidates (never its own, never a muted
+   publisher's); a take plays as lead-in then the publisher's audio fetched signed-in, and ends through the same `aired` op as any entry.
+   Built: the model is `TakesPage.swift` and `TakeSession.swift`; the wire is `Choir/Takes.swift` (`TakesClient`). A mute is kept on the phone
+   only: the notebook line ("Never play takes by voice-xxxxxx.") has no route to be written through yet.
+
+8. **My notebook** (station L6; [the learned document](autoradio-learned-document-2026-11-17.md) sections 2 and 5 to 8). A row under Takes opens the page
+   `notebook:` (kind `notebook`; also a glyph in the launcher's tray, `place-notebook`). The page shows the notebook's lines by section (the document is the
+   Texture found by `GET /api/texture/edition`; **Edit the notebook** opens it in the Texture reader, which edits it as the listener's own revision),
+   the scorecard from `GET /api/autoradio/learning` (settled, heard through, still open, by kind, forecasts with no verdict), the forecasts behind a line when
+   it is tapped (the ledger rows whose `caused_by` is the line's ref: `lesson:L<n>`, `try:T<n>`, `mine:<8 hex>`), and the plain list of everything held about
+   the listener with where each is read (rule 2). With no learning route (404, 501, an unknown shape) the scorecard says "not available yet" and shows no
+   number; offline and signed-out say so. Built: `Notebook.swift` (the model and `NotebookStore`), `Choir/Learning.swift` (`LearningClient`, `SteerClient`,
+   `SteerQueue`), `AutoradioLab/notebook.contract`.
+   What the phone now sends about the listener: the `segment` event's `entry_id` and `claim_id` are kept on the entry; a relaunch that finds an entry on air
+   closes it `failed` with the reason "interrupted by a restart" (never `left`, which is sign-out); the programme request carries `edition_text` (the notebook
+   text when held, else the topics as text); the turn's `queue` carries `on_air` (`id`, `title`, `claim_id`, `stories`); more and less taps and mutes go to
+   `POST /api/autoradio/steer` through a queue that survives a relaunch and waits while the route is absent; onboarding writes the topics as the first lines of
+   "What you asked for" (the local topics file stays as a cache). Not built on the server at the time of writing: the notebook writer and the steer route.
 
 ## States
 
@@ -67,10 +104,11 @@ they place entries on the same run sheet, and this page shows the result.
   it one line: "Then back to: <the held entry's title>".
 - **You are speaking.** The status line says "Listening", and the on-air
   card dims. What you said appears as text when it is recognised.
+- **Writing ahead, nothing on air.** One line on the status line ("Writing the next stretch. It will start by itself."); no "Nothing is on air" and no Play button, because pressing it would do nothing the desk is not already doing.
+- **Heard** lists only entries that made a sound: an entry that failed to play is not heard.
 - **Cannot speak.** The reason is on the status line and on the on-air card,
   with one action when there is one ("Try again", "Use the system voice").
-- **Nothing ahead and nothing to write from.** Up next says so and offers
-  the places row.
+- **Nothing ahead and nothing to write from.** Up next says so ("Open the mark below to find a story, a page or a podcast, and add it."); there is no row of places.
 - **Offline.** What is already written plays. The status line says the desk
   cannot write ahead.
 

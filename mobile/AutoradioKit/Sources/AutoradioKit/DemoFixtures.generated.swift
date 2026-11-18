@@ -24,13 +24,18 @@ public enum DemoFixtureData {
   "title": "My edition",
   "failFirst": true,
   "intro": "This is your edition. Change anything by asking.",
-  "writingLines": ["Reading what you told me", "Sorting it into what you follow and what you do not", "Writing your edition"],
+  "writingLines": [
+    "Reading your choices",
+    "Putting your edition together"
+  ],
   "sections": [
-    { "heading": "What I follow", "lines": ["Tech, the companies mostly: what they ship, who they hire, and what it does to work.", "The harbor council, from the tide barrier vote to the ferry timetable."] },
-    { "heading": "Less of", "lines": ["Celebrity gossip. Sports, unless my team makes the final."] },
-    { "heading": "Sources", "lines": ["I trust the public radio. I would rather not see the tabloids."] },
-    { "heading": "Places and people", "lines": ["Dunmere, and the harbor council."] },
-    { "heading": "When I listen", "lines": ["Mornings on the train, about twenty minutes."] }
+    {
+      "heading": "What I follow",
+      "lines": [
+        "Technology",
+        "Space"
+      ]
+    }
   ]
 }
 """#,
@@ -685,24 +690,6 @@ public enum DemoFixtureData {
  ]
 }
 """#,
-        "interview-script": #"""
-{
-  "sections": ["World", "Local", "Culture", "Tech and AI"],
-  "steps": [
-    { "kind": "say", "words": "Honestly, the news", "note": "A vague answer: the radio offers sections from today's paper." },
-    { "kind": "interrupt", "words": "Actually, tech", "note": "Cuts in over the offer; the next line answers what was said." },
-    { "kind": "loud", "words": "", "note": "The room gets loud: the interview waits, kindly, on its card." },
-    { "kind": "resume", "words": "", "note": "Back in a quiet place: continue." },
-    { "kind": "say", "words": "The companies, mostly", "note": "Answers the prepared follow-up." },
-    { "kind": "say", "words": "Celebrity gossip, and sports", "note": "Tired of hearing about." },
-    { "kind": "say", "words": "I trust the public radio but not the tabloids", "note": "Sources." },
-    { "kind": "say", "words": "Dunmere, and I follow the harbor council", "note": "Places and people." },
-    { "kind": "say", "words": "Mornings on the train, about twenty minutes", "note": "When and how long." },
-    { "kind": "say", "words": "Drop sports", "note": "A change at the read-back." },
-    { "kind": "say", "words": "That's it", "note": "Confirms the read-back; the desk writes the edition." }
-  ]
-}
-"""#,
         "learned": #"""
 {
   "lines": [
@@ -710,6 +697,39 @@ public enum DemoFixtureData {
     { "at": 1793813600, "kind": "less", "text": "Less of this: Celebrity chef opens a third restaurant" },
     { "at": 1793727200, "kind": "more", "text": "More like this: Grid storage prices (energy, batteries)" }
   ]
+}
+"""#,
+        "learning": #"""
+{
+ "scorecard": {
+  "forecasts": 14, "settled": 11, "heard_through": 8, "heard_through_rate": 0.7272727, "brier": 0.19,
+  "open": 2, "overdue": 0, "no_verdict": 1, "no_verdict_reasons": {"left": 1},
+  "by_kind": [
+   {"project": "story", "claims": 10, "open": 1, "overdue": 0, "settled": 8, "resolved": 8, "unresolvable": 0, "brier": 0.17, "base_rate": 0.75},
+   {"project": "podcast_clip", "claims": 4, "open": 1, "overdue": 0, "settled": 3, "resolved": 3, "unresolvable": 0, "brier": 0.25, "base_rate": 0.6667}
+  ],
+  "by_cause": [
+   {"cause": "lesson", "claims": 6, "settled": 5, "resolved": 5, "base_rate": 0.8},
+   {"cause": "importance", "claims": 8, "settled": 6, "resolved": 6, "base_rate": 0.6667}
+  ]
+ },
+ "rows": [
+  {"claim_id": "calib:autoradio-dj:s7:3", "stretch_id": "s7", "segment_id": "s7/3", "entry_id": "d-s7-3", "kind": "story", "title": "Council keeps libraries open late",
+   "p_heard": 0.7, "caused_by": "lesson:L1", "forecast_at": "2026-11-17T21:10:00Z", "deadline": "2026-11-18T09:10:00Z", "status": "open"},
+  {"claim_id": "calib:autoradio-dj:s7:2", "stretch_id": "s7", "segment_id": "s7/2", "entry_id": "d-s7-2", "kind": "story", "title": "A regional grid adds its largest battery",
+   "p_heard": 0.55, "caused_by": "lesson:L1", "forecast_at": "2026-11-17T21:10:00Z", "deadline": "2026-11-18T09:10:00Z", "status": "settled", "outcome": "true",
+   "heard_through": true, "brier": 0.2025, "settled_at": "2026-11-17T21:20:00Z",
+   "op": {"op_id": "p-a1", "by": "phone", "outcome": "finished", "last_block": 3, "ended_at": "2026-11-17T21:20:00Z", "position_seconds": 61.5, "version": 12}},
+  {"claim_id": "calib:autoradio-dj:s7:1", "stretch_id": "s7", "segment_id": "s7/1", "entry_id": "d-s7-1", "kind": "story", "title": "Harbor fees rise",
+   "p_heard": 0.8, "caused_by": "lesson:L1", "forecast_at": "2026-11-17T21:10:00Z", "deadline": "2026-11-18T09:10:00Z", "status": "settled", "outcome": "false",
+   "heard_through": false, "brier": 0.64, "settled_at": "2026-11-17T21:14:00Z",
+   "op": {"op_id": "p-a0", "by": "listener", "outcome": "skipped", "last_block": 0, "ended_at": "2026-11-17T21:14:00Z", "position_seconds": 4.0, "version": 11}},
+  {"claim_id": "calib:autoradio-dj:s6:4", "stretch_id": "s6", "segment_id": "s6/4", "entry_id": "d-s6-4", "kind": "podcast_clip", "title": "Tide tables",
+   "p_heard": 0.5, "caused_by": "mine:3fa2c1d0", "forecast_at": "2026-11-17T20:00:00Z", "deadline": "2026-11-18T08:00:00Z", "status": "no_verdict",
+   "settled_at": "2026-11-17T20:05:00Z", "no_verdict_reason": "left",
+   "op": {"op_id": "p-z9", "by": "phone", "outcome": "left", "last_block": 1, "ended_at": "2026-11-17T20:05:00Z", "position_seconds": 20, "version": 9}}
+ ],
+ "truncated": false
 }
 """#,
         "mail-aliases": #"""
@@ -2009,6 +2029,411 @@ public enum DemoFixtureData {
  }
 }
 """#,
+        "runsheet-answer": #"""
+{
+ "sheet": {
+  "version": 4,
+  "entries": [
+   {
+    "id": "c-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "skipped",
+    "title": "The harbour barrier passes its first test",
+    "est_seconds": 150,
+    "text": "The harbour barrier passes its first test. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:harbour-barrier",
+     "label": "Example Harbour Ledger"
+    },
+    "ended": {
+     "outcome": "cut",
+     "at": "",
+     "last_block": 0
+    },
+    "cites": [
+     {
+      "ref": "pub:demo-harbor-barrier@v2",
+      "role": "subject",
+      "label": "The harbor council approves a tide barrier"
+     }
+    ]
+   },
+   {
+    "id": "a-1",
+    "kind": "answer",
+    "placed_by": "phone",
+    "state": "ahead",
+    "title": "Answer",
+    "est_seconds": 40,
+    "text": "The barrier was tested on Tuesday and held. The board will report in spring."
+   },
+   {
+    "id": "c-2",
+    "kind": "story",
+    "placed_by": "phone",
+    "state": "ahead",
+    "title": "The harbour barrier passes its first test",
+    "est_seconds": 90,
+    "text": "The rest of the story, from where it was cut.",
+    "cites": [
+     {
+      "ref": "pub:demo-harbor-barrier@v2",
+      "role": "subject",
+      "label": "The harbor council approves a tide barrier"
+     }
+    ]
+   },
+   {
+    "id": "d-2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A library opens late for exam week",
+    "est_seconds": 95,
+    "text": "A library opens late for exam week. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:library-late",
+     "label": "Example City Post"
+    }
+   }
+  ],
+  "position_seconds": 0
+ },
+ "pending": []
+}
+"""#,
+        "runsheet-cold": #"""
+{
+ "sheet": {
+  "version": 6,
+  "entries": [
+   {
+    "id": "d-open",
+    "kind": "opening",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Opening",
+    "est_seconds": 120,
+    "text": "Good evening. Here is what is lined up for you tonight."
+   },
+   {
+    "id": "d-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The harbour barrier passes its first test",
+    "est_seconds": 336,
+    "text": "The harbour barrier passes its first test. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:harbour-barrier",
+     "label": "Example Harbour Ledger"
+    },
+    "forecast": {
+     "p_heard": 0.78,
+     "caused_by": "you finished two stories on the harbour this week",
+     "claim_id": "c-example-1"
+    }
+   },
+   {
+    "id": "d-2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A library opens late for exam week",
+    "est_seconds": 336,
+    "text": "A library opens late for exam week. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:library-late",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "l-1",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "title": "Why the tram fares changed",
+    "est_seconds": 336,
+    "text": "Why the tram fares changed. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:tram-fares",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-3",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Seven new lamps for the old bridge",
+    "est_seconds": 336,
+    "text": "Seven new lamps for the old bridge. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:bridge-lamps",
+     "label": "Example Harbour Ledger"
+    }
+   },
+   {
+    "id": "d-4",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The market adds a winter day",
+    "est_seconds": 336,
+    "text": "The market adds a winter day. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:winter-market",
+     "label": "Example City Post"
+    }
+   }
+  ],
+  "position_seconds": 0
+ },
+ "pending": []
+}
+"""#,
+        "runsheet-day": #"""
+{
+ "sheet": {
+  "version": 12,
+  "entries": [
+   {
+    "id": "h-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "title": "Morning tide tables, explained",
+    "est_seconds": 120,
+    "text": "Morning tide tables, explained. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:tide-tables",
+     "label": "Example Harbour Ledger"
+    },
+    "ended": {
+     "outcome": "finished",
+     "at": "",
+     "last_block": 0
+    },
+    "cites": [
+     {
+      "ref": "pub:demo-library-hours@v1",
+      "role": "subject",
+      "label": "City libraries extend their evening hours"
+     }
+    ]
+   },
+   {
+    "id": "h-2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "skipped",
+    "title": "A dispute over a bike lane",
+    "est_seconds": 100,
+    "text": "A dispute over a bike lane. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:bike-lane",
+     "label": "Example City Post"
+    },
+    "ended": {
+     "outcome": "failed",
+     "at": ""
+    }
+   },
+   {
+    "id": "h-3",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "title": "The school choir tours the coast",
+    "est_seconds": 90,
+    "text": "The school choir tours the coast. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:school-choir",
+     "label": "Example City Post"
+    },
+    "ended": {
+     "outcome": "left",
+     "at": "",
+     "last_block": 0
+    }
+   },
+   {
+    "id": "d-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The harbor council approves a tide barrier",
+    "est_seconds": 240,
+    "text": "The harbour barrier passes its first test. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:demo-harbor-barrier@v2",
+     "label": "Demo harbor desk"
+    },
+    "forecast": {
+     "p_heard": 0.78,
+     "caused_by": "you finished two stories on the harbour this week",
+     "claim_id": "c-example-1"
+    },
+    "cites": [
+     {
+      "ref": "pub:demo-harbor-barrier@v2",
+      "role": "subject",
+      "label": "The harbor council approves a tide barrier"
+     },
+     {
+      "ref": "pub:demo-grid-storage@v1",
+      "role": "subject",
+      "label": "A regional grid adds its largest battery yet"
+     }
+    ]
+   },
+   {
+    "id": "d-2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A library opens late for exam week",
+    "est_seconds": 240,
+    "text": "A library opens late for exam week. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:library-late",
+     "label": "Example City Post"
+    },
+    "cites": [
+     {
+      "ref": "pub:demo-library-hours@v1",
+      "role": "subject",
+      "label": "City libraries extend their evening hours"
+     }
+    ]
+   },
+   {
+    "id": "l-1",
+    "kind": "story",
+    "placed_by": "listener",
+    "state": "ahead",
+    "title": "Why the tram fares changed",
+    "est_seconds": 240,
+    "text": "Why the tram fares changed. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:tram-fares",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-3",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Seven new lamps for the old bridge",
+    "est_seconds": 240,
+    "text": "Seven new lamps for the old bridge. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:bridge-lamps",
+     "label": "Example Harbour Ledger"
+    }
+   },
+   {
+    "id": "d-4",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The market adds a winter day",
+    "est_seconds": 240,
+    "text": "The market adds a winter day. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:winter-market",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-pod",
+    "kind": "episode",
+    "placed_by": "listener",
+    "state": "ahead",
+    "title": "Episode 12: Bridges",
+    "est_seconds": 1500,
+    "source": {
+     "ref": "episode:example-show",
+     "label": "The Example Hour",
+     "url": "https://example.com/audio/ep12.mp3"
+    }
+   },
+   {
+    "id": "d-x0",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "The ferry timetable changes in January",
+    "est_seconds": 240,
+    "text": "The ferry timetable changes in January. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:ferry-times",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-x1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "A bakery wins the street award",
+    "est_seconds": 240,
+    "text": "A bakery wins the street award. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:bakery-award",
+     "label": "Example City Post"
+    }
+   },
+   {
+    "id": "d-x2",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "title": "Rain returns to the coast on Friday",
+    "est_seconds": 240,
+    "text": "Rain returns to the coast on Friday. Invented fixture words for the tour.",
+    "source": {
+     "ref": "pub:coast-rain",
+     "label": "Example City Post"
+    }
+   }
+  ],
+  "position_seconds": 0
+ },
+ "pending": []
+}
+"""#,
+        "runsheet-empty": #"""
+{
+ "sheet": {
+  "version": 1,
+  "entries": [
+   {
+    "id": "h-1",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "heard",
+    "title": "Morning tide tables, explained",
+    "est_seconds": 120,
+    "text": "Morning tide tables, explained. Invented fixture words for the tour. The harbour board met on Tuesday. It said the barrier would be tested in spring.",
+    "source": {
+     "ref": "pub:tide-tables",
+     "label": "Example Harbour Ledger"
+    },
+    "ended": {
+     "outcome": "finished",
+     "at": "",
+     "last_block": 0
+    }
+   }
+  ],
+  "position_seconds": 0
+ },
+ "pending": []
+}
+"""#,
         "setup-script": #"""
 {
   "tickMs": 450,
@@ -2034,6 +2459,21 @@ public enum DemoFixtureData {
   }
  ]
 }
+"""#,
+        "takes-list": #"""
+{"takes":[
+ {"take_id":"take-00000000000000a1","publisher":"voice-3fa2c1","published_at":"2026-11-17T20:00:00Z","duration_seconds":14.2,"sha256":"aa","bytes":56000,
+  "transcript":"The harbor vote is tonight and nobody has said what the fee is for.\nSecond line.","responds_to":{"route":"/harbor-fees","title":"Harbor fees rise"},
+  "state":"live","audio_url":"/api/platform/takes/take-00000000000000a1/audio","record":{"offered":11,"heard":7,"skipped":4,"listeners":11,"takes":5,"new":false}},
+ {"take_id":"take-00000000000000a2","publisher":"voice-9b0e44","published_at":"2026-11-17T21:00:00Z","duration_seconds":8,"transcript":"A quick note on the bus route.","state":"live","record":{"new":true}},
+ {"take_id":"take-00000000000000a3","publisher":"voice-3fa2c1","published_at":"2026-11-16T09:00:00Z","duration_seconds":30,"transcript":"Older take.","state":"live"},
+ {"take_id":"take-00000000000000a4","publisher":"voice-77aa10","published_at":"2026-11-17T22:00:00Z","duration_seconds":9,"transcript":"Deleted one.","state":"deleted"},
+ {"take_id":"take-00000000000000a5","publisher":"voice-me0001","published_at":"2026-11-17T23:00:00Z","duration_seconds":9,"transcript":"My own voice.","state":"live"},
+ {"publisher":"voice-bad","transcript":"no id","state":"live"}
+]}
+"""#,
+        "takes-record": #"""
+{"publisher":"voice-me0001","offered":11,"heard":7,"skipped":4,"listeners":11,"takes":5,"new":false}
 """#,
         "texture-doc-demo-draft": #"""
 {
@@ -2064,6 +2504,15 @@ public enum DemoFixtureData {
  "revision_count": 1
 }
 """#,
+        "texture-doc-demo-notebook": #"""
+{
+ "doc_id": "demo-notebook",
+ "title": "My notebook",
+ "current_revision_id": "nb-r1",
+ "current_version_number": 0,
+ "revision_count": 1
+}
+"""#,
         "texture-doc-demo-notes": #"""
 {
  "doc_id": "demo-notes",
@@ -2086,6 +2535,14 @@ public enum DemoFixtureData {
    "metadata": {
     "role": "edition"
    }
+  },
+  {
+   "doc_id": "demo-notebook",
+   "title": "My notebook",
+   "created_at": "2026-11-17T21:00:00Z",
+   "updated_at": "2026-11-17T21:30:00Z",
+   "revision_count": 1,
+   "current_revision_id": "nb-r1"
   },
   {
    "doc_id": "demo-draft",
@@ -2114,6 +2571,14 @@ public enum DemoFixtureData {
    "current_revision_id": "le-r1"
   }
  ]
+}
+"""#,
+        "texture-edition": #"""
+{
+ "found": true,
+ "doc_id": "demo-notebook",
+ "revision_id": "nb-r1",
+ "updated_at": "2026-11-17T21:30:00Z"
 }
 """#,
         "texture-rev-dr-r1": #"""
@@ -2158,6 +2623,17 @@ public enum DemoFixtureData {
  "author_kind": "user",
  "content": "# Letter to the library board\n\nDear board,\n\nI am writing to ask that the evening hours at the central branch be extended to ten on weekdays. Students and shift workers have nowhere else quiet to read after six.\n\nThank you for considering it.",
  "created_at": "2026-10-30T09:00:00Z"
+}
+"""#,
+        "texture-rev-nb-r1": #"""
+{
+ "revision_id": "nb-r1",
+ "doc_id": "demo-notebook",
+ "version_number": 0,
+ "author_label": "app:autoradio",
+ "author_kind": "appagent",
+ "content": "# My notebook\n\n## What you asked for\n- Mornings: world news first, then science.\n- \"Less sport.\" (you said, 17 Nov, during \"Leeds sack manager\")\n- Never play takes by voice-3fa2c1.\n\n## What Autoradio has learned\n- Long policy pieces before 8 am get skipped; short ones are heard. [L1 \u00b7 heard 9 of 11]\n- You hear podcast clips through when the clip quotes a scientist. [L9 \u00b7 heard 4 of 4]\n\n## What Autoradio is trying\n- One longer science piece after the headlines. [T2 \u00b7 heard 1 of 3]\n\n## Recent steering\n- More like this: \"The new Webb image\" (17 Nov 08:12)\n- Less like this: \"Transfer window latest\" (17 Nov 08:20)\n",
+ "created_at": "2026-11-17T21:30:00Z"
 }
 """#,
         "texture-rev-no-r1": #"""
@@ -2235,6 +2711,19 @@ public enum DemoFixtureData {
    "version_number": 0,
    "author_label": "you",
    "created_at": "2026-10-30T09:00:00Z"
+  }
+ ]
+}
+"""#,
+        "texture-revs-demo-notebook": #"""
+{
+ "revisions": [
+  {
+   "revision_id": "nb-r1",
+   "doc_id": "demo-notebook",
+   "version_number": 0,
+   "author_label": "app:autoradio",
+   "created_at": "2026-11-17T21:30:00Z"
   }
  ]
 }

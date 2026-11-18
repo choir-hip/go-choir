@@ -1,0 +1,268 @@
+// The tetramark with the motion model: the bar's mark, and the mark gallery (`lab:mark`). Mirrors
+// mobile/AutoradioKit/Sources/AutoradioKit/TetraMarkMotion.swift (the Swift file is the specification and is tested; every
+// number here is the same number). PURE CONTRACT, as the owner ruled for the mark (2026-11-11).
+//
+// A pose is 24 numbers: roll, tumble, azimuth, elevation, beta, scale, alpha, dx, dy, then per blade phase, spread, length,
+// scale, beta. The rest pose is the brand drawing exactly. A named motion is a closed form of the seconds since it began; a
+// change of motion blends from the pose that was on screen (captured by the root, angles wrapped), so nothing jumps.
+// Reduce Motion: a still pose per motion, and a cross-fade of alpha when it changes.
+use Theme from "@choir/autoradio"
+use RadioInfo from "@choir/autoradio"
+use PageScroll, Btn, dyn from "./ui.contract"
+
+fn tat(xs: number[], i: number): number = match xs.at(i) { case some(v) => v, case none => 0 }
+fn tstr(xs: string[], i: number): string = match xs.at(i) { case some(v) => v, case none => "" }
+fn tarr(xs: number[][], i: number): number[] = match xs.at(i) { case some(v) => v, case none => [0, 1, 2] }
+fn tl(a: number, b: number, k: number): number = a + (b - a) * k
+fn tabs(x: number): number = max(x, 0 - x)
+fn tclamp(x: number): number = min(1, max(0, x))
+fn tsmooth(x: number): number = tclamp(x) * tclamp(x) * (3 - 2 * tclamp(x))
+fn tbump(x: number): number = 0.5 - 0.5 * cos(6.2831853 * x)
+fn tback1(u: number): number = 1 + 2.020948 * u * u * u + 1.020948 * u * u
+fn tback(x: number): number = tback1(tclamp(x) - 1)
+fn twrap(a: number): number = a - 6.2831853 * floor((a + 3.1415927) / 6.2831853)
+
+// 24 numbers from the nine whole-mark ones and three blades (phase, spread, length, scale, beta).
+fn tpose(roll: number, tumble: number, az: number, el: number, beta: number, sc: number, al: number, dx: number, dy: number, b0: number[], b1: number[], b2: number[]): number[] = [roll, tumble, az, el, beta, sc, al, dx, dy].concat(b0).concat(b1).concat(b2)
+fn tbl(ph: number, sp: number, ln: number, sc: number, bt: number): number[] = [ph, sp, ln, sc, bt]
+fn tRest(): number[] = tpose(0, 0, 0, 0, 0, 1, 1, 0, 0, tbl(0, 0, 1, 1, 0), tbl(0, 0, 1, 1, 0), tbl(0, 0, 1, 1, 0))
+
+fn tIdle(ee: number): number[] = tpose(0, 0, 0, 0, 0.05 * tbump(ee / 6.5), 1 + 0.025 * tbump(ee / 6.5), 1, 0, 0, tbl(0, 0.012 * tbump(ee / 6.5), 1, 1, 0), tbl(0, 0.012 * tbump(ee / 6.5), 1, 1, 0), tbl(0, 0.012 * tbump(ee / 6.5), 1, 1, 0))
+fn tDown(ee: number): number = ee < 0.1 ? tsmooth(ee / 0.1) : 1 - tback((ee - 0.1) / 0.32)
+fn tPressed(ee: number): number[] = tpose(0, 0, 0, 0, 0, 1 - 0.16 * tDown(ee), 1, 0, 0, tbl(0, 0 - 0.05 * tDown(ee), 1, 1, 0), tbl(0, 0 - 0.05 * tDown(ee), 1, 1, 0), tbl(0, 0 - 0.05 * tDown(ee), 1, 1, 0))
+fn tBloom(ee: number): number = 0.06 * sin(3.1415927 * tclamp(ee / 0.55))
+fn tTray(ee: number, open: bool): number[] = tpose(2.0943951 * (open ? tback(ee / 0.55) : 1 - tback(ee / 0.55)), 0, 0, 0, 0, 1, 1, 0, 0, tbl(0, tBloom(ee), 1, 1, 0), tbl(0, tBloom(ee), 1, 1, 0), tbl(0, tBloom(ee), 1, 1, 0))
+fn tWorkBlade(ee: number, i: number): number[] = tbl(0.35 * sin(6.2831853 * (ee / 1.8 - i / 3)), 0.1 * tbump(ee / 1.8 - i / 3), 1 + 0.08 * tbump(ee / 1.8 - i / 3), 1 - 0.12 * tbump(ee / 1.8 - i / 3), 0)
+fn tWorking(ee: number): number[] = tpose(6.2831853 * ee / 5.4, 0, 0, 0, 0, 1, 1, 0, 0, tWorkBlade(ee, 0), tWorkBlade(ee, 1), tWorkBlade(ee, 2))
+fn tPlayAmp(ee: number, lv: number): number = max(lv, 0.5 * (0.5 + 0.5 * sin(6.2831853 * ee / 2.6)))
+fn tPlayBlade(ee: number, lv: number, i: number): number[] = tbl(0.08 * tPlayAmp(ee, lv) * sin(6.2831853 * ee / 1.6 + 2.1 * i), 0.02 + 0.05 * tPlayAmp(ee, lv), 1, 1, 0)
+fn tPlaying(ee: number, lv: number): number[] = tpose(0, 0.3 * tPlayAmp(ee, lv) * sin(6.2831853 * ee / 3.2), 1.5707963, 0, 0.12 * tPlayAmp(ee, lv), 1 + 0.05 * tPlayAmp(ee, lv), 1, 0, 0, tPlayBlade(ee, lv, 0), tPlayBlade(ee, lv, 1), tPlayBlade(ee, lv, 2))
+fn tHearAmp(ee: number, lv: number): number = max(lv, 0.4 * (0.5 + 0.5 * sin(6.2831853 * ee / 2.6)))
+fn tHearBlade(ee: number, lv: number, i: number): number[] = tbl(0.1 * tHearAmp(ee, lv) * sin(6.2831853 * ee / 1.6 + 2.1 * i), (0.04 + 0.14 * tHearAmp(ee, lv)) * (0.6 + 0.4 * sin(6.2831853 * ee / 1.6 + 2.1 * i)), 1, 1, 0.2 * tHearAmp(ee, lv))
+fn tListening(ee: number, lv: number): number[] = tpose(0, 0.35 * tHearAmp(ee, lv) * sin(6.2831853 * ee / 2.2), 1.5707963, 0, 0, 1 + 0.05 * tHearAmp(ee, lv), 1, 0, 0, tHearBlade(ee, lv, 0), tHearBlade(ee, lv, 1), tHearBlade(ee, lv, 2))
+fn tTumbling(ee: number): number[] = tpose(0, 6.2831853 * ee / 4, 6.2831853 * ee / 11, 0.5, 1, 0.86, 1, 0, 0, tbl(0, 0, 1, 1, 0), tbl(0, 0, 1, 1, 0), tbl(0, 0, 1, 1, 0))
+
+fn tTarget(m: string, ee: number, lv: number): number[] = m == "idle" ? tIdle(ee) : (m == "pressed" ? tPressed(ee) : (m == "trayOpen" ? tTray(ee, true) : (m == "trayClose" ? tTray(ee, false) : (m == "working" ? tWorking(ee) : (m == "playing" ? tPlaying(ee, lv) : (m == "listening" ? tListening(ee, lv) : (m == "tumbling" ? tTumbling(ee) : tRest())))))))
+fn tBlend(m: string): number = m == "idle" ? 0.6 : (m == "pressed" ? 0.15 : (m == "trayOpen" or m == "trayClose" ? 0.2 : (m == "working" ? 0.5 : (m == "playing" ? 0.7 : (m == "listening" ? 0.6 : (m == "tumbling" ? 0.6 : 0.9))))))
+// The pose on screen: from `from`, `ms` after the motion began (the blend's ease, with overshoot for the tray only).
+fn tmix(from: number[], tg: number[], k: number): number[] = from.map((f, i) => tl(f, tat(tg, i), k))
+fn tPose(m: string, ms: number, from: number[], lv: number): number[] = tmix(from, tTarget(m, max(0, ms) / 1000, lv), (m == "trayOpen" or m == "trayClose") ? tback(max(0, ms) / 1000 / tBlend(m)) : tsmooth(max(0, ms) / 1000 / tBlend(m)))
+// The same picture with every angle (roll, tumble, azimuth, each blade's phase) within a half turn: the root keeps this as `from`.
+fn tCapture(m: string, ms: number, from: number[], lv: number): number[] = tPose(m, ms, from, lv).map((v, k) => (k < 3 or k == 9 or k == 14 or k == 19) ? twrap(v) : v)
+// Reduce Motion: the still pose of a motion, with alpha.
+fn tStill(m: string, a: number): number[] = tRest().map((v, k) => k == 0 ? (m == "trayOpen" ? 2.0943951 : 0) : (k == 6 ? a : v))
+
+// ---- the drawing ----
+fn tpt3(ax: number, ay: number, bx: number, by: number, bz: number, w: number, ln: number, cx: number, cy: number, ux: number, uy: number, ct: number, st: number, s: number, rho: number): number[] = [s * ((tl(ax, bx, w) + ((tl(ax, bx, w) - cx) * (0 - uy) + (tl(ay, by, w) - cy) * ux) * (ln - 1) * (0 - uy)) * ct - (tl(ay, by, w) + ((tl(ax, bx, w) - cx) * (0 - uy) + (tl(ay, by, w) - cy) * ux) * (ln - 1) * ux) * st) + rho * ux, s * ((tl(ax, bx, w) + ((tl(ax, bx, w) - cx) * (0 - uy) + (tl(ay, by, w) - cy) * ux) * (ln - 1) * (0 - uy)) * st + (tl(ay, by, w) + ((tl(ax, bx, w) - cx) * (0 - uy) + (tl(ay, by, w) - cy) * ux) * (ln - 1) * ux) * ct) + rho * uy, s * w * bz]
+fn tproj(p: number[], m: number[], sc: number, dx: number, dy: number): string = `${256 + 256 * (sc * (tat(m, 0) * tat(p, 0) + tat(m, 1) * tat(p, 1) + tat(m, 2) * tat(p, 2)) * 8 / max(8 - (tat(m, 6) * tat(p, 0) + tat(m, 7) * tat(p, 1) + tat(m, 8) * tat(p, 2)), 4) + dx)},${256 + 256 * (sc * (tat(m, 3) * tat(p, 0) + tat(m, 4) * tat(p, 1) + tat(m, 5) * tat(p, 2)) * 8 / max(8 - (tat(m, 6) * tat(p, 0) + tat(m, 7) * tat(p, 1) + tat(m, 8) * tat(p, 2)), 4) + dy)}`
+fn tblade(axs: number[], ays: number[], bxs: number[], bys: number[], bzs: number[], w: number, ln: number, cx: number, cy: number, ux: number, uy: number, ph: number, s: number, rho: number, m: number[], sc: number, dx: number, dy: number): string = axs.map((ax, j) => tproj(tpt3(ax, tat(ays, j), tat(bxs, j), tat(bys, j), tat(bzs, j), w, ln, cx, cy, ux, uy, cos(ph), sin(ph), s, rho), m, sc, dx, dy)).join(" ")
+fn tface(vx: number[], vy: number[], vz: number[], idx: number[], m: number[], sc: number, dx: number, dy: number): string = idx.map(v => tproj([tat(vx, v), tat(vy, v), tat(vz, v)], m, sc, dx, dy)).join(" ")
+fn tnrm(n: number[], m: number[], r: number): number = tat(m, 3 * r) * tat(n, 0) + tat(m, 3 * r + 1) * tat(n, 1) + tat(m, 3 * r + 2) * tat(n, 2)
+fn tlit(n: number[], m: number[]): number = 0.5 + 0.5 * (tnrm(n, m, 2) >= 0 ? 1 : -1) * (tnrm(n, m, 0) * -0.42 + tnrm(n, m, 1) * -0.52 + tnrm(n, m, 2) * 0.74)
+fn tbop(n: number[], m: number[], w: number, al: number): number = al * (1 - w * 0.45 * (1 - tlit(n, m)))
+fn tfop(n: number[], m: number[], fb: number, al: number): number = al * fb * (tnrm(n, m, 2) >= 0 ? 0.2 + 0.3 * tlit(n, m) : 0.1)
+
+// One pose at any size. The blades are drawn back to front by the depth of their centres.
+component TetraMarkFace
+  inject
+    th: Theme
+  props
+    pose: number[]
+    size: number
+    testId: string
+  derive g0 = tat(pose, 0)
+  derive tumble = tat(pose, 1)
+  derive az = tat(pose, 2)
+  derive el = tat(pose, 3)
+  derive beta = tat(pose, 4)
+  derive sc = tat(pose, 5)
+  derive al = tat(pose, 6)
+  derive dx = tat(pose, 7)
+  derive dy = tat(pose, 8)
+  derive nx = cos(el) * cos(az)
+  derive ny = cos(el) * sin(az)
+  derive nz = sin(el)
+  derive tc = cos(tumble)
+  derive ts = sin(tumble)
+  derive tk = 1 - tc
+  derive r0 = [tk * nx * nx + tc, tk * nx * ny - ts * nz, tk * nx * nz + ts * ny]
+  derive r1 = [tk * nx * ny + ts * nz, tk * ny * ny + tc, tk * ny * nz - ts * nx]
+  derive r2 = [tk * nx * nz - ts * ny, tk * ny * nz + ts * nx, tk * nz * nz + tc]
+  derive cr = cos(g0)
+  derive sr = sin(g0)
+  derive m = [0, 1, 2].map(j => cr * tat(r0, j) - sr * tat(r1, j)).concat([0, 1, 2].map(j => sr * tat(r0, j) + cr * tat(r1, j))).concat(r2)
+  derive pull = tsmooth(tabs(twrap(tumble)) * cos(el) / 0.5)
+  derive ws = [0, 1, 2].map(i => min(1, max(0, max(beta, max(tat(pose, 13 + 5 * i), pull)))))
+  derive w0 = tat(ws, 0)
+  derive w1 = tat(ws, 1)
+  derive w2 = tat(ws, 2)
+  derive sps = [0, 1, 2].map(i => tabs(tat(pose, 10 + 5 * i)))
+  derive fb = min(w0, min(w1, w2)) * min(w0, min(w1, w2)) * min(w0, min(w1, w2)) * max(0, 1 - 5 * max(tat(sps, 0), max(tat(sps, 1), tat(sps, 2))))
+  // mean depth of each blade's centre after the turn
+  derive cxs = [sum(ax0) / ax0.length, sum(ax1) / ax1.length, sum(ax2) / ax2.length]
+  derive cys = [sum(ay0) / ay0.length, sum(ay1) / ay1.length, sum(ay2) / ay2.length]
+  derive zms = [sum(bz0) / bz0.length, sum(bz1) / bz1.length, sum(bz2) / bz2.length]
+  derive depth = [0, 1, 2].map(i => tat(m, 6) * tat(cxs, i) + tat(m, 7) * tat(cys, i) + tat(m, 8) * tat(ws, i) * tat(zms, i))
+  derive rank = [0, 1, 2].map(i => [0, 1, 2].filter(j => tat(depth, j) < tat(depth, i) or (tat(depth, j) == tat(depth, i) and j < i)).length)
+  derive order = [0, 1, 2].map(k => sum([0, 1, 2].filter(i => tat(rank, i) == k)))
+  derive p0 = tblade(ax0, ay0, bx0, by0, bz0, w0, tat(pose, 11), tat(cxs, 0), tat(cys, 0), tat(ru0, 0), tat(ru0, 1), tat(pose, 9), tat(pose, 12), tat(pose, 10), m, sc, dx, dy)
+  derive p1 = tblade(ax1, ay1, bx1, by1, bz1, w1, tat(pose, 16), tat(cxs, 1), tat(cys, 1), tat(ru1, 0), tat(ru1, 1), tat(pose, 14), tat(pose, 17), tat(pose, 15), m, sc, dx, dy)
+  derive p2 = tblade(ax2, ay2, bx2, by2, bz2, w2, tat(pose, 21), tat(cxs, 2), tat(cys, 2), tat(ru2, 0), tat(ru2, 1), tat(pose, 19), tat(pose, 22), tat(pose, 20), m, sc, dx, dy)
+  derive pts = [p0, p1, p2]
+  derive ops = [tbop(on0, m, w0, al), tbop(on1, m, w1, al), tbop(on2, m, w2, al)]
+  derive fcs = [[0, 2, 3], [1, 0, 3], [2, 1, 3], [0, 1, 2]]
+  derive ons = [on0, on1, on2, on3]
+  // BEGIN tetramark-data (generated by mobile/scripts/gen-tetramark.py from frontend/src/lib/tetramark.ts; do not edit)
+  derive ax0 = [0.0536, 0.01, -0.0223, -0.0168, 0.0257, 0.0759, 0.1284, 0.1374, 0.2032, 0.4724, 0.6578, 0.7572, 0.8588, 0.7091, 0.4076, 0.2837, 0.1374]
+  derive ay0 = [-0.856, -0.7533, -0.4383, -0.1915, -0.0743, -0.0787, -0.2373, -0.5735, -0.588, -0.1156, 0.0932, 0.2675, 0.2775, -0.043, -0.4607, -0.6986, -0.8638]
+  derive bx0 = [0.0985, 0.0732, 0.0014, -0.0546, -0.0829, -0.0908, 0.0495, 0.1199, 0.1612, 0.3863, 0.5758, 0.6715, 0.799, 0.6427, 0.3724, 0.2317, 0.1188]
+  derive by0 = [-0.6899, -0.5987, -0.34, -0.1383, -0.0364, -0.0079, -0.09, -0.3436, -0.4925, -0.0265, 0.3658, 0.4856, 0.645, 0.3214, -0.2381, -0.5295, -0.7632]
+  derive bz0 = [-0.3108, -0.201, 0.1105, 0.3534, 0.476, 0.5104, 0.2939, -0.0115, -0.1907, 0.0158, 0.1896, 0.2047, 0.2248, 0.0815, -0.1664, -0.2955, -0.3991]
+  derive bn0 = [0.5917, -0.5478, 0.5914]
+  derive ru0 = [0.6749, -0.7379]
+  derive fx0 = [0.1188, 0.8502, -0.1066]
+  derive fy0 = [-0.7632, 0.751, 0.049]
+  derive fz0 = [-0.3991, 0.2718, 0.5788]
+  derive ax1 = [-0.3194, -0.4724, -0.6891, -0.7862, -0.8621, -0.8543, -0.7896, -0.2915, -0.1463, -0.1485, -0.1943, -0.4277, -0.6377, -0.6969, -0.6902, -0.3138]
+  derive ay1 = [-0.4182, -0.3144, 0.0977, 0.4104, 0.55, 0.6639, 0.7108, 0.5154, 0.3892, 0.3367, 0.3266, 0.4104, 0.5433, 0.5422, 0.4584, -0.3512]
+  derive bx1 = [0.0593, -0.1249, -0.431, -0.6462, -0.732, -0.636, -0.5822, -0.2217, -0.1503, -0.214, -0.2404, -0.4002, -0.5648, -0.5232, -0.4679, -0.0693]
+  derive by1 = [-0.6588, -0.3359, 0.2007, 0.5781, 0.7286, 0.6243, 0.5657, 0.1741, 0.0966, 0.1268, 0.1393, 0.313, 0.4918, 0.4188, 0.322, -0.377]
+  derive bz1 = [-0.3882, -0.3546, -0.2988, -0.2596, -0.2439, -0.1176, -0.0468, 0.4273, 0.5212, 0.3501, 0.2791, 0.0688, -0.1477, -0.1553, -0.1653, -0.238]
+  derive bn1 = [-0.8367, -0.5004, 0.2227]
+  derive ru1 = [-0.863, 0.5053]
+  derive fx1 = [-0.732, 0.1188, -0.1066]
+  derive fy1 = [0.7286, -0.7632, 0.049]
+  derive fz1 = [-0.2439, -0.3991, 0.5788]
+  derive ax2 = [0.8611, 0.4344, 0.2691, 0.2747, 0.5204, 0.5182, -0.22, -0.3071, -0.3149, -0.277, 0.191, 0.7873, 0.8487]
+  derive ay2 = [0.7789, 0.4048, 0.3255, 0.4071, 0.6438, 0.7019, 0.7298, 0.7812, 0.8225, 0.8638, 0.8482, 0.8638, 0.8337]
+  derive bx2 = [0.8502, 0.18, -0.0396, 0.0665, 0.3296, 0.558, -0.2616, -0.3509, -0.4429, -0.6213, -0.1084, 0.7134, 0.8077]
+  derive by2 = [0.751, 0.2592, 0.0981, 0.2914, 0.4845, 0.6521, 0.6404, 0.6392, 0.6701, 0.7302, 0.7374, 0.7491, 0.7504]
+  derive bz2 = [0.2718, 0.4869, 0.5573, 0.4195, 0.335, 0.2618, -0.0054, -0.0345, -0.0935, -0.2078, -0.0407, 0.2272, 0.2579]
+  derive bn2 = [-0.2442, 0.6483, 0.7212]
+  derive ru2 = [0.37, 0.929]
+  derive fx2 = [0.8502, -0.732, -0.1066]
+  derive fy2 = [0.751, 0.7286, 0.049]
+  derive fz2 = [0.2718, -0.2439, 0.5788]
+  derive vx = [0.1188, -0.732, 0.8502, -0.1066]
+  derive vy = [-0.7632, 0.7286, 0.751, 0.049]
+  derive vz = [-0.3991, -0.2439, 0.2718, 0.5788]
+  derive on0 = [0.5917, -0.5478, 0.5914]
+  derive on1 = [-0.8367, -0.5004, 0.2227]
+  derive on2 = [-0.2442, 0.6483, 0.7212]
+  derive on3 = [0.2955, 0.264, -0.9181]
+  // END tetramark-data
+  view
+    box testId=testId width=size height=size position="relative" role="img" aria-label="TetraMark"
+      svg viewBox="0 0 512 512" width=size height=size overflow="visible"
+        if fb > 0.01
+          for f in [0, 1, 2, 3] key=f
+            polygon points=tface(vx, vy, vz, tarr(fcs, f), m, sc, dx, dy) fill=th.accent2 fill-opacity=tfop(tarr(ons, f), m, fb, al)
+        for i in order key=i
+          polygon points=tstr(pts, i) fill=th.accent fill-opacity=tat(ops, i)
+
+// The bar's mark: the 48 pt button face. The root keeps the motion (members-mark.contract): the current motion, the motion
+// before it, when it began and the pose that was on screen then.
+component BarMark
+  inject
+    th: Theme
+    ri: RadioInfo
+    mkT: number
+    mkCur: string
+    mkPrev: string
+    mkSince: number
+    mkFrom: number[]
+  view
+    row width=44 height=44 align-items="center" justify-content="center" testId="mark"
+      TetraMark(motion=mkCur, prev=mkPrev, since=mkSince, from=mkFrom, level=(mkCur == "listening" ? ri.micLevel : 0), fixed=[], size=36, testId="mark-glyph")
+
+// Any mark on any clock: a motion since a time, or a fixed pose (the gallery's sliders).
+component TetraMark
+  inject
+    th: Theme
+    mkT: number
+  props
+    motion: string
+    prev: string
+    since: number
+    from: number[]
+    level: number
+    fixed: number[]
+    size: number
+    testId: string
+  derive ms = max(0, mkT - since)
+  derive k = tclamp(ms / 300)
+  derive calm = th.reducedMotion
+  derive still = tStill(k < 0.5 ? prev : motion, 0.35 + 0.65 * tabs(1 - 2 * k))
+  derive live = tPose(motion, ms, from, level)
+  derive pose = fixed.length > 0 ? fixed : (calm ? still : live)
+  view
+    TetraMarkFace(pose=pose, size=size, testId=testId)
+
+// ---- the gallery ----
+// One slider: a track with a thumb, dragged relative to its last event (the speed slider's way), the value beside the name.
+component MarkSlider
+  inject
+    th: Theme
+    gmV: number[]
+    gmLo: number[]
+    gmHi: number[]
+    gmMove: action
+  props
+    i: number
+    label: string
+    pose: number[]
+  derive v = tat(pose, i)
+  derive pct = floor(tclamp((v - tat(gmLo, i)) / (tat(gmHi, i) - tat(gmLo, i))) * 100)
+  view
+    row gap=8 width="100%" align-items="center" testId=`mark-slider-${i}`
+      text label width=84 font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+      column flex=1 min-width=0 height=36 justify-content="center" pan=gmMove(i) aria-label=label testId=`mark-slider-${i}-track`
+        row width="100%" height=22 align-items="center" padding-left=11 box-sizing="border-box"
+          box width=`${pct}%` height=4 background-color=th.accent
+          row width=22 height=22 margin-left=-11 justify-content="center"
+            box width=3 height=22 background-color=th.accent
+          box flex=1 height=4 background-color=th.rule
+      text `${floor(v * 100) / 100}` width=48 font-family=th.fontMono font-size="-exact-caption1" color=th.fg
+
+// `lab:mark`: the mark large, each named motion by tap, the input level, and sliders for the pose.
+component MarkPage
+  inject
+    th: Theme
+    mkT: number
+    gmMotion: string
+    gmPrev: string
+    gmSince: number
+    gmFrom: number[]
+    gmV: number[]
+    gmManual: bool
+    gmLevel: number
+    gmPlay: action
+    gmRest: action
+    gmLevelSet: action
+  derive names = ["idle", "pressed", "trayOpen", "trayClose", "working", "playing", "listening", "tumbling", "settle"]
+  derive levels = [0, 0.3, 0.6, 1]
+  derive sliderAt = [0, 1, 2, 3, 4, 5, 9, 10, 11, 14, 15, 16, 19, 20, 21]
+  derive sliderName = ["Roll", "Tumble", "Axis turn", "Axis lift", "Solid", "Scale", "Phase A", "Spread A", "Length A", "Phase B", "Spread B", "Length B", "Phase C", "Spread C", "Length C"]
+  derive fixedPose = gmManual ? gmV : []
+  derive shown = gmManual ? gmV : tPose(gmMotion, mkT - gmSince, gmFrom, gmLevel)
+  view
+    PageScroll(id="markgallery")
+      text "Mark" role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 testId="page-title" font-family=th.fontHead
+      text "The tetramark: three freehand blades that are also a tetrahedron seen flat. Tap a motion; drag a slider to hold a pose by hand." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+      row width="100%" justify-content="center" padding-top=8 padding-bottom=8
+        TetraMark(motion=gmMotion, prev=gmPrev, since=gmSince, from=gmFrom, level=gmLevel, fixed=fixedPose, size=240, testId="mark-gallery-main")
+      row gap=14 align-items="center" justify-content="center"
+        TetraMark(motion=gmMotion, prev=gmPrev, since=gmSince, from=gmFrom, level=gmLevel, fixed=fixedPose, size=36, testId="mark-gallery-36")
+        TetraMark(motion=gmMotion, prev=gmPrev, since=gmSince, from=gmFrom, level=gmLevel, fixed=fixedPose, size=64, testId="mark-gallery-64")
+        text (gmManual ? "by hand" : gmMotion) testId="mark-gallery-state" font-family=th.fontMono font-size="-exact-caption1" color=th.muted
+      row gap=8 width="100%" flex-wrap="wrap" testId="mark-motions"
+        for n in names key=n
+          button press=gmPlay(n) testId=`mark-motion-${n}` appearance="none"
+            Btn(label=n, primary=(n == gmMotion and gmManual == false), wide=false)
+      row gap=8 align-items="center" width="100%"
+        text "Level" width=84 font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+        for lv in levels key=lv
+          button press=gmLevelSet(lv) testId=`mark-level-${lv}` appearance="none"
+            Btn(label=`${lv}`, primary=(lv == gmLevel), wide=false)
+      for i, j in sliderAt key=i
+        MarkSlider(i=i, label=tstr(sliderName, j), pose=shown)

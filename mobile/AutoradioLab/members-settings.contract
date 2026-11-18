@@ -11,7 +11,6 @@ members Autoradio
   resource tx = themeExtras() as shape ThemeExtras else empty()
   resource acctInfo = settingsAccount() as shape SettingsAccount else empty()
   resource cmpt = settingsComputer() as shape SettingsComputer else empty()
-  resource talkRows = settingRows(group="talk") as shape SettingRows else empty()
   resource gestureRows = settingRows(group="gestures") as shape SettingRows else empty()
   resource learnt = learnedInfo() as shape LearnedInfo else empty()
   resource act = activityInfo() as shape ActivityInfo else empty()

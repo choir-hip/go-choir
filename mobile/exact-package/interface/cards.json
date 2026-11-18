@@ -59,7 +59,8 @@
    "places": "LauncherPlace[]",
    "recent": "LauncherHit[]",
    "hits": "LauncherHit[]",
-   "stories": "number"
+   "stories": "number",
+   "searchNote": "string"
   },
   "ShadeRow": {
    "route": "string",
@@ -143,7 +144,8 @@
      "places": [],
      "recent": [],
      "hits": [],
-     "stories": 0
+     "stories": 0,
+     "searchNote": ""
     }
    }
   },

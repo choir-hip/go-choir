@@ -1,0 +1,166 @@
+diff --git a/host/apple/Sources/ExactMarkdown/MarkupEditor.swift b/host/apple/Sources/ExactMarkdown/MarkupEditor.swift
+--- a/host/apple/Sources/ExactMarkdown/MarkupEditor.swift
++++ b/host/apple/Sources/ExactMarkdown/MarkupEditor.swift
+@@ -135,7 +135,8 @@
+         var json: UnsafePointer<UInt8>? = nil
+         var count = 0
+         let handle = text.withUTF8 { bytes in
+-            exact_markup_style(bytes.baseAddress, bytes.count, AtomHandle.of(look.atoms), UInt32(clamping: selection.location), UInt32(clamping: selection.location + selection.length), &json, &count)
++            // Choir patch 0001: no selection to reveal (`u32::MAX`), so every marker of syntax is a hidden range and none is dimmed.
++            exact_markup_style(bytes.baseAddress, bytes.count, AtomHandle.of(look.atoms), UInt32.max, UInt32.max, &json, &count)
+         }
+         defer { exact_markup_free(handle) }
+         guard handle != 0, let json,
+@@ -230,17 +231,25 @@
+             }
+             storage.addAttributes(attributes, range: range)
+         }
+-        // Syntax outside the active paragraph is quieter, at full advance.
++        // Choir patch 0001: every marker of syntax is hidden (zero width, `MarkupHidden.swift`), as the web editor hides it; a heading shows
++        // as a heading with no `#`, emphasis styled with no `*`. The source keeps them.
++        var syntax = MarkupSyntaxHiding.syntaxBase
+         for h in object["h"] ?? [] where h.count >= 2 {
+-            storage.addAttribute(.foregroundColor, value: look.ink.withAlphaComponent(0.3), range: clamp(h[0], h[1]))
++            let range = clamp(h[0], h[1])
++            guard range.length > 0 else { continue }
++            storage.addAttribute(.markupHidden, value: syntax, range: range)
++            syntax += 1
+         }
+         for r in object["r"] ?? [] where r.count >= 4 {
+             let range = clamp(r[0], r[1])
+             guard range.length > 0 else { continue }
+             let kind = (r[2] as? Int) ?? 0
+             switch kind {
+-            case 0, 1, 2:
+-                // The list marker, dimmed, until a drawn bullet or box replaces it.
++            case 0:
++                // Choir patch 0001: a bullet's source is drawn as a bullet glyph (`MarkupSyntaxHiding.drawn`), never as `-`.
++                storage.addAttribute(.markupHidden, value: MarkupSyntaxHiding.bullet, range: range)
++            case 1, 2:
++                // A task box's marker, dimmed, until a drawn box replaces it.
+                 storage.addAttribute(.foregroundColor, value: look.ink.withAlphaComponent(0.4), range: range)
+             case 3: break // a thematic break, below
+             default:
+@@ -259,7 +268,10 @@
+             let open = clamp(l[0], l[1]), close = clamp(l[2], l[3])
+             guard close.length > 0 else { continue }
+             storage.addAttribute(.markupHidden, value: n, range: close)
+-            if open.length > 0 { storage.addAttribute(.markupOpener, value: n, range: open) }
++            if open.length > 0 {
++                storage.addAttribute(.markupOpener, value: n, range: open)
++                storage.addAttribute(.markupHidden, value: n, range: open)           // Choir patch 0001: a link shows its text only, as on the web
++            }
+         }
+         // Each inline atom, drawn as its pill whatever the selection
+         // (MarkupHidden.swift); one covered by the selection draws selected.
+diff --git a/host/apple/Sources/ExactMarkdown/MarkupHidden.swift b/host/apple/Sources/ExactMarkdown/MarkupHidden.swift
+--- a/host/apple/Sources/ExactMarkdown/MarkupHidden.swift
++++ b/host/apple/Sources/ExactMarkdown/MarkupHidden.swift
+@@ -27,8 +27,10 @@
+         // Hidden runs, and each atom's first code unit (LLP 1045.000 §4): a
+         // U+FFFC carrying a new attachment whose picture is the pill.
+         var runs: [(NSRange, MarkupAtom?)] = []
++        var bullets = Set<Int>()
+         shown.enumerateAttribute(.markupHidden, in: all) { value, run, _ in
+             if value != nil { runs.append((run, nil)) }
++            if (value as? Int) == MarkupSyntaxHiding.bullet { bullets.insert(run.location) }      // Choir patch 0001
+         }
+         shown.enumerateAttribute(.markupAtom, in: all) { value, run, _ in
+             if let atom = value as? MarkupAtom { runs.append((run, atom)) }
+@@ -36,7 +38,7 @@
+         for (run, atom) in runs.sorted(by: { $0.0.location > $1.0.location }) {
+             var attributes = shown.attributes(at: run.location, effectiveRange: nil)
+             attributes[.markupAtom] = nil
+-            let piece = NSMutableAttributedString(string: String(repeating: "\u{2060}", count: run.length), attributes: attributes)
++            let piece = NSMutableAttributedString(string: MarkupSyntaxHiding.drawn(length: run.length, bullet: bullets.contains(run.location) && atom == nil), attributes: attributes)
+             // An atom whose source began in an earlier paragraph has none here.
+             if let atom, storage.atomRange(at: range.location + run.location)?.location == range.location + run.location {
+                 piece.replaceCharacters(in: NSRange(location: 0, length: 1), with: "\u{FFFC}")
+@@ -131,6 +133,10 @@
+             let at = NSMaxRange(atom)
+             return MarkupRewrite(edits: [(NSRange(location: at, length: 0), text)], caret: at + text.utf16.count)
+         }
++        // Choir patch 0001: Backspace just after a block's hidden prefix (`# `, `> `, a bullet) removes the prefix: the block loses its formatting.
++        if text.isEmpty, range.length > 0, let gone = Self.prefixRemoved(by: range, in: s) {
++            return MarkupRewrite(edits: [(gone, "")], caret: gone.location)
++        }
+         let wide = Self.outward(range, in: s)
+         if let hidden = rewriteHidden(wide, with: text, caret: caret, in: s) { return hidden }
+         guard wide != range else { return nil }
+@@ -212,5 +218,20 @@
+             if value as? Int == n { found = range; stop.pointee = true }
+         }
+         return found
++    }
++}
++
++extension MarkupEditor {
++    /// The hidden prefix a deletion `range` (the grapheme before the caret) lands on, when its caret is just after it.
++    static func prefixRemoved(by range: NSRange, in s: NSAttributedString) -> NSRange? {
++        var hidden: [NSRange] = [], bullets: [NSRange] = []
++        s.enumerateAttribute(.markupHidden, in: NSRange(location: 0, length: s.length)) { value, run, _ in
++            guard let n = value as? Int else { return }
++            if n == MarkupSyntaxHiding.bullet { bullets.append(run) } else if n >= MarkupSyntaxHiding.syntaxBase { hidden.append(run) }
++        }
++        guard !hidden.isEmpty || !bullets.isEmpty else { return nil }
++        let prefixes = MarkupSyntaxHiding.blockPrefixes(of: s.string as NSString, hidden: hidden, bullets: bullets)
++        guard let p = MarkupSyntaxHiding.backspaceRemoves(caret: NSMaxRange(range), prefixes: prefixes), NSLocationInRange(range.location, p) else { return nil }
++        return p
+     }
+ }
+diff --git a/host/apple/Sources/ExactMarkdown/MarkupSyntaxHiding.swift b/host/apple/Sources/ExactMarkdown/MarkupSyntaxHiding.swift
+new file mode 100644
+--- /dev/null
++++ b/host/apple/Sources/ExactMarkdown/MarkupSyntaxHiding.swift
+@@ -0,0 +1,51 @@
++// Every Markdown marker hidden while editing (choir patch 0001; mobile/exact-patches/README.md).
++// The web editor hides syntax away from the caret; the Apple host dimmed it. This file holds the pure rules of hiding all of it, with no
++// dependency on ExactKit so that they are unit-tested on their own (AutoradioKit's MarkupSyntaxHidingTests compiles this very file).
++// @ref LLP 1045 D5: which runs are hidden is the styler's (`Styled.hidden`, asked with no selection to reveal); the source, its offsets,
++// native undo and copy stay the Markdown's.
++import Foundation
++
++enum MarkupSyntaxHiding {
++    /// `.markupHidden`'s value for a marker of syntax (a link's destination keeps its link index, below this).
++    static let syntaxBase = 1_000_000
++    /// `.markupHidden`'s value for a list bullet: hidden source drawn as a bullet glyph.
++    static let bullet = -1
++    static let joiner = "\u{2060}"
++
++    /// What is drawn in place of a hidden run of `length` UTF-16 units: word joiners (no advance, no glyph), or for a bullet the glyph then
++    /// joiners, so the run keeps its length and every offset stays a source offset.
++    static func drawn(length: Int, bullet isBullet: Bool) -> String {
++        guard length > 0 else { return "" }
++        return isBullet ? "\u{2022}" + String(repeating: joiner, count: length - 1) : String(repeating: joiner, count: length)
++    }
++
++    /// The hidden runs that open a block: a heading's `#`s, a quote's `>`s and a list item's bullet, in the order they are in. A marker inside a
++    /// line (`**`, `*`, a backtick, `~~`) is not one. `hidden` and `bullets` are sorted.
++    static func blockPrefixes(of source: NSString, hidden: [NSRange], bullets: [NSRange]) -> [NSRange] {
++        let candidates = (hidden.filter { r in
++            guard r.length > 0, NSMaxRange(r) <= source.length else { return false }
++            let text = source.substring(with: r)
++            return text.unicodeScalars.allSatisfy { "#> \t".unicodeScalars.contains($0) } && text.contains(where: { $0 == "#" || $0 == ">" })
++        } + bullets.filter { $0.length > 0 && NSMaxRange($0) <= source.length }).sorted { $0.location < $1.location }
++        var accepted: [NSRange] = []
++        for r in candidates {
++            let lineStart = source.lineRange(for: NSRange(location: r.location, length: 0)).location
++            var ok = true
++            var u = lineStart
++            while u < r.location {
++                let c = source.character(at: u)
++                let blank = c == 0x20 || c == 0x09
++                if !blank && !accepted.contains(where: { NSLocationInRange(u, $0) }) { ok = false; break }
++                u += 1
++            }
++            if ok { accepted.append(r) }
++        }
++        return accepted
++    }
++
++    /// Backspace with the caret just after a block's hidden prefix removes that prefix (innermost first), so the block loses its formatting
++    /// and the text stays; nil when the caret is not at the end of one.
++    static func backspaceRemoves(caret: Int, prefixes: [NSRange]) -> NSRange? {
++        prefixes.last { NSMaxRange($0) == caret }
++    }
++}

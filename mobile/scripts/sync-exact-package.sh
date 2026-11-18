@@ -18,8 +18,8 @@ find "$KIT" -name '*.swift' -exec cp {} "$OUT/Kit/" \;   # flat: Choir/ and othe
 import json, os, sys
 out = sys.argv[1]
 files = ["AutoradioModule.swift"] + sorted(f for f in os.listdir(out) if f.startswith("AutoradioModule+") and f.endswith(".swift")) + ["Kit/" + f for f in sorted(os.listdir(os.path.join(out, "Kit"))) if f.endswith(".swift")]
-json.dump({"kind": "implementation", "implements": "@choir/autoradio@^1.0", "platform": "apple", "targets": ["ios"],
-           "shapes": {}, "options": {}, "names": [], "views": [], "hatches": [],
+json.dump({"kind": "implementation", "implements": "@choir/autoradio@^1.0", "platform": "apple", "targets": ["ios", "macos"],
+           "shapes": {}, "options": {}, "names": [], "views": ["web-page"], "hatches": [],
            "sources": {"swift": files}, "artifacts": [], "class": "AutoradioModule"},
           open(os.path.join(out, "exact.json"), "w"), indent=2)
 print("exact-package/apple/exact.json:", len(files), "swift files")
