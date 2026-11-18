@@ -23,6 +23,7 @@ extension AutoradioModule {
             i.wants = player.wantsToPlay; i.message = q.message; i.notice = q.notice; i.writing = q.writing; i.dry = q.dry
             if let r = player.store.onAir()?.paperRoute { i.published = PublishedTimes.shared.words(route: r) }
             i.versions = PublishedTimes.shared.versions()
+            i.takeLookup = { TakeStore.shared.take($0) }
             i.stale = Set(player.store.sheet.ahead().filter { player.store.isStale($0) }.map(\.id))
             return RadioPage.make(i)
         }

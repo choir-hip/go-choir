@@ -97,6 +97,10 @@ extension PlaybackEngine {
     public var locator: ClipLocating = ClipLocator.shared
     /// The clips the phone holds (the located ones are looked up here by the entry's clip id).
     public var clips: ClipStore = .shared
+    /// Fetches a take's audio (the publisher's voice, signed in) into a file on the phone, by take id; nil when it could not be had (deleted,
+    /// yanked, offline). Set by the host. The file is deleted when the entry ends or leaves the sheet.
+    public var takeAudio: ((String) async -> URL?)?
+    var takeFiles: [String: URL] = [:]
     /// Locating in flight or done, by entry id: it starts when the entry is next in line, so the clip begins with no gap.
     private var locating: [String: Task<ClipLocation, Never>] = [:]
     /// The clip files kept for entries (deleted when the entry ends or leaves the sheet).
@@ -365,6 +369,7 @@ extension PlaybackEngine {
     }
 
     private func dropLocated(_ id: String) {
+        if let f = takeFiles.removeValue(forKey: id) { try? FileManager.default.removeItem(at: f) }
         locating[id]?.cancel(); locating[id] = nil
         if let l = located.removeValue(forKey: id) { try? FileManager.default.removeItem(at: l.file) }
     }
@@ -400,6 +405,7 @@ extension PlaybackEngine {
             return
         }
         if playingId != nil {                         // what was on air was skipped, cut or taken off: its sound stops
+            if let p = playingId, let f = takeFiles.removeValue(forKey: p) { try? FileManager.default.removeItem(at: f) }
             rememberPlace(of: playingId, nextKind: nextToAir()?.kind)
             sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil
             playingId = nil; playingDocument = nil; audio = nil; paused = false; generation += 1; pendingEnd = nil
@@ -489,6 +495,20 @@ extension PlaybackEngine {
                 playingDocument = doc
                 ok = await engine.speak(documentID: doc, entry: entry, paragraphs: blocks)
             } else if my == generation { message = "Could not open \u{201C}\(entry.displayTitle)\u{201D} to read." }
+        case .take:
+            guard let tid = entry.takeID, let fetch = takeAudio else { if my == generation { finish(entry.id, played: false, why: "the take has no id or no way to be fetched") }; return }
+            guard let file = await fetch(tid) else { if my == generation, playingId == entry.id { finish(entry.id, played: false, why: "the take\u{2019}s audio could not be had") }; return }
+            guard my == generation, playingId == entry.id else { try? FileManager.default.removeItem(at: file); return }
+            takeFiles[entry.id] = file
+            let a = RunSheetAudio(url: file, title: entry.title, show: entry.source?.label ?? "")
+            audio = a
+            if let lead = entry.text, !lead.isEmpty {
+                let doc = "rs:" + entry.id
+                playingDocument = doc
+                ok = await engine.speak(documentID: doc, entry: entry, paragraphs: [lead])
+            } else {
+                ok = await startAudio(a, generation: my)
+            }
         case .clip, .episode:
             var spec = entry.audioSpec
             if spec == nil, let address = entry.filesAddress {
@@ -569,7 +589,7 @@ extension PlaybackEngine {
         guard let eid = playingId, id == playingDocument else { return }
         if turnOpen() { pendingEnd = (id, anyPlayed); return }
         // A clip's lead-in is over: the audio plays now.
-        if let e = store.entry(eid), e.kind == .clip, let a = audio, !leadInDone.contains(eid) {
+        if let e = store.entry(eid), e.kind == .clip || e.kind == .take, let a = audio, !leadInDone.contains(eid) {
             leadInDone.insert(eid)
             playingDocument = nil
             let my = generation

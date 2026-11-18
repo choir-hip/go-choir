@@ -18,7 +18,7 @@ import Foundation
 //  - check order: op shape, duplicate, aired's authority, reason, then the op's own rules.
 
 public enum RunSheetKind: String, Codable, Equatable, Sendable {
-    case opening, transition, story, clip, episode, page, document, mail, result, answer
+    case opening, transition, story, clip, take, episode, page, document, mail, result, answer
     /// Entries of these kinds carry words to speak.
     public var textRequired: Bool {
         switch self { case .opening, .transition, .story, .answer, .result: return true; default: return false }

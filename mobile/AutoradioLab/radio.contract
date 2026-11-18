@@ -3,12 +3,13 @@
 // line comes here. The model is the Kit's (RadioPage.swift); this file only draws it and sends the gestures.
 // Type is the Autopaper's: the masthead and its double rule (paper.contract), the headline face for titles, the label face for what describes,
 // the action face for what is pressed (mobile/docs/typography.md). No second scale.
+// takes testIds: radio-takes, takes-record, takes-stop, takes-elapsed, takes-review, takes-transcript, takes-preview, takes-rerecord, takes-discard, takes-publish, takes-notice, takes-mine-<n>, takes-delete-<n>, takes-muted-<n>, takes-unmute-<n>, radio-take, radio-take-mute, radio-heard-mute-<n>.
 // testIds: radio-page, radio-scroll, radio-title, radio-date, radio-status, radio-onair, radio-onair-kind, radio-onair-title, radio-onair-open,
 // radio-onair-byline, radio-onair-sentence, radio-onair-sentence-number, radio-greeting, radio-heard-words, radio-cannot, radio-retry, radio-then-back,
 // radio-progress, radio-elapsed, radio-remaining, radio-play, radio-next, radio-why, radio-why-text, radio-forecast, radio-back15, radio-fwd15,
 // radio-speed, radio-speed-slider, radio-speed-down, radio-speed-up, radio-speed-reset, radio-next-list, radio-next-<n>, radio-next-play-<n>,
 // radio-next-grip-<n>, radio-next-all, radio-next-writing, radio-next-empty, radio-notice, radio-builton-<n>, radio-heard-<n>, radio-heard-built-<n>, radio-heard-builton-<n>-<m>.
-use Theme, RadioPageInfo, QueueInfo from "@choir/autoradio"
+use Theme, RadioPageInfo, QueueInfo, TakesPageInfo from "@choir/autoradio"
 use Btn, SectionHeader, RowRule, BarClear from "./ui.contract"
 use QueueAudio, QueueScrub from "./queue.contract"
 
@@ -16,6 +17,8 @@ component RadioPage
   inject
     th: Theme
     rp: RadioPageInfo
+    tp: TakesPageInfo
+    takesDo: action
     qv: QueueInfo
     radioAll: bool
     whyFor: string
@@ -135,6 +138,15 @@ component RadioPage
                   text rp.why font-family=th.fontText font-size="-exact-callout" line-height=1.4 color=th.fg testId="radio-why-text"
                 if rp.forecast != ""
                   text rp.forecast font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-forecast"
+            // a take on air: who made it, what they said (the text the phone read from the recording), and a way to stop hearing them
+            if rp.takePublisher != ""
+              column gap=6 width="100%" align-items="flex-start" testId="radio-take"
+                if rp.takeTranscript != ""
+                  text rp.takeTranscript font-family=th.fontText font-size="-exact-callout" line-height=1.4 color=th.fg line-clamp=6 testId="radio-take-transcript"
+                if rp.takeRecord != ""
+                  text `${rp.takePublisher} · ${rp.takeRecord}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="radio-take-record"
+                button press=takesDo("mute", rp.takePublisher) testId="radio-take-mute" appearance="none" aria-label=`Never play takes by ${rp.takePublisher}`
+                  Btn(label=`Mute ${rp.takePublisher}`, primary=false, wide=false)
             // the stories this entry was built on: tap one to open its Texture (which shows its own sources). Nothing is drawn for an entry with none.
             if rp.builtOn.length > 0
               column gap=0 width="100%" testId="radio-builton"
@@ -215,6 +227,9 @@ component RadioPage
                       text h.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=1
                     text h.outcome font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
                     image "symbol:forward-chevron" color=th.muted pointer-events="none"
+                if h.publisher != ""
+                  button press=takesDo("mute", h.publisher) testId=`radio-heard-mute-${h.n}` appearance="none" align-self="flex-start" aria-label=`Never play takes by ${h.publisher}`
+                    Btn(label=`Mute ${h.publisher}`, primary=false, wide=false)
                 if h.builtOn.length > 0
                   button press=toggleHeardBuilt(h.id) testId=`radio-heard-built-${h.n}` appearance="none" align-self="flex-start" aria-label=(heardOpen == h.id ? "Hide the stories it was built on" : "Show the stories it was built on")
                     row min-height=44 align-items="center"
@@ -225,4 +240,68 @@ component RadioPage
                         row align-items="center" gap=8 width="100%" min-height=44
                           text b.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=2 flex=1 min-width=0
                           image "symbol:forward-chevron" color=th.muted pointer-events="none"
+          // takes: your own voice, offered to other listeners (design 11). Record, review, publish; your takes; the voices you muted; your record.
+          column gap=8 width="100%" testId="radio-takes"
+            SectionHeader(label="Takes")
+            if tp.state == "idle"
+              button press=takesDo("record", "") testId="takes-record" appearance="none" align-self="flex-start" aria-label="Record a take"
+                Btn(label="Record a take", primary=false, wide=false)
+            if tp.state == "recording"
+              column gap=6 width="100%" testId="takes-recording"
+                row justify-content="space-between" width="100%" align-items="baseline"
+                  text `Recording ${tp.elapsed} of ${tp.limit}` font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg font-variant-numeric="tabular-nums" testId="takes-elapsed"
+                box height=2 background-color=th.rule width="100%"
+                  box height=2 width=`${floor(tp.fraction * 100)}%` background-color=th.accent
+                if tp.respondsTo != ""
+                  text tp.respondsTo font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="takes-responds"
+                text "The radio is paused while you record." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+                button press=takesDo("stop", "") testId="takes-stop" appearance="none" align-self="flex-start" aria-label="Stop recording"
+                  Btn(label="Stop", primary=false, wide=false)
+            if tp.state == "transcribing"
+              text "Reading what you said…" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="takes-wait"
+            if tp.state == "review" or tp.state == "publishing"
+              column gap=8 width="100%" testId="takes-review"
+                if tp.respondsTo != ""
+                  text tp.respondsTo font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="takes-responds"
+                text (tp.transcript != "" ? tp.transcript : "Nothing was recognised.") font-family=th.fontText font-size="-exact-body" line-height=1.4 color=th.fg testId="takes-transcript"
+                text `${tp.elapsed} · ${tp.publishLine}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="takes-publish-line"
+                text tp.rightsLine font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="takes-rights"
+                if tp.state == "review"
+                  row gap=16 align-items="center" width="100%"
+                    button press=takesDo("preview", "") testId="takes-preview" appearance="none" aria-label=(tp.previewing ? "Stop playing back" : "Play back")
+                      Btn(label=(tp.previewing ? "Stop" : "Play back"), primary=false, wide=false)
+                    button press=takesDo("rerecord", "") testId="takes-rerecord" appearance="none" aria-label="Record it again"
+                      Btn(label="Re-record", primary=false, wide=false)
+                    button press=takesDo("discard", "") testId="takes-discard" appearance="none" aria-label="Discard this take"
+                      Btn(label="Discard", primary=false, wide=false)
+                  if tp.canPublish
+                    button press=takesDo("publish", "") testId="takes-publish" appearance="none" align-self="flex-start" aria-label="Publish this take"
+                      Btn(label="Publish", primary=false, wide=false)
+                else
+                  text "Publishing…" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="takes-publishing"
+            if tp.notice != ""
+              text tp.notice font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="takes-notice"
+            if tp.justPublished != ""
+              text tp.justPublished font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="takes-published"
+            if tp.record != ""
+              text `Your record: ${tp.record}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="takes-record-line"
+            if tp.mine.length > 0
+              column gap=0 width="100%" testId="takes-mine"
+                for t, k in tp.mine key=t.id
+                  if k > 0
+                    RowRule(indent=0)
+                  row align-items="center" gap=8 width="100%" min-height=52 testId=`takes-mine-${k}`
+                    column flex=1 min-width=0 gap=2 align-items="flex-start"
+                      text t.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg text-align="left" line-clamp=1
+                      text `${t.state} · ${t.length}` font-family=th.fontLabel font-size="-exact-caption2" color=th.muted
+                    button press=takesDo("delete", t.id) testId=`takes-delete-${k}` appearance="none" aria-label=`Delete ${t.title}`
+                      Btn(label="Delete", primary=false, wide=false)
+            if tp.muted.length > 0
+              column gap=0 width="100%" testId="takes-muted"
+                SectionHeader(label="Muted voices")
+                for m, k in tp.muted key=m.handle
+                  row align-items="center" gap=8 width="100%" min-height=44 testId=`takes-muted-${k}`
+                    text m.line font-family=th.fontLabel font-size="-exact-footnote" color=th.muted flex=1 min-width=0
+                    button press=takesDo("unmute", m.handle) testId=`takes-unmute-${k}` appearance="none" aria-label=`Hear ${m.handle} again`
+                      Btn(label="Undo", primary=false, wide=false)
           BarClear()

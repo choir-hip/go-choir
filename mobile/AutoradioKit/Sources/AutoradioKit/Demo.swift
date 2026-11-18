@@ -98,6 +98,13 @@ final class DemoURLProtocol: URLProtocol {
             client?.urlProtocolDidFinishLoading(self)
             return
         }
+        if let (status, body) = TakesDemo.answer(method: request.httpMethod ?? "GET", path: url.path, body: sent) {
+            let resp = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: body)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         // Mail (lane 6) needs the method and the body, so it answers first; every other route is the one switch below.
         let (status, body) = MailDemo.answer(method: request.httpMethod ?? "GET", path: url.path, query: items,
                                              body: (try? JSONSerialization.jsonObject(with: sent)) as? [String: Any] ?? [:]) ?? Self.route(path: url.path, query: items)

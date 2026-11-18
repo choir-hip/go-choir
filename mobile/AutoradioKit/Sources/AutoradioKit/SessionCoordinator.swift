@@ -76,10 +76,20 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     /// change category or mode again between listening and talking, so the programme is never played through a mode switch; the one switch is
     /// the Voice control's, made with the engine stopped. (`alwaysListening` is the lab's own choice and stays what it says.)
     func target(for asked: AudioState) -> AudioState {
+        if isRecordingTake, !isBackgrounded, !isInterrupted { return .listening }       // a take: capture and playback; given up with the microphone in the background or when another app has the session
         guard voiceOn(), !isBackgrounded else { return .playing }       // in the background the microphone is given up and the radio plays on
         return policy() == .alwaysListening ? .listening : .talking
     }
     private var _backgrounded = false, _interrupted = false
+    private var _recordingTake = false
+    /// A take is being recorded or reviewed: the session is the capture one (full-quality playback, no voice processing) until it is over.
+    public var isRecordingTake: Bool { lock.lock(); defer { lock.unlock() }; return _recordingTake }
+    /// Take the capture session for a take (`true`) or go back to what voice says (`false`). Throws when the session could not be taken.
+    public func setRecordingTake(_ on: Bool) async throws {
+        lock.lock(); _recordingTake = on; let has = _current != nil; lock.unlock()
+        if has { await reapply() } else if on { try await claim(.listening, preferBuiltInMic: false, reason: "take") }
+        if on, current != .listening { throw LabError.unavailable(lastFailure.isEmpty ? "the microphone could not be taken" : lastFailure) }
+    }
     public var isBackgrounded: Bool { lock.lock(); defer { lock.unlock() }; return _backgrounded }
     /// Another app has the session (an interruption began and has not ended): nothing here asks for it back except a foreground, an
     /// interruption's end and a press of Play.

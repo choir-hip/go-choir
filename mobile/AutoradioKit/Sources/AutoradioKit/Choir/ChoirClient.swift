@@ -269,8 +269,8 @@ public final class ChoirClient: @unchecked Sendable {
     @discardableResult
     public func send(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil,
                      authenticated: Bool = true, route: String? = nil, timeout t: Double? = nil,
-                     okStatuses: Set<Int> = []) async throws -> ChoirResponse {
-        let r = try await request(method, path, query: query, body: body, authenticated: authenticated, timeout: t)
+                     okStatuses: Set<Int> = [], contentType: String = "application/json", accept: String = "application/json") async throws -> ChoirResponse {
+        let r = try await request(method, path, query: query, body: body, authenticated: authenticated, timeout: t, accept: accept, contentType: contentType)
         let label = "choir \(method) \(route ?? path)"
         let start = log?.clock.now
         let t0 = ProcessInfo.processInfo.systemUptime
@@ -301,7 +301,7 @@ public final class ChoirClient: @unchecked Sendable {
 
     /// The URLRequest for a call: the base URL, the headers, the key and the computer. The timeout is URLRequest's idle timeout.
     func request(_ method: String, _ path: String, query: [String: String] = [:], body: Data? = nil, authenticated: Bool = true,
-                 timeout t: Double? = nil, accept: String = "application/json") async throws -> URLRequest {
+                 timeout t: Double? = nil, accept: String = "application/json", contentType: String = "application/json") async throws -> URLRequest {
         if authenticated, let t = trustedOrigin, !SameOrigin.matches(baseURL, t) { throw ChoirError.wrongHost(baseURL.host ?? "(none)") }
         guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { throw ChoirError.decode("bad base URL") }
         comps.percentEncodedPath = path
@@ -316,7 +316,7 @@ public final class ChoirClient: @unchecked Sendable {
         var r = URLRequest(url: url, timeoutInterval: t ?? timeout)
         r.httpMethod = method
         r.setValue(accept, forHTTPHeaderField: "Accept")
-        if body != nil { r.setValue("application/json", forHTTPHeaderField: "Content-Type"); r.httpBody = body }
+        if body != nil { r.setValue(contentType, forHTTPHeaderField: "Content-Type"); r.httpBody = body }
         if authenticated {
             guard let key = keys.get(KeyAccount.apiKey) else { throw ChoirError.notSignedIn }
             r.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")

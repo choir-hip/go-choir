@@ -58,6 +58,8 @@ public struct RadioHeardRow: Codable, Sendable, Equatable {
     public var title = ""
     /// finished | skipped | cut | left | failed
     public var outcome = ""
+    /// A take's publisher handle ("voice-3fa2c1"), so the row can mute it; "" for every other entry.
+    public var publisher = ""
     public var builtOn: [RadioBuiltOn] = []
     public init() {}
 }
@@ -100,6 +102,10 @@ public struct RadioPageInfo: Codable, Sendable, Equatable {
     public var builtOn: [RadioBuiltOn] = []
     /// A Play button is offered only when pressing it does something: not while the desk is writing and the radio will start by itself.
     public var canPlay = true
+    /// A take on air: who made it, what they said (the on-device transcript, shown as text), and their record; "" for every other entry.
+    public var takePublisher = ""
+    public var takeTranscript = ""
+    public var takeRecord = ""
 
     // up next
     public var ahead: [RadioPageRow] = []
@@ -144,6 +150,8 @@ public struct RadioPageInput: Sendable {
     public var stale: Set<String> = []
     /// The current version of stories the phone holds, by route (from the front list): a cite of another version is noted on its row.
     public var versions: [String: Int] = [:]
+    /// The takes the phone holds, by id (for the transcript and record of a take on air).
+    public var takeLookup: @Sendable (String) -> Take? = { _ in nil }
     public var now = Date()
     public var timeZone = TimeZone.current
     public init(sheet: RunSheet) { self.sheet = sheet }
@@ -162,6 +170,7 @@ public enum RadioPage {
         case .transition: return "Transition"
         case .story: return "Story"
         case .clip, .episode: return "Podcast"
+        case .take: return "Take"
         case .page: return e.paperRoute != nil ? "Story" : "Page"
         case .document: return "Book"
         case .mail: return "Mail"
@@ -300,6 +309,10 @@ public enum RadioPage {
             o.published = i.published
             o.openAddress = openAddress(e)
             o.builtOn = builtOn(e, versions: i.versions)
+            if e.kind == .take {
+                o.takePublisher = e.source?.label ?? ""
+                if let id = e.takeID, let t = i.takeLookup(id) { o.takeTranscript = t.transcript; o.takeRecord = (t.record ?? TakeRecordSummary()).words }
+            }
             if !i.remoteAudio, i.sentences.indices.contains(i.sentenceIndex) {
                 o.sentence = i.sentences[i.sentenceIndex]; o.sentenceNumber = i.sentenceIndex + 1; o.sentenceCount = i.sentences.count
             }
@@ -342,7 +355,7 @@ public enum RadioPage {
         let sounded = tail.filter { $0.ended?.outcome != .failed }
         o.heard = sounded.reversed().prefix(heardShown).enumerated().map { k, e in
             var r = RadioHeardRow()
-            r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.displayTitle; r.outcome = outcomeWord(e); r.builtOn = builtOn(e, versions: i.versions)
+            r.n = k; r.id = e.id; r.kind = kindLabel(e); r.title = e.displayTitle; r.outcome = outcomeWord(e); r.publisher = e.kind == .take ? (e.source?.label ?? "") : ""; r.builtOn = builtOn(e, versions: i.versions)
             return r
         }
 

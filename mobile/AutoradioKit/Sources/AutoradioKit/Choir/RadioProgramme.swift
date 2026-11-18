@@ -67,7 +67,7 @@ public enum SegmentKinds {
     static let labels: [String: String] = [
         "story": "Story", "headlines": "Headlines", "update": "Update", "mail": "Mail", "podcast_note": "Podcast",
         "answer": "Answer", "result": "Result", "bridge": "Bridge", "ident": "Station break", "podcast_clip": "Podcast clip",
-        "opening": "Opening", "transition": "Transition",
+        "opening": "Opening", "transition": "Transition", "take": "Take",
     ]
     public static func isKnown(_ kind: String) -> Bool { labels[kind] != nil }
     public static func label(_ kind: String) -> String { labels[kind] ?? "" }
@@ -92,9 +92,12 @@ public struct IncomingSegment: Sendable, Equatable {
     public var clip: ProgrammeClipRef?
     /// A `transition`: the `segment_id`s of the two segments it joins.
     public var between: IncomingBetween?
+    /// A `take` segment's take id, and the forecast the line carried (a take line without one is dropped by the server).
+    public var takeID: String?
+    public var forecast: RunSheetForecast?
     public init(stretchID: String, segmentID: String, kind: String, title: String, text: String, cites: [ProgrammeCite], blockCount: Int?, clip: ProgrammeClipRef? = nil,
-                between: IncomingBetween? = nil) {
-        self.clip = clip; self.between = between
+                between: IncomingBetween? = nil, takeID: String? = nil, forecast: RunSheetForecast? = nil) {
+        self.clip = clip; self.between = between; self.takeID = takeID; self.forecast = forecast
         self.stretchID = stretchID; self.segmentID = segmentID; self.kind = kind; self.title = title; self.text = text
         self.cites = cites; self.blockCount = blockCount
     }
@@ -352,6 +355,16 @@ public struct StretchDecoder {
                 clip = ProgrammeClipRef(clipID: id, storyRef: c["story_ref"] as? String ?? "", seconds: (c["seconds"] as? NSNumber)?.doubleValue ?? 0)
             }
             if kind == "podcast_clip", clip == nil { droppedCount += 1; return [] }
+            // ASSUMED wire: `take` is the id, or an object with `take_id`; the forecast is `forecast{p_heard,caused_by,claim_id}` or the line's own flat fields.
+            var takeID: String?
+            if let t = o["take"] as? String { takeID = t } else if let t = o["take"] as? [String: Any] { takeID = t["take_id"] as? String }
+            if kind == "take", takeID.map({ Take.validID($0) }) != true { droppedCount += 1; return [] }
+            var forecast: RunSheetForecast?
+            let fo = (o["forecast"] as? [String: Any]) ?? o
+            if let p = (fo["p_heard"] as? NSNumber)?.doubleValue, p.isFinite, p >= 0, p <= 1 {
+                forecast = RunSheetForecast(pHeard: p, causedBy: (fo["caused_by"] as? String) ?? "", claimId: (fo["claim_id"] as? String) ?? "")
+            }
+            if kind == "take", forecast == nil { droppedCount += 1; return [] }
             let st = (o["stretch_id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? stretchID
             let id = (o["segment_id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "\(st)/\(n)"
             var cites: [ProgrammeCite] = []
@@ -366,7 +379,8 @@ public struct StretchDecoder {
                 between = IncomingBetween(after: a, before: z)
             }
             return [.segment(IncomingSegment(stretchID: st, segmentID: id, kind: kind, title: (o["title"] as? String) ?? "", text: text, cites: cites,
-                                             blockCount: Self.wholeNumber(o["block_count"]), clip: kind == "podcast_clip" ? clip : nil, between: between))]
+                                             blockCount: Self.wholeNumber(o["block_count"]), clip: kind == "podcast_clip" ? clip : nil, between: between,
+                                             takeID: kind == "take" ? takeID : nil, forecast: forecast))]
         case "stretch":
             if let id = o["stretch_id"] as? String, !id.isEmpty { stretchID = id }
             return []
@@ -453,7 +467,19 @@ public struct RouteStretchSource: StretchSource {
             }
             g.cancelAll()
         }
-        return StretchCandidates.body(items, texts: texts, clips: clips.candidateClips(forRoutes: items.map(\.route)))
+        let stories = StretchCandidates.body(items, texts: texts, clips: clips.candidateClips(forRoutes: items.map(\.route)))
+        // The takes: ONE list request (signed-in only; a failure or an empty list leaves the request as it was). Their audio address stays here.
+        let takes = await Self.takeCandidates(client: client)
+        return TakeCandidates.merged(stories: stories, takes: takes)
+    }
+
+    /// The takes the request may offer: the public list minus the listener's own and the muted publishers', at most 3.
+    static func takeCandidates(client: ChoirClient, own: TakeOwn = .shared, mutes: TakeMutes = .shared, store: TakeStore = .shared) async -> [Take] {
+        guard client.hasKey, let all = try? await TakesClient(client: client).list() else { return [] }
+        store.replace(all)
+        let picked = TakeCandidates.select(all, own: own, mutes: mutes)
+        print("AUTORADIO takes listed=\(all.count) offered=\(picked.count)")
+        return picked
     }
 
     public func events(cause: String, excludingRoutes: Set<String>, onlyRoutes: [String]?) async throws -> AsyncThrowingStream<StretchEvent, Error> {
