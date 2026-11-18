@@ -192,8 +192,9 @@ func (s *Store) ListCommitmentRecordsBySubjectRefOfComputer(ctx context.Context,
 
 // ListCommitmentRecordsByBodyOfComputer lists the owner's newest records of
 // one computer whose body holds every match (JSON path to exact value), the
-// computer filter and every match inside the query before its limit, so the
-// limit counts only matching rows. rows is every row the query returned (a
+// computer filter, every match, every absent path and the Since bound inside
+// the query before its limit, so the limit counts only matching rows and a
+// sparse match walks only the window. rows is every row the query returned (a
 // full page is rows >= limit); undecodable those that did not decode. Paths
 // are code constants of the caller, not input: they are checked all the same.
 func (s *Store) ListCommitmentRecordsByBodyOfComputer(ctx context.Context, ownerID, computerID string, q types.BodyListQuery, limit int) (records []types.CommitmentRecord, undecodable, rows int, err error) {
@@ -217,8 +218,17 @@ func (s *Store) ListCommitmentRecordsByBodyOfComputer(ctx context.Context, owner
 	for _, p := range paths {
 		ms = append(ms, objectgraph.JSONFieldMatch{JSONPath: p, Value: match[p]})
 	}
+	// An absent path is missing or empty.
+	absent := append([]string(nil), q.Absent...)
+	sort.Strings(absent)
+	for _, p := range absent {
+		if !bodyMatchPathRe.MatchString(p) {
+			return nil, 0, 0, fmt.Errorf("commitment record list by body: %q is not a body path", p)
+		}
+		ms = append(ms, objectgraph.JSONFieldMatch{JSONPath: p, MissingMatchesEmpty: true})
+	}
 	ms = append(ms, objectgraph.JSONFieldMatch{JSONPath: "$.computer_id", Value: computerID})
-	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, ms, limit)
+	objs, err := s.ogListByOwnerAndBodySince(ctx, ogKindCommitmentRecord, ownerID, ms, q.Since, limit)
 	if err != nil {
 		return nil, 0, 0, err
 	}

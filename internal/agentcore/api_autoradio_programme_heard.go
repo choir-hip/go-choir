@@ -264,6 +264,7 @@ func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.Co
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
+		defer c.recoverHeardRead("segments", &segErr)
 		// Content segments only (the forecast flag): openings and transitions
 		// are never heard-settled and would use up the page.
 		recs, segUndec, segRows, segErr = c.ledger.ListCommitmentRecordsByBodyOfComputer(ctx, c.ownerID, c.rt.cfg.ComputerID,
@@ -274,6 +275,7 @@ func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.Co
 	}()
 	go func() {
 		defer wg.Done()
+		defer c.recoverHeardRead("settlements", &heardErr)
 		heard, rd, heardErr = calibration.ListAutoradioHeard(ctx, c.ledger, c.ownerID, c.rt.cfg.ComputerID, since, heardSettlementsRead)
 	}()
 	wg.Wait()
@@ -297,6 +299,17 @@ func (c *programmeCall) readHeard(ctx context.Context) (segs map[string]types.Co
 		}
 	}
 	return segs, heard, nil
+}
+
+// recoverHeardRead turns a panic in a reading goroutine into the read's error
+// (history unavailable): a goroutine's panic is not the handler's to recover,
+// and would take the process down. The log line names the read and the
+// request, never the panic's words.
+func (c *programmeCall) recoverHeardRead(which string, errp *error) {
+	if r := recover(); r != nil {
+		log.Printf("autoradio heard: read panicked which=%s request=%s class=%T", which, c.req.RequestID, r)
+		*errp = fmt.Errorf("the %s read panicked", which)
+	}
 }
 
 // loadHeard derives the heard index from the listener's records and marks the
