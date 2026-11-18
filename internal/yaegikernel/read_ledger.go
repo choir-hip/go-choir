@@ -54,18 +54,19 @@ type readLedger struct {
 
 // beginRun resets the ledger when a cell of a new run binds. An empty run id
 // (a frame that names no run) keeps the ledger.
-func (l *readLedger) beginRun(runID string) {
+func (l *readLedger) beginRun(runID string) (changed bool) {
 	if runID == "" {
-		return
+		return false
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.runID == runID {
-		return
+		return false
 	}
 	l.runID = runID
 	l.reads, l.noted, l.packetSent, l.nudged, l.warnings = nil, 0, false, nil, nil
 	l.packedID, l.packedURL = nil, nil
+	return true
 }
 
 // recordRead notes one Read's outcome. A re-read of an unchanged page returns
@@ -96,6 +97,22 @@ func (s *ChoirScope) recordRead(url string, out JSON, err error) {
 		}
 	}
 	l.reads = append(l.reads, e)
+	if e.OK {
+		s.readStat.Add(1)
+	}
+}
+
+// pageRead says whether this run captured the page whose searchHitKey is key.
+func (s *ChoirScope) pageRead(key string) bool {
+	l := &s.ledger
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, e := range l.reads {
+		if e.OK && searchHitKey(e.URL) == key {
+			return true
+		}
+	}
+	return false
 }
 
 // Reads returns every Read this run made, failures included.

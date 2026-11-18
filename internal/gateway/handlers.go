@@ -1012,8 +1012,11 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("gateway: search request from autoputer %s (query=%q max_results=%d)",
-		computerID, req.Query, req.MaxResults)
+	// run/desk/conv come from the guest's headers (search.Attribution); "-"
+	// is a caller that sent none.
+	log.Printf("gateway: search request from autoputer %s (query=%q max_results=%d run=%s desk=%s conv=%s)",
+		computerID, req.Query, req.MaxResults,
+		searchAttributionValue(r, "X-Choir-Run"), searchAttributionValue(r, "X-Choir-Desk"), searchAttributionValue(r, "X-Choir-Conversation"))
 
 	// Step 5: Start every eligible provider and stream each one's answer as
 	// it lands. The stream is bounded by the provider timeout plus a margin.
@@ -1093,9 +1096,12 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	// routing/escalated/paid_calls/today measure spend
 	// (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md §4.1).
 	skipped := append(append([]searchplane.Cooling{}, stream.Cooling...), route.Skipped...)
-	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending) skipped=[%s] served=%s results=%d unique=%d seen=%d %s",
+	// urls= is the hash of each of the first ten result URLs (the hash
+	// search_seen.go keys on), so a log reader can tell which searches
+	// returned the same pages without the log holding a URL.
+	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending) skipped=[%s] served=%s results=%d unique=%d seen=%d %s urls=[%s]",
 		computerID, answered, len(started), len(skipped), len(done.Pending), searchSkippedSummary(skipped),
-		searchServed(stream), len(resultURLs), unique, seen, searchRouteSummary(stream))
+		searchServed(stream), len(resultURLs), unique, seen, searchRouteSummary(stream), searchURLHashes(resultURLs, 10))
 }
 
 // HandleSearchHealth handles GET /provider/v1/search/health. Like the
