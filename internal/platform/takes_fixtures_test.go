@@ -154,6 +154,21 @@ func TestPhoneFixturesAgreeWithWhatTheServerWrites(t *testing.T) {
 		t.Errorf("refused-daily: status %d %q, fixture %q", w.Code, got.Error, fx.Error)
 	}
 
+	// The boundary list: takes at the header's edges, every one inside the
+	// bounds publish and the programme route share.
+	var edge TakesResponse
+	if err := json.Unmarshal(readTakeFixture(t, "list-boundary.json"), &edge); err != nil || len(edge.Takes) != 3 {
+		t.Fatalf("list-boundary.json: %d takes, %v", len(edge.Takes), err)
+	}
+	for _, tk := range edge.Takes {
+		if tk.DurationSeconds < types.TakeHeaderMinSeconds || tk.DurationSeconds > types.TakeHeaderMaxSeconds || !types.TakeIDRe.MatchString(tk.TakeID) {
+			t.Errorf("list-boundary.json: %s at %v s is outside the header bounds", tk.TakeID, tk.DurationSeconds)
+		}
+	}
+	if gaps := fixtureGaps(decodeAny(t, readTakeFixture(t, "list-boundary.json")), decodeAny(t, list), ""); len(gaps) != 0 {
+		t.Errorf("list-boundary.json differs from the server's list: %q", gaps)
+	}
+
 	// The request examples are in routes.json; internal/proxy/takes_test.go
 	// sends each one through the registered route.
 }

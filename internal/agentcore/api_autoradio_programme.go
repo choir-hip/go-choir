@@ -13,6 +13,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -57,6 +58,8 @@ var (
 	programmeCallsTotal     atomic.Int64
 	programmeSegmentsTotal  atomic.Int64
 	programmeDroppedTotal   atomic.Int64
+	// programmeDroppedTakeCandidates counts take candidates dropped at validation.
+	programmeDroppedTakeCandidates atomic.Int64
 )
 
 // Deadlines and a bound on output. These are not limits on our model calls
@@ -158,8 +161,6 @@ type programmeClip struct {
 
 const (
 	programmeMaxTakes        = 3
-	programmeTakeMinSeconds  = 3
-	programmeTakeMaxSeconds  = 60
 	programmeTakeLeadMax     = 400
 	programmeTakeTextMax     = 2000
 	programmeMaxClipsPerCand = 3
@@ -240,9 +241,24 @@ func parseProgrammeRequest(body []byte) (programmeRequest, error) {
 	seen := map[string]bool{}
 	clipSeen := map[string]bool{}
 	takes := 0
+	kept := req.Candidates[:0]
+	droppedTakes := 0
+	var lastDropErr error
 	for i := range req.Candidates {
 		c := &req.Candidates[i]
 		if err := c.check(i); err != nil {
+			if c.Kind == "take" {
+				// A take is a stranger's published words, copied by the phone from
+				// the list. One that does not validate is dropped and counted (one
+				// log line per request); it never fails another listener's
+				// programme request. No client on main sends takes yet; the phone
+				// lane (origin/lane/autoradio-integ16, RadioProgramme.swift) is what
+				// was read, and it does not depend on a 400 for a malformed take.
+				droppedTakes++
+				lastDropErr = err
+				programmeDroppedTakeCandidates.Add(1)
+				continue
+			}
 			return req, err
 		}
 		if c.isTake() {
@@ -254,6 +270,8 @@ func parseProgrammeRequest(body []byte) (programmeRequest, error) {
 			return req, fmt.Errorf("candidates[%d] repeats the ref %s", i, c.ref)
 		}
 		seen[c.ref] = true
+		kept = append(kept, *c)
+		c = &kept[len(kept)-1]
 		for j := range c.Clips {
 			if err := c.Clips[j].check(i, j); err != nil {
 				return req, err
@@ -264,6 +282,11 @@ func parseProgrammeRequest(body []byte) (programmeRequest, error) {
 			clipSeen[c.Clips[j].ClipID] = true
 		}
 	}
+	if droppedTakes > 0 {
+		log.Printf("autoradio programme: request %s: %d take candidate(s) dropped, the last: %v", req.RequestID, droppedTakes, lastDropErr)
+	}
+	// Clip: the filtered slice shares the decoded array; nothing may grow into it.
+	req.Candidates = slices.Clip(kept)
 	return req, nil
 }
 
@@ -312,8 +335,10 @@ func (c *programmeCandidate) checkTake(i int) error {
 	if c.Transcript = strings.TrimSpace(c.Transcript); c.Transcript == "" || len(c.Transcript) > programmeTakeTextMax {
 		return fmt.Errorf("%s.transcript must be 1 to %d bytes", at, programmeTakeTextMax)
 	}
-	if !(c.DurationSeconds >= programmeTakeMinSeconds && c.DurationSeconds <= programmeTakeMaxSeconds) {
-		return fmt.Errorf("%s.duration_seconds must be %d to %d", at, programmeTakeMinSeconds, programmeTakeMaxSeconds)
+	// A take is stored with its header's length, so the bounds are the
+	// header's (one pair shared with publish), not the claim's 3 to 60.
+	if !(c.DurationSeconds >= types.TakeHeaderMinSeconds && c.DurationSeconds <= types.TakeHeaderMaxSeconds) {
+		return fmt.Errorf("%s.duration_seconds must be %.1f to %.1f", at, types.TakeHeaderMinSeconds, types.TakeHeaderMaxSeconds)
 	}
 	if r := c.RespondsTo; r != nil {
 		r.Route, r.Title = strings.TrimSpace(r.Route), strings.TrimSpace(r.Title)

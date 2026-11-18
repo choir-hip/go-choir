@@ -520,6 +520,16 @@ func TestRecordRowsAreOnlyTheCallersTakesWhenHandlesCollide(t *testing.T) {
 	if rec, _ := svc.TakeRecord(ctx, in1.Publisher, types.TakePublisherKey("nobody")); len(rec.Rows) != 0 {
 		t.Errorf("a stranger reads rows %+v", rec.Rows)
 	}
+	// Counts are keyed by publisher key, never pooled by handle: a second
+	// listener's outcome on the first take only.
+	if _, err := outcome(t, svc, t1.TakeID, "l2", "computer-"+strings.Repeat("b", 32), TakeSkipped); err != nil {
+		t.Fatal(err)
+	}
+	r1, _ := svc.TakeRecord(ctx, in1.Publisher, types.TakePublisherKey("c1"))
+	r2, _ := svc.TakeRecord(ctx, in1.Publisher, types.TakePublisherKey("c2"))
+	if r1.Summary.Offered != 2 || r1.Summary.Listeners != 2 || r2.Summary.Offered != 1 || r2.Summary.Listeners != 1 {
+		t.Errorf("counts pooled: c1 %+v c2 %+v", r1.Summary, r2.Summary)
+	}
 }
 
 func TestDeleteAndYankBlankTheTranscript(t *testing.T) {

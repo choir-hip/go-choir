@@ -25,7 +25,7 @@ session, or an API key. An API key that is not bound to one computer (an
 owner-wide key, which is what a device login gives the phone) must name the
 computer on every request, in the `X-Choir-Computer` header, as on every other
 owner-wide route: an unnamed request is `400` ("owner-wide api key requires a
-named computer"), a computer the account does not own is `403`, and a named,
+named computer (computer_id)"), a computer the account does not own is `403`, and a named,
 owned computer is served. A key bound to a computer needs no header. This is
 `takesCaller` in `internal/proxy/takes.go`; `internal/proxy/takes_test.go`
 pins all three cases with an owner-wide key on every route. The route table
@@ -61,9 +61,15 @@ be 2.5 to 62.0 s (`TakeHeaderMinSeconds`, `TakeHeaderMaxSeconds`) and must be
 within 2 s of the claim. The header grace is for container padding and stop
 latency: Apple's AAC encoder adds about 0.11 s of priming, so 60.000 s of audio
 has an `mvhd` of 60.117 s, and the phone stops on a timer; an honest
-full-length take is never refused for that. At most 512 KB; `ftyp` must be present; transcript 1 to 2,000
+full-length take is never refused for that. The take is stored with its
+header's length (60.1 for an honest 60 s take), so the programme route's take
+candidate check uses the same pair, `types.TakeHeaderMinSeconds` and
+`types.TakeHeaderMaxSeconds`, and `mobile/fixtures/takes/list-boundary.json`
+(takes at 60.1, 2.5 and 62.0 s) is decoded by a platform test and offered
+whole by an agentcore test. At most 512 KB; `ftyp` must be present; transcript 1 to 2,000
 bytes; 10 takes per publisher per 24 hours (deleted ones count; drill takes do
-not); at most 3 takes per programme request, 40 candidates in all; lead-in at
+not); at most 3 takes per programme request (a fourth is a 400, the phone
+selects them), 40 candidates in all; lead-in at
 most 400 bytes.
 
 ## The publisher's record
@@ -84,17 +90,30 @@ A drill take is listed only to drill computers.
 The take row stays, with its id, handle, times, size, hash and state
 (`deleted` or `yanked`); its transcript and the story it answered are blanked.
 The audio object is deleted, but a body of 1 KB or more is externalised, and
-those bytes stay on disk until the artifact GC pass removes them. The outcome
+those bytes stay on disk until the artifact GC pass removes them. That holds
+for the take row too: the pre-blank body, transcript included (a transcript
+over about 1 KB), survives in the artifact store until the same GC pass. The outcome
 rows stay as counts: a yanked take keeps its prior counts in the publisher's
 record (a decision for the owner, not made here).
 
 ## Reads and scans
 
 The list reads live takes by their `state` metadata (newest first), so deleted
-and yanked rows never take a place in the window; the scan is bounded at 2,000
-rows and logs when it reaches the bound. A publisher's rows in the record are
-the rows of takes that publisher's key published: handles are 24 bits and two
-publishers can share one, and a collision never widens the read.
+and yanked rows never take a place in the window. It asks the store for twice
+the list's limit first and widens only when drill rows or the 7-day window leave
+fewer, up to 2,000 rows (the store orders by `updated_at`, which for a live take
+is its publication; it has no offset, so there is no deeper paging). Reaching
+the bound is logged at most once a minute. The 5,000-row outcome scan of a
+record is logged the same way when it is reached, because the record then
+undercounts.
+
+A publisher's record is keyed by the publisher key; the handle (`voice-xxxxxx`,
+24 bits) is display only, because two publishers can share one. The outcome rows
+carry the publisher key, so counts, the drill line and the per-listener rows of
+one publisher are never pooled with another's. A record asked for by handle
+alone (the route takes a handle) is the caller's own when the caller published
+under it, and otherwise that of the key that most recently published under the
+handle. A collision never widens the read.
 
 ## Refusals that are not switches
 
@@ -138,6 +157,40 @@ written and posts the result to the outcome route under the computer's own key.
 - Operator yank is a new route beside the podcast operator routes, not part of
   the package yank path.
 - Record queries scan the kind by metadata; fine at invited-tester scale.
+
+## A malformed take candidate
+
+A take candidate in a programme request that fails validation (a bad id or
+handle, a length outside the header's 2.5 to 62.0 s, a multi-line title, a
+transcript or record out of bounds, a bad `responds_to`, take fields beside a
+route) is dropped, logged and counted; it never fails the request, so a
+stranger's published take cannot make another listener's programme call fail.
+No client on main sends takes yet; the phone lane
+(`origin/lane/autoradio-integ16`,
+`mobile/AutoradioKit/Sources/AutoradioKit/Choir/RadioProgramme.swift`) is what
+was read, and it does not depend on a 400 for a malformed take. One log line
+per request names the count dropped. What stays a 400
+is structure the phone itself controls: a fourth take, an unknown kind, take
+fields on a story, an unknown key.
+
+## Known fixture differences
+
+The phone's fixtures in `mobile/fixtures/takes/` are shape-only and were not
+edited by this lane. For the next phone lane to correct:
+
+- `publish.json` carries `"publisher_key"`, which the server never answers.
+- `refused-daily.json` says `invalid take: 10 takes in the last 24 hours, the
+  limit is 10`; the server says `daily take limit reached: 10 takes in the last
+  24 hours, the limit is 10` (429 both).
+- `list.json` holds rows the public list never answers: a `deleted` take and a
+  row with no `take_id`. (The public list does answer the listener's own live
+  take, as it does for every account; the phone removes its own.) `record` there lacks the
+  `publisher` and `summary` keys the server always writes. `mine.json` lacks
+  `audio_url` and `responds_to`. `record.json` lacks `summary` and `drill`.
+- The phone's header comment says deleting an already-removed take is 409; the
+  server answers 200 (idempotent).
+- `routes.json` declares publish as `201`, which is what corpusd answers; the
+  proxy relays it.
 
 ## Residuals (recorded, no code)
 
