@@ -184,16 +184,31 @@ final class OnboardingController: @unchecked Sendable {
                 self.save(); return
             }
             self.set { self.progress.micRefused = false }
-            // One live check: start the engine and wait for words (the engine's transcript is the evidence). UNPROVEN on a device.
+            // One live check: start the engine, listen on this screen only (hands-free is off by default and the engine drops every frame
+            // while it is off), feed the meter from the real input level, and pass on the first transcript or on a sustained level
+            // (`MicCheck`). When it ends, hands-free goes back to the stored state. UNPROVEN on a device.
             Task { [weak self] in
                 guard let self else { return }
-                await self.module.runtime.start(virtual: self.module.virtualEngine)
-                for _ in 0..<40 {
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    let t = self.module.runtime.snapshot().transcript
-                    if !t.isEmpty { self.set { self.heard = t; self.mic = "heard" }; return }
+                let rt = self.module.runtime!
+                let meter = MicCheckMeter()
+                let frames = rt.bus.mic()
+                let feeder = Task { for await f in frames { meter.frame(db: f.rmsDb, seconds: f.duration) } }
+                await rt.start(virtual: self.module.virtualEngine)
+                if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }
+                defer { feeder.cancel(); rt.restoreHandsFree() }
+                while meter.verdict == .listening {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    meter.tick(0.1)
+                    meter.transcript(rt.snapshot().transcript)
+                    let l = meter.level
+                    self.set { self.level = l }
                 }
-                self.set { self.mic = "silent"; self.message = "I could not hear anything. The paper keeps working, and you can tap your topics instead." }
+                if meter.verdict == .heard {
+                    let t = rt.snapshot().transcript
+                    self.set { self.heard = t.isEmpty ? "Your microphone is working." : t; self.mic = "heard" }
+                } else {
+                    self.set { self.mic = "silent"; self.message = "I could not hear anything. The paper keeps working, and you can tap your topics instead." }
+                }
             }
         }
     }

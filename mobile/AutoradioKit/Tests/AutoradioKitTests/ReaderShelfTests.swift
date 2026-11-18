@@ -176,6 +176,31 @@ final class ShelfStoreTests: XCTestCase {
         XCTAssertThrowsError(try lib.importFile(at: write(Data("hello".utf8), "a.epub", in: dir)))
         XCTAssertEqual(lib.list().count, 1)
     }
+    func testShelfFolderIsExcludedFromBackupAndFilesAreProtected() throws {
+        let (lib, dir) = make(); defer { try? FileManager.default.removeItem(at: dir) }
+        let root = dir.appendingPathComponent("lib")
+        XCTAssertEqual(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+        let d = try lib.importFile(at: write(makePDF(["Moon over water."]), "n.pdf", in: dir))
+        let original = try XCTUnwrap(lib.fileURL(d.id))
+        // The flag is on the folder, so the copy, the text and the index inside it are left out of device backups with it.
+        XCTAssertTrue(original.path.hasPrefix(root.path))
+        XCTAssertEqual(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+        #if os(iOS)
+        for u in [root, original.deletingLastPathComponent(), original, original.deletingLastPathComponent().appendingPathComponent("text.json")] {
+            let a = try FileManager.default.attributesOfItem(atPath: u.path)
+            XCTAssertEqual(a[.protectionKey] as? FileProtectionType, .completeUntilFirstUserAuthentication, u.lastPathComponent)
+        }
+        #endif
+        XCTAssertTrue(ContentStore.writeOptions.contains(.completeFileProtectionUntilFirstUserAuthentication))
+    }
+    func testOpenDocumentsInMemoryAreBounded() throws {
+        let (lib, dir) = make(); defer { try? FileManager.default.removeItem(at: dir) }
+        var ids: [String] = []
+        for i in 0..<(ReaderShelf.cacheLimit + 3) { ids.append(try lib.importFile(at: write(makePDF(["Page of book \(i)."]), "b\(i).pdf", in: dir)).id) }
+        XCTAssertLessThanOrEqual(lib.cachedCount, ReaderShelf.cacheLimit)
+        for id in ids { XCTAssertNotNil(lib.text(id), "an evicted document is read from disk again") }
+        XCTAssertLessThanOrEqual(lib.cachedCount, ReaderShelf.cacheLimit)
+    }
     func testProtectedEpubRefusedAndNothingStored() throws {
         let (lib, dir) = make(); defer { try? FileManager.default.removeItem(at: dir) }
         let drm = #"<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><EncryptedData><EncryptionMethod Algorithm="urn:x:aes"/></EncryptedData></encryption>"#

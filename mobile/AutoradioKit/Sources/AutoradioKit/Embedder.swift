@@ -134,7 +134,7 @@ public final class VectorStore: @unchecked Sendable {
 }
 
 /// The background embedding job: brings a store in line with the documents the app holds. It embeds only what is new or changed (by
-/// content key), in small slices, saves after each slice so a kill loses at most one slice, and waits while the radio needs the
+/// content key), in small slices, saves every `savesEverySlices` slices (about a minute) and at the end, and waits while the radio needs the
 /// processor (`busy`, true while a voice line is on or the listener is speaking): speech always wins. It never starts by itself after a
 /// crash; the caller starts it when stores change.
 public actor EmbeddingJob {
@@ -143,6 +143,12 @@ public actor EmbeddingJob {
     public struct Budget: Sendable {
         /// Passages embedded between two looks at `busy` and two saves.
         public var passagesPerSlice = 4
+        /// Slices between two saves. A save rewrites the whole vector file, so saving after every slice made the cost grow with the store.
+        /// A slice is about a second, so a kill loses at most about a minute of work. The job also saves when it ends, is cancelled or
+        /// fails, and the service saves when the app goes to the background.
+        /// REMAINING COST (not fixed here): every save still rewrites the whole file, and the store holds all vectors in memory
+        /// (dimension x 2 bytes a row, plus ids). Memory mapping and eviction are a later change.
+        public var savesEverySlices = 40
         /// A rest between slices, so the processor is not held for the whole backlog.
         public var restBetweenSlices: Duration = .milliseconds(150)
         /// How long to wait before looking at `busy` again.
@@ -167,7 +173,7 @@ public actor EmbeddingJob {
         if removeOthers { let keep = Set(items.map(\.id)); progress.removed = have.keys.filter { !keep.contains($0) }.count; store.removeAll(except: keep) }
         let todo = items.filter { have[$0.id] != $0.key }
         progress.skipped = items.count - todo.count
-        var i = 0
+        var i = 0, slicesSinceSave = 0
         while i < todo.count, !Task.isCancelled {
             if busy() { progress.waitedForSpeech += 1; try? await Task.sleep(for: budget.busyPoll); continue }
             let slice = Array(todo[i..<min(todo.count, i + budget.passagesPerSlice)])
@@ -175,8 +181,9 @@ public actor EmbeddingJob {
                 let vs = try await embedder.embed(slice.map { EmbedPrompt.document(title: $0.title, text: String($0.text.prefix(budget.maxChars))) })
                 for (it, v) in zip(slice, vs) { store.upsert(id: it.id, key: it.key, vector: v); progress.embedded += 1 }
             } catch { progress.failed = todo.count - i; break }     // the model is not there or failed: stop, the caller sees `failed`
-            try? store.save()
             i += slice.count
+            slicesSinceSave += 1
+            if slicesSinceSave >= budget.savesEverySlices { try? store.save(); slicesSinceSave = 0 }
             onSlice?(progress)
             try? await Task.sleep(for: budget.restBetweenSlices)
         }

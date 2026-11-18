@@ -70,9 +70,22 @@ final class EmbedderTests: XCTestCase {
         let first = await t.value
         XCTAssertFalse(first.finished); XCTAssertGreaterThan(first.embedded, 0); XCTAssertLessThan(first.embedded, 10)
         let reopened = VectorStore(directory: d, engine: e.engine, dimension: 64)
-        XCTAssertEqual(reopened.count, first.embedded)                 // saved after each slice
+        XCTAssertEqual(reopened.count, first.embedded)                 // saved when the job ends (here: cancelled)
         let second = await EmbeddingJob(store: reopened, embedder: e, busy: { false }).run(items)
         XCTAssertEqual(second.embedded, 10 - first.embedded); XCTAssertEqual(second.skipped, first.embedded); XCTAssertTrue(second.finished)
+    }
+
+    func testSavesEveryNSlicesAndAtTheEnd() async throws {
+        let d = dir(), e = HashEmbedder()
+        let s = VectorStore(directory: d, engine: e.engine, dimension: 64)
+        var b = EmbeddingJob.Budget(); b.passagesPerSlice = 1; b.restBetweenSlices = .milliseconds(1); b.savesEverySlices = 4
+        let onDisk = Locked<[Int]>([])
+        let p = await EmbeddingJob(store: s, embedder: e, busy: { false }, budget: b).run(items) { _ in
+            let n = VectorStore(directory: d, engine: e.engine, dimension: 64).count; onDisk.write { $0.append(n) }
+        }
+        XCTAssertEqual(onDisk.read { $0 }, [0, 0, 0, 4, 4, 4, 4, 8, 8, 8], "the file is rewritten every 4 slices, not after each one")
+        XCTAssertTrue(p.finished)
+        XCTAssertEqual(VectorStore(directory: d, engine: e.engine, dimension: 64).count, 10, "and once more at the end")
     }
 
     func testSpeechWins() async throws {

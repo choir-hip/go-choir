@@ -210,25 +210,39 @@ private final class RSSDelegate: NSObject, XMLParserDelegate {
         var media: [(url: String, type: String)] = []
     }
     var path: [String] = []
-    var text = ""
+    /// One text buffer per open element: a parent keeps its own words and takes each child's text as a paragraph (never markup), so
+    /// `<description><p>Words</p></description>` reads "Words" and not the empty text of the last child.
+    var buffers: [String] = []
+    static let inline: Set<String> = ["a", "b", "i", "u", "em", "strong", "span", "code", "small", "sup", "sub", "abbr", "cite", "mark", "s"]
     var item: Item?
     var title = "", author = "", artwork = "", summary = "", channelDescription = ""
     var episodes: [PodcastEpisode] = []
     var aborted = false
 
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes a: [String: String]) {
-        path.append(name); text = ""
+        path.append(name); buffers.append("")
         if name == "item" { item = Item() }
         if name == "enclosure", item != nil, let u = a["url"] { item?.enclosures.append((u, (a["type"] ?? "").lowercased())) }
         if name == "media:content", item != nil, let u = a["url"] { item?.media.append((u, (a["type"] ?? a["medium"] ?? "").lowercased())) }
         if name == "itunes:image", let h = a["href"] { if item != nil { item?.image = h } else if artwork.isEmpty { artwork = h } }
     }
-    func parser(_ parser: XMLParser, foundCharacters s: String) { text += s }
-    func parser(_ parser: XMLParser, foundCDATA data: Data) { text += String(decoding: data, as: UTF8.self) }
+    func parser(_ parser: XMLParser, foundCharacters s: String) { if !buffers.isEmpty { buffers[buffers.count - 1] += s } }
+    func parser(_ parser: XMLParser, foundCDATA data: Data) { if !buffers.isEmpty { buffers[buffers.count - 1] += String(decoding: data, as: UTF8.self) } }
 
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
-        defer { path.removeLast(); text = "" }
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = buffers.popLast() ?? ""
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer {
+            path.removeLast()
+            if !buffers.isEmpty, name != "item" {
+                if name == "br" { buffers[buffers.count - 1] += "\n" }
+                else if Self.inline.contains(name.lowercased()) { buffers[buffers.count - 1] += raw }
+                else if !t.isEmpty {
+                    let own = buffers[buffers.count - 1]
+                    buffers[buffers.count - 1] += (own.isEmpty || own.hasSuffix("\n") ? "" : "\n\n") + t + "\n\n"
+                }
+            }
+        }
         let parent = path.count >= 2 ? path[path.count - 2] : ""
         if name == "item", let it = item {
             item = nil

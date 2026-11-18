@@ -269,8 +269,25 @@ public final class ReaderShelf: @unchecked Sendable {
     public init(root: URL) {
         self.root = root
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        Self.protect(root)
+        var v = URLResourceValues(); v.isExcludedFromBackup = true       // the folder's flag covers everything inside it
+        var r = root; try? r.setResourceValues(v)
         loadIndex()
     }
+
+    /// The content store's norm: the protection class on everything the reader keeps (imported books and files are the listener's own).
+    static func protect(_ url: URL) {
+        try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: url.path)
+    }
+
+    /// Documents whose text and index stay in memory (most recently used); the rest are read from disk when opened.
+    static let cacheLimit = 3
+    private var recent: [String] = []
+    private func remember(_ id: String, _ v: (DocText, DocIndex)) {         // caller holds the lock
+        cache[id] = v; recent.removeAll { $0 == id }; recent.append(id)
+        while recent.count > Self.cacheLimit { cache[recent.removeFirst()] = nil }
+    }
+    var cachedCount: Int { lock.lock(); defer { lock.unlock() }; return cache.count }
 
     private var indexFile: URL { root.appendingPathComponent("index.json") }
     private func dir(_ id: String) -> URL { root.appendingPathComponent(id, isDirectory: true) }
@@ -283,7 +300,7 @@ public final class ReaderShelf: @unchecked Sendable {
         docs = l.filter { FileManager.default.fileExists(atPath: dir($0.id).appendingPathComponent("text.json").path) }
     }
     private func saveIndexLocked() {
-        if let d = try? enc().encode(docs) { try? d.write(to: indexFile, options: .atomic) }
+        if let d = try? enc().encode(docs) { try? d.write(to: indexFile, options: ContentStore.writeOptions) }
     }
 
     // MARK: reading
@@ -298,12 +315,12 @@ public final class ReaderShelf: @unchecked Sendable {
 
     private func loaded(_ id: String) -> (DocText, DocIndex)? {
         lock.lock()
-        if let c = cache[id] { lock.unlock(); return c }
+        if let c = cache[id] { recent.removeAll { $0 == id }; recent.append(id); lock.unlock(); return c }
         let known = docs.contains { $0.id == id }
         lock.unlock()
         guard known, let td = try? Data(contentsOf: dir(id).appendingPathComponent("text.json")), let t = try? JSONDecoder().decode(DocText.self, from: td) else { return nil }
         let idx = (try? Data(contentsOf: dir(id).appendingPathComponent("index.json"))).flatMap { try? JSONDecoder().decode(DocIndex.self, from: $0) } ?? DocIndex.build(t.blocks)
-        lock.lock(); cache[id] = (t, idx); lock.unlock()
+        lock.lock(); remember(id, (t, idx)); lock.unlock()
         return (t, idx)
     }
     public func text(_ id: String) -> DocText? { loaded(id)?.0 }
@@ -374,13 +391,16 @@ public final class ReaderShelf: @unchecked Sendable {
         let folder = dir(id)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: url, to: folder.appendingPathComponent("original." + kind))
-            try JSONEncoder().encode(text).write(to: folder.appendingPathComponent("text.json"), options: .atomic)
+            Self.protect(folder)
+            let original = folder.appendingPathComponent("original." + kind)
+            try FileManager.default.copyItem(at: url, to: original)
+            Self.protect(original)
+            try JSONEncoder().encode(text).write(to: folder.appendingPathComponent("text.json"), options: ContentStore.writeOptions)
             let index = DocIndex.build(text.blocks)
-            try JSONEncoder().encode(index).write(to: folder.appendingPathComponent("index.json"), options: .atomic)
+            try JSONEncoder().encode(index).write(to: folder.appendingPathComponent("index.json"), options: ContentStore.writeOptions)
             let d = ShelfDoc(id: id, title: title.trimmingCharacters(in: .whitespacesAndNewlines), author: author.trimmingCharacters(in: .whitespacesAndNewlines),
                                kind: kind, added: Date(), position: 0, length: text.blocks.count, sections: text.sections.count, fileName: fileName)
-            lock.lock(); docs.append(d); cache[id] = (text, index); saveIndexLocked(); lock.unlock()
+            lock.lock(); docs.append(d); remember(id, (text, index)); saveIndexLocked(); lock.unlock()
             onChange?()
             return d
         } catch {
@@ -409,7 +429,7 @@ public final class ReaderShelf: @unchecked Sendable {
 
     public func remove(id: String) {
         lock.lock()
-        docs.removeAll { $0.id == id }; cache[id] = nil; saveIndexLocked()
+        docs.removeAll { $0.id == id }; cache[id] = nil; recent.removeAll { $0 == id }; saveIndexLocked()
         lock.unlock()
         try? FileManager.default.removeItem(at: dir(id))
         onChange?()
