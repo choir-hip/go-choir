@@ -455,6 +455,7 @@ type programmeCall struct {
 	heardFull []string // the heard reads that reached their limit, for the log
 	// heardUnparsable counts the heard settlements whose time did not parse.
 	heardUnparsable int
+	heardStats      heardReadStats
 	followups       int
 
 	// The notebook (L5): Texture's service, the notebook lines the model wrote

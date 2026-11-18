@@ -1433,10 +1433,15 @@ func (h *APIHandler) learningNotebook(ctx context.Context, ownerID string, led a
 	}
 	var inputs []map[string]any
 	for _, r := range list(kindStretchStart, 40) {
-		if r.SubjectRefs["notebook_revision_id"] != "" {
-			inputs = append(inputs, map[string]any{"stretch_id": r.SubjectRefs["stretch_id"], "notebook_revision_id": r.SubjectRefs["notebook_revision_id"],
+		heard := heardReceiptView(r.SubjectRefs)
+		if r.SubjectRefs["notebook_revision_id"] != "" || heard != nil {
+			row := map[string]any{"stretch_id": r.SubjectRefs["stretch_id"], "notebook_revision_id": r.SubjectRefs["notebook_revision_id"],
 				"notebook_sha256": r.SubjectRefs["notebook_sha256"], "notebook_bytes": r.SubjectRefs["notebook_bytes"], "marked_cases": r.SubjectRefs["marked_cases"],
-				"notebook_lines_shown": r.SubjectRefs["notebook_lines_shown"], "notebook_lines_total": r.SubjectRefs["notebook_lines_total"]})
+				"notebook_lines_shown": r.SubjectRefs["notebook_lines_shown"], "notebook_lines_total": r.SubjectRefs["notebook_lines_total"]}
+			if heard != nil {
+				row["heard"] = heard
+			}
+			inputs = append(inputs, row)
 		}
 	}
 	out["struck"], out["patches"], out["steering"], out["inputs"], out["retired"] = nonNilRows(struck), nonNilRows(patches), nonNilRows(notes), nonNilRows(inputs), nonNilRows(retired)

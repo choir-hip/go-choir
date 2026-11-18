@@ -23,11 +23,25 @@ revision at least as new as the tap's; the page is within budget (at most 12
 learned, 3 trying, 1,000 written words); and every lesson line cites ledger
 rows that exist. Whether the model proposed a lesson in that one call is its
 own choice: it is reported, and --require-lesson makes it a failure.
+Then the heard phase (docs/reference/AUTORADIO-PROGRAMME.md, "What the
+listener heard, in the input"): this run's story routes carry a per-run suffix,
+so what earlier runs finished does not count. It takes one entry the run
+FINISHED and one it SKIPPED, opens a stretch that offers both at the same
+version plus a never-seen candidate, and reads that stretch's input receipt
+(notebook.inputs[].heard: counts and ids, never words): asserts candidates 3,
+same 1 (the finished one), not_in_window 2 (the skipped one and the new one),
+unavailable false. A second stretch offers the finished story at a HIGHER
+version: asserts earlier 1. What the DJ then did is only reported (a new
+forecast row citing the finished story at the same version should be
+telling:followup or absent; at the higher version it should be telling:followup);
+--require-followup makes a departure a failure. The receipts are printed.
 Exit 0 when all hold, 1 otherwise, 2 on bad arguments.
 
 Rerun ceiling: each run leaves about ten entries on the sheet's 100 ahead
-places and the desk removes only entries older than 12 hours, so about eight
-runs in 12 hours fill them; the next run then fails loudly (unplaced).
+places, and the heard phase adds two more stretches of at most six entries
+each (up to twelve more), so about twenty to thirty in all. The desk removes
+only entries older than 12 hours, so about three or four runs in 12 hours
+fill them; the next run then fails loudly (unplaced).
 
 The key goes only in the Authorization header and is never printed. An
 owner-wide key names no computer: pass --computer (X-Choir-Computer).
@@ -68,6 +82,9 @@ def read_key(path):
 class Api:
     def __init__(self, args, key):
         self.args, self.key = args, key
+        # A per-run suffix on every story route: the heard index matches by
+        # route, so what an earlier run finished must not count in this one.
+        self.salt = uuid.uuid4().hex[:6]
 
     def call(self, method, path, body=None, stream=False):
         a = self.args
@@ -86,11 +103,15 @@ class Api:
         finally:
             conn.close()
 
-    def programme(self, cause):
+    def route(self, r):
+        return "%s-%s" % (r, self.salt)
+
+    def programme(self, cause, candidates=None):
         now = datetime.now(timezone.utc).astimezone()
         body = {"request_id": "learn-%s-%s" % (cause, uuid.uuid4().hex[:10]), "cause": cause,
                 "local_time": now.isoformat(timespec="seconds"), "tz": "Europe/Paris",
-                "candidates": [{"route": r, "version": 1, "title": t, "dek": d, "text": d} for r, t, d in STORIES]}
+                "candidates": candidates if candidates is not None else
+                [{"route": self.route(r), "version": 1, "title": t, "dek": d, "text": d} for r, t, d in STORIES]}
         if cause == "extend":
             body["ahead_titles"] = []
         raw = self.call("POST", "/api/autoradio/programme", body, stream=True)
@@ -158,6 +179,7 @@ def main():
     ap.add_argument("--insecure-http", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--require-lesson", action="store_true", help="fail unless the model proposed a lesson that was written")
+    ap.add_argument("--require-followup", action="store_true", help="fail unless the DJ's telling of a heard story was a follow-up (or it left it out)")
     args = ap.parse_args()
     key = read_key(args.api_key_file)
     if args.dry_run:
@@ -239,6 +261,7 @@ def main():
     ok = ok and not twice
     print("scorecard: %s" % json.dumps({k: after["scorecard"][k] for k in ("forecasts", "settled", "heard_through", "heard_through_rate", "brier", "no_verdict")}))
     ok = notebook_phase(api, args, content, ok)
+    ok = heard_phase(api, args, content, claims, ok)
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -304,6 +327,73 @@ def notebook_phase(api, args, content, ok):
         print("  retired %s heard %s of %s%s: %r" % (r["id"], r["heard"], r["of"], (" replaced by " + r["replaced_by"]) if r["replaced_by"] else "", r["text"][:60]))
     if args.require_lesson and not wrote:
         print("  --require-lesson: the model proposed no lesson")
+        ok = False
+    return ok
+
+
+def cite_routes(seg):
+    """The routes a segment event cites (refs are pub:<route>@v<version>)."""
+    out = []
+    for c in seg.get("cites") or []:
+        ref = c.get("ref", "") if isinstance(c, dict) else str(c)
+        if ref.startswith("pub:") and "@v" in ref:
+            out.append(ref[4:ref.rindex("@v")])
+    return out
+
+
+def heard_receipt(api, stretch):
+    nb = api.learning().get("notebook") or {}
+    row = next((r for r in nb.get("inputs", []) if r.get("stretch_id") == stretch), None)
+    return (row or {}).get("heard")
+
+
+def candidate(route, version, title):
+    return {"route": route, "version": version, "title": title, "dek": title + ".", "text": title + "."}
+
+
+def heard_phase(api, args, content, claims, ok):
+    print("-- the heard index")
+    segs_by_claim = {s["claim_id"]: s for s in content}
+    finished = [cid for cid, n in claims.items() if n in ("finished", "backdated") and cid in segs_by_claim]
+    skipped = [cid for cid, n in claims.items() if n in ("skipped", "cut") and cid in segs_by_claim]
+    heard_routes = {r for cid, n in claims.items() if n in ("finished", "backdated") and cid in segs_by_claim for r in cite_routes(segs_by_claim[cid])}
+    fin_route = next((r for cid in finished for r in cite_routes(segs_by_claim[cid])), None)
+    skip_route = next((r for cid in skipped for r in cite_routes(segs_by_claim[cid]) if r not in heard_routes), None)
+    if not fin_route or not skip_route:
+        print("  FAIL: the run's entries do not give a finished story and a skipped one on different routes (finished %r, skipped %r)" % (fin_route, skip_route))
+        return False
+    print("  the finished story's route %s, the skipped story's route %s" % (fin_route, skip_route))
+    new1 = "heard-new-%s" % api.salt
+    cands = [candidate(fin_route, 1, "Finished story"), candidate(skip_route, 1, "Skipped story"), candidate(new1, 1, "A story never offered")]
+    segs1 = api.programme("extend", cands)
+    st1 = api.last_done.get("stretch_id", "")
+    r1 = heard_receipt(api, st1)
+    print("  same-version stretch %s receipt: %s" % (st1, json.dumps(r1, sort_keys=True)))
+    good1 = bool(r1) and r1.get("unavailable") is False and r1.get("candidates") == 3 and r1.get("same") == 1 and r1.get("not_in_window") == 2 and r1.get("earlier") == 0
+    print("  want candidates 3, same 1, not_in_window 2, earlier 0, unavailable false: %s" % ("ok" if good1 else "WRONG"))
+    ok = ok and good1
+    new2 = "heard-new2-%s" % api.salt
+    segs2 = api.programme("extend", [candidate(fin_route, 2, "Finished story, a later version"), candidate(new2, 1, "Another story never offered")])
+    st2 = api.last_done.get("stretch_id", "")
+    r2 = heard_receipt(api, st2)
+    print("  higher-version stretch %s receipt: %s" % (st2, json.dumps(r2, sort_keys=True)))
+    good2 = bool(r2) and r2.get("unavailable") is False and r2.get("earlier") == 1 and r2.get("same") == 0
+    print("  want earlier 1, same 0, unavailable false: %s" % ("ok" if good2 else "WRONG"))
+    ok = ok and good2
+    # What the DJ did is reported; only --require-followup makes it a failure.
+    tellings = {r["claim_id"]: r.get("telling", "") for r in api.learning_all()["rows"]}
+    follow_ok = True
+    for label, segs, want_row in (("same version", segs1, False), ("higher version", segs2, True)):
+        rows = [(s.get("title"), tellings.get(s.get("claim_id"), "(no row)")) for s in segs if s.get("claim_id") and fin_route in cite_routes(s)]
+        if not rows:
+            print("  DJ, %s: no new forecast row cites the finished story (left out)%s" % (label, "" if not want_row else " [expected a follow-up]"))
+            continue
+        for title, t in rows:
+            good = t == "followup" or (t == "" and not want_row)
+            follow_ok = follow_ok and good
+            print("  DJ, %s: row %r telling=%r %s" % (label, title, t or "(absent)", "ok" if good else "NOT A FOLLOW-UP"))
+    if args.require_followup and not follow_ok:
+        print("  --require-followup: the DJ told a heard story in full")
         ok = False
     return ok
 

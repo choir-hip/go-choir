@@ -374,3 +374,29 @@ replayed to the end is not heard: its forecast settles on the first outcome
 (right for scoring), and the later finished end is not read back. Reading it
 means folding the run sheet's ops per entry, which is not a small change.
 TestR8 pins today's behaviour so the gap is visible.
+
+**The heard receipt.** The stretch's start record gains optional subject refs
+(`heard_*`), and `GET /api/autoradio/learning` shows them as
+`notebook.inputs[].heard`, so the deployed index can be seen without a guest
+log. Ids and counts only, never a title or words; the numbers are the very
+variables the `autoradio heard:` log line prints. Fields: `unavailable` (true
+when the history could not be read, with `error_class`, the error's Go type,
+and nothing else); otherwise `candidates` (story candidates marked; takes are
+never marked), `not_in_window` (no heard record in the last 14 days, the line
+`heard: not in the last 14 days`), `same` (heard at this version or a later
+one), `earlier` (heard at an earlier version), `recent` (rows in the recent
+list), `all_heard` (every story candidate heard at its current version),
+`unparsable` (heard settlements whose time did not parse), `segments_rows` and
+`settlements_rows` (rows each list returned) and `segments_full` and
+`settlements_full` (the list reached its limit, so older rows were not read).
+`candidates = not_in_window + same + earlier`. A start record written before
+this change has no `heard` object.
+
+`scripts/prove-autoradio-learning` has a heard phase (drill computer only): it
+finishes one story and skips another, offers both at the same version plus a
+never-seen candidate and asserts the receipt (candidates 3, same 1,
+not_in_window 2, unavailable false), offers the finished story at a higher
+version and asserts `earlier` 1, and only reports whether the DJ's telling was
+a follow-up (`--require-followup` makes it a failure). It has no offline
+fixture test (`scripts/test-status-scripts.sh` covers other scripts); the heard
+parsing was exercised against a fake API once, by hand, and not committed.
