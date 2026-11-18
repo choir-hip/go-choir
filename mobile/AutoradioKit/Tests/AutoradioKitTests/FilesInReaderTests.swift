@@ -107,7 +107,7 @@ final class FilesInReaderTests: XCTestCase {
     func test7_AnAudioFileInFilesIsARunSheetEntryNamedByItsFilesPathAndNeverByTheDeviceCopy() async throws {
         let got = await reader.audioEntry(address: "file:/Media/Tone 440.wav")
         let (e, local) = try XCTUnwrap(got)
-        XCTAssertEqual(e.kind, .episode); XCTAssertEqual(e.title, "A file"); XCTAssertEqual(e.shownTitle(), "Tone 440"); XCTAssertEqual(e.source?.ref, "file:/Media/Tone 440.wav"); XCTAssertNil(e.source?.url)
+        XCTAssertEqual(e.kind, .episode); XCTAssertEqual(e.title, "Tone 440"); XCTAssertEqual(e.source?.ref, "file:/Media/Tone 440.wav"); XCTAssertNil(e.source?.url)
         let none = await reader.audioEntry(address: "file:/Documents/Key list.txt")
         XCTAssertNil(none)
         let eng = await MainActor.run { FakeEngine() }

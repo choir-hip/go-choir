@@ -61,7 +61,7 @@ extension AutoradioModule {
 
         handle("radioView") { [unowned self] _, reply in
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: RunSheetStore.shared.ahead(limit: 1).first?.shownTitle() ?? "")) }   // lane autoradio-queue
+            let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "")) }   // lane autoradio-queue
             ReaderFeed.shared.feed(info, route: route)
             reply(json(info))
         }
@@ -74,7 +74,7 @@ extension AutoradioModule {
             }
             touch(["radioView", "barState"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.shownTitle() ?? "" })))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" })))
         }
 
         // Next or previous (move "next" or "previous"): the run sheet's `skip(on air)`, and its `previous` (the start of this entry when it has
@@ -86,7 +86,7 @@ extension AutoradioModule {
                 await self.choir.moveStory(move)
                 self.touch(["radioView", "barState"])
                 let route = ChoirEnvironment.shared.playing(self.runtime.player.document.id)?.route ?? ""
-                DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.shownTitle() ?? "" }))) }
+                DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" }))) }
             }
         }
 
@@ -97,7 +97,7 @@ extension AutoradioModule {
             if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v); SpeedStore.standard.save(tracker.speed) }
             touch(["radioView"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.shownTitle() ?? "" })))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" })))
         }
     }
 }
