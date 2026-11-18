@@ -561,3 +561,102 @@ func seedLessons(t *testing.T, rt *Runtime, ids ...string) {
 		}
 	}
 }
+
+// A5: a retire whose apply came back stale does not make the desk disown its
+// own line. The retire record is written before the apply; it counts as gone
+// only once its patch landed.
+func TestA5_AStaleRetireLeavesTheLineTaggedAndTheNextOneLandsIt(t *testing.T) {
+	noCadence(t)
+	fake := &fakeNotebook{}
+	fake.push("appagent", notebook.DeskLabel, "# My notebook\n\n## What you asked for\n\n## What Autoradio has learned\n- Short pieces are heard. [L1 · heard 2 of 3]\n\n## What Autoradio is trying\n\n## Recent steering\n")
+	fake.found = true
+	var seenStable string
+	retire := func(req provideriface.TextStreamRequest, shown []string) []string {
+		return []string{titled("Story G", nil), jsonLine(map[string]any{"kind": "notebook", "op": "retire", "line": "L1", "cites": shown[:1]})}
+	}
+	rt, _ := radioRuntime(t, notebookScript(map[int]func(provideriface.TextStreamRequest, []string) []string{
+		1: func(provideriface.TextStreamRequest, []string) []string { return sixStoriesLines() },
+		2: retire,
+		3: func(req provideriface.TextStreamRequest, _ []string) []string {
+			seenStable = req.StableUser
+			return []string{titled("Story H", nil)}
+		},
+		4: retire,
+	}))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	seedLessons(t, rt, "L1")
+	firstStretch(t, h, "r-1", []string{"finished", "finished", "finished", "finished", "skipped", "skipped"})
+
+	// Every attempt is stale: the line is still the desk's, tagged, with its count.
+	fake.staleN = 3
+	_, evs := serve(t, h, "r-2")
+	if nb := doneNotebook(t, evs); nb["status"] != notebook.StatusStale {
+		t.Fatalf("setup: %v", nb)
+	}
+	if !strings.Contains(fake.text(), "- Short pieces are heard. [L1 · heard ") {
+		t.Errorf("(A5) the line was disowned:\n%s", fake.text())
+	}
+	for _, r := range tape(t, rt, kindStrike) {
+		if r.SubjectRefs["kind"] == "foreign_tag" {
+			t.Errorf("(A5) a foreign_tag strike for the desk's own line: %v", r.SubjectRefs)
+		}
+	}
+	serve(t, h, "r-3")
+	if !strings.Contains(seenStable, "lesson:L1: Short pieces are heard.") {
+		t.Errorf("(A5) the DJ's view lost the tag:\n%s", seenStable)
+	}
+
+	// One stale, then it lands: retired, with its record kept.
+	fake.staleN = 1
+	_, evs = serve(t, h, "r-4")
+	if nb := doneNotebook(t, evs); nb["status"] != notebook.StatusApplied {
+		t.Fatalf("(A5) the retry: %v", nb)
+	}
+	if strings.Contains(fake.text(), "Short pieces") {
+		t.Errorf("(A5) the line is still there:\n%s", fake.text())
+	}
+	for _, r := range tape(t, rt, kindStrike) {
+		if r.SubjectRefs["kind"] == "foreign_tag" {
+			t.Errorf("(A5) a foreign_tag strike after the retry: %v", r.SubjectRefs)
+		}
+	}
+	_, out := learningGet(t, h, "")
+	ret, _ := out["notebook"].(map[string]any)["retired"].([]any)
+	if len(ret) != 1 || ret[0].(map[string]any)["id"] != "L1" || ret[0].(map[string]any)["of"] != float64(0) {
+		t.Errorf("(A5) retired %v", ret)
+	}
+}
+
+// a ledger whose lesson listing is full to the cap
+type lessonListAtCap struct{ autoradioLedger }
+
+func (l lessonListAtCap) ListCommitmentRecordsBySubjectRef(ctx context.Context, o, c, k, v string, n int) ([]types.CommitmentRecord, error) {
+	if v == kindLesson {
+		return make([]types.CommitmentRecord, n), nil
+	}
+	return l.autoradioLedger.ListCommitmentRecordsBySubjectRef(ctx, o, c, k, v, n)
+}
+
+// A6: a read that returns the cap may have lost ids: no patch is drafted and
+// the done event says why.
+func TestA6_ALessonReadAtTheCapRefusesThePatch(t *testing.T) {
+	noCadence(t)
+	fake := &fakeNotebook{}
+	fake.push("appagent", notebook.DeskLabel, notebook.Fresh().Render())
+	fake.found = true
+	rt, _ := radioRuntime(t, notebookScript(map[int]func(provideriface.TextStreamRequest, []string) []string{
+		1: func(provideriface.TextStreamRequest, []string) []string { return sixStoriesLines() },
+		2: func(req provideriface.TextStreamRequest, shown []string) []string {
+			return []string{titled("Story G", nil), nbAdd("Short pieces are heard through.", shown[:2], nil)}
+		},
+	}))
+	h := NewAPIHandler(rt)
+	h.SetNotebook(fake)
+	firstStretch(t, h, "r-1", []string{"finished", "finished", "finished", "finished", "skipped", "skipped"})
+	h.autoradioLedgerOverride = lessonListAtCap{rt.store}
+	_, evs := serve(t, h, "r-2")
+	if len(fake.patches) != 0 || !strings.Contains(fmt.Sprint(doneNotebook(t, evs)["error"]), "read cap") {
+		t.Errorf("(A6) %d patches, %v", len(fake.patches), doneNotebook(t, evs))
+	}
+}

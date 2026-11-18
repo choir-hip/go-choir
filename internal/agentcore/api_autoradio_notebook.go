@@ -47,6 +47,7 @@ const (
 	// notebookCaller names the Autoradio desk to Texture's grant table.
 	notebookCaller = "desk:autoradio"
 
+	nbReadCap           = 5000    // the most records of one kind a notebook read takes; at it, the read refuses
 	nbPromptLineMax     = 400     // bytes of one notebook line in the prompt copy
 	nbPromptMax         = 8 << 10 // bytes of the notebook in the prompt copy
 	programmeCasesShown = 40      // design 4: the last 40 settled forecasts
@@ -366,6 +367,7 @@ func (c *programmeCall) settleNotebook(ctx context.Context) {
 		d, err := c.draftPatch(ctx, st)
 		if err != nil {
 			sum["error"] = err.Error()
+			log.Printf("autoradio notebook: owner=%s stretch=%s: no patch drafted: %v", c.ownerID, c.stretchID, err)
 			return
 		}
 		sum["dropped"] = d.dropped
@@ -393,6 +395,7 @@ func (c *programmeCall) settleNotebook(ctx context.Context) {
 		// not applied (the document never holds a line the ledger lacks).
 		if err := c.recordLessons(ctx, d); err != nil {
 			sum["error"] = "lesson record: " + err.Error()
+			log.Printf("autoradio notebook: owner=%s stretch=%s: lesson record not written, patch not applied: %v", c.ownerID, c.stretchID, err)
 			c.recordPatchResult(ctx, d.patch, notebook.Result{Status: "not_applied", Reason: err.Error()})
 			return
 		}
@@ -939,9 +942,20 @@ type lessonIndex struct {
 }
 
 func (c *programmeCall) lessonIndex(ctx context.Context) (*lessonIndex, error) {
-	recs, err := c.ledger.ListCommitmentRecordsBySubjectRef(ctx, c.ownerID, c.rt.cfg.ComputerID, "record_kind", kindLesson, 5000)
+	recs, err := c.ledger.ListCommitmentRecordsBySubjectRef(ctx, c.ownerID, c.rt.cfg.ComputerID, "record_kind", kindLesson, nbReadCap)
 	if err != nil {
 		return nil, fmt.Errorf("read the lesson records: %w", err)
+	}
+	// A read that returns the cap may have lost ids: untagging old lessons or
+	// minting an id twice would follow, so the patch is refused instead.
+	if len(recs) >= nbReadCap {
+		return nil, fmt.Errorf("the lesson records reach the read cap (%d): no notebook patch is drafted", nbReadCap)
+	}
+	// A retire record is written before its patch is applied; it counts only
+	// once that patch landed (applied or noop), as the learning route reads it.
+	landed, err := c.landedPatches(ctx)
+	if err != nil {
+		return nil, err
 	}
 	ix := &lessonIndex{known: map[string]bool{}}
 	live, gone := map[string]bool{}, map[string]bool{}
@@ -966,7 +980,9 @@ func (c *programmeCall) lessonIndex(ctx context.Context) (*lessonIndex, error) {
 			continue
 		}
 		if r.SubjectRefs["retired"] != "" {
-			gone[id] = true
+			if landed[r.SubjectRefs["patch_id"]] {
+				gone[id] = true
+			}
 		} else {
 			live[id] = true
 		}
@@ -977,6 +993,24 @@ func (c *programmeCall) lessonIndex(ctx context.Context) (*lessonIndex, error) {
 		}
 	}
 	return ix, nil
+}
+
+// landedPatches is the set of patch ids whose result record is applied or noop.
+func (c *programmeCall) landedPatches(ctx context.Context) (map[string]bool, error) {
+	recs, err := c.ledger.ListCommitmentRecordsBySubjectRef(ctx, c.ownerID, c.rt.cfg.ComputerID, "record_kind", kindPatch, nbReadCap)
+	if err != nil {
+		return nil, fmt.Errorf("read the patch records: %w", err)
+	}
+	if len(recs) >= nbReadCap {
+		return nil, fmt.Errorf("the patch records reach the read cap (%d): no notebook patch is drafted", nbReadCap)
+	}
+	out := map[string]bool{}
+	for _, r := range recs {
+		if st := r.SubjectRefs["status"]; st == notebook.StatusApplied || st == notebook.StatusNoop {
+			out[r.SubjectRefs["patch_id"]] = true
+		}
+	}
+	return out, nil
 }
 
 // lineCounts is heard h of m per line ref: of the settled forecasts whose
@@ -1314,7 +1348,7 @@ func (h *APIHandler) learningNotebook(ctx context.Context, ownerID string, led a
 			live[r.SubjectRefs["line_id"]] = r
 			continue
 		}
-		if failed[r.SubjectRefs["patch_id"]] {
+		if _, landed := applied[r.SubjectRefs["patch_id"]]; failed[r.SubjectRefs["patch_id"]] && !landed {
 			continue // its patch did not land: the line was not removed
 		}
 		heard, _ := strconv.Atoi(r.SubjectRefs["heard"])
