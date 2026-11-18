@@ -35,6 +35,11 @@ public final class ReaderStore: @unchecked Sendable {
         self.limit = max(1, limit); self.fetcher = fetcher
     }
 
+    /// Sign-out: every cached document (an offline page must not show the previous account's), and the fetches in flight.
+    public func wipe() {
+        lock.lock(); cache = [:]; recency = []; let t = Array(inflight.values); inflight = [:]; lock.unlock()
+        for x in t { x.cancel() }
+    }
     public func cached(_ address: String) -> ReaderDoc? {
         lock.lock(); defer { lock.unlock() }
         guard let d = cache[address] else { return nil }

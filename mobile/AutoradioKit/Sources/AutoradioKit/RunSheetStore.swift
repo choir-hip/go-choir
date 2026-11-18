@@ -133,7 +133,10 @@ public struct RouteSheetPoster: RunSheetPoster {
 
     /// An op that came from the desk's side (the feed, later the master stream): applied here, never posted back.
     @discardableResult
-    public func applyFromDesk(_ op: RunSheetOp) -> RunSheetResult { run(op, remote: true) }
+    public func applyFromDesk(_ op: RunSheetOp, generation: Int? = nil) -> RunSheetResult {
+        if let g = generation, g != AccountWipe.generation { return RunSheetResult(opId: op.opId, applied: false, dropped: "stale_account", version: sheet.version) }
+        return run(op, remote: true)
+    }
 
     private func run(_ op: RunSheetOp, remote: Bool) -> RunSheetResult {
         var op = op.bounded()                         // the server's field bounds: cut here, never dropped there

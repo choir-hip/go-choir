@@ -92,10 +92,31 @@ final class AccountWipeTests: XCTestCase {
         let mailService = MailService(environment: env)
         write("cache/mail-abc.html", "<p>\(m)</p>")
 
+        // What the second review found: the spoken words and the files of the app target.
+        let mailReading = MailReading(); mailReading.request(address: m, text: m)
+        let conversation = Conversation(); conversation.begin(id: "q1", question: m)
+        let acks = AckHistory(); acks.add(m, page: m)
+        let reader = ReaderStore(limit: 4)
+        let kept = KeptTurnStore(root: root.appendingPathComponent("turns")); write("turns/t1/record.json", m)
+        write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
+        let signals = FileSignals(file: root.appendingPathComponent("signals.jsonl")); signals.record(SignalEvent(kind: "ask", subject: m, detail: m))
+        let openPages = OpenPages(file: root.appendingPathComponent("open-pages.json")); openPages.open("mailbox:inbox", title: m)
+        let session = EditionSetupSession(suggestions: [], file: root.appendingPathComponent("edition-selection.json"))
+        EditionSetupSession.shared = session; write("edition-selection.json", "{\"topics\":[\"\(m)\"]}")
+        write("onboarding.json", m); write("books/b1/text.txt", m); write("cache/files/f1.txt", m)
+
         let wipe = AccountWipe()
+        wipe.register("signals") { signals.wipe() }
+        wipe.register("open-pages") { openPages.wipe() }
+        let rootRef = root!
+        wipe.register("app-files") {          // as AutoradioModule registers them
+            AccountWipe.removeFiles([rootRef.appendingPathComponent("onboarding.json")])
+            AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
+        }
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, topicsFile: topics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
                               takeOwn: own, takeMutes: mutes, takeStore: takes, tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
-                              podcasts: pods, texture: texture, environment: env, content: content, corpus: SavedCorpus())
+                              podcasts: pods, texture: texture, environment: env, content: content, corpus: SavedCorpus(),
+                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice)
         let cacheDir = root.appendingPathComponent("cache")
         wipe.register("mail") { mailService.wipe(originalsIn: cacheDir) }
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
@@ -113,6 +134,9 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertNil(opening.opening(voice: "v")); XCTAssertTrue(pods.subscriptions().isEmpty)
         XCTAssertNil(pods.position(PodcastKey.episode(feed: PodcastKey.feed(feed), id: "g1"))); XCTAssertNil(pods.cachedFeed(feed))
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1")); XCTAssertNil(content.get("mail:1"))
+        XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
+        XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned); XCTAssertTrue(signals.recent(limit: 10).isEmpty)
+        XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertNil(EditionSetupSession.shared)
         XCTAssertNil(mailService.cachedRows(folder: "inbox")); XCTAssertNil(mailService.originalDocument(id: "abc"))
 
         // (c) the next sign-in: the first request of each kind carries nothing of the old account.
@@ -132,5 +156,141 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertEqual(pushed.all, [], "podcast sync")
         await texture.retryPending(); XCTAssertTrue(api.posts.isEmpty, "texture retry")
         XCTAssertEqual(poster.posted.count, 1, "the old poster was not used again after the first post")
+    }
+}
+
+
+// Work in flight when the account is wiped: each fake suspends, the wipe runs, the fake is released, and nothing of the old account is written or held.
+actor Latch {
+    private var open = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async { if open { return }; await withCheckedContinuation { waiters.append($0) } }
+    func release() { open = true; for w in waiters { w.resume() }; waiters = [] }
+    var isOpen: Bool { open }
+}
+
+@MainActor
+final class AccountWipeInFlightTests: XCTestCase {
+    static let marker = "MARKER-7731"
+    var root: URL!
+    override func setUp() { root = FileManager.default.temporaryDirectory.appendingPathComponent("acctflight-\(UUID().uuidString)"); try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) }
+    override func tearDown() { try? FileManager.default.removeItem(at: root) }
+
+    func waitFor(_ l: Latch) async { for _ in 0..<200 { if await l.isOpen { return }; try? await Task.sleep(nanoseconds: 10_000_000) } }
+    func filesHoldingMarker() -> [String] {
+        var hits: [String] = []
+        let en = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey])
+        while let u = en?.nextObject() as? URL {
+            if let d = try? Data(contentsOf: u), d.range(of: Data(Self.marker.utf8)) != nil { hits.append(u.lastPathComponent) }
+        }
+        return hits
+    }
+
+    func testContentSyncDoesNotRePutMailAfterTheWipe() async {
+        let m = Self.marker
+        let store = ContentStore(root: root.appendingPathComponent("content"))
+        let entered = Latch(), release = Latch()
+        var f = ContentSync.Fetchers(); f.mailFolders = ["inbox"]
+        f.mailPage = { _, _ in var r = MailSummary(); r.id = "1"; r.subject = m; return ([r], nil) }
+        f.mailBody = { _ in await entered.release(); await release.wait(); throw URLError(.notConnectedToInternet) }      // the catch path puts the row
+        let sync = ContentSync(store: store, fetch: f)
+        let run = Task { await sync.syncAll() }
+        await waitFor(entered)
+        let wipe = AccountWipe(); wipe.register("content") { ContentSync.wipeAccount(store: store, corpus: SavedCorpus()) }
+        await wipe.run()
+        await release.release(); _ = await run.value
+        XCTAssertNil(store.get("mail:1"), "the old account's mail row came back after the wipe")
+        store.flush(); XCTAssertEqual(filesHoldingMarker(), [])
+    }
+
+    func testDeskStreamAppliesNothingAfterTheWipe() async {
+        let m = Self.marker
+        final class Feed: RunSheetFeed, @unchecked Sendable {
+            let entered: Latch, release: Latch, entry: RunSheetEntry
+            init(_ e: Latch, _ r: Latch, _ entry: RunSheetEntry) { entered = e; release = r; self.entry = entry }
+            func ask(_ a: RunSheetAsk) async throws -> AsyncThrowingStream<RunSheetFeedEvent, Error> {
+                await entered.release(); await release.wait()
+                let op = ProgrammeRouteFeed.placeOp(entry, cause: "open")
+                return AsyncThrowingStream { c in c.yield(.ops([op])); c.yield(.done); c.finish() }
+            }
+        }
+        let entered = Latch(), release = Latch()
+        let store = RunSheetStore(storage: root.appendingPathComponent("runsheet.json"))
+        let feed = Feed(entered, release, RunSheetEntry.paperStory(route: m, title: m, by: .desk))
+        let w = RunSheetWriter(store: store) { feed }
+        w.open()
+        await waitFor(entered)
+        let wipe = AccountWipe()
+        wipe.register("run-sheet") { await MainActor.run { w.stop(); store.wipe() } }
+        await wipe.run()
+        await release.release(); await w.settle()
+        XCTAssertTrue(store.sheet.entries.isEmpty, "the desk's entries of the old account were applied after the wipe")
+        XCTAssertTrue(store.pending.isEmpty); XCTAssertEqual(filesHoldingMarker(), []); XCTAssertFalse(w.inFlight)
+    }
+
+    func testStaleDeskOpIsRefusedEvenWithoutStop() async {
+        let store = RunSheetStore()
+        let gen = AccountWipe.generation
+        await AccountWipe().run()
+        let op = ProgrammeRouteFeed.placeOp(RunSheetEntry.paperStory(route: "a", title: "A", by: .desk), cause: "open")
+        XCTAssertFalse(store.applyFromDesk(op, generation: gen).applied)
+        XCTAssertTrue(store.applyFromDesk(op, generation: AccountWipe.generation).applied)
+    }
+
+    func testFeedLoadAfterTheWipeIsNotKept() async throws {
+        let m = Self.marker
+        let entered = Latch(), release = Latch()
+        let pods = PodcastService(directory: root.appendingPathComponent("pod"), fetch: { _ in
+            await entered.release(); await release.wait()
+            return Data("<rss><channel><title>\(m)</title><item><guid>g1</guid><title>\(m)</title><enclosure url=\"https://e.example/a.mp3\" type=\"audio/mpeg\"/></item></channel></rss>".utf8) })
+        let feed = "https://example.com/\(m)"
+        pods.subscribe(PodcastShow(feedURL: feed, title: m))
+        await waitFor(entered)
+        let wipe = AccountWipe(); wipe.register("podcasts") { pods.wipe() }
+        await wipe.run()
+        await release.release(); try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertNil(pods.cachedFeed(feed)); XCTAssertTrue(pods.subscriptions().isEmpty); XCTAssertEqual(filesHoldingMarker(), [])
+    }
+
+    func testOpeningWriteAheadDoesNotRePutTheOldOpening() async {
+        let m = Self.marker
+        final class Feed: RunSheetFeed, @unchecked Sendable {
+            let entered: Latch, release: Latch, entry: RunSheetEntry
+            init(_ e: Latch, _ r: Latch, _ entry: RunSheetEntry) { entered = e; release = r; self.entry = entry }
+            func ask(_ a: RunSheetAsk) async throws -> AsyncThrowingStream<RunSheetFeedEvent, Error> {
+                await entered.release(); await release.wait()
+                let op = ProgrammeRouteFeed.placeOp(entry, cause: "open")
+                return AsyncThrowingStream { c in c.yield(.ops([op])); c.finish() }
+            }
+        }
+        let entered = Latch(), release = Latch()
+        let cache = OpeningCache(dir: root.appendingPathComponent("opening"))
+        let store = RunSheetStore()
+        let opening = RunSheetEntry(id: "o1", kind: .opening, placedBy: .desk, title: "Opening", text: "Good morning \(m).", estSeconds: 3)
+        let feed = Feed(entered, release, opening)
+        let wa = OpeningWriteAhead(cache: cache, store: store, feed: { feed }, voice: { "v" }, synth: { PreparedAudio(text: $0, samples: [0.1], rate: 24000) })
+        let run = Task { @MainActor in await wa.refresh(reason: "launch") }
+        await waitFor(entered)
+        let wipe = AccountWipe(); wipe.register("opening") { cache.wipe() }
+        await wipe.run()
+        await release.release(); await run.value
+        XCTAssertNil(cache.opening(voice: "v")); XCTAssertEqual(filesHoldingMarker(), [])
+    }
+
+    func testNotebookWriteAfterTheWipeKeepsNothing() async {
+        let m = Self.marker
+        let saved = ChoirEnvironment.shared.keys; ChoirEnvironment.shared.keys = InMemoryKeyStore([KeyAccount.apiKey: "k"]); defer { ChoirEnvironment.shared.keys = saved }
+        let entered = Latch(), release = Latch()
+        let s = NotebookStore(); let cache = NotebookCache(file: root.appendingPathComponent("notebook-cache.md")); s.notebookCache = cache
+        s.lookupEdition = { await entered.release(); await release.wait(); return EditionInfo(found: false) }
+        s.createNotebook = { "d1" }
+        let marker = root.appendingPathComponent("notebook-topics-written")
+        let run = Task { @MainActor in await s.writeTopics([m], marker: marker) }
+        await waitFor(entered)
+        let wipe = AccountWipe(); wipe.register("notebook") { await MainActor.run { cache.wipe(); s.wipe() } }
+        await wipe.run()
+        await release.release()
+        let ok = await run.value
+        XCTAssertFalse(ok); XCTAssertNil(cache.text); XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path)); XCTAssertEqual(filesHoldingMarker(), [])
     }
 }

@@ -51,7 +51,10 @@ public enum SignalDetail {
 public protocol Signals: AnyObject, Sendable {
     func record(_ e: SignalEvent)
     func recent(limit: Int) -> [SignalEvent]
+    /// Sign-out: the ring and the file (questions asked, mail and notebook addresses) are the account's.
+    func wipe()
 }
+public extension Signals { func wipe() {} }
 
 public final class NullSignals: Signals {
     public init() {}
@@ -65,6 +68,7 @@ public final class MemorySignals: Signals, @unchecked Sendable {
     private var ring: [SignalEvent] = []
     public init() {}
     public func record(_ e: SignalEvent) { lock.lock(); ring.append(e); lock.unlock() }
+    public func wipe() { lock.lock(); ring = []; lock.unlock() }
     public func recent(limit: Int) -> [SignalEvent] { lock.lock(); defer { lock.unlock() }; return Array(ring.suffix(limit).reversed()) }
 }
 
@@ -94,5 +98,9 @@ public final class FileSignals: Signals, @unchecked Sendable {
     public func recent(limit: Int) -> [SignalEvent] {
         lock.lock(); defer { lock.unlock() }
         return Array(ring.suffix(limit).reversed())
+    }
+    public func wipe() {
+        lock.lock(); ring = []; lock.unlock()
+        if let file { try? FileManager.default.removeItem(at: file) }
     }
 }

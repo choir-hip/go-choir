@@ -123,6 +123,14 @@ public final class OpenPages: @unchecked Sendable {
         openLocked(Page(address: PageAddress.radio, kind: "radio", title: "Autoradio"), record: false)   // every launch lands on the radio
     }
 
+    /// Sign-out: only the radio stays open; the persisted titles and addresses go.
+    public func wipe() {
+        lock.lock(); pages = []; recency = []; lastClosedPage = nil; lock.unlock()
+        if let file { try? FileManager.default.removeItem(at: file) }
+        lock.lock(); _ = openLocked(Page(address: PageAddress.radio, kind: "radio", title: "Autoradio"), record: false); lock.unlock()
+        onChange?()
+    }
+
     // MARK: Reading
 
     /// Most recent first: the order of the pile.

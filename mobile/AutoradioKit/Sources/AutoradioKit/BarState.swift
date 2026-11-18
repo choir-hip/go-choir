@@ -118,6 +118,10 @@ public final class BarTracker: @unchecked Sendable {
     private var errorText = ""
     private var lastMessage = ""
     private var clock = BlockClock()
+    /// Sign-out: the held words (a message, a revision summary, the holding line) are the account's.
+    public func wipe() {
+        lock.lock(); holdingLine = ""; revisedAt = nil; revisedSummary = ""; errorAt = nil; errorText = ""; lastMessage = ""; lock.unlock()
+    }
     public private(set) var speed = 1.0
     private var level = 0.0
     /// The audio's own position in the block (set by the runtime). Without one the estimate from play time is used.

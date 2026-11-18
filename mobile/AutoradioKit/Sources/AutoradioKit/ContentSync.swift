@@ -75,22 +75,31 @@ public final class ContentSync: @unchecked Sendable {
     /// Every kind, in the order the listener feels them: stories, mail, documents, then the slow ones. Returns one report per kind.
     @discardableResult
     public func syncAll() async -> [SyncReport] {
-        lock.lock(); if running { lock.unlock(); return [] }; running = true; lock.unlock()
-        defer { lock.lock(); running = false; lock.unlock() }
+        lock.lock(); if running { lock.unlock(); return [] }; running = true; startedUnder = AccountWipe.generation; lock.unlock()
+        defer { lock.lock(); running = false; startedUnder = nil; lock.unlock() }
         var out: [SyncReport] = []
-        if let sheet = await fetch.runSheet() { recordRunSheet(sheet); store.markSynced(.runsheet) }
+        if let sheet = await fetch.runSheet() { recordRunSheet(sheet); writeMarkSynced(.runsheet) }
         for step in [syncStories, syncMail, syncDocuments, syncPodcasts, syncFiles] as [() async -> SyncReport] {
             let r = await step()
             out.append(r)
-            store.markSynced(r.kind); store.flush()
+            writeMarkSynced(r.kind); writeFlush()
             log("content sync \(r.kind.rawValue): fetched \(r.fetched), held \(r.skipped), failed \(r.failed)\(r.stoppedBy.isEmpty ? "" : ", stopped: " + r.stoppedBy)")
             if r.stoppedBy == "radio" || r.stoppedBy == "cancelled" { break }
         }
-        _ = store.enforceBudget()
+        if live { _ = store.enforceBudget() }
         return out
     }
 
+    /// The account generation this run started under (nil outside `syncAll`). A write after the account was wiped is dropped.
+    private var startedUnder: Int?
+    private var live: Bool { lock.lock(); defer { lock.unlock() }; return startedUnder == nil || startedUnder == AccountWipe.generation }
+    private func writePut(_ i: StoredItem) { if live { store.put(i) } }
+    private func writeFlush() { if live { store.flush() } }
+    private func writeMarkSynced(_ k: ContentKind) { if live { store.markSynced(k) } }
+    private func writeSetCheckpoint(_ k: String, _ v: String) { if live { store.setCheckpoint(k, v) } }
+
     private func gate(_ r: inout SyncReport) async -> Bool {
+        if !live { r.stoppedBy = "cancelled"; return false }
         if Task.isCancelled { r.stoppedBy = "cancelled"; return false }
         if await audioBusy() { r.stoppedBy = "radio"; return false }
         return true
@@ -110,7 +119,7 @@ public final class ContentSync: @unchecked Sendable {
             guard await gate(&r) else { return r }
             do {
                 guard let text = try await fetch.storyBody(s.route), !text.isEmpty else { r.failed += 1; continue }
-                store.put(StoredItem(id: id, kind: .story, title: s.title, text: text, date: s.date, address: id, source: "Autopaper", version: version, syncedAt: now))
+                writePut(StoredItem(id: id, kind: .story, title: s.title, text: text, date: s.date, address: id, source: "Autopaper", version: version, syncedAt: now))
                 r.fetched += 1
             } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { r.failed += 1 }
         }
@@ -134,7 +143,7 @@ public final class ContentSync: @unchecked Sendable {
                     let id = "mail:" + row.id
                     if let held = store.get(id), held.version == "body" {
                         r.skipped += 1
-                        if held.meta["readAt"] != row.readAt { var h = held; h.meta["readAt"] = row.readAt; store.put(h) }       // read state follows the server
+                        if held.meta["readAt"] != row.readAt { var h = held; h.meta["readAt"] = row.readAt; writePut(h) }       // read state follows the server
                         continue
                     }
                     anyNew = true
@@ -142,22 +151,22 @@ public final class ContentSync: @unchecked Sendable {
                     do {
                         let d = try await fetch.mailBody(row.id)
                         var s = row; if s.id.isEmpty { s.id = d.summary.id }
-                        store.put(ContentStore.mailItem(s, text: d.text, folder: folder, syncedAt: now, to: d.to))
+                        writePut(ContentStore.mailItem(s, text: d.text, folder: folder, syncedAt: now, to: d.to))
                         r.fetched += 1
                     } catch is CancellationError { r.stoppedBy = "cancelled"; return r }
-                    catch { store.put(ContentStore.mailItem(row, text: "", folder: folder, syncedAt: now)); r.failed += 1 }       // the row is kept; the body next run
+                    catch { writePut(ContentStore.mailItem(row, text: "", folder: folder, syncedAt: now)); r.failed += 1 }       // the row is kept; the body next run
                 }
-                store.flush()
+                writeFlush()
                 if let next = page.next, !next.isEmpty, seen.insert(next).inserted {
                     if done, !anyNew { break pages }          // a walked folder: the first all-held page ends it
                     cursor = next
                 } else { break }
             }
-            store.setCheckpoint("mail.\(folder).done", "1")
+            writeSetCheckpoint("mail.\(folder).done", "1")
         }
         if let ds = try? await fetch.drafts() {
             for d in ds where !d.id.isEmpty {
-                store.put(StoredItem(id: "mail:draft/" + d.id, kind: .mail, title: d.subject.isEmpty ? "(no subject)" : d.subject, text: d.text, date: now, address: "mail:draft/" + d.id,
+                writePut(StoredItem(id: "mail:draft/" + d.id, kind: .mail, title: d.subject.isEmpty ? "(no subject)" : d.subject, text: d.text, date: now, address: "mail:draft/" + d.id,
                                      source: "Mail", version: "body", pinned: true, syncedAt: now, meta: ["folder": "drafts", "to": d.to.joined(separator: ", ")]))
                 r.fetched += 1
             }
@@ -180,12 +189,12 @@ public final class ContentSync: @unchecked Sendable {
                 guard await gate(&r) else { return r }
                 do {
                     guard let text = try await fetch.documentBody(d.id) else { r.failed += 1; continue }
-                    store.put(StoredItem(id: id, kind: .document, title: d.title.isEmpty ? "Untitled" : d.title, text: text, date: PaperStory.date(d.updated), address: id,
+                    writePut(StoredItem(id: id, kind: .document, title: d.title.isEmpty ? "Untitled" : d.title, text: text, date: PaperStory.date(d.updated), address: id,
                                          source: "Texture", version: d.updated, pinned: true, syncedAt: clock()))
                     r.fetched += 1
                 } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { r.failed += 1 }
             }
-            store.flush()
+            writeFlush()
             guard let next = page.next, !next.isEmpty, seen.insert(next).inserted else { break }
             cursor = next
         }
@@ -200,7 +209,7 @@ public final class ContentSync: @unchecked Sendable {
         for d in fetch.podcasts() where !d.id.hasPrefix("podcast-tr:") {
             let id = d.id, version = "\(d.text.utf8.count)"
             if store.has("pc:" + id, version: version) { r.skipped += 1; continue }
-            store.put(StoredItem(id: "pc:" + id, kind: .podcast, title: d.title, text: d.text, date: d.date, address: d.address, source: "Podcasts", version: version, syncedAt: now)); r.fetched += 1
+            writePut(StoredItem(id: "pc:" + id, kind: .podcast, title: d.title, text: d.text, date: d.date, address: d.address, source: "Podcasts", version: version, syncedAt: now)); r.fetched += 1
         }
         var tr = SyncReport(kind: .transcript)
         for t in fetch.transcriptTargets().prefix(Self.transcriptsPerRun) {
@@ -210,7 +219,7 @@ public final class ContentSync: @unchecked Sendable {
             guard await gate(&tr) else { r.stoppedBy = tr.stoppedBy; return r }
             do {
                 guard let x = try await fetch.transcript(t.feed, t.id), !x.blocks.isEmpty else { tr.failed += 1; continue }
-                store.put(StoredItem(id: id, kind: .transcript, title: t.title, text: x.blocks.map(\.text).joined(separator: " "), date: t.date,
+                writePut(StoredItem(id: id, kind: .transcript, title: t.title, text: x.blocks.map(\.text).joined(separator: " "), date: t.date,
                                      address: PodcastService.episodeAddress(feed: t.feed, id: t.id), source: "Podcasts", version: "1", syncedAt: now)); tr.fetched += 1
             } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { tr.failed += 1 }
         }
@@ -237,7 +246,7 @@ public final class ContentSync: @unchecked Sendable {
                 guard await gate(&r) else { return r }
                 do {
                     guard let text = try await fetch.fileText(e.path), !text.isEmpty else { r.failed += 1; continue }
-                    store.put(StoredItem(id: id, kind: .file, title: e.name, text: text, date: e.modified, address: id, source: "Files", version: version, syncedAt: clock()))
+                    writePut(StoredItem(id: id, kind: .file, title: e.name, text: text, date: e.modified, address: id, source: "Files", version: version, syncedAt: clock()))
                     r.fetched += 1
                 } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { r.failed += 1 }
             }
@@ -254,7 +263,7 @@ public final class ContentSync: @unchecked Sendable {
             let id = "run:" + e.id
             if store.has(id) { continue }
             let outcome = e.ended.map { "\($0)" } ?? (e.state == .skipped ? "skipped" : "heard")
-            store.put(StoredItem(id: id, kind: .runsheet, title: e.title, text: [e.title, e.text ?? ""].filter { !$0.isEmpty }.joined(separator: "\n"), date: now,
+            writePut(StoredItem(id: id, kind: .runsheet, title: e.title, text: [e.title, e.text ?? ""].filter { !$0.isEmpty }.joined(separator: "\n"), date: now,
                                  address: e.source?.ref ?? id, source: e.state == .skipped ? "Skipped" : "Heard", version: "1", syncedAt: now, meta: ["outcome": outcome, "kind": e.kind.rawValue]))
         }
     }
@@ -314,12 +323,14 @@ public extension ContentSync {
     static let shared: ContentSync = ContentSync(store: .shared, fetch: .live(), log: { fputs($0 + "\n", stderr) })
     /// Off until the app turns it on (a test must not sync the machine's real mail).
     nonisolated(unsafe) static var enabled = false
+    nonisolated(unsafe) static var kicked: Task<[SyncReport], Never>?
     static func kick() {
         guard enabled, !Demo.isOn, ContentStore.shared.usable else { return }
-        Task.detached(priority: .utility) { await ContentSync.shared.syncAll() }
+        kicked = Task.detached(priority: .utility) { await ContentSync.shared.syncAll() }
     }
     /// What sign-out does: the store, the index and the kept answers go with the account.
     static func wipeAccount(store: ContentStore = .shared, corpus: SavedCorpus = .shared) {
+        kicked?.cancel(); kicked = nil
         store.wipe(); corpus.reset()
     }
 }

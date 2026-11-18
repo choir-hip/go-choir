@@ -215,6 +215,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         let started = clock()
         let first0 = !launchAsked; launchAsked = true
         let airId = store.onAir()?.id
+        let gen = AccountWipe.generation          // the account this ask is for
         task = Task { @MainActor in
             var added = 0, received = 0, first: Date?
             var failure: Error?
@@ -222,13 +223,14 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                 let stream = try await feed.ask(a)
                 if first0 { LaunchTimings.shared.mark("request", ms: self.clock().timeIntervalSince(started) * 1000) }
                 for try await e in stream {
+                    if gen != AccountWipe.generation { break }          // signed out meanwhile: nothing of this stream is applied
                     switch e {
                     case .ops(let ops):
                         if first == nil { first = self.clock(); if first0 { LaunchTimings.shared.mark("first_segment", ms: first!.timeIntervalSince(started) * 1000) } }
                         received += ops.count
                         for op in ops {
                             guard let admitted = self.admit?(op, cause) ?? (self.admit == nil ? op : nil) else { continue }
-                            if self.store.applyFromDesk(admitted).applied { added += 1 }
+                            if self.store.applyFromDesk(admitted, generation: gen).applied { added += 1 }
                         }
                     case .done: break
                     case .error(let m): if added == 0 { failure = WriterError.said(m) }
@@ -236,6 +238,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                 }
             } catch is CancellationError {
             } catch { failure = error }
+            guard gen == AccountWipe.generation else { return }          // stop() already cleared the flags; a later ask owns them now
             if let f = first { self.latency = max(0.5, f.timeIntervalSince(started)) }
             self.inFlight = false
             self.onWriting?(false)
@@ -252,6 +255,13 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
                 for e in fill() { self.store.place(e, at: .end, by: .phone, reason: "the desk could not be reached: a story held on this phone") }
             }
         }
+    }
+
+    /// Sign-out: cancel the ask in flight and clear its flags; what its stream still delivers is dropped (the generation check).
+    public func stop() {
+        task?.cancel(); task = nil
+        if inFlight { inFlight = false; onWriting?(false) }
+        quietOn = nil
     }
 
     enum WriterError: Error { case said(String) }
