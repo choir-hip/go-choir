@@ -101,7 +101,9 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
         }
         // The listener's words: an opening is "Opening"; a transition is the station speaking between two entries and has no title of its own.
         let title = kind == .opening ? "Opening" : (kind == .transition ? "" : SegmentPrep.title(s.title, kind: s.kind))
-        var e = RunSheetEntry(id: entryID(s.segmentID), kind: kind, placedBy: .desk, title: title, text: text, cites: cites.isEmpty ? nil : cites,
+        // The server's own id when it sent one (it places the same entry on its sheet under it); else the phone's grammar, which is the same string.
+        let id = s.entryID.map { String($0.prefix(64)) } ?? entryID(s.segmentID)
+        var e = RunSheetEntry(id: id, kind: kind, placedBy: .desk, title: title, text: text, cites: cites.isEmpty ? nil : cites,
                               estSeconds: RunSheetEntry.estimateSeconds(words: text))
         if let p = cites.first(where: { $0.ref.hasPrefix("pub:") }) { e.source = RunSheetSource(ref: p.ref, label: p.label) }
         if let b = s.between { e.between = RunSheetBetween(after: entryID(b.after), before: entryID(b.before)) }
@@ -130,6 +132,7 @@ public struct ProgrammeRouteFeed: RunSheetFeed {
             e.title = t.title
         }
         if let f = s.forecast { e.forecast = f }
+        else if let c = s.claimID { e.forecast = RunSheetForecast(claimId: c) }                  // the claim the server settles by; no number the phone does not hold
         return e
     }
 }

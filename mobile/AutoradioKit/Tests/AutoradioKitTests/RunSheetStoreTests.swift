@@ -315,7 +315,7 @@ final class RunSheetStoreTests: XCTestCase {
         s2.restore(); await s2.flushTask?.value
         XCTAssertEqual(s2.pending.map(\.opId).first, opId, "the same op, in order")
         XCTAssertNil(s2.onAir(), "an entry that was on air is closed, not resumed")
-        XCTAssertEqual(s2.entry(s2.sheet.entries[0].id)?.ended?.outcome, .left)
+        XCTAssertEqual(s2.entry(s2.sheet.entries[0].id)?.ended?.outcome, .failed)
         poster2.answer = .answered([]); s2.flush(); await s2.flushTask?.value
         XCTAssertTrue(s2.pending.isEmpty)
         XCTAssertEqual(poster2.posts.last?.first, s2.sheet.appliedOps.first, "the first op sent is the first applied")
@@ -366,13 +366,13 @@ final class RunSheetStoreTests: XCTestCase {
     }
 
     // 14
-    func test14_AnEntryLeftOnAirByADeadAppIsClosedAsLeft() async {
+    func test14_AnEntryLeftOnAirByADeadAppIsClosedAsFailedNeverLeft() async {
         let f = FileManager.default.temporaryDirectory.appendingPathComponent("rs-\(UUID().uuidString).json")
         let (p, s, _) = make(storage: f)
         let o = await opened(["d-1"], p, s)
         let s2 = RunSheetStore(storage: f); let p2 = RunSheetPlayer(store: s2); let e2 = FakeEngine(); p2.engine = e2
         s2.restore(); await p2.settle()
-        XCTAssertNil(s2.onAir()); XCTAssertEqual(s2.entry(o)?.state, .heard); XCTAssertEqual(s2.entry(o)?.ended?.outcome, .left)
+        XCTAssertNil(s2.onAir()); XCTAssertEqual(s2.entry(o)?.state, .skipped); XCTAssertEqual(s2.entry(o)?.ended?.outcome, .failed)
         XCTAssertTrue(e2.speaks.isEmpty, "a crash restart never resumes work")
         XCTAssertEqual(s2.entry("d-1")?.state, .ahead)
     }

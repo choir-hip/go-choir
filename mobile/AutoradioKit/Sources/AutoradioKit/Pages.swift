@@ -26,6 +26,8 @@ public enum PageAddress {
     public static let edition = "onboarding:edit"
     /// The Autoradio page. The app opens on it, it is the first card of the deck and it cannot be closed.
     public static let radio = "radio:"
+    /// My notebook: what Autoradio has been told and has learned about the listener (station L6).
+    public static let notebook = "notebook:"
     public static func canonical(_ address: String) -> String {
         // lane autoradio-reader: "doc:<id>@<block>" (a search hit) opens the document page and remembers the block once.
         if let (id, block) = ShelfAddress.parse(address), let b = block { ShelfJump.shared.set(id, block: b); return ShelfAddress.address(id) }
@@ -37,6 +39,7 @@ public enum PageAddress {
         let scheme = address.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         switch scheme {
         case "radio": return "radio"       // the Autoradio page: the deck's first card, always open
+        case "notebook": return "notebook"
         case "paper": return "paper"
         case "pub", "texture": return "reader"
         case "textures": return "textures"
@@ -65,6 +68,7 @@ public enum PageAddress {
         let rest = rest(of: address)
         switch address {
         case "radio:": return "Autoradio"
+        case "notebook:": return "My notebook"
         case "paper:front": return "Paper"
         case "textures:": return "Textures"
         case "activity:": return "Activity"

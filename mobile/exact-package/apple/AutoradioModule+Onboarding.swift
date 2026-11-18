@@ -346,7 +346,10 @@ final class OnboardingController: @unchecked Sendable {
             // Always ends: the edition, a failure, or the deadline (EditionCompletion). The topics were saved before this ran.
             let outcome = await EditionCompletion.run(topics: topics, writer: w) { line in self.set { self.writingLine = line } }
             switch outcome {
-            case .written(let e): self.editionReady(e)
+            case .written(let e):
+                self.editionReady(e)
+                // The topics also become the first lines of the notebook; the local file stays as the cache. A failure here is quiet: the page retries.
+                Task { @MainActor in await NotebookStore.shared.writeTopics(topics) }
             case .failed(let m): self.set { self.editionStatus = "failed"; self.editionError = m }
             case .timedOut: self.set { self.editionStatus = "failed"; self.editionError = EditionCompletion.timedOutLine }
             }

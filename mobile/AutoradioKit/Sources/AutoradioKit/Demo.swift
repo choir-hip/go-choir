@@ -120,6 +120,9 @@ final class DemoURLProtocol: URLProtocol {
         switch path {
         case "/api/platform/publications/front": if let d = Demo.fixture("front") { return (200, d) }
         case "/api/compute/status": if let d = Demo.fixture("status") { return (200, d) }
+        case "/api/autoradio/learning": if let d = Demo.fixture("learning") { return (200, d) }          // station L6: the scorecard (a fixture; the real route is the server's)
+        case "/api/texture/edition": if let d = Demo.fixture("texture-edition") { return (200, d) }      // the demo notebook
+        case "/api/autoradio/steer": return (200, Data("{}".utf8))
         case "/api/platform/publications/resolve": if let d = Demo.fixture("resolve-" + TextureDemo.bareRoute(q("route"))) { return (200, d) }
         case "/api/platform/publications/related": if let d = Demo.fixture("related-" + TextureDemo.bareRoute(q("route"))) { return (200, d) }
         default: if let d = TextureDemo.route(path) { return (200, d) }

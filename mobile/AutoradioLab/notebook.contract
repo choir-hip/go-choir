@@ -1,0 +1,84 @@
+// My notebook (notebook:). Station L6, docs/design/autoradio-learned-document-2026-11-17.md section 7. What Autoradio has been told and has learned about the
+// listener: the notebook's lines (the document is a Texture; Edit opens it in the Texture reader, which edits it), the scorecard from the server's learning
+// route (or "not available yet": never a made-up number), the forecasts behind a line when it is tapped, and the plain list of everything held about the
+// listener and where each is read. The model is the Kit's (Notebook.swift).
+// testIds: notebook-page, notebook-title, notebook-edit, notebook-refresh, notebook-doc-notice, notebook-section-<key>, notebook-line-<id>, notebook-line-tag-<id>,
+// notebook-score-state, notebook-score-<n>, notebook-bykind-<n>, notebook-noverdict, notebook-behind, notebook-behind-text, notebook-evidence-<n>, notebook-evidence-note,
+// notebook-steer, notebook-held, notebook-held-<n>.
+use Theme, NotebookPageInfo from "@choir/autoradio"
+use ToolScroll, Btn, SectionHeader, RowRule from "./ui.contract"
+
+component NotebookPage
+  inject
+    th: Theme
+    nb: NotebookPageInfo
+    notebookDo: action
+    openPage: action
+  props
+    address: string
+    title: string
+  view
+    ToolScroll(id="notebook")
+      column gap=10 width="100%" testId="notebook-page"
+        text "My notebook" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 color=th.fg testId="notebook-title"
+        text "What Autoradio has been told about you, and what it has learned. You can change any line." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+        row gap=16 align-items="center"
+          if nb.docAddress != ""
+            button press=openPage(nb.docAddress, "My notebook") testId="notebook-edit" appearance="none" aria-label="Open the notebook to edit it"
+              Btn(label="Edit the notebook", primary=false, wide=false)
+          button press=notebookDo("refresh", "") testId="notebook-refresh" appearance="none" aria-label="Refresh the notebook"
+            Btn(label="Refresh", primary=false, wide=false)
+        if nb.docNotice != ""
+          text nb.docNotice font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="notebook-doc-notice"
+        if nb.docState == "loading"
+          text "Reading your notebook…" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="notebook-loading"
+        for s in nb.sections key=s.key
+          column gap=0 width="100%" testId=`notebook-section-${s.key}`
+            SectionHeader(label=s.heading)
+            for l, k in s.lines key=l.id
+              if k > 0
+                RowRule(indent=0)
+              button press=notebookDo("select", l.id) testId=`notebook-line-${l.id}` appearance="none" width="100%" aria-label=(l.canWhy ? `${l.text}. Show the forecasts behind it` : l.text)
+                row gap=8 align-items="center" width="100%" min-height=44 padding="6px 0px"
+                  column flex=1 min-width=0 gap=2 align-items="flex-start"
+                    text l.text font-family=th.fontText font-size="-exact-callout" line-height=1.35 color=th.fg text-align="left"
+                    if l.tag != ""
+                      text l.tag font-family=th.fontLabel font-size="-exact-caption2" color=th.muted testId=`notebook-line-tag-${l.id}`
+                  if l.canWhy
+                    image (l.selected ? "symbol:sf/chevron.down" : "symbol:forward-chevron") color=th.muted pointer-events="none"
+        if nb.selectedText != ""
+          column gap=6 width="100%" testId="notebook-behind"
+            SectionHeader(label="Behind this line")
+            text nb.selectedText font-family=th.fontText font-size="-exact-subheadline" color=th.fg testId="notebook-behind-text"
+            for e, n in nb.evidence key=`${n}`
+              column gap=2 width="100%" testId=`notebook-evidence-${n}`
+                text e.title font-family=th.fontHead font-size="-exact-subheadline" font-weight=600 color=th.fg line-clamp=2
+                text `${e.outcome}${e.detail != "" ? " · " + e.detail : ""}` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+            if nb.evidenceNote != ""
+              text nb.evidenceNote font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="notebook-evidence-note"
+        column gap=4 width="100%" testId="notebook-scorecard"
+          SectionHeader(label="Scorecard")
+          if nb.scoreState == "loading"
+            text "Reading the scorecard…" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="notebook-score-state"
+          if nb.scoreNotice != ""
+            text nb.scoreNotice font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="notebook-score-state"
+          for p, n in nb.score key=p.label
+            row justify-content="space-between" width="100%" testId=`notebook-score-${n}`
+              text p.label font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg
+              text p.value font-family=th.fontLabel font-size="-exact-subheadline" color=th.fg font-variant-numeric="tabular-nums"
+          for p, n in nb.byKind key=p.label
+            row justify-content="space-between" width="100%" testId=`notebook-bykind-${n}`
+              text p.label font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+              text p.value font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+          if nb.noVerdict != ""
+            text nb.noVerdict font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="notebook-noverdict"
+        if nb.steerLine != ""
+          text nb.steerLine font-family=th.fontLabel font-size="-exact-footnote" color=th.muted testId="notebook-steer"
+        column gap=0 width="100%" testId="notebook-held"
+          SectionHeader(label="What is held about you, and where you read it")
+          for h, n in nb.held key=h.what
+            if n > 0
+              RowRule(indent=0)
+            column gap=2 width="100%" padding="8px 0px" testId=`notebook-held-${n}`
+              text h.what font-family=th.fontText font-size="-exact-footnote" color=th.fg
+              text h.whereRead font-family=th.fontLabel font-size="-exact-caption2" color=th.muted

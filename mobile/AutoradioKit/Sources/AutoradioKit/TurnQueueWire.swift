@@ -49,7 +49,17 @@ extension RunSheetPlayer {
         let up: [[String: Any]] = store.ahead(limit: Int.max).compactMap { e in
             Self.wireItem(e).map { ["id": e.id, "item": $0, "added_by": by(e.placedBy)] }
         }
-        let o: [String: Any] = ["version": Int(store.sheet.version), "current": cur, "upcoming": Array(up.prefix(maxUpcoming))]
+        var o: [String: Any] = ["version": Int(store.sheet.version), "current": cur, "upcoming": Array(up.prefix(maxUpcoming))]
+        // The entry on air, whatever its kind, so a steering turn ("less of this") has its referent: id, title, forecast claim, stories it cites.
+        // Inside `queue`, where the route reads unknown fields leniently (the turn's top level refuses them).
+        if let e = store.onAir() {
+            var a: [String: Any] = ["id": e.id, "title": Self.clamp(e.displayTitle, 300)]
+            if let c = e.forecast?.claimId, !c.isEmpty { a["claim_id"] = c }
+            var stories: [String] = []
+            for c in e.cites ?? [] where c.ref.hasPrefix("pub:") { let r = SteerTap.story(c.ref); if !r.isEmpty, !stories.contains(r) { stories.append(r) } }
+            if !stories.isEmpty { a["stories"] = Array(stories.prefix(12)) }
+            o["on_air"] = a
+        }
         return try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys, .withoutEscapingSlashes])
     }
 

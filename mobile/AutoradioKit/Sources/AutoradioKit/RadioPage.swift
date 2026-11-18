@@ -329,7 +329,7 @@ public enum RadioPage {
             if let f = e.forecast {
                 let cause = f.causedBy.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !cause.isEmpty { o.why = cause.prefix(1).uppercased() + cause.dropFirst() + (cause.hasSuffix(".") ? "" : ".") }
-                if f.pHeard >= 0 && f.pHeard <= 1 { o.forecast = "The desk forecast a \(Int((f.pHeard * 100).rounded())) in 100 chance that you hear it through." }
+                if let p = f.pHeard, p >= 0, p <= 1 { o.forecast = "The desk forecast a \(Int((p * 100).rounded())) in 100 chance that you hear it through." }
             }
             if o.why.isEmpty { o.why = builtWhy(e) }
             o.canWhy = !o.why.isEmpty

@@ -4,7 +4,7 @@
 // plus search over pages, files and stories. Titles are human: a page's title, else one made from its slug; never an address.
 // The panel is placed by the bar (bar.contract); the scrim behind the page is the root's.
 // testIds: launcher-layer, launcher-search, launcher-open-<address>, launcher-close-<address>, search-hit-<address>,
-// place-<slug> (radio, paper, textures, files, mail, books, podcasts, settings as glyphs; activity, told, components in More), launcher-nohits.
+// place-<slug> (radio, notebook, paper, textures, files, mail, books, podcasts, settings as glyphs; activity, told, components in More), launcher-nohits.
 use Theme, PageList, LauncherData from "@choir/autoradio"
 use Layer, stackName, kindOf, kindWord, isFixed, pageName, SectionHeader, RowRule from "./ui.contract"
 
@@ -47,6 +47,9 @@ component KeyGlyph
             path d="M15.4 8.6a4.8 4.8 0 0 1 0 6.8"
             path d="M5.6 5.6a9 9 0 0 0 0 12.8"
             path d="M18.4 5.6a9 9 0 0 1 0 12.8"
+          if slug == "notebook"
+            rect x=5 y=3 width=14 height=18 rx=1.5
+            path d="M9 3v18M12.5 8h3M12.5 12h3"
           if slug == "paper"
             rect x=5 y=3 width=14 height=18 rx=1.5
             path d="M8 7.5h8M8 11.5h8M8 15h5"
@@ -134,6 +137,7 @@ component Launcher
           if lnc.hasQuery == false
             row flex-wrap="wrap" gap=0 width="100%" testId="launcher-key-pages"
               KeyGlyph(slug="radio", name="Autoradio", address="radio:")
+              KeyGlyph(slug="notebook", name="My notebook", address="notebook:")
               KeyGlyph(slug="paper", name="Paper", address="paper:front")
               KeyGlyph(slug="textures", name="Textures", address="textures:")
               KeyGlyph(slug="files", name="Files", address="file:/")
