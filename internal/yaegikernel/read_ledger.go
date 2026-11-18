@@ -102,17 +102,18 @@ func (s *ChoirScope) recordRead(url string, out JSON, err error) {
 	}
 }
 
-// pageRead says whether this run captured the page whose searchHitKey is key.
-func (s *ChoirScope) pageRead(key string) bool {
+// readKeys is the searchHitKey of every page this run captured.
+func (s *ChoirScope) readKeys() map[string]bool {
 	l := &s.ledger
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	keys := make(map[string]bool, len(l.reads))
 	for _, e := range l.reads {
-		if e.OK && searchHitKey(e.URL) == key {
-			return true
+		if e.OK {
+			keys[searchHitKey(e.URL)] = true
 		}
 	}
-	return false
+	return keys
 }
 
 // Reads returns every Read this run made, failures included.

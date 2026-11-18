@@ -119,7 +119,7 @@ _ = s`)
 		t.Fatalf("first cell: err=%v res=%#v", err, first)
 	}
 	id := <-host.starts
-	if got := strings.Join(first.Searches, "|"); got != id+": 1/2 answered, +1 new" {
+	if got := strings.Join(first.Searches, "|"); got != id+": 1/2 answered, +1 in, 1 of 1 pages new" {
 		t.Fatalf("first cell count lines = %q", got)
 	}
 	if strings.Contains(first.Stdout, "fast.example") {
@@ -141,7 +141,7 @@ fmt.Println(c, err)`)
 	if !strings.Contains(second.Stdout, id+": 1/2 answered, done") {
 		t.Fatalf("SearchWait counts = %q", second.Stdout)
 	}
-	if got := strings.Join(second.Searches, "|"); got != id+": 1/2 answered, +1 new, done" {
+	if got := strings.Join(second.Searches, "|"); got != id+": 1/2 answered, +1 in, 1 of 1 pages new, done" {
 		t.Fatalf("second cell count lines = %q", got)
 	}
 	third, err := w.Eval(ctx, `fmt.Println(len(choir.Searches.List()))`)

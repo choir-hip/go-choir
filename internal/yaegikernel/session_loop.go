@@ -127,7 +127,7 @@ type SessionResult struct {
 	Reuse    ReuseDisposition `json:"reuse,omitempty"`
 	DiagKind DiagnosticKind   `json:"diag_kind,omitempty"`
 	// Searches carries one count line per async search with arrivals since
-	// the last cell result ("s3: 3/4 answered, +2 new"): the only push of
+	// the last cell result ("s3: 3/4 answered, +2 in, 12 of 40 pages new"): the only push of
 	// search arrivals to the model, counts and never results.
 	Searches []string `json:"searches,omitempty"`
 	// SearchStats are the cell's search counts (search_marks.go).

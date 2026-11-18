@@ -5,16 +5,17 @@ import (
 	"context"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/searchquery"
 )
 
 // Result cache and in-flight join
 // (docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md,
 // docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md §1).
 //
-// An identical search (same scope, same query up to whitespace, same
+// An identical search (same scope, same query terms (searchquery.Key), same
 // max_results) answered within the TTL is replayed from memory without
 // calling any provider; one already in flight is joined. Only arrivals that
 // answered with results are kept, so a failure or an empty answer never
@@ -110,12 +111,6 @@ func NewCache(cfg CacheConfig) *Cache {
 	}
 }
 
-// NormalizeQuery collapses whitespace and nothing else: case, quotes and
-// operators (OR, site:, phrases) can change what a provider returns.
-func NormalizeQuery(q string) string {
-	return strings.Join(strings.Fields(q), " ")
-}
-
 var timeSensitive = regexp.MustCompile(`(?i)\b(today|tonight|yesterday|this (week|morning|evening|month)|latest|breaking|live|now|just|hours? ago|minutes? ago|january|february|march|april|may|june|july|august|september|october|november|december)\b`)
 
 // IsTimeSensitive reports whether a query asks about the news of the
@@ -123,7 +118,10 @@ var timeSensitive = regexp.MustCompile(`(?i)\b(today|tonight|yesterday|this (wee
 func IsTimeSensitive(q string) bool { return timeSensitive.MatchString(q) }
 
 func cacheKey(scope, query string, maxResults int) string {
-	return scope + "\x00" + NormalizeQuery(query) + "\x00" + strconv.Itoa(maxResults)
+	// searchquery.Key: the same terms in any order, case, quoting or
+	// punctuation, with a bare year and stop words dropped, are one search.
+	// The desk's search store keys on the same function.
+	return scope + "\x00" + searchquery.Key(query) + "\x00" + strconv.Itoa(maxResults)
 }
 
 // Start answers from the cache, joins an identical search in flight, or

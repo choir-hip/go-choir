@@ -34,6 +34,10 @@ type researchFixture struct {
 	slow    map[string]time.Duration
 	hang    map[string]bool
 	failing map[string]string
+	// searchCalls counts the searches the host was asked to start; urlsFor
+	// fixes the URLs a query returns (default: five made from the query).
+	searchCalls atomic.Int32
+	urlsFor     map[string][]string
 }
 
 func newResearchFixture(t *testing.T) *researchFixture {
@@ -55,10 +59,13 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				if err := json.Unmarshal(payload, &in); err != nil {
 					return nil, err
 				}
+				f.searchCalls.Add(1)
 				id := fmt.Sprintf("s%d", len(f.scope.searches.order)+1)
-				var urls []string
+				urls := f.urlsFor[in.Query]
 				for _, host := range []string{"a.example", "b.example", "a.example", "c.example", "d.example"} {
-					urls = append(urls, fmt.Sprintf("https://%s/%s/%d", host, strings.ReplaceAll(in.Query, " ", "-"), len(urls)))
+					if f.urlsFor[in.Query] == nil {
+						urls = append(urls, fmt.Sprintf("https://%s/%s/%d", host, strings.ReplaceAll(in.Query, " ", "-"), len(urls)))
+					}
 				}
 				f.scope.searches.apply(SearchFrame{ID: id, Kind: SearchFrameStart, Query: in.Query, Providers: []string{"keenable"}})
 				f.scope.searches.apply(providerFrame(id, "keenable", true, urls...))

@@ -113,6 +113,7 @@ type ChoirScope struct {
 	statsMu     sync.Mutex
 	heldStat    int
 	notSentStat map[string]int
+	notes       []string
 	// ledger is this session's read ledger (read_ledger.go): every Read, its
 	// capture or its error, so a failed Read is never invisible.
 	ledger readLedger
@@ -183,7 +184,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	}
 	scope := &ChoirScope{broker: broker, issuer: issuer, actions: actions, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: desk, slot: slot, searches: newSearchStore()}
 	scope.handleRef.Store(&handleRef)
-	scope.searches.isRead = scope.pageRead
+	scope.searches.readKeys = scope.readKeys
 	return scope, nil
 }
 

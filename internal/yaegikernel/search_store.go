@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/searchquery"
 )
 
 // Async search, worker side (Cut 2 unit 2a,
@@ -100,6 +103,11 @@ type Search struct {
 	Done      bool     `json:"done"`
 	Pending   []string `json:"pending,omitempty"`
 	Error     string   `json:"error,omitempty"`
+
+	// startedAt and key let SearchStart answer a later query with the same
+	// terms from this search (search_marks.go reuseSearch).
+	startedAt time.Time
+	key       string
 }
 
 // SearchCount is how far one search has come.
@@ -109,6 +117,10 @@ type SearchCount struct {
 	Arrived  int    `json:"arrived"`
 	Total    int    `json:"total"`
 	Done     bool   `json:"done"`
+	// Pages are the search's distinct result pages; NewPages the ones no
+	// earlier search of this run returned.
+	Pages    int `json:"pages"`
+	NewPages int `json:"new_pages"`
 }
 
 func (c SearchCount) String() string {
@@ -126,9 +138,15 @@ type SearchStub struct {
 	Query     string   `json:"query"`
 	Providers int      `json:"providers"`
 	Cooling   []string `json:"cooling,omitempty"`
+	// Reused says why no search was sent: the query has the terms of an
+	// earlier search of this run, and ID is that search.
+	Reused string `json:"reused,omitempty"`
 }
 
 func (s SearchStub) String() string {
+	if s.Reused != "" {
+		return fmt.Sprintf("%s not sent: %s", s.ID, s.Reused)
+	}
 	line := fmt.Sprintf("%s started: %d providers", s.ID, s.Providers)
 	if len(s.Cooling) > 0 {
 		line += fmt.Sprintf(" (%d cooling: %s)", len(s.Cooling), strings.Join(s.Cooling, ", "))
@@ -164,9 +182,11 @@ type SearchStore struct {
 	// runStart is the index in order of the first search of the current run:
 	// held is judged against searches from there on (markRunStart).
 	runStart int
-	// isRead says whether this run read the page with that searchHitKey;
-	// nil means the store knows no read ledger.
-	isRead func(key string) bool
+	// now is the clock (nil: time.Now); a test sets it.
+	now func() time.Time
+	// readKeys returns the searchHitKey of every page this run read; nil
+	// means the store knows no read ledger.
+	readKeys func() map[string]bool
 	// counted is what the host has been told (takeStats).
 	startedCounted int
 	counted        map[string][2]int
@@ -185,13 +205,14 @@ func (st *SearchStore) apply(f SearchFrame) {
 	defer st.mu.Unlock()
 	s := st.searches[f.ID]
 	if s == nil {
-		s = &Search{ID: f.ID}
+		s = &Search{ID: f.ID, startedAt: st.nowTime()}
 		st.searches[f.ID] = s
 		st.order = append(st.order, f.ID)
 	}
 	switch f.Kind {
 	case SearchFrameStart:
 		s.Query = f.Query
+		s.key = searchquery.Key(f.Query)
 		s.Providers = append([]string(nil), f.Providers...)
 		s.Cooling = append([]string(nil), f.Cooling...)
 	case SearchFrameProvider:
@@ -264,27 +285,45 @@ func (st *SearchStore) Summary(id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	type group struct {
-		host string
-		hits []SearchHit
-	}
-	var groups []*group
-	byHost := map[string]*group{}
-	for _, hit := range s.Results {
+	groups := groupByHost(s.Results)
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %q: %d results on %d hosts, %d/%d providers answered; %d of %d pages new\n", s.ID, s.Query, len(s.Results), len(groups), s.Answered, s.Total, s.NewPages, len(s.Results))
+	writeHostGroups(&b, groups, func(n int) string {
+		return fmt.Sprintf("... %d more hosts; read choir.Searches.Get(%q).Results for them\n", n, s.ID)
+	})
+	return b.String(), nil
+}
+
+type hostGroup struct {
+	host string
+	hits []SearchHit
+}
+
+// groupByHost groups hits by host, hosts in first-seen order.
+func groupByHost(hits []SearchHit) []*hostGroup {
+	var groups []*hostGroup
+	byHost := map[string]*hostGroup{}
+	for _, hit := range hits {
 		host := hostOf(hit.URL)
 		g := byHost[host]
 		if g == nil {
-			g = &group{host: host}
+			g = &hostGroup{host: host}
 			byHost[host] = g
 			groups = append(groups, g)
 		}
 		g.hits = append(g.hits, hit)
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s %q: %d results on %d hosts, %d/%d providers answered\n", s.ID, s.Query, len(s.Results), len(groups), s.Answered, s.Total)
+	return groups
+}
+
+// writeHostGroups prints each host with its count and first two hits, until
+// b would pass summaryMaxBytes; more says what the cut left out.
+func writeHostGroups(b *strings.Builder, groups []*hostGroup, more func(n int) string) {
 	for i, g := range groups {
 		var line strings.Builder
 		fmt.Fprintf(&line, "%s (%d)", g.host, len(g.hits))
+		// The first two hits shown are pages the desk does not hold yet.
+		sort.SliceStable(g.hits, func(a, b int) bool { return !g.hits[a].Held && g.hits[b].Held })
 		for j, hit := range g.hits {
 			if j == 2 {
 				break
@@ -293,16 +332,15 @@ func (st *SearchStore) Summary(id string) (string, error) {
 			if r := []rune(title); len(r) > 80 {
 				title = string(r[:80]) + "..."
 			}
-			fmt.Fprintf(&line, "\n  %s | %s", title, hit.URL)
+			fmt.Fprintf(&line, "\n  %s | %s%s", title, hit.URL, hitMarks(hit))
 		}
 		line.WriteString("\n")
 		if b.Len()+line.Len() > summaryMaxBytes {
-			fmt.Fprintf(&b, "... %d more hosts; read choir.Searches.Get(%q).Results for them\n", len(groups)-i, s.ID)
+			b.WriteString(more(len(groups) - i))
 			break
 		}
 		b.WriteString(line.String())
 	}
-	return b.String(), nil
 }
 
 func hostOf(raw string) string {
@@ -336,6 +374,11 @@ func (st *SearchStore) wait(id string, d time.Duration) (SearchCount, error) {
 			return SearchCount{}, err
 		}
 		count := countOf(s)
+		for _, c := range st.markedLocked() {
+			if c.ID == s.ID {
+				count = countOfMarked(c)
+			}
+		}
 		changed := st.changed
 		st.mu.Unlock()
 		if count.Done {
@@ -357,10 +400,14 @@ func (st *SearchStore) counts() []SearchCount {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	out := make([]SearchCount, 0, len(st.order))
-	for _, id := range st.order {
-		out = append(out, countOf(st.searches[id]))
+	for _, c := range st.markedLocked() {
+		out = append(out, countOfMarked(c))
 	}
 	return out
+}
+
+func countOfMarked(c Search) SearchCount {
+	return SearchCount{ID: c.ID, Answered: c.Answered, Arrived: len(c.Arrivals), Total: len(c.Providers), Done: c.Done, Pages: len(c.Results), NewPages: c.NewPages}
 }
 
 func countOf(s *Search) SearchCount {
@@ -412,6 +459,13 @@ func (s *ChoirScope) SearchStart(query string) (SearchStub, error) {
 	if query == "" {
 		return SearchStub{}, fmt.Errorf("choir: SearchStart needs a query")
 	}
+	if !searchquery.HasRealWord(query) {
+		s.noteNotSent("refused")
+		return SearchStub{}, fmt.Errorf("choir: SearchStart refused: %q has no word of two or more letters or digits, so it is not a question; send the words of the question", query)
+	}
+	if stub, ok := s.reuseSearch(query); ok {
+		return stub, nil
+	}
 	var out SearchStartResult
 	if err := s.call(ActionSearchStart, SearchStartPayload{Query: query}, &out); err != nil {
 		return SearchStub{}, err
@@ -438,7 +492,11 @@ func (s *ChoirScope) SearchWait(id string, ms int) (SearchCount, error) {
 
 // searchCountLines returns one line per search with arrivals the desk has
 // not been told about, and marks them told: the only push of arrivals to
-// the model, and it carries counts, never results.
+// the model, and it carries counts, never results. A line says how many
+// providers answered, how many arrivals are new to the desk ("+2 in"), and
+// how many of the search's pages no earlier search of this run returned
+// ("12 of 40 pages new"). When any line is shown, one more says what the
+// latest searches added.
 func (s *ChoirScope) searchCountLines() []string {
 	if s == nil || s.searches == nil {
 		return nil
@@ -447,17 +505,27 @@ func (s *ChoirScope) searchCountLines() []string {
 		s.searchTold = map[string]int{}
 	}
 	var lines []string
-	for _, c := range s.searches.counts() {
+	counts := s.searches.counts()
+	for _, c := range counts {
 		fresh := c.Arrived - s.searchTold[c.ID]
 		if fresh <= 0 {
 			continue
 		}
 		s.searchTold[c.ID] = c.Arrived
-		line := fmt.Sprintf("%s: %d/%d answered, +%d new", c.ID, c.Answered, c.Total, fresh)
+		line := fmt.Sprintf("%s: %d/%d answered, +%d in", c.ID, c.Answered, c.Total, fresh)
+		if c.Pages > 0 || c.Done {
+			line += fmt.Sprintf(", %d of %d pages new", c.NewPages, c.Pages)
+		}
 		if c.Done {
 			line += ", done"
 		}
 		lines = append(lines, line)
 	}
+	if len(lines) > 0 {
+		if thread := s.searches.latestYield(3); thread != "" {
+			lines = append(lines, thread)
+		}
+	}
+	lines = append(lines, s.takeNotes()...)
 	return lines
 }
