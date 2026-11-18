@@ -11,11 +11,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// InboxCommitsWritten is the number of inbox command batches this process
-// has written: one per CommitInboxRecords that wrote and one per
-// CommitInboxRecordsBatch that wrote, however many commands it held. A
-// replay writes nothing and is not counted. The crash boot's closure reads
-// it to say how many commits its closures took.
+// InboxCommitsWritten is the number of inbox command writes this process has
+// made through commitInboxRecordsLocked (CommitInboxRecords and the rebase
+// notice claim, which calls it directly) and CommitInboxRecordsBatch, one per
+// write however many commands a batch held. A replay writes nothing and is
+// not counted. Only tests read it, to count commits; the crash boot's closure
+// counts its own commits locally.
 func (s *Store) InboxCommitsWritten() int64 { return s.inboxCommits.Load() }
 
 // CommitInboxRecordsBatch commits several independent inbox commands in ONE
