@@ -893,24 +893,13 @@ func TestTwoFilesPlacedMidPassAreBothImportedInOrderBeforeTheGapIsDone(t *testin
 	}
 }
 
-// countHealth counts the worker's passes: each begins with one Health call.
-type countHealth struct {
-	inner  embedder.Embedder
-	passes atomic.Int64
-}
-
-func (e *countHealth) Health(ctx context.Context) error { e.passes.Add(1); return e.inner.Health(ctx) }
-func (e *countHealth) Embed(ctx context.Context, in []string) ([][]float32, error) {
-	return e.inner.Embed(ctx, in)
-}
-
 func TestAPermanentlyWaitingFileDoesNotMakePassesSpin(t *testing.T) {
 	f := newVecFixture(t)
 	base := time.Now().UTC().Add(-100 * time.Hour)
 	f.captures(t, "o1", "c1", "gap", 40, base, func(i int) string { return fmt.Sprintf("gap text number%d", i) }, time.Minute)
 	stuck := f.captures(t, "o1", "c1", "STUCK", 40, base, func(i int) string { return fmt.Sprintf("STUCK text number%d", i) }, time.Minute)
-	ch := &countHealth{inner: &stuckEmbedder{inner: f.emb}}
-	f.store.SetEmbedder(ch)
+	logs := fullTextLog(t)
+	f.store.SetEmbedder(&stuckEmbedder{inner: f.emb})
 	f.inboxPut(t, "stuck.jsonl", f.macRows(t, stuck...), time.Hour)
 	// The timings are read once by StartVectorWorker, so they are put back at
 	// once, before the worker has run a pass.
@@ -928,8 +917,9 @@ func TestAPermanentlyWaitingFileDoesNotMakePassesSpin(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if n := ch.passes.Load(); n > 4 {
-		t.Fatalf("%d passes started in the window with one permanently waiting file", n)
+	// every pass that tries the waiter says so once
+	if n := strings.Count(logs.String(), "stuck.jsonl was not imported now"); n > 4 {
+		t.Fatalf("the waiting file was tried %d times in the window", n)
 	}
 	if !spoolHas(filepath.Join(f.inboxDir("inbox"), "stuck.jsonl")) {
 		t.Fatal("the waiting file left the inbox")
