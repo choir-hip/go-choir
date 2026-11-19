@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -1538,11 +1537,11 @@ func TestResearchBriefLogsAPanickedSearchOnceWithTheRunAndNoQuery(t *testing.T) 
 	b := rt.researchBriefOpening(context.Background(), briefRunRecord(owner, computer, "doc-20", "run-brief-20"))
 	b.finish(false)
 	out := logs.String()
-	if n := strings.Count(out, "corpus search panicked"); n != 1 || !strings.Contains(out, "run-brief-20") {
+	if n := strings.Count(out, "a corpus search panicked"); n != 1 || !strings.Contains(out, "run-brief-20") {
 		t.Fatalf("want one panic line naming the run:\n%s", out)
 	}
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "corpus search panicked") && strings.Contains(line, "Secret objective") {
+		if strings.Contains(line, "a corpus search panicked") && strings.Contains(line, "Secret objective") {
 			t.Fatalf("the panic line carries the query: %s", line)
 		}
 	}
