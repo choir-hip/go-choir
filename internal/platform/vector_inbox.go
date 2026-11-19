@@ -277,3 +277,5 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 	}
 	return true, nil
 }
+
+const vectorInboxShortDraws = 3
