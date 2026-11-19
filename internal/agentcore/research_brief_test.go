@@ -74,7 +74,7 @@ func briefResult(captures []map[string]any, stories int) json.RawMessage {
 }
 
 func fullCoverage() map[string]any {
-	return map[string]any{"page_text": true, "page_text_indexed": 10, "pages": 10, "labels": true, "published": true}
+	return map[string]any{"page_text": true, "page_text_indexed": 10, "titles": true, "labels": true, "published": true}
 }
 
 // withCoverage returns a result with its coverage object replaced (nil removes it).
@@ -217,17 +217,17 @@ func TestBriefOverTheTokenBoundDropsWholeThreadsFromTheLastAndNamesThem(t *testi
 	}
 }
 
-func TestBriefOnAnEmptyCorpusSaysSoAndMarksOnlyTheRecordsLabels(t *testing.T) {
+// A search that found nothing says what it covered and claims nothing else; it
+// marks the record's labels (its text is in the message) and no page's.
+func TestBriefOnAnEmptySearchSaysWhatItCoveredAndMarksOnlyTheRecordsLabels(t *testing.T) {
 	plan := researchBriefThreads([]types.CommitmentRecord{castWithLabels("Harbor?", types.OwnerPrivateLabel("texture"))}, "")
 	res := buildResearchBrief(context.Background(), plan, fixedSearch(briefResult(nil, 0)))
-	if res.outcome != briefEmpty {
-		t.Fatalf("outcome = %q", res.outcome)
+	if res.outcome != briefEmpty || res.gaps != 0 {
+		t.Fatalf("outcome = %q gaps=%d", res.outcome, res.gaps)
 	}
-	if !strings.Contains(res.text, "holds no page or story") {
-		t.Fatalf("an empty corpus is not said plainly:\n%s", res.text)
+	if !strings.Contains(res.text, "Nothing found. Searched: page text (10 pages indexed), titles and labels, published stories.") {
+		t.Fatalf("what the search covered is not said:\n%s", res.text)
 	}
-	// The record's label is marked (its text is in the message); the pages'
-	// labels are not (none was delivered): no capture floor, no world.
 	if got := strings.Join(sortedLabels(res.labels), ","); got != "owner_private:texture" {
 		t.Fatalf("an empty brief marks %q, want only the record's label", got)
 	}
@@ -279,7 +279,7 @@ func TestBriefKeepsThreadsSearchedBeforeTheDeadline(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-	if res.outcome != briefPartial || !strings.Contains(res.text, "first thread page") || !strings.Contains(res.text, "Not searched") {
+	if res.outcome != briefDelivered || res.gaps < 9 || !strings.Contains(res.text, "first thread page") || !strings.Contains(res.text, "Not searched") {
 		t.Fatalf("a partial brief is not delivered with what was not searched named:\n%s", res.text)
 	}
 }
@@ -633,24 +633,25 @@ func seedResearchCastWithLabels(t *testing.T, s *store.Store, owner, computer, d
 	}
 }
 
-// A half the verb did not search is never read as an empty corpus: the brief
-// reads the verb's coverage object, not its prose notes.
-func TestBriefAFailedHalfIsNotAnEmptyCorpus(t *testing.T) {
-	// Page text and labels ran, published did not: partial, with the pages.
+// A part the verb says it did not run is named as not searched, whatever was
+// found; the brief states facts about the search and nothing about absence.
+func TestBriefNamesWhatWasNotSearched(t *testing.T) {
+	// Published did not run, a page was found: delivered, with the gap named.
 	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult([]map[string]any{briefCapture(1, "p")}, 0), coverageWith(map[string]any{"published": false}))))
-	if res.outcome != briefPartial || !strings.Contains(res.text, "capture_id=cap-1") || !strings.Contains(res.text, "Published stories: not searched") {
-		t.Fatalf("outcome=%q text:\n%s", res.outcome, res.text)
+	if res.outcome != briefDelivered || res.gaps != 1 || !strings.Contains(res.text, "capture_id=cap-1") || !strings.Contains(res.text, "Not searched: published stories.") {
+		t.Fatalf("outcome=%q gaps=%d text:\n%s", res.outcome, res.gaps, res.text)
 	}
 	if len(res.labels) == 0 {
 		t.Fatal("delivered pages marked nothing")
 	}
-	// Nothing found and a half not searched: never the empty sentence.
-	res = buildResearchBrief(context.Background(), planN(2), fixedSearch(withCoverage(briefResult(nil, 0), coverageWith(map[string]any{"labels": false}))))
-	if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") {
-		t.Fatalf("outcome=%q text:\n%s", res.outcome, res.text)
+	// Titles ran but Jev's labels were not read: the part is named truthfully.
+	res = buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult(nil, 0), coverageWith(map[string]any{"labels": false}))))
+	if res.outcome != briefEmpty || res.gaps != 1 ||
+		!strings.Contains(res.text, "Nothing found. Searched: page text (10 pages indexed), titles, published stories. Not searched: labels.") {
+		t.Fatalf("outcome=%q gaps=%d text:\n%s", res.outcome, res.gaps, res.text)
 	}
-	// Every half failed in every thread: failed, one sentence.
-	none := map[string]any{"page_text": false, "page_text_indexed": 0, "pages": 0, "labels": false, "published": false}
+	// No part ran in any thread: failed, one sentence.
+	none := map[string]any{"page_text": false, "page_text_indexed": 0, "titles": false, "labels": false, "window": false, "published": false}
 	res = buildResearchBrief(context.Background(), planN(2), fixedSearch(withCoverage(briefResult(nil, 0), none)))
 	if res.outcome != briefFailed || !strings.HasPrefix(res.text, "No corpus brief:") {
 		t.Fatalf("outcome=%q text:\n%s", res.outcome, res.text)
@@ -672,7 +673,7 @@ func TestBriefReadsTheCoverageTheRealToolWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
-	if res.outcome != briefFailed || strings.Contains(res.text, "holds no page or story") {
+	if res.outcome != briefFailed {
 		t.Fatalf("a computer whose capture store is not configured read as %q:\n%s", res.outcome, res.text)
 	}
 }
@@ -1003,9 +1004,7 @@ func TestBriefProseNeverReachesTheVerbAsAnOperator(t *testing.T) {
 	}
 }
 
-// Round 2, item 2: "the corpus holds nothing" only when every thread was
-// searched in both halves and found nothing.
-func TestBriefDoesNotSayEmptyWhenTheDeadlineCutTheLoop(t *testing.T) {
+func TestBriefAThreadTheDeadlineCutIsAGapNotAClaim(t *testing.T) {
 	restore := researchBriefDeadline
 	t.Cleanup(func() { researchBriefDeadline = restore })
 	researchBriefDeadline = 150 * time.Millisecond
@@ -1018,30 +1017,31 @@ func TestBriefDoesNotSayEmptyWhenTheDeadlineCutTheLoop(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-	if strings.Contains(res.text, "holds no page or story") {
-		t.Fatalf("a brief the deadline cut says the corpus holds nothing:\n%s", res.text)
+	if res.outcome != briefEmpty || res.gaps != 15 || res.reason == "" {
+		t.Fatalf("outcome=%q gaps=%d reason=%q, want empty (the searches that ran found nothing), 5 threads x 3 parts not searched", res.outcome, res.gaps, res.reason)
 	}
-	if res.outcome != briefPartial || res.reason == "" {
-		t.Fatalf("outcome=%q reason=%q, want partial with a reason", res.outcome, res.reason)
-	}
-	if !strings.Contains(res.text, "Not searched") || !strings.Contains(res.text, "Thread 1") || !strings.Contains(res.text, "Nothing") {
-		t.Fatalf("the brief does not say what was searched and found nothing and what was not searched:\n%s", res.text)
+	if !strings.Contains(res.text, "Not searched") || !strings.Contains(res.text, "Thread 1") || !strings.Contains(res.text, "Nothing found. Searched:") {
+		t.Fatalf("the brief does not say what was searched and what was not:\n%s", res.text)
 	}
 }
 
-func TestBriefDoesNotSayEmptyWhileTheTextIndexIsCatchingUp(t *testing.T) {
-	cov := coverageWith(map[string]any{"page_text_indexed": 100, "pages": 900})
+// The brief prints how many pages the page-text index holds, as a number, and
+// compares it with nothing.
+func TestBriefPrintsTheIndexedCountAndComparesNothing(t *testing.T) {
+	cov := coverageWith(map[string]any{"page_text_indexed": 100})
 	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult(nil, 0), cov)))
-	if strings.Contains(res.text, "holds no page or story") || res.outcome != briefPartial {
-		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+	if res.gaps != 0 || !strings.Contains(res.text, "page text (100 pages indexed)") {
+		t.Fatalf("gaps=%d:\n%s", res.gaps, res.text)
 	}
-	if !strings.Contains(res.text, "100 of 900") {
-		t.Fatalf("the index's reach is not said in plain words:\n%s", res.text)
+	// A count that is 0 is not printed as "0 pages".
+	cov = coverageWith(map[string]any{"page_text_indexed": 0})
+	res = buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult(nil, 0), cov)))
+	if strings.Contains(res.text, "0 pages") || !strings.Contains(res.text, "Searched: page text, titles and labels") {
+		t.Fatalf("a zero count is printed:\n%s", res.text)
 	}
 }
 
-// A failed deadline-free thread error is a gap too.
-func TestBriefAThreadThatErroredIsAGapNotAnEmptyCorpus(t *testing.T) {
+func TestBriefAThreadThatErroredIsAGap(t *testing.T) {
 	calls := 0
 	res := buildResearchBrief(context.Background(), planN(2), func(context.Context, string) (json.RawMessage, error) {
 		calls++
@@ -1050,8 +1050,8 @@ func TestBriefAThreadThatErroredIsAGapNotAnEmptyCorpus(t *testing.T) {
 		}
 		return briefResult(nil, 0), nil
 	})
-	if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") {
-		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+	if res.outcome != briefEmpty || res.gaps != 3 || !strings.Contains(res.text, "Not searched (corpusd returned 500): thread 2") {
+		t.Fatalf("outcome=%q gaps=%d:\n%s", res.outcome, res.gaps, res.text)
 	}
 }
 
@@ -1084,11 +1084,11 @@ func TestBriefCountsAfterTheDropLoopAndLogsLeftOutThreads(t *testing.T) {
 	}
 }
 
-func TestBriefSaysWhichHalfFoundNothingAndWhichWasNotSearched(t *testing.T) {
-	cov := coverageWith(map[string]any{"page_text": false, "page_text_indexed": 0, "pages": 0, "labels": false})
+func TestBriefSaysWhichPartsWereSearchedAndWhichWereNot(t *testing.T) {
+	cov := coverageWith(map[string]any{"page_text": false, "page_text_indexed": 0, "titles": false, "labels": false})
 	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult(nil, 0), cov)))
-	if !strings.Contains(res.text, "Held pages: not searched") || !strings.Contains(res.text, "Published stories: none found") {
-		t.Fatalf("the searched half is not said to have found nothing:\n%s", res.text)
+	if !strings.Contains(res.text, "Nothing found. Searched: published stories. Not searched: page text, titles and labels.") {
+		t.Fatalf("the parts are not named:\n%s", res.text)
 	}
 }
 
@@ -1129,60 +1129,34 @@ func briefOverRealTool(t *testing.T, sink researchtools.CaptureSink, plan briefP
 	return buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
 }
 
-// The reviewer's scenario: no page-text index, and the window fallback. Both
-// searched "nothing" and said so before the coverage object existed.
-func TestBriefNeverSaysEmptyWhenPageTextWasNeverSearched(t *testing.T) {
+// The reviewer's scenario: no page-text index, and the window fallback. The
+// brief names the page text as not searched.
+func TestBriefNamesPageTextAsNotSearchedWhenTheIndexDidNotAnswer(t *testing.T) {
 	for name, sink := range map[string]researchtools.CaptureSink{
 		"index answered, no page text": &briefSink{},
 		"window fallback":              windowOnlySink{},
 	} {
 		t.Run(name, func(t *testing.T) {
 			res := briefOverRealTool(t, sink, planN(2))
-			if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") {
-				t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+			if res.outcome != briefEmpty || res.gaps == 0 {
+				t.Fatalf("outcome=%q gaps=%d:\n%s", res.outcome, res.gaps, res.text)
 			}
-			if !strings.Contains(res.text, "page text not searched") && !strings.Contains(res.text, "Page text: not searched") {
+			if !strings.Contains(res.text, "Not searched: page text") {
 				t.Fatalf("the missing page text is not said:\n%s", res.text)
-			}
-			if res.reason == "" {
-				t.Fatal("no reason for the log")
 			}
 		})
 	}
 }
 
-// Only a search that ran in full and found nothing may say the corpus is empty.
-func TestBriefSaysEmptyOnlyOnAFullCoverageStatement(t *testing.T) {
-	sink := &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 7, Captures: 7}}
-	res := briefOverRealTool(t, sink, planN(2))
-	if res.outcome != briefEmpty || !strings.Contains(res.text, "holds no page or story") {
-		t.Fatalf("a full search that found nothing is not said to: outcome=%q\n%s", res.outcome, res.text)
-	}
-}
 
-// A result with a zero-value (or missing) coverage object can never produce
-// the sentence, whatever else it holds or lacks.
-func TestBriefZeroCoverageCanNeverSayEmpty(t *testing.T) {
-	for name, raw := range map[string]json.RawMessage{
-		"no coverage key":  withCoverage(briefResult(nil, 0), nil),
-		"zero coverage":    withCoverage(briefResult(nil, 0), map[string]any{}),
-		"false everywhere": withCoverage(briefResult(nil, 0), map[string]any{"page_text": false, "labels": false, "published": false}),
-		"only published":   withCoverage(briefResult(nil, 0), map[string]any{"published": true}),
-	} {
-		res := buildResearchBrief(context.Background(), planN(3), fixedSearch(raw))
-		if strings.Contains(res.text, "holds no page or story") || res.outcome == briefEmpty || res.outcome == briefDelivered {
-			t.Fatalf("%s: outcome=%q\n%s", name, res.outcome, res.text)
-		}
-	}
-}
 
-// A thread past the sixth was never searched: the sentence is not printed.
-func TestBriefLeftOutThreadsPreventTheEmptySentence(t *testing.T) {
+// A thread past the sixth was never searched: it is named, and counted as gaps.
+func TestBriefNamesLeftOutThreadsAndCountsThemAsGaps(t *testing.T) {
 	plan := planN(2)
 	plan.left = []briefThread{{Kind: "question", Text: "never searched"}}
 	res := buildResearchBrief(context.Background(), plan, fixedSearch(briefResult(nil, 0)))
-	if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") || !strings.Contains(res.text, "never searched") {
-		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+	if res.gaps != 3 || !strings.Contains(res.text, "never searched") {
+		t.Fatalf("gaps=%d:\n%s", res.gaps, res.text)
 	}
 }
 
@@ -1229,20 +1203,16 @@ func TestBriefNeverCutsAUrlOrAnId(t *testing.T) {
 	}
 }
 
-// Round 3, item 5: the "nothing held" line says the right thing in each case.
 func TestBriefNothingLineIsTrueInEachBranch(t *testing.T) {
-	// Nothing found, with a gap (so the block is printed): nothing is listed above.
+	// Nothing found, with a gap: nothing is listed above.
 	empty := buildResearchBrief(context.Background(), planN(2), fixedSearch(withCoverage(briefResult(nil, 0), coverageWith(map[string]any{"page_text": false}))))
-	if strings.Contains(empty.text, "only those listed above") || !strings.Contains(empty.text, "Held pages") {
-		t.Fatalf("nothing is listed above, yet:\n%s", empty.text)
+	if strings.Contains(empty.text, "only those listed above") || !strings.Contains(empty.text, "Nothing found.") {
+		t.Fatalf("the nothing-found branch is wrong:\n%s", empty.text)
 	}
 	n := 0
 	res := buildResearchBrief(context.Background(), planN(2), func(context.Context, string) (json.RawMessage, error) {
 		n++
-		if n == 1 {
-			return briefResult([]map[string]any{briefCapture(1, "p")}, 0), nil
-		}
-		return briefResult([]map[string]any{briefCapture(1, "p")}, 0), nil // the same page again
+		return briefResult([]map[string]any{briefCapture(1, "p")}, 0), nil // the same page for both threads
 	})
 	if !strings.Contains(res.text, "only those listed above") {
 		t.Fatalf("a thread whose pages were all listed above does not say so:\n%s", res.text)
@@ -1290,5 +1260,134 @@ func TestResearchFirstTurnDoesNotPromiseABriefAbsolutely(t *testing.T) {
 	}
 	if !strings.Contains(p, "normally ends with a corpus brief") || !strings.Contains(p, "search the corpus yourself first") {
 		t.Fatalf("the first turn does not say what to do when neither is there: %s", p)
+	}
+}
+
+// --- round 4: the brief states facts about the search and never an absence ---
+
+// absenceClaims are the phrases the brief must never print, in any wording the
+// repairs of rounds 1 to 3 used, and the near-phrases that would bring the
+// claim back. Absence needs every search path proved complete; presence and
+// "what was searched" need nothing proved.
+var absenceClaims = []string{
+	"the corpus holds no page or story", "holds no page", "no page or story", "holds no ", "holds nothing",
+	"nothing is held", "nothing held", "nothing in the corpus", "corpus is empty", "no page matches", "no story matches",
+	"does not hold", "doesn't hold", "contains no", "contains nothing",
+}
+
+func assertNoAbsenceClaim(t *testing.T, label, text string) {
+	t.Helper()
+	lower := strings.ToLower(text)
+	for _, phrase := range absenceClaims {
+		if strings.Contains(lower, phrase) {
+			t.Fatalf("%s: the brief claims an absence (%q):\n%s", label, phrase, text)
+		}
+	}
+}
+
+// Every render path, under every coverage value: all true with no items, the
+// zero value, a missing object, every single part false, threads cut, left out
+// or dropped, and the real tool over each kind of sink.
+func TestBriefNeverClaimsAnAbsenceOnAnyPath(t *testing.T) {
+	parts := []string{"page_text", "titles", "labels", "window", "published"}
+	covs := map[string]map[string]any{
+		"all true":   fullCoverage(),
+		"zero value": {},
+		"all false":  {"page_text": false, "titles": false, "labels": false, "window": false, "published": false},
+	}
+	for _, part := range parts {
+		covs["only "+part+" false"] = coverageWith(map[string]any{part: false})
+		covs["only "+part+" true"] = map[string]any{part: true}
+	}
+	for name, cov := range covs {
+		for _, items := range []bool{false, true} {
+			var caps []map[string]any
+			stories := 0
+			if items {
+				caps, stories = []map[string]any{briefCapture(1, "p")}, 1
+			}
+			plan := planN(3)
+			plan.left = []briefThread{{Kind: "question", Text: "left out"}}
+			plan.others = 2
+			res := buildResearchBrief(context.Background(), plan, fixedSearch(withCoverage(briefResult(caps, stories), cov)))
+			assertNoAbsenceClaim(t, fmt.Sprintf("coverage %s items=%v", name, items), res.text)
+			if res.outcome == "partial" {
+				t.Fatalf("coverage %s: partial is not an outcome", name)
+			}
+		}
+	}
+	absent := buildResearchBrief(context.Background(), planN(2), fixedSearch(withCoverage(briefResult(nil, 0), nil)))
+	assertNoAbsenceClaim(t, "no coverage key", absent.text)
+	// The deadline cut, a search that errored, a drop for the bound.
+	restore := researchBriefDeadline
+	t.Cleanup(func() { researchBriefDeadline = restore })
+	researchBriefDeadline = 40 * time.Millisecond
+	cut := buildResearchBrief(briefDeadlineCtx(), planN(3), func(ctx context.Context, _ string) (json.RawMessage, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	assertNoAbsenceClaim(t, "deadline", cut.text)
+	failing := buildResearchBrief(context.Background(), planN(3), func(context.Context, string) (json.RawMessage, error) { return nil, errors.New("down") })
+	assertNoAbsenceClaim(t, "failing", failing.text)
+	// Through the real tool, over each kind of sink.
+	for name, sink := range map[string]researchtools.CaptureSink{
+		"no page text":  &briefSink{},
+		"whole index":   &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 7, Captures: 7}},
+		"window":        windowOnlySink{},
+		"no capture store": nil,
+	} {
+		res := briefOverRealTool(t, sink, planN(2))
+		assertNoAbsenceClaim(t, "real tool "+name, res.text)
+	}
+	// The skipped and failed sentences too.
+	assertNoAbsenceClaim(t, "failure text", briefFailureText("anything"))
+}
+
+// Jev's labels are read separately from the index answer. When that read
+// fails, titles were searched but labels were not: coverage says so and the
+// brief names the part truthfully. Through the real tool, with the store closed.
+func TestBriefNamesLabelsAsNotSearchedWhenTheStoreCannotBeRead(t *testing.T) {
+	rt, s := testRuntime(t)
+	sink := &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 7, Captures: 7}}
+	rt.researchDeps = &researchtools.Dependencies{Store: s, Captures: sink}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID})
+	res := buildResearchBrief(ctx, planN(1), rt.researchBriefSearcher())
+	if res.outcome != briefEmpty && res.outcome != briefFailed {
+		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+	}
+	if res.outcome == briefEmpty && !strings.Contains(res.text, "Not searched: labels.") {
+		t.Fatalf("labels were not read but are not said to be not searched:\n%s", res.text)
+	}
+	assertNoAbsenceClaim(t, "store closed", res.text)
+}
+
+// A route_path used in place of a read_url is whole or omitted, like every
+// address; with both over the limit the brief says to search by title.
+func TestBriefRoutePathIsWholeOrOmitted(t *testing.T) {
+	long := "https://choir.news/read/" + strings.Repeat("a", 300)
+	var m map[string]any
+	_ = json.Unmarshal(briefResult(nil, 0), &m)
+	m["published"] = []map[string]any{
+		{"title": "A", "read_url": long, "route_path": "/pub/" + strings.Repeat("r", 300), "kind": "story"},
+		{"title": "B", "read_url": long, "route_path": "/pub/short", "kind": "story"},
+	}
+	raw, _ := json.Marshal(m)
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
+	if !strings.Contains(res.text, "(address too long to show; search the corpus by title)") || !strings.Contains(res.text, "route_path=/pub/short") {
+		t.Fatalf("addresses are not whole or omitted:\n%s", res.text)
+	}
+	if strings.Contains(res.text, "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr") {
+		t.Fatalf("a route_path was cut or shown over its limit:\n%s", res.text)
+	}
+}
+
+func TestBriefLogLineCountsGapsAndHasNoPartialOutcome(t *testing.T) {
+	res := buildResearchBrief(context.Background(), planN(2), fixedSearch(withCoverage(briefResult(nil, 0), coverageWith(map[string]any{"published": false}))))
+	line := researchBriefLogLine("r", "research", 0, res)
+	if !strings.Contains(line, " gaps=2 ") || !strings.Contains(line, " outcome=empty ") || strings.Contains(line, "partial") {
+		t.Fatalf("line: %s", line)
 	}
 }
