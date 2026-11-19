@@ -24,7 +24,9 @@ type CaptureNeighbour struct {
 	Score     float64 `json:"score"`
 }
 
-// CaptureNeighboursAnswer mirrors platform.CaptureNeighboursResponse.
+// CaptureNeighboursAnswer mirrors platform.CaptureNeighboursResponse except
+// its Refused count (captures whose vector the embedder refused), which the
+// event layer does not read and so is not decoded here.
 type CaptureNeighboursAnswer struct {
 	Neighbours  map[string][]CaptureNeighbour `json:"neighbours"`
 	Unembedded  int                           `json:"unembedded"`

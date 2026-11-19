@@ -1254,7 +1254,9 @@ func (rt *Runtime) stopEventLayer() {
 // unavailable with vector_state=ok|approximate|partial|unavailable, the
 // captures with no neighbours by reason (missing_unembedded: no vector yet;
 // missing_excluded: private, tombstoned, superseded or unknown; a deadline cut
-// is partial, not missing), the neighbours that mapped to no event
+// is partial, not missing; a capture whose vector the embedder refused is
+// counted by corpusd as refused=, which this line does not carry, so it is in
+// neither missing field), the neighbours that mapped to no event
 // (vector_unmapped), and what became of the questions.
 func eventFlushLine(r eventResolveReport) string {
 	vector, state := "unavailable", "unavailable"
