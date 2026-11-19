@@ -189,24 +189,38 @@ func logCorpusSearch(ctx context.Context, query, computerID string, capturesElap
 }
 
 // The two notes that say a half of the corpus was not searched at all (the
-// verb answers success with the half's list empty and the note set). The host
+// verb answers success with the half's list empty and the note set), and the
+// marker of the note that says the page-text index covers only part of the
+// computer's pages (not a failure, but "nothing held" overstates it). The host
 // reads them to tell "searched, nothing held" from "not searched" (the research
-// brief); IsNotSearched is the one predicate, so a reworded note breaks a test.
+// brief). Each predicate reads the start of the trimmed note (the two failure
+// notes are written whole, never joined after another note), so a reworded or
+// moved note breaks a test and not the brief silently.
 const (
 	CapturesNotSearchedNote  = "captures not searched"
 	PublishedNotSearchedNote = "published pieces not searched"
+	// CaptureTextCatchingUpMarker is inside the note searchCapturesFor adds
+	// while the page-text index is still being built; notes are joined, so
+	// this one is matched anywhere.
+	CaptureTextCatchingUpMarker = "is searchable so far"
 )
 
 // CapturesNotSearched reports a captures_note that says the capture half was
 // not searched.
 func CapturesNotSearched(note string) bool {
-	return strings.Contains(note, CapturesNotSearchedNote)
+	return strings.HasPrefix(strings.TrimSpace(note), CapturesNotSearchedNote)
 }
 
 // PublishedNotSearched reports a published_note that says the published half
 // was not searched.
 func PublishedNotSearched(note string) bool {
 	return strings.HasPrefix(strings.TrimSpace(note), PublishedNotSearchedNote)
+}
+
+// CaptureTextCatchingUp reports a captures_note that says the page-text index
+// covers only part of the computer's pages so far.
+func CaptureTextCatchingUp(note string) bool {
+	return strings.Contains(note, CaptureTextCatchingUpMarker)
 }
 
 // CorpusCallerBrief is the caller of a search the host makes for a research
