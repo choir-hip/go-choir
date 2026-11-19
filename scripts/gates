@@ -64,6 +64,10 @@ run python3 -I scripts/check-autoradio-native-boundary
 run scripts/check-guest-floor-paths
 run scripts/selftest-guest-floor-paths
 run bash scripts/test-status-scripts.sh
+# CI's plan job fails when a script that CI, Go or a kept script names is still
+# classified docs-like (2026-11-19: three such names reached main unseen and the
+# first CI run after them failed in two minutes). About 25 s.
+run .github/scripts/ci-impact-classify-test
 # behaviour tests of three more repo scripts, none run by CI (0 to 4 s each)
 run bash scripts/test-check-guest-app-layer.sh
 run bash scripts/test-guest-tool-exec-wrapper.sh

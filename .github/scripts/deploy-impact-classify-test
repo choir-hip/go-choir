@@ -227,6 +227,16 @@ assert_contains "$swap_output" "scripts/receipts-index-swap -> ignored (CI/local
 assert_contains "$swap_output" "scripts/receipts-index-swap-test -> ignored (CI/local/operator tooling"
 swap_with_code_output="$(run_classifier "scripts/receipts-index-swap" "internal/platform/receipt_walk.go")"
 assert_contains "$swap_with_code_output" "deploy_needed=true"
+# Tooling that CI must run for (ci-docs-like-paths lists it) and that no closure
+# reads is not a deploy by itself; with code beside it the code still deploys.
+e1_tooling_output="$(run_classifier "scripts/e1" "scripts/selftest-e1" "scripts/testdata/e1/normal.json" "scripts/status-vectors" "scripts/proofs/corpus-search-recall" "scripts/autoradio-native-ceiling.txt" "scripts/autoradio-native-voice-list.txt")"
+assert_contains "$e1_tooling_output" "deploy_needed=false"
+assert_contains "$e1_tooling_output" "scripts/e1 -> ignored (CI/local/operator tooling"
+assert_contains "$e1_tooling_output" "scripts/status-vectors -> ignored (CI/local/operator tooling"
+assert_contains "$e1_tooling_output" "scripts/proofs/corpus-search-recall -> ignored (CI/local/operator tooling"
+assert_contains "$e1_tooling_output" "scripts/autoradio-native-ceiling.txt -> ignored (CI/local/operator tooling"
+e1_with_code_output="$(run_classifier "scripts/status-vectors" "internal/platform/vector_worker.go")"
+assert_contains "$e1_with_code_output" "deploy_needed=true"
 mixed_skill_output="$(run_classifier "skills/definition/SKILL.md" "internal/store/db.go")"
 assert_contains "$mixed_skill_output" "deploy_needed=true"
 ci_script_deploys_output="$(run_classifier "scripts/ci-prune-go-cache" "scripts/selftest-store-handles")"
