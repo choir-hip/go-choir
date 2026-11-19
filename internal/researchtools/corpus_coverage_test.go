@@ -83,42 +83,62 @@ func coverageOf(t *testing.T, captures CaptureSink) SearchCoverage {
 	return *body.Coverage
 }
 
-func TestCoverageIsFullOnlyWhenEveryHalfRan(t *testing.T) {
+func TestCoverageNamesEachPartThatRan(t *testing.T) {
 	whole := &CaptureTextInfo{Used: true, Indexed: 5, Captures: 5}
 	cases := []struct {
 		name string
 		sink CaptureSink
 		want SearchCoverage
-		full bool
 	}{
-		{"no capture store", nil, SearchCoverage{}, false},
-		{"index answered, page text did not", indexSink{}, SearchCoverage{Labels: true, Published: true}, false},
-		{"window fallback", noSearchSink{}, SearchCoverage{Window: true}, false},
-		{"title and label projection still building", indexSink{text: whole, termsOpen: true}, SearchCoverage{PageText: true, PageTextIndexed: 5, Pages: 5, Window: true, Published: true}, false},
-		{"page text index catching up", indexSink{text: &CaptureTextInfo{Used: true, Indexed: 3, Captures: 5}}, SearchCoverage{PageText: true, PageTextIndexed: 3, Pages: 5, Labels: true, Published: true}, false},
-		{"page text refused", indexSink{text: &CaptureTextInfo{Used: false, Reason: "index not ready"}}, SearchCoverage{Labels: true, Published: true}, false},
-		{"published search failed", indexSink{text: whole, pubErr: errors.New("corpusd 503")}, SearchCoverage{PageText: true, PageTextIndexed: 5, Pages: 5, Labels: true}, false},
-		{"published search capped", indexSink{text: whole, published: PublishedAnswer{Capped: true}}, SearchCoverage{PageText: true, PageTextIndexed: 5, Pages: 5, Labels: true}, false},
-		{"every half ran", indexSink{text: whole}, SearchCoverage{PageText: true, PageTextIndexed: 5, Pages: 5, Labels: true, Published: true}, true},
-		{"every half ran on an empty computer", indexSink{text: &CaptureTextInfo{Used: true}}, SearchCoverage{PageText: true, Labels: true, Published: true}, true},
+		{"no capture store", nil, SearchCoverage{}},
+		{"index answered, page text did not", indexSink{}, SearchCoverage{Titles: true, Labels: true, Published: true}},
+		{"window fallback", noSearchSink{}, SearchCoverage{Window: true}},
+		{"title and label projection still building", indexSink{text: whole, termsOpen: true}, SearchCoverage{PageText: true, PageTextIndexed: 5, Window: true, Published: true}},
+		{"page text index covers part", indexSink{text: &CaptureTextInfo{Used: true, Indexed: 3, Captures: 5}}, SearchCoverage{PageText: true, PageTextIndexed: 3, Titles: true, Labels: true, Published: true}},
+		{"page text refused", indexSink{text: &CaptureTextInfo{Used: false, Reason: "index not ready"}}, SearchCoverage{Titles: true, Labels: true, Published: true}},
+		{"published search failed", indexSink{text: whole, pubErr: errors.New("corpusd 503")}, SearchCoverage{PageText: true, PageTextIndexed: 5, Titles: true, Labels: true}},
+		{"published search capped", indexSink{text: whole, published: PublishedAnswer{Capped: true}}, SearchCoverage{PageText: true, PageTextIndexed: 5, Titles: true, Labels: true}},
+		{"every part ran", indexSink{text: whole}, SearchCoverage{PageText: true, PageTextIndexed: 5, Titles: true, Labels: true, Published: true}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := coverageOf(t, tc.sink)
-			if got != tc.want || got.Full() != tc.full {
-				t.Fatalf("coverage = %+v (full %v), want %+v (full %v)", got, got.Full(), tc.want, tc.full)
+			if got := coverageOf(t, tc.sink); got != tc.want {
+				t.Fatalf("coverage = %+v, want %+v", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestCoverageZeroValueIsNotSearched(t *testing.T) {
-	if (SearchCoverage{}).Full() {
-		t.Fatal("a result nobody set coverage for reads as fully searched")
+// Jev's labels are read from the store separately from the index answer. When
+// that read fails, the titles were searched and the labels were not.
+func TestCoverageLabelsAreFalseWhenTheLabelStoreCannotBeRead(t *testing.T) {
+	guest, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, c := range []SearchCoverage{{PageText: true, Labels: true}, {PageText: true, Published: true}, {Labels: true, Published: true}} {
-		if c.Full() {
-			t.Fatalf("%+v is full with a half missing", c)
-		}
+	tool := newSearchWireCorpusTool(Dependencies{Store: guest, Captures: indexSink{text: &CaptureTextInfo{Used: true, Indexed: 5, Captures: 5}}})
+	if err := guest.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c"})
+	out, err := tool.Func(ctx, json.RawMessage(`{"query":"harbor strike"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		Coverage SearchCoverage `json:"coverage"`
+	}
+	if err := json.Unmarshal([]byte(out), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Coverage.Titles || body.Coverage.Labels {
+		t.Fatalf("coverage = %+v, want titles searched and labels not", body.Coverage)
+	}
+}
+
+func TestCoverageZeroValueIsNotSearched(t *testing.T) {
+	var c SearchCoverage
+	if c.PageText || c.Titles || c.Labels || c.Window || c.Published || c.PageTextIndexed != 0 {
+		t.Fatalf("zero coverage reads as searched: %+v", c)
 	}
 }
