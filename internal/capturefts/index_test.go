@@ -479,3 +479,23 @@ func TestMoreScopesThanOpenFilesAllWork(t *testing.T) {
 		t.Fatalf("Scopes: %d %v", len(scopes), err)
 	}
 }
+
+// A page with neither a published nor a fetched time is outside every window,
+// an until-only window included (the term half and the guest drop it too).
+func TestPageWithNeitherTimeIsOutsideEveryWindow(t *testing.T) {
+	ix := newTestIndex(t)
+	put(t, ix, scopeA, "dated", "Quay inspection", "The inspector walked the quay again.\n\n", day0)
+	put(t, ix, scopeA, "undated", "Quay inspection", "The inspector walked the quay again.\n\n", time.Time{})
+	if got := ids(search(t, ix, scopeA, Query{Text: "inspector quay"})); len(got) != 2 {
+		t.Fatalf("no window: %v", got)
+	}
+	for name, q := range map[string]Query{
+		"until only":    {Text: "inspector quay", Until: day0.AddDate(0, 0, 5)},
+		"since only":    {Text: "inspector quay", Since: day0.AddDate(0, 0, -5)},
+		"since + until": {Text: "inspector quay", Since: day0.AddDate(0, 0, -5), Until: day0.AddDate(0, 0, 5)},
+	} {
+		if got := ids(search(t, ix, scopeA, q)); len(got) != 1 || got[0] != "dated" {
+			t.Fatalf("%s: %v, want only the dated page", name, got)
+		}
+	}
+}
