@@ -1138,38 +1138,43 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 		return
 	}
 	s.store.vec.started.Do(func() {
+		// The timings are read once, here, before the goroutine exists: the
+		// loop never reads the package variables, so a test that changes them
+		// and puts them back does not race with a worker that is still
+		// stopping.
+		startDelay, backoffStart, backoffMax, idle := vectorStartDelay, vectorBackoffStart, vectorBackoffMax, vectorIdleInterval
 		go func() {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(vectorStartDelay):
+			case <-time.After(startDelay):
 			}
-			backoff := vectorBackoffStart
+			backoff := backoffStart
 			down := false
 			for {
 				res, err := s.RunVectorPass(ctx)
 				if ctx.Err() != nil {
 					return
 				}
-				wait := vectorIdleInterval
+				wait := idle
 				switch {
 				case errors.Is(err, errEmbedderDown):
 					if !down {
-						log.Printf("corpusd vectors embedder down, backing off (retry in %s, doubling to %s): %v", backoff, vectorBackoffMax, err)
+						log.Printf("corpusd vectors embedder down, backing off (retry in %s, doubling to %s): %v", backoff, backoffMax, err)
 						down = true
 					}
 					wait = backoff
-					backoff = min(2*backoff, vectorBackoffMax)
+					backoff = min(2*backoff, backoffMax)
 				case err != nil:
 					log.Printf("corpusd vectors pass err=%v (retry in %s)", err, backoff)
 					wait = backoff
-					backoff = min(2*backoff, vectorBackoffMax)
+					backoff = min(2*backoff, backoffMax)
 				default:
 					if down {
 						log.Printf("corpusd vectors embedder is back")
 						down = false
 					}
-					backoff = vectorBackoffStart
+					backoff = backoffStart
 					if res.Worked() {
 						wait = 0
 					}
