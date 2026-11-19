@@ -273,6 +273,9 @@ type Runtime struct {
 	// startSearch, desk_search.go). nil until
 	// InstallDefaultAgentTools builds them.
 	researchDeps *researchtools.Dependencies
+	// researchBriefSearch replaces the corpus search of a research run's
+	// brief; nil searches through researchDeps. Tests bind it.
+	researchBriefSearch briefSearchFunc
 	// commitCaptureArrival commits a source poll's arrival record; nil
 	// commits it through the store. Tests bind a failing commit to pin the
 	// pending-arrival list (L2a A5, defect 2).
@@ -4100,7 +4103,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// wrapped as data; they are marked shown only once persisted below, and
 	// never on a resumed run (managementTaskOpening).
 	opening := rt.managementTaskOpening(ctx, rec)
-	openingText := rec.Prompt + opening.openingText()
+	// A research desk run's corpus brief joins the same first turn
+	// (research_brief.go); it marks labels only on a fresh start, below.
+	brief := rt.researchBriefOpening(ctx, rec)
+	openingText := rec.Prompt + opening.openingText() + brief.openingText()
 	userMsg, _ := json.Marshal(map[string]any{
 		"role": "user",
 		"content": []any{
@@ -4203,6 +4209,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	opening.commitAfter(memory)
+	brief.commitAfter(memory)
 	// The calibration digest (ICRL experiment) is a user turn after the
 	// history, never the system prompt: the cached prefix holds.
 	calibrationTurns := rt.calibrationDigestInjector(rec, initialMessages)
