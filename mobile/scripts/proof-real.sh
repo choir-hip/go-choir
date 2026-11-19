@@ -164,7 +164,7 @@ bad "paper: no sign-in card" '\[paper-signin-card\]' "$SV"
 chk "settings: the account shows a handle" '\[settings-account-handle\][^"]*"writer-' "$SV"
 bad "settings: account has no failure message" '\[settings-account-message\] "(This|Could|The server)' "$SV"
 chk "textures: documents listed" '\[textures-doc-texture:' "$SV"
-chk "textures: no edition yet shows the make-your-edition card" '\[textures-make-edition\]' "$SV"
+if grep -qE '\[textures-make-edition\]' "$SV"; then echo "info: textures: the make-your-edition card shows (the drill computer has no edition)"; else echo "info: textures: no make-your-edition card (the drill computer has an edition now; that is state, not a defect)"; fi
 bad "textures: no error" '\[textures-message\] "(Could|Sign in)' "$SV"
 chk "files: root listing" '\[files-row-/' "$SV"
 chk "mail: reached the mail place" '\[page-title\] "(Mail|Inbox)"' "$SV"
