@@ -605,6 +605,15 @@ env -u BASH_ENV python3 "$vectors" --fixture "$root/vec1.log" >"$root/out" 2>&1
 check "V6 the extension error is newest: the first line says pgvector MISSING" 'head -n1 "$root/out" | grep -q "^pgvector  MISSING or too old: pgvector extension is not installed"'
 env -u BASH_ENV python3 "$vectors" --fixture "$root/vec.log" >"$root/out" 2>&1
 check "V6 an embed_gap line after (or without) an error: pgvector ok" 'head -n1 "$root/out" | grep -q "^pgvector  ok"'
+cat >"$root/vec2.log" <<'EOF'
+2026/11/19 05:00:00 corpusd retrieval op=embed_gap shape=stories ms=0.00 rows=0 have=100 want=100 remaining=0 model=2188ac1deca4 refused=0
+2026/11/19 05:10:00 corpusd retrieval op=vector_import shape=route ms=5000 rows=100 written=100 refused=0 sample_min_cosine=0.99990 err= reasons= job=vi-1 state=done file=
+2026/11/19 06:10:00 corpusd retrieval op=vector_import shape=inbox ms=900000 rows=215189 written=214000 refused=1189 sample_min_cosine=0.99961 err= reasons=not_public:1000,text_mismatch:189 job=vi-2 state=done file=captures.jsonl
+EOF
+env -u BASH_ENV python3 "$vectors" --fixture "$root/vec2.log" >"$root/out" 2>&1
+check "V7 the last import job is shown with its source, counts and reasons" 'grep -q "^last import  inbox vi-2 file captures.jsonl: done, rows 215189, written 214000, dropped 1189 (not_public:1000,text_mismatch:189), min cosine 0.99961" "$root/out"'
+env -u BASH_ENV python3 "$vectors" --fixture "$root/vec.log" >"$root/out" 2>&1
+check "V7 with no import line it says none" 'grep -q "^last import  none" "$root/out"'
 printf 'nothing here\n' >"$root/vec0.log"
 env -u BASH_ENV python3 "$vectors" --fixture "$root/vec0.log" >"$root/out" 2>&1; rc=$?
 check "V4 no embed_gap line: said so, no numbers invented, searches show -" '[ "$rc" = 0 ] && grep -q "^stories .*no embed_gap line" "$root/out" && grep -q "vector_stories .*0 searches, mean -" "$root/out"'
