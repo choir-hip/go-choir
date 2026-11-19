@@ -1,9 +1,12 @@
-# Calibration experiment E1: the model or the harness (protocol, rewritten 2026-11-19, round 2)
+# Calibration experiment E1: the model or the harness (protocol, rewritten 2026-11-19, round 3)
 
 Status: design (green). Station L2 of
 [the night's goal file](../definitions/choir-night-exact-vectors-learning-2026-11-19.md).
-Round 2 answers seat 1's review (four blocking findings) and the lead's
-eleven decisions. Tonight only a **pilot** may run (section 14). The full run
+Round 2 answered seat 1's review (four blocking findings) and the lead's
+eleven decisions. Round 3 answers the second review (nineteen findings): the
+driver `scripts/e1` and its self-test were **written by this change**, and
+section 14 was rewritten against the code the driver calls. Tonight only a
+**pilot** may run (section 14). The full run
 waits for the owner's word. Deleting the 4 November arms is a separate red
 landing that is due on main before 2026-11-24 (section 10). The file keeps its
 old name so that existing links and the registry's `hold` lines still resolve.
@@ -15,8 +18,10 @@ learning. the calibration experiment is something that we should do now,
 actually. you can redesign it as you see fit."
 
 How claims are marked: **[read: file:line]** or **[read: record]** means read
-for this design (seat 1 checked most of these against the code); **[assumed]**
-means not checked, and the smoke step checks it.
+for this design (seat 1 checked most of these against the code, and the round 3
+author opened every route and field named in section 14 and in sections 3 and
+7); **[assumed]** means not checked, and the smoke step checks it
+(`scripts/e1 smoke` prints one PASS or FAIL line per check).
 
 ## 1. What E1-M is, and what it cannot conclude
 
@@ -30,10 +35,15 @@ surface arm can name a harness cause, and that is E1-H (section 9), which
 cannot start until the research eval route exists.
 
 **The scope of every claim: a research run on a computer that holds no
-captures of its own.** Each arm runs on a fresh test computer. Captures are
-scoped to their owner [read: internal/researchtools/researchtools.go:82], so
-an arm computer starts with an empty corpus. The paper's research runs
-search about 207,000 held pages. The published-stories layer is the one
+captures from the paper, and only those of its own earlier objectives.** Each
+arm runs on a fresh test computer. Captures are scoped to their owner
+[read: internal/researchtools/researchtools.go:82], so an arm computer starts
+with an empty corpus: true of objective 1 only. Objectives 2 to 10 on a
+computer see the captures its own earlier objectives made; the objective's
+position is a covariate and the readout shows it. The paper's corpus holds
+about 207,000 pages; a run searches that corpus and the web and gets 40 results
+a web search, so the comparison is between a large corpus and a nearly empty
+one. The published-stories layer is the one
 thing an arm computer shares with the paper: it is searched "from every
 computer" [read: researchtools.go:105-107]. This difference is a confound, not
 a risk. It narrows what the result means; it does not invalidate it. The
@@ -68,59 +78,97 @@ summed**, and records the number of research runs beside the total.
   on every arm, so an imbalance points at the research model's effect on
   Texture's casting, and is reported as that.
 
-**Primary outcome: web searches**, meaning the number of `search.served`
-lines across the unit's research runs. The host writes one line "per finished
-desk search", naming each provider asked and what it answered
-[read: internal/types/search_served.go:8-35]. The model cannot write these
-lines. The sum of the providers' `Calls` is the experiment's **search tally**,
-the cost bound of section 7. On the paper, nearly every search is a single
-Keenable request [read: search-volume record, Investigation], so the line
-count is comparable with the record's request counts.
+**Primary outcome: started web searches**, meaning the number of
+`search_start` rows of the desk's egress that were not errors, over every
+research run of the unit. The host writes the row when a desk cell starts an
+asynchronous search and a `search_done` row when it ends
+[read: internal/agentcore/tools_desk.go:665-717]; the start row rides the open
+cell's `desk.cell` event as an `egress` element, the done row is its own
+`desk.egress` event [read: cmd/choir/trace.go:715-768, which folds both]. The
+reader counts distinct `(run_id, request_id)` start rows and distinct
+`(run_id, search_id)` done rows, and takes the larger count (a run whose start
+row was lost still counts). **This is a count of searches started, the
+measure of the search-volume record** ("started 10 or more"
+[read: search-volume record, "Traces read", item 2]). It includes a search the
+gateway's result cache answered.
 
-**Which model served the unit** comes from `model.served`. That record names
-the model that actually answered each call "after any quota switch or pool
-failover", and its `Switches` list each mid-run move
-[read: internal/types/model_served.go:7-43]. A research run with any
-`Switches` entry, or with any call served by a model other than its arm's, is
-**invalid by rule**. The document route `GET /api/texture/documents/{id}/models`
-gives the same facts by role [read: internal/textureowner/texture_model_provenance.go:14-17].
+**The cost tally is a different number.** The host writes one `search.served`
+line per finished search *that a provider answered*: the writer is guarded by
+`len(done.providers) > 0` [read: internal/agentcore/tools_desk.go:699-703], so
+a cache-answered search has no line (the record counts 44 of 332). The sum of
+the providers' `Calls` over those lines [read: internal/types/search_served.go:8-35]
+is the experiment's **tally**, the cost bound of section 7. The unit also
+reports `cache_answered`, started less served lines, which is zero or more. The
+model cannot write either row. A search made by a `choir.Research` child is not
+a run and emits no desk row to the parent [read: cmd/choir/trace.go:413 and
+internal/agentcore/research_children.go:382-404, which forwards only
+`model.served`]; the pilot does not see those, and its count is of the research
+desk's own searches.
+
+**Which model served the unit** comes from `model.served` lines of the unit's
+research runs: the lines with purpose `tool_loop`, leaving out the decision
+model's (role `system1`). The record names the model that actually answered
+each call "after any quota switch or pool failover", and its `Switches` list
+each mid-run move [read: internal/types/model_served.go:7-43]. A research run
+with any `Switches` entry, or with any call served by a model other than its
+arm's (provider and catalogued name), is **invalid by rule**. The run's own
+metadata names the overlay (`llm_policy_overlay_id`); a research run without
+the arm's overlay id is invalid too. Texture's and the conductor's lines are on
+their own runs and are not checked against the arm. The document route
+`GET /api/texture/documents/{id}/models` gives the same facts by role plus the
+providers' calls by role [read: internal/textureowner/texture_model_provenance.go:14-17];
+the driver does not need it.
 
 **A unit is valid when** all of these hold:
 
 1. it has at least one research run;
-2. every research run has ended (any terminal state) within 60 minutes of the
-   submission;
+2. every research run has ended (completed, failed or cancelled) within 60
+   minutes of the submission (a run cancelled after its 60 minutes is invalid,
+   and its searches stay in the tally);
 3. no research run has a model switch or a foreign model;
-4. its trajectory's trace bundle was exported;
-5. its computer reported the same `build` in `GET /api/runtime/observability`
-   [read: internal/agentcore/api.go:871-874] at submission and at the
-   objective's end, and that build matches the other arms' build for the same
-   objective.
+4. its trajectory's trace bundle was exported with the runs and run events
+   served;
+5. its computer reported the same `build.commit` in
+   `GET /api/runtime/observability` [read: internal/agentcore/api.go:871-874]
+   at submission and at the objective's end, and that build matches the other
+   arms' build for the same objective;
+6. no document of its trajectory is published (section 11, risk 4).
 
-A failed check 5 invalidates the objective on every arm.
+A failed check 5 invalidates the objective on every arm. A unit with no
+research run is recorded `no_research` (section 3, above).
 
-**Secondary outcomes, counts only**, from the bundle's `desk.cell` and
-`desk.egress` layers [read: cmd/choir/trace.go:715 onward]:
-
-- searches by verb (`SearchAll` against plain), and searches per subject;
-- pages read, and the largest number of reads of one page;
-- per-cell bound refusals;
-- **new-host reads**: pages read from a host the story does not cite (follow-ups only);
-- whether the run read a paper story from the published layer (a covariate);
-- model calls and input tokens.
-
-Whether any of these per-search fields is present in the event payloads is
-checked in the smoke step [assumed]. The gateway journal is not a source,
-because a scoped key cannot read it.
+**Secondary outcomes, counts only.** The reader prints, per unit: research
+runs, started searches, `search_done` rows, `search.served` lines, provider
+calls, cache-answered searches, failed starts (a `search_start` row with
+`is_error`), `read` rows, model calls and input tokens, and the largest number
+of started searches in one run. The egress rows carry the verb as `search_start`,
+`search_done` or `read`; they do not say whether the cell called `SearchAll` or
+the plain verb (that is in the cell source, which only E1-H's program analysis
+reads), so **the design no longer reports searches by verb**. Per-subject
+searches, new-host reads, per-cell bound refusals, and whether a run read a
+paper story from the published layer need fields the driver does not read; they
+are left to the second trace pass and to E1-H. The gateway journal is not a
+source, because a scoped key cannot read it.
 
 ## 4. Method, arithmetic, and what each outcome means
 
 **One computer per arm.** Every arm computer is made fresh for the
-experiment. All arms get the same objectives in the same order, and each
-objective starts on every arm at the same moment.
+experiment. All arms get the same objectives in the same order. What is aligned
+is the **submission**: the driver posts an objective to the four eval routes
+together (four requests sent at once), and records each request's time. What
+the route delivers after that is not the same input: the eval route runs the
+conductor and Texture, and **Texture writes the research run's first message**
+[read: internal/agentcore/runtime.go:4108-4116], so the research message, the
+moment research starts and the number of research runs differ by arm, and each
+arm has its own test owner (`scripts/qa_test_computer.mjs` registers
+`<label>@example.com`; owner ids differ). The S-a/S-b pair measures that
+variation on one model only; the other arms' variation from Texture's choice
+is part of what the contrast measures, and the readout reports it (research
+runs per unit, `no_research` per arm).
 
 - No arm sees pages another arm captured.
-- Every arm runs the same release at the same moment.
+- Every arm runs the same release, checked by the build at submission and at
+  the end of each objective.
 - What remains is symmetric by design: each computer accumulates its own
   captures over successive objectives. The objective's position (1 to n) is
   reported as a covariate, and the primary difference is also shown by
@@ -167,9 +215,9 @@ third fewer), tested two one-sided at 5% each, which is the 90% interval.
 
 | Outcome | Conclusion |
 |---|---|
-| mean d ≥ 0.405 and the 95% interval's lower bound > 0 | The many-search count is specific to `swe-2-flash` among the models tried. The lever is the model choice. Change no harness for this tail on E1-M's strength. |
+| mean d ≥ 0.405 and the 95% interval's lower bound > 0 | The mean number of started searches is higher on `swe-2-flash` than on the models tried. Whether the many-search tail is specific to it is for the tail share below, which is underpowered. The lever is the model choice. Change no harness for this tail on E1-M's strength. |
 | the 90% interval lies inside ±0.405 | The models tried search alike, within 50%. The behaviour is common to them. Nothing is shown about the harness; E1-H is needed before any harness change. |
-| mean d ≤ −0.405 and the 95% interval's upper bound < 0 | `swe-2-flash` searches less than the others. |
+| mean d ≤ −0.405 and the 95% interval's upper bound < 0 | `swe-2-flash` starts fewer searches on average than the others. |
 | anything else | Inconclusive, reported as such with the interval. |
 
 At d = 0 and σ = 1.0, the 90% interval falls inside ±0.405 with probability
@@ -200,7 +248,7 @@ d@e holds nothing either: it is the proof ring and runs other proofs.
 
 | Arm | Computer | Research model | Provider route | Marginal charge |
 |---|---|---|---|---|
-| S-a | `e1-sa` | `swe-2-flash` | `devin` (Devin's API through one person's CLI session); the default pool's lead and the paper's research model [read: internal/modelcatalog/catalog.go:516-523] | none until 2026-12-04 [read: same, comment] |
+| S-a | `e1-sa` | `swe-2-flash`, effort `low` | `devin` (Devin's API through one person's CLI session); the default pool's lead and the paper's research model [read: internal/modelcatalog/catalog.go:516-523]. The provider maps `low` to the `swe-2-flash-medium` model id [read: internal/provider/devin.go:770-795] | none until 2026-12-04 [read: same, comment] |
 | S-b | `e1-sb` | `swe-2-flash` | `devin`, as S-a | none |
 | L | `e1-l` | `gpt-6-luna` | `chatgpt`: ChatGPT subscription billing through Codex OAuth, the Responses endpoint [read: internal/provider/provider.go:1268-1287; catalog.go:362-368] | none (subscription) |
 | I | `e1-i` | `iceman-contributor-free` | `opencode-go` free model, probed with a tool call on 2026-11-05 at cost 0; the default pool's first fallback [read: catalog.go:249-260, :524] | none |
@@ -225,17 +273,36 @@ Why these, under the rules the lead gave:
   and Luna is in the default pool today. L is kept; decision D-E2.
 
 Texture and the conductor run on each computer's default policy, the same on
-every arm, so only research differs.
+every arm, so only research differs. That default policy is led by Devin
+[read: internal/modelcatalog/catalog.go:516-523], so the Texture and conductor
+calls of **all four** arms use Devin's single session beside the paper's; the
+two S arms' research calls come on top of that.
+
+**The research reasoning effort.** The repo's policy default is `low` for every
+role including research [read: internal/modelpolicy/model_policy.go:796-808,
+the `[roles.research]` block and `fallbackPolicy`'s comment "every role runs at
+low effort (owner, 2026-11-09)"], and all four overlays say `low`. That is
+**assumed from the repo**: the paper's policy file may be owner-edited, and the
+evidence of 2026-11-09 says research then ran `high`
+[read: docs/evidence/paper-token-budget-2026-11-09.md:349-350]. The live value
+cannot be read without touching the paper computer. The line that shows it is
+in Node B's gateway journal (`journalctl -u go-choir-gateway`): `gateway:
+inference request from autoputer <the paper's vm> (provider=devin model=... reasoning=...)`
+[read: internal/gateway/handlers.go:511]. The lead can read it with the status
+scripts' ssh and a `grep reasoning=` on the paper's vm id. If it says `high`,
+the S arms' overlay (`reasoning_effort`) is changed in `scripts/e1`
+(`EFFORT`) before the pilot, and the smoke prints the reported model id of the
+arm for comparison with the paper's `model=` value.
 
 ## 6. Arms without switches
 
 | | |
 |---|---|
-| **How an arm is set** | An overlay file `System/model-policy-overlays/e1-<arm>.toml` on that arm's computer, installed with `choir files put` (the verb exists for overlay installs [read: cmd/choir/files.go:1-5; cmd/choir/commands.go:390-396]). It names only the research role, with an end: `[overlay] expires_at = ...` and `[roles.research] provider, model, reasoning_effort` [read: internal/modelpolicy/model_policy.go:1015-1060, :1223-1229]. Every submission names it as `model_policy_overlay_id`. |
+| **How an arm is set** | An overlay file `System/model-policy-overlays/e1-<arm>.toml` on that arm's computer, installed with `choir files put` (the verb exists for overlay installs [read: cmd/choir/files.go:1-5; cmd/choir/commands.go:390-396]). It names only the research role, with an end: `[overlay] expires_at = ...` and `[roles.research] provider, model, reasoning_effort` [read: internal/modelpolicy/model_policy.go:1015-1060, :1223-1229]. Every submission names it as `model_policy_overlay_id`. The directory is made one level at a time (`System`, then `System/model-policy-overlays`; `files put` into a missing parent answered 404 "parent directory not found" on 2026-11-19). The route resolves the overlay against the **Texture** role [read: api_texture_prompt_eval.go:99-108], so its 202 (and the `provider`/`model` it echoes, which are Texture's) does not show that the research section parsed; `model.served` does. |
 | **How it is recorded** | The route writes the overlay id into run metadata as `llm_policy_overlay_id` [read: model_policy.go:29; internal/textureowner/api_texture_prompt_eval.go:78]. The trajectory carries it as `SubjectRefs[TrajectoryRefModelPolicyOverlay]` [read: internal/textureowner/texture_handoff.go:255-257]. Research runs inherit it [read: internal/agentcore/runtime.go:1746-1749, :5547-5575]. The reader takes the arm from the run and the model from `model.served`, never from the driver's plan. |
 | **How it is read back** | `choir trace export <trajectory>` (scopes `read:runtime`, `read:texture` [read: cmd/choir/commands.go:702-707]), plus `GET /api/runs/{id}/events`. |
-| **How it ends** | At `expires_at` the route refuses the overlay rather than falling back [read: model_policy.go:758; api_texture_prompt_eval.go resolve check]. `scripts/e1 end` deletes the overlay files. After the readout is committed, the computers are deleted. |
-| **Registry** | The five `calibration_e1_*` entries go with their code (section 10). E1-M adds no entry: it adds no setting, environment value or code path, which are what the lint scans [read: scripts/check-switch-registry:48-52, :255-260]. Its record is section 14.1 and its end is the overlay expiry, which the code enforces. E1-H's surface variant is code, so it gets an entry (section 9). |
+| **How it ends** | At `expires_at` the route refuses the overlay rather than falling back [read: model_policy.go:758; api_texture_prompt_eval.go resolve check]. `scripts/e1 end` removes the overlay files with `DELETE /api/files/System/model-policy-overlays/<id>.toml` [read: internal/autoputer/files.go:247]; there is no `choir files` delete verb. After the readout is committed, the computers are deleted (by the lead, not by the driver). |
+| **Registry** | The five `calibration_e1_*` entries go with their code (section 10). E1-M adds no entry: it adds no setting, environment value or code path, which are what the lint scans [read: scripts/check-switch-registry:48-52, :255-260]. Its record is section 14.1 and its end is the overlay expiry, which the code enforces. The driver is a developer script with no environment value or setting. E1-H's surface variant is code, so it gets an entry (section 9). |
 
 **A prompt arm is not in this protocol.** A prompt override is stored per
 owner [read: internal/promptstore/store.go:83-93, :203-204], so it cannot
@@ -247,28 +314,52 @@ prompt pin, which goes beside E1-H's surface variant.
 
 Search credits are the owner's money. Keenable reports no balance; the
 reading is "a number a person copies from the usage page"
-[read: search-volume record, Remaining error]. The last reading is 17,000
-credits at 2026-11-18T12:38Z [read: scripts/status-paper-usage:59]. The
-budget that reaches 5 December is about **880 searches a day**
+[read: search-volume record, Remaining error]. The last reading is **17,000
+credits read by the owner at 2026-11-18T12:38Z** [read: scripts/status-paper-usage:59].
+The budget that reaches 5 December is about **880 searches a day**
 [read: search-volume record, Investigation]. (`status-paper-usage` computes
 1,032 a day from the same reading.)
 
-| | Units | Expected searches (7.5 a unit) | Hard stop on the tally | In days of budget (880/day) |
+| | Units | Expected started searches (7.5 a unit) | Hard stop on the tally | In days of budget (880/day) |
 |---|---|---|---|---|
-| Pilot (tonight) | 10 objectives × 4 arms = 40 | about 300 | **450** | about 0.34 expected, 0.51 at the stop |
-| Full run (owner's word) | 40 × 4 = 160 | about 1,200 | 1,800 | about 1.4 expected, 2.0 at the stop |
+| Pilot (tonight) | 10 objectives x 4 arms = 40 | about 300 | **450** | about 0.34 expected, 0.51 at the stop |
+| Full run (owner's word) | 40 x 4 = 160 | about 1,200 | 1,800 | about 1.4 expected, 2.0 at the stop |
 
-The hard stop is a bound the experimenter sets on the experiment's own cost.
-It is not a limit on model calls.
+The smoke objective `s00` (four more units, one per arm) is **outside** the 40
+and outside the 450: it is a handful of searches, counted and printed by the
+smoke, and the tally for the stop starts at zero with objective `p01`.
 
-**The refusal rule before starting.** The driver estimates the remaining
-credits as the last reading minus the Keenable calls counted in the gateway
-journal since that reading (read-only over SSH, as the status scripts already
-do). It refuses to start when:
+**The tally and the stop.** The hard stop is a bound the experimenter sets on
+the experiment's own cost. It is not a limit on model calls. The tally is the
+sum of the providers' `Calls` in the `search.served` lines of the pilot's
+research runs (section 3); started searches, the outcome, are a few percent
+more because the gateway's cache answers some. **450 is the hard stop**: the
+driver adds the live tally of the running objective (read from the runs'
+events every three minutes) to the finished objectives', and at 450 it cancels
+every active run of the objective and ends the pilot. **315 is a printed
+warning**, never a stop, so on a tail-heavy night the ten objectives P1 needs
+still run. The most that can overshoot is what runs in the three minutes
+between two live reads.
 
-- the estimate is below 10 times the hard stop (4,500 for the pilot);
-- the estimate cannot be made;
-- `status-paper-usage` shows Keenable not answering or `quota_limited`.
+**The refusal rule before starting.** Estimated remaining credits is "17,000
+read at 2026-11-18T12:38Z, minus the provider's answered searches since then".
+**Where that count can be read without acting on any computer:**
+`scripts/status-paper-usage --json` (one read-only ssh to Node B, the status
+scripts' own reading, the only one the driver runs and never twice in three
+minutes) gives `search.keenable.today_calls`, the gateway's Keenable calls
+today UTC [read: scripts/status-paper-usage:208-220 and
+internal/gateway/search_plane.go:300-323, the `today=[keenable=N]` field]. It
+reads the last 60 minutes of the journal [read: scripts/status-paper-usage:381, `--since '-60 min'`]; no status line gives
+the calls of the days between the reading and today. So the driver cannot
+compute the estimate (it can only say today's part: `scripts/e1 credits`), and
+**the lead supplies it**: `scripts/e1 pilot --credits N --credits-basis "..."`,
+both required. The driver prints both and refuses to start when N is below
+**4,500** (ten times the hard stop), when `--credits-basis` is empty, or when
+the one status read fails. It also refuses when the read shows the
+newspaper's searches getting no provider answer, its Devin calls refused for
+quota, or Keenable `quota_limited` (the last may never fire: Keenable is the
+uncapped provider [read: scripts/status-paper-usage:51]; the credit figure is
+the real guard).
 
 At the paper's rate since the reading, the estimate may well be below 4,500.
 In that case the pilot does not run tonight, and that is the correct outcome.
@@ -281,29 +372,47 @@ goes to the three no-charge routes above.
 
 ## 8. The reader, the ledger gate, and why nothing lapses
 
-- **The verdict is computed.** `scripts/e1 read --verdict` applies the rules
-  of sections 3, 4 and 14.4 to the trace bundles and prints `true` or
-  `false` for each claim. Settling a claim is copying that line.
-- **Too few valid units settles false, never void.** A void is unscored, so
-  it would be a lapse under another name.
-- **The driver refuses to start a counted run** unless the claim ids are in
-  the Claims table of `docs/calibration/claude-ledger.md` as read from
-  `origin/main` (`git show origin/main:...`). They must be pushed, not only
-  written. The lead enters them.
-- **The validity filter and the reader are one script with a fixture**
-  (synthetic bundles covering: a switch, a foreign model, a `no_research`
-  submission, a build change, a missing bundle, and a unit with several
-  research runs). One review seat reads the script and its fixture before the
-  first counted run, because the outcome depends on code the author wrote.
+- **The verdict is computed, and the forecaster does not judge.**
+  `scripts/e1 read --verdict` applies sections 3, 4 and 14.4 to the exported
+  bundles and prints `true`, `false` or `void` per claim, with the counts
+  behind it. The computed line is the teacher (learning engine, rule 1a: the
+  one who forecast does not settle [read: docs/learning-engine.md:39-50]); the
+  lead only copies the line into the ledger's settlements table, with the
+  command and the bundles' hash as evidence.
+- **Too few valid units settles `void` with the reason, not `false`.** The
+  ledger defines `void` as a real settlement ("the test became impossible; say
+  why"), distinct from `lapsed`, and not scored
+  [read: docs/calibration/claude-ledger.md:89-90; precedents C101, C128].
+  `false` is a completed test whose event is absent. A stop (cost, publication,
+  the newspaper's status, the deadline) that cuts the pilot short therefore
+  settles the claims it starves `void`, and never reads as "the tail does not
+  reproduce" (finding 1 of the second review).
+- **The driver refuses to start a counted run** unless the three claim ids are
+  rows of the **Claims** table (not the settlements) of
+  `docs/calibration/claude-ledger.md` as read from `origin/main` (`git fetch`
+  then `git show origin/main:...`, never the working tree), each row says
+  "E1-M pilot P1", "E1-M pilot P2" or "E1-M pilot P3", and the P1 row holds the
+  SHA-256 of the objective file, which itself must be the file on `origin/main`.
+  They must be pushed, not only written. The lead enters them.
+- **The validity filter and the reader are one script with a fixture.**
+  `scripts/e1` holds `read_unit`, `link_builds` and `verdicts` as pure
+  functions of the exported bundles; `scripts/selftest-e1` runs them over the
+  invented bundles in `scripts/testdata/e1/` (a normal run, a many-search run, a
+  cache-answered search with no `search.served` line, a run with no research, a
+  timed-out run, a two-research-run trajectory, a wrong served model, a model
+  switch) and the stub flow, and is wired into `scripts/gates`. One review seat
+  reads the script, its fixture and the self-test before the first counted run,
+  because the outcome depends on code the author wrote. That review has not
+  happened: **no counted run starts until it has.**
 - **The readings are a pure function of the bundles.** The driver's own state
-  (`~/.cache/choir-status/e1/`) only lets it skip what it has already done.
-  The computers are deleted only after the readout is committed.
-- **`scripts/status-hourly` gains an E1 section** that shows the latest
-  outcome line and flags any of these: no unit finished in three hours while
-  the pilot is open; the end time passed with no verdict; a verdict exists but
-  the ledger's settlements table has no row for the claim ids. The flag leads
-  the status line. Settling still depends on someone running the hourly
-  status; the ledger's settle-by time is the backstop.
+  (`~/.cache/choir-e1/`, outside the repo) holds the submissions and the
+  bundles; `read` recomputes every unit from the bundles and the recorded
+  submission times. The computers are deleted only after the readout is
+  committed.
+- **`scripts/status-hourly` gains no E1 section in this change.** It is not
+  built. The settle-by time in the ledger remains the backstop, and the lead
+  runs `scripts/e1 read --verdict` by hand. (The round 2 text promised the
+  section; the promise is withdrawn until someone builds it.)
 
 ## 9. E1-H: the harness arms (not startable until the research eval route exists)
 
@@ -373,15 +482,34 @@ The complete list [read: git grep at this commit]:
 - **Settings**: `internal/store/computer_setting.go:181-198, :222-226`; the
   five registry entries (`switches/registry.yaml` from line 2010).
 - **Runtime** (`internal/agentcore/`):
-  - `calibration_e1.go` (the whole file);
-  - `calibration_feedback.go:580, :642` (delivery checks become the push default);
+  - `calibration_e1.go`, **not the whole file**: the file also holds helpers the
+    kept push digest and `choir.Calibration` still read, and they move first
+    (the table below this list says where each goes); the rest of the file
+    goes, with `calibration_e1_test.go` (its tests are the five arms' and the
+    restatement protocol's, F1 to F9; any test that reads a kept helper moves
+    with it);
+  - `calibration_feedback.go:580` (the push gate `rt.calibrationDeliveryOfRun(ctx, rec) == calibrationDeliveryPush` becomes the desk test alone) and `:642-645` (the pull/stub branch that calls `calibrationComputedDigest` goes, the push branch stays);
   - `calibration_reads.go:51-54` (`restateAsked`);
   - `engineering_precommit_rules.go:176`;
   - `inbox_records.go:788`;
   - `rlm_reduce.go:202, :715-720, :1239`;
   - `tools_capsule.go:1106`;
   - `tools_desk.go:922-923`.
-- **The `calibrationRestatement` wrapper** (`calibration_e1.go:59-61`) moves
+- **The helpers the kept code still uses, and where each goes:**
+
+  | Helper (`internal/agentcore/calibration_e1.go`) | Read by | Fate |
+  |---|---|---|
+  | `calibrationRestatement` (:60-62) | `calibration_feedback.go:194, :390, :685` | moves to `calibration_feedback.go` (next row) |
+  | `calibrationDeliveryFor` (:67), `calibrationArmForDelivery` (:102) | the helpers below only | deleted: with no setting held, delivery is always `push` and the arm is the thread's arm |
+  | `calibrationDeliveryOfRun` (:91) | `calibration_feedback.go:580, :642` | deleted; both call sites test the desk (`IsAssignmentPerformer`) alone |
+  | `calibrationComputedDigest` (:114) | `calibration_feedback.go:645` (pull/stub branch), `calibrationReadableForRun` | deleted with that branch |
+  | `calibrationReadableForRun` (:137) | `tools_desk.go:792`, `tools_capsule.go:1024` | reduced to `calibrationDigestForRun` plus the literal delivery `"push"` those two callers record, so the callers keep their signature |
+  | `stampEngineerDelivery` (:153) | `engineering_precommit_rules.go:169` | reduced to the two stamps a push claim keeps, `calibrationArmRef` from `calibrationArmOfThread` (already on line 167) and `RuleRefStage = first`; the `calibrationDeliveryRef` stamp stops (the kept reader `calibration_claims_api.go:106` reads `Delivery` from it, so an old record still shows its delivery and a new one shows none) |
+  | the constants `calibrationDeliveryPush` and `calibrationDeliveryRef` (:33-48) | the rows above | `Push` stays beside the reduced `calibrationReadableForRun`; the other four deliveries go |
+
+  These rows are read from `git grep` at this commit and from the file; the
+  review of the deletion confirms each against the compiler.
+- **The `calibrationRestatement` wrapper** (`calibration_e1.go:60-62`) moves
   to `calibration_feedback.go`, beside its three callers (:194, :390, :685),
   still calling `types.RestatementRulePrecommit`. It stays until it is shown
   that no p1 record exists on any tape.
@@ -428,14 +556,36 @@ Rollback: revert.
 3. **The pinned model does not serve every call, or the experiment competes
    with the paper.** `ContinuationChain` switches model on quota
    [read: model_policy.go, near :225]. Every switch makes a unit invalid, so
-   the cost is lost units, not bias. Two S computers and the paper share
-   Devin's single session. The driver reads the paper's Devin refusals in
-   `status-hourly` and stops (section 14.5).
+   the cost is lost units, not bias. **All four arms'** Texture and conductor
+   calls, and the two S arms' research calls, share Devin's single session with
+   the paper (the default policy is Devin-led). The driver reads the
+   newspaper's Devin refusals through the one status read before each
+   objective and waits when they appear (section 14.5). L and I use
+   subscription and free-tier quotas that can also refuse: the evidence of
+   2026-11-09 counts 54 ChatGPT quota failures and 113 opencode-go circuit
+   opens in a day [read: docs/evidence/paper-token-budget-2026-11-09.md:355-356].
+   A refusal there is a model switch or a failed run, so a lost unit, not a
+   measurement. D-E2's stand-in covers I only.
 4. **Test computers publish.** The eval route opens Texture with `open_app`,
    not publish [read: api_texture_prompt_eval.go, `CompletePromptBarDecision`
    spec]. Auto-publish applies only to "a story opened with publish"
    [read: internal/textureowner/texture_cell_author.go:486]. Checked anyway in
-   the smoke step and after every objective.
+   the smoke step and after every objective with a real read:
+   `GET /api/platform/texture/publications?doc_id=<id>` is the caller's own
+   publication of one document, whatever its mode: 404 when there is none, 200
+   with the publication when there is
+   [read: internal/proxy/platform_publish.go:781-846;
+   internal/platform/handlers.go:196-222]. (`GET /api/texture/documents/{id}/published`,
+   which round 2 named, is a POST-only notice and answers 405
+   [read: internal/textureowner/published_notice.go:13-34].) The check covers the
+   submission's document and every document id the trace bundle names. **There
+   is no story-unpublish verb**: `choir platform yank` yanks a package release
+   [read: cmd/choir/package.go:193-241], and the platform yank route is
+   operator-only. So the response to a publication by a test computer is:
+   **stop the pilot, print the document and the arm, and tell the owner.** Test
+   computers must not be public-platform computers; these are fresh test
+   owners made by `scripts/qa_test_computer.mjs`, ordinary computers on no
+   platform ring.
 5. **The paper's story is findable from the arm computers** through the
    shared published layer. Every arm sees it equally. Whether a run read it is
    recorded as a covariate. It lowers searching against the paper's rates,
@@ -452,7 +602,9 @@ Rollback: revert.
   ChatGPT, `iceman-contributor-free` via opencode-go. Stand-in for I:
   `recursive/flint-v1.0:free` via OpenRouter (a free model, within the
   OpenRouter rule). If neither free model passes the smoke step, run three
-  arms (S-a, S-b, L).
+  arms (S-a, S-b, L). The driver has four arms fixed in its `ARMS` table; a
+  stand-in or a three-arm pilot is an edit to that table and a new `setup`, not
+  an option.
 - **D-E3: what runs before the owner wakes.** Default: **the pilot only.**
   The full 40-objective run (and its expansion to 60 if σ > 1.2), the
   read-loop replays and any E1-H work wait for the owner's word at the
@@ -478,45 +630,73 @@ Rollback: revert.
 - **The reader.** From the owner reading a route by hand to a reviewed script
   whose verdict is computed, a driver that will not start without the claims
   on `origin/main`, and the hourly status chasing the settlement.
+- **Round 3 (the second review's nineteen findings).** The outcome is started
+  searches, the cost tally is the providers' calls; the unit's validity rules
+  and the verdicts are code with a fixture; too few valid units is `void`; the
+  publication read and the response to a publication are real; the driver and
+  its self-test exist; the credit figure is supplied, not computed; 315 is a
+  warning; a timed-out run is cancelled and re-exported; the deletion list
+  names the helpers the kept code uses.
 - **Kept.** "Every record says what it actually got" (old F6). Fixed n, no
   early stop for success, inconclusive reported as inconclusive.
 
 ## 14. Pilot, tonight
+
+**The driver exists.** `scripts/e1` (Python standard library, developer side,
+yellow) and its self-test `scripts/selftest-e1` with the invented bundles in
+`scripts/testdata/e1/` were written by the change that rewrote this section,
+and the self-test runs in `scripts/gates`. Every route below is one read in the
+code (cited) or one seen to answer (marked **seen**). `setup` and `smoke` ran
+once on staging on 2026-11-19; their output is in 14.6. `pilot` has **not**
+run, and it does not start until the review in section 8 has read the reader
+and its fixtures.
 
 ### 14.1 The record
 
 | | |
 |---|---|
 | Experiment | E1-M pilot |
-| Computers and arms | `e1-sa` S-a, `e1-sb` S-b, `e1-l` L, `e1-i` I (section 5) |
-| Objectives | 10: 5 `thin_event`, 5 `follow_up`, fixed and committed before the first counted run |
-| Units | 40 |
-| Hard stop | 450 on the search tally; at 315 (70%) no new objective starts until `scripts/e1 pilot --continue` |
-| Overlays expire | 2026-11-20T12:00:00Z |
-| Pilot ends | when 10 objectives are done, a stop fires, or 2026-11-20T06:00Z |
+| Computers and arms | S-a `e1-sa`, S-b `e1-sb`, L `e1-l`, I `e1-i` (section 5; ids in 14.6) |
+| Objectives | 10: 5 `thin_event`, 5 `follow_up`, fixed and committed before the first counted run (14.3) |
+| Units | 40, plus the smoke's 4 outside the bound |
+| Outcome | started web searches, summed over the unit's research runs (section 3) |
+| Cost tally | the providers' calls in `search.served`; **hard stop 450**; 315 is a printed warning only (section 7) |
+| Overlays expire | set by `setup` (now plus 30 hours; 2026-11-20T12:50Z for these four); the pilot refuses with under 90 minutes left |
+| Pilot ends | when 10 objectives are done, a stop fires, or no new objective starts after 2026-11-20T06:00Z |
+| Act and bound | the owner's message of 2026-11-19 ("the calibration experiment is something that we should do now, actually") is the act; the 450-call tally, the 4,500-credit floor and the 0 published documents are its bound; the claims name both |
 | Claims | three, entered and pushed by the lead before the first counted run (14.4) |
+| Start | all four requests of an objective are sent together; the start time is each request's. Research start, first message and number of research runs vary by arm (section 4) |
 
 ### 14.2 Making the computers and installing the arms
 
-On the lead's Mac, from the primary checkout's frontend dependencies (the
-script loads Playwright from `frontend/` [read: scripts/qa_test_computer.mjs:16-23]):
+`scripts/e1 setup` (print the plan with `--plan`). It runs
+`node scripts/qa_test_computer.mjs --label <label>` four times in turn, from the
+checkout whose `frontend/node_modules` holds Playwright
+[read: scripts/qa_test_computer.mjs:16-23]. That script needs no credential
+from the person running it: it registers a fresh owner `<label>@example.com`
+with a virtual passkey on `https://choir.news`, waits for the computer, and
+mints a key scoped to that one computer
+[read: scripts/qa_test_computer.mjs:122-148]. It prints one JSON line with the
+computer id and `credential_file`, a JSON file under
+`~/.config/choir-qa/test-computers/` holding `api_key`
+[read: scripts/qa_test_computer.mjs:151-160]. A label that already has a
+credential file is refused by the script; `setup --label-suffix` takes new
+labels, and a rerun of `setup` keeps the computers it already recorded.
 
-```
-for a in sa sb l i; do node scripts/qa_test_computer.mjs --label e1-$a; done
-```
+The driver derives `~/.cache/choir-e1/keys/<label>.key` (mode 0600, the
+`api_key` and a newline: the CLI's `--api-key-file` reads the whole file as the
+key and requires 0600 [read: cmd/choir/main.go:99-126]) and records, in
+`computers.json` (0600, outside the repo), per arm: label, computer id, key
+file, credential file, overlay id, provider, model, reasoning effort, host.
+No key is printed.
 
-Each run prints one JSON line of identifiers and the 0600 key-file path
-[read: qa_test_computer.mjs:1-14]. `scripts/e1 smoke` collects them into
-`~/.config/choir-qa/e1/computers.json` (mode 0600; it holds paths, not keys),
-in this shape:
-`{"sa": {"label", "computer_id", "key_file", "overlay": "e1-sa", "model": "devin/swe-2-flash"}, ...}`.
-
-Overlay file for each arm (S shown; L uses `chatgpt` and `gpt-6-luna`, I uses
-`opencode-go` and `iceman-contributor-free`):
+The overlay for each arm (S shown; L uses `chatgpt` and `gpt-6-luna`, I uses
+`opencode-go` and `iceman-contributor-free`; `reasoning_effort` is assumed from
+the repo, section 5):
 
 ```
 [overlay]
-expires_at = "2026-11-20T12:00:00Z"
+expires_at = "<setup time + 30 h>"
 
 [roles.research]
 provider = "devin"
@@ -524,15 +704,23 @@ model = "swe-2-flash"
 reasoning_effort = "low"
 ```
 
-Installed with:
-`choir files put System/model-policy-overlays/e1-sa.toml --local e1-sa.toml --api-key-file <key_file>`.
-`scripts/e1 smoke` does this for all four.
+It is installed with `choir files mkdir System`, `choir files mkdir
+System/model-policy-overlays` and `choir files put --local <file>
+--api-key-file <key> --host <host> System/model-policy-overlays/<id>.toml`
+(flags before the path: the CLI's parser stops at the first positional
+[read: cmd/choir/registry.go:352-378, 380]; mkdir and put answered on
+2026-11-19, **seen**), and read back with `choir files get`.
 
 ### 14.3 The objective file
 
-It lives at `docs/calibration/e1/pilot-objectives.jsonl`, committed (a docs
-commit) before the first counted run. Its SHA-256 goes into the claims. Only
-public news subjects appear in it.
+It lives at `docs/calibration/e1/pilot-objectives.jsonl`, committed and pushed
+(a docs commit) before the first counted run. Its SHA-256 goes into the P1
+claim. Only public news subjects appear in it. **It is not written by this
+change**: choosing the stories is the lead's act at T0, from the public front
+(`GET /api/platform/publications/front`, which needs no key
+[read: internal/proxy/platform_public.go:88-96]). The driver validates the
+file's shape (`scripts/testdata/e1/pilot-objectives.sample.jsonl` is an invented
+example): one header and ten objectives, five of each kind.
 
 - **Line 1, the header:**
   `{"t0": "<UTC>", "rule": "e1m-pilot-v1", "arms": ["sa","sb","l","i"], "order": "file order"}`.
@@ -554,120 +742,181 @@ first:
 - `label_basis` records why each label was given (for example, "2 cited
   hosts; a district named"). Labels are written before any run.
 
-A smoke objective `s00` (a `follow_up`, not in the file) is used only by the
-smoke step.
+The smoke objective `s00` is a `follow_up`-style prompt inside `scripts/e1`,
+not in the file; its four units are outside the pilot's 40 and 450.
 
 ### 14.4 The claims for the pilot (the lead enters them)
 
 Kind `experiment`. Settle by 2026-11-20T08:00Z. Evidence: `scripts/e1 read
---verdict` on the bundles. Fewer valid units than a claim needs settles it
-**false**.
+--verdict` on the bundles. Each row begins "E1-M pilot P1" (P2, P3), names the
+act and its bound (14.1), and the P1 row holds the objective file's SHA-256.
+Each claim is restated so that **one line of the verdict** settles it, over
+**valid units** (section 3), with a stated **minimum count**, on **started
+searches**. Fewer valid units than the minimum, or a stop that cut the pilot
+short, settles **`void` with the reason**; `false` is a completed test whose
+event is absent. The probabilities are the design's.
 
-- **P1, p = 0.45.** At least 2 of the 20 valid S units (S-a and S-b over the
-  10 objectives) have 10 or more web searches. At the paper's rate of 0.19,
-  the chance of 2 or more in 20 is 0.92. The price is low because the empty
-  corpus, the Texture-written first message and the shared published layer
-  all push searching down. **This is the gate.** If P1 is false, the tail does
-  not reproduce on an empty computer, E1-M stops, and the research eval route
-  comes first.
-- **P2, p = 0.50.** On at least 7 of the 10 objectives with both S units
-  valid, ln(1 + searches) of S-a and S-b differ by less than ln 2 (the same
-  model on two computers lands within a factor of two).
-- **P3, p = 0.50.** At least 36 of the 40 units are valid (section 3) by
-  2026-11-20T06:00Z.
+- **P1, p = 0.45.** Among the valid S units (S-a and S-b over the ten
+  objectives), at least 2 started 10 or more web searches, **given at least 14
+  valid S units**. With fewer than 14, `void`. The event changed in two small
+  ways from round 2: the count is of started searches (a few percent higher
+  than `search.served` lines, because cache-answered searches count), and 14
+  valid units suffice where round 2 asked for 20. The two move the chance in
+  opposite directions by less than the forecast's precision, so the number is
+  kept. At the paper's rate of 0.19, the chance of 2 or more in 20 is 0.92 (and
+  0.78 in 14); the price is low because the empty corpus, the Texture-written
+  first message and the shared published layer all push searching down. **This
+  is the gate.** If P1 is false, the tail does not reproduce on an empty
+  computer, E1-M stops, and the research eval route comes first. If P1 is void
+  nothing is concluded.
+- **P2, p = 0.50.** On at least 7 of the objectives on which S-a and S-b are
+  both valid, ln(1 + started) of S-a and S-b differ by less than ln 2, **given
+  at least 7 such objectives**. With fewer than 7, `void`. (Round 2 said "at
+  least 7 of the 10 ... with both S units valid", which a count under 7 settled
+  false; it is now void, and the probability is kept.)
+- **P3, p = 0.50.** All 10 objectives were submitted (no stop cut the pilot)
+  and at least 36 of the 40 units are valid (section 3). If a stop cut the
+  pilot short, **`void`**: the test of validity did not run. A completed pilot
+  with fewer than 36 valid units is `false`. The unit's 60-minute rule bounds
+  the wait, so no unit is waited on past 2026-11-20T06:00Z plus an hour.
 
-P1 and P2 come from the same bundles, and both depend on P3's validity rule,
-so they are correlated. Each is still priced on its own.
+P1 and P2 come from the same bundles, and both depend on the validity rule,
+so they are correlated. Each is still priced on its own. The driver's output
+for each is one line, `P1 (C...) true|false|void  <counts and reason>`.
 
 ### 14.5 The driver
 
-`scripts/e1` (Python, developer-side, yellow) has three subcommands.
-`read`'s rules and its fixture are reviewed by one seat before `pilot` runs.
+```
+scripts/e1 setup   [--plan] [--label-suffix S]
+scripts/e1 smoke
+scripts/e1 credits
+scripts/e1 pilot   --claims C1,C2,C3 --credits N --credits-basis "..." [--objectives FILE]
+scripts/e1 read    [--verdict] [--claims C1,C2,C3]
+scripts/e1 end
+```
 
-**`scripts/e1 smoke`** makes or collects the four computers, installs the
-overlays, submits `s00` to each, and prints one `PASS` or `FAIL` line per
-check per arm. It exits 0 only if every check passes:
+Common: `--state-dir` (default `~/.cache/choir-e1`), `--choir` (default `choir`
+on PATH; the CLI runs with a scrubbed environment so no stray key reaches it).
 
-1. the eval route answers 202 with the arm's overlay id (a missing or
-   unparsable overlay is a 400 [read: api_texture_prompt_eval.go resolve check]);
-2. the trajectory resolves. `doc_id` from the 202 leads, via `GET
-   /api/texture/documents/{doc_id}`, to `trajectory_id`
-   [assumed field; the document carries `TrajectoryID`
-   (texture_model_provenance.go:58)]. Then `GET /api/runs?trajectory_id=<id>`
-   [read: internal/agentcore/api.go:569] lists the research runs. If research
-   runs are not on that trajectory, the fallback is `GET
-   /api/inboxes/research:<doc_id>/records`
-   [read: internal/agentcore/api_inbox_records.go:29-30]. The check prints
-   which path worked;
-3. at least one research run ended, and its `model.served` names only the
-   arm's model with no `Switches`;
-4. `search.served` lines are present, and `desk.cell` and `desk.egress` carry
-   the per-search and per-read fields `read` needs (it prints which are
-   missing);
-5. `choir trace export <trajectory_id> --out ~/.config/choir-qa/traces/e1/<arm>-s00.json`
-   succeeds;
-6. **no publication**: `GET /api/texture/documents/{doc_id}/published`
-   [read: internal/textureowner/router.go:85] reports no published version,
-   and a corpus search from `e1-sa` for the `s00` document's title returns
-   no published hit from any e1 owner;
-7. all four computers report the same `build`.
+**What the driver calls** (each route read in the code; the ones marked
+**seen** answered during the smoke):
 
-**`scripts/e1 pilot [--continue]`** refuses to start unless all of these hold:
+| Step | Call | Read |
+|---|---|---|
+| submit | `POST /api/evals/texture-prompt` `{text, model_policy_overlay_id}`; 202 with `submission_id`, `doc_id`, `model_policy_overlay_id` | internal/apihandler/routes.go:82; api_texture_prompt_eval.go:21-36, :133-143; scope `write:runtime` (internal/proxy/handlers.go:591-615) |
+| unknown overlay | the same route answers 400 and starts nothing | api_texture_prompt_eval.go:99-108 |
+| trajectory | `GET /api/prompt-bar/submissions/{id}` → `decision.trajectory_id` | prompt_bar.go:87-95, :426-484; texture_handoff.go:277 |
+| runs | `GET /api/runs?trajectory_id=&limit=500` → `runs[]` with `run_id`, `agent_role`, `state`, `created_at`, `finished_at`, `metadata` | internal/agentcore/api.go:569-600 |
+| live tally | `GET /api/runs/{id}/events?after=&limit=1000` → `events[]` (`loop_id`, `kind`, `payload`), `next_after` | api_run_events.go:38-78; types/task.go:422-460 |
+| cancel | `POST /api/runs/{id}/cancel` | api.go:643-653 |
+| build | `GET /api/runtime/observability` → `build.commit`, `computer_id` | api.go:871-874; cmd/choir/trace.go:441-470 |
+| bundle | `choir trace export --api-key-file K --host H --timeout 120s --out P <trajectory>` | cmd/choir/trace.go:1003-1064; scopes `read:runtime`, `read:texture` (commands.go:702-707) |
+| publication | `GET /api/platform/texture/publications?doc_id=` → 404 none, 200 published | platform_publish.go:781-846; platform/handlers.go:196-222 |
+| overlay | `choir files mkdir|put|get`; `DELETE /api/files/System/model-policy-overlays/<id>.toml` for `end` | commands.go:374-423; autoputer/files.go:247 |
+| newspaper status | `scripts/status-paper-usage --json` (ssh to Node B, read only), at most once in three minutes | scripts/status-paper-usage:381 |
 
-- the claim ids are in the ledger on `origin/main`;
-- `smoke` has passed within 6 hours (from its stamp file);
-- the objective file's SHA-256 matches the one in the claims;
-- the overlays have not expired;
-- the credit rule of section 7 passes (it prints the estimate and the
-  threshold).
+**`scripts/e1 smoke`** reads the four computers from `computers.json`, submits
+`s00` to all four together, and prints one `PASS` or `FAIL` line per check per
+arm, then one summary line per arm, then `SMOKE OK` (exit 0) or `SMOKE FAILED
+at step N (arm): ...`. A pass writes a stamp naming the four computer ids.
+Steps:
 
-Then, for each objective in file order:
+1. the computer answers observability with its recorded id and a build;
+2. the overlay file is on the computer, as put;
+3. an unknown overlay id is refused with 400 and no run;
+4. the eval route answers 202 with the arm's overlay id;
+5. the submission names its trajectory;
+6. every run of the trajectory ends within 30 minutes (else cancelled and re-exported);
+7. `choir trace export` succeeds with runs and run events served;
+8. the trajectory has a research run (it prints the roles seen);
+9. `model.served` of the research runs names only the arm's model, no switch, and the run carries the arm's overlay (it prints the reported model id for comparison with the paper's);
+10. `search_start` rows and `search.served` lines are present (it prints started, done, served lines, provider calls and cache-answered searches);
+11. no document of the trajectory is published (14.5, publication read);
+12. the four computers report one build before and after.
 
-- it submits to all four arms at once;
-- it waits until every unit is ended or 60 minutes pass;
-- it exports the bundles and runs check 6 for each document;
-- it appends the outcome line to `~/.cache/choir-status/e1.tsv`;
-- it prints one line, for example:
-  `p03 thin_event | sa 12 sb 9 l 4 i 6 searches | runs 1/1/2/1 | valid 4/4 | tally 141/450 | build ok | published 0`.
+A cache-answered search cannot be forced; the reader's handling of one is
+tested on the invented bundle only, and the pilot shows whether it occurs.
 
-It stops, printing why, when:
+**`scripts/e1 pilot`** takes `--claims`, `--credits` and `--credits-basis`
+(required). It refuses to start, listing every reason, unless **all** hold:
 
-- the tally reaches 450;
-- the tally reaches 315, until `--continue`;
-- `status-hourly` shows the paper's searches failing, Keenable
-  `quota_limited`, or the paper's Devin calls refused;
-- any test document is found published: stop and record it, then unpublish
-  through the operator yank route [assumed path: the `choir platform yank`
-  verb, `cmd/choir/platform_yank*`];
-- an arm fails 3 units in a row: that arm stops, the others go on, and the
-  failure is a finding;
-- the builds disagree: that objective is invalid on every arm, and the driver
-  goes on.
+- the three claim ids are rows of the Claims table on `origin/main`, P1 to P3 (section 8);
+- the objective file validates, is the file on `origin/main`, and its SHA-256 is in the P1 row;
+- `smoke` passed on these four computers within 6 hours;
+- the overlays have at least 90 minutes left;
+- `--credits` is at least 4,500, and `--credits-basis` says where it came from (section 7);
+- the newspaper status read succeeds and shows no stop.
 
-**`scripts/e1 read [--verdict]`** recomputes every unit from the bundles. It
-prints:
+It then prints the block it starts from (claims, file hash, smoke stamp,
+overlay expiry, credits and basis, the status read time, the stops) and, for
+each objective in file order: reads the build of each computer, submits to all
+arms together, waits (a poll every 20 s; the trajectory has ended when it holds
+runs, none is pending, running or blocked, and the set held for 45 s), exports
+the bundles, runs the publication read, reads the build again, appends the
+outcome line to `outcomes.tsv` and prints:
+`p03 thin_event | sa 12 sb 9 l 4 i 6 started | runs 1/1/2/1 | valid 4/4 | tally 141/450 | build ok | published 0`.
 
-- the unit table (searches, research runs, validity and the reason for any
-  invalid unit, position);
-- per-arm medians;
-- the tail share and the 90th percentile;
-- d with its intervals and its sd;
-- the S-a/S-b differences;
-- the outcome line.
+A unit that has not ended 60 minutes after its submission is **timed out**:
+its active runs are cancelled (`POST /api/runs/{id}/cancel`), the driver waits
+up to five minutes for a terminal state, and **re-exports before the next
+objective starts**. Its searches are in the tally; the unit is invalid.
 
-With `--verdict` it prints `P1 true|false`, `P2 ...` and `P3 ...` with the
-counts behind each, ready to copy into the settlements table.
+It stops, printing why and writing the stop to `pilot.json`, when:
 
-### 14.6 After the pilot
+- the live tally of the running objective plus the finished ones reaches **450**: every active run of the objective is cancelled; terminal;
+- a test document is found **published**: it prints the document and the arm and says there is no story-unpublish verb and the owner must be told; terminal. A publication read that answers anything but 404 or 200 stops it too;
+- the status read, made before each objective, shows the newspaper's searches getting no provider answer, its Devin calls refused for quota, or Keenable `quota_limited`, or fails: a pause, not terminal; running `pilot` again re-reads it;
+- 2026-11-20T06:00Z passes before an objective starts: terminal;
+- an arm's last three units are invalid: that arm is left out of later objectives, the others go on, and the failure is a finding;
+- the builds disagree: that objective is invalid on every arm, and the driver goes on.
+
+315 prints a warning once. A terminal stop is final for this pilot: a second
+`pilot` run refuses. `pilot` is resumable: it reads `pilot.json`, skips
+finished objectives, and an objective whose submissions it recorded is waited
+on, not submitted again.
+
+**`scripts/e1 read [--verdict]`** recomputes every unit from the bundles and
+the recorded submission times and prints: the unit table (research runs,
+started searches, provider calls, cache-answered, valid, reasons, position);
+per arm the valid count, median, 90th percentile (nearest rank), tail share,
+`no_research` count and calls; d over the objectives valid on all four arms with its mean, sd, 95% t
+interval and a bootstrap interval; the S-a against S-b counts; and the outcome
+line, which states the full run's n (40, or 60 if sd of d is above 1.2). With
+`--verdict` it prints `P1`, `P2`, `P3`, each `true`, `false` or `void` with the
+counts and the reason.
+
+**`scripts/e1 credits`** runs the one status read and prints what the status
+scripts can give (today's Keenable calls) and what they cannot (section 7).
+
+**`scripts/e1 end`** removes the four overlay files and prints what is left on
+the test computers (documents, runs, captures, key and credential files,
+bundles). It deletes no computer.
+
+### 14.6 What `setup` and `smoke` showed on 2026-11-19
+SMOKEPLACEHOLDER
+
+### 14.7 After the pilot
 
 - If P1 is false, E1-M stops. The research eval route is designed next, and
   the readout says so.
 - If P1 is true, the readout gives the sd of d and states the full run's n
-  (40, or 60 if σ > 1.2). It waits for the owner's word (D-E3).
+  (40, or 60 if sd of d is above 1.2). It waits for the owner's word (D-E3).
+- If P1 is void, nothing is concluded; the readout says which stop starved it.
 
 Either way:
 
-- the lead settles P1, P2 and P3 from the verdict line;
-- `scripts/e1 end` deletes the overlays;
+- the lead settles P1, P2 and P3 from the verdict lines, copying them; the
+  computed line is the teacher and the forecaster does not judge (section 8);
+- `scripts/e1 end` removes the overlays;
 - the readout is appended to this file;
 - the four computers are deleted only after that commit.
+
+### 14.8 What the pilot cannot show
+
+- Anything about the harness: it varies the model only (section 1).
+- Anything about the paper's corpus: the arms start empty (section 1).
+- The searches of `choir.Research` children (section 3).
+- The paper's live reasoning effort, assumed `low` from the repo (section 5).
+- The run-to-run noise of the L and I arms: only S has a second computer.
+- Whether a cache-answered search reproduces at the paper's rate: the 13% is the record's, and the pilot's rate is whatever `cache_answered` shows.
+- A real tail: ten objectives on two S computers give 20 S units; the tail share is descriptive.
