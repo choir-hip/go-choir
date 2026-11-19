@@ -49,7 +49,7 @@ const ok = (): Record<string, (u: URL, i?: RequestInit) => Response> => ({
 });
 const signIn = (on: boolean): void => {
   resetSession();
-  bindNative(on ? { later: async ({ account }) => (account === 'api-key' ? { found: true, value: 'test-key' } : account === 'computer-id' ? { found: true, value: 'computer-1' } : { found: false }) } : null);
+  bindNative(on ? { later: async ({ op, account }: { op?: string; account?: string }) => (op === 'session' ? { found: true, value: 'test-key', computerId: 'computer-1' } : account === 'api-key' ? { found: true, value: 'test-key' } : account === 'computer-id' ? { found: true, value: 'computer-1' } : { found: false }) } : null);
 };
 const count = (needle: string): number => calls.filter((c) => c.url.includes(needle)).length;
 

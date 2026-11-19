@@ -3,9 +3,9 @@ import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { bindNative } from './api.ts';
+import { bindNative, setDemo } from './api.ts';
 import { settingsAccount } from './settings.ts';
-import { accountSignOut } from './account.ts';
+import { accountSignOut, settleAccount } from './account.ts';
 import * as mail from './mail.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -37,6 +37,10 @@ fs.read app:/data/mail
 fs.write app:/data/mail
 fs.read app:/cache
 fs.write app:/cache
+fs.read app:/data/signout-pending
+fs.write app:/data/signout-pending
+fs.read app:/data/account-stamp
+fs.write app:/data/account-stamp
 secret.keep mail-key`;
 
 const sources: Sources = {
@@ -74,4 +78,17 @@ const sources: Sources = {
   mailMarkUnread: ([address, demo]) => mail.mailMarkUnread(address, demo),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
-export const answer: Answer = (source, args, store, storage, native) => { bindNative(native); return sources[source](args, store, storage, native); };
+// Where the demo flag sits in a source's arguments (the sources that carry it). The signed-in seam is told at every answer; once in demo it stays
+// in demo until the process ends (api.ts `setDemo`), and the native reader answers "not found" in demo for the sources that carry no flag.
+export const DEMO_AT: Record<string, number> = {
+  settingsAccount: 1, accountSignOut: 0, mailBox: 1, mailSync: 1, mailMessage: 1, mailCompose: 1, mailSaveDraft: 4, mailApprovalEmail: 2, mailMarkUnread: 1,
+  fileList: 0, fileOpen: 0, fileResolve: 0, fileMkdir: 0, fileDelete: 0, fileRename: 0, fileUpload: 0, paperFront: 6,
+};
+export const answer: Answer = async (source, args, store, storage, native) => {
+  bindNative(native);
+  const at = DEMO_AT[source];
+  if (at !== undefined && (args as unknown[])[at] === true) setDemo(true);
+  // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
+  if (source !== 'accountSignOut') await settleAccount(storage, store);
+  return sources[source](args, store, storage, native);
+};

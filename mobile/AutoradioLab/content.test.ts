@@ -20,7 +20,7 @@ import {
 } from './content.ts';
 import { Corpus } from './search.ts';
 import { bindNative, resetSession, SignedOutError } from './api.ts';
-const signedIn = { available: true, later: async (r: { account: string }) => ({ found: true, value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-test' }) };
+const signedIn = { available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: 'test-key-0001-not-real', computerId: 'comp-test' } : { found: true, value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-test' }) };
 import mailList from '../fixtures/content/mail-list.json';
 import mailMessage from '../fixtures/content/mail-message.json';
 import documentList from '../fixtures/content/document-list.json';

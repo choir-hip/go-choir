@@ -9,7 +9,7 @@ let calls: string[] = [];
 let handler: () => Response;
 beforeEach(() => {
   calls = []; resetSession();
-  bindNative({ available: true, later: async (r: { account: string }) => (r.account === 'api-key' ? { found: true, value: KEY } : r.account === 'computer-id' ? { found: true, value: 'comp-1' } : { found: false }) } as never);
+  bindNative({ available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: KEY, computerId: 'comp-1' } : r.account === 'api-key' ? { found: true, value: KEY } : r.account === 'computer-id' ? { found: true, value: 'comp-1' } : { found: false }) } as never);
   handler = () => new Response(JSON.stringify(live), { status: 200 });
   globalThis.fetch = (async (u: string) => { calls.push(String(u)); return handler(); }) as never;
 });

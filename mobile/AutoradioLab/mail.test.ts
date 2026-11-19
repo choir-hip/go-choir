@@ -39,7 +39,7 @@ let calls: Req[] = [];
 let route: (r: Req) => { status: number; body: unknown } | 'network' = () => ({ status: 404, body: { error: 'not found' } });
 const mail = await import('./mail.ts');
 const app = await import('./app.ts');
-const reader = { available: true, later: async (r: { account: string }) => ({ found: r.account !== 'key-id', value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-1' }) };
+const reader = { available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: 'test-key-0001-not-real', computerId: 'comp-1' } : { found: r.account !== 'key-id', value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-1' }) };
 function stubFetch(): void {
   globalThis.fetch = (async (u: string, init: RequestInit) => {
     const url = new URL(String(u));

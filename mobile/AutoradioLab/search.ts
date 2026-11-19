@@ -455,13 +455,17 @@ export function fromHalf(h: number): number {
   return s * Math.pow(2, e - 15) * (1 + m / 1024);
 }
 
+/** The vector stores this session holds, so sign-out can empty them (the in-memory copy serves the old account otherwise). */
+const liveVectors = new Set<VectorStore>();
+export async function wipeLiveVectors(storage: Storage | undefined): Promise<void> { for (const v of [...liveVectors]) await wipeVectors(v, storage); }
+
 export class VectorStore {
   private ids: string[] = [];
   private keys: string[] = [];
   private vec: Float32Array[] = [];
   private slot = new Map<string, number>();
   dirty = false;
-  constructor(readonly engine: string = ENGINE, readonly dimension: number = DIMENSION) {}
+  constructor(readonly engine: string = ENGINE, readonly dimension: number = DIMENSION) { liveVectors.add(this); }
 
   get count(): number { return this.ids.length; }
   /** The content key each stored id was made from (what the job compares to decide what to embed again). */

@@ -73,10 +73,14 @@ function rowToItem(r: unknown[]): StoredItem {
     version: str(r[7]), pinned: num(r[8]) === 1, syncedAt: num(r[9]), meta };
 }
 
+/** The stores this session holds, so sign-out can reach them (a sync that is running notices by `generation`; the open db is emptied). */
+const liveStores = new Set<ContentStore>();
+export async function wipeLiveContent(): Promise<void> { for (const s of [...liveStores]) await s.wipe(); }
+
 export class ContentStore {
   /** Bumped by `wipe`: a sync that started under another generation drops its writes. */
   generation = 0;
-  constructor(readonly db: Db, public budget: Budget = STANDARD_BUDGET) {}
+  constructor(readonly db: Db, public budget: Budget = STANDARD_BUDGET) { liveStores.add(this); }
 
   async init(): Promise<void> {
     await this.db.execute('CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, text TEXT NOT NULL, date INTEGER, address TEXT NOT NULL, source TEXT NOT NULL, version TEXT NOT NULL, pinned INTEGER NOT NULL, synced_at INTEGER NOT NULL, meta TEXT NOT NULL, bytes INTEGER NOT NULL)');

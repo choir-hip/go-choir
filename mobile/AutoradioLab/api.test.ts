@@ -14,13 +14,13 @@
 //  A11 a changed key (another account signed in) does not reuse the old account's computer id.
 //  A12 a transport failure is an Error, not a SignedOutError.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { authedJSON, authedBytes, SignedOutError, HTTPError, bindNative, resetSession, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
+import { authedJSON, authedBytes, SignedOutError, HTTPError, bindNative, resetSession, resetSeam, setDemo, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
 
 const KEY = 'test-key-0001-not-real';
 const KEY2 = 'test-key-0002-not-real';
 let kept: Record<string, string> = {};
 let reads: string[] = [];
-const native = { available: true, later: async (r: { account: string }) => { reads.push(r.account); const v = kept[r.account]; return v === undefined ? { found: false } : { found: true, value: v }; } };
+const native = { available: true, later: async (r: { op?: string; account?: string }) => { if (r.op === 'session') { reads.push('session'); const k = kept['api-key']; return k === undefined ? { found: false } : { found: true, value: k, computerId: kept['computer-id'] ?? '' }; } reads.push(r.account as string); const v = kept[r.account as string]; return v === undefined ? { found: false } : { found: true, value: v }; } };
 
 type Call = { url: string; init: RequestInit };
 let calls: Call[] = [];
@@ -29,7 +29,7 @@ const header = (c: Call, n: string) => (c.init.headers as Record<string, string>
 
 beforeEach(() => {
   kept = { 'api-key': KEY, 'computer-id': 'comp-1' };
-  reads = []; calls = []; resetSession();
+  reads = []; calls = []; resetSeam();
   bindNative(native as never);
   handler = () => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
   globalThis.fetch = (async (u: string, init: RequestInit) => { const c = { url: String(u), init }; calls.push(c); return handler(c); }) as never;
@@ -145,5 +145,49 @@ describe('signed-in seam', () => {
   test('only the three accounts today\'s sign-in keeps are readable', async () => {
     expect(KEYCHAIN_ACCOUNTS).toEqual(['api-key', 'key-id', 'computer-id']);
     expect(authedURL('/api/x', {})).toBe(`${ORIGIN}/api/x`);
+  });
+});
+
+describe('review 2026-11-19: demo, generation, redirect, one read', () => {
+  test('D1 demo mode: zero fetches and zero native reads, whoever calls', async () => {
+    setDemo(true);
+    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
+    await expect(authedBytes('/api/x')).rejects.toBeInstanceOf(SignedOutError);
+    expect(calls.length).toBe(0); expect(reads.length).toBe(0);
+  });
+  test('D2 a source that says demo=true puts the seam in demo (app.ts answers every source that carries the flag)', async () => {
+    const { answer, DEMO_AT } = await import('./app.ts');
+    expect(Object.keys(DEMO_AT).length).toBeGreaterThan(10);
+    try { await answer('settingsAccount' as never, [true, true, 0] as never, undefined as never, undefined as never, native as never); } catch { /* the page's own business */ }
+    bindNative(native as never);
+    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
+    expect(calls.length).toBe(0);
+  });
+  test('G1 a reply that finished after a sign-out is dropped as signed out, JSON and bytes', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => { release = r; });
+    globalThis.fetch = (async (u: string, init: RequestInit) => { calls.push({ url: String(u), init }); await gate; return new Response('{"old":"account"}', { status: 200 }); }) as never;
+    const j = authedJSON('/api/x'); const b = authedBytes('/api/y');
+    await new Promise((r) => setTimeout(r, 5));
+    nextGeneration(); release();
+    const [rj, rb] = await Promise.allSettled([j, b]);
+    expect(rj.status).toBe('rejected'); expect(rb.status).toBe('rejected');
+    expect((rj as PromiseRejectedResult).reason).toBeInstanceOf(SignedOutError); expect((rb as PromiseRejectedResult).reason).toBeInstanceOf(SignedOutError);
+  });
+  test('R1 the key reaches the server only: redirects are not followed, a 3xx is an error', async () => {
+    handler = () => new Response('', { status: 302, headers: { location: 'https://evil.example.com/' } });
+    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(HTTPError);
+    expect((calls[0].init as { redirect?: string }).redirect).toBe('manual');
+  });
+  test('O1 the key and the computer id come from ONE native read', async () => {
+    await authedJSON('/api/x');
+    expect(reads).toEqual(['session']);
+  });
+  test('K1 what is kept after discovery is a digest: the key text is in no field of the module state', async () => {
+    kept = { 'api-key': KEY };
+    handler = (c) => c.url.endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: 'c9', kind: 'interactive', current: true }] }), { status: 200 }) : new Response('{}', { status: 200 });
+    await authedJSON('/api/x');
+    const api = await import('./api.ts');
+    expect(JSON.stringify(Object.values(api).map((v) => typeof v === 'function' ? '' : v))).not.toContain(KEY);
   });
 });

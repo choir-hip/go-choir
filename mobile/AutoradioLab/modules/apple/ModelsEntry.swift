@@ -21,7 +21,9 @@ final class ModelsModule: ExactModule {
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
                 await m.signOutForShared()
-                reply.send(["done": true])
+                // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done,
+                // and shared code wipes nothing (a retry is safe). This does not change how the Swift sign-out deletes.
+                reply.send(["done": !CredentialReader().keyRemains()])
             }
             return
         }

@@ -67,7 +67,7 @@ export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
 type Account = (typeof KEYCHAIN_ACCOUNTS)[number];
 
 /** The data module's one native module, as far as this file uses it. */
-export type NativeReader = { available?: boolean; later(request: { op: 'get'; account: Account }): Promise<unknown> };
+export type NativeReader = { available?: boolean; later(request: { op: 'get'; account: Account } | { op: 'session' }): Promise<unknown> };
 let reader: NativeReader | undefined;
 /** app.ts hands over the module's native handle at every answer. */
 export function bindNative(native: NativeReader | null | undefined): void { reader = native ?? undefined; }
@@ -77,6 +77,27 @@ async function keptItem(account: Account): Promise<string | null> {
   const r = (await reader.later({ op: 'get', account })) as { found?: boolean; value?: unknown } | null;
   return r && r.found === true && typeof r.value === 'string' && r.value !== '' ? r.value : null;
 }
+
+/** The key and the computer id in ONE native read: a sign-out or a new sign-in between two reads cannot pair an old key with a new computer. */
+async function keptSession(): Promise<{ key: string; computerId: string } | null> {
+  if (!reader || reader.available === false) return null;
+  const r = (await reader.later({ op: 'session' })) as { found?: boolean; value?: unknown; computerId?: unknown } | null;
+  if (!r || r.found !== true || typeof r.value !== 'string' || r.value === '') return null;
+  return { key: r.value, computerId: typeof r.computerId === 'string' ? r.computerId : '' };
+}
+
+// DEMO MODE (review 2026-11-19, finding 1). In demo mode no signed-in request is ever made and the stored credential is never read: the seam
+// refuses HERE, before any native read or fetch, whatever the caller. app.ts tells the seam the flag from every source that carries it. Demo
+// is chosen at launch (relaunch to change), so once a source has said so the seam stays in demo until the process ends. The native reader
+// also answers "not found" in demo (CredentialReader.swift), for the sources that carry no flag.
+let demoOn = false;
+export function setDemo(on: boolean): void { if (on) demoOn = true; }
+
+// ACCOUNT GENERATION (finding 5). Bumped by sign-out before the wipes. A reply that started under an older generation is dropped as signed out,
+// so a request in flight at sign-out can never write the old account's data back into a store the wipe just emptied.
+let generation = 0;
+export const accountGeneration = (): number => generation;
+export function nextGeneration(): number { generation += 1; return generation; }
 
 /** An id as one path segment (Swift PathSegment.encode): everything but unreserved characters is escaped; "." and ".." too. */
 export function segment(id: string): string {
@@ -101,16 +122,23 @@ function plainPath(path: string): boolean {
   return path.startsWith('/') && !path.startsWith('//') && !/[\\\s#]/.test(path) && !path.split('?')[0].split('/').some((s) => s === '.' || s === '..') && !path.includes('?');
 }
 
-// The computer discovered for a key (memory only; today's sign-in keeps the id in the Keychain and that is read first).
-let discovered: { key: string; id: string } | null = null;
-let discovering: Promise<string> | null = null;
+// The computer discovered for a key (memory only; today's sign-in keeps the id in the Keychain and that is read first). Only a SHA-256 of the
+// key is kept, never the key (finding 6); the discovery in flight is keyed by that digest too, so another account's key never receives it.
+let discovered: { digest: string; id: string } | null = null;
+let discovering: { digest: string; p: Promise<string> } | null = null;
+async function digestOf(key: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key) as unknown as BufferSource));
+  return Array.from(d, (x) => x.toString(16).padStart(2, '0')).join('');
+}
 
 function scrub(text: string, key: string): string { return key ? text.split(key).join('[key]') : text; }
 
 async function send(path: string, opts: Authed, accept: string): Promise<{ r: Response; key: string }> {
   if (!plainPath(path)) throw new Error('refused: a signed-in path is a plain absolute path on the server');
-  const key = await keptItem('api-key');
-  if (!key) throw new SignedOutError();
+  if (demoOn) throw new SignedOutError('demo mode makes no signed-in request');
+  const sess = await keptSession();
+  if (!sess) throw new SignedOutError();
+  const key = sess.key;
   const headers: Record<string, string> = { ...(opts.headers ?? {}), Accept: accept, Authorization: `Bearer ${key}` };
   const method = opts.method ?? 'GET';
   let body: string | undefined;
@@ -118,22 +146,26 @@ async function send(path: string, opts: Authed, accept: string): Promise<{ r: Re
     // Raw bytes go as they are (a file added to the listener's computer: PUT /api/files/{path}); the caller names the type.
     body = opts.body as unknown as string; headers['Content-Type'] = headers['content-type'] ?? headers['Content-Type'] ?? 'application/octet-stream'; delete headers['content-type'];
   } else if (opts.body !== undefined) { body = JSON.stringify(opts.body); headers['Content-Type'] = 'application/json'; }
-  if (!path.startsWith('/auth/') && path !== STATUS_PATH) headers['X-Choir-Computer'] = await computerId(key);
+  if (!path.startsWith('/auth/') && path !== STATUS_PATH) headers['X-Choir-Computer'] = await computerId(key, sess.computerId);
   try {
-    return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS } as RequestInit), key };
+    return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual' } as RequestInit), key };
   } catch (e) {
     throw new Error(scrub(`network: ${e instanceof Error ? e.message : 'request failed'}`, key));
   }
 }
 
-async function computerId(key: string): Promise<string> {
-  const kept = await keptItem('computer-id');
+async function computerId(key: string, kept: string): Promise<string> {
   if (kept) return kept;
-  if (discovered && discovered.key === key) return discovered.id;
+  const digest = await digestOf(key);
+  if (discovered && discovered.digest === digest) return discovered.id;
+  if (discovering && discovering.digest !== digest) discovering = null;
   if (!discovering) {
-    discovering = (async () => {
+    const gen = generation;
+    let mine!: Promise<string>;
+    mine = (async () => {
       try {
-        const { r } = await send(STATUS_PATH, {}, 'application/json');
+        const { r, key: used } = await send(STATUS_PATH, {}, 'application/json');
+        if (used !== key) throw new SignedOutError();       // the account changed while this was asked
         await check(r, STATUS_PATH, key);
         const o = (await r.json()) as { computers?: { computer_id?: string; kind?: string; current?: boolean }[]; warnings?: string[] };
         const list = (o.computers ?? []).filter((c) => (c.kind ?? 'interactive') === 'interactive' && !!c.computer_id);
@@ -142,12 +174,14 @@ async function computerId(key: string): Promise<string> {
           const warn = (o.warnings ?? [])[0] ?? '';
           throw new Error('the account has no computer yet' + (warn ? ` (${warn.slice(0, 120)})` : '') + '; try again in a moment');
         }
-        discovered = { key, id: pick.computer_id };
+        if (gen !== generation) throw new SignedOutError();
+        discovered = { digest, id: pick.computer_id };
         return pick.computer_id;
-      } finally { discovering = null; }
+      } finally { const cur = discovering as { p: Promise<string> } | null; if (cur && cur.p === mine) discovering = null; }
     })();
+    discovering = { digest, p: mine };
   }
-  return discovering;
+  return discovering.p;
 }
 
 async function check(r: Response, path: string, key: string): Promise<void> {
@@ -156,15 +190,18 @@ async function check(r: Response, path: string, key: string): Promise<void> {
   let msg = '';
   try { const o = JSON.parse(await r.text()); if (o && typeof o.error === 'string') msg = o.error.slice(0, 200); } catch { /* the server's string only; never the body */ }
   const retry = Number(r.headers.get('retry-after'));
+  if (r.status >= 300 && r.status < 400) throw new HTTPError(r.status, 'redirect refused: the key goes only to the server it was made for');
   const reason = r.status === 403 ? `403: the key lacks the scope for ${path}` : r.status === 429 ? '429: rate limited' : `HTTP ${r.status}`;
   throw new HTTPError(r.status, scrub(reason + (msg ? `: ${msg}` : ''), key), r.status === 429 && Number.isFinite(retry) && r.headers.get('retry-after') ? retry : null);
 }
 
 /** A signed-in JSON request to the listener's own computer. Throws SignedOutError when there is no session. */
 export async function authedJSON(path: string, opts: Authed = {}): Promise<Reply> {
+  const gen = generation;
   const { r, key } = await send(path, opts, 'application/json');
   await check(r, path, key);
   const raw = await r.text();
+  if (gen !== generation) throw new SignedOutError('signed out while the request was in flight');
   let body: unknown = null;
   if (raw !== '') { try { body = JSON.parse(raw); } catch { throw new Error(`${path} answered a body that is not JSON`); } }
   const date = r.headers.get('date');
@@ -174,13 +211,24 @@ export async function authedJSON(path: string, opts: Authed = {}): Promise<Reply
 
 /** The same, for bytes (a file, a PDF, audio). */
 export async function authedBytes(path: string, opts: Authed = {}): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const gen = generation;
   const { r, key } = await send(path, opts, '*/*');
   await check(r, path, key);
-  return { bytes: new Uint8Array(await r.arrayBuffer()), contentType: r.headers.get('content-type') ?? '' };
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  if (gen !== generation) throw new SignedOutError('signed out while the request was in flight');
+  return { bytes, contentType: r.headers.get('content-type') ?? '' };
+}
+
+/** The digest of the stored key, or null when there is none or demo mode is on. For the account stamp (account.ts); never the key itself. */
+export async function sessionDigest(): Promise<string | null> {
+  if (demoOn) return null;
+  try { const s = await keptSession(); return s ? await digestOf(s.key) : null; } catch { return null; }
 }
 
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
+/** For tests: leave demo mode and the generation as a fresh process has them. */
+export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }
