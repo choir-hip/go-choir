@@ -42,9 +42,9 @@ function episodeOf(it: Item): Episode {
 }
 
 /** Parses a feed. Throws NotAFeed with a sentence the page can show. */
-/** The most of a feed's text that is parsed. A page's turn is 100 ms of CPU and the device parsed a 2.2 MB feed in 378 ms and 103 ms at 300 000 (the third and fifth real runs: `podcastHome` was refused as an
+/** The most of a feed's text that is parsed. A page's turn is 100 ms of CPU and the device parsed a 2.2 MB feed in 378 ms and 103 ms at 300 000 and 102 ms at 150 000 (real runs 3, 5 and 14: `podcastHome` was refused as an
  * Overrun and the page drew nothing). Feeds list the newest episodes first, so a prefix cut at the last whole `</item>` keeps the newest; the rest is not read. */
-export const MAX_PARSE = 150_000;
+export const MAX_PARSE = 80_000;
 
 export function parseFeed(fullText: string, feedURL: string, fetchedAt: number): Feed {
   let text = fullText;
