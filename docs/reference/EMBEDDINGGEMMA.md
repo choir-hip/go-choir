@@ -459,12 +459,25 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
   `POST /internal/platform/captures/neighbours` `{owner_id, computer_id, capture_ids, since, limit}` (a bound guest for its own
   scope, or an internal caller; at most 5,000 ids and 50 neighbours each). It reads the named captures' stored vectors (no
   embedder, so a down embedder does not stop it) and for each returns the nearest other captures of the same owner and computer
-  from the same list as every other vector search (the eligibility predicate, exact or index, `since` inclusive by day). A capture
-  with no eligible vector (not embedded yet, private, tombstoned, superseded) comes back in `missing`; `state` is `exact`,
-  `approximate` or `partial` (the 30 s deadline cut it; the captures not reached are in `missing`); `unavailable` says the tables
-  are not ready. The event layer sends every waiting capture of a flush in one request, maps the neighbours to events by their
-  memberships and offers each capture its three nearest events beyond the 30 recent. Journal: `op=vector_neighbours
-  shape=captures rows= ids= missing= state=`.
+  under the same eligibility predicate, `since` inclusive by day. **One SQL statement answers up to 500 named captures** (a
+  lateral join of their vectors against the scope's eligible rows), so a flush of up to 500 is one statement and one request;
+  a larger one is a statement a group of 500 in the same request (at most 5,000 ids; the event layer sends the rest of a larger
+  flush in a second request), and a group the deadline or the statement timeout passes is cut, not the whole answer. The list is
+  exact when the eligible rows in the window number at most 100,000 and rows times named captures at most 40 million distance
+  computations (the count uses the query's predicate), else the HNSW index's, and a list it returns short of the limit is read
+  again exactly. Reasoned cost, not measured on the paper: an exact list is one pass over the window's rows for each named
+  capture, about 0.2 to 0.5 microseconds a halfvec distance, so a 100,000-row window costs 20 to 50 ms a capture and the 40-million
+  bound is a few seconds. Measured on the build VM with the fake embedder: 520 named captures against 520 rows, one request, 1.6 s with the
+  eligible rows found once (a first version that repeated the predicate for every pair took 29 s, hence the pool); a flush on the paper is tens of captures (about 17 research reads a minute plus a poll's 20 to 100
+  new items a source), so it is well inside the 30 s deadline. Answer: `neighbours` by capture; counts of the captures with no
+  list, by reason: `unembedded` (eligible, no vector yet), `excluded` (private, tombstoned, superseded, another scope, unknown)
+  and `cut` (not reached before the deadline: that is `state: partial`, a fact about the answer, not about the captures);
+  `state` is `exact`, `approximate` or `partial`; `unavailable` ("the vector tables are not ready"; the database's words go to
+  the journal) says the vectors cannot answer. The event layer sends every waiting capture of a flush in one request, before it
+  takes the event index (a slow request does not hold the Stories read), maps the neighbours to events by their memberships
+  and offers each capture its three nearest events beyond the 30 recent. Journal: `op=vector_neighbours shape=captures rows=
+  ids= unembedded= excluded= cut= state=`; the event layer's flush line carries `vector_state=ok|approximate|partial|unavailable`,
+  `missing_unembedded=`, `missing_excluded=` and `vector_unmapped=` (neighbours whose capture maps to no event in the index).
 - **Import** (the Mac's first pass): `POST /internal/platform/vectors/import` on corpusd's loopback port 8086 with the host
   credential, body one JSON row a line (`kind` `story_passage` or `capture`, `id` a publication version's or a capture's, `ordinal`,
   `text_sha`, `model`, `dim` 256, `v` base64 of 256 float16); answers 202 and a job, `GET ?job=` reads it. Refused whole for another
