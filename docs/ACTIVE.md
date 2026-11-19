@@ -26,17 +26,16 @@ redesigns and starts the calibration experiment (built on 4 November, never
 started). State at 2026-11-19T13:50Z, nothing below is accepted until its
 deployed proof is named in the goal file:
 
-- **V.** The vector index and the ranked corpus search are deployed
-  (`a8b603d22`, 12:57Z; claims C151 to C154 false on the way, C156 true).
-  The server's own worker fills the index at about 0.4 passages a second
-  beside the paper, days for the 256,000 rows. The Mac's file of 278,048
-  vectors was refused whole by corpusd's sample check: 2,661 rows carried a
-  vector made under another title
-  (`problems/first-vectors-file-refused-equal-text-under-another-title-2026-11-19.md`).
-  The corrected file is in the inbox and is taken at corpusd's next restart
-  (claim C157). `lane/inbox-retry` (a running pass yields to a waiting
-  file; the capture walk reads its gap by page) is in review round 3. The
-  event layer (`lane/event-land`) lands after the index is filled.
+- **V.** The vector index and the ranked corpus search are deployed and
+  filled: the Mac's corrected file of 278,048 vectors was imported at 14:55Z
+  (C157 true), stories 34,890 of 34,890, captures 97%. The inbox repairs
+  are deployed (`e4ab2eab2`, claim C159). Open defect: while the worker
+  embeds, a search waits 4 s behind it and loses its vector half
+  (`problems/search-waits-four-seconds-behind-the-embed-worker-2026-11-19.md`;
+  the fix, a second embedder unit for queries, is built on
+  `lane/embed-query` and waits for review). The event layer
+  (`lane/event-land`) is next to land (claim C160). Recall on the deployed
+  search is not measured.
 - **X.** The Exact move is on main and deployed (`a8b603d22`, claim C155
   true): pages, sign-in, sync, mail, files, podcasts, the reader's content
   and the run sheet are shared code; voice and the deck are native. Nothing
@@ -47,7 +46,10 @@ deployed proof is named in the goal file:
   The experiment driver is on main (`463ec68f0`); the pilot started at
   13:58:36Z (three arms, thirty units; claims C148 to C150) after its smoke
   test's question was changed to ask for one new web search (C158 true).
-  Nothing that refreshes computers is pushed until it ends. The ten
+  It paused itself before its third objective at 14:48Z: the paper's
+  Devin calls were being refused for quota, and one of the six units so far
+  is invalid because its run was switched to another model. It resumes,
+  after a fresh smoke test, when the refusals stop. The ten
   objectives are on main (`calibration/e1/pilot-objectives.jsonl`).
 
 ## Live station (2026-11-18): Autoradio, the cutover from Swift to Exact
