@@ -29,6 +29,12 @@ Go log lines (UTC) the runtime already writes:
       returned; ledger claim C144 is settled from this field)
   corpus read run= desk= conv= capture= held=(false|own|true) via=
       internal/researchtools corpusReadLine
+  event layer: resolved N captures in K calls: op=event_flush queued= research_reads= calls=
+      shortlist_recent= shortlist_vector= shortlist_vector_new= vector=(N|unavailable)
+      vector_state=(ok|approximate|partial|unavailable) missing_unembedded= missing_excluded=
+      vector_unmapped= joined= minted= tentative= unresolved= corroborated= cost_usd=
+      internal/agentcore eventFlushLine (station V5; the event layer's acceptance, design
+      S7: the minted share of the questions asked falls from 85% to 60% or less)
 and, from the gateway journal, "search request from autoputer <paper vm>
 (... run= desk= conv=)" lines: the web searches the paper sent.
 The query and note text are removed on Node B before the lines leave it, and
@@ -79,6 +85,7 @@ REASONS_RE = re.compile(r"not_sent=\d+ \(([^)]*)\)")
 NUM_KV_RE = re.compile(r"\b(\w+)=(\d+)\b")
 CS_RE = re.compile(STAMP + r" corpus search computer=\S+ (.*)$")
 RB_RE = re.compile(STAMP + r" research brief run=(\S+) desk=(\S+) (.*)$")
+EF_RE = re.compile(STAMP + r" event layer: resolved \d+ captures in \d+ calls: op=event_flush (.*)$")
 RD_RE = re.compile(STAMP + r" corpus read run=(\S+) desk=(\S+) conv=\S+ capture=\S+ held=(\S+) via=(\S+)")
 GW_RE = re.compile(STAMP + r" .*search request from autoputer (\S+) \(.*?run=(\S+) desk=(\S+) conv=")
 ANY_STAMP_RE = re.compile(STAMP)
@@ -167,6 +174,18 @@ def parse_console(text):
             ev.append({"k": "rb", "t": t, "run": m.group(2), "desk": m.group(3), "outcome": kv.get("outcome", "?"),
                        "ms": bnum("ms"), "captures": bnum("captures"), "tokens": bnum("tokens_est")})
             continue
+        m = EF_RE.search(ln)
+        if m:
+            kv = dict(KV_RE.findall(m.group(2)))
+            def fnum(k):
+                v = kv.get(k, "")
+                return int(v) if v.isdigit() else 0
+            ev.append({"k": "ef", "t": t, "queued": fnum("queued"), "research": fnum("research_reads"), "calls": fnum("calls"),
+                       "joined": fnum("joined"), "minted": fnum("minted"), "tentative": fnum("tentative"),
+                       "unresolved": fnum("unresolved"), "unembedded": fnum("missing_unembedded"),
+                       "excluded": fnum("missing_excluded"), "unmapped": fnum("vector_unmapped"),
+                       "vstate": kv.get("vector_state", "unknown")})
+            continue
         m = RD_RE.search(ln)
         if m:
             ev.append({"k": "rd", "t": t, "run": m.group(2), "desk": m.group(3), "held": m.group(4), "via": m.group(5)})
@@ -194,7 +213,7 @@ def med(xs):
     return None if not xs else statistics.median(xs)
 
 
-def metrics(sr, cs_all, rd_all, gw, rb_all=()):
+def metrics(sr, cs_all, rd_all, gw, rb_all=(), ef_all=()):
     """The numbers for the run summaries in sr, the corpus searches and reads
     in cs_all/rd_all (joined on run=), and the gateway events gw (or None)."""
     r = {"runs": len(sr)}
@@ -263,6 +282,16 @@ def metrics(sr, cs_all, rd_all, gw, rb_all=()):
         "captures_median": med([e["captures"] for e in rb_all if e["captures"] is not None]),
         "tokens_est_median": med([e["tokens"] for e in rb_all if e["tokens"] is not None])}
     r["gateway_web_searches"] = None if gw is None else len(gw)
+    r["event_flush"] = None
+    if ef_all:
+        f = {k: sum(e[k] for e in ef_all) for k in ("queued", "research", "calls", "joined", "minted", "tentative",
+                                                     "unresolved", "unembedded", "excluded", "unmapped")}
+        f["flushes"] = len(ef_all)
+        f["minted_share"] = share(f["minted"], f["queued"])
+        f["states"] = {}
+        for e in ef_all:
+            f["states"][e["vstate"]] = f["states"].get(e["vstate"], 0) + 1
+        r["event_flush"] = f
     return r
 
 
@@ -300,7 +329,8 @@ def compute(console_text, gateway_text, since=None, until=None, first=None, afte
     if first is not None:
         keep = {e["run"] for e in sr}
         rb = [e for e in rb if e["run"] in keep]
-    rep["m"] = metrics(sr, cs, rd, gw, rb)
+    ef = [e for e in win if e["k"] == "ef"]
+    rep["m"] = metrics(sr, cs, rd, gw, rb, ef)
     rep["gateway_span"] = None
     if gw_all:
         rep["gateway_span"] = [iso(min(e["t"] for e in gw_all)), iso(max(e["t"] for e in gw_all))]
@@ -398,6 +428,12 @@ def render(r):
         o.append("research briefs: %d (%s); median ms %s, captures %s, tokens_est %s" % (
             b["n"], ", ".join("%s %d" % kv for kv in sorted(b["outcomes"].items())),
             fmt(b["ms_median"]), fmt(b["captures_median"]), fmt(b["tokens_est_median"])))
+    f = m["event_flush"]
+    if f:
+        o.append("event layer: %d flushes, %d questions asked (%d from research's reads), %d Jev calls; joined %d, minted %d (%s of the questions), tentative %d, unresolved %d"
+                 % (f["flushes"], f["queued"], f["research"], f["calls"], f["joined"], f["minted"], pct(f["minted"], f["queued"]), f["tentative"], f["unresolved"]))
+        o.append("  vector states of the flushes: %s; captures with no vector yet %d, excluded %d; neighbours mapped to no event %d"
+                 % (", ".join("%s %d" % kv for kv in sorted(f["states"].items())), f["unembedded"], f["excluded"], f["unmapped"]))
     p = m["per_run"]
     o.append("per run (joined on run=; cell searches only): corpus searches median %s, web searches started median %s, reads median %s; "
              "runs with a web search and no corpus search at all: %d of %d"

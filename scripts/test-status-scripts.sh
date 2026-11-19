@@ -420,6 +420,8 @@ check "Q3 a list that ends inside the day is said to be incomplete" 'grep -q "ma
 #      unknown numeric field in the middle drops the line; the reasons inside
 #      parentheses are read as fields or lost; the one-line label names the
 #      console's span when --since/--until or --first narrowed the window
+#  R15 the event layer's op=event_flush line is not read, or its sums, minted share or vector states are wrong, or a
+#      console without the line prints the section
 #  R10 the hourly script fails, or changes its last line, when the corpus
 #      section is unavailable
 corpus="$here/status-corpus-reuse"
@@ -494,6 +496,29 @@ runcorpus --fixture "$root/cr_a.log" --append "$tsv"
 check "R5 a second run appends nothing new" '[ "$(wc -l <"$tsv")" -eq 3 ] && grep -q "appended 0" "$root/out"'
 runcorpus --fixture "$root/cr_a.log" --append "$here/../corpus-reuse-test.tsv"
 check "R5 a file inside the repo is refused" '[ "$(cat "$root/rc")" = 2 ] && [ ! -e "$here/../corpus-reuse-test.tsv" ]'
+# R15 the event layer's flush line (station V5): flushes, questions, minted share, vector states
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+PRE = "[ 3433.240153] 267hzahw99fgwgizzlinyajh0hnpc6ya-go-choir-run-autoputer-runtime[723]: "
+def ef(ts, q, res, vec, state, un, ex, um, j, m, t, calls=1):
+    return (f"{PRE}{ts} event layer: resolved {q} captures in {calls} calls: op=event_flush queued={q} research_reads={res} calls={calls} "
+            f"shortlist_recent=30 shortlist_vector=4 shortlist_vector_new=2 vector={vec} vector_state={state} missing_unembedded={un} "
+            f"missing_excluded={ex} vector_unmapped={um} joined={j} minted={m} tentative={t} unresolved=0 corroborated=0 cost_usd=0.00002\n")
+lines = [PRE + "2026/11/18 20:30:00 runtime: something else\n",
+         ef("2026/11/18 21:10:00", 10, 4, 25, "ok", 1, 0, 3, 4, 6, 0),
+         ef("2026/11/18 21:20:00", 10, 0, 0, "partial", 0, 2, 0, 2, 7, 1, 2),
+         ef("2026/11/18 21:30:00", 5, 5, "unavailable", "unavailable", 0, 0, 0, 0, 5, 0),
+         ef("2026/11/18 23:30:00", 99, 0, 1, "ok", 0, 0, 0, 99, 0, 0),
+         PRE + "2026/11/18 23:40:00 runtime: something else\n"]
+open(root + "/cr_ef.log", "w").write("".join(lines))
+PY
+runcorpus --fixture "$root/cr_ef.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z
+check "R15 3 flushes in the window, 25 questions asked (9 from research's reads), 4 Jev calls" 'grep -q "event layer: 3 flushes, 25 questions asked (9 from research.s reads), 4 Jev calls" "$root/out"'
+check "R15 joined 6, minted 18 (72.0% of the questions), tentative 1" 'grep -q "joined 6, minted 18 (72.0% of the questions), tentative 1" "$root/out"'
+check "R15 vector states by count, unembedded, excluded and unmapped sums" 'grep -q "vector states of the flushes: ok 1, partial 1, unavailable 1; captures with no vector yet 1, excluded 2; neighbours mapped to no event 3" "$root/out"'
+runcorpus --fixture "$root/cr_a.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z
+check "R15 a console with no flush line prints no event layer section" '! grep -q "event layer:" "$root/out"'
 # R11: no --since: the gateway's 19:00 line is before the console's first line (20:30)
 runcorpus --fixture "$root/cr_a.log" --gateway-fixture "$root/cr_g.log"
 check "R11 gateway lines before the console's first line are not counted (3, not 4)" 'grep -q "journal): 3 " "$root/out"'
