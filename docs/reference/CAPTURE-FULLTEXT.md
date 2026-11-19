@@ -353,7 +353,12 @@ common words (428,000 postings) 744 to 205 ms; 6 words with a 3-letter prefix
 words (30,000) 30 to 29 ms. The build took 6.6 s including the vacuum, and a
 writer inserting a row every 2 ms meanwhile saw its slowest insert at 3.4 ms (it
 is not blocked: `CREATE INDEX CONCURRENTLY` excludes only schema changes and
-vacuum). The corpusd journal's `capture_search
+vacuum). The index is about 390 MB on 2.76 million postings (the primary key is
+387 MB; the covering index is the same size plus `fetched_at`, measured as the
+whole-table growth, not separately), and every write to the term table now
+maintains it as well as the primary key. The primary key could later be replaced
+by a unique covering index on the same columns, which would drop one index's
+write cost and disk; that is not done. The corpusd journal's `capture_search
 shape=terms` line used to include the full-text search; it no longer does, and
 `capture_fulltext_search` is its own line.
 

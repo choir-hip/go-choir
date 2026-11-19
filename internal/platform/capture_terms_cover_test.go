@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
@@ -128,6 +129,11 @@ func TestCaptureTermSearchReadsPostingsFromTheCoveringIndexAndAnswersTheSame(t *
 		t.Fatal(err)
 	}
 	coverFixture(t, store)
+	// The migration's own build (on the empty table) vacuumed once already:
+	// the vacuum under test must be a later one.
+	var lastVacuumBefore sql.NullTime
+	_ = store.corpus().QueryRowContext(ctx, `SELECT last_vacuum FROM pg_stat_user_tables WHERE relname = ?`, captureTermsTable).Scan(&lastVacuumBefore)
+	time.Sleep(50 * time.Millisecond)
 	if err := store.ensureCaptureTermsCoverIndex(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -198,15 +204,17 @@ func TestCaptureTermSearchReadsPostingsFromTheCoveringIndexAndAnswersTheSame(t *
 	// the vacuum could mark every page all-visible depends on the snapshots
 	// other sessions hold, so the test does not assert Heap Fetches: 0; the
 	// measurement is in docs/reference/CAPTURE-FULLTEXT.md.
-	var vacuumed bool
-	for i := 0; i < 50 && !vacuumed; i++ {
-		_ = store.corpus().QueryRowContext(ctx, `SELECT last_vacuum IS NOT NULL FROM pg_stat_user_tables WHERE relname = ?`, captureTermsTable).Scan(&vacuumed)
-		if !vacuumed {
+	var after sql.NullTime
+	advanced := false
+	for i := 0; i < 50 && !advanced; i++ {
+		_ = store.corpus().QueryRowContext(ctx, `SELECT last_vacuum FROM pg_stat_user_tables WHERE relname = ?`, captureTermsTable).Scan(&after)
+		advanced = after.Valid && (!lastVacuumBefore.Valid || after.Time.After(lastVacuumBefore.Time))
+		if !advanced {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	if !vacuumed {
-		t.Fatal("the term table was not vacuumed after the index was built")
+	if !advanced {
+		t.Fatalf("the term table was not vacuumed by the build (last_vacuum before %v, after %v)", lastVacuumBefore, after)
 	}
 
 	// C4: dropped, the search answers the same through the primary key.
@@ -243,7 +251,9 @@ func TestSearchCaptureTimersDoNotNest(t *testing.T) {
 	if text.MaxMS < float64(slow.Milliseconds()) {
 		t.Fatalf("the slow text half was not timed by its own line: %+v", text)
 	}
-	if terms.MaxMS >= float64(slow.Milliseconds()) {
-		t.Fatalf("the terms line (%.0f ms) contains the text search (%.0f ms): the timers nest", terms.MaxMS, text.MaxMS)
+	// Nested, the terms line would hold the whole text search and so be at
+	// least as long as it; apart, it is the short term search.
+	if terms.MaxMS >= text.MaxMS {
+		t.Fatalf("the terms line (%.0f ms) is not shorter than the text search (%.0f ms): the timers nest", terms.MaxMS, text.MaxMS)
 	}
 }
