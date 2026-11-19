@@ -25,20 +25,13 @@ const (
 	ogKindEventMembership = objectgraph.ObjectKind("choir.event_membership")
 )
 
-// SettingIntakeEvents turns on the event layer's shadow resolution: new
-// captures from source polls are resolved onto events by Jev. On by default
-// (owner, 2026-11-03); it runs only where source polls capture; nothing reads
-// the events yet, and a stored off is the rollback.
-const SettingIntakeEvents = "intake.events"
-
 // SettingIntakeEventWakes makes production wait on events (event layer
-// §15, V3): with intake.events also on, a poll's arrival is held, and
+// §15, V3): a poll's arrival is held, and
 // management wakes on an event's records instead. Off by default; turning
 // it off is the rollback.
 const SettingIntakeEventWakes = "intake.event_wakes"
 
 func init() {
-	KnownComputerSettings[SettingIntakeEvents] = true
 	KnownComputerSettings[SettingIntakeEventWakes] = false
 }
 
