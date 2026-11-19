@@ -1,0 +1,1 @@
+{"resultCount":4,"results":[{"collectionName":"Show A","artistName":"Ann Example","feedUrl":"https://feeds.example.com/a.xml","artworkUrl600":"http://img.example.com/a.jpg"},{"collectionName":"No feed"},{"collectionName":"","feedUrl":"https://feeds.example.com/b.xml"},{"collectionName":"Show A again","feedUrl":"https://feeds.example.com/a.xml/"}]}

@@ -1,0 +1,111 @@
+// The shapes of the podcast pages' data (home, a show, an episode, the clip rows) and of what a play or a write answers. Declared here in Contract;
+// app.ts answers them (podcast.ts, clips.ts) and the generated app.contract.d.ts gives those modules their types from these lines. Before the
+// podcasts moved to shared logic they came from the Swift package's interface (interface/podcasts.json and joins.json).
+
+use HearItRow from "@choir/autoradio"   // the reader page carries the same row (interface/reader.json), so the shape stays the package's
+
+shape PodShowRow
+  feedURL: string
+  address: string
+  title: string
+  author: string
+  artwork: string
+  detail: string
+  latest: string
+  latestStamp: string
+  subscribed: bool
+  unplayed: bool
+  unplayedCount: number
+
+shape PodEpisodeRow
+  key: string
+  address: string
+  title: string
+  stamp: string
+  duration: string
+  snippet: string
+  progress: string
+  unplayed: bool
+  playable: bool
+  current: bool
+
+shape PodTranscriptRow
+  key: string
+  time: string
+  text: string
+  seconds: number
+  current: bool
+  seekable: bool
+
+shape PodHomeView
+  status: string
+  message: string
+  query: string
+  searchNote: string
+  syncNote: string
+  searching: bool
+  hasQuery: bool
+  shows: PodShowRow[]
+  results: PodShowRow[]
+  suggestions: PodShowRow[]
+
+shape PodShowView
+  status: string
+  message: string
+  feedURL: string
+  title: string
+  author: string
+  artwork: string
+  summary: string
+  unplayedLine: string
+  subscribed: bool
+  refreshing: bool
+  episodes: PodEpisodeRow[]
+
+shape PodEpisodeView
+  status: string
+  message: string
+  address: string
+  feedURL: string
+  showTitle: string
+  showAddress: string
+  title: string
+  stamp: string
+  duration: string
+  artwork: string
+  playingFrom: string
+  resumeLabel: string
+  note: string
+  notes: string[]
+  subscribed: bool
+  playable: bool
+  current: bool
+  fromClip: bool
+  hasResume: bool
+  transcriptState: string
+  transcriptNote: string
+  transcriptSource: string
+  transcript: PodTranscriptRow[]
+
+shape PodPlay
+  op: string
+  id: string
+  url: string
+  title: string
+  show: string
+  start: number
+  clip: string
+  feed: string
+
+shape PodAck
+  status: string
+  message: string
+  play: PodPlay
+  open: string
+  openTitle: string
+
+shape PodHead
+  rev: number
+
+shape ClipRows
+  rows: HearItRow[]

@@ -1,17 +1,30 @@
-// Lane members file (autoradio-joins): what a clip row's Play, Queue and Open episode do. One send, `clipAct`, for every place that shows
-// clips (the article page's "Hear it", a show page's "Clips"). Answered by exact-package/apple/AutoradioModule+Joins.swift (Kit: ClipActions).
-use showClips, clipAct from "@choir/autoradio"
-use ClipRows, ClipAck from "@choir/autoradio"
+// Members file (joins): what a clip row's Play, Queue and Open episode do. One send, `clipAct`, for every place that shows clips (the article page's
+// "Hear it", a show page's "Clips"). Answered by app.ts (clips.ts): it decides which clip, and a play answers the clip's id as data. The clip is found in
+// the file the publisher serves by the native locator, which holds the fingerprints (owner rule: clips play from fingerprinted audio): `clipPlay`.
+use clipPlay, PodDone from "@choir/autoradio"
+use ClipRows from "./podcast-types.contract"
+use PodAck from "./podcast-types.contract"
 
 members Autoradio
-  resource shClips = showClips(address=pg.top) as shape ClipRows else empty()
-  mutation clipAck as shape ClipAck
+  resource shClips = showClips(pg.top, podTick) as shape ClipRows else empty()
+  mutation clipAck as shape PodAck then afterClip
+  mutation clipHanded as shape PodDone
 
   // The note belongs to the page it was said on ("" none).
   state clipNoteFor = ""
   derive clipNoteRaw = match clipAck { case some(a) => a.message, case none => "" }
   derive clipNote = clipNoteFor == pg.top ? clipNoteRaw : ""
+  derive clipPlayOp = match clipAck { case some(a) => a.play.op, case none => "" }
+  derive clipPlayId = match clipAck { case some(a) => a.play.clip, case none => "" }
+  derive clipPlayFeed = match clipAck { case some(a) => a.play.feed, case none => "" }
+  derive clipOpen = match clipAck { case some(a) => a.open, case none => "" }
+  derive clipOpenTitle = match clipAck { case some(a) => a.openTitle, case none => "" }
 
   action clipDo(op: string, id: string)
     clipNoteFor = pg.top
-    send clipAck = clipAct(op=op, id=id)
+    send clipAck = clipAct(op, id)
+  action afterClip
+    if clipPlayId != ""
+      send clipHanded = clipPlay(op=clipPlayOp, id=clipPlayId, feed=clipPlayFeed)
+    if clipOpen != ""
+      openPage(clipOpen, clipOpenTitle)

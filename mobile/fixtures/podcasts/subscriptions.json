@@ -1,0 +1,1 @@
+{"subscriptions":[{"feed_url":"https://feeds.example.com/a.xml","title":"https://feeds.example.com/a.xml","content_item":{"title":"Real A"}},{"feed_url":"","title":"x"},{"feed_url":"https://feeds.example.com/b.xml","title":"B","author":"Bo Example","artwork_url":"http://img.example.com/b.png"}]}
