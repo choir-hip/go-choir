@@ -253,12 +253,13 @@ final class DeckTests: XCTestCase {
         let j = DeckJournal(storage: f)
         j.append("started", item: "a"); j.append("ended", item: "a", end: "skipped")
         let good = try Data(contentsOf: f)
-        // the file is there and cannot be read (a background launch before first unlock: modelled by bytes no decoder accepts)
-        try Data("not json".utf8).write(to: f)
+        // the file is there and cannot be read (a background launch before first unlock: modelled by no read permission)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.path)
         let j2 = DeckJournal(storage: f)
         XCTAssertFalse(j2.isLoaded)
         j2.append("started", item: "b")
-        XCTAssertEqual(try Data(contentsOf: f), Data("not json".utf8), "nothing is saved over a file that could not be read")
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: f.path)
+        XCTAssertEqual(try Data(contentsOf: f), good, "nothing is saved over a file that could not be read")
         try good.write(to: f)                                   // the phone is unlocked: the file reads
         let l = j2.append("ended", item: "b", end: "skipped")
         XCTAssertTrue(j2.isLoaded)
@@ -290,8 +291,48 @@ final class DeckTests: XCTestCase {
         XCTAssertLessThanOrEqual(j.lines.count, DeckJournal.maxLines)
         let marks = j.lines.filter { $0.type == "system" && $0.command == "dropped" }
         XCTAssertEqual(marks.count, 1); XCTAssertTrue(marks[0].reason.hasPrefix("dropped "), marks[0].reason)
-        XCTAssertEqual(j.dropped + 0, j.dropped); XCTAssertGreaterThan(j.dropped, 0)
+        XCTAssertGreaterThan(j.dropped, 0)
         XCTAssertEqual(Set(j.lines.map(\.seq)).count, j.lines.count, "numbers still unique")
+    }
+    // Review 2026-11-19 (deck, seat 2, round 2): J8 a file that reads and cannot be decoded is moved aside and journalling goes on from the numbers file, with a `system` line
+    //  J9 an unreadable launch still closes the item a kill left open, once the file reads  J10 lines at or below the acknowledged number are pruned at init
+    //  J11 a start suspended across the wipe makes no sound for the next account
+    func test19_ACorruptJournalIsMovedAsideAndJournallingGoesOn() throws {
+        let f = tmp(); let bad = f.deletingPathExtension().appendingPathExtension("bad")
+        defer { for u in [f, bad, DeckJournal.seqFile(for: f)] { try? FileManager.default.removeItem(at: u) } }
+        let j = DeckJournal(storage: f); for n in 1...3 { j.append("started", item: "i\(n)") }
+        try Data("not json".utf8).write(to: f)
+        let j2 = DeckJournal(storage: f)
+        XCTAssertTrue(j2.isLoaded); XCTAssertEqual(try Data(contentsOf: bad), Data("not json".utf8))
+        let l = j2.append("started", item: "x")
+        XCTAssertEqual(j2.lines.map(\.command), ["journal-corrupt", ""]); XCTAssertEqual(j2.lines.first?.seq, 4); XCTAssertEqual(l.seq, 5, "the numbers file carries on")
+        XCTAssertEqual(DeckJournal(storage: f).lines.count, 2, "and it is saved again")
+    }
+    func test20_AnUnreadableLaunchStillClosesTheItemAKillLeftOpen() throws {
+        let f = tmp(); defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: f.path); try? FileManager.default.removeItem(at: f); try? FileManager.default.removeItem(at: DeckJournal.seqFile(for: f)) }
+        let j = DeckJournal(storage: f); j.append("started", item: "a")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: f.path)
+        let j2 = DeckJournal(storage: f); XCTAssertNil(j2.closeOpenAtBoot()); XCTAssertFalse(j2.isLoaded)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: f.path)
+        j2.append("remote", item: "", command: "play")                    // the next event reads the file
+        XCTAssertEqual(j2.lines.filter { $0.type == "ended" }.map { "\($0.item):\($0.end):\($0.reason)" }, ["a:failed:interrupted by a restart"])
+    }
+    func test21_LinesAtOrBelowTheAcknowledgedNumberArePrunedAtInit() throws {
+        let f = tmp(); defer { try? FileManager.default.removeItem(at: f); try? FileManager.default.removeItem(at: DeckJournal.seqFile(for: f)) }
+        let j = DeckJournal(storage: f); for n in 1...3 { j.append("started", item: "i\(n)") }
+        var raw = try JSONSerialization.jsonObject(with: Data(contentsOf: f)) as! [String: Any]; raw["acked"] = 2
+        try JSONSerialization.data(withJSONObject: raw).write(to: f)
+        XCTAssertEqual(DeckJournal(storage: f).lines.map(\.seq), [3])
+    }
+    func test22_AStartSuspendedAcrossTheWipeMakesNoSound() async {
+        let (d, e) = makeDeck(); var release: CheckedContinuation<Void, Never>?
+        e.holdSpeak = { await withCheckedContinuation { release = $0 } }
+        let t = Task { @MainActor in await d.play(self.speech("a")) }
+        await settle(); XCTAssertNotNil(release)
+        d.wipe(); e.log = []
+        release?.resume(); _ = await t.value
+        XCTAssertNil(d.current); XCTAssertTrue(e.log.contains("stopSpoken"), "the engine is stopped again when the start resolves after the wipe")
+        XCTAssertTrue(d.journal.lines.isEmpty)
     }
     func test16_AnEndedLineOfAnEarlierAiringIsNotThisAiringsEnd() async {
         let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }

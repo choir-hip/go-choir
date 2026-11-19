@@ -53,7 +53,7 @@ before the run sheet is restored. (Today the verdict the run sheet posts is deci
 cannot be read (a launch before the first unlock) is never overwritten: lines made meanwhile are held and numbered after it once it reads;
 `seq` and `acked` live in a small file of their own so numbers never repeat. A failed save is counted and logged, and the whole journal is
 written again at the next event. The journal keeps the newest 2000 lines; past that the oldest go in a tenth at a time and a `system` line
-`dropped` says how many. Sign-out wipes it (`AccountWipe`, "deck-journal").
+`dropped` says how many. Sign-out wipes the whole deck (`Deck.wipe()`, registered in `AccountWipe` as "deck"): the item on air, the held items, the reason and the journal; an engine start that resolves after the wipe is stopped again. A journal file that reads and cannot be decoded is moved to `deck-journal.bad`, a `system` line `journal-corrupt` says so, and the numbers file carries on; lines at or below the acknowledged number are pruned when the file is read. If the launch found the file unreadable, the item a kill left open is closed (as `failed`, "interrupted by a restart") as soon as it reads.
 
 ## What shared code does with it
 

@@ -103,10 +103,12 @@ extension DeckLine {
         case .absent: break
         case .ok(let s): lines = s.lines; seq = s.seq; acked = s.acked
         case .unreadable: isLoaded = false
+        case .corrupt: setAside()
         }
         // The numbers have a file of their own: a lost or unreadable lines file never makes them start again.
         if let n = readNumbers() { seq = max(seq, n.seq); acked = max(acked, n.acked) }
-        floor = seq
+        floor = seq; lines.removeAll { $0.seq <= acked }
+        if aside { append("system", item: "", command: "journal-corrupt", reason: "the journal file could not be decoded and was moved aside") }
     }
 
     public static func applicationSupportFile() -> URL? {
@@ -120,13 +122,21 @@ extension DeckLine {
 
     struct Saved: Codable { var seq: Int; var acked: Int; var lines: [DeckLine] }
     struct Numbers: Codable { var seq: Int; var acked: Int }
-    private enum Read { case absent, ok(Saved), unreadable }
+    private enum Read { case absent, ok(Saved), unreadable, corrupt }
+    private var aside = false, bootPending = false
 
     private func read() -> Read {
         guard let storage else { return .absent }
         guard FileManager.default.fileExists(atPath: storage.path) else { return .absent }
-        guard let d = try? Data(contentsOf: storage), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return .unreadable }
+        guard let d = try? Data(contentsOf: storage) else { return .unreadable }          // cannot be read now (protected data): kept, tried again
+        guard let s = try? JSONDecoder().decode(Saved.self, from: d) else { return .corrupt }   // read, and still no journal: it would wedge journalling for good
         return .ok(s)
+    }
+    /// A file that reads and cannot be decoded is moved aside (`.bad`), never deleted, and the numbers file carries on.
+    private func setAside() {
+        guard let storage else { return }
+        let bad = storage.deletingPathExtension().appendingPathExtension("bad")
+        try? FileManager.default.removeItem(at: bad); try? FileManager.default.moveItem(at: storage, to: bad); aside = true
     }
     private func readNumbers() -> Numbers? {
         guard let storage, let d = try? Data(contentsOf: Self.seqFile(for: storage)) else { return nil }
@@ -140,11 +150,15 @@ extension DeckLine {
         switch read() {
         case .unreadable: return
         case .absent: lines = []; seq = floor
+        case .corrupt: setAside(); lines = []; seq = floor
         case .ok(let s): lines = s.lines; seq = max(floor, s.seq); acked = max(acked, s.acked)
         }
+        lines.removeAll { $0.seq <= acked }
         seq = max(seq, lines.last?.seq ?? 0, acked)
         for var l in held { seq += 1; l.seq = seq; lines.append(l) }
         isLoaded = true
+        if aside { aside = false; append("system", item: "", command: "journal-corrupt", reason: "the journal file could not be decoded and was moved aside") }
+        if bootPending { bootPending = false; closeOpenAtBoot() }          // the launch found the file unreadable: the item a kill left open is closed now
     }
 
     static func stamp(_ d: Date) -> String {
@@ -195,6 +209,7 @@ extension DeckLine {
     @discardableResult
     public func closeOpenAtBoot() -> DeckLine? {
         ensureLoaded()
+        if !isLoaded { bootPending = true; return nil }
         guard let item = openItem else { return nil }
         let last = lines.last { $0.item == item && ($0.type == "sounding" || $0.type == "started") }
         let sounded = lines.contains { $0.item == item && $0.type == "sounding" }
@@ -210,8 +225,8 @@ extension DeckLine {
     /// the next event writes everything held again.
     private func save() {
         guard let storage, isLoaded else { return }
-        guard let d = try? JSONEncoder().encode(Saved(seq: seq, acked: acked, lines: lines)), let n = try? JSONEncoder().encode(Numbers(seq: seq, acked: acked)) else { return }
         do {
+            let d = try JSONEncoder().encode(Saved(seq: seq, acked: acked, lines: lines)), n = try JSONEncoder().encode(Numbers(seq: seq, acked: acked))
             #if os(iOS)
             try n.write(to: Self.seqFile(for: storage), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             try d.write(to: storage, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
@@ -452,7 +467,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
             e.estSeconds = RunSheetEntry.estimateSeconds(words: item.paragraphs)
             ok = await engine.speak(documentID: item.documentID, entry: e, paragraphs: item.paragraphList)
         }
-        guard my == generation, current?.id == item.id else { return ok }
+        guard my == generation, current?.id == item.id else { if ok, current == nil { stopEngine() }; return ok }       // wiped while it started: no sound for the next account
         if !ok {
             ended(.failed, reason: "the engine could not start it")
             await playOn()

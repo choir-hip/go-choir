@@ -115,10 +115,20 @@ describe('D14 D15 what a loss looks like', () => {
 describe('D16 the interface tells no lie', () => {
   test('no level op and no rate field in deck.ts, deck-types.contract, interface/deck.json', () => {
     const dir = import.meta.dir;
-    for (const f of [join(dir, 'deck.ts'), join(dir, 'deck-types.contract'), join(dir, '..', 'exact-package', 'interface', 'deck.json')]) {
+    for (const f of [join(dir, 'deck.ts'), join(dir, 'deck-types.contract'), join(dir, '..', 'exact-package', 'interface', 'deck.json')]) {      // (exact.json is generated from the fragments; the next test reads its deck entries too)
       const src = readFileSync(f, 'utf8');
       expect(src).not.toMatch(/'level'|"level"|\brate\b/);
     }
+  });
+});
+
+describe('D16b the generated interface agrees', () => {
+  test('exact.json declares no level op and no DeckState.rate', () => {
+    const j = JSON.parse(readFileSync(join(import.meta.dir, '..', 'exact-package', 'exact.json'), 'utf8'));
+    expect(JSON.stringify(j.shapes.DeckState ?? {})).not.toContain('rate');
+    expect(JSON.stringify(j)).not.toMatch(/"level":\s*"string"[^}]*deck/i);
+    const act = (j.names as { send?: string; options?: Record<string, string> }[]).find((n) => n.send === 'deckAct');
+    expect(act).toBeDefined();
   });
 });
 
