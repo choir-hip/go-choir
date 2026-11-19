@@ -328,3 +328,26 @@ Steps 5 and 6 (the deck bridge, the run sheet through the deck) are not started.
 - A late native answer on the launch paths only finishes bookkeeping bound to its own sign-out (the marker's token and the stamp are captured when the finish starts); if both
   changed in between, it does nothing and the next launch's reconcile decides.
 - The wipe marker now holds a per-sign-out token (a UUID), not "1"; an older marker of "1" is still a marker.
+
+## The deck with no native code (Android), 2026-11-19 late
+
+The lead's Android build of the squashed lane (`"android": {}` in app.json's host, now committed) showed shared code working (the paper front fetched, 100 stories) but nothing on screen:
+the deck's `order` was shared state, but WHICH page is on top came from the Swift OpenPages through `autoradio.openPages` / `pageOpen`, which Android answers NotSupported, so the
+deck drew placards only. What moved, each proved with the queue's `android` mode (a fresh store, `tap place-paper`, then a story):
+
+1. **The open pages** (`pages.ts`, a port of `OpenPages` in Pages.swift: open with the opener recorded, close with the opener coming forward, focus, pin, reopen, the 30-page pile, the radio
+   always open and unclosable, kept in `app:/data/open-pages-shared.json`, wiped at sign-out). `spine.contract` keeps the native set as `pgn` and adds the shared `pgs`; `pg` is the native
+   set when it has a top page (always on iOS) and the shared one otherwise; every open/close/pin/reopen is sent to both (`pms`/`pcs`). Result on Android: `deck-slot-paper:front` holds the
+   paper page with 100 story rows with real titles (`paper-story-/pub/texture/ukraine-and-russia-trade-record-drone-strikes-...`). Tests: `pages.test.ts` P1 to P9.
+2. **The reader for stories** (`reader.ts`): a `pub:` page resolves the public route and shows the story's text as h/p/li/quote blocks. `members-reader.contract` reads it when the Swift reader's
+   answer is the empty "loading". Result on Android: tapping a story opens the reader page with the title and 55 text blocks. Owed (the Swift reader decodes more): citations, versions, related stories,
+   tables, embeds, hear-it rows, `texture:` documents, editing. Tests: `reader.test.ts` R1 to R5.
+3. **The notebook page**: `notebook.ts` already had the page source; the contract now reads it while the Swift one is empty/substituted (read only; selecting a line and steer taps stay native).
+
+Still Swift, and why (the substituted sources of the Android log):
+- Voice and audio, owed in Kotlin: `voiceProfile`, the mic, speech, on-device models, `barState`'s voice fields, `radioPage`/`radioView`, `queueView`/`queueAdd` (the run sheet player), `podcastNow`, the deck's
+  audio names. Not stubbed: they answer NotSupported and the pages that need them draw their idle state.
+- Plain server reads not yet moved (cheapest next): `takesPage` (takes.ts has `page`, but the Swift owns the kept ids and the audio), `shelfList/Doc/Chapter/Find/Follow` (the books/Reader shelf: Swift `ReaderShelf`),
+  `texturesList` (the Textures place), `textureEditInfo`, `editionPicks`, `conversationInfo`, `themeList`/`theme` (themes are Swift data; the default theme is substituted), `signalList`.
+- The Swift `OpenPages` is NOT removed: Swift-initiated opens (the bar's ask-about-this-page, the voice) go through it. Removing it needs those to tell shared code through a one-way call that Android may lack.
+- Contracts that relied on `sf/...` symbols (drawn only on Apple) and `-exact-exit-animation` (refused on Android) have not been audited.
