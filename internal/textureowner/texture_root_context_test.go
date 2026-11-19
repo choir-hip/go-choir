@@ -60,23 +60,18 @@ func hasRootContext(run types.RunRecord) bool {
 	return strings.Contains(run.Prompt, textureprompts.RootContextLabel())
 }
 
-// Off, or on with no master yet, the run is exactly what it was.
-func TestTextureRootContextOffOrNoMasterChangesNothing(t *testing.T) {
-	off := newRootHarness(t, false)
-	_, runOff := off.createDoc("ctx-b", "Harbor")
-	on := newRootHarness(t, true)
-	_, runOn := on.createDoc("ctx-b", "Harbor")
-	if _, ok := on.marker(); ok {
+// With no master yet the run is exactly what it was.
+func TestTextureRootContextNoMasterChangesNothing(t *testing.T) {
+	rh := newRootHarness(t)
+	_, run := rh.createDoc("ctx-b", "Harbor")
+	if _, ok := rh.marker(); ok {
 		t.Fatal("creating a document claimed a master")
 	}
-	if hasRootContext(runOff) || hasRootContext(runOn) {
-		t.Fatal("a run got the master's excerpt with the switch off or no master")
+	if hasRootContext(run) {
+		t.Fatal("a run got the master's excerpt with no master")
 	}
-	if runOff.Prompt != runOn.Prompt {
-		t.Fatalf("on with no master changed the run's prompt:\noff:\n%s\non:\n%s", runOff.Prompt, runOn.Prompt)
-	}
-	if _, ok := runOn.Metadata["texture_root_context_revision_id"]; ok {
-		t.Fatal("on with no master stamped the root context on the run")
+	if _, ok := run.Metadata["texture_root_context_revision_id"]; ok {
+		t.Fatal("no master stamped the root context on the run")
 	}
 }
 

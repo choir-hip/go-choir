@@ -9,7 +9,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 )
 
@@ -62,9 +61,6 @@ func TestLedgerChangeWakesNoteTheTextureRoot(t *testing.T) {
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			f := newRecordsWakeFixture(t, "rootnote", false, false)
-			if err := f.env.store.PutComputerSetting(f.env.ctx, store.ComputerSetting{OwnerID: f.ownerID, ComputerID: f.computerID, Key: store.SettingTextureRootDesk, Value: true}); err != nil {
-				t.Fatal(err)
-			}
 			var digests []string
 			f.env.adapter.Runtime.SetScheduleActor(func(_ context.Context, _, _, to, kind, content, _, _ string, _ time.Time) error {
 				if kind == agentcore.TextureRootDigestKind {
@@ -97,9 +93,6 @@ func TestFateDeadlineNotesTheTextureRootAfterItCommits(t *testing.T) {
 	}{{"ran", nil, 1}, {"held", agentcore.ErrAssignmentSagaHeld, 0}} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newRecordsWakeFixture(t, "fatenote", false, false)
-			if err := f.env.store.PutComputerSetting(f.env.ctx, store.ComputerSetting{OwnerID: f.ownerID, ComputerID: f.computerID, Key: store.SettingTextureRootDesk, Value: true}); err != nil {
-				t.Fatal(err)
-			}
 			var digests []string
 			f.env.adapter.Runtime.SetScheduleActor(func(_ context.Context, _, _, _, kind, content, _, _ string, _ time.Time) error {
 				if kind == agentcore.TextureRootDigestKind {

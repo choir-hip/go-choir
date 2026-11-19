@@ -2,7 +2,7 @@ package textureowner
 
 // PD3 S1: one Texture root desk per computer, the master document's own
 // Texture desk, woken by a debounced texture_root_digest after other
-// documents' commits, behind texture.root_desk
+// documents' commits
 // (docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
 // fail, written before the code (the design's numbering):
 //
@@ -17,7 +17,7 @@ package textureowner
 //	7   a crash leaves a digest to resume (actorruntime test; here: the next
 //	    commit after a boot mints a new digest and boot runs nothing);
 //	    the root's own commits wake the root; the root completes its
-//	    standing item; off is not inert; the read is unbounded.
+//	    standing item; the read is unbounded.
 
 import (
 	"context"
@@ -54,7 +54,7 @@ type rootHarness struct {
 	now       time.Time
 }
 
-func newRootHarness(t *testing.T, on bool) *rootHarness {
+func newRootHarness(t *testing.T) *rootHarness {
 	t.Helper()
 	core, h := testAPISetup(t)
 	rh := &rootHarness{t: t, core: core, h: h, s: core.Store(), now: time.Now().UTC()}
@@ -66,11 +66,6 @@ func newRootHarness(t *testing.T, on bool) *rootHarness {
 		return nil
 	})
 	rh.wire(h)
-	if on {
-		if err := rh.s.PutComputerSetting(t.Context(), store.ComputerSetting{OwnerID: rootOwner, ComputerID: rootComputer, Key: store.SettingTextureRootDesk, Value: true}); err != nil {
-			t.Fatal(err)
-		}
-	}
 	return rh
 }
 
@@ -226,7 +221,7 @@ func (rh *rootHarness) countDocsTitled(title string) int {
 // master exists and its root run is live.
 func rootStarted(t *testing.T) (rh *rootHarness, master string, root types.RunRecord, b string, c string) {
 	t.Helper()
-	rh = newRootHarness(t, true)
+	rh = newRootHarness(t)
 	b, runB := rh.createDoc("root-b", "Harbor")
 	c, runC := rh.createDoc("root-c", "Bridge")
 	rh.write(rh.h, &runB, "harbor", "The harbor is open.", "")
@@ -248,29 +243,24 @@ func rootStarted(t *testing.T) (rh *rootHarness, master string, root types.RunRe
 	return rh, marker.DocumentID, root, b, c
 }
 
-// Off is inert: no digest is minted, nothing is created, and no run carries
-// the root section.
-func TestTextureRootOffIsInert(t *testing.T) {
-	rh := newRootHarness(t, false)
-	b, runB := rh.createDoc("off-b", "Harbor")
+// The root desk has no setting (owner, 2026-11-19: "I want everything on"):
+// with nothing stored, a commit on another document mints a digest and the
+// digest makes the master.
+func TestTextureRootRunsWithNoSetting(t *testing.T) {
+	rh := newRootHarness(t)
+	b, runB := rh.createDoc("nos-b", "Harbor")
 	rh.write(rh.h, &runB, "harbor", "The harbor is open.", "")
-	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, b)
-	if n := len(rh.digests()); n != 0 {
-		t.Fatalf("switch off minted %d digests", n)
+	if n := len(rh.digests()); n != 1 {
+		t.Fatalf("a commit with no setting minted %d digests, want 1", n)
 	}
-	before := len(mustListDocs(t, rh.s))
-	// A digest minted before the switch went off is consumed and creates nothing.
-	if err := rh.h.HandleTextureRootDigest(t.Context(), rootOwner, rootComputer, `{"v":1,"nonce":"before-off","docs":["`+b+`"]}`); err != nil {
-		t.Fatalf("digest while off: %v", err)
+	if err := rh.h.HandleTextureRootDigest(t.Context(), rootOwner, rootComputer, `{"v":1,"nonce":"nos","docs":["`+b+`"]}`); err != nil {
+		t.Fatalf("digest: %v", err)
 	}
-	if _, ok := rh.marker(); ok {
-		t.Fatal("switch off claimed a root marker")
+	if _, ok := rh.marker(); !ok {
+		t.Fatal("a digest with no setting made no master")
 	}
-	if after := len(mustListDocs(t, rh.s)); after != before {
-		t.Fatalf("switch off created %d documents", after-before)
-	}
-	if strings.Contains(runB.Prompt, textureprompts.RootSection()) {
-		t.Fatal("switch off gave a document's Texture the root section")
+	if _, known := store.KnownComputerSettings["texture.root_desk"]; known {
+		t.Fatal("texture.root_desk is still a known setting")
 	}
 }
 
@@ -286,7 +276,7 @@ func mustListDocs(t *testing.T, s *store.Store) []types.Document {
 // Failure mode 3: commits on other documents mint one coalesced digest,
 // after the commit and debounced by the runtime configuration's interval.
 func TestTextureRootCommitsMintOneDebouncedDigest(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	b, runB := rh.createDoc("mint-b", "Harbor")
 	c, runC := rh.createDoc("mint-c", "Bridge")
 	if n := len(rh.digests()); n != 0 {
@@ -313,7 +303,7 @@ func TestTextureRootCommitsMintOneDebouncedDigest(t *testing.T) {
 
 // An owner revision is a commit on a document too: it mints a digest.
 func TestTextureRootOwnerRevisionMintsADigest(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	b, _ := rh.createDoc("owner-b", "Harbor")
 	head := rh.snapshot(b).HeadRevision.RevisionID
 	if resp := postOwnerInstruction(t, rh.h, "/api/texture/documents/"+b+"/revise", rootOwner, "owner-b-1", "Add the ferry times.", head); resp.Code != http.StatusAccepted {
@@ -506,7 +496,7 @@ func TestTextureRootSettledMasterIsReplaced(t *testing.T) {
 
 // Failure mode 3b: concurrent ensure steps yield one marker and one master.
 func TestTextureRootEnsureRaceYieldsOneMaster(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	var wg sync.WaitGroup
 	got := make([]string, 8)
 	errs := make([]error, 8)
@@ -542,7 +532,7 @@ func TestTextureRootEnsureRaceYieldsOneMaster(t *testing.T) {
 // boot (a new process: no armed digest in memory, the pre-boot digest
 // interrupted by the actor runtime) the next commit mints a new digest.
 func TestTextureRootNextCommitAfterBootMintsANewDigest(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	b, runB := rh.createDoc("boot-b", "Harbor")
 	_, runC := rh.createDoc("boot-c", "Bridge")
 	rh.write(rh.h, &runB, "harbor", "The harbor is open.", "")
@@ -740,7 +730,7 @@ func TestTextureRootTrajectoryChangeNotesItsDocument(t *testing.T) {
 // write does not serialize every commit's note), arming stays exactly-once,
 // and a failed schedule rolls the arm back so the next note schedules.
 func TestTextureRootScheduleRunsOutsideTheLockAndRollsBackOnFailure(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	var calls int
 	heldLock, fail := false, true
 	rh.core.SetScheduleActor(func(_ context.Context, _, _, to, kind, content, _, _ string, notBefore time.Time) error {
@@ -767,120 +757,17 @@ func TestTextureRootScheduleRunsOutsideTheLockAndRollsBackOnFailure(t *testing.T
 	}
 }
 
-// Item 5: the ensure step is not callable with the switch off.
-func TestTextureRootEnsureRefusesWithTheSwitchOff(t *testing.T) {
-	rh := newRootHarness(t, false)
-	if _, _, err := rh.h.ensureTextureRoot(t.Context(), rootOwner, rootComputer); err == nil {
-		t.Fatal("ensure with texture.root_desk off succeeded")
-	}
-	if _, ok := rh.marker(); ok {
-		t.Fatal("ensure with the switch off claimed a marker")
-	}
-	if n := rh.countDocsTitled(textureRootTitle); n != 0 {
-		t.Fatalf("ensure with the switch off created %d master documents", n)
-	}
-}
-
-// Item 6: once a document's head is Texture's, the ledger still says what
-// the owner last asked, from the revision chain.
-func TestTextureRootLedgerKeepsTheOwnerAskPastAnAgentHead(t *testing.T) {
-	_, _, root, b, _ := rootStarted(t)
-	_ = b
-	if !strings.Contains(root.Prompt, "the owner last asked: Write about Harbor.") {
-		t.Fatalf("the ledger lost the owner's ask once Texture wrote the head:\n%s", root.Prompt)
-	}
-}
-
-// Item 7: the master is bounded: a root revision over 48 KiB is refused with
-// a reason the root sees; another document's is not.
-func TestTextureRootRefusesAMasterRevisionOver48KiB(t *testing.T) {
-	rh, _, root, b, _ := rootStarted(t)
-	big := strings.Repeat("The harbor is open and the ferry runs. ", 50<<10/39+1)
-	base := headOf(rh.t, rh.s, root)
-	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{Edits: "@all\n# master\n\n" + big, Why: "too long"}})
-	_, err := rh.h.CommitCellTextureAuthor(t.Context(), &root, turn, "master-big")
-	if err == nil || !strings.Contains(err.Error(), "48 KiB") {
-		t.Fatalf("a 50 KiB master revision: err=%v, want a refusal naming 48 KiB", err)
-	}
-	if !strings.Contains(textureprompts.RootSection(), "48 KiB") {
-		t.Fatal("the root section does not tell the root its bound")
-	}
-	runB, ok := rh.activeRun(b)
-	if !ok {
-		t.Fatal("no run on b")
-	}
-	rh.write(rh.h, &runB, "harbor-big", big, "")
-}
-
-// Item 8: the master's client request ids are reserved.
-func TestTextureRootReservesItsClientRequestIDs(t *testing.T) {
-	rh := newRootHarness(t, true)
-	body := `{"client_request_id":"texture-root:1","title":"Mine","initial_content":"Hello."}`
-	w := runtimeHandlerRequest(t, rh.h.HandleTextureLifecycleCreate, http.MethodPost, "/api/texture/lifecycle/create", body, rootOwner)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("create with a texture-root: request id = %d %s, want 400", w.Code, w.Body.String())
-	}
-}
-
-// Item 9: a note after a committed change survives its caller's cancelled
-// context.
-func TestTextureRootNoteSurvivesACancelledContext(t *testing.T) {
-	rh := newRootHarness(t, true)
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	rh.h.NoteTextureRootChange(ctx, rootOwner, rootComputer, "doc-b")
-	if n := len(rh.digests()); n != 1 {
-		t.Fatalf("a note with a cancelled context armed %d digests, want 1", n)
-	}
-}
-
-// Item 11 (DeepSeek #9): a document started after the marker is ordinary:
-// no root section, and its Done completes its own work item (no clamp).
-func TestTextureRootDocumentStartedAfterTheMarkerIsOrdinary(t *testing.T) {
-	rh, _, _, _, _ := rootStarted(t)
-	d, runD := rh.createDoc("after-d", "Ferry")
-	if strings.Contains(runD.Prompt, textureprompts.RootSection()) || runD.Metadata["texture_root"] == true {
-		t.Fatalf("a document started after the marker got the root section:\n%s", runD.Prompt)
-	}
-	rh.write(rh.h, &runD, "ferry", "The ferry runs hourly.", "answered")
-	if open := openWorkFor(rh.snapshot(d)); len(open) != 0 {
-		t.Fatalf("Done on an ordinary document left its work open (the root clamp applied): %+v", open)
-	}
-}
-
-// MA3.7b counter-zero: a root digest round (documents written, a digest
-// minted, the root ensured and started) reads no kind through a reader that is
-// not its custodian or admitted, and reads nothing undeclared. The settings
-// the root reads to configure itself are read as the shell, and the rows it
-// reads are Texture's own.
-func TestTextureRootRoundCrossesNoReader(t *testing.T) {
-	objectgraph.ResetReaderGateCounts()
-	objectgraph.ResetUndeclaredReads()
-	rootStarted(t)
-	for key, n := range objectgraph.ReaderGateCounts() {
-		// An undeclared read counted here may be the fixture's own (it seeds
-		// through the store); the oracle below sees the product's call sites.
-		if strings.Contains(key, "|undeclared|") {
-			continue
-		}
-		t.Errorf("reader gate counted during a root digest round: %s x%d", key, n)
-	}
-	for key, n := range objectgraph.UndeclaredReads() {
-		t.Errorf("undeclared read during a root digest round: %s x%d", key, n)
-	}
-}
-
 // MA3.7b: the settings the host reads to configure Texture's run are read as
 // the settings' custodian, so a Texture-declared context crosses nothing. A
 // content-item ref Texture resolves into a source card stays Texture's read
 // and is counted: the ref comes from a desk's record and the card's text
 // reaches Texture's prompt, so declaring the custodian would launder it.
 func TestTextureHostReadsOfSettingsCrossNothingAndContentItemsAreCounted(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	ctx := objectgraph.WithReader(t.Context(), objectgraph.WriterTexture)
 	objectgraph.ResetReaderGateCounts()
-	if !rh.h.textureSettingOn(ctx, rootOwner, rootComputer, store.SettingTextureRootDesk) {
-		t.Fatal("the root desk setting reads off")
+	if !rh.h.textureSettingOn(ctx, rootOwner, rootComputer, store.SettingTextureOwnerDirections) {
+		t.Fatal("the owner directions setting reads off")
 	}
 	for key, n := range objectgraph.ReaderGateCounts() {
 		t.Errorf("reader gate counted a settings read: %s x%d", key, n)
@@ -898,7 +785,7 @@ func TestTextureHostReadsOfSettingsCrossNothingAndContentItemsAreCounted(t *test
 // custodian and not counted; the same ref carried by any other desk's record,
 // or by none, stays Texture's read and is counted.
 func TestEvidenceRefCarriedByItsCustodianIsUncountedAndOtherwiseCounted(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	base := objectgraph.WithReader(t.Context(), objectgraph.WriterTexture)
 	if err := rh.s.CreateEvidence(objectgraph.WithWriter(t.Context(), objectgraph.WriterResearch), types.EvidenceRecord{
 		EvidenceID: "ev-ma37c", OwnerID: rootOwner, AgentID: "research:doc-1", Kind: "web_page",
@@ -937,7 +824,7 @@ func TestEvidenceRefCarriedByItsCustodianIsUncountedAndOtherwiseCounted(t *testi
 // pending record stamped by research that carries an evidence ref resolves
 // uncounted; the same ref in a record stamped by management is counted.
 func TestEvidenceRefsOfPendingRecordsUseTheStampedProvenanceDesk(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	ctx := objectgraph.WithReader(t.Context(), objectgraph.WriterTexture)
 	if err := rh.s.CreateEvidence(objectgraph.WithWriter(t.Context(), objectgraph.WriterResearch), types.EvidenceRecord{
 		EvidenceID: "ev-ma37c-2", OwnerID: rootOwner, AgentID: "research:doc-2", Kind: "web_page",

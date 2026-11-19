@@ -9,8 +9,7 @@ package textureowner
 // first by their documents' last revision (whatever order the root wrote:
 // S2 paired test F4), without the run's own document's section, cut from
 // the end. Only with
-// texture.root_desk on and a live master the root has written; otherwise
-// the run is unchanged.
+// a live master the root has written; otherwise the run is unchanged.
 
 import (
 	"context"

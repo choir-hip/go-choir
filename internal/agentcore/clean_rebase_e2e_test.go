@@ -146,9 +146,6 @@ func newCleanRebaseE2EWith(t *testing.T, pkg string) *cleanRebaseE2E {
 	if _, err := f.store.ClaimTextureRoot(context.Background(), nil, store.TextureRoot{OwnerID: f.owner, ComputerID: f.computerID, DocumentID: "doc-master", Generation: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: f.owner, ComputerID: f.computerID, Key: store.SettingTextureRootDesk, Value: true}); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	f.configure(func(rt *Runtime) {
 		rt.releaseSourceDir = f.guestRepo

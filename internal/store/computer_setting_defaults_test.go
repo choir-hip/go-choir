@@ -34,7 +34,6 @@ var defaultOnFeatures = []string{
 var heldDefaults = []string{
 	SettingManagementSerialTasks, // rollback lever (on = K=1)
 	SettingCompactForce,          // proof lever for d@e
-	SettingTextureRootDesk,       // F4/F5 re-proof on d@e; the paper's hourly batch not built
 	SettingResearchRelatedStory,  // its finish rule would bind every owner research desk
 	SettingEvidenceGraph,         // owner: measure the import on a paper copy first
 	SettingTelemetryPartitions,   // GC starvation; floor 5 on every computer
@@ -72,7 +71,7 @@ func TestHeldSettingsKeepTheirOffDefault(t *testing.T) {
 // The retired keys, which nothing read, are gone: a stored row stays
 // invisible and a new one is refused.
 func TestRetiredStoreSettingsAreRemoved(t *testing.T) {
-	for _, key := range []string{"store.debounced_checkpoint", "store.trace_log", "intake.events", "dispatch.wide_slots"} {
+	for _, key := range []string{"store.debounced_checkpoint", "store.trace_log", "intake.events", "dispatch.wide_slots", "texture.root_desk"} {
 		if _, known := KnownComputerSettings[key]; known {
 			t.Errorf("%s is still known", key)
 		}

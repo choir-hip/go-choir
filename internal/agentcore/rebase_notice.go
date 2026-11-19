@@ -159,18 +159,6 @@ func (rt *Runtime) armRebaseNotice(ctx context.Context, result sourceproj.Result
 	rt.armRebaseLocked(due, now)
 }
 
-// applyTextureRootDeskSetting is the owner's change of texture.root_desk at
-// runtime. On, a reconcile arms the timer if the stack sits on a moved base, so
-// a root that just became live is asked (the timer, not this call, mints, and
-// only after the stay-up interval). Off changes nothing here: the timer finds
-// no live root and mints nothing.
-func (rt *Runtime) applyTextureRootDeskSetting(value bool) {
-	if rt == nil || !value {
-		return
-	}
-	go rt.reconcileSourceProjectionLogged(context.Background(), "setting")
-}
-
 // rearmRebaseNotice arms the timer again after a fire.
 func (rt *Runtime) rearmRebaseNotice(after time.Duration) {
 	rt.rebaseMu.Lock()
@@ -391,8 +379,8 @@ type rebaseAddressee struct {
 // the root Texture RLM when one is live, and otherwise the Texture of the
 // document the operation's own trajectory binds
 // (docs/problems/selfdev-round-blockers-cluster-2026-11-03.md, fix 10). The
-// root exists only where texture.root_desk is on, which is off by default, so
-// without the fallback no computer but the root's ever got a notice. The
+// root is not live on every computer at every moment, so
+// without the fallback a computer whose root is not live never got a notice. The
 // store's admission is unchanged: the notice's inbox must be the sender of the
 // Texture Cast the rebase answers, and the document Texture sends its own.
 func (rt *Runtime) rebaseTexture(ctx context.Context, ownerID, computerID, operationID string) (rebaseAddressee, error) {

@@ -19,7 +19,7 @@ import (
 // engineering's. The handler reads as Texture, for its own reads only.
 
 func TestR3EvidenceEmbedReadsAsTextureWhateverTheCallerDeclared(t *testing.T) {
-	rh := newRootHarness(t, true)
+	rh := newRootHarness(t)
 	engineering, ok := objectgraph.DeskWriter("engineering")
 	if !ok {
 		t.Fatal("no engineering writer")

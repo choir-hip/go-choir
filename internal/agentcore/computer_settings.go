@@ -150,8 +150,6 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 				rt.applyTelemetryBatchingSetting(value)
 			case store.SettingTelemetryPartitions:
 				rt.applyTelemetryPartitionsSetting(value)
-			case store.SettingTextureRootDesk:
-				rt.applyTextureRootDeskSetting(value)
 			}
 			resp := map[string]any{"setting": current}
 			if value {
@@ -170,9 +168,6 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 			rt.applyTelemetryBatchingSetting(value)
 		case store.SettingTelemetryPartitions:
 			rt.applyTelemetryPartitionsSetting(value)
-		}
-		if key == store.SettingTextureRootDesk {
-			rt.applyTextureRootDeskSetting(value)
 		}
 		resp := map[string]any{"setting": setting}
 		if value {
