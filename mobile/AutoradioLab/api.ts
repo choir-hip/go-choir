@@ -35,13 +35,3 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
   const parsed = date ? Date.parse(date) : NaN;
   return { body, serverTime: Number.isFinite(parsed) ? parsed : null, raw };
 }
-
-// PROVISIONAL api seam (the lane exact-signin owns the real one; the lead drops this commit at merge). The signatures are the agreed ones.
-// A non-2xx answer throws an HttpError carrying `status`; the files page reads only that and `SignedOutError`.
-export class SignedOutError extends Error {}
-export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
-export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string> };
-/** A signed-in JSON request to the listener's own computer. Throws SignedOutError when there is no session. */
-export async function authedJSON(_path: string, _opts: Authed = {}): Promise<Reply> { throw new SignedOutError('no session (provisional seam)'); }
-/** The same, for bytes (a file, a PDF, audio). */
-export async function authedBytes(_path: string, _opts: Authed = {}): Promise<{ bytes: Uint8Array; contentType: string }> { throw new SignedOutError('no session (provisional seam)'); }
