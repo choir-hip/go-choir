@@ -21,6 +21,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -424,11 +429,6 @@ func TestRankedAnswerNeverHoldsAnOlderVersionOfAStory(t *testing.T) {
 	f.cite(t, v1, f.id(t, "old1"))
 	f.cite(t, v2, f.id(t, "new1"))
 	resp := f.rank(t, "harbor")
-	got := f.keys(t, entryIDs(resp), "old1", "new1")
-	if !strings.Contains(got, "new1") || strings.Contains(got, "old1") {
-		// old1 and new1 are also captures with their own vectors; both are reached by meaning.
-		// Only their reasons tell the version: the old one must not be reached through the story.
-	}
 	for _, e := range resp.Ranked.Entries {
 		viaStory := containsStr(e.Reasons, "story")
 		switch e.CaptureID {
@@ -567,10 +567,6 @@ func TestRankedAnswerWindowReachesTheVectorHalfAndAStorysCitations(t *testing.T)
 	}
 	resp := f.rank(t, "zorblax harbor", window)
 	got := f.keys(t, entryIDs(resp), "w0", "w1", "w2", "w3", "w4", "w5", "cited")
-	if got != "w2,w3,cited" && got != "w2,cited,w3" && got != "w2,w3" {
-		// since inclusive, until exclusive: w2 and w3, and the cited capture (day 3)
-		// only through the vector half, never through the story (which is today's).
-	}
 	for _, k := range []string{"w0", "w1", "w4", "w5"} {
 		if strings.Contains(got, k) {
 			t.Fatalf("%s is outside the window: %s", k, got)
@@ -605,5 +601,57 @@ func TestRankedAnswerRecentOrderListsTheAnswerNewestFirst(t *testing.T) {
 	resp := f.rank(t, "zorblax harbor", func(r *CaptureSearchRequest) { r.Order = "recent" })
 	if got := f.keys(t, entryIDs(resp), "p1", "p2", "p3"); got != "p2,p3,p1" {
 		t.Fatalf("recent order %s", got)
+	}
+}
+
+// The measurement script (scripts/proofs/corpus-search-recall) runs against a
+// real handler over a test database with the fake embedder, and says when the
+// bar is missed.
+func TestRankedRecallScriptRunsAgainstARealHandler(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	f := newRankFixture(t)
+	f.disagree(t)
+	h := NewObjectGraphHandler(objectgraph.NewService(objectgraph.Config{Durable: f.og}), f.og)
+	h.ConfigureCaptureIndex(f.store)
+	srv := httptest.NewServer(http.HandlerFunc(h.HandleCaptureSearch))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	set := filepath.Join(dir, "set.jsonl")
+	line := fmt.Sprintf(`{"id":"s1","query":"zorblax","relevant":[%q,%q,%q,%q],"non_english":[%q]}`+"\n",
+		f.id(t, "bmA"), f.id(t, "bmB"), f.id(t, "bmC"), f.id(t, "v01"), f.id(t, "bmC"))
+	if err := os.WriteFile(set, []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script, _ := filepath.Abs("../../scripts/proofs/corpus-search-recall")
+	run := func(extra ...string) (string, int) {
+		args := append([]string{"-I", script, "--set", set, "--url", srv.URL, "--owner", f.owner, "--computer", f.computer, "--header", "X-Internal-Caller: true"}, extra...)
+		out, err := exec.Command(py, args...).CombinedOutput()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		return string(out), code
+	}
+	out, code := run()
+	if code != 0 || !strings.Contains(out, "recall@10 1.000") || !strings.Contains(out, "vector half answered 1 of 1") || !strings.Contains(out, "BM25 pages inserted 3") {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	// With the vectors down the measurement says it is not of the ship rule.
+	f.emb.Down.Store(true)
+	if out, code = run(); code != 4 {
+		t.Fatalf("vectors down: exit %d:\n%s", code, out)
+	}
+	f.emb.Down.Store(false)
+	// A question whose answers are not in the ten misses the bar.
+	if err := os.WriteFile(set, []byte(`{"id":"s1","query":"zorblax","relevant":["obj:none:a","obj:none:b"]}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, code = run(); code != 1 {
+		t.Fatalf("a missed bar: exit %d:\n%s", code, out)
 	}
 }

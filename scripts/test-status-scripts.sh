@@ -528,6 +528,23 @@ runcorpus --fixture "$root/cr_a.log"
 check "R13 no brief lines: no brief section" '! grep -q "research briefs" "$root/out"'
 runcorpus --fixture "$root/cr_c.log" --append "$root/c.tsv"
 check "R12 the hour row has the brief count (21:00 row, column 15 = 2)" '[ "$(head -1 "$root/c.tsv" | cut -f15)" = corpus_searches_brief ] && [ "$(sed -n 2p "$root/c.tsv" | cut -f15)" = 2 ]'
+# R14: the guest line's vector= and bm25_kept= fields (station V4; ledger C144 is settled from vector=)
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+PRE = "[ 1.0] x-go-choir-run-autoputer-runtime[1]: "
+def cs(ts, run, extra):
+    return (f'{PRE}{ts} corpus search computer=c captures_ms=5 captures=1 note="n" query="SECRET-Q" capture_ids= run={run} '
+            f'desk=research conv=v published=1 events=1 capped=false{extra} caller=cell\n')
+L = [PRE + "2026/11/18 20:30:00 other\n", PRE + "2026/11/18 22:10:00 other\n",
+     cs("2026/11/18 21:01:00", "d-1", " vector=12 bm25_kept=1"), cs("2026/11/18 21:02:00", "d-1", " vector=0 bm25_kept=2"),
+     cs("2026/11/18 21:03:00", "d-1", " vector=unavailable bm25_kept=0"), cs("2026/11/18 21:04:00", "d-1", "")]
+open(root + "/cr_v.log", "w").write("".join(L))
+PY
+runcorpus --fixture "$root/cr_v.log"
+check "R14 vector half answered on 2 of the 3 lines with the field (0 rows is an answer), 3 BM25 pages inserted" 'grep -q "vector half answered 66.7% (of 3 lines with vector=); BM25 pages inserted 3" "$root/out" && ! grep -q SECRET "$root/out"'
+runcorpus --fixture "$root/cr_c.log"
+check "R14 lines without the field print no vector line" '! grep -q "vector half answered" "$root/out"'
 # R14: the deployed shape (new fields before pages_returned), the old shape, and an unknown field
 python3 - "$root" <<'PY'
 import sys

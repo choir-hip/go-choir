@@ -118,6 +118,12 @@ type RetrievalSnapshot struct {
 }
 
 func (m *RetrievalMetrics) record(op, shape string, elapsed time.Duration, rows int, err error) {
+	m.recordExtra(op, shape, elapsed, rows, err, "")
+}
+
+// recordExtra is record with extra journal fields (" name=value ...") placed
+// before err=, so a reader of the older fields is not moved.
+func (m *RetrievalMetrics) recordExtra(op, shape string, elapsed time.Duration, rows int, err error, extra string) {
 	if m == nil {
 		return
 	}
@@ -171,7 +177,7 @@ func (m *RetrievalMetrics) record(op, shape string, elapsed time.Duration, rows 
 			errText = errText[:160]
 		}
 	}
-	logf("corpusd retrieval op=%s shape=%s ms=%.2f rows=%d err=%s", op, shapeOrDash(shape), ms, rows, errText)
+	logf("corpusd retrieval op=%s shape=%s ms=%.2f rows=%d%s err=%s", op, shapeOrDash(shape), ms, rows, extra, errText)
 }
 
 func shapeOrDash(shape string) string {
@@ -276,6 +282,18 @@ func (s *Store) retrievalTimer(op string) func(shape string, rows int, err error
 			return
 		}
 		s.retrieval.record(op, shape, time.Since(start), rows, err)
+	}
+}
+
+// retrievalTimerExtra is retrievalTimer whose record carries extra journal
+// fields chosen when the call ends.
+func (s *Store) retrievalTimerExtra(op string) func(shape string, rows int, err error, extra string) {
+	start := time.Now()
+	return func(shape string, rows int, err error, extra string) {
+		if s == nil {
+			return
+		}
+		s.retrieval.recordExtra(op, shape, time.Since(start), rows, err, extra)
 	}
 }
 

@@ -61,6 +61,23 @@ type CorpusCapture struct {
 	Passage        string `json:"passage,omitempty"`
 	PassageOrdinal int    `json:"passage_ordinal,omitempty"`
 	PassageCount   int    `json:"passage_count,omitempty"`
+	// Reasons say why the page is listed: "text" (its words match), "meaning"
+	// (its title and opening are near the question in meaning) and "story"
+	// (a published story cites it; via_stories names the stories' publication
+	// ids, whose title and captures are in the result's stories list). Absent
+	// from an answer that did not come from corpusd's ranking.
+	Reasons    []string `json:"reasons,omitempty"`
+	ViaStories []string `json:"via_stories,omitempty"`
+}
+
+// CorpusStory is a published story corpusd found by meaning and walked: the
+// captures its latest version cites that are listed in captures.
+type CorpusStory struct {
+	PublicationID string   `json:"publication_id"`
+	Title         string   `json:"title,omitempty"`
+	Revision      int      `json:"revision"`
+	Day           string   `json:"day,omitempty"`
+	CaptureIDs    []string `json:"capture_ids"`
 }
 
 // corpusField is one searchable field of a capture and the weight of a
@@ -173,6 +190,13 @@ type corpusSearchInfo struct {
 	// Dropped are the query words the text search did not look for (pruned
 	// for weight, or capped), named to the model in the note and the result.
 	Dropped []string
+	// VectorAnswered: corpusd's vector half answered; VectorRows is the rows
+	// it returned and BM25Kept how many of BM25's top three pages had to be
+	// inserted. Stories are the stories it walked.
+	VectorAnswered bool
+	VectorRows     int
+	BM25Kept       int
+	Stories        []CorpusStory
 }
 
 // searchCaptures is the title-and-label search alone (the words kept by
@@ -192,11 +216,14 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 //     table, or the window of the newest captures, matched by this file's
 //     matcher against title, outlet, language and Jev's labels.
 //
-// A page not yet indexed by text is still found by the second half, so
-// nothing gets worse while the index catches up. The halves are merged by
-// reciprocal rank (a page both found rises), or by time when Order is
-// "recent". A note says which half answered and how much the text index
-// covers.
+// The text half is corpusd's one ranked answer (platform.CaptureRanking):
+// vector order with BM25's top three pages guaranteed a place, or BM25's
+// pages alone when the vectors could not answer. The guest does not merge
+// it with anything: pages the title and label half found that the answer
+// does not hold are listed after it, in their own order, up to the limit
+// (so a page not yet indexed by text is still found while the index catches
+// up), and a page in both gets the label half's evidence added. A note says
+// which half answered and how much the text index covers.
 func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computerID string, req corpusRequest, limit int) ([]CorpusCapture, string, corpusSearchInfo, error) {
 	var info corpusSearchInfo
 	if deps.Captures == nil {
@@ -226,7 +253,7 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 		q := CaptureSearchQuery{OwnerID: ownerID, ComputerID: computerID, Words: terms,
 			Need: corpusNeeded(len(terms)), Candidates: corpusIndexCandidates, IDs: labelMatchedCaptureIDs(labels, terms)}
 		if query != "" {
-			q.Query, q.Order, q.Limit = query, req.Order, 2*limit
+			q.Query, q.Order, q.Limit, q.Size = query, req.Order, 2*limit, limit
 			if !req.Since.IsZero() {
 				q.Since = req.Since.UTC().Format(time.RFC3339)
 			}
@@ -291,7 +318,19 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			notes = append(notes, "page text not searched ("+ft.Reason+")")
 		}
 	}
-	merged := mergeCaptureHalves(textHalf, labelHalf, req.Order, limit)
+	primary := textHalf
+	if rk := answer.Ranked; rk != nil {
+		primary = rankedCaptures(answer, labels)
+		info.VectorAnswered, info.VectorRows, info.BM25Kept = rk.VectorAnswered, rk.VectorRows, rk.BM25Kept
+		info.Stories = rankedStories(rk, primary)
+		if !rk.VectorAnswered && rk.VectorUnavailable != "" {
+			notes = append(notes, "search by meaning did not answer ("+rk.VectorUnavailable+"); the pages are those whose text matches")
+		}
+		if rk.Note != "" {
+			notes = append(notes, rk.Note)
+		}
+	}
+	merged := appendLabelHalf(primary, labelHalf, limit)
 	textFound := map[string][]string{}
 	for _, c := range textHalf {
 		textFound[c.CaptureID] = c.Matched
@@ -378,61 +417,99 @@ func textHitCaptures(answer CaptureSearchAnswer, labels map[string]store.Capture
 	return out
 }
 
-// mergeCaptureHalves merges the text half and the title-and-label half. A
-// capture found by both is one result carrying both halves' evidence.
-func mergeCaptureHalves(text, labelHalf []CorpusCapture, order string, limit int) []CorpusCapture {
-	const rrfK = 60.0
-	type entry struct {
-		c     CorpusCapture
-		score float64
-		at    time.Time
+// rankedCaptures turns corpusd's ranked answer into results, in its order.
+// A page found by text carries its passage; one found only by meaning or
+// through a story has none.
+func rankedCaptures(answer CaptureSearchAnswer, labels map[string]store.CaptureLabel) []CorpusCapture {
+	byID := map[string]objectgraph.Object{}
+	for _, obj := range answer.HitObjects {
+		byID[obj.CanonicalID] = obj
 	}
-	merged := map[string]*entry{}
-	var ids []string
-	add := func(list []CorpusCapture) {
-		for rank, c := range list {
-			e := merged[c.CaptureID]
-			if e == nil {
-				at, _ := time.Parse(time.RFC3339Nano, firstNonEmptyString(c.PublishedAt, c.FetchedAt))
-				e = &entry{c: c, at: at}
-				merged[c.CaptureID] = e
-				ids = append(ids, c.CaptureID)
-			} else {
-				for _, m := range c.Matched {
-					if !containsString(e.c.Matched, m) {
-						e.c.Matched = append(e.c.Matched, m)
-					}
-				}
-				if e.c.Passage == "" {
-					e.c.Passage, e.c.PassageOrdinal, e.c.PassageCount = c.Passage, c.PassageOrdinal, c.PassageCount
+	hits := map[string]CaptureTextHit{}
+	for _, h := range answer.Hits {
+		hits[h.CaptureID] = h
+	}
+	out := []CorpusCapture{}
+	for _, e := range answer.Ranked.Entries {
+		obj, ok := byID[e.CaptureID]
+		if !ok || types.LabelsFromMetadata(obj.Metadata).OwnerPrivate() {
+			continue
+		}
+		meta, err := objectgraph.WebCaptureMetadataFromObject(obj)
+		if err != nil {
+			continue
+		}
+		c := newCorpusCapture(obj.CanonicalID, meta, labels[obj.CanonicalID])
+		if h, ok := hits[e.CaptureID]; ok {
+			if h.TitleMatch {
+				c.Matched = append(c.Matched, "title")
+			}
+			if h.BodyMatch || !h.TitleMatch {
+				c.Matched = append(c.Matched, "body")
+			}
+			c.Passage, c.PassageOrdinal, c.PassageCount = h.Snippet, h.Ordinal+1, h.Passages
+		}
+		c.Reasons = append([]string(nil), e.Reasons...)
+		c.ViaStories = append([]string(nil), e.Stories...)
+		out = append(out, c)
+	}
+	return out
+}
+
+// rankedStories are the walked stories whose captures are listed, with the
+// listed capture ids only.
+func rankedStories(rk *CaptureRanking, listed []CorpusCapture) []CorpusStory {
+	have := map[string]bool{}
+	for _, c := range listed {
+		have[c.CaptureID] = true
+	}
+	var out []CorpusStory
+	for _, s := range rk.Stories {
+		cs := CorpusStory{PublicationID: s.PublicationID, Title: s.Title, Revision: s.Revision, Day: s.Day, CaptureIDs: []string{}}
+		for _, id := range s.Captures {
+			if have[id] {
+				cs.CaptureIDs = append(cs.CaptureIDs, id)
+			}
+		}
+		if len(cs.CaptureIDs) > 0 {
+			out = append(out, cs)
+		}
+	}
+	return out
+}
+
+// appendLabelHalf lists the primary answer as it is, adds the label half's
+// evidence to a page both hold, and lists the label half's other pages after
+// the answer, in their own order, up to limit. It ranks nothing together.
+func appendLabelHalf(primary, labelHalf []CorpusCapture, limit int) []CorpusCapture {
+	labelByID := map[string]CorpusCapture{}
+	for _, c := range labelHalf {
+		labelByID[c.CaptureID] = c
+	}
+	out := make([]CorpusCapture, 0, limit)
+	seen := map[string]bool{}
+	for _, c := range primary {
+		if len(out) == limit {
+			break
+		}
+		seen[c.CaptureID] = true
+		if l, ok := labelByID[c.CaptureID]; ok {
+			for _, m := range l.Matched {
+				if !containsString(c.Matched, m) {
+					c.Matched = append(c.Matched, m)
 				}
 			}
-			e.score += 1 / (rrfK + float64(rank+1))
 		}
+		out = append(out, c)
 	}
-	add(text)
-	add(labelHalf)
-	sort.SliceStable(ids, func(i, j int) bool {
-		a, b := merged[ids[i]], merged[ids[j]]
-		if strings.EqualFold(order, "recent") {
-			if !a.at.Equal(b.at) {
-				return a.at.After(b.at)
-			}
+	for _, c := range labelHalf {
+		if len(out) == limit {
+			break
 		}
-		if a.score != b.score {
-			return a.score > b.score
+		if !seen[c.CaptureID] {
+			seen[c.CaptureID] = true
+			out = append(out, c)
 		}
-		if !a.at.Equal(b.at) {
-			return a.at.After(b.at)
-		}
-		return ids[i] < ids[j]
-	})
-	if len(ids) > limit {
-		ids = ids[:limit]
-	}
-	out := make([]CorpusCapture, 0, len(ids))
-	for _, id := range ids {
-		out = append(out, merged[id].c)
 	}
 	return out
 }

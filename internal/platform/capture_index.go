@@ -526,6 +526,9 @@ type CaptureSearchRequest struct {
 	Until string `json:"until,omitempty"`
 	Order string `json:"order,omitempty"`
 	Limit int    `json:"limit,omitempty"`
+	// Size is how many pages the ranked answer holds (capture_rank.go); the
+	// default is 10 and the most 25. Only a request with a Query is ranked.
+	Size int `json:"size,omitempty"`
 }
 
 // CaptureSearchResponse holds the candidate captures, newest first among
@@ -550,6 +553,11 @@ type CaptureSearchResponse struct {
 	// label projection is still being built: Objects is empty and the caller
 	// uses its own window for that half.
 	TermsIncomplete bool `json:"terms_incomplete,omitempty"`
+	// Ranked is the one answer for a request with a Query: vector order with
+	// BM25's top three pages guaranteed a place, or BM25's pages alone when the
+	// vectors could not answer (capture_rank.go). Every capture it names has
+	// its object in HitObjects.
+	Ranked *CaptureRanking `json:"ranked,omitempty"`
 }
 
 const (
@@ -563,6 +571,16 @@ const (
 // source or language hold at least Need of the words, from the term table
 // over all history, plus the captures named by IDs.
 func (s *Store) SearchCaptures(ctx context.Context, req CaptureSearchRequest) (resp CaptureSearchResponse, err error) {
+	resp, err = s.searchCaptureParts(ctx, req)
+	if err == nil && strings.TrimSpace(req.Query) != "" {
+		// After the terms timer has ended, so neither journal line contains
+		// the other.
+		s.rankCaptureAnswer(ctx, req, &resp)
+	}
+	return resp, err
+}
+
+func (s *Store) searchCaptureParts(ctx context.Context, req CaptureSearchRequest) (resp CaptureSearchResponse, err error) {
 	owner, computer := strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID)
 	if strings.TrimSpace(req.Query) != "" && owner != "" && computer != "" {
 		// The text half has its own timer (capture_fulltext_search). The
