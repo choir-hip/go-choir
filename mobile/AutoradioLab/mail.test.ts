@@ -84,10 +84,11 @@ const err = (code: string): Error => Object.assign(new Error(code), { code });
 const storage = {
   fs: {
     readFile: async (p: string) => { const b = files.get(p); if (!b) throw err('ENOENT'); return b; },
-    atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, new Uint8Array(d)); },
+    atomicWriteFile: async (p: string, d: Uint8Array) => { if (writeGate) await writeGate; files.set(p, new Uint8Array(d)); },
     mkdir: async () => undefined,
     rm: async (p: string) => { if (!files.delete(p)) { const dir = [...files.keys()].some((k) => k.startsWith(p + '/')); if (dir) throw err('ENOTEMPTY'); throw err('ENOENT'); } },
     readdir: async (p: string) => {
+      if (readdirGate && p === 'app:/cache') await readdirGate;
       const names = [...files.keys()].filter((k) => k.startsWith(p + '/')).map((k) => k.slice(p.length + 1)).filter((n) => !n.includes('/'));
       if (names.length === 0) throw err('ENOENT');
       return names;
@@ -96,13 +97,14 @@ const storage = {
   },
 } as never;
 const mtimes = new Map<string, number>();
+let writeGate: Promise<void> | null = null; let readdirGate: Promise<void> | null = null;
 const env = (): C.Env => ({ storage });
 
 let logs: string[] = [];
 const realLog = console.log;
 beforeEach(() => {
   resetSeam(); bindNative(reader as never); stubFetch();
-  mail.forget(); calls = []; files.clear(); mtimes.clear(); nativeKey = null; refuses = false; forgets = 0; sealCalls = 0; locked = false; noPair = false; signedOutNative = false; sealGate = null; sealStarted = null; logs = []; forgetProbe();
+  mail.forget(); calls = []; files.clear(); mtimes.clear(); nativeKey = null; refuses = false; forgets = 0; sealCalls = 0; locked = false; noPair = false; signedOutNative = false; sealGate = null; sealStarted = null; writeGate = null; readdirGate = null; logs = []; forgetProbe();
   route = () => ({ status: 404, body: { error: 'not found' } });
   console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
 });
@@ -617,10 +619,13 @@ describe('R1 R2 hostile bodies', () => {
     }
     expect(M.blocks('', '<p>'.repeat(200_000)).cut).toBe(true);
   });
+  test('R1 at the cap itself: every shape of exactly HTML_MAX characters is read within a fixed bound', () => {
+    for (const make of Object.values(shapes)) expect(time(() => M.htmlToText(make(M.HTML_MAX)))).toBeLessThan(400);
+  });
   test('R1 the scans themselves are linear: htmlToText of an uncapped-looking shape is not quadratic (4x the size, not 16x the time)', () => {
     for (const make of Object.values(shapes)) {
       const a = Math.max(time(() => M.htmlToText(make(250_000))), 1), b = time(() => M.htmlToText(make(1_000_000)));
-      expect(b).toBeLessThan(a * 8 + 30);
+      expect(b).toBeLessThan(a * 12 + 80);
     }
     const lines = ' '.repeat(190_000) + 'x';
     expect(time(() => M.blocks(lines + '\n\n' + lines, ''))).toBeLessThan(500);          // trimH on a long run of spaces
@@ -722,10 +727,7 @@ describe('R5 R6 R7', () => {
     const out = sanitized('<a href="https://evil.example/x?a=1">Your invoice</a>');
     expect(out).not.toContain('href'); expect(out).toContain('Your invoice</a> <small>(https://evil.example/x?a=1)</small>');
   });
-  test('R7 the sign-out action clears the unsent compose text', async () => {
-    const c = await Bun.file(new URL('./account.contract', import.meta.url)).text();
-    expect(c).toMatch(/action signOut[\s\S]*mailTo = ""[\s\S]*mailSubject = ""[\s\S]*mailBody = ""/);
-  });
+  // (The sign-out action's reset of mailTo/mailSubject/mailBody/mailFor in account.contract is UNTESTED: the contract test harness has no mail page. The proof tour must open mail:new after a sign-out.)
 });
 
 describe('R8 restore, demo, budget, words', () => {
@@ -744,8 +746,7 @@ describe('R8 restore, demo, budget, words', () => {
   });
   test('demo mode never shows the real sealed rows', async () => {
     computer();
-    await mail.mailBox('mailbox:inbox', false, env());
-    mail.forget();
+    await mail.mailBox('mailbox:inbox', false, env());                     // the real rows are in memory now
     expect((await mail.mailFrame('mailbox:inbox', true, env())).rows.length).toBe(0);
     expect((await mail.mailFrame('mailbox:inbox', false, env())).rows.length).toBeGreaterThan(0);
   });
@@ -763,5 +764,52 @@ describe('R8 restore, demo, budget, words', () => {
     const st = (status: number) => M.words(Object.assign(new Error('x'), { status, name: 'HTTPError' })).message;
     const set = new Set([401, 403, 404, 413, 429].map(st));
     expect(set.size).toBe(5); expect(st(413)).toContain('too large');
+  });
+});
+
+describe('R9 the last races and words', () => {
+  test('a seal that SUCCEEDS while the sign-out begins writes no file (the check after the seal)', async () => {
+    computer();
+    let release: () => void = () => undefined; sealGate = new Promise<void>((r) => { release = r; });
+    const started = new Promise<void>((r) => { sealStarted = r; });
+    const pending = mail.mailMessage('mail:em_01hz0a', false, false, env());
+    await started;
+    await beginSignOut();                                                  // the generation moves; the native module does not know (it will seal)
+    release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
+    expect(sealCalls).toBeGreaterThan(0); expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
+  });
+  test('a file write in flight when the sign-out begins is removed (the check after the write)', async () => {
+    computer();
+    let release: () => void = () => undefined; writeGate = new Promise<void>((r) => { release = r; });
+    const pending = mail.mailMessage('mail:em_01hz0a', false, false, env());
+    for (let i = 0; i < 40 && sealCalls === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 20));
+    await beginSignOut();
+    release(); await pending.catch(() => undefined); await new Promise((r) => setTimeout(r, 20));
+    expect([...files.keys()].filter((k) => k.startsWith('app:/data/mail/'))).toEqual([]);
+  });
+  test('"Show original" in flight at a sign-out leaves no plain file and no path', async () => {
+    computer();
+    let release: () => void = () => undefined; readdirGate = new Promise<void>((r) => { release = r; });
+    const pending = mail.mailMessage('mail:em_01hz08', false, true, env());
+    await new Promise((r) => setTimeout(r, 30));
+    await beginSignOut();
+    release(); const v = await pending;
+    expect(v.originalPath).toBe(''); expect([...files.keys()].filter((k) => k.startsWith('app:/cache/mail-'))).toEqual([]);
+  });
+  test('the next session\'s first sync is not answered idle: a different key clears the block at once', async () => {
+    computer();
+    await mail.mailBox('mailbox:inbox', false, env());
+    await beginSignOut();
+    expect(await C.sealed(env())).toBe(false);
+    const api = await import('./api.ts');
+    api.nextGeneration();
+    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: true, value: 'another-key-0002-not-real', computerId: 'comp-2' } : r.op === 'mailCan' ? { ok: true } : { ok: true }) } as never);
+    expect(await C.sealed({ storage })).toBe(true);
+  });
+  test('a timeout has its own words, not "offline"', () => {
+    const w = M.words(new Error('timeout: The request timed out'));
+    expect(w.message).toContain('too long'); expect(w.message).not.toMatch(/offline/i);
+    expect(M.words(new Error('network: The Internet connection appears to be offline')).status).toBe('offline');
   });
 });

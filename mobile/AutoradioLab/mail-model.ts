@@ -470,7 +470,8 @@ export function words(e: unknown): Words {
   if (status === 404) return { status: 'error', message: 'This message is gone.' };
   if (status === 413) return { status: 'error', message: 'That is too large for your computer to take from the phone.' };
   if (status !== 0) { const w = serverWords(e); return { status: 'error', message: w !== '' ? w : `Your computer could not do that (${status}).` }; }
-  if (message.startsWith('network:') || name === 'AbortError' || name === 'TimeoutError' || name === 'TypeError') return OFFLINE;
+  if (message.startsWith('timeout:') || name === 'TimeoutError') return { status: 'error', message: 'Your computer took too long to answer. Try again.' };
+  if (message.startsWith('network:') || name === 'AbortError' || name === 'TypeError') return OFFLINE;
   if (message.includes('not JSON')) return { status: 'error', message: 'Something unexpected came back from your computer.' };
   return { status: 'error', message: 'Could not reach your mail.' };
 }

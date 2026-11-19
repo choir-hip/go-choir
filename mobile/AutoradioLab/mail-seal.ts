@@ -7,7 +7,7 @@
 // No cipher, nothing written: when the native module is absent or refuses (no key could be made), `seal` answers null and mail-store writes no file.
 // Format: "MS3" | the native sealed box (12-byte nonce, ciphertext, 16-byte tag), the whole as AES-GCM's combined form.
 
-import { nativeLater, sealingBlocked } from './api.ts';
+import { nativeLater, sealingBlocked, refreshSealBlock } from './api.ts';
 
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', data as unknown as BufferSource));
@@ -37,6 +37,7 @@ let sealable: boolean | null = null;
 const DEADLINE_MS = 15000;
 const bounded = <T>(p: Promise<T>): Promise<T> => Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('no answer')), DEADLINE_MS))]);
 export async function canSeal(): Promise<boolean> {
+  await refreshSealBlock();
   if (sealingBlocked()) return false;
   const later = nativeLater(); if (!later) return false;
   if (sealable === null) {

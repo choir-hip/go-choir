@@ -153,9 +153,9 @@ export function frame(address: string): BoxView {
 }
 
 async function ensureKept(env: C.Env, folder: string, demo: boolean): Promise<Held | null> {
+  if (demo) return null;                                  // demo mode shows no real row, in memory or sealed
   const k = kept.get(folder);
   if (k) return k;
-  if (demo) return null;
   const c = await C.loadFolder(env, folder);
   if (!c) return null;
   const h: Held = { rows: c.rows, total: c.total, unread: c.unread, next: '' };
@@ -308,8 +308,16 @@ async function loadMessage(address: string, demo: boolean, wantOriginal: boolean
     // The sender's own layout is written only while it is asked for, and every other document is removed: the message's HTML sits on the phone, readable, for as short a time as it can.
     if (v.hasOriginal && !demo && !(await C.sealed(env))) { v.hasOriginal = false; v.originalPath = ''; }      // no cipher on this platform: no plain copy of a message is made
     if (v.hasOriginal && wantOriginal && env.storage) {
+      // The one mail write with a plain file: it carries the account stamp like the sealed ones. A sign-out during the awaits blanks the path and removes the file.
+      const stale = (): boolean => env.gen !== accountGeneration();
       await C.forgetOldCopy(env.storage, name);
-      try { await env.storage.fs.atomicWriteFile(v.originalPath, new TextEncoder().encode(sanitized(d.html))); } catch { v.hasOriginal = false; v.originalPath = ''; }
+      if (stale()) { v.hasOriginal = false; v.originalPath = ''; }
+      else {
+        try {
+          await env.storage.fs.atomicWriteFile(v.originalPath, new TextEncoder().encode(sanitized(d.html)));
+          if (stale()) { try { await env.storage.fs.rm(v.originalPath); } catch { /* the wipe will */ } v.hasOriginal = false; v.originalPath = ''; }
+        } catch { v.hasOriginal = false; v.originalPath = ''; }
+      }
     } else { await C.forgetOldCopy(env.storage); }
     v.attachments = d.attachments.map((a) => {
       const filename = M.safeFilename(a.filename);
@@ -468,7 +476,7 @@ export async function mailSync(address: string, demo: boolean, env: C.Env): Prom
     out.status = stopped ? 'more' : 'done';
     state.syncedAt[folder] = clock;
     await C.saveState(env, state);
-    await C.trim(env);
+    if (out.fetched > 0) await C.trim(env);                 // the copy only grows when a body was saved: the files are not walked on a sync that saved none
   } catch (e) { out.status = M.words(e).status === 'offline' ? 'offline' : 'error'; }
   try { out.held = (await env.storage.fs.readdir(C.DIR)).filter((n) => n.startsWith('msg-')).length; } catch { out.held = 0; }
   out.note = out.held === 0 ? '' : `${out.held} messages saved on this phone`;

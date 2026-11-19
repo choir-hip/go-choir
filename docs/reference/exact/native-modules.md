@@ -357,7 +357,7 @@ The Mail pages, the signed-in requests to the listener's computer and the phone'
 - **Show original.** `iframe` has no `srcdoc` (gaps.md 30), so the cleaned document is written PLAIN to `app:/cache/mail-<hash>.html` only while it is asked for, and every
   other `mail-*.html` is removed on each message answer, at sign-out and at every launch. `app:/cache` is `$HOME/Library/Caches/exact/<app id>` (`host/apple/src/picker.rs:52`):
   under Apple's rules Library/Caches is not in a device backup; the file is plain on the phone while the page is open (residual). A link in it is inert (no `href`; its
-  address is written after it). A body over 120 000 characters shows a statement that it is too large to show in full; the message page shows the text, cut at 300 000.
+  address is written after it). A body over 120 000 characters shows a statement that it is too large to show in full; the message page shows the text, cut at 200 000 (the HTML is read up to 300 000).
 - **Sign-out.** Shared code leads (`account.ts`): `beginSignOut` moves the account generation and turns sealing off BEFORE the native sign-out; a store write checks the generation
   before and after it seals and writes; `wipeMail` removes the files and the key. (The Swift registration `AccountWipe.removeMailCopy` is a second path for the same files.)
   same and also forgets the key, and is what the shared sign-out will call.

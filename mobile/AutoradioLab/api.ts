@@ -109,7 +109,7 @@ export function nextGeneration(): number { generation += 1; return generation; }
 // A SIGN-OUT UNDER WAY (review 2026-11-19, mail seat 1, finding 2). `beginSignOut` runs BEFORE the native sign-out: the generation moves at once (a store write
 // that began under the old one refuses itself, mail-store.ts), and sealing is off until a NEW session is established (a key whose digest is not the one that
 // was signed out) or the sign-out is given up (`abortSignOut`). The native side also makes no mail key once the sign-in key is gone (MailSeal.swift).
-let blockedDigest: string | null = null;
+let blockedDigest: string | null = null;      // null: not signing out. '' or a digest: a sign-out began; sealing waits for a session whose key is another one.
 export const sealingBlocked = (): boolean => blockedDigest !== null;
 export async function beginSignOut(): Promise<void> {
   nextGeneration(); resetSession();
@@ -118,6 +118,11 @@ export async function beginSignOut(): Promise<void> {
   blockedDigest = d;
 }
 export function abortSignOut(): void { blockedDigest = null; }
+/** A new session clears the block explicitly: called before sealing is judged, so the first sync of the next session is not answered idle. */
+export async function refreshSealBlock(): Promise<void> {
+  if (blockedDigest === null) return;
+  try { const sess = await keptSession(); if (sess && (await digestOf(sess.key)) !== blockedDigest) blockedDigest = null; } catch { /* still signed out */ }
+}
 
 /** An id as one path segment (Swift PathSegment.encode): everything but unreserved characters is escaped; "." and ".." too. */
 export function segment(id: string): string {
@@ -173,7 +178,8 @@ async function send(path: string, opts: Authed, accept: string, extra: Record<st
   try {
     return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual', ...extra } as RequestInit), key };
   } catch (e) {
-    throw new Error(scrub(`network: ${e instanceof Error ? e.message : 'request failed'}`, key));
+    const timed = (e as { kind?: string } | null)?.kind === 'Timeout' || (e as { name?: string } | null)?.name === 'TimeoutError';
+    throw new Error(scrub(`${timed ? 'timeout' : 'network'}: ${e instanceof Error ? e.message : 'request failed'}`, key));
   }
 }
 
