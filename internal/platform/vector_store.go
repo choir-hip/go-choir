@@ -121,6 +121,9 @@ type vectorState struct {
 	// among them the one tried longest ago. In memory only: a restart forgets it,
 	// which only makes every waiter new again.
 	inboxDeferred map[string]time.Time
+	// inboxShort counts, per inbox file, consecutive imports whose sample fell
+	// short of the floor in a draw of only part of the file (countShortDraw).
+	inboxShort map[string]int
 }
 
 func (v *vectorState) kickChan() chan struct{} {

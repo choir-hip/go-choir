@@ -40,6 +40,14 @@ import (
 // taken, so a copy in progress is not read. Copy as name.part and rename.
 var vectorInboxMinAge = 60 * time.Second
 
+// vectorInboxShortDraws is how many times in a row the same inbox file may fall
+// short of the sample floor in a draw that was only a subset of its rows before
+// it is refused. One short draw of a big file proves nothing about the rows not
+// drawn (each pass draws afresh), so it waits; the same shortfall in this many
+// draws means the file is mostly uncheckable, which is as good as a proof can be
+// without embedding every row. In memory: a restart starts the count again.
+const vectorInboxShortDraws = 3
+
 var vectorInboxDirNames = []string{"inbox", "running", "done", "refused", "interrupted"}
 
 func (s *Service) vectorSpoolDir(sub string) string {
@@ -151,6 +159,11 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 			delete(v.inboxDeferred, name) // gone from the inbox
 		}
 	}
+	for name := range v.inboxShort {
+		if !present[name] {
+			delete(v.inboxShort, name)
+		}
+	}
 	deferred := map[string]time.Time{} // name -> when it was last tried
 	for name, at := range v.inboxDeferred {
 		deferred[name] = at
@@ -165,9 +178,10 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 		}
 	}
 	if pick == "" {
-		// Only waiting files are left: try the one tried longest ago (ties: the
-		// older file, as cands is in modification order), so a file that can never
-		// be imported now does not starve the others.
+		// Only waiting files are left: try the one tried longest ago (ties keep
+		// the order of cands, which sort.Slice leaves arbitrary for equal
+		// modification times), so a file that can never be imported now does not
+		// starve the others.
 		var last time.Time
 		for _, c := range cands {
 			if at := deferred[c.name]; pick == "" || at.Before(last) {
@@ -228,6 +242,7 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 		ierr = fmt.Errorf("%w: %s is %d bytes, over the %d the import takes", ErrVectorImportRefused, name, fi.Size(), vectorImportMaxBytes)
 	default:
 		res, ierr = s.ImportVectorFile(ctx, run)
+		ierr = s.countShortDraw(name, ierr)
 	}
 	if ctx.Err() != nil && ierr != nil {
 		// Shutdown mid-import: the file stays in running/ and is moved to
@@ -278,4 +293,25 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 	return true, nil
 }
 
-const vectorInboxShortDraws = 3
+// countShortDraw counts, per inbox file, consecutive imports that fell short of
+// the sample floor in a draw that covered only part of the file
+// (errVectorImportShortDraw). At vectorInboxShortDraws the error becomes a
+// refusal naming the count; any other outcome clears the count.
+func (s *Service) countShortDraw(name string, ierr error) error {
+	v := &s.store.vec
+	v.importMu.Lock()
+	defer v.importMu.Unlock()
+	if !errors.Is(ierr, errVectorImportShortDraw) {
+		delete(v.inboxShort, name)
+		return ierr
+	}
+	if v.inboxShort == nil {
+		v.inboxShort = map[string]int{}
+	}
+	v.inboxShort[name]++
+	if n := v.inboxShort[name]; n >= vectorInboxShortDraws {
+		delete(v.inboxShort, name)
+		return fmt.Errorf("%w: the sample fell short of the floor in %d draws in a row, each of %d of the file's rows; the file is mostly uncheckable by this host (last: %v)", ErrVectorImportRefused, n, vectorImportCandidates, ierr)
+	}
+	return ierr
+}
