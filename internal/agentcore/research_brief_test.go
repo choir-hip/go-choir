@@ -22,7 +22,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // Station S3, the corpus brief (docs/design/corpus-first-retrieval-and-research-2026-11-18.md):
@@ -153,13 +152,15 @@ func TestBriefBoundsEachThreadAndNeverRepeatsAPage(t *testing.T) {
 }
 
 func TestBriefOverTheTokenBoundDropsWholeThreadsFromTheLastAndNamesThem(t *testing.T) {
-	big := strings.Repeat("harbor ", 150) // a whole passage, never cut
+	big := strings.Repeat("harbor ", 70) // a whole passage under the clip, never cut by the bound
 	n := 0
 	search := func(context.Context, string) (json.RawMessage, error) {
 		var caps []map[string]any
 		for i := 0; i < 6; i++ {
 			n++
-			caps = append(caps, briefCapture(n, big+fmt.Sprintf("end-marker-%d", n)))
+			c := briefCapture(n, big+fmt.Sprintf("end-marker-%d", n))
+			c["title"], c["url"] = strings.Repeat("title ", 40), "https://example.org/"+strings.Repeat("path/", 40)
+			caps = append(caps, c)
 		}
 		return briefResult(caps, 0), nil
 	}
@@ -480,7 +481,7 @@ func TestResearchBriefOnAResumedRunSearchesNothingAndLogsNothing(t *testing.T) {
 }
 
 func TestResearchBriefIsOnlyForResearchDeskRuns(t *testing.T) {
-	rt, s := testRuntime(t)
+	rt, _ := testRuntime(t)
 	owner, computer := "owner-brief-4", rt.cfg.ComputerID
 	probe := &briefProbe{result: briefResult(nil, 1)}
 	rt.researchBriefSearch = probe.search
@@ -629,7 +630,7 @@ func TestBriefAFailedHalfIsNotAnEmptyCorpus(t *testing.T) {
 	}
 	// Published half failed, captures delivered: partial with the pages.
 	res = buildResearchBrief(context.Background(), planN(1), fixedSearch(failed("", pubNote, []map[string]any{briefCapture(1, "p")}, 0)))
-	if res.outcome != briefPartial || !strings.Contains(res.text, "capture_id=\"cap-1\"") || !strings.Contains(res.text, "Published stories: not searched") || strings.Contains(res.text, "SECRET-DETAIL") {
+	if res.outcome != briefPartial || !strings.Contains(res.text, "capture_id=cap-1") || !strings.Contains(res.text, "Published stories: not searched") || strings.Contains(res.text, "SECRET-DETAIL") {
 		t.Fatalf("outcome=%q text:\n%s", res.outcome, res.text)
 	}
 	if len(res.labels) == 0 {
@@ -765,7 +766,7 @@ func TestResearchBriefWithABlankOwnerOrComputerSearchesNothing(t *testing.T) {
 			if len(sink.searches) != 0 || len(sink.publishedQ) != 0 {
 				t.Fatalf("a run with no %s searched: %+v %v", tc.name, sink.searches, sink.publishedQ)
 			}
-			b.commitAfter(nil)
+			b.commitAfter(&runMemoryManager{startedFresh: true})
 			if !strings.Contains(logs.String(), "outcome=skipped") || !strings.Contains(logs.String(), "reason=\""+tc.reason+"\"") {
 				t.Fatalf("log:\n%s", logs.String())
 			}
@@ -918,9 +919,16 @@ func TestResearchBriefDeadlineIsStartedByTheOpening(t *testing.T) {
 type briefRequestProvider struct {
 	*provider.StubProvider
 	requests []provideriface.ToolLoopRequest
+	// labels is what the run carried when its first model call was made.
+	rt     *Runtime
+	runID  string
+	labels []string
 }
 
 func (p *briefRequestProvider) CallWithTools(_ context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	if len(p.requests) == 0 && p.rt != nil {
+		p.labels = append([]string(nil), p.rt.runLabelSet(p.runID)...)
+	}
 	p.requests = append(p.requests, req)
 	return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Usage: provideriface.TokenUsage{InputTokens: 1, OutputTokens: 1}, Model: "test-model"}, nil
 }
@@ -928,6 +936,7 @@ func (p *briefRequestProvider) CallWithTools(_ context.Context, req providerifac
 func TestExecuteWithToolLoopDeliversTheBriefAndMarksTheRun(t *testing.T) {
 	prov := &briefRequestProvider{StubProvider: provider.NewStubProvider(0)}
 	rt, s := testRuntimeWithProviderAndRegistry(t, prov, nil)
+	prov.rt, prov.runID = rt, "run-brief-14"
 	ctx := context.Background()
 	owner, computer, doc := "owner-brief-14", rt.cfg.ComputerID, "doc-14"
 	seedResearchCastWithLabels(t, s, owner, computer, doc, "Did the harbor strike end?", []string{types.OwnerPrivateLabel("texture")})
@@ -944,7 +953,7 @@ func TestExecuteWithToolLoopDeliversTheBriefAndMarksTheRun(t *testing.T) {
 	if len(prov.requests) == 0 || !toolLoopRequestContains(prov.requests[0], "BRIEF-PASSAGE workers voted") || !toolLoopRequestContains(prov.requests[0], "Corpus brief.") {
 		t.Fatalf("the first provider request does not carry the brief: %+v", prov.requests)
 	}
-	got := strings.Join(sortedLabels(rt.runLabelsOf(ctx, owner, computer, rec.RunID)), ",")
+	got := strings.Join(sortedLabels(prov.labels), ",")
 	for _, want := range []string{"owner_private:capture", "owner_private:texture", "world_untrusted"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("the run carries %q, lacks %q", got, want)
