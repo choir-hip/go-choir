@@ -195,8 +195,11 @@ type corpusSearchInfo struct {
 	// inserted. Stories are the stories it walked.
 	VectorAnswered bool
 	VectorRows     int
-	BM25Kept       int
-	Stories        []CorpusStory
+	// VectorState is exact, approximate or partial when the vector half
+	// answered (see platform.CaptureRanking.VectorState).
+	VectorState string
+	BM25Kept    int
+	Stories     []CorpusStory
 }
 
 // searchCaptures is the title-and-label search alone (the words kept by
@@ -321,10 +324,15 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 	primary := textHalf
 	if rk := answer.Ranked; rk != nil {
 		primary = rankedCaptures(answer, labels)
-		info.VectorAnswered, info.VectorRows, info.BM25Kept = rk.VectorAnswered, rk.VectorRows, rk.BM25Kept
+		info.VectorAnswered, info.VectorRows, info.VectorState, info.BM25Kept = rk.VectorAnswered, rk.VectorRows, rk.VectorState, rk.BM25Kept
 		info.Stories = rankedStories(rk, primary)
 		if !rk.VectorAnswered && rk.VectorUnavailable != "" {
 			notes = append(notes, "search by meaning did not answer ("+rk.VectorUnavailable+"); the pages are those whose text matches")
+		}
+		if rk.VectorState == "partial" {
+			notes = append(notes, "search by meaning is partial ("+rk.VectorPartial+"): the pages found by meaning may lack nearer ones")
+		} else if rk.VectorState == "approximate" {
+			notes = append(notes, "search by meaning is approximate: the pages found by meaning are the index's nearest, not exactly the nearest")
 		}
 		if rk.Note != "" {
 			notes = append(notes, rk.Note)

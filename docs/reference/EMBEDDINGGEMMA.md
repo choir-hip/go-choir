@@ -438,11 +438,16 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
   empty result whose `Unavailable` says why and no error, so a caller (station V4) answers from BM25 alone and says so; a
   caller that holds a vector can search without the embedder.
 - **The ranked answer** (station V4, `platform/capture_rank.go`; built on `lane/ranked-search`, not landed): `SearchCaptures` with a
-  query calls `SearchVectors` once (4 times the answer size of each kind, under a 4 s deadline), keeps only the latest version of each
-  story, replaces a story by the captures its latest version cites (at most 8, `cites_capture` edges), and guarantees BM25's top three
-  pages a place at their BM25 rank. A window narrows the vector scan by day and each page again by its exact time; HNSW filters after
-  the scan, so a narrow window can return few rows (the journal's `vector=` is that count) and the answer is then mostly BM25's. When
-  the vectors are unavailable the answer is BM25's and `vector=unavailable`. Journal: `op=capture_search shape=ranked ... vector= bm25_kept=`.
+  query calls `SearchVectors` once (4 times the answer size of each kind), keeps only the latest version of each story (a story is
+  walked only through the version whose passage passed V2's eligibility predicate), replaces a story by the captures its latest version
+  cites (at most 8, `cites_capture` edges), and guarantees BM25's top three pages a place at their BM25 rank. A window narrows the
+  vector scan by day and each page again by its exact time, also a page reached through a story. **One deadline**: the vector half
+  has 4 s (`captureVectorDeadline`), and each SQL statement's timeout is nine tenths of what is left of it (V2's own 5 s applies only
+  to a caller with no deadline), so the two do not race and an exact read that passes it can still come back `partial`. The answer
+  says how the vector lists were answered: `vector_state=exact` (the true nearest of the filtered rows), `approximate` (the HNSW
+  index's answer on a list over 100,000 rows) or `partial` (an exact read hit the deadline); `vector=` stays the rows returned.
+  When the vectors are unavailable the answer is BM25's and `vector=unavailable vector_state=unavailable`.
+  Journal: `op=capture_search shape=ranked ... vector=<rows>|unavailable vector_state=exact|approximate|partial|unavailable bm25_kept=`.
 - **Import** (the Mac's first pass): `POST /internal/platform/vectors/import` on corpusd's loopback port 8086 with the host
   credential, body one JSON row a line (`kind` `story_passage` or `capture`, `id` a publication version's or a capture's, `ordinal`,
   `text_sha`, `model`, `dim` 256, `v` base64 of 256 float16); answers 202 and a job, `GET ?job=` reads it. Refused whole for another

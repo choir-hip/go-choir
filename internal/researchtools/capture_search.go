@@ -79,6 +79,8 @@ type CaptureRanking struct {
 	VectorAnswered    bool            `json:"vector_answered"`
 	VectorRows        int             `json:"vector_rows"`
 	VectorUnavailable string          `json:"vector_unavailable,omitempty"`
+	VectorState       string          `json:"vector_state,omitempty"`
+	VectorPartial     string          `json:"vector_partial,omitempty"`
 	BM25Kept          int             `json:"bm25_kept"`
 	Note              string          `json:"note,omitempty"`
 }

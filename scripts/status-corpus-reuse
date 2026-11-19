@@ -23,7 +23,7 @@ Go log lines (UTC) the runtime already writes:
       pages_returned= pages_new= pages_read= [search_all_calls= wordings_offered=
       wordings_sent= unread_notes= untagged=]    internal/agentcore/search_run_summary.go
   corpus search computer= ... by_body= by_title= by_both= by_labels_only= ...
-      run= desk= conv= published= events= capped= vector=(N|unavailable) bm25_kept=
+      run= desk= conv= published= events= capped= vector=(N|unavailable) vector_state=(exact|approximate|partial|unavailable) bm25_kept=
       caller=   internal/researchtools logCorpusSearch (vector= and bm25_kept= are
       corpusd's one ranked answer, station V4: N is the rows its vector half
       returned; ledger claim C144 is settled from this field)
@@ -155,7 +155,8 @@ def parse_console(text):
                        "captures": num("captures") or 0, "text_fields": tx,
                        "text_hit": tx and (num("by_body") + num("by_both")) > 0,
                        # vector= is a number when corpusd's vector half answered, else "unavailable"
-                       "vec_field": "vector" in kv, "vec_rows": num("vector"), "kept": num("bm25_kept") or 0})
+                       "vec_field": "vector" in kv, "vec_rows": num("vector"), "kept": num("bm25_kept") or 0,
+                       "vstate": kv.get("vector_state", "")})
             continue
         m = RB_RE.search(ln)
         if m:
@@ -220,7 +221,7 @@ def metrics(sr, cs_all, rd_all, gw, rb_all=()):
     # corpus searches by desk, reads by desk and held x via
     cs_by = {}
     for e in cs_all:
-        d = cs_by.setdefault(e["desk"], {"n": 0, "brief": 0, "cell": 0, "ge1": 0, "tf": 0, "th": 0, "vf": 0, "va": 0, "kept": 0})
+        d = cs_by.setdefault(e["desk"], {"n": 0, "brief": 0, "cell": 0, "ge1": 0, "tf": 0, "th": 0, "vf": 0, "va": 0, "kept": 0, "states": {}})
         d["n"] += 1
         d[e["caller"]] += 1
         d["ge1"] += e["captures"] > 0
@@ -229,6 +230,8 @@ def metrics(sr, cs_all, rd_all, gw, rb_all=()):
         d["vf"] += e["vec_field"]
         d["va"] += e["vec_rows"] is not None
         d["kept"] += e["kept"]
+        if e["vec_rows"] is not None and e["vstate"]:
+            d["states"][e["vstate"]] = d["states"].get(e["vstate"], 0) + 1
     r["corpus_searches"] = cs_by
     rd_by, rd_hv, shares = {}, {}, {"true": 0, "own": 0, "false": 0}
     for e in rd_all:
@@ -376,6 +379,8 @@ def render(r):
         if v["vf"]:
             o.append("  %-12s vector half answered %s (of %d lines with vector=); BM25 pages inserted %d"
                      % ("", pct(v["va"], v["vf"]), v["vf"], v["kept"]))
+            if v["states"]:
+                o.append("  %-12s vector_state of those answered: %s" % ("", ", ".join("%s %d" % kv for kv in sorted(v["states"].items()))))
     o.append("page reads by desk:")
     if not m["reads_by_desk"]:
         o.append("  (none)")
