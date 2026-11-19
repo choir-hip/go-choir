@@ -61,7 +61,9 @@ type neighbourSink struct {
 	mu          sync.Mutex
 	requests    []researchtools.CaptureNeighboursQuery
 	near        map[string][]string
-	missing     []string
+	unembedded  int
+	excluded    int
+	cut         int
 	unavailable string
 	err         error
 	delay       time.Duration
@@ -81,7 +83,7 @@ func (s *neighbourSink) ListCaptures(context.Context, string, string, int) ([]ob
 func (s *neighbourSink) CaptureNeighbours(ctx context.Context, q researchtools.CaptureNeighboursQuery) (researchtools.CaptureNeighboursAnswer, error) {
 	s.mu.Lock()
 	s.requests = append(s.requests, q)
-	near, missing, unavailable, err, delay := s.near, s.missing, s.unavailable, s.err, s.delay
+	near, unavailable, err, delay := s.near, s.unavailable, s.err, s.delay
 	s.mu.Unlock()
 	if delay > 0 {
 		select {
@@ -93,7 +95,7 @@ func (s *neighbourSink) CaptureNeighbours(ctx context.Context, q researchtools.C
 	if err != nil {
 		return researchtools.CaptureNeighboursAnswer{}, err
 	}
-	ans := researchtools.CaptureNeighboursAnswer{Neighbours: map[string][]researchtools.CaptureNeighbour{}, Missing: missing, Unavailable: unavailable, State: "exact"}
+	ans := researchtools.CaptureNeighboursAnswer{Neighbours: map[string][]researchtools.CaptureNeighbour{}, Unembedded: s.unembedded, Excluded: s.excluded, Cut: s.cut, Unavailable: unavailable, State: "exact"}
 	if s.state != "" {
 		ans.State = s.state
 	}
@@ -355,7 +357,7 @@ func TestEventVectorSlotUnavailableNeverBlocksTheFlush(t *testing.T) {
 				if report, err = rt.resolveEvents(context.Background(), owner, computer, []eventInput{capItem("c1", "Anything at all", "https://a.example.com/1", "")}); err != nil {
 					t.Fatal(err)
 				}
-				log.Print(eventFlushLine([]eventInput{capItem("c1", "Anything at all", "https://a.example.com/1", "")}, report))
+				log.Print(eventFlushLine(report))
 			})
 			if time.Since(start) > 5*time.Second {
 				t.Fatalf("the flush waited %s for the vector slot", time.Since(start))
@@ -468,34 +470,117 @@ func TestEventResearchReadReachesTheLayerAndTheLineCountsIt(t *testing.T) {
 	if judge.callCount() != 1 {
 		t.Fatalf("Jev calls = %d, want one for the flush", judge.callCount())
 	}
-	// X8: r1 was queued twice and judged once.
+	// X8: r1 was queued twice and judged once (queued= counts the two questions).
 	if n := strings.Count(string(judge.asked[0]["k1"])+string(judge.asked[0]["k2"])+string(judge.asked[0]["k3"]), `"type"`); n != 2 {
 		t.Fatalf("the flush asked %d questions, want 2 (r1 once, p1 once)", n)
 	}
-	for _, want := range []string{"op=event_flush", "queued=3", "research_reads=1", "calls=1", "shortlist_recent=0", "shortlist_vector=0", "shortlist_vector_new=0", "vector=0", "vector_missing=0", "joined=0", "minted=2", "tentative=0", "unresolved=0"} {
+	for _, want := range []string{"op=event_flush", "queued=2", "research_reads=1", "calls=1", "shortlist_recent=0", "shortlist_vector=0", "shortlist_vector_new=0", "vector=0 ", "vector_state=ok", "missing_unembedded=0", "missing_excluded=0", "vector_unmapped=0", "joined=0", "minted=2", "tentative=0", "unresolved=0"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("the flush line lacks %q:\n%s", want, out)
 		}
 	}
 }
 
-// The line's vector field is the neighbour rows, and a missing vector is
-// counted: a capture embedded after the flush is not an unavailable slot.
-func TestEventFlushLineCountsVectorRowsAndMissing(t *testing.T) {
+// The line's vector field is the neighbour rows; the captures with none are
+// counted by reason; a deadline cut is the state, not a count of missing; the
+// neighbours that mapped to no event are counted.
+func TestEventFlushLineCountsVectorRowsStateAndMissingByReason(t *testing.T) {
+	cases := []struct {
+		name  string
+		sink  *neighbourSink
+		state string
+		want  []string
+	}{
+		{"exact", &neighbourSink{near: map[string][]string{"b1": {"a1", "a2"}}, unembedded: 3, excluded: 2},
+			"ok", []string{"vector=2 ", "vector_state=ok", "missing_unembedded=3", "missing_excluded=2", "vector_unmapped=2"}},
+		{"approximate", &neighbourSink{near: map[string][]string{}, state: "approximate"},
+			"approximate", []string{"vector=0 ", "vector_state=approximate", "missing_unembedded=0"}},
+		{"partial", &neighbourSink{near: map[string][]string{}, state: "partial", cut: 2},
+			"partial", []string{"vector_state=partial", "missing_unembedded=0", "missing_excluded=0"}},
+		{"cut is partial", &neighbourSink{near: map[string][]string{}, cut: 1},
+			"partial", []string{"vector_state=partial"}},
+		{"tables not ready", &neighbourSink{unavailable: "the vector tables are not ready"},
+			"unavailable", []string{"vector=unavailable", "vector_state=unavailable", "missing_unembedded=0"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			judge := &eventJudge{answers: map[string]eventAnswer{}}
+			rt, owner, computer := vectorRuntime(t, judge, c.sink)
+			report, err := rt.resolveEvents(context.Background(), owner, computer, []eventInput{
+				capItem("b1", "First", "https://a.example.com/1", ""), capItem("b2", "Second", "https://b.example.com/2", "")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			line := eventFlushLine(report)
+			for _, want := range c.want {
+				if !strings.Contains(line, want) {
+					t.Fatalf("line lacks %q: %s", want, line)
+				}
+			}
+		})
+	}
+}
+
+// Review 7: a neighbour whose event the index does not hold (no membership, or
+// past the load caps) is counted, and offers nothing.
+func TestEventVectorUnmappedNeighboursAreCounted(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}}
-	sink := &neighbourSink{near: map[string][]string{"b1": {"a1", "a2"}}, missing: []string{"b2"}}
+	sink := &neighbourSink{near: map[string][]string{"b1": {"ghost1", "ghost2"}, "b2": {"ghost2"}}}
 	rt, owner, computer := vectorRuntime(t, judge, sink)
-	items := []eventInput{capItem("b1", "First", "https://a.example.com/1", ""), capItem("b2", "Second", "https://b.example.com/2", "")}
-	report, err := rt.resolveEvents(context.Background(), owner, computer, items)
-	if err != nil {
+	report, err := rt.resolveEvents(context.Background(), owner, computer, []eventInput{
+		capItem("b1", "First", "https://a.example.com/1", ""), capItem("b2", "Second", "https://b.example.com/2", "")})
+	if err != nil || !strings.Contains(eventFlushLine(report), "vector_unmapped=2") {
+		t.Fatalf("%v %s", err, eventFlushLine(report))
+	}
+}
+
+// Review 10: the neighbours request does not hold the index, so the management
+// Stories read (eventSummary) is not made to wait for a slow request.
+func TestEventSlowNeighboursRequestDoesNotBlockTheIndexReader(t *testing.T) {
+	judge := &eventJudge{answers: map[string]eventAnswer{}}
+	sink := &neighbourSink{delay: 600 * time.Millisecond}
+	rt, owner, computer := vectorRuntime(t, judge, sink)
+	ctx := context.Background()
+	if _, err := rt.resolveEvents(ctx, owner, computer, []eventInput{capItem("a1", "Opening", "https://a.example.com/1", "")}); err != nil {
 		t.Fatal(err)
 	}
-	line := eventFlushLine(items, report)
-	for _, want := range []string{"vector=2 ", "vector_missing=1"} {
-		if !strings.Contains(line, want) {
-			t.Fatalf("line lacks %q: %s", want, line)
-		}
+	evID := eventOf(t, rt, owner, computer, "a1")
+	started := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		close(started)
+		_, _ = rt.resolveEvents(ctx, owner, computer, []eventInput{capItem("a2", "Another", "https://b.example.com/2", "")})
+		close(done)
+	}()
+	<-started
+	time.Sleep(100 * time.Millisecond) // the request is in flight
+	t0 := time.Now()
+	if _, ok := rt.eventSummary(ctx, owner, computer, evID); !ok {
+		t.Fatal("no summary")
 	}
+	if d := time.Since(t0); d > 200*time.Millisecond {
+		t.Fatalf("eventSummary waited %s behind the neighbours request", d)
+	}
+	<-done
+}
+
+// Review: the capture hook returns at once, even while a flush is waiting on a
+// slow neighbours request.
+func TestEventCaptureHookReturnsPromptlyDuringAFlush(t *testing.T) {
+	judge := &eventJudge{answers: map[string]eventAnswer{}}
+	sink := &neighbourSink{delay: 600 * time.Millisecond}
+	rt, owner, computer := vectorRuntime(t, judge, sink)
+	ctx := context.Background()
+	rt.enqueueEventCaptures(ctx, owner, computer, "web:read", []sourcegraph.CapturedItem{{CaptureID: "r1", Title: "First read", URL: "https://a.example.com/1"}}, true)
+	rt.flushEventQueue(owner, computer)
+	time.Sleep(100 * time.Millisecond)
+	t0 := time.Now()
+	rt.enqueueEventCaptures(ctx, owner, computer, "web:read", []sourcegraph.CapturedItem{{CaptureID: "r2", Title: "Second read", URL: "https://b.example.com/2"}}, true)
+	if d := time.Since(t0); d > 100*time.Millisecond {
+		t.Fatalf("the hook took %s", d)
+	}
+	rt.flushEventQueueForTest(ctx)
+	eventOf(t, rt, owner, computer, "r2")
 }
 
 // X10: the runtime's research dependencies announce what the tools capture.
