@@ -21,7 +21,7 @@ func TestResearchFirstTurnAsksForAnEarlyInterimPacket(t *testing.T) {
 // from what is held and does not search the corpus for the same words again.
 func TestResearchFirstTurnNamesTheCorpusBrief(t *testing.T) {
 	p, _ := recordsInboxPromptFor(agentprofile.Research)
-	if !strings.Contains(p, "corpus brief") {
+	if !strings.Contains(p, "corpus brief") || !strings.Contains(p, "or a sentence saying why there is none") {
 		t.Fatalf("research first-turn prompt does not mention the corpus brief: %s", p)
 	}
 }
