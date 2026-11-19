@@ -1340,6 +1340,8 @@ func TestBriefNeverClaimsAnAbsenceOnAnyPath(t *testing.T) {
 		"whole index":   &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 7, Captures: 7}},
 		"window":        windowOnlySink{},
 		"no capture store": nil,
+		"capped published": &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 3, Captures: 3}, pubCapped: true,
+			pubPieces: []researchtools.PublishedPiece{{Title: "T", ReadURL: "https://choir.news/r/t", Kind: "story"}}},
 	} {
 		res := briefOverRealTool(t, sink, planN(2))
 		assertNoAbsenceClaim(t, "real tool "+name, res.text)
