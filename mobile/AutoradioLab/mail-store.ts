@@ -83,24 +83,52 @@ export async function loadState(env: Env): Promise<StateCopy> {
   return s && typeof s === 'object' && s.done && s.syncedAt && s.cursor ? s : { done: {}, syncedAt: {}, cursor: {} };
 }
 
-/** Is a message's body held (so a sync does not fetch it again)? Reads the file's name only. */
+/** Can the files that are here be opened with the key that is here? After a restore to another phone (the files came back, the key did not) every body would
+ * be "held" forever by `holds` and never fetched again. One file is opened: 'ok' (or nothing there), 'purged' (it was bad: every message file and the state are
+ * removed so the server's copy replaces them), 'cannot' (no verdict now: a locked Keychain; nothing is removed and the caller must not sync). */
+export async function validate(env: Env): Promise<'ok' | 'purged' | 'cannot'> {
+  const fs = env.storage?.fs;
+  if (!fs || !(await canSeal())) return 'cannot';
+  let names: string[] = [];
+  try { names = await fs.readdir(DIR); } catch { return 'ok'; }
+  const probe = names.includes('state.bin') ? 'state.bin' : names.find((n) => n.startsWith('rows-') || n.startsWith('msg-'));
+  if (!probe) return 'ok';
+  let bytes: Uint8Array;
+  try { bytes = new Uint8Array(await fs.readFile(`${DIR}/${probe}`)); } catch { return 'ok'; }
+  // The aad of the probe: a state file is 'state'; a rows file names its folder; for a message file only the key is tested (a wrong aad is also 'bad', so use the state/rows).
+  const aad = probe === 'state.bin' ? 'state' : probe.startsWith('rows-') ? `rows|${probe.slice(5, -4)}` : '';
+  if (aad === '') return 'ok';
+  const o = await open(bytes, aad);
+  if (!('why' in o)) return 'ok';
+  if (o.why === 'cannot') return 'cannot';
+  for (const n of names) { try { await fs.rm(`${DIR}/${n}`); } catch { /* kept */ } }
+  return 'purged';
+}
+
+/** Is a message's body held (so a sync does not fetch it again)? Reads the file's name only: `validate` has said the key opens what is here. */
 export async function holds(env: Env, id: string): Promise<boolean> {
   if (!env.storage) return false;
   try { await env.storage.fs.stat(await fileFor(id)); return true; } catch { return false; }
 }
 
-/** Past MAX_FILES, the oldest message files go. Returns how many. */
-export async function trim(env: Env, max = MAX_FILES): Promise<number> {
+/** The most bytes the message files may take (the Swift store was held to 200 MB for mail). */
+export const MAX_BYTES = 200_000_000;
+/** Past MAX_FILES or MAX_BYTES, the oldest message files go. Returns how many. */
+export async function trim(env: Env, max = MAX_FILES, maxBytes = MAX_BYTES): Promise<number> {
   const fs = env.storage?.fs;
   if (!fs) return 0;
   let names: string[];
   try { names = (await fs.readdir(DIR)).filter((n) => n.startsWith('msg-')); } catch { return 0; }
-  if (names.length <= max) return 0;
-  const aged: { n: string; t: number }[] = [];
-  for (const n of names) { try { aged.push({ n, t: (await fs.stat(`${DIR}/${n}`)).modifiedMs }); } catch { /* gone */ } }
+  const aged: { n: string; t: number; size: number }[] = [];
+  let total = 0;
+  for (const n of names) { try { const st = await fs.stat(`${DIR}/${n}`); aged.push({ n, t: st.modifiedMs, size: st.size ?? 0 }); total += st.size ?? 0; } catch { /* gone */ } }
+  if (aged.length <= max && total <= maxBytes) return 0;
   aged.sort((a, b) => a.t - b.t);
-  let gone = 0;
-  for (const a of aged.slice(0, Math.max(0, aged.length - max))) { try { await fs.rm(`${DIR}/${a.n}`); gone += 1; } catch { /* kept */ } }
+  let gone = 0, left = aged.length;
+  for (const a of aged) {
+    if (left <= max && total <= maxBytes) break;
+    try { await fs.rm(`${DIR}/${a.n}`); gone += 1; left -= 1; total -= a.size; } catch { /* kept */ }
+  }
   return gone;
 }
 

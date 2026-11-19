@@ -33,11 +33,14 @@ function unb64(text: string): Uint8Array {
 let sealable: boolean | null = null;
 /** Is there a native cipher, learned from ONE probe (`mailCan`) per session: a module that lacks the pair (Android today) answers no, so nothing is fetched
  * to be thrown away. False while a sign-out is under way, until a new session is established (api.ts `sealingBlocked`). */
+/** A native call that never answers must not hang a source: a deadline, not a limit. */
+const DEADLINE_MS = 15000;
+const bounded = <T>(p: Promise<T>): Promise<T> => Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('no answer')), DEADLINE_MS))]);
 export async function canSeal(): Promise<boolean> {
   if (sealingBlocked()) return false;
   const later = nativeLater(); if (!later) return false;
   if (sealable === null) {
-    try { const r = (await later({ op: 'mailCan' })) as { ok?: boolean } | null; sealable = !!r && r.ok === true; } catch { sealable = false; }
+    try { const r = (await bounded(later({ op: 'mailCan' }))) as { ok?: boolean } | null; sealable = !!r && r.ok === true; } catch { sealable = false; }
   }
   return sealable;
 }
@@ -49,7 +52,7 @@ export async function seal(plain: Uint8Array, aad: string): Promise<Uint8Array |
   if (sealingBlocked()) return null;
   const later = nativeLater(); if (!later) return null;
   try {
-    const r = (await later({ op: 'mailSeal', b64: b64(plain), aad })) as { ok?: boolean; b64?: unknown } | null;
+    const r = (await bounded(later({ op: 'mailSeal', b64: b64(plain), aad }))) as { ok?: boolean; b64?: unknown } | null;
     if (!r || r.ok !== true || typeof r.b64 !== 'string') return null;
     const box = unb64(r.b64); const out = new Uint8Array(MAGIC.length + box.length);
     out.set(MAGIC); out.set(box, MAGIC.length);
@@ -65,7 +68,7 @@ export async function open(sealed: Uint8Array, aad: string): Promise<Opened> {
   if (sealed.length < MAGIC.length + 28) return { why: 'bad' };
   for (let i = 0; i < MAGIC.length; i++) if (sealed[i] !== MAGIC[i]) return { why: 'bad' };
   try {
-    const r = (await later({ op: 'mailOpen', b64: b64(sealed.subarray(MAGIC.length)), aad })) as { ok?: boolean; b64?: unknown; why?: unknown } | null;
+    const r = (await bounded(later({ op: 'mailOpen', b64: b64(sealed.subarray(MAGIC.length)), aad }))) as { ok?: boolean; b64?: unknown; why?: unknown } | null;
     if (r && r.ok === true && typeof r.b64 === 'string') return { plain: unb64(r.b64) };
     return { why: r && r.why === 'bad' ? 'bad' : 'cannot' };
   } catch { return { why: 'cannot' }; }

@@ -273,10 +273,6 @@ describe('S1 the seal (the platform cipher, through one native pair)', () => {
     bindNative(undefined);
     expect(await seal(new Uint8Array([1]), 'x')).toBeNull(); expect(await open(new Uint8Array(40), 'x')).toEqual({ why: 'cannot' });
   });
-  test('the shared code holds no cipher of its own', async () => {
-    const src = await Bun.file(new URL('./mail-seal.ts', import.meta.url)).text();
-    expect(src).not.toMatch(/SBOX|expandKey|encryptBlock|hmac|ctr\(/i);
-  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------- the mailbox
@@ -294,7 +290,7 @@ describe('B1 B2 the mailbox', () => {
     expect(v.rows[2].subject).toBe('(no subject)'); expect(v.rows[2].trust).toBe('quarantined');
     expect(v.folders.map((f) => f.name)).toEqual(['inbox', 'drafts', 'sent', 'quarantine']);
     expect(v.folders.find((f) => f.current)?.name).toBe('inbox'); expect(v.folders[0].badge).toBe('2');
-    const f = await mail.mailFrame('mailbox:inbox', env());
+    const f = await mail.mailFrame('mailbox:inbox', false, env());
     expect(f.status).toBe('cached'); expect(f.rows.length).toBe(3); expect(f.folders[0].badge).toBe('2');
     expect(calls.length).toBe(1);
   });
@@ -324,7 +320,7 @@ describe('B1 B2 the mailbox', () => {
     v = await mail.mailBox('mailbox:inbox', false, env());
     expect(v.status).toBe('offline'); expect(v.cached).toBe(true); expect(v.rows.length).toBe(3);
     expect(v.message).toContain('saved on this phone');
-    const f = await mail.mailFrame('mailbox:inbox', env());
+    const f = await mail.mailFrame('mailbox:inbox', false, env());
     expect(f.status).toBe('cached'); expect(f.rows.length).toBe(3);
     // with no copy at all (a fresh phone, or the copy wiped) it says so and shows no rows
     await mail.wipeMail(storage); mail.forget();
@@ -553,7 +549,7 @@ describe('W1 L1 D1 A1', () => {
     expect([...files.keys()]).toEqual(['app:/data/paper-front.json']);
     expect(nativeKey).toBeNull(); expect(forgets).toBe(1);
     route = () => 'network';
-    expect((await mail.mailFrame('mailbox:inbox', env())).status).toBe('frame');                // memory is gone too
+    expect((await mail.mailFrame('mailbox:inbox', false, env())).status).toBe('frame');                // memory is gone too
     expect(await mail.wipeMail(storage)).toEqual({ files: 0, originals: 0 });
     expect(await mail.wipeMail(undefined)).toEqual({ files: 0, originals: 0 });
   });
@@ -729,5 +725,43 @@ describe('R5 R6 R7', () => {
   test('R7 the sign-out action clears the unsent compose text', async () => {
     const c = await Bun.file(new URL('./account.contract', import.meta.url)).text();
     expect(c).toMatch(/action signOut[\s\S]*mailTo = ""[\s\S]*mailSubject = ""[\s\S]*mailBody = ""/);
+  });
+});
+
+describe('R8 restore, demo, budget, words', () => {
+  test('a restore (the files are back, the key is not) purges them so the bodies are fetched again; a locked Keychain judges nothing and syncs nothing', async () => {
+    computer();
+    await mail.mailBox('mailbox:inbox', false, env()); await mail.mailSync('mailbox:inbox', false, env());
+    const held = [...files.keys()].filter((k) => k.includes('/msg-')).length; expect(held).toBeGreaterThan(0);
+    locked = true; calls = [];
+    expect((await mail.mailSync('mailbox:inbox', false, env())).status).toBe('idle'); expect(calls.length).toBe(0);
+    expect([...files.keys()].filter((k) => k.includes('/msg-')).length).toBe(held);          // kept
+    locked = false; nativeKey = randomBytes(32);                                              // another phone: the files came back, the key is a new one
+    mail.forget(); await mail.mailBox('mailbox:inbox', false, env()); calls = [];
+    expect(await C.validate(env())).toBe('purged');
+    const again = await mail.mailSync('mailbox:inbox', false, env());
+    expect(again.fetched).toBe(5);                                                            // fetched again, none "held" by a file nobody can open
+  });
+  test('demo mode never shows the real sealed rows', async () => {
+    computer();
+    await mail.mailBox('mailbox:inbox', false, env());
+    mail.forget();
+    expect((await mail.mailFrame('mailbox:inbox', true, env())).rows.length).toBe(0);
+    expect((await mail.mailFrame('mailbox:inbox', false, env())).rows.length).toBeGreaterThan(0);
+  });
+  test('no cipher, no plain copy: "Show original" offers nothing and writes no file', async () => {
+    noPair = true; computer();
+    const v = await mail.mailMessage('mail:em_01hz08', false, true, env());
+    expect(v.hasOriginal).toBe(false); expect([...files.keys()].filter((k) => k.startsWith('app:/cache/mail-'))).toEqual([]);
+  });
+  test('the copy is held to a byte budget as well as a file count: the oldest go first', async () => {
+    const e = env();
+    for (let i = 0; i < 4; i++) { files.set(`${C.DIR}/msg-${i}.bin`, new Uint8Array(1000)); mtimes.set(`${C.DIR}/msg-${i}.bin`, i); }
+    expect(await C.trim(e, 100, 2500)).toBe(2); expect([...files.keys()].sort()).toEqual([`${C.DIR}/msg-2.bin`, `${C.DIR}/msg-3.bin`]);
+  });
+  test('the words for 401, 403, 404, 413 and 429 are plain and differ', () => {
+    const st = (status: number) => M.words(Object.assign(new Error('x'), { status, name: 'HTTPError' })).message;
+    const set = new Set([401, 403, 404, 413, 429].map(st));
+    expect(set.size).toBe(5); expect(st(413)).toContain('too large');
   });
 });

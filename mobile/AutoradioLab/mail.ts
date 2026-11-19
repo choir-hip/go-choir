@@ -164,10 +164,10 @@ async function ensureKept(env: C.Env, folder: string, demo: boolean): Promise<He
 }
 
 /** The last list this session fetched, or the phone's saved one, answered at once: a return visit shows it and refreshes underneath. */
-export async function mailFrame(address: string, env: C.Env): Promise<BoxView> {
+export async function mailFrame(address: string, demo: boolean, env: C.Env): Promise<BoxView> {
   const v = frame(address);
   if (!address.startsWith('mailbox:') || DEMO_STATES.includes(v.folder) || v.folder === 'drafts') { v.status = 'frame'; return v; }
-  const h = await ensureKept(env, v.folder, false);
+  const h = await ensureKept(env, v.folder, demo);          // demo mode never shows the real sealed rows
   if (!h) { v.status = 'frame'; return v; }
   if (v.folder === 'inbox') for (const f of v.folders) if (f.name === 'inbox') f.badge = h.unread > 0 ? String(h.unread) : '';
   v.rows = M.threadRows(h.rows, nowOf(h.rows)); v.status = 'cached';
@@ -306,6 +306,7 @@ async function loadMessage(address: string, demo: boolean, wantOriginal: boolean
     const name = v.hasOriginal ? await originalName(id) : '';
     v.originalPath = v.hasOriginal ? `${C.CACHE}/${name}` : '';
     // The sender's own layout is written only while it is asked for, and every other document is removed: the message's HTML sits on the phone, readable, for as short a time as it can.
+    if (v.hasOriginal && !demo && !(await C.sealed(env))) { v.hasOriginal = false; v.originalPath = ''; }      // no cipher on this platform: no plain copy of a message is made
     if (v.hasOriginal && wantOriginal && env.storage) {
       await C.forgetOldCopy(env.storage, name);
       try { await env.storage.fs.atomicWriteFile(v.originalPath, new TextEncoder().encode(sanitized(d.html))); } catch { v.hasOriginal = false; v.originalPath = ''; }
@@ -438,7 +439,9 @@ export async function mailSync(address: string, demo: boolean, env: C.Env): Prom
   if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !env.storage || !(await C.sealed(env))) { out.status = 'idle'; return out; }      // no cipher: no body is fetched to be thrown away
   const h = kept.get(folder) ?? (await ensureKept(env, folder, false));
   if (!h) { out.status = 'idle'; return out; }
-  const state = await C.loadState(env);
+  const verdict = await C.validate(env);
+  if (verdict === 'cannot') { out.status = 'idle'; return out; }        // the key cannot be read now (a locked Keychain): nothing is judged, nothing is marked held
+  const state = verdict === 'purged' ? { done: {}, syncedAt: {}, cursor: {} } : await C.loadState(env);
   let budget = SYNC_BODIES;
   let page = h.rows, nextCursor = h.next, first = true, stopped = false;
   try {

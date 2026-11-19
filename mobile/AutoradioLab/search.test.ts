@@ -21,7 +21,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   Index, Corpus, VectorStore, BUDGET_CHARS, retrieve, bm25Retriever, tokens, stem, passages, queryTerms, embedPrompt, truncatedUnit, toHalf, fromHalf, day,
   fuse, rrf, fusedRetriever, itemID, workItems, todo, runJob, contentKey, loadVectors, saveVectors, wipeVectors, coverage, embedQuery, paperFrontDocs,
-  loadPaperFront, PAPER_FRONT_FILE, decodeCorpus, corpusRows, corpusNote, searchPaper, normalizeQuery, CORPUS_PATH, mailDocs, fileNameDocs, editionTopicDocs,
+  loadPaperFront, PAPER_FRONT_FILE, decodeCorpus, corpusRows, corpusNote, searchPaper, normalizeQuery, CORPUS_PATH, fileNameDocs, editionTopicDocs,
   openPageDocs, ENGINE, DIMENSION, VECTORS_DIR, type Doc, type Query, type Embed, type Fusion,
 } from './search.ts';
 import { getJSON } from './api.ts';
@@ -448,10 +448,9 @@ describe('S14 the paper-wide route', () => {
   });
 });
 
-describe('S15 mail, files, topics and open pages', () => {
+describe('S15 files, topics and open pages', () => {
   test('they become documents; a replaced group drops its old documents', () => {
-    const mail = mailDocs([{ id: 'm1', subject: 'Tunnel vote', from: 'Ana', snippet: 'See the referendum notes.', at: Date.parse('2026-11-14T09:00:00Z') }, { id: '', subject: '', from: '', snippet: '', at: null }]);
-    expect(mail.length).toBe(1); expect(mail[0].address).toBe('mail:m1'); expect(mail[0].date).not.toBeNull();
+    // (no mail documents: mail text stays out of the index until a search over sealed mail is designed)
     const files = fileNameDocs([{ name: 'budget-notes.md', path: '/docs/budget-notes.md', isDirectory: false, modified: null }, { name: 'docs', path: '/docs', isDirectory: true, modified: null }]);
     expect(files.map((f) => f.title)).toEqual(['budget-notes.md']);
     expect(editionTopicDocs(['Science', 'Senate'])[0].text).toContain('Senate'); expect(editionTopicDocs([])).toEqual([]);

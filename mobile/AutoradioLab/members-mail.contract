@@ -21,7 +21,7 @@ members Autoradio
   derive mboxName = mboxAddr.startsWith("mailbox:") ? mboxAddr.slice(8) : "inbox"
   // Arguments: the address; whether demo mode is on; (message only) whether "Show original" is open on this page, which is when its document is written.
   resource mbx = mailBox(mboxAddr, dm.on) as shape MailBoxView else empty()
-  resource mfr = mailFrame(mboxAddr) as shape MailBoxView else empty()
+  resource mfr = mailFrame(mboxAddr, dm.on) as shape MailBoxView else empty()
   // The catch-up that keeps the phone's copy: asked again when the list arrives, answers counts only.
   resource msy = mailSync(mboxAddr, dm.on, mbx.rows.length) as shape MailSyncView else empty()
   resource mmsg = mailMessage(pg.top, dm.on, mailOriginal) as shape MailMessageView else empty()

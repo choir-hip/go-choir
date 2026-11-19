@@ -346,11 +346,18 @@ The Mail pages, the signed-in requests to the listener's computer and the phone'
 (`mail-model.ts` pure data, `mail-sanitize.ts` the allowlist HTML cleaner, `mail-seal.ts` the cipher, `mail-store.ts` the copy). Three sends stay native
 (`mailOpenReview`, `mailRead`, `mailAsk`: the in-app web view, the radio's voice, the Swift signal log).
 
-- **At rest.** Exact's secret store keeps the key (Keychain on Apple, Keystore-wrapped files on Android); `crypto.subtle` gives digests only, so AES-256-CTR plus
-  HMAC-SHA-256 are written in TypeScript (`mail-seal.ts`, checked against the FIPS-197 vector and Node's own AES and HMAC) and every file under `app:/data/mail`
-  is sealed. This does not depend on the file protection class of Exact's files, which the cutover file's X0 still has to measure on the owner's iPhone; if X0 shows
-  Exact's files carry the same class the Swift store set, the seal is a second layer, not the first. With no key (a scripted drive keeps no secrets) nothing is written.
-- **Show original.** `iframe` has no `srcdoc` (gaps.md 30), so the cleaned document is written to `app:/cache/mail-<hash>.html` only while it is asked for, and every
-  other `mail-*.html` is removed on each message answer. The server sends `html_body` uncleaned; `mail-sanitize.ts` is the only thing between it and the page.
-- **Sign-out.** Stays in Swift tonight (`AccountWipe.removeMailCopy` removes `app:/data/mail` and `app:/cache/mail-*.html`); `wipeMail(storage, store)` in `mail.ts` does the
+- **At rest.** The cipher is the platform's: ONE native pair on the app module, `mailSeal` and `mailOpen` (`Choir/MailSeal.swift`, CryptoKit AES-256-GCM), with a key
+  made and kept natively in the Keychain (its own item, this device only, after first unlock) and never returned to shared code; Exact's `crypto.subtle` has digests
+  and ECDSA only. Every file under `app:/data/mail` is sealed (format `MS3`), and the record's identity (`msg|<id>`, `rows|<folder>`, `state`) is authenticated data, so a
+  file swapped to another record fails. The native open answers three things: opened, `bad` (the tag failed: the file is removed and fetched again) or `cannot` (no key
+  could be read now: the file is KEPT and nothing is judged). A key is made only while the sign-in key is stored. With no cipher (`mailCan` unanswered: Android today)
+  nothing is written, nothing is fetched for storing, and "Show original" is not offered. `app:/data` is `Library/Application Support/exact/<app id>/data` and IS in a device backup
+  (`host/apple/src/picker.rs:46-51`), which is why the key is this-device-only. Mail is not in local search: a search index of mail would hold its words unsealed, and the plain
+  mail sync in `content.ts` and `mailDocs` in `search.ts` were deleted; a search over sealed mail has to be designed first.
+- **Show original.** `iframe` has no `srcdoc` (gaps.md 30), so the cleaned document is written PLAIN to `app:/cache/mail-<hash>.html` only while it is asked for, and every
+  other `mail-*.html` is removed on each message answer, at sign-out and at every launch. `app:/cache` is `$HOME/Library/Caches/exact/<app id>` (`host/apple/src/picker.rs:52`):
+  under Apple's rules Library/Caches is not in a device backup; the file is plain on the phone while the page is open (residual). A link in it is inert (no `href`; its
+  address is written after it). A body over 120 000 characters shows a statement that it is too large to show in full; the message page shows the text, cut at 300 000.
+- **Sign-out.** Shared code leads (`account.ts`): `beginSignOut` moves the account generation and turns sealing off BEFORE the native sign-out; a store write checks the generation
+  before and after it seals and writes; `wipeMail` removes the files and the key. (The Swift registration `AccountWipe.removeMailCopy` is a second path for the same files.)
   same and also forgets the key, and is what the shared sign-out will call.
