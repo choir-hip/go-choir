@@ -84,13 +84,29 @@ extension DeckLine {
     public private(set) var lines: [DeckLine] = []
     public private(set) var seq = 0
     public private(set) var acked = 0
+    /// How many unacknowledged lines the cap has dropped, ever (each drop writes a `system` line that says how many).
+    public private(set) var dropped = 0
+    /// Saves that failed (a full disk, a protected file). The whole journal is written again at the next event.
+    public private(set) var saveFailures = 0
+    public var log: (String) -> Void = { _ in }
     public var now: () -> Date = { Date() }
     private let storage: URL?
+    /// False while the file is there and could not be read (a background launch before the first unlock): the lines made meanwhile are held in
+    /// memory, nothing is saved over the file, and they are merged after it once it reads. An ABSENT file is a fresh journal.
+    public private(set) var isLoaded = true
+    private var floor = 0           // the numbers known before the file could be read: lines held meanwhile are numbered after the larger of this and the file's
 
     public init(storage: URL? = nil) {
         self.storage = storage
-        guard let storage, let d = try? Data(contentsOf: storage), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
-        lines = s.lines; seq = s.seq; acked = s.acked
+        guard storage != nil else { return }
+        switch read() {
+        case .absent: break
+        case .ok(let s): lines = s.lines; seq = s.seq; acked = s.acked
+        case .unreadable: isLoaded = false
+        }
+        // The numbers have a file of their own: a lost or unreadable lines file never makes them start again.
+        if let n = readNumbers() { seq = max(seq, n.seq); acked = max(acked, n.acked) }
+        floor = seq
     }
 
     public static func applicationSupportFile() -> URL? {
@@ -99,8 +115,37 @@ extension DeckLine {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("deck-journal.json")
     }
+    /// The small file beside the journal that holds `seq` and `acked`.
+    static func seqFile(for storage: URL) -> URL { storage.deletingPathExtension().appendingPathExtension("seq.json") }
 
     struct Saved: Codable { var seq: Int; var acked: Int; var lines: [DeckLine] }
+    struct Numbers: Codable { var seq: Int; var acked: Int }
+    private enum Read { case absent, ok(Saved), unreadable }
+
+    private func read() -> Read {
+        guard let storage else { return .absent }
+        guard FileManager.default.fileExists(atPath: storage.path) else { return .absent }
+        guard let d = try? Data(contentsOf: storage), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return .unreadable }
+        return .ok(s)
+    }
+    private func readNumbers() -> Numbers? {
+        guard let storage, let d = try? Data(contentsOf: Self.seqFile(for: storage)) else { return nil }
+        return try? JSONDecoder().decode(Numbers.self, from: d)
+    }
+
+    /// Try the unreadable file again. When it reads, the lines made meanwhile follow it, numbered after it.
+    private func ensureLoaded() {
+        guard !isLoaded else { return }
+        let held = lines
+        switch read() {
+        case .unreadable: return
+        case .absent: lines = []; seq = floor
+        case .ok(let s): lines = s.lines; seq = max(floor, s.seq); acked = max(acked, s.acked)
+        }
+        seq = max(seq, lines.last?.seq ?? 0, acked)
+        for var l in held { seq += 1; l.seq = seq; lines.append(l) }
+        isLoaded = true
+    }
 
     static func stamp(_ d: Date) -> String {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]
@@ -110,16 +155,26 @@ extension DeckLine {
     @discardableResult
     func append(_ type: String, item: String, block: Int = 0, seconds: Double = 0, final: Int = 0, rendered: Bool = false, end: String = "",
                 command: String = "", reason: String = "") -> DeckLine {
+        ensureLoaded()
         seq += 1
         let l = DeckLine(seq: seq, type: type, item: item, at: Self.stamp(now()), block: block, seconds: seconds, final: final, rendered: rendered, end: end, command: command, reason: reason)
         lines.append(l)
-        if lines.count > Self.maxLines { lines.removeFirst(lines.count - Self.maxLines) }
+        if lines.count > Self.maxLines {
+            // Every line here is unacknowledged (an acknowledged one has already gone): the cap is hit by unacknowledged lines alone. The oldest go,
+            // and a `system` line says how many, so shared code sees the gap (never a silent drop).
+            // It cuts a tenth at once, so the marker is one line and not one per event.
+            let cut = lines.count - Self.maxLines + Self.maxLines / 10
+            lines.removeFirst(cut); dropped += cut
+            seq += 1
+            lines.append(DeckLine(seq: seq, type: "system", item: "", at: Self.stamp(now()), block: 0, seconds: 0, final: 0, rendered: false, end: "", command: "dropped", reason: "dropped \(cut) unacknowledged lines"))
+        }
         save()
         return l
     }
 
     /// Shared code (or the player) has what is up to `n`: those lines go. The number never falls.
     public func ack(through n: Int) {
+        ensureLoaded()
         guard n > acked else { return }
         acked = min(n, seq)
         lines.removeAll { $0.seq <= acked }
@@ -139,6 +194,7 @@ extension DeckLine {
     /// however much sound there was.
     @discardableResult
     public func closeOpenAtBoot() -> DeckLine? {
+        ensureLoaded()
         guard let item = openItem else { return nil }
         let last = lines.last { $0.item == item && ($0.type == "sounding" || $0.type == "started") }
         let sounded = lines.contains { $0.item == item && $0.type == "sounding" }
@@ -146,17 +202,27 @@ extension DeckLine {
     }
 
     public func wipe() {
-        lines = []; seq = 0; acked = 0
-        if let storage { try? FileManager.default.removeItem(at: storage) }
+        lines = []; seq = 0; acked = 0; dropped = 0; isLoaded = true
+        if let storage { try? FileManager.default.removeItem(at: storage); try? FileManager.default.removeItem(at: Self.seqFile(for: storage)) }
     }
 
+    /// Nothing is written while the file could not be read (it would destroy what it holds). A failed write is counted and logged with counts only;
+    /// the next event writes everything held again.
     private func save() {
-        guard let storage, let d = try? JSONEncoder().encode(Saved(seq: seq, acked: acked, lines: lines)) else { return }
-        #if os(iOS)
-        try? d.write(to: storage, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        #else
-        try? d.write(to: storage, options: .atomic)
-        #endif
+        guard let storage, isLoaded else { return }
+        guard let d = try? JSONEncoder().encode(Saved(seq: seq, acked: acked, lines: lines)), let n = try? JSONEncoder().encode(Numbers(seq: seq, acked: acked)) else { return }
+        do {
+            #if os(iOS)
+            try n.write(to: Self.seqFile(for: storage), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            try d.write(to: storage, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            #else
+            try n.write(to: Self.seqFile(for: storage), options: .atomic)
+            try d.write(to: storage, options: .atomic)
+            #endif
+        } catch {
+            saveFailures += 1
+            log("deck journal: save failed (\(saveFailures) failures, \(lines.count) lines held)")
+        }
     }
 }
 

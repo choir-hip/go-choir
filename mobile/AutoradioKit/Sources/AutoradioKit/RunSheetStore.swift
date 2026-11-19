@@ -345,7 +345,9 @@ public struct RouteSheetPoster: RunSheetPoster {
         if let e = sheet.onAirEntry {
             // The deck's journal is read first: an entry that ended and was written there, but whose op the app died before applying, keeps its
             // verdict and its time. The deck has already closed an item the kill left open, as failed.
-            if let j = journal, let l = j.lines.last(where: { $0.type == "ended" && $0.item == e.id }), let end = l.airedEnd {
+            // The end must come AFTER this airing's last start: an `ended` line of an earlier airing of the same entry id is not this one's end.
+            let lastStart = journal?.lines.lastIndex(where: { $0.type == "started" && $0.item == e.id }) ?? -1
+            if let j = journal, let at = j.lines.lastIndex(where: { $0.type == "ended" && $0.item == e.id }), at > lastStart, case let l = j.lines[at], let end = l.airedEnd {
                 let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]
                 let at = f.date(from: l.at) ?? now()
                 let saved = now; now = { at }

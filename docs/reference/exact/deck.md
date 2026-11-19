@@ -48,7 +48,12 @@ number stored beside the lines so it never repeats across a relaunch. `type` is 
 `ended` line says how: `finished`, `skipped`, `replaced`, `stopped`, `failed`, with the device's time, the block and seconds
 reached, the last block, and `rendered`. `rendered` is true only when sound reached the output; `finished` with `rendered` false is
 written `failed`. A launch that finds an item open (the app was killed) closes it first, as `failed` "interrupted by a restart",
-before the run sheet is restored. The journal keeps the newest 2000 lines. Sign-out wipes it (`AccountWipe`, "deck-journal").
+before the run sheet is restored. (Today the verdict the run sheet posts is decided by the Swift player's own `played` flag; the journal's
+`rendered` is what shared code will decide by once it posts, and the two are checked against each other by the fixtures.) A journal file that
+cannot be read (a launch before the first unlock) is never overwritten: lines made meanwhile are held and numbered after it once it reads;
+`seq` and `acked` live in a small file of their own so numbers never repeat. A failed save is counted and logged, and the whole journal is
+written again at the next event. The journal keeps the newest 2000 lines; past that the oldest go in a tenth at a time and a `system` line
+`dropped` says how many. Sign-out wipes it (`AccountWipe`, "deck-journal").
 
 ## What shared code does with it
 

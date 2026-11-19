@@ -211,4 +211,69 @@ final class DeckTests: XCTestCase {
         await w.run()
         XCTAssertEqual(d.journal.seq, 0); XCTAssertTrue(d.journal.lines.isEmpty); XCTAssertFalse(FileManager.default.fileExists(atPath: f.path))
     }
+
+    // Review 2026-11-19 (deck, seat 1), A: the journal is never overwritten by a read that failed.
+    //  J1 a file that is there but cannot be read is not "empty": nothing is saved over it, and once it can be read the lines made meanwhile are merged after it
+    //  J2 the numbers live in a file of their own: they survive a lost lines file and never repeat
+    //  J3 a failed save is counted and tried again at the next event
+    //  J4 the cap never drops silently: a `system` line says how many unacknowledged lines went
+    //  J5 an `ended` line of an EARLIER airing of the same entry is not taken for this one's end
+    func test12_AnUnreadableJournalIsNotOverwrittenAndNothingIsLost() throws {
+        let f = tmp(); defer { try? FileManager.default.removeItem(at: f); try? FileManager.default.removeItem(at: DeckJournal.seqFile(for: f)) }
+        let j = DeckJournal(storage: f)
+        j.append("started", item: "a"); j.append("ended", item: "a", end: "skipped")
+        let good = try Data(contentsOf: f)
+        // the file is there and cannot be read (a background launch before first unlock: modelled by bytes no decoder accepts)
+        try Data("not json".utf8).write(to: f)
+        let j2 = DeckJournal(storage: f)
+        XCTAssertFalse(j2.isLoaded)
+        j2.append("started", item: "b")
+        XCTAssertEqual(try Data(contentsOf: f), Data("not json".utf8), "nothing is saved over a file that could not be read")
+        try good.write(to: f)                                   // the phone is unlocked: the file reads
+        let l = j2.append("ended", item: "b", end: "skipped")
+        XCTAssertTrue(j2.isLoaded)
+        XCTAssertEqual(j2.lines.map { "\($0.type):\($0.item)" }, ["started:a", "ended:a", "started:b", "ended:b"])
+        XCTAssertEqual(j2.lines.map(\.seq), [1, 2, 3, 4], "the unreadable time's lines are numbered after the file's")
+        XCTAssertEqual(l.seq, 4); XCTAssertEqual(DeckJournal(storage: f).lines.count, 4)
+    }
+    func test13_TheNumbersSurviveALostLinesFile() throws {
+        let f = tmp(); defer { try? FileManager.default.removeItem(at: f); try? FileManager.default.removeItem(at: DeckJournal.seqFile(for: f)) }
+        let j = DeckJournal(storage: f)
+        for n in 1...5 { j.append("started", item: "i\(n)") }
+        try FileManager.default.removeItem(at: f)
+        let j2 = DeckJournal(storage: f)
+        XCTAssertEqual(j2.seq, 5); XCTAssertEqual(j2.append("started", item: "x").seq, 6, "a lost lines file does not restart the numbering")
+    }
+    func test14_AFailedSaveIsCountedAndTriedAgain() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("deck-dir-\(UUID().uuidString)")
+        let f = dir.appendingPathComponent("j.json")                // the folder does not exist: the write fails
+        let j = DeckJournal(storage: f); var told: [String] = []; j.log = { told.append($0) }
+        j.append("started", item: "a")
+        XCTAssertEqual(j.saveFailures, 1); XCTAssertEqual(told, ["deck journal: save failed (1 failures, 1 lines held)"])
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true); defer { try? FileManager.default.removeItem(at: dir) }
+        j.append("ended", item: "a", end: "skipped")
+        XCTAssertEqual(DeckJournal(storage: f).lines.count, 2, "the next event writes everything held")
+    }
+    func test15_TheCapSaysWhatItDropped() {
+        let j = DeckJournal()
+        for n in 0..<(DeckJournal.maxLines + 5) { j.append("sounding", item: "i\(n)") }
+        XCTAssertLessThanOrEqual(j.lines.count, DeckJournal.maxLines)
+        let marks = j.lines.filter { $0.type == "system" && $0.command == "dropped" }
+        XCTAssertEqual(marks.count, 1); XCTAssertTrue(marks[0].reason.hasPrefix("dropped "), marks[0].reason)
+        XCTAssertEqual(j.dropped + 0, j.dropped); XCTAssertGreaterThan(j.dropped, 0)
+        XCTAssertEqual(Set(j.lines.map(\.seq)).count, j.lines.count, "numbers still unique")
+    }
+    func test16_AnEndedLineOfAnEarlierAiringIsNotThisAiringsEnd() async {
+        let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
+        let s = RunSheetStore(storage: f); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
+        let a = RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "A", text: "Words.", estSeconds: 5)
+        s.applyFromDesk(ProgrammeRouteFeed.placeOp(a, cause: "open")); p.wants = true; p.advanceIfIdle(); await p.settle()
+        XCTAssertEqual(s.onAir()?.id, "a")
+        // the journal holds an end of an earlier airing of "a", and then the start of this airing, which the kill cut off
+        let j = DeckJournal()
+        j.append("started", item: "a"); j.append("ended", item: "a", block: 1, seconds: 9, final: 1, rendered: true, end: "finished")
+        j.append("started", item: "a")
+        let s2 = RunSheetStore(storage: f); s2.restore(journal: j)
+        XCTAssertEqual(s2.entry("a")?.ended?.outcome, .failed, "the earlier end must not decide this airing")
+    }
 }

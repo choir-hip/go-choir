@@ -1,6 +1,9 @@
 // What the phone posts from the deck's journal: the ops that put an item on air and say how it left, built from the deck's own lines with the
 // deck's own times, and posted in order, acknowledged only when the server answered. The deck is the evidence (docs/reference/exact/deck.md):
 // an item is heard only if the deck says sound was rendered; nothing here decides what plays.
+// STATE AT THE 2026-11-19 INTEGRATION BRANCH: nothing in shared code calls this yet. The ops actually posted are the Swift RunSheetStore's, and
+// the verdict it posts comes from the player's own `played` flag (RunSheetPlayer.finish), not from the journal's `rendered`; the journal's
+// `rendered` is what this file reads, and the two are meant to agree. When shared code posts, the Swift poster goes in the SAME commit.
 //
 // Contract with the server (internal/runsheet/apply.go `aired`, internal/agentcore/api_autoradio_settle.go): heard + finished settles a forecast
 // true; skipped (skipped, cut) settles it false; heard + left, skipped + failed settle nothing ("no verdict"); an `aired on_air` for an item
