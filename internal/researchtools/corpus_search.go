@@ -170,6 +170,11 @@ type corpusSearchInfo struct {
 	Body, Title, Both, LabelsOnly int
 	// Capped: a candidate bound was hit (the index's or the window's).
 	Capped bool
+	// LabelsSearched: the title-and-label half ran over the capture index's
+	// term table, which answered whole. The window fallback leaves it false.
+	LabelsSearched bool
+	// WindowSearched: the window of the newest captures was listed.
+	WindowSearched bool
 	// Dropped are the query words the text search did not look for (pruned
 	// for weight, or capped), named to the model in the note and the result.
 	Dropped []string
@@ -200,15 +205,15 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computerID string, req corpusRequest, limit int) ([]CorpusCapture, string, corpusSearchInfo, error) {
 	var info corpusSearchInfo
 	if deps.Captures == nil {
-		return nil, CapturesNotSearchedNote+": the shared capture store is not configured", info, nil
+		return nil, "captures not searched: the shared capture store is not configured", info, nil
 	}
 	if strings.TrimSpace(computerID) == "" {
-		return nil, CapturesNotSearchedNote+": the run names no computer", info, nil
+		return nil, "captures not searched: the run names no computer", info, nil
 	}
 	terms := req.Terms
 	query := strings.TrimSpace(req.Query)
 	if len(terms) == 0 && query == "" {
-		return nil, CapturesNotSearchedNote+": the query has no search words", info, nil
+		return nil, "captures not searched: the query has no search words", info, nil
 	}
 	labels := map[string]store.CaptureLabel{}
 	var notes []string
@@ -251,11 +256,13 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			return nil, "", info, err
 		}
 		objs = window
+		info.WindowSearched = true
 		if len(objs) >= corpusCaptureScan {
 			info.Capped = true
 			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
 		}
 	}
+	info.LabelsSearched = searched
 	objs = dropOwnerPrivate(inWindow(objs, req.Since, req.Until))
 	var labelHalf []CorpusCapture
 	if len(terms) > 0 {
@@ -284,8 +291,8 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			if len(ft.PhraseFallbacks) > 0 {
 				notes = append(notes, "no page holds the phrase "+strings.Join(ft.PhraseFallbacks, ", ")+"; its words were searched instead")
 			}
-			if ft.Indexed < int64(ft.Captures) {
-				notes = append(notes, fmt.Sprintf("the page text of %d of this computer's %d captures "+CaptureTextCatchingUpMarker+"; the rest are found by title and labels only", ft.Indexed, ft.Captures))
+			if !textIndexComplete(ft.Indexed, ft.Captures) {
+				notes = append(notes, fmt.Sprintf("the page text of %d of this computer's %d captures is searchable so far; the rest are found by title and labels only", ft.Indexed, ft.Captures))
 			}
 		case ft.Reason != "":
 			notes = append(notes, "page text not searched ("+ft.Reason+")")

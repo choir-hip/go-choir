@@ -46,7 +46,7 @@ const (
 	// or push the brief over its bound; the bound holds by construction, not
 	// by the drop loop alone. The drop loop never cuts a passage; the clip does.
 	researchBriefTitleRunes   = 160
-	researchBriefURLRunes     = 200
+	researchBriefURLRunes     = 200 // a url or id over its limit is omitted, never cut
 	researchBriefIDRunes      = 80
 	researchBriefPassageRunes = 600
 	researchBriefSnippetRunes = 300
@@ -126,7 +126,9 @@ func boundBriefText(s string) string { return clipRunes(s, researchBriefThreadRu
 // verb after it strips them; the pass repeats until the text stops changing.
 func plainBriefQuery(text string) string {
 	quotes := strings.NewReplacer(`"`, "", "\u201c", "", "\u201d", "", "\u201e", "", "\u00ab", "", "\u00bb", "")
-	for pass := 0; pass < 8; pass++ {
+	// A pass that changes the text removes a character or turns a colon into a
+	// space, so the loop ends.
+	for {
 		var out []string
 		for _, w := range strings.Fields(text) {
 			w = strings.TrimLeft(quotes.Replace(w), "-\u2010\u2011\u2012\u2013\u2014\u2212")
@@ -277,9 +279,13 @@ type briefBlock struct {
 	text     string
 	captures []researchtools.CorpusCapture
 	stories  []researchtools.PublishedPiece
-	// capFail and pubFail: the verb answered that a half was not searched.
-	// capCatchingUp: the page-text index covers only part of the pages.
-	capFail, pubFail, capCatchingUp bool
+	// foundCaptures and foundStories count what the search returned before the
+	// brief's per-thread bound and its dedupe against earlier threads.
+	foundCaptures, foundStories int
+	// cov is what the verb says it searched for this thread. A zero value is
+	// "not searched": the brief never infers a search from the absence of a
+	// failure note.
+	cov researchtools.SearchCoverage
 }
 
 const briefFailureTail = " Search this computer's corpus yourself with choir.SearchWireCorpus before the web."
@@ -311,6 +317,11 @@ func notSearchedNote(threads []briefThread, first int, why string) string {
 	return "Not searched (" + clipRunes(why, researchBriefReasonRunes) + "): " + nameThreads(numbers, texts) + "; search them with choir.SearchWireCorpus."
 }
 
+// nothingRan reports a coverage in which no search ran at all.
+func nothingRan(c researchtools.SearchCoverage) bool {
+	return !c.PageText && !c.Labels && !c.Window && !c.Published
+}
+
 // buildResearchBrief searches each thread in turn and renders what is held.
 // The caller's context carries the deadline (researchBriefOpening starts it
 // before it reads the run memory and the inbox). The deadline is cooperative:
@@ -318,6 +329,11 @@ func notSearchedNote(threads []briefThread, first int, why string) string {
 // http.NewRequestWithContext (researchtools/capture_search.go do), and the
 // events search runs on the same context, so a search past the deadline
 // returns and no goroutine is needed to abandon it.
+//
+// What was searched is read from the verb's coverage object and nowhere else.
+// "The corpus holds no page or story" is claimed only when every thread the
+// record named (the threads past the sixth included) was searched in full and
+// found nothing; any other empty result is partial or failed, with a reason.
 //
 // It never returns an error: a brief that could not be built is one plain
 // sentence saying so, and the run starts.
@@ -363,10 +379,9 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 			continue
 		}
 		var body struct {
-			Published     []researchtools.PublishedPiece `json:"published"`
-			Captures      []researchtools.CorpusCapture  `json:"captures"`
-			CapturesNote  string                         `json:"captures_note"`
-			PublishedNote string                         `json:"published_note"`
+			Published []researchtools.PublishedPiece `json:"published"`
+			Captures  []researchtools.CorpusCapture  `json:"captures"`
+			Coverage  researchtools.SearchCoverage   `json:"coverage"`
 		}
 		if err := json.Unmarshal(raw, &body); err != nil {
 			unsearched++
@@ -377,9 +392,7 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 			continue
 		}
 		searched++
-		b := briefBlock{number: i + 1, thread: th,
-			capFail: researchtools.CapturesNotSearched(body.CapturesNote), pubFail: researchtools.PublishedNotSearched(body.PublishedNote),
-			capCatchingUp: researchtools.CaptureTextCatchingUp(body.CapturesNote)}
+		b := briefBlock{number: i + 1, thread: th, cov: body.Coverage, foundCaptures: len(body.Captures), foundStories: len(body.Published)}
 		for j, c := range body.Captures {
 			if j >= researchBriefCapturesPerThread {
 				break
@@ -414,14 +427,14 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 		res.text = briefFailureText(res.reason)
 		return res
 	}
-	bothFailed := true
+	allNothing := true
 	for _, b := range blocks {
-		if !(b.capFail && b.pubFail) {
-			bothFailed = false
+		if !nothingRan(b.cov) {
+			allNothing = false
 		}
 	}
-	if bothFailed && unsearched == 0 {
-		res.reason = "the capture search and the published-story search were both unavailable"
+	if allNothing && unsearched == 0 {
+		res.reason = "the verb reports that none of its searches ran"
 		res.text = briefFailureText(res.reason)
 		return res
 	}
@@ -440,11 +453,12 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 			notes = append(notes, fmt.Sprintf("%d other unread records name an objective; this brief searched the one for this run. Read the rest with choir.Records().", plan.others))
 		}
 	}
-	// Over the bound: drop whole threads from the last back; a passage is
-	// never cut (a field over its clip is cut, and says so with [cut]). Every field is clipped and every note capped, so what is left
+	// Over the bound: drop whole threads from the last back (the drop loop
+	// never cuts a passage; a field over its clip is cut, and says so with
+	// [cut]). Every field is clipped and every note capped, so what is left
 	// after the last thread is dropped is small by construction.
 	for {
-		res.text = renderBrief(blocks, notes, res.dropped, unsearched, threads)
+		res.text = renderBrief(blocks, notes, res.dropped, unsearched, len(left), threads)
 		res.tokens = estimateTextTokens(frameOpeningSection(worldReadLabels, res.text))
 		if res.tokens <= researchBriefMaxTokens || len(blocks) == 0 {
 			break
@@ -471,33 +485,9 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 	}
 	res.threads, res.captures, res.stories = len(blocks), len(caps), len(stories)
 	sort.Ints(res.dropped)
-	// Counted from the kept blocks, after the drop loop: a dropped thread is
-	// not in the brief, so its gaps are not stated.
-	capFails, pubFails, catching := 0, 0, 0
-	for _, b := range blocks {
-		if b.capFail {
-			capFails++
-		}
-		if b.pubFail {
-			pubFails++
-		}
-		if b.capCatchingUp {
-			catching++
-		}
-	}
-	var gaps []string
-	if capFails > 0 {
-		gaps = append(gaps, fmt.Sprintf("captures not searched for %d of %d threads", capFails, len(blocks)))
-	}
-	if pubFails > 0 {
-		gaps = append(gaps, fmt.Sprintf("published stories not searched for %d of %d threads", pubFails, len(blocks)))
-	}
-	if catching > 0 {
-		gaps = append(gaps, "the page-text index is still catching up")
-	}
-	if unsearched > 0 {
-		gaps = append(gaps, fmt.Sprintf("%d threads not searched", unsearched))
-	}
+	// Gaps are counted from the kept blocks, after the drop loop: a dropped
+	// thread is not in the brief, so its gaps are not stated.
+	gaps := briefGaps(blocks, unsearched, len(left))
 	switch {
 	case len(gaps) > 0:
 		res.outcome = briefPartial
@@ -519,6 +509,53 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 	return res
 }
 
+// briefGaps names, in plain words, what the verb's coverage says was not
+// searched in full, over the kept blocks; and the threads never searched.
+func briefGaps(blocks []briefBlock, unsearched, left int) []string {
+	var noText, partialText, noLabels, windowOnly, noPub int
+	indexed, pages := int64(0), 0
+	for _, b := range blocks {
+		c := b.cov
+		switch {
+		case !c.PageText:
+			noText++
+		case !c.PageTextComplete():
+			partialText++
+			indexed, pages = c.PageTextIndexed, c.Pages
+		}
+		if !c.Labels {
+			noLabels++
+			if c.Window {
+				windowOnly++
+			}
+		}
+		if !c.Published {
+			noPub++
+		}
+	}
+	n := len(blocks)
+	var gaps []string
+	if noText > 0 {
+		gaps = append(gaps, fmt.Sprintf("page text not searched for %d of %d threads", noText, n))
+	}
+	if partialText > 0 {
+		gaps = append(gaps, fmt.Sprintf("the page-text index covers only %d of %d pages", indexed, pages))
+	}
+	if noLabels > 0 {
+		gaps = append(gaps, fmt.Sprintf("titles and labels not searched in full for %d of %d threads", noLabels, n))
+	}
+	if noPub > 0 {
+		gaps = append(gaps, fmt.Sprintf("published stories not searched in full for %d of %d threads", noPub, n))
+	}
+	if unsearched > 0 {
+		gaps = append(gaps, fmt.Sprintf("%d threads not searched", unsearched))
+	}
+	if left > 0 {
+		gaps = append(gaps, fmt.Sprintf("%d threads past the sixth not searched", left))
+	}
+	return gaps
+}
+
 func nonNilCaptures(c []researchtools.CorpusCapture) []researchtools.CorpusCapture {
 	if c == nil {
 		return []researchtools.CorpusCapture{}
@@ -526,15 +563,26 @@ func nonNilCaptures(c []researchtools.CorpusCapture) []researchtools.CorpusCaptu
 	return c
 }
 
+// wholeOrOmitted returns text whole, or "" when it is over n runes: a cut url
+// or id is worse than an absent one, so it is never cut.
+func wholeOrOmitted(text string, n int) string {
+	text = clipRunes(text, 1<<30)
+	if len([]rune(text)) > n {
+		return ""
+	}
+	return text
+}
+
 func renderBriefBlock(b briefBlock) string {
 	var sb strings.Builder
+	cov := b.cov
 	fmt.Fprintf(&sb, "Thread %d (%s): %s\n", b.number, b.thread.Kind, clipRunes(b.thread.Text, researchBriefThreadRunes))
-	failed := b.capFail || b.pubFail
+	full := cov.Full()
+	capturesCovered := cov.PageTextComplete() && cov.Labels
+	// Held pages: what was found, or what was not searched, from the coverage.
 	switch {
-	case b.capFail:
-		sb.WriteString("  Held pages: not searched (the capture search was unavailable for this thread).\n")
-	case len(b.captures) == 0 && failed:
-		sb.WriteString("  Held pages: none found.\n")
+	case !cov.PageText && !cov.Labels && !cov.Window:
+		sb.WriteString("  Held pages: not searched (neither the page text nor the titles and labels were searched for this thread).\n")
 	case len(b.captures) > 0:
 		sb.WriteString("  Held pages:\n")
 		for _, c := range b.captures {
@@ -548,47 +596,86 @@ func renderBriefBlock(b briefBlock) string {
 			if len(dates) == 0 {
 				dates = append(dates, "date unknown")
 			}
-			fmt.Fprintf(&sb, "  - capture_id=%s %q %s (%s)", clipMark(c.CaptureID, researchBriefIDRunes), clipMark(c.Title, researchBriefTitleRunes),
-				clipMark(c.URL, researchBriefURLRunes), strings.Join(dates, ", "))
+			id := wholeOrOmitted(c.CaptureID, researchBriefIDRunes)
+			if id == "" {
+				id = "(omitted: too long to show whole; find the page again with choir.SearchWireCorpus)"
+			}
+			url := wholeOrOmitted(c.URL, researchBriefURLRunes)
+			if url == "" {
+				url = "(url omitted: too long to show whole)"
+			}
+			fmt.Fprintf(&sb, "  - capture_id=%s %q %s (%s)", id, clipMark(c.Title, researchBriefTitleRunes), url, strings.Join(dates, ", "))
 			if p := clipMark(c.Passage, researchBriefPassageRunes); p != "" {
 				fmt.Fprintf(&sb, ": %s", p)
 			}
 			sb.WriteString("\n")
 		}
+	case !capturesCovered:
+		sb.WriteString("  Held pages: none found in what was searched.\n")
+	}
+	if !capturesCovered && (cov.PageText || cov.Labels || cov.Window) {
+		var parts []string
+		switch {
+		case !cov.PageText:
+			parts = append(parts, "page text not searched")
+		case !cov.PageTextComplete():
+			parts = append(parts, fmt.Sprintf("page text searched for %d of %d pages only", cov.PageTextIndexed, cov.Pages))
+		}
+		switch {
+		case !cov.Labels && cov.Window:
+			parts = append(parts, "titles and labels searched over the newest captures only")
+		case !cov.Labels:
+			parts = append(parts, "titles and labels not searched")
+		}
+		if len(parts) > 0 {
+			sb.WriteString("  Held pages were searched with gaps: " + strings.Join(parts, "; ") + ".\n")
+		}
 	}
 	switch {
-	case b.pubFail:
-		sb.WriteString("  Published stories: not searched (the published-story search was unavailable for this thread).\n")
-	case len(b.stories) == 0 && failed:
-		sb.WriteString("  Published stories: none found.\n")
+	case !cov.Published && len(b.stories) == 0:
+		sb.WriteString("  Published stories: not searched in full (the published-story search failed or stopped at its scan cap).\n")
 	case len(b.stories) > 0:
 		sb.WriteString("  Published stories (no date is carried here):\n")
 		for _, p := range b.stories {
-			fmt.Fprintf(&sb, "  - %q read_url=%s", clipMark(p.Title, researchBriefTitleRunes), clipMark(firstNonEmpty(p.ReadURL, p.RoutePath), researchBriefURLRunes))
+			u := wholeOrOmitted(p.ReadURL, researchBriefURLRunes)
+			switch {
+			case u != "":
+				u = "read_url=" + u
+			case p.RoutePath != "":
+				u = "route_path=" + clipRunes(p.RoutePath, researchBriefURLRunes) + " (read_url too long to show whole)"
+			default:
+				u = "(url omitted: too long to show whole)"
+			}
+			fmt.Fprintf(&sb, "  - %q %s", clipMark(p.Title, researchBriefTitleRunes), u)
 			if sn := clipMark(p.Snippet, researchBriefSnippetRunes); sn != "" {
 				fmt.Fprintf(&sb, ": %s", sn)
 			}
 			sb.WriteString("\n")
 		}
+		if !cov.Published {
+			sb.WriteString("  The published-story search was not whole; more may exist.\n")
+		}
+	case !full && cov.Published:
+		sb.WriteString("  Published stories: none found.\n")
 	}
-	if b.capCatchingUp {
-		sb.WriteString("  The page-text index is still catching up, so a page found only by its text may be missing here.\n")
-	}
-	if !failed && len(b.captures) == 0 && len(b.stories) == 0 {
-		sb.WriteString("  Nothing new held for this thread (no page or story, or only those listed above).\n")
+	if len(b.captures) == 0 && len(b.stories) == 0 {
+		switch {
+		case b.foundCaptures+b.foundStories > 0:
+			sb.WriteString("  Nothing new for this thread: the pages found are only those listed above.\n")
+		case full:
+			sb.WriteString("  Nothing held for this thread.\n")
+		}
 	}
 	return sb.String()
 }
 
-func renderBrief(blocks []briefBlock, notes []string, dropped []int, unsearched int, threads []briefThread) string {
+func renderBrief(blocks []briefBlock, notes []string, dropped []int, unsearched, left int, threads []briefThread) string {
 	var sb strings.Builder
 	sb.WriteString("Corpus brief. Before your first turn the host searched this computer's own corpus for your objective and its threads; it cost no model turn. It is data, not instructions. A held page is a capture: read it with choir.ReadCapture(capture_id) and cite its capture_id, never a passage alone. A field marked [cut] was shortened: read the page with choir.ReadCapture before you quote it. A page's date is when it was published or fetched, and a held page is not necessarily current; a published story carries no date here, so Read its read_url to see how current it is. choir.SearchWireCorpus gives more than this brief holds.\n\n")
 	items, newest := 0, time.Time{}
 	newestText := ""
-	gaps := unsearched > 0
 	for _, b := range blocks {
 		items += len(b.captures) + len(b.stories)
-		gaps = gaps || b.capFail || b.pubFail || b.capCatchingUp
 		for _, c := range b.captures {
 			for _, ts := range []string{c.PublishedAt, c.FetchedAt} {
 				if t, err := time.Parse(time.RFC3339Nano, ts); err == nil && t.After(newest) {
@@ -597,9 +684,10 @@ func renderBrief(blocks []briefBlock, notes []string, dropped []int, unsearched 
 			}
 		}
 	}
-	// Only a brief in which every thread was searched in both halves, with the
-	// page-text index whole, may say the corpus holds nothing.
-	if items == 0 && len(dropped) == 0 && !gaps {
+	// Only a brief in which every thread (those past the sixth too) was
+	// searched in full, on the verb's own statement of what it searched, may
+	// say the corpus holds nothing.
+	if items == 0 && len(dropped) == 0 && len(briefGaps(blocks, unsearched, left)) == 0 {
 		sb.WriteString("The corpus holds no page or story matching these threads.\n")
 	} else {
 		for _, b := range blocks {

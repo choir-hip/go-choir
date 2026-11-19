@@ -85,8 +85,9 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			capturesStart := time.Now()
 			captures, note, info, err := searchCapturesFor(ctx, deps, ownerID, exec.ComputerID,
 				corpusRequest{Query: query, Terms: corpusQueryTerms(query), Since: window.Since, Until: window.Until, Order: window.Order}, limit)
+			capturesErr := err
 			if err != nil {
-				captures, note = nil, CapturesNotSearchedNote+": "+err.Error()
+				captures, note = nil, "captures not searched: "+err.Error()
 			}
 			capturesElapsed := time.Since(capturesStart)
 			if captures == nil {
@@ -102,13 +103,24 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			}
 			// Published Autopaper stories and opinion pieces, from every
 			// computer: citable once Read captures their read_url.
-			published, publishedNote := searchPublished(ctx, deps, query, limit)
+			published, publishedNote, publishedRan := searchPublished(ctx, deps, query, limit)
+			// Coverage is affirmative: each field is true only on the path
+			// where that search returned from the store without error, so a
+			// path nobody set (the window fallback, a future one) reads as
+			// not searched. A failed capture search leaves the captures part
+			// at its zero value.
+			var coverage SearchCoverage
+			if capturesErr == nil {
+				coverage = info.coverage()
+			}
+			coverage.Published = publishedRan
 			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events), info.Capped, info)
 			body := wireCorpusResult{
 				Query:     query,
 				Published: published, PublishedCount: len(published), PublishedNote: publishedNote,
 				Events: events, EventCount: len(events), EventsNote: eventsNote,
 				Captures: captures, CaptureCount: len(captures), CapturesNote: note, CaptureWordsDropped: info.Dropped,
+				Coverage: coverage,
 			}
 			if len(published) > 0 {
 				body.PublishedFirstNote = publishedFirstNote
@@ -142,6 +154,10 @@ type wireCorpusResult struct {
 	CaptureWordsDropped []string `json:"capture_words_dropped,omitempty"`
 	CaptureCount        int      `json:"capture_count"`
 	CapturesNote        string   `json:"captures_note,omitempty"`
+	// Coverage states what this search ran (see SearchCoverage). The notes
+	// above are prose for the model; a program that needs to know whether a
+	// half ran reads this.
+	Coverage SearchCoverage `json:"coverage"`
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -186,41 +202,6 @@ func logCorpusSearch(ctx context.Context, query, computerID string, capturesElap
 	run, desk, conv := corpusAttribution(ctx)
 	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t caller=%s",
 		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped, CorpusCallerFrom(ctx))
-}
-
-// The two notes that say a half of the corpus was not searched at all (the
-// verb answers success with the half's list empty and the note set), and the
-// marker of the note that says the page-text index covers only part of the
-// computer's pages (not a failure, but "nothing held" overstates it). The host
-// reads them to tell "searched, nothing held" from "not searched" (the research
-// brief). Each predicate reads the start of the trimmed note (the two failure
-// notes are written whole, never joined after another note), so a reworded or
-// moved note breaks a test and not the brief silently.
-const (
-	CapturesNotSearchedNote  = "captures not searched"
-	PublishedNotSearchedNote = "published pieces not searched"
-	// CaptureTextCatchingUpMarker is inside the note searchCapturesFor adds
-	// while the page-text index is still being built; notes are joined, so
-	// this one is matched anywhere.
-	CaptureTextCatchingUpMarker = "is searchable so far"
-)
-
-// CapturesNotSearched reports a captures_note that says the capture half was
-// not searched.
-func CapturesNotSearched(note string) bool {
-	return strings.HasPrefix(strings.TrimSpace(note), CapturesNotSearchedNote)
-}
-
-// PublishedNotSearched reports a published_note that says the published half
-// was not searched.
-func PublishedNotSearched(note string) bool {
-	return strings.HasPrefix(strings.TrimSpace(note), PublishedNotSearchedNote)
-}
-
-// CaptureTextCatchingUp reports a captures_note that says the page-text index
-// covers only part of the computer's pages so far.
-func CaptureTextCatchingUp(note string) bool {
-	return strings.Contains(note, CaptureTextCatchingUpMarker)
 }
 
 // CorpusCallerBrief is the caller of a search the host makes for a research
