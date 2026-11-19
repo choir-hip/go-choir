@@ -67,14 +67,14 @@ func TestAppendLabelHalfKeepsTheRankedAnswerAndOnlyAppendsAfterIt(t *testing.T) 
 	// above a. It stays second; the label half's evidence is added to it.
 	lb := b
 	lb.Matched = []string{"title"}
-	got := appendLabelHalf([]CorpusCapture{a, b}, []CorpusCapture{lb, c, d}, 10)
+	got := appendLabelHalf([]CorpusCapture{a, b}, []CorpusCapture{lb, c, d}, 10, "relevance")
 	if strings.Join(ids(got), ",") != "a,b,c,d" || !containsString(got[1].Matched, "title") || got[1].Reasons[0] != "meaning" {
 		t.Fatalf("answer %+v", got)
 	}
-	if got = appendLabelHalf([]CorpusCapture{a, b}, []CorpusCapture{c, d}, 3); strings.Join(ids(got), ",") != "a,b,c" {
+	if got = appendLabelHalf([]CorpusCapture{a, b}, []CorpusCapture{c, d}, 3, "relevance"); strings.Join(ids(got), ",") != "a,b,c" {
 		t.Fatalf("limit: %v", ids(got))
 	}
-	if got = appendLabelHalf([]CorpusCapture{a, b}, nil, 1); strings.Join(ids(got), ",") != "a" {
+	if got = appendLabelHalf([]CorpusCapture{a, b}, nil, 1, "relevance"); strings.Join(ids(got), ",") != "a" {
 		t.Fatalf("limit: %v", ids(got))
 	}
 }
