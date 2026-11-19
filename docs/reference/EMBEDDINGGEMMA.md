@@ -470,14 +470,31 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
 - **pgvector 0.8.7:** `halfvec`, `halfvec_cosine_ops` and HNSW (`sql/vector--0.8.7.sql`; built in the test overlay). Filtering is
   applied after the index scan; iterative scans (`hnsw.iterative_scan` `strict_order`/`relaxed_order`) arrived in 0.8.0 and stop at
   `hnsw.max_scan_tuples` (default 20,000) or `work_mem` x `hnsw.scan_mem_multiplier` (README "Filtering", "Iterative Index Scans",
-  `src/hnswscan.c:256-264`). So a filter that keeps few of the nearest rows can leave a scan short with no signal. corpusd's answer: every
-  list that comes back under its limit is asked again with index scans off (exact, over the btree on scope and day or the table), and
-  a list that cannot be completed in the 5 s statement deadline is flagged `partial`. The code states its minimum, 0.8.0
-  (`vectorMinPgvector`), and the CI action requires it numerically.
+  `src/hnswscan.c:256-264`). pgvector gives **no signal** when a scan is cut. `strict_order` keeps the rows it returns in distance
+  order; it does not make them the nearest, because HNSW is approximate even unfiltered (recall depends on `hnsw.ef_search`; corpusd
+  uses 200). What corpusd's search guarantees, per list, and how it says so:
+  (1) **Exact** (`exact_scan` in the result): the filtered rows number at most 100,000 (`vectorExactMaxRows`, counted first with the
+  btree on scope and day), or the index came back short of the limit. The statement runs with index scans off, so the planner reads
+  the filtered rows and sorts by true distance: the true nearest of the rows the filter keeps. (2) **Approximate** (`approximate`):
+  more than 100,000 filtered rows (in practice an unwindowed search of the paper's captures or stories): the index's answer, ordered
+  by distance, approximate in which rows it found, and not rechecked when it fills the limit. (3) **`partial`**: set when an exact read
+  passes the 5 s statement deadline; the list is then the index's and may lack nearer rows. A caller that needs to know has all three.
+  The code states its minimum, 0.8.0 (`vectorMinPgvector`), and the CI action requires it numerically.
 - **The planner and the ORDER BY.** The statements order by the bare distance (`ORDER BY v.embedding <=> $q LIMIT n`; ties are broken in
   Go), which an HNSW index can serve; `TestVectorSearchStatementUsesTheHNSWIndex` shows the plan uses `idx_vc_hnsw` and `idx_vsp_hnsw`
   once the alternatives to an ordered index scan are priced out. On a small or unanalysed table the planner may rightly prefer the scope's
   btree and a sort (seen in the test before ANALYZE); the production plan is to be read with `EXPLAIN (ANALYZE)` on staging.
+- **Memory of the unit** (measured 2026-11-19 on the Mac, one short run): llama.cpp b12259 (`351025ec5`, the trial's source tree)
+  built CPU-only, `llama-embedding -m embeddinggemma-2-Q8_0.gguf -c 4096 -b 2048 -ub 2048 -np 2 --pooling mean -t 4`. A 2,007-token
+  input (the largest batch the unit accepts is 2,048): peak memory footprint 506 MB, maximum resident set 765 MB (the 310 MB model file is
+  mapped, file-backed, reclaimable); a 13-token input: 206 MB footprint, 555 MB resident. The embedding context has no KV cache, and the
+  compute buffer is sized once for the ubatch, so two slots do not double it. `MemoryMax = 1536M` is about twice the largest measured
+  footprint plus the mapped file. Not measured: x86 (the CPU backend's buffers are similar, not identical) and the server process's own
+  overhead (HTTP, tokeniser, a few tens of MB).
+- **The Web UI in the nix build.** `scripts/ui-assets.cmake` takes pre-built assets in `tools/ui/dist` first, then an npm build if
+  `LLAMA_BUILD_UI=ON`, then a download from a Hugging Face bucket; with none of them it fails (seen: a Mac build without network). The
+  nixpkgs derivation runs `npm run build` in `tools/ui` before cmake (`preConfigure`), which is why `npmDepsHash` is overridden; that this
+  produces `tools/ui/dist` at b12259 is read from the cmake script, not built (no x86 builder here).
 - **The import's spool** (`artifacts/vector-import/`) is not under any namespace the artifact collector sweeps
   (`artifact_gc.go` `artifactGCNamespaces`: projection-base, parts, platform-update, capture-bodies, file-cas-roots, file-cas-chunks, og);
   corpusd removes leftover spool files when its worker starts.

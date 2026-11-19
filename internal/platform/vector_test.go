@@ -949,7 +949,9 @@ func TestVectorSearchWithAFilterIsCompleteNotSilentlyShort(t *testing.T) {
 	forceIndex(t)
 	old := vectorMaxScanTuples
 	vectorMaxScanTuples = 20
-	t.Cleanup(func() { vectorMaxScanTuples = old })
+	oldExact := vectorExactMaxRows
+	vectorExactMaxRows = 0 // the index path: the short list is read again exactly
+	t.Cleanup(func() { vectorMaxScanTuples, vectorExactMaxRows = old, oldExact })
 	ctx := context.Background()
 
 	res, err := f.store.SearchVectors(ctx, VectorSearchRequest{Query: "alpha common words", Owner: "o1", Computer: "small", CaptureLimit: 20})
@@ -981,7 +983,7 @@ func TestVectorSearchWithAFilterIsCompleteNotSilentlyShort(t *testing.T) {
 
 	// A list that fills its limit from the index is not asked again.
 	res, err = f.store.SearchVectors(ctx, VectorSearchRequest{Query: "alpha common words", Owner: "o1", Computer: "big", CaptureLimit: 20})
-	if err != nil || len(res.Captures) != 20 || strings.Contains(strings.Join(res.ExactScan, ","), "captures") {
+	if err != nil || len(res.Captures) != 20 || strings.Contains(strings.Join(res.ExactScan, ","), "captures") || !strings.Contains(strings.Join(res.Approximate, ","), "captures") {
 		t.Fatalf("full list: %d, exact %v, %v", len(res.Captures), res.ExactScan, err)
 	}
 }
@@ -1247,4 +1249,121 @@ func TestVectorWorkerRemovesAStaleSpoolFileAtStart(t *testing.T) {
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Fatal("stale spool file kept")
 	}
+}
+
+func TestVectorSearchOfAFewFilteredRowsIsExactAndALargeOneSaysApproximate(t *testing.T) {
+	f := newVecFixture(t)
+	f.captures(t, "o1", "c1", "x", 30, time.Now().UTC().Add(-100*time.Hour), func(i int) string { return fmt.Sprintf("alpha text number%d", i) }, time.Minute)
+	f.pass(t)
+	req := VectorSearchRequest{Query: "alpha text", Owner: "o1", Computer: "c1", CaptureLimit: 10}
+	res, err := f.store.SearchVectors(context.Background(), req)
+	if err != nil || strings.Join(res.ExactScan, ",") != "stories,captures" || len(res.Approximate) != 0 || len(res.Captures) != 10 {
+		t.Fatalf("below the threshold: %+v %v", res, err)
+	}
+	old := vectorExactMaxRows
+	vectorExactMaxRows = 5
+	t.Cleanup(func() { vectorExactMaxRows = old })
+	res, err = f.store.SearchVectors(context.Background(), req)
+	if err != nil || !strings.Contains(strings.Join(res.Approximate, ","), "captures") || len(res.Captures) != 10 {
+		t.Fatalf("above the threshold: %+v %v", res, err)
+	}
+}
+
+func TestVectorStoryWalkSeesEveryPublicationOfOneSecondAcrossABatchBoundary(t *testing.T) {
+	f := newVecFixture(t)
+	second := time.Now().UTC().Truncate(time.Second).Add(-2 * time.Hour)
+	for i := 0; i < 8; i++ {
+		doc := fmt.Sprintf("doc-%d", i)
+		f.story(t, doc, 1, "Story "+doc, storyText(fmt.Sprintf("tag%d", i)), time.Time{})
+		ident, _ := publicationIdentityFor("paper-owner", doc)
+		// Same second, distinct microseconds: the whole-second cursor of the
+		// front skips the rows of the second that sort below a batch's last row.
+		at := second.Add(time.Duration(100+i*37) * time.Microsecond * 1000)
+		if _, err := f.store.corpus().Exec(`UPDATE og_objects SET updated_at = ? WHERE canonical_id = ?`, at, ident.CanonicalID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := vectorStoryBatch
+	vectorStoryBatch = 3
+	t.Cleanup(func() { vectorStoryBatch = old })
+	refs, err := f.svc.eligibleStoryVersions(context.Background())
+	if err != nil || len(refs) != 8 {
+		t.Fatalf("walk saw %d of 8 publications (%v)", len(refs), err)
+	}
+}
+
+// vecPublish publishes a one-version story with an access policy and returns
+// its publication and version ids.
+func (f *vecFixture) vecPublish(t *testing.T, doc, title string, policy json.RawMessage) (pub, version string) {
+	t.Helper()
+	_, err := f.svc.PublishTexture(context.Background(), PublishTextureRequest{OwnerID: "paper-owner", SourceDocID: doc, SourceRevisionID: doc + "-rev-1", RevisionNumber: 1,
+		Title: title, Content: storyText(doc), RequestedBy: "paper-owner", PublishMode: PublishModeAuto, AccessPolicy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ident, _ := publicationIdentityFor("paper-owner", doc)
+	vs, err := publishedVersions(context.Background(), f.og, ident.CanonicalID)
+	if err != nil || len(vs) == 0 {
+		t.Fatalf("versions: %v %v", vs, err)
+	}
+	return ident.CanonicalID, vs[0].CanonicalID
+}
+
+func TestVectorWorkerWritesOnlyWhatTheOnePredicateKeepsEachClause(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Add(-time.Hour)
+	// stories
+	_, goodV := f.vecPublish(t, "good", "Good", nil)
+	_, privPolV := f.vecPublish(t, "private-policy", "Private policy", json.RawMessage(`{"visibility":"private"}`))
+	tombPub, _ := f.vecPublish(t, "tombstoned-pub", "Tomb pub", nil)
+	_, tombVer := f.vecPublish(t, "tombstoned-ver", "Tomb ver", nil)
+	noRoute, _ := f.vecPublish(t, "no-route", "No route", nil)
+	for _, q := range []struct{ sql, id string }{
+		{`UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = ?`, tombPub},
+		{`UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = ?`, tombVer},
+		{`UPDATE og_objects SET metadata = jsonb_set(metadata::jsonb, '{route_path}', '""')::text WHERE canonical_id = ?`, noRoute},
+	} {
+		if _, err := f.store.corpus().Exec(q.sql, q.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// captures
+	f.capture(t, "o1", "c1", "ok", "Fine", "fine text", now, false)
+	f.capture(t, "o1", "c1", "tomb", "Tomb", "tomb text", now, false)
+	f.capture(t, "o1", "c1", "super", "Super", "super text", now, false)
+	odd := f.capture(t, "o1", "c1", "oddlabel", "Odd label", "odd text", now, false)
+	for _, q := range []string{
+		`UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = '` + mustCaptureID(t, "o1", "tomb") + `'`,
+		`UPDATE og_objects SET superseded_by = 'obj:x' WHERE canonical_id = '` + mustCaptureID(t, "o1", "super") + `'`,
+		// a label the Go reader drops (empty suffix is no label) but the one SQL
+		// predicate keeps as private: it must not be embedded and swept in turn
+		`UPDATE og_objects SET metadata = jsonb_set(metadata::jsonb, '{labels}', '["owner_private:"]')::text WHERE canonical_id = '` + odd.CanonicalID + `'`,
+	} {
+		if _, err := f.store.corpus().Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res := f.pass(t)
+	var versions []string
+	rows, _ := f.store.corpus().Query(`SELECT DISTINCT version_id FROM vec_story_passages`)
+	for rows.Next() {
+		var v string
+		_ = rows.Scan(&v)
+		versions = append(versions, v)
+	}
+	rows.Close()
+	if len(versions) != 1 || versions[0] != goodV {
+		t.Fatalf("versions embedded %v (private policy %s), want only %s", versions, privPolV, goodV)
+	}
+	if f.count(t, "vec_captures") != 1 {
+		t.Fatalf("captures embedded %d, want 1", f.count(t, "vec_captures"))
+	}
+	// A second pass embeds nothing and sweeps nothing: no write-then-sweep loop.
+	before := f.emb.Inputs.Load()
+	res2 := f.pass(t)
+	if res2.Removed != 0 || res2.Captures != 0 || res2.StoryVersions != 0 || f.emb.Inputs.Load() != before {
+		t.Fatalf("second pass %+v (first %+v)", res2, res)
+	}
+	_ = ctx
 }
