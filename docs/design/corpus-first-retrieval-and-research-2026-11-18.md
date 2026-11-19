@@ -250,3 +250,32 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 - The gateway still has a rate and in-flight limiter on Jev (`gateway/jev_limiter.go:24-45`, wired at `jev.go:72`). `CLAUDE.md` and `SYSTEM1.md` rule 4 forbid one.
 - `intake_labels.go:43` names a "bucket".
 - `CAPTURE-FULLTEXT.md` §5 prescribes reciprocal-rank fusion against the measurement.
+
+## Assessment after four review rounds on the vector index (2026-11-19T09:00Z)
+
+The vector index's Go half has been sent back three times (rounds 2, 3
+and 4), each time with one blocking finding, so the contract's rule
+applies: stop patching and change the approach.
+
+- **What recurred.** Round 3: a status error from the embedder was written
+  as a permanent refusal of the input. Round 4: an input the embedder
+  refuses as too large makes the import refuse the whole file, and a
+  server that cannot answer makes the inbox move the file to `refused/`.
+  These are one defect in three callers. After round 3 the embedder client
+  classifies an outcome in one place, but the worker, the import's sample
+  and the inbox each still decide alone what that outcome does to durable
+  state, and each new caller got it wrong once.
+- **The change of approach.** One function maps an embedder outcome to one
+  of three effects (this input is refused; the server cannot answer now;
+  this call failed), and only the first may write anything permanent, about
+  that input only. The three callers use it and none reads error types. A
+  file is refused only for faults of the file. The builder's last act is a
+  table of every durable failure state and the one condition that reaches
+  it.
+- **The landing is split if the import does not converge.** The store, the
+  worker and the search were sound in round 4 apart from one should-fix (a
+  cancelled caller). If round 5 again blocks on the import or the inbox,
+  the Go half lands without them, the server's own worker fills the index
+  newest first, and the import follows as its own change.
+- **What I got wrong.** I added the inbox, a new caller, between rounds 3
+  and 4, which widened a change that had not converged.
