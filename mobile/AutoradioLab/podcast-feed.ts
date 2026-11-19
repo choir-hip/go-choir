@@ -42,7 +42,13 @@ function episodeOf(it: Item): Episode {
 }
 
 /** Parses a feed. Throws NotAFeed with a sentence the page can show. */
-export function parseFeed(text: string, feedURL: string, fetchedAt: number): Feed {
+/** The most of a feed's text that is parsed. A page's turn is 100 ms of CPU and the device parsed a 2.2 MB feed in 378 ms (the third real run: `podcastHome` was refused as an
+ * Overrun and the page drew nothing). Feeds list the newest episodes first, so a prefix cut at the last whole `</item>` keeps the newest; the rest is not read. */
+export const MAX_PARSE = 300_000;
+
+export function parseFeed(fullText: string, feedURL: string, fetchedAt: number): Feed {
+  let text = fullText;
+  if (text.length > MAX_PARSE) { const cut = text.lastIndexOf('</item>', MAX_PARSE); text = text.slice(0, cut > 0 ? cut + 7 : MAX_PARSE) + '</channel></rss>'; }
   const head = text.slice(0, 400).toLowerCase();
   if (head.includes('<html') || head.includes('<!doctype html')) throw new NotAFeed('That address is a web page, not a podcast feed.');
 

@@ -463,3 +463,17 @@ describe('the phone\'s own search reads the shared documents', () => {
     expect(d.length).toBe(1); expect(d[0].episodes.length).toBe(5);
   });
 });
+
+describe('feeds over the parse cap (the device\'s 100 ms turn)', () => {
+  test('a 2 MB feed is read up to the cap at a whole item: the newest episodes stay, the page is not refused', async () => {
+    const { parseFeed, MAX_PARSE } = await import('./podcast-feed.ts');
+    const item = (i: number) => `<item><title>Episode ${i}</title><guid>g${i}</guid><pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate><description>${'words '.repeat(300)}</description><enclosure url="https://cdn.example.com/e${i}.mp3" type="audio/mpeg"/></item>`;
+    const xml = `<?xml version="1.0"?><rss><channel><title>Big show</title>${Array.from({ length: 1100 }, (_, i) => item(i)).join('')}</channel></rss>`;
+    expect(xml.length).toBeGreaterThan(1_900_000);
+    const t = performance.now(); const f = parseFeed(xml, 'https://feeds.example.com/big.xml', 0); const ms = performance.now() - t;
+    expect(f.show.title).toBe('Big show'); expect(f.episodes[0].title).toBe('Episode 0');
+    expect(f.episodes.length).toBeGreaterThan(50); expect(f.episodes.length).toBeLessThan(300);
+    expect(f.episodes.length * 1800).toBeLessThan(MAX_PARSE + 20_000);
+    expect(ms).toBeLessThan(500);
+  });
+});
