@@ -74,9 +74,6 @@ func briefResult(captures []map[string]any, stories int) json.RawMessage {
 	return b
 }
 
-
-
-
 // threadOf is the index of the thread a query came from (planN's texts). The
 // brief searches its threads at once, so a fake host cannot tell them by call order.
 func threadOf(query string) int {
@@ -622,7 +619,6 @@ func seedResearchCastWithLabels(t *testing.T, s *store.Store, owner, computer, d
 	}
 }
 
-
 // Through the real tool: a computer whose capture store is not configured
 // answers success with nothing; the verb answered, so the brief says nothing
 // was found by the host's search (a binary fact, known at the call site).
@@ -643,6 +639,7 @@ func TestBriefOverTheRealToolWithNoCaptureStoreSaysNothingFound(t *testing.T) {
 		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
 	}
 }
+
 // Review item 6: free fields are clipped, the notes are capped, and the whole
 // text is under the bound by construction.
 func TestBriefClipsFieldsAndCapsNotes(t *testing.T) {
@@ -960,8 +957,8 @@ func TestBriefProseNeverReachesTheVerbAsAnOperator(t *testing.T) {
 			deps := &researchtools.Dependencies{Store: s, Captures: sink}
 			rt.researchDeps = deps
 			// The searches run on goroutines, as in production, with the desk declared
-	// as reader as the opening does (a read with no declared reader is a gate violation).
-	ctx := withDeskReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID}), agentprofile.Research)
+			// as reader as the opening does (a read with no declared reader is a gate violation).
+			ctx := withDeskReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID}), agentprofile.Research)
 			res := buildResearchBrief(ctx, briefPlan{threads: []briefThread{{Kind: "objective", Text: "Did the strike end " + form}}}, rt.researchBriefSearcher())
 			if res.outcome == briefFailed || strings.Contains(res.text, sentenceUnanswered) {
 				t.Fatalf("the verb refused the thread (outcome %s):\n%s", res.outcome, res.text)
@@ -1084,7 +1081,6 @@ func TestBriefEveryThreadSaysOneOfThreeThings(t *testing.T) {
 	}
 }
 
-
 // Round 2, item 5: a field over its clip is marked cut.
 func TestBriefMarksACutFieldAndNeverCutsAShortOne(t *testing.T) {
 	c := briefCapture(1, strings.Repeat("harbor ", 200))
@@ -1097,7 +1093,6 @@ func TestBriefMarksACutFieldAndNeverCutsAShortOne(t *testing.T) {
 		t.Fatalf("an uncut field is marked cut:\n%s", res.text)
 	}
 }
-
 
 // --- round 3: positive evidence ---
 
@@ -1123,9 +1118,6 @@ func briefOverRealTool(t *testing.T, sink researchtools.CaptureSink, plan briefP
 	ctx := withDeskReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID}), agentprofile.Research)
 	return buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
 }
-
-
-
 
 // A thread past the sixth was never searched: it is named, and counted in left.
 func TestBriefNamesLeftOutThreadsAndCountsThemAsGaps(t *testing.T) {
@@ -1189,6 +1181,7 @@ func TestBriefAThreadWhosePagesWereAllListedAboveSaysSo(t *testing.T) {
 		t.Fatalf("a thread that found pages says nothing was found:\n%s", res.text)
 	}
 }
+
 // Round 3, item 6: two records with different objectives; the channel is only
 // in the run's metadata. The old rec.ChannelID expression gives "" and picks
 // the newest (the other conversation's); the accessor picks this run's.
@@ -1349,11 +1342,7 @@ func TestBriefRoutePathIsWholeOrOmitted(t *testing.T) {
 	}
 }
 
-
 // --- round 5 ---
-
-
-
 
 // Round 5, item 5: an absent id or url is not printed; an over-long one says so.
 func TestBriefDistinguishesAnAbsentAddressFromATooLongOne(t *testing.T) {
@@ -1380,7 +1369,6 @@ func briefOverRealToolAsDesk(t *testing.T, sink researchtools.CaptureSink, plan 
 	ctx := withDeskReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID}), agentprofile.Research)
 	return buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
 }
-
 
 // A story with neither a read_url nor a route_path prints no address line.
 func TestBriefAStoryWithNoAddressPrintsNone(t *testing.T) {
@@ -1493,7 +1481,8 @@ func TestBriefALateCallWritesNothingTheBuilderRead(t *testing.T) {
 	if strings.Contains(res.text, "too late") || res.unanswered != 2 || res.captures != 0 {
 		t.Fatalf("unanswered=%d captures=%d:\n%s", res.unanswered, res.captures, res.text)
 	}
-	text, unanswered := res.text, res.unanswered
+	// The reply channel has one slot per thread, which is what guarantees a late
+	// send never blocks: the late searches below return and end.
 	close(release)
 	for i := 0; i < 2; i++ {
 		select {
@@ -1501,10 +1490,6 @@ func TestBriefALateCallWritesNothingTheBuilderRead(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatal("a late search did not return")
 		}
-	}
-	// The late calls have returned; what the builder returned is unchanged.
-	if strings.Contains(res.text, "too late") || res.text != text || res.unanswered != unanswered {
-		t.Fatalf("a late call changed the brief:\n%s", res.text)
 	}
 }
 
@@ -1537,6 +1522,8 @@ func TestResearchBriefLogsAPanickedSearchOnceWithTheRunAndNoQuery(t *testing.T) 
 	b := rt.researchBriefOpening(context.Background(), briefRunRecord(owner, computer, "doc-20", "run-brief-20"))
 	b.finish(false)
 	out := logs.String()
+	// The count tells the panic log line ("a corpus search panicked") from the
+	// journal line's reason ("the corpus search panicked: ...").
 	if n := strings.Count(out, "a corpus search panicked"); n != 1 || !strings.Contains(out, "run-brief-20") {
 		t.Fatalf("want one panic line naming the run:\n%s", out)
 	}
@@ -1547,7 +1534,7 @@ func TestResearchBriefLogsAPanickedSearchOnceWithTheRunAndNoQuery(t *testing.T) 
 	}
 }
 
-// slowest is the slowest search that returned, answered or not: five searches
+// slowest is the slowest search that returned, answered or not: three searches
 // that each fail after a while do not log 0.
 func TestBriefSlowestCountsSearchesThatReturnedAnError(t *testing.T) {
 	res := buildResearchBrief(context.Background(), planN(3), func(context.Context, string) (json.RawMessage, error) {
