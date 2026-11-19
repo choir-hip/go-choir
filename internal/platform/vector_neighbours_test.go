@@ -404,8 +404,9 @@ func TestCaptureNeighboursRereadsExactlyOnlyWithinTheExactBounds(t *testing.T) {
 // Index mode is forced by a work bound of 1 and the statements are counted
 // through vectorSearchTxHook. The hook, in the first statement's rolled-back
 // transaction only, removes all but one other row so the list comes back
-// short while the count taken before it still holds six. The seams are set before CaptureNeighbours starts and restored after it has
-// returned; the call is synchronous.
+// short while the count taken before it still holds six (asserted before the
+// call). The seams are set before CaptureNeighbours starts and restored by
+// t.Cleanup after it has returned; the call is synchronous.
 func TestCaptureNeighboursShortIndexListIsNotReadAgainPastTheExactBound(t *testing.T) {
 	f := newVecFixture(t)
 	now := time.Now().UTC()
@@ -414,8 +415,14 @@ func TestCaptureNeighboursShortIndexListIsNotReadAgainPastTheExactBound(t *testi
 	}
 	f.pass(t)
 	q := mustCaptureID(t, "o1", "k0")
+	// The precondition the comment names: all six rows are embedded, so more
+	// rows are held than the limit and the short-list branch can open.
+	if n := f.count(t, vecCaptureTable); n != 6 {
+		t.Fatalf("%d vector rows held, want 6: the pass did not embed every capture", n)
+	}
 
 	oldWork, oldHook := neighboursExactWork, vectorSearchTxHook
+	t.Cleanup(func() { neighboursExactWork, vectorSearchTxHook = oldWork, oldHook })
 	var statements int
 	neighboursExactWork = 1
 	vectorSearchTxHook = func(ctx context.Context, tx *sql.Tx) error {
@@ -431,7 +438,6 @@ func TestCaptureNeighboursShortIndexListIsNotReadAgainPastTheExactBound(t *testi
 		return ctx.Err()
 	}
 	res, err := f.store.CaptureNeighbours(context.Background(), CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: []string{q}, Limit: 4})
-	neighboursExactWork, vectorSearchTxHook = oldWork, oldHook
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,8 +447,8 @@ func TestCaptureNeighboursShortIndexListIsNotReadAgainPastTheExactBound(t *testi
 	if statements != 1 {
 		t.Fatalf("%d statements ran, want 1: a short index list past the exact work bound was read again (F1, F2)", statements)
 	}
-	if got := len(res.Neighbours[q]); got >= 4 {
-		t.Fatalf("the index list holds %d of limit 4: no short list, so the re-read was never reachable (F3)", got)
+	if got := len(res.Neighbours[q]); got != 1 {
+		t.Fatalf("the index list holds %d, want the 1 row the hook left: no short list, so the re-read was never reachable (F3)", got)
 	}
 }
 
