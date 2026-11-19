@@ -132,7 +132,7 @@ fi
 if [ -n "$BIG_ROW" ]; then
   step "clock data"; wait_ 5000
   place paper 2000
-  place textures 900; wait_ 2500
+  place textures 900; wait_ 6000        # the list of hundreds of documents is slow on a cold launch (the drive tapped it at 2.5 s and found no row)
   step "tap \"$BIG_ROW\""; view real-23-big-document 9000
   step logs
   run_drive big light "" --touch platform
