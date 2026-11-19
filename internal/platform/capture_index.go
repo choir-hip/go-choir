@@ -880,7 +880,8 @@ const captureTermsCoverLockKey = 7330212470803
 // come from MigrateRetrieval at start and from every tick of retrievalPeriodic
 // (every 10 minutes by default), so an index left invalid by a process that
 // died while another skipped for its lock is repaired without a restart; once
-// the index is valid a call is one catalog query.
+// the index is valid a call is a pool checkout, a try-lock, one catalog query
+// and an unlock.
 func (s *Store) ensureCaptureTermsCoverIndex(ctx context.Context) error {
 	if !s.retrievalState.captureIndexReady.Load() {
 		return nil
