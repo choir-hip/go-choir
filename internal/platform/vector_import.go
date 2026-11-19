@@ -182,9 +182,13 @@ func (r *VectorImport) reject(reason string, n int) {
 func scanVectorFile(path string, fn func(i int, row vectorFileRow, v []float32) error) error {
 	f, err := os.Open(path)
 	if err != nil {
-		// A file that cannot be opened is a fault of the file (its permissions or
-		// its kind), not of the server: refused, not retried.
-		return fmt.Errorf("%w: the file cannot be read: %v", ErrVectorImportRefused, err)
+		// A file that is not there or whose permissions forbid reading is a fault of
+		// the file: refused. Any other open failure (too many open files, an I/O
+		// error) is the host's state: returned plain, so the file waits.
+		if errors.Is(err, os.ErrPermission) || errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%w: the file cannot be read: %v", ErrVectorImportRefused, err)
+		}
+		return fmt.Errorf("vector import: open: %w", err)
 	}
 	defer f.Close()
 	rd := bufio.NewReaderSize(f, vectorImportMaxLine)
