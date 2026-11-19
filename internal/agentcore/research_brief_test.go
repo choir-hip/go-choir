@@ -1474,34 +1474,89 @@ func TestBriefOneSlowCallPastTheDeadlineIsUnansweredAndTheOthersAreDelivered(t *
 	}
 }
 
-// A call that returns after the deadline writes nothing the builder has read,
-// and no goroutine outlives the cancelled call.
-func TestBriefALateCallWritesNothingAndLeavesNoGoroutine(t *testing.T) {
-	before := runtime.NumGoroutine()
+// A call that returns after the deadline writes nothing the builder has read.
+func TestBriefALateCallWritesNothingTheBuilderRead(t *testing.T) {
 	restore := researchBriefDeadline
 	t.Cleanup(func() { researchBriefDeadline = restore })
 	researchBriefDeadline = 60 * time.Millisecond
 	release := make(chan struct{})
+	lateReturned := make(chan struct{}, 2)
 	search := func(ctx context.Context, q string) (json.RawMessage, error) {
 		if threadOf(q) == 0 {
 			return briefResult(nil, 0), nil
 		}
 		// Ignores the deadline and returns late with a page.
 		<-release
+		defer func() { lateReturned <- struct{}{} }()
 		return briefResult([]map[string]any{briefCapture(99, "too late")}, 0), nil
 	}
 	res := buildResearchBrief(briefDeadlineCtx(), planN(3), search)
-	text := res.text
+	if strings.Contains(res.text, "too late") || res.unanswered != 2 || res.captures != 0 {
+		t.Fatalf("unanswered=%d captures=%d:\n%s", res.unanswered, res.captures, res.text)
+	}
+	text, unanswered := res.text, res.unanswered
 	close(release)
-	deadline := time.Now().Add(2 * time.Second)
-	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	for i := 0; i < 2; i++ {
+		select {
+		case <-lateReturned:
+		case <-time.After(2 * time.Second):
+			t.Fatal("a late search did not return")
+		}
 	}
-	if n := runtime.NumGoroutine(); n > before {
-		t.Fatalf("%d goroutines remain (before %d)", n, before)
+	// The late calls have returned; what the builder returned is unchanged.
+	if strings.Contains(res.text, "too late") || res.text != text || res.unanswered != unanswered {
+		t.Fatalf("a late call changed the brief:\n%s", res.text)
 	}
-	if res.text != text || strings.Contains(res.text, "too late") || res.unanswered != 2 {
-		t.Fatalf("a late call changed the brief (unanswered=%d):\n%s", res.unanswered, res.text)
+}
+
+// A search that panics is that thread's "did not answer"; the others deliver
+// and the process lives (the searches no longer run on the actor's goroutine,
+// whose dispatcher recovered).
+func TestBriefASearchThatPanicsIsAThreadThatDidNotAnswer(t *testing.T) {
+	res := buildResearchBrief(context.Background(), planN(3), func(_ context.Context, q string) (json.RawMessage, error) {
+		if threadOf(q) == 1 {
+			panic("boom")
+		}
+		return briefResult([]map[string]any{briefCapture(threadOf(q)+1, "answered")}, 0), nil
+	})
+	if res.outcome != briefDelivered || res.unanswered != 1 || res.panicked != 1 || res.captures != 2 {
+		t.Fatalf("outcome=%q unanswered=%d panicked=%d captures=%d:\n%s", res.outcome, res.unanswered, res.panicked, res.captures, res.text)
+	}
+	second := res.text[strings.Index(res.text, "Thread 2 ("):strings.Index(res.text, "Thread 3 (")]
+	if !strings.Contains(second, sentenceUnanswered) {
+		t.Fatalf("the panicking thread does not read as unanswered:\n%s", res.text)
+	}
+}
+
+// The panic is logged once with the run id and no query text.
+func TestResearchBriefLogsAPanickedSearchOnceWithTheRunAndNoQuery(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-brief-20", rt.cfg.ComputerID
+	seedResearchCast(t, s, owner, computer, "doc-20", "Secret objective words", "")
+	rt.researchBriefSearch = func(context.Context, string) (json.RawMessage, error) { panic("boom") }
+	logs := briefCaptureLog(t)
+	b := rt.researchBriefOpening(context.Background(), briefRunRecord(owner, computer, "doc-20", "run-brief-20"))
+	b.finish(false)
+	out := logs.String()
+	if n := strings.Count(out, "corpus search panicked"); n != 1 || !strings.Contains(out, "run-brief-20") {
+		t.Fatalf("want one panic line naming the run:\n%s", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "corpus search panicked") && strings.Contains(line, "Secret objective") {
+			t.Fatalf("the panic line carries the query: %s", line)
+		}
+	}
+}
+
+// slowest is the slowest search that returned, answered or not: five searches
+// that each fail after a while do not log 0.
+func TestBriefSlowestCountsSearchesThatReturnedAnError(t *testing.T) {
+	res := buildResearchBrief(context.Background(), planN(3), func(context.Context, string) (json.RawMessage, error) {
+		time.Sleep(80 * time.Millisecond)
+		return nil, errors.New("down")
+	})
+	if res.slowest < 80*time.Millisecond || res.outcome != briefFailed {
+		t.Fatalf("slowest=%s outcome=%q", res.slowest, res.outcome)
 	}
 }
 
