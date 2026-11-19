@@ -113,3 +113,37 @@ earlier "brief claimed absence wrongly" defect was about: the desk is told
 the search did not answer, not that nothing is held. The clustering
 assessment of this and two other corpus-search defects is in
 [recurring agent failures read from traces](recurring-agent-failures-read-from-traces-2026-11-19.md).
+
+## Update, 2026-11-19T07:55Z: the fix deployed, and a second cost found
+
+The faster search deployed at 06:17Z (`a0e852f56`). corpusd's journal for
+06:47Z to 07:47Z, 223 searches, each with one line per half:
+
+| line | calls | mean | median | ninth decile | maximum |
+| --- | --- | --- | --- | --- | --- |
+| `capture_fulltext_search shape=passages` | 223 | 189 ms | 121 ms | | 1,209 ms |
+| `capture_search shape=terms` | 223 | 869 ms | 37 ms | 2,046 ms | 14,178 ms |
+
+Before, the same lines read 751 ms and 1,315 ms (the second then included the
+first). The text half is four times faster and the ordinary title-and-label
+search is fast: 194 of the 223 took 65 ms on average. Ledger claim C143 is
+settled false all the same, because the terms mean had to be 250 ms or less.
+
+What carries the mean is a different cost. Twenty-nine calls took over a
+second. The slowest eighteen fell between 06:48Z and 06:58Z, took 8 to 14
+seconds, and each returned about 1,500 rows (1,512 to 1,946); the fast calls
+returned a median of two rows. Two calls ended at 4.9 s with
+`err=read_capture_candidates: context canceled`, which is the brief's 8 s
+deadline or the guest's giving up. So the time grows with the rows a search
+returns, at roughly 7 ms a row, and it is spent after the index has answered:
+in reading each candidate.
+
+Belief: a search whose words match many captures returns every match up to a
+cap near 1,500 and reads each one, and nothing a caller does needs 1,500
+candidates (the guest shows ten to thirty). Not yet read from the code: where
+the cap is, what is read per candidate, and which caller's wording produces
+the broad matches (the corpus brief sends a thread's subject as its query,
+and a subject of common words would do it). Until that is read this is a
+hypothesis. No fix is built. The ranked search waiting to land (vector order
+with the best three of BM25) calls the same terms half and inherits the cost.
+
