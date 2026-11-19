@@ -244,6 +244,15 @@ What it does:
   run's conversation (else the newest with an objective; a clause counts the
   other unread records that name one) plus its typed hypotheses and uncertainties and the `questions` list of its
   packet: the objective and at most 5 more; the rest are named, not searched.
+- The threads' searches run at the same time, under the one deadline, one call
+  each with no pool, cap or spacing: one `search_wire_corpus` call takes a
+  median of 2,096 ms on the paper (p75 3,397, p90 5,423, max 18,399; 39 calls,
+  Node B, 2026-11-19 01:30Z to 02:30Z,
+  `corpus-search-takes-two-seconds-on-the-paper-2026-11-19.md`), so six in turn
+  would answer about three threads and hold every research run for the whole
+  8 s. A call still running at the deadline is that thread's "did not answer".
+  The log's `ms=` is the whole build and `slowest_ms=` the slowest answered
+  search.
 - Each thread is one call of the verb's own host function
   (`search_wire_corpus`), as the run's owner and computer, in turn, under one
   8 s deadline for the whole build (the run-memory and inbox reads included).
@@ -255,8 +264,8 @@ What it does:
   was cut by the deadline, was never reached, or its result could not be
   decoded: one binary fact known at the call site). It does not say what a
   search covered and never says that the corpus holds nothing. The outcome is
-  `delivered` (a page or story is in the brief), `empty` (every kept search
-  answered and found nothing; some threads may be unanswered), `failed` (no
+  `delivered` (a page or story is in the brief), `empty` (the brief holds no page or story;
+  `unanswered=` says how many threads did not answer), `failed` (no
   thread answered), `skipped` or `dropped`. A field over its clip (title,
   passage, snippet) ends `[cut]`; a url, route_path or id over its limit is
   omitted, never cut.
@@ -278,7 +287,7 @@ What it does:
   the "has not tried to read" count and the `search run=` line speak of web
   searches only.
 - One journal line per research run start: `research brief run= desk= ms=
-  threads= queries= stories= captures= passages= newest_held= bytes=
+  slowest_ms= threads= queries= stories= captures= passages= newest_held= bytes=
   tokens_est= dropped= left= unanswered= outcome=(delivered|empty|failed|skipped|dropped)
   reason=`, written once the run memory has taken (or not taken) the text:
   `dropped` means the desk never saw the brief; `unanswered` counts the threads
@@ -302,6 +311,11 @@ What it cannot do:
   12 words.
 - Whether the delivered brief lowers web searches is not measured; the claim
   is entered separately.
+- A decodable answer whose halves did not run (no page-text answer, the
+  window fallback, a capped published scan) reads as "Nothing found by the
+  host's search." The brief does not describe what a search covered; the
+  prompt's one corpus search in the desk's own words, for any thread the brief
+  found nothing on, covers it.
 - The child Report label gap above is not touched.
 
 ## Why the brief does not describe its search (rounds 1 to 6, 2026-11-18)
