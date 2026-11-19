@@ -138,33 +138,14 @@ type Dispatcher struct {
 	// never read by a scheduling decision.
 	skips  map[string]skipNote
 	jitter func() float64
-	// slots is the shared cap now: opts.MaxConcurrent at start, changed live
-	// by SetSharedSlots. Guarded by mu.
+	// slots is the shared cap: opts.MaxConcurrent, or defaultSharedSlots.
 	slots int
 }
 
-// defaultSharedSlots is the shared cap when the options set none.
-const defaultSharedSlots = 8
-
-// SetSharedSlots changes the shared cap while the dispatcher runs (0 or less
-// is the default). A raise admits waiting work at once; a lower lets running
-// activations finish and admits new ones only below the new cap.
-func (d *Dispatcher) SetSharedSlots(n int) {
-	if n <= 0 {
-		n = defaultSharedSlots
-	}
-	d.mu.Lock()
-	d.slots = n
-	d.mu.Unlock()
-	d.Notify()
-}
-
-// SharedSlots is the shared cap now.
-func (d *Dispatcher) SharedSlots() int {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.slots
-}
+// defaultSharedSlots is the shared cap when the options set none: twelve
+// (the paper's owner, 2026-10-27: "I have the tokens for it"; the cap was
+// eight, and a computer's setting raised it). Every computer runs twelve.
+const defaultSharedSlots = 12
 
 // activationWaitLogAfter is how long an activation's oldest due update may
 // have waited before the activation logs the wait

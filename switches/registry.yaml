@@ -1813,37 +1813,6 @@
    "off_ok": "on is the rollback for S2b, not a feature"
   },
   {
-   "id": "dispatch_wide_slots",
-   "kind": "setting",
-   "life": "release",
-   "owner": "texture",
-   "class": "orange",
-   "surface": "settings-selfdev",
-   "introduced": "2026-10-28",
-   "settings": [
-    "dispatch.wide_slots"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "unknown",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "blocked_by": "owner of dispatch.wide_slots to state its proof (not in the 10-26 audit)",
-   "note": "Added after the 10-26 audit; no walk data."
-  },
-  {
    "id": "auth_email_sign_in",
    "kind": "host_env",
    "life": "ops",
