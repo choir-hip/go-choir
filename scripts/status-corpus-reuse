@@ -71,10 +71,9 @@ RESEARCH = "research"
 
 STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
 QUOTED_RE = re.compile(r' (?:note|query|reason)="(?:[^"\\]|\\.)*"')
-SR_RE = re.compile(
-    STAMP + r" runtime: search run=(\S+) desk=(\S+) started=(\d+) from_held=(\d+) not_sent=(\d+)"
-    r"(?: \(([^)]*)\))? pages_returned=(\d+) pages_new=(\d+) pages_read=(\d+)"
-    r"(?: search_all_calls=(\d+) wordings_offered=(\d+) wordings_sent=(\d+) unread_notes=(\d+) untagged=(\d+))?")
+SR_RE = re.compile(STAMP + r" runtime: search run=(\S+) desk=(\S+)(.*)$")   # the rest is read as key=number pairs, in any order
+REASONS_RE = re.compile(r"not_sent=\d+ \(([^)]*)\)")
+NUM_KV_RE = re.compile(r"\b(\w+)=(\d+)\b")
 CS_RE = re.compile(STAMP + r" corpus search computer=\S+ (.*)$")
 RB_RE = re.compile(STAMP + r" research brief run=(\S+) desk=(\S+) (.*)$")
 RD_RE = re.compile(STAMP + r" corpus read run=(\S+) desk=(\S+) conv=\S+ capture=\S+ held=(\S+) via=(\S+)")
@@ -86,6 +85,10 @@ HEADER = ["hour", "runs", "started", "from_held", "not_sent", "pages_returned", 
           "wordings_offered", "wordings_sent", "corpus_searches", "corpus_searches_with_capture",
           "corpus_searches_with_text_hit", "corpus_searches_with_text_fields", "corpus_searches_brief", "reads", "research_reads_held",
           "research_reads_own", "research_reads_new", "runs_web_no_corpus", "gateway_web_searches"]
+
+
+KNOWN_SR = {"started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read", "search_all_calls",
+            "wordings_offered", "wordings_sent", "unread_notes", "untagged"}
 
 
 def stamp_epoch(s):
@@ -116,19 +119,26 @@ def parse_console(text):
         hi = t if hi is None else max(hi, t)
         m = SR_RE.search(ln)
         if m:
-            g = m.groups()
+            rest = m.group(4)
             reasons = {}
-            for item in (g[6] or "").split():
-                k, _, v = item.partition("=")
-                if v.isdigit():
-                    reasons[k] = int(v)
-            has_new = g[10] is not None
-            ev.append({"k": "sr", "t": t, "run": g[1], "desk": g[2], "started": int(g[3]), "from_held": int(g[4]),
-                       "not_sent": int(g[5]), "reasons": reasons, "returned": int(g[7]), "new": int(g[8]),
-                       "read": int(g[9]), "has_new": has_new,
-                       "all_calls": int(g[10]) if has_new else 0, "offered": int(g[11]) if has_new else 0,
-                       "sent": int(g[12]) if has_new else 0, "unread": int(g[13]) if has_new else 0,
-                       "untagged": int(g[14]) if has_new else 0})
+            rm = REASONS_RE.search(rest)
+            if rm:
+                for item in rm.group(1).split():
+                    k, _, v = item.partition("=")
+                    if v.isdigit():
+                        reasons[k] = int(v)
+                rest = rest[:rm.start(1) - 1] + rest[rm.end(1) + 1:]   # the reasons are not field pairs
+            kv = {k: int(v) for k, v in NUM_KV_RE.findall(rest)}   # an unknown key is kept, not an error
+            if "started" not in kv:
+                continue
+            has_new = "search_all_calls" in kv
+            ev.append({"k": "sr", "t": t, "run": m.group(2), "desk": m.group(3), "started": kv["started"],
+                       "from_held": kv.get("from_held", 0), "not_sent": kv.get("not_sent", 0), "reasons": reasons,
+                       "returned": kv.get("pages_returned", 0), "new": kv.get("pages_new", 0),
+                       "read": kv.get("pages_read", 0), "has_new": has_new,
+                       "all_calls": kv.get("search_all_calls", 0), "offered": kv.get("wordings_offered", 0),
+                       "sent": kv.get("wordings_sent", 0), "unread": kv.get("unread_notes", 0),
+                       "untagged": kv.get("untagged", 0), "extra": {k: v for k, v in kv.items() if k not in KNOWN_SR}})
             continue
         m = CS_RE.search(ln)
         if m:
@@ -192,6 +202,10 @@ def metrics(sr, cs_all, rd_all, gw, rb_all=()):
             r["not_sent_reasons"][k] = r["not_sent_reasons"].get(k, 0) + v
     r["read_share"] = share(r["read"], r["returned"])
     nw = [e for e in sr if e["has_new"]]
+    r["extra_fields"] = {}
+    for e in sr:
+        for k, v in e["extra"].items():
+            r["extra_fields"][k] = r["extra_fields"].get(k, 0) + v
     r["new_fields"] = None
     if nw:
         r["new_fields"] = {"lines": len(nw)}
@@ -295,7 +309,12 @@ def fmt(x):
 
 def one_line(r):
     m = r["m"]
-    span = "no console lines" if not r["covers"]["oldest"] else "%s to %s" % (r["covers"]["oldest"][5:16], r["covers"]["newest"][5:16])
+    # label the window the numbers cover: --first, else --since/--until, else the console's span
+    lo = r["since"] or r["covers"]["oldest"]
+    hi = r["until"] or r["covers"]["newest"]
+    span = "no console lines" if not lo else "%s to %s" % (lo[5:16], (hi or "now")[5:16])
+    if r["first"]:
+        span = "first %d runs after %s, found %d" % (r["first"]["asked"], (r["first"]["after"] or lo or "?")[5:16], r["first"]["found"])
     rr = m["research_reads"]
     tot = rr["held"] + rr["own"] + rr["new"]
     cs = sum(d["n"] for d in m["corpus_searches"].values())
@@ -338,6 +357,8 @@ def render(r):
         if nf:
             o.append("  (%d lines carry the wording fields) search_all_calls %d, wordings_offered %d, wordings_sent %d (%s), unread_notes %d, untagged %d"
                      % (nf["lines"], nf["all_calls"], nf["offered"], nf["sent"], pct(nf["sent"], nf["offered"]), nf["unread"], nf["untagged"]))
+    if m["extra_fields"]:
+        o.append("  other numeric fields on the summary lines (sums): " + ", ".join("%s=%d" % kv for kv in sorted(m["extra_fields"].items())))
     o.append("corpus searches by desk:")
     if not m["corpus_searches"]:
         o.append("  (none)")

@@ -415,6 +415,11 @@ check "Q3 a list that ends inside the day is said to be incomplete" 'grep -q "ma
 #  R13 the research brief line's free-text reason is printed, or outcomes, median
 #      ms, captures and tokens_est are wrong, or the old console without the line
 #      prints a brief section
+#  R14 a summary line with the wording fields BETWEEN not_sent (reasons) and
+#      pages_returned (the deployed shape) finds no run; field order matters; an
+#      unknown numeric field in the middle drops the line; the reasons inside
+#      parentheses are read as fields or lost; the one-line label names the
+#      console's span when --since/--until or --first narrowed the window
 #  R10 the hourly script fails, or changes its last line, when the corpus
 #      section is unavailable
 corpus="$here/status-corpus-reuse"
@@ -523,6 +528,28 @@ runcorpus --fixture "$root/cr_a.log"
 check "R13 no brief lines: no brief section" '! grep -q "research briefs" "$root/out"'
 runcorpus --fixture "$root/cr_c.log" --append "$root/c.tsv"
 check "R12 the hour row has the brief count (21:00 row, column 15 = 2)" '[ "$(head -1 "$root/c.tsv" | cut -f15)" = corpus_searches_brief ] && [ "$(sed -n 2p "$root/c.tsv" | cut -f15)" = 2 ]'
+# R14: the deployed shape (new fields before pages_returned), the old shape, and an unknown field
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+PRE = "[ 9.0] x-go-choir-run-autoputer-runtime[1]: "
+L = [PRE + "2026/11/19 01:00:00 runtime: other\n",
+ PRE + "2026/11/19 01:50:57 runtime: search run=d-1 desk=research started=4 from_held=0 not_sent=0 search_all_calls=0 wordings_offered=0 wordings_sent=0 unread_notes=1 untagged=0 pages_returned=120 pages_new=88 pages_read=11\n",
+ PRE + "2026/11/19 01:51:12 runtime: search run=d-2 desk=research started=2 from_held=0 not_sent=2 (holds_unread=2) search_all_calls=2 wordings_offered=4 wordings_sent=2 unread_notes=0 untagged=0 pages_returned=80 pages_new=75 pages_read=6\n",
+ PRE + "2026/11/19 01:52:00 runtime: search run=d-3 desk=research started=1 from_held=0 not_sent=0 pages_returned=10 pages_new=5 pages_read=1\n",
+ PRE + "2026/11/19 01:53:00 runtime: search run=d-4 desk=research started=3 from_held=0 not_sent=1 (stopped_yielding=1) widgets_seen=7 search_all_calls=1 wordings_offered=2 wordings_sent=1 unread_notes=0 untagged=0 pages_returned=30 pages_new=20 pages_read=2\n",
+ PRE + "2026/11/19 02:30:00 runtime: other\n"]
+open(root + "/cr_d.log", "w").write("".join(L))
+PY
+runcorpus --fixture "$root/cr_d.log"
+check "R14 all four shapes count: 4 runs, started 10, from the deployed shape pages_returned 240 and read 20" 'grep -q "summary lines): 4" "$root/out" && grep -q "started (web searches sent) sum 10" "$root/out" && grep -q "pages_returned 240, pages_new 188, pages_read 20" "$root/out"'
+check "R14 reasons from the parentheses are summed and not read as fields; wordings 3 sent of 6 offered (50.0%), unread_notes 1, calls 3" 'grep -q "not_sent 3 (holds_unread=2, stopped_yielding=1)" "$root/out" && grep -q "(3 lines carry the wording fields) search_all_calls 3, wordings_offered 6, wordings_sent 3 (50.0%), unread_notes 1" "$root/out"'
+check "R14 an unknown numeric field in the middle is kept, shown, and does not drop the line" 'grep -q "other numeric fields on the summary lines (sums): widgets_seen=7" "$root/out"'
+runcorpus --fixture "$root/cr_d.log" --first 2 --after 2026-11-19T01:51Z
+check "R14 --first on the deployed shape finds 2 (d-2, d-3)" 'grep -q "found 2" "$root/out" && grep -q "summary lines): 2" "$root/out"'
+check "R14 the one-line label names --first, not the console span" 'tail -n 1 "$root/out" | grep -q "^Corpus reuse (first 2 runs after 11-19T01:51, found 2)"'
+runcorpus --fixture "$root/cr_d.log" --since 2026-11-19T01:50Z --until 2026-11-19T01:55Z
+check "R14 the one-line label names the --since/--until window" 'tail -n 1 "$root/out" | grep -q "^Corpus reuse (11-19T01:50 to 11-19T01:55)"'
 # R10
 mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 * h' 3
 env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/missing.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
