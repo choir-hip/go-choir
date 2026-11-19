@@ -97,5 +97,5 @@ func (s *ChoirScope) noteUnreadPages() {
 	}
 	s.unreadNoted = true
 	s.allStat.unreadNotes++
-	s.notes = append(s.notes, fmt.Sprintf("this run holds %d pages new to this run that you have not read, returned by its earlier searches; the search is sent. Read the ones that matter (choir.Searches.Summary(id) lists them), then search again for what is still missing, naming it. A page that will not load counts once you have tried it; fresh sends a search the run holds results for", n))
+	s.notes = append(s.notes, fmt.Sprintf("this run holds %d pages new to this run that you have not tried to read, returned by its earlier searches; the search is sent. Read the ones that matter (choir.Searches.Summary(id) lists them), then search again for what is still missing, naming it. A page that will not load counts once you have tried it; fresh sends a search the run holds results for", n))
 }
