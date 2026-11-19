@@ -7,7 +7,6 @@ final class CredentialReaderTests: XCTestCase {
     private let service = "news.choir.autoradio.choir.test-\(UUID().uuidString.prefix(8))"
 
     func testTheServiceTodaysSignInWritesUnderIsTheOneTheSeamReads() {
-        XCTAssertEqual(KeychainKeyStore.defaultService, "news.choir.autoradio.choir")
         XCTAssertEqual(KeychainKeyStore().service, "news.choir.autoradio.choir")
         XCTAssertEqual(KeyAccount.apiKey, "api-key"); XCTAssertEqual(KeyAccount.keyID, "key-id"); XCTAssertEqual(KeyAccount.computerID, "computer-id")
     }

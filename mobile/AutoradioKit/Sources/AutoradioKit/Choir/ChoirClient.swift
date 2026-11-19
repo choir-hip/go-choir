@@ -76,9 +76,7 @@ public final class OverlayKeyStore: KeyStore, @unchecked Sendable {
 /// The iOS (and macOS) Keychain. Device-only, available after first unlock so audio can run with the screen locked.
 public final class KeychainKeyStore: KeyStore, @unchecked Sendable {
     let service: String
-    /// The service the sign-in has always written under. The stored key is read where it is; never move or rename it.
-    public static let defaultService = "news.choir.autoradio.choir"
-    public init(service: String = KeychainKeyStore.defaultService) { self.service = service }
+    public init(service: String = "news.choir.autoradio.choir") { self.service = service }
     private func base(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
     }

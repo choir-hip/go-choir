@@ -9,6 +9,7 @@ public struct CredentialReader: Sendable {
     /// The accounts the shared code may read: the bearer key (a secret), the key's id and the listener's computer id.
     public static let accounts: Set<String> = [KeyAccount.apiKey, KeyAccount.keyID, KeyAccount.computerID]
     private let store: KeyStore
+    // The default is today's store with its own default service: the one the sign-in has always written under. Never move or rename that item.
     public init(store: KeyStore = KeychainKeyStore()) { self.store = store }
     /// The stored text, or nil when there is none or the name is not one of the three.
     public func read(_ account: String) -> String? {
