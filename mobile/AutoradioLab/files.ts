@@ -69,8 +69,7 @@ function choirBackend(net: Net): Backend {
     async put(path, bytes) { await net.json(route(path), { method: 'PUT', body: bytes, headers: { 'content-type': M.mimeOf(M.nameOf(path)) } }); },
     async mkdir(path) { await net.json(route(path), { method: 'POST' }); },
     async remove(path) { await net.json(route(path), { method: 'DELETE' }); },
-    // The seam's method list must carry PATCH (the server renames with PATCH {move_to}); see the report.
-    async move(from, to) { await net.json(route(from), { method: 'PATCH' as never, body: { move_to: to } }); },
+    async move(from, to) { await net.json(route(from), { method: 'PATCH', body: { move_to: to } }); },
   };
 }
 

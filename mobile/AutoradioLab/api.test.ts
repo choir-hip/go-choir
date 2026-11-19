@@ -1,0 +1,149 @@
+// The signed-in seam (api.ts: authedJSON, authedBytes, SignedOutError) under bun test, `fetch` and the native reader stubbed.
+// Every value here is made up. Failure list, written before the code (each line has a test below):
+//  A1 no native reader, or no key kept: SignedOutError, and nothing is sent.
+//  A2 a key kept: the request goes to ORIGIN with `Authorization: Bearer <key>`, `Accept: application/json` and `X-Choir-Computer: <id>`.
+//  A3 the computer id kept by today's sign-in is used as it is, with no discovery call.
+//  A4 no computer id kept: one GET /api/compute/status (no X-Choir-Computer) picks the current interactive computer; a second request reuses it.
+//  A5 /auth/ routes and /api/compute/status carry no X-Choir-Computer (Swift: ChoirClient.request).
+//  A6 a body is JSON with Content-Type; a query is sorted by name and escaped as Swift does (& + = ; escaped, / : @ , kept).
+//  A7 401 is a SignedOutError (the key was refused; the key is not deleted: sign-in is the user's act); 403, 429 (Retry-After), 5xx are HTTPError
+//     carrying the server's own short `error` string and never the body.
+//  A8 a path that could carry the key elsewhere (absolute URL, "//host", no leading slash) is refused before anything is sent.
+//  A9 the key never appears in an error message or in what the seam logs.
+//  A10 authedBytes returns the bytes and the content type, and asks for any type.
+//  A11 a changed key (another account signed in) does not reuse the old account's computer id.
+//  A12 a transport failure is an Error, not a SignedOutError.
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { authedJSON, authedBytes, SignedOutError, HTTPError, bindNative, resetSession, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
+
+const KEY = 'test-key-0001-not-real';
+const KEY2 = 'test-key-0002-not-real';
+let kept: Record<string, string> = {};
+let reads: string[] = [];
+const native = { available: true, later: async (r: { account: string }) => { reads.push(r.account); const v = kept[r.account]; return v === undefined ? { found: false } : { found: true, value: v }; } };
+
+type Call = { url: string; init: RequestInit };
+let calls: Call[] = [];
+let handler: (c: Call) => Response;
+const header = (c: Call, n: string) => (c.init.headers as Record<string, string>)[n];
+
+beforeEach(() => {
+  kept = { 'api-key': KEY, 'computer-id': 'comp-1' };
+  reads = []; calls = []; resetSession();
+  bindNative(native as never);
+  handler = () => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
+  globalThis.fetch = (async (u: string, init: RequestInit) => { const c = { url: String(u), init }; calls.push(c); return handler(c); }) as never;
+});
+
+describe('signed-in seam', () => {
+  test('A1 no reader, or no key: SignedOutError and nothing sent', async () => {
+    kept = {};
+    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
+    bindNative(undefined);
+    kept = { 'api-key': KEY };
+    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
+    expect(calls.length).toBe(0);
+  });
+  test('A2 headers', async () => {
+    const r = await authedJSON('/api/x', { query: { a: 1 } });
+    expect(r.body).toEqual({ ok: true });
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toBe(`${ORIGIN}/api/x?a=1`);
+    expect(calls[0].init.method).toBe('GET');
+    expect(header(calls[0], 'Authorization')).toBe(`Bearer ${KEY}`);
+    expect(header(calls[0], 'Accept')).toBe('application/json');
+    expect(header(calls[0], 'X-Choir-Computer')).toBe('comp-1');
+  });
+  test('A3 the kept computer id: no discovery', async () => {
+    await authedJSON('/api/x'); await authedJSON('/api/y');
+    expect(calls.map((c) => c.url)).toEqual([`${ORIGIN}/api/x`, `${ORIGIN}/api/y`]);
+  });
+  test('A4 discovery picks the current interactive computer, once', async () => {
+    kept = { 'api-key': KEY };
+    handler = (c) => c.url.endsWith('/api/compute/status')
+      ? new Response(JSON.stringify({ computers: [{ computer_id: 'c-other', kind: 'interactive' }, { computer_id: 'c-batch', kind: 'batch', current: true }, { computer_id: 'c-cur', current: true }] }), { status: 200 })
+      : new Response('{}', { status: 200 });
+    await authedJSON('/api/x'); await authedJSON('/api/y');
+    expect(calls.map((c) => c.url.replace(ORIGIN, ''))).toEqual(['/api/compute/status', '/api/x', '/api/y']);
+    expect(header(calls[0], 'X-Choir-Computer')).toBeUndefined();
+    expect(header(calls[1], 'X-Choir-Computer')).toBe('c-cur');
+    expect(header(calls[2], 'X-Choir-Computer')).toBe('c-cur');
+  });
+  test('A4b no computer yet is an Error saying so, not a sign-out', async () => {
+    kept = { 'api-key': KEY };
+    handler = () => new Response('{"computers":[],"warnings":["still starting"]}', { status: 200 });
+    const e = await authedJSON('/api/x').catch((x) => x);
+    expect(e).toBeInstanceOf(Error); expect(e).not.toBeInstanceOf(SignedOutError); expect(String(e.message)).toContain('no computer yet');
+  });
+  test('A5 auth routes and status carry no computer header', async () => {
+    await authedJSON('/auth/api-keys/abc', { method: 'DELETE' });
+    await authedJSON('/api/compute/status');
+    expect(header(calls[0], 'X-Choir-Computer')).toBeUndefined();
+    expect(header(calls[1], 'X-Choir-Computer')).toBeUndefined();
+    expect(header(calls[0], 'Authorization')).toBe(`Bearer ${KEY}`);
+  });
+  test('A6 body and query', async () => {
+    await authedJSON('/api/x', { method: 'POST', body: { q: 'AT&T' }, query: { z: 'C++', a: 'x/y:z@w,v', m: 'a b=c;d' } });
+    expect(calls[0].url).toBe(`${ORIGIN}/api/x?a=x/y:z@w,v&m=a%20b%3Dc%3Bd&z=C%2B%2B`);
+    expect(calls[0].init.body).toBe('{"q":"AT&T"}');
+    expect(header(calls[0], 'Content-Type')).toBe('application/json');
+    await authedJSON('/api/x');
+    expect(header(calls[1], 'Content-Type')).toBeUndefined();
+  });
+  test('A7 statuses', async () => {
+    handler = () => new Response('{"error":"nope"}', { status: 401 });
+    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
+    handler = () => new Response('{"error":"nope"}', { status: 403 });
+    const f = await authedJSON('/api/x').catch((x) => x);
+    expect(f).toBeInstanceOf(HTTPError); expect(f.status).toBe(403); expect(f.message).toContain('nope');
+    handler = () => new Response('{}', { status: 429, headers: { 'retry-after': '7' } });
+    const r = await authedJSON('/api/x').catch((x) => x);
+    expect(r.status).toBe(429); expect(r.retryAfter).toBe(7);
+    handler = () => new Response(`{"error":"${'e'.repeat(500)}","echo":"secret-body"}`, { status: 500 });
+    const s = await authedJSON('/api/x').catch((x) => x);
+    expect(s.status).toBe(500); expect(s.message).not.toContain('secret-body'); expect(s.message.length).toBeLessThan(260);
+    expect(kept['api-key']).toBe(KEY); // a refused key is not deleted
+  });
+  test('A8 a path that could aim the key elsewhere is refused', async () => {
+    for (const p of ['https://evil.example.com/x', '//evil.example.com/x', 'api/x', '/a/../../x', '/x\\y', '']) {
+      await expect(authedJSON(p)).rejects.toThrow();
+    }
+    expect(calls.length).toBe(0);
+    expect(reads.length).toBe(0);
+  });
+  test('A9 the key is in no message', async () => {
+    handler = () => new Response(`{"error":"${KEY}"}`, { status: 500 });
+    const e = await authedJSON('/api/x').catch((x) => x);
+    expect(String(e.message)).not.toContain(KEY);
+    handler = () => { throw new Error(`boom ${KEY}`); };
+    const t = await authedJSON('/api/x').catch((x) => x);
+    expect(String(t.message)).not.toContain(KEY);
+  });
+  test('A10 bytes', async () => {
+    handler = () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'application/pdf' } });
+    const r = await authedBytes('/api/file/1');
+    expect(Array.from(r.bytes)).toEqual([1, 2, 3]); expect(r.contentType).toBe('application/pdf');
+    expect(header(calls[0], 'Accept')).toBe('*/*');
+    expect(header(calls[0], 'Authorization')).toBe(`Bearer ${KEY}`);
+    handler = () => new Response('', { status: 401 });
+    await expect(authedBytes('/api/file/1')).rejects.toBeInstanceOf(SignedOutError);
+  });
+  test('A11 another account does not reuse the old computer', async () => {
+    kept = { 'api-key': KEY };
+    handler = (c) => c.url.endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: header(c, 'Authorization').includes(KEY2) ? 'c-two' : 'c-one' }] }), { status: 200 }) : new Response('{}', { status: 200 });
+    await authedJSON('/api/x');
+    expect(header(calls[1], 'X-Choir-Computer')).toBe('c-one');
+    kept = { 'api-key': KEY2 };
+    await authedJSON('/api/x');
+    expect(header(calls[calls.length - 1], 'X-Choir-Computer')).toBe('c-two');
+  });
+  test('A12 transport failure', async () => {
+    handler = () => { throw new TypeError('network down'); };
+    const e = await authedJSON('/api/x').catch((x) => x);
+    expect(e).toBeInstanceOf(Error); expect(e).not.toBeInstanceOf(SignedOutError);
+  });
+  test('only the three accounts today\'s sign-in keeps are readable', async () => {
+    expect(KEYCHAIN_ACCOUNTS).toEqual(['api-key', 'key-id', 'computer-id']);
+    expect(authedURL('/api/x', {})).toBe(`${ORIGIN}/api/x`);
+  });
+});
