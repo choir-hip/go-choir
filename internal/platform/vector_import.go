@@ -479,10 +479,12 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		}
 	}
 	if checked < floor {
-		// Candidates rejected for a reason that is the file's (not found, not public, a
-		// text this host cuts differently) are counted apart from those set aside or
-		// skipped: when they alone account for the shortfall the file is refused.
-		if setAside+skippedNow > 0 && fileRejected < floor-checked {
+		// The file waits only if the rows the server could not answer for now could
+		// still bring the checked count to the floor. Rows set aside (too large for
+		// this host) and rows rejected as the file's own fault (not found, not public,
+		// another cut) are permanent: if checked plus the transient skips cannot reach
+		// the floor, no later pass can either, and the file is refused.
+		if checked+skippedNow >= floor {
 			return res, fmt.Errorf("%w: only %d rows could be checked, need %d (%d are too large for this host's embedder, %d failed this call); the file waits", errVectorImportCannotCheck, checked, floor, setAside, skippedNow)
 		}
 		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (the text or its cut differs)", ErrVectorImportRefused, checked, floor)

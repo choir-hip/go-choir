@@ -137,7 +137,8 @@ type VectorPassResult struct {
 	// are recorded (no vector, the reason) and are not retried until the model
 	// changes.
 	Refused int
-	// Imports are inbox files taken in this pass (one a pass).
+	// Imports are inbox files brought to an outcome (done/ or refused/) in this
+	// pass, at most one; a file put back to wait is not counted.
 	Imports int
 	// Removed are vectors deleted because their text is no longer public.
 	Removed int

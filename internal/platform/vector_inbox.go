@@ -112,7 +112,7 @@ func moveNoReplace(src, dir, name string) (string, error) {
 }
 
 // ProcessVectorInbox imports one file of the inbox, if one is eligible: the
-// oldest that is not waiting, else the oldest waiting one; none while a job of the
+// oldest that is not waiting, else the waiting one tried longest ago; none while a job of the
 // route runs (the file waits). It returns how many files it brought to an outcome
 // (done/ or refused/): a file that was put back because it could not be imported
 // now is not counted, so the pass is not "work" and waits its ordinary interval.
@@ -151,21 +151,29 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 			delete(v.inboxDeferred, name) // gone from the inbox
 		}
 	}
-	deferred := map[string]bool{}
-	for name := range v.inboxDeferred {
-		deferred[name] = true
+	deferred := map[string]time.Time{} // name -> when it was last tried
+	for name, at := range v.inboxDeferred {
+		deferred[name] = at
 	}
 	v.importMu.Unlock()
 	sort.Slice(cands, func(i, j int) bool { return cands[i].mod.Before(cands[j].mod) })
 	pick := ""
 	for _, c := range cands {
-		if !deferred[c.name] {
+		if _, waits := deferred[c.name]; !waits {
 			pick = c.name
 			break
 		}
 	}
-	if pick == "" && len(cands) > 0 {
-		pick = cands[0].name // only waiting files are left: try the oldest again
+	if pick == "" {
+		// Only waiting files are left: try the one tried longest ago (ties: the
+		// older file, as cands is in modification order), so a file that can never
+		// be imported now does not starve the others.
+		var last time.Time
+		for _, c := range cands {
+			if at := deferred[c.name]; pick == "" || at.Before(last) {
+				pick, last = c.name, at
+			}
+		}
 	}
 	if pick == "" || ctx.Err() != nil {
 		return 0, nil
@@ -180,13 +188,13 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 		delete(v.inboxDeferred, pick)
 	} else {
 		if v.inboxDeferred == nil {
-			v.inboxDeferred = map[string]bool{}
+			v.inboxDeferred = map[string]time.Time{}
 		}
-		v.inboxDeferred[pick] = true
+		v.inboxDeferred[pick] = time.Now()
 	}
 	v.importMu.Unlock()
 	if done {
-		return 1, ierr
+		return 1, nil // importInboxFile returns an error only for a file not done
 	}
 	return 0, ierr
 }
