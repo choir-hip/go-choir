@@ -230,3 +230,116 @@ BM25 passages; every captured page through the event layer; story event ids
 at publish; research that reads a corpus brief first and searches the web
 only for the gaps; the new-or-revise choice at a new story's first publish.
 A proposal with stations and the owner's decisions; not ratified.
+
+## Built: the corpus brief (station S3, lane `corpus-brief`, 2026-11-18)
+
+Not deployed. Before a research desk run's first model call the host searches
+the computer's own corpus and puts the result at the end of the run's first
+message (`internal/agentcore/research_brief.go`, wired at
+`runtime.go` next to `managementTaskOpening`). It costs no model turn.
+
+What it does:
+
+- The threads are the objective of the unread Cast (or Ask) record of this
+  run's conversation (else the newest with an objective; a clause counts the
+  other unread records that name one) plus its typed hypotheses and uncertainties and the `questions` list of its
+  packet: the objective and at most 5 more; the rest are named, not searched.
+- The threads' searches run at the same time, under the one deadline, one call
+  each with no pool, cap or spacing: one `search_wire_corpus` call takes a
+  median of 2,096 ms on the paper (p75 3,397, p90 5,423, max 18,399; 39 calls,
+  Node B, 2026-11-19 01:30Z to 02:30Z,
+  `corpus-search-takes-two-seconds-on-the-paper-2026-11-19.md`), so six in turn
+  would answer about three threads and hold every research run for the whole
+  8 s. A call still running at the deadline is that thread's "did not answer".
+  The log's `ms=` is the whole build and `slowest_ms=` the slowest search whose
+  reply the builder read.
+- Each thread is one call of the verb's own host function
+  (`search_wire_corpus`), as the run's owner and computer, all at the same
+  time (one goroutine per thread, a panic in one is that thread's "did not
+  answer"), under one 8 s deadline for the whole build (the run-memory and inbox reads included).
+  A slow or failing corpusd, a run with no objective, owner or computer starts
+  the run with one plain sentence saying why there is no brief; the run always
+  starts. Per thread the brief says one of three things and nothing more: the
+  pages and stories found, or "Nothing found by the host's search.", or "The
+  host's search did not answer for this thread." (the call errored, timed out,
+  was cut by the deadline, was never reached, or its result could not be
+  decoded: one binary fact known at the call site). It does not say what a
+  search covered and never says that the corpus holds nothing. The outcome is
+  `delivered` (a page or story is in the brief), `empty` (the brief holds no page or story;
+  `unanswered=` says how many threads did not answer), `failed` (no
+  thread answered), `skipped` or `dropped`. A field over its clip (title,
+  passage, snippet) ends `[cut]`; a url, route_path or id over its limit is
+  omitted, never cut.
+  Thread text is searched as plain words (the verb's `since:`, quote and
+  `-word` operators are neutralised).
+- It delivers at most 6 captures (with dates, capture ids and the matching
+  passage) and 5 published stories a thread, and 8,000 estimated tokens in all
+  (it rides on every turn; the verb gives more). Over the bound whole threads
+  are dropped from the last and named.
+- A resumed run builds nothing: the first message is replayed from run memory.
+- Labels: the labels of the record the objective and threads came from, and
+  what the verb gives for the pages delivered (the capture floor when a passage
+  is shown, world otherwise), marked only when the run memory took the text as
+  a fresh start, on every outcome that put record text in the message. The run-label union feeds publish admission and the
+  disclosure gate, so an owner's computer may see the capture label on more
+  research runs (the v16 prompt already asks the desk to search the corpus
+  first, which gives the same label).
+- The ledger is not seeded: brief pages are not pages the run searched for, so
+  the "has not tried to read" count and the `search run=` line speak of web
+  searches only.
+- One journal line per research run start: `research brief run= desk= ms=
+  slowest_ms= threads= queries= stories= captures= passages= newest_held= bytes=
+  tokens_est= dropped= left= unanswered= outcome=(delivered|empty|failed|skipped|dropped)
+  reason=`, written once the run memory has taken (or not taken) the text:
+  `dropped` means the desk never saw the brief; `unanswered` counts the threads
+  whose search did not answer (0 where no thread was ever known, as in an
+  opening that skips; left-out threads are in `left`). A build in which a
+  search panicked also writes one panic line (the run id and the count, no
+  query text). The
+  `corpus search` line gains `caller=brief` or `caller=cell` at its end.
+  "Runs that made a web search before any corpus read": the first `gateway:
+  search request ... run=` against the first `corpus read run=` or
+  `corpus search ... caller=cell`.
+
+What it cannot do:
+
+- It cannot judge a story stale. A published story carries no date in the
+  corpus answer (`PublishedPiece`), so the brief says so in one clause and
+  shows dates only for held captures. "Stale" waits on story dates or event
+  ids (S8).
+- Each thread is three searches (captures, published stories, events), not one
+  neighbourhood read; the brief shows captures and stories, not events.
+- Query quality on long objectives is unmeasured: the text half takes every
+  word of the query with term caps and pruning, and the benchmark queries were
+  12 words.
+- Whether the delivered brief lowers web searches is not measured; the claim
+  is entered separately.
+- A decodable answer whose halves did not run (no page-text answer, the
+  window fallback, a capped published scan) reads as "Nothing found by the
+  host's search." The brief does not describe what a search covered; the
+  prompt's one corpus search in the desk's own words, for any thread the brief
+  found nothing on, covers it.
+- A search that panics after the deadline is not logged as a panic (its thread
+  still reads "did not answer"); the panic value is formatted with `%v`.
+- The child Report label gap above is not touched.
+
+## Why the brief does not describe its search (rounds 1 to 6, 2026-11-18)
+
+Six review rounds found one defect in new forms: the brief said "the corpus
+holds nothing" when part of the search had not run (a failed half, a deadline
+cut, an index still catching up, page text never searched), and from round 3 on
+each repair added a typed description of what the search covered (a `coverage`
+object in the verb's answer) that was itself hard to make exactly true in the
+fallback paths (the window of the newest captures, a thread of stop words,
+Jev's labels read from a separate store, a capped published scan, pages the
+full-text index never holds).
+
+Round 6 changed the approach: the description has no reader who needs it. The
+desk is told to make one corpus search in its own words for any thread the
+brief found nothing on, whatever the brief says it covered, so the scope
+statement was cost with no use. It was deleted, with the `coverage` object and
+everything added to the verb for it. The verb's result and notes are as they
+were on the lane's base, plus only `caller=` on the `corpus search` log line.
+The brief says what it found, that the search found nothing, or that the
+search did not answer. A test sweeps every render path for absence and scope
+phrases so neither can return unnoticed.
