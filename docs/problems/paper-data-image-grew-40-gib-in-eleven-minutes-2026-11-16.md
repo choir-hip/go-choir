@@ -109,3 +109,25 @@ size and the time grow with the store.
   snapshot; the root dated 19:36:54Z shows it completed.
 - Why captures happen when they do (01:12Z and 18:43Z today) is not read.
 
+
+## Seen again, 2026-11-19T08Z, and one open item answered
+
+The hourly reading at 08:36Z had free space at 87 GiB (141 GiB an hour
+earlier) and the paper's image at 98.6 GiB (51.5 GiB an hour earlier): the
+same step, now 47 GiB. The growth ledger's hourly rows show it six times in
+three days, each for one or two rows (11-16T19, 11-17T06 and 07, 11-17T17,
+11-18T05, 11-18T18, 11-19T08), with the image back at its baseline after.
+
+The open item "whether the refresh waits for a streaming snapshot" is
+answered from the host's log: it does. The deploy of `d26a202aa` asked the
+paper to refresh from 08:08Z; vmctl deferred it 28 times, a minute apart,
+with `snapshot_in_flight: true` (`selfdev_active_operations: 0`,
+`live_capsules: 0`), and refreshed it at 08:36:07Z, eight seconds after
+the snapshot root `e5ab44ea87c6` was dated. During the copy the host marked
+the paper unhealthy three times (08:26Z to 08:28Z) and the console printed
+a `store_stalled` line at 08:28Z.
+
+So a deploy that lands during a capture reaches the paper up to an hour
+late, and the copy needs the store's size free on the host: 47 GiB today
+with 141 GiB free before it. Not established today: whether the space
+returned (the next hourly reading will say).
