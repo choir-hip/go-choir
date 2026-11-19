@@ -133,13 +133,6 @@ const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 // rollback: the master stays an ordinary document.
 const SettingTextureRootDesk = "texture.root_desk"
 
-// SettingDispatchWideSlots raises the dispatcher's shared slots from 8 to
-// 12 at once, without a restart (the owner for the paper, 2026-10-27: "I
-// have the tokens for it"; docs/problems/related-stories-not-showing-on-the-paper-2026-10-27.md
-// saw slots 8/8 with 94 to 114 agents due). Off by default; off is the
-// rollback: running activations finish and new ones wait for one of 8.
-const SettingDispatchWideSlots = "dispatch.wide_slots"
-
 // SettingTelemetryRetire runs the daily telemetry retirement job
 // (telemetry_retire.go): aged choir.event rows of the unread and trace kinds
 // leave the working store by a tape op; they stay on the sealed tape. On by
@@ -203,7 +196,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureEvidenceEmbeds:        true,
 	SettingTextureHoldTrajectory:        true,
 	SettingTextureRootDesk:              false,
-	SettingDispatchWideSlots:            false,
 	SettingTelemetryRetire:              true,
 	SettingTelemetryPartitions:          false,
 	SettingCompactForce:                 false,
