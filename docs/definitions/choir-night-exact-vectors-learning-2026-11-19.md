@@ -2,10 +2,10 @@
 definition_version: 7
 readiness: drafted
 review:
-  reviewer: DeepSeek v4.1 flash (seat 2), round 1
-  frozen_ref: 7a2eae69f
+  reviewer: DeepSeek v4.1 flash (seat 2), rounds 1 to 3
+  frozen_ref: e3944da74
   verdict: send_back
-  evidence_ref: 'round 1, 2026-11-19T05:44Z: five blocking findings (the design not amended; fusion by reciprocal rank against the design''s measurement; a finish that needed the owner''s phone; a deadline the capture pass cannot meet; conjecture N1 and ledger C144 not the same claim). All answered in the revision that carries this line; re-review pending. The owner''s ruling R1 authorises the night; red stations V1, V2, V6, V7b and L3 each take their own two seats before landing. Round 2 (2026-11-19T06:10Z) sent it back again: the design still carried the old worker and file wording, the finish promised E1 running and a cause for every failure, and the cutover file''s sign-in defaults contradicted this file; answered in the revision that carries this line.'
+  evidence_ref: 'round 1, 2026-11-19T05:44Z: five blocking findings (the design not amended; fusion by reciprocal rank against the design''s measurement; a finish that needed the owner''s phone; a deadline the capture pass cannot meet; conjecture N1 and ledger C144 not the same claim). All answered in the revision that carries this line; re-review pending. The owner''s ruling R1 authorises the night; red stations V1, V2, V6, V7b, L2 and L3 each take their own two seats before landing. Round 2 (2026-11-19T06:10Z) sent it back again: the design still carried the old worker and file wording, the finish promised E1 running and a cause for every failure, and the cutover file''s sign-in defaults contradicted this file; answered in the revision that carries this line. Round 3 (2026-11-19T06:20Z, at e3944da74) sent it back a third time on one blocking finding: the acceptance named the demo smoke script as the signed-in staging tour, which it is not. That and its five smaller findings are answered in the revision that carries this line. Three rounds without acceptance is the contract''s signal to stop patching: there is no fourth round. The file runs on the owner''s own word of 2026-11-19T05:38Z, not on a review verdict; readiness stays drafted, and each red station takes its own review before landing.'
 start:
   captured_at: 2026-11-19T05:20Z
   source:
@@ -49,8 +49,8 @@ finish:
     - action: 'scripts/check-autoradio-native-boundary on main (built by station XG)'
       proves: how many Swift sources and interface names remain outside the voice list; the count only falls
       evidence_class: gate output in CI
-    - action: the Android emulator tour and the iPhone simulator tour for each merged Exact area, signed in as the drill account, kept as the tool's tree output and screenshots under the proof folder the tour script names (mobile/scripts/proof-sim.sh on the simulator; the Android tour script is committed by the integration station)
-      proves: the moved page shows real staging data on both, from one source; only where a tour ran (an area with no tour is reported as merged and unproved)
+    - action: the Android emulator tour and the iPhone simulator tour for each merged Exact area, signed in as the drill account against staging, driven by the lead through Exact's agent on the simulator and the emulator, kept as the tool's tree output and screenshots. No committed script does this yet (mobile/scripts/proof-sim.sh is the demo smoke, with bundled fixtures and no network, and proves only that the pages build and draw); the lead commits the signed-in tour for both phones with the integration landing, under station XG
+      proves: the moved page shows real staging data on both, from one source; only where a signed-in tour ran (an area with the demo smoke alone is reported as demo only, and an area with neither as merged and unproved)
       evidence_class: a rerunnable script's output against staging; the lead reads it, a second seat may rerun it
     - action: scripts/status-vectors (built by station V2), which reads corpusd's journal on Node B
       proves: 'have, want and remaining for story vectors and capture vectors: coverage of the first pass'
@@ -64,7 +64,7 @@ finish:
     - action: the run ids on the drill computer named in each trace record, exported again with choir trace export
       proves: the cause stated for each recurring failure, or that it is not established; the failure list was fixed in this file at 05:20Z, before the reading
       evidence_class: trace evidence anyone with the drill key can re-export
-    - action: 'stations V5, V6, V7a to V7d and L3, L4: each station''s own line in the design''s table (S7 to S12) or in the experiment protocol'
+    - action: 'stations V5, V6 and V7a to V7d: each station''s own line in the design''s table (S7 to S12). L2: the protocol on main with both seats'' verdicts recorded. L3: the protocol''s own reading rules. L4: the problem record docs/problems/dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md lists the eight entries and what each got, and scripts/check-switch-registry --today 2026-11-26 reports fewer failures than nine'
       proves: what those lines say, when each lands; none is expected by the check-in and the report says where each stands
       evidence_class: per station, as its line names
   rollback: each landing reverts as one. Vectors are a derived index (drop the tables and stop the embedder unit; BM25 search is untouched). Each Exact station reverts as one landing and the phone rolls back by installing the build before it. E1 ends by clearing its arm settings on the test computers.
@@ -73,7 +73,7 @@ finish:
     environment: staging
     required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance, device_install]
 value:
-  better_means: 'three gaps close. The share of the app''s logic that exists once and runs on both phones rises to all of it outside voice. The share of research that stands on what the computer already holds rises, measured as web searches a run and reads from held pages. The share of recurring failures with a known cause rises to all of them.'
+  better_means: 'three gaps close. The share of the app''s logic that exists once and runs on both phones rises to all of it outside voice. The share of research that stands on what the computer already holds rises, measured as web searches a run and reads from held pages. The share of recurring failures with a trace-backed cause, or a record that the cause is not established and what would establish it, rises to all of them.'
   goodharting_would_be: 'One native call that decides everything behind a thin TypeScript wrapper. Swift deleted with the behaviour it carried gone untested, or a station called landed with no build on a device. Vectors stored and counted but never used by a search a desk makes; the vector half decorative because BM25 already ranked the same pages; pages reachable only through a story that cites them; or a recall figure taken on questions written from the indexed text. A cause written for each failure from reading code and not the run''s ledger; a failure list chosen after the reading; or a prompt changed to make one bad run look better. An experiment started with arms nobody reads.'
 homotopy:
   realism_axis: 'How much of the real system each track runs on, on how real a subject: from one page on the web host with a canned fetch, to every page on the owner''s locked iPhone; from 449 trial passages on the Mac, to every published story and every captured page on Node B answering the paper''s own research runs; from one loop read in one run''s ledger, to an experiment whose arms run on five computers for days.'
@@ -245,7 +245,7 @@ decisions_for_the_owner:
     default: fresh test computers made for the experiment (the redesign proposes one for the model arms and one for the prompt arm, with the drill computer as fallback), never the paper, the owner's computer or a real user's; the owner may rule otherwise
   - id: D3
     question: Do captures get a vector for every passage, or one per page?
-    why: 'one per page is 215,000 vectors and six hours on the Mac; every passage is about 850,000 and one to three days'
+    why: 'one per page is 215,000 vectors and seven to eight hours on the Mac; every passage is about 850,000 and one to three days'
     options: 'stories only, pages reached through the stories that cite them (the owner''s proposal in R3); stories plus one vector per page (the lead''s answer); every passage of every page (the 18 November design)'
     default: 'stories plus one vector per page. This is the lead''s proposal, not the cheapest option: the owner''s stories-only proposal costs one Mac-hour, the page vectors seven or eight more on a Mac that is also building. The pass therefore runs stories first and imports them alone if the page pass is not finished; the page vectors can be dropped without touching the story path'
 owner_rulings:
@@ -287,7 +287,7 @@ owner_rulings:
     read_as: 'the lab pages (the voice lab and the motion gallery) are deleted, not moved to a second app; the animated mark is drawn whichever way is cheap, keeping its hand-drawn roughness; no pixel comparison is required of it'
 now:
   status: working
-  slice: 'three tracks at once. X: the two Exact lanes and the boundary gate are joined in lane/exact-base (contract build 9 s); eight builders move sign-in, the deck, the run sheet, podcasts, files, mail, content and settings from it in parallel, each against an agreed signed-in request seam, and the lead merges and tours them; the cutover file''s order (sign-in, then the deck, then the run sheet) is the order they MERGE in, not the order they are written in. V: the faster corpus search lands; pgvector and the embedder are built; the Mac starts on stories. L: the traces are read.'
+  slice: 'three tracks at once. X: the two Exact lanes and the boundary gate are joined in lane/exact-base (contract build 9 s); eight builders move the signed-in request seam, the deck, the run sheet, podcasts, files, mail, content and settings from it in parallel, each against an agreed signed-in request seam, and the lead merges and tours them; the cutover file''s order (sign-in, then the deck, then the run sheet) is the order they MERGE in, not the order they are written in. V: the faster corpus search lands; pgvector and the embedder are built; the Mac starts on stories. L: the traces are read.'
   source_ref: origin/main at the commit that carries this file
   deploy_identity: staging d2c8bfdd0; the owner's iPhone on lane/autoradio-integ23 a0671d74c, installed and not launched
   candidate:
@@ -353,8 +353,8 @@ design's objection to Postgres. Stories in full are about 61,000 passages across
 
 Three bounds are physical, not choices.
 
-- The Mac embeds about 3,000 tokens a second. Stories take minutes; one
-  vector for each of 215,000 pages takes about six hours.
+- The Mac embeds about 3,000 tokens a second. Stories take about an hour;
+  one vector for each of 215,000 pages takes seven to eight hours.
 - A server landing takes about 75 minutes of suites, then CI and a deploy,
   and they run one at a time: eight or nine before the owner's check-in.
 - The lead cannot hear, and the owner's phone must not speak. Sound and the
