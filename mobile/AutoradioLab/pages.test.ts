@@ -107,18 +107,45 @@ describe('load', () => {
     const v = await P.pagesView(slow);
     expect(reads).toBe(1); expect(addrs(v)).toEqual(['textures:', 'radio:', 'paper:front']); expect(new Set(addrs(v)).size).toBe(v.rows.length);
   });
-  test('P12 a wipe during a load: the old account\'s file does not refill the set', async () => {
+  test('P12 a wipe during a load: the old account\'s file does not refill the set (fails without the epoch guard)', async () => {
     await P.pagesOpen(storage, 'paper:front', 'Old account page'); P.forget();
+    const snapshot = files.get(P.PAGES_FILE)!;                                 // the bytes the read in flight will return, taken BEFORE the wipe deletes the file
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
-    const slow = { fs: { readFile: async (p: string) => { await gate; const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
+    let reads = 0;
+    const slow = { fs: { readFile: async () => { reads++; if (reads === 1) { await gate; return snapshot; } throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
     const load = P.pagesView(slow); await new Promise((r) => setTimeout(r, 10));
     await P.wipePages(slow);                                                   // sign-out while the read is out
-    release(); await load;
-    expect(addrs(await P.pagesView(slow))).toEqual(['radio:']);
+    release(); const v = await load;
+    expect(addrs(v)).toEqual(['radio:']); expect(addrs(await P.pagesView(slow))).toEqual(['radio:']);
   });
   test('P13 close then reopen keeps the opener', async () => {
     await P.pagesOpen(storage, 'paper:front', ''); await P.pagesOpen(storage, 'pub:/x', 'X'); await P.pagesClose(storage, 'pub:/x');
     let v = await P.pagesReopen(storage); expect(v.rows[0]).toMatchObject({ address: 'pub:/x', opener: 'paper:front' });
     v = await P.pagesClose(storage, 'pub:/x'); expect(v.top).toBe('paper:front');                                    // the opener comes forward again
+  });
+});
+
+describe('round 6', () => {
+  test('S1 saves are serialized: the last state wins the file even if an older write is slower', async () => {
+    const delays = [60, 0, 0]; let n = 0;
+    const slowFirst = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { const w = delays[n++] ?? 0; await new Promise((r) => setTimeout(r, w)); files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
+    const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+    await P.pagesView(slowFirst);
+    const p1 = P.pagesOpen(slowFirst, 'paper:front', ''); await sleep(5); const p2 = P.pagesOpen(slowFirst, 'textures:', ''); await sleep(5); const p3 = P.pagesOpen(slowFirst, 'file:/', '');
+    await Promise.all([p1, p2, p3]);
+    const saved = JSON.parse(new TextDecoder().decode(files.get(P.PAGES_FILE)!)) as { recency: string[] };
+    expect(saved.recency[0]).toBe('file:/'); expect(saved.recency.length).toBe(4);
+  });
+  test('C1 close and pin canonicalise the address like open does', async () => {
+    await P.pagesOpen(storage, 'doc:abc@12', '');
+    let v = await P.pagesPin(storage, 'doc:abc@12'); expect(v.rows.find((r) => r.address === 'doc:abc')?.pinned).toBe(true);
+    v = await P.pagesClose(storage, 'doc:abc@12'); expect(addrs(v)).not.toContain('doc:abc');
+  });
+  test('O1 an open that finished loading after a sign-out began changes nothing', async () => {
+    const api = await import('./api.ts');
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    const slow = { fs: { readFile: async () => { await gate; throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
+    const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 10)); api.nextGeneration(); release(); const v = await p;
+    expect(addrs(v)).not.toContain('paper:front'); expect(files.has(P.PAGES_FILE)).toBe(false);
   });
 });

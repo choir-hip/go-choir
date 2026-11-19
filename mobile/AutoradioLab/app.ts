@@ -57,8 +57,8 @@ const sources: Sources = {
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
-  notebookPageShared: ([selected, steerQueued, active, _tick], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
-  hostCaps: async () => ({ mode: await hostMode() }),
+  notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
+  hostCaps: async ([nativeSeen]) => ({ mode: await hostMode(4000, 1500, nativeSeen) }),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),

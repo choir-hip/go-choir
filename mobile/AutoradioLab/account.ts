@@ -69,17 +69,20 @@ export const wipedPaths = (): string[] => [
 
 /** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply
  * still in flight is dropped as signed out) and no remembered computer. */
-export async function wipeAll(storage: Storage | undefined, store: Store | undefined, wipes: Wipe[] = WIPES): Promise<string[]> {
-  nextGeneration(); resetSession();
+/** Counts every completed wipe, the late continuation's too: the shared sources that keep state in memory are asked again when it changes (signedOutTick). */
+let wipes = 0;
+export const wipeEpoch = (): number => wipes;
+export async function wipeAll(storage: Storage | undefined, store: Store | undefined, wipes_: Wipe[] = WIPES): Promise<string[]> {
+  nextGeneration(); resetSession(); wipes += 1;
   const failed: string[] = [];
-  for (const w of wipes) {
+  for (const w of wipes_) {
     try { await w.run(storage, store); } catch { failed.push(w.name); console.log(`account: wipe ${w.name} failed`); }
   }
   return failed;
 }
 
 export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe' }): Promise<unknown> };
-export type SignOutResult = { done: boolean; failed: string; message: string };
+export type SignOutResult = { done: boolean; failed: string; message: string; epoch: number };
 /** A deadline, not a limit: a native sign-out that never answers leaves the page retryable. */
 export const NATIVE_DEADLINE_MS = 30000;
 
@@ -203,10 +206,19 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
 
 // ---- sign-out
 
+/** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
 export async function accountSignOut(
   a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
   opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
 ): Promise<SignOutResult> {
+  const r = await signOutInner(a, storage, store, native, opts);
+  return { ...r, epoch: wipes };
+}
+
+async function signOutInner(
+  a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
+  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
+): Promise<Omit<SignOutResult, 'epoch'>> {
   // Demo mode has no account of its own: the key on the phone (if any) is the real one, and the demo's sign-out must neither end it nor wipe it.
   if (a.demo) return { done: false, failed: '', message: 'Demo mode has no account to sign out of. Nothing was changed.' };
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };

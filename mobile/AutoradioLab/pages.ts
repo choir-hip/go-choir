@@ -115,8 +115,12 @@ async function load(storage: Storage | undefined): Promise<void> {
   }
 }
 
-async function save(storage: Storage | undefined, gen: number): Promise<void> {
-  await writeCurrent(gen, storage, PAGES_FILE, new TextEncoder().encode(JSON.stringify({ pages, recency })));   // a sign-out in flight writes nothing
+let saving: Promise<unknown> = Promise.resolve();
+/** Saves run one after another and each writes the set as it is WHEN IT RUNS, so the last state wins the file whatever order the host finishes the writes in. */
+function save(storage: Storage | undefined, gen: number): Promise<void> {
+  const run = saving.then(() => writeCurrent(gen, storage, PAGES_FILE, new TextEncoder().encode(JSON.stringify({ pages, recency }))), () => undefined);   // a sign-out in flight writes nothing
+  saving = run.catch(() => undefined);
+  return run.then(() => undefined);
 }
 
 function view(): PageList {
@@ -131,6 +135,7 @@ export async function pagesView(storage: Storage | undefined): Promise<PageList>
 export async function pagesOpen(storage: Storage | undefined, rawAddress: string, title: string): Promise<PageList> {
   const gen = accountGeneration();
   await load(storage);
+  if (gen !== accountGeneration()) return view();                          // a sign-out began while the set loaded: nothing of this open is kept
   const address = canonical(rawAddress);
   openLocked({ address, kind: kindOf(address), title: title !== '' ? title : defaultTitle(address), opener: recency[0] ?? '', pinned: false });
   await save(storage, gen);
@@ -142,8 +147,9 @@ export async function pagesFocus(storage: Storage | undefined, address: string):
   await save(storage, gen); return view();
 }
 /** Close a page. When it was in front, its opener (if still open) comes forward, else the next most recent. */
-export async function pagesClose(storage: Storage | undefined, address: string): Promise<PageList> {
+export async function pagesClose(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
+  const address = canonical(rawAddress);
   const p = pages.find((x) => x.address === address);
   if (address !== RADIO && p) {
     const wasFront = recency[0] === address;
@@ -162,8 +168,9 @@ export async function pagesReopen(storage: Storage | undefined): Promise<PageLis
   await save(storage, gen);
   return view();
 }
-export async function pagesPin(storage: Storage | undefined, address: string): Promise<PageList> {
+export async function pagesPin(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
+  const address = canonical(rawAddress);
   const p = pages.find((x) => x.address === address); if (p) p.pinned = !p.pinned;
   await save(storage, gen); return view();
 }

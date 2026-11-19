@@ -340,9 +340,9 @@ deck drew placards only. What moved, each proved with the queue's `android` mode
    set when it has a top page (always on iOS) and the shared one otherwise; every open/close/pin/reopen is sent to both (`pms`/`pcs`). Result on Android: `deck-slot-paper:front` holds the
    paper page with 100 story rows with real titles (`paper-story-/pub/texture/ukraine-and-russia-trade-record-drone-strikes-...`). Tests: `pages.test.ts` P1 to P9.
 2. **The reader for stories** (`reader.ts`): a `pub:` page resolves the public route and shows the story's text as h/p/li/quote blocks. `members-reader.contract` reads it when the Swift reader's
-   answer is the empty "loading". Result on Android: tapping a story opens the reader page with the title and 55 text blocks. Owed (the Swift reader decodes more): citations, versions, related stories,
+   answer is the empty "loading" (SUPERSEDED: it is read when the host fact says there is no native package, `noNative`, see "Seat 1's answers"). Result on Android: tapping a story opens the reader page with the title and 55 text blocks. Owed (the Swift reader decodes more): citations, versions, related stories,
    tables, embeds, hear-it rows, `texture:` documents, editing. Tests: `reader.test.ts` R1 to R5.
-3. **The notebook page**: `notebook.ts` already had the page source; the contract now reads it while the Swift one is empty/substituted (read only; selecting a line and steer taps stay native).
+3. **The notebook page**: `notebook.ts` already had the page source; the contract reads it when the host fact says there is no native package (`noNative`; it was first "while the Swift one is empty", which flickered on an iPhone cold launch and was replaced) (read only; selecting a line and steer taps stay native).
 
 Still Swift, and why (the substituted sources of the Android log):
 - Voice and audio, owed in Kotlin: `voiceProfile`, the mic, speech, on-device models, `barState`'s voice fields, `radioPage`/`radioView`, `queueView`/`queueAdd` (the run sheet player), `podcastNow`, the deck's
@@ -365,3 +365,14 @@ Still Swift, and why (the substituted sources of the Android log):
 - `pages.ts` load is single-flight with an epoch (a wipe during the read drops it; the caller reads again), validates entry by entry, never trims the radio, and a reopen keeps the opener (as Swift does).
 - Named residuals: the in-memory shared state is re-asked after a sign-out through `signedOutTick` (`pagesView`, `notebookPageShared`); the reader twin has no per-account state. A sign-out on Android is not
   implemented (no native sign-in), so this path has not been exercised there.
+
+### Seat 2's answers (Exact delta at 3015e5e61)
+
+Changed: (1) the host fact cannot be downgraded: any app-module op that answered (a key read or key state, api.ts `nativeHasAnswered`) or the package having answered (`hostCaps(pgn.top != "")`) decides
+"native" for good, and a "none" is re-asked by the contract when the native set gets a top page, so one bad window cannot keep an iPhone on the shared deck; (2) the wait is bounded by real time
+(a timer races the probe loop; a hanging probe no longer stretches it); (3) `SignOutResult.epoch` counts every completed wipe (the late continuation's too) and is what `signedOutTick` carries; the shared
+notebook also takes `au.signedIn`; (4) P12 snapshots the bytes before the wipe and fails without the epoch guard; (6) the shared deck's saves are serialized (the last state wins the file); notes 9 (an open that
+finished loading after a sign-out began changes nothing) and 10 (close and pin canonicalise) are done.
+Named residuals (not built): (4) an Android launch shows the placard deck until the host fact is decided (about 4 s on a host with no native package); (7) a literal `</item>` inside CDATA in a feed can
+still yield a half item; (8) `reader.ts` has no text-size cap (two scans of a very large story could overrun the turn); (11) `proof-real.sh` clears the Swift container but not Exact's `app:/data`, and the
+proof does not exercise the Android deck; a sign-out whose wipe finishes late still does not re-ask the in-memory sources until the next sign-out result (the counter is bumped, but no event carries it to the contract).

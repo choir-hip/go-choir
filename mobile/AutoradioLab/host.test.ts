@@ -35,7 +35,29 @@ describe('hostMode', () => {
     const spine = await Bun.file(new URL('./spine.contract', import.meta.url)).text();
     expect(spine).toContain('derive noNative = hc.mode == "none"');
     for (const f of ['members-reader.contract', 'members-notebook.contract']) expect(await Bun.file(new URL(`./${f}`, import.meta.url)).text()).toContain('noNative');
-    expect(spine).not.toContain('pgn.top != ""');
+    expect(spine).not.toContain('derive pg = pgn.top');          // the SET is never chosen by the native set's content; the native set's top page only tells the host fact that the package answered (hostCaps(pgn.top != ""))
+  });
+});
+
+describe('round 6: recovery and the time bound', () => {
+  test('R1 once the package has answered (the native set has a top page) the decision is native and cannot be downgraded; a "none" recovers on that signal', async () => {
+    expect(await hostMode(30, 10)).toBe('none');                                  // a bad window: no usable handle in time
+    expect(await hostMode(30, 10, true)).toBe('native');                         // the contract re-asks with "the package answered": recovered
+    expect(await hostMode(30, 10, false)).toBe('native');                        // and never downgraded again
+  });
+  test('R1b an app-module op that answered anywhere (api.ts) counts as native too', async () => {
+    const api = await import('./api.ts');
+    resetSeam(); resetHost();
+    api.adoptNative(handle(async (r) => (r.op === 'session' ? { found: false } : { state: 'absent' })), 'x');
+    await api.keyState();                                                         // any answer from the app module
+    expect((await api.keyState()).state).toBe('absent');
+    expect(api.nativeHasAnswered()).toBe(true);
+    expect(await hostMode(5, 5)).toBe('native');
+  });
+  test('R2 the wait is bounded by time: a probe that hangs does not stretch it', async () => {
+    adoptNative(handle(() => new Promise(() => undefined)), 'x');
+    const t = performance.now(); const m = await hostMode(120, 1000);          // a 1 s probe timeout must not extend a 120 ms wait
+    expect(m).toBe('none'); expect(performance.now() - t).toBeLessThan(600);
   });
 });
 
