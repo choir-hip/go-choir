@@ -170,15 +170,6 @@ type corpusSearchInfo struct {
 	Body, Title, Both, LabelsOnly int
 	// Capped: a candidate bound was hit (the index's or the window's).
 	Capped bool
-	// TitlesSearched: the title half ran over the capture index's term table,
-	// which answered whole. The window fallback leaves it false. LabelsRead:
-	// Jev's labels were read from the store without error.
-	TitlesSearched bool
-	LabelsRead     bool
-	// NoTitleWords: the query held no word the title half can match.
-	NoTitleWords bool
-	// WindowSearched: the window of the newest captures was listed.
-	WindowSearched bool
 	// Dropped are the query words the text search did not look for (pruned
 	// for weight, or capped), named to the model in the note and the result.
 	Dropped []string
@@ -224,7 +215,6 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 	if deps.Store != nil {
 		if got, err := deps.Store.RecentCaptureLabels(ctx, ownerID, computerID, corpusLabelScan); err == nil {
 			labels = got
-			info.LabelsRead = true
 		} else {
 			notes = append(notes, "label hints not read: "+err.Error())
 		}
@@ -261,14 +251,11 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			return nil, "", info, err
 		}
 		objs = window
-		info.WindowSearched = true
 		if len(objs) >= corpusCaptureScan {
 			info.Capped = true
 			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
 		}
 	}
-	info.TitlesSearched = searched && len(terms) > 0
-	info.NoTitleWords = len(terms) == 0
 	objs = dropOwnerPrivate(inWindow(objs, req.Since, req.Until))
 	var labelHalf []CorpusCapture
 	if len(terms) > 0 {

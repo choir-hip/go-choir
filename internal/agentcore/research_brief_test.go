@@ -1372,3 +1372,15 @@ func briefOverRealToolAsDesk(t *testing.T, sink researchtools.CaptureSink, plan 
 	return buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
 }
 
+
+// A story with neither a read_url nor a route_path prints no address line.
+func TestBriefAStoryWithNoAddressPrintsNone(t *testing.T) {
+	var m map[string]any
+	_ = json.Unmarshal(briefResult(nil, 0), &m)
+	m["published"] = []map[string]any{{"title": "No address story", "kind": "story"}}
+	raw, _ := json.Marshal(m)
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
+	if !strings.Contains(res.text, "  - \"No address story\"\n") || strings.Contains(res.text, "too long") || strings.Contains(res.text, "read_url=") {
+		t.Fatalf("a story with no address prints one:\n%s", res.text)
+	}
+}
