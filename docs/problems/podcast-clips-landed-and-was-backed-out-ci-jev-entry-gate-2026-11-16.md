@@ -199,3 +199,15 @@ be written the run before it had failed on a dated gate
 outcome was known and a claim would have been worthless. Whether CI accepts
 the new steps is read from the first run that gets past that gate.
 
+
+The first CI run to reach the new steps (44429117991 on `a10eb7716`, 00:5xZ)
+passed "Check scripts/gates covers the CI gate jobs" and failed "Check the
+store schema floor": `scripts/selftest-store-schema-floor` makes one commit
+in its scratch repository without naming an author (line 43; the helper on
+line 18 does name one), and a CI runner has no git identity (`fatal: empty
+ident name`). The self-test had only ever run where a developer's identity
+exists. Repaired by naming the author on that commit; reproduced before and
+after with `user.useConfigOnly=true`, and no other self-test fails that way.
+So a step moved into CI met CI's environment for the first time in CI: the
+coverage check compares which gates run where, not whether a gate can run
+there.
