@@ -57,6 +57,13 @@ if [ -z "${NOBUILD:-}" ]; then
 fi
 SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 
+# ---- 3.0 WARM-UP drive: the first launch after an install showed Settings account, Files and Mail signed out for the whole drive in four of sixteen runs (the later drives of the same run were fine, with the
+# same key). The cause is not proven (a first-launch race around the Keychain); the survey must not be that launch, so it is a throwaway one that only opens the app and waits.
+step "clock data"; wait_ 6000
+place settings 900; step "tap settings-nav-account"; view real-00w-warmup 4000
+step logs
+run_drive warm light "" --touch platform
+
 # ---- 3a. SURVEY drive: every place once, trees dumped so the next drive can pick real ids
 step "clock data"; wait_ 6000
 view real-00-opens-on-radio 800   # the app opens on the Autoradio page (radio: is the first fixed page); there is no first-run page with a carried key
