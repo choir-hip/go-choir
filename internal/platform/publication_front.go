@@ -95,6 +95,16 @@ type FrontPage struct {
 type frontCursor struct {
 	UpdatedAt   int64  `json:"u"`
 	CanonicalID string `json:"id"`
+	// Nanos is the sub-second part of UpdatedAt. The front's own cursors
+	// leave it zero and keep whole seconds (a page boundary inside one second
+	// can then skip rows of that second; recorded as a problem, not changed
+	// here); the vector worker sets it, because it must see every row.
+	Nanos int32 `json:"n,omitempty"`
+}
+
+// frontCursorAt is the cursor after a publication row at full precision.
+func frontCursorAt(row frontPublicationRow) *frontCursor {
+	return &frontCursor{UpdatedAt: row.UpdatedAt.Unix(), Nanos: int32(row.UpdatedAt.Nanosecond()), CanonicalID: row.CanonicalID}
 }
 
 func encodeFrontCursor(c frontCursor) string {
@@ -381,7 +391,7 @@ func frontPublicationWindowSQL(after *frontCursor, w newestWindow, want int) (st
 		WHERE object_kind = 'choir.publication' AND tombstone = FALSE`
 	var args []any
 	if after != nil {
-		at := time.Unix(after.UpdatedAt, 0).UTC()
+		at := time.Unix(after.UpdatedAt, int64(after.Nanos)).UTC()
 		query += ` AND (updated_at < ? OR (updated_at = ? AND canonical_id < ?))`
 		args = append(args, at, at, after.CanonicalID)
 	}

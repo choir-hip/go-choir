@@ -35,6 +35,9 @@ import (
 
 // Variables so tests can shrink them.
 var (
+	// vectorStoryBatch is how many publications one read of the story walk
+	// takes.
+	vectorStoryBatch = 200
 	// vectorBatch is how many inputs go in one embedder call, a size and not a
 	// limit. The worker sends one batch at a time and waits for its answer, so
 	// a search's query, which goes to the same unit, waits behind at most one
@@ -246,7 +249,7 @@ func (s *Service) eligibleStoryVersions(ctx context.Context) ([]storyVersionRef,
 	seen := map[string]bool{}
 	var after *frontCursor
 	for {
-		rows, err := s.frontPublicationBatch(ctx, after, 200)
+		rows, err := s.frontPublicationBatch(ctx, after, vectorStoryBatch)
 		if err != nil {
 			return nil, err
 		}
@@ -268,11 +271,11 @@ func (s *Service) eligibleStoryVersions(ctx context.Context) ([]storyVersionRef,
 				out = append(out, storyVersionRef{StoryID: row.CanonicalID, VersionID: versions[i].CanonicalID, Revision: versions[i].Revision, Title: meta.Title})
 			}
 		}
-		if len(rows) < 200 {
+		if len(rows) < vectorStoryBatch {
 			return out, nil
 		}
 		last := rows[len(rows)-1]
-		after = &frontCursor{UpdatedAt: last.UpdatedAt.Unix(), CanonicalID: last.CanonicalID}
+		after = frontCursorAt(last)
 	}
 }
 
@@ -430,6 +433,17 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		return res, err
 	}
 	var gap []storyVersionRef
+	okSQL, err := s.store.sqlEligibleStoryVersions(ctx, eligible)
+	if err != nil {
+		return res, err
+	}
+	var kept []storyVersionRef
+	for _, ref := range eligible {
+		if okSQL[ref.VersionID] {
+			kept = append(kept, ref)
+		}
+	}
+	eligible = kept
 	for _, ref := range eligible {
 		if !have[ref.VersionID] {
 			gap = append(gap, ref)
@@ -631,10 +645,20 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 		lead, title   string
 		input, textID string
 	}
+	var batchObjs []objectgraph.Object
+	for _, r := range rows {
+		if obj, ok := objs[r.ID]; ok {
+			batchObjs = append(batchObjs, obj)
+		}
+	}
+	okSQL, err := s.store.sqlEligibleCaptures(ctx, batchObjs)
+	if err != nil {
+		return 0, 0, err
+	}
 	var items []item
 	for _, r := range rows {
 		obj, ok := objs[r.ID]
-		if !ok {
+		if !ok || !okSQL[r.ID] {
 			skipped++
 			continue
 		}
@@ -763,6 +787,74 @@ var (
 		AND EXISTS (SELECT 1 FROM og_objects pub WHERE pub.canonical_id = v.story_id AND NOT pub.tombstone
 			AND pub.metadata::jsonb->>'state' = 'published' AND btrim(COALESCE(pub.metadata::jsonb->>'route_path', '')) <> ''))`
 )
+
+// sqlEligibleCaptures returns which of objs satisfy vecCaptureEligibleSQL, the
+// one predicate the sweep and the search use, so that the worker never writes
+// a vector those would remove at once (a label the Go reader drops but the
+// predicate keeps would otherwise be embedded and swept in turn).
+func (s *Store) sqlEligibleCaptures(ctx context.Context, objs []objectgraph.Object) (map[string]bool, error) {
+	out := map[string]bool{}
+	for start := 0; start < len(objs); start += 200 {
+		chunk := objs[start:min(start+200, len(objs))]
+		args := make([]any, 0, 3*len(chunk))
+		vals := make([]string, len(chunk))
+		for i, o := range chunk {
+			vals[i] = "(?::text, ?::text, ?::text)"
+			args = append(args, o.CanonicalID, o.OwnerID, o.ComputerID)
+		}
+		rows, err := s.corpus().QueryContext(ctx, `SELECT v.capture_id FROM (VALUES `+strings.Join(vals, ",")+`) AS v(capture_id, owner_id, computer_id) WHERE `+vecCaptureEligibleSQL, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			out[id] = true
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// sqlEligibleStoryVersions returns the version ids among refs that satisfy
+// vecStoryEligibleSQL.
+func (s *Store) sqlEligibleStoryVersions(ctx context.Context, refs []storyVersionRef) (map[string]bool, error) {
+	out := map[string]bool{}
+	for start := 0; start < len(refs); start += 200 {
+		chunk := refs[start:min(start+200, len(refs))]
+		args := make([]any, 0, 2*len(chunk))
+		vals := make([]string, len(chunk))
+		for i, r := range chunk {
+			vals[i] = "(?::text, ?::text)"
+			args = append(args, r.StoryID, r.VersionID)
+		}
+		rows, err := s.corpus().QueryContext(ctx, `SELECT v.version_id FROM (VALUES `+strings.Join(vals, ",")+`) AS v(story_id, version_id) WHERE `+vecStoryEligibleSQL, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			out[id] = true
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
 
 // sweepVectors deletes the vectors whose text is no longer public, of both
 // kinds, and returns the rows deleted.

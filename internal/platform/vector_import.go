@@ -49,6 +49,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/embedder"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 const (
@@ -252,6 +253,10 @@ func (d *vectorRowDeriver) storyVersion(ctx context.Context, versionID string) (
 		return "", d.vt, false, qerr
 	}
 	d.story = storyID2
+	if okSQL, err := d.s.store.sqlEligibleStoryVersions(ctx, []storyVersionRef{{StoryID: storyID2, VersionID: versionID}}); err != nil || !okSQL[versionID] {
+		d.vtErr = err
+		return d.story, d.vt, false, err
+	}
 	d.vt, d.vtOK, d.vtErr = d.s.loadStoryVersionText(ctx, d.og, storyID2, versionID)
 	return d.story, d.vt, d.vtOK, d.vtErr
 }
@@ -278,7 +283,7 @@ func (d *vectorRowDeriver) derive(ctx context.Context, row vectorFileRow) rowInp
 			return rowInput{reason: "not_found"}
 		}
 		title, hash, ok := captureVectorSource(obj)
-		if !ok {
+		if okSQL, err := d.s.store.sqlEligibleCaptures(ctx, []objectgraph.Object{obj}); !ok || err != nil || !okSQL[obj.CanonicalID] {
 			return rowInput{reason: "not_public"}
 		}
 		if row.Ordinal != 0 {
