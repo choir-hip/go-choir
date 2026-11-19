@@ -216,6 +216,7 @@ func TestGuestCountsPagesFoundByMeaningApartFromLabelOnlyPages(t *testing.T) {
 	answer := CaptureSearchAnswer{
 		HitObjects: []objectgraph.Object{a, b, c},
 		Hits:       []CaptureTextHit{{CaptureID: a.CanonicalID, Snippet: "pa", BodyMatch: true}},
+		FullText:   &CaptureTextInfo{Used: true, Indexed: 3, Captures: 3},
 		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 3, VectorState: "exact", Entries: []RankedCapture{
 			{CaptureID: a.CanonicalID, Reasons: []string{"text", "meaning"}},
 			{CaptureID: b.CanonicalID, Reasons: []string{"meaning"}},
