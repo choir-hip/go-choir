@@ -39,8 +39,8 @@ var vectorMaxScanTuples = 100000
 // read exactly. Beyond it the list is the HNSW index's approximate nearest.
 var vectorExactMaxRows = 100000
 
-// vectorSearchStageHook runs inside a savepoint before the "count" and the
-// "exact" statements (tests make them fail or pass the deadline).
+// vectorSearchStageHook runs inside a savepoint before the "count", "exact"
+// and "index" statements (tests make them fail or pass the deadline).
 var vectorSearchStageHook func(ctx context.Context, tx *sql.Tx, stage string) error
 
 // vectorSearchTxHook runs inside each list's transaction, after the settings
@@ -362,6 +362,25 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 		_, _ = tx.ExecContext(ctx, `RELEASE SAVEPOINT vec_try`)
 		return ""
 	}
+	// The index read is under a savepoint too: a deadline there returns an
+	// empty list and says partial; no statement of a search is a hard failure
+	// except a transaction that cannot begin or a cancelled caller.
+	indexCollect := func() ([]T, string) {
+		var got []T
+		why := attempt("index", func() error {
+			var err error
+			got, err = collect()
+			return err
+		})
+		if why != "" {
+			return nil, "the index scan did not finish: " + why
+		}
+		return got, ""
+	}
+	indexList := func(partial string) ([]T, string, string, error) {
+		got, p := indexCollect()
+		return got, vecModeIndex, joinSentence(partial, p), nil
+	}
 	filtered := int64(-1)
 	if why := attempt("count", func() error {
 		return tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&filtered)
@@ -388,16 +407,11 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 		if ctx.Err() != nil {
 			return nil, "", "", ctx.Err()
 		}
-		partial = joinSentence(partial, "the exact scan did not finish: "+why)
-		out, err = collect()
-		if err != nil {
-			return nil, "", "", err
-		}
-		return out, vecModeIndex, partial, nil
+		return indexList(joinSentence(partial, "the exact scan did not finish: "+why))
 	}
-	out, err = collect()
-	if err != nil {
-		return nil, "", "", err
+	out, partialIdx := indexCollect()
+	if partialIdx != "" {
+		return out, vecModeIndex, joinSentence(partial, partialIdx), nil
 	}
 	if len(out) >= limit {
 		return out, vecModeIndex, partial, nil

@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -1420,7 +1421,7 @@ func (r *refusing) Embed(ctx context.Context, in []string) ([][]float32, error) 
 	r.calls.Add(int64(len(in)))
 	for _, x := range in {
 		if strings.Contains(x, "TOOLONG") {
-			return nil, &embedder.StatusError{Code: 500, Body: "input (3000 tokens) is too large to process"}
+			return nil, &embedder.InputRefusedError{Code: 500, Reason: "input (3000 tokens) is too large to process. increase the physical batch size"}
 		}
 		if r.net != nil && r.net(x) {
 			return nil, errors.New("connection reset by peer")
@@ -1576,7 +1577,7 @@ func TestVectorIdlePassReadsOneRowAndTwoCountsNotEveryPublication(t *testing.T) 
 	}
 }
 
-func TestVectorStoryPredicateReadsThePolicyObjectAndIgnoresAMalformedOne(t *testing.T) {
+func TestVectorStoryPredicateReadsThePolicyObjectAndAMalformedOneExcludes(t *testing.T) {
 	f := newVecFixture(t)
 	ctx := context.Background()
 	// distinct policy JSON, so each version has its own content-addressed policy object
@@ -1608,10 +1609,11 @@ func TestVectorStoryPredicateReadsThePolicyObjectAndIgnoresAMalformedOne(t *test
 	for _, h := range res.Stories {
 		seen[h.VersionID]++
 	}
-	if seen[vPriv] != 0 || seen[vOK] != 4 || seen[vBad] != 4 {
+	// the read route fails closed on a malformed policy, so the vector search does too
+	if seen[vPriv] != 0 || seen[vOK] != 4 || seen[vBad] != 0 {
 		t.Fatalf("hits by version %v", seen)
 	}
-	if pass := f.pass(t); pass.Removed != 4 || f.count(t, "vec_story_passages") != 8 {
+	if pass := f.pass(t); pass.Removed != 8 || f.count(t, "vec_story_passages") != 4 {
 		t.Fatalf("sweep %+v rows %d", pass, f.count(t, "vec_story_passages"))
 	}
 }
@@ -1763,5 +1765,299 @@ func TestVectorRefusesAPgvectorBelowTheMinimumAndTheSearchSaysUnavailable(t *tes
 	}
 	if res, serr = f.store.SearchVectors(context.Background(), VectorSearchRequest{Vector: embedder.FakeVector("harbor")}); serr != nil || res.Unavailable != "" {
 		t.Fatalf("search after restore: %+v %v", res, serr)
+	}
+}
+
+// ---- round 4: one rule for what a failure may make durable ----
+
+// httpEmbedder serves the llama.cpp shape for a real embedder.Client: /health,
+// and /v1/embeddings that answers per behave(inputs).
+func httpEmbedder(t *testing.T, behave func(inputs []string) (code int, body string)) *embedder.Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(200)
+			return
+		}
+		var req struct {
+			Input []string `json:"input"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		code, body := behave(req.Input)
+		if code != 200 {
+			w.WriteHeader(code)
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		type d struct {
+			Index     int       `json:"index"`
+			Embedding []float32 `json:"embedding"`
+		}
+		var data []d
+		for i, in := range req.Input {
+			e := make([]float32, 768)
+			copy(e, embedder.FakeVector(in))
+			data = append(data, d{Index: i, Embedding: e})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+	}))
+	t.Cleanup(srv.Close)
+	return embedder.NewClient(srv.URL)
+}
+
+func TestVectorOnlyAnIdentifiedInputRefusalIsRecordedEveryOtherStatusIsRetried(t *testing.T) {
+	for _, c := range []struct {
+		code int
+		body string
+	}{
+		{500, `{"error":{"message":"internal error"}}`},
+		{503, `{"error":{"message":"Loading model"}}`},
+		{429, `too many requests`},
+		{404, `not found`},
+	} {
+		f := newVecFixture(t)
+		f.story(t, "doc-a", 1, "Harbor reopens", storyText("harbor"), time.Time{})
+		f.capture(t, "o1", "c1", "k1", "One", "one text", time.Now().UTC().Add(-time.Hour), false)
+		bad := true
+		f.store.SetEmbedder(httpEmbedder(t, func(in []string) (int, string) {
+			if bad {
+				return c.code, c.body
+			}
+			return 200, ""
+		}))
+		res, err := f.svc.RunVectorPass(context.Background())
+		if !errors.Is(err, errEmbedderDown) || res.Refused != 0 {
+			t.Fatalf("status %d: err %v, %+v", c.code, err, res)
+		}
+		if f.count(t, "vec_story_passages")+f.count(t, "vec_captures") != 0 {
+			t.Fatalf("status %d wrote rows", c.code)
+		}
+		bad = false
+		if res := f.pass(t); res.StoryVersions != 1 || res.Captures != 1 || res.Refused != 0 {
+			t.Fatalf("status %d: not retried: %+v", c.code, res)
+		}
+	}
+	// The two identified shapes, through the real client, are recorded.
+	for _, msg := range []string{
+		`{"error":{"message":"input (3000 tokens) is too large to process. increase the physical batch size (current batch size: 2048)"}}`,
+		`{"error":{"message":"input (5000 tokens) is larger than the max context size (2048 tokens). skipping"}}`,
+	} {
+		f := newVecFixture(t)
+		f.capture(t, "o1", "c1", "k1", "TOOLONG", "one text", time.Now().UTC().Add(-time.Hour), false)
+		f.store.SetEmbedder(httpEmbedder(t, func(in []string) (int, string) {
+			for _, x := range in {
+				if strings.Contains(x, "TOOLONG") {
+					return 500, msg
+				}
+			}
+			return 200, ""
+		}))
+		if res := f.pass(t); res.Refused != 1 || res.Captures != 0 {
+			t.Fatalf("%s: %+v", msg, res)
+		}
+	}
+}
+
+func TestVectorUnreadableMetadataIsRetriedNotRecorded(t *testing.T) {
+	f := newVecFixture(t)
+	id := f.capture(t, "o1", "c1", "k1", "One", "one text", time.Now().UTC().Add(-time.Hour), false).CanonicalID
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET metadata = '{"labels":[]}' WHERE canonical_id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if res := f.pass(t); res.Skipped != 1 || res.Refused != 0 || f.count(t, "vec_captures") != 0 {
+			t.Fatalf("pass %d: %+v rows %d", i, res, f.count(t, "vec_captures"))
+		}
+	}
+	// repaired metadata is embedded on the next pass
+	obj := f.capture(t, "o1", "c1", "k1", "One", "one text", time.Now().UTC().Add(-time.Hour), false)
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET metadata = ? WHERE canonical_id = ?`, string(obj.Metadata), id); err != nil {
+		t.Fatal(err)
+	}
+	if res := f.pass(t); res.Captures != 1 {
+		t.Fatalf("after repair: %+v", res)
+	}
+}
+
+func TestVectorOnePersistentlyFailingCaptureDoesNotStallTheOlderOnes(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-10 * time.Hour)
+	var ids []string
+	for i := 0; i < 6; i++ {
+		title := fmt.Sprintf("Page %d", i)
+		if i == 5 { // the newest
+			title = "BADONE"
+		}
+		ids = append(ids, f.capture(t, "o1", "c1", fmt.Sprintf("k%d", i), title, "text", base.Add(time.Duration(i)*time.Hour), false).CanonicalID)
+	}
+	r := &refusing{inner: f.emb, net: func(in string) bool { return strings.Contains(in, "BADONE") }}
+	f.store.SetEmbedder(r)
+	logs := fullTextLog(t)
+	for i := 0; i < 2; i++ {
+		res, err := f.svc.RunVectorPass(context.Background())
+		if err != nil || res.Skipped != 1 {
+			t.Fatalf("pass %d: %+v %v", i, res, err)
+		}
+		if i == 0 && res.Captures != 5 {
+			t.Fatalf("the older captures stalled behind the failing one: %+v", res)
+		}
+	}
+	if f.count(t, "vec_captures") != 5 || !strings.Contains(logs.String(), "capture="+ids[5]+" could not be embedded now") {
+		t.Fatalf("rows %d\\n%s", f.count(t, "vec_captures"), logs.String())
+	}
+}
+
+// policyCases are access_policy_json values the read route decides on.
+var policyCases = []string{
+	`{"visibility":"public","route":"public"}`, `{"visibility":"public"}`, `{"visibility":"PUBLIC ","route":" Public"}`,
+	`{"visibility":"public","route":"private"}`, `{"visibility":"private"}`, `{"route":"public"}`, `{}`, ``,
+	`{not json`, `null`, `[]`, `"public"`, `42`, `{"visibility":"public","route":""}`, `{"visibility":"public"} trailing`,
+	`{"visibility":123}`, `{"visibility":"public","route":null}`,
+}
+
+func TestVectorSQLPolicyAgreesWithTheReadRoute(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	pub, ver := f.vecPublish(t, "pol", "Policy", json.RawMessage(`{"visibility":"public","route":"public","n":1}`))
+	eligible := func() bool {
+		ok, err := f.store.sqlEligibleStoryVersions(ctx, []storyVersionRef{{StoryID: pub, VersionID: ver}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok[ver]
+	}
+	if !eligible() {
+		t.Fatal("the fixture's own policy is not eligible")
+	}
+	set := func(metadata string) {
+		t.Helper()
+		res, err := f.store.corpus().Exec(`UPDATE og_objects SET metadata = ? WHERE canonical_id IN (SELECT to_id FROM og_edges WHERE from_id = ? AND kind = 'has_policy')`, metadata, ver)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			t.Fatalf("policy objects updated: %d", n)
+		}
+	}
+	for _, in := range policyCases {
+		meta, _ := json.Marshal(map[string]string{"access_policy_json": in, "export_policy_json": "{}"})
+		set(string(meta))
+		// the read route: firstNonEmpty(access_policy_json, "{}") through publicationAccessPolicyAllowsPublicRoute
+		want := publicationAccessPolicyAllowsPublicRoute(json.RawMessage(firstNonEmpty(in, "{}")))
+		if got := eligible(); got != want {
+			t.Fatalf("access_policy_json %q: the SQL predicate says %v, the read route says %v", in, got, want)
+		}
+	}
+	// a policy object whose metadata is not JSON, and one with no access key
+	for name, meta := range map[string]string{"not json": `{{{`, "no access key": `{"export_policy_json":"{}"}`} {
+		set(meta)
+		var obj struct {
+			AccessPolicyJSON string `json:"access_policy_json"`
+		}
+		_ = json.Unmarshal([]byte(meta), &obj)
+		want := publicationAccessPolicyAllowsPublicRoute(json.RawMessage(firstNonEmpty(obj.AccessPolicyJSON, "{}")))
+		if got := eligible(); got != want {
+			t.Fatalf("%s: SQL %v, read route %v", name, got, want)
+		}
+	}
+}
+
+func TestVectorIdleMarkSeesATombstoneAndANewVersionThatLeaveTheCountsAlone(t *testing.T) {
+	f := newVecFixture(t)
+	f.story(t, "doc-a", 1, "A", storyText("aaa"), time.Time{})
+	f.story(t, "doc-b", 1, "B", storyText("bbb"), time.Time{})
+	ctx := context.Background()
+	if err := f.store.ensureVectorTables(ctx); err != nil {
+		t.Fatal(err)
+	}
+	m1, err := f.svc.storyMark(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identA, _ := publicationIdentityFor("paper-owner", "doc-a")
+	vs, _ := publishedVersions(ctx, f.og, identA.CanonicalID)
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = ?`, vs[0].CanonicalID); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1100 * time.Millisecond) // creation times are whole seconds
+	f.story(t, "doc-b", 2, "B again", storyText("bbb2"), time.Time{})
+	identB, _ := publicationIdentityFor("paper-owner", "doc-b")
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET updated_at = ? WHERE canonical_id = ?`, m1.newest, identB.CanonicalID); err != nil {
+		t.Fatal(err)
+	}
+	m2, err := f.svc.storyMark(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m2.pubs != m1.pubs || m2.versions != m1.versions || m2.held != m1.held || !m2.newest.Equal(m1.newest) {
+		t.Fatalf("the fixture did not keep the counts: %+v %+v", m1, m2)
+	}
+	if m2 == m1 {
+		t.Fatal("the mark did not change: a tombstone plus a new version would leave the new version unseen")
+	}
+}
+
+func TestVectorEnsureMigratesATableOfTheEarlierSchema(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	if err := f.store.ensureVectorTables(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`DROP TABLE vec_story_passages, vec_captures`,
+		`CREATE TABLE vec_story_passages (story_id TEXT NOT NULL, version_id TEXT NOT NULL, ordinal INTEGER NOT NULL, text_sha TEXT NOT NULL, day DATE NOT NULL, model TEXT NOT NULL, embedding halfvec(256) NOT NULL, embedded_on DATE NOT NULL, PRIMARY KEY (story_id, version_id, ordinal))`,
+		`CREATE TABLE vec_captures (capture_id TEXT NOT NULL PRIMARY KEY, owner_id TEXT NOT NULL, computer_id TEXT NOT NULL, text_sha TEXT NOT NULL, day DATE NOT NULL, model TEXT NOT NULL, embedding halfvec(256) NOT NULL, embedded_on DATE NOT NULL)`,
+	} {
+		if _, err := f.store.corpus().Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.store.ensureVectorTables(ctx); err != nil {
+		t.Fatalf("ensure on the old schema: %v", err)
+	}
+	// a refused row (no vector, a reason) now writes
+	rows := []storyVectorRow{{StoryID: "s", VersionID: "v", Ordinal: 0, TextSHA: "x", Day: time.Now(), Refused: "too large"}}
+	if err := f.store.writeStoryVersionVectors(ctx, "s", "v", rows); err != nil {
+		t.Fatalf("a refused row after migration: %v", err)
+	}
+	// and a second ensure alters nothing (it must not take an exclusive lock each pass)
+	tx, _ := f.store.corpus().BeginTx(ctx, nil)
+	_, _ = tx.Exec(`LOCK TABLE vec_story_passages IN SHARE UPDATE EXCLUSIVE MODE`)
+	short, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := f.store.ensureVectorTables(short); err != nil {
+		t.Fatalf("ensure under a build's lock: %v", err)
+	}
+	_ = tx.Rollback()
+}
+
+func TestVectorSearchNeverFailsOnTheIndexReadEither(t *testing.T) {
+	f := newVecFixture(t)
+	f.captures(t, "o1", "c1", "p", 10, time.Now().UTC().Add(-50*time.Hour), func(i int) string { return fmt.Sprintf("alpha %d", i) }, time.Minute)
+	f.pass(t)
+	old := vectorSearchStageHook
+	t.Cleanup(func() { vectorSearchStageHook = old })
+	vectorSearchStageHook = func(ctx context.Context, tx *sql.Tx, stage string) error {
+		if stage == "count" || stage == "index" {
+			if _, err := tx.ExecContext(ctx, `SET LOCAL statement_timeout = '5ms'`); err != nil {
+				return err
+			}
+			_, err := tx.ExecContext(ctx, `SELECT pg_sleep(2)`)
+			return err
+		}
+		return nil
+	}
+	res, err := f.store.SearchVectors(context.Background(), VectorSearchRequest{Query: "alpha", Owner: "o1", Computer: "c1"})
+	if err != nil || !strings.Contains(res.Partial, "index scan did not finish") {
+		t.Fatalf("count and index both past the deadline: %+v %v", res, err)
+	}
+}
+
+func TestVectorWalkIsTimed(t *testing.T) {
+	f := newVecFixture(t)
+	f.story(t, "doc-a", 1, "A", storyText("aaa"), time.Time{})
+	f.pass(t)
+	if f.store.RetrievalSnapshot().Ops["published_versions_of"].Calls == 0 {
+		t.Fatal("the chunked edge read is not in the retrieval counters")
 	}
 }

@@ -182,7 +182,7 @@ func (c *Client) Embed(ctx context.Context, inputs []string) ([][]float32, error
 		return nil, fmt.Errorf("embedder: read: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, &StatusError{Code: resp.StatusCode, Body: strings.TrimSpace(string(raw[:min(len(raw), 300)]))}
+		return nil, classifyStatus(resp.StatusCode, strings.TrimSpace(string(raw[:min(len(raw), 600)])))
 	}
 	var out embeddingsResponse
 	if err := json.Unmarshal(raw, &out); err != nil {
@@ -205,11 +205,39 @@ func (c *Client) Embed(ctx context.Context, inputs []string) ([][]float32, error
 	return vecs, nil
 }
 
-// StatusError is a non-200 answer. A 4xx names an input the server will not
-// take; a 5xx or 503 is the server's state.
+// StatusError is a non-200 answer that does not identify an input as the
+// cause: a 5xx, a 503 while loading, a 429, a 404 from a route that is not
+// there are the server's state, whatever the code, and the caller retries.
 type StatusError struct {
 	Code int
 	Body string
 }
 
 func (e *StatusError) Error() string { return fmt.Sprintf("embedder: status %d: %s", e.Code, e.Body) }
+
+// InputRefusedError is the server saying this input, and not the server, is
+// the problem: the one condition the client identifies. llama.cpp b12259
+// answers an embedding input over its batch or its slot's context with
+// "input (N tokens) is too large to process. increase the physical batch size"
+// or "input (N tokens) is larger than the max context size (M tokens)"
+// (tools/server/server-context.cpp:4076-4098; docs/reference/EMBEDDINGGEMMA.md
+// 0.11.2). Only these two messages are an input refusal; a caller may record
+// one durably. Everything else is a StatusError or a transport error and is
+// retried.
+type InputRefusedError struct {
+	Code   int
+	Reason string
+}
+
+func (e *InputRefusedError) Error() string {
+	return fmt.Sprintf("embedder: input refused (status %d): %s", e.Code, e.Reason)
+}
+
+// classifyStatus turns a non-200 answer into an InputRefusedError when its body
+// is one of the two too-large messages, else a StatusError.
+func classifyStatus(code int, body string) error {
+	if strings.Contains(body, "is too large to process") || strings.Contains(body, "is larger than the max context size") {
+		return &InputRefusedError{Code: code, Reason: body}
+	}
+	return &StatusError{Code: code, Body: body}
+}

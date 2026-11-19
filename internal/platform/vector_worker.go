@@ -93,6 +93,9 @@ type vecIdleMark struct {
 type storyMarkT struct {
 	newest         time.Time
 	pubs, versions int64
+	// latest is the newest creation time of a live version: a tombstone and a
+	// new version in one interval leave the counts alone but move it.
+	latest time.Time
 	// held is the story vector rows of the current model, so a table that
 	// lost or changed rows since the walk is walked again.
 	held int64
@@ -112,7 +115,7 @@ func (s *Service) storyMark(ctx context.Context) (storyMarkT, error) {
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = 'choir.publication' AND NOT tombstone`).Scan(&m.pubs); err != nil {
 		return m, err
 	}
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = 'choir.publication_version' AND NOT tombstone`).Scan(&m.versions); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(created_at), 'epoch'::timestamptz) FROM og_objects WHERE object_kind = 'choir.publication_version' AND NOT tombstone`).Scan(&m.versions, &m.latest); err != nil {
 		return m, err
 	}
 	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM vec_story_passages WHERE model = ?`, embedder.ModelHash).Scan(&m.held)
@@ -347,8 +350,10 @@ func (s *Service) eligibleStoryVersions(ctx context.Context) ([]storyVersionRef,
 // publishedVersionsOf reads the has_version edges of many publications in one
 // statement and returns each publication's published versions, oldest
 // revision first, exactly as publishedVersions reads one.
-func (s *Store) publishedVersionsOf(ctx context.Context, pubIDs []string) (map[string][]publishedVersion, error) {
-	out := map[string][]publishedVersion{}
+func (s *Store) publishedVersionsOf(ctx context.Context, pubIDs []string) (out map[string][]publishedVersion, err error) {
+	done := s.retrievalTimer(retrievalPublishedVersionsOf)
+	defer func() { done("chunk", len(out), err) }()
+	out = map[string][]publishedVersion{}
 	if len(pubIDs) == 0 {
 		return out, nil
 	}
@@ -468,17 +473,25 @@ func (s *Store) captureGapBatch(ctx context.Context, model string, afterEff *tim
 }
 
 // embedInputs embeds inputs in batches. When a batch fails and the embedder
-// still answers, its inputs are tried one by one so one bad input does not
-// hold the rest. An input the server answers with an error status while it is
-// healthy is a refusal (too many tokens for its batch, for example): its
-// vector is nil and refusals names the reason, so the caller records it and
-// does not ask again. Any other failure of a single input (a dropped
-// connection) is returned as an error: nothing is recorded and the next pass
-// tries again. When the embedder cannot answer the error wraps errEmbedderDown.
-func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string) (out [][]float32, refusals map[int]string, err error) {
+// still answers its health check, its inputs are tried one by one so one bad
+// input does not hold the rest. What a failure of one input means is decided
+// here, in one place, and by one rule:
+//
+//   - the server identifies the input as the problem (embedder.InputRefusedError:
+//     the two "too large" messages): the vector is nil and refusals names the
+//     reason; the caller may record it durably;
+//   - a status error of any other kind (a 500, a 503, a 429, a 404) is the
+//     server's state, not the input's: the error wraps errEmbedderDown, nothing
+//     is recorded, the pass stops and backs off, the items are retried;
+//   - a transport or decode failure of one input while the server is healthy:
+//     the input is left out of this pass (failed names it) and the others go
+//     on; it is tried again next pass.
+//
+// When the embedder cannot answer its health check the error wraps errEmbedderDown.
+func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string) (out [][]float32, refusals map[int]string, failed map[int]error, err error) {
 	emb := s.store.embedder()
 	if emb == nil {
-		return nil, nil, fmt.Errorf("%w: no embedder configured", errEmbedderDown)
+		return nil, nil, nil, fmt.Errorf("%w: no embedder configured", errEmbedderDown)
 	}
 	out = make([][]float32, len(inputs))
 	for start := 0; start < len(inputs); start += vectorBatch {
@@ -491,32 +504,43 @@ func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string
 			continue
 		}
 		if ctx.Err() != nil {
-			return nil, nil, ctx.Err()
+			return nil, nil, nil, ctx.Err()
 		}
 		if herr := emb.Health(ctx); herr != nil {
-			return nil, nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
+			return nil, nil, nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
 		}
 		for i := start; i < end; i++ {
 			one, err := emb.Embed(ctx, inputs[i:i+1])
-			if err != nil {
-				if herr := emb.Health(ctx); herr != nil {
-					return nil, nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
-				}
-				var se *embedder.StatusError
-				if !errors.As(err, &se) {
-					return nil, nil, fmt.Errorf("embed: %w", err)
-				}
-				log.Printf("corpusd vectors embed refused shape=%s status=%d err=%v", shape, se.Code, err)
+			if err == nil {
+				out[i] = one[0]
+				continue
+			}
+			if ctx.Err() != nil {
+				return nil, nil, nil, ctx.Err()
+			}
+			if herr := emb.Health(ctx); herr != nil {
+				return nil, nil, nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
+			}
+			var ir *embedder.InputRefusedError
+			var se *embedder.StatusError
+			switch {
+			case errors.As(err, &ir):
+				log.Printf("corpusd vectors embed refused shape=%s status=%d err=%v", shape, ir.Code, err)
 				if refusals == nil {
 					refusals = map[int]string{}
 				}
-				refusals[i] = clipRunes(strings.TrimSpace(se.Error()), 200)
-				continue
+				refusals[i] = clipRunes(strings.TrimSpace(ir.Error()), 200)
+			case errors.As(err, &se):
+				return nil, nil, nil, fmt.Errorf("%w: the server answered %v", errEmbedderDown, err)
+			default:
+				if failed == nil {
+					failed = map[int]error{}
+				}
+				failed[i] = err
 			}
-			out[i] = one[0]
 		}
 	}
-	return out, refusals, nil
+	return out, refusals, failed, nil
 }
 
 // RunVectorPass derives the gap and embeds it: stories, then captures, then
@@ -744,9 +768,14 @@ func (s *Service) embedStoryVersion(ctx context.Context, og *ObjectGraphStore, r
 	for i, p := range vt.Passages {
 		inputs[i] = embedder.DocumentInput(vt.Title, p)
 	}
-	vecs, refusals, err := s.embedInputs(ctx, "story", inputs)
+	vecs, refusals, failed, err := s.embedInputs(ctx, "story", inputs)
 	if err != nil {
 		return 0, 0, err
+	}
+	if len(failed) > 0 {
+		for i, ferr := range failed {
+			return 0, 0, fmt.Errorf("passage %d of the version could not be embedded now (tried again next pass): %w", i, ferr)
+		}
 	}
 	rows := make([]storyVectorRow, len(vecs))
 	for i := range vecs {
@@ -856,7 +885,11 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 		}
 		title, hash, ok := captureVectorSource(obj)
 		if !ok {
-			record(obj, "not embeddable: no scope or unreadable metadata")
+			// The predicate keeps it and the Go reader cannot read its metadata:
+			// unreadable is not an identified refusal, so it is skipped and read
+			// again next pass.
+			skipped++
+			log.Printf("corpusd vectors capture=%s skipped: its metadata cannot be read now", r.ID)
 			continue
 		}
 		lead, err := captureLeadPassage(s.captureBodies, hash)
@@ -881,7 +914,7 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 	for i, it := range items {
 		inputs[i] = it.input
 	}
-	vecs, refusals, err := s.embedInputs(ctx, "capture", inputs)
+	vecs, refusals, failed, err := s.embedInputs(ctx, "capture", inputs)
 	if err != nil {
 		return 0, skipped, 0, err
 	}
@@ -889,6 +922,13 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 	refused = len(norow)
 	embedded := 0
 	for i, it := range items {
+		if ferr, bad := failed[i]; bad {
+			// Left out of this pass, tried again next: one line per capture per
+			// pass, and passes that do no other work are 5 minutes apart.
+			skipped++
+			log.Printf("corpusd vectors capture=%s could not be embedded now (tried again next pass): %v", it.obj.CanonicalID, ferr)
+			continue
+		}
 		out = append(out, captureVectorRow{ID: it.obj.CanonicalID, Owner: it.obj.OwnerID, Computer: it.obj.ComputerID, TextSHA: it.textID, Day: captureDay(it.obj), Vec: vecs[i], Refused: refusals[i]})
 		if vecs[i] != nil {
 			embedded++
@@ -980,10 +1020,12 @@ func (s *Store) captureObjectsByIDAny(ctx context.Context, ids []string) (map[st
 // index's exclusion, taken conservatively: the label's prefix anywhere in the
 // metadata text hides the capture). A story passage's is eligible while its
 // version and publication are not tombstoned and the publication is published
-// with a route, and no policy object of the version says its access is not
-// public (the read routes' source, service_publication_read.go:465; read with
-// pg_input_is_valid and a CASE so malformed data never raises: a missing,
-// empty or unreadable policy object adds no constraint). The manifest's policy,
+// with a route, and no policy object of the version fails the read route's test
+// (service_publication_read.go:465-481 with publicationAccessPolicyAllowsPublicRoute:
+// access_policy_json absent, empty, malformed or not public is NOT public; a
+// version with no policy object is the default, public). The CASE keeps
+// malformed data from raising; TestVectorSQLPolicyAgreesWithTheReadRoute runs
+// the same inputs through both so they cannot drift. The manifest's policy,
 // the Mac export's source, is checked in Go when vectors are written.
 var (
 	vecCaptureEligibleSQL = `EXISTS (SELECT 1 FROM og_objects o WHERE o.canonical_id = v.capture_id AND o.object_kind = '` + string(objectgraph.WebCaptureObjectKind) + `'
@@ -994,9 +1036,9 @@ var (
 			AND pub.metadata::jsonb->>'state' = 'published' AND btrim(COALESCE(pub.metadata::jsonb->>'route_path', '')) <> '')
 		AND NOT EXISTS (SELECT 1 FROM og_edges pe JOIN og_objects po ON po.canonical_id = pe.to_id
 			WHERE pe.from_id = v.version_id AND pe.kind = 'has_policy' AND NOT pe.tombstone
-			AND CASE WHEN NOT pg_input_is_valid(po.metadata, 'jsonb') THEN false
-				WHEN NOT pg_input_is_valid(COALESCE(po.metadata::jsonb->>'access_policy_json', ''), 'jsonb') THEN false
-				WHEN COALESCE(po.metadata::jsonb->>'access_policy_json', '') = '' THEN false
+			AND CASE WHEN NOT pg_input_is_valid(po.metadata, 'jsonb') THEN true
+				WHEN NOT pg_input_is_valid(COALESCE(po.metadata::jsonb->>'access_policy_json', ''), 'jsonb') THEN true
+				WHEN COALESCE(po.metadata::jsonb->>'access_policy_json', '') = '' THEN true
 				ELSE NOT (lower(btrim(COALESCE((po.metadata::jsonb->>'access_policy_json')::jsonb->>'visibility', ''))) = 'public'
 					AND lower(btrim(COALESCE((po.metadata::jsonb->>'access_policy_json')::jsonb->>'route', ''))) IN ('', 'public')) END))`
 )
