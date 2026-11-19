@@ -917,5 +917,17 @@ func (s *Store) ensureCaptureTermsCoverIndex(ctx context.Context) error {
 		return fmt.Errorf("build %s: %w", captureTermsCoverIdx, err)
 	}
 	log.Printf("corpusd retrieval migrate index=%s table=%s ms=%d concurrently", captureTermsCoverIdx, captureTermsTable, time.Since(start).Milliseconds())
+	// An index-only scan reads the heap for every page the visibility map does
+	// not mark all-visible, which is as slow as no index at all (measured: no
+	// gain until the table was vacuumed). Autovacuum keeps the map, but a table
+	// that was bulk-loaded may not have been vacuumed; one vacuum after the
+	// build makes the index useful at once. It takes a lock that excludes only
+	// schema changes and other vacuums, not writers, and failing is harmless.
+	vstart := time.Now()
+	if _, err := conn.ExecContext(ctx, `VACUUM (ANALYZE) `+captureTermsTable); err != nil {
+		log.Printf("corpusd retrieval migrate vacuum table=%s err=%v (autovacuum will do it)", captureTermsTable, err)
+		return nil
+	}
+	log.Printf("corpusd retrieval migrate vacuum table=%s ms=%d", captureTermsTable, time.Since(vstart).Milliseconds())
 	return nil
 }
