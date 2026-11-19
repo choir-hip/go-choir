@@ -1,0 +1,119 @@
+{
+ "about": "A skip is skipped at the block it reached, not the last block. The remote line itself posts nothing.",
+ "anomalies": [],
+ "dropped": {},
+ "journal": [
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": false,
+   "seconds": 0,
+   "seq": 1,
+   "type": "started"
+  },
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": true,
+   "seconds": 0,
+   "seq": 2,
+   "type": "sounding"
+  },
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "block": 2,
+   "command": "next",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": false,
+   "seconds": 20.25,
+   "seq": 3,
+   "type": "remote"
+  },
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "block": 2,
+   "command": "",
+   "end": "skipped",
+   "final": 5,
+   "item": "a",
+   "reason": "",
+   "rendered": true,
+   "seconds": 20.25,
+   "seq": 4,
+   "type": "ended"
+  }
+ ],
+ "name": "03_skipped_on_the_lock_screen",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "j1.toqug0.a",
+   "position_seconds": 0.0,
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-19T10:00:05Z",
+    "last_block": 2,
+    "outcome": "skipped"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "j4.toqug5.a",
+   "position_seconds": 20.25,
+   "state": "skipped"
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0.0,
+  "version": 5
+ },
+ "through": 4,
+ "want": [
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "id": "a",
+   "last_block": 2,
+   "outcome": "skipped",
+   "state": "skipped"
+  }
+ ]
+}

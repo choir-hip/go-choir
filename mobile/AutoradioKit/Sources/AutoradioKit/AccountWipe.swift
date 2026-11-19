@@ -62,7 +62,8 @@ public final class AccountWipe: @unchecked Sendable {
         reader: ReaderStore = .shared,
         keptTurns: KeptTurnStore? = nil,
         voice: SpeakerGate = .shared,
-        heldRest: HeldRest = .shared
+        heldRest: HeldRest = .shared,
+        deck: Deck = .shared
     ) {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
@@ -77,6 +78,7 @@ public final class AccountWipe: @unchecked Sendable {
             Self.removeTakeScratch(in: tempDirectory)
         }
         register("run-sheet") { await MainActor.run { runSheet.wipe() } }
+        register("deck-journal") { await MainActor.run { deck.journal.wipe() } }
         if let openingCache { register("opening") { openingCache.wipe() } }
         register("clips") { clips.wipe() }
         // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).

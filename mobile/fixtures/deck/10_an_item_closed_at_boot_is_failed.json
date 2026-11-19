@@ -1,0 +1,107 @@
+{
+ "about": "The deck closes the item a kill left open; a restart is no verdict, however much sound there was.",
+ "anomalies": [],
+ "dropped": {},
+ "journal": [
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": false,
+   "seconds": 0,
+   "seq": 1,
+   "type": "started"
+  },
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": true,
+   "seconds": 0,
+   "seq": 2,
+   "type": "sounding"
+  },
+  {
+   "at": "2026-11-19T10:01:00Z",
+   "block": 1,
+   "command": "",
+   "end": "failed",
+   "final": 0,
+   "item": "a",
+   "reason": "interrupted by a restart",
+   "rendered": true,
+   "seconds": 7.0,
+   "seq": 3,
+   "type": "ended"
+  }
+ ],
+ "name": "10_an_item_closed_at_boot_is_failed",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "j1.toqug0.a",
+   "position_seconds": 0.0,
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-19T10:01:00Z",
+    "last_block": 1,
+    "outcome": "failed"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "j3.toquho.a",
+   "position_seconds": 7.0,
+   "reason": "interrupted by a restart",
+   "state": "skipped"
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0.0,
+  "version": 5
+ },
+ "through": 3,
+ "want": [
+  {
+   "at": "2026-11-19T10:01:00Z",
+   "id": "a",
+   "last_block": 1,
+   "outcome": "failed",
+   "state": "skipped"
+  }
+ ]
+}

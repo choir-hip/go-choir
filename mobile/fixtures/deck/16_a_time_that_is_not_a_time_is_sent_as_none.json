@@ -1,0 +1,93 @@
+{
+ "about": "A line with no usable time posts an empty ended.at, which the server takes as its arrival. The deck always writes a time; this is the guard.",
+ "anomalies": [],
+ "dropped": {},
+ "journal": [
+  {
+   "at": "not a time",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": false,
+   "seconds": 0,
+   "seq": 1,
+   "type": "started"
+  },
+  {
+   "at": "",
+   "block": 1,
+   "command": "",
+   "end": "finished",
+   "final": 1,
+   "item": "a",
+   "reason": "",
+   "rendered": true,
+   "seconds": 2.0,
+   "seq": 2,
+   "type": "ended"
+  }
+ ],
+ "name": "16_a_time_that_is_not_a_time_is_sent_as_none",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "j1.0.a",
+   "position_seconds": 0.0,
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "ended": {
+    "at": "",
+    "last_block": 1,
+    "outcome": "finished"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "j2.0.a",
+   "position_seconds": 2.0,
+   "state": "heard"
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0.0,
+  "version": 5
+ },
+ "through": 2,
+ "want": [
+  {
+   "at": "",
+   "id": "a",
+   "last_block": 1,
+   "outcome": "finished",
+   "state": "heard"
+  }
+ ]
+}

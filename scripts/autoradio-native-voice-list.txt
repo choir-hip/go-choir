@@ -47,6 +47,10 @@ path mobile/AutoradioKit/Sources/AutoradioKit/ExternalModels.swift the registrar
 path mobile/AutoradioKit/Sources/AutoradioKit/LiveConfigBackend.swift the configurator's backend on a real device
 path mobile/AutoradioKit/Sources/AutoradioKit/LabRuntime.swift the voice lab: runs and measures the engine and its stages
 path mobile/AutoradioKit/Sources/AutoradioKit/Embedder.swift the on-device embedding model's interface and prompts
+# --- the deck: the queue of prepared audio under shared code (docs/reference/exact/deck.md)
+path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirPlayback.swift the engine behind the deck: spoken entries through the programme player and remote audio through AVPlayer, and whether sound is reaching the output
+path mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift the deck: plays what shared code hands it, applies the named rules that cannot wait for shared code, keeps the journal of what started and ended with sound rendered
+path mobile/exact-package/apple/AutoradioModule+Deck.swift the deck's names for Exact: reads options, answers the deck's state; decides nothing
 # --- the take recorder and clip fingerprinting
 path mobile/AutoradioKit/Sources/AutoradioKit/TakeSession.swift the take recorder: microphone, recogniser and player behind four protocols
 path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ClipFingerprint.swift clip fingerprinting over decoded PCM
@@ -64,5 +68,6 @@ name onboardingHearing the microphone check's hearing level
 name choirTalkCancel cancels the open microphone turn
 name choirHandsFreeToggle opens and closes the microphone
 name choirListen starts a spoken turn
+name deck* the deck: play, hold, pause, seek, acknowledge, and the state and journal it keeps (the audio session and the lock screen are native)
 # --- the Keychain read behind the signed-in seam (AutoradioLab/api.ts); goes when sign-in moves to Exact's own secret store
 path mobile/AutoradioKit/Sources/AutoradioKit/Choir/CredentialReader.swift reads the Keychain item today's sign-in wrote, in place (Exact's secret store keeps items under another service), so the phone stays signed in

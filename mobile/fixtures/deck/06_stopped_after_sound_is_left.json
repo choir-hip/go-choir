@@ -1,0 +1,93 @@
+{
+ "about": "A sign-out after sound leaves as heard with outcome left: no verdict, as today.",
+ "anomalies": [],
+ "dropped": {},
+ "journal": [
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": false,
+   "seconds": 0,
+   "seq": 1,
+   "type": "started"
+  },
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "block": 1,
+   "command": "",
+   "end": "stopped",
+   "final": 3,
+   "item": "a",
+   "reason": "",
+   "rendered": true,
+   "seconds": 12.0,
+   "seq": 2,
+   "type": "ended"
+  }
+ ],
+ "name": "06_stopped_after_sound_is_left",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "j1.toqug0.a",
+   "position_seconds": 0.0,
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-19T10:00:05Z",
+    "last_block": 1,
+    "outcome": "left"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "j2.toqug5.a",
+   "position_seconds": 12.0,
+   "state": "heard"
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0.0,
+  "version": 5
+ },
+ "through": 2,
+ "want": [
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "id": "a",
+   "last_block": 1,
+   "outcome": "left",
+   "state": "heard"
+  }
+ ]
+}

@@ -37,6 +37,9 @@ final class FakeEngine: PlaybackEngine {
     func restartSpoken() { log.append("restart") }
     func resumeSpoken() { log.append("resumeSpoken") }
     var remainder: String?
+    var rendersSound = false
+    func rendering() -> Bool { rendersSound }
+    func pauseSpoken() { log.append("pauseSpoken") }
     func spokenRemainder() -> String? { remainder }
     func spokenPosition() -> (block: Int, seconds: Double) { position }
     func stopSpoken() { log.append("stopSpoken") }
