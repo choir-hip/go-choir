@@ -35,6 +35,10 @@ const (
 // make the index scan end early.
 var vectorMaxScanTuples = 100000
 
+// vectorExactMaxRows is how many filtered rows a list may have and still be
+// read exactly. Beyond it the list is the HNSW index's approximate nearest.
+var vectorExactMaxRows = 100000
+
 // vectorSearchTxHook runs inside each list's transaction, after the settings
 // and before the first statement (tests steer the planner with it).
 var vectorSearchTxHook func(ctx context.Context, tx *sql.Tx) error
@@ -86,11 +90,15 @@ type VectorSearchResult struct {
 	// and the caller answers from what it has, naming the gap. A search for
 	// meaning never fails the caller's search.
 	Unavailable string `json:"unavailable,omitempty"`
-	// ExactScan names the lists ("stories", "captures") that came back short
-	// of the limit from the index and were answered again by an exact scan
-	// (filters are applied after an approximate index scan, so a narrow
-	// window or scope can leave it short). Such a list is complete.
-	ExactScan []string `json:"exact_scan,omitempty"`
+	// ExactScan names the lists ("stories", "captures") answered by an exact
+	// scan: their filtered rows number at most vectorExactMaxRows, or the
+	// index came back short of the limit (filters apply after an approximate
+	// index scan). Such a list is the true nearest of the rows it covers.
+	// Approximate names the lists answered by the HNSW index alone: the
+	// approximate nearest, as pgvector's index gives it (docs/reference/
+	// EMBEDDINGGEMMA.md 0.11.2 says what that does and does not guarantee).
+	ExactScan   []string `json:"exact_scan,omitempty"`
+	Approximate []string `json:"approximate,omitempty"`
 	// Partial is set when a list could not be completed (the exact scan
 	// passed the statement deadline): the list holds what the index gave and
 	// may lack nearer rows. A result without Partial is complete.
@@ -159,7 +167,8 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 	storyLimit := clamp(req.StoryLimit)
 	doneStories := s.retrievalTimer(retrievalVectorSearch)
 	sq, sargs := vectorStoryQuery(lit, window, storyLimit)
-	stories, exact, partial, err := runVectorList(ctx, s, sq, sargs, storyLimit, func(rows *sql.Rows) (VectorStoryHit, error) {
+	cw, cargsS := window([]any{embedder.ModelHash})
+	stories, mode, partial, err := runVectorList(ctx, s, sq, sargs, storyLimit, `SELECT COUNT(*) FROM vec_story_passages v WHERE v.model = ?`+cw, cargsS, func(rows *sql.Rows) (VectorStoryHit, error) {
 		var h VectorStoryHit
 		err := rows.Scan(&h.PublicationID, &h.VersionID, &h.Ordinal, &h.Day, &h.TextSHA, &h.Score)
 		return h, err
@@ -170,16 +179,15 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 	}
 	sort.SliceStable(stories, func(i, j int) bool { return stories[i].Score > stories[j].Score })
 	res.Stories = stories
-	if exact {
-		res.ExactScan = append(res.ExactScan, "stories")
-	}
+	res.noteMode("stories", mode)
 	res.Partial = joinPartial(res.Partial, "stories", partial)
 
 	if strings.TrimSpace(req.Owner) != "" && strings.TrimSpace(req.Computer) != "" {
 		capLimit := clamp(req.CaptureLimit)
 		doneCaptures := s.retrievalTimer(retrievalVectorSearch)
 		cq, cargs := vectorCaptureQuery(lit, req.Owner, req.Computer, window, capLimit)
-		caps, exact, partial, err := runVectorList(ctx, s, cq, cargs, capLimit, func(rows *sql.Rows) (VectorCaptureHit, error) {
+		cw, cargsC := window([]any{embedder.ModelHash, req.Owner, req.Computer})
+		caps, mode, partial, err := runVectorList(ctx, s, cq, cargs, capLimit, `SELECT COUNT(*) FROM vec_captures v WHERE v.model = ? AND v.owner_id = ? AND v.computer_id = ?`+cw, cargsC, func(rows *sql.Rows) (VectorCaptureHit, error) {
 			var h VectorCaptureHit
 			err := rows.Scan(&h.CaptureID, &h.Day, &h.TextSHA, &h.Score)
 			return h, err
@@ -190,13 +198,24 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 		}
 		sort.SliceStable(caps, func(i, j int) bool { return caps[i].Score > caps[j].Score })
 		res.Captures = caps
-		if exact {
-			res.ExactScan = append(res.ExactScan, "captures")
-		}
+		res.noteMode("captures", mode)
 		res.Partial = joinPartial(res.Partial, "captures", partial)
 	}
 	return res, nil
 }
+
+func (r *VectorSearchResult) noteMode(list, mode string) {
+	if mode == vecModeIndex {
+		r.Approximate = append(r.Approximate, list)
+	} else {
+		r.ExactScan = append(r.ExactScan, list)
+	}
+}
+
+const (
+	vecModeIndex = "index"
+	vecModeExact = "exact"
+)
 
 func joinPartial(have, list, why string) string {
 	if why == "" {
@@ -233,19 +252,26 @@ func vectorCaptureQuery(lit, owner, computer string, window func([]any) (string,
 }
 
 // runVectorList runs one list in its own transaction under a statement
-// deadline. pgvector applies a WHERE after the approximate HNSW scan, so a
-// filter that excludes most of the nearest rows leaves the scan short even
-// with iterative scans, which stop at hnsw.max_scan_tuples (pgvector 0.8.7
-// README, "Filtering" and "Iterative Index Scans"). A list that comes back
-// with fewer rows than its limit is therefore asked again with index scans
-// off, which makes the planner read the filtered rows exactly (the btree on
-// scope and day, or the table) and sort them by distance. The answer is then
-// complete; if that second statement passes the deadline, the first answer is
-// returned and partial says so.
-func runVectorList[T any](ctx context.Context, s *Store, query string, args []any, limit int, scan func(*sql.Rows) (T, error)) (out []T, exact bool, partial string, err error) {
+// deadline and says how it was answered. pgvector applies a WHERE after the
+// approximate HNSW scan: a filter that excludes most of the nearest rows
+// leaves the scan short, and iterative scans stop at hnsw.max_scan_tuples or
+// work_mem (pgvector 0.8.7 README, "Filtering", "Iterative Index Scans";
+// src/hnswscan.c:256-264), with no signal when they stop. So:
+//
+//   - a list whose filtered rows number at most vectorExactMaxRows is read
+//     exactly (index scans off: the planner reads the filtered rows by the
+//     btree on scope and day or the table and sorts by distance): the true
+//     nearest, a guarantee;
+//   - a larger list is the index's answer with iterative scans on: ordered by
+//     distance among the rows it found, approximate in which rows it found
+//     (HNSW recall, widened by ef_search 200), and if it comes back short of the
+//     limit it is read again exactly;
+//   - an exact read that passes the statement deadline falls back to what the
+//     index gave, and partial says so.
+func runVectorList[T any](ctx context.Context, s *Store, query string, args []any, limit int, countQuery string, countArgs []any, scan func(*sql.Rows) (T, error)) (out []T, mode string, partial string, err error) {
 	tx, err := s.corpus().BeginTx(ctx, nil)
 	if err != nil {
-		return nil, false, "", err
+		return nil, "", "", err
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, stmt := range []string{
@@ -257,12 +283,12 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 		fmt.Sprintf(`SET LOCAL hnsw.max_scan_tuples = %d`, vectorMaxScanTuples),
 	} {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
-			return nil, false, "", err
+			return nil, "", "", err
 		}
 	}
 	if vectorSearchTxHook != nil {
 		if err := vectorSearchTxHook(ctx, tx); err != nil {
-			return nil, false, "", err
+			return nil, "", "", err
 		}
 	}
 	collect := func() ([]T, error) {
@@ -281,22 +307,36 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 		}
 		return got, rows.Err()
 	}
+	var filtered int64
+	if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&filtered); err != nil {
+		return nil, "", "", err
+	}
+	if filtered <= int64(vectorExactMaxRows) {
+		if _, err := tx.ExecContext(ctx, `SET LOCAL enable_indexscan = off`); err != nil {
+			return nil, "", "", err
+		}
+		out, err = collect()
+		if err != nil {
+			return nil, "", "", err
+		}
+		return out, vecModeExact, "", nil
+	}
 	out, err = collect()
 	if err != nil {
-		return nil, false, "", err
+		return nil, "", "", err
 	}
 	if len(out) >= limit {
-		return out, false, "", nil
+		return out, vecModeIndex, "", nil
 	}
 	if _, err := tx.ExecContext(ctx, `SET LOCAL enable_indexscan = off`); err != nil {
-		return out, false, "the exact scan could not start: " + err.Error(), nil
+		return out, vecModeIndex, "the exact scan could not start: " + err.Error(), nil
 	}
 	again, err := collect()
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, false, "", ctx.Err()
+			return nil, "", "", ctx.Err()
 		}
-		return out, false, "the exact scan did not finish: " + err.Error(), nil
+		return out, vecModeIndex, "the exact scan did not finish: " + err.Error(), nil
 	}
-	return again, true, "", nil
+	return again, vecModeExact, "", nil
 }
