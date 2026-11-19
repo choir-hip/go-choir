@@ -1,0 +1,753 @@
+{
+ "base_url": "https://staging.invalid",
+ "build": {
+  "commit": "fixture0001"
+ },
+ "computer_id": "computer-fixture-sa",
+ "exported_at": "2026-01-01T00:30:00Z",
+ "layers": {
+  "run_events": {
+   "items": [
+    {
+     "event_id": "ev-many-001",
+     "kind": "model.served",
+     "loop_id": "run-tex",
+     "payload": {
+      "models": [
+       {
+        "calls": 6,
+        "input_tokens": 1200,
+        "model": "gpt-6-luna",
+        "provider": "chatgpt"
+       }
+      ],
+      "purpose": "tool_loop",
+      "schema": "choir.model_served.v1"
+     },
+     "seq": 1,
+     "ts": "2026-01-01T00:05:01Z"
+    },
+    {
+     "event_id": "ev-many-002",
+     "kind": "model.served",
+     "loop_id": "run-res",
+     "payload": {
+      "models": [
+       {
+        "calls": 40,
+        "input_tokens": 1200,
+        "model": "swe-2-flash",
+        "provider": "devin"
+       }
+      ],
+      "purpose": "tool_loop",
+      "schema": "choir.model_served.v1"
+     },
+     "seq": 2,
+     "ts": "2026-01-01T00:05:02Z"
+    },
+    {
+     "event_id": "ev-many-003",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "is_error": false,
+      "request_id": "run-res-q0",
+      "run_id": "run-res",
+      "verb": "search_start"
+     },
+     "seq": 3,
+     "ts": "2026-01-01T00:05:03Z"
+    },
+    {
+     "event_id": "ev-many-004",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s0",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 4,
+     "ts": "2026-01-01T00:05:04Z"
+    },
+    {
+     "event_id": "ev-many-005",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 1,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q1",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r1",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 5,
+     "ts": "2026-01-01T00:05:05Z"
+    },
+    {
+     "event_id": "ev-many-006",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s1",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 6,
+     "ts": "2026-01-01T00:05:06Z"
+    },
+    {
+     "event_id": "ev-many-007",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 2,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q2",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r2",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 7,
+     "ts": "2026-01-01T00:05:07Z"
+    },
+    {
+     "event_id": "ev-many-008",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s2",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 8,
+     "ts": "2026-01-01T00:05:08Z"
+    },
+    {
+     "event_id": "ev-many-009",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 3,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q3",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r3",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 9,
+     "ts": "2026-01-01T00:05:09Z"
+    },
+    {
+     "event_id": "ev-many-010",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s3",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 10,
+     "ts": "2026-01-01T00:05:10Z"
+    },
+    {
+     "event_id": "ev-many-011",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 4,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q4",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r4",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 11,
+     "ts": "2026-01-01T00:05:11Z"
+    },
+    {
+     "event_id": "ev-many-012",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s4",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 12,
+     "ts": "2026-01-01T00:05:12Z"
+    },
+    {
+     "event_id": "ev-many-013",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "is_error": false,
+      "request_id": "run-res-q5",
+      "run_id": "run-res",
+      "verb": "search_start"
+     },
+     "seq": 13,
+     "ts": "2026-01-01T00:05:13Z"
+    },
+    {
+     "event_id": "ev-many-014",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s5",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 14,
+     "ts": "2026-01-01T00:05:14Z"
+    },
+    {
+     "event_id": "ev-many-015",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 6,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q6",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r6",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 15,
+     "ts": "2026-01-01T00:05:15Z"
+    },
+    {
+     "event_id": "ev-many-016",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s6",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 16,
+     "ts": "2026-01-01T00:05:16Z"
+    },
+    {
+     "event_id": "ev-many-017",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 7,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q7",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r7",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 17,
+     "ts": "2026-01-01T00:05:17Z"
+    },
+    {
+     "event_id": "ev-many-018",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s7",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 18,
+     "ts": "2026-01-01T00:05:18Z"
+    },
+    {
+     "event_id": "ev-many-019",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 8,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q8",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r8",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 19,
+     "ts": "2026-01-01T00:05:19Z"
+    },
+    {
+     "event_id": "ev-many-020",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s8",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 20,
+     "ts": "2026-01-01T00:05:20Z"
+    },
+    {
+     "event_id": "ev-many-021",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 9,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q9",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r9",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 21,
+     "ts": "2026-01-01T00:05:21Z"
+    },
+    {
+     "event_id": "ev-many-022",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s9",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 22,
+     "ts": "2026-01-01T00:05:22Z"
+    },
+    {
+     "event_id": "ev-many-023",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "is_error": false,
+      "request_id": "run-res-q10",
+      "run_id": "run-res",
+      "verb": "search_start"
+     },
+     "seq": 23,
+     "ts": "2026-01-01T00:05:23Z"
+    },
+    {
+     "event_id": "ev-many-024",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s10",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 24,
+     "ts": "2026-01-01T00:05:24Z"
+    },
+    {
+     "event_id": "ev-many-025",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 11,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q11",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r11",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 25,
+     "ts": "2026-01-01T00:05:25Z"
+    },
+    {
+     "event_id": "ev-many-026",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s11",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 26,
+     "ts": "2026-01-01T00:05:26Z"
+    },
+    {
+     "event_id": "ev-many-027",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 27,
+     "ts": "2026-01-01T00:05:27Z"
+    },
+    {
+     "event_id": "ev-many-028",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 28,
+     "ts": "2026-01-01T00:05:28Z"
+    },
+    {
+     "event_id": "ev-many-029",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 29,
+     "ts": "2026-01-01T00:05:29Z"
+    },
+    {
+     "event_id": "ev-many-030",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 30,
+     "ts": "2026-01-01T00:05:30Z"
+    },
+    {
+     "event_id": "ev-many-031",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 31,
+     "ts": "2026-01-01T00:05:31Z"
+    },
+    {
+     "event_id": "ev-many-032",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 32,
+     "ts": "2026-01-01T00:05:32Z"
+    },
+    {
+     "event_id": "ev-many-033",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 33,
+     "ts": "2026-01-01T00:05:33Z"
+    },
+    {
+     "event_id": "ev-many-034",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 34,
+     "ts": "2026-01-01T00:05:34Z"
+    },
+    {
+     "event_id": "ev-many-035",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 35,
+     "ts": "2026-01-01T00:05:35Z"
+    },
+    {
+     "event_id": "ev-many-036",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 36,
+     "ts": "2026-01-01T00:05:36Z"
+    },
+    {
+     "event_id": "ev-many-037",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 37,
+     "ts": "2026-01-01T00:05:37Z"
+    },
+    {
+     "event_id": "ev-many-038",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 38,
+     "ts": "2026-01-01T00:05:38Z"
+    }
+   ],
+   "status": "present"
+  },
+  "runs": {
+   "items": [
+    {
+     "agent_profile": "texture",
+     "agent_role": "texture",
+     "created_at": "2026-01-01T00:01:00Z",
+     "finished_at": "2026-01-01T00:25:00Z",
+     "metadata": {
+      "llm_model": "swe-2-flash",
+      "llm_policy_overlay_id": "e1-sa",
+      "llm_provider": "devin"
+     },
+     "run_id": "run-tex",
+     "state": "completed",
+     "trajectory_id": "traj-fx-many",
+     "updated_at": "2026-01-01T00:25:00Z"
+    },
+    {
+     "agent_profile": "research",
+     "agent_role": "research",
+     "created_at": "2026-01-01T00:02:00Z",
+     "finished_at": "2026-01-01T00:40:00Z",
+     "metadata": {
+      "llm_model": "swe-2-flash",
+      "llm_policy_overlay_id": "e1-sa",
+      "llm_provider": "devin"
+     },
+     "run_id": "run-res",
+     "state": "completed",
+     "trajectory_id": "traj-fx-many",
+     "updated_at": "2026-01-01T00:40:00Z"
+    }
+   ],
+   "status": "present"
+  }
+ },
+ "schema": "choir.trace_bundle.v1",
+ "trajectory_id": "traj-fx-many"
+}

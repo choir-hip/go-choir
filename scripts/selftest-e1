@@ -1,0 +1,487 @@
+#!/usr/bin/env python3
+"""Selftest for scripts/e1 (calibration experiment E1-M's pilot driver).
+
+  python3 -I scripts/selftest-e1
+
+Network-free: the product routes are a stub HTTP server on 127.0.0.1, the
+choir CLI and status-paper-usage are stub scripts, git is a throwaway bare
+remote. The pure reading runs over the invented bundles in
+scripts/testdata/e1/.
+
+Failure list, written before the code (each is a case below):
+ units (the pure reading of an exported bundle)
+  U1  a search the gateway's cache answered (no search.served line) is not counted as a started search
+      by the provider-call tally only: started counts it, calls does not
+  U2  a failed search_start (is_error) counts as started
+  U3  Texture's own model, or the decision model's line, is checked against the arm
+  U4  a search_start row seen twice (a cell row and a standalone row) counts twice
+  U5  a run with no research is valid, or its objective is not flagged no_research
+  U6  a research run still running, or ended after 60 minutes, or a timed-out unit, is valid
+  U7  a trajectory with two research runs is not summed, or its runs are not counted
+  U8  a foreign model, a model switch, a wrong overlay, a build change is valid
+  U9  a missing bundle is valid
+  U10 an objective whose arms ran different builds is valid on any arm
+  verdicts
+  V1  too few valid units settles false, not void; a completed test with the event absent settles void
+  V2  P1 counts searches that were not started (served lines) instead of started searches
+  V3  P3 settles false when a stop cut the pilot short
+  statistics
+  S1  d is not the mean of the S arms' ln(1+n) less the mean of the others', over objectives valid on all four arms
+  gates
+  G1  the ledger gate accepts an id that is only in the settlements, a row that does not name its claim, or a missing file hash
+  G2  the objective file is accepted with 9 objectives, a repeated id or a wrong kind mix
+  G3  4,499 credits pass; an unknown estimate passes
+  G4  a quota-limited Keenable, no-answer searches or refused Devin calls do not stop the pilot
+  flow (stub server)
+  F1  the key file is not 0600 or holds anything but the key; a key is printed
+  F2  smoke passes with a research run and fails (naming the step) with none, with a foreign model, or with a published document
+  F3  the pilot starts without a passed smoke, without the ledger rows on origin/main, with too few credits
+  F4  the pilot's tally stop does not fire at the hard stop, or a published document does not stop it
+  F5  read --verdict prints anything but true|false|void per claim
+"""
+import contextlib
+import hashlib
+import importlib.machinery
+import importlib.util
+import io
+import json
+import math
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import threading
+import http.server
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+FX = os.path.join(HERE, "testdata", "e1")
+
+loader = importlib.machinery.SourceFileLoader("e1", os.path.join(HERE, "e1"))
+spec = importlib.util.spec_from_loader("e1", loader)
+e1 = importlib.util.module_from_spec(spec)
+sys.modules["e1"] = e1
+loader.exec_module(e1)
+
+passed = failed = 0
+
+
+def check(name, cond, detail=""):
+    global passed, failed
+    if cond:
+        passed += 1
+    else:
+        failed += 1
+        print("FAIL: %s %s" % (name, detail))
+
+
+def bundle(name):
+    with open(os.path.join(FX, name + ".json")) as f:
+        return json.load(f)
+
+
+def meta(arm="sa", **kw):
+    a = e1.ARMS[arm]
+    m = {"arm": arm, "objective": "p01", "kind": "thin_event", "position": 1, "overlay_id": a["label"],
+         "provider": a["provider"], "model": a["model"], "submitted_at": "2026-01-01T00:00:00Z",
+         "build_submit": "b1", "build_end": "b1", "timed_out": False, "published": []}
+    m.update(kw)
+    return m
+
+
+# ---------------------------------------------------------------- units ----
+u = e1.read_unit(bundle("normal"), meta())
+check("U3 normal is valid, Texture's model and the decision model are not the arm", u["valid"], u["reasons"])
+check("U3 normal counts", (u["started"], u["done"], u["served_lines"], u["calls"], u["research_runs"]) == (4, 4, 4, 4, 1), u)
+check("U3 only the research tool loop's models are read", u["models"] == ["devin/swe-2-flash"] and u["reported_models"] == [], u)
+
+u = e1.read_unit(bundle("cache"), meta())
+check("U1 a cache-answered search is started, not a provider call", (u["started"], u["served_lines"], u["calls"], u["cache_answered"]) == (3, 2, 2, 1), u)
+check("U2 a failed start is not started, and is reported", u["failed_starts"] == 1, u)
+
+u = e1.read_unit(bundle("many"), meta())
+check("U4 standalone and cell rows count once each", u["started"] == 12 and u["calls"] == 12 and u["valid"], u)
+
+u = e1.read_unit(bundle("noresearch"), meta())
+check("U5 no research is invalid and named", not u["valid"] and "no_research" in u["reasons"] and u["research_runs"] == 0 and u["started"] == 0, u)
+
+u = e1.read_unit(bundle("timedout"), meta(timed_out=True))
+check("U6 a running research run and a timeout are invalid, its searches still counted",
+      not u["valid"] and "research_run_not_ended" in u["reasons"] and "timed_out" in u["reasons"] and u["started"] == 5 and u["calls"] == 5, u)
+u = e1.read_unit(bundle("normal"), meta(submitted_at="2025-12-31T22:00:00Z"))
+check("U6 a research run ended after 60 minutes is invalid", "research_run_ended_after_60_min" in u["reasons"], u)
+
+u = e1.read_unit(bundle("two"), meta())
+check("U7 two research runs are summed", u["research_runs"] == 2 and u["started"] == 5 and u["calls"] == 5 and u["valid"], u)
+
+u = e1.read_unit(bundle("wrongmodel"), meta())
+check("U8 a foreign model is invalid", "foreign_model" in u["reasons"] and not u["valid"], u)
+u = e1.read_unit(bundle("switch"), meta())
+check("U8 a model switch is invalid", "model_switch" in u["reasons"], u)
+u = e1.read_unit(bundle("normal"), meta(overlay_id="e1-other"))
+check("U8 a wrong overlay is invalid", "wrong_overlay" in u["reasons"], u)
+u = e1.read_unit(bundle("normal"), meta(build_end="b2"))
+check("U8 a build change is invalid", "build_changed" in u["reasons"], u)
+u = e1.read_unit(bundle("normal"), meta(published=["doc-x"]))
+check("U8 a published document is invalid", "published" in u["reasons"], u)
+u = e1.read_unit(None, meta())
+check("U9 a missing bundle is invalid", u["reasons"] == ["no_bundle"] and not u["valid"], u)
+u = e1.read_unit(bundle("normal"), meta(submit_error="answered 500"))
+check("U9 a failed submission is named", "submit_failed" in u["reasons"], u)
+
+group = [e1.read_unit(bundle("normal"), meta(arm=x, objective="p02", overlay_id=e1.ARMS[x]["label"], provider="devin", model="swe-2-flash",
+                                              build_submit="b1" if x != "i" else "b9", build_end="b1" if x != "i" else "b9")) for x in e1.ARM_ORDER]
+e1.link_builds(group)
+check("U10 differing builds invalidate the objective on every arm", all("build_differs_across_arms" in g["reasons"] and not g["valid"] for g in group), group)
+
+
+def synth(arm, objective, started, valid=True, calls=None, kind="thin_event"):
+    return {"arm": arm, "objective": objective, "kind": kind, "position": 1, "valid": valid, "reasons": [] if valid else ["x"],
+            "started": started, "calls": started if calls is None else calls, "research_runs": 1, "cache_answered": 0}
+
+
+# ------------------------------------------------------------- verdicts ----
+def full(started_by_arm):
+    return [synth(arm, "p%02d" % (n + 1), s) for n in range(10) for arm, s in started_by_arm.items()]
+
+
+units = full({"sa": 12, "sb": 2, "l": 3, "i": 3})
+v = e1.verdicts(units, {"planned": 10, "submitted": 10, "stops": []})
+check("V1 P1 true on 10 tail units of 20", v["P1"][0] == "true", v)
+check("V1 P2 false when S-a and S-b differ widely on a completed test", v["P2"][0] == "false", v)
+check("V1 P3 true with 40 valid", v["P3"][0] == "true", v)
+units = full({"sa": 2, "sb": 3, "l": 3, "i": 3})
+v = e1.verdicts(units, {"planned": 10, "submitted": 10, "stops": []})
+check("V1 P1 false when 20 valid S units hold no tail", v["P1"][0] == "false", v)
+check("V1 P2 true when the S arms agree", v["P2"][0] == "true", v)
+few = [x for x in units if x["objective"] in ("p01", "p02", "p03", "p04", "p05", "p06")]
+v = e1.verdicts(few, {"planned": 10, "submitted": 6, "stops": [{"reason": "cost: tally 450 reached 450"}]})
+check("V1 too few valid units settles void with the reason", v["P1"][0] == "void" and "cost" in v["P1"][1] and v["P2"][0] == "void", v)
+check("V3 a stop cut the pilot short: P3 void, not false", v["P3"][0] == "void", v)
+inv = [dict(x, valid=False) if x["objective"] in ("p01", "p02", "p03", "p04", "p05") else x for x in full({"sa": 3, "sb": 3, "l": 3, "i": 3})]
+v = e1.verdicts(inv, {"planned": 10, "submitted": 10, "stops": []})
+check("V3 every objective submitted but units invalid: P3 false", v["P3"][0] == "false" and v["P1"][0] == "void", v)
+# V2: started 10+ but served lines fewer; the verdict reads started
+units = [synth(arm, "p%02d" % (n + 1), 10 if arm == "sa" else 1, calls=2) for n in range(10) for arm in e1.ARM_ORDER]
+v = e1.verdicts(units, {"planned": 10, "submitted": 10, "stops": []})
+check("V2 P1 reads started searches, not the provider calls", v["P1"][0] == "true", v)
+
+# ------------------------------------------------------------ statistics ----
+units = []
+for n, (s_a, s_b, l, i) in enumerate([(7, 7, 1, 1), (3, 3, 1, 1), (1, 1, 1, 1)]):
+    for arm, s in zip(e1.ARM_ORDER, (s_a, s_b, l, i)):
+        units.append(synth(arm, "p%02d" % (n + 1), s))
+units[-1]["valid"] = False   # objective p03 leaves the pairing
+d = e1.paired_d(units)
+want = {"p01": math.log(8) - math.log(2), "p02": math.log(4) - math.log(2)}
+check("S1 d is the S mean less the others' mean over valid-on-all-four objectives", set(d) == set(want) and all(abs(d[k] - want[k]) < 1e-9 for k in want), d)
+ds = e1.d_summary(d)
+check("S1 summary mean, n and t interval", ds["n"] == 2 and abs(ds["mean"] - sum(want.values()) / 2) < 1e-9 and ds["t_interval"][0] < ds["mean"] < ds["t_interval"][1], ds)
+check("S1 p90 is nearest rank", e1.p90(list(range(1, 11))) == 9 and e1.p90([]) is None)
+
+# ---------------------------------------------------------------- gates ----
+tmp = tempfile.mkdtemp(prefix="selftest-e1.")
+sample = os.path.join(FX, "pilot-objectives.sample.jsonl")
+hdr, objs, sha = e1.load_objectives(sample)
+check("G2 the sample objective file loads", len(objs) == 10 and sha == hashlib.sha256(open(sample, "rb").read()).hexdigest())
+
+
+def objectives_variant(edit):
+    lines = open(sample).read().splitlines()
+    lines = edit(lines)
+    p = os.path.join(tmp, "o.jsonl")
+    open(p, "w").write("\n".join(lines) + "\n")
+    return p
+
+
+def refuses(edit):
+    try:
+        e1.load_objectives(objectives_variant(edit))
+        return False
+    except ValueError:
+        return True
+
+
+check("G2 nine objectives refused", refuses(lambda L: L[:-1]))
+check("G2 a repeated id refused", refuses(lambda L: L[:-1] + [L[-1].replace("p10", "p09")]))
+check("G2 a wrong kind mix refused", refuses(lambda L: [x.replace("follow_up", "thin_event") if "p06" in x else x for x in L]))
+check("G2 a wrong header refused", refuses(lambda L: [L[0].replace("e1m-pilot-v1", "other")] + L[1:]))
+
+good = open(os.path.join(FX, "ledger-good.md")).read().replace("SHAPLACEHOLDER", sha)
+bad = open(os.path.join(FX, "ledger-bad.md")).read().replace("SHAPLACEHOLDER", sha)
+ids = ["C901", "C902", "C903"]
+check("G1 the good ledger passes", e1.ledger_problems(good, ids, sha) == [], e1.ledger_problems(good, ids, sha))
+pb = e1.ledger_problems(bad, ids, sha)
+check("G1 an id only among the settlements, and a row that does not name its claim, are refused", len(pb) == 2 and any("C903" in x for x in pb) and any("C902" in x for x in pb), pb)
+check("G1 a missing file hash is refused", any("SHA-256" in x for x in e1.ledger_problems(good, ids, "0" * 64)))
+
+check("G3 4,499 refused, 4,500 passes, unknown refused", e1.credit_problems(4499) and not e1.credit_problems(4500) and e1.credit_problems(None))
+check("G4 status stops", e1.status_stops({"flags": ["search: 9 of 50 requests got no provider answer"]}) and e1.status_stops({"flags": ["devin: 30 quota refusals in the last hour"]})
+      and e1.status_stops({"flags": [], "search": {"by": {"keenable": {"quota_limited": 1}}}}) and not e1.status_stops({"flags": ["paper not publishing"], "search": {"by": {}}}))
+check("G5 overlay text is the research role alone with an end", e1.overlay_text("l", "2026-01-02T00:00:00Z") ==
+      '[overlay]\nexpires_at = "2026-01-02T00:00:00Z"\n\n[roles.research]\nprovider = "chatgpt"\nmodel = "gpt-6-luna"\nreasoning_effort = "low"\n')
+
+
+# ----------------------------------------------------------- the stub flow ----
+class Stub:
+    """Product routes of four test computers, keyed by bearer key."""
+
+    def __init__(self, bundles, published=()):
+        self.bundles, self.published, self.counter = bundles, set(published), {}
+        self.lock = threading.Lock()
+        stub = self
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def send(self, code, obj=None):
+                raw = json.dumps(obj if obj is not None else {}).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def arm(self):
+                key = self.headers.get("Authorization", "").replace("Bearer ", "")
+                return key.replace("choir_sk_", "")
+
+            def body(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                return json.loads(self.rfile.read(n)) if n else None
+
+            def do_GET(self):
+                arm, path = self.arm(), self.path
+                b = stub.bundles.get(arm)
+                if path == "/api/runtime/observability":
+                    return self.send(200, {"build": {"commit": "stubbuild"}, "computer_id": "computer-stub-" + arm})
+                if path.startswith("/api/prompt-bar/submissions/"):
+                    sid = path.rsplit("/", 1)[1]
+                    return self.send(200, {"submission_id": sid, "decision": {"trajectory_id": sid.replace("sub-", "traj-")}})
+                if path.startswith("/api/runs?"):
+                    return self.send(200, {"runs": b["layers"]["runs"]["items"]})
+                if path.startswith("/api/runs/") and "/events" in path:
+                    rid = path.split("/")[3]
+                    return self.send(200, {"events": [e for e in b["layers"]["run_events"]["items"] if e["loop_id"] == rid], "next_after": 0})
+                if path.startswith("/api/platform/texture/publications?doc_id="):
+                    doc = path.split("=", 1)[1]
+                    return self.send(200 if doc in stub.published else 404, {"error": "publication not found"})
+                self.send(404)
+
+            def do_POST(self):
+                arm, path, body = self.arm(), self.path, self.body()
+                if path == "/api/evals/texture-prompt":
+                    if body.get("model_policy_overlay_id") != "e1-" + arm:
+                        return self.send(400, {"error": "model policy overlay did not resolve"})
+                    with stub.lock:
+                        n = stub.counter[arm] = stub.counter.get(arm, 0) + 1
+                    return self.send(202, {"submission_id": "sub-%s-%d" % (arm, n), "doc_id": "doc-%s-%d" % (arm, n),
+                                           "model_policy_overlay_id": body["model_policy_overlay_id"], "provider": "stub", "model": "stub"})
+                if path.endswith("/cancel"):
+                    return self.send(200, {})
+                self.send(404)
+
+        self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.url = "http://127.0.0.1:%d" % self.srv.server_address[1]
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.srv.shutdown()
+
+
+CHOIR_STUB = r'''#!/usr/bin/env python3
+import json, os, shutil, sys
+here = os.path.dirname(os.path.abspath(__file__))
+a = sys.argv[1:]
+def opt(name):
+    return a[a.index(name) + 1] if name in a else None
+key = os.path.basename(opt("--api-key-file") or "")
+if a[:2] == ["trace", "export"]:
+    arm = key.replace("e1-", "").replace(".key", "")
+    shutil.copy(os.path.join(here, "bundle-" + arm + ".json"), opt("--out"))
+    print(json.dumps({"path": opt("--out")}))
+elif a[0] == "files":
+    d = os.path.join(here, "files", key); os.makedirs(d, exist_ok=True)
+    path = a[-1].replace("/", "__")
+    if a[1] == "put":
+        shutil.copy(opt("--local"), os.path.join(d, path))
+    elif a[1] == "get":
+        p = os.path.join(d, path)
+        if not os.path.exists(p): sys.exit(1)
+        sys.stdout.write(open(p).read())
+'''
+
+
+def make_world(bundles_by_arm, published=()):
+    root = tempfile.mkdtemp(prefix="world.", dir=tmp)
+    stub = Stub({}, published)
+    stubdir = os.path.join(root, "stub")
+    os.makedirs(stubdir)
+    for arm in e1.ARM_ORDER:
+        raw = json.dumps(bundle(bundles_by_arm[arm]))
+        a = e1.ARMS[arm]
+        raw = raw.replace('"devin"', '"%s"' % a["provider"]).replace("swe-2-flash", a["model"]).replace('"e1-sa"', '"%s"' % a["label"])
+        b = json.loads(raw)
+        stub.bundles[arm] = b
+        with open(os.path.join(stubdir, "bundle-%s.json" % arm), "w") as f:
+            json.dump(b, f)
+    choir = os.path.join(stubdir, "choir")
+    open(choir, "w").write(CHOIR_STUB)
+    os.chmod(choir, 0o755)
+    status = os.path.join(stubdir, "status")
+    open(status, "w").write("#!/usr/bin/env python3\nimport json\nprint(json.dumps({'now':'x','flags':[],'search':{'by':{},'keenable':{'today_calls':5}}}))\n")
+    os.chmod(status, 0o755)
+    state = os.path.join(root, "state")
+    comps = {"base_url": stub.url, "created_at": "x", "overlay_expires_at": e1.iso(e1.now() + e1.datetime.timedelta(hours=20)), "arms": {}}
+    os.makedirs(os.path.join(state, "keys"), mode=0o700)
+    for arm in e1.ARM_ORDER:
+        label = e1.ARMS[arm]["label"]
+        cred = os.path.join(root, label + ".json")
+        open(cred, "w").write(json.dumps({"api_key": "choir_sk_" + arm, "base_url": stub.url}))
+        kf = os.path.join(state, "keys", label + ".key")
+        e1.key_from_credential(cred, kf)
+        comps["arms"][arm] = {"label": label, "computer_id": "computer-stub-" + arm, "key_file": kf, "credential_file": cred, "overlay_id": label,
+                              "provider": e1.ARMS[arm]["provider"], "model": e1.ARMS[arm]["model"], "reasoning_effort": "low", "base_url": stub.url}
+    os.makedirs(state, exist_ok=True)
+    e1.write_private(os.path.join(state, "computers.json"), json.dumps(comps))
+    return stub, state, choir, status, comps
+
+
+def run(argv):
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            code = e1.main(argv)
+        except SystemExit as e:
+            code = e.code
+    return code, out.getvalue() + err.getvalue()
+
+
+e1.POLL_S, e1.SETTLE_S, e1.LIVE_TALLY_S, e1.CANCEL_WAIT_S = 0.01, 0, 0.01, 1
+
+
+def common(state, choir, status, repo=None):
+    c = ["--state-dir", state, "--choir", choir, "--status-script", status]
+    return c + (["--repo", repo] if repo else [])
+
+
+def install_all(state, choir, status):
+    st = e1.State(state)
+    comps = st.computers()
+    a = e1.build_parser().parse_args(common(state, choir, status) + ["smoke"])
+    for arm in e1.ARM_ORDER:
+        e1.install_overlay(a, st, comps, arm)
+
+
+# F1 the key file
+stub, state, choir, status, comps = make_world({x: "normal" for x in e1.ARM_ORDER})
+kf = comps["arms"]["sa"]["key_file"]
+check("F1 key file is 0600 and holds only the key", stat.S_IMODE(os.stat(kf).st_mode) == 0o600 and open(kf).read() == "choir_sk_sa\n")
+os.chmod(kf, 0o644)
+try:
+    e1.Api(stub.url, kf)
+    check("F1 a key file that is not 0600 is refused", False)
+except e1.ApiError:
+    check("F1 a key file that is not 0600 is refused", True)
+os.chmod(kf, 0o600)
+
+# F2 smoke
+install_all(state, choir, status)
+code, out = run(common(state, choir, status) + ["smoke"])
+check("F2 smoke passes on four normal arms", code == 0 and out.strip().endswith("SMOKE OK") and "choir_sk_" not in out, out[-600:])
+check("F2 smoke prints a line per arm", sum(1 for l in out.splitlines() if l.startswith(("S-a", "S-b", "L ", "I "))) == 4, out)
+check("F2 smoke leaves its stamp on these computers", e1.State(state).load("smoke.json")["passed"] is True)
+stub.close()
+
+for label, mapping, published, step in (("no research", {"sa": "noresearch"}, (), "8"),
+                                         ("foreign model", {"sa": "wrongmodel"}, (), "9"),
+                                         ("published", {}, ("doc-sa-1",), "11")):
+    m = {x: "normal" for x in e1.ARM_ORDER}
+    m.update(mapping)
+    stub, state, choir, status, comps = make_world(m, published)
+    install_all(state, choir, status)
+    code, out = run(common(state, choir, status) + ["smoke"])
+    check("F2 smoke fails on %s at step %s" % (label, step), code == 1 and ("SMOKE FAILED at step %s (sa)" % step) in out, out[-500:])
+    check("F2 a failed smoke stamps a failure", e1.State(state).load("smoke.json")["passed"] is False)
+    stub.close()
+
+# F3 and F4 the pilot
+def make_repo(root, with_ledger=True):
+    remote = os.path.join(root, "remote.git")
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", remote], check=True)
+    work = os.path.join(root, "work")
+    subprocess.run(["git", "clone", "-q", remote, work], check=True, stderr=subprocess.DEVNULL)
+    os.makedirs(os.path.join(work, "docs", "calibration", "e1"))
+    shutil.copy(sample, os.path.join(work, "docs", "calibration", "e1", "pilot-objectives.jsonl"))
+    ledger = good if with_ledger else good.replace("E1-M pilot", "other")
+    open(os.path.join(work, "docs", "calibration", "claude-ledger.md"), "w").write(ledger)
+    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@invalid", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@invalid")
+    for cmd in (["add", "."], ["commit", "-q", "-m", "x"], ["push", "-q", "origin", "HEAD:main"]):
+        subprocess.run(["git", "-C", work] + cmd, check=True, env=env, stderr=subprocess.DEVNULL)
+    return work
+
+
+def pilot_args(state, choir, status, repo, credits=9000):
+    return common(state, choir, status, repo) + ["pilot", "--claims", "C901,C902,C903", "--credits", str(credits), "--credits-basis", "selftest",
+            "--objectives", os.path.join(repo, "docs", "calibration", "e1", "pilot-objectives.jsonl")]
+
+
+e1.DEADLINE = "2099-01-01T00:00:00Z"
+stub, state, choir, status, comps = make_world({x: "normal" for x in e1.ARM_ORDER})
+repo = make_repo(tmp)
+code, out = run(pilot_args(state, choir, status, repo))
+check("F3 the pilot refuses without a passed smoke", code == 3 and "smoke has not passed" in out, out)
+install_all(state, choir, status)
+run(common(state, choir, status) + ["smoke"])
+code, out = run(pilot_args(state, choir, status, repo, credits=4499))
+check("F3 the pilot refuses with 4,499 credits", code == 3 and "4,499" in out, out)
+os.remove(os.path.join(state, "status.json")) if os.path.exists(os.path.join(state, "status.json")) else None
+os.makedirs(os.path.join(tmp, "bad"))
+bad_repo = make_repo(os.path.join(tmp, "bad"), with_ledger=False)
+code, out = run(pilot_args(state, choir, status, bad_repo))
+check("F3 the pilot refuses when the claims are not on origin/main", code == 3 and "ledger" in out, out)
+
+code, out = run(pilot_args(state, choir, status, repo))
+check("F4 the pilot runs ten objectives", code == 0 and "PILOT DONE" in out, out[-800:])
+check("F4 the pilot prints its pre-start block and no key", "credits: estimate 9,000" in out and "choir_sk_" not in out and "claims C901, C902, C903" in out, out[:900])
+lines = [l for l in out.splitlines() if l.startswith("p") and "tally" in l]
+check("F4 one line per objective", len(lines) == 10 and lines[0].startswith("p01 thin_event | sa 4 sb 4 l 4 i 4 started | runs 1/1/1/1 | valid 4/4 | tally 16/450 | build ok | published 0"), lines[:1])
+code, out = run(common(state, choir, status, repo) + ["read", "--verdict", "--claims", "C901,C902,C903"])
+vlines = [l for l in out.splitlines() if l[:2] in ("P1", "P2", "P3")]
+check("F5 read --verdict prints one outcome per claim", len(vlines) == 3 and all(l.split()[2] in ("true", "false", "void") for l in vlines), vlines)
+check("F5 on ten objectives of 4 started searches: P1 false, P2 true, P3 true",
+      [l.split()[2] for l in vlines] == ["false", "true", "true"], vlines)
+code, out = run(pilot_args(state, choir, status, repo))
+check("F4 a second run does not repeat finished objectives", code == 0 and not [l for l in out.splitlines() if l.startswith("p0") and "tally" in l], out[-300:])
+stub.close()
+
+# cost stop
+saved = e1.HARD_STOP
+e1.HARD_STOP = 40
+stub, state, choir, status, comps = make_world({x: "normal" for x in e1.ARM_ORDER})
+install_all(state, choir, status)
+run(common(state, choir, status) + ["smoke"])
+code, out = run(pilot_args(state, choir, status, repo))
+pl = e1.State(state).load("pilot.json")
+check("F4 the tally stop fires at the hard stop", code == 4 and any(s["reason"].startswith("cost") and s["terminal"] for s in pl["stops"]), out[-500:])
+code, out = run(common(state, choir, status, repo) + ["read", "--verdict"])
+check("F5 a cost stop settles every claim void, with the reason", [l.split()[1] for l in out.splitlines() if l[:2] in ("P1", "P2", "P3")] == ["void"] * 3 and "cost" in out, out[-600:])
+code, out = run(pilot_args(state, choir, status, repo))
+check("F4 a stopped pilot does not start again", "the pilot is over" in str(code), (code, out))
+stub.close()
+e1.HARD_STOP = saved
+
+# published stop
+stub, state, choir, status, comps = make_world({x: "normal" for x in e1.ARM_ORDER}, published=("doc-l-2",))
+install_all(state, choir, status)
+run(common(state, choir, status) + ["smoke"])
+stub.published = {"doc-l-2"}
+code, out = run(pilot_args(state, choir, status, repo))
+check("F4 a published test document stops the pilot and says so", code == 4 and "PUBLISHED: doc-l-2" in out and "no story-unpublish verb" in out, out[-700:])
+stub.close()
+
+shutil.rmtree(tmp, ignore_errors=True)
+print("selftest-e1: %d passed, %d failed" % (passed, failed))
+sys.exit(1 if failed else 0)
