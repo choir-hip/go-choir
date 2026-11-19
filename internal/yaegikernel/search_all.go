@@ -51,7 +51,7 @@ type SearchAllResult struct {
 	Question string             `json:"question"`
 	Wordings []SearchAllWording `json:"wordings"`
 	// Next says what to do when wordings were left out because the question
-	// already holds unread pages.
+	// already holds pages the run has not tried to read.
 	Next string `json:"next,omitempty"`
 	// Results are the pages of every search sent, each once, in the order
 	// they were found; Held marks a page the desk held before this call.
@@ -170,9 +170,10 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 			continue
 		}
 		// Alternative wordings are fallbacks, not multipliers: a question that
-		// already holds enough unread pages is read before it is searched again.
+		// already holds enough pages the run has not tried to read is read before it
+		// is searched again.
 		if n := s.searches.unreadNew(qk); qk != "" && n >= searchEnoughUnread {
-			stopWhy, stopStat = fmt.Sprintf("this question already holds %d pages new to this run that you have not read", n), "holds_unread"
+			stopWhy, stopStat = fmt.Sprintf("this question already holds %d pages new to this run that you have not tried to read", n), "holds_unread"
 			res.Next = "Read the ones that matter (the Results of this value; choir.Searches.Summary(id)), then search again for what is still missing, naming it. A page that will not load counts once you have tried it. A wording left out can be sent now with fresh: choir.Search(wording, true)."
 			notSent(stopWhy, stopStat)
 			continue
