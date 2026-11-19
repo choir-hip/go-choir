@@ -45,7 +45,7 @@ deployed proof is named in the goal file:
   pages, a story reader and the notebook in shared code; Android lists the
   paper's stories and opens one. Open: a first launch showed a signed-out
   screen in one simulator run, cause not proved, so nothing is installed on
-  the owner's phone (claim C162 waits on the post-deploy proof run).
+  the owner's phone (C162 true: the post-deploy proof run passed with its sign-out drill).
 - **L.** The dated-switch deletions are deployed (`f3874a8bf`, C146 true).
   The experiment driver is on main (`463ec68f0`); the pilot started at
   13:58:36Z (three arms, thirty units; claims C148 to C150) after its smoke
