@@ -410,9 +410,12 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 	if len(sampleInputs) < floor {
 		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (the text or its cut differs)", ErrVectorImportRefused, len(sampleInputs), floor)
 	}
-	got, _, err := s.embedInputs(ctx, "import_sample", sampleInputs)
+	got, _, failed, err := s.embedInputs(ctx, "import_sample", sampleInputs)
 	if err != nil {
 		return res, err
+	}
+	if len(failed) > 0 {
+		return res, fmt.Errorf("vector import: the embedder could not embed %d sample rows now", len(failed))
 	}
 	for i, g := range got {
 		if g == nil {

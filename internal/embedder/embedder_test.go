@@ -3,6 +3,7 @@ package embedder
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -119,5 +120,31 @@ func TestFakeIsDeterministicAndShared(t *testing.T) {
 	}
 	if Cosine(a, FakeVector("title: x | text: harbor reopened")) < 0.7 {
 		t.Fatal("shared words not near")
+	}
+}
+
+func TestOnlyTheTwoTooLargeMessagesAreAnInputRefusal(t *testing.T) {
+	for _, c := range []struct {
+		code    int
+		body    string
+		refused bool
+	}{
+		{500, `{"error":{"message":"input (3000 tokens) is too large to process. increase the physical batch size (current batch size: 2048)"}}`, true},
+		{400, `{"error":{"message":"input (5000 tokens) is larger than the max context size (2048 tokens). skipping"}}`, true},
+		{500, `{"error":{"message":"internal error"}}`, false},
+		{503, `{"error":{"message":"Loading model"}}`, false},
+		{429, `too many requests`, false},
+		{404, `not found`, false},
+		{400, `{"error":{"message":"bad request"}}`, false},
+	} {
+		err := classifyStatus(c.code, c.body)
+		var ir *InputRefusedError
+		if got := errors.As(err, &ir); got != c.refused {
+			t.Fatalf("%d %q: refusal %v, want %v (%v)", c.code, c.body, got, c.refused, err)
+		}
+		var se *StatusError
+		if !c.refused && !errors.As(err, &se) {
+			t.Fatalf("%d: not a StatusError: %v", c.code, err)
+		}
 	}
 }
