@@ -247,6 +247,13 @@ func TestAppendLabelHalfTailIsNewestFirstUnderRecentOrder(t *testing.T) {
 	if strings.Join(ids(got), ",") != "p,new,mid,old" {
 		t.Fatalf("recent tail %v", ids(got))
 	}
+	// The two halves are one time order under recent: a label page newer than
+	// the answer's rows stands above them.
+	fresher := CorpusCapture{CaptureID: "fresh", FetchedAt: "2026-11-15T00:00:00Z"}
+	got = appendLabelHalf([]CorpusCapture{p}, []CorpusCapture{old, fresher}, 10, "recent")
+	if strings.Join(ids(got), ",") != "fresh,p,old" {
+		t.Fatalf("merged by time %v", ids(got))
+	}
 	got = appendLabelHalf([]CorpusCapture{p}, []CorpusCapture{old, mid, newest}, 10, "relevance")
 	if strings.Join(ids(got), ",") != "p,old,mid,new" {
 		t.Fatalf("relevance tail %v", ids(got))

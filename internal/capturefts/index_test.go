@@ -499,3 +499,16 @@ func TestPageWithNeitherTimeIsOutsideEveryWindow(t *testing.T) {
 		}
 	}
 }
+
+// "No time" is an absent time, not a non-positive one: a page of 1960 is in an
+// until-only window as the term half and the guest keep it.
+func TestPageBeforeTheEpochIsInTheWindowItsTimeIsIn(t *testing.T) {
+	ix := newTestIndex(t)
+	old := time.Date(1960, 6, 1, 0, 0, 0, 0, time.UTC)
+	put(t, ix, scopeA, "old", "Quay inspection", "The inspector walked the quay again.\n\n", old)
+	put(t, ix, scopeA, "undated", "Quay inspection", "The inspector walked the quay again.\n\n", time.Time{})
+	got := ids(search(t, ix, scopeA, Query{Text: "inspector quay", Until: time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)}))
+	if len(got) != 1 || got[0] != "old" {
+		t.Fatalf("until 1970: %v, want only the 1960 page", got)
+	}
+}
