@@ -29,9 +29,11 @@ package platform
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -39,6 +41,7 @@ import (
 	"io"
 	"log"
 	"math"
+	mrand "math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -53,13 +56,26 @@ const (
 	vectorKindCapture = "capture"
 	// vectorImportMinCosine is the agreement a re-embedded sample must reach.
 	vectorImportMinCosine = 0.999
-	// vectorImportSamples is how many rows are re-embedded.
+	// vectorImportSamples is how many rows are re-embedded, and the least a
+	// large file may be checked by: a file with fewer checkable rows than
+	// the floor (that many, or half the file when it is small) is refused.
 	vectorImportSamples = 32
+	// vectorImportMaxLine bounds a line: a row is about 1 KB (two ids, a
+	// 684-character vector).
+	vectorImportMaxLine = 4096
+	// vectorImportCandidates bounds how many rows a sample examines to find
+	// its checkable ones.
+	vectorImportCandidates = 400
 	// vectorImportMaxBytes bounds a posted file (an operator route; the
 	// first pass is about 215,000 rows of 700 bytes).
 	vectorImportMaxBytes = 2 << 30
 	vectorImportDirName  = "vector-import"
 )
+
+// vectorImportMaxGroupRows bounds the rows held for one story version: a
+// version of a quarter of a megabyte is under 200 passages. A variable so a
+// test can shrink it.
+var vectorImportMaxGroupRows = 5000
 
 // ErrVectorImportRefused marks a file refused whole.
 var ErrVectorImportRefused = errors.New("vector import refused")
@@ -140,6 +156,9 @@ type VectorImport struct {
 	// Samples re-embedded, and the lowest cosine among them.
 	Samples   int     `json:"samples"`
 	MinCosine float64 `json:"min_cosine"`
+	// SampleSeed seeded the random choice of the sample, so a refused file's
+	// sample can be chosen again.
+	SampleSeed int64 `json:"sample_seed"`
 }
 
 func (r *VectorImport) reject(reason string, n int) {
@@ -149,28 +168,35 @@ func (r *VectorImport) reject(reason string, n int) {
 	r.Rejected[reason] += n
 }
 
-// scanVectorFile calls fn for every line of the file, in order.
+// scanVectorFile calls fn for every row of the file, in order; i counts the
+// rows (blank lines are not rows). A line over vectorImportMaxLine refuses the
+// file.
 func scanVectorFile(path string, fn func(i int, row vectorFileRow, v []float32) error) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	rd := bufio.NewReaderSize(f, 1<<20)
-	for i := 0; ; i++ {
-		line, err := rd.ReadBytes('\n')
-		if len(strings.TrimSpace(string(line))) > 0 {
+	rd := bufio.NewReaderSize(f, vectorImportMaxLine)
+	i := 0
+	for lineNo := 1; ; lineNo++ {
+		line, err := rd.ReadSlice('\n')
+		if errors.Is(err, bufio.ErrBufferFull) {
+			return fmt.Errorf("%w: line %d is longer than %d bytes", ErrVectorImportRefused, lineNo, vectorImportMaxLine)
+		}
+		if len(bytes.TrimSpace(line)) > 0 {
 			var row vectorFileRow
 			if jerr := json.Unmarshal(line, &row); jerr != nil {
-				return fmt.Errorf("%w: line %d is not a row: %v", ErrVectorImportRefused, i+1, jerr)
+				return fmt.Errorf("%w: line %d is not a row: %v", ErrVectorImportRefused, lineNo, jerr)
 			}
 			v, derr := decodeHalfVector(row.V)
 			if derr != nil {
-				return fmt.Errorf("%w: line %d: %v", ErrVectorImportRefused, i+1, derr)
+				return fmt.Errorf("%w: line %d: %v", ErrVectorImportRefused, lineNo, derr)
 			}
 			if err := fn(i, row, v); err != nil {
 				return err
 			}
+			i++
 		}
 		if err == io.EOF {
 			return nil
@@ -179,6 +205,18 @@ func scanVectorFile(path string, fn func(i int, row vectorFileRow, v []float32) 
 			return err
 		}
 	}
+}
+
+// importStratum is the group a row is sampled from: a story's first passage,
+// a later story passage, a capture's lead.
+func importStratum(row vectorFileRow) int {
+	switch {
+	case row.Kind == vectorKindCapture:
+		return 2
+	case row.Ordinal == 0:
+		return 0
+	}
+	return 1
 }
 
 // rowInput is what this host derives for a file row: the prompt input, the
@@ -266,18 +304,21 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 	if err := s.store.ensureVectorTables(ctx); err != nil && !s.store.VectorsReady() {
 		return res, err
 	}
-	// Pass 1: every row names our model and dimension and decodes.
+	// Pass 1: every row names our model and dimension and decodes; the rows'
+	// strata are kept (a byte a row) for the sample.
+	var strata []int8
 	if err := scanVectorFile(path, func(i int, row vectorFileRow, v []float32) error {
 		res.Rows++
 		if row.Model != embedder.ModelHash {
-			return fmt.Errorf("%w: line %d names model %q, this host's is %s", ErrVectorImportRefused, i+1, row.Model, embedder.ModelHash)
+			return fmt.Errorf("%w: row %d names model %q, this host's is %s", ErrVectorImportRefused, i+1, row.Model, embedder.ModelHash)
 		}
 		if row.Dim != embedder.Dim {
-			return fmt.Errorf("%w: line %d has dim %d, want %d", ErrVectorImportRefused, i+1, row.Dim, embedder.Dim)
+			return fmt.Errorf("%w: row %d has dim %d, want %d", ErrVectorImportRefused, i+1, row.Dim, embedder.Dim)
 		}
 		if row.Kind != vectorKindStory && row.Kind != vectorKindCapture {
-			return fmt.Errorf("%w: line %d has kind %q", ErrVectorImportRefused, i+1, row.Kind)
+			return fmt.Errorf("%w: row %d has kind %q", ErrVectorImportRefused, i+1, row.Kind)
 		}
+		strata = append(strata, int8(importStratum(row)))
 		return nil
 	}); err != nil {
 		return res, err
@@ -286,27 +327,74 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		return res, fmt.Errorf("%w: the file has no rows", ErrVectorImportRefused)
 	}
 
-	// Pass 2: a sample, re-embedded here, must agree with the file.
-	deriver := &vectorRowDeriver{s: s, og: s.ogStore()}
-	step := (res.Rows + vectorImportSamples - 1) / vectorImportSamples
-	var sampleInputs []string
-	var sampleVecs [][]float32
+	// Pass 2: a random sample, re-embedded here, must agree with the file. The
+	// seed is recorded. Candidates are drawn round-robin from the three strata
+	// (a story's first passage, a later one, a capture) so each present kind of
+	// row is checked; a candidate this host cannot cut identically does not
+	// count, and fewer checkable rows than the floor refuses the file.
+	var seedBytes [8]byte
+	if _, err := rand.Read(seedBytes[:]); err != nil {
+		return res, err
+	}
+	res.SampleSeed = int64(binary.LittleEndian.Uint64(seedBytes[:]) >> 1)
+	rng := mrand.New(mrand.NewSource(res.SampleSeed))
+	var byStratum [3][]int
+	for i, st := range strata {
+		byStratum[st] = append(byStratum[st], i)
+	}
+	for k := range byStratum {
+		rng.Shuffle(len(byStratum[k]), func(a, b int) { byStratum[k][a], byStratum[k][b] = byStratum[k][b], byStratum[k][a] })
+	}
+	var order []int
+	for round := 0; len(order) < vectorImportCandidates; round++ {
+		added := false
+		for k := range byStratum {
+			if round < len(byStratum[k]) && len(order) < vectorImportCandidates {
+				order = append(order, byStratum[k][round])
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	wanted := make(map[int]bool, len(order))
+	for _, i := range order {
+		wanted[i] = true
+	}
+	type candidate struct {
+		row vectorFileRow
+		v   []float32
+	}
+	cands := map[int]candidate{}
 	if err := scanVectorFile(path, func(i int, row vectorFileRow, v []float32) error {
-		if i%step != 0 {
-			return nil
+		if wanted[i] {
+			cands[i] = candidate{row, v}
 		}
-		in := deriver.derive(ctx, row)
-		if in.reason != "" || in.TextSHA != row.TextSHA {
-			return nil // not verifiable here; the write pass drops or accepts it on its own check
-		}
-		sampleInputs = append(sampleInputs, in.Input)
-		sampleVecs = append(sampleVecs, v)
 		return nil
 	}); err != nil {
 		return res, err
 	}
-	if len(sampleInputs) == 0 {
-		return res, fmt.Errorf("%w: no row of the file can be checked against this host's text (the text or its cut differs)", ErrVectorImportRefused)
+	deriver := &vectorRowDeriver{s: s, og: s.ogStore()}
+	floor := min(vectorImportSamples, (res.Rows+1)/2)
+	var sampleInputs []string
+	var sampleVecs [][]float32
+	var sampleStrata [3]int
+	for _, i := range order {
+		if len(sampleInputs) >= vectorImportSamples {
+			break
+		}
+		c := cands[i]
+		in := deriver.derive(ctx, c.row)
+		if in.reason != "" || in.TextSHA != c.row.TextSHA {
+			continue // cannot be re-checked here: it does not count
+		}
+		sampleInputs = append(sampleInputs, in.Input)
+		sampleVecs = append(sampleVecs, c.v)
+		sampleStrata[strata[i]]++
+	}
+	if len(sampleInputs) < floor {
+		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (the text or its cut differs)", ErrVectorImportRefused, len(sampleInputs), floor)
 	}
 	got, err := s.embedInputs(ctx, "import_sample", sampleInputs)
 	if err != nil {
@@ -323,12 +411,13 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		}
 	}
 	if res.MinCosine < vectorImportMinCosine {
-		return res, fmt.Errorf("%w: a sample of %d rows agrees only to cosine %.5f, need %.3f", ErrVectorImportRefused, res.Samples, res.MinCosine, vectorImportMinCosine)
+		return res, fmt.Errorf("%w: a sample of %d rows (seed %d) agrees only to cosine %.5f, need %.3f", ErrVectorImportRefused, res.Samples, res.SampleSeed, res.MinCosine, vectorImportMinCosine)
 	}
 
 	// Pass 3: write. Rows of a story version are contiguous; the version is
 	// written whole when every passage is present and matches, else dropped.
 	var storyGroup []vectorFileRow
+	oversizedID := ""
 	var storyVecs [][]float32
 	var capBatch []captureVectorRow
 	flushStory := func() error {
@@ -368,7 +457,12 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 			rows[ord] = storyVectorRow{StoryID: story, VersionID: versionID, Ordinal: ord, TextSHA: storyGroup[i].TextSHA, Day: vt.Day, Vec: storyVecs[i]}
 		}
 		if err := s.store.writeStoryVersionVectors(ctx, story, versionID, rows); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			res.reject("write_failed", len(rows))
+			log.Printf("corpusd vectors import version=%s not written: %v", versionID, err)
+			return nil
 		}
 		res.Written += len(rows)
 		return nil
@@ -379,7 +473,12 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		}
 		defer func() { capBatch = nil }()
 		if err := s.store.writeCaptureVectors(ctx, capBatch); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			res.reject("write_failed", len(capBatch))
+			log.Printf("corpusd vectors import capture batch not written: %v", err)
+			return nil
 		}
 		res.Written += len(capBatch)
 		return nil
@@ -387,10 +486,19 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 	err = scanVectorFile(path, func(i int, row vectorFileRow, v []float32) error {
 		switch row.Kind {
 		case vectorKindStory:
+			if row.ID == oversizedID {
+				res.reject("oversized_version", 1)
+				return nil
+			}
 			if len(storyGroup) > 0 && storyGroup[0].ID != row.ID {
 				if err := flushStory(); err != nil {
 					return err
 				}
+			}
+			if len(storyGroup) >= vectorImportMaxGroupRows {
+				res.reject("oversized_version", len(storyGroup)+1)
+				oversizedID, storyGroup, storyVecs = row.ID, nil, nil
+				return nil
 			}
 			storyGroup = append(storyGroup, row)
 			storyVecs = append(storyVecs, v)
@@ -462,6 +570,34 @@ func (s *Service) StartVectorImport(path string, remove bool) (VectorImportJob, 
 	return *job, nil
 }
 
+func (s *Service) vectorImportRunning() bool {
+	v := &s.store.vec
+	v.importMu.Lock()
+	defer v.importMu.Unlock()
+	cur := v.jobs[v.lastJob]
+	return cur != nil && cur.State == "running"
+}
+
+// removeStaleVectorSpool deletes posted files left by a process that died
+// mid-import (an import resumes nothing; it is posted again). The artifact
+// collector sweeps named namespaces only (artifact_gc.go artifactGCNamespaces)
+// and never reads this directory.
+func (s *Service) removeStaleVectorSpool() {
+	if s.vectorImportRunning() {
+		return
+	}
+	dir := filepath.Join(s.artifactsRoot, vectorImportDirName)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), "import-") {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
 // VectorImportStatus returns a job by id, or the latest when id is empty.
 func (s *Service) VectorImportStatus(id string) (VectorImportJob, bool) {
 	v := &s.store.vec
@@ -493,6 +629,11 @@ func (h *Handler) HandleVectorImport(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, job)
 	case http.MethodPost:
+		// Refuse before reading the body: a second import waits for the first.
+		if h.service.vectorImportRunning() {
+			writeJSON(w, http.StatusConflict, apiError{Error: "a vector import is already running"})
+			return
+		}
 		dir := filepath.Join(h.service.artifactsRoot, vectorImportDirName)
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})

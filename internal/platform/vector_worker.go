@@ -51,9 +51,6 @@ var (
 	vectorIdleInterval = 5 * time.Minute
 	// vectorProgressEvery is how often a pass logs progress.
 	vectorProgressEvery = 30 * time.Second
-	// vectorSweepEvery is how often the capture sweep (a vector whose capture
-	// is gone, superseded or owner-private) runs.
-	vectorSweepEvery = time.Hour
 	// vectorBackoffStart and vectorBackoffMax bound the wait after a failed pass.
 	vectorBackoffStart = 5 * time.Second
 	vectorBackoffMax   = 5 * time.Minute
@@ -401,15 +398,23 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 	if s == nil || s.store == nil {
 		return res, errors.New("vectors: nil service")
 	}
+	if err := s.store.ensureVectorTables(ctx); err != nil && !s.store.VectorsReady() {
+		return res, err
+	}
+	// The sweep comes first and needs no embedder: a vector whose text is no
+	// longer public is gone before anything else runs, whether or not the
+	// embedder is up.
+	removed, err := s.store.sweepVectors(ctx)
+	res.Removed += removed
+	if err != nil {
+		return res, err
+	}
 	emb := s.store.embedder()
 	if emb == nil {
 		return res, fmt.Errorf("%w: no embedder configured", errEmbedderDown)
 	}
 	if err := emb.Health(ctx); err != nil {
 		return res, fmt.Errorf("%w: %v", errEmbedderDown, err)
-	}
-	if err := s.store.ensureVectorTables(ctx); err != nil && !s.store.VectorsReady() {
-		return res, err
 	}
 	model := embedder.ModelHash
 	started := time.Now()
@@ -425,9 +430,7 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		return res, err
 	}
 	var gap []storyVersionRef
-	eligibleSet := make(map[string]bool, len(eligible))
 	for _, ref := range eligible {
-		eligibleSet[ref.VersionID] = true
 		if !have[ref.VersionID] {
 			gap = append(gap, ref)
 		}
@@ -533,19 +536,6 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		progress("capture")
 	}
 
-	// Sweeps: a vector must not outlive its text's being public.
-	removed, err := s.sweepStoryVectors(ctx, eligibleSet)
-	res.Removed += removed
-	if err != nil {
-		return res, err
-	}
-	if s.store.captureSweepDue() {
-		removed, err := s.sweepCaptureVectors(ctx)
-		res.Removed += removed
-		if err != nil {
-			return res, err
-		}
-	}
 	s.store.vec.remaining.Store(0)
 	if res.Worked() || res.Skipped > 0 {
 		el := time.Since(started).Seconds()
@@ -598,7 +588,10 @@ type storyVectorRow struct {
 	Vec                []float32
 }
 
-// writeStoryVersionVectors replaces a version's rows with rows, whole.
+// writeStoryVersionVectors replaces a version's rows with rows, whole. Two
+// writers of one version (the worker and an import, or two corpusd processes
+// at a deploy overlap) do not abort each other: the second's inserts update
+// the first's rows.
 func (s *Store) writeStoryVersionVectors(ctx context.Context, storyID, versionID string, rows []storyVectorRow) (err error) {
 	done := s.retrievalTimer(retrievalVectorWrite)
 	defer func() { done("story", len(rows), err) }()
@@ -612,7 +605,9 @@ func (s *Store) writeStoryVersionVectors(ctx context.Context, storyID, versionID
 	}
 	for _, r := range rows {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO vec_story_passages (story_id, version_id, ordinal, text_sha, day, model, embedding, embedded_on)
-			VALUES (?, ?, ?, ?, ?::date, ?, ?::halfvec(256), (now() AT TIME ZONE 'UTC')::date)`,
+			VALUES (?, ?, ?, ?, ?::date, ?, ?::halfvec(256), (now() AT TIME ZONE 'UTC')::date)
+			ON CONFLICT (story_id, version_id, ordinal) DO UPDATE SET text_sha = EXCLUDED.text_sha, day = EXCLUDED.day, model = EXCLUDED.model,
+				embedding = EXCLUDED.embedding, embedded_on = EXCLUDED.embedded_on`,
 			storyID, versionID, r.Ordinal, r.TextSHA, r.Day.UTC().Format("2006-01-02"), embedder.ModelHash, vecLiteral(r.Vec)); err != nil {
 			return err
 		}
@@ -725,8 +720,9 @@ func (s *Store) captureObjectsByIDAny(ctx context.Context, ids []string) (map[st
 	for i, id := range ids {
 		args[i] = id
 	}
+	args = append(args, string(objectgraph.WebCaptureObjectKind))
 	rows, err := s.corpus().QueryContext(ctx, `SELECT canonical_id, owner_id, computer_id, metadata, tombstone, superseded_by, created_at, updated_at
-		FROM og_objects WHERE canonical_id IN (?`+strings.Repeat(",?", len(ids)-1)+`)`, args...)
+		FROM og_objects WHERE canonical_id IN (?`+strings.Repeat(",?", len(ids)-1)+`) AND object_kind = ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -745,96 +741,47 @@ func (s *Store) captureObjectsByIDAny(ctx context.Context, ids []string) (map[st
 	return out, rows.Err()
 }
 
-// ---- sweeps ----
+// ---- eligibility and sweeps ----
 
-// sweepStoryVectors removes the vectors of versions that are no longer
-// eligible: a withdrawn or deleted story.
-func (s *Service) sweepStoryVectors(ctx context.Context, eligible map[string]bool) (int, error) {
-	rows, err := s.store.corpus().QueryContext(ctx, `SELECT DISTINCT version_id FROM vec_story_passages`)
-	if err != nil {
-		return 0, err
-	}
-	var gone []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
-			return 0, err
-		}
-		if !eligible[id] {
-			gone = append(gone, id)
-		}
-	}
-	err = rows.Err()
-	_ = rows.Close()
-	if err != nil {
-		return 0, err
-	}
-	for _, id := range gone {
-		if _, err := s.store.corpus().ExecContext(ctx, `DELETE FROM vec_story_passages WHERE version_id = ?`, id); err != nil {
-			return 0, err
-		}
-	}
-	return len(gone), nil
-}
+// The predicates below are the one statement of which vectors may be returned
+// and which must be removed. A search filters by them in the same statement
+// that reads the index, so removal latency cannot leak a private capture's id
+// or a withdrawn story's passages; the sweep deletes by their negation, at the
+// start of every pass and without the embedder. A capture's vector is
+// eligible while its object is not tombstoned or superseded, belongs to the
+// row's owner and computer, and carries no owner-private label (the full-text
+// index's exclusion, taken conservatively: the label's prefix anywhere in the
+// metadata text hides the capture). A story passage's is eligible while its
+// version and publication are not tombstoned and the publication is published
+// with a route. A version's access policy is fixed when it is published and is
+// checked when its vectors are written.
+var (
+	vecCaptureEligibleSQL = `EXISTS (SELECT 1 FROM og_objects o WHERE o.canonical_id = v.capture_id AND o.object_kind = '` + string(objectgraph.WebCaptureObjectKind) + `'
+		AND NOT o.tombstone AND COALESCE(o.superseded_by, '') = '' AND o.owner_id = v.owner_id AND o.computer_id = v.computer_id
+		AND position('` + types.LabelOwnerPrivatePrefix + `' in o.metadata) = 0)`
+	vecStoryEligibleSQL = `(EXISTS (SELECT 1 FROM og_objects ver WHERE ver.canonical_id = v.version_id AND NOT ver.tombstone)
+		AND EXISTS (SELECT 1 FROM og_objects pub WHERE pub.canonical_id = v.story_id AND NOT pub.tombstone
+			AND pub.metadata::jsonb->>'state' = 'published' AND btrim(COALESCE(pub.metadata::jsonb->>'route_path', '')) <> ''))`
+)
 
-func (s *Store) captureSweepDue() bool {
-	s.vec.sweepMu.Lock()
-	defer s.vec.sweepMu.Unlock()
-	return time.Since(s.vec.lastCaptureSweep) >= vectorSweepEvery
-}
-
-// sweepCaptureVectors removes the vectors of captures that are gone,
-// tombstoned, superseded or owner-private, paging through the table.
-func (s *Service) sweepCaptureVectors(ctx context.Context) (int, error) {
+// sweepVectors deletes the vectors whose text is no longer public, of both
+// kinds, and returns the rows deleted.
+func (s *Store) sweepVectors(ctx context.Context) (int, error) {
 	removed := 0
-	after := ""
-	for {
-		rows, err := s.store.corpus().QueryContext(ctx, `SELECT capture_id FROM vec_captures WHERE capture_id > ? ORDER BY capture_id LIMIT 400`, after)
+	for _, q := range []struct{ table, pred string }{
+		{vecStoryTable, vecStoryEligibleSQL}, {vecCaptureTable, vecCaptureEligibleSQL},
+	} {
+		res, err := s.corpus().ExecContext(ctx, `DELETE FROM `+q.table+` v WHERE NOT `+q.pred)
 		if err != nil {
-			return removed, err
+			return removed, fmt.Errorf("vectors: sweep %s: %w", q.table, err)
 		}
-		var ids []string
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				_ = rows.Close()
-				return removed, err
-			}
-			ids = append(ids, id)
-		}
-		err = rows.Err()
-		_ = rows.Close()
-		if err != nil {
-			return removed, err
-		}
-		if len(ids) == 0 {
-			break
-		}
-		after = ids[len(ids)-1]
-		objs, err := s.store.captureObjectsByIDAny(ctx, ids)
-		if err != nil {
-			return removed, err
-		}
-		for _, id := range ids {
-			obj, ok := objs[id]
-			if ok {
-				if _, _, live := captureVectorSource(obj); live {
-					continue
-				}
-			}
-			if _, err := s.store.corpus().ExecContext(ctx, `DELETE FROM vec_captures WHERE capture_id = ?`, id); err != nil {
-				return removed, err
-			}
-			removed++
-		}
-		if len(ids) < 400 {
-			break
+		if n, err := res.RowsAffected(); err == nil {
+			removed += int(n)
 		}
 	}
-	s.store.vec.sweepMu.Lock()
-	s.store.vec.lastCaptureSweep = time.Now()
-	s.store.vec.sweepMu.Unlock()
+	if removed > 0 {
+		log.Printf("corpusd vectors sweep removed=%d (text no longer public)", removed)
+	}
 	return removed, nil
 }
 
@@ -849,6 +796,7 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 		return
 	}
 	s.store.vec.started.Do(func() {
+		s.removeStaleVectorSpool()
 		go func() {
 			select {
 			case <-ctx.Done():
