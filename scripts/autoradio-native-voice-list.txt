@@ -1,0 +1,67 @@
+# What native code is allowed to be (CLAUDE.md, Product: "only voice is native"; the cutover file,
+# "What native code is, when this is done"): the voice and the deck. Read by scripts/check-autoradio-native-boundary.
+# One entry per line, each with the one reason only native code can meet:
+#   path <file or directory/ prefix, from the repo root> <why>
+#   name <interface name, or prefix*> <why>
+# A file or name not listed here is counted against the ceiling in scripts/autoradio-native-ceiling.txt.
+# An entry that matches nothing fails the gate. Adding an entry is a change to the rule: it needs the owner's reason.
+
+# --- the audio session and the engine
+path mobile/AutoradioKit/Sources/AutoradioKit/LiveAudio.swift the one AVAudioEngine: mic tap, player nodes, mixer, reference tap
+path mobile/AutoradioKit/Sources/AutoradioKit/Audio.swift PCM frames and the mic and reference buses the engine feeds
+path mobile/AutoradioKit/Sources/AutoradioKit/SessionCoordinator.swift the one owner of the audio session
+path mobile/AutoradioKit/Sources/AutoradioKit/PlaybackContinuity.swift audio through the background, the lock screen, interruptions and route changes
+path mobile/AutoradioKit/Sources/AutoradioKit/RemoteAudioPlayer.swift AVPlayer playback of remote audio under the audio session
+path mobile/AutoradioKit/Sources/AutoradioKit/Playhead.swift the position of the audio actually rendered
+path mobile/AutoradioKit/Sources/AutoradioKit/TurnEngine.swift the voice turn engine over the microphone and the session
+path mobile/AutoradioKit/Sources/AutoradioKit/Events.swift the engine's host clock and event log
+# --- the microphone, speech in and out
+path mobile/AutoradioKit/Sources/AutoradioKit/AppleStages.swift on-device speech recognition and speech synthesis stages
+path mobile/AutoradioKit/Sources/AutoradioKit/BasicStages.swift the model-free voice stages: microphone source, addressing, speech bounds
+path mobile/AutoradioKit/Sources/AutoradioKit/Stages.swift the stage protocols of the voice pipeline
+path mobile/AutoradioKit/Sources/AutoradioKit/Core.swift the voice pipeline's stage descriptors and parameters
+path mobile/AutoradioKit/Sources/AutoradioKit/ScriptedStages.swift a fixed transcriber for the voice proof
+path mobile/AutoradioKit/Sources/AutoradioKit/HandsFree.swift hands-free listening: the open microphone driving the turn policy
+path mobile/AutoradioKit/Sources/AutoradioKit/HandsFreeSwitch.swift the one hands-free state that opens and closes the microphone
+path mobile/AutoradioKit/Sources/AutoradioKit/LocalAck.swift the on-phone model's immediate spoken response
+path mobile/AutoradioKit/Sources/AutoradioKit/LocalSpeaker.swift speech on the phone, cut at a sentence boundary
+path mobile/AutoradioKit/Sources/AutoradioKit/MicCheck.swift the first-run microphone check
+path mobile/AutoradioKit/Sources/AutoradioKit/VoiceChoice.swift the voice the radio speaks with: its catalog and fallback speaker
+path mobile/AutoradioKit/Sources/AutoradioKit/VoiceSampler.swift the voice cards' spoken sample
+path mobile/AutoradioKit/Sources/AutoradioKit/VoiceSetup.swift voice setup: the models and checks of this phone's voice pipeline
+path mobile/AutoradioKit/Sources/AutoradioKit/TurnTimeline.swift the timing trace of a voice turn
+path mobile/AutoradioKit/Sources/AutoradioKit/KeptTurns.swift kept microphone turns
+path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurn.swift generated microphone-turn fixture for voice setup and the model proof
+path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurnAudio.swift the fixture utterance read by voice setup and the model proof
+path mobile/AutoradioKit/Sources/AutoradioKit/FixtureClip.swift generated clip fixture for the fingerprint tests
+path mobile/AutoradioKit/Sources/AutoradioKit/Voice/ speaker identity, the turn policy and voice preparation
+# --- the on-device models
+path mobile/AutoradioKit/Sources/AutoradioModels/ the on-device models (llama.cpp, FluidAudio, Core ML)
+path mobile/AutoradioKit/Sources/autoradio-models/ the Mac command that proves the on-device models
+path mobile/AutoradioKit/Sources/autoradio-replay/ the Mac command that replays recorded turns through the voice pipeline
+path mobile/AutoradioKit/Sources/AutoradioKit/Configurator.swift picks one on-device model per voice role for this device
+path mobile/AutoradioKit/Sources/AutoradioKit/ModelCandidates.swift the on-device model candidate table
+path mobile/AutoradioKit/Sources/AutoradioKit/ModelStore.swift on-device model weights, listed and unloaded
+path mobile/AutoradioKit/Sources/AutoradioKit/KnownModels.swift the catalog of on-device models
+path mobile/AutoradioKit/Sources/AutoradioKit/ExternalModels.swift the registrar through which the app module supplies model stages
+path mobile/AutoradioKit/Sources/AutoradioKit/LiveConfigBackend.swift the configurator's backend on a real device
+path mobile/AutoradioKit/Sources/AutoradioKit/LabRuntime.swift the voice lab: runs and measures the engine and its stages
+path mobile/AutoradioKit/Sources/AutoradioKit/Embedder.swift the on-device embedding model's interface and prompts
+# --- the take recorder and clip fingerprinting
+path mobile/AutoradioKit/Sources/AutoradioKit/TakeSession.swift the take recorder: microphone, recogniser and player behind four protocols
+path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ClipFingerprint.swift clip fingerprinting over decoded PCM
+path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ClipLocator.swift finding a clip again in served audio by its fingerprint
+# --- the host: what binds the native side to Exact
+path mobile/AutoradioKit/Package.swift the Swift package manifest of the native side
+path mobile/exact-package/apple/AutoradioModule.swift the module class that registers the native names with Exact
+path mobile/exact-package/apple/AutoradioModule+Voice.swift the voice cards' native side
+
+# --- interface names
+name lab* the voice lab: the engine's state, stages, parameters, audio policy, replay
+name voice* the voice cards and the speaker profile
+name onboardingMic the microphone check
+name onboardingMicNext the microphone check
+name onboardingHearing the microphone check's hearing level
+name choirTalkCancel cancels the open microphone turn
+name choirHandsFreeToggle opens and closes the microphone
+name choirListen starts a spoken turn
