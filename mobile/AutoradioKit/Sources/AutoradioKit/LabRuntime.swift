@@ -37,23 +37,6 @@ public struct LabSnapshot: Codable, Sendable {
     public var message = ""
     public var micActive = false
 }
-public struct AudioInfo: Codable, Sendable {
-    public var state = "none", policy = "switchOnAddress", engine = "off", route = "", message = ""
-    public var voiceProcessing = false, audible = false
-    public var volume = 1.0, lastSwitchMs = 0.0
-    public var policies: [String] = AudioPolicy.allCases.map(\.rawValue)
-    public var ackTiming = "immediate"
-    public var ackTimings: [String] = AckTiming.allCases.map(\.rawValue)
-}
-public struct StageRow: Codable, Sendable { public var kind, kindLabel, id, name, summary: String; public var selected: Bool; public var network: Bool; public var models: String }
-public struct ParamRow: Codable, Sendable { public var kind, stage, name, label, value, hint: String }
-public struct TimingRow: Codable, Sendable { public var stage: String; public var startMs, durMs: Double }
-public struct TraceView: Codable, Sendable {
-    public var id = "", transcript = "", configName = "", outcome = "", addressedBy = ""
-    public var totalMs = 0.0, ackMs = 0.0, revisionMs = 0.0, audioSwitchMs = 0.0
-    public var timings: [TimingRow] = []
-    public var lines: [String] = []
-}
 public struct TurnRow: Codable, Sendable { public var id, transcript, configName, outcome: String; public var ackMs, revisionMs: Double }
 
 /// Everything a host needs: the registry, the audio, the engine, kept turns, configurations.
@@ -78,15 +61,12 @@ public final class LabRuntime: @unchecked Sendable {
     private let lock = NSLock()
     private var config: LabConfiguration
     private var snap = LabSnapshot()
-    private var tail: [String] = []
     private var records: [String: TurnRecord] = [:]
     private var lastID: String?
     private var micTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     private var started = false
-    private var lastSwitchMs = 0.0
     private let policyBox: PolicyBox
-    private var injecting = false
 
     /// `emptyProgramme`: the radio starts with nothing loaded (the phone and the Mac): the lab's fixture edition is for tests and the lab, and
     /// must never be spoken on a listener's device. Everything that plays is a run sheet entry.
@@ -344,34 +324,6 @@ public final class LabRuntime: @unchecked Sendable {
     /// Discard the turn being talked (Cancel beside Send): stop the capture, drop the audio and words, call nothing.
     public func cancelTalk() { Task { await engine.cancelTurn() } }
 
-    /// Drive the live path with the bundled kept turn: press, feed its microphone audio in real time as if it came from
-    /// the hardware, release. Works with real or virtual audio; the turn lands in Trace like a spoken one.
-    public func injectFixtureTurn() async {
-        guard started, !injecting else { return }
-        injecting = true; defer { injecting = false }
-        guard let url = FixtureTurn.materialise(), let mic = try? AudioFiles.readMono(url) else {
-            log.emit(.error(stage: "inject", message: "no fixture turn audio")); return
-        }
-        log.emit(.note("injecting the fixture turn (\(mic.count / 16) ms) through the live engine"))
-        // Press the button only when the configuration addresses by button; in open mode the audio alone must do it.
-        let useButton = false          // hands-free: the audio alone starts and ends the turn
-        if useButton { await engine.buttonDown() }
-        let n = 512   // 32 ms frames, paced in real time
-        var i = 0
-        while i < mic.count {
-            let f = AudioFrame(samples: Array(mic[i..<min(i + n, mic.count)]), sampleRate: busSampleRate, t: clock.now)
-            bus.pushMic(f)
-            i += n
-            try? await Task.sleep(nanoseconds: 32_000_000)
-        }
-        // trailing silence so the VAD closes, then the button
-        for _ in 0..<50 {
-            bus.pushMic(AudioFrame(samples: [Float](repeating: 0, count: n), sampleRate: busSampleRate, t: clock.now))
-            try? await Task.sleep(nanoseconds: 32_000_000)
-        }
-        if useButton { await engine.buttonUp() }
-    }
-
     // MARK: Configuration
 
     public var configuration: LabConfiguration { lock.lock(); defer { lock.unlock() }; return config }
@@ -394,11 +346,6 @@ public final class LabRuntime: @unchecked Sendable {
         c.audioPolicy = p
         setConfiguration(c)
     }
-    public func setAckTiming(_ t: AckTiming) {
-        var c = configuration
-        c.ackTiming = t
-        setConfiguration(c)
-    }
     public func setStage(_ kind: StageKind, id: String) {
         var c = configuration
         c.set(kind, StageSetting(id: id))
@@ -412,26 +359,6 @@ public final class LabRuntime: @unchecked Sendable {
         setConfiguration(c)
         voiceStore.save(o.setting)
     }
-    public func setParam(_ kind: StageKind, name: String, value: String) {
-        var c = configuration
-        guard var s = c.setting(kind) else { return }
-        let spec = registry.stages(kind).first { $0.id == s.id }?.descriptor.params.first { $0.name == name }
-        switch spec?.kind {
-        case .number, .int: if let d = Double(value) { s.params[name] = .number(d) }
-        case .bool: s.params[name] = .bool(value == "true" || value == "1" || value == "yes")
-        default: s.params[name] = .string(value)
-        }
-        c.set(kind, s)
-        setConfiguration(c)
-        if kind == .voice { voiceStore.save(s) }
-    }
-    public func saveConfiguration(name: String) throws {
-        var c = configuration; c.name = name
-        try configs.save(c); setConfiguration(c)
-    }
-    public func loadConfiguration(name: String) throws { setConfiguration(try configs.load(name)) }
-    public func loadConfiguration(url: URL) async throws { setConfiguration(try await LabConfiguration.fetch(url)) }
-
     // MARK: Turns
 
     func keep(_ rec: TurnRecord) {
@@ -460,61 +387,6 @@ public final class LabRuntime: @unchecked Sendable {
         if let l = lastID { return records[l] }
         return store.list().first.flatMap { try? $0.record() }
     }
-    public func trace(id: String?) -> TraceView {
-        guard let r = record(id: id) else { return TraceView() }
-        let t0 = r.events.first?.t ?? 0
-        var v = TraceView(id: r.id, transcript: r.summary.transcript ?? "", configName: r.configuration.name, outcome: r.outcome.rawValue,
-                          addressedBy: r.summary.addressedBy ?? "", totalMs: ((r.events.last?.t ?? t0) - t0) * 1000,
-                          ackMs: r.summary.turnEndToAckMs ?? 0, revisionMs: r.summary.turnEndToRevisionMs ?? 0)
-        v.audioSwitchMs = r.summary.audioSwitchMs ?? 0
-        v.timings = r.summary.timings.map { TimingRow(stage: $0.stage, startMs: ($0.startedAt - t0) * 1000, durMs: $0.ms) }
-        v.lines = r.events.filter { if case .partialTranscript = $0.event { return false }; if case .stageTiming = $0.event { return false }; return true }
-            .map { String(format: "%7.0f ms  ", ($0.t - t0) * 1000) + Self.describe($0.event) }
-        // The five steps of the turn, from the live log (the desk's audio starts after the record was folded).
-        if let anchor = r.events.first(where: { if case .turnEnded = $0.event { return true }; return false })?.t,
-           let tl = TurnTimeline.compute(log.events.filter { $0.t >= t0 - 0.001 }).first(where: { abs($0.turnEndedAt - anchor) < 0.001 }) {
-            v.lines = tl.lines + [""] + v.lines
-        }
-        return v
-    }
-
-    /// Write a turn record (JSON) to Documents/AutoradioExports/<id>.json and return its URL. Pull it off a phone with
-    /// `xcrun devicectl device copy from --device <udid> --domain-type appDataContainer --domain-identifier <bundle id>
-    /// --source Documents/AutoradioExports/<id>.json --destination .`
-    public func export(id: String?) -> URL? {
-        if id == "last" || id == "*" { return exportTrace(last: 5) }
-        guard let r = record(id: id), let data = try? r.encoded() else { return nil }
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("AutoradioExports")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent(r.id + ".json")
-        do { try data.write(to: url, options: .atomic); return url } catch { log.emit(.error(stage: "export", message: "\(error)")); return nil }
-    }
-
-    /// The last `n` turns as one JSON file: each turn's timeline (end of speech, local reply text ready, local audio start, desk first
-    /// token, desk audio start) and the whole event log from the first of them. Written to Documents/AutoradioExports/trace-<time>.json.
-    public func exportTrace(last n: Int) -> URL? {
-        lock.lock()
-        var recs = Array(records.values)
-        lock.unlock()
-        if recs.isEmpty { recs = store.list().compactMap { try? $0.record() } }
-        recs = Array(recs.sorted { $0.startedAt < $1.startedAt }.suffix(max(1, n)))
-        let export = TraceExport.make(records: recs, log: log.events, device: .current, describe: Self.describe, configuration: ConfigRecordStore.load())
-        guard let data = try? export.encoded() else { return nil }
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("AutoradioExports")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("trace-\(Int(Date().timeIntervalSince1970)).json")
-        do { try data.write(to: url, options: .atomic); return url } catch { log.emit(.error(stage: "export", message: "\(error)")); return nil }
-    }
-
-    /// Run a kept turn through the current (or another) configuration; returns the new record's id.
-    public func replay(id: String, configuration: LabConfiguration? = nil) async throws -> TurnRecord {
-        let k = KeptTurn(folder: store.root.appendingPathComponent(id))
-        let rec = try await Replayer.run(turn: k, configuration: configuration ?? self.configuration, registry: registry)
-        lock.lock(); records[rec.id] = rec; lastID = rec.id; lock.unlock()
-        refresh()
-        return rec
-    }
-
     // MARK: Views for hosts
 
     public func snapshot() -> LabSnapshot {
@@ -530,50 +402,6 @@ public final class LabRuntime: @unchecked Sendable {
         s.micActive = audio.micActive
         return s
     }
-    public func audioInfo() -> AudioInfo {
-        var a = AudioInfo()
-        a.state = coordinator.current?.rawValue ?? "none"
-        a.policy = configuration.audio.rawValue
-        a.ackTiming = configuration.ack.rawValue
-        a.engine = audio.virtual && audio.running ? "virtual" : audio.running ? "up" : audio.down ? "down" : "off"
-        a.route = coordinator.describe()
-        a.voiceProcessing = audio.voiceProcessing
-        a.audible = audio.programmeAudible
-        a.volume = Double(audio.programmeVolume)
-        lock.lock(); a.lastSwitchMs = lastSwitchMs; a.message = snap.message; lock.unlock()
-        return a
-    }
-    public func stageRows() -> [StageRow] {
-        let c = configuration
-        return registry.all.map { r in
-            StageRow(kind: r.kind.rawValue, kindLabel: Self.kindLabel(r.kind), id: r.id, name: r.descriptor.displayName, summary: r.descriptor.summary,
-                     selected: c.setting(r.kind)?.id == r.id, network: r.descriptor.needsNetwork, models: r.descriptor.needsModels.joined(separator: ", "))
-        }
-    }
-    public func paramRows() -> [ParamRow] {
-        let c = configuration
-        var out: [ParamRow] = []
-        for k in StageKind.allCases {
-            guard let s = c.setting(k), let d = registry.stages(k).first(where: { $0.id == s.id })?.descriptor else { continue }
-            let p = registry.params(k, s)
-            for spec in d.params {
-                let hint = [spec.min.map { "min \($0)" }, spec.max.map { "max \($0)" }, spec.note].compactMap { $0 }.joined(separator: ", ")
-                out.append(ParamRow(kind: k.rawValue, stage: s.id, name: spec.name, label: spec.label, value: (p.values[spec.name] ?? spec.defaultValue).description, hint: hint))
-            }
-        }
-        return out
-    }
-    public func eventLines() -> [String] { lock.lock(); defer { lock.unlock() }; return tail }
-
-    static func kindLabel(_ k: StageKind) -> String {
-        switch k {
-        case .micSource: return "Microphone"; case .addressing: return "Addressing"; case .speechBounds: return "Speech bounds"
-        case .speakerCheck: return "Speaker check"; case .transcriber: return "Transcription"; case .yieldPolicy: return "Yielding"
-        case .system1: return "System 1"; case .holder: return "Holding"; case .voice: return "Voice"; case .desk: return "System 2 (desk)"
-        case .programme: return "Programme"
-        }
-    }
-
     // MARK: Event absorption
 
     func absorb(_ te: TimedEvent) {
@@ -582,12 +410,7 @@ public final class LabRuntime: @unchecked Sendable {
         case .phase(_, let to): snap.phase = to; if to == "candidate" { snap.transcript = "" }
         case .partialTranscript(let t), .finalTranscript(let t): snap.transcript = t
         case .error(_, let m): snap.message = m
-        case .audioSwitch(let from, _, let ms) where from != "none": lastSwitchMs = ms
         default: break
-        }
-        if case .partialTranscript = te.event {} else {
-            tail.append(String(format: "%.2f ", te.t.truncatingRemainder(dividingBy: 10000)) + Self.describe(te.event))
-            if tail.count > 60 { tail.removeFirst() }
         }
         lock.unlock()
         onChange?()

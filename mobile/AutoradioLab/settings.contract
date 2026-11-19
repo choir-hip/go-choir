@@ -258,8 +258,6 @@ component RootScreen
         NavRow(address="settings:about", title="About", subtitle="Builds and server", testId="settings-nav-about")
       SectionLabel(label="Developer")
       PlainList(testId="settings-card-developer")
-        NavRow(address="lab:components", title="Components and Trace", subtitle="Stages, parameters, kept turns", testId="settings-components")
-        Hairline()
         button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" appearance="none" width="100%" box-sizing="border-box" padding="14px 0px"
           column align-items="flex-start" gap=2 width="100%"
             text (dm.on ? "Demo mode is on" : "Demo mode is off") font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
@@ -415,12 +413,8 @@ component VoiceScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Voice and models", back=true)
-      text "The voice that reads the paper, and the models that hear you, run on this phone. Their sizes and checks are on the Components page." font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      text "The voice that reads the paper, and the models that hear you, run on this phone." font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
       VoiceCardsList()
-      PlainList(testId="settings-card-voice")
-        NavRow(address="lab:components", title="Components", subtitle="Models, stages and parameters", testId="settings-voice-components")
-        Hairline()
-        NavRow(address="lab:trace", title="Trace", subtitle="The last turn, step by step", testId="settings-voice-trace")
       text "Voice setup, with the model downloads and the checks for this device, opens from here once first run has it." testId="settings-voice-note" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
 
 // ---------------------------------------------------------------- computer

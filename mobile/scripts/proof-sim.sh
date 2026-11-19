@@ -67,19 +67,6 @@ while :; do
     "tap bar-voice down" "tap up" "clock +1500 real" "clock data" tree "screenshot $SHOTS/11-playing.png" \
     logs > "$OUT" 2>&1
   rc=$?
-  # Second drive, plain taps (under --touch platform a held press is one scripted touch): Components, Trace.
-  # The open pages and the theme are kept from the first drive.
-  [ $rc -eq 0 ] && "$HERE/exact.sh" agent ios \
-    "clock data" "clock +1500 real" "clock data" \
-    "tap bar-field" "clock +800 real" "clock data" "screenshot $SHOTS/12a-bar-field-focused.png window" \
-    "tap settings-components" "clock +700 real" "clock data" tree "screenshot $SHOTS/13-components.png" \
-    "tap stage-addressing-hybrid" "tap stage-transcriber-scripted" "tap stage-system1-fixed" "tap stage-holder-local-ack" \
-      "tap stage-desk-stub-echo" "tap stage-programme-fixture" "tap ack-immediate" "clock data" \
-    "tap start" "clock +1500 real" "clock data" tree \
-    "tap inject" "clock +3000 real" "clock data" tree \
-    "clock +9000 real" "clock data" "tap open-trace" "clock +700 real" "clock data" tree "screenshot $SHOTS/14-trace.png" \
-    logs >> "$OUT" 2>&1
-  rc=$?
   if grep -q "never opened its agent socket\|not foreground-active\|before opening its agent socket\|the app hung up" "$OUT" && [ $attempt -lt 3 ]; then
     attempt=$((attempt + 1)); echo "launch refused, retry $attempt"; DEVELOPER_DIR=$DD /usr/bin/xcrun simctl terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 5; continue
   fi
@@ -114,23 +101,6 @@ must "theme switch: Depth dark" 'Showing Depth (dark)'
 must "theme switch: back to Depth light" 'Showing Depth (light)'
 must "pull the bar up: the launcher opens" '[launcher-layer]'
 must "play: tap on the voice button starts the radio (bar shows what plays)" '[bar-text]'
-must "components: reachable as a page" '[page-title] "Components"'
-must "components: phase line" '[lab-phase]'
-must "components: acknowledgement timing choice" '[ack-immediate]'
-must "components: stub configuration selected explicitly" '"● System 1'
-must "components: audio state line" '[audio-state]'
-must "components: policy choices" '[policy-alwaysTalking]'
-must "components: inject control" '[inject]'
-must "trace: reachable as a page" '[page-title] "Trace"'
-must "trace: export control" '[trace-export]'
-must "start audio: listening claim" 'State listening'
-must "start audio: virtual engine" 'engine virtual'
-must "start audio: microphone on" 'Phase: playing'
-must "audio switch events recorded" 'audio switch listening -> talking in'
-grep -qE '\[trace-id\] "turn-' "$OUT" || fail "trace: turn record" "no live turn record in Trace"
-echo "ok: trace: live turn record"
-grep -qE 'Acknowledgement [0-9]+ ms' "$OUT" || fail "trace: acknowledgement time" "no acknowledgement time in the record"
-echo "ok: trace: acknowledgement time"
 [ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 12 ] || fail "screenshots" "fewer than 12 in $SHOTS"
 echo "ok: screenshots in $SHOTS"
 if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m5 'ERROR\|Fatal error' "$OUT"; fi

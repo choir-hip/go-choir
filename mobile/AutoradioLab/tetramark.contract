@@ -1,4 +1,4 @@
-// The tetramark with the motion model: the bar's mark, and the mark gallery (`lab:mark`). Mirrors
+// The tetramark with the motion model: the bar's mark. Mirrors
 // mobile/AutoradioKit/Sources/AutoradioKit/TetraMarkMotion.swift (the Swift file is the specification and is tested; every
 // number here is the same number). PURE CONTRACT, as the owner ruled for the mark (2026-11-11).
 //

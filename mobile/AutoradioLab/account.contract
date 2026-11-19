@@ -1,0 +1,33 @@
+// The integrator's members of the root: the Choir sign-in and the player (the voice lab page, its stages, parameters, trace and
+// audio switch are gone: owner, 2026-11-19, "get rid of lab pages").
+use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
+use choirSignIn, choirSignOut, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirPlay, choirListen from "@choir/autoradio"
+use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
+use LabState from "@choir/autoradio"
+
+members Autoradio
+  resource au = choirAuth() as shape ChoirAuth else empty()
+  resource pl = choirPlayer() as shape ChoirPlayer else empty()
+  resource sl = choirStories() as shape StoryList else empty()
+  mutation acct as shape LabState
+  mutation ctl as shape LabState
+  mutation down as shape LabState
+  mutation up as shape LabState
+
+  action signIn
+    send acct = choirSignIn()
+  action cancelSignIn
+    send acct = choirCancelSignIn()
+  action openApproval
+    send acct = choirOpenApproval()
+  action signOut
+    send acct = choirSignOut()
+  action refreshRadio
+    send acct = choirRefresh()
+  action radioPlay
+    send acct = choirPlayPause()
+  action playStory(route: string)
+    send acct = choirPlay(route=route)
+  // Listen: the radio reads this text now, headline first (the page's own text; the module cleans it).
+  action listen(address: string, title: string, text: string)
+    send ctl = choirListen(address=address, title=title, text=text)

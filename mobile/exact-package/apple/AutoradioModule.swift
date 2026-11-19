@@ -111,7 +111,7 @@ public final class AutoradioModule: ExactPackage {
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
         #endif
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["labState", "labAudio", "labEvents", "labTrace", "labTurns", "labStages", "labParams", "labConfigs", "choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState"], now: true) } }
         // Demo mode first: the Choir environment then talks to the bundled fixtures, signed in as the demo listener.
         if Demo.isOn { Demo.install() }
@@ -124,7 +124,7 @@ public final class AutoradioModule: ExactPackage {
         }
         #endif
         choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "labState", "barState", "radioView"]) } }
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
         pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
@@ -231,74 +231,6 @@ public final class AutoradioModule: ExactPackage {
         let state = { [unowned self] in self.json(self.runtime.snapshot()) }
         if let h = handlers[name] { h(args, reply); return }
         switch name {
-        case "labState": reply(state())
-        case "labAudio": reply(json(runtime.audioInfo()))
-        case "labStages": reply(["rows": runtime.stageRows().map { json($0) }])
-        case "labParams": reply(["rows": runtime.paramRows().map { json($0) }])
-        case "labEvents": reply(["lines": runtime.eventLines()])
-        case "labTurns": reply(["rows": runtime.turns().map { json($0) }])
-        case "labConfigs": reply(["names": runtime.configs.names()])
-        case "labTrace":
-            let id = (args["turn"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-            reply(json(runtime.trace(id: id)))
-        case "labStart":
-            // Never start the engine inside the reply. Under the agent no device is opened: the engine is virtual.
-            // On a phone driven by the agent the real engine runs (that is how the device numbers are measured).
-            #if targetEnvironment(simulator)
-            let virtual = context.agent
-            #else
-            let virtual = false
-            #endif
-            DispatchQueue.main.async { [weak self] in Task { await self?.runtime.start(virtual: virtual) } }
-            reply(state())
-        case "labInject":
-            Task { [weak self] in await self?.runtime.injectFixtureTurn() }
-            reply(state())
-        case "labSetAckTiming":
-            if let t = AckTiming(rawValue: args["timing"] as? String ?? "") { runtime.setAckTiming(t) }
-            reply(state())
-        case "labSetAudioPolicy":
-            if let p = AudioPolicy(rawValue: args["policy"] as? String ?? "") { runtime.setAudioPolicy(p) }
-            reply(state())
-        case "labExportTurn":
-            let id = (args["turn"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-            guard let u = runtime.export(id: id) else { return reply(["path": "", "documents": "", "name": ""]) }
-            // Also as an app:/ file, for the share sheet (the host resolves the path against the app's grants).
-            var shared = ""
-            if let d = context.file("app:/data/exports/\(u.lastPathComponent)") {
-                try? FileManager.default.createDirectory(at: d.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? FileManager.default.removeItem(at: d)
-                if (try? FileManager.default.copyItem(at: u, to: d)) != nil { shared = "app:/data/exports/\(u.lastPathComponent)" }
-            }
-            reply(["path": shared, "documents": u.path, "name": u.lastPathComponent])
-        case "labStop": runtime.stop(); reply(state())
-        case "labPlayPause": if runtime.player.userPaused { runtime.player.play() } else { runtime.player.pause() }; reply(state())
-        // Skip and previous move the programme: the player's view and the bar read the new position (found in the P1 simulator drive:
-        // with the engine paused nothing else asked for them again, so the view kept the old segment).
-        // While remote audio plays, the passage buttons are its 15 second skips (lane autoradio-queue).
-        case "labNext" where onMainThread({ RunSheetPlayer.shared.isRemote }): onMainThread { RunSheetPlayer.shared.seek(by: 15) }; reply(state())
-        case "labPrevious" where onMainThread({ RunSheetPlayer.shared.isRemote }): onMainThread { RunSheetPlayer.shared.seek(by: -15) }; reply(state())
-        // Next and previous are the run sheet's: `skip(on air)` and `previous`, not a passage of the entry.
-        case "labNext": onMainThread { RunSheetPlayer.shared.next() }; touch(["radioView", "barState"]); reply(state())
-        case "labPrevious": onMainThread { RunSheetPlayer.shared.previous() }; touch(["radioView", "barState"]); reply(state())
-        case "labSelectStage":
-            if let k = StageKind(rawValue: args["kind"] as? String ?? ""), let id = args["id"] as? String {
-                runtime.setStage(k, id: id)
-                if k == .programme { Task { [choir] in await choir?.loadProgramme() } }   // a programme picked in the Lab loads now
-            }
-            reply(state())
-        case "labSetParam":
-            if let k = StageKind(rawValue: args["kind"] as? String ?? "") {
-                runtime.setParam(k, name: args["name"] as? String ?? "", value: args["value"] as? String ?? "")
-            }
-            reply(state())
-        case "labSaveConfig": try? runtime.saveConfiguration(name: args["name"] as? String ?? "unnamed"); touch(["labConfigs"]); reply(state())
-        case "labLoadConfig": try? runtime.loadConfiguration(name: args["name"] as? String ?? ""); reply(state())
-        case "labLoadConfigURL":
-            if let u = URL(string: args["url"] as? String ?? "") { Task { try? await runtime.loadConfiguration(url: u); DispatchQueue.main.async { reply(state()) } } } else { reply(state()) }
-        case "labReplay":
-            let id = args["turn"] as? String ?? ""
-            Task { _ = try? await runtime.replay(id: id); DispatchQueue.main.async { reply(state()) } }
         case "choirAuth": reply(json(choir.authView()))
         case "choirPlayer": reply(json(choir.playerView()))
         case "choirStories": reply(["rows": choir.storyRows().map { json($0) }])

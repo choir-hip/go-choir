@@ -1,4 +1,4 @@
-// Motion (lane 9): the alive wait, the motion gallery (`lab:motion`), the wait on its own page (`lab:wait`). Lane 9 owns this file. Pure Contract; every duration is a
+// Motion (lane 9): the alive wait. Lane 9 owns this file. Pure Contract; every duration is a
 // theme token.
 use Theme from "@choir/autoradio"
 use MarkAt from "./mark.contract"

@@ -96,22 +96,7 @@ run_drive B \
   "tap bar-voice down" "clock +1000 real" "clock data" tree "screenshot $SHOTS/23-dark-talking.png" "tap up" "clock +1500 real" "clock data" tree "screenshot $SHOTS/24-dark-after.png" \
   logs
 
-# ---- C: a scripted turn through the Components page, the bar visible; shots at intervals (best effort)
-fresh light
-run_drive C \
-  "clock data" "clock +1500 real" "clock data" \
-  "tap bar-pages" "clock +600 real" "tap pile-places" "clock +600 real" "tap place-components" "clock +800 real" "clock data" \
-  "tap stage-addressing-hybrid" "tap stage-transcriber-scripted" "tap stage-system1-fixed" "tap stage-holder-local-ack" \
-    "tap stage-desk-stub-echo" "tap stage-programme-fixture" "tap ack-immediate" "clock data" \
-  "tap start" "clock +1500 real" "clock data" \
-  "tap inject" "clock +1200 real" "clock data" tree "screenshot $SHOTS/30-turn-1.png" \
-  "clock +1500 real" "clock data" tree "screenshot $SHOTS/31-turn-2.png" \
-  "clock +2000 real" "clock data" tree "screenshot $SHOTS/32-turn-3.png" \
-  "clock +3000 real" "clock data" tree "screenshot $SHOTS/33-turn-4.png" \
-  "clock +5000 real" "clock data" tree "screenshot $SHOTS/34-turn-5.png" \
-  logs
-
-[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 18 ] || fail "screenshots" "fewer than 18 in $SHOTS"
+[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 12 ] || fail "screenshots" "fewer than 12 in $SHOTS"
 echo "ok: screenshots in $SHOTS"
 if grep -q 'Fatal error' "$OUT"; then echo "note: fatal error in the app log:"; grep -m5 'Fatal error' "$OUT"; fi
 echo "PROOF OK"

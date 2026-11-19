@@ -57,7 +57,6 @@ path mobile/exact-package/apple/AutoradioModule.swift the module class that regi
 path mobile/exact-package/apple/AutoradioModule+Voice.swift the voice cards' native side
 
 # --- interface names
-name lab* the voice lab: the engine's state, stages, parameters, audio policy, replay
 name voice* the voice cards and the speaker profile
 name onboardingMic the microphone check
 name onboardingMicNext the microphone check

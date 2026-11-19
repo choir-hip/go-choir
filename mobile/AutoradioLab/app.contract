@@ -9,7 +9,7 @@ use BarWebLayer from "./queue.contract"
 
 component Autoradio
   members "./spine.contract"
-  members "./lab.contract"
+  members "./account.contract"
   // ---- one members file per lane (already wired; the lane fills its own) ----
   members "./members-bar.contract"
   members "./members-paper.contract"
@@ -69,25 +69,10 @@ component Autoradio
     record
     editAsk
     sendAsk
-    // ---- integrator (engine, Lab, Choir sign-in, player) ----
+    // ---- integrator (Choir sign-in, player) ----
     au
     pl
     sl
-    st
-    aud
-    stages
-    params
-    turns
-    events
-    configs
-    trace
-    other
-    cfgName
-    cfgUrl
-    expPath
-    expName
-    cmp
-    yieldLabel
     signIn
     cancelSignIn
     openApproval
@@ -96,25 +81,6 @@ component Autoradio
     radioPlay
     playStory
     listen
-    start
-    stop
-    next
-    previous
-    pick
-    setParam
-    editCfgName
-    saveCfg
-    loadCfg
-    editCfgUrl
-    loadUrl
-    setPolicy
-    setAckTiming
-    inject
-    exportTurn
-    shareExport
-    choose
-    compare
-    replay
     // ---- lane 1: bar, radio, talk ----
     ri
     typing

@@ -105,10 +105,6 @@ drive "D learned gestures about activity" \
     "tap settings-back" "clock +700 real" "clock data" "tap settings-nav-about" "clock +700 real" "clock data" tree "screenshot $SHOTS/25-about.png" \
     "tap settings-back" "clock +1000 real" "clock data" "tap settings-nav-activity" "clock +1000 real" "clock data" tree "screenshot $SHOTS/26-activity.png"
 
-drive "E components trace" \
-    "tap bar-pages" "clock +700 real" "clock data" "tap pile-places" "clock +700 real" "clock data" "tap place-settings" "clock +700 real" "clock data" "tap settings-components" "clock +700 real" "clock data" tree "screenshot $SHOTS/27-components.png" \
-    "tap open-trace" "clock +700 real" "clock data" tree "screenshot $SHOTS/28-trace.png"
-
 drive "F dark pass" \
     "tap bar-pages" "clock +700 real" "clock data" "tap pile-places" "clock +700 real" "clock data" "tap place-settings" "clock +700 real" "clock data" "tap settings-mode-dark" "clock +700 real" "clock data" "tap settings-nav-appearance" "clock +700 real" "clock data" tree "screenshot $SHOTS/30-appearance-dark.png" \
     "tap settings-back" "clock +700 real" "clock data" "tap settings-nav-account" "clock +700 real" "clock data" "screenshot $SHOTS/31-account-dark.png" \
@@ -166,9 +162,6 @@ must "activity: the page" '[page-title] "Activity"'
 must "activity: a revision from the changelog" 'Revision saved'
 must "activity: the computer's update" 'Your computer finished updating and restarted.'
 must "activity: unseen count" '2 new since you last looked'
-must "components: restyled page still works" '[page-title] "Components"'
-must "components: phase line kept" '[lab-phase]'
-must "trace: restyled page still works" '[page-title] "Trace"'
 [ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 30 ] || fail "screenshots" "fewer than 30 in $SHOTS"
 echo "ok: screenshots in $SHOTS"
 if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m5 'ERROR\|Fatal error' "$OUT"; fi

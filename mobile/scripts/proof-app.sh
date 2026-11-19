@@ -4,7 +4,7 @@
 # 3. one build, 4. a tour: paper (front, a story in the reader), the bar's controls (play, mic, Cancel, the player sheet), the deck (a swipe sends a page to the bottom, the
 # launcher brings one back; a separate drive counts the pages from the deck label, swipes through all of them and asserts the starting page is on top
 # again) and the launcher, files (list, a PDF),
-# mail (inbox, a message), Textures (list, a document), settings, voice setup and the interview, the motion lab; first in LIGHT, then in
+# mail (inbox, a message), Textures (list, a document), settings, voice setup and the interview; first in LIGHT, then in
 # DARK. No theme is chosen: the app shows the default pair (Chrome Pastel in light, Liquid Metal in dark). The scheme really switches: the Settings
 # mode control (settings-mode-dark) is tapped, the settings line "Showing Liquid Metal (dark)" is asserted, and it is put back to light at the end. Screenshot names say which mode they are: light-NN-*.png, dark-NN-*.png.
 # Last line: PROOF OK, or PROOF FAILED at <step>. Screenshots: $PROOF_SHOTS.
@@ -96,7 +96,6 @@ step "tap bar-mark"; view light-05-launcher 700
 step "tap \"launcher-open-pub:demo-grid-storage\""; view light-05b-story-brought-back 900
 step "tap bar-mark"; wait_ 600
 step "tap place-settings"; wait_ 900
-step "tap settings-components"; view light-05e-components-page 1500
 step "tap bar-mark"; wait_ 600
 step "tap place-files"; view light-06-files-list 1200
 step "tap \"files-row-/Documents\""; wait_ 700
@@ -106,23 +105,6 @@ step "tap mail-row-m6"; view light-09-mail-message 900
 place textures 900; view light-10-textures-list 500
 step "tap textures-doc-texture:demo-notes"; view light-11-texture-document 1000
 place settings 900; step tree; shot light-12-settings
-step "tap settings-motion"; view light-13-motion-lab 1500
-step "clock +450 real"; shot light-13-mark-b
-step "clock +450 real"; shot light-13-mark-c
-step "clock +450 real"; shot light-13-mark-d
-step "clock +450 real"; shot light-13-mark-e
-step "clock +450 real"; shot light-13-mark-f
-step "clock +450 real"; shot light-13-mark-g
-# the other states in motion at hero size: replay, scroll to the rows, three frames each
-step "tap motion-replay"; step "tap motion-scroll drag 0 -520"; step "clock +120 real"; step tree; shot light-13-states1-a
-step "clock +250 real"; shot light-13-states1-b
-step "clock +250 real"; shot light-13-states1-c
-step "tap motion-scroll drag 0 -520"; step "clock +200 real"; shot light-13-states2-a
-step "clock +250 real"; shot light-13-states2-b
-step "clock +250 real"; shot light-13-states2-c
-step "tap motion-scroll drag 0 -900"; step "clock +200 real"; shot light-13-states3-a
-step "clock +250 real"; shot light-13-states3-b
-step "clock +250 real"; shot light-13-states3-c
 place settings 900
 step "tap settings-setup-voice"; view light-14-setup-from-settings 900
 step "tap ob-skip"; view light-14b-setup-left-back-to-deck 900
@@ -206,16 +188,13 @@ step "tap bar-now"; view light-17-radio-page 900
 step logs
 run_drive talk light "" --touch platform
 
-# ---- 4a3. a typed question: the local acknowledgement and the timing trace. The simulator has no downloaded language model, so the
-# honest outcome here is "no local reply" and a non-verbal cue (never a stock phrase); the trace page lists the five timing steps and
-# the last-5-turns export is offered. (The model writing a line is proven by the Swift tests with the model faked, and on the Mac/phone.)
+# ---- 4a3. a typed question: the local acknowledgement. The simulator has no downloaded language model, so the
+# honest outcome here is "no local reply" and a non-verbal cue (never a stock phrase); (The model writing a line is proven by the Swift tests with the model faked, and on the Mac/phone.)
 step "clock data"; wait_ 1500
 ensure_light
 step "tap bar-field"; wait_ 600
 step "type bar-field What changed in the harbor story"; wait_ 400
 step "tap bar-send"; wait_ 4500
-place components 900
-step "tap open-trace"; view light-33-trace-timeline 1500
 step logs
 run_drive ask light "" --touch platform
 
@@ -271,13 +250,6 @@ step "tap mail-row-m6"; view dark-10-mail-message 900
 place textures 900; view dark-11-textures-list 500
 step "tap textures-doc-texture:demo-notes"; view dark-12-texture-document 1000
 place settings 900; step tree; shot dark-13-settings
-step "tap settings-motion"; view dark-14-motion-lab 1500
-step "clock +450 real"; shot dark-14-mark-b
-step "clock +450 real"; shot dark-14-mark-c
-step "clock +450 real"; shot dark-14-mark-d
-step "clock +450 real"; shot dark-14-mark-e
-step "clock +450 real"; shot dark-14-mark-f
-step "clock +450 real"; shot dark-14-mark-g
 place settings 900
 step "tap settings-setup-voice"; view dark-15-setup-from-settings 900
 place settings 900
@@ -344,17 +316,6 @@ if grep -qF 'Now playing,' "$SHOTS/drive-mailread.txt" 2>/dev/null; then echo "o
 must "textures: list" '[textures-doc-texture:demo-notes]'
 must "textures: a document" '[page-title] "Charging pilot: working notes"'
 must "settings: modes" '[settings-mode-dark]'
-must "motion lab" '[page-title] "Motion"'
-must "mark: the flat brand mark at rest" '[mark-rest-120]'
-must "mark: pole A, the flat brand symbol" '[mark-pole-a]'
-must "mark: pole B, the tetrahedron" '[mark-pole-b]'
-must "mark: thinking at hero size" '[mark-live-120]'
-must "mark: thinking at bar size" '[mark-live-36]'
-# the mark moves: frames of the thinking state differ, and the still mark does not change
-for p in light-13-mark-b:light-13-mark-c light-13-mark-c:light-13-mark-d light-13-mark-d:light-13-mark-e dark-14-mark-b:dark-14-mark-d; do
-  a=${p%%:*}; b=${p##*:}
-  if [ "$(md5 -q "$SHOTS/$a.png" 2>/dev/null)" != "$(md5 -q "$SHOTS/$b.png" 2>/dev/null)" ]; then echo "ok: $a and $b differ"; else echo "MISSING: the mark did not move between $a and $b"; FAILS="$FAILS [mark motion $a]"; fi
-done
 must "voice: welcome" '[ob-begin]'
 must "voice: setup rows" '[ob-row-transcriber]'
 must "voice: microphone check" '[ob-mic-ask]'
@@ -366,7 +327,6 @@ must "voice: the edition is done" '[ob-start-radio]'
 if grep -qF 'NOW PLAYING' "$SHOTS/drive-voice.txt" 2>/dev/null; then echo "ok: Start the radio from the edition page starts it (the bar says NOW PLAYING)"; else echo "MISSING: Start the radio did not start the radio within 5 s"; FAILS="$FAILS [start the radio]"; fi
 must "topics: the selection is shown" '[ob-selection]'
 must "first run: the card on the paper" '[firstrun-card]'
-if grep -qF 'local reply text ready' "$SHOTS/drive-ask.txt" 2>/dev/null; then echo "ok: trace: the timing steps are listed"; else echo "note: the trace page did not list the timing steps in the demo run (no turn record yet, or the path moved)"; fi
 if grep -qF 'Got it' "$SHOTS/drive-ask.txt" 2>/dev/null; then echo "UNWANTED: a stock phrase was spoken"; FAILS="$FAILS [stock phrase]"; fi
 must "settings: Set up voice row" '[settings-setup-voice]'
 must "settings: the mode control is ours" '[settings-mode-system]'

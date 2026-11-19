@@ -1,10 +1,7 @@
 #!/bin/sh
 # Lane 9 proof: the pure-Contract TetraMark and the alive wait, on a simulator, demo mode, light and dark.
-# Drives by test id: the bar's mark (idle, listening, playing), the motion gallery (`lab:motion`: every state at 26, 44 and
-# 96 pt, the reduced-motion row, the wait, the 3D-box experiment), the flip after "Replay states", the wait page
-# (`lab:wait`). Measures, as well as a simulator can: the frame counter the root clock keeps (frames per second actually
-# presented) and the CPU and memory of the app process, sampled by pid with `top`, while idle, while the wait runs and
-# during the gallery. SIMULATOR NUMBERS ARE NOT PHONE NUMBERS: the app runs on the Mac's CPU, the render server is the Mac's.
+# Drives by test id: the bar's mark idle on the paper page. (The motion gallery, the mark gallery and the wait page are gone,
+# owner 2026-11-19.) Measures, as well as a simulator can: the CPU of the app process, sampled by pid with `top`, while idle. SIMULATOR NUMBERS ARE NOT PHONE NUMBERS: the app runs on the Mac's CPU, the render server is the Mac's.
 # Screenshots go to $PROOF_SHOTS. Last line: PROOF OK or PROOF FAILED at <step>.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -71,67 +68,11 @@ drive "$SCRATCH/m1.txt" "clock data" "clock +1500 real" "tree" "screenshot $SHOT
 wait
 must "bar: the mark replaces the placeholder glyph" "$SCRATCH/m1.txt" '[mark]'
 
-# ---- D1: bar states, the gallery, the flip, the wait inside the gallery, then end on the wait page ----
-fresh light; clean_pages
-sampler "$SCRATCH/cpu-gallery.txt" 75
-drive "$SCRATCH/d1.txt" "clock data" "clock +1200 real" \
-  "tap bar-pages" "clock +600 real" "tap pile-places" "clock +600 real" "tap place-settings" "clock +600 real" tree "screenshot $SHOTS/02-settings.png" \
-  "tap bar-voice down" "clock +900 real" tree "screenshot $SHOTS/03-bar-listening.png" "tap up" "clock +1500 real" \
-  "tap settings-motion" "clock +1500 real" tree "screenshot $SHOTS/04-gallery-top.png" \
-  "tap motion-replay" "clock +120 real" "screenshot $SHOTS/05-flip-a.png" "clock +150 real" "screenshot $SHOTS/05-flip-b.png" \
-  "clock +150 real" "screenshot $SHOTS/05-flip-c.png" "clock +150 real" "screenshot $SHOTS/05-flip-d.png" "clock +1500 real" tree "screenshot $SHOTS/06-gallery-settled.png" \
-  "tap motion-wait-replay" "clock +1800 real" tree "screenshot $SHOTS/07-wait-1.png" \
-  "clock +3500 real" "screenshot $SHOTS/07-wait-2.png" "clock +3500 real" "screenshot $SHOTS/07-wait-3.png" \
-  "clock +3200 real" "screenshot $SHOTS/07-wait-4.png" "clock +2500 real" tree "screenshot $SHOTS/07-wait-5-done.png" \
-  "clock +900 real" tree "screenshot $SHOTS/08-gallery-bottom.png" "clock +2000 real" "screenshot $SHOTS/08-gallery-bottom-b.png" \
-  "tap bar-pages" "clock +600 real" "tap pile-places" "clock +600 real" "tap place-settings" "clock +600 real" \
-  "tap settings-wait" "clock +1500 real" tree "screenshot $SHOTS/09-wait-page.png" logs \
-  || { grep -v "^warning" "$SCRATCH/d1.txt" | tail -20; fail "drive gallery"; }
-wait
-cp "$SCRATCH/d1.txt" "$SHOTS/drive-gallery.txt" 2>/dev/null
-
-# ---- M2: the wait page alone (relaunch lands on it), 15 s: frames per second and CPU ----
-sampler "$SCRATCH/cpu-wait.txt" 19
-drive "$SCRATCH/m2.txt" "clock data" "clock +1500 real" "tap wait-replay" "clock +300 real" tree "screenshot $SHOTS/10-wait-start.png" "clock +15500 real" tree "screenshot $SHOTS/11-wait-end.png" \
-  || { grep -v "^warning" "$SCRATCH/m2.txt" | tail -20; fail "drive wait"; }
-wait
-cp "$SCRATCH/m2.txt" "$SHOTS/drive-wait.txt" 2>/dev/null
-
-# ---- D3: dark ----
-fresh dark; clean_pages
-drive "$SCRATCH/d3.txt" "clock data" "clock +1200 real" \
-  "tap bar-pages" "clock +600 real" "tap pile-places" "clock +600 real" "tap place-settings" "clock +600 real" \
-  "tap settings-motion" "clock +2500 real" tree "screenshot $SHOTS/12-gallery-dark.png" \
-  "tap motion-wait-replay" "clock +4000 real" "screenshot $SHOTS/13-wait-dark.png" \
-  || { grep -v "^warning" "$SCRATCH/d3.txt" | tail -20; fail "drive dark"; }
-
 # ---- assertions ----
-D="$SCRATCH/d1.txt"
-must "settings: the motion gallery is reachable" "$D" '[settings-motion]'
-must "gallery: a page" "$D" '[page-title] "Motion"'
-for s in idle listening thinking speaking success error reduced; do must "gallery: row $s" "$D" "[motion-row-$s]"; done
-for z in 36 44 120; do must "gallery: thinking mark at $z pt" "$D" "[mark-thinking-$z]"; done
-must "gallery: the reduced row" "$D" '[mark-reduced-120]'
-must "wait: first scripted line" "$D" 'Reading what you asked'
-must "wait: a later scripted line" "$D" 'Drafting the revision'
-must "wait: the end" "$D" 'Revision ready'
-must "wait page: reachable" "$D" '[wait]'
-# the pictures must move: consecutive screenshots of the wait differ
-for p in 07-wait-1:07-wait-2 07-wait-2:07-wait-3 07-wait-3:07-wait-4 05-flip-a:05-flip-c; do
-  a=${p%%:*}; b=${p##*:}
-  [ -f "$SHOTS/$a.png" ] && [ -f "$SHOTS/$b.png" ] || fail "screenshots" "missing $a or $b"
-  [ "$(md5 -q "$SHOTS/$a.png")" != "$(md5 -q "$SHOTS/$b.png")" ] || fail "motion" "$a and $b are identical: the mark did not move"
-  echo "ok: $a and $b differ"
-done
-# frames per second from the root clock's counter on the wait page
-FR=$(grep -o 'wait-clock\] "[0-9]* frames, [0-9]* ms"' "$SCRATCH/m2.txt" | sed 's/[^0-9 ]//g' | awk '{print $1, $2}')
-echo "$FR" | awk 'NR==1 {f0=$1; t0=$2} {f1=$1; t1=$2} END {if (t1>t0) printf "MEASURE wait page: %d frames in %.1f s = %.1f frames/s presented to the mark (60 = none dropped)\n", f1-f0, (t1-t0)/1000, (f1-f0)/((t1-t0)/1000); else print "MEASURE: no clock readings"}'
 echo "MEASURE app process CPU (simulator, Mac cores; not a phone), first 3 samples dropped:"
 echo "  idle bar mark (5 Hz):   $(mean_cpu "$SCRATCH/cpu-idle.txt")"
-echo "  gallery + wait + nav:   $(mean_cpu "$SCRATCH/cpu-gallery.txt")"
-echo "  the wait page, 15 s:    $(mean_cpu "$SCRATCH/cpu-wait.txt")"
 cp "$SCRATCH"/cpu-*.txt "$SHOTS/" 2>/dev/null
-[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 15 ] || fail "screenshots" "fewer than 15 in $SHOTS"
+[ -f "$SHOTS/01-bar-idle.png" ] || fail "screenshots" "no 01-bar-idle.png in $SHOTS"
 echo "ok: screenshots in $SHOTS"
-if grep -q 'ERROR\|Fatal error' "$D"; then echo "note: errors in the app log:"; grep -m5 'ERROR\|Fatal error' "$D"; fi
+if grep -q 'ERROR\|Fatal error' "$SCRATCH/m1.txt"; then echo "note: errors in the app log:"; grep -m5 'ERROR\|Fatal error' "$SCRATCH/m1.txt"; fi
 echo "PROOF OK"
