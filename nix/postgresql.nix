@@ -98,7 +98,12 @@ in
       '') databases}
       EOF
       ${lib.concatMapStringsSep "\n" (db: ''
-      runuser -u postgres -- psql -X -q -v ON_ERROR_STOP=1 -h /run/postgresql -d ${db} -c 'CREATE EXTENSION IF NOT EXISTS vector' >/dev/null
+      # An optional extension never fails the switch or the unit: a failure is
+      # logged loudly (the journal; corpusd reports the missing extension and
+      # backs off, and scripts/status-vectors shows it) and the unit goes on.
+      if ! runuser -u postgres -- psql -X -q -v ON_ERROR_STOP=1 -h /run/postgresql -d ${db} -c 'CREATE EXTENSION IF NOT EXISTS vector' >/dev/null; then
+        echo "go-choir-postgresql-roles: CREATE EXTENSION vector FAILED in ${db}: vectors stay off until it succeeds (is pgvector in the running server's package?)" >&2
+      fi
       '') vectorDatabases}
       echo "go-choir PostgreSQL role ${appUser} and databases ${lib.concatStringsSep ", " databases} ensured"
     '';
