@@ -51,6 +51,8 @@ const emptyLibrary = (): Library => ({ subscriptions: [], removed: [], synced: [
 // ---- state kept between answers (cleared by `forget`, which a test calls, and by `wipe`, which sign-out calls)
 
 let lib: Library | null = null;
+/** Raised by every wipe: a feed that was being fetched when the listener signed out is not kept. */
+let generation = 0;
 const feeds = new Map<string, Feed>();
 const known = new Map<string, Show>();
 const failed = new Map<string, string>();
@@ -71,6 +73,7 @@ let reportedNow = '';
 const played = new Set<string>();
 
 export function forget(): void {
+  generation++;
   lib = null; feeds.clear(); known.clear(); failed.clear(); attempted.clear(); inflight.clear(); transcripts.clear(); transcriptAsked.clear(); searches.clear();
   latestQuery = ''; suggestions = []; suggestionsAt = -1; syncAt = -1; syncNote = ''; lastTick = 0; rev = 0; reportedFeeds = false; reportedNow = ''; played.clear();
 }
@@ -171,6 +174,7 @@ async function fetchJSON(url: string): Promise<unknown> {
 
 async function load(feedURL: string, storage: Storage | undefined): Promise<void> {
   const n = feedKey(feedURL);
+  const gen = generation;
   const candidates = [https(feedURL)];
   let lastError = 'The feed could not be reached.';
   let result: Feed | null = null;
@@ -187,6 +191,7 @@ async function load(feedURL: string, storage: Storage | undefined): Promise<void
       else lastError = 'The feed could not be reached. Check your connection.';
     }
   }
+  if (gen !== generation) return;                                           // signed out while the feed was fetched: it is not kept
   const l = await loadLibrary(storage);
   if (result) {
     const k = known.get(n);
@@ -351,13 +356,10 @@ export async function podcastHome(a: HomeArgs, storage: Storage | undefined): Pr
   const q = normalize(a.q);
   v.query = q; v.hasQuery = q !== '';
   latestQuery = q;
-  const subs = l.subscriptions.map((s) => s.show);
-  // Everything the page needs is asked together: one fetch per feed, the sync, the suggestions (when there is no query) or the search.
-  await Promise.all([
-    syncIfDue(storage, l),
-    ...subs.map((s) => ensureFeed(s.feedURL, storage)),
-    q === '' ? loadSuggestions() : runSearch(q),
-  ]);
+  // The computer's list first (it may add shows), then everything the page needs together: one fetch per feed, and the suggestions or the search.
+  await Promise.all([syncIfDue(storage, l), q === '' ? loadSuggestions() : runSearch(q)]);
+  await Promise.all(l.subscriptions.map((s) => ensureFeed(s.show.feedURL, storage)));
+  const subs = l.subscriptions.map((s) => s.show);                         // read after the feeds: a feed's own title replaces the address
   if (!reportedFeeds) { reportedFeeds = true; await reportFeeds(l); }
   const shows = subs.map((s, i) => ({ r: row(l, s, true), i, t: feeds.get(feedKey(s.feedURL))?.episodes[0]?.published ?? 0 }));
   shows.sort((x, y) => (x.t !== y.t ? y.t - x.t : x.i - y.i));

@@ -133,7 +133,7 @@ history. Plain spoken commands (skip, back, pause, play, "play this next", "add 
 by words, whole utterance only, with no model (`QueueVoice.swift`). Anything else goes to the server turn with the queue.
 Owner ruling 2026-11-15: models under 100 MB may be bundled, larger ones download at onboarding.
 
-**Reader and podcast apps**: built. Podcast lists shows, opens episodes, streams (13 s elapsed of 5.5 min seen in the simulator); the Reader imports books and documents and read-aloud works on the demo sample only.
+**Reader and podcast apps**: built. Podcast lists shows, opens episodes, streams (13 s elapsed of 5.5 min seen in the simulator). The phone's podcast app (search, feeds, subscriptions, positions, episode and clip pages) is shared Exact code since 2026-11-19 (`mobile/AutoradioLab/podcast.ts`, `clips.ts`; web loop and `bun test` only, not yet run on a phone); the audio and the clip locator stay native; the Reader imports books and documents and read-aloud works on the demo sample only.
 **Never heard on a device**: sound, voice and clips; a stretch with clips while signed in; the Reader with the owner's own book; opening a file from another app; captions fetched on the device; hands-free (never spoken to).
 
 ## 7. Web desktop (checked 2026-11-16)

@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { parseFeed, NotAFeed } from './podcast-feed.ts';
 import * as M from './podcast-model.ts';
 import * as P from './podcast.ts';
-import { provisionalSetKey } from './api.ts';
+import { bindNative, resetSession } from './api.ts';
 import { readXML } from './xml.ts';
 
 const fx = (n: string): string => readFileSync(new URL(`../fixtures/podcasts/${n}`, import.meta.url), 'utf8');
@@ -47,16 +47,20 @@ const ok = (): Record<string, (u: URL, i?: RequestInit) => Response> => ({
   'choir.news/api/platform/podcast-feeds': () => reply('{}'),
   'choir.news/api/platform/podcast-transcript': () => reply('', 404),
 });
+const signIn = (on: boolean): void => {
+  resetSession();
+  bindNative(on ? { later: async ({ account }) => (account === 'api-key' ? { found: true, value: 'test-key' } : account === 'computer-id' ? { found: true, value: 'computer-1' } : { found: false }) } : null);
+};
 const count = (needle: string): number => calls.filter((c) => c.url.includes(needle)).length;
 
 beforeEach(() => {
-  P.forget(); calls = []; files.clear(); provisionalSetKey(null);
+  P.forget(); calls = []; files.clear(); signIn(false);
   P.search.pause = 0; P.zone.offset = 0;
   routes = ok();
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const u = new URL(String(input));
     const h = (init?.headers ?? {}) as Record<string, string>;
-    calls.push({ url: String(input), method: init?.method ?? 'GET', body: init?.body as string | undefined, auth: !!h.authorization });
+    calls.push({ url: String(input), method: init?.method ?? 'GET', body: init?.body as string | undefined, auth: Object.keys(h).some((k) => k.toLowerCase() === 'authorization') });
     const key = Object.keys(routes).find((k) => (u.host + u.pathname).startsWith(k));
     if (!key) throw new Error('no route ' + u.host);
     return routes[key](u, init);
@@ -267,7 +271,7 @@ describe('11 play and queue hand the deck data', () => {
     expect((await P.podcastQueue(M.episodeAddress(FEED_URL, 'guid-4'), storage)).status).toBe('error');
   });
   test('the playhead tells the platform what is playing, once per episode', async () => {
-    provisionalSetKey('test-key');
+    signIn(true);
     await P.podcastSubscribe(FEED_URL, storage); await showPage();
     const before = count('podcast-feeds');
     const key = M.episodeKey(FEED_URL, 'guid-1');
@@ -371,7 +375,7 @@ describe('7 the computer', () => {
     expect(h.syncNote).toBe(''); expect(count('/api/podcast/subscriptions')).toBe(0);
   });
   test('signed in: the computer\'s list is pulled in, local shows are pushed, an unsubscribed show is not brought back', async () => {
-    provisionalSetKey('test-key');
+    signIn(true);
     await P.podcastSubscribe(FEED_URL, storage);
     const pushed: string[] = [];
     routes['choir.news/api/podcast/subscriptions'] = (_u, i) => { if (i?.method === 'POST') { pushed.push(JSON.parse(String(i.body)).feed_url); return reply('{}'); } return reply(fx('subscriptions.json')); };
@@ -386,7 +390,7 @@ describe('7 the computer', () => {
     expect((await home()).shows.map((s) => s.title).sort()).toEqual(['Real A', 'Synthetic Hour']);
   });
   test('the computer not answering is a note, and the phone\'s list is unchanged', async () => {
-    provisionalSetKey('test-key');
+    signIn(true);
     await P.podcastSubscribe(FEED_URL, storage);
     routes['choir.news/api/podcast/subscriptions'] = (_u, i) => (i?.method === 'POST' ? reply('{}') : reply('', 502));
     const h = await home();
@@ -397,7 +401,7 @@ describe('7 the computer', () => {
 describe('transcript', () => {
   const addr = M.episodeAddress(FEED_URL, 'guid-1');
   test('shown, searchable, the playing block marked, tap-to-seek only when the lengths agree', async () => {
-    provisionalSetKey('test-key');
+    signIn(true);
     routes['choir.news/api/platform/podcast-transcript'] = () => reply(fx('transcript.json'));
     let v = await P.podcastEpisode(epArgs(addr), storage);
     expect(v.transcript.length).toBe(3); expect(v.transcript.every((t) => t.seekable)).toBe(true); expect(v.transcript[1].time).toBe('0:12');
@@ -424,12 +428,29 @@ describe('10 the grants and the files agree', () => {
   test('app.ts grants the library, the feed folder, and any https host for a feed the listener names', () => {
     expect(app).toContain(`fs.read ${P.LIBRARY_FILE}`); expect(app).toContain(`fs.write ${P.LIBRARY_FILE}`);
     expect(app).toContain(`fs.read ${P.FEED_DIR}`); expect(app).toContain(`fs.write ${P.FEED_DIR}`);
-    expect(app).toMatch(/^net\.fetch https:$/m);
+    expect(app).toMatch(/^net\.fetch https:`;$/m);
     expect(app).not.toMatch(/net\.fetch http:/);
   });
   test('sign-out wipes the library and every cached feed', async () => {
     await P.podcastSubscribe(FEED_URL, storage); await showPage();
     await P.wipe(storage);
+    expect([...files.keys()]).toEqual([]);
+    expect(await P.subscriptions(storage)).toEqual([]);
+  });
+});
+
+describe('a feed that finishes loading after the wipe is not kept (the Swift AccountWipeTests rule)', () => {
+  test('nothing is written and nothing is shown', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    routes['feeds.example.com/show.xml'] = () => { throw new Error('unused'); };
+    globalThis.fetch = (async (input: RequestInfo | URL) => { calls.push({ url: String(input), method: 'GET', auth: false }); await gate; return reply(FEED); }) as typeof fetch;
+    await P.podcastSubscribe(FEED_URL, storage).catch(() => {});
+    const pending = showPage();
+    await new Promise((r) => setTimeout(r, 5));
+    await P.wipe(storage);
+    release();
+    await pending;
     expect([...files.keys()]).toEqual([]);
     expect(await P.subscriptions(storage)).toEqual([]);
   });

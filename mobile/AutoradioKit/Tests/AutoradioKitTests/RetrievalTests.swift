@@ -146,19 +146,7 @@ final class RetrievalTimingTests: XCTestCase {
     }
 }
 
-final class RetrievalSourcesTests: XCTestCase {
-    func testEpisodesAndTranscriptsBecomeSearchablePassagesWithTheirMinute() {
-        let show = PodcastShow(feedURL: "https://example.com/feed.xml", title: "Morning Talk", summary: "Politics and weather.")
-        let feed = PodcastFeed(show: show, episodes: [PodcastEpisode(id: "e1", title: "The budget fight", published: 1_794_000_000, notes: "Why the budget stalled."),
-                                                       PodcastEpisode(id: "e2", title: "Rain", published: nil, notes: "Rain notes.")])
-        let tr = PodcastTranscript(durationSeconds: 600, source: "x", blocks: (0..<40).map { .init(start: Double($0) * 15, end: Double($0) * 15 + 15, text: "We discussed the tunnel referendum in detail number \($0).") })
-        let docs = RetrievalSources.podcasts(shows: [show], feed: { _ in feed }, transcript: { $1 == "e1" ? tr : nil })
-        let i = RetrievalIndex(); i.upsertAll(docs.map(\.retrieval))
-        let c = i.retrieve(.init(words: "tunnel referendum"), record: false)
-        XCTAssertEqual(c.items.first?.kind, "transcript"); XCTAssertTrue(c.items.first?.place.hasPrefix("at ") ?? false)
-        XCTAssertEqual(i.retrieve(.init(words: "rain"), record: false).items.first?.date, nil)
-    }
-}
+// RetrievalSourcesTests (podcast episodes and transcripts as searchable passages) went with the Swift podcast source; podcastDocuments in podcast.ts is what the search lane reads.
 
 final class RetrievalHolderTests: XCTestCase {
     func testTheModelIsShownRetrievedItemsWithDatesAndIdsAndTheTurnRecordsThem() async {

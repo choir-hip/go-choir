@@ -2,6 +2,7 @@ import type { Answer, Sources } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips } from './clips.ts';
+import { bindNative } from './api.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -38,4 +39,5 @@ const sources: Sources = {
   clipAct: ([op, id]) => clipAct(op, id),
   paperFront: ([view, edition, width, tick, focus, picks, demo], _store, storage) => paperFront({ view, edition, width, tick, focus, picks, demo }, storage),
 };
-export const answer: Answer = (source, args, store, storage) => sources[source](args, store, storage);
+// `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
+export const answer: Answer = (source, args, store, storage, native) => { bindNative(native); return sources[source](args, store, storage); };
