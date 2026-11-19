@@ -91,5 +91,5 @@ passages in the full-text index):
 - The 18.4 second maximum on the guest side has no matching corpusd line over
   7.2 seconds in the same hour; the rest of that call's time is unexplained.
 - On the live database the index-only scan needs the table's visibility map;
-  autovacuum maintains it, and a vacuum is not run by the code.
+  the build runs one `VACUUM (ANALYZE)`; autovacuum maintains the map after that.
 - One hour's numbers from one computer.
