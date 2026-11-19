@@ -412,7 +412,10 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
 - **One writer.** corpusd alone writes vector rows. The worker's vectors and the Mac's first-pass file (input to the import
   below) pass the same checks (the model's hash, `text_sha` against the passage corpusd cuts itself, public text only) and are
   written by the same two functions; the import adds a sampled re-embedding here.
-- **Worker.** Each pass derives its list: versions of published stories and opinion pieces without a vector of this model
+- **Worker.** (`vectorBatch = 4` is a throughput choice, not a quota or a limit on calls: the largest input the unit takes is 2,048
+  tokens, so a batch is at most about 8,000 tokens and about 20 s of CPU at the measured 350 tokens a second, a query waiting behind it at
+  most that long; four keeps that wait short while a call is still a handful of passages. Nothing is counted against it.)
+  Each pass derives its list: versions of published stories and opinion pieces without a vector of this model
   (newest publication first, newest version first), then projected captures without one (newest first, keyset cursor).
   Owner-private, tombstoned and superseded captures never get one (the full-text index's exclusion); the sweep removes the
   vectors of a withdrawn story and of a capture that has since become private. **No pacing**: it sends one batch of 4 inputs at
@@ -424,8 +427,11 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
 - **Journal.** `corpusd retrieval op=embed_gap shape=stories|captures ms= rows= have= want= remaining= model=<12>` at the start of
   a pass and at each batch of 4 (stories count versions); `op=vector_embed`, `vector_write`, and `op=vector_search
   shape=vector_stories|vector_captures`. `scripts/status-vectors` reads them over ssh (have, want, remaining of each kind, and the
-  last hour's searches and mean ms); the acceptance is that line, not SQL on Node B. Until a pass has passed over them `want`
-  counts owner-private or empty captures and non-public versions; the last line of a phase is exact.
+  last hour's searches and mean ms); the acceptance is that line, not SQL on Node B. `remaining` is exact: `want` counts only captures that satisfy the one SQL
+  predicate and story versions that pass it (a capture that can never be eligible is in neither `have` nor `want`; an empty or
+  unembeddable capture is recorded as refused and held). Exceptions, both visible as `skipped` in the pass line: a capture whose text blob cannot be read at the
+  moment, and a version found not public when the pass reaches it. The story walk reads the publications in windows and their
+  version edges in one statement per 500 publications (not one query per publication); an idle pass skips even that (see 0.11.3).
 - **Search.** `Store.SearchVectors`: the nearest story passages (publication id, version id, ordinal, cosine score, day) and, for a
   named owner and computer, the nearest captures; `since` inclusive and `until` exclusive by day. The query is embedded by the
   Node B unit with the query prompt. No fusion. When the embedder is down, absent or the tables are not ready, the answer is an
@@ -524,6 +530,21 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   policy object says its access is not public (visibility `public` and route empty or `public`); a missing, empty or malformed policy object adds
   no constraint (read with `pg_input_is_valid` and a CASE, so malformed data cannot fail a search or a sweep). The manifest's policy
   stays a Go check at write time, because it is not always in a database column.
+- **The extension is created when the roles unit runs after PostgreSQL restarts on the new package.** From the evaluated unit
+  (`nix eval` of `go-choir-b`): `postgresql.service` is `Type=notify` (ready when it accepts connections), `go-choir-postgresql-roles` is
+  `After` and `Requires` `postgresql.service`, `RemainAfterExit`, `restartIfChanged = true`, and its script text changes with this
+  work, so the switch restarts it, and a restart of PostgreSQL restarts it by propagation, always after the server is ready. A
+  `CREATE EXTENSION` that fails is logged and the unit goes on (the switch does not fail); corpusd reports it every five minutes
+  and `scripts/status-vectors` prints `pgvector MISSING or too old` when that is the newest line. `systemctl restart go-choir-postgresql-roles` repeats it.
+- **Pgvector below 0.8.0.** The worker's ensure step reads `extversion`; below the minimum it logs `corpusd vectors disabled: pgvector X is older
+  than the 0.8.0 ...`, the pass fails with that reason, and the search answers `unavailable` with it (a server that errors on
+  `hnsw.iterative_scan` is also taken as unavailable).
+- **The guest content digest.** `scripts/guest-content-digest` hashes the guest's inputs and the deploy refreshes every active
+  computer when it moves. `nix/embedder.nix` is now in its host-only exclusion, beside `postgresql.nix`. Two other things in this work move it
+  regardless: `flake.nix` (the dev shell's PostgreSQL with pgvector; `flake.nix` is a fixed input of the digest) and the Go in
+  `internal/platform` and `internal/embedder` (the guest binaries import `internal/platform`, so any non-test change there moves it). So this
+  deploy refreshes every active computer through the planned, marker-backed path, as any Go change in those packages does; the
+  embedder unit's later flag changes will not.
 - **Rollback.** Reverting V2 (the Go) alone is safe: the worker stops, the tables stay (unused), the search is gone. Reverting V1 (the
   nix) after the tables exist is **not** safe in one deploy: the old server cannot load `vector.so`; opening an HNSW index (a `DROP`
   of the table, or any scan) is expected to call the access method from it (not run), and the daily `pg_dump` of `graph` calls `halfvec_out` for every

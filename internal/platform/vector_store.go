@@ -103,9 +103,12 @@ type vectorState struct {
 	mu       sync.RWMutex
 	embedder embedder.Embedder
 	ready    atomic.Bool
-	kick     chan struct{}
-	kickOnce sync.Once
-	started  sync.Once
+	// unsupported is why the installed pgvector is too old ("" when it is
+	// not); set by ensureVectorTables, read by the search.
+	unsupported atomic.Value
+	kick        chan struct{}
+	kickOnce    sync.Once
+	started     sync.Once
 	// remaining is the last pass's count of rows still without a vector.
 	remaining atomic.Int64
 	importMu  sync.Mutex
@@ -178,6 +181,20 @@ func (s *Store) ensureVectorTables(ctx context.Context) error {
 			return fmt.Errorf("vectors: the pgvector extension is not installed in this database and this role cannot create it (go-choir-postgresql-roles makes it as postgres): %w", err)
 		}
 	}
+	// The code needs iterative index scans (pgvector 0.8.0): below that every
+	// search statement would error. Refuse here, once per pass, and say why;
+	// the search answers unavailable with the same reason.
+	var extver string
+	if err := db.QueryRowContext(ctx, `SELECT extversion FROM pg_extension WHERE extname = 'vector'`).Scan(&extver); err != nil {
+		return fmt.Errorf("vectors: read the pgvector version: %w", err)
+	}
+	if versionLess(extver, vectorMinPgvector) {
+		why := fmt.Sprintf("pgvector %s is older than the %s the vector search needs (hnsw.iterative_scan)", extver, vectorMinPgvector)
+		s.vec.unsupported.Store(why)
+		log.Printf("corpusd vectors disabled: %s", why)
+		return errors.New("vectors: " + why)
+	}
+	s.vec.unsupported.Store("")
 	present, err := s.vectorTablesPresent(ctx)
 	if err != nil {
 		return fmt.Errorf("vectors: read tables: %w", err)
@@ -287,3 +304,27 @@ func (s *Store) VectorsReady() bool { return s != nil && s.vec.ready.Load() }
 
 // VectorRemaining is the last pass's count of rows still without a vector.
 func (s *Store) VectorRemaining() int64 { return s.vec.remaining.Load() }
+
+// versionLess reports whether the dotted version a is below b (numeric parts
+// compared in order; a missing part is 0).
+func versionLess(a, b string) bool {
+	pa, pb := strings.Split(strings.TrimSpace(a), "."), strings.Split(strings.TrimSpace(b), ".")
+	for i := 0; i < max(len(pa), len(pb)); i++ {
+		var x, y int
+		if i < len(pa) {
+			x, _ = strconv.Atoi(pa[i])
+		}
+		if i < len(pb) {
+			y, _ = strconv.Atoi(pb[i])
+		}
+		if x != y {
+			return x < y
+		}
+	}
+	return false
+}
+
+func (v *vectorState) unsupportedReason() string {
+	s, _ := v.unsupported.Load().(string)
+	return s
+}
