@@ -26,22 +26,26 @@ redesigns and starts the calibration experiment (built on 4 November, never
 started). State at 2026-11-19T13:50Z, nothing below is accepted until its
 deployed proof is named in the goal file:
 
-- **V.** The vector index and the ranked corpus search are deployed and
-  filled: the Mac's corrected file of 278,048 vectors was imported at 14:55Z
-  (C157 true), stories 34,890 of 34,890, captures 97%. The inbox repairs
-  are deployed (`e4ab2eab2`, claim C159). Open defect: while the worker
-  embeds, a search waits 4 s behind it and loses its vector half
-  (`problems/search-waits-four-seconds-behind-the-embed-worker-2026-11-19.md`;
-  the fix, a second embedder unit for queries, is built on
-  `lane/embed-query` and waits for review). The event layer
-  (`lane/event-land`) is next to land (claim C160). Recall on the deployed
-  search is not measured.
+- **V.** The vector index is full (stories and captures, every row) and the
+  ranked corpus search answers from it. A second embedder unit for queries
+  is deployed (`2754468d2`, 19:52Z): recall at ten on the deployed search
+  rose from 0.886 to 0.940 (bar 0.90). Open: a query of 32 tokens or more
+  still takes 2 s to 6 s on that unit while the host is busy and misses the
+  4 s deadline (cause under measurement, claim C161). The event layer is
+  deployed (`4365f2ca3`) and joins captures to events through vectors
+  (C160 true).
+- **S.** Web searches: 4,700 a day against 1,000
+  (`problems/web-searches-are-sent-without-asking-what-is-held-2026-11-19.md`).
+  Fix 1, every web search passes the need test, is built on
+  `lane/search-gate` and accepted by seat 2; fixes 2 to 4 follow.
 - **X.** The Exact move is on main and deployed (`a8b603d22`, claim C155
   true): pages, sign-in, sync, mail, files, podcasts, the reader's content
   and the run sheet are shared code; voice and the deck are native. Nothing
-  new is on a phone. Android builds and fetches the paper's front page but
-  does not yet draw its stories (claim C126 open); `lane/exact-integ`
-  carries the next shift (the deck in shared code, Android pages).
+  new is on a phone. The next shift is on main and deployed too (`62cb7f35b`): the open
+  pages, a story reader and the notebook in shared code; Android lists the
+  paper's stories and opens one. Open: a first launch showed a signed-out
+  screen in one simulator run, cause not proved, so nothing is installed on
+  the owner's phone (claim C162 waits on the post-deploy proof run).
 - **L.** The dated-switch deletions are deployed (`f3874a8bf`, C146 true).
   The experiment driver is on main (`463ec68f0`); the pilot started at
   13:58:36Z (three arms, thirty units; claims C148 to C150) after its smoke
