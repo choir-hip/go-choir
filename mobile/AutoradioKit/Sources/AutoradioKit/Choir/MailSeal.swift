@@ -7,11 +7,9 @@ import Security
 // code. Exact's `crypto.subtle` has digests and ECDSA and refuses AES (Exact reference.md, data-module table), so shared code cannot do this;
 // hand-made cipher code does not ship. The key is its own Keychain item (service news.choir.autoradio.mailseal), apart from the sign-in item,
 // which this never reads, writes or moves. Android owes the same pair in Kotlin (Keystore AES-GCM).
-// Ops (the app module's `later`/`call`): mailSeal {b64, aad} -> {ok, b64}; mailOpen {b64, aad} -> {ok, b64} or {ok: false, why: "bad" | "cannot"};
-// mailForget -> {ok}; mailCan -> {ok} (this platform has the pair). `aad` is the record's identity (kind and id), authenticated with the data: a file
-// swapped to another message, folder or account fails to open. `why` "bad": the data is not ours or was changed (the tag failed): it may be deleted.
-// "cannot": no key could be read now (the Keychain is locked before the first unlock, or the key is gone): the file is KEPT. Nothing here logs.
-// A key is made only while a sign-in key is stored: after a sign-out has deleted it, a late seal cannot make a new key for a copy nobody will wipe.
+// Ops (app module `later`/`call`): mailSeal {b64, aad} -> {ok, b64}; mailOpen {b64, aad} -> {ok, b64} | {ok: false, why: "bad" | "cannot"}; mailForget; mailCan.
+// `aad` (kind and id) is authenticated with the data. "bad": the tag failed, the file may go. "cannot": no key could be read now, the file is KEPT.
+// A key is made only while the sign-in key is stored (a late seal after sign-out makes none). Nothing here logs.
 
 public struct MailSeal: Sendable {
     public static let service = "news.choir.autoradio.mailseal"
@@ -39,7 +37,6 @@ public struct MailSeal: Sendable {
         #endif
         let status = SecItemAdd(add as CFDictionary, nil)
         if status == errSecSuccess { return k }
-        // Two first uses at once: the other one's key won. Take it (seal and open must use the one key), never fail the write for it.
         return status == errSecDuplicateItem ? stored() : nil
     }
 
@@ -53,7 +50,6 @@ public struct MailSeal: Sendable {
         guard let box = try? AES.GCM.SealedBox(combined: sealed), let plain = try? AES.GCM.open(box, using: k, authenticating: aad) else { return .bad }
         return .plain(plain)
     }
-    public func open(_ sealed: Data, aad: Data = Data()) -> Data? { if case .plain(let d) = openResult(sealed, aad: aad) { return d }; return nil }
     public func forget() { SecItemDelete(query() as CFDictionary) }
 
     /// The reply for the native module; nil when the request is not one of ours.
@@ -65,11 +61,9 @@ public struct MailSeal: Sendable {
             return ["ok": true, "b64": out.base64EncodedString()]
         case "mailOpen":
             guard let text = request["b64"] as? String, let data = Data(base64Encoded: text) else { return ["ok": false, "why": "bad"] }
-            switch openResult(data, aad: aad) {
-            case .plain(let d): return ["ok": true, "b64": d.base64EncodedString()]
-            case .bad: return ["ok": false, "why": "bad"]
-            case .cannot: return ["ok": false, "why": "cannot"]
-            }
+            let r = openResult(data, aad: aad)
+            if case .plain(let d) = r { return ["ok": true, "b64": d.base64EncodedString()] }
+            return ["ok": false, "why": r == .bad ? "bad" : "cannot"]
         case "mailForget": forget(); return ["ok": true]
         case "mailCan": return ["ok": true]
         default: return nil

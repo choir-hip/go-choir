@@ -132,8 +132,7 @@ component AudioViewer
     th: Theme
     fvInfo: FileInfo
     fvShare: action
-    queuePlay: action
-    queueLater: action
+    queueFilePlay: action
   view
     column flex=1 min-height=0 width="100%" testId="viewer-audio"
       ViewerHeader(title=fvInfo.name, sub=`${fvInfo.kindLabel} · ${fvInfo.sizeLabel} · ${fvInfo.modifiedLabel}`)
@@ -142,8 +141,8 @@ component AudioViewer
           column padding=20 gap=16 align-items="center"
             image "symbol:sf/waveform" width=64 height=64 color=th.accent
             row gap=8 align-items="center" flex-wrap="wrap"
-              Chip(label="Play", active=false, testId="audio-play", press=queuePlay("file", fvInfo.address, fvInfo.name))
-              Chip(label="Add to queue", active=false, testId="audio-queue", press=queueLater("file", fvInfo.address, fvInfo.name))
+              Chip(label="Play", active=false, testId="audio-play", press=queueFilePlay("now", fvInfo.address, fvInfo.local, fvInfo.name))
+              Chip(label="Add to queue", active=false, testId="audio-queue", press=queueFilePlay("add", fvInfo.address, fvInfo.local, fvInfo.name))
               Chip(label="Share", active=false, testId="audio-share", press=fvShare(fvInfo.name, fvInfo.src))
 
 // ---------------------------------------------------------------- table (CSV, TSV)

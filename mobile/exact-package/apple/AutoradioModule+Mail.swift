@@ -5,11 +5,7 @@ import Foundation
 
 extension AutoradioModule {
     func registerMail() {
-        // Sign-out stays in Swift tonight: it removes the sealed copy mail.ts keeps (app:/data/mail) and the "Show original" documents (app:/cache/mail-*.html).
-        // mail.ts's `wipeMail(storage, store)` does the same and also forgets the key; the lead may replace this line with a call to it.
-        if let data = context.file("app:/data/mail-x")?.deletingLastPathComponent(), let cache = context.file("app:/cache/mail-x.html")?.deletingLastPathComponent() {
-            choir.accountWipe.register("mail") { AccountWipe.removeMailCopy(dataDirectory: data, cacheDirectory: cache) }
-        }
+        // (Sign-out of the mail copy is shared code's: mail.ts `wipeMail`, run by account.ts after the native sign-out; the native key goes in `signOut`.)
         // Open the approval page in the app's own web view like any web link (SourceLink: http and https are in-app; mailto, tel, sms and
         // facetime go to the system; anything else is refused), only on the configured Choir host (same scheme, host and port), over https.
         // Native because the in-app web view is a native view.

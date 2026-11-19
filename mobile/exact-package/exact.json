@@ -197,7 +197,6 @@
       "block": "number",
       "seconds": "number",
       "duration": "number",
-      "rate": "number",
       "held": "string[]",
       "seq": "number",
       "acked": "number",
@@ -1190,7 +1189,6 @@
           "block": 0,
           "seconds": 0,
           "duration": 0,
-          "rate": 1,
           "held": [],
           "seq": 0,
           "acked": 0,
@@ -1527,7 +1525,8 @@
         "mode": "string",
         "kind": "string",
         "ref": "string",
-        "title": "string"
+        "title": "string",
+        "local": "string"
       },
       "answers": "QueueInfo"
     },

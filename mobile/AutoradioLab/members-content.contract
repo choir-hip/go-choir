@@ -138,10 +138,10 @@ members Autoradio
   // ---- a web page
   action ctlWebRead(u: string, h: string)
     ctlOpen = false
-    send qm = queueAdd(mode="now", kind="page", ref=u, title=h)
+    send qm = queueAdd(mode="now", kind="page", ref=u, title=h, local="")
   action ctlWebLater(u: string, h: string)
     ctlOpen = false
-    send qm = queueAdd(mode="add", kind="page", ref=u, title=h)
+    send qm = queueAdd(mode="add", kind="page", ref=u, title=h, local="")
   action ctlSafari(u: string)
     ctlOpen = false
     send rack = readerOpenExternal(url=u)

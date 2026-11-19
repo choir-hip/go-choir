@@ -417,6 +417,7 @@ component Autoradio
     qVp
     queuePlay
     queueLater
+    queueFilePlay
     queueDo
     scrubLive
     scrubShown

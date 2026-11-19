@@ -74,3 +74,5 @@ final class MailSealTests: XCTestCase {
         XCTAssertNotEqual(MailSeal.service, KeychainKeyStore().service)
     }
 }
+
+extension MailSeal { func open(_ d: Data, aad: Data = Data()) -> Data? { if case .plain(let p) = openResult(d, aad: aad) { return p }; return nil } }

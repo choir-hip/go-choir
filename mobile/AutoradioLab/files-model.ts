@@ -53,17 +53,20 @@ export const symbolOf = (k: FileKind): string => SYMBOLS[k];
 /** The kinds that open as another page: a PDF or an e-book is read by the listener's computer (decision D4), text, Markdown and code open in Texture. */
 export const opensElsewhere = (k: FileKind): boolean => k === 'pdf' || k === 'epub' || k === 'markdown' || k === 'text' || k === 'code';
 
-/** The most this phone brings into the app's memory to open a kind. A reply is held in memory (the shared code has no file stream through the signed-in
- * seam yet), so the caps are smaller than the Swift app's (which streamed to disk). Beyond a cap the page shows the facts and says why. */
+/** The most this phone opens of a kind: the Swift app's limits (it streamed to disk; so does this, by the host: `authedToFile`). Text and tables are also
+ * read into JavaScript, so they stay small. Beyond a cap the page shows the facts and says why. */
 export function maxBytes(k: FileKind): number {
   switch (k) {
     case 'markdown': case 'text': case 'code': case 'csv': return 5_000_000;
-    case 'image': return 32_000_000;
-    case 'audio': return 48_000_000;
-    case 'video': return 48_000_000;
+    case 'image': return 60_000_000;
+    case 'audio': return 300_000_000;
+    case 'video': return 800_000_000;
     default: return 0;
   }
 }
+/** The most that is ever held in JavaScript: a picture is read to measure it only up to here (a bigger one is shown without its size, fitted by the viewer),
+ * and a phone with no file system (the web build) opens nothing larger. The engine's heap is 64 MiB and a turn gets 100 ms. */
+export const MEMORY_MAX = 32_000_000;
 
 const MIME: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heic', pdf: 'application/pdf',

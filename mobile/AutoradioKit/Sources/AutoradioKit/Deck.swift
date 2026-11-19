@@ -266,8 +266,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
 
     public init(journal: DeckJournal) { self.journal = journal }
 
-    /// Sign-out: the whole deck goes, not only its journal. What was on air, what was held and why it was silent belong to the account that left; a
-    /// late end of that item must not write a line into the next account's journal, and nothing may go on sounding.
+    /// Sign-out: the item on air, the held items and the reason go with the journal, the engine stops: a late end writes nothing for the next account.
     public func wipe() {
         retryTask?.cancel(); retryTask = nil; generation += 1
         let wasPlaying = current != nil

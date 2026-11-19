@@ -8,6 +8,11 @@
 //  F11 a PDF or an e-book is read by the listener's computer (D4) and opens as its texture: page; text, Markdown and code are sent as the web sends them; a failure says why and is asked again next time.
 //  F12 the changes use the right verbs and answer the refreshed listing; a folder is not renamed to nothing.   F13 an upload sends the picked file's bytes to the computer.
 //  F14 recents: newest first, capped at 30, kept on the phone, dropped when the file is gone.   F15 demo mode asks nothing and works on invented files.
+//  F18 a big file (60 MB) is written to disk by the host with no bytes in JavaScript: the signed-in reply is never read, the file system is never asked to read it back.
+//  F19 the caps are the Swift app's (800 MB video, 300 MB audio, 60 MB images); one byte over is refused before any download.
+//  F20 a failed download leaves no file that a later open takes for whole; a file of the wrong size is fetched again.
+//  F21 the signed-in download (api.ts authedToFile): the body goes to the named app file, a refusal or a sign-out leaves none, a host that wrote nothing is an error.
+//  F22 audio from Files reaches the run sheet: the Play and Add to queue chips send queueAdd (kind file) with the app file the page brought, which the interface declares.
 //  F16 no word "Loading" in what the source answers.   F17 the grants cover the paths the module touches.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as F from './files.ts';
@@ -25,13 +30,16 @@ let tree: Record<string, unknown[]>;           // folder path -> the server's ar
 let blobs: Record<string, Uint8Array>;
 let fail: ((c: Call) => unknown) | null;
 const files = new Map<string, Uint8Array>();
+const sizes = new Map<string, number>();        // a file the host wrote that never entered JavaScript: only its size is known
+let reads: string[] = [];
 const storage = {
   fs: {
-    readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('no ' + p); return b; },
+    readFile: async (p: string) => { if (p.startsWith(F.CACHE_DIR)) reads.push(p); const b = files.get(p); if (!b) throw new Error('no ' + p); return b; },
     atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); },
     writeFile: async (p: string, d: Uint8Array) => { files.set(p, d); },
-    stat: async (p: string) => { const b = files.get(p); if (!b) throw new Error('no'); return { size: b.length }; },
+    stat: async (p: string) => { if (sizes.has(p)) return { size: sizes.get(p)! }; const b = files.get(p); if (!b) throw new Error('no'); return { size: b.length }; },
     mkdir: async () => {},
+    rm: async (p: string) => { files.delete(p); sizes.delete(p); },
   },
 } as never;
 const apiPath = (p: string) => decodeURIComponent(p.replace(/^\/api\/files/, '')) || '/';
@@ -51,9 +59,19 @@ const net: F.Net = {
     return { bytes: b, contentType: '' };
   },
 };
+let toFileFail: unknown = null;
+(net as { toFile: F.Net['toFile'] }).toFile = async (path, dest, o = {}) => {
+  calls.push({ method: 'GET', path, query: o.query, headers: { dest } });
+  if (toFileFail) throw toFileFail;
+  const dir = apiPath(path);
+  if (bigSizes[dir] !== undefined) { sizes.set(dest, bigSizes[dir]); return { bytes: bigSizes[dir], contentType: '' }; }
+  const b = blobs[dir]; if (!b) throw Object.assign(new Error('nf'), { status: 404 });
+  files.set(dest, b); return { bytes: b.length, contentType: '' };
+};
+let bigSizes: Record<string, number> = {};
 const enc = (s: string) => new TextEncoder().encode(s);
 beforeEach(() => {
-  F.forget(); calls = []; files.clear(); fail = null;
+  F.forget(); calls = []; files.clear(); sizes.clear(); reads = []; bigSizes = {}; toFileFail = null; fail = null;
   tree = { '/': rootListing, '/Documents': [{ name: 'Council notes.txt', type: 'file', size: 30, modified: '2026-11-18T10:00:00Z' }, { name: 'Sub', type: 'directory', size: 0, modified: '2026-11-01T00:00:00Z' }], '/Documents/Sub': [{ name: 'deep lamp.png', type: 'file', size: 9, modified: '2026-11-01T00:00:00Z' }] };
   blobs = { '/readings.csv': enc('day,mm\nMon,"1,5"\r\nTue,"say ""hi"""\nWed'), '/Notes 2.txt': enc('Two lamps.\n'), '/Harbor.md': enc('# Harbor\n\nA note.\n') };
 });
@@ -170,6 +188,55 @@ describe('F10 opening what the phone shows', () => {
     tree['/'] = [{ name: 'big.mp4', type: 'file', size: 900_000_000, modified: '2026-11-18T08:00:00Z' }, { name: 'huge.csv', type: 'file', size: 6_000_000, modified: '2026-11-18T08:00:00Z' }];
     const v = await open('file:/big.mp4'); expect(v.status).toBe('toolarge'); expect(v.message).toBe('It is 900 MB, too large to open on this phone.');
     expect((await open('file:/huge.csv')).status).toBe('toolarge'); expect(calls.filter((c) => c.query).length).toBe(0);
+  });
+});
+
+describe('F18 to F20 large files go to disk and stay out of JavaScript', () => {
+  const big = (name: string, size: number) => { tree['/'] = [{ name, type: 'file', size, modified: '2026-11-18T08:00:00Z' }]; bigSizes['/' + name] = size; };
+  test('F18 a 60 MB video is written by the host: no reply read, no file read back, the cache path named', async () => {
+    big('talk.mp4', 60_000_000);
+    const i = await open('file:/talk.mp4');
+    expect(i).toMatchObject({ status: 'ready', kind: 'video' }); expect(i.local).toBe(i.src); expect(i.local.startsWith(F.CACHE_DIR + '/')).toBe(true);
+    expect(sizes.get(i.local)).toBe(60_000_000);
+    expect(calls.filter((c) => c.query).length).toBe(1); expect(calls.find((c) => c.query)!.headers!.dest).toBe(i.local);
+    expect(reads).toEqual([]);                                       // 60 MB never enters the engine's heap (or its 100 ms turn)
+    const again = await open('file:/talk.mp4'); expect(again.local).toBe(i.local); expect(calls.filter((c) => c.query).length).toBe(1);     // cached: not fetched twice
+  });
+  test('F18 audio and a large picture the same; a small picture is still measured', async () => {
+    big('long.mp3', 250_000_000); expect(await open('file:/long.mp3')).toMatchObject({ status: 'ready', kind: 'audio' }); expect(reads).toEqual([]);
+    big('scan.png', 50_000_000); const p = await open('file:/scan.png'); expect(p).toMatchObject({ status: 'ready', kind: 'image', width: 0, height: 0 }); expect(reads).toEqual([]);
+  });
+  test('F19 the Swift caps: 800 MB video, 300 MB audio, 60 MB images; a byte over is refused before any download', async () => {
+    expect([M.maxBytes('video'), M.maxBytes('audio'), M.maxBytes('image')]).toEqual([800_000_000, 300_000_000, 60_000_000]);
+    for (const [name, size] of [['a.mp4', 800_000_001], ['a.mp3', 300_000_001], ['a.png', 60_000_001]] as const) {
+      big(name, size); const v = await open('file:/' + name); expect(v.status).toBe('toolarge');
+    }
+    expect(calls.filter((c) => c.query).length).toBe(0);
+    big('ok.mp4', 800_000_000); expect((await open('file:/ok.mp4')).status).toBe('ready');
+  });
+  test('F20 a failed download leaves nothing that a later open takes for whole', async () => {
+    big('talk.mp4', 60_000_000);
+    toFileFail = new Error('network'); const bad = await open('file:/talk.mp4'); expect(bad.status).toBe('error'); expect(sizes.size).toBe(0); expect(files.size).toBe(0);
+    toFileFail = null;
+    const dest = `${F.CACHE_DIR}/${M.hash(`/talk.mp4|60000000|${Date.parse('2026-11-18T08:00:00Z')}`)}/talk.mp4`;
+    sizes.set(dest, 1_000_000);                                      // a stray short file at the place (a host that died mid-way)
+    const ok = await open('file:/talk.mp4'); expect(ok.status).toBe('ready'); expect(sizes.get(dest)).toBe(60_000_000); expect(calls.filter((c) => c.query).length).toBe(2);
+  });
+  test('F20 a download that turns out larger than the cap is removed, not kept', async () => {
+    big('talk.mp3', 100); bigSizes['/talk.mp3'] = 300_000_001;
+    const v = await open('file:/talk.mp3'); expect(v.status).toBe('toolarge'); expect(sizes.size).toBe(0);
+  });
+});
+
+describe('F22 audio from Files reaches the run sheet', () => {
+  test('the chips send queueAdd (kind file) with the page\'s app file, and the interface declares it', () => {
+    const v = readFileSync(new URL('./viewers.contract', import.meta.url), 'utf8');
+    expect(v).toContain('queueFilePlay("now", fvInfo.address, fvInfo.local, fvInfo.name)');
+    expect(v).toContain('queueFilePlay("add", fvInfo.address, fvInfo.local, fvInfo.name)');
+    const q = JSON.parse(readFileSync(new URL('../exact-package/interface/queue.json', import.meta.url), 'utf8'));
+    expect(q.names.find((n: { send?: string }) => n.send === 'queueAdd')?.options).toEqual({ mode: 'string', kind: 'string', ref: 'string', title: 'string', local: 'string' });
+    const m = readFileSync(new URL('./members-queue.contract', import.meta.url), 'utf8');
+    expect(m).toContain('queueAdd(mode=mode, kind="file", ref=address, title=title, local=local)');
   });
 });
 

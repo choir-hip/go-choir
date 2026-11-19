@@ -83,7 +83,6 @@ final class AccountWipeTests: XCTestCase {
         let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
         let content = ContentStore(root: root.appendingPathComponent("content"))
         content.put(StoredItem(id: "mail:1", kind: .mail, title: m, text: m, address: "mail:1")); content.flush()
-        write("cache/mail-abc.html", "<p>\(m)</p>"); write("data/mail/msg-1.bin", m)
 
         // What the second review found: the spoken words and the files of the app target.
         let mailReading = MailReading(); mailReading.request(address: m, text: m)
@@ -110,9 +109,6 @@ final class AccountWipeTests: XCTestCase {
                               takeOwn: own, takeMutes: mutes, takeStore: takes, tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
                               texture: texture, environment: env, content: content, corpus: SavedCorpus(),
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice)
-        let cacheDir = root.appendingPathComponent("cache")
-        let dataDir = root.appendingPathComponent("data")
-        wipe.register("mail") { AccountWipe.removeMailCopy(dataDirectory: dataDir, cacheDirectory: cacheDir) }
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
 
         await wipe.run()

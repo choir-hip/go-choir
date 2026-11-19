@@ -8,7 +8,7 @@
 //          e-book is read by the computer (decision D4: it extracts the text; the phone shows and speaks it), text, Markdown and code open the same way.
 // Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, authedBytes, SignedOutError } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError } from './api.ts';
 import demoTree from './fixtures/files-demo/tree.json';
 import * as M from './files-model.ts';
 import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
@@ -18,8 +18,8 @@ export const CACHE_DIR = 'app:/cache/files';
 export const RECENT_LIMIT = 30;
 const SEARCH_FOLDERS = 80, SEARCH_DEPTH = 4, SEARCH_FOUND = 200, TEXTURE_CAP = 1_000_000;
 
-export type Net = { json: typeof authedJSON; bytes: typeof authedBytes };
-const realNet: Net = { json: authedJSON, bytes: authedBytes };
+export type Net = { json: typeof authedJSON; bytes: typeof authedBytes; toFile: (path: string, dest: string, opts?: Parameters<typeof authedJSON>[1], storage?: Storage) => Promise<{ bytes: number; contentType: string }> };
+const realNet: Net = { json: authedJSON, bytes: authedBytes, toFile: (path, dest, opts, storage) => authedToFile(path, dest, storage, opts) };
 
 /** What the page may say when a file cannot be had. */
 export class FilesError extends Error {
@@ -44,6 +44,8 @@ const BAD_NAME = 'That name cannot be used. Avoid slashes and empty names.';
 type Backend = {
   list(path: string): Promise<{ entries: Entry[]; now: number | null }>;
   fetch(path: string): Promise<Uint8Array>;
+  /** The file at `path` into the app file `dest`, the bytes never in JavaScript; the size written. */
+  download(path: string, dest: string, storage: Storage): Promise<number>;
   put(path: string, bytes: Uint8Array): Promise<void>;
   mkdir(path: string): Promise<void>;
   remove(path: string): Promise<void>;
@@ -66,6 +68,7 @@ function choirBackend(net: Net): Backend {
       return { entries, now: r.serverTime };
     },
     async fetch(path) { return (await net.bytes(route(path), { query: { disposition: 'inline' } })).bytes; },
+    async download(path, dest, storage) { return (await net.toFile(route(path), dest, { query: { disposition: 'inline' } }, storage)).bytes; },
     async put(path, bytes) { await net.json(route(path), { method: 'PUT', body: bytes, headers: { 'content-type': M.mimeOf(M.nameOf(path)) } }); },
     async mkdir(path) { await net.json(route(path), { method: 'POST' }); },
     async remove(path) { await net.json(route(path), { method: 'DELETE' }); },
@@ -119,6 +122,10 @@ function demoBackend(now: number): Backend {
       return { entries, now };
     },
     async fetch(path) { const n = nodes.get(path); if (!n || n.isDir) throw new FilesError('notFound', 'That file is not there any more.'); return n.data; },
+    async download(path, dest, storage) {
+      const n = nodes.get(path); if (!n || n.isDir) throw new FilesError('notFound', 'That file is not there any more.');
+      await storage.fs.writeFile(dest, n.data); return n.data.length;
+    },
     async put(path, bytes) {
       if (nodes.get(M.parent(path))?.isDir !== true) throw new FilesError('notFound', 'That file is not there any more.');
       if (nodes.get(path)?.isDir) throw new FilesError('exists', 'Something with that name is already there.');
@@ -305,11 +312,22 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
     const name = M.cacheName(entry.name), key = cacheKey(entry), dest = `${CACHE_DIR}/${key}/${name}`;
     let bytes: Uint8Array | null = null;
     let have = false;
+    // Whole means the size the listing named: the host stages a download beside the file and puts it in place only when complete, so a file of another
+    // size is a leftover (or a changed file) and is fetched again.
     if (storage) { try { have = (await storage.fs.stat(dest)).size === entry.size; } catch { have = false; } }
     if (!have) {
-      bytes = await backend.fetch(path);
-      if (bytes.length > cap) throw new FilesError('tooLarge', `It is ${M.sizeLabel(bytes.length)}, too large to open on this phone.`);
-      if (storage) { await storage.fs.mkdir(`${CACHE_DIR}/${key}`).catch(() => {}); await storage.fs.writeFile(dest, bytes); }
+      if (storage) {
+        // The host writes the body to the file; nothing enters JavaScript (a video of 800 MB costs the same as a note).
+        await storage.fs.mkdir(`${CACHE_DIR}/${key}`).catch(() => {});
+        try {
+          const written = await backend.download(path, dest, storage);
+          if (written > cap) throw new FilesError('tooLarge', `It is ${M.sizeLabel(written)}, too large to open on this phone.`);
+        } catch (e) { try { await storage.fs.rm(dest); } catch { /* nothing there */ } throw e; }
+      } else {
+        // No file system (the web build): the reply is held in memory, so only what fits there.
+        if (entry.size > M.MEMORY_MAX) throw new FilesError('tooLarge', `It is ${M.sizeLabel(entry.size)}, too large to open here.`);
+        bytes = await backend.fetch(path);
+      }
     }
     if (storage) { out.local = dest; out.src = dest; }
     if (kind === 'csv') {
@@ -318,7 +336,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
       const text = new TextDecoder().decode(cut ? M.withoutPartialUTF8(bytes.slice(0, 256_000)) : bytes);
       out.rows = M.parseCsv(text, M.extOf(entry.name) === 'tsv' ? '\t' : ',', 300).map((cells) => ({ cells: cells.slice(0, 12) }));
       out.truncated = cut;
-    } else if (kind === 'image') {
+    } else if (kind === 'image' && entry.size <= M.MEMORY_MAX) {
       bytes = bytes ?? new Uint8Array(await storage!.fs.readFile(dest));
       const [w, h] = imageSize(bytes); out.width = w; out.height = h;
     }
