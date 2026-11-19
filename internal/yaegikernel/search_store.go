@@ -481,7 +481,8 @@ func (s *ChoirScope) SearchStart(query string, fresh ...bool) (SearchStub, error
 // startSearch is the one path a web search takes to the host. gated is false
 // only for SearchAll, which has judged the wording against its own question.
 // One search at a time passes the need test and starts (sendMu): the next is
-// judged after the running searches of the run have returned their pages.
+// judged only when none of the run's searches is still running (it is refused
+// at once otherwise, never waited for: a cell cannot time out on it).
 func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -500,6 +501,16 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 		}
 	}
 	over := false
+	if gated && !override {
+		if id := s.searches.runningSearch(); id != "" {
+			s.noteNotSent("search_running")
+			why := runningRefusal(id)
+			s.statsMu.Lock()
+			s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
+			s.statsMu.Unlock()
+			return SearchStub{Query: query, Refused: why}, nil
+		}
+	}
 	if gated {
 		held, refuse := s.refuseForUnread("", override)
 		if refuse {

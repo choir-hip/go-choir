@@ -201,7 +201,7 @@ func TestDeskSearchesKeepTheirOwnIDs(t *testing.T) {
 		client.done(t, second, 2)
 	}()
 	out := evalDeskCell(t, tool, ctx, `x, _ := choir.SearchStart("alpha")
-y, _ := choir.SearchStart("beta")
+y, _ := choir.SearchStart("beta", true) // fresh: a second search while the first runs is otherwise refused
 for _, id := range []string{x.ID, y.ID} {
 	c, err := choir.SearchWait(id, 5000)
 	r, _ := choir.Searches.Get(id)

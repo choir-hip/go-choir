@@ -78,36 +78,21 @@ func (st *SearchStore) unreadPages(qk string) []SearchHit {
 	return out
 }
 
-// settle waits until none of this run's searches is still running, at most d
-// in all, so a search is judged against the pages the searches before it
-// returned, not before they arrive. A search that has run longer than d is not
-// waited on again: it had its wait.
-func (st *SearchStore) settle(d time.Duration) {
+// runningSearch returns the id of the latest search of this run still running
+// (no done frame yet, started less than searchWaitMax ago), or "". A search that
+// has run longer is the host's to end; it does not hold the next one back.
+func (st *SearchStore) runningSearch() string {
 	if st == nil {
-		return
+		return ""
 	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	for {
-		st.mu.Lock()
-		pending := false
-		for i := st.runStart; i < len(st.order); i++ {
-			if c := st.searches[st.order[i]]; !c.Done && st.nowTime().Sub(c.startedAt) < d {
-				pending = true
-				break
-			}
-		}
-		changed := st.changed
-		st.mu.Unlock()
-		if !pending {
-			return
-		}
-		select {
-		case <-changed:
-		case <-timer.C:
-			return
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	for i := len(st.order) - 1; i >= st.runStart; i-- {
+		if c := st.searches[st.order[i]]; !c.Done && st.nowTime().Sub(c.startedAt) < searchWaitMax {
+			return c.ID
 		}
 	}
+	return ""
 }
 
 // knows waits up to d until the store holds search id (its start frame has
@@ -144,16 +129,12 @@ func questionKey(question string) string {
 // wordings and the plain verbs alike. It returns the pages the run holds for
 // the question (qk; every search of the run when empty) that it has not tried
 // to read, and whether they are enough to refuse a search: searchEnoughUnread
-// or more. Unless override is set it first waits for the run's running searches
-// (see settle). With override it never refuses; the caller counts a refusal as
+// or more. With override it never refuses; the caller counts a refusal as
 // holds_unread, and a search sent over one as fresh_over_unread once the host
 // has accepted it.
 func (s *ChoirScope) refuseForUnread(qk string, override bool) (held []SearchHit, refuse bool) {
 	if s == nil || s.searches == nil {
 		return nil, false
-	}
-	if !override {
-		s.searches.settle(time.Duration(searchWaitMs) * time.Millisecond)
 	}
 	held = s.searches.unreadPages(qk)
 	if len(held) < searchEnoughUnread {
@@ -167,4 +148,11 @@ func (s *ChoirScope) refuseForUnread(qk string, override bool) (held []SearchHit
 // Search carry them).
 func unreadRefusal(n int) string {
 	return fmt.Sprintf("this run already holds %d pages new to this run that you have not tried to read, returned by its earlier searches (they may be from any thread of this run, not only this query's). Read the ones that matter, then search again for what is still missing, naming it. A page that will not load counts once you have tried it. To send a search for something these pages cannot hold, pass fresh: choir.Search(query, true)", n)
+}
+
+// runningRefusal is what the desk is told when a search is started while another
+// of its run is still running: that one's pages are not yet known, so this one
+// cannot be judged by them. It returns at once; the cell is never held.
+func runningRefusal(id string) string {
+	return fmt.Sprintf("a search of this run is still running (%s), so this one cannot be judged by the pages it will return. Wait for it (choir.SearchWait(%q, ms)), read what it returns, then search again for what is still missing, naming it. To send this search now anyway, pass fresh: choir.Search(query, true)", id, id)
 }
