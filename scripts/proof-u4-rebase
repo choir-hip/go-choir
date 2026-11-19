@@ -14,7 +14,7 @@
 # script and awaited, not performed.
 #
 # Steps (the numbers are the design's):
-#   1  set texture.root_desk on, through /api/computer-settings (source
+#   1  (retired: texture.root_desk is gone, so the root desk is on; source
 #      projection and the rebase offer have no switch since capsule overlay
 #      S4; owner-act records have none since fix 13 of
 #      docs/problems/selfdev-round-blockers-cluster-2026-11-03.md)
@@ -114,16 +114,9 @@ fail_step() { log "FAIL: $*"; FAILED=1; }
 
 log "health $(api GET /health | jq -c '{deployed: .build.deployed_commit}')"
 if [ "$DRY" = 1 ]; then
-  log "dry run: would set the root desk switch, request change A, let consensus apply it, wait for FP0's main commit that edits A's file, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
-  setting texture.root_desk true
+  log "dry run: would request change A, let consensus apply it, wait for FP0's main commit that edits A's file, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
   exit 0
 fi
-
-# Step 1.
-setting texture.root_desk true
-api GET /api/computer-settings > "$OUT/settings.json"
-jq -e '[.settings[] | select(.key == "texture.root_desk") | .value] | all' "$OUT/settings.json" >/dev/null \
-  || { log "a switch did not take"; exit 1; }
 
 if [ "$PHASE" = all ] || [ "$PHASE" = apply ]; then
   # Step 2.

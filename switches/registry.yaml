@@ -1567,37 +1567,6 @@
    "note": "ON NOW on owner computers; paper after. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
-   "id": "texture_root_desk",
-   "kind": "setting",
-   "life": "release",
-   "owner": "texture",
-   "class": "red",
-   "surface": "settings-selfdev",
-   "introduced": "2026-10-28",
-   "settings": [
-    "texture.root_desk"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "ids:1",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "blocked_by": "PD3 S2 F4 fix proved (oldest-first excerpt)",
-   "note": "LEAVE OFF on the paper (hundreds of story documents would churn the master). Default off, held 2026-11-03 (docs/problems/default-off-switches-audit-2026-11-03.md): owner turns it on once F4/F5 are re-proved on d@e and the paper's story documents feed the master as one batched entry an hour."
-  },
-  {
    "id": "intake_labels",
    "kind": "setting",
    "life": "release",

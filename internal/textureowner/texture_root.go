@@ -16,8 +16,8 @@ package textureowner
 // runs the ensure step, which makes a fresh master and advances the
 // marker's generation. Nothing here runs at boot: a crash interrupts a
 // pre-boot digest (agentcore.RestartWorkKinds) and drops the notes held in
-// memory, and the next commit mints a new digest. All of it is behind
-// texture.root_desk, off by default.
+// memory, and the next commit mints a new digest. It has no setting: the
+// root desk runs on every computer.
 
 import (
 	"context"
@@ -117,12 +117,12 @@ func (h *Handler) textureRootScopeLocked(ownerID, computerID string) *textureRoo
 	return scope
 }
 
-// textureRootFor returns the marker when the root desk is on and docID is
+// textureRootFor returns the marker when docID is
 // the master document: the one condition that makes a Texture run the root.
 func (h *Handler) textureRootFor(ctx context.Context, ownerID, computerID, docID string) (store.TextureRoot, bool) {
 	ctx = asTextureReader(ctx)
 	ownerID, computerID, docID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)
-	if h == nil || h.Store == nil || docID == "" || !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
+	if h == nil || h.Store == nil || docID == "" {
 		return store.TextureRoot{}, false
 	}
 	root, err := h.Store.GetTextureRoot(ctx, ownerID, computerID)
@@ -195,16 +195,13 @@ func addTextureRootPending(pending []string, docs ...string) []string {
 
 // NoteTextureRootChange records, after its transaction, that a document
 // other than the master changed (a Texture commit, an owner revision, a desk
-// report), and arms one digest unless one is already armed. Off, or on the
-// master itself, it does nothing. The change is committed, so a cancelled
+// report), and arms one digest unless one is already armed. On the
+// master itself it does nothing. The change is committed, so a cancelled
 // caller context does not drop the note.
 func (h *Handler) NoteTextureRootChange(ctx context.Context, ownerID, computerID, docID string) {
 	ctx = context.WithoutCancel(ctx)
 	ownerID, computerID, docID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)
 	if h == nil || h.Store == nil || h.Core == nil || ownerID == "" || computerID == "" || docID == "" {
-		return
-	}
-	if !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
 		return
 	}
 	h.noteTextureRootChangeOn(ctx, ownerID, computerID, docID)
@@ -220,9 +217,6 @@ func (h *Handler) NoteTextureRootTrajectoryChange(ctx context.Context, ownerID, 
 	if h == nil || h.Store == nil || h.Core == nil || ownerID == "" || computerID == "" || trajectoryID == "" {
 		return
 	}
-	if !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
-		return
-	}
 	trajectory, err := h.Store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
@@ -235,7 +229,7 @@ func (h *Handler) NoteTextureRootTrajectoryChange(ctx context.Context, ownerID, 
 	}
 }
 
-// noteTextureRootChangeOn is the note with the switch already read on.
+// noteTextureRootChangeOn arms the digest for a change to docID.
 func (h *Handler) noteTextureRootChangeOn(ctx context.Context, ownerID, computerID, docID string) {
 	ctx = asTextureReader(ctx)
 	if root, err := h.Store.GetTextureRoot(ctx, ownerID, computerID); err == nil && root.DocumentID == docID {
@@ -330,10 +324,6 @@ func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computer
 		h.textureRootMu.Unlock()
 		h.scheduleTextureRootDigest(ctx, ownerID, computerID, arm)
 	}
-	if !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
-		log.Printf("texture root: digest on %s consumed: texture.root_desk is off", computerID)
-		return nil
-	}
 	root, created, err := h.ensureTextureRoot(ctx, ownerID, computerID)
 	if err != nil {
 		h.textureRootMu.Lock()
@@ -425,15 +415,12 @@ func (h *Handler) reconcileTextureRootDigest(ctx context.Context, master types.D
 // crash between claim and create) is completed, not replaced. created
 // reports that this call made the document. It returns the live master,
 // creating it, or replacing a master that is no longer live, first; it is
-// idempotent on liveness, and refuses with texture.root_desk off.
+// idempotent on liveness.
 func (h *Handler) ensureTextureRoot(ctx context.Context, ownerID, computerID string) (store.TextureRoot, bool, error) {
 	ctx = asTextureReader(ctx)
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if h == nil || h.Store == nil {
 		return store.TextureRoot{}, false, fmt.Errorf("texture root: store unavailable")
-	}
-	if !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
-		return store.TextureRoot{}, false, fmt.Errorf("texture root: %s is off", store.SettingTextureRootDesk)
 	}
 	for attempt := 0; attempt < 4; attempt++ {
 		current, err := h.Store.GetTextureRoot(ctx, ownerID, computerID)

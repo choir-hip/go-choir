@@ -5,7 +5,6 @@ package store
 // (docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
 // fail, written before the code:
 //
-//   - the switch is missing, unknown to the allowlist, or on by default;
 //   - two ensure steps race and both claim a master (the CAS is the claim);
 //   - a replacement advances the generation without naming the marker it
 //     replaces, or a stale claim overwrites a newer one;
@@ -21,16 +20,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-func TestTextureRootDeskSwitchIsKnownAndOffByDefault(t *testing.T) {
-	def, known := KnownComputerSettings[SettingTextureRootDesk]
-	if !known || def {
-		t.Fatalf("texture.root_desk known=%v default=%v, want known and off", known, def)
-	}
-	if SettingTextureRootDesk != "texture.root_desk" {
-		t.Fatalf("switch key = %q", SettingTextureRootDesk)
-	}
-}
 
 func TestTextureRootMarkerIsClaimedByCompareAndSet(t *testing.T) {
 	s := openTestStore(t)
