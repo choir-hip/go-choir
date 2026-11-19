@@ -47,10 +47,12 @@ that a process was gone was a process-list search, which missed it twice.
   on the build VM after the fact (results in the landing's report).
 - Not reverted: a revert would be a second unverified push of the same
   size, and CI is still in front of the deploy.
-- Owed: `scripts/land` takes a lock in its tree and refuses a second run
-  while one lives; the hook's hold says in the log that it is holding. Until
-  then the lead starts a landing only after reading the process list by
-  hand and never reuses the tree while a held run exists.
+- Repaired the same hour: `scripts/land` takes a lock in its tree's git
+  directory (`land.lock`, holding its pid) and refuses a second run while
+  that pid lives; it records the train it verified and refuses to push if the
+  tree's `HEAD` is no longer that commit; and it says in the log when it
+  enters and leaves `LAND_HOOK_AFTER_VERIFY`. Checked by hand: refused under
+  a live holder, taken over from a dead one, released at exit.
 - Remaining error: the claim for this landing (C151) is settled on CI and
   the deploy as written; it does not measure what the skipped run would
   have caught that CI does not (CI's PostgreSQL has pgvector only since
