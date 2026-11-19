@@ -16,8 +16,9 @@ package platform
 //	skip      this one call failed in transport or decoding while the server is healthy. The
 //	          input is left out of this pass and nothing is written.
 //
-// (The import of the Mac's first-pass file, which applied the same rule to a file's
-// fate, is built on lane/vec-inbox and not part of this landing.)
+// A file's fate follows from the same rule (importFate): it is refused, terminally,
+// only for a fault of the file itself; anything else is "cannot be done now" and
+// the file waits where it is.
 
 import (
 	"errors"
@@ -45,4 +46,31 @@ func classifyEmbedOutcome(err error) embedEffect {
 		return effectDown
 	}
 	return effectSkip
+}
+
+// errVectorImportCannotCheck means a file could not be checked enough now (too
+// few sample rows could be embedded): not a fault of the file.
+var errVectorImportCannotCheck = errors.New("vector import: the file cannot be checked now")
+
+type importFateKind int
+
+const (
+	fateDone importFateKind = iota
+	// fateRefuse is terminal: a fault of the file itself (ErrVectorImportRefused:
+	// format, model, dimension, bounds, a text this host does not cut the same,
+	// a sampled vector that disagrees with this host's embedding of a row it could embed).
+	fateRefuse
+	// fateRetry leaves the file where it is: the server cannot answer, the file cannot be
+	// checked now, or something other than the file failed. Unstarted work, not resumed work.
+	fateRetry
+)
+
+func importFate(err error) importFateKind {
+	switch {
+	case err == nil:
+		return fateDone
+	case errors.Is(err, ErrVectorImportRefused):
+		return fateRefuse
+	}
+	return fateRetry
 }

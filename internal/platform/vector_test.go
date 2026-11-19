@@ -21,11 +21,16 @@ package platform
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -609,6 +614,245 @@ func TestVectorIndexesAreBuiltConcurrentlyAndAnInvalidLeftoverIsRepaired(t *test
 
 // ---- import ----
 
+func f32ToHalf(f float32) uint16 {
+	b := math.Float32bits(f)
+	sign := uint16(b>>16) & 0x8000
+	exp := int((b>>23)&0xff) - 127 + 15
+	frac := b & 0x7fffff
+	switch {
+	case exp <= 0:
+		if exp < -10 {
+			return sign
+		}
+		frac |= 0x800000
+		shift := uint(14 - exp)
+		h := uint16(frac >> shift)
+		if (frac>>(shift-1))&1 == 1 {
+			h++
+		}
+		return sign | h
+	case exp >= 31:
+		return sign | 0x7bff
+	}
+	h := sign | uint16(exp)<<10 | uint16(frac>>13)
+	if (frac>>12)&1 == 1 {
+		h++
+	}
+	return h
+}
+
+func encodeHalfVector(v []float32) string {
+	raw := make([]byte, 2*len(v))
+	for i, x := range v {
+		binary.LittleEndian.PutUint16(raw[2*i:], f32ToHalf(x))
+	}
+	return base64.StdEncoding.EncodeToString(raw)
+}
+
+type importRow struct {
+	Kind, ID, TextSHA, Model string
+	Ordinal, Dim             int
+	Vec                      []float32
+}
+
+func writeImportFile(t *testing.T, rows []importRow) string {
+	t.Helper()
+	var b strings.Builder
+	for _, r := range rows {
+		line, _ := json.Marshal(map[string]any{"kind": r.Kind, "id": r.ID, "ordinal": r.Ordinal, "text_sha": r.TextSHA, "model": r.Model, "dim": r.Dim, "v": encodeHalfVector(r.Vec)})
+		b.Write(line)
+		b.WriteByte('\n')
+	}
+	path := filepath.Join(t.TempDir(), "pass.ndjson")
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// macRows are the rows the Mac would make for the fixture: every passage of
+// every eligible version and the lead of each named capture, vectors from the
+// same fake model.
+func (f *vecFixture) macRows(t *testing.T, captureIDs ...string) []importRow {
+	t.Helper()
+	ctx := context.Background()
+	var rows []importRow
+	refs, err := f.svc.eligibleStoryVersions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range refs {
+		vt, ok, err := f.svc.loadStoryVersionText(ctx, f.og, r.StoryID, r.VersionID)
+		if err != nil || !ok {
+			t.Fatal(err)
+		}
+		for i, p := range vt.Passages {
+			rows = append(rows, importRow{Kind: vectorKindStory, ID: r.VersionID, Ordinal: i, TextSHA: embedder.TextSHA(p), Model: embedder.ModelHash, Dim: 256,
+				Vec: embedder.FakeVector(embedder.DocumentInput(vt.Title, p))})
+		}
+	}
+	objs, err := f.store.captureObjectsByIDAny(ctx, captureIDs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range captureIDs {
+		obj := objs[id]
+		meta, _ := objectgraph.WebCaptureMetadataFromObject(obj)
+		hash := strings.TrimPrefix(meta.ExtractedTextBlobID, "sha256:")
+		lead, err := captureLeadPassage(f.svc.captureBodies, hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows = append(rows, importRow{Kind: vectorKindCapture, ID: id, Ordinal: 0, TextSHA: embedder.TextSHA(lead), Model: embedder.ModelHash, Dim: 256,
+			Vec: embedder.FakeVector(embedder.DocumentInput(meta.Title, lead))})
+	}
+	return rows
+}
+
+func importFixture(t *testing.T) (*vecFixture, []string) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-time.Hour)
+	f.story(t, "doc-a", 1, "Harbor reopens", storyText("harbor"), time.Time{})
+	f.story(t, "doc-b", 1, "Bridge closes", storyText("bridge"), time.Time{})
+	a := f.capture(t, "o1", "c1", "k1", "One", "one text about ropes", base, false).CanonicalID
+	b := f.capture(t, "o1", "c1", "k2", "Two", "two text about nets", base.Add(time.Minute), false).CanonicalID
+	return f, []string{a, b}
+}
+
+func TestVectorImportWritesMatchingRowsAndTheWorkerFindsNoGap(t *testing.T) {
+	f, caps := importFixture(t)
+	path := writeImportFile(t, f.macRows(t, caps...))
+	res, err := f.svc.ImportVectorFile(context.Background(), path)
+	if err != nil {
+		t.Fatalf("import: %v (%+v)", err, res)
+	}
+	if res.Written != 8+2 || res.Samples == 0 || res.MinCosine < 0.999 || len(res.Rejected) != 0 {
+		t.Fatalf("result %+v", res)
+	}
+	if f.count(t, "vec_story_passages") != 8 || f.count(t, "vec_captures") != 2 {
+		t.Fatal("rows missing")
+	}
+	// The embedder was used only for the sample, and the worker has no gap.
+	if f.emb.Inputs.Load() > vectorImportSamples {
+		t.Fatalf("%d inputs embedded for an import", f.emb.Inputs.Load())
+	}
+	if res := f.pass(t); res.Worked() || res.StoryGap != 0 || res.CaptureGap != 0 {
+		t.Fatalf("worker after import: %+v", res)
+	}
+}
+
+func TestVectorImportRefusesAWrongModelOrDimensionWhole(t *testing.T) {
+	f, caps := importFixture(t)
+	for name, mutate := range map[string]func(r *importRow){
+		"model": func(r *importRow) { r.Model = strings.Repeat("0", 64) },
+		"dim":   func(r *importRow) { r.Dim = 768 },
+		"kind":  func(r *importRow) { r.Kind = "page" },
+	} {
+		rows := f.macRows(t, caps...)
+		mutate(&rows[len(rows)-1]) // the last row only: the whole file is refused
+		_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+		if !errors.Is(err, ErrVectorImportRefused) {
+			t.Fatalf("%s: err %v", name, err)
+		}
+		if f.count(t, "vec_story_passages")+f.count(t, "vec_captures") != 0 {
+			t.Fatalf("%s: rows written from a refused file", name)
+		}
+	}
+}
+
+func TestVectorImportRefusesAFileWhoseSampleTheEmbedderHereDoesNotReproduce(t *testing.T) {
+	f, caps := importFixture(t)
+	rows := f.macRows(t, caps...)
+	for i := range rows {
+		rows[i].Vec = embedder.FakeVector("something else entirely " + fmt.Sprint(i)) // the right text hashes, other vectors
+	}
+	res, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if !errors.Is(err, ErrVectorImportRefused) || !strings.Contains(err.Error(), "cosine") {
+		t.Fatalf("err %v", err)
+	}
+	if res.MinCosine >= 0.999 || f.count(t, "vec_story_passages")+f.count(t, "vec_captures") != 0 {
+		t.Fatalf("%+v rows written", res)
+	}
+}
+
+func TestVectorImportDropsRowsThisHostDoesNotCutPrivateOnesAndPartialVersions(t *testing.T) {
+	f, caps := importFixture(t)
+	priv := f.capture(t, "o1", "c1", "priv", "Private", "secret diary", time.Now().UTC().Add(-time.Hour), true).CanonicalID
+	rows := f.macRows(t, append(append([]string{}, caps...), priv)...)
+	var storyRows []int
+	for i, r := range rows {
+		if r.Kind == vectorKindStory {
+			storyRows = append(storyRows, i)
+		}
+	}
+	// One version's passage was cut differently on the Mac: the whole version
+	// is dropped, never half written.
+	rows[storyRows[1]].TextSHA = embedder.TextSHA("a different cut")
+	// A capture's lead differs.
+	for i := range rows {
+		if rows[i].ID == caps[1] {
+			rows[i].TextSHA = embedder.TextSHA("other lead")
+		}
+	}
+	res, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if res.Rejected["text_mismatch"] != 4+1 || res.Rejected["not_public"] != 1 || res.Written != 4+1 {
+		t.Fatalf("result %+v", res)
+	}
+	if f.count(t, "vec_story_passages") != 4 || f.count(t, "vec_captures") != 1 {
+		t.Fatalf("rows story %d capture %d", f.count(t, "vec_story_passages"), f.count(t, "vec_captures"))
+	}
+	var n int
+	_ = f.store.corpus().QueryRow(`SELECT COUNT(*) FROM vec_captures WHERE capture_id = ?`, priv).Scan(&n)
+	if n != 0 {
+		t.Fatal("a private capture was imported")
+	}
+	// The worker fills exactly what the import left out.
+	res2 := f.pass(t)
+	if res2.StoryVersions != 1 || res2.Captures != 1 {
+		t.Fatalf("worker after partial import: %+v", res2)
+	}
+	// A version with a passage missing is incomplete and dropped whole.
+	f2, caps2 := importFixture(t)
+	rows = f2.macRows(t, caps2...)
+	rows = append(rows[:1], rows[2:]...)
+	res, err = f2.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if err != nil || res.Rejected["incomplete_version"] != 3 || f2.count(t, "vec_story_passages") != 4 {
+		t.Fatalf("incomplete version: %+v %v rows %d", res, err, f2.count(t, "vec_story_passages"))
+	}
+}
+
+func TestVectorImportJobAndRouteRefuseAnUntrustedCaller(t *testing.T) {
+	f, caps := importFixture(t)
+	path := writeImportFile(t, f.macRows(t, caps...))
+	job, err := f.svc.StartVectorImport(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		st, ok := f.svc.VectorImportStatus(job.JobID)
+		if ok && st.State != "running" {
+			if st.State != "done" || st.Result == nil || st.Result.Written != 10 {
+				t.Fatalf("job %+v", st)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("job did not finish")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	h := &Handler{service: f.svc}
+	rec := httptest.NewRecorder()
+	h.HandleVectorImport(rec, httptest.NewRequest("POST", "/internal/platform/vectors/import", strings.NewReader("{}")))
+	if rec.Code != 403 {
+		t.Fatalf("untrusted caller got %d", rec.Code)
+	}
+}
+
 // The Mac's export (scripts/embed-pass-export.py) is what made the first
 // vectors: a story's title is the manifest's, else the publication's; a
 // capture's is its metadata title stripped; a passage is cut on the raw bytes
@@ -898,6 +1142,113 @@ func TestVectorCaptureLookupReadsOnlyCaptures(t *testing.T) {
 	objs, err := f.store.captureObjectsByIDAny(context.Background(), []string{id})
 	if err != nil || len(objs) != 0 {
 		t.Fatalf("a non-capture object was read as a capture: %v %v", objs, err)
+	}
+}
+
+func TestVectorImportSampleIsRandomStratifiedAndCannotShrinkBelowTheFloor(t *testing.T) {
+	// 150 captures; the vectors are right only at the old fixed stride (every
+	// fifth row). A random sample of 32 cannot all land on the 30 right rows.
+	f := newVecFixture(t)
+	ids := f.captures(t, "o1", "c1", "s", 150, time.Now().UTC().Add(-200*time.Hour), func(i int) string { return fmt.Sprintf("sample text number%d", i) }, time.Minute)
+	rows := f.macRows(t, ids...)
+	for i := range rows {
+		if i%5 != 0 {
+			rows[i].Vec = embedder.FakeVector(fmt.Sprint("wrong", i))
+		}
+	}
+	res, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if !errors.Is(err, ErrVectorImportRefused) || res.SampleSeed == 0 || !strings.Contains(err.Error(), fmt.Sprint(res.SampleSeed)) {
+		t.Fatalf("a fixed-stride file passed or the seed is not recorded: %v (seed %d)", err, res.SampleSeed)
+	}
+	if f.count(t, "vec_captures") != 0 {
+		t.Fatal("rows written from a refused file")
+	}
+	// Every present kind of row is checked: wrong vectors only on a story's
+	// later passages are found.
+	f2, caps := importFixture(t)
+	rows = f2.macRows(t, caps...)
+	for i := range rows {
+		if rows[i].Kind == vectorKindStory && rows[i].Ordinal > 0 {
+			rows[i].Vec = embedder.FakeVector(fmt.Sprint("wrong", i))
+		}
+	}
+	if _, err := f2.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows)); !errors.Is(err, ErrVectorImportRefused) {
+		t.Fatalf("wrong later passages passed: %v", err)
+	}
+	// A file of which too few rows can be checked is refused: 100 rows, 90 of
+	// them with a text this host does not cut.
+	f3 := newVecFixture(t)
+	ids = f3.captures(t, "o1", "c1", "s", 100, time.Now().UTC().Add(-200*time.Hour), func(i int) string { return fmt.Sprintf("floor text number%d", i) }, time.Minute)
+	rows = f3.macRows(t, ids...)
+	for i := 10; i < 100; i++ {
+		rows[i].TextSHA = embedder.TextSHA("another cut")
+	}
+	_, err = f3.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if !errors.Is(err, ErrVectorImportRefused) || !strings.Contains(err.Error(), "can be checked") {
+		t.Fatalf("a file that could be checked on 10 rows passed: %v", err)
+	}
+}
+
+func TestVectorImportBoundsALineAndAVersionGroup(t *testing.T) {
+	f, caps := importFixture(t)
+	path := writeImportFile(t, f.macRows(t, caps...))
+	raw, _ := os.ReadFile(path)
+	long := append([]byte(strings.Repeat("x", vectorImportMaxLine+10)), '\n')
+	bad := filepath.Join(t.TempDir(), "long.ndjson")
+	_ = os.WriteFile(bad, append(append([]byte{}, raw...), long...), 0o600)
+	if _, err := f.svc.ImportVectorFile(context.Background(), bad); !errors.Is(err, ErrVectorImportRefused) || !strings.Contains(err.Error(), "longer than") {
+		t.Fatalf("a long line: %v", err)
+	}
+	if f.count(t, "vec_story_passages")+f.count(t, "vec_captures") != 0 {
+		t.Fatal("rows written from a refused file")
+	}
+	old := vectorImportMaxGroupRows
+	vectorImportMaxGroupRows = 2
+	t.Cleanup(func() { vectorImportMaxGroupRows = old })
+	res, err := f.svc.ImportVectorFile(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Rejected["oversized_version"] != 8 || res.Written != 2 {
+		t.Fatalf("oversized versions: %+v", res)
+	}
+}
+
+func TestVectorImportRouteRefusesASecondImportBeforeReadingItsBody(t *testing.T) {
+	f, caps := importFixture(t)
+	f.store.vec.importMu.Lock()
+	f.store.vec.jobs = map[string]*VectorImportJob{"j": {JobID: "j", State: "running"}}
+	f.store.vec.lastJob = "j"
+	f.store.vec.importMu.Unlock()
+	_ = caps
+	h := &Handler{service: f.svc}
+	body := &failReader{t: t}
+	req := httptest.NewRequest("POST", "/internal/platform/vectors/import", body)
+	req.RemoteAddr = "127.0.0.1:40000"
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+	h.HandleVectorImport(rec, req)
+	if rec.Code != 409 || body.read {
+		t.Fatalf("status %d, body read %v", rec.Code, body.read)
+	}
+}
+
+type failReader struct {
+	t    *testing.T
+	read bool
+}
+
+func (r *failReader) Read([]byte) (int, error) { r.read = true; return 0, io.EOF }
+
+func TestVectorWorkerRemovesAStaleSpoolFileAtStart(t *testing.T) {
+	f := newVecFixture(t)
+	dir := filepath.Join(f.svc.artifactsRoot, vectorImportDirName)
+	_ = os.MkdirAll(dir, 0o750)
+	stale := filepath.Join(dir, "import-123.ndjson")
+	_ = os.WriteFile(stale, []byte("x"), 0o600)
+	f.svc.removeStaleVectorSpool()
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("stale spool file kept")
 	}
 }
 
@@ -1266,6 +1617,28 @@ func TestVectorStoryPredicateReadsThePolicyObjectAndAMalformedOneExcludes(t *tes
 		t.Fatalf("sweep %+v rows %d", pass, f.count(t, "vec_story_passages"))
 	}
 }
+
+func TestVectorImportAppliesTheWorkersEmptyTitleRule(t *testing.T) {
+	f, caps := importFixture(t)
+	empty := f.capture(t, "o1", "c1", "empty", "", "", time.Now().UTC().Add(-time.Hour), false).CanonicalID
+	rows := f.macRows(t, caps...)
+	rows = append(rows, importRow{Kind: vectorKindCapture, ID: empty, Ordinal: 0, TextSHA: embedder.TextSHA(""), Model: embedder.ModelHash, Dim: 256, Vec: embedder.FakeVector("title: none | text: ")})
+	res, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Rejected["no_text"] != 1 || f.count(t, "vec_captures") != 2 {
+		t.Fatalf("%+v captures %d", res, f.count(t, "vec_captures"))
+	}
+	f.pass(t)
+	var vec, refused int
+	_ = f.store.corpus().QueryRow(`SELECT COUNT(*) FILTER (WHERE embedding IS NOT NULL), COUNT(*) FILTER (WHERE refused <> '') FROM vec_captures WHERE capture_id = ?`, empty).Scan(&vec, &refused)
+	if vec != 0 || refused != 1 {
+		t.Fatalf("the worker embedded what the import refused (vectors %d, refused rows %d)", vec, refused)
+	}
+}
+
+// ---- round 3: an exact gap, one edge query, the pgvector minimum ----
 
 func TestVectorCaptureGapAndWantAreExactAndNeverReReadWhatCannotBeEligible(t *testing.T) {
 	f := newVecFixture(t)
