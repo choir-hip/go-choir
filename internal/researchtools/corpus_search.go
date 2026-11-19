@@ -175,6 +175,8 @@ type corpusSearchInfo struct {
 	// Jev's labels were read from the store without error.
 	TitlesSearched bool
 	LabelsRead     bool
+	// NoTitleWords: the query held no word the title half can match.
+	NoTitleWords bool
 	// WindowSearched: the window of the newest captures was listed.
 	WindowSearched bool
 	// Dropped are the query words the text search did not look for (pruned
@@ -265,7 +267,8 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
 		}
 	}
-	info.TitlesSearched = searched
+	info.TitlesSearched = searched && len(terms) > 0
+	info.NoTitleWords = len(terms) == 0
 	objs = dropOwnerPrivate(inWindow(objs, req.Since, req.Until))
 	var labelHalf []CorpusCapture
 	if len(terms) > 0 {

@@ -23,13 +23,18 @@ type SearchCoverage struct {
 	// Window: the window of the newest captures was listed and matched by
 	// title (the fallback when the index cannot answer).
 	Window bool `json:"window"`
-	// Published: the published-story search answered over every publication
-	// (a search that failed, or stopped at its scan cap, is false).
-	Published bool `json:"published"`
+	// NoTitleWords: the query had no word the title half can match (stop
+	// words alone), so Titles and Labels are false though the index answered.
+	NoTitleWords bool `json:"no_title_words"`
+	// Published: the published-story search ran and returned without error.
+	// PublishedCapped: its scan stopped at its cap, so older pieces may be
+	// missing (the pieces it did return are real).
+	Published       bool `json:"published"`
+	PublishedCapped bool `json:"published_capped"`
 }
 
 // coverage is the captures part of a search's coverage.
 func (i corpusSearchInfo) coverage() SearchCoverage {
 	return SearchCoverage{PageText: i.TextUsed, PageTextIndexed: i.TextIndexed, Titles: i.TitlesSearched,
-		Labels: i.TitlesSearched && i.LabelsRead, Window: i.WindowSearched}
+		Labels: i.TitlesSearched && i.LabelsRead, Window: i.WindowSearched, NoTitleWords: i.NoTitleWords}
 }

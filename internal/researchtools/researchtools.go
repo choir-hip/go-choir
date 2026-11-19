@@ -103,7 +103,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			}
 			// Published Autopaper stories and opinion pieces, from every
 			// computer: citable once Read captures their read_url.
-			published, publishedNote, publishedRan := searchPublished(ctx, deps, query, limit)
+			published, publishedNote, publishedRan, publishedCapped := searchPublished(ctx, deps, query, limit)
 			// Coverage is affirmative: each field is true only on the path
 			// where that search returned from the store without error, so a
 			// path nobody set (the window fallback, a future one) reads as
@@ -113,7 +113,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			if capturesErr == nil {
 				coverage = info.coverage()
 			}
-			coverage.Published = publishedRan
+			coverage.Published, coverage.PublishedCapped = publishedRan, publishedCapped
 			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events), info.Capped, info)
 			body := wireCorpusResult{
 				Query:     query,
