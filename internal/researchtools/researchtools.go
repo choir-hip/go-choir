@@ -86,7 +86,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			captures, note, info, err := searchCapturesFor(ctx, deps, ownerID, exec.ComputerID,
 				corpusRequest{Query: query, Terms: corpusQueryTerms(query), Since: window.Since, Until: window.Until, Order: window.Order}, limit)
 			if err != nil {
-				captures, note = nil, "captures not searched: "+err.Error()
+				captures, note = nil, CapturesNotSearchedNote+": "+err.Error()
 			}
 			capturesElapsed := time.Since(capturesStart)
 			if captures == nil {
@@ -186,6 +186,27 @@ func logCorpusSearch(ctx context.Context, query, computerID string, capturesElap
 	run, desk, conv := corpusAttribution(ctx)
 	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t caller=%s",
 		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped, CorpusCallerFrom(ctx))
+}
+
+// The two notes that say a half of the corpus was not searched at all (the
+// verb answers success with the half's list empty and the note set). The host
+// reads them to tell "searched, nothing held" from "not searched" (the research
+// brief); IsNotSearched is the one predicate, so a reworded note breaks a test.
+const (
+	CapturesNotSearchedNote  = "captures not searched"
+	PublishedNotSearchedNote = "published pieces not searched"
+)
+
+// CapturesNotSearched reports a captures_note that says the capture half was
+// not searched.
+func CapturesNotSearched(note string) bool {
+	return strings.Contains(note, CapturesNotSearchedNote)
+}
+
+// PublishedNotSearched reports a published_note that says the published half
+// was not searched.
+func PublishedNotSearched(note string) bool {
+	return strings.HasPrefix(strings.TrimSpace(note), PublishedNotSearchedNote)
 }
 
 // CorpusCallerBrief is the caller of a search the host makes for a research

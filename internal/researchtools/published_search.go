@@ -62,11 +62,11 @@ func (c *CorpusdCaptureSink) SearchPublished(ctx context.Context, query string, 
 func searchPublished(ctx context.Context, deps Dependencies, query string, limit int) ([]PublishedPiece, string) {
 	searcher, ok := deps.Captures.(PublishedSearcher)
 	if !ok {
-		return []PublishedPiece{}, "published pieces not searched: the shared store is not configured"
+		return []PublishedPiece{}, PublishedNotSearchedNote+": the shared store is not configured"
 	}
 	answer, err := searcher.SearchPublished(ctx, query, limit)
 	if err != nil {
-		return []PublishedPiece{}, "published pieces not searched: " + err.Error()
+		return []PublishedPiece{}, PublishedNotSearchedNote+": "+err.Error()
 	}
 	if answer.Pieces == nil {
 		answer.Pieces = []PublishedPiece{}

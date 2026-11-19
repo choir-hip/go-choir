@@ -4106,6 +4106,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// A research desk run's corpus brief joins the same first turn
 	// (research_brief.go); it marks labels only on a fresh start, below.
 	brief := rt.researchBriefOpening(ctx, rec)
+	// A return before the run memory takes the text writes the brief's line
+	// as dropped (a second call after commitAfter writes nothing).
+	defer brief.finish(false)
 	openingText := rec.Prompt + opening.openingText() + brief.openingText()
 	userMsg, _ := json.Marshal(map[string]any{
 		"role": "user",
@@ -4205,6 +4208,12 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	injectUserTurns := composeInjectors(frameTurns, rt.coagentUpdateTurnInjectorWithDelivered(rec, initialMailboxPhase, activationDeliveredSet))
 	initialMessages, err = memory.initialize(ctx, initialMessages)
 	if err != nil {
+		// initialize can write the first message and then fail to list it
+		// back: the text is stored and a later activation replays it, so its
+		// labels are marked here too (startedFresh is set only after the
+		// write). The management opening had the same gap before this change.
+		opening.commitAfter(memory)
+		brief.commitAfter(memory)
 		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
 		return
 	}
