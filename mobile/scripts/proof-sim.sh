@@ -52,7 +52,7 @@ while :; do
   "$HERE/exact.sh" agent ios --touch platform \
     "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01-radio-first.png" \
     "tap bar-mark" "clock +600 real" "clock data" tree "screenshot $SHOTS/01a-launcher.png" \
-    "tap place-paper" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01b-paper.png" \
+    "tap place-paper" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01b-paper.png" logs \
     "tap paper-story-demo-grid-storage" "clock +800 real" "clock data" tree "screenshot $SHOTS/02-story-page.png" \
     "tap bar-mark" "clock +600 real" "clock data" tree "screenshot $SHOTS/03-launcher-two-pages.png" \
     "tap launcher-open-paper:front" "clock +800 real" "clock data" tree "screenshot $SHOTS/03b-switched-to-paper.png" \
