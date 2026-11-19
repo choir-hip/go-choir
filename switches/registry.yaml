@@ -592,30 +592,6 @@
    "note": "Deletes; bounded by VMCTL_RETENTION_MAX_DELETES/BYTES."
   },
   {
-   "id": "choir_event_table_computers",
-   "kind": "host_selector",
-   "life": "release",
-   "owner": "store",
-   "class": "red",
-   "surface": "store",
-   "introduced": "2026-10-28",
-   "nix": [
-    "CHOIR_EVENT_TABLE_COMPUTERS"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "none",
-   "nix_value": "",
-   "retire": "delete with store.event_table if R7 supersedes",
-   "hold": "owner",
-   "hold_question": "R7 may make choir_events redundant; lease, grant and R7 decision (audit row 41)",
-   "grandfathered_off_until": "2026-11-25",
-   "note": "ComputerIDs only; once a computer stamps, deploy 1 is its rollback floor."
-  },
-  {
    "id": "choir_capsule_mirrors",
    "kind": "host_selector",
    "life": "release",
@@ -1742,41 +1718,6 @@
    "hold": "owner",
    "hold_question": "false-merge bar failed 3 times (7.0%, 9.5%, 15-30%); structural assessment first (audit row 40)",
    "grandfathered_off_until": "2026-11-25"
-  },
-  {
-   "id": "store_event_table",
-   "kind": "setting",
-   "life": "release",
-   "owner": "store",
-   "class": "red",
-   "surface": "store",
-   "introduced": "2026-10-28",
-   "settings": [
-    "store.event_table"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "none",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete if R7 supersedes",
-   "hold": "owner",
-   "hold_question": "R7 may make it redundant; lease, grant and R7 decision (audit row 41)",
-   "grandfathered_off_until": "2026-11-25",
-   "revert": {
-    "mode": "one_way"
-   }
   },
   {
    "id": "store_telemetry_retire",

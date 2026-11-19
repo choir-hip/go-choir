@@ -494,16 +494,19 @@ func (s *Store) eventTableNewestStreamSeq(ctx context.Context) (int64, error) {
 	return newest, nil
 }
 
-// Deploy 2: the writer (event-table design 2.2, 4.2). The runtime applies
-// store.event_table (the owner's setting and the host's grant, both required)
-// through SetEventTableWrites. With it on, AppendEvent stamps the op of every
-// event whose kind is EventTableEligible (the event-table class), on both paths: the acknowledged write
+// Deploy 2: the writer (event-table design 2.2, 4.2). The switch that armed
+// it (the owner's setting store.event_table and the host's grant
+// CHOIR_EVENT_TABLE_COMPUTERS) was deleted on the owner's ruling of
+// 2026-11-03: it was never on for any computer. Nothing in production calls
+// SetEventTableWrites now; the writer, its floor and its tests stay only
+// because the choir_events readers, the projector, the retire path and the
+// lease gate are tested through the stamped rows it makes, and moving that to
+// a test helper is a separate change. The choir_events table, its readers and
+// the stream_seq lease stay: telemetry partitions share the lease gate.
+// With it on, AppendEvent stamps the op of every
+// event whose kind is EventTableEligible, on both paths: the acknowledged write
 // (W1, appendStampedEvent) and the sealer (W2, newTelemetryRecord). The
-// lifecycle fold (W3) never stamps. Off, the tape is byte for byte deploy 1's.
-//
-// Rollback once any op is stamped: the setting off (live; events already in
-// choir_events stay there and stay readable), then a binary down to deploy 1.
-// Below deploy 1 is not supported (section 4.5).
+// lifecycle fold (W3) never stamps.
 
 // eventTableFloorEpoch is the store floor once an op may be stamped:
 // deploy 1's epoch, the first that projects and reads choir_events

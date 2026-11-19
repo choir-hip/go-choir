@@ -51,17 +51,6 @@ const SettingTelemetryBatch = "telemetry.batch"
 // rollback: the verb refuses and nothing is recorded or exported.
 const SettingResearchRelatedStory = "research.related_story"
 
-// SettingEventTable moves the ten batched telemetry kinds to their own table,
-// choir_events (4 prolly trees per insert instead of 13): the writer stamps
-// their projection ops for it (docs/archive/design/choir-event-table-f-c-2026-10-22.md
-// 4.2). It takes effect only on a computer the host also names
-// (CHOIR_EVENT_TABLE_COMPUTERS, a grant on the credential disk), because once
-// an op is stamped deploy 1 is that computer's rollback floor. Off by
-// default; off is the live rollback: new events go back to og_objects, and
-// the events already in choir_events stay where they are and stay readable
-// (the readers read both tables).
-const SettingEventTable = "store.event_table"
-
 // SettingEngineeringProgressToTexture makes each engineering progress Report
 // (a choir.Report from an assignment's engineering desk, which goes to
 // management) also mint one platform-authored progress record into the
@@ -206,7 +195,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingManagementSerialTasks:        false,
 	SettingTelemetryBatch:               true,
 	SettingResearchRelatedStory:         false,
-	SettingEventTable:                   false,
 	SettingEngineeringProgressToTexture: true,
 	SettingEvidenceGraph:                false,
 	SettingEngineeringSlotsGraph:        true,
