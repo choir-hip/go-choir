@@ -2,13 +2,15 @@
 """e1: the driver of calibration experiment E1-M's pilot (docs/design/calibration-experiment-e1-2026-11-04.md).
 
 Developer side (yellow). Python standard library only. The experiment holds
-the harness fixed and varies the research model: four fresh test computers,
-one arm each (S-a and S-b swe-2-flash through devin, L gpt-6-luna through
+the harness fixed and varies the research model: four fresh test computers
+are made, one arm each; the pilot's arms are the objective file's header
+`arms` (a subset that includes sa and sb; arm L was dropped for the pilot of
+2026-11-19: the gateway's ChatGPT login) (S-a and S-b swe-2-flash through devin, L gpt-6-luna through
 chatgpt, I iceman-contributor-free through opencode-go), the same ten
 objectives submitted to every arm at the same moment.
 
   scripts/e1 setup   [--plan] [--label-suffix S] [--expires-hours H]
-  scripts/e1 smoke
+  scripts/e1 smoke   [--arms sa,sb,i] [--restamp]
   scripts/e1 credits
   scripts/e1 pilot   --claims C1,C2,C3 --credits N --credits-basis TEXT [--objectives FILE]
   scripts/e1 read    [--verdict] [--claims C1,C2,C3]
@@ -71,7 +73,7 @@ STATUS_MIN_GAP_S = 180     # no more than one ssh read of Node B in three minute
 TAIL = 10                  # "many searches": this many started searches or more
 P1_MIN_VALID, P1_MIN_TAIL = 14, 2
 P2_MIN_PAIRS, P2_MAX_RATIO = 7, 2.0
-P3_MIN_VALID = 36
+P3_MIN_SHARE = 0.9          # P3: this share of the units valid, rounded up (27 of 30; 36 of 40)
 PLANNED = 10
 DEADLINE = "2026-11-20T06:00:00Z"
 POLL_S = 20
@@ -329,6 +331,15 @@ def link_builds(units):
     return units
 
 
+def pilot_arms(header):
+    """The pilot's arms, in the driver's order, from the objective file's header."""
+    return [a for a in ARM_ORDER if a in header["arms"]]
+
+
+def p3_need(n_units):
+    return math.ceil(P3_MIN_SHARE * n_units - 1e-9)
+
+
 def tally_of(units):
     return sum(u.get("calls", 0) for u in units)
 
@@ -345,17 +356,21 @@ T975 = [12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2
         2.045, 2.042]
 
 
-def paired_d(units):
-    """d per objective on which all four arms are valid:
-    mean(S-a, S-b) of ln(1+started) minus mean(L, I) of ln(1+started)."""
+def paired_d(units, pilot_arms_list=ARM_ORDER):
+    """d per objective on which every arm of the pilot is valid:
+    mean(S-a, S-b) of ln(1+started) minus the mean over the other arms present
+    (L and I in a four-arm pilot, I alone in the three-arm pilot of 2026-11-19)."""
+    others = [a for a in pilot_arms_list if a not in S_ARMS]
     by = {}
     for u in units:
         by.setdefault(u["objective"], {})[u["arm"]] = u
     out = {}
+    if not others:
+        return out
     for objective, arms in by.items():
-        if all(a in arms and arms[a]["valid"] for a in ARM_ORDER):
+        if all(a in arms and arms[a]["valid"] for a in pilot_arms_list):
             ln = lambda a: math.log(1 + arms[a]["started"])
-            out[objective] = (ln("sa") + ln("sb")) / 2 - (ln("l") + ln("i")) / 2
+            out[objective] = (ln("sa") + ln("sb")) / 2 - sum(ln(a) for a in others) / len(others)
     return out
 
 
@@ -411,8 +426,9 @@ def verdicts(units, pilot):
         out["P3"] = ("void", "%d of %d objectives were submitted%s; %d units valid so far"
                      % (pilot.get("submitted", 0), pilot.get("planned", PLANNED), _why_short(pilot), n_valid))
     else:
-        out["P3"] = ("true" if n_valid >= P3_MIN_VALID else "false",
-                     "%d of %d units valid (the claim needs %d)" % (n_valid, 4 * pilot.get("planned", PLANNED), P3_MIN_VALID))
+        total = len(pilot.get("arms") or ARM_ORDER) * pilot.get("planned", PLANNED)
+        out["P3"] = ("true" if n_valid >= p3_need(total) else "false",
+                     "%d of %d units valid (the claim needs %d, 90%% rounded up)" % (n_valid, total, p3_need(total)))
     return out
 
 
@@ -456,8 +472,12 @@ def load_objectives(path):
     if len(lines) != PLANNED + 1:
         raise ValueError("%s: %d lines, want 1 header and %d objectives" % (path, len(lines), PLANNED))
     header = json.loads(lines[0])
-    if header.get("rule") != "e1m-pilot-v1" or header.get("arms") != list(ARM_ORDER) or not header.get("t0"):
-        raise ValueError("%s: header must carry t0, rule e1m-pilot-v1 and arms %s" % (path, list(ARM_ORDER)))
+    arms = header.get("arms")
+    if header.get("rule") != "e1m-pilot-v1" or not header.get("t0"):
+        raise ValueError("%s: header must carry t0 and rule e1m-pilot-v1" % path)
+    if (not isinstance(arms, list) or not arms or len(set(arms)) != len(arms) or any(x not in ARMS for x in arms)
+            or "sa" not in arms or "sb" not in arms):
+        raise ValueError("%s: header arms must be a non-empty list of distinct arms from %s that includes sa and sb" % (path, list(ARM_ORDER)))
     objectives, seen = [], set()
     for n, line in enumerate(lines[1:], start=1):
         o = json.loads(line)
@@ -899,28 +919,57 @@ def install_overlay(a, st, comps, arm):
 
 class Smoke:
     def __init__(self, a, out):
-        self.a, self.out, self.failed = a, out, None
+        self.a, self.out, self.failed, self.fails = a, out, None, {}
 
     def check(self, ok, arm, n, name, detail=""):
         self.out("%s %-3s %2d %s%s" % ("PASS" if ok else "FAIL", arm, n, name, (": " + detail) if detail else ""))
-        if not ok and self.failed is None:
-            self.failed = (arm, n, name, detail)
+        if not ok:
+            self.fails.setdefault(arm, (n, name, detail))
+            if self.failed is None:
+                self.failed = (arm, n, name, detail)
         return ok
+
+
+def smoke_arms(a, recs):
+    """The arms a smoke covers: --arms (comma list) or every arm of the table."""
+    want = [x.strip() for x in (a.arms or "").split(",") if x.strip()] or list(ARM_ORDER)
+    bad = [x for x in want if x not in ARMS or x not in recs]
+    if bad:
+        raise SystemExit("e1: unknown arm(s) %s" % ",".join(bad))
+    return [x for x in ARM_ORDER if x in want]
+
+
+def smoke_unit_checks(s, arm, u, bundle, pub, problems):
+    """Steps 8 to 11 on one arm's unit: a research run, the served model, the
+    search rows, no publication."""
+    roles = sorted({role_of(r) for r in ((bundle.get("layers") or {}).get("runs") or {}).get("items") or []})
+    s.check(u["research_runs"] >= 1, arm, 8, "a research run exists in the trajectory", "roles seen: %s" % ", ".join(roles))
+    bad = [r for r in u["reasons"] if r in ("foreign_model", "model_switch", "no_model_served_record", "wrong_overlay")]
+    s.check(u["research_runs"] >= 1 and not bad, arm, 9, "model.served names only the arm's model, no switch, overlay inherited",
+            "served %s reported %s switches %d%s%s" % (",".join(u["models"]) or "none", ",".join(u["reported_models"]) or "-", u["switches"], ("; " + ",".join(bad)) if bad else "",
+                                                          ("; run errors: " + " | ".join(u["run_errors"])) if u["run_errors"] else ""))
+    s.check(u["started"] >= 1 and u["served_lines"] >= 1, arm, 10, "search_start rows and search.served lines are present",
+            "started %d done %d served lines %d provider calls %d cache-answered %d failed starts %d" %
+            (u["started"], u["done"], u["served_lines"], u["calls"], u["cache_answered"], u["failed_starts"]))
+    s.check(not pub and not problems, arm, 11, "no document of the trajectory is published", ("PUBLISHED " + ",".join(pub)) if pub else "; ".join(problems))
 
 
 def cmd_smoke(a):
     st, comps, recs = load_arms(a)
+    arms = smoke_arms(a, recs)
     s = Smoke(a, say)
-    apis = {arm: arm_api(recs[arm]) for arm in ARM_ORDER}
+    if a.restamp:
+        return restamp(a, st, comps, recs, arms, s)
+    apis = {arm: arm_api(recs[arm]) for arm in arms}
     builds = {}
     # 1 build, 2 overlay, 3 refusal of an unknown overlay
-    for arm in ARM_ORDER:
+    for arm in arms:
         try:
             builds[arm], cid = build_of(apis[arm])
             s.check(bool(builds[arm]) and cid == recs[arm]["computer_id"], arm, 1, "build and computer id", "build %s" % (builds[arm] or "none"))
         except ApiError as e:
             s.check(False, arm, 1, "build and computer id", str(e))
-    for arm in ARM_ORDER:
+    for arm in arms:
         g = choir_files(a, recs[arm], "get", "%s/%s.toml" % (OVERLAY_DIR, recs[arm]["overlay_id"]))
         s.check(g.returncode == 0 and g.stdout.strip() == overlay_text(arm, comps["overlay_expires_at"]).strip(), arm, 2, "overlay file is on the computer")
         try:
@@ -929,7 +978,7 @@ def cmd_smoke(a):
         except ApiError as e:
             s.check(False, arm, 3, "an unknown overlay is refused", str(e))
     if s.failed:
-        return finish_smoke(st, comps, s, {})
+        return finish_smoke(st, comps, s, arms, {"builds": builds})
     # 4 submit to every arm at the same moment, 5 trajectory
     subs = {}
 
@@ -938,8 +987,8 @@ def cmd_smoke(a):
         code, js = submit(apis[arm], SMOKE_OBJECTIVE["prompt"], recs[arm]["overlay_id"])
         return arm, t, code, js
 
-    with concurrent.futures.ThreadPoolExecutor(4) as ex:
-        for arm, t, code, js in ex.map(lambda x: one(x), ARM_ORDER):
+    with concurrent.futures.ThreadPoolExecutor(len(arms)) as ex:
+        for arm, t, code, js in ex.map(one, arms):
             ok = code == 202 and isinstance(js, dict) and js.get("submission_id") and js.get("doc_id") \
                 and js.get("model_policy_overlay_id") == recs[arm]["overlay_id"]
             s.check(bool(ok), arm, 4, "the eval route answers 202 with the arm's overlay id", "answered %s" % code)
@@ -947,26 +996,26 @@ def cmd_smoke(a):
                 subs[arm] = {"submission_id": js["submission_id"], "doc_id": js["doc_id"], "submitted_at": iso(t),
                              "texture_model": "%s/%s" % (js.get("provider"), js.get("model"))}
     if s.failed:
-        return finish_smoke(st, comps, s, {})
-    for arm in ARM_ORDER:
+        return finish_smoke(st, comps, s, arms, {"builds": builds})
+    for arm in arms:
         try:
             subs[arm]["trajectory_id"] = trajectory_of(apis[arm], subs[arm]["submission_id"])
             s.check(True, arm, 5, "the submission names its trajectory", subs[arm]["trajectory_id"])
         except ApiError as e:
             s.check(False, arm, 5, "the submission names its trajectory", str(e))
     if s.failed:
-        return finish_smoke(st, comps, s, {})
+        return finish_smoke(st, comps, s, arms, {"builds": builds})
     # 6 wait
     timed, _ = wait_arms(a, recs, subs, SMOKE_WAIT_MIN, 0, say)
-    for arm in ARM_ORDER:
+    for arm in arms:
         s.check(arm not in timed, arm, 6, "every run of the trajectory ended within %d minutes" % SMOKE_WAIT_MIN)
     if timed:
         cancel_active(recs, subs, timed)
         wait_terminal(recs, subs, timed, say)
-    # 7..10 export and read
+    # 7..11 export and read
     lines = {}
     os.makedirs(st.p("bundles"), mode=0o700, exist_ok=True)
-    for arm in ARM_ORDER:
+    for arm in arms:
         sub = subs[arm]
         try:
             bundle = export_bundle(a, recs[arm], sub["trajectory_id"], st.p("bundles", "s00-%s.json" % arm))
@@ -984,45 +1033,81 @@ def cmd_smoke(a):
                 "provider": recs[arm]["provider"], "model": recs[arm]["model"], "submitted_at": sub["submitted_at"],
                 "build_submit": builds.get(arm), "build_end": build_end, "timed_out": arm in timed, "published": pub}
         u = read_unit(bundle, meta)
-        roles = sorted({role_of(r) for r in ((bundle.get("layers") or {}).get("runs") or {}).get("items") or []})
-        s.check(u["research_runs"] >= 1, arm, 8, "a research run exists in the trajectory", "roles seen: %s" % ", ".join(roles))
-        bad = [r for r in u["reasons"] if r in ("foreign_model", "model_switch", "no_model_served_record", "wrong_overlay")]
-        s.check(u["research_runs"] >= 1 and not bad, arm, 9, "model.served names only the arm's model, no switch, overlay inherited",
-                "served %s reported %s switches %d%s%s" % (",".join(u["models"]) or "none", ",".join(u["reported_models"]) or "-", u["switches"], ("; " + ",".join(bad)) if bad else "",
-                                                              ("; run errors: " + " | ".join(u["run_errors"])) if u["run_errors"] else ""))
-        s.check(u["started"] >= 1 and u["served_lines"] >= 1, arm, 10, "search_start rows and search.served lines are present",
-                "started %d done %d served lines %d provider calls %d cache-answered %d failed starts %d" %
-                (u["started"], u["done"], u["served_lines"], u["calls"], u["cache_answered"], u["failed_starts"]))
-        s.check(not pub and not problems, arm, 11, "no document of the trajectory is published", ("PUBLISHED " + ",".join(pub)) if pub else "; ".join(problems))
+        smoke_unit_checks(s, arm, u, bundle, pub, problems)
         lines[arm] = u
-        sub["unit"] = {k: u[k] for k in ("research_runs", "started", "calls", "models", "reported_models", "reasons")}
+        builds[arm + "_end"] = build_end
     # 12 builds
-    for arm in ARM_ORDER:
+    same = len({builds.get(x) for x in arms} | {builds.get(x + "_end") for x in arms}) == 1 and all(builds.get(x) for x in arms)
+    s.check(same, "all", 12, "the computers report one build, before and after", "build %s" % builds.get(arms[0]))
+    return finish_smoke(st, comps, s, arms, {"subs": subs, "builds": builds, "lines": lines})
+
+
+def restamp(a, st, comps, recs, arms, s):
+    """Re-evaluate the stored bundles of an earlier smoke (bundles/s00-<arm>.json)
+    without a new run. Steps 1 to 7 are not repeated (the bundle exists, so the
+    submission, the trajectory and the export worked); steps 8 to 11 are run on
+    the bundle, with a fresh publication read. The submission time is the
+    earliest run's creation in the bundle, the build is the bundle's boot-layer
+    build (read at export), and the stamp's time is the bundle's export time, so
+    the six-hour clock starts when the evidence was taken."""
+    lines, builds, exported = {}, {}, {}
+    for arm in arms:
+        path = st.p("bundles", "s00-%s.json" % arm)
         try:
-            builds[arm + "_end"], _ = build_of(apis[arm])
-        except ApiError:
-            builds[arm + "_end"] = ""
-    same = len({builds.get(x) for x in ARM_ORDER} | {builds.get(x + "_end") for x in ARM_ORDER}) == 1 and all(builds.get(x) for x in ARM_ORDER)
-    s.check(same, "all", 12, "the four computers report one build, before and after", "build %s" % builds.get("sa"))
-    return finish_smoke(st, comps, s, {"subs": subs, "build": builds.get("sa"), "lines": lines})
+            with open(path) as f:
+                bundle = json.load(f)
+        except (OSError, ValueError):
+            s.check(False, arm, 7, "a stored smoke bundle exists", path)
+            continue
+        runs = [r for r in ((bundle.get("layers") or {}).get("runs") or {}).get("items") or [] if isinstance(r, dict)]
+        created = sorted(r.get("created_at") for r in runs if r.get("created_at"))
+        build = (bundle.get("build") or {}).get("commit") or ""
+        builds[arm], exported[arm] = build, bundle.get("exported_at")
+        docs = collect_doc_ids(bundle)
+        try:
+            pub, problems = publication_check(arm_api(recs[arm]), docs)
+        except ApiError as e:
+            pub, problems = [], [str(e)]
+        meta = {"arm": arm, "objective": "s00", "kind": "follow_up", "position": 0, "overlay_id": recs[arm]["overlay_id"],
+                "provider": recs[arm]["provider"], "model": recs[arm]["model"], "submitted_at": created[0] if created else None,
+                "build_submit": build, "build_end": build, "timed_out": False, "published": pub}
+        u = read_unit(bundle, meta)
+        smoke_unit_checks(s, arm, u, bundle, pub, problems)
+        lines[arm] = u
+    s.check(len(set(builds.values())) == 1 and all(builds.values()), "all", 12, "the stored bundles name one build", "build %s" % next(iter(builds.values()), "none"))
+    return finish_smoke(st, comps, s, arms, {"builds": builds, "lines": lines, "restamp": exported})
 
 
-def finish_smoke(st, comps, s, detail):
+def finish_smoke(st, comps, s, arms, detail):
+    """Print the per-arm lines and the verdict, and record each arm's result in
+    smoke.json beside the others': a smoke of three arms does not erase what an
+    earlier smoke recorded for the fourth."""
     lines = detail.get("lines") or {}
-    for arm in ARM_ORDER:
+    for arm in arms:
         u = lines.get(arm)
         if u:
             say("%-3s %s/%s | research runs %d | started %d | provider calls %d | served %s | switches %d | %s" % (
                 ARMS[arm]["name"], comps["arms"][arm]["provider"], comps["arms"][arm]["model"], u["research_runs"], u["started"],
                 u["calls"], ",".join(u["models"]) or "none", u["switches"], "valid" if u["valid"] else "not valid: " + ",".join(u["reasons"])))
+    stamp = st.load("smoke.json") or {}
+    stamp = {"arms": stamp.get("arms") or {}}
+    restamped = detail.get("restamp") or {}
+    for arm in arms:
+        f = s.fails.get(arm) or s.fails.get("all")
+        u = lines.get(arm)
+        stamp["arms"][arm] = {
+            "passed": f is None and u is not None, "computer_id": comps["arms"][arm]["computer_id"],
+            "at": restamped.get(arm) or iso(now()), "build": (detail.get("builds") or {}).get(arm),
+            "source": "restamp: bundles/s00-%s.json" % arm if restamped else "smoke",
+            "failed": {"step": f[0], "name": f[1]} if f else None,
+            "reasons": u["reasons"] if u else [], "run_errors": (u or {}).get("run_errors", [])}
+    st.save("smoke.json", stamp)
     if s.failed:
         arm, n, name, detail_text = s.failed
         say("SMOKE FAILED at step %d (%s): %s%s" % (n, arm, name, (": " + detail_text) if detail_text else ""))
-        st.save("smoke.json", {"passed": False, "at": iso(now()), "failed": {"arm": arm, "step": n, "name": name}})
+        say("recorded per arm: " + ", ".join("%s %s" % (x, "passed" if stamp["arms"][x]["passed"] else "failed") for x in arms))
         return 1
-    st.save("smoke.json", {"passed": True, "at": iso(now()), "computers": sorted(r["computer_id"] for r in comps["arms"].values()),
-                           "build": detail.get("build"), "subs": detail.get("subs")})
-    say("SMOKE OK")
+    say("SMOKE OK" + (" (restamped from stored bundles)" if restamped else ""))
     return 0
 
 
@@ -1050,6 +1135,9 @@ def cmd_pilot(a):
         header = objectives = sha = None
         problems.append("objectives: %s" % e)
     pilot = st.load("pilot.json") or {"objectives": {}, "stops": [], "started_at": None, "arm_stopped": {}}
+    parms = pilot_arms(header) if header else []
+    if parms and pilot.get("arms") and pilot["arms"] != parms:
+        problems.append("the header's arms %s differ from the pilot already begun on %s" % (parms, pilot["arms"]))
     if any(s.get("terminal") for s in pilot["stops"]):
         raise SystemExit("e1: the pilot is over (%s); `scripts/e1 read --verdict` reads it" % ", ".join(s["reason"] for s in pilot["stops"] if s.get("terminal")))
     ledger = None
@@ -1067,13 +1155,21 @@ def cmd_pilot(a):
             pushed = origin_main_file(a, rel)
             if pushed is None or hashlib.sha256(pushed.encode()).hexdigest() != sha:
                 problems.append("objectives: the file is not on origin/main with the same content")
-    smoke = st.load("smoke.json") or {}
-    ids = sorted(r["computer_id"] for r in recs.values())
-    at = parse_ts(smoke.get("at"))
-    if not smoke.get("passed") or smoke.get("computers") != ids:
-        problems.append("smoke has not passed on these four computers")
-    elif at is None or (now() - at).total_seconds() > SMOKE_VALID_HOURS * 3600:
-        problems.append("the smoke passed more than %d hours ago; run it again" % SMOKE_VALID_HOURS)
+    # every arm of the header needs a passed smoke on its own computer within 6 hours;
+    # an arm outside the header (a failed L) does not matter, and the header is
+    # not required to equal the arms the smoke covered
+    smoke = (st.load("smoke.json") or {}).get("arms") or {}
+    smoke_lines = []
+    for arm in parms:
+        e = smoke.get(arm)
+        at = parse_ts((e or {}).get("at"))
+        if not e or not e.get("passed") or e.get("computer_id") != recs[arm]["computer_id"]:
+            problems.append("smoke has not passed for %s on %s" % (arm, recs[arm]["computer_id"]))
+        elif at is None or (now() - at).total_seconds() > SMOKE_VALID_HOURS * 3600:
+            problems.append("the smoke for %s passed more than %d hours ago; run it again" % (arm, SMOKE_VALID_HOURS))
+        else:
+            smoke_lines.append("%s %s (%s)" % (arm, e["at"], e.get("source", "smoke")))
+    ids = sorted(recs[x]["computer_id"] for x in parms)
     exp = parse_ts(comps.get("overlay_expires_at"))
     left_min = (exp - now()).total_seconds() / 60 if exp else -1
     if left_min < EXPIRY_MARGIN_MIN:
@@ -1091,16 +1187,17 @@ def cmd_pilot(a):
         for p in problems:
             say("  - " + p)
         return 3
-    say("E1-M pilot, %d objectives x 4 arms = %d units" % (len(objectives), 4 * len(objectives)))
+    pilot["arms"] = parms
+    say("E1-M pilot, %d objectives x %d arms (%s) = %d units" % (len(objectives), len(parms), ", ".join(ARMS[x]["name"] for x in parms), len(parms) * len(objectives)))
     say("  claims %s present on origin/main (P1, P2, P3)" % ", ".join(claims))
     say("  objectives %s sha256 %s" % (a.objectives, sha))
-    say("  smoke passed %s on %s" % (smoke["at"], ", ".join(ids)))
+    say("  smoke passed: %s; computers %s" % ("; ".join(smoke_lines), ", ".join(ids)))
     say("  overlays expire %s (%d minutes left)" % (comps["overlay_expires_at"], left_min))
     say("  credits: estimate %s (%s); threshold %s: ok" % ("{:,}".format(a.credits), a.credits_basis, "{:,}".format(CREDIT_MIN)))
     say("  newspaper status read %s: no stop" % rep.get("now"))
     say("  stops: tally %d (hard, the providers' calls in search.served), warning at %d, deadline %s" % (HARD_STOP, WARN_AT, DEADLINE))
     pilot["started_at"] = pilot["started_at"] or iso(now())
-    apis = {arm: arm_api(recs[arm]) for arm in ARM_ORDER}
+    apis = {arm: arm_api(recs[arm]) for arm in parms}
     os.makedirs(st.p("bundles"), mode=0o700, exist_ok=True)
     for position, obj in enumerate(objectives, start=1):
         entry = pilot["objectives"].setdefault(obj["id"], {"position": position, "kind": obj["kind"], "subs": {}, "units": {}, "done": False})
@@ -1157,7 +1254,7 @@ def all_units(st, pilot):
 
 
 def run_objective(a, st, comps, recs, apis, pilot, obj, entry):
-    arms = [x for x in ARM_ORDER if not pilot["arm_stopped"].get(x)]
+    arms = [x for x in pilot["arms"] if not pilot["arm_stopped"].get(x)]
     if not entry["subs"]:
         builds = {}
         for arm in arms:
@@ -1238,9 +1335,9 @@ def run_objective(a, st, comps, recs, apis, pilot, obj, entry):
             say("ARM STOPPED: %s had %d invalid units in a row (a finding); the other arms go on" % (ARMS[arm]["name"], ARM_FAIL_RUN))
     line = "%s %s | %s started | runs %s | valid %d/%d | tally %d/%d | build %s | published %d" % (
         obj["id"], obj["kind"],
-        " ".join("%s %s" % (x, mine[x]["started"] if x in mine else "-") for x in ARM_ORDER),
-        "/".join(str(mine[x]["research_runs"]) if x in mine else "-" for x in ARM_ORDER),
-        sum(1 for u in mine.values() if u["valid"]), len(ARM_ORDER), tally, HARD_STOP,
+        " ".join("%s %s" % (x, mine[x]["started"] if x in mine else "-") for x in pilot["arms"]),
+        "/".join(str(mine[x]["research_runs"]) if x in mine else "-" for x in pilot["arms"]),
+        sum(1 for u in mine.values() if u["valid"]), len(pilot["arms"]), tally, HARD_STOP,
         "ok" if not any("build" in r for u in mine.values() for r in u["reasons"]) else "DIFFERS",
         len(published_all))
     say(line)
@@ -1260,24 +1357,25 @@ def cmd_read(a):
         raise SystemExit("e1: no pilot.json in %s" % st.root)
     units = all_units(st, pilot)
     submitted = sum(1 for e in pilot["objectives"].values() if e.get("subs"))
-    meta = {"planned": PLANNED, "submitted": submitted, "stops": pilot.get("stops") or []}
+    parms = pilot.get("arms") or list(ARM_ORDER)
+    meta = {"planned": PLANNED, "submitted": submitted, "stops": pilot.get("stops") or [], "arms": parms}
     say("unit table (started = started web searches in every research run of the unit; calls = providers' calls in search.served)")
     say("obj  kind        pos arm  runs started calls cache  valid  reasons")
     for u in units:
         say("%-4s %-11s %3s %-3s %4d %7d %5d %5d  %-5s  %s" % (u["objective"], u["kind"], u["position"], u["arm"], u["research_runs"], u["started"],
             u["calls"], u["cache_answered"], "yes" if u["valid"] else "no", ",".join(u["reasons"]) or "-"))
     say("")
-    for arm in ARM_ORDER:
+    for arm in parms:
         mine = [u for u in units if u["arm"] == arm]
         val = [u["started"] for u in mine if u["valid"]]
         nr = sum(1 for u in mine if "no_research" in u["reasons"])
         say("%-3s valid %d/%d  median started %s  p90 %s  tail(>=%d) share %s  no_research %d  calls %d" % (
             ARMS[arm]["name"], len(val), len(mine), statistics.median(val) if val else "n/a", p90(val) if val else "n/a", TAIL,
             ("%.2f" % (sum(1 for v in val if v >= TAIL) / len(val))) if val else "n/a", nr, tally_of(mine)))
-    d = paired_d(units)
+    d = paired_d(units, parms)
     ds = d_summary(d)
     fmt = lambda x: "n/a" if x is None else "%.2f" % x
-    say("d over %d objectives valid on all four arms: mean %s sd %s t95 %s bootstrap95 %s" % (ds["n"], fmt(ds["mean"]), fmt(ds["sd"]),
+    say("d over %d objectives valid on all %d arms of the pilot: mean %s sd %s t95 %s bootstrap95 %s" % (ds["n"], len(parms), fmt(ds["mean"]), fmt(ds["sd"]),
         "n/a" if not ds["t_interval"] else "[%.2f, %.2f]" % ds["t_interval"], "n/a" if not ds["bootstrap"] else "[%.2f, %.2f]" % ds["bootstrap"]))
     by = {}
     for u in units:
@@ -1322,7 +1420,9 @@ def build_parser():
     s.add_argument("--label-suffix", default="")
     s.add_argument("--expires-hours", type=float, default=30.0)
     s.add_argument("--base-url", default="https://choir.news")
-    sub.add_parser("smoke")
+    sm = sub.add_parser("smoke")
+    sm.add_argument("--arms", default="", help="comma list of arms to smoke (default: all four)")
+    sm.add_argument("--restamp", action="store_true", help="re-evaluate the stored smoke bundles, submitting nothing")
     sub.add_parser("credits")
     p = sub.add_parser("pilot")
     p.add_argument("--claims", required=True, help="the ledger ids of P1,P2,P3, in that order")
