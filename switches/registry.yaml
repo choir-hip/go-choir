@@ -1348,26 +1348,6 @@
    "note": "Normal state; do not flip."
   },
   {
-   "id": "unwired_packages",
-   "kind": "code",
-   "life": "release",
-   "owner": "appdesk",
-   "class": "orange",
-   "surface": "packages",
-   "introduced": "2026-10-28",
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "none",
-   "retire": "decide: wire or delete",
-   "where": "internal/appdesk, internal/appnet, internal/egressgrant (unwired)",
-   "hold": "owner",
-   "hold_question": "wire, or delete the unwired packages (audit row 44)",
-   "grandfathered_off_until": "2026-11-25"
-  },
-  {
    "id": "texture_owner_directions",
    "kind": "setting",
    "life": "release",
