@@ -725,3 +725,65 @@ func TestAFileWhoseShortfallIsOnlyTransientSkipsStaysInTheInbox(t *testing.T) {
 		t.Fatal("a file the server could not answer for was not left in the inbox")
 	}
 }
+
+// ---- round 7, review: a short draw of a big file is not proof ----
+// Failure list, written before the code:
+//   e. TestAShortDrawOfAFileOverTheCandidateCapWaitsAtFirst: a file of more rows
+//      than the candidate cap, mostly set aside, was refused on one random draw;
+//   f. TestAFileOverTheCandidateCapThatStaysShortIsRefusedAfterSeveralDraws: it
+//      must not wait for ever either;
+//   g. TestTheRefusalOfAShortSampleNamesTheCountsOfEveryKind: the record the owner
+//      reads says checked, floor, and each kind of row not checked.
+
+// bigMostlyTooLong builds a file of vectorImportCandidates+100 captures of which
+// only 20 can be checked by this host (the floor is 32, so it is short whatever
+// the draw).
+func bigMostlyTooLong(t *testing.T, f *vecFixture) []importRow {
+	t.Helper()
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	n := vectorImportCandidates + 100
+	plain := f.captures(t, "o1", "c1", "plain", 20, base, func(i int) string { return fmt.Sprintf("plain text number%d", i) }, time.Minute)
+	long := f.captures(t, "o1", "c1", "TOOLONG", n-20, base, func(i int) string { return fmt.Sprintf("TOOLONG text number%d", i) }, time.Minute)
+	return f.macRows(t, append(plain, long...)...)
+}
+
+func TestAShortDrawOfAFileOverTheCandidateCapWaitsAtFirst(t *testing.T) {
+	f := newVecFixture(t)
+	rows := bigMostlyTooLong(t, f)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if !errors.Is(err, errVectorImportCannotCheck) || errors.Is(err, ErrVectorImportRefused) {
+		t.Fatalf("one draw of %d candidates from %d rows proves nothing about the rest: %v", vectorImportCandidates, len(rows), err)
+	}
+}
+
+func TestAFileOverTheCandidateCapThatStaysShortIsRefusedAfterSeveralDraws(t *testing.T) {
+	f := newVecFixture(t)
+	rows := bigMostlyTooLong(t, f)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	f.inboxPut(t, "big.jsonl", rows, time.Hour)
+	for i := 0; i < vectorInboxShortDraws-1; i++ {
+		if n := inboxTake(t, f); n != 0 || !spoolHas(filepath.Join(f.inboxDir("inbox"), "big.jsonl")) {
+			t.Fatalf("draw %d: the file should still wait (took %d)", i+1, n)
+		}
+	}
+	if n := inboxTake(t, f); n != 1 || !spoolHas(filepath.Join(f.inboxDir("refused"), "big.jsonl")) {
+		t.Fatalf("after %d short draws the file must be refused (took %d)", vectorInboxShortDraws, n)
+	}
+}
+
+func TestTheRefusalOfAShortSampleNamesTheCountsOfEveryKind(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	ids := f.captures(t, "o1", "c1", "TOOLONG", 40, base, func(i int) string { return fmt.Sprintf("TOOLONG text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, f.macRows(t, ids...)))
+	if !errors.Is(err, ErrVectorImportRefused) {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"only 0 rows", "need 20", "40 are too large", "0 failed this call"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("the refusal lacks %q: %v", want, err)
+		}
+	}
+}
