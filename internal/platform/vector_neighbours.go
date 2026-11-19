@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/yusefmosiah/go-choir/internal/embedder"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
@@ -62,11 +63,14 @@ type CaptureNeighbour struct {
 // captures. Unavailable is set, with no error, when the vectors cannot answer
 // now; the caller proceeds without them.
 type CaptureNeighboursResponse struct {
-	Neighbours  map[string][]CaptureNeighbour `json:"neighbours"`
-	Unembedded  int                           `json:"unembedded"`
-	Excluded    int                           `json:"excluded"`
-	Cut         int                           `json:"cut"`
-	Unavailable string                        `json:"unavailable,omitempty"`
+	Neighbours map[string][]CaptureNeighbour `json:"neighbours"`
+	Unembedded int                           `json:"unembedded"`
+	Excluded   int                           `json:"excluded"`
+	// Refused are named captures whose vector the embedder refused (a row with
+	// no embedding); they are neither unembedded nor excluded.
+	Refused     int    `json:"refused"`
+	Cut         int    `json:"cut"`
+	Unavailable string `json:"unavailable,omitempty"`
 	// State is how the lists were answered: exact, approximate (the HNSW
 	// index's answer on a large list) or partial (some were cut, or an exact
 	// read did not finish).
@@ -141,7 +145,7 @@ func (s *Store) CaptureNeighbours(ctx context.Context, req CaptureNeighboursRequ
 	done := s.retrievalTimerExtra(retrievalVectorNeighbours, retrievalVectorNeighbours)
 	rows := 0
 	defer func() {
-		done("captures", rows, err, fmt.Sprintf(" ids=%d unembedded=%d excluded=%d cut=%d state=%s", len(ids), res.Unembedded, res.Excluded, res.Cut, firstNonEmptyString(res.State, "unavailable")))
+		done("captures", rows, err, fmt.Sprintf(" ids=%d unembedded=%d excluded=%d refused=%d cut=%d state=%s", len(ids), res.Unembedded, res.Excluded, res.Refused, res.Cut, firstNonEmptyString(res.State, "unavailable")))
 	}()
 	if !s.VectorsReady() {
 		if terr := s.ensureVectorTables(ctx); terr != nil && !s.VectorsReady() {
@@ -171,7 +175,7 @@ func (s *Store) CaptureNeighbours(ctx context.Context, req CaptureNeighboursRequ
 		countArgs = append(countArgs, sinceArg)
 	}
 	var filtered int64
-	if cerr := s.corpus().QueryRowContext(ctx, countQ+` AND `+vecCaptureEligibleSQL, countArgs...).Scan(&filtered); cerr != nil {
+	if cerr := s.corpus().QueryRowContext(ctx, countQ+` AND v.embedding IS NOT NULL AND `+vecCaptureEligibleSQL, countArgs...).Scan(&filtered); cerr != nil {
 		if ctx.Err() == nil {
 			return res, cerr
 		}
@@ -225,7 +229,9 @@ func (s *Store) CaptureNeighbours(ctx context.Context, req CaptureNeighboursRequ
 					short = append(short, id)
 				}
 			}
-			if len(short) > 0 {
+			// Only within the exact bounds: past them a full pool is a scan that
+			// meets the statement timeout, and the index's list stands.
+			if len(short) > 0 && neighbourRereadIsExact(len(short), filtered) {
 				again, aerr := s.neighbourStatement(ctx, owner, computer, sinceArg, short, limit, true)
 				if aerr != nil {
 					if ctx.Err() == nil && !isStatementTimeout(aerr) {
@@ -261,6 +267,20 @@ func (s *Store) CaptureNeighbours(ctx context.Context, req CaptureNeighboursRequ
 		}
 	}
 	if len(rest) > 0 {
+		refused, rerr := s.refusedCaptures(ctx, owner, computer, rest)
+		if rerr != nil && ctx.Err() == nil {
+			return res, rerr
+		}
+		res.Refused = len(refused)
+		var kept []objectgraph.Object
+		for _, o := range rest {
+			if !refused[o.CanonicalID] {
+				kept = append(kept, o)
+			}
+		}
+		rest = kept
+	}
+	if len(rest) > 0 {
 		eligible, eerr := s.sqlEligibleCaptures(ctx, rest)
 		if eerr != nil {
 			if ctx.Err() == nil {
@@ -282,11 +302,51 @@ func (s *Store) CaptureNeighbours(ctx context.Context, req CaptureNeighboursRequ
 	return res, nil
 }
 
-// isStatementTimeout is the database's own cut (SQLSTATE 57014, "canceling
+// neighbourRereadIsExact is whether short lists may be read again exactly: the
+// scope is within the exact row bound and the work (rows times lists) within
+// the exact work bound, the same as the first choice of mode.
+func neighbourRereadIsExact(short int, filtered int64) bool {
+	return filtered <= int64(vectorExactMaxRows) && filtered*int64(short) <= neighboursExactWork
+}
+
+// isStatementTimeout is the database's own cut: SQLSTATE 57014 ("canceling
 // statement due to statement timeout"), which the deadline's 90% makes likely
 // before the context ends.
 func isStatementTimeout(err error) bool {
-	return err != nil && (strings.Contains(err.Error(), "statement timeout") || strings.Contains(err.Error(), "57014"))
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "57014"
+}
+
+// refusedCaptures are the named captures whose row holds no embedding because
+// the embedder refused the text.
+func (s *Store) refusedCaptures(ctx context.Context, owner, computer string, objs []objectgraph.Object) (map[string]bool, error) {
+	out := map[string]bool{}
+	for start := 0; start < len(objs); start += 500 {
+		group := objs[start:min(start+500, len(objs))]
+		args := []any{embedder.ModelHash, owner, computer}
+		for _, o := range group {
+			args = append(args, o.CanonicalID)
+		}
+		rows, err := s.corpus().QueryContext(ctx, `SELECT v.capture_id FROM `+vecCaptureTable+` v WHERE v.model = ? AND v.owner_id = ? AND v.computer_id = ?
+			AND v.embedding IS NULL AND v.capture_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(group)), ",")+`)`, args...)
+		if err != nil {
+			return out, err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return out, err
+			}
+			out[id] = true
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
 }
 
 // neighbourStatement is one statement for every named capture: a lateral join
@@ -304,7 +364,7 @@ func (s *Store) neighbourStatement(ctx context.Context, owner, computer, sinceAr
 		// table, whose index orders the candidates; the predicate then runs on
 		// the candidates only.)
 		b.WriteString(`WITH pool AS MATERIALIZED (SELECT v.capture_id, v.embedding FROM ` + vecCaptureTable + ` v
-			WHERE v.model = ? AND v.owner_id = ? AND v.computer_id = ?`)
+			WHERE v.model = ? AND v.owner_id = ? AND v.computer_id = ? AND v.embedding IS NOT NULL`)
 		args = append(args, embedder.ModelHash, owner, computer)
 		if sinceArg != "" {
 			b.WriteString(` AND v.day >= ?::date`)
@@ -317,7 +377,7 @@ func (s *Store) neighbourStatement(ctx context.Context, owner, computer, sinceAr
 		SELECT v.capture_id, 1 - (v.embedding <=> q.embedding) AS score FROM ` + pool + ` v
 		WHERE v.capture_id <> q.capture_id`)
 	if !exact {
-		b.WriteString(` AND v.model = ? AND v.owner_id = ? AND v.computer_id = ?`)
+		b.WriteString(` AND v.model = ? AND v.owner_id = ? AND v.computer_id = ? AND v.embedding IS NOT NULL`)
 		args = append(args, embedder.ModelHash, owner, computer)
 		if sinceArg != "" {
 			b.WriteString(` AND v.day >= ?::date`)
@@ -327,7 +387,7 @@ func (s *Store) neighbourStatement(ctx context.Context, owner, computer, sinceAr
 	}
 	b.WriteString(`
 		ORDER BY v.embedding <=> q.embedding LIMIT ?) n ON TRUE
-		WHERE q.model = ? AND q.owner_id = ? AND q.computer_id = ? AND q.capture_id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",") + `)
+		WHERE q.model = ? AND q.owner_id = ? AND q.computer_id = ? AND q.embedding IS NOT NULL AND q.capture_id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",") + `)
 		AND ` + strings.ReplaceAll(vecCaptureEligibleSQL, " v.", " q.") + `
 		ORDER BY q.capture_id, n.score DESC`)
 	args = append(args, limit, embedder.ModelHash, owner, computer)
