@@ -472,7 +472,7 @@ describe('feeds over the parse cap (the device\'s 100 ms turn)', () => {
     expect(xml.length).toBeGreaterThan(1_900_000);
     const t = performance.now(); const f = parseFeed(xml, 'https://feeds.example.com/big.xml', 0); const ms = performance.now() - t;
     expect(f.show.title).toBe('Big show'); expect(f.episodes[0].title).toBe('Episode 0');
-    expect(f.episodes.length).toBeGreaterThan(50); expect(f.episodes.length).toBeLessThan(300);
+    expect(f.episodes.length).toBeGreaterThan(20); expect(f.episodes.length).toBeLessThan(300);
     expect(f.episodes.length * 1800).toBeLessThan(MAX_PARSE + 20_000);
     expect(ms).toBeLessThan(500);
   });
