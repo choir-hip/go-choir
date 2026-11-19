@@ -85,17 +85,18 @@ public final class PassRunner {
     let embed: (String) throws -> (vec: [Float], tokens: Int)   // the whole prompt string in; the unit 768-vector out
     let sink: (String) throws -> Void                            // one output line, appended and flushed
     var held: Set<String> = []                                   // keys already written
-    var bySha: [String: Data] = [:]                              // text_sha -> vector bytes already written
+    var byInput: [String: Data] = [:]                            // (text_sha, title) -> vector bytes written in THIS run: the model reads the title too
     public private(set) var progress = PassProgress()
 
-    /// `existing` is the output file's current lines: what is held is skipped and its vectors reused for equal text.
+    /// `existing` is the output file's current lines: what is held is skipped. Nothing is reused from them: a line has no title,
+    /// and equal text under another title is another input (2,661 rows of the first file carried a vector made under another headline).
     /// A line from another model hash is an error, never mixed.
     public init(model: String, existing: [String], embed: @escaping (String) throws -> (vec: [Float], tokens: Int), sink: @escaping (String) throws -> Void) throws {
         self.model = model; self.embed = embed; self.sink = sink
         for l in existing where !l.isEmpty {
             guard let r = try? PassFile.decode(l) else { continue }   // a torn last line from a killed run is not a row; it is re-embedded
             guard r.model == model else { throw PassError.otherModel(r.model) }
-            held.insert(r.key); bySha[r.textSha] = r.v
+            held.insert(r.key)
         }
     }
 
@@ -106,7 +107,8 @@ public final class PassRunner {
         if row.markedPrivate { progress.refusedPrivate += 1; return false }
         if held.contains(row.key) { progress.skippedHeld += 1; return false }
         let bytes: Data
-        if let b = bySha[row.textSha] { bytes = b; progress.reused += 1 }
+        let inputKey = row.textSha + "\u{1}" + row.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let b = byInput[inputKey] { bytes = b; progress.reused += 1 }
         else {
             let t0 = DispatchTime.now().uptimeNanoseconds
             let r = try embed(PassPrompt.document(title: row.title, text: row.text))
@@ -114,7 +116,7 @@ public final class PassRunner {
             progress.tokens += r.tokens
             let n = PassVector.norm(r.vec)
             bytes = PassVector.f16Bytes(PassVector.truncate(n > 0 ? r.vec.map { $0 / n } : r.vec))
-            bySha[row.textSha] = bytes
+            byInput[inputKey] = bytes
         }
         try sink(try PassFile.encode(PassVectorRow(kind: row.kind, id: row.id, ordinal: row.ordinal, textSha: row.textSha, model: model, dim: passDimension, v: bytes)))
         held.insert(row.key); progress.written += 1

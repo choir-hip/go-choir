@@ -77,6 +77,34 @@ final class EmbedPassTests: XCTestCase {
         XCTAssertEqual(try PassFile.decode(out[0]).v, try PassFile.decode(out[1]).v)
     }
 
+    /// The model reads the title with the text, so equal text under another title is another input: found 2026-11-19 when corpusd
+    /// refused the first file (a sample agreed only to cosine 0.958): 2,661 of 278,048 rows had been given the vector of a row
+    /// with the same passage and a different headline.
+    func testEqualTextUnderAnotherTitleIsEmbeddedAgain() throws {
+        var out: [String] = []
+        let f = Fake()
+        let r = try PassRunner(model: "m", existing: [], embed: f.embed, sink: { out.append($0) })
+        try r.process(row("v1", "same", title: "First headline")); try r.process(row("v2", "same", title: "Another headline"))
+        try r.process(row("v3", "same", title: " First headline "))
+        XCTAssertEqual(f.prompts, ["title: First headline | text: same", "title: Another headline | text: same"])
+        XCTAssertEqual(r.progress.reused, 1); XCTAssertEqual(out.count, 3)
+        XCTAssertNotEqual(try PassFile.decode(out[0]).v, try PassFile.decode(out[1]).v)
+        XCTAssertEqual(try PassFile.decode(out[0]).v, try PassFile.decode(out[2]).v)
+    }
+
+    /// A resumed run does not know the titles of what it wrote before, so it reuses nothing from the file: it only skips what is held.
+    func testAResumedRunReusesNothingFromTheFile() throws {
+        var out: [String] = []
+        let f = Fake()
+        let a = try PassRunner(model: "m", existing: [], embed: f.embed, sink: { out.append($0) })
+        try a.process(row("v1", "same", title: "First headline"))
+        var out2: [String] = []
+        let g = Fake()
+        let b = try PassRunner(model: "m", existing: out, embed: g.embed, sink: { out2.append($0) })
+        try b.process(row("v1", "same", title: "First headline")); try b.process(row("v2", "same", title: "Another headline"))
+        XCTAssertEqual(g.prompts, ["title: Another headline | text: same"]); XCTAssertEqual(b.progress.reused, 0); XCTAssertEqual(b.progress.skippedHeld, 1)
+    }
+
     func testARowMarkedPrivateIsNeverEmbeddedOrWritten() throws {
         var out: [String] = []
         let f = Fake()
