@@ -45,6 +45,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -67,11 +68,12 @@ const (
 	// vectorImportCandidates bounds how many rows a sample examines to find
 	// its checkable ones.
 	vectorImportCandidates = 400
-	// vectorImportMaxBytes bounds a posted file (an operator route; the
-	// first pass is about 215,000 rows of 700 bytes).
-	vectorImportMaxBytes = 2 << 30
-	vectorImportDirName  = "vector-import"
+	vectorImportDirName    = "vector-import"
 )
+
+// vectorImportMaxBytes bounds a posted or inboxed file (the first pass is about
+// 215,000 rows of 700 bytes). A variable so a test can shrink it.
+var vectorImportMaxBytes int64 = 2 << 30
 
 // vectorImportMaxGroupRows bounds the rows held for one story version: a
 // version of a quarter of a megabyte is under 200 passages. A variable so a
@@ -138,13 +140,17 @@ func halfToFloat32(h uint16) (float32, bool) {
 
 // VectorImportJob is the state of an import.
 type VectorImportJob struct {
-	JobID      string         `json:"job_id"`
-	State      string         `json:"state"` // running | done | refused | failed
-	Error      string         `json:"error,omitempty"`
-	StartedAt  time.Time      `json:"started_at"`
-	FinishedAt *time.Time     `json:"finished_at,omitempty"`
-	Result     *VectorImport  `json:"result,omitempty"`
-	Rejected   map[string]int `json:"rejected,omitempty"`
+	JobID      string        `json:"job_id"`
+	State      string        `json:"state"` // running | done | refused | failed
+	Error      string        `json:"error,omitempty"`
+	StartedAt  time.Time     `json:"started_at"`
+	FinishedAt *time.Time    `json:"finished_at,omitempty"`
+	Result     *VectorImport `json:"result,omitempty"`
+	// Source is "route" (POST /internal/platform/vectors/import) or "inbox"
+	// (a file in the spool inbox); File is the inbox file's name.
+	Source   string         `json:"source,omitempty"`
+	File     string         `json:"file,omitempty"`
+	Rejected map[string]int `json:"rejected,omitempty"`
 }
 
 // VectorImport is what an import did.
@@ -535,9 +541,9 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 	return res, err
 }
 
-// StartVectorImport spools nothing itself: it runs ImportVectorFile on path
-// in the background and returns the job. One import runs at a time.
-func (s *Service) StartVectorImport(path string, remove bool) (VectorImportJob, error) {
+// beginVectorJob registers a running job, or says one already runs (the route
+// and the inbox share this: one import at a time).
+func (s *Service) beginVectorJob(source, file string) (*VectorImportJob, bool) {
 	v := &s.store.vec
 	v.importMu.Lock()
 	defer v.importMu.Unlock()
@@ -545,37 +551,71 @@ func (s *Service) StartVectorImport(path string, remove bool) (VectorImportJob, 
 		v.jobs = map[string]*VectorImportJob{}
 	}
 	if cur := v.jobs[v.lastJob]; cur != nil && cur.State == "running" {
-		return *cur, errors.New("a vector import is already running")
+		return cur, false
 	}
 	var b [6]byte
 	_, _ = rand.Read(b[:])
-	job := &VectorImportJob{JobID: "vi-" + time.Now().UTC().Format("20060102T150405Z") + "-" + hex.EncodeToString(b[:]), State: "running", StartedAt: time.Now().UTC()}
+	job := &VectorImportJob{JobID: "vi-" + time.Now().UTC().Format("20060102T150405Z") + "-" + hex.EncodeToString(b[:]), State: "running", StartedAt: time.Now().UTC(), Source: source, File: file}
 	v.jobs[job.JobID] = job
 	v.lastJob = job.JobID
+	return job, true
+}
+
+// finishVectorJob records a job's outcome and writes its one journal line, the
+// same line for both sources:
+//
+//	corpusd retrieval op=vector_import shape=inbox|route ms= rows= written= refused= sample_min_cosine= err= reasons= job= state= file=
+//
+// refused is the rows dropped for any reason; reasons names them.
+func (s *Service) finishVectorJob(job *VectorImportJob, res VectorImport, err error) VectorImportJob {
+	v := &s.store.vec
+	v.importMu.Lock()
+	defer v.importMu.Unlock()
+	now := time.Now().UTC()
+	job.FinishedAt = &now
+	job.Result = &res
+	job.Rejected = res.Rejected
+	switch {
+	case err == nil:
+		job.State = "done"
+	case errors.Is(err, ErrVectorImportRefused):
+		job.State, job.Error = "refused", err.Error()
+	default:
+		job.State, job.Error = "failed", err.Error()
+	}
+	dropped := 0
+	var reasons []string
+	for k, n := range res.Rejected {
+		dropped += n
+		reasons = append(reasons, fmt.Sprintf("%s:%d", k, n))
+	}
+	sort.Strings(reasons)
+	errText := strings.ReplaceAll(job.Error, " ", "_")
+	if len(errText) > 160 {
+		errText = errText[:160]
+	}
+	log.Printf("corpusd retrieval op=vector_import shape=%s ms=%d rows=%d written=%d refused=%d sample_min_cosine=%.5f err=%s reasons=%s job=%s state=%s file=%s",
+		job.Source, now.Sub(job.StartedAt).Milliseconds(), res.Rows, res.Written, dropped, res.MinCosine, errText, strings.Join(reasons, ","), job.JobID, job.State, job.File)
+	return *job
+}
+
+// StartVectorImport runs ImportVectorFile on path in the background and
+// returns the job (the route's form). One import runs at a time.
+func (s *Service) StartVectorImport(path string, remove bool) (VectorImportJob, error) {
+	job, ok := s.beginVectorJob("route", "")
+	if !ok {
+		return *job, errors.New("a vector import is already running")
+	}
+	out := *job
 	go func() {
 		res, err := s.ImportVectorFile(context.Background(), path)
 		if remove {
 			_ = os.Remove(path)
 		}
-		v.importMu.Lock()
-		defer v.importMu.Unlock()
-		now := time.Now().UTC()
-		job.FinishedAt = &now
-		job.Result = &res
-		job.Rejected = res.Rejected
-		switch {
-		case err == nil:
-			job.State = "done"
-		case errors.Is(err, ErrVectorImportRefused):
-			job.State, job.Error = "refused", err.Error()
-		default:
-			job.State, job.Error = "failed", err.Error()
-		}
-		log.Printf("corpusd vectors import job=%s state=%s rows=%d written=%d rejected=%v samples=%d min_cosine=%.5f err=%s",
-			job.JobID, job.State, res.Rows, res.Written, res.Rejected, res.Samples, res.MinCosine, job.Error)
+		s.finishVectorJob(job, res, err)
 		s.store.KickVectors()
 	}()
-	return *job, nil
+	return out, nil
 }
 
 func (s *Service) vectorImportRunning() bool {
