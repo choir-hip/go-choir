@@ -852,3 +852,49 @@ func TestVectorImportJobAndRouteRefuseAnUntrustedCaller(t *testing.T) {
 		t.Fatalf("untrusted caller got %d", rec.Code)
 	}
 }
+
+// The Mac's export (scripts/embed-pass-export.py) is what made the first
+// vectors: a story's title is the manifest's, else the publication's; a
+// capture's is its metadata title stripped; a passage is cut on the raw bytes
+// and decoded with replacement, not stripped.
+func TestVectorInputsMatchTheMacExportsTitlesAndText(t *testing.T) {
+	f := newVecFixture(t)
+	f.story(t, "doc-a", 1, "Manifest title", storyText("harbor"), time.Time{})
+	ident, _ := publicationIdentityFor("paper-owner", "doc-a")
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET metadata = jsonb_set(metadata::jsonb, '{title}', '"Publication title"')::text WHERE canonical_id = ?`, ident.CanonicalID); err != nil {
+		t.Fatal(err)
+	}
+	f.capture(t, "o1", "c1", "k1", "  Padded title \n", "Lead \xff\xfe bytes here.\n\nSecond.", time.Now().UTC().Add(-time.Hour), false)
+	f.capture(t, "o1", "c1", "k2", "", "Untitled lead.", time.Now().UTC().Add(-2*time.Hour), false)
+	f.pass(t)
+	var story, caps []string
+	for _, in := range f.emb.Seen() {
+		if strings.HasPrefix(in, "title: Manifest title | text: ") {
+			story = append(story, in)
+		}
+		if !strings.Contains(in, "harbor") {
+			caps = append(caps, in)
+		}
+	}
+	if len(story) != 4 {
+		t.Fatalf("story inputs with the manifest title: %d of %q", len(story), f.emb.Seen())
+	}
+	for _, in := range f.emb.Seen() {
+		if strings.Contains(in, "Publication title") {
+			t.Fatalf("the publication's title was used over the manifest's: %q", in)
+		}
+	}
+	want := map[string]bool{
+		"title: Padded title | text: Lead \uFFFD\uFFFD bytes here.\n\nSecond.": true,
+		"title: none | text: Untitled lead.":                                   true,
+	}
+	for _, in := range caps {
+		if !want[in] {
+			t.Fatalf("capture input %q, want one of %v", in, want)
+		}
+		delete(want, in)
+	}
+	if len(want) != 0 {
+		t.Fatalf("capture inputs missing: %v", want)
+	}
+}
