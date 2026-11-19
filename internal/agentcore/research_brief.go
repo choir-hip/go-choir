@@ -86,7 +86,9 @@ type briefThread struct {
 }
 
 // briefSearchFunc is one corpus search; its result is the SearchWireCorpus
-// verb's JSON.
+// verb's JSON. buildResearchBrief calls it once per thread, all at the same
+// time, each on its own goroutine, so it must be safe for concurrent calls and
+// must return when its context is done.
 type briefSearchFunc func(ctx context.Context, query string) (json.RawMessage, error)
 
 // clipRunes collapses whitespace and control characters (a field cannot start
@@ -277,9 +279,11 @@ type researchBriefResult struct {
 	dropped    []int
 	left       int
 	unanswered int
-	// slowest is the slowest answered search, so the journal shows whether the
-	// wait was one search or the deadline.
-	slowest time.Duration
+	// slowest is the slowest search that returned (answered or not), so the
+	// journal shows whether the wait was one search or the deadline. panicked
+	// counts searches that panicked (each is an unanswered thread).
+	slowest  time.Duration
+	panicked int
 }
 
 type briefBlock struct {
@@ -331,13 +335,17 @@ func nameThreads(numbers []int, texts []string) string {
 	return strings.Join(parts, ", ")
 }
 
-// buildResearchBrief searches each thread in turn and renders what was found.
-// The caller's context carries the deadline (researchBriefOpening starts it
-// before it reads the run memory and the inbox). The deadline is cooperative:
-// the corpus search and the published search both build their requests with
-// http.NewRequestWithContext (researchtools/capture_search.go do), and the
-// events search runs on the same context, so a search past the deadline
-// returns and no goroutine is needed to abandon it.
+// buildResearchBrief searches every thread at the same time, one goroutine per
+// thread, and renders what was found. The caller's context carries the
+// deadline (researchBriefOpening starts it before it reads the run memory and
+// the inbox). The builder reads only the replies that arrived before the
+// deadline passed, in thread order; a search still running then is that
+// thread's "did not answer". The searches' requests are cancellable (the corpus
+// search and the published search both build theirs with
+// http.NewRequestWithContext, researchtools/capture_search.go do, and the
+// events search runs on the same context), so an abandoned call ends soon after
+// the deadline and its goroutine exits; if it returns later still, it sends
+// into a buffer nobody reads.
 //
 // Per thread the brief says one of three things and nothing more: what was
 // found, that the host's search found nothing, or that the host's search did
@@ -372,6 +380,8 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 		raw  json.RawMessage
 		err  error
 		took time.Duration
+		// panicked: the search panicked and err says so.
+		panicked bool
 	}
 	replies := make(chan searchReply, len(threads))
 	started := 0
@@ -382,6 +392,14 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 		started++
 		go func(i int, query string) {
 			t0 := time.Now()
+			// The search no longer runs on the actor's goroutine (whose
+			// dispatcher recovers), so a panic in it is that thread's error, not
+			// the process's.
+			defer func() {
+				if r := recover(); r != nil {
+					replies <- searchReply{i: i, err: fmt.Errorf("the corpus search panicked: %v", r), panicked: true, took: time.Since(t0)}
+				}
+			}()
 			raw, err := search(ctx, query)
 			replies <- searchReply{i: i, raw: raw, err: err, took: time.Since(t0)}
 		}(i, plainBriefQuery(th.Text))
@@ -424,6 +442,12 @@ collect:
 			continue
 		}
 		raw, err := r.raw, r.err
+		if r.took > res.slowest {
+			res.slowest = r.took
+		}
+		if r.panicked {
+			res.panicked++
+		}
 		if err != nil {
 			if deadlinePassed && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
 				unanswered(i, th, deadlineWhy)
@@ -441,9 +465,6 @@ collect:
 			continue
 		}
 		answered++
-		if r.took > res.slowest {
-			res.slowest = r.took
-		}
 		b := briefBlock{number: i + 1, thread: th, answered: true, foundCaptures: len(body.Captures), foundStories: len(body.Published)}
 		for j, c := range body.Captures {
 			if j >= researchBriefCapturesPerThread {
@@ -766,6 +787,10 @@ func (rt *Runtime) researchBriefOpening(ctx context.Context, rec *types.RunRecor
 	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
 	ctx = researchtools.WithCorpusCaller(ctx, researchtools.CorpusCallerBrief)
 	b.res = buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
+	if b.res.panicked > 0 {
+		// Once per brief, with the run and no query text.
+		log.Printf("runtime: research brief run=%s: a corpus search panicked (%d of %d threads); the run starts without those threads", rec.RunID, b.res.panicked, len(plan.threads))
+	}
 	return done()
 }
 
