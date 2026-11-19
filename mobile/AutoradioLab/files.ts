@@ -153,6 +153,13 @@ const resolved = new Map<string, Promise<FileResolved>>();
 
 export function forget(): void { recents = null; lastNow = 0; resolved.clear(); demoNodes = null; }
 
+/** Sign-out (account.ts): the recent list, every cached file and the pickers' copies, and what this session holds. Never throws. */
+export async function wipeFiles(storage: Storage | undefined): Promise<void> {
+  forget();
+  if (!storage) return;
+  for (const p of [RECENT_FILE, CACHE_DIR, 'app:/tmp/picked']) { try { await storage.fs.rm(p); } catch { /* absent */ } }
+}
+
 async function loadRecents(storage: Storage | undefined): Promise<Recent[]> {
   if (recents) return recents;
   recents = [];

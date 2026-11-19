@@ -256,7 +256,7 @@ export function merged(stories: Record<string, unknown>[], takes: Take[]): Recor
 
 export type Upload = { audio: Uint8Array; transcript: string; duration: number; respondsTo: Responds | null };
 export async function sha256Hex(d: Uint8Array): Promise<string> {
-  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', d));
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', d as unknown as BufferSource));
   return [...h].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 const enc = new TextEncoder();

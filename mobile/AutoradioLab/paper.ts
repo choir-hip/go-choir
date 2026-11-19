@@ -156,3 +156,10 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
 
 /** Forget the kept lists (tests). */
 export function forget(): void { kept.clear(); lastTick = 0; }
+
+/** Sign-out (account.ts): the cached front list on disk and what this session holds. Never throws. */
+export async function wipePaper(storage: Storage | undefined): Promise<void> {
+  kept.clear(); lastTick = 0;
+  if (!storage) return;
+  try { await storage.fs.rm(CACHE_FILE); } catch { /* absent */ }
+}

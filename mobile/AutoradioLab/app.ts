@@ -5,6 +5,7 @@ import { clipAct, showClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { bindNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
+import { accountSignOut } from './account.ts';
 import * as mail from './mail.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -40,6 +41,8 @@ secret.keep mail-key`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),
+  // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
+  accountSignOut: ([demo], store, storage, native) => accountSignOut({ demo }, storage, store, native as never),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>
@@ -71,4 +74,4 @@ const sources: Sources = {
   mailMarkUnread: ([address, demo]) => mail.mailMarkUnread(address, demo),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
-export const answer: Answer = (source, args, store, storage, native) => { bindNative(native); return sources[source](args, store, storage); };
+export const answer: Answer = (source, args, store, storage, native) => { bindNative(native); return sources[source](args, store, storage, native); };

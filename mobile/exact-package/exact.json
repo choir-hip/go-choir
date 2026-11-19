@@ -907,10 +907,6 @@
       "answers": "LabState"
     },
     {
-      "send": "choirSignOut",
-      "answers": "LabState"
-    },
-    {
       "send": "choirOpenApproval",
       "answers": "LabState"
     },

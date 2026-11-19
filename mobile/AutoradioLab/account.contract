@@ -1,15 +1,18 @@
 // The integrator's members of the root: the Choir sign-in and the player (the voice lab page, its stages, parameters, trace and
 // audio switch are gone: owner, 2026-11-19, "get rid of lab pages").
 use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
-use choirSignIn, choirSignOut, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirPlay, choirListen from "@choir/autoradio"
+use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirPlay, choirListen from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
 use LabState from "@choir/autoradio"
+use SignOutResult from "./account-types.contract"
 
 members Autoradio
   resource au = choirAuth() as shape ChoirAuth else empty()
   resource pl = choirPlayer() as shape ChoirPlayer else empty()
   resource sl = choirStories() as shape StoryList else empty()
   mutation acct as shape LabState
+  // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
+  mutation so as shape SignOutResult
   mutation ctl as shape LabState
   mutation down as shape LabState
   mutation up as shape LabState
@@ -21,7 +24,7 @@ members Autoradio
   action openApproval
     send acct = choirOpenApproval()
   action signOut
-    send acct = choirSignOut()
+    send so = accountSignOut(dm.on)
   action refreshRadio
     send acct = choirRefresh()
   action radioPlay

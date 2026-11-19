@@ -10,8 +10,22 @@ import ExactPkg_autoradio
 // cannot see that item; the owner's phone stays signed in because nothing is moved. Read only: `{op: "get", account}` for the three
 // accounts CredentialReader allows, answering `{found, value}`. It logs nothing. It goes when sign-in itself is moved and the key is
 // kept by Exact's store.
+//
+// The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
+// by shared code (AutoradioLab/account.ts); the reason it is native is that the key is a Keychain item the Swift sign-in wrote and the Swift stores
+// (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift. It goes with them when sign-in itself moves.
 final class ModelsModule: ExactModule {
     override func call(_ request: [String: Any]) -> [String: Any] { CredentialReader().reply(request) }
-    override func later(_ request: [String: Any], reply: ExactReply) { reply.send(call(request)) }
+    override func later(_ request: [String: Any], reply: ExactReply) {
+        if (request["op"] as? String) == "signOut" {
+            Task { @MainActor in
+                guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
+                await m.signOutForShared()
+                reply.send(["done": true])
+            }
+            return
+        }
+        reply.send(call(request))
+    }
 }
 let exactModule: ExactModule.Type = ModelsModule.self

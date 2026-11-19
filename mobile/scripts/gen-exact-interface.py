@@ -36,7 +36,7 @@ names = [
     src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "",
         "playing": False, "talking": False, "heard": "", "message": ""}),
     src("choirStories", "StoryList", default={"rows": []}),
-    snd("choirSignIn"), snd("choirSignOut"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
+    snd("choirSignIn"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
     snd("choirPlayPause"), snd("choirStartRadio"), snd("choirTalkCancel"), snd("choirHandsFreeToggle"),
     snd("choirPlay", {"route": S}),
     snd("choirAsk", {"text": S, "aim": S}),

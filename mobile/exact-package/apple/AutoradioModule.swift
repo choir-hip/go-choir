@@ -100,8 +100,17 @@ public final class AutoradioModule: ExactPackage {
     /// The page the bar opened in place (a URL typed in the bar); lane autoradio-queue.
     var barWebURL = ""
 
+    /// The one handle the app module (modules/apple/ModelsEntry.swift) uses to run the native half of sign-out, which shared code leads
+    /// (AutoradioLab/account.ts). Weak: the module owns its life; this is set at init and read on the main thread.
+    nonisolated(unsafe) public static weak var current: AutoradioModule?
+
+    /// The native half of sign-out: playback stops, the Swift run sheet posts what it holds under the old key, the key goes, the Swift
+    /// stores are wiped, the revoke is sent in the background (ChoirApp.signOut). Answers when that has finished.
+    public func signOutForShared() async { await choir?.signOut() }
+
     public init(context: ExactPackageContext) {
         self.context = context
+        Self.current = self
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         #if os(macOS)
         ConsoleFile.install(directory: support)
@@ -236,7 +245,6 @@ public final class AutoradioModule: ExactPackage {
         case "choirStories": reply(["rows": choir.storyRows().map { json($0) }])
         case "choirSignIn": Task { [choir] in _ = await choir?.signIn.begin() }; reply(state())
         case "choirCancelSignIn": choir.signIn.cancel(); reply(state())
-        case "choirSignOut": Task { [choir] in await choir?.signOut() }; reply(state())
         case "choirOpenApproval":
             if let u = URL(string: choir.authView().verificationURL) { Platform.open(u) }
             reply(state())
