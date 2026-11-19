@@ -1,0 +1,190 @@
+// Edition setup under bun test. Ported from EditionSetupTests.swift (E1 to E9, T1 to T3, C1 to C4 and the spoken forms).
+import { describe, expect, test } from 'bun:test';
+import {
+  suggestions, TREE, key, parentsOf, Selection, parseSpoken, isEmptyEdit, labelForSectionID, treeRows, Session, EXPLAINER, VOICE_HINT, EMPTY_LINE, SPOKEN_OPEN, selectionLine,
+  MAX_TOPIC_LENGTH, localEdition, editionLines, complete, localWriter, generalEdition, FAILED_LINE, type TextFile, type Writer,
+} from './edition-model.ts';
+
+const sug = suggestions();
+const rows = (exp: string[], sel: string[], live: string[] = []) => treeRows({ liveSections: live, expanded: new Set(exp.map(key)), selection: new Selection(sel), own: [] });
+const memory = (): TextFile & { text?: string } => { const m: TextFile & { text?: string } = { read: async () => m.text, write: async (t) => { m.text = t; }, remove: async () => { m.text = undefined; } }; return m; };
+
+describe('what is offered', () => {
+  test('suggestions are generous and start with the house sections', () => {
+    expect(sug.length).toBeGreaterThanOrEqual(18); expect(TREE.length).toBe(10);
+    expect(sug.slice(0, 10)).toEqual(['World', 'U.S.', 'Politics', 'Business', 'Technology', 'Science', 'Health', 'Climate', 'Culture', 'Sports']);
+    expect(new Set(sug.map(key)).size).toBe(sug.length);
+  });
+  test('live sections are merged without duplicates', () => {
+    const s = suggestions(['tech_ai', 'world', 'housing_market']);
+    expect(s.filter((x) => x === 'Technology').length).toBe(1); expect(s).toContain('Housing market'); expect(labelForSectionID('us')).toBe('U.S.');
+  });
+  test('no suggestion or line asks what the reader does not want', () => {
+    const words = [...sug, EXPLAINER, VOICE_HINT, EMPTY_LINE, SPOKEN_OPEN].join(' ').toLowerCase();
+    for (const bad of ['tired of', 'do not want', "don't want", 'avoid', 'less of', 'anything you']) expect(words).not.toContain(bad);
+    expect(EXPLAINER).toContain('any time');
+  });
+  test('T2: the graph is sound', () => {
+    const tops = TREE.map((c) => c.label);
+    expect(new Set(tops.map(key)).size).toBe(tops.length);
+    for (const c of TREE) {
+      expect(new Set(c.children.map(key)).size).toBe(c.children.length);
+      for (const k of c.children) { expect(tops).not.toContain(k); expect(parentsOf(k).length).toBeGreaterThan(0); }
+    }
+    expect(new Set(parentsOf('AI'))).toEqual(new Set(['Technology', 'Business']));
+    expect(new Set(parentsOf('Public health'))).toEqual(new Set(['Health', 'Politics']));
+    expect(new Set(parentsOf('Energy'))).toEqual(new Set(['Climate', 'Business']));
+    expect(new Set(parentsOf('Security'))).toEqual(new Set(['Technology', 'World']));
+    expect(parentsOf('ai')).toEqual(parentsOf('AI'));
+    expect(sug.filter((x) => key(x) === 'ai').length).toBe(1);
+    expect(new Selection().add('ai', sug)).toBe('AI'); expect(new Selection().apply('add AI', sug).added).toEqual(['AI']);
+  });
+});
+
+describe('the tree', () => {
+  test('T1: a shared subtopic is one topic lit everywhere', () => {
+    const r = rows(['Technology', 'Business'], ['AI']);
+    const ai = r.filter((x) => x.label === 'AI');
+    expect(ai.length).toBe(2); expect(ai.every((x) => x.selected)).toBe(true); expect(ai.map((x) => x.note)).toEqual(['also in Technology', 'also in Business']);
+    expect(new Selection(['AI', 'ai', 'AI']).topics).toEqual(['AI']);
+    expect(r.find((x) => x.label === 'Technology')?.note).toBe('1 picked'); expect(r.find((x) => x.label === 'Business')?.note).toBe('1 picked');
+  });
+  test('T3: partial selection, and nothing moves on picking', () => {
+    expect(rows([], []).length).toBe(10);
+    expect(rows(['Culture'], []).map((x) => x.key)).toEqual(rows(['Culture'], ['Film', 'Music', 'Culture', 'Sports']).map((x) => x.key));
+    const r = rows([], ['Film']);
+    expect(r.find((x) => x.label === 'Culture')?.partial).toBe(true); expect(r.find((x) => x.label === 'Culture')?.selected).toBe(false);
+    const p = rows([], ['Culture']);
+    expect(p.find((x) => x.label === 'Culture')?.selected).toBe(true); expect(p.find((x) => x.label === 'Culture')?.partial).toBe(false);
+    expect(rows(['Culture'], ['Culture']).filter((x) => x.kind === 'sub').every((x) => !x.selected)).toBe(true);
+    expect(rows(['Sports'], []).length).toBe(10); expect(rows(['Culture'], []).length).toBe(17); expect(rows([], []).find((x) => x.label === 'Sports')?.expandable).toBe(false);
+  });
+  test('the session expands and takes live sections', () => {
+    const s = new Session(suggestions());
+    s.toggleExpanded('Business'); expect(s.treeRows().length).toBe(17);
+    s.toggleExpanded('business'); expect(s.treeRows().length).toBe(10);
+    s.setLiveSections(['housing_market', 'world']);
+    expect(s.treeRows().at(-1)?.label).toBe('Housing market'); expect(s.treeRows().length).toBe(11);
+  });
+});
+
+describe('picking and saying', () => {
+  test('E1: the same topic twice is one', () => {
+    const s = new Selection();
+    s.toggle('Space', sug); expect(s.topics).toEqual(['Space']);
+    expect(s.add('space', sug)).toBeUndefined(); expect(s.add(' SPACE ', sug)).toBeUndefined();
+    expect(s.add('tech', sug)).toBe('Technology');
+    expect(s.add('technology', sug)).toBeUndefined(); expect(s.add('Spaces', sug)).toBeUndefined();
+    expect(s.topics).toEqual(['Space', 'Technology']);
+    s.toggle('space', sug); expect(s.contains('Space')).toBe(false);
+    const u = new Selection(); u.add('us', sug); expect(u.topics).toEqual(['U.S.']); expect(u.add('U.S.', sug)).toBeUndefined();
+    const c = new Selection(); c.add('Chess', sug); expect(c.add('chess', sug)).toBeUndefined();
+  });
+  test('E2: speech names topics not in the suggestions', () => {
+    const s = new Selection();
+    const o = s.apply('add space and chess', sug);
+    expect(o.added).toEqual(['Space', 'Chess']); expect(o.reply).toBe('Added Space and Chess.'); expect(s.topics).toEqual(['Space', 'Chess']);
+    expect(s.apply('also sourdough baking, and the tech', sug).added).toEqual(['Sourdough baking', 'Technology']);
+  });
+  test('spoken forms', () => {
+    expect(parseSpoken("I'd like to hear about space").adds).toEqual(['space']);
+    expect(parseSpoken('Space.').adds).toEqual(['space']);
+    expect(parseSpoken('please add the U.S. and politics').adds).toEqual(['us', 'politics']);
+    expect(parseSpoken('drop chess').removes).toEqual(['chess']);
+    expect(parseSpoken('take off sports and music').removes).toEqual(['sports', 'music']);
+    expect(parseSpoken('continue').finish).toBe(true); expect(parseSpoken("that's all").finish).toBe(true);
+    expect(parseSpoken('tell me about science, health and film').adds).toEqual(['science', 'health', 'film']);
+  });
+  test('E5: questions and long sentences are not topics', () => {
+    for (const q of ['what is this for?', 'how does this work', 'I was thinking about whether the weather today will affect anything at all', '', 'um']) expect(isEmptyEdit(parseSpoken(q))).toBe(true);
+    const s = new Selection();
+    expect(s.apply('what is this', sug).reply).toContain('Tell me a topic'); expect(s.topics).toEqual([]);
+  });
+  test('E8: negative words only take off what is there', () => {
+    const s = new Selection(['Sports', 'Music']);
+    s.apply('not sports', sug); expect(s.topics).toEqual(['Music']);
+    expect(s.apply('no gossip', sug).added).toEqual([]); expect(s.topics).toEqual(['Music']);
+    expect(s.apply('nothing', sug).added).toEqual([]); expect(s.apply('none', sug).removed).toEqual([]);
+  });
+  test('E3: long or empty typed topics', () => {
+    const s = new Selection();
+    expect(s.addTyped('   ', sug)).toEqual([]); expect(s.addTyped('...,;!', sug)).toEqual([]);
+    const added = s.addTyped(Array(40).fill('harbour').join(' '), sug);
+    expect(added.length).toBe(1); expect([...added[0]].length).toBeLessThanOrEqual(MAX_TOPIC_LENGTH); expect(added[0].endsWith(' ')).toBe(false);
+    expect(s.addTyped('space, chess; Arts and crafts', sug)).toEqual(['Space', 'Chess', 'Arts and crafts']);
+    expect(s.addTyped('a\u0007b', sug)).toEqual(['Ab']);
+  });
+  test('E4: no minimum and no maximum', () => {
+    expect(localEdition([]).sections[0].lines).toEqual(['The whole paper, until I say otherwise.']);
+    expect(selectionLine([])).toContain('general edition');
+    const s = new Selection();
+    for (const t of sug) s.toggle(t, sug);
+    expect(s.topics.length).toBe(sug.length); expect(localEdition(s.topics).sections[0].lines.length).toBe(sug.length);
+    expect(selectionLine(['Space'])).toContain('Space'); expect(selectionLine(['Space', 'Chess', 'Film'])).toContain('3 topics');
+  });
+});
+
+describe('the session', () => {
+  test('E6, E7: saved locally and shown again', async () => {
+    const f = memory();
+    const a = await Session.open(sug, f);
+    expect(a.hasSaved).toBe(false);
+    await a.toggle('Space'); await a.addTyped('Chess'); await a.hear('add film');
+    expect(a.hasSaved).toBe(true);
+    const b = await Session.open(sug, f);            // coming back to the step
+    expect(b.topics).toEqual(['Space', 'Chess', 'Film']);
+    const r = b.treeRows();
+    expect(r.find((x) => x.kind === 'yours')?.label).toBe('Chess'); expect(r.find((x) => x.label === 'Science')?.partial).toBe(true); expect(r.find((x) => x.label === 'World')?.selected).toBe(false);
+  });
+  test('E7: a corrupt or empty file starts empty', async () => {
+    const f = memory(); f.text = '{not json';
+    expect((await Session.open(sug, f)).topics).toEqual([]);
+    f.text = '';
+    expect((await Session.open(sug, f)).topics).toEqual([]);
+  });
+  test('E6: a failed write loses nothing in memory', async () => {
+    const f: TextFile = { read: async () => undefined, write: async () => { throw new Error('disk full'); }, remove: async () => undefined };
+    const s = await Session.open(sug, f);
+    await s.toggle('Space');
+    expect(s.topics).toEqual(['Space']);
+  });
+  test('E9: a deselected own topic stays as a chip', async () => {
+    const s = new Session(sug);
+    await s.addTyped('Chess'); await s.toggle('Chess');
+    expect(s.topics).toEqual([]);
+    const c = s.treeRows().find((x) => x.label === 'Chess');
+    expect(c).toBeDefined(); expect(c?.selected).toBe(false); expect(c?.kind).toBe('yours');
+  });
+  test('finish by voice calls back; sign-out wipes', async () => {
+    const f = memory();
+    const s = await Session.open(sug, f);
+    let done = false; s.onFinish = () => { done = true; };
+    expect(await s.hear('continue')).toBe('Okay.'); expect(done).toBe(true);
+    await s.toggle('Space'); await s.wipe();
+    expect(s.topics).toEqual([]); expect(f.text).toBeUndefined();
+  });
+});
+
+describe('finishing always ends (C1 to C4)', () => {
+  test('C1: success', async () => {
+    const o = await complete(['Space'], localWriter);
+    expect(o.kind).toBe('written');
+    expect(o.kind === 'written' && editionLines(o.edition)).toEqual(['What I follow', 'Space']);
+  });
+  test('C2: failure says so plainly', async () => {
+    const o = await complete(['Space'], async () => { throw new Error('no'); });
+    expect(o).toEqual({ kind: 'failed', line: FAILED_LINE }); expect(FAILED_LINE).toContain('topics are saved');
+  });
+  test('C3: a writer that never returns times out at the deadline and is aborted', async () => {
+    let aborted = false;
+    const never: Writer = (_t, _p, signal) => new Promise((_res, rej) => { signal.addEventListener('abort', () => { aborted = true; rej(new Error('aborted')); }); });
+    const t0 = Date.now();
+    const o = await complete([], never, undefined, 0.2);
+    expect(o).toEqual({ kind: 'timedOut' }); expect(Date.now() - t0).toBeLessThan(5000); expect(aborted).toBe(true);
+  });
+  test('"Continue anyway" is the general edition', () => expect(editionLines(generalEdition())).toEqual(['What I follow', 'The whole paper, until I say otherwise.']));
+  test('the edition is written without a network from the choices', async () => {
+    const e = await localWriter(['Space', 'Chess'], () => undefined, new AbortController().signal);
+    expect(e.title).toBe('My edition'); expect(editionLines(e)).toEqual(['What I follow', 'Space', 'Chess']);
+  });
+});
