@@ -77,3 +77,43 @@ after midnight UTC, when CI did not.
   seconds is a margin, not a fix. Starting it at the first cell would need
   the helper to see the cell.
 - Other tests may read the clock near a boundary. Not searched for.
+
+## The other eight entries dated 2026-11-25, read on 2026-11-19
+
+Read from the registry, the gate and the code by a read-only investigator;
+no live value was read. Thirteen entries carry `expires: 2026-11-25`: E1's
+five and these eight. The gate compares `grandfathered_off_until < today`,
+so main goes red at 2026-11-26T00:00Z, not on the 25th. Run with
+`scripts/check-switch-registry --today 2026-11-26` it reports nine failures:
+E1's five and four of the eight (`choir_event_table_computers`,
+`store_event_table`, `intake_event_wakes`, `unwired_packages`). The other
+four only warn, and block a change that adds a switch from 2026-12-03. The
+registry's own rules allow two extensions of fourteen days per entry; none
+of the four has used one.
+
+| Entry | Proposal | Class | Files (main) | Risk | Red on 11-26? | Guest-security |
+|---|---|---|---|---|---|---|
+| vm_guest_reclaim_damon | delete behaviour | orange | vmmanager/guest_reclaim*.go, config.go, manager.go, nix/node-b.nix | low; two computers cold boot once | no | no |
+| choir_event_table_computers + store_event_table | delete behaviour (owner ruled delete), keep table | red | eventtablegrant/, vmmanager/event_table_grant*.go, agentcore/event_table*.go, computer_settings.go, api.go, store event_table.go/store.go/open.go/computer_setting.go, nix line | medium; shared table and lease with partitions | yes, both | yes |
+| owner_act_mode | owner; default keep observe, extend once; or enforce and delete observe | red | platform/owner_acts.go, nix/node-b.nix | high if enforce (auth); none if kept | no | no |
+| unwired_packages | owner; default delete appnet and egressgrant | orange | internal/appnet/, internal/egressgrant/, registry | lowest | yes | no |
+| texture_root_desk | owner; default ship on after d@e F4/F5 proof | red | textureowner/texture_root*.go, rebase_notice.go, computer_settings.go, store/computer_setting.go | medium; Master doc and spend on every computer | no | yes |
+| intake_event_wakes | owner; default delete wait path; extend once if unanswered | orange | agentcore/event_wakes*.go, source_schedule.go, tool_profiles.go, computer_settings.go, runtimeprompts | medium; paper's intake path | yes | yes |
+| dispatch_wide_slots | ship on as constant 12, delete switch | orange | agentcore/dispatch_slots*.go, computer_settings.go, runtime.go, actorruntime/adapter.go, actor/dispatcher.go | medium; concurrency and provider load | no | yes |
+
+All eight also edit `switches/registry.yaml` (delete the entry). E1's station edits the same file (five other entries): two builders touching it will conflict textually; sequence the landings or split by line ranges.
+
+What is being done. The two event-table entries (the owner ruled delete on
+2026-11-03) and `unwired_packages` (`appdesk` was wired on 2026-11-08;
+`appnet` and `egressgrant` are imported by nothing) are deleted by one
+builder on the night of 2026-11-19, the first as a red change with two
+review seats. `intake_event_wakes` goes to the owner: it failed its
+false-merge bar three times and cannot ship on, and the owner's two notes
+of 2026-11-03 disagree (delete; investigate). Its default is to delete the
+wait path, and if there is no answer by the 25th, one extension. The four
+without gate pressure (`vm_guest_reclaim_damon`, `owner_act_mode`,
+`texture_root_desk`, `dispatch_wide_slots`) wait for the owner with the
+defaults in the table: `owner_act_mode` is misfiled (it is the observe
+stage of an auth refusal, which the owner ruled to keep on 2026-10-24), and
+shipping twelve dispatch slots on every computer is not a change to make
+while the owner sleeps.
