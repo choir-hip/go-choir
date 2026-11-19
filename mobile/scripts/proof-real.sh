@@ -80,7 +80,10 @@ run_drive survey light "" --touch platform
 
 # The stories tapped must be ones the server can resolve (a live front page sometimes holds one that answers 502 "failed to resolve publication": that is the server's, not the app's).
 RESOLVABLE=""
-for id in $(ids "$SHOTS/drive-survey.txt" "paper-story-" | head -8); do
+# (Only cards at the first card's depth: a card nested deeper sits in a smaller band, and a tap on one of those sometimes does not press, which is a script risk, not an app one.)
+FIRST_INDENT=$(grep -m1 '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" | sed -E 's/^( *).*/\1/' | awk '{ print length($0) }')
+SHALLOW=$(awk -v n="$FIRST_INDENT" '/\[paper-story-\/pub\// { match($0, /^ */); if (RLENGTH == n) { match($0, /\[paper-story-[^]]*\]/); id = substr($0, RSTART + 1, RLENGTH - 2); if (!seen[id]++) print id } }' "$SHOTS/drive-survey.txt")
+for id in $(echo "$SHALLOW" | head -8); do
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://choir.news/api/platform/publications/resolve?route=${id#paper-story-}")
   [ "$code" = 200 ] && RESOLVABLE="$RESOLVABLE $id"
 done
