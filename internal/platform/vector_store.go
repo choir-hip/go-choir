@@ -105,7 +105,7 @@ type vectorState struct {
 	embedder embedder.Embedder
 	// queryEmbedder, when not nil, embeds search queries and nothing else.
 	queryEmbedder embedder.Embedder
-	ready    atomic.Bool
+	ready         atomic.Bool
 	// unsupported is why the installed pgvector is too old ("" when it is
 	// not); set by ensureVectorTables, read by the search.
 	unsupported atomic.Value
@@ -133,7 +133,9 @@ func (v *vectorState) kickChan() chan struct{} {
 	return v.kick
 }
 
-// SetEmbedder names the embedder the worker, the search and the import use.
+// SetEmbedder names the embedder the worker and the import use for documents.
+// It also serves search queries when no query embedder is set
+// (SetQueryEmbedder).
 func (s *Store) SetEmbedder(e embedder.Embedder) {
 	s.vec.mu.Lock()
 	s.vec.embedder = e

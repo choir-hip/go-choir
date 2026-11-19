@@ -21,13 +21,16 @@ package platform
 //      never the query one.
 //
 // Race shape avoided: every seam (SetEmbedder, SetQueryEmbedder, the deadline
-// variable) is set before any goroutine of the code under test starts, and the
-// deadline variable is restored by t.Cleanup, which runs after the goroutines
-// the test waited for have returned.
+// variable) is set before any goroutine of the code under test starts. The one
+// test that shortens captureVectorDeadline leaves a goroutine behind on
+// purpose (searchVectorsBounded stops waiting at the deadline), so its slow
+// embedder is a gate: the test releases it and waits until that embed call has
+// returned, in a defer that runs before the t.Cleanup that restores the
+// variable. The only reader of the variable besides that goroutine's caller is
+// the caller itself.
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -169,24 +172,52 @@ func TestVectorQueryEmbedderDownLeavesTheVectorHalfUnavailableAndDoesNotFallBack
 	}
 }
 
+// slowEmbedder does not look at its context: a query call blocks on release,
+// and returned counts the calls that have come back.
+type slowEmbedder struct {
+	inner    embedder.Embedder
+	release  chan struct{}
+	entered  chan struct{}
+	once     sync.Once
+	returned sync.WaitGroup
+}
+
+func (e *slowEmbedder) Health(ctx context.Context) error { return e.inner.Health(ctx) }
+func (e *slowEmbedder) Embed(ctx context.Context, in []string) ([][]float32, error) {
+	e.returned.Add(1)
+	defer e.returned.Done()
+	e.once.Do(func() { close(e.entered) })
+	<-e.release
+	return e.inner.Embed(ctx, in)
+}
+
 func TestVectorQueryEmbedderThatDoesNotAnswerInTimeIsUnavailableAtTheDeadlineAndNotRetriedOnTheBulkOne(t *testing.T) {
 	f := newRankFixture(t)
 	f.disagree(t)
 	bulkFake := f.emb
-	queryFake := &embedder.Fake{Override: func(input string) []float32 {
-		time.Sleep(600 * time.Millisecond) // does not look at its context
-		return markerVector(input)
-	}}
 	f.pass(t) // documents, on the bulk embedder, before any seam changes
-	f.store.SetQueryEmbedder(queryFake)
+	slow := &slowEmbedder{inner: &embedder.Fake{Override: markerVector}, release: make(chan struct{}), entered: make(chan struct{})}
+	f.store.SetQueryEmbedder(slow)
 	old := captureVectorDeadline
 	captureVectorDeadline = 80 * time.Millisecond
 	t.Cleanup(func() { captureVectorDeadline = old })
+	// Runs when the test function returns, before the Cleanup above: the call
+	// the search left behind is released and has returned before the variable
+	// is restored.
+	defer func() {
+		close(slow.release)
+		slow.returned.Wait()
+	}()
 	seen := len(bulkFake.Seen())
 	start := time.Now()
 	resp := f.rank(t, "zorblax")
 	if took := time.Since(start); took > 400*time.Millisecond {
 		t.Fatalf("the search waited %v with an 80 ms deadline", took)
+	}
+	select {
+	case <-slow.entered:
+	default:
+		t.Fatal("the query embedder was never asked")
 	}
 	if r := resp.Ranked; r == nil || r.VectorAnswered || !strings.Contains(r.VectorUnavailable, "within") {
 		t.Fatalf("ranking info %+v", r)
@@ -234,5 +265,4 @@ func TestVectorQueryLongerThanAQuerySlotIsUnavailableNeverAnErrorOrAHang(t *test
 			t.Fatalf("%s: the long query was retried on the bulk embedder: %v", msg, f.emb.Seen()[bulkSeen:])
 		}
 	}
-	_ = fmt.Sprint
 }
