@@ -1,7 +1,7 @@
 #!/bin/sh
 # End-to-end proof of the spine on a simulator, driven through Exact's agent socket (no human, no device), in demo mode
-# (bundled fixtures, no network, no microphone): the glass bar over a full-bleed page; two pages open and the pile shows
-# two cards; switch; one closes by swipe; the theme switches (Depth, Newsprint, dark); play/pause on
+# (bundled fixtures, no network, no microphone): the glass bar over a full-bleed page; the radio page first, then the paper and a story opened: the pile shows
+# three cards; switch; one closes by swipe; the theme switches (Depth, Newsprint, dark); play/pause on
 # the bar; the Components page (a talk turn through the injected fixture path, with the stub stages) and the Trace page.
 # Screenshots go to a directory the script prints (PROOF_SHOTS=dir to choose). Last line: PROOF OK, or PROOF FAILED at <step>.
 # Elements are found by test id, never by position.
@@ -50,7 +50,8 @@ DEVELOPER_DIR=$DD /usr/bin/xcrun simctl privacy "$EXACT_SIM" grant all $APP >/de
 attempt=1
 while :; do
   "$HERE/exact.sh" agent ios --touch platform \
-    "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01-paper.png" \
+    "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01-radio-first.png" \
+    "tap bar-pages" "clock +600 real" "clock data" "tap pile-places" "clock +600 real" "clock data" "tap place-paper" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01b-paper.png" \
     "tap paper-story-demo-grid-storage" "clock +800 real" "clock data" tree "screenshot $SHOTS/02-story-page.png" \
     "tap bar-pages" "clock +600 real" "clock data" tree "screenshot $SHOTS/03-pile-two-cards.png" \
     "tap pile-places" "clock +600 real" "clock data" "tap launcher-open-paper:front" "clock +600 real" "clock data" tree "screenshot $SHOTS/03b-switched-to-paper.png" \
@@ -81,6 +82,7 @@ must() { # <step name> <fixed text>
   echo "ok: $1"
 }
 
+must "the app opens on the Autoradio page (the first fixed page)" '[radio-play]'
 must "demo mode: the paper page under the bar" '[page-title] "AUTOPAPER"'
 must "demo mode: a fixture story on the front page" 'The harbor council approves a tide barrier'
 must "bar: floats over the page" '[bar] (pan'
@@ -88,11 +90,11 @@ must "bar: pages button, prompt, voice button" '[bar-pages]'
 must "bar: prompt field with the aim (first run: the invitation)" 'label="Make it yours'
 must "bar: voice button" '[bar-voice]'
 must "open a page: the story is a page" '[page-title] "A regional grid adds its largest battery yet"'
-must "open a page: the bar counts two" '[bar-pages-count] "2"'
+must "open a page: the bar counts three (radio, paper, story)" '[bar-pages-count] "3"'
 must "pile: a card per page (story)" '[card-pub:demo-grid-storage]'
 must "pile: a card per page (paper)" '[card-paper:front]'
 must "switch: the launcher's open chip brings the first page forward" '[page-title] "AUTOPAPER"'
-must "close by swipe: the count is back to one" '[bar-pages-count] "1"'
+must "close by swipe: the count is back to two (the radio and the story)" '[bar-pages-count] "2"'
 must "launcher: places" '[place-settings]'
 must "settings: themes and modes" '[settings-theme-newsprint]'
 must "theme switch: Newsprint" 'Showing Newsprint (light)'

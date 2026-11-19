@@ -428,7 +428,7 @@ describe('10 the grants and the files agree', () => {
   test('app.ts grants the library, the feed folder, and any https host for a feed the listener names', () => {
     expect(app).toContain(`fs.read ${P.LIBRARY_FILE}`); expect(app).toContain(`fs.write ${P.LIBRARY_FILE}`);
     expect(app).toContain(`fs.read ${P.FEED_DIR}`); expect(app).toContain(`fs.write ${P.FEED_DIR}`);
-    expect(app).toMatch(/^net\.fetch https:`;$/m);
+    expect(app).toMatch(/^net\.fetch https:$/m);
     expect(app).not.toMatch(/net\.fetch http:/);
   });
   test('sign-out wipes the library and every cached feed', async () => {
