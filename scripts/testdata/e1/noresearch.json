@@ -1,0 +1,56 @@
+{
+ "base_url": "https://staging.invalid",
+ "build": {
+  "commit": "fixture0001"
+ },
+ "computer_id": "computer-fixture-sa",
+ "exported_at": "2026-01-01T00:30:00Z",
+ "layers": {
+  "run_events": {
+   "items": [
+    {
+     "event_id": "ev-noresearch-001",
+     "kind": "model.served",
+     "loop_id": "run-tex",
+     "payload": {
+      "models": [
+       {
+        "calls": 6,
+        "input_tokens": 1200,
+        "model": "gpt-6-luna",
+        "provider": "chatgpt"
+       }
+      ],
+      "purpose": "tool_loop",
+      "schema": "choir.model_served.v1"
+     },
+     "seq": 1,
+     "ts": "2026-01-01T00:05:01Z"
+    }
+   ],
+   "status": "present"
+  },
+  "runs": {
+   "items": [
+    {
+     "agent_profile": "texture",
+     "agent_role": "texture",
+     "created_at": "2026-01-01T00:01:00Z",
+     "finished_at": "2026-01-01T00:25:00Z",
+     "metadata": {
+      "llm_model": "swe-2-flash",
+      "llm_policy_overlay_id": "e1-sa",
+      "llm_provider": "devin"
+     },
+     "run_id": "run-tex",
+     "state": "completed",
+     "trajectory_id": "traj-fx-noresearch",
+     "updated_at": "2026-01-01T00:25:00Z"
+    }
+   ],
+   "status": "present"
+  }
+ },
+ "schema": "choir.trace_bundle.v1",
+ "trajectory_id": "traj-fx-noresearch"
+}

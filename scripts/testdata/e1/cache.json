@@ -1,0 +1,264 @@
+{
+ "base_url": "https://staging.invalid",
+ "build": {
+  "commit": "fixture0001"
+ },
+ "computer_id": "computer-fixture-sa",
+ "exported_at": "2026-01-01T00:30:00Z",
+ "layers": {
+  "run_events": {
+   "items": [
+    {
+     "event_id": "ev-cache-001",
+     "kind": "model.served",
+     "loop_id": "run-tex",
+     "payload": {
+      "models": [
+       {
+        "calls": 6,
+        "input_tokens": 1200,
+        "model": "gpt-6-luna",
+        "provider": "chatgpt"
+       }
+      ],
+      "purpose": "tool_loop",
+      "schema": "choir.model_served.v1"
+     },
+     "seq": 1,
+     "ts": "2026-01-01T00:05:01Z"
+    },
+    {
+     "event_id": "ev-cache-002",
+     "kind": "model.served",
+     "loop_id": "run-res",
+     "payload": {
+      "models": [
+       {
+        "calls": 6,
+        "input_tokens": 1200,
+        "model": "swe-2-flash",
+        "provider": "devin"
+       }
+      ],
+      "purpose": "tool_loop",
+      "schema": "choir.model_served.v1"
+     },
+     "seq": 2,
+     "ts": "2026-01-01T00:05:02Z"
+    },
+    {
+     "event_id": "ev-cache-003",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 0,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q0",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r0",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 3,
+     "ts": "2026-01-01T00:05:03Z"
+    },
+    {
+     "event_id": "ev-cache-004",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s0",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 4,
+     "ts": "2026-01-01T00:05:04Z"
+    },
+    {
+     "event_id": "ev-cache-005",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 1,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q1",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r1",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 5,
+     "ts": "2026-01-01T00:05:05Z"
+    },
+    {
+     "event_id": "ev-cache-006",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s1",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 6,
+     "ts": "2026-01-01T00:05:06Z"
+    },
+    {
+     "event_id": "ev-cache-007",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 2,
+      "egress": [
+       {
+        "is_error": false,
+        "request_id": "run-res-q2",
+        "run_id": "run-res",
+        "verb": "search_start"
+       },
+       {
+        "is_error": false,
+        "request_id": "run-res-r2",
+        "run_id": "run-res",
+        "verb": "read"
+       }
+      ]
+     },
+     "seq": 7,
+     "ts": "2026-01-01T00:05:07Z"
+    },
+    {
+     "event_id": "ev-cache-008",
+     "kind": "desk.egress",
+     "loop_id": "run-res",
+     "payload": {
+      "answered": 1,
+      "arrived": 1,
+      "run_id": "run-res",
+      "search_id": "run-res-s2",
+      "total": 1,
+      "verb": "search_done"
+     },
+     "seq": 8,
+     "ts": "2026-01-01T00:05:08Z"
+    },
+    {
+     "event_id": "ev-cache-009",
+     "kind": "desk.cell",
+     "loop_id": "run-res",
+     "payload": {
+      "cell": 900,
+      "egress": [
+       {
+        "error": "gate refused",
+        "is_error": true,
+        "request_id": "run-res-e0",
+        "run_id": "run-res",
+        "verb": "search_start"
+       }
+      ]
+     },
+     "seq": 9,
+     "ts": "2026-01-01T00:05:09Z"
+    },
+    {
+     "event_id": "ev-cache-010",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 10,
+     "ts": "2026-01-01T00:05:10Z"
+    },
+    {
+     "event_id": "ev-cache-011",
+     "kind": "search.served",
+     "loop_id": "run-res",
+     "payload": {
+      "providers": [
+       {
+        "answered": 1,
+        "calls": 1,
+        "provider": "keenable",
+        "results": 40
+       }
+      ],
+      "role": "research",
+      "schema": "choir.search_served.v1"
+     },
+     "seq": 11,
+     "ts": "2026-01-01T00:05:11Z"
+    }
+   ],
+   "status": "present"
+  },
+  "runs": {
+   "items": [
+    {
+     "agent_profile": "texture",
+     "agent_role": "texture",
+     "created_at": "2026-01-01T00:01:00Z",
+     "finished_at": "2026-01-01T00:25:00Z",
+     "metadata": {
+      "llm_model": "swe-2-flash",
+      "llm_policy_overlay_id": "e1-sa",
+      "llm_provider": "devin"
+     },
+     "run_id": "run-tex",
+     "state": "completed",
+     "trajectory_id": "traj-fx-cache",
+     "updated_at": "2026-01-01T00:25:00Z"
+    },
+    {
+     "agent_profile": "research",
+     "agent_role": "research",
+     "created_at": "2026-01-01T00:02:00Z",
+     "finished_at": "2026-01-01T00:15:00Z",
+     "metadata": {
+      "llm_model": "swe-2-flash",
+      "llm_policy_overlay_id": "e1-sa",
+      "llm_provider": "devin"
+     },
+     "run_id": "run-res",
+     "state": "completed",
+     "trajectory_id": "traj-fx-cache",
+     "updated_at": "2026-01-01T00:15:00Z"
+    }
+   ],
+   "status": "present"
+  }
+ },
+ "schema": "choir.trace_bundle.v1",
+ "trajectory_id": "traj-fx-cache"
+}
