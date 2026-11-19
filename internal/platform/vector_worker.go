@@ -734,30 +734,45 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
-		rows, err := s.store.captureGapBatch(ctx, model, afterEff, afterID, vectorBatch)
+		page, err := s.store.captureGapBatch(ctx, model, afterEff, afterID, vectorGapPage)
 		if err != nil {
 			return res, err
 		}
-		if len(rows) == 0 {
+		if len(page) == 0 {
 			break
 		}
-		last := rows[len(rows)-1]
+		last := page[len(page)-1]
 		afterEff, afterID = &last.Eff, last.ID
-		batchAt := time.Now()
-		n, skipped, nref, err := s.embedCaptureBatch(ctx, rows)
-		s.store.vec.remaining.Add(-int64(len(rows)))
-		res.Captures += n
-		res.Skipped += skipped
-		res.Refused += nref
-		refusedCaptures += int64(nref)
-		capHave += int64(n + nref)
-		capWant -= int64(skipped)
-		embeddedTotal.Add(int64(n))
-		logEmbedGap("captures", batchAt, n, capHave, capWant, refusedCaptures)
-		if err != nil {
-			return res, err
+		// The page is a snapshot. embedCaptureBatch re-checks each row's
+		// eligibility (sqlEligibleCaptures) just before embedding and skips one
+		// that is no longer eligible, and writeCaptureVectors upserts by capture
+		// id, so a row that got a vector meanwhile is only overwritten with the
+		// same model's row; a stale page cannot write a vector for an ineligible
+		// capture.
+		for start := 0; start < len(page); start += vectorBatch {
+			if err := ctx.Err(); err != nil {
+				return res, err
+			}
+			rows := page[start:min(start+vectorBatch, len(page))]
+			batchAt := time.Now()
+			n, skipped, nref, err := s.embedCaptureBatch(ctx, rows)
+			s.store.vec.remaining.Add(-int64(len(rows)))
+			res.Captures += n
+			res.Skipped += skipped
+			res.Refused += nref
+			refusedCaptures += int64(nref)
+			capHave += int64(n + nref)
+			capWant -= int64(skipped)
+			embeddedTotal.Add(int64(n))
+			logEmbedGap("captures", batchAt, n, capHave, capWant, refusedCaptures)
+			if err != nil {
+				return res, err
+			}
+			progress("capture")
 		}
-		progress("capture")
+		if len(page) < vectorGapPage {
+			break // a short page is the end of the gap
+		}
 	}
 
 	s.store.vec.remaining.Store(0)

@@ -2066,9 +2066,10 @@ func TestVectorWalkIsTimed(t *testing.T) {
 
 // The capture walk reads the gap a page at a time (vectorGapPage) and feeds the
 // embedder vectorBatch at a time from it. Failure list, written before the code:
-//   h. TestTheCaptureWalkReadsTheGapOncePerPageNotOncePerEmbedBatch: one gap
-//      statement per embed batch of four, each a scan of every capture;
-//   i. the same walk still embeds every capture, one batch at a time.
+//
+//	h. TestTheCaptureWalkReadsTheGapOncePerPageNotOncePerEmbedBatch: one gap
+//	   statement per embed batch of four, each a scan of every capture;
+//	i. the same walk still embeds every capture, one batch at a time.
 func TestTheCaptureWalkReadsTheGapOncePerPageNotOncePerEmbedBatch(t *testing.T) {
 	f := newVecFixture(t)
 	const n = 30
