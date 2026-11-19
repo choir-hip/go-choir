@@ -545,6 +545,11 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 	if err := emb.Health(ctx); err != nil {
 		return res, fmt.Errorf("%w: %v", errEmbedderDown, err)
 	}
+	// A file waiting in the spool inbox is imported before the gap work, so the
+	// gap it leaves is what the worker then fills.
+	if s.ProcessVectorInbox(ctx) > 0 {
+		s.vecIdle = vecIdleMark{}
+	}
 	model := embedder.ModelHash
 	started := time.Now()
 	lastLog := started
@@ -1099,6 +1104,7 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 	}
 	s.store.vec.started.Do(func() {
 		s.removeStaleVectorSpool()
+		s.recoverVectorInbox()
 		go func() {
 			select {
 			case <-ctx.Done():

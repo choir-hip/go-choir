@@ -561,6 +561,42 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   poll offers them again (feed items are not lost); `read.go:161-164` returns the error to the agent, which sees the failed Read. Nothing in the
   guest drops a capture silently. (No change made.)
 
+### 0.11.4 The spool inbox (the Mac's file without HTTP or a credential)
+
+`internal/platform/vector_inbox.go`. Whoever can write corpusd's disk on the host already holds more than the host credential, so a
+directory adds no authority; the file passes every check the route applies (`ImportVectorFile`: another model or dimension, a bad row,
+a failed 32-row sample, the 4 KiB line and group bounds, `text_sha` against the host's own cut, public text only) and is one job among
+the route's: one at a time, so a file waits while a route job runs.
+
+```
+/var/lib/go-choir/platform-artifacts/vector-import/
+  inbox/        *.jsonl files wait here; *.part is ignored; a file younger than 60 s is left alone
+  running/      the file being imported (the rename into it is the claim)
+  done/         imported; <name>.job.json beside it
+  refused/      refused or failed (wrong model, bad row, failed sample, over 2 GiB, a symlink, unreadable); <name>.job.json says why
+  interrupted/  found in running/ at start; corpusd never runs it again
+```
+
+- **Rules.** A pass takes the oldest eligible file before the gap work, one at a time. A crash restart resumes nothing: at start
+  anything in `running/` is moved to `interrupted/` and logged (`moved to interrupted/ and not run again`). A file is retried only
+  by a person moving it back to `inbox/`. A symlink or other non-regular file is moved to `refused/` as it is, never opened or followed. Nothing
+  deletes `done/`, `refused/` or `interrupted/`: the artifact collector sweeps named namespaces only (`artifact_gc.go`
+  `artifactGCNamespaces`: none of these), and corpusd removes nothing there. The files are large (the stories about 30 MB, the captures about
+  200 MB); the lead deletes them after reading the job record.
+- **The journal line**, one per file (and per route job), the same format: `corpusd retrieval op=vector_import shape=inbox|route ms= rows=
+  written= refused= sample_min_cosine= err= reasons=<reason:n,...> job= state= file=`. `refused=` is the rows dropped, `reasons=` says by
+  which check. `scripts/status-vectors` shows the last one.
+- **To import a file, on Node B as a user who can write that directory (root):**
+
+```
+D=/var/lib/go-choir/platform-artifacts/vector-import/inbox
+cp captures.jsonl "$D/captures.jsonl.part" && mv "$D/captures.jsonl.part" "$D/captures.jsonl"   # copy whole, then rename
+# the worker takes it on its next pass after the file is 60 s old (at most about 5 minutes)
+journalctl -u go-choir-corpusd --since '-30 min' --no-pager -o cat | grep 'op=vector_import'
+cat /var/lib/go-choir/platform-artifacts/vector-import/done/captures.jsonl.job.json      # or refused/captures.jsonl.job.json
+scripts/status-vectors                                                                    # from a checkout: the last import and have/want/remaining
+```
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image
