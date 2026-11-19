@@ -317,8 +317,8 @@ Recounted from every row of both tables on 2026-11-19T00:15Z (the count
 before it was from 2026-11-13 and had fallen behind: it showed 3 of 13 true in
 the 0.3 to 0.6 band when the rows held 14 of 29). Second form, with C140 to C142 added on 2026-11-19T03:20Z: 125 claims
 (C143 and C144 added, C138 settled, 2026-11-19T05:25Z);
-67 settled true or false (39 true, 28 false; C141 true and C142 false settled 2026-11-19T06:45Z, C145 added), 3 partial, 2 void, 31 lapsed,
-6 open. Mean Brier over the 67: 0.21. First form: 12 settled (7 true, 4
+67 settled true or false (39 true, 28 false; C141 true and C142 false settled 2026-11-19T06:45Z, C145 added), 3 partial, 2 void, 31 lapsed.
+Open by name on 2026-11-19T06:50Z: C120, C126, C127, C129, C143, C144, C145 (the earlier count of 25 open was not recounted here). Mean Brier over the 67: 0.21. First form: 12 settled (7 true, 4
 false, 1 partial), 7 lapsed.
 
 | band | settled true or false | came true | partial | lapsed | mean Brier |
