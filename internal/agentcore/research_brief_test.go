@@ -233,7 +233,7 @@ func TestBriefOnAnEmptySearchSaysWhatItCoveredAndMarksOnlyTheRecordsLabels(t *te
 	}
 }
 
-func TestBriefFailureIsOnePlainSentenceAndMarksOnlyTheRecordsLabels(t *testing.T) {
+func TestBriefFailureIsOnePlainSentenceAndMarksNothing(t *testing.T) {
 	plan := researchBriefThreads([]types.CommitmentRecord{castWithLabels("Harbor?", types.OwnerPrivateLabel("texture"))}, "")
 	res := buildResearchBrief(briefDeadlineCtx(), plan, func(context.Context, string) (json.RawMessage, error) {
 		return nil, errors.New("corpusd returned 503")
@@ -244,8 +244,9 @@ func TestBriefFailureIsOnePlainSentenceAndMarksOnlyTheRecordsLabels(t *testing.T
 	if !strings.HasPrefix(strings.TrimSpace(res.text), "No corpus brief:") || !strings.Contains(res.text, "503") || !strings.Contains(res.text, "choir.SearchWireCorpus") {
 		t.Fatalf("the missing brief is not stated plainly:\n%s", res.text)
 	}
-	if got := strings.Join(sortedLabels(res.labels), ","); got != "owner_private:texture" {
-		t.Fatalf("a failed brief marks %q, want only the record's label", got)
+	// The sentence holds no record text, so no record label is marked.
+	if len(res.labels) != 0 {
+		t.Fatalf("a failed brief (a sentence with no record text) marks %v", res.labels)
 	}
 }
 
@@ -589,15 +590,16 @@ func castWithLabels(objective string, labels ...string) types.CommitmentRecord {
 func TestBriefMarksTheLabelsOfTheRecordItTookTextFrom(t *testing.T) {
 	rec := castWithLabels("Harbor?", types.OwnerPrivateLabel("capture"), types.OwnerPrivateLabel("texture"))
 	plan := researchBriefThreads([]types.CommitmentRecord{rec}, "")
-	for _, search := range []briefSearchFunc{
-		fixedSearch(briefResult(nil, 0)), // empty
-		func(context.Context, string) (json.RawMessage, error) { return nil, errors.New("down") }, // failed
-	} {
-		res := buildResearchBrief(context.Background(), plan, search)
-		got := strings.Join(sortedLabels(res.labels), ",")
-		if !strings.Contains(got, "owner_private:capture") || !strings.Contains(got, "owner_private:texture") {
-			t.Fatalf("outcome %s carries %q, not the record's labels", res.outcome, got)
-		}
+	// An empty search still shows the objective in "Thread 1": marked.
+	res := buildResearchBrief(context.Background(), plan, fixedSearch(briefResult(nil, 0)))
+	got := strings.Join(sortedLabels(res.labels), ",")
+	if res.outcome != briefEmpty || !strings.Contains(got, "owner_private:capture") || !strings.Contains(got, "owner_private:texture") {
+		t.Fatalf("outcome %s carries %q, not the record's labels", res.outcome, got)
+	}
+	// A failed one is a sentence with no record text: nothing to mark.
+	res = buildResearchBrief(context.Background(), plan, func(context.Context, string) (json.RawMessage, error) { return nil, errors.New("down") })
+	if res.outcome != briefFailed || len(res.labels) != 0 || strings.Contains(res.text, "Harbor?") {
+		t.Fatalf("a failed brief marks %v and shows %q", res.labels, res.text)
 	}
 }
 
@@ -734,6 +736,9 @@ type briefSink struct {
 	publishedQ []string
 	// text is what the index says of the page text; nil means it did not answer.
 	text *researchtools.CaptureTextInfo
+	// pubPieces and pubCapped are what the published search answers.
+	pubPieces []researchtools.PublishedPiece
+	pubCapped bool
 }
 
 func (f *briefSink) WriteCaptures(context.Context, string, string, []sourcegraph.CaptureItem) (sourcegraph.CaptureWriteResult, error) {
@@ -755,7 +760,7 @@ func (f *briefSink) SearchPublished(_ context.Context, query string, _ int) (res
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.publishedQ = append(f.publishedQ, query)
-	return researchtools.PublishedAnswer{}, nil
+	return researchtools.PublishedAnswer{Pieces: f.pubPieces, Capped: f.pubCapped}, nil
 }
 
 // Review item 7, through the real tool path: a blank owner or computer makes
@@ -1355,11 +1360,10 @@ func TestBriefNamesLabelsAsNotSearchedWhenTheStoreCannotBeRead(t *testing.T) {
 	}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID})
 	res := buildResearchBrief(ctx, planN(1), rt.researchBriefSearcher())
-	if res.outcome != briefEmpty && res.outcome != briefFailed {
+	// Pinned: with the store closed the verb still answers (the index and the
+	// published search do not use the store), titles ran and labels did not.
+	if res.outcome != briefEmpty || !strings.Contains(res.text, "Not searched: labels.") || !strings.Contains(res.text, "titles,") {
 		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
-	}
-	if res.outcome == briefEmpty && !strings.Contains(res.text, "Not searched: labels.") {
-		t.Fatalf("labels were not read but are not said to be not searched:\n%s", res.text)
 	}
 	assertNoAbsenceClaim(t, "store closed", res.text)
 }
@@ -1389,5 +1393,117 @@ func TestBriefLogLineCountsGapsAndHasNoPartialOutcome(t *testing.T) {
 	line := researchBriefLogLine("r", "research", 0, res)
 	if !strings.Contains(line, " gaps=2 ") || !strings.Contains(line, " outcome=empty ") || strings.Contains(line, "partial") {
 		t.Fatalf("line: %s", line)
+	}
+}
+
+// --- round 5 ---
+
+// Round 5, item 1: a capped published search ran and returned a story. The
+// block lists it, says the scan stopped at its cap, and does not say the
+// published stories were not searched.
+func TestBriefAPublishedSearchThatWasCappedIsSearchedInPart(t *testing.T) {
+	story := researchtools.PublishedPiece{Title: "Capped story", ReadURL: "https://choir.news/r/capped", RoutePath: "/pub/capped", Kind: "story"}
+	sink := &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 4, Captures: 4}, pubPieces: []researchtools.PublishedPiece{story}, pubCapped: true}
+	res := briefOverRealToolAsDesk(t, sink, planN(1))
+	if !strings.Contains(res.text, "Capped story") {
+		t.Fatalf("the story the capped search returned is not listed:\n%s", res.text)
+	}
+	if strings.Contains(res.text, "Not searched: published stories") {
+		t.Fatalf("a capped search that returned a story is said not to have been searched:\n%s", res.text)
+	}
+	if res.gaps != 0 {
+		t.Fatalf("a capped part counted as a gap: gaps=%d", res.gaps)
+	}
+	// With nothing found it says what ran, and that the scan was capped.
+	sink = &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 4, Captures: 4}, pubCapped: true}
+	res = briefOverRealToolAsDesk(t, sink, planN(1))
+	if !strings.Contains(res.text, "published stories (in part: the scan stopped at its cap)") {
+		t.Fatalf("the cap is not said under Searched:\n%s", res.text)
+	}
+	assertNoAbsenceClaim(t, "capped published search", res.text)
+}
+
+// Round 5, item 2: one definition of gaps wins on every path, early returns
+// included: thread parts not searched, 3 for a thread no search answered.
+func TestBriefGapsAreThreadPartsNotSearchedOnEveryPath(t *testing.T) {
+	plan := planN(3)
+	plan.left = []briefThread{{Kind: "question", Text: "left"}}
+	// No host: every thread and the left-out one: 4 x 3.
+	if res := buildResearchBrief(context.Background(), plan, nil); res.outcome != briefFailed || res.gaps != 12 {
+		t.Fatalf("no host: outcome=%q gaps=%d", res.outcome, res.gaps)
+	}
+	// All three searches fail.
+	failing := func(context.Context, string) (json.RawMessage, error) { return nil, errors.New("down") }
+	if res := buildResearchBrief(context.Background(), plan, failing); res.outcome != briefFailed || res.gaps != 12 || res.queries != 3 {
+		t.Fatalf("all fail: outcome=%q gaps=%d queries=%d", res.outcome, res.gaps, res.queries)
+	}
+	// One fails: that thread's three parts (and the left-out thread's).
+	n := 0
+	one := func(context.Context, string) (json.RawMessage, error) {
+		n++
+		if n == 2 {
+			return nil, errors.New("down")
+		}
+		return briefResult(nil, 0), nil
+	}
+	if res := buildResearchBrief(context.Background(), plan, one); res.outcome != briefEmpty || res.gaps != 6 {
+		t.Fatalf("one fails: outcome=%q gaps=%d", res.outcome, res.gaps)
+	}
+	// The run's one log line (the deferred finish path) carries the same count.
+	rt, s := testRuntime(t)
+	owner, computer := "owner-brief-17", rt.cfg.ComputerID
+	seedResearchCast(t, s, owner, computer, "doc-17", "Harbor?", "")
+	rt.researchDeps = nil
+	logs := briefCaptureLog(t)
+	b := rt.researchBriefOpening(context.Background(), briefRunRecord(owner, computer, "doc-17", "run-brief-17"))
+	b.finish(false)
+	if !strings.Contains(logs.String(), "gaps=3") || !strings.Contains(logs.String(), "outcome=dropped") {
+		t.Fatalf("the line through finish(false):\n%s", logs.String())
+	}
+}
+
+// Round 5, item 4: a thread of stop words has no word to match titles on; the
+// brief says so instead of "Searched: titles and labels".
+func TestBriefNamesAThreadWithNoSearchableWord(t *testing.T) {
+	cov := coverageWith(map[string]any{"titles": false, "labels": false, "no_title_words": true})
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult(nil, 0), cov)))
+	if !strings.Contains(res.text, "Not searched: titles and labels (the thread has no word to match titles on).") || strings.Contains(res.text, "Searched: page text (10 pages indexed), titles") {
+		t.Fatalf("a thread of stop words is said to have searched titles:\n%s", res.text)
+	}
+}
+
+// Round 5, item 5: an absent id or url is not printed; an over-long one says so.
+func TestBriefDistinguishesAnAbsentAddressFromATooLongOne(t *testing.T) {
+	c := briefCapture(1, "p")
+	c["capture_id"], c["url"] = "", ""
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(briefResult([]map[string]any{c}, 0)))
+	if strings.Contains(res.text, "omitted") || strings.Contains(res.text, "capture_id=") {
+		t.Fatalf("an absent id or url is printed as omitted:\n%s", res.text)
+	}
+	c2 := briefCapture(2, "p")
+	c2["url"] = "https://x.example/" + strings.Repeat("u", 300)
+	res = buildResearchBrief(context.Background(), planN(1), fixedSearch(briefResult([]map[string]any{c2}, 0)))
+	if !strings.Contains(res.text, "(url omitted: too long to show whole)") {
+		t.Fatalf("an over-long url does not say so:\n%s", res.text)
+	}
+}
+
+// briefOverRealToolAsDesk drives the brief's real verb as the opening does:
+// with the research desk declared as the reader of the object graph.
+func briefOverRealToolAsDesk(t *testing.T, sink researchtools.CaptureSink, plan briefPlan) researchBriefResult {
+	t.Helper()
+	rt, s := testRuntime(t)
+	rt.researchDeps = &researchtools.Dependencies{Store: s, Captures: sink}
+	ctx := withDeskReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID}), agentprofile.Research)
+	return buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
+}
+
+// Round 5, item 6: with the desk declared as reader the labels read succeeds
+// and the brief says titles and labels were searched: proven, not read from code.
+func TestBriefTheRealVerbWithADeclaredDeskReaderSearchedLabels(t *testing.T) {
+	sink := &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 7, Captures: 7}}
+	res := briefOverRealToolAsDesk(t, sink, planN(1))
+	if !strings.Contains(res.text, "Searched: page text (7 pages indexed), titles and labels, published stories.") || res.gaps != 0 {
+		t.Fatalf("gaps=%d:\n%s", res.gaps, res.text)
 	}
 }

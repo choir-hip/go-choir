@@ -57,6 +57,11 @@ func (s indexSink) SearchPublished(context.Context, string, int) (PublishedAnswe
 
 func coverageOf(t *testing.T, captures CaptureSink) SearchCoverage {
 	t.Helper()
+	return coverageOfQuery(t, captures, "harbor strike")
+}
+
+func coverageOfQuery(t *testing.T, captures CaptureSink, query string) SearchCoverage {
+	t.Helper()
 	guest, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +70,8 @@ func coverageOf(t *testing.T, captures CaptureSink) SearchCoverage {
 	tool := newSearchWireCorpusTool(Dependencies{Store: guest, Captures: captures})
 	// A desk reads the labels as itself; the kernel reader stands for it here.
 	ctx := objectgraph.WithReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c"}), objectgraph.WriterKernel)
-	out, err := tool.Func(ctx, json.RawMessage(`{"query":"harbor strike"}`))
+	payload, _ := json.Marshal(map[string]string{"query": query})
+	out, err := tool.Func(ctx, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +101,8 @@ func TestCoverageNamesEachPartThatRan(t *testing.T) {
 		{"page text index covers part", indexSink{text: &CaptureTextInfo{Used: true, Indexed: 3, Captures: 5}}, SearchCoverage{PageText: true, PageTextIndexed: 3, Titles: true, Labels: true, Published: true}},
 		{"page text refused", indexSink{text: &CaptureTextInfo{Used: false, Reason: "index not ready"}}, SearchCoverage{Titles: true, Labels: true, Published: true}},
 		{"published search failed", indexSink{text: whole, pubErr: errors.New("corpusd 503")}, SearchCoverage{PageText: true, PageTextIndexed: 5, Titles: true, Labels: true}},
-		{"published search capped", indexSink{text: whole, published: PublishedAnswer{Capped: true}}, SearchCoverage{PageText: true, PageTextIndexed: 5, Titles: true, Labels: true}},
+		// A capped search ran and returned pieces: it is Published, and says it was capped.
+		{"published search capped", indexSink{text: whole, published: PublishedAnswer{Capped: true}}, SearchCoverage{PageText: true, PageTextIndexed: 5, Titles: true, Labels: true, Published: true, PublishedCapped: true}},
 		{"every part ran", indexSink{text: whole}, SearchCoverage{PageText: true, PageTextIndexed: 5, Titles: true, Labels: true, Published: true}},
 	}
 	for _, tc := range cases {
@@ -148,5 +155,15 @@ func TestCoverageZeroValueIsNotSearched(t *testing.T) {
 	var c SearchCoverage
 	if c.PageText || c.Titles || c.Labels || c.Window || c.Published || c.PageTextIndexed != 0 {
 		t.Fatalf("zero coverage reads as searched: %+v", c)
+	}
+}
+
+// A thread of stop words alone has no word to match titles on: nothing in the
+// title half is searched, so titles and labels are not claimed.
+func TestCoverageTitlesAreFalseWhenTheQueryHasNoSearchableWord(t *testing.T) {
+	got := coverageOfQuery(t, indexSink{text: &CaptureTextInfo{Used: true, Indexed: 5, Captures: 5}}, "What is the latest?")
+	want := SearchCoverage{PageText: true, PageTextIndexed: 5, NoTitleWords: true, Published: true}
+	if got != want {
+		t.Fatalf("coverage = %+v, want %+v", got, want)
 	}
 }
