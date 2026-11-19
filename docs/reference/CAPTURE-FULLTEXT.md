@@ -322,7 +322,10 @@ could have entered it. In every other case the old statement runs. A query with
 time after the score order. `TestTopPassagesAnswerLikeTheFullStatement` compares
 the two paths on hits, passage ids, order and scores across cut sizes, limits,
 ties, a page with more than three matching passages, windows, recency order and
-an empty answer, and requires that both the shortcut and the fallback occur.
+and requires that both the shortcut and the fallback occur;
+`TestTopPassagesEmptyJoinFallsBack` covers passages whose page row is gone (the
+cut joins to nothing while other pages match), no page rows at all, and a query
+nothing matches.
 Measured on the 100,000-page index above, top 10 identical in all 120 queries:
 median 388 to 120 ms (ninth decile 772 to 198), 640 to 174 ms (2,912 to 1,083)
 with common words kept, 429 to 118 ms (631 to 186) for 10 words. The remaining
@@ -341,8 +344,9 @@ statement reads every posting of every query word (prefixes included) and sorts
 them, so its time is the sum of the words' postings; the primary key
 `(owner_id, computer_id, term, capture_id)` did not hold `fetched_at`, so each
 posting also cost a heap fetch. `idx_pct_cover` (same columns, `INCLUDE
-(fetched_at)`) makes it an index-only scan; it is built `CONCURRENTLY` at start
-by `ensureCaptureTermsCoverIndex`, followed by one `VACUUM (ANALYZE)` of the
+(fetched_at)`) makes it an index-only scan; it is built `CONCURRENTLY` at start and
+repaired on each periodic retrieval tick (10 minutes) by
+`ensureCaptureTermsCoverIndex`, followed by one `VACUUM (ANALYZE)` of the
 table (an index-only scan reads the heap for pages the visibility map does not
 cover, and on a bulk-loaded, never-vacuumed table the index gave no gain at all
 until it was vacuumed). Measured on the build machine at 214,000 captures and

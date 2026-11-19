@@ -90,7 +90,7 @@ func TestCaptureTermsCoverIndexIsBuiltByTheMigrationAndRepaired(t *testing.T) {
 	// An interrupted build leaves the index invalid (marked here as the
 	// server marks it); the next call drops and rebuilds it.
 	if _, err := store.corpus().ExecContext(ctx, `UPDATE pg_index SET indisvalid = false WHERE indexrelid = ?::regclass`, captureTermsCoverIdx); err != nil {
-		t.Skipf("cannot mark an index invalid here: %v", err)
+		t.Fatalf("the test database must let a superuser mark an index invalid (dbxtest's cluster, or a CHOIR_TEST_PG_DSN of one): %v", err)
 	}
 	if ex, va := coverIndexState(t, store); !ex || va {
 		t.Fatalf("setup: exists=%v valid=%v", ex, va)
@@ -131,8 +131,18 @@ func TestCaptureTermSearchReadsPostingsFromTheCoveringIndexAndAnswersTheSame(t *
 	coverFixture(t, store)
 	// The migration's own build (on the empty table) vacuumed once already:
 	// the vacuum under test must be a later one.
+	// Wait for that baseline to be recorded (statistics lag a moment), so the
+	// migration's vacuum cannot satisfy the poll below.
 	var lastVacuumBefore sql.NullTime
-	_ = store.corpus().QueryRowContext(ctx, `SELECT last_vacuum FROM pg_stat_user_tables WHERE relname = ?`, captureTermsTable).Scan(&lastVacuumBefore)
+	for i := 0; i < 50 && !lastVacuumBefore.Valid; i++ {
+		_ = store.corpus().QueryRowContext(ctx, `SELECT last_vacuum FROM pg_stat_user_tables WHERE relname = ?`, captureTermsTable).Scan(&lastVacuumBefore)
+		if !lastVacuumBefore.Valid {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if !lastVacuumBefore.Valid {
+		t.Fatal("the migration's own build recorded no vacuum, so there is no baseline")
+	}
 	time.Sleep(50 * time.Millisecond)
 	if err := store.ensureCaptureTermsCoverIndex(ctx); err != nil {
 		t.Fatal(err)
@@ -264,11 +274,13 @@ func TestPeriodicStepRepairsAnInvalidCoverIndex(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	ctx := context.Background()
 	if _, err := store.corpus().ExecContext(ctx, `UPDATE pg_index SET indisvalid = false WHERE indexrelid = ?::regclass`, captureTermsCoverIdx); err != nil {
-		t.Skipf("cannot mark an index invalid here: %v", err)
+		t.Fatalf("the test database must let a superuser mark an index invalid (dbxtest's cluster, or a CHOIR_TEST_PG_DSN of one): %v", err)
 	}
 	if ex, va := coverIndexState(t, store); !ex || va {
 		t.Fatalf("setup: exists=%v valid=%v", ex, va)
 	}
+	// The step is called directly: the loop's wiring (retrievalPeriodic calling
+	// retrievalStep on its tick) is not driven by this test.
 	store.retrievalStep(ctx)
 	if ex, va := coverIndexState(t, store); !ex || !va {
 		t.Fatalf("after the periodic step: exists=%v valid=%v, want a valid index", ex, va)
