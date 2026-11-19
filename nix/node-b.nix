@@ -598,7 +598,7 @@ in
 {
   # PostgreSQL for the host data system (additive; wired to services at the
   # cutover). Rollback: remove this line.
-  imports = [ ./postgresql.nix ];
+  imports = [ ./postgresql.nix ./embedder.nix ];
 
   # Boot
   boot.loader.efi.canTouchEfiVariables = true;
@@ -1099,6 +1099,9 @@ in
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "CORPUSD_PORT=8086"
+        # The host embedder (nix/embedder.nix): the vector worker and search
+        # embed through it. Down is backed off and logged, never fatal.
+        "CORPUSD_EMBEDDER_URL=http://127.0.0.1:8090"
         # Related stories read switch (internal/platform/publication_related_story.go):
         # the walk reads the research desk's judged related_story pairs. On by
         # owner direction (2026-10-26: "Ofc I want it switched on"). Rollback
