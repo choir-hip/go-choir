@@ -281,9 +281,11 @@ What it does:
   searches only.
 - One journal line per research run start: `research brief run= desk= ms=
   threads= queries= stories= captures= passages= newest_held= bytes=
-  tokens_est= dropped= left= outcome=(delivered|empty|partial|failed|skipped|dropped)
+  tokens_est= dropped= left= gaps= outcome=(delivered|empty|failed|skipped|dropped)
   reason=`, written once the run memory has taken (or not taken) the text:
-  `dropped` means the desk never saw the brief. The
+  `dropped` means the desk never saw the brief; `gaps` counts thread parts
+  (page text, titles and labels, published stories) not searched, a thread no
+  search answered counting as three, a capped published scan not a gap. The
   `corpus search` line gains `caller=brief` or `caller=cell` at its end.
   "Runs that made a web search before any corpus read": the first `gateway:
   search request ... run=` against the first `corpus read run=` or
@@ -334,8 +336,16 @@ the defect. The approach changed again: the brief no longer says the corpus
 holds nothing, in any wording, on any path. A claim that something is absent
 needs every search path proved complete; a claim about what was found and what
 was searched needs nothing proved. `labels` is now true only when the store
-read succeeded (`titles` is the index half alone), `Full()` and the comparison
+read succeeded (`titles` is the index half alone, and is false for a thread of
+stop words); a capped published scan is `published` with `published_capped`,
+not "not searched", `Full()` and the comparison
 are deleted from the brief, and a test sweeps every render path under every
 coverage value for absence phrases. A new search path must still set its
 coverage field, so the brief names its parts truthfully
 (`corpus_coverage_test.go`).
+
+Round 5 narrowed the same family: a capped published scan was reported as not
+searched beside the story it returned, early returns carried `gaps=0`, and
+the failure and skip sentences marked record labels although they hold no
+record text. The code now marks the record's labels only where the threads'
+text is in the message.
