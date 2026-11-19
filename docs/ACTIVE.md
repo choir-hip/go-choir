@@ -23,25 +23,30 @@ Track X is the cutover below, which keeps its stations. Track V is the
 corpus-first retrieval design with pgvector, stories first and one vector a
 captured page. Track L reads the traces of every recurring failure and
 redesigns and starts the calibration experiment (built on 4 November, never
-started). State at 2026-11-19T08:45Z, nothing below is accepted until its
+started). State at 2026-11-19T11:27Z, nothing below is accepted until its
 deployed proof is named in the goal file:
 
-- **V.** The corpus brief and the faster corpus search are deployed
-  (`a0e852f56`; text half median 121 ms, ordinary search median 37 ms, a
-  search matching 1,500 pages still ten seconds). The vector index is built
-  and reviewed four rounds, not deployed: the host half (`lane/vec-host`:
-  pgvector and the embedder unit) lands next and alone, then the Go half
-  (`lane/vec-go`), then ranked search (`lane/ranked-search`, accepted with
-  should-fixes), then the event shortlist (`lane/event-shortlist`). The Mac
-  has embedded every story (45,673 vectors) and is embedding 215,926
-  captures; the files go in through corpusd's import inbox.
-- **X.** Seven areas are merged on `lane/exact-integ` and pass the simulator
-  tour signed in. Review sent auth, the deck journal and mail back; the
-  fixes are in re-review. Nothing is on main or on a phone.
-- **L.** The management story-cursor fix is deployed (`d26a202aa`); the
-  dated-switch deletions are landing (`lane/switch-land`). The experiment
-  driver is built (`lane/e1-driver`); its pilot runs three arms because the
-  gateway's ChatGPT login was refused; the ten objectives are on main
+- **V.** The host half is deployed (`40a5bbdff`: pgvector in Node B's
+  PostgreSQL, the embedder unit active on loopback 8090). The vector index
+  and the ranked corpus search are on main (`b6298ae88`) and **not
+  deployed**: they reached main before the landing's suites ran
+  (`problems/two-landings-in-one-tree-pushed-an-unverified-train-2026-11-19.md`),
+  and CI then refused them three ways (a script classified as docs, two
+  test races). The repair for the first is on main (`5ffc8d8d5`); the race
+  fixes and the import of the Mac's vectors (review round 6 accepted) go in
+  together next (`lane/vec-train2`, claim C154). The Mac has embedded every
+  story and is embedding the captures; the files go in through corpusd's
+  inbox once the import is deployed. The event shortlist
+  (`lane/event-shortlist`) lands after the index is filled.
+- **X.** `lane/exact-integ` passes the signed-in simulator tour with the
+  sign-out drill. Sign-in is accepted after four review rounds, mail and
+  the deck after two; one should-fix on the account-change path is being
+  made before the lane lands as one squashed commit. Nothing is on a phone;
+  Android has not been built.
+- **L.** The dated-switch deletions are deployed (`f3874a8bf`, C146 true).
+  The experiment driver is on main (`463ec68f0`); its pilot runs three arms
+  and waits for the vector train's deploy, which refreshes the test
+  computers. The ten objectives are on main
   (`calibration/e1/pilot-objectives.jsonl`).
 
 ## Live station (2026-11-18): Autoradio, the cutover from Swift to Exact
