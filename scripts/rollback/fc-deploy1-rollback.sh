@@ -29,8 +29,11 @@
 # may be written only after the pre-rollback reading (design 4.5): read
 # /api/runtime/observability store_floor on every computer (the
 # paper included), and the override is valid only while every one of them
-# reports store_floor == 0 (the field is omitted when there is no floor, which
-# counts as 0). A computer with a floor above 0 has
+# reports no floor: store_floor absent from an answer that was read (the field
+# is omitted when the floor is zero) or 0. A computer running a release from
+# before 2026-11-19 reports no top-level store_floor at all; read
+# event_table.store_floor there, or do not write the override. An answer that
+# could not be read is not a zero. A computer with a floor above 0 has
 # stamped events, deploy 1 is its rollback floor, and the repair there is
 # forward (design 4.5); do not write the trailer then. The guard reads the
 # trailer from the head commit of a push; it is not visible on a
