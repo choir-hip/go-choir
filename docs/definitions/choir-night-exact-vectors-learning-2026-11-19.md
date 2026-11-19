@@ -24,7 +24,7 @@ metamission:
       status: working
       depends_on: []
 start:
-  captured_at: 2026-11-19T05:30Z
+  captured_at: 2026-11-19T05:20Z
   source:
     canonical_ref: origin/main af0adc837
     deploy_identity: staging deployed_commit d2c8bfdd0 (deployed 2026-11-19T02:19Z); the corpus brief is pushed at bfa898f8d with CI run 44462773656 in progress
@@ -236,16 +236,6 @@ decisions_for_the_owner:
     why: 'one per page is 215,000 vectors and six hours on the Mac; every passage is about 850,000 and one to three days'
     options: one per page now, every passage when a measurement asks; every passage now
     default: one per page now (ruling R3 leaves this to the lead's proposal)
-  - id: D4
-    question: Do the lab pages (the voice lab and the motion gallery, two developer pages that ship inside the app) move to a second small app?
-    why: they slow every compile and ship to listeners; the owner asked what they are and has not ruled
-    options: a second app; delete them; keep them
-    default: a second app
-  - id: D5
-    question: May the animated mark be drawn another way if screenshots show it pixel for pixel the same?
-    why: it was 50 of the compiler's 66 seconds; the owner asked what this means and has not ruled
-    options: yes, held fixed by screenshots; no, keep the page arithmetic and its cost
-    default: yes, held fixed by screenshots at three clock times
 owner_rulings:
   - 'on': '2026-11-19'
     decision: R1
@@ -279,6 +269,10 @@ owner_rulings:
     decision: R8
     said: Wait a day (Recommended)
     read_as: nothing is bought or capped for web search tonight; the Keenable reading is taken again on 2026-11-20
+  - 'on': '2026-11-19'
+    decision: R9
+    said: ok, get rid of lab pages. and we should draw the mark efficiently. its hand drawn for roughness. no need for pixel perfect. its imperfect by design.
+    read_as: 'the lab pages (the voice lab and the motion gallery) are deleted, not moved to a second app; the animated mark is drawn whichever way is cheap, keeping its hand-drawn roughness; no pixel comparison is required of it'
 now:
   status: working
   slice: 'three tracks at once. X: the two unmeasured Exact lanes are rebased and measured, the boundary gate is built, and the page stations fan out behind the paper page''s pattern. V: the faster corpus search lands; pgvector and the embedder are built; the Mac starts on stories. L: the traces are read.'

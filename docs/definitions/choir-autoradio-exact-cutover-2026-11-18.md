@@ -343,6 +343,13 @@ owner_rulings:
   decision: R6
   said: Just to be clear, there is no rule that local files can't go to server. And that's unrelated to native code vs exact anyway. Not sure where these ideas came from. The whole point is that autoradio is an interface into user's own choir vm
   read_as: nothing the phone holds is withheld from the listener's own computer; the withholding built on 2026-11-17 and 2026-11-18 is removed; where logic runs (native or shared) is a separate question from where data may go
+- 'on': '2026-11-19'
+  decision: D5, D6
+  said: ok, get rid of lab pages. and we should draw the mark efficiently. its hand drawn for roughness. no need for pixel perfect. its imperfect by design.
+  read_as: 'D5: the lab pages are deleted, not moved to a second app. D6: the mark is drawn whichever way is cheap to compile, keeping its hand-drawn roughness; the screenshot comparison in station X1 and ledger C125 is no longer the bar'
+- 'on': '2026-11-19'
+  decision: D8
+  said: yes, testflight waits. next week.
 now:
   status: working
   slice: X1 (the loop is fast) and X2 (the paper page) are being built in lanes; K3 (the phone work onto main) is being merged; K1 is in its third review round and K2 in its last fixes; X0's device tests wait for the owner's phone
