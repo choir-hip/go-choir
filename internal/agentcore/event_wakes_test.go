@@ -38,9 +38,9 @@ import (
 //     turned off;
 //   - the setting off mints nothing.
 
-func setEventSettings(t *testing.T, rt *Runtime, owner, computer string, events, wakes bool, at time.Time) {
+func setEventSettings(t *testing.T, rt *Runtime, owner, computer string, wakes bool, at time.Time) {
 	t.Helper()
-	for key, on := range map[string]bool{store.SettingIntakeEvents: events, store.SettingIntakeEventWakes: wakes} {
+	for key, on := range map[string]bool{store.SettingIntakeEventWakes: wakes} {
 		if err := rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: key, Value: on, UpdatedAt: at}); err != nil {
 			t.Fatal(err)
 		}
@@ -84,7 +84,7 @@ func eurotunnelJudge() *eventJudge {
 func TestCorroboratedEventWakesManagementOnceAndGrowthIsHeld(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	inputs := []eventInput{
 		capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", ""),
 		capItem("c2", "Bus and train collide at Channel Tunnel terminal", "https://www.dw.com/en/2", ""),
@@ -144,7 +144,7 @@ func TestCorroboratedEventWakesManagementOnceAndGrowthIsHeld(t *testing.T) {
 func TestACrashBeforeTheRecordLeavesAGapTheNextFlushFills(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	// The memberships are written; the computer crashes before the
 	// record is minted.
 	if _, err := rt.resolveEvents(ctx, owner, computer, []eventInput{
@@ -172,7 +172,7 @@ func TestAnEventCorroboratedBeforeTheSettingIsNotWokenAgain(t *testing.T) {
 	}
 	// Turned on after the event was corroborated in shadow: management
 	// saw c1 and c2 on their unheld arrivals.
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(time.Second))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(time.Second))
 	time.Sleep(1100 * time.Millisecond)
 	rt.mintEventWakes(ctx, owner, computer, nil, eventResolveReport{}, nil)
 	if got := managementRecords(t, rt, owner, computer); len(got) != 0 {
@@ -190,7 +190,7 @@ func TestAnEventCorroboratedBeforeTheSettingIsNotWokenAgain(t *testing.T) {
 func TestAJevOutageSendsTheCapturesToManagementUnresolved(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	inputs := []eventInput{
 		capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", ""),
 		capItem("c2", "Plex sells movie tickets", "https://arstechnica.com/2", ""),
@@ -211,7 +211,7 @@ func TestAJevOutageSendsTheCapturesToManagementUnresolved(t *testing.T) {
 func TestEventWakesOffMintsNothing(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, false, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, false, time.Now().UTC().Add(-time.Hour))
 	inputs := []eventInput{
 		capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", ""),
 		capItem("c2", "Bus and train collide at Channel Tunnel terminal", "https://www.dw.com/en/2", ""),
@@ -227,7 +227,7 @@ func TestEventWakesOffMintsNothing(t *testing.T) {
 func TestAnOfficialSingleOutletEventWakesOnceWhenAged(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, &eventJudge{answers: map[string]eventAnswer{}})
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-3*time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-3*time.Hour))
 	rt.researchDeps = &researchtools.Dependencies{Sources: &sources.Registry{Sources: []sources.Source{
 		{ID: "src-o1", Official: true}, {ID: "src-n1"},
 	}}}
@@ -252,7 +252,7 @@ func TestAnOfficialSingleOutletEventWakesOnceWhenAged(t *testing.T) {
 func TestTheSweepReleasesStrandedHeldCapturesOnceAndDrainsOnRollback(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	// Two held arrivals: c1 was resolved (it waits on its event), c9 was
 	// queued when the computer crashed.
 	if _, err := rt.resolveEvents(ctx, owner, computer, []eventInput{capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", "")}); err != nil {
@@ -298,7 +298,7 @@ func TestTheSweepReleasesStrandedHeldCapturesOnceAndDrainsOnRollback(t *testing.
 
 	// Rollback: with event_wakes off, the capture waiting on its event is
 	// released too.
-	setEventSettings(t, rt, owner, computer, true, false, time.Now().UTC())
+	setEventSettings(t, rt, owner, computer, false, time.Now().UTC())
 	rt.sweepHeldCaptures(ctx, owner, computer, now.Add(3*(eventSweepEvery+eventHeldGrace)))
 	drained := recordsWithPrefix(managementRecords(t, rt, owner, computer), "event-released:")
 	if len(drained) != 1 || itemIDs(drained[0]) != "c1" {
@@ -310,7 +310,7 @@ func TestDeclineRoutesAnEventRecordsCapturesToTheirOwnSources(t *testing.T) {
 	deskTestWorkerBin(t)
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	inputs := []eventInput{
 		capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", ""),
 		capItem("c2", "Bus and train collide at Channel Tunnel terminal", "https://www.dw.com/en/2", ""),
@@ -349,7 +349,7 @@ func TestWithEventWakesOnAPollsArrivalIsHeldAndWakesNoOne(t *testing.T) {
 	rt.SetCandidateJudge(&eventJudge{answers: map[string]eventAnswer{}})
 	owner, computer, sourceID := "owner-held", rt.cfg.ComputerID, "rss:held"
 	management := agentprofile.Management + ":" + owner
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeLabels, Value: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +436,7 @@ func TestWorldEventsAPIListsEventsWithMembersForTheOwnerOnly(t *testing.T) {
 func TestAFailedCommitIsRetriedByTheNextFlush(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	failing := true
 	rt.commitCaptureArrival = func(ctx context.Context, req types.CommitInboxRecordsRequest) error {
 		if failing {
@@ -464,7 +464,7 @@ func TestAFailedCommitIsRetriedByTheNextFlush(t *testing.T) {
 func TestAFailedFlushLeavesOnlyCapturesWithoutAMembership(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	resolved := capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", "")
 	if _, err := rt.resolveEvents(ctx, owner, computer, []eventInput{resolved}); err != nil {
 		t.Fatal(err)
@@ -480,7 +480,7 @@ func TestAFailedFlushLeavesOnlyCapturesWithoutAMembership(t *testing.T) {
 func TestAnAgedWakeSurvivesARestartOnce(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, &eventJudge{answers: map[string]eventAnswer{}})
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-3*time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-3*time.Hour))
 	rt.researchDeps = &researchtools.Dependencies{Sources: &sources.Registry{Sources: []sources.Source{{ID: "src-o1", Official: true}}}}
 	official := capItem("o1", "Central bank raises rates", "https://www.ecb.europa.eu/press/1", "")
 	official.At = time.Now().UTC().Add(-time.Hour)
@@ -506,7 +506,7 @@ func TestMembersPastOneRecordGoOnHeldPages(t *testing.T) {
 	}
 	rt, owner, computer := eventRuntime(t, judge)
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	report, err := rt.resolveEvents(ctx, owner, computer, inputs)
 	if err != nil {
 		t.Fatal(err)
@@ -562,7 +562,7 @@ func TestEventWakesWithoutLabelsShowsTheIntakeSurfaceButNotLabels(t *testing.T) 
 func TestTheSweepTallyReachesTheStoriesPage(t *testing.T) {
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	if rt.heldCapturesTally(owner, computer) != nil {
 		t.Fatal("a tally before any sweep")
 	}
@@ -582,7 +582,7 @@ func TestEventRecordsNameTheStoriesThatHoldTheEvent(t *testing.T) {
 	deskTestWorkerBin(t)
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	story := openTestStory(t, rt.store, owner, computer, "Channel Tunnel collision injures 19")
 	inputs := []eventInput{
 		capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", ""),
@@ -637,7 +637,7 @@ func TestRecordsOfOneEventAreDelegatedToOneTask(t *testing.T) {
 	deskTestWorkerBin(t)
 	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
 	ctx := context.Background()
-	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	setEventSettings(t, rt, owner, computer, true, time.Now().UTC().Add(-time.Hour))
 	inputs := []eventInput{
 		capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", ""),
 		capItem("c2", "Bus and train collide at Channel Tunnel terminal", "https://www.dw.com/en/2", ""),
