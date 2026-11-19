@@ -357,14 +357,16 @@ func TestVectorEmbedderDownDropsNothingLogsOnceAndRecovers(t *testing.T) {
 	}
 	f.emb.Down.Store(false)
 	deadline := time.Now().Add(10 * time.Second)
-	for f.count(t, "vec_story_passages") != 4 || f.count(t, "vec_captures") != 1 {
+	// The worker says "embedder is back" when the pass that wrote the rows
+	// returns, so the rows can be seen a moment before the line: wait for both.
+	for f.count(t, "vec_story_passages") != 4 || f.count(t, "vec_captures") != 1 || !strings.Contains(logs.String(), "embedder is back") {
 		if time.Now().After(deadline) {
-			t.Fatalf("worker did not recover; log:\n%s", logs.String())
+			t.Fatalf("worker did not recover, or did not say so; log:\n%s", logs.String())
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !strings.Contains(logs.String(), "embedder is back") || !strings.Contains(logs.String(), "remaining=") {
-		t.Fatalf("log lacks recovery or remaining=:\n%s", logs.String())
+	if !strings.Contains(logs.String(), "remaining=") {
+		t.Fatalf("log lacks remaining=:\n%s", logs.String())
 	}
 }
 
