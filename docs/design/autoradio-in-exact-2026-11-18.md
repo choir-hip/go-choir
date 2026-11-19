@@ -287,3 +287,7 @@ order to do it. Work in a lane; `EXACT2=<lead's build tree>/mobile/.exact-src`; 
 Carried on `exact-x12`: the loop fix (`MarkAt` and `TetraMarkFace` stage points through lists; the mark's plan code
 fell from 4.6 MB to 269 KB (measured, `agent web` build report); `contract build app.contract` measured 14.0, 14.4 and 14.4 s on 2026-11-19;
 screenshots through `agent web` at clock 0, 1300 and 4200 ms are byte-identical to main's old drawing) and the Paper page.
+
+The file-by-file map of the Swift tests, and where each rule goes, is
+[autoradio-swift-test-map-2026-11-18.md](autoradio-swift-test-map-2026-11-18.md).
+The gate's voice-and-deck list is `scripts/autoradio-native-voice-list.txt`.
