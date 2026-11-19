@@ -285,7 +285,7 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 				notes = append(notes, "no page holds the phrase "+strings.Join(ft.PhraseFallbacks, ", ")+"; its words were searched instead")
 			}
 			if ft.Indexed < int64(ft.Captures) {
-				notes = append(notes, fmt.Sprintf("the page text of %d of this computer's %d captures is searchable so far; the rest are found by title and labels only", ft.Indexed, ft.Captures))
+				notes = append(notes, fmt.Sprintf("the page text of %d of this computer's %d captures "+CaptureTextCatchingUpMarker+"; the rest are found by title and labels only", ft.Indexed, ft.Captures))
 			}
 		case ft.Reason != "":
 			notes = append(notes, "page text not searched ("+ft.Reason+")")
