@@ -491,7 +491,7 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		// proves nothing about the rows not drawn, and the next draw is another
 		// random subset: that waits (errVectorImportShortDraw), and the inbox
 		// refuses the file when it stays short vectorInboxShortDraws times.
-		counts := fmt.Sprintf("%d rows are too large for this host's embedder, %d failed this call, %d differ in text or cut", setAside, skippedNow, fileRejected)
+		counts := fmt.Sprintf("%d are too large for this host's embedder, %d failed this call, %d differ in text or cut", setAside, skippedNow, fileRejected)
 		if len(order) < res.Rows {
 			return res, fmt.Errorf("%w: %w: only %d rows could be checked, need %d, in a draw of %d of the file's %d rows (%s); the file waits", errVectorImportCannotCheck, errVectorImportShortDraw, checked, floor, len(order), res.Rows, counts)
 		}
