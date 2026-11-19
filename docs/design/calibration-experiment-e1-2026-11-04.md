@@ -6,7 +6,8 @@ Round 2 answered seat 1's review (four blocking findings) and the lead's
 eleven decisions. Round 3 answers the second review (nineteen findings): the
 driver `scripts/e1` and its self-test were **written by this change**, and
 section 14 was rewritten against the code the driver calls. Tonight only a
-**pilot** may run (section 14). The full run
+**pilot** may run (section 14), **on three arms: S-a, S-b and I. Arm L is dropped
+for the pilot** (section 5). The full run
 waits for the owner's word. Deleting the 4 November arms is a separate red
 landing that is due on main before 2026-11-24 (section 10). The file keeps its
 old name so that existing links and the registry's `hold` lines still resolve.
@@ -184,7 +185,7 @@ same model on the same objective on two identical computers.
 
 **The primary statistic.** For each objective:
 
-d = mean(S-a, S-b) of ln(1 + searches) − mean(L, I) of ln(1 + searches)
+d = mean(S-a, S-b) of ln(1 + searches) − mean(the other arms present: L and I, or I alone tonight) of ln(1 + searches)
 
 The table reports the mean of d over valid objectives, with a 95% t interval
 (and a bootstrap interval beside it as a check). The sd of d includes the
@@ -250,7 +251,7 @@ d@e holds nothing either: it is the proof ring and runs other proofs.
 |---|---|---|---|---|
 | S-a | `e1-sa` | `swe-2-flash`, effort `low` | `devin` (Devin's API through one person's CLI session); the default pool's lead and the paper's research model [read: internal/modelcatalog/catalog.go:516-523]. The provider maps `low` to the `swe-2-flash-medium` model id [read: internal/provider/devin.go:770-795] | none until 2026-12-04 [read: same, comment] |
 | S-b | `e1-sb` | `swe-2-flash` | `devin`, as S-a | none |
-| L | `e1-l` | `gpt-6-luna` | `chatgpt`: ChatGPT subscription billing through Codex OAuth, the Responses endpoint [read: internal/provider/provider.go:1268-1287; catalog.go:362-368] | none (subscription) |
+| L (**dropped for the pilot**) | `e1-l` | `gpt-6-luna` | `chatgpt`: ChatGPT subscription billing through Codex OAuth, the Responses endpoint [read: internal/provider/provider.go:1268-1287; catalog.go:362-368] | none (subscription) |
 | I | `e1-i` | `iceman-contributor-free` | `opencode-go` free model, probed with a tool call on 2026-11-05 at cost 0; the default pool's first fallback [read: catalog.go:249-260, :524] | none |
 
 Why these, under the rules the lead gave:
@@ -270,7 +271,17 @@ Why these, under the rules the lead gave:
   "is often parked" [read: catalog.go, AutoradioPool comment].
 - An owner note of 2026-10-21 said "stop testing luna". It was about that
   night's app rewrites [read: docs/reports/owner-notes-2026-10-14.md:905-916],
-  and Luna is in the default pool today. L is kept; decision D-E2.
+  and Luna is in the default pool today. L was kept in round 2 and **is dropped
+  for the pilot of 2026-11-19** (decision D-E2, below). The gateway's journal
+  shows why: the first Luna call of the day got `chatgpt: auth: refresh chatgpt
+  auth via http: status 401`, the gateway marked the model a hard failure, and
+  its circuit has stayed open since; the journal holds only two Luna calls in a
+  week. That is the gateway's ChatGPT login, which only the owner can renew. The
+  three smoke runs of 2026-11-19 saw the same breaker (`circuit open (model
+  unhealthy)`) on every L research run. Until the owner renews the
+  login, **the comparison tonight is S against I only**: the contrast is two
+  Devin computers against one opencode-go computer, and it says nothing about
+  a third model.
 
 Texture and the conductor run on each computer's default policy, the same on
 every arm, so only research differs. That default policy is led by Devin
@@ -322,7 +333,7 @@ The budget that reaches 5 December is about **880 searches a day**
 
 | | Units | Expected started searches (7.5 a unit) | Hard stop on the tally | In days of budget (880/day) |
 |---|---|---|---|---|
-| Pilot (tonight) | 10 objectives x 4 arms = 40 | about 300 | **450** | about 0.34 expected, 0.51 at the stop |
+| Pilot (tonight) | 10 objectives x 3 arms = 30 (4 arms: 40) | about 225 (3 arms; 300 for 4) | **450** | about 0.34 expected, 0.51 at the stop |
 | Full run (owner's word) | 40 x 4 = 160 | about 1,200 | 1,800 | about 1.4 expected, 2.0 at the stop |
 
 The smoke objective `s00` (four more units, one per arm) is **outside** the 40
@@ -366,7 +377,7 @@ In that case the pilot does not run tonight, and that is the correct outcome.
 
 **Model calls:** 18.5 calls and about 0.41M input tokens per research run on
 2026-11-09 [read: docs/evidence/token-efficiency-2026-11-09/research.md:21, :88].
-The pilot's 40 units therefore come to about 740 research calls and 16M input
+The pilot's 40 units (four arms; about three quarters of that with three) come to about 740 research calls and 16M input
 tokens, plus Texture's and the conductor's calls (not measured). All of it
 goes to the three no-charge routes above.
 
@@ -598,13 +609,17 @@ Rollback: revert.
   fresh test computers, one per arm (`e1-sa`, `e1-sb`, `e1-l`, `e1-i`). The
   paper, the owner's computer, users' computers, d@e and the old arm computers
   hold nothing.
-- **D-E2: the models.** Default: `swe-2-flash` twice, `gpt-6-luna` via
-  ChatGPT, `iceman-contributor-free` via opencode-go. Stand-in for I:
+- **D-E2: the models (updated 2026-11-19).** Default for the pilot: `swe-2-flash`
+  twice and `iceman-contributor-free` via opencode-go, **three arms**; `gpt-6-luna`
+  via ChatGPT is dropped until the owner renews the gateway's ChatGPT login (the
+  Luna decision of round 2, "L is kept", is superseded by the journal's 401). The
+  full run's four-arm design waits for that login. Stand-in for I:
   `recursive/flint-v1.0:free` via OpenRouter (a free model, within the
   OpenRouter rule). If neither free model passes the smoke step, run three
-  arms (S-a, S-b, L). The driver has four arms fixed in its `ARMS` table; a
-  stand-in or a three-arm pilot is an edit to that table and a new `setup`, not
-  an option.
+  arms (S-a, S-b, L) would be the other three-arm pilot. The driver keeps a
+  table of the four arms; **the pilot's arms are the objective file's header
+  `arms`** (section 14.3), so a pilot of three arms is a header, not an edit; a
+  stand-in model is an edit to the table and a new `setup`.
 - **D-E3: what runs before the owner wakes.** Default: **the pilot only.**
   The full 40-objective run (and its expansion to 60 if σ > 1.2), the
   read-loop replays and any E1-H work wait for the owner's word at the
@@ -656,9 +671,9 @@ and its fixtures.
 | | |
 |---|---|
 | Experiment | E1-M pilot |
-| Computers and arms | S-a `e1-sa`, S-b `e1-sb`, L `e1-l`, I `e1-i` (section 5; ids in 14.6) |
+| Computers and arms | S-a `e1-sa`, S-b `e1-sb`, I `e1-i`; the header's `arms` are `["sa","sb","i"]`. L's computer `e1-l` exists and stays as it is (section 5; ids in 14.6) |
 | Objectives | 10: 5 `thin_event`, 5 `follow_up`, fixed and committed before the first counted run (14.3) |
-| Units | 40, plus the smoke's 4 outside the bound |
+| Units | 30 (10 objectives x 3 arms; 10 x the header's arms), plus the smoke's units outside the bound |
 | Outcome | started web searches, summed over the unit's research runs (section 3) |
 | Cost tally | the providers' calls in `search.served`; **hard stop 450**; 315 is a printed warning only (section 7) |
 | Overlays expire | set by `setup` (now plus 30 hours; 2026-11-20T12:50Z for these four); the pilot refuses with under 90 minutes left |
@@ -723,7 +738,13 @@ file's shape (`scripts/testdata/e1/pilot-objectives.sample.jsonl` is an invented
 example): one header and ten objectives, five of each kind.
 
 - **Line 1, the header:**
-  `{"t0": "<UTC>", "rule": "e1m-pilot-v1", "arms": ["sa","sb","l","i"], "order": "file order"}`.
+  `{"t0": "<UTC>", "rule": "e1m-pilot-v1", "arms": ["sa","sb","i"], "order": "file order"}`.
+  **`arms` is the pilot's arm list.** It must be a non-empty list of distinct
+  arms from the driver's table (`sa`, `sb`, `l`, `i`) that includes `sa` and
+  `sb`; everything the driver counts (units = 10 x arms, the per-objective
+  line, the tally, the drop-an-arm rule, P3's denominator, d's pairing) comes
+  from it. The tonight header is exactly:
+  `{"t0": "<UTC>", "rule": "e1m-pilot-v1", "arms": ["sa","sb","i"], "order": "file order"}`.
 - **Lines 2 to 11, one per objective:**
   `{"id": "p01", "kind": "thin_event"|"follow_up", "story_url", "headline", "cited_hosts": [...], "label_basis", "prompt"}`.
 
@@ -775,9 +796,14 @@ event is absent. The probabilities are the design's.
   least 7 of the 10 ... with both S units valid", which a count under 7 settled
   false; it is now void, and the probability is kept.)
 - **P3, p = 0.50.** All 10 objectives were submitted (no stop cut the pilot)
-  and at least 36 of the 40 units are valid (section 3). If a stop cut the
+  and at least **90% of the units, rounded up, are valid** (section 3): 10
+  objectives times the header's arms is the number of units, so 27 of 30 for
+  three arms and 36 of 40 for four. `read --verdict` prints the derived counts
+  ("N of 30 units valid (the claim needs 27, 90% rounded up)"). The event of
+  round 2 was 36 of 40; with three arms it is stated on the derived number and
+  the probability is kept (the share, 0.9, is the same). If a stop cut the
   pilot short, **`void`**: the test of validity did not run. A completed pilot
-  with fewer than 36 valid units is `false`. The unit's 60-minute rule bounds
+  with fewer valid units than that is `false`. The unit's 60-minute rule bounds
   the wait, so no unit is waited on past 2026-11-20T06:00Z plus an hour.
 
 P1 and P2 come from the same bundles, and both depend on the validity rule,
@@ -815,8 +841,9 @@ on PATH; the CLI runs with a scrubbed environment so no stray key reaches it).
 | overlay | `choir files mkdir|put|get`; `DELETE /api/files/System/model-policy-overlays/<id>.toml` for `end` | commands.go:374-423; autoputer/files.go:247 |
 | newspaper status | `scripts/status-paper-usage --json` (ssh to Node B, read only), at most once in three minutes | scripts/status-paper-usage:381 |
 
-**`scripts/e1 smoke`** reads the four computers from `computers.json`, submits
-`s00` to all four together, and prints one `PASS` or `FAIL` line per check per
+**`scripts/e1 smoke [--arms sa,sb,i] [--restamp]`** reads the computers from
+`computers.json` (default all four; `--arms` a comma list), submits `s00` to the
+chosen arms together, and prints one `PASS` or `FAIL` line per check per
 arm, then one summary line per arm, then `SMOKE OK` (exit 0) or `SMOKE FAILED
 at step N (arm): ...`. A pass writes a stamp naming the four computer ids.
 Steps:
@@ -832,7 +859,18 @@ Steps:
 9. `model.served` of the research runs names only the arm's model, no switch, and the run carries the arm's overlay (it prints the reported model id for comparison with the paper's);
 10. `search_start` rows and `search.served` lines are present (it prints started, done, served lines, provider calls and cache-answered searches);
 11. no document of the trajectory is published (14.5, publication read);
-12. the four computers report one build before and after.
+12. the chosen computers report one build before and after.
+
+The stamp is **per arm**: `smoke.json` records, for each arm smoked, `passed`,
+the computer id, the time, the build, the failing step if any and the run
+errors, and a smoke of some arms keeps what an earlier smoke recorded for the
+others. `--restamp` re-evaluates the stored bundles of the last smoke
+(`bundles/s00-<arm>.json`) with no new run: steps 8 to 11 on the bundle (with a
+fresh publication read of its documents) and step 12 on the bundles' builds; the
+submission time is the earliest run's creation in the bundle, the build is the
+bundle's boot-layer build, and the stamp's time is the bundle's export time, so
+the six-hour clock starts when the evidence was taken. Its `source` says
+"restamp".
 
 A cache-answered search cannot be forced; the reader's handling of one is
 tested on the invented bundle only, and the pilot shows whether it occurs.
@@ -842,7 +880,7 @@ tested on the invented bundle only, and the pilot shows whether it occurs.
 
 - the three claim ids are rows of the Claims table on `origin/main`, P1 to P3 (section 8);
 - the objective file validates, is the file on `origin/main`, and its SHA-256 is in the P1 row;
-- `smoke` passed on these four computers within 6 hours;
+- every arm of the header has a passed smoke on its own recorded computer within 6 hours (an arm outside the header, or a failed L, does not count; the header is not required to equal the arms the smoke covered; the refusal names the arm: "smoke has not passed for l");
 - the overlays have at least 90 minutes left;
 - `--credits` is at least 4,500, and `--credits-basis` says where it came from (section 7);
 - the newspaper status read succeeds and shows no stop.
@@ -854,7 +892,7 @@ arms together, waits (a poll every 20 s; the trajectory has ended when it holds
 runs, none is pending, running or blocked, and the set held for 45 s), exports
 the bundles, runs the publication read, reads the build again, appends the
 outcome line to `outcomes.tsv` and prints:
-`p03 thin_event | sa 12 sb 9 l 4 i 6 started | runs 1/1/2/1 | valid 4/4 | tally 141/450 | build ok | published 0`.
+`p03 thin_event | sa 12 sb 9 i 6 started | runs 1/1/1 | valid 3/3 | tally 141/450 | build ok | published 0` (one entry per header arm).
 
 A unit that has not ended 60 minutes after its submission is **timed out**:
 its active runs are cancelled (`POST /api/runs/{id}/cancel`), the driver waits
@@ -879,7 +917,7 @@ on, not submitted again.
 the recorded submission times and prints: the unit table (research runs,
 started searches, provider calls, cache-answered, valid, reasons, position);
 per arm the valid count, median, 90th percentile (nearest rank), tail share,
-`no_research` count and calls; d over the objectives valid on all four arms with its mean, sd, 95% t
+`no_research` count and calls; d over the objectives valid on every arm of the pilot with its mean, sd, 95% t
 interval and a bootstrap interval; the S-a against S-b counts; and the outcome
 line, which states the full run's n (40, or 60 if sd of d is above 1.2). With
 `--verdict` it prints `P1`, `P2`, `P3`, each `true`, `false` or `void` with the
@@ -934,9 +972,19 @@ gateway's breaker for `chatgpt/gpt-6-luna` was open on 2026-11-19 from 06:51Z to
 search. The smoke fails at step 9 for L. This is a finding about the L route, not
 about the driver: **L cannot run until that breaker is closed** (the breaker
 routes are operator-only; the driver does not read or reset them). The pilot
-refuses while the stamp says the smoke failed; so does the plan: with L out, the
-experiment is three arms (D-E2), which needs an edit to the driver's `ARMS`
-table and a new smoke, or L is waited on.
+no longer blocks a pilot whose header leaves L out; a header that names `l`
+refuses with "smoke has not passed for l" until L passes a smoke.
+
+**The decision after the smoke (2026-11-19).** The journal explains L (section
+5): the gateway's ChatGPT login returned 401 and the breaker has been open since,
+which only the owner can renew. The pilot runs on three arms (header `arms`
+`["sa","sb","i"]`). The driver's smoke stamp became per arm, and the third run's
+stored bundles were **re-stamped without a new run** with
+`scripts/e1 smoke --restamp --arms sa,sb,l,i`: S-a, S-b and I passed (stamp
+time 07:20Z, the bundles' export time, source "restamp: bundles/s00-<arm>.json"),
+L failed at step 9 with the circuit-open run error recorded. The stamps expire
+six hours after the export (about 13:20Z on 2026-11-19); after that the pilot
+needs one more smoke of the three arms (`smoke --arms sa,sb,i`).
 
 **What the first two runs showed, fixed in the driver:** run 1 read run ids from
 `run_id` where the bundle's run records say `loop_id` (every research run was
@@ -975,6 +1023,7 @@ Either way:
 - Anything about the paper's corpus: the arms start empty (section 1).
 - The searches of `choir.Research` children (section 3).
 - The paper's live reasoning effort, assumed `low` from the repo (section 5).
-- The run-to-run noise of the L and I arms: only S has a second computer.
+- The run-to-run noise of the I arm: only S has a second computer.
+- Anything about `gpt-6-luna`: arm L is dropped for the pilot (section 5); tonight's contrast is S against I only.
 - Whether a cache-answered search reproduces at the paper's rate: the 13% is the record's, and the pilot's rate is whatever `cache_answered` shows.
 - A real tail: ten objectives on two S computers give 20 S units; the tail share is descriptive.
