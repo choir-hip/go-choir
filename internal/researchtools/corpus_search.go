@@ -185,6 +185,9 @@ type corpusSearchInfo struct {
 	// Of the captures returned: found by the page text only, by the title
 	// only, by both, and by the title and labels without the text search.
 	Body, Title, Both, LabelsOnly int
+	// Meaning counts the pages found by meaning or through a story that the
+	// text half did not find: they are not label-only pages.
+	Meaning int
 	// Capped: a candidate bound was hit (the index's or the window's).
 	Capped bool
 	// Dropped are the query words the text search did not look for (pruned
@@ -338,7 +341,7 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			notes = append(notes, rk.Note)
 		}
 	}
-	merged := appendLabelHalf(primary, labelHalf, limit)
+	merged := appendLabelHalf(primary, labelHalf, limit, req.Order)
 	textFound := map[string][]string{}
 	for _, c := range textHalf {
 		textFound[c.CaptureID] = c.Matched
@@ -354,6 +357,8 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			default:
 				info.Body++
 			}
+		} else if containsString(c.Reasons, "meaning") || containsString(c.Reasons, "story") {
+			info.Meaning++
 		} else {
 			info.LabelsOnly++
 		}
@@ -489,7 +494,16 @@ func rankedStories(rk *CaptureRanking, listed []CorpusCapture) []CorpusStory {
 // appendLabelHalf lists the primary answer as it is, adds the label half's
 // evidence to a page both hold, and lists the label half's other pages after
 // the answer, in their own order, up to limit. It ranks nothing together.
-func appendLabelHalf(primary, labelHalf []CorpusCapture, limit int) []CorpusCapture {
+func appendLabelHalf(primary, labelHalf []CorpusCapture, limit int, order string) []CorpusCapture {
+	if strings.EqualFold(order, "recent") {
+		// The tail is newest first, as the answer before it is.
+		labelHalf = append([]CorpusCapture(nil), labelHalf...)
+		sort.SliceStable(labelHalf, func(i, j int) bool {
+			a, _ := time.Parse(time.RFC3339Nano, firstNonEmptyString(labelHalf[i].PublishedAt, labelHalf[i].FetchedAt))
+			b, _ := time.Parse(time.RFC3339Nano, firstNonEmptyString(labelHalf[j].PublishedAt, labelHalf[j].FetchedAt))
+			return a.After(b)
+		})
+	}
 	labelByID := map[string]CorpusCapture{}
 	for _, c := range labelHalf {
 		labelByID[c.CaptureID] = c

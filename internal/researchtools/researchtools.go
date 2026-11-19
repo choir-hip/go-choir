@@ -196,8 +196,8 @@ func logCorpusSearch(ctx context.Context, query, computerID string, capturesElap
 	if info.VectorAnswered {
 		vector, state = strconv.Itoa(info.VectorRows), info.VectorState
 	}
-	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t vector=%s vector_state=%s bm25_kept=%d caller=%s",
-		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped, vector, state, info.BM25Kept, CorpusCallerFrom(ctx))
+	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d by_meaning=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t vector=%s vector_state=%s bm25_kept=%d caller=%s",
+		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, info.Meaning, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped, vector, state, info.BM25Kept, CorpusCallerFrom(ctx))
 }
 
 // CorpusCallerBrief is the caller of a search the host makes for a research

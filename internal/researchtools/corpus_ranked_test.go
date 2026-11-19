@@ -158,7 +158,7 @@ func TestGuestLogsTheVectorFieldsAndFallsBackToBM25Order(t *testing.T) {
 // The mirror types decode what platform writes.
 func TestRankedMirrorDecodesWhatPlatformWrites(t *testing.T) {
 	in := platform.CaptureSearchResponse{Ranked: &platform.CaptureRanking{
-		Entries:        []platform.RankedCapture{{CaptureID: "x", Reasons: []string{"text", "story"}, Stories: []string{"p"}, }},
+		Entries:        []platform.RankedCapture{{CaptureID: "x", Reasons: []string{"text", "story"}, Stories: []string{"p"}}},
 		Stories:        []platform.RankedStory{{PublicationID: "p", VersionID: "v", Revision: 3, Title: "T", Score: 0.7, Day: "2026-11-19", Captures: []string{"x"}}},
 		VectorAnswered: true, VectorRows: 9, VectorState: "partial", VectorPartial: "captures: x", BM25Kept: 2, Note: "n"}}
 	raw, err := json.Marshal(in)

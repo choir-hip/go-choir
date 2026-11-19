@@ -768,6 +768,11 @@ func (s *scopeDB) rankPassages(ctx context.Context, match string, q Query, topK 
 			FROM m JOIN passages p ON p.id = m.id JOIN pages pg ON pg.capture_id = p.capture_id
 			WHERE 1 = 1`
 	args := []any{TitleWeight, match}
+	if !q.Since.IsZero() || !q.Until.IsZero() {
+		// A page with neither a published nor a fetched time (eff 0) is outside
+		// every window, as in the term half and the guest.
+		sqlText += ` AND p.eff > 0`
+	}
 	if !q.Since.IsZero() {
 		sqlText += ` AND p.eff >= ?`
 		args = append(args, q.Since.Unix())
