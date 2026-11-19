@@ -87,6 +87,7 @@ async function keptItem(account: Account): Promise<string | null> {
 async function keptSession(): Promise<{ key: string; computerId: string } | null> {
   if (!reader || reader.available === false) return null;
   const r = (await reader.later({ op: 'session' })) as { found?: boolean; value?: unknown; computerId?: unknown } | null;
+  console.log(`api: session found=${String(r?.found)} key=${typeof r?.value === 'string' && r.value !== ''} computer=${typeof r?.computerId === 'string' && r.computerId !== ''}`);   // flags only, never a value
   if (!r || r.found !== true || typeof r.value !== 'string' || r.value === '') return null;
   return { key: r.value, computerId: typeof r.computerId === 'string' ? r.computerId : '' };
 }
@@ -151,7 +152,9 @@ async function send(path: string, opts: Authed, accept: string): Promise<{ r: Re
     // Raw bytes go as they are (a file added to the listener's computer: PUT /api/files/{path}); the caller names the type.
     body = opts.body as unknown as string; headers['Content-Type'] = headers['content-type'] ?? headers['Content-Type'] ?? 'application/octet-stream'; delete headers['content-type'];
   } else if (opts.body !== undefined) { body = JSON.stringify(opts.body); headers['Content-Type'] = 'application/json'; }
-  if (!path.startsWith('/auth/') && path !== STATUS_PATH) headers['X-Choir-Computer'] = await computerId(key, sess.computerId);
+  if (!path.startsWith('/auth/') && path !== STATUS_PATH) {
+    try { headers['X-Choir-Computer'] = await computerId(key, sess.computerId); } catch (e) { console.log(`api: computer id failed: ${e instanceof Error ? e.name : 'error'}`); throw e; }
+  }
   try {
     return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual' } as RequestInit), key };
   } catch (e) {
