@@ -455,6 +455,16 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
   index's answer on a list over 100,000 rows) or `partial` (an exact read hit the deadline); `vector=` stays the rows returned.
   When the vectors are unavailable the answer is BM25's and `vector=unavailable vector_state=unavailable`.
   Journal: `op=capture_search shape=ranked ... vector=<rows>|unavailable vector_state=exact|approximate|partial|unavailable bm25_kept=`.
+- **Neighbours of named captures** (station V5, `platform/vector_neighbours.go`; built on `lane/event-shortlist`, not landed):
+  `POST /internal/platform/captures/neighbours` `{owner_id, computer_id, capture_ids, since, limit}` (a bound guest for its own
+  scope, or an internal caller; at most 5,000 ids and 50 neighbours each). It reads the named captures' stored vectors (no
+  embedder, so a down embedder does not stop it) and for each returns the nearest other captures of the same owner and computer
+  from the same list as every other vector search (the eligibility predicate, exact or index, `since` inclusive by day). A capture
+  with no eligible vector (not embedded yet, private, tombstoned, superseded) comes back in `missing`; `state` is `exact`,
+  `approximate` or `partial` (the 30 s deadline cut it; the captures not reached are in `missing`); `unavailable` says the tables
+  are not ready. The event layer sends every waiting capture of a flush in one request, maps the neighbours to events by their
+  memberships and offers each capture its three nearest events beyond the 30 recent. Journal: `op=vector_neighbours
+  shape=captures rows= ids= missing= state=`.
 - **Import** (the Mac's first pass): `POST /internal/platform/vectors/import` on corpusd's loopback port 8086 with the host
   credential, body one JSON row a line (`kind` `story_passage` or `capture`, `id` a publication version's or a capture's, `ordinal`,
   `text_sha`, `model`, `dim` 256, `v` base64 of 256 float16); answers 202 and a job, `GET ?job=` reads it. Refused whole for another
