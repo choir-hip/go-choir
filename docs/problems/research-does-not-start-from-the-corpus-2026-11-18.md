@@ -249,15 +249,20 @@ What it does:
   8 s deadline for the whole build (the run-memory and inbox reads included).
   A slow or failing corpusd, a run with no objective, owner or computer starts
   the run with one plain sentence saying why there is no brief; the run always
-  starts. A half the verb did not search (captures or published stories, from
-  its own notes) is named in the brief and is never read as an empty corpus:
-  the outcome is `partial`, or `failed` when both halves failed everywhere.
+  starts. What was searched is read from the verb's typed `coverage` object
+  (below), never from its prose notes: a half the verb did not run is named in
+  the brief and is never read as an empty corpus. The outcome is `partial`, or
+  `failed` when no search ran at all.
   "The corpus holds no page or story matching these threads" is said only when
-  every thread was searched in both halves and the page-text index is whole;
-  a thread the deadline or an error cut, a half not searched, or an index
-  still catching up gives `partial` with the reason in the log, and the text
-  says what was searched and found nothing and what was not searched. A field
-  over its clip (title, url, passage, snippet, id) ends `[cut]`.
+  the verb states, for every thread the record named (those past the sixth
+  included), that page text covered every page, titles and labels ran over the
+  index and the published stories were searched whole, and nothing was found.
+  Anything else (a thread the deadline or an error cut, the window fallback, no
+  page-text answer, an index still catching up, a capped published search, a
+  thread never searched) gives `partial` with the reason in the log, and the
+  text says what was searched and found nothing and what was not searched. A
+  field over its clip (title, passage, snippet) ends `[cut]`; a url or id over
+  its limit is omitted, never cut.
   Thread text is searched as plain words (the verb's `since:`, quote and
   `-word` operators are neutralised).
 - It delivers at most 6 captures (with dates, capture ids and the matching
@@ -299,3 +304,29 @@ What it cannot do:
 - Whether the delivered brief lowers web searches is not measured; the claim
   is entered separately.
 - The child Report label gap above is not touched.
+
+## The same defect in three forms, and the change of approach (2026-11-18)
+
+Three review rounds of the corpus brief found one defect in three forms: the
+brief said "the corpus holds nothing" when part of the search had not run.
+Round 1 it was a failed half (the verb answers success with a note); round 2 a
+deadline cut and a page-text index still catching up; round 3 page text never
+searched at all (the index answered no page-text hit, or the window fallback
+ran, which writes no note).
+
+Why: the brief inferred "everything was searched" from the absence of known
+failure notes in prose. Every new way a search can be incomplete defeated that
+silently, and each round fixed one way by adding a string predicate.
+
+What changed (lane `corpus-brief`, third round): the verb states what it
+searched. `search_wire_corpus` returns a `coverage` object
+(`internal/researchtools/corpus_coverage.go`: `page_text`, `page_text_indexed`,
+`pages`, `labels`, `window`, `published`), each field true only on the path
+where that search returned from the store without error; the zero value, and
+any path nobody set, means not searched. One function says whether the
+page-text index covers the computer's pages, used by the verb's own
+"catching up" note and by `Full()`. The brief reads only this object, and
+claims emptiness only on a full statement for every thread; the note predicates
+and their constants are deleted. The notes the model reads in the cell are
+unchanged. Remaining: a new search path must set its coverage field, and a test
+(`corpus_coverage_test.go`) fails for the paths that exist today.
