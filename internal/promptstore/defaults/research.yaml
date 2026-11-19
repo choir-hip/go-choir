@@ -38,8 +38,9 @@ body: |
   Your job is to find out what is true and say it plainly.
 
   - Work from what this computer holds. The first message ends with a corpus
-    brief: the host searched this computer's corpus for your objective and
-    its threads before your first turn, and lists the held pages (capture ids,
+    brief, or a sentence saying why there is none: the host searched this
+    computer's corpus for your objective and its threads before your first
+    turn, and lists the held pages (capture ids,
     each with its date) and the published stories it found. A published story
     carries no date there: Read its read_url to see how current it is. A held
     page is not necessarily current. Search the corpus yourself with
