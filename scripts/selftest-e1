@@ -760,7 +760,7 @@ def b3_flow():
     objs = e1.load_objectives(os.path.join(repo, "docs", "calibration", "e1", "pilot-objectives.jsonl"))[1]
     prompt = objs[0]["prompt"]
     old, fresh = e1.iso(e1.now() - e1.datetime.timedelta(minutes=10)), e1.iso(e1.now() - e1.datetime.timedelta(seconds=5))
-    n0 = dict(stub.counter)
+    n0 = dict(stub.counter)      # the objectives p02 to p10 add 9 to every arm; p01 adds one only where it is resubmitted
     stub.runs_by_arm["sa"] = [{"run_id": "sub-sa-77", "agent_role": "conductor", "state": "completed", "prompt": prompt,
                                "created_at": e1.iso(e1.now() - e1.datetime.timedelta(seconds=3)), "metadata": {"trajectory_id": "traj-sa-77", "doc_id": "doc-sa-77"}}]
     st = e1.State(state)
@@ -768,8 +768,8 @@ def b3_flow():
                                                   "intent": {"sa": fresh, "sb": old, "i": old}}}, "stops": [], "started_at": None, "arm_stopped": {}})
     code, out = run(pilot_args(state, choir, status, repo))
     sub = st.load("pilot.json")["objectives"]["p01"]["subs"]
-    check("B3 flow: an arm with an intent and a matching run is adopted, not resubmitted", sub["sa"]["submission_id"] == "sub-sa-77" and stub.counter.get("sa", 0) == n0.get("sa", 0), (sub.get("sa"), stub.counter))
-    check("B3 flow: an old intent with no run found is submitted", stub.counter.get("sb", 0) == n0.get("sb", 0) + 1 and stub.counter.get("i", 0) == n0.get("i", 0) + 1, stub.counter)
+    check("B3 flow: an arm with an intent and a matching run is adopted, not resubmitted", sub["sa"]["submission_id"] == "sub-sa-77" and stub.counter.get("sa", 0) == n0.get("sa", 0) + 9, (sub.get("sa"), stub.counter, n0))
+    check("B3 flow: an old intent with no run found is submitted", stub.counter.get("sb", 0) == n0.get("sb", 0) + 10 and stub.counter.get("i", 0) == n0.get("i", 0) + 10, (stub.counter, n0))
     stub.close()
     stub, state, choir, status, repo = three_arm_world()
     st = e1.State(state)
