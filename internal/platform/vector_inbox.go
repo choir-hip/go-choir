@@ -14,7 +14,11 @@ package platform
 //	<artifacts>/vector-import/interrupted/  found in running/ at start; never run again by corpusd
 //
 // A crash restart resumes nothing (CLAUDE.md, Restarts): a file left in
-// running/ at start is moved to interrupted/ and logged. Nothing here deletes
+// running/ at start is moved to interrupted/ and logged. A file that could not be
+// imported NOW (the server cannot answer, too few rows could be checked) is put
+// back in inbox/: that is unstarted work, not resumed work.
+// One corpusd is assumed: the claim cannot replace a file, but two processes taking the
+// same inbox file at once is not designed for. Nothing here deletes
 // done/, refused/ or interrupted/ files; the artifact collector sweeps named
 // namespaces only and never reads this directory (artifact_gc.go
 // artifactGCNamespaces); the operator deletes them after reading the record.
@@ -22,11 +26,11 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
@@ -65,7 +69,7 @@ func (s *Service) recoverVectorInbox() {
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if err := os.Rename(filepath.Join(s.vectorSpoolDir("running"), name), filepath.Join(s.vectorSpoolDir("interrupted"), name)); err != nil {
+		if _, err := moveNoReplace(filepath.Join(s.vectorSpoolDir("running"), name), s.vectorSpoolDir("interrupted"), name); err != nil {
 			log.Printf("corpusd vectors inbox: %s was running at start and could not be moved to interrupted/: %v", name, err)
 			continue
 		}
@@ -73,90 +77,147 @@ func (s *Service) recoverVectorInbox() {
 	}
 }
 
-// ProcessVectorInbox imports the files in the inbox that are old enough, one at
-// a time, oldest first. A file waits while a job of the route runs. It returns
-// the files it took.
-func (s *Service) ProcessVectorInbox(ctx context.Context) (taken int) {
-	if err := s.ensureVectorInboxDirs(); err != nil {
-		return 0
-	}
-	entries, err := os.ReadDir(s.vectorSpoolDir("inbox"))
+// moveNoReplace moves src into dir/name, never replacing what is there: a name
+// taken is suffixed (name.2, name.3, ...). A regular file is hard-linked then
+// unlinked (link fails if the destination exists, so two movers cannot both
+// win); anything else (a directory, a symlink) is renamed after a check, which is
+// enough for one corpusd. It returns the name used.
+func moveNoReplace(src, dir, name string) (string, error) {
+	fi, err := os.Lstat(src)
 	if err != nil {
-		return 0
+		return "", err
 	}
-	type cand struct {
-		name string
-		mod  time.Time
-	}
-	var cands []cand
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasSuffix(name, ".jsonl") || e.IsDir() {
-			continue // *.part and anything else is left alone
+	for n := 1; n < 1000; n++ {
+		cand := name
+		if n > 1 {
+			cand = fmt.Sprintf("%s.%d", name, n)
 		}
-		fi, err := os.Lstat(filepath.Join(s.vectorSpoolDir("inbox"), name))
-		if err != nil || time.Since(fi.ModTime()) < vectorInboxMinAge {
+		dst := filepath.Join(dir, cand)
+		if _, err := os.Lstat(dst); err == nil {
 			continue
 		}
-		cands = append(cands, cand{name, fi.ModTime()})
-	}
-	sort.Slice(cands, func(i, j int) bool { return cands[i].mod.Before(cands[j].mod) })
-	for _, c := range cands {
-		if ctx.Err() != nil {
-			return taken
+		if fi.Mode().IsRegular() {
+			if err := os.Link(src, dst); err != nil {
+				if os.IsExist(err) {
+					continue
+				}
+				return "", err
+			}
+			return cand, os.Remove(src)
 		}
-		job, ok := s.beginVectorJob("inbox", c.name)
-		if !ok {
-			return taken // the route's job runs; the file waits
-		}
-		taken++
-		s.importInboxFile(ctx, job, c.name)
+		return cand, os.Rename(src, dst)
 	}
-	return taken
+	return "", fmt.Errorf("no free name for %s in %s", name, dir)
 }
 
-// importInboxFile claims name (a rename into running/ is the claim: a second
-// corpusd cannot also take it), imports it, and moves it to done/ or refused/
-// with the job record beside it.
-func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, name string) {
-	src := filepath.Join(s.vectorSpoolDir("inbox"), name)
-	run := filepath.Join(s.vectorSpoolDir("running"), name)
-	// Judged before the claim, on the link itself: a symlink or any other
-	// non-regular file is moved to refused/ as it is and never opened.
-	fi, lerr := os.Lstat(src)
-	if err := os.Rename(src, run); err != nil {
-		s.finishVectorJob(job, VectorImport{}, fmt.Errorf("could not claim %s: %w", name, err))
-		return
+// ProcessVectorInbox imports the oldest eligible file of the inbox, if any: one
+// file a pass, and none while a job of the route runs (the file waits). The
+// error it returns is the embedder being unable to answer (errEmbedderDown), so
+// the pass backs off; the file is then still in the inbox.
+func (s *Service) ProcessVectorInbox(ctx context.Context) (taken int, err error) {
+	if err := s.ensureVectorInboxDirs(); err != nil {
+		return 0, nil
 	}
+	entries, rerr := os.ReadDir(s.vectorSpoolDir("inbox"))
+	if rerr != nil {
+		return 0, nil
+	}
+	var oldest string
+	var oldestMod time.Time
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".jsonl") {
+			continue // *.part and anything else is left alone
+		}
+		fi, lerr := os.Lstat(filepath.Join(s.vectorSpoolDir("inbox"), name))
+		if lerr != nil || time.Since(fi.ModTime()) < vectorInboxMinAge {
+			continue
+		}
+		if oldest == "" || fi.ModTime().Before(oldestMod) {
+			oldest, oldestMod = name, fi.ModTime()
+		}
+	}
+	if oldest == "" || ctx.Err() != nil {
+		return 0, nil
+	}
+	job, ok := s.beginVectorJob("inbox", oldest)
+	if !ok {
+		return 0, nil // the route's job runs; the file waits
+	}
+	return 1, s.importInboxFile(ctx, job, oldest)
+}
+
+// importInboxFile claims name (a move into running/ that cannot replace), imports
+// it, and then follows importFate: done/ with its record, refused/ with its
+// record (a fault of the file itself), or back to inbox/ untouched (the server
+// cannot answer, the file cannot be checked now, or something other than the file
+// failed): unstarted work, found again next pass, never resumed work.
+func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, name string) error {
+	src := filepath.Join(s.vectorSpoolDir("inbox"), name)
+	// Judged on the link itself before the claim: a symlink or any other
+	// non-regular file (a directory named x.jsonl) is moved to refused/ as it is
+	// and never opened.
+	fi, lerr := os.Lstat(src)
+	claimed, err := moveNoReplace(src, s.vectorSpoolDir("running"), name)
+	if err != nil {
+		s.finishVectorJob(job, VectorImport{}, fmt.Errorf("could not claim %s: %w", name, err))
+		return nil
+	}
+	run := filepath.Join(s.vectorSpoolDir("running"), claimed)
 	var res VectorImport
-	var err error
+	var ierr error
 	switch {
 	case lerr != nil:
-		err = fmt.Errorf("%w: %v", ErrVectorImportRefused, lerr)
+		ierr = fmt.Errorf("%w: %v", ErrVectorImportRefused, lerr)
 	case !fi.Mode().IsRegular():
-		err = fmt.Errorf("%w: %s is not a regular file (a symlink or special file; not followed)", ErrVectorImportRefused, name)
+		ierr = fmt.Errorf("%w: %s is not a regular file (a symlink, a directory or a special file; not followed)", ErrVectorImportRefused, name)
 	case fi.Size() > vectorImportMaxBytes:
-		err = fmt.Errorf("%w: %s is %d bytes, over the %d the import takes", ErrVectorImportRefused, name, fi.Size(), vectorImportMaxBytes)
+		ierr = fmt.Errorf("%w: %s is %d bytes, over the %d the import takes", ErrVectorImportRefused, name, fi.Size(), vectorImportMaxBytes)
 	default:
-		res, err = s.ImportVectorFile(ctx, run)
+		res, ierr = s.ImportVectorFile(ctx, run)
 	}
-	if ctx.Err() != nil && err != nil {
+	if ctx.Err() != nil && ierr != nil {
 		// Shutdown mid-import: the file stays in running/ and is moved to
 		// interrupted/ at the next start.
-		s.finishVectorJob(job, res, err)
-		return
+		s.finishVectorJob(job, res, ierr)
+		return nil
 	}
-	out := s.finishVectorJob(job, res, err)
-	dest := "done"
-	if out.State != "done" {
+	out := s.finishVectorJob(job, res, ierr)
+	var dest string
+	switch importFate(ierr) {
+	case fateDone:
+		dest = "done"
+	case fateRefuse:
 		dest = "refused"
+	default:
+		// Back to inbox/ with its modification time: taken again next pass.
+		if _, merr := moveNoReplace(run, s.vectorSpoolDir("inbox"), name); merr != nil {
+			log.Printf("corpusd vectors inbox: %s could not be returned to inbox/ (%v); moved to interrupted/ instead", name, merr)
+			_, _ = moveNoReplace(run, s.vectorSpoolDir("interrupted"), name)
+		} else {
+			log.Printf("corpusd vectors inbox: %s was not imported now (%v); it stays in inbox/ and is tried again next pass", name, ierr)
+		}
+		if errors.Is(ierr, errEmbedderDown) {
+			return ierr
+		}
+		return nil
 	}
-	if rerr := os.Rename(run, filepath.Join(s.vectorSpoolDir(dest), name)); rerr != nil {
-		log.Printf("corpusd vectors inbox: %s finished %s but could not be moved to %s/: %v", name, out.State, dest, rerr)
-		return
+	final, merr := moveNoReplace(run, s.vectorSpoolDir(dest), name)
+	if merr != nil {
+		log.Printf("corpusd vectors inbox: %s finished %s but could not be moved to %s/: %v", name, out.State, dest, merr)
+		return nil
 	}
 	rec, _ := json.MarshalIndent(out, "", "  ")
-	if werr := os.WriteFile(filepath.Join(s.vectorSpoolDir(dest), name+".job.json"), append(rec, '\n'), 0o640); werr != nil {
-		log.Printf("corpusd vectors inbox: job record of %s not written: %v", name, werr)
+	recPath := filepath.Join(s.vectorSpoolDir(dest), final+".job.json")
+	f, werr := os.OpenFile(recPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o640)
+	if werr == nil {
+		_, werr = f.Write(append(rec, '\n'))
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
 	}
+	if werr != nil {
+		log.Printf("corpusd vectors inbox: job record of %s not written: %v", final, werr)
+	}
+	return nil
 }

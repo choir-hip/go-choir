@@ -528,10 +528,19 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   at most one line per input per 5 minutes) and the older captures go on. The audit of every place a failure could become durable:
   the refused row (only the identified refusal above); the "empty: no title and no text" row (a capture whose text was read and is empty: a
   property of the data, not a failure); an unreadable text blob or unreadable metadata (skipped, retried every pass); a version whose manifest policy is not public, or with no
-  passages (skipped; walked again when the mark changes); the story idle mark (stored only after a walk with no error); import outcomes
-  (`refused` only for the identified file conditions: another model or dimension, a malformed row or kind, an over-long line, a failed or too thin
-  sample, over 2 GiB, a symlink; `failed` for everything else, which in the inbox lands in `refused/` for a person to retry); an import's dropped rows
-  (never a stored state: the worker fills what the file did not write).
+  passages (skipped; walked again when the mark changes); the story idle mark (stored only after a walk with no error). **One function decides
+  what an embedder outcome may do** (`vector_outcome.go`, applied by `embedInputs` for every caller): the server names the input (its two too-large
+  answers) = `refused`, the only effect that may write anything permanent and only about that input; a status error that names no input, or health failing = `down`, nothing
+  durable, the caller stops and the same work is found next pass; one call failing in transport = `skip`, nothing written. The worker, the import's sample and the inbox all get those
+  three effects, none inspects an error type. **A file** is refused (terminal, `refused/`) only for a fault of the file itself (`importFate`): format, model, dimension, bounds,
+  a file that cannot be opened, a `text_sha` this host does not cut the same, a sampled vector that disagrees with this host's embedding of a row it could embed, a symlink or
+  directory. Everything else (the server cannot answer, too few rows could be checked now, a database error) leaves the file in `inbox/` for the next pass (state `retry`
+  in the journal): unstarted work, not resumed work; a file found in `running/` at boot still goes to `interrupted/`. A sampled row the host's embedder refuses as too large is set aside and
+  another is drawn; pass 3 drops the set-aside rows (`oversized`) so the worker records its own refusal; an unsampled oversized row keeps the Mac's vector (see 0.11.4).
+  One consequence: a file whose sample keeps meeting rows that are too large or failing in transport waits (it is logged each pass), it is not refused.
+  Import row drops are never a stored state; the worker fills what the file did not write. The third too-long wording of the server ("request (N tokens) exceeds
+  the available context size", `server-context.cpp:4098-4102`, a splittable configuration) is not classified: the unit's configuration cannot produce it, and an
+  unrecognised wording degrades to retry, never to a durable refusal. The import's 32-row sample remains a pipeline check and not a per-row check (a design limit).
 - **No DDL on a request path.** Tables and plain indexes are created only when `to_regclass` finds them missing, by the worker and the
   import; a search that finds no tables answers unavailable. The HNSW builds are `CONCURRENTLY` under advisory locks, with
   `maintenance_work_mem` reset before the connection returns to the pool.
@@ -598,10 +607,17 @@ the route's: one at a time, so a file waits while a route job runs.
 
 - **Rules.** A pass takes the oldest eligible file before the gap work, one at a time. A crash restart resumes nothing: at start
   anything in `running/` is moved to `interrupted/` and logged (`moved to interrupted/ and not run again`). A file is retried only
-  by a person moving it back to `inbox/`. A symlink or other non-regular file is moved to `refused/` as it is, never opened or followed. Nothing
+  by a person moving it back to `inbox/`; a file that could not be imported *now* (the server cannot answer, too few sample rows could be checked) stays in `inbox/` untouched and is
+  tried again next pass, and a pass takes one file, the oldest. A symlink, a directory named `*.jsonl` or other non-regular file is moved to `refused/` as it is, never opened or followed. A name already used in `done/` or `refused/` is never overwritten (the new file is `name.2`, its record `name.2.job.json`). Nothing
   deletes `done/`, `refused/` or `interrupted/`: the artifact collector sweeps named namespaces only (`artifact_gc.go`
   `artifactGCNamespaces`: none of these), and corpusd removes nothing there. The files are large (the stories about 30 MB, the captures about
   200 MB); the lead deletes them after reading the job record.
+- **The Mac's embedder does not refuse an over-long input: it cuts it.** `LlamaEmbedder.swift` takes `toks.prefix(n_ctx)` (2,048 tokens), so a
+  row the unit would refuse as too large is embedded on the Mac from its first 2,048 tokens. Measured 2026-11-19 on the captures file (215,926 rows, the lead
+  passage; `llama-tokenize` of b12259 with the GGUF over the prompt `title: ... | text: ...` for the 1,656 rows that could possibly reach it: more than 2,400
+  runes, or mostly CJK scripts above 400 runes): **1 row is over 2,048 tokens (the longest, 2,110), 2 more are between 1,800 and 2,048**; every other row
+  is shorter than the candidates' bound by construction (a Latin or Cyrillic passage of 2,400 runes is about 1,200 tokens). So one capture's vector is of a truncated passage; the host's
+  worker would have recorded its own refusal for it. If the sample meets it, it is set aside; if not, the Mac's vector stays (a vector of the first 2,048 tokens). Not changed.
 - **The journal line**, one per file (and per route job), the same format: `corpusd retrieval op=vector_import shape=inbox|route ms= rows=
   written= refused= sample_min_cosine= err= reasons=<reason:n,...> job= state= file=`. `refused=` is the rows dropped, `reasons=` says by
   which check. `scripts/status-vectors` shows the last one.

@@ -32,6 +32,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -181,7 +182,9 @@ func (r *VectorImport) reject(reason string, n int) {
 func scanVectorFile(path string, fn func(i int, row vectorFileRow, v []float32) error) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		// A file that cannot be opened is a fault of the file (its permissions or
+		// its kind), not of the server: refused, not retried.
+		return fmt.Errorf("%w: the file cannot be read: %v", ErrVectorImportRefused, err)
 	}
 	defer f.Close()
 	rd := bufio.NewReaderSize(f, vectorImportMaxLine)
@@ -236,6 +239,20 @@ type rowInput struct {
 	reason         string
 }
 
+// reasonUnreadableNow is a row the host could not read this time (the database
+// or a blob read failed): not a fault of the file; the row is dropped from this
+// import, the sample counts it as "cannot be checked now", and the worker fills it.
+const reasonUnreadableNow = "unreadable_now"
+
+// importErrReason is the reason for an error reading the objects of a row:
+// nothing found is a fact about the file's row; anything else is the host's state.
+func importErrReason(err error) string {
+	if errors.Is(err, sql.ErrNoRows) {
+		return "not_found"
+	}
+	return reasonUnreadableNow
+}
+
 // vectorRowDeriver derives rows' inputs, holding the last story version.
 type vectorRowDeriver struct {
 	s       *Service
@@ -254,7 +271,7 @@ func (d *vectorRowDeriver) storyVersion(ctx context.Context, versionID string) (
 	d.version, d.story, d.vt, d.vtOK, d.vtErr = versionID, "", storyVersionText{}, false, nil
 	var storyID2 string
 	qerr := d.s.store.corpus().QueryRowContext(ctx, `SELECT from_id FROM og_edges WHERE to_id = ? AND kind = 'has_version' AND tombstone = FALSE LIMIT 1`, versionID).Scan(&storyID2)
-	if qerr != nil {
+	if qerr != nil { // sql.ErrNoRows is "not found"; any other error is the database's state
 		d.vtErr = qerr
 		return "", d.vt, false, qerr
 	}
@@ -272,7 +289,7 @@ func (d *vectorRowDeriver) derive(ctx context.Context, row vectorFileRow) rowInp
 	case vectorKindStory:
 		story, vt, ok, err := d.storyVersion(ctx, row.ID)
 		if err != nil {
-			return rowInput{reason: "not_found"}
+			return rowInput{reason: importErrReason(err)}
 		}
 		if !ok {
 			return rowInput{reason: "not_public"}
@@ -284,12 +301,19 @@ func (d *vectorRowDeriver) derive(ctx context.Context, row vectorFileRow) rowInp
 		return rowInput{Input: embedder.DocumentInput(vt.Title, p), TextSHA: embedder.TextSHA(p), StoryID: story, Day: vt.Day}
 	case vectorKindCapture:
 		objs, err := d.s.store.captureObjectsByIDAny(ctx, []string{row.ID})
+		if err != nil {
+			return rowInput{reason: reasonUnreadableNow}
+		}
 		obj, found := objs[row.ID]
-		if err != nil || !found {
+		if !found {
 			return rowInput{reason: "not_found"}
 		}
 		title, hash, ok := captureVectorSource(obj)
-		if okSQL, err := d.s.store.sqlEligibleCaptures(ctx, []objectgraph.Object{obj}); !ok || err != nil || !okSQL[obj.CanonicalID] {
+		okSQL, serr := d.s.store.sqlEligibleCaptures(ctx, []objectgraph.Object{obj})
+		if serr != nil {
+			return rowInput{reason: reasonUnreadableNow}
+		}
+		if !ok || !okSQL[obj.CanonicalID] {
 			return rowInput{reason: "not_public"}
 		}
 		if row.Ordinal != 0 {
@@ -297,7 +321,10 @@ func (d *vectorRowDeriver) derive(ctx context.Context, row vectorFileRow) rowInp
 		}
 		lead, err := captureLeadPassage(d.s.captureBodies, hash)
 		if err != nil {
-			return rowInput{reason: "no_text"}
+			if errors.Is(err, os.ErrNotExist) {
+				return rowInput{reason: "no_text"}
+			}
+			return rowInput{reason: reasonUnreadableNow}
 		}
 		if title == "" && strings.TrimSpace(lead) == "" {
 			return rowInput{reason: "no_text"} // the worker's rule: nothing to embed
@@ -391,41 +418,66 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 	}
 	deriver := &vectorRowDeriver{s: s, og: s.ogStore()}
 	floor := min(vectorImportSamples, (res.Rows+1)/2)
-	var sampleInputs []string
-	var sampleVecs [][]float32
-	var sampleStrata [3]int
-	for _, i := range order {
-		if len(sampleInputs) >= vectorImportSamples {
+	// Rows are drawn in the random stratified order and embedded here in chunks
+	// until vectorImportSamples have been CHECKED. A row this host cannot
+	// reproduce (its text differs) does not count; a row the host's embedder
+	// refuses as too large is not a fault of the file: it is set aside (and
+	// dropped in pass 3 as "oversized", for the worker to record its own refusal)
+	// and another is drawn; a call that fails in transport is skipped and another
+	// drawn. The outcomes are embedInputs's (vector_outcome.go); this loop
+	// inspects no error.
+	oversizedKeys := map[string]bool{}
+	rowKey := func(r vectorFileRow) string { return fmt.Sprintf("%s|%s|%d", r.Kind, r.ID, r.Ordinal) }
+	checked, setAside, skippedNow, next := 0, 0, 0, 0
+	for checked < vectorImportSamples && next < len(order) {
+		var inputs []string
+		var vecs [][]float32
+		var keys []string
+		for next < len(order) && len(inputs) < vectorImportSamples-checked {
+			c := cands[order[next]]
+			next++
+			in := deriver.derive(ctx, c.row)
+			if in.reason == reasonUnreadableNow {
+				skippedNow++
+				continue
+			}
+			if in.reason != "" || in.TextSHA != c.row.TextSHA {
+				continue // cannot be re-checked here: it does not count
+			}
+			inputs = append(inputs, in.Input)
+			vecs = append(vecs, c.v)
+			keys = append(keys, rowKey(c.row))
+		}
+		if len(inputs) == 0 {
 			break
 		}
-		c := cands[i]
-		in := deriver.derive(ctx, c.row)
-		if in.reason != "" || in.TextSHA != c.row.TextSHA {
-			continue // cannot be re-checked here: it does not count
+		got, refusals, failed, err := s.embedInputs(ctx, "import_sample", inputs)
+		if err != nil {
+			return res, err
 		}
-		sampleInputs = append(sampleInputs, in.Input)
-		sampleVecs = append(sampleVecs, c.v)
-		sampleStrata[strata[i]]++
-	}
-	if len(sampleInputs) < floor {
-		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (the text or its cut differs)", ErrVectorImportRefused, len(sampleInputs), floor)
-	}
-	got, _, failed, err := s.embedInputs(ctx, "import_sample", sampleInputs)
-	if err != nil {
-		return res, err
-	}
-	if len(failed) > 0 {
-		return res, fmt.Errorf("vector import: the embedder could not embed %d sample rows now", len(failed))
-	}
-	for i, g := range got {
-		if g == nil {
-			return res, fmt.Errorf("vector import: the embedder refused sample %d", i)
+		for i := range inputs {
+			switch {
+			case got[i] != nil:
+				c := embedder.Cosine(got[i], vecs[i])
+				checked++
+				res.Samples++
+				if c < res.MinCosine {
+					res.MinCosine = c
+				}
+			case refusals != nil && refusals[i] != "":
+				oversizedKeys[keys[i]] = true
+				setAside++
+			default:
+				_ = failed
+				skippedNow++
+			}
 		}
-		c := embedder.Cosine(g, sampleVecs[i])
-		res.Samples++
-		if c < res.MinCosine {
-			res.MinCosine = c
+	}
+	if checked < floor {
+		if setAside+skippedNow > 0 {
+			return res, fmt.Errorf("%w: only %d rows could be checked, need %d (%d are too large for this host's embedder, %d failed this call); the file waits", errVectorImportCannotCheck, checked, floor, setAside, skippedNow)
 		}
+		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (the text or its cut differs)", ErrVectorImportRefused, checked, floor)
 	}
 	if res.MinCosine < vectorImportMinCosine {
 		return res, fmt.Errorf("%w: a sample of %d rows (seed %d) agrees only to cosine %.5f, need %.3f", ErrVectorImportRefused, res.Samples, res.SampleSeed, res.MinCosine, vectorImportMinCosine)
@@ -445,7 +497,7 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		versionID := storyGroup[0].ID
 		story, vt, ok, err := deriver.storyVersion(ctx, versionID)
 		if err != nil {
-			res.reject("not_found", len(storyGroup))
+			res.reject(importErrReason(err), len(storyGroup))
 			return nil
 		}
 		if !ok {
@@ -455,6 +507,14 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		if len(storyGroup) != len(vt.Passages) {
 			res.reject("incomplete_version", len(storyGroup))
 			return nil
+		}
+		for _, r := range storyGroup {
+			if oversizedKeys[rowKey(r)] {
+				// a passage the host's embedder refuses as too large: not the file's
+				// fault; the version is left to the worker, which records its own refusal
+				res.reject("oversized", len(storyGroup))
+				return nil
+			}
 		}
 		byOrd := map[int]int{}
 		for i, r := range storyGroup {
@@ -500,7 +560,7 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		res.Written += len(capBatch)
 		return nil
 	}
-	err = scanVectorFile(path, func(i int, row vectorFileRow, v []float32) error {
+	err := scanVectorFile(path, func(i int, row vectorFileRow, v []float32) error {
 		switch row.Kind {
 		case vectorKindStory:
 			if row.ID == oversizedID {
@@ -520,6 +580,10 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 			storyGroup = append(storyGroup, row)
 			storyVecs = append(storyVecs, v)
 		case vectorKindCapture:
+			if oversizedKeys[rowKey(row)] {
+				res.reject("oversized", 1)
+				return nil
+			}
 			in := deriver.derive(ctx, row)
 			switch {
 			case in.reason != "":
@@ -578,13 +642,17 @@ func (s *Service) finishVectorJob(job *VectorImportJob, res VectorImport, err er
 	job.FinishedAt = &now
 	job.Result = &res
 	job.Rejected = res.Rejected
-	switch {
-	case err == nil:
+	switch importFate(err) {
+	case fateDone:
 		job.State = "done"
-	case errors.Is(err, ErrVectorImportRefused):
+	case fateRefuse:
 		job.State, job.Error = "refused", err.Error()
 	default:
+		// the route's job is over; an inbox file waits where it is ("retry")
 		job.State, job.Error = "failed", err.Error()
+		if job.Source == "inbox" {
+			job.State = "retry"
+		}
 	}
 	dropped := 0
 	var reasons []string
@@ -593,7 +661,7 @@ func (s *Service) finishVectorJob(job *VectorImportJob, res VectorImport, err er
 		reasons = append(reasons, fmt.Sprintf("%s:%d", k, n))
 	}
 	sort.Strings(reasons)
-	errText := strings.ReplaceAll(job.Error, " ", "_")
+	errText := strings.NewReplacer(" ", "_", "\n", "_", "\r", "_", "\t", "_").Replace(job.Error)
 	if len(errText) > 160 {
 		errText = errText[:160]
 	}
