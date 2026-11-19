@@ -178,3 +178,6 @@ export async function authedBytes(path: string, opts: Authed = {}): Promise<{ by
 
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
+
+/** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
+export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

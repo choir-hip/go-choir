@@ -1,6 +1,7 @@
 import type { Answer, Sources } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { bindNative } from './api.ts';
+import { settingsAccount } from './settings.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -19,6 +20,7 @@ fs.write app:/data/paper-front.json
 net.fetch ${ORIGIN}`;
 
 const sources: Sources = {
+  settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),
   paperFront: ([view, edition, width, tick, focus, picks, demo], _store, storage) => paperFront({ view, edition, width, tick, focus, picks, demo }, storage),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.

@@ -320,7 +320,6 @@ component Autoradio
     tx
     acctInfo
     cmpt
-    gestureRows
     learnt
     act
     about
@@ -333,7 +332,6 @@ component Autoradio
     refreshComputer
     wakeComputer
     updateComputer
-    setSetting
     resetLearned
     refreshActivity
     devDetails

@@ -55,18 +55,6 @@
    "ok": "bool",
    "message": "string"
   },
-  "SettingsAccount": {
-   "status": "string",
-   "signedIn": "bool",
-   "handle": "string",
-   "keyID": "string",
-   "keyLabel": "string",
-   "scopes": "string",
-   "computerID": "string",
-   "message": "string",
-   "demo": "bool",
-   "baseURL": "string"
-  },
   "SettingsComputer": {
    "id": "string",
    "state": "string",
@@ -76,23 +64,6 @@
    "message": "string",
    "epoch": "number",
    "checked": "bool"
-  },
-  "SettingOption": {
-   "id": "string",
-   "label": "string",
-   "detail": "string",
-   "selected": "bool"
-  },
-  "SettingRowInfo": {
-   "id": "string",
-   "label": "string",
-   "help": "string",
-   "value": "string",
-   "valueLabel": "string",
-   "choices": "SettingOption[]"
-  },
-  "SettingRows": {
-   "rows": "SettingRowInfo[]"
   },
   "LearnedItem": {
    "line": "string",
@@ -180,25 +151,6 @@
    }
   },
   {
-   "source": "settingsAccount",
-   "live": true,
-   "answers": "SettingsAccount",
-   "substitute": {
-    "default": {
-     "status": "",
-     "signedIn": false,
-     "handle": "",
-     "keyID": "",
-     "keyLabel": "",
-     "scopes": "",
-     "computerID": "",
-     "message": "",
-     "demo": false,
-     "baseURL": ""
-    }
-   }
-  },
-  {
    "source": "settingsComputer",
    "live": true,
    "answers": "SettingsComputer",
@@ -212,19 +164,6 @@
      "message": "",
      "epoch": 0,
      "checked": false
-    }
-   }
-  },
-  {
-   "source": "settingRows",
-   "live": true,
-   "answers": "SettingRows",
-   "options": {
-    "group": "string"
-   },
-   "substitute": {
-    "default": {
-     "rows": []
     }
    }
   },
@@ -288,10 +227,6 @@
    "answers": "SettingsAck"
   },
   {
-   "send": "accountRefresh",
-   "answers": "SettingsAck"
-  },
-  {
    "send": "computerRefresh",
    "answers": "SettingsAck"
   },
@@ -301,14 +236,6 @@
   },
   {
    "send": "computerUpdate",
-   "answers": "SettingsAck"
-  },
-  {
-   "send": "settingSet",
-   "options": {
-    "id": "string",
-    "value": "string"
-   },
    "answers": "SettingsAck"
   },
   {

@@ -155,28 +155,6 @@ final class CardsTests: XCTestCase {
         XCTAssertEqual(StoryTopics.entities(route: "r", title: "x", section: "s", map: ["r": ["Mapped"]]), ["Mapped"])
     }
 
-    // The stack
-    func testStackKeepsDecidedFirstUndoesAndIgnoresRepeats() {
-        let list = [story("a", "A"), story("b", "B"), story("c", "C")].map { (story: $0, lift: 0.0) }
-        let s = StackSession()
-        XCTAssertNil(s.undo())
-        XCTAssertEqual(s.rows(shaded: list).map(\.story.route), ["a", "b", "c"])
-        s.decide(route: "a", side: "left")
-        s.decide(route: "a", side: "right")           // repeat: ignored
-        s.decide(route: "ghost", side: "left")        // no longer in the list: kept but not counted
-        s.decide(route: "b", side: "right")
-        let reshaded = [list[2], list[1], list[0]]    // the shading changed the order underneath
-        let rows = s.rows(shaded: reshaded)
-        XCTAssertEqual(rows.map(\.story.route), ["a", "b", "c"], "decided cards keep the front")
-        XCTAssertEqual(rows.map(\.dir), ["left", "right", ""])
-        XCTAssertEqual(s.index(shaded: reshaded), 2)
-        XCTAssertEqual(s.setAside, 2, "the ghost counts as set aside in the tally only")
-        XCTAssertEqual(s.undo()?.route, "b")
-        s.reset()
-        XCTAssertEqual(s.index(shaded: list), 0)
-        XCTAssertEqual(StackSession().rows(shaded: []).count, 0)
-    }
-
     // Launcher: places, search, recents, undo
     func testPlacesHaveOneShortLine() {
         let rows = Places.rows(topStory: "A very long headline " + String(repeating: "x", count: 90) + "\nsecond line", extra: ["mail": "3 unread"])
@@ -209,12 +187,6 @@ final class CardsTests: XCTestCase {
         XCTAssertEqual(RecentPages.addresses(events: ev, excluding: [], limit: 1), ["pub:a"])
         XCTAssertEqual(RecentPages.title(for: "pub:a", stories: [story("a", "Story A")]), "Story A")
         XCTAssertEqual(RecentPages.title(for: "settings:root", stories: []), "Settings")
-    }
-
-    func testUndoOfferIsAPureFunctionOfTheClock() {
-        let u = UndoOffer(title: "T", address: "pub:a", since: 100)
-        XCTAssertTrue(u.isOpen(at: 100)); XCTAssertTrue(u.isOpen(at: 104.9))
-        XCTAssertFalse(u.isOpen(at: 105)); XCTAssertFalse(u.isOpen(at: 99))
     }
 
     // Signals

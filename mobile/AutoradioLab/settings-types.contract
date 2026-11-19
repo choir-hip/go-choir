@@ -1,0 +1,14 @@
+// The shapes of the Settings page's account data. Declared here and answered by `app.ts` (settings.ts: `settingsAccount`); before the
+// account moved to shared logic this came from the Swift package's interface (interface/settings.json).
+
+shape SettingsAccount
+  status: string
+  signedIn: bool
+  handle: string
+  keyID: string
+  keyLabel: string
+  scopes: string
+  computerID: string
+  message: string
+  demo: bool
+  baseURL: string

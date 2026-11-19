@@ -14,10 +14,6 @@ import Foundation
 final class CardsState: @unchecked Sendable {
     let lock = NSLock()
     var prefs: Preferences!
-    let stack = StackSession()
-    var undo: UndoOffer?
-    var note = ""
-    var noteAt = 0.0
     var ready = false
     /// The paper-wide search: asks the public search route, one query current, late answers for older queries dropped.
     var corpus: CorpusSearcher?
@@ -50,27 +46,8 @@ extension AutoradioModule {
 
     private func now() -> Double { Date().timeIntervalSince1970 }
 
-    private func setNote(_ text: String) {
-        cs.lock.lock(); cs.note = text; cs.noteAt = now(); cs.lock.unlock()
-        touch(["toldPaper"])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.7) { [weak self] in self?.touch(["toldPaper"]) }
-    }
-
     private func touchLearning() {
-        touch(["toldPaper", "cardStories", "storyStack", "choirStories", "shadingList", "launcherData", "signalList"])
-    }
-
-    // MARK: close with an Undo offer
-
-    private func closeWithUndo(_ address: String, after delay: Double) {
-        let title = pages.list().first { $0.address == address }?.title ?? PageAddress.defaultTitle(address)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
-            self.pages.close(address)
-            self.cs.lock.lock(); self.cs.undo = UndoOffer(title: title, address: address, since: self.now()); self.cs.lock.unlock()
-            self.touch(["openPages", "undoOffer", "launcherData"])
-            DispatchQueue.main.asyncAfter(deadline: .now() + UndoOffer.seconds + 0.1) { [weak self] in self?.touch(["undoOffer"]) }
-        }
+        touch(["choirStories", "launcherData", "signalList"])
     }
 
     private func gesture(_ kind: String, _ f: StoryFacts, surface: String, meaning: String) {
@@ -89,7 +66,6 @@ extension AutoradioModule {
                 SteerQueue.shared.enqueue(t); await SteerQueue.shared.flush()
             }
         }
-        setNote(Preferences.note(kind: kind, f))
         touchLearning()
         return true
     }
@@ -110,45 +86,6 @@ extension AutoradioModule {
             let by = Dictionary(rows.map { ($0.route, $0) }, uniquingKeysWith: { a, _ in a })
             let sorted = order.compactMap { by[$0] }
             reply(["rows": (sorted.isEmpty ? rows : sorted).map { json($0) }])
-        }
-        handle("shadingList") { [unowned self] _, reply in
-            reply(["rows": shaded().enumerated().map { ["route": $0.element.story.route, "lift": $0.element.lift, "rank": $0.offset] as [String: Any] }])
-        }
-        handle("cardStories") { [unowned self] _, reply in
-            let s = shaded()
-            reply(["rows": s.enumerated().map { storyJSON($0.element.story, lift: $0.element.lift, n: $0.offset, dir: "") },
-                   "index": 0, "setAside": 0, "total": s.count])
-        }
-        handle("storyStack") { [unowned self] _, reply in
-            let s = shaded()
-            let rows = cs.stack.rows(shaded: s)
-            reply(["rows": rows.map { storyJSON($0.story, lift: $0.lift, n: $0.n, dir: $0.dir) },
-                   "index": cs.stack.index(shaded: s), "setAside": cs.stack.setAside, "total": rows.count])
-        }
-        handle("toldPaper") { [unowned self] _, reply in
-            let g = cs.prefs.gestures
-            let all = cs.prefs.all.reversed()
-            cs.lock.lock(); let fresh = now() - cs.noteAt < 2.5; let note = fresh ? cs.note : ""; cs.lock.unlock()
-            let df = DateFormatter(); df.locale = Locale(identifier: "en_US_POSIX"); df.dateFormat = "d MMM HH:mm"
-            var d: [String: Any] = [:]
-            d["count"] = cs.prefs.count
-            d["rows"] = all.prefix(12).map { a -> [String: Any] in
-                ["kind": a.kind, "title": a.title, "entities": a.entities.joined(separator: ", "),
-                 "when": df.string(from: Date(timeIntervalSince1970: a.at)), "route": a.route]
-            }
-            d["lines"] = cs.prefs.lines()
-            d["left"] = g.left
-            d["right"] = g.right
-            let labels: [String: String] = ["close": "Close", "close-less": "Close, and less of this", "less-in-stack": "Close; less of this in the stack"]
-            d["leftLabel"] = labels[g.left] ?? "Close"
-            d["rightLabel"] = g.right == "more" ? "More of this" : "Nothing"
-            d["note"] = note
-            reply(d)
-        }
-        handle("undoOffer") { [unowned self] _, reply in
-            cs.lock.lock(); let u = cs.undo; cs.lock.unlock()
-            let open = u?.isOpen(at: now()) ?? false
-            reply(["open": open, "title": open ? (u?.title ?? "") : "", "address": open ? (u?.address ?? "") : ""])
         }
         handle("launcherData") { [unowned self] args, reply in
             let q = (args["q"] as? String) ?? ""
@@ -195,76 +132,8 @@ extension AutoradioModule {
         handle("storyMore") { [unowned self] args, reply in
             let address = args["address"] as? String ?? "", surface = args["surface"] as? String ?? "pile"
             guard let f = facts(forAddress: address) else { return ack(reply) }
-            if cs.prefs.gestures.right == "nothing" {
-                gesture(SignalKind.ignored, f, surface: surface, meaning: "nothing"); touch(["signalList"]); return ack(reply)
-            }
             tell("more", f, surface: surface)
             ack(reply, Preferences.note(kind: "more", f))
-        }
-        handle("storyLess") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? "", surface = args["surface"] as? String ?? "pile"
-            guard let f = facts(forAddress: address) else { return ack(reply) }
-            tell("less", f, surface: surface)
-            ack(reply, Preferences.note(kind: "less", f))
-        }
-        // A card thrown left: close after the card has left the screen. With the "close and less of this" meaning, also less.
-        handle("cardFling") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? ""
-            if let f = facts(forAddress: address), cs.prefs.gestures.leftIsLess(surface: "pile") { tell("less", f, surface: "pile") }
-            closeWithUndo(address, after: 0.26)
-            ack(reply)
-        }
-        handle("cardClose") { [unowned self] args, reply in
-            closeWithUndo(args["address"] as? String ?? "", after: 0); ack(reply)
-        }
-        handle("cardUndo") { [unowned self] _, reply in
-            pages.reopenLastClosed()
-            cs.lock.lock(); let u = cs.undo; cs.undo = nil; cs.lock.unlock()
-            signals.record(SignalEvent(kind: SignalKind.undo, subject: u?.address ?? "", detail: "close"))
-            touch(["openPages", "undoOffer", "signalList"]); ack(reply)
-        }
-        // The story stack: a card thrown left (set aside; neutral unless the meanings say less) or right (more of this).
-        handle("stackDecide") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? "", side = args["side"] as? String ?? ""
-            guard let f = facts(forAddress: address) else { return ack(reply) }
-            if side == "right" {
-                if cs.prefs.gestures.right == "more" { tell("more", f, surface: "stack") }
-                else { gesture(SignalKind.ignored, f, surface: "stack", meaning: "nothing") }
-            } else if side == "left" {
-                if cs.prefs.gestures.leftIsLess(surface: "stack") { tell("less", f, surface: "stack") }
-                else { gesture(SignalKind.setAside, f, surface: "stack", meaning: "close") }
-            } else { return ack(reply) }
-            cs.stack.decide(route: f.route, side: side)
-            touchLearning()
-            ack(reply, side == "right" ? Preferences.note(kind: "more", f) : "Set aside")
-        }
-        handle("stackUndo") { [unowned self] _, reply in
-            if let d = cs.stack.undo() {
-                if d.side == "right" { cs.prefs.removeLast(route: d.route, kind: "more") } else { cs.prefs.removeLast(route: d.route, kind: "less") }
-                signals.record(SignalEvent(kind: SignalKind.undo, subject: "pub:" + d.route, detail: SignalDetail.gesture(surface: "stack", page: "reader", meaning: d.side, entities: [], topic: "")))
-            }
-            touchLearning(); ack(reply)
-        }
-        handle("stackReset") { [unowned self] _, reply in cs.stack.reset(); touchLearning(); ack(reply) }
-        handle("toldForget") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? ""
-            let n = cs.prefs.forget(route: PageAddress.rest(of: address))
-            if n > 0 { signals.record(SignalEvent(kind: SignalKind.forget, subject: address, detail: "\(n)")) }
-            touchLearning(); ack(reply)
-        }
-        handle("toldReset") { [unowned self] _, reply in
-            let n = cs.prefs.reset(); cs.stack.reset()
-            if n > 0 { signals.record(SignalEvent(kind: SignalKind.reset, subject: "told", detail: "\(n)")) }
-            touchLearning(); ack(reply)
-        }
-        handle("gestureSet") { [unowned self] args, reply in
-            let side = args["side"] as? String ?? "", meaning = args["meaning"] as? String ?? ""
-            if cs.prefs.setGesture(side: side, meaning: meaning) {   // Settings owns the meaning: keep it in step
-                let back = ["close-less": "closeLess", "less-in-stack": "lessInStack"][meaning] ?? meaning
-                _ = AppSettings.shared.set(side == "left" ? "swipeLeft" : "swipeRight", back)
-                touch(["settingRows"])
-            }
-            touch(["toldPaper"]); ack(reply)
         }
     }
 }

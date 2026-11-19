@@ -1,78 +1,12 @@
 import Foundation
 
-// Settings that are data (lane 7): the gesture meanings are a catalog of choices (id, label, options),
-// kept in UserDefaults and shown by one component, so a new choice is a catalog line and not a new screen. Other lanes read
-// the value, never the screen:
-//   AppSettings.shared.value("swipeLeft")    close | closeLess | lessInStack   (lane 4: what a left swipe on a story means)
-//   AppSettings.shared.value("swipeRight")   more | nothing              (lane 4)
-// "What the paper has learned" reads a LearnedProvider; the default one is derived from the gesture events in `Signals`
-// (lane 4 owns their meaning; its Preferences.swift can supply its own provider).
+// "What the paper has learned" reads a LearnedProvider; the default one is derived from the gesture events in `Signals`.
+// (The swipe-meaning settings are gone with the swipes, 2026-11-19.)
 //
-// Ways it can fail (written before the code; tests in SettingsDataTests):
-//  S1 A stored value that is no longer an option (the catalog changed) shows nothing selected: value() falls back to the
-//     default, and set() refuses an id that is not an option.
-//  (The talk mode setting is gone: hands-free is the only way to talk, HandsFree.swift. A stored "talkMode" is never read.)
+// Ways it can fail (tests in SettingsDataTests):
 //  L1 The learned list shows acts from before a Reset: the list is cut at the newest "learned-reset" event.
-//  L2 Reset deletes the gesture events: it only records a marker; the lab records stay (they are lab records, not the list).
+//  L2 Reset deletes the gesture events: it only records a marker.
 //  L3 A subject that is a private address is shown in full: lines use the detail text lane 4 wrote, else the bare address.
-
-public struct SettingOptionRow: Codable, Sendable, Equatable {
-    public var id = "", label = "", detail = "", selected = false
-    public init(id: String, label: String, detail: String = "", selected: Bool = false) { self.id = id; self.label = label; self.detail = detail; self.selected = selected }
-}
-public struct SettingRow: Codable, Sendable, Equatable {
-    public var id = "", label = "", help = "", value = "", valueLabel = ""
-    public var choices: [SettingOptionRow] = []
-    public init() {}
-}
-
-public struct SettingDef: Sendable {
-    public var id: String, group: String, label: String, help: String, defaultValue: String
-    public var options: [(id: String, label: String, detail: String)]
-}
-
-public enum SettingsCatalog {
-    public static let all: [SettingDef] = [
-        SettingDef(id: "swipeLeft", group: "gestures", label: "Swipe left on a story",
-                   help: "A change applies to the next swipe. Closing never costs a story its place unless you choose it.",
-                   defaultValue: "close",
-                   options: [("close", "Close, nothing more", "Closing is neutral. It is not a vote against the story."),
-                             ("closeLess", "Close, and less of this", "Every close also tells the paper you want less of it."),
-                             ("lessInStack", "Less of this, only in the stack", "In the story stack a pass means less; on open pages a close is neutral.")]),
-        SettingDef(id: "swipeRight", group: "gestures", label: "Swipe right on a story",
-                   help: "The one cheap way to say more of this.",
-                   defaultValue: "more",
-                   options: [("more", "More of this", "The card leaves to the right and the paper notes you want more like it."),
-                             ("nothing", "Nothing", "Swiping right does nothing.")]),
-    ]
-}
-
-public final class AppSettings: @unchecked Sendable {
-    public static let shared = AppSettings()
-    private let defaults: UserDefaults
-    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
-    static func key(_ id: String) -> String { "AutoradioSetting.\(id)" }
-
-    public func value(_ id: String) -> String {
-        guard let def = SettingsCatalog.all.first(where: { $0.id == id }) else { return "" }
-        let stored = defaults.string(forKey: Self.key(id)) ?? def.defaultValue
-        return def.options.contains { $0.id == stored } ? stored : def.defaultValue         // S1
-    }
-    @discardableResult
-    public func set(_ id: String, _ value: String) -> Bool {
-        guard let def = SettingsCatalog.all.first(where: { $0.id == id }), def.options.contains(where: { $0.id == value }) else { return false }
-        defaults.set(value, forKey: Self.key(id)); return true
-    }
-    public func rows(group: String) -> [SettingRow] {
-        SettingsCatalog.all.filter { $0.group == group }.map { def in
-            var r = SettingRow(); r.id = def.id; r.label = def.label; r.help = def.help
-            let v = value(def.id); r.value = v
-            r.choices = def.options.map { SettingOptionRow(id: $0.id, label: $0.label, detail: $0.detail, selected: $0.id == v) }
-            r.valueLabel = def.options.first { $0.id == v }?.label ?? ""
-            return r
-        }
-    }
-}
 
 // MARK: What the paper has learned
 

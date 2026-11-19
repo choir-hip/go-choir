@@ -5,7 +5,6 @@
 //   settings:voice                voice and models: Components, and the voice setup card (lane 8)
 //   settings:computer             status, Wake, Restart to update
 //   settings:learned              what the paper has learned, with Reset
-//   settings:gestures             what each swipe means (a catalog of choices, applied to the next gesture)
 //   settings:about                app and server builds
 // testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-demo, settings-components, settings-theme-problems,
 //   settings-nav-<screen>, settings-back, settings-theme-doc, settings-theme-load,
@@ -13,7 +12,8 @@
 //   settings-choice-<setting>-<option>, settings-wake, settings-update, settings-computer-*, settings-learned-reset, settings-learned-row,
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
-use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth, VoiceProfile from "@choir/autoradio"
+use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsComputer, LearnedInfo, AboutInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
+use SettingsAccount from "./settings-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
 use SkeletonLine from "./transitions.contract"
@@ -34,11 +34,9 @@ component SettingsPage
       ComputerScreen()
     if screen == "learned"
       LearnedScreen()
-    if screen == "gestures"
-      GesturesScreen()
     if screen == "about"
       AboutScreen()
-    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "computer" and screen != "learned" and screen != "gestures" and screen != "about"
+    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "computer" and screen != "learned" and screen != "about"
       RootScreen()
 
 // ---------------------------------------------------------------- shared pieces
@@ -250,8 +248,6 @@ component RootScreen
       PlainList(testId="settings-card-paper")
         NavRow(address="settings:learned", title="What the paper has learned", subtitle="Your more and less of this, with Reset", testId="settings-nav-learned")
         Hairline()
-        NavRow(address="settings:gestures", title="Swipes", subtitle="What each swipe on a story means", testId="settings-nav-gestures")
-        Hairline()
         NavRow(address="activity:", title="Activity", subtitle="What the computer and the desk are doing", testId="settings-nav-activity")
       SectionLabel(label="About")
       PlainList(testId="settings-card-about")
@@ -367,42 +363,6 @@ component AccountScreen
         if au.signedIn
           button press=signOut testId="settings-signout" appearance="none"
             ActionButton(label="Sign out", testId="settings-signout-box", primary=false, danger=true)
-
-// ---------------------------------------------------------------- choices (talk, gestures)
-
-component SettingChoices
-  inject
-    th: Theme
-    tx: ThemeExtras
-    setSetting: action
-  props
-    rows: SettingRowInfo[]
-  view
-    column gap=14 width="100%"
-      for r in rows key=r.id
-        PlainList(testId=`settings-setting-${r.id}`)
-          column width="100%" box-sizing="border-box" padding="14px 0"
-            column gap=4 padding="0px 0px 10px 0px"
-              text r.label font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
-              text r.help font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-            for o in r.choices key=o.id
-              button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" box-sizing="border-box" padding="10px 0px"
-                row gap=12 align-items="flex-start" width="100%"
-                  column flex=1 min-width=0 gap=2 align-items="flex-start"
-                    text o.label font-family=th.fontHead font-size=dyn(tx.sizeLabel) font-weight=600 color=(o.selected ? th.fg : th.muted)
-                    text o.detail font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-                  SelectMark(state=(o.selected ? "on" : "blank"))
-
-component GesturesScreen
-  inject
-    th: Theme
-    tx: ThemeExtras
-    gestureRows: SettingRows
-  view
-    ToolScroll(id="settings")
-      ScreenTitle(label="Swipes", back=true)
-      text "What each swipe on a story means is yours to choose. A change applies to the next swipe, and every swipe is recorded with the meaning in force." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-      SettingChoices(rows=gestureRows.rows)
 
 // ---------------------------------------------------------------- voice and models
 

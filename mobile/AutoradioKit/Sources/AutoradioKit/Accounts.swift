@@ -1,119 +1,18 @@
 import Foundation
 
-// Accounts and the computer, for Settings (lane 7). Two clients behind interfaces, each with a demo form that reads the
-// bundled fixtures and a live form on the routes the plan names:
-//   AccountClient   GET /auth/whoami (bearer key) -> {handle, key_id, key_label, scopes, computer_id}   (server lane, deployed
-//                   on the branch lane/ar-server; a server without it answers 404 and the page says so in plain words)
+// The computer, for Settings (lane 7). The account (GET /auth/whoami) moved to shared code (AutoradioLab/settings.ts).
+// A client behind an interface, with a demo form that reads the bundled fixtures and a live form on the routes the plan names:
 //   ComputerClient  GET /api/compute/status, POST /api/compute/recovery {action: wake_current_computer},
 //                   GET /api/computers/{id}/update, GET /api/computers/{id}/lifecycle/status,
 //                   POST /api/computers/{id}/lifecycle/update {idempotency_key}   (the web's UpdateChip and compute monitor)
 //
-// Ways it can fail (written before the code; tests in SettingsDataTests):
-//  A1 The key, or the account's email, is shown or logged: the views carry the handle, key id, key label and scopes only;
-//     the key itself is never read here, and no event carries a response body.
-//  A2 whoami answers 401 (key revoked) or 404 (route not deployed) or garbage: the view says which in plain words, the page
-//     still renders, and sign out stays available.
-//  A3 Two refreshes overlap and the older answer lands last: each refresh carries a generation; a stale answer is dropped.
+// Ways it can fail (tests in SettingsDataTests):
 //  C1 Wake or Restart to update is tapped twice: while one is in flight the second is ignored (phase is not idle).
 //  C2 The update route answers 409 (the computer is busy with a self-development apply or a live capsule): the view says it
 //     will update when idle; it never retries by itself and never says it updated.
 //  C3 A restart that the proxy gave up on (502/504) is taken as failed: the connection dropping while restarting is
 //     expected; the view then polls the update signal and reports "current" only when the signal clears.
 //  C4 Status has no computer yet (a new account): "try again in a moment", not a crash.
-
-public struct WhoAmI: Codable, Sendable, Equatable {
-    public var handle = "", keyID = "", keyLabel = "", computerID = ""
-    public var scopes: [String] = []
-    public init(handle: String = "", keyID: String = "", keyLabel: String = "", scopes: [String] = [], computerID: String = "") {
-        self.handle = handle; self.keyID = keyID; self.keyLabel = keyLabel; self.scopes = scopes; self.computerID = computerID
-    }
-    public static func parse(_ data: Data) throws -> WhoAmI {
-        guard let o = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ChoirError.decode("whoami: not an object") }
-        guard let h = o["handle"] as? String, !h.isEmpty else { throw ChoirError.decode("whoami: no handle") }
-        return WhoAmI(handle: h, keyID: o["key_id"] as? String ?? "", keyLabel: o["key_label"] as? String ?? "",
-                      scopes: o["scopes"] as? [String] ?? [], computerID: o["computer_id"] as? String ?? "")
-    }
-}
-
-public protocol AccountClient: Sendable { func whoami() async throws -> WhoAmI }
-
-public struct ChoirAccountClient: AccountClient {
-    public init() {}
-    public func whoami() async throws -> WhoAmI {
-        let r = try await ChoirEnvironment.shared.client().send("GET", "/auth/whoami", route: "/auth/whoami")
-        return Self.filled(try WhoAmI.parse(r.data), stored: ChoirEnvironment.shared.keys.get(KeyAccount.computerID))
-    }
-    /// An owner-wide key answers `computer_id: ""` (checked on choir.news); the phone knows which computer it found, so say that one.
-    static func filled(_ w: WhoAmI, stored: String?) -> WhoAmI {
-        var x = w
-        if x.computerID.isEmpty, let s = stored, !s.isEmpty { x.computerID = s }
-        return x
-    }
-}
-
-public struct DemoAccountClient: AccountClient {
-    public init() {}
-    public func whoami() async throws -> WhoAmI {
-        guard let d = Demo.fixture("whoami") else { throw ChoirError.decode("no demo fixture") }
-        return try WhoAmI.parse(d)
-    }
-}
-
-/// What the Account page shows.
-public struct AccountView: Codable, Sendable, Equatable {
-    /// idle | loading | ok | failed
-    public var status = "idle"
-    public var signedIn = false
-    public var handle = "", keyID = "", keyLabel = "", scopes = "", computerID = ""
-    public var message = ""
-    public var demo = false
-    public var baseURL = ""
-    public init() {}
-}
-
-public final class AccountModel: @unchecked Sendable {
-    private let client: AccountClient
-    private let lock = NSLock()
-    private var v = AccountView()
-    private var generation = 0
-    public var signedIn: @Sendable () -> Bool
-    public var baseURL: @Sendable () -> String
-    public var onChange: (@Sendable () -> Void)?
-    public init(client: AccountClient, demo: Bool, signedIn: @escaping @Sendable () -> Bool, baseURL: @escaping @Sendable () -> String) {
-        self.client = client; self.signedIn = signedIn; self.baseURL = baseURL; v.demo = demo
-    }
-    public func view() -> AccountView {
-        lock.lock(); var x = v; lock.unlock()
-        x.baseURL = baseURL()
-        if signedIn() { x.signedIn = true } else { let d = x.demo; x = AccountView(); x.demo = d; x.baseURL = baseURL(); x.message = "Not signed in." }
-        return x
-    }
-    public func refresh() async {
-        guard signedIn() else { onChange?(); return }
-        lock.lock(); generation += 1; let g = generation; v.status = "loading"; v.message = ""; lock.unlock(); onChange?()
-        var next = AccountView()
-        do {
-            let w = try await client.whoami()
-            next.status = "ok"; next.handle = w.handle; next.keyID = w.keyID; next.keyLabel = w.keyLabel
-            next.scopes = w.scopes.joined(separator: ", "); next.computerID = w.computerID
-        } catch {
-            next.status = "failed"; next.message = Self.plain(error)
-        }
-        lock.lock(); let current = (g == generation); if current { next.demo = v.demo; v = next }; lock.unlock()   // A3
-        if current { onChange?() }
-    }
-    public func clear() { lock.lock(); generation += 1; let d = v.demo; v = AccountView(); v.demo = d; lock.unlock(); onChange?() }
-
-    static func plain(_ e: Error) -> String {
-        switch e as? ChoirError {
-        case .unauthorized?: return "This phone's sign-in is no longer accepted. Sign out and sign in again."
-        case .server(let status, _)? where status == 404: return "This server cannot say which account a key is yet."
-        case .notSignedIn?: return "Not signed in."
-        case .decode?: return "The server's answer was not what was expected."
-        default: return "Could not reach choir.news."
-        }
-    }
-}
 
 // MARK: Computer
 
