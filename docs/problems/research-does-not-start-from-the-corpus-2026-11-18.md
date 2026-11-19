@@ -387,3 +387,27 @@ Seen on the way, in the new record
 `choir.Stories` paging is refused by the broker's own bound (the cursor is 67
 bytes and the bound is 64), 4 times in 3 hours, so a management run that
 wants the second page of candidates cannot have it.
+
+## The brief, measured on the paper (2026-11-19T06:45Z)
+
+The corpus brief deployed at 05:19Z. Read from the paper's console from
+05:39:52Z:
+
+- **It is delivered.** Of the first 30 briefs, 27 were delivered and 3
+  failed the 8 second deadline; 21 had every thread answered. Median 5.9 s,
+  median four threads, about 5,900 tokens. (Ledger C141, true.)
+- **The model searches the web as much as before.** The first 24 search
+  summaries have a median of 4.5 web searches started (mean 7.3, most 40),
+  against 4 before the brief; 4.9% of returned pages were read. (Ledger
+  C142, false, entered at 0.3.)
+
+Belief now: giving the model what the computer holds, unasked, does not
+change what it asks the web for. That fits the trace read's finding that the
+many-search runs are the model rewording one question
+(`recurring-agent-failures-read-from-traces-2026-11-19.md`). Remaining
+error: the window crosses a second refresh at 06:16Z (the faster corpus
+search), two dozen runs is a small sample, and whether the stories the runs
+wrote stood on held pages more often was not read. What would tell: the
+same read over a full day, and the calibration experiment's model arms.
+The brief costs one corpus search of up to six threads a run and no web
+search; it stays.
