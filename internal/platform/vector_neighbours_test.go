@@ -22,6 +22,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -30,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/yusefmosiah/go-choir/internal/embedder"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
@@ -324,5 +326,74 @@ func TestCaptureNeighboursPastOneGroupAreStillOneRequest(t *testing.T) {
 	res, err := f.store.CaptureNeighbours(context.Background(), CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: ids, Limit: 3})
 	if err != nil || len(res.Neighbours) != n || res.Cut != 0 || res.State != "exact" {
 		t.Fatalf("answered %d of %d, cut %d, state %q: %v", len(res.Neighbours), n, res.Cut, res.State, err)
+	}
+}
+
+// Review round 2. Failure list:
+//   - a refused capture (a row with a NULL embedding) is answered with arbitrary
+//     rows at score 0, is never counted, or is returned as a neighbour;
+//   - the short-list exact re-read ignores the exact bounds, so a large scope
+//     meets the statement timeout on every short list;
+//   - a statement timeout is recognised by words in an error string, not by the
+//     database's code.
+
+func (f *vecFixture) refuse(t *testing.T, id string) {
+	t.Helper()
+	if _, err := f.store.corpus().Exec(`UPDATE vec_captures SET embedding = NULL, refused = 'too long' WHERE capture_id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCaptureNeighboursRefusedCaptureIsCountedAndNeverANeighbour(t *testing.T) {
+	f := newVecFixture(t)
+	now := time.Now().UTC()
+	f.capture(t, "o1", "c1", "a", "A", "quorum valdoria amber treaty ratified", now.Add(-time.Hour), false)
+	f.capture(t, "o1", "c1", "b", "B", "quorum valdoria harvest", now.Add(-2*time.Hour), false)
+	f.capture(t, "o1", "c1", "r", "R", "quorum valdoria amber", now.Add(-3*time.Hour), false)
+	f.pass(t)
+	a, b, r := mustCaptureID(t, "o1", "a"), mustCaptureID(t, "o1", "b"), mustCaptureID(t, "o1", "r")
+	f.refuse(t, r)
+	for _, indexPath := range []bool{false, true} {
+		old := vectorExactMaxRows
+		if indexPath {
+			vectorExactMaxRows = 0
+		}
+		res, err := f.store.CaptureNeighbours(context.Background(), CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: []string{a, r}, Limit: 10})
+		vectorExactMaxRows = old
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := neighbourIDs(res.Neighbours[a]); len(got) != 1 || got[0] != b {
+			t.Fatalf("index=%v: a's neighbours %v; the refused row must not be one", indexPath, got)
+		}
+		if _, answered := res.Neighbours[r]; answered || res.Refused != 1 || res.Unembedded != 0 || res.Excluded != 0 {
+			t.Fatalf("index=%v: refused capture answered or miscounted: %+v", indexPath, res)
+		}
+	}
+}
+
+func TestCaptureNeighboursRereadsExactlyOnlyWithinTheExactBounds(t *testing.T) {
+	old := neighboursExactWork
+	defer func() { neighboursExactWork = old }()
+	oldRows := vectorExactMaxRows
+	defer func() { vectorExactMaxRows = oldRows }()
+	neighboursExactWork, vectorExactMaxRows = 1000, 500
+	for _, c := range []struct {
+		short    int
+		filtered int64
+		want     bool
+	}{{2, 400, true}, {3, 400, false}, {1, 501, false}, {1, 500, true}, {0, 10, true}} {
+		if got := neighbourRereadIsExact(c.short, c.filtered); got != c.want {
+			t.Errorf("short %d filtered %d: %v, want %v", c.short, c.filtered, got, c.want)
+		}
+	}
+}
+
+func TestIsStatementTimeoutReadsTheDatabasesCode(t *testing.T) {
+	if !isStatementTimeout(fmt.Errorf("query: %w", &pgconn.PgError{Code: "57014", Message: "canceling statement due to statement timeout"})) {
+		t.Error("code 57014 not recognised")
+	}
+	if isStatementTimeout(&pgconn.PgError{Code: "22P02", Message: "statement timeout"}) || isStatementTimeout(errors.New("statement timeout 57014")) {
+		t.Error("words without the code taken for the code")
 	}
 }
