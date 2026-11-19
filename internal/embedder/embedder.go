@@ -117,8 +117,9 @@ type Client struct {
 }
 
 // NewClient returns a client for the server at baseURL (DefaultURL when empty).
-// Its calls have no overall deadline of their own; the caller's context is
-// the deadline.
+// A call ends when the caller's context does, and in any case after ten
+// minutes (a bound on one HTTP exchange, far above a batch of four passages;
+// not a limit on how many calls are made).
 func NewClient(baseURL string) *Client {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = DefaultURL
