@@ -165,7 +165,7 @@ func TestFrontPublicationWindowedEqualsUnbounded(t *testing.T) {
 				break
 			}
 			last := got[len(got)-1]
-			after = &frontCursor{UpdatedAt: last.UpdatedAt.Unix(), CanonicalID: last.CanonicalID}
+			after = frontCursorAt(last)
 		}
 	}
 }
