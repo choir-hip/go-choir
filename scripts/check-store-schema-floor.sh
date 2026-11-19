@@ -14,7 +14,9 @@
 #
 # which says, in the commit itself, that no computer has a store floor above
 # the new epoch (each computer's /api/runtime/observability
-# store_floor). Raising or keeping the epoch always passes.
+# store_floor; a release from before 2026-11-19 answers
+# event_table.store_floor instead, and an unread answer is not a zero).
+# Raising or keeping the epoch always passes.
 #
 #   scripts/check-store-schema-floor.sh [--base REF] [--head REF]
 #

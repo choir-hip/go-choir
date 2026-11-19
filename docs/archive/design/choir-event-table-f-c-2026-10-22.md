@@ -410,6 +410,10 @@ git commit -m "rollback below F-c deploy 1: drop an empty choir_events at boot
 Store-Floor-Override: pre-rollback check done at <time>: every computer reports event_table.store_floor == 0 (<how many read>)"
 ```
 
+(Since 2026-11-19 the field is the top-level `store_floor` of the same
+answer, omitted when zero; `event_table.store_floor` is what a release from
+before that date answers.)
+
 **The override trailer** (round 2 of deploy 2, bunch 148, DeepSeek P1). The
 revert lowers `storeschema.Version` 2 to 1, and CI's store floor guard
 (`scripts/check-store-schema-floor.sh`, section 4.5 and the deploy-2
