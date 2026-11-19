@@ -29,9 +29,10 @@ import (
 //     capture;
 //   - R4 two outlets that first meet in one flush (0 -> 2) never
 //     corroborate, or corroboration fires again on the third outlet;
-//   - R5 a slow second report misses an uncorroborated event older than
-//     the recency horizon (Gemini B2), or the shortlist reaches back
-//     without bound;
+//   - R5 a slow second report misses an event older than the recency
+//     horizon (Gemini B2), or the shortlist reaches back without bound
+//     (since station V5 the vector shortlist reaches them: see
+//     event_vector_shortlist_test.go);
 //   - R6 two outlets carrying the same wire story count as two origins
 //     (Gemini B3);
 //   - R7 a restart loses what the store holds: the index rebuilt from the
@@ -139,6 +140,11 @@ func (j *eventJudge) JudgeScoped(_ context.Context, _ string, stateRaw json.RawM
 		choice := "new"
 		if a.target != "" {
 			for alias, ev := range state.Events {
+				// A question offers only the events it lists: Jev cannot choose
+				// a handle the question does not give it.
+				if !strings.Contains(string(questions[key]), `"`+alias+`"`) {
+					continue
+				}
 				match := ev.Headline == a.target
 				for _, r := range ev.Recent {
 					if r == a.target {
@@ -282,44 +288,6 @@ func TestEventLayerRetryIsIdempotentAndOneCallJoinsASiblingCapture(t *testing.T)
 	events, _ := rt.store.RecentWorldEvents(ctx, owner, computer, 100)
 	if len(events) != 14 {
 		t.Fatalf("events = %d, want 14", len(events))
-	}
-}
-
-func TestEventLayerShortlistReachesUncorroboratedEventsWithinTheOverlapHorizon(t *testing.T) {
-	judge := &eventJudge{answers: map[string]eventAnswer{}}
-	rt, owner, computer := eventRuntime(t, judge)
-	ctx := context.Background()
-	now := time.Now().UTC()
-	old := capItem("o1", "Regulator fines Acme over pipeline leak", "https://a.example.com/1", "")
-	old.At = now.Add(-5 * 24 * time.Hour)
-	ancient := capItem("o2", "Regulator fines Acme over earlier spill", "https://b.example.com/1", "")
-	ancient.At = now.Add(-20 * 24 * time.Hour)
-	if _, err := rt.resolveEvents(ctx, owner, computer, []eventInput{ancient}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := rt.resolveEvents(ctx, owner, computer, []eventInput{old}); err != nil {
-		t.Fatal(err)
-	}
-	// Fill the recency slots with newer, unrelated events.
-	var fill []eventInput
-	for i := 0; i < eventShortlistRecent+2; i++ {
-		fill = append(fill, capItem(fmt.Sprintf("f%d", i), fmt.Sprintf("Unrelated item %d", i), fmt.Sprintf("https://f%d.example.org/x", i), ""))
-	}
-	if _, err := rt.resolveEvents(ctx, owner, computer, fill); err != nil {
-		t.Fatal(err)
-	}
-	judge.calls = nil
-	if _, err := rt.resolveEvents(ctx, owner, computer, []eventInput{capItem("n1", "Acme pipeline leak fine upheld", "https://c.example.net/1", "")}); err != nil {
-		t.Fatal(err)
-	}
-	headlines := ""
-	if len(judge.calls) == 1 {
-		b, _ := json.Marshal(judge.calls[0]["events"])
-		headlines = string(b)
-	}
-	// R5: the 5-day-old uncorroborated event is a candidate; the 20-day one is not.
-	if !strings.Contains(headlines, "pipeline leak") || strings.Contains(headlines, "earlier spill") {
-		t.Fatalf("shortlist = %s", headlines)
 	}
 }
 
@@ -481,57 +449,5 @@ func TestEventLayerMarginalMatchIsTentativeNotCorroboration(t *testing.T) {
 	}
 	if len(r.Corroborated) != 1 {
 		t.Fatalf("p 0.92 report = %+v; want the event corroborated", r)
-	}
-}
-
-// D1: a corroborated event is reachable by title overlap after more than
-// eventShortlistRecent newer events have passed (every story's event is
-// corroborated, so before this no later report could rejoin one). Ways it
-// can fail: E1 a corroborated event past the recency slots is not offered;
-// E2 corroborated events crowd out the uncorroborated overlap budget; E3 a
-// corroborated event older than the recency horizon is offered; E4 the extra
-// budget is unbounded.
-func TestEventShortlistOffersCorroboratedEventsByOverlap(t *testing.T) {
-	now := time.Now().UTC()
-	view := func(id, headline string, age time.Duration, origins int) *eventView {
-		v := &eventView{ev: store.WorldEvent{EventID: id, Headline: headline}, outlets: map[string]bool{}, origins: map[string]bool{}, last: now.Add(-age), titles: []string{headline}}
-		for i := 0; i < origins; i++ {
-			v.origins[fmt.Sprintf("%s-o%d", id, i)] = true
-			v.outlets[fmt.Sprintf("%s-x%d", id, i)] = true
-		}
-		return v
-	}
-	idx := &eventIndex{events: map[string]*eventView{}}
-	for i := 0; i < eventShortlistRecent+5; i++ {
-		v := view(fmt.Sprintf("fill%d", i), fmt.Sprintf("Unrelated item %d", i), time.Duration(i+1)*time.Minute, 1)
-		idx.events[v.ev.EventID] = v
-	}
-	idx.events["story"] = view("story", "Harbour board approves dredging plan", 10*time.Hour, store.EventMinOrigins)
-	idx.events["stale"] = view("stale", "Harbour board dredging plan, old report", 5*24*time.Hour, store.EventMinOrigins)
-	idx.events["lone"] = view("lone", "Harbour dredging plan rumoured", 20*time.Hour, 1)
-	for i := 0; i < eventShortlistCorroborated+3; i++ {
-		v := view(fmt.Sprintf("many%d", i), "Harbour dredging plan item", time.Duration(8+i)*time.Hour, store.EventMinOrigins)
-		idx.events[v.ev.EventID] = v
-	}
-	got := eventShortlist(idx, titleTokens("Harbour board dredging plan approved"), now)
-	has := map[string]bool{}
-	corroborated := 0
-	for _, v := range got {
-		has[v.ev.EventID] = true
-		if v.corroborated() && (strings.HasPrefix(v.ev.EventID, "many") || v.ev.EventID == "story") {
-			corroborated++
-		}
-	}
-	if !has["story"] && !has["many0"] {
-		t.Error("E1: no corroborated event past the recency slots was offered")
-	}
-	if !has["lone"] {
-		t.Error("E2: the uncorroborated overlap candidate was crowded out")
-	}
-	if has["stale"] {
-		t.Error("E3: a corroborated event older than the recency horizon was offered")
-	}
-	if corroborated > eventShortlistCorroborated {
-		t.Errorf("E4: %d corroborated overlap picks; the budget is %d", corroborated, eventShortlistCorroborated)
 	}
 }
