@@ -249,19 +249,17 @@ What it does:
   8 s deadline for the whole build (the run-memory and inbox reads included).
   A slow or failing corpusd, a run with no objective, owner or computer starts
   the run with one plain sentence saying why there is no brief; the run always
-  starts. The brief states facts about the search and never claims an absence:
-  per thread it lists what was found, and for each thread says which parts of
-  the search ran (page text, titles and labels, published stories) and which
-  did not, reading the verb's typed `coverage` object (below), never its prose
-  notes. A thread it found nothing on reads "Nothing found. Searched: page text
-  (N pages indexed), titles and labels, published stories. Not searched: ...";
-  the page-text count is printed as a number and compared with nothing. No
-  rendering says that the corpus holds nothing. The outcome is `delivered` (a
-  page or story is in the brief), `empty` (the searches ran and found nothing:
-  a statement about the search), `failed` (no search ran), `skipped` or
-  `dropped`; `gaps=N` in the log counts the thread parts not searched. A field
-  over its clip (title, passage, snippet) ends `[cut]`; a url, route_path or id
-  over its limit is omitted, never cut.
+  starts. Per thread the brief says one of three things and nothing more: the
+  pages and stories found, or "Nothing found by the host's search.", or "The
+  host's search did not answer for this thread." (the call errored, timed out,
+  was cut by the deadline, was never reached, or its result could not be
+  decoded: one binary fact known at the call site). It does not say what a
+  search covered and never says that the corpus holds nothing. The outcome is
+  `delivered` (a page or story is in the brief), `empty` (every kept search
+  answered and found nothing; some threads may be unanswered), `failed` (no
+  thread answered), `skipped` or `dropped`. A field over its clip (title,
+  passage, snippet) ends `[cut]`; a url, route_path or id over its limit is
+  omitted, never cut.
   Thread text is searched as plain words (the verb's `since:`, quote and
   `-word` operators are neutralised).
 - It delivers at most 6 captures (with dates, capture ids and the matching
@@ -281,11 +279,11 @@ What it does:
   searches only.
 - One journal line per research run start: `research brief run= desk= ms=
   threads= queries= stories= captures= passages= newest_held= bytes=
-  tokens_est= dropped= left= gaps= outcome=(delivered|empty|failed|skipped|dropped)
+  tokens_est= dropped= left= unanswered= outcome=(delivered|empty|failed|skipped|dropped)
   reason=`, written once the run memory has taken (or not taken) the text:
-  `dropped` means the desk never saw the brief; `gaps` counts thread parts
-  (page text, titles and labels, published stories) not searched, a thread no
-  search answered counting as three, a capped published scan not a gap. The
+  `dropped` means the desk never saw the brief; `unanswered` counts the threads
+  whose search did not answer (0 where no thread was ever known, as in an
+  opening that skips; left-out threads are in `left`). The
   `corpus search` line gains `caller=brief` or `caller=cell` at its end.
   "Runs that made a web search before any corpus read": the first `gateway:
   search request ... run=` against the first `corpus read run=` or
@@ -306,46 +304,23 @@ What it cannot do:
   is entered separately.
 - The child Report label gap above is not touched.
 
-## The same defect in three forms, and the change of approach (2026-11-18)
+## Why the brief does not describe its search (rounds 1 to 6, 2026-11-18)
 
-Three review rounds of the corpus brief found one defect in three forms: the
-brief said "the corpus holds nothing" when part of the search had not run.
-Round 1 it was a failed half (the verb answers success with a note); round 2 a
-deadline cut and a page-text index still catching up; round 3 page text never
-searched at all (the index answered no page-text hit, or the window fallback
-ran, which writes no note).
+Six review rounds found one defect in new forms: the brief said "the corpus
+holds nothing" when part of the search had not run (a failed half, a deadline
+cut, an index still catching up, page text never searched), and from round 3 on
+each repair added a typed description of what the search covered (a `coverage`
+object in the verb's answer) that was itself hard to make exactly true in the
+fallback paths (the window of the newest captures, a thread of stop words,
+Jev's labels read from a separate store, a capped published scan, pages the
+full-text index never holds).
 
-Why: the brief inferred "everything was searched" from the absence of known
-failure notes in prose. Every new way a search can be incomplete defeated that
-silently, and each round fixed one way by adding a string predicate.
-
-What changed in round 3 (lane `corpus-brief`): the verb states what it
-searched. `search_wire_corpus` returns a `coverage` object
-(`internal/researchtools/corpus_coverage.go`), each field true only where that
-part ran and returned without error; the zero value, and any path nobody set,
-means not searched. The brief read only that object and claimed emptiness only
-on a full statement for every thread.
-
-Round 4 found that version still overstating in two places: `labels` came from
-the index's answer alone while Jev's labels are read separately from the store
-(a failed read left every field true), and the "index covers every page"
-comparison counted pages the full-text index never holds (owner-private and
-textless captures), so it would have read "partial" forever and, on a failed
-count, "0 pages" as complete. Four rounds on one sentence says the sentence was
-the defect. The approach changed again: the brief no longer says the corpus
-holds nothing, in any wording, on any path. A claim that something is absent
-needs every search path proved complete; a claim about what was found and what
-was searched needs nothing proved. `labels` is now true only when the store
-read succeeded (`titles` is the index half alone, and is false for a thread of
-stop words); a capped published scan is `published` with `published_capped`,
-not "not searched", `Full()` and the comparison
-are deleted from the brief, and a test sweeps every render path under every
-coverage value for absence phrases. A new search path must still set its
-coverage field, so the brief names its parts truthfully
-(`corpus_coverage_test.go`).
-
-Round 5 narrowed the same family: a capped published scan was reported as not
-searched beside the story it returned, early returns carried `gaps=0`, and
-the failure and skip sentences marked record labels although they hold no
-record text. The code now marks the record's labels only where the threads'
-text is in the message.
+Round 6 changed the approach: the description has no reader who needs it. The
+desk is told to make one corpus search in its own words for any thread the
+brief found nothing on, whatever the brief says it covered, so the scope
+statement was cost with no use. It was deleted, with the `coverage` object and
+everything added to the verb for it. The verb's result and notes are as they
+were on the lane's base, plus only `caller=` on the `corpus search` log line.
+The brief says what it found, that the search found nothing, or that the
+search did not answer. A test sweeps every render path for absence and scope
+phrases so neither can return unnoticed.
