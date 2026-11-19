@@ -537,12 +537,13 @@ def cs(ts, run, extra):
     return (f'{PRE}{ts} corpus search computer=c captures_ms=5 captures=1 note="n" query="SECRET-Q" capture_ids= run={run} '
             f'desk=research conv=v published=1 events=1 capped=false{extra} caller=cell\n')
 L = [PRE + "2026/11/18 20:30:00 other\n", PRE + "2026/11/18 22:10:00 other\n",
-     cs("2026/11/18 21:01:00", "d-1", " vector=12 vector_state=exact bm25_kept=1"), cs("2026/11/18 21:02:00", "d-1", " vector=0 vector_state=approximate bm25_kept=2"),
+     cs("2026/11/18 21:01:00", "d-1", " vector=12 vector_state=exact bm25_kept=1 by_meaning=5"), cs("2026/11/18 21:02:00", "d-1", " vector=0 vector_state=approximate bm25_kept=2 by_meaning=2"),
      cs("2026/11/18 21:03:00", "d-1", " vector=unavailable vector_state=unavailable bm25_kept=0"), cs("2026/11/18 21:04:00", "d-1", "")]
 open(root + "/cr_v.log", "w").write("".join(L))
 PY
 runcorpus --fixture "$root/cr_v.log"
 check "R14 vector half answered on 2 of the 3 lines with the field (0 rows is an answer), 3 BM25 pages inserted" 'grep -q "vector half answered 66.7% (of 3 lines with vector=); BM25 pages inserted 3" "$root/out" && ! grep -q SECRET "$root/out"'
+check "R14 pages found by meaning are counted apart from by_labels_only (5 + 2 = 7)" 'grep -q "pages found by meaning 7" "$root/out"'
 check "R14 the states of the answered lines are counted (exact 1, approximate 1)" 'grep -q "vector_state of those answered: approximate 1, exact 1" "$root/out"'
 runcorpus --fixture "$root/cr_c.log"
 check "R14 lines without the field print no vector line" '! grep -q "vector half answered" "$root/out"'
