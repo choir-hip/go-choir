@@ -49,6 +49,11 @@ var (
 	// searches or space its calls: the unit's low CPU weight is what lets
 	// guests win (CLAUDE.md, no limits on our own model calls).
 	vectorBatch = 4
+	// vectorGapPage is how many gap rows one statement reads. The gap statement
+	// scans every projected capture of the computer (about 2 s at 217,000), so it
+	// runs once per page and the page is fed to the embedder vectorBatch at a
+	// time; it is a size of one read, not a limit on the embedder's calls.
+	vectorGapPage = 512
 	// vectorStartDelay is how long after boot the first pass waits.
 	vectorStartDelay = 30 * time.Second
 	// vectorIdleInterval is how long a worker with nothing to do waits before
@@ -447,9 +452,16 @@ type captureGapRow struct {
 	Eff   time.Time
 }
 
+// captureGapBatchHook is a test seam: it runs before each gap statement of the
+// capture walk, so a test can count them. Set it only while no pass runs.
+var captureGapBatchHook func()
+
 // captureGapBatch is the next batch of eligible projected captures without a
 // row of the model, newest first, after the keyset cursor (eff, id).
 func (s *Store) captureGapBatch(ctx context.Context, model string, afterEff *time.Time, afterID string, n int) ([]captureGapRow, error) {
+	if captureGapBatchHook != nil {
+		captureGapBatchHook()
+	}
 	q := `SELECT v.capture_id, v.owner_id, COALESCE(v.published_at, v.fetched_at, v.updated_at) AS eff FROM proj_capture_index v
 		WHERE ` + vecCaptureEligibleSQL + ` AND NOT EXISTS (SELECT 1 FROM vec_captures x WHERE x.capture_id = v.capture_id AND x.model = ?)`
 	args := []any{model}
