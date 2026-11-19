@@ -15,6 +15,10 @@ let
   pg = pkgs.postgresql_17;
   appUser = "choir";
   databases = [ "control" "graph" ];
+  # Databases that hold vectors. CREATE EXTENSION vector needs a superuser
+  # (pgvector is not a trusted extension), so it is made here, as postgres;
+  # corpusd's migration only checks it is there.
+  vectorDatabases = [ "graph" ];
   secretsDir = "/var/lib/go-choir/secrets";
   passwordFile = "${secretsDir}/pg-app-password";
 in
@@ -46,6 +50,10 @@ in
       host    all       ${appUser}  127.0.0.1/32 scram-sha-256
       host    all       ${appUser}  ::1/128      scram-sha-256
     '';
+    # pgvector for corpusd's vectors (docs/reference/EMBEDDINGGEMMA.md,
+    # "The server"). The package change restarts PostgreSQL once on the
+    # deploy that adds it.
+    extensions = ps: [ ps.pgvector ];
     ensureDatabases = databases;
     ensureUsers = [{ name = appUser; }];
   };
@@ -89,6 +97,9 @@ in
       ALTER DATABASE ${db} OWNER TO ${appUser};
       '') databases}
       EOF
+      ${lib.concatMapStringsSep "\n" (db: ''
+      runuser -u postgres -- psql -X -q -v ON_ERROR_STOP=1 -h /run/postgresql -d ${db} -c 'CREATE EXTENSION IF NOT EXISTS vector' >/dev/null
+      '') vectorDatabases}
       echo "go-choir PostgreSQL role ${appUser} and databases ${lib.concatStringsSep ", " databases} ensured"
     '';
   };

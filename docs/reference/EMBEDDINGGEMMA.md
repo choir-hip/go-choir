@@ -356,6 +356,45 @@ and was at load 9.6.
 - Not measured: full page against lead (needs the real page text), any
   non-English story, a quiet x86 machine.
 
+## 0.10 The server (Node B, 2026-11-19; built, not yet deployed)
+
+Station V1 of the night's goal. Code: `nix/embedder.nix`, `nix/postgresql.nix`, the
+caller in `internal/platform/vector_*.go`. Facts below were read from the nixpkgs
+pin (`fe13242`, 2026-10-15), the Hub's LFS listing and llama.cpp's tree on
+2026-11-19; the unit has **not** been run (nothing was built on x86 or on Node B).
+
+- **llama.cpp.** The nixpkgs `llama-cpp` is 0.6.0 (2026-10-05) and has no
+  `src/models/gemma-embedding2.cpp` (404 at that tag; present at b12259). The module overrides
+  the package to b12259 (`351025ec5`): `src` by rev with hash
+  `sha256-tB+aeXiqzy9D5tBHLNy+AJRjfilggVaX/ppA4YlGM70=`, `npmDepsHash` of `tools/ui` at that
+  commit, no patches, no tests. Both fixed-output hashes were built on the Mac
+  (`fetchFromGitHub`, `fetchNpmDeps`) and matched. The CPU build compiles the C++ of one
+  llama.cpp (no CUDA, no Vulkan) and the web UI's npm build; the time on Node B is not measured.
+- **The model file.** `ggml-org/embeddinggemma-2-GGUF`, `embeddinggemma-2-Q8_0.gguf`, 309,855,456
+  bytes, SHA-256 `2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135`, fetched from
+  the Hub at commit `6ea3e3a3...` by the unit's `ExecStartPre` into
+  `/var/lib/go-choir-embedder` (not the repo, not the Nix store). A file whose hash differs is
+  deleted and the unit fails and retries every 60 s with no start limit.
+- **The unit** `go-choir-embedder`: `llama-server --embeddings --pooling mean --host 127.0.0.1
+  --port 8090 --threads 4 --parallel 2 --ctx-size 4096 --batch-size 2048 --ubatch-size 2048`.
+  `CPUWeight=10`, `Nice=10`, `IOWeight=10`, `MemoryMax=1536M`, `OOMScoreAdjust=500`, dynamic user,
+  secrets paths inaccessible, `Restart=on-failure`. No request limit, no counting. Loopback only;
+  the firewall is unchanged (22, 80, 443). Only corpusd is meant to call it; a loopback port cannot
+  say which local process connects (residual).
+- **Health.** `GET http://127.0.0.1:8090/health`: 200 when the model is loaded, 503 while loading.
+- **Calls.** `POST /v1/embeddings` with `{"input": [text, ...]}` (one call for a batch). The server
+  returns each mean-pooled vector L2-normalised at 768 dimensions (verify on first run: section
+  0.2 says the raw pooled vector is not unit length, so a caller must not rely on it).
+- **What corpusd stores.** The first 256 values, normalised again (Matryoshka), as `halfvec(256)`
+  with the model's hash (the file's SHA-256 above). The input strings are the card's:
+  documents `title: <title> | text: <passage>` (a story passage carries the story's title; a
+  capture's single vector is its title and lead passage), queries `task: search result | query: <q>`.
+  The server adds `<bos>` and `<eos>`.
+- **pgvector.** `postgresql_17.pkgs.pgvector` 0.8.7 in the pin, with `halfvec` and HNSW on
+  `halfvec_cosine_ops`. It is not a trusted extension, so `CREATE EXTENSION vector` is run as
+  `postgres` by `go-choir-postgresql-roles` in the `graph` database; corpusd's code only checks
+  it is there. Adding it restarts PostgreSQL once on the deploy.
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image
