@@ -444,7 +444,7 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
   the Mac's passes averaged 285 tokens a story passage and 232 a capture lead (2,563 tokens/s over 9.0 rows/s; 2,669 over 11.5). Reasoned:
   45,673 story passages is 13.0 million tokens, about 10 hours; 215,926 captures is 50.1 million tokens, about 40 hours; about **50 hours (two days)** in all at
   350 tokens a second, 35 hours at 500, over five days at the loaded 127. Not measured on Node B (the unit runs at `CPUWeight` 10 beside the guests).
-- **The ranked answer** (station V4, `platform/capture_rank.go`; built on `lane/ranked-search`, not landed): `SearchCaptures` with a
+- **The ranked answer** (station V4, `platform/capture_rank.go`; landed 2026-11-19 with the index): `SearchCaptures` with a
   query calls `SearchVectors` once (4 times the answer size of each kind, under a 4 s deadline), keeps only the latest version of each
   story, replaces a story by the captures its latest version cites (at most 8, `cites_capture` edges), and guarantees BM25's top three
   pages a place at their BM25 rank. A window narrows the vector scan by day and each page again by its exact time; HNSW filters after
