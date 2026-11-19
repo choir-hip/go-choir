@@ -577,7 +577,10 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		res.Imports += taken
 	}
 	if ierr != nil {
-		return res, ierr
+		if errors.Is(ierr, errEmbedderDown) {
+			return res, ierr
+		}
+		log.Printf("corpusd vectors inbox: %v", ierr)
 	}
 	model := embedder.ModelHash
 	started := time.Now()

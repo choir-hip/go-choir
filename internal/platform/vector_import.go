@@ -432,7 +432,7 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 	// inspects no error.
 	oversizedKeys := map[string]bool{}
 	rowKey := func(r vectorFileRow) string { return fmt.Sprintf("%s|%s|%d", r.Kind, r.ID, r.Ordinal) }
-	checked, setAside, skippedNow, next := 0, 0, 0, 0
+	checked, setAside, skippedNow, fileRejected, next := 0, 0, 0, 0, 0
 	for checked < vectorImportSamples && next < len(order) {
 		var inputs []string
 		var vecs [][]float32
@@ -446,7 +446,8 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 				continue
 			}
 			if in.reason != "" || in.TextSHA != c.row.TextSHA {
-				continue // cannot be re-checked here: it does not count
+				fileRejected++ // a fault of the file: not found, not public, another cut
+				continue
 			}
 			inputs = append(inputs, in.Input)
 			vecs = append(vecs, c.v)
@@ -478,7 +479,10 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		}
 	}
 	if checked < floor {
-		if setAside+skippedNow > 0 {
+		// Candidates rejected for a reason that is the file's (not found, not public, a
+		// text this host cuts differently) are counted apart from those set aside or
+		// skipped: when they alone account for the shortfall the file is refused.
+		if setAside+skippedNow > 0 && fileRejected < floor-checked {
 			return res, fmt.Errorf("%w: only %d rows could be checked, need %d (%d are too large for this host's embedder, %d failed this call); the file waits", errVectorImportCannotCheck, checked, floor, setAside, skippedNow)
 		}
 		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (the text or its cut differs)", ErrVectorImportRefused, checked, floor)
@@ -628,8 +632,38 @@ func (s *Service) beginVectorJob(source, file string) (*VectorImportJob, bool) {
 	_, _ = rand.Read(b[:])
 	job := &VectorImportJob{JobID: "vi-" + time.Now().UTC().Format("20060102T150405Z") + "-" + hex.EncodeToString(b[:]), State: "running", StartedAt: time.Now().UTC(), Source: source, File: file}
 	v.jobs[job.JobID] = job
+	v.jobOrder = append(v.jobOrder, job.JobID)
 	v.lastJob = job.JobID
+	// finished jobs are kept to a bounded number, as the tape sweep's are
+	for len(v.jobOrder) > vectorJobsKept {
+		delete(v.jobs, v.jobOrder[0])
+		v.jobOrder = v.jobOrder[1:]
+	}
 	return job, true
+}
+
+// vectorJobsKept is how many job records the process remembers.
+const vectorJobsKept = 32
+
+// forgetVectorJob drops a job that did not run to an outcome the operator reads
+// (an inbox file that waits): it leaves no entry behind, only its journal line.
+func (s *Service) forgetVectorJob(job *VectorImportJob) {
+	v := &s.store.vec
+	v.importMu.Lock()
+	defer v.importMu.Unlock()
+	delete(v.jobs, job.JobID)
+	for i, id := range v.jobOrder {
+		if id == job.JobID {
+			v.jobOrder = append(v.jobOrder[:i], v.jobOrder[i+1:]...)
+			break
+		}
+	}
+	if v.lastJob == job.JobID {
+		v.lastJob = ""
+		if n := len(v.jobOrder); n > 0 {
+			v.lastJob = v.jobOrder[n-1]
+		}
+	}
 }
 
 // finishVectorJob records a job's outcome and writes its one journal line, the

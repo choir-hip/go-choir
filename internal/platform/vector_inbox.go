@@ -31,6 +31,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -110,41 +111,84 @@ func moveNoReplace(src, dir, name string) (string, error) {
 	return "", fmt.Errorf("no free name for %s in %s", name, dir)
 }
 
-// ProcessVectorInbox imports the oldest eligible file of the inbox, if any: one
-// file a pass, and none while a job of the route runs (the file waits). The
-// error it returns is the embedder being unable to answer (errEmbedderDown), so
-// the pass backs off; the file is then still in the inbox.
-func (s *Service) ProcessVectorInbox(ctx context.Context) (taken int, err error) {
+// ProcessVectorInbox imports one file of the inbox, if one is eligible: the
+// oldest that is not waiting, else the oldest waiting one; none while a job of the
+// route runs (the file waits). It returns how many files it brought to an outcome
+// (done/ or refused/): a file that was put back because it could not be imported
+// now is not counted, so the pass is not "work" and waits its ordinary interval.
+// The error is the embedder being unable to answer (errEmbedderDown), so the pass
+// backs off, or the inbox being unreadable.
+func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err error) {
 	if err := s.ensureVectorInboxDirs(); err != nil {
-		return 0, nil
+		return 0, fmt.Errorf("vector inbox: %w", err)
 	}
 	entries, rerr := os.ReadDir(s.vectorSpoolDir("inbox"))
 	if rerr != nil {
-		return 0, nil
+		return 0, fmt.Errorf("vector inbox: %w", rerr)
 	}
-	var oldest string
-	var oldestMod time.Time
+	type cand struct {
+		name string
+		mod  time.Time
+	}
+	var cands []cand
+	present := map[string]bool{}
 	for _, e := range entries {
 		name := e.Name()
 		if !strings.HasSuffix(name, ".jsonl") {
 			continue // *.part and anything else is left alone
 		}
+		present[name] = true
 		fi, lerr := os.Lstat(filepath.Join(s.vectorSpoolDir("inbox"), name))
 		if lerr != nil || time.Since(fi.ModTime()) < vectorInboxMinAge {
 			continue
 		}
-		if oldest == "" || fi.ModTime().Before(oldestMod) {
-			oldest, oldestMod = name, fi.ModTime()
+		cands = append(cands, cand{name, fi.ModTime()})
+	}
+	v := &s.store.vec
+	v.importMu.Lock()
+	for name := range v.inboxDeferred {
+		if !present[name] {
+			delete(v.inboxDeferred, name) // gone from the inbox
 		}
 	}
-	if oldest == "" || ctx.Err() != nil {
+	deferred := map[string]bool{}
+	for name := range v.inboxDeferred {
+		deferred[name] = true
+	}
+	v.importMu.Unlock()
+	sort.Slice(cands, func(i, j int) bool { return cands[i].mod.Before(cands[j].mod) })
+	pick := ""
+	for _, c := range cands {
+		if !deferred[c.name] {
+			pick = c.name
+			break
+		}
+	}
+	if pick == "" && len(cands) > 0 {
+		pick = cands[0].name // only waiting files are left: try the oldest again
+	}
+	if pick == "" || ctx.Err() != nil {
 		return 0, nil
 	}
-	job, ok := s.beginVectorJob("inbox", oldest)
+	job, ok := s.beginVectorJob("inbox", pick)
 	if !ok {
 		return 0, nil // the route's job runs; the file waits
 	}
-	return 1, s.importInboxFile(ctx, job, oldest)
+	done, ierr := s.importInboxFile(ctx, job, pick)
+	v.importMu.Lock()
+	if done {
+		delete(v.inboxDeferred, pick)
+	} else {
+		if v.inboxDeferred == nil {
+			v.inboxDeferred = map[string]bool{}
+		}
+		v.inboxDeferred[pick] = true
+	}
+	v.importMu.Unlock()
+	if done {
+		return 1, ierr
+	}
+	return 0, ierr
 }
 
 // importInboxFile claims name (a move into running/ that cannot replace), imports
@@ -152,7 +196,7 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (taken int, err error)
 // record (a fault of the file itself), or back to inbox/ untouched (the server
 // cannot answer, the file cannot be checked now, or something other than the file
 // failed): unstarted work, found again next pass, never resumed work.
-func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, name string) error {
+func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, name string) (done bool, err error) {
 	src := filepath.Join(s.vectorSpoolDir("inbox"), name)
 	// Judged on the link itself before the claim: a symlink or any other
 	// non-regular file (a directory named x.jsonl) is moved to refused/ as it is
@@ -161,7 +205,8 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 	claimed, err := moveNoReplace(src, s.vectorSpoolDir("running"), name)
 	if err != nil {
 		s.finishVectorJob(job, VectorImport{}, fmt.Errorf("could not claim %s: %w", name, err))
-		return nil
+		s.forgetVectorJob(job)
+		return false, nil
 	}
 	run := filepath.Join(s.vectorSpoolDir("running"), claimed)
 	var res VectorImport
@@ -180,7 +225,7 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 		// Shutdown mid-import: the file stays in running/ and is moved to
 		// interrupted/ at the next start.
 		s.finishVectorJob(job, res, ierr)
-		return nil
+		return false, nil
 	}
 	out := s.finishVectorJob(job, res, ierr)
 	var dest string
@@ -197,15 +242,18 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 		} else {
 			log.Printf("corpusd vectors inbox: %s was not imported now (%v); it stays in inbox/ and is tried again next pass", name, ierr)
 		}
+		s.forgetVectorJob(job) // no entry for a file that waits
 		if errors.Is(ierr, errEmbedderDown) {
-			return ierr
+			return false, ierr
 		}
-		return nil
+		return false, nil
 	}
 	final, merr := moveNoReplace(run, s.vectorSpoolDir(dest), name)
 	if merr != nil {
+		// The import itself is done and idempotent; the file stays in running/ and is
+		// reported as interrupted at the next start (re-importing it is harmless).
 		log.Printf("corpusd vectors inbox: %s finished %s but could not be moved to %s/: %v", name, out.State, dest, merr)
-		return nil
+		return true, nil
 	}
 	rec, _ := json.MarshalIndent(out, "", "  ")
 	recPath := filepath.Join(s.vectorSpoolDir(dest), final+".job.json")
@@ -219,5 +267,5 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 	if werr != nil {
 		log.Printf("corpusd vectors inbox: job record of %s not written: %v", final, werr)
 	}
-	return nil
+	return true, nil
 }

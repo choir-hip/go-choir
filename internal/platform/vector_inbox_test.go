@@ -378,8 +378,8 @@ func TestEmbedEffectsReachTheWorkerTheImportSampleAndTheInboxTheSameWay(t *testi
 		}
 		f.inboxPut(t, "d.jsonl", rows, time.Hour)
 		n, err := f.svc.ProcessVectorInbox(ctx)
-		if n != 1 || !errors.Is(err, errEmbedderDown) {
-			t.Fatalf("inbox: %d %v", n, err)
+		if n != 0 || !errors.Is(err, errEmbedderDown) {
+			t.Fatalf("inbox: %d %v (a file put back is not taken)", n, err)
 		}
 		if !spoolHas(filepath.Join(f.inboxDir("inbox"), "d.jsonl")) || spoolHas(filepath.Join(f.inboxDir("refused"), "d.jsonl")) || spoolHas(filepath.Join(f.inboxDir("done"), "d.jsonl")) || len(globJobs(f)) != 0 {
 			t.Fatal("the file did not stay in inbox/ untouched")
@@ -412,7 +412,7 @@ func TestEmbedEffectsReachTheWorkerTheImportSampleAndTheInboxTheSameWay(t *testi
 			t.Fatalf("import: %v", err)
 		}
 		f2.inboxPut(t, "t.jsonl", rows, time.Hour)
-		if n, err := f2.svc.ProcessVectorInbox(ctx); n != 1 || err != nil || !spoolHas(filepath.Join(f2.inboxDir("inbox"), "t.jsonl")) || len(globJobs(f2)) != 0 {
+		if n, err := f2.svc.ProcessVectorInbox(ctx); n != 0 || err != nil || !spoolHas(filepath.Join(f2.inboxDir("inbox"), "t.jsonl")) || len(globJobs(f2)) != 0 {
 			t.Fatalf("inbox: %d %v", n, err)
 		}
 		eff.allFlaky = false
@@ -556,5 +556,92 @@ func TestAFileWhoseRowsCannotBeReadNowWaitsAndIsNotRefused(t *testing.T) {
 	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
 	if !errors.Is(err, errVectorImportCannotCheck) || errors.Is(err, ErrVectorImportRefused) {
 		t.Fatalf("a file whose rows the host cannot read now: %v", err)
+	}
+}
+
+// ---- round 6: a file that waits is not work ----
+
+func TestADeferredFileIsNotTakenSoThePassWaitsAndTheIdleMarkStays(t *testing.T) {
+	f := newVecFixture(t)
+	f.story(t, "doc-a", 1, "A", storyText("aaa"), time.Time{})
+	f.pass(t)
+	if !f.svc.vecIdle.valid {
+		t.Fatal("no idle mark after a complete walk")
+	}
+	ids := f.captures(t, "o1", "c1", "plain", 40, time.Now().UTC().Add(-100*time.Hour), func(i int) string { return fmt.Sprintf("plain text number%d", i) }, time.Minute)
+	rows := f.macRows(t, ids...)
+	eff := &effectEmbedder{inner: f.emb, allFlaky: true}
+	f.store.SetEmbedder(eff)
+	f.inboxPut(t, "w.jsonl", rows, time.Hour)
+	for i := 0; i < 3; i++ {
+		res, err := f.svc.RunVectorPass(context.Background())
+		if err != nil || res.Worked() || res.Imports != 0 {
+			t.Fatalf("pass %d with a waiting file counted as work: %+v %v (a worked pass runs again at once)", i, res, err)
+		}
+		if !f.svc.vecIdle.valid {
+			t.Fatalf("pass %d cleared the idle mark", i)
+		}
+		if !spoolHas(filepath.Join(f.inboxDir("inbox"), "w.jsonl")) {
+			t.Fatal("the file left the inbox")
+		}
+	}
+	// a file that waits leaves no job entry behind; finished jobs are bounded
+	f.store.vec.importMu.Lock()
+	n := len(f.store.vec.jobs)
+	f.store.vec.importMu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d job entries for a file that waits", n)
+	}
+	for i := 0; i < vectorJobsKept+10; i++ {
+		j, _ := f.svc.beginVectorJob("route", "")
+		f.svc.finishVectorJob(j, VectorImport{}, nil)
+	}
+	f.store.vec.importMu.Lock()
+	n = len(f.store.vec.jobs)
+	f.store.vec.importMu.Unlock()
+	if n > vectorJobsKept {
+		t.Fatalf("%d job entries kept, want at most %d", n, vectorJobsKept)
+	}
+}
+
+func TestAWaitingFileDoesNotStarveANewerOne(t *testing.T) {
+	f, caps := importFixture(t)
+	// the older file holds only FLAKY rows: it cannot be checked while those fail
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	flaky := f.captures(t, "o1", "c1", "FLAKY", 40, base, func(i int) string { return fmt.Sprintf("FLAKY text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	f.inboxPut(t, "a-old.jsonl", f.macRows(t, flaky...), 5*time.Hour)
+	f.inboxPut(t, "b-new.jsonl", f.macRows(t, caps...), time.Hour)
+	if n := inboxTake(t, f); n != 0 {
+		t.Fatalf("the old file should have waited, took %d", n)
+	}
+	if n := inboxTake(t, f); n != 1 || !spoolHas(filepath.Join(f.inboxDir("done"), "b-new.jsonl")) {
+		t.Fatalf("the newer file was starved by the waiting one (took %d)", n)
+	}
+	if !spoolHas(filepath.Join(f.inboxDir("inbox"), "a-old.jsonl")) {
+		t.Fatal("the waiting file was lost")
+	}
+}
+
+func TestACutMismatchRefusesTheFileEvenWhenSomeCandidatesWereSetAside(t *testing.T) {
+	f := newVecFixture(t)
+	rows := effectFile(t, f)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	// every plain row's text is cut differently by the Mac; the TOOLONG and FLAKY ones are as before
+	plain := 0
+	for i := range rows {
+		meta, _ := f.store.captureObjectsByIDAny(context.Background(), []string{rows[i].ID})
+		o := meta[rows[i].ID]
+		if strings.Contains(string(o.Metadata), "T plain-") {
+			rows[i].TextSHA = embedder.TextSHA("another cut")
+			plain++
+		}
+	}
+	if plain != 30 {
+		t.Fatalf("plain rows %d", plain)
+	}
+	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if !errors.Is(err, ErrVectorImportRefused) || !strings.Contains(err.Error(), "the text or its cut differs") {
+		t.Fatalf("a file this host cuts differently must be refused, not wait: %v", err)
 	}
 }
