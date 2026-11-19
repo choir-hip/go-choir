@@ -26,7 +26,7 @@
 // 10. Time is never read (`Date.now()` is refused): "now" is the Date header of the last answer any server gave, kept in the library file.
 
 import type { Result, Storage } from './app.contract.d.ts';
-import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS } from './api.ts';
+import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration } from './api.ts';
 import { NotAFeed, parseFeed } from './podcast-feed.ts';
 import {
   HOME, TOP_URL, clock, decodeChartNews, decodePopular, decodeSearch, decodeSubscriptions, decodeTranscript, durationLabel, durationsAgree, episodeAddress,
@@ -175,6 +175,7 @@ async function fetchJSON(url: string): Promise<unknown> {
 async function load(feedURL: string, storage: Storage | undefined): Promise<void> {
   const n = feedKey(feedURL);
   const gen = generation;
+  const apiGen = accountGeneration();                                        // the seam's account generation: the file write below refuses after a sign-out began
   const candidates = [https(feedURL)];
   let lastError = 'The feed could not be reached.';
   let result: Feed | null = null;
@@ -201,7 +202,7 @@ async function load(feedURL: string, storage: Storage | undefined): Promise<void
     if (i >= 0) { l.subscriptions[i].show = result.show; await saveLibrary(storage); }
     if (storage) {
       try { await storage.fs.mkdir(FEED_DIR); } catch { /* exists */ }
-      try { await storage.fs.atomicWriteFile(feedFile(n), enc.encode(JSON.stringify(result))); } catch { /* the copy is lost, not the feed */ }
+      await writeCurrent(apiGen, storage, feedFile(n), enc.encode(JSON.stringify(result)));      // the copy may be lost, not the feed; a sign-out in flight writes nothing
     }
   } else failed.set(n, lastError);
 }

@@ -37,8 +37,8 @@ final class ModelsModule: ExactModule {
                 guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
                 await m.signOutForShared(keepKey: op == "wipe")
                 MailSeal().forget()      // the mail copy's key goes with the account, whatever shared code does next
-                // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done, and shared code wipes
-                // nothing (a retry is safe). Idempotent: with the key already gone it only runs the Swift wipe again.
+                // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done. The Account screen's sign-out then wipes
+                // nothing shared (the key remains: the marker goes); at a launch (account.ts reconcile) the shared stores of the account being left are wiped regardless of this answer and the marker stays. Idempotent: with the key already gone it only runs the Swift wipe again.
                 reply.send(["done": op == "wipe" || !CredentialReader().keyRemains()])
             }
             return

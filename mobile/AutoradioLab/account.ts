@@ -163,19 +163,24 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
     if (action === 'adopt') { await mark(storage, STAMP_FILE, k.digest); return { action, failed: [] }; }
     if (action === 'finish') {
       const done = async (): Promise<void> => { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); };
-      // The late answer wipes only if the key is STILL absent (a sign-in that finished inside the window owns its fresh stores).
-      const nativeOk = await native.signOut(() => { void keyState().then((n) => { if (n.state === 'absent') void sharedWipeThen(storage, store, done); }); });
-      // The shared wipe does not wait on the native answer: the key is gone, so the previous account's shared stores must not stay readable because the native half failed or hung.
-      // Only the stamp and marker wait for both.
-      const failed = await sharedWipeThen(storage, store, nativeOk ? done : async () => undefined);
+      // A late native answer never wipes the shared stores again (they are wiped below, once): it only finishes the bookkeeping that waited on it, and only if the key is still absent.
+      let shared: Promise<string[]> | null = null;
+      const nativeOk = await native.signOut(() => { void (async () => { if ((await keyState()).state === 'absent' && shared && (await shared).length === 0) await done(); })(); });
+      // The shared wipe does not DEPEND on the native answer: the key is gone, so the previous account's shared stores must not stay readable because the native half failed or hung.
+      // (It starts after the native call has answered or passed its deadline, at most NATIVE_DEADLINE_MS later; only the stamp and marker wait for both results.)
+      shared = sharedWipeThen(storage, store, nativeOk ? done : async () => undefined);
+      const failed = [...(await shared)];       // a copy: the late continuation reads the wipe's own result
       if (!nativeOk) failed.push('native');
       console.log(`account: finished an interrupted sign-out, ${failed.length} failed`);
       return { action, failed };
     }
     if (action === 'account-change') {
       const stamp2 = async (): Promise<void> => { await mark(storage, STAMP_FILE, k.digest); };
-      const nativeOk = await native.wipe(() => { void keyState().then((n) => { if (n.state === 'present' && n.digest === k.digest) void sharedWipeThen(storage, store, stamp2); }); });
-      const failed = await sharedWipeThen(storage, store, nativeOk ? stamp2 : async () => undefined);       // shared stores go regardless; the old stamp stays unless both succeeded
+      // The late answer finishes only the stamp (the new account IS signed in: re-wiping would delete its fresh stores), and only if the same key is still stored and the wipe below was clean.
+      let shared: Promise<string[]> | null = null;
+      const nativeOk = await native.wipe(() => { void (async () => { const n = await keyState(); if (n.state === 'present' && n.digest === k.digest && shared && (await shared).length === 0) await stamp2(); })(); });
+      shared = sharedWipeThen(storage, store, nativeOk ? stamp2 : async () => undefined);       // shared stores go regardless; the old stamp stays unless both succeeded
+      const failed = [...(await shared)];       // a copy: the late continuation reads the wipe's own result
       if (!nativeOk) failed.push('native');
       console.log(`account: another account signed in, ${failed.length} failed`);
       return { action, failed };

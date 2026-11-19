@@ -297,6 +297,18 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
     release2(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
     expect(dataLeft(m2).length).toBe(SEED.length);
   });
+  test('round 4: an account change whose native wipe answers AFTER the deadline does not wipe the new account\'s data again; it only finishes the stamp', async () => {
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    W = newWorld('present', 'test-key-B-not-real'); const m = memFs(SEED);
+    m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real')));
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    const r = await settleAccount(m.storage, undefined, nativeOf(async (q) => (q.op === 'wipe' ? (await gate, { done: true }) : phone().later(q)), 20));
+    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]);              // the shared stores were wiped at the launch
+    for (const k of SEED) m.files.set(k, new TextEncoder().encode('B wrote this'));        // the new account is signed in and has written data in between
+    release(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
+    expect(dataLeft(m).length).toBe(SEED.length);                                          // it survives the late answer
+    expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));   // and the bookkeeping is finished
+  });
   test('a native sign-out that outlives its deadline keeps its continuation and the marker (finding 4)', async () => {
     W = newWorld('present'); W.hang = true; const m = memFs(SEED);
     await launch(m); resetSettled();

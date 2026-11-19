@@ -2,8 +2,8 @@
 // generation moved is removed. Failure list, written before the code (a test per store; each suspends the source across the sign-out):
 //  W1 the helper itself: before, after.   W2 paper (front list cache).   W3 notebook (text cache).   W4 files (recent list, memory and file).   W5 files (cache download).
 //  Why the others cannot write after the wipe (no test possible or needed):
-//   takes: `saveKept` has no caller in the app (takes.ts:213, grep: only takes.test.ts), so no source writes it.   podcasts: `saveLibrary` writes `lib`, which `forget()` sets to null
-//   (podcast.ts:76, :125), and the feed write is behind `gen !== generation` (podcast.ts:177, :194); the tiny window between that check and the write is the same helper's reach and is covered by W1.
+//   takes: `saveKept` has no caller in the app (takes.ts:213, grep: only takes.test.ts), so no source writes it.   podcasts: the feed file goes through `writeCurrent` (W6); `saveLibrary` writes
+//   `lib`, which `forget()` sets to null (podcast.ts:76, :125), so a library write after the wipe has nothing to write (the generation check before `loadLibrary` plus that null).
 //   content: every put goes through `put()` in syncAll, which checks `c.live()` (the store's generation, bumped by `wipe`) immediately before the write (content.ts `const put`).
 //   mail: mail-store.ts `write` (tests R3 and R9 in mail.test.ts).   vectors: search.ts persist runs from the live store that sign-out empties first (account.ts wipes `vectors`).
 import { beforeEach, describe, expect, test } from 'bun:test';
@@ -11,6 +11,8 @@ import { accountGeneration, bindNative, nextGeneration, resetSeam, writeCurrent 
 import * as paper from './paper.ts';
 import * as F from './files.ts';
 import { loadDoc, CACHE_FILE as NB_CACHE, type Get } from './notebook.ts';
+import * as P from './podcast.ts';
+import * as PM from './podcast-model.ts';
 
 const written = new Map<string, Uint8Array>();
 let gate: Promise<void> | null = null;
@@ -38,6 +40,17 @@ describe('W1 the helper', () => {
     const slow = { fs: { atomicWriteFile: async (p: string, d: Uint8Array) => { await gated(); written.set(p, d); }, rm: async (p: string) => { written.delete(p); } } } as never;
     const release = hold(); const p = writeCurrent(g2, slow, 'app:/data/z', new Uint8Array([1])); nextGeneration(); release();
     expect(await p).toBe(false); expect(written.has('app:/data/z')).toBe(false);
+  });
+});
+
+describe('W6 podcasts', () => {
+  test('a feed that arrives after the sign-out is not kept on disk', async () => {
+    P.forget(); const release = hold();
+    const rss = '<?xml version="1.0"?><rss><channel><title>Show</title><item><title>E</title><guid>g</guid><enclosure url="https://cdn.example.com/e.mp3" type="audio/mpeg"/></item></channel></rss>';
+    globalThis.fetch = (async () => { await gated(); return new Response(rss, { status: 200, headers: { 'content-type': 'application/rss+xml' } }); }) as never;
+    const p = P.podcastShow({ address: PM.showAddress('https://feeds.example.com/s.xml'), tick: 0, nowId: '', rev: 0 }, storage);
+    await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await p; await new Promise((r) => setTimeout(r, 30));
+    expect([...written.keys()].filter((k) => k.startsWith('app:/data/podcast-feeds') || k.includes('feed'))).toEqual([]);
   });
 });
 
