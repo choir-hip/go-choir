@@ -176,6 +176,9 @@ type Runtime struct {
 	// storiesShown counts the candidate stories each running desk run was
 	// shown through choir.Stories (management_story_choice.go).
 	storiesShown sync.Map
+	// openingShown counts the stories a task's opening message carried
+	// (run id -> int), apart from the verb's.
+	openingShown sync.Map
 	// pollSources serializes choir.PollSource per source within a run.
 	pollSources pollSourceLocks
 	// calibration caches each computer's calibration snapshot for the
