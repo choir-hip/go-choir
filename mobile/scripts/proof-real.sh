@@ -237,6 +237,8 @@ chk "notebook: the page opened" '\[notebook-(page|title)\]' "$SHOTS/drive-tour.t
 chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' "$SHOTS/drive-tour.txt"
 # the first shared answer after a launch must not run over the device's 100 ms turn (the app logs the failure that says so)
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
+# the shared twins are the Android path: on iOS the shared reader must never fetch (it logs "reader: story blocks=" when it does)
+bad "iOS: the shared reader twin never fetched" 'console: reader: story blocks=' "$OUT"
 # the sign-out drill
 chk "drill: signed in before" '\[settings-account-signed\][^"]*"Yes"' "$DR"
 chk "drill: the account page says signed out after" '\[settings-account-signed\][^"]*"No"' "$DR"
