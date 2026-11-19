@@ -645,3 +645,82 @@ func TestACutMismatchRefusesTheFileEvenWhenSomeCandidatesWereSetAside(t *testing
 		t.Fatalf("a file this host cuts differently must be refused, not wait: %v", err)
 	}
 }
+
+// ---- round 7: which waiter is retried, and when a short sample waits ----
+// Failure list, written before the code:
+//   a. TestOnlyTheOldestWaitingFileIsRetriedSoANewerWaiterIsNeverTried: two
+//      deferred files, the older never importable; the newer is never retried;
+//   b. TestAFileWhoseCheckableRowsAreAllSetAsideIsRefusedNotLeftWaiting: rows set
+//      aside for the file's own reason (too large) can never be checked, so the
+//      file waits for ever;
+//   c. TestAFileWhoseShortfallIsOnlyTransientSkipsStaysInTheInbox: the guard that
+//      repair (b) does not refuse a file the server merely could not answer for;
+//   d. the existing waiting-file tests stay as they are.
+
+// stuckEmbedder fails in transport on an input holding STUCK always, and on one
+// holding LATER until open is set.
+type stuckEmbedder struct {
+	inner embedder.Embedder
+	open  atomic.Bool
+}
+
+func (e *stuckEmbedder) Health(ctx context.Context) error { return e.inner.Health(ctx) }
+func (e *stuckEmbedder) Embed(ctx context.Context, in []string) ([][]float32, error) {
+	for _, x := range in {
+		if strings.Contains(x, "STUCK") || (strings.Contains(x, "LATER") && !e.open.Load()) {
+			return nil, errors.New("connection reset by peer")
+		}
+	}
+	return e.inner.Embed(ctx, in)
+}
+
+func TestOnlyTheOldestWaitingFileIsRetriedSoANewerWaiterIsNeverTried(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	stuck := f.captures(t, "o1", "c1", "STUCK", 40, base, func(i int) string { return fmt.Sprintf("STUCK text number%d", i) }, time.Minute)
+	later := f.captures(t, "o1", "c1", "LATER", 40, base, func(i int) string { return fmt.Sprintf("LATER text number%d", i) }, time.Minute)
+	emb := &stuckEmbedder{inner: f.emb}
+	f.store.SetEmbedder(emb)
+	f.inboxPut(t, "a-old.jsonl", f.macRows(t, stuck...), 5*time.Hour)
+	f.inboxPut(t, "b-new.jsonl", f.macRows(t, later...), time.Hour)
+	for i := 0; i < 2; i++ { // both are tried once and both wait
+		if n := inboxTake(t, f); n != 0 {
+			t.Fatalf("pass %d took %d", i, n)
+		}
+	}
+	emb.open.Store(true) // the newer file can be imported now; the older never can
+	for i := 0; i < 4; i++ {
+		inboxTake(t, f)
+	}
+	if !spoolHas(filepath.Join(f.inboxDir("done"), "b-new.jsonl")) {
+		t.Fatal("the newer waiting file was never tried again: the oldest waiter starves it")
+	}
+	if !spoolHas(filepath.Join(f.inboxDir("inbox"), "a-old.jsonl")) {
+		t.Fatal("the stuck file left the inbox")
+	}
+}
+
+func TestAFileWhoseCheckableRowsAreAllSetAsideIsRefusedNotLeftWaiting(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	ids := f.captures(t, "o1", "c1", "TOOLONG", 40, base, func(i int) string { return fmt.Sprintf("TOOLONG text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, f.macRows(t, ids...)))
+	if !errors.Is(err, ErrVectorImportRefused) || errors.Is(err, errVectorImportCannotCheck) {
+		t.Fatalf("a file whose rows are all too large for this host must be refused, not wait: %v", err)
+	}
+}
+
+func TestAFileWhoseShortfallIsOnlyTransientSkipsStaysInTheInbox(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	ids := f.captures(t, "o1", "c1", "FLAKY", 40, base, func(i int) string { return fmt.Sprintf("FLAKY text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	f.inboxPut(t, "t.jsonl", f.macRows(t, ids...), time.Hour)
+	if n := inboxTake(t, f); n != 0 {
+		t.Fatalf("took %d", n)
+	}
+	if !spoolHas(filepath.Join(f.inboxDir("inbox"), "t.jsonl")) || spoolHas(filepath.Join(f.inboxDir("refused"), "t.jsonl")) {
+		t.Fatal("a file the server could not answer for was not left in the inbox")
+	}
+}
