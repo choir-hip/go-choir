@@ -83,16 +83,11 @@ export const DEMO_AT: Record<string, number> = {
   settingsAccount: 1, accountSignOut: 0, mailBox: 1, mailFrame: 1, mailSync: 1, mailMessage: 1, mailCompose: 1, mailSaveDraft: 4, mailApprovalEmail: 2, mailMarkUnread: 1,
   fileList: 0, fileOpen: 0, fileResolve: 0, fileMkdir: 0, fileDelete: 0, fileRename: 0, fileUpload: 0, paperFront: 6,
 };
-let firstAnswerLogged = false;
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
   const at = DEMO_AT[source];
   if (at !== undefined && (args as unknown[])[at] === true) setDemo(true);
   // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
-  const t0 = Date.now();
   if (source !== 'accountSignOut') await settleAccount(storage, store);
-  const t1 = Date.now();
-  const out = await sources[source](args, store, storage, native);
-  if (!firstAnswerLogged) { firstAnswerLogged = true; console.log(`app: first answer (${source}): reconcile ${t1 - t0} ms, source ${Date.now() - t1} ms`); }   // wall time; the 100 ms CPU turn is judged by the host's own "over the 100 ms budget" failure
-  return out;
+  return sources[source](args, store, storage, native);
 };
