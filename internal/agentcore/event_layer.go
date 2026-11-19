@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/jevbudget"
 	"github.com/yusefmosiah/go-choir/internal/jevrecord"
 	"github.com/yusefmosiah/go-choir/internal/outlet"
+	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -38,25 +39,36 @@ import (
 var (
 	eventFlushInterval = 60 * time.Second
 	eventCallTimeout   = 30 * time.Second
+	// eventNeighboursTimeout bounds the one neighbours request of a flush; its
+	// answer is a shortlist, never a reason to hold the flush.
+	eventNeighboursTimeout = 40 * time.Second
 )
 
 const (
-	eventShortlistRecent  = 30
-	eventShortlistOverlap = 10
-	// eventShortlistCorroborated is the overlap budget of corroborated
-	// events, which a later report of a developed story must still reach:
-	// every story's event is corroborated, so without it no report could
-	// rejoin an event once about 30 newer ones passed (docs/problems/
-	// unsupported-cites-duplicates-and-churn-2026-11-10.md, D1).
-	eventShortlistCorroborated = 10
+	eventShortlistRecent = 30
+	// eventShortlistVector is how many events a capture's own question offers
+	// beyond the recent ones: the events whose member captures are nearest to it
+	// by vector (station V5; it replaced the title-overlap slots, which a
+	// reworded report of a known event could not reach, and the corroborated
+	// overlap slot, which a later report of a developed story needed once about
+	// 30 newer events had passed: the vector neighbours reach both).
+	eventShortlistVector = 3
+	// eventNeighbourLimit is how many nearest captures corpusd is asked for
+	// each queued capture; they are mapped to events and the first
+	// eventShortlistVector distinct events are offered.
+	eventNeighbourLimit = 12
+	// eventNeighbourBatch is the most captures one neighbours request names
+	// (corpusd's bound, platform.captureNeighboursMaxIDs); a flush of more is
+	// sent in the next request.
+	eventNeighbourBatch = 5000
 	// eventLinkChoices bounds the after_ choices one capture's question
 	// offers: the known events sharing the most words with the capture.
 	eventLinkChoices = 3
-	// eventRecentHorizon bounds the recency slots; eventOverlapHorizon
-	// bounds the title-overlap slots, which reach uncorroborated events a
-	// slow second report would otherwise miss (panel B2).
-	eventRecentHorizon  = 72 * time.Hour
-	eventOverlapHorizon = 14 * 24 * time.Hour
+	// eventRecentHorizon bounds the recency slot; eventVectorHorizon bounds how
+	// far back a capture's vector neighbours are searched, which reaches the
+	// uncorroborated events a slow second report would otherwise miss (panel B2).
+	eventRecentHorizon = 72 * time.Hour
+	eventVectorHorizon = 14 * 24 * time.Hour
 	// eventJoinP joins an event as a counted member; eventTentativeP up to
 	// it attaches the capture as a tentative member, which never counts
 	// toward the event's outlets and never mints a rival event (panel B1).
@@ -80,6 +92,9 @@ type eventInput struct {
 	Item     sourcegraph.CapturedItem
 	SourceID string
 	At       time.Time
+	// Research is true for a page a research desk read (choir.Read) or polled,
+	// not one a source schedule captured.
+	Research bool
 }
 
 // eventResolveReport is what one resolution did.
@@ -95,6 +110,14 @@ type eventResolveReport struct {
 	Created map[string][]string
 	// Left are the inputs that ended without a membership.
 	Left []eventInput
+	// vec is the flush's vector neighbours (nil: none were asked for).
+	vec *eventVectors
+	// ShortRecent is the recent slot's size. vectorEvents are the distinct
+	// events the captures' vector neighbours led to across the flush's calls,
+	// vectorOnlyEvts those the recent slot did not already offer.
+	ShortRecent    int
+	vectorEvents   map[string]bool
+	vectorOnlyEvts map[string]bool
 }
 
 // eventSummary is an event as the index holds it.
@@ -337,6 +360,10 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		}
 		pending = append(pending, in)
 	}
+	// The vector shortlist: one request for every waiting capture (never the
+	// embedder, never a reason to stop: an answer that is not there is named
+	// in the journal line and the flush goes on with the recent events).
+	report.vec = rt.eventNeighbours(ctx, ownerID, computerID, pending)
 	// The fewest calls: the longest run of waiting captures whose one request
 	// fits the vendor's limits (jevbudget: 255 choices a question, 64k tokens a
 	// request, 32k state plus a question); a split names its limit in the log.
@@ -347,7 +374,7 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		for lo := 0; lo < len(pending); {
 			hi := len(pending)
 			sub, err := planJevCalls("event_layer", hi-lo, func(a, b int) (json.RawMessage, map[string]json.RawMessage, error) {
-				state, questions, _ := eventBuildChunk(idx, pending[lo+a:lo+b], now)
+				state, questions, _ := eventBuildChunk(idx, report.vec, pending[lo+a:lo+b], now)
 				return state, questions, nil
 			})
 			if err != nil || len(sub.Ranges) == 0 {
@@ -392,54 +419,125 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	return report, nil
 }
 
-// eventShortlistFor is the known events a chunk's questions offer.
-func eventShortlistFor(idx *eventIndex, chunk []eventInput, now time.Time) []*eventView {
-	tokens := map[string]bool{}
-	for _, in := range chunk {
-		for w := range titleTokens(in.Item.Title) {
-			tokens[w] = true
+// eventCandidates are the known events a chunk's questions offer: the recent
+// events every question offers, and each capture's own vector neighbours.
+type eventCandidates struct {
+	shared []*eventView
+	own    [][]*eventView // by capture of the chunk
+	// reached is every event the vector neighbours led to, among them those the
+	// recent slot already offered (which the own lists leave out).
+	reached map[*eventView]bool
+}
+
+// of is the events capture j's question offers, shared ones first.
+func (c *eventCandidates) of(j int) []*eventView {
+	out := append([]*eventView(nil), c.shared...)
+	if j < len(c.own) {
+		out = append(out, c.own[j]...)
+	}
+	return out
+}
+
+// union is every event any question offers, shared ones first, each once.
+func (c *eventCandidates) union() []*eventView {
+	out := append([]*eventView(nil), c.shared...)
+	seen := map[*eventView]bool{}
+	for _, v := range out {
+		seen[v] = true
+	}
+	for _, own := range c.own {
+		for _, v := range own {
+			if !seen[v] {
+				seen[v] = true
+				out = append(out, v)
+			}
 		}
 	}
-	return eventShortlist(idx, tokens, now)
+	return out
+}
+
+// dropLast removes the weakest candidate of a one-capture chunk: its last
+// vector neighbour, else the last recent event. It reports whether one was left.
+func (c *eventCandidates) dropLast() bool {
+	for j := len(c.own) - 1; j >= 0; j-- {
+		if n := len(c.own[j]); n > 0 {
+			c.own[j] = c.own[j][:n-1]
+			return true
+		}
+	}
+	if n := len(c.shared); n > 0 {
+		c.shared = c.shared[:n-1]
+		return true
+	}
+	return false
+}
+
+// eventShortlistFor is the known events a chunk's questions offer.
+func eventShortlistFor(idx *eventIndex, vec *eventVectors, chunk []eventInput, now time.Time) *eventCandidates {
+	c := &eventCandidates{shared: eventShortlist(idx, now), own: make([][]*eventView, len(chunk)), reached: map[*eventView]bool{}}
+	offered := map[*eventView]bool{}
+	for _, v := range c.shared {
+		offered[v] = true
+	}
+	for j, in := range chunk {
+		picked := map[*eventView]bool{}
+		for _, nid := range vec.nearOf(strings.TrimSpace(in.Item.CaptureID)) {
+			if len(c.own[j]) >= eventShortlistVector {
+				break
+			}
+			v := idx.events[idx.byCapture[nid]]
+			// A neighbour with no membership (a capture no flush has resolved,
+			// a sibling of this flush) offers nothing; an event already
+			// offered to every question, or to this one, is not offered twice.
+			if v == nil {
+				continue
+			}
+			c.reached[v] = true
+			if offered[v] || picked[v] {
+				continue
+			}
+			picked[v] = true
+			c.own[j] = append(c.own[j], v)
+		}
+	}
+	return c
 }
 
 // eventBuildChunkState is eventBuildChunk's state and questions, for naming the limit.
-func eventBuildChunkState(idx *eventIndex, chunk []eventInput, now time.Time) (json.RawMessage, map[string]json.RawMessage) {
-	state, questions, _ := eventBuildChunk(idx, chunk, now)
+func eventBuildChunkState(idx *eventIndex, vec *eventVectors, chunk []eventInput, now time.Time) (json.RawMessage, map[string]json.RawMessage) {
+	state, questions, _ := eventBuildChunk(idx, vec, chunk, now)
 	return state, questions
 }
 
 // eventBuildChunk is the request for chunk against the index as it stands,
 // with no bound applied.
-func eventBuildChunk(idx *eventIndex, chunk []eventInput, now time.Time) (json.RawMessage, map[string]json.RawMessage, eventAliases) {
-	return eventQuestion(chunk, eventShortlistFor(idx, chunk, now), eventSummaryRunes)
+func eventBuildChunk(idx *eventIndex, vec *eventVectors, chunk []eventInput, now time.Time) (json.RawMessage, map[string]json.RawMessage, eventAliases) {
+	return eventQuestion(chunk, eventShortlistFor(idx, vec, chunk, now), eventSummaryRunes)
 }
 
 // eventPrepareChunk builds the call for chunk against the index as it stands.
 // split is true when the request is over the token budget and the chunk must be
 // halved first (the halves are prepared one after the other, each seeing the
 // previous half's events).
-func eventPrepareChunk(idx *eventIndex, chunk []eventInput, now time.Time) (state json.RawMessage, questions map[string]json.RawMessage, alias eventAliases, split bool) {
-	state, questions, alias = eventBuildChunk(idx, chunk, now)
-	candidates := eventShortlistFor(idx, chunk, now)
+func eventPrepareChunk(idx *eventIndex, vec *eventVectors, chunk []eventInput, now time.Time) (state json.RawMessage, questions map[string]json.RawMessage, alias eventAliases, cands *eventCandidates, split bool) {
+	cands = eventShortlistFor(idx, vec, chunk, now)
+	state, questions, alias = eventQuestion(chunk, cands, eventSummaryRunes)
 	// The bound counts the questions too: each repeats every candidate's
 	// criteria, so they grow with chunk x candidates (code review, Devin
 	// B2). Split the chunk first; a single capture over the bound drops its
 	// summary, then its weakest candidates.
 	if !jevbudget.Fits(state, questions) && len(chunk) > 1 {
-		return nil, nil, alias, true
+		return nil, nil, alias, cands, true
 	}
 	for summary := eventSummaryRunes; !jevbudget.Fits(state, questions); {
 		if summary > 0 {
 			summary = 0
-		} else if len(candidates) > 0 {
-			candidates = candidates[:len(candidates)-1]
-		} else {
+		} else if !cands.dropLast() {
 			break
 		}
-		state, questions, alias = eventQuestion(chunk, candidates, summary)
+		state, questions, alias = eventQuestion(chunk, cands, summary)
 	}
-	return state, questions, alias, false
+	return state, questions, alias, cands, false
 }
 
 func (rt *Runtime) askEventChunk(ctx context.Context, chunk []eventInput, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
@@ -467,14 +565,15 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 // dial failure, which fails at once.
 func (rt *Runtime) resolveEventChunkAt(ctx context.Context, idx *eventIndex, ownerID, computerID string, chunk []eventInput, report *eventResolveReport, depth, retries int) {
 	now := time.Now().UTC()
-	stateRaw, questions, alias, split := eventPrepareChunk(idx, chunk, now)
+	stateRaw, questions, alias, cands, split := eventPrepareChunk(idx, report.vec, chunk, now)
 	if split {
 		half := len(chunk) / 2
-		log.Printf("jev split: site=event_layer items=%d calls=2 forced_by=map[%s:1]", len(chunk), jevbudget.Limit(eventBuildChunkState(idx, chunk, now)))
+		log.Printf("jev split: site=event_layer items=%d calls=2 forced_by=map[%s:1]", len(chunk), jevbudget.Limit(eventBuildChunkState(idx, report.vec, chunk, now)))
 		rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[:half], report, depth, retries)
 		rt.resolveEventChunkAt(ctx, idx, ownerID, computerID, chunk[half:], report, depth, retries)
 		return
 	}
+	report.noteShortlist(cands)
 	raw, err := rt.askEventChunk(ctx, chunk, stateRaw, questions)
 	report.Calls++
 	if err != nil && ctx.Err() == nil {
@@ -694,14 +793,13 @@ type eventAliases struct {
 	captures map[string]int        // alias -> index+1
 }
 
-// eventShortlist is the candidate events for a chunk: the newest within the
-// recency horizon, then uncorroborated ones within the overlap horizon that
-// share title words with the chunk, then corroborated ones within the recency
-// horizon that do, with a budget of their own.
-func eventShortlist(idx *eventIndex, tokens map[string]bool, now time.Time) []*eventView {
+// eventShortlist is the recent slot every question offers: the newest events
+// within the recency horizon, at most eventShortlistRecent. The events a
+// capture's vector neighbours reach are added per capture (eventShortlistFor).
+func eventShortlist(idx *eventIndex, now time.Time) []*eventView {
 	var live []*eventView
 	for _, v := range idx.events {
-		if now.Sub(v.last) <= eventOverlapHorizon {
+		if now.Sub(v.last) <= eventRecentHorizon {
 			live = append(live, v)
 		}
 	}
@@ -711,52 +809,106 @@ func eventShortlist(idx *eventIndex, tokens map[string]bool, now time.Time) []*e
 		}
 		return live[i].ev.EventID < live[j].ev.EventID
 	})
-	var out []*eventView
-	picked := map[*eventView]bool{}
-	for _, v := range live {
-		if len(out) >= eventShortlistRecent || now.Sub(v.last) > eventRecentHorizon {
+	if len(live) > eventShortlistRecent {
+		live = live[:eventShortlistRecent]
+	}
+	return live
+}
+
+// eventVectors is a flush's vector neighbours: for each queued capture the
+// nearest other captures of the computer, best first, as corpusd gave them.
+// They are mapped to events when a call is built, so a membership an earlier
+// call of the flush wrote is seen by the next.
+type eventVectors struct {
+	near map[string][]string
+	// Unavailable is why no neighbours came ("" when corpusd answered).
+	Unavailable string
+	// Rows is the neighbour rows returned; Missing the captures with no vector
+	// (not embedded yet, or not eligible); State how corpusd answered.
+	Rows, Missing int
+	State         string
+}
+
+func (v *eventVectors) nearOf(captureID string) []string {
+	if v == nil {
+		return nil
+	}
+	return v.near[captureID]
+}
+
+// eventNeighbours asks corpusd, in one request, for the nearest held captures
+// of every waiting capture. It never fails the flush: a corpusd without the
+// route, a refusal, a timeout or vectors that are not ready is named in
+// Unavailable and the flush goes on without the vector slot.
+func (rt *Runtime) eventNeighbours(ctx context.Context, ownerID, computerID string, pending []eventInput) *eventVectors {
+	vec := &eventVectors{near: map[string][]string{}}
+	if len(pending) == 0 {
+		return vec
+	}
+	var source researchtools.CaptureNeighbourer
+	if rt.researchDeps != nil {
+		source, _ = rt.researchDeps.Captures.(researchtools.CaptureNeighbourer)
+	}
+	if source == nil {
+		vec.Unavailable = "no capture store answers neighbours"
+		return vec
+	}
+	ids := make([]string, 0, len(pending))
+	for _, in := range pending {
+		ids = append(ids, strings.TrimSpace(in.Item.CaptureID))
+	}
+	since := time.Now().UTC().Add(-eventVectorHorizon).Format("2006-01-02")
+	for lo := 0; lo < len(ids); lo += eventNeighbourBatch {
+		callCtx, cancel := context.WithTimeout(ctx, eventNeighboursTimeout)
+		ans, err := source.CaptureNeighbours(callCtx, researchtools.CaptureNeighboursQuery{OwnerID: ownerID, ComputerID: computerID,
+			CaptureIDs: ids[lo:min(lo+eventNeighbourBatch, len(ids))], Since: since, Limit: eventNeighbourLimit})
+		cancel()
+		switch {
+		case err != nil:
+			vec.Unavailable = "the neighbours request failed: " + err.Error()
+		case ans.Unavailable != "":
+			vec.Unavailable = ans.Unavailable
+		}
+		if vec.Unavailable != "" {
 			break
 		}
-		out = append(out, v)
-		picked[v] = true
-	}
-	type scored struct {
-		v     *eventView
-		score int
-	}
-	var overlap, corroborated []scored
-	for _, v := range live {
-		if picked[v] {
-			continue
-		}
-		counted := v.corroborated()
-		if counted && now.Sub(v.last) > eventRecentHorizon {
-			continue
-		}
-		words := titleTokens(v.ev.Headline + " " + strings.Join(lastN(v.titles, eventRecentTitles), " "))
-		score := 0
-		for w := range words {
-			if tokens[w] {
-				score++
+		for id, list := range ans.Neighbours {
+			for _, n := range list {
+				vec.near[id] = append(vec.near[id], n.CaptureID)
+				vec.Rows++
 			}
 		}
-		if score > 0 {
-			if counted {
-				corroborated = append(corroborated, scored{v, score})
-			} else {
-				overlap = append(overlap, scored{v, score})
-			}
+		vec.Missing += len(ans.Missing)
+		if vec.State == "" || ans.State == "partial" || (ans.State == "approximate" && vec.State == "exact") {
+			vec.State = ans.State
 		}
 	}
-	sort.SliceStable(overlap, func(i, j int) bool { return overlap[i].score > overlap[j].score })
-	for i := 0; i < len(overlap) && i < eventShortlistOverlap; i++ {
-		out = append(out, overlap[i].v)
+	if vec.Unavailable != "" {
+		log.Printf("event layer: vector slot unavailable: %s", vec.Unavailable)
+		vec.near, vec.Rows, vec.Missing, vec.State = map[string][]string{}, 0, 0, ""
 	}
-	sort.SliceStable(corroborated, func(i, j int) bool { return corroborated[i].score > corroborated[j].score })
-	for i := 0; i < len(corroborated) && i < eventShortlistCorroborated; i++ {
-		out = append(out, corroborated[i].v)
+	return vec
+}
+
+// noteShortlist adds one call's candidates to the flush's shortlist counts.
+func (r *eventResolveReport) noteShortlist(c *eventCandidates) {
+	if c == nil {
+		return
 	}
-	return out
+	if n := len(c.shared); n > r.ShortRecent {
+		r.ShortRecent = n
+	}
+	if r.vectorEvents == nil {
+		r.vectorEvents, r.vectorOnlyEvts = map[string]bool{}, map[string]bool{}
+	}
+	for v := range c.reached {
+		r.vectorEvents[v.ev.EventID] = true
+	}
+	for _, own := range c.own {
+		for _, v := range own {
+			r.vectorOnlyEvts[v.ev.EventID] = true // an own list never repeats a recent event
+		}
+	}
 }
 
 func lastN(s []string, n int) []string {
@@ -817,13 +969,14 @@ func eventLinkCandidates(in eventInput, candidates []*eventView, aliasOf map[*ev
 	return out
 }
 
-// eventQuestion builds one call: the candidate events, the chunk's
-// captures, and one choice question per capture.
-func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int) (json.RawMessage, map[string]json.RawMessage, eventAliases) {
+// eventQuestion builds one call: the candidate events, the chunk's captures,
+// and one choice question per capture, which offers the recent events and its
+// own vector neighbours' events.
+func eventQuestion(chunk []eventInput, cands *eventCandidates, summaryRunes int) (json.RawMessage, map[string]json.RawMessage, eventAliases) {
+	candidates := cands.union()
 	alias := eventAliases{events: map[string]*eventView{}, after: map[string]*eventView{}, captures: map[string]int{}}
 	aliasOf := map[*eventView]string{}
 	events := map[string]any{}
-	var eventChoices []string
 	for i, v := range candidates {
 		a := fmt.Sprintf("e%d", i+1)
 		alias.events[a] = v
@@ -839,7 +992,6 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 			entry["recent_titles"] = recent
 		}
 		events[a] = entry
-		eventChoices = append(eventChoices, a)
 	}
 	captures := map[string]any{}
 	titles := make([]string, len(chunk))
@@ -876,11 +1028,14 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 		// quadratically many tokens in the request, so a flush of a few dozen
 		// captures crossed the 64k limit and split.
 		criteria := map[string]any{"new": "No known event and no other capture reports this incident."}
-		choices := append([]string(nil), eventChoices...)
-		for _, e := range eventChoices {
+		offered := cands.of(j)
+		var choices []string
+		for _, v := range offered {
+			e := aliasOf[v]
+			choices = append(choices, e)
 			criteria[e] = nil
 		}
-		for _, e := range eventLinkCandidates(chunk[j], candidates, aliasOf) {
+		for _, e := range eventLinkCandidates(chunk[j], offered, aliasOf) {
 			after := "after_" + e
 			alias.after[after] = alias.events[e]
 			criteria[after] = "A later development of state.events." + e + ", not that incident itself."
@@ -915,6 +1070,13 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 //
 // It reports whether it queued the captures.
 func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem) bool {
+	return rt.enqueueEventCaptures(ctx, ownerID, computerID, sourceID, captured, false)
+}
+
+// enqueueEventCaptures is enqueueEventResolution for captures a source
+// schedule made (research false) or a research desk's read or poll made
+// (research true: the flush's journal line counts them apart).
+func (rt *Runtime) enqueueEventCaptures(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem, research bool) bool {
 	if rt == nil || len(captured) == 0 || !rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents) {
 		return false
 	}
@@ -935,7 +1097,7 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 	}
 	for _, c := range captured {
 		if strings.TrimSpace(c.CaptureID) != "" {
-			q.items = append(q.items, eventInput{Item: c, SourceID: sourceID, At: now})
+			q.items = append(q.items, eventInput{Item: c, SourceID: sourceID, At: now, Research: research})
 		}
 	}
 	if q.inFlight || len(q.items) == 0 {
@@ -996,8 +1158,7 @@ func (rt *Runtime) drainEventQueue(layerCtx context.Context, ownerID, computerID
 			log.Printf("event layer: %d captures unresolved: %v", len(items), err)
 			continue
 		}
-		log.Printf("event layer: resolved %d captures in %d calls: %d joined, %d tentative, %d new events, %d unresolved, %d corroborated, $%.5f",
-			len(items), report.Calls, report.Joined, report.Tentative, report.Minted, report.Unresolved, len(report.Corroborated), report.CostUSD)
+		log.Print(eventFlushLine(items, report))
 	}
 }
 
@@ -1030,4 +1191,26 @@ func (rt *Runtime) stopEventLayer() {
 	if rt.events.cancel != nil {
 		rt.events.cancel()
 	}
+}
+
+// eventFlushLine is the journal line of one flush, the same fields every time
+// (the station V5 acceptance reads them): captures queued and how many were
+// research's pages, the Jev calls, the shortlist by slot (recent: the slot's
+// size; vector: the events the captures' neighbours led to; vector_new: those
+// the recent slot did not already offer), vector=<neighbour rows>|unavailable
+// (and vector_missing: captures with no vector yet), and what became of them.
+func eventFlushLine(items []eventInput, r eventResolveReport) string {
+	research := 0
+	for _, in := range items {
+		if in.Research {
+			research++
+		}
+	}
+	vector, missing := "unavailable", 0
+	if r.vec != nil && r.vec.Unavailable == "" {
+		vector, missing = fmt.Sprintf("%d", r.vec.Rows), r.vec.Missing
+	}
+	return fmt.Sprintf("event layer: resolved %d captures in %d calls: op=event_flush queued=%d research_reads=%d calls=%d shortlist_recent=%d shortlist_vector=%d shortlist_vector_new=%d vector=%s vector_missing=%d joined=%d minted=%d tentative=%d unresolved=%d corroborated=%d cost_usd=%.5f",
+		len(items), r.Calls, len(items), research, r.Calls, r.ShortRecent, len(r.vectorEvents), len(r.vectorOnlyEvts), vector, missing,
+		r.Joined, r.Minted, r.Tentative, r.Unresolved, len(r.Corroborated), r.CostUSD)
 }

@@ -167,6 +167,21 @@ func readPage(ctx context.Context, deps Dependencies, ownerID, computerID, targe
 	switch {
 	case len(written.Captured) > 0:
 		out.CaptureID, out.New = written.Captured[0].CaptureID, true
+		if deps.OnCaptured != nil {
+			// A page research read joins the event layer like a polled one:
+			// the page's title (else its first text) and its lead stand where
+			// a feed's title and summary do.
+			captured := written.Captured[0]
+			lead := readLead(doc)
+			captured.Title = firstNonEmptyText(doc.Title, captured.Title, clipRunes(lead, 160), finalURL)
+			if strings.TrimSpace(captured.Summary) == "" {
+				captured.Summary = clipRunes(lead, readLeadRunes)
+			}
+			if captured.URL == "" {
+				captured.URL = finalURL
+			}
+			deps.OnCaptured(ctx, ownerID, computerID, sourcegraph.ReadSourceID, []sourcegraph.CapturedItem{captured}, true)
+		}
 	case len(written.Repeats) > 0:
 		out.CaptureID = written.Repeats[0].CaptureID
 	default:
@@ -214,4 +229,37 @@ func readMediaType(header, pageURL string, body []byte) string {
 	}
 	sniffed, _, _ := mime.ParseMediaType(http.DetectContentType(body))
 	return sniffed
+}
+
+// readLeadRunes bounds the lead a read page gives the event layer.
+const readLeadRunes = 400
+
+// readLead is a page's first running text: its first paragraphs, not its
+// headings, up to readLeadRunes.
+func readLead(doc sourcefetch.Document) string {
+	var parts []string
+	n := 0
+	for _, b := range doc.Blocks {
+		if b.Kind == sourcefetch.KindHeading {
+			continue
+		}
+		text := strings.Join(strings.Fields(b.Text), " ")
+		if text == "" {
+			continue
+		}
+		parts = append(parts, text)
+		if n += len([]rune(text)); n >= readLeadRunes {
+			break
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func firstNonEmptyText(values ...string) string {
+	for _, v := range values {
+		if v = strings.TrimSpace(v); v != "" {
+			return v
+		}
+	}
+	return ""
 }

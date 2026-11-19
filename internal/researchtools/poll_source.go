@@ -100,6 +100,11 @@ func newPollSourceTool(deps Dependencies) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
+			// Research's own poll queues its new captures for the event layer
+			// (a scheduled poll queues its own, with the feed's summaries).
+			if deps.OnCaptured != nil && len(report.Captured) > 0 {
+				deps.OnCaptured(ctx, exec.OwnerID, exec.ComputerID, in.SourceID, append([]sourcegraph.CapturedItem(nil), report.Captured...), false)
+			}
 			// The tool's result names captures, never their text: the feed
 			// summary rides only the schedule's report for intake labelling.
 			for i := range report.Captured {
