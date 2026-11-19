@@ -175,9 +175,17 @@ proof-real.sh: the failure at `tap ob-skip` is the script's, not the app's. The 
 a carried key shows no first-run page, and no lane touched `onboarding.contract` (last changed by the main landing). The script predates the
 2026-11-18 landing and was never run against it; its five `ob-skip` taps are now `place paper` (the mark, then Paper).
 
+Queue results: `proof` at 7fb0b3246 `PROOF OK`; `real` at a1e933fad `PROOF OK` (the signed-in tour: Paper, reader, a played story, a Texture document,
+the theme, Settings account, Files root; 20 `api: session found=true` log lines, flags only). The first `real` run at 7fb0b3246 showed the Settings
+account page, Files and Mail as signed out ("sign-in is no longer accepted") although the key answers 200 on staging; the next run at ef33b0adc
+did not, and one run stalled at `settings-nav-account` (a carrier stall). Not explained: a first-launch race between the simulator proof key being
+read into the Keychain and the first shared source's read is the suspect (the seam then sees no session and says signed out). A real device is not
+affected by ProofKey, but the same read-before-written order should be checked. The textures "make your edition" check was dropped from the
+script (the drill computer's state). Mail and Files rows were still not toured (the survey picks no row: dir= and mail= were empty).
+
 ## Left, in order (for a third integrator)
 
-1. Queue `proof` and `real` at the tip (the tip below the mail commit has only been through `proof`), read each result.
+1. The tip has passed `proof` and `real`; run both again after any change.
 2. Step E remainder: the Files, Mail and podcasts tours and the sign-out drill in `proof-real.sh` (reads only; never open a PDF, Save draft, the
    approval link or Subscribe). Not written.
 3. Step C, files over 48 MB: Exact supports it (`exactBodyTo`, `exactBodyFrom`, reference.md fetch row: to 1 GiB, bytes never enter JavaScript; the
