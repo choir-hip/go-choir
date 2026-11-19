@@ -220,7 +220,7 @@ public final class ContentSync: @unchecked Sendable {
             do {
                 guard let x = try await fetch.transcript(t.feed, t.id), !x.blocks.isEmpty else { tr.failed += 1; continue }
                 writePut(StoredItem(id: id, kind: .transcript, title: t.title, text: x.blocks.map(\.text).joined(separator: " "), date: t.date,
-                                     address: PodcastService.episodeAddress(feed: t.feed, id: t.id), source: "Podcasts", version: "1", syncedAt: now)); tr.fetched += 1
+                                     address: PodcastKey.episodeAddress(feed: t.feed, id: t.id, enclosure: "", at: 0), source: "Podcasts", version: "1", syncedAt: now)); tr.fetched += 1
             } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { tr.failed += 1 }
         }
         r.fetched += tr.fetched; r.skipped += tr.skipped; r.failed += tr.failed
@@ -306,14 +306,9 @@ public extension ContentSync.Fetchers {
             try await backend.fetch(path, size: 0, to: tmp, maxBytes: Int64(ContentSync.maxFileBytes))
             return try? String(contentsOf: tmp, encoding: .utf8)
         }
-        f.podcasts = { PodcastService.shared.retrievalDocuments() }
-        f.transcriptTargets = {
-            PodcastService.shared.subscriptions().flatMap { show in
-                (PodcastService.shared.cachedFeed(show.feedURL)?.episodes ?? []).prefix(10).map { (feed: show.feedURL, id: $0.id, title: show.title + ": " + $0.title, date: $0.published.map { Date(timeIntervalSince1970: $0) }) }
-            }
-        }
+        // The podcasts' shows, episodes and transcripts were read here from the Swift PodcastService. The podcast app is shared code now
+        // (AutoradioLab/podcast.ts, `podcastDocuments`); until the content store moves and reads it, the phone's own search holds no podcasts.
         f.runSheet = { await MainActor.run { RunSheetStore.shared.sheet } }
-        f.transcript = { feed, id in try? await PodcastService.shared.platform?.transcript(feed, id) }
         return f
     }
 }

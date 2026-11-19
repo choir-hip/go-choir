@@ -241,13 +241,6 @@
       "story": "string",
       "episodeOnly": "bool"
     },
-    "ClipRows": {
-      "rows": "HearItRow[]"
-    },
-    "ClipAck": {
-      "status": "string",
-      "message": "string"
-    },
     "MailRow": {
       "id": "string",
       "address": "string",
@@ -447,92 +440,16 @@
     "EditionPicks": {
       "picks": "string"
     },
-    "PodShowRow": {
-      "feedURL": "string",
-      "address": "string",
-      "title": "string",
-      "author": "string",
-      "artwork": "string",
-      "detail": "string",
-      "latest": "string",
-      "latestStamp": "string",
-      "subscribed": "bool",
-      "unplayed": "bool",
-      "unplayedCount": "number"
+    "PodNow": {
+      "episodeId": "string",
+      "clip": "bool",
+      "start": "number",
+      "elapsed": "number",
+      "duration": "number"
     },
-    "PodHomeView": {
-      "status": "string",
-      "message": "string",
-      "query": "string",
-      "searchNote": "string",
-      "syncNote": "string",
-      "searching": "bool",
-      "hasQuery": "bool",
-      "shows": "PodShowRow[]",
-      "results": "PodShowRow[]",
-      "suggestions": "PodShowRow[]"
-    },
-    "PodEpisodeRow": {
-      "key": "string",
-      "address": "string",
-      "title": "string",
-      "stamp": "string",
-      "duration": "string",
-      "snippet": "string",
-      "progress": "string",
-      "unplayed": "bool",
-      "playable": "bool",
-      "current": "bool"
-    },
-    "PodShowView": {
-      "status": "string",
-      "message": "string",
-      "feedURL": "string",
-      "title": "string",
-      "author": "string",
-      "artwork": "string",
-      "summary": "string",
-      "unplayedLine": "string",
-      "subscribed": "bool",
-      "refreshing": "bool",
-      "episodes": "PodEpisodeRow[]"
-    },
-    "PodEpisodeView": {
-      "status": "string",
-      "message": "string",
-      "address": "string",
-      "feedURL": "string",
-      "showTitle": "string",
-      "showAddress": "string",
-      "title": "string",
-      "stamp": "string",
-      "duration": "string",
-      "artwork": "string",
-      "playingFrom": "string",
-      "resumeLabel": "string",
-      "note": "string",
-      "notes": "string[]",
-      "subscribed": "bool",
-      "playable": "bool",
-      "current": "bool",
-      "fromClip": "bool",
-      "hasResume": "bool",
-      "transcriptState": "string",
-      "transcriptNote": "string",
-      "transcriptSource": "string",
-      "transcript": "PodTranscriptRow[]"
-    },
-    "PodAck": {
+    "PodDone": {
       "status": "string",
       "message": "string"
-    },
-    "PodTranscriptRow": {
-      "key": "string",
-      "time": "string",
-      "text": "string",
-      "seconds": "number",
-      "current": "bool",
-      "seekable": "bool"
     },
     "QueueInfo": {
       "current": "string",
@@ -1475,27 +1392,6 @@
       "answers": "FileListing"
     },
     {
-      "source": "showClips",
-      "live": true,
-      "answers": "ClipRows",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
-      "send": "clipAct",
-      "options": {
-        "op": "string",
-        "id": "string"
-      },
-      "answers": "ClipAck"
-    },
-    {
       "source": "mailBox",
       "live": true,
       "answers": "MailBoxView",
@@ -1829,122 +1725,39 @@
       }
     },
     {
-      "source": "podcastHome",
+      "source": "podcastNow",
       "live": true,
-      "answers": "PodHomeView",
-      "options": {
-        "q": "string",
-        "address": "string"
-      },
+      "answers": "PodNow",
       "substitute": {
         "default": {
-          "status": "loading",
-          "message": "",
-          "query": "",
-          "searchNote": "",
-          "syncNote": "",
-          "searching": false,
-          "hasQuery": false,
-          "shows": [],
-          "results": [],
-          "suggestions": []
+          "episodeId": "",
+          "clip": false,
+          "start": 0,
+          "elapsed": 0,
+          "duration": 0
         }
       }
     },
     {
-      "source": "podcastShow",
-      "live": true,
-      "answers": "PodShowView",
+      "send": "podcastPlayAudio",
       "options": {
-        "address": "string"
+        "op": "string",
+        "id": "string",
+        "url": "string",
+        "title": "string",
+        "show": "string",
+        "start": "number"
       },
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "feedURL": "",
-          "title": "",
-          "author": "",
-          "artwork": "",
-          "summary": "",
-          "unplayedLine": "",
-          "subscribed": false,
-          "refreshing": false,
-          "episodes": []
-        }
-      }
+      "answers": "PodDone"
     },
     {
-      "source": "podcastEpisode",
-      "live": true,
-      "answers": "PodEpisodeView",
+      "send": "clipPlay",
       "options": {
-        "address": "string",
-        "find": "string"
+        "op": "string",
+        "id": "string",
+        "feed": "string"
       },
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "address": "",
-          "feedURL": "",
-          "showTitle": "",
-          "showAddress": "",
-          "title": "",
-          "stamp": "",
-          "duration": "",
-          "artwork": "",
-          "playingFrom": "",
-          "resumeLabel": "",
-          "note": "",
-          "notes": [],
-          "subscribed": false,
-          "playable": false,
-          "current": false,
-          "fromClip": false,
-          "hasResume": false,
-          "transcriptState": "",
-          "transcriptNote": "",
-          "transcriptSource": "",
-          "transcript": []
-        }
-      }
-    },
-    {
-      "send": "podcastSubscribe",
-      "options": {
-        "feedURL": "string"
-      },
-      "answers": "PodAck"
-    },
-    {
-      "send": "podcastUnsubscribe",
-      "options": {
-        "feedURL": "string"
-      },
-      "answers": "PodAck"
-    },
-    {
-      "send": "podcastPlay",
-      "options": {
-        "address": "string",
-        "mode": "string"
-      },
-      "answers": "PodAck"
-    },
-    {
-      "send": "podcastQueue",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PodAck"
-    },
-    {
-      "send": "podcastRefresh",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PodAck"
+      "answers": "PodDone"
     },
     {
       "source": "queueView",

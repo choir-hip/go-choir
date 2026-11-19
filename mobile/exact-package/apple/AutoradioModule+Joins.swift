@@ -1,27 +1,24 @@
-// Lane file: autoradio-joins. What the clip rows do ("Hear it" on a story's page, "Clips" on a show's page). Sources and sends are declared in
-// exact-package/interface/joins.json; the logic and its tests are in Kit/Choir/DJQueueAdapter.swift (HearIt, ClipActions) and PodcastClips.swift.
-//   showClips(address)   the clips found for a show (a podcast show page's address), quote first; the show's own fetch runs in the background
-//   clipAct(op, id)      op play | queue | open, id: the clip (play applies the 3 second length rule through RunSheetPlayer.preflight)
+// What a clip row does is shared code (AutoradioLab/clips.ts: the rows, the choice of clip, "Open episode"). What stays native is the one thing only
+// native code can do: "clips play from fingerprinted audio" (owner rule). The shared code answers WHICH clip (its id); this file asks the clip store,
+// which holds the fingerprint records, and the locator (ClipLocator, in the run sheet player) finds where the clip is in the file the publisher serves.
+// A clip with no usable fingerprint, or one the locator found a different file for, plays as its episode from the start, as before.
+//   clipPlay(op, id, feed)   op play | queue; feed: the show the clip belongs to ("" when the record had none)
 import Foundation
 
 extension AutoradioModule {
     func registerJoins() {
-        handle("showClips") { [unowned self] args, reply in
-            guard let feed = PodcastService.parseShow(args["address"] as? String ?? "") else { return reply(self.json(ClipRowsView())) }
-            reply(self.json(ClipRowsView(rows: HearIt.rows(feed: feed))))
-            // Asked for in the background (at most every 15 minutes per show); silent when the route is missing or has nothing.
-            Task { [weak self] in
-                if await PodcastClips.ensure(client: ChoirEnvironment.shared.client(), feed: feed) { self?.touch(["showClips"]) }
-            }
-        }
-        handle("clipAct") { [unowned self] args, reply in
-            let op = args["op"] as? String ?? "", id = args["id"] as? String ?? ""
+        handle("clipPlay") { [unowned self] args, reply in
+            let op = args["op"] as? String ?? "", id = args["id"] as? String ?? "", feed = args["feed"] as? String ?? ""
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // The clip store is filled by the radio's one bulk request; a show's own clips (the shared page listed them) are asked for here when it lacks the id.
+                if ClipStore.shared.clip(id) == nil, !feed.isEmpty { _ = await PodcastClips.ensure(client: ChoirEnvironment.shared.client(), feed: feed, force: true) }
+                if ClipStore.shared.clip(id) == nil { ClipStore.shared.merge(await PodcastClips.fetch(client: ChoirEnvironment.shared.client()).clips) }   // a clip with no feed: the bulk set, merged, never replacing
+                guard ClipStore.shared.clip(id) != nil else { reply(self.json(PodDone(status: "error", message: "That clip is not available any more."))); return }
                 if op == "play", !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
-                let note = await ClipActions.run(op: op, clipID: id)
-                self.touch(["queueView", "radioView", "barState"], now: true)
-                reply(self.json(ClipAckView(message: note)))
+                if op == "queue" { HearIt.enqueue(id) } else { await HearIt.play(id) }
+                self.touch(["queueView", "radioView", "barState", "podcastNow"], now: true)
+                reply(self.json(PodDone()))
             }
         }
     }

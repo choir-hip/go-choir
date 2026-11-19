@@ -1,0 +1,22 @@
+// The podcast and clip pages' data on the real plan and the web host. The deck mounts a page only when the Swift package says which page is on top
+// (openPages), and the web host has only that source's placeholder, so `pg.top` is empty here: the pages' own trees are looked at on the simulator and
+// on Android, and the rules of the sources (feeds, positions, play, clips) are in podcast.test.ts and clips.test.ts under bun test. What this proves
+// is the wiring the build could not: that app.ts answers every name the pages read, with the shapes the pages read, and that none of them throws when
+// no page is open.
+
+test "no page open: the three podcast sources answer their idle shapes"
+  clock data
+  expect state podHome.status == "idle"
+  expect state podShow.status == ""
+  expect state podEp.status == ""
+  expect state podHome.shows.length == 0
+
+test "no show page: no clip rows, and no note"
+  clock data
+  expect state shClips.rows.length == 0
+  expect state clipNote == ""
+
+test "nothing is playing: the playhead reads revision 0"
+  clock data
+  expect state podNow.episodeId == ""
+  expect state podHead.rev == 0

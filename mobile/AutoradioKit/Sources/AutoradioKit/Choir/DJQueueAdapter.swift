@@ -57,10 +57,6 @@ public enum HearIt {
         if found.isEmpty { found = store.clips(forRoute: TextureAddress.splitRoute(t.route).bare) }
         return found.prefix(3).map { row($0, store) }
     }
-    /// The clips found for a show, quote first (a show page's "Clips"); at most ten.
-    public static func rows(feed: String, store: ClipStore = .shared) -> [HearItRow] {
-        store.clips(forFeed: feed).prefix(10).map { row($0, store) }
-    }
     /// Play: the clip when it can be found in the served file (the player locates it); else the episode from its start (the row then says "Open episode").
     @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) async {
         guard let c = store.clip(clipID) else { return }
@@ -71,20 +67,5 @@ public enum HearIt {
     }
 }
 
-/// What a clip row's Play, Queue and Open episode do. Returns the plain note the page shows ("" when nothing needs saying).
-public enum ClipActions {
-    public static let gone = "That clip is not available any more."
-    @MainActor public static func run(op: String, clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) async -> String {
-        guard let c = store.clip(clipID) else { return gone }
-        switch op {
-        case "play": await HearIt.play(clipID, store: store, player: player); return ""
-        case "queue": HearIt.enqueue(clipID, store: store, player: player); return "Added to the queue."
-        case "open": PodcastBridge.openEpisode(of: c); return ""
-        default: return ""
-        }
-    }
-}
-
 /// The wire shapes of the clip rows (interface/joins.json).
 public struct ClipRowsView: Codable, Sendable, Equatable { public var rows: [HearItRow]; public init(rows: [HearItRow] = []) { self.rows = rows } }
-public struct ClipAckView: Codable, Sendable, Equatable { public var status = "ok", message = ""; public init(message: String = "") { self.message = message } }
