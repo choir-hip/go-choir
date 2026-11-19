@@ -29,9 +29,10 @@ deployed proof is named in the goal file:
 - **V.** The vector index is full (stories and captures, every row) and the
   ranked corpus search answers from it. A second embedder unit for queries
   is deployed (`2754468d2`, 19:52Z): recall at ten on the deployed search
-  rose from 0.886 to 0.940 (bar 0.90). Open: a query of 32 tokens or more
-  still takes 2 s to 6 s on that unit while the host is busy and misses the
-  4 s deadline (cause under measurement, claim C161). The event layer is
+  rose from 0.886 to 0.940 (bar 0.90). A query of 32 tokens or more was still slow on a busy host because
+  the BLAS library ran twelve threads; both units now set its team size
+  (`ad44370da`): longer queries take a median 0.26 s and host load fell
+  from about 20 to about 4 (C164 true). The event layer is
   deployed (`4365f2ca3`) and joins captures to events through vectors
   (C160 true).
 - **S.** Web searches: 4,700 a day against 1,000
