@@ -206,6 +206,7 @@ func (s *Store) MigrateRetrieval(ctx context.Context) error {
 	note("capture_index_tables", s.ensureCaptureIndexTables(ctx))
 	if s.retrievalState.captureIndexReady.Load() {
 		note("capture_index_reconcile", s.ReconcileCaptureIndex(ctx))
+		note("capture_terms_cover_index", s.ensureCaptureTermsCoverIndex(ctx))
 	}
 	return firstErr
 }
