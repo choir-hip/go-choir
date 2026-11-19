@@ -76,7 +76,14 @@ Each with a count and an example; none was chased.
    64 since 2026-11-05, the cursor having had a document id since
    2026-10-13). A cursor whose timestamp has fewer digits fits, so some page
    2 calls pass and some do not. Class: **harness**, certain. The management
-   run that wanted the second page of candidates cannot have it. A test that
+   run that wanted the second page of candidates cannot have it.
+   **Fixed 2026-11-19** (lane mgmt-stories-fixes): `before` is bounded at
+   `yaegikernel.MaxStoriesBeforeBytes` (128, above any cursor the host
+   issues; the handler still refuses a `before` that does not start with a
+   time); a test feeds the longest cursor back through `ValidatePayload`.
+   The other host-issued ids checked (shot job id at most 36 bytes against
+   128; capture, evidence, entry and mail refs against 256) fit; the desk
+   protocol version and lock did not move (its contract tests pass). A test that
    feeds a page's `Next` back to the verb would have found it; none does.
 2. **A story's publication fails and "stays a gap".** 38 lines of `story
    publish: <id> v<n> (revision <id>) failed and stays a gap: ... status 502:

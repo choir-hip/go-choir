@@ -387,3 +387,9 @@ Seen on the way, in the new record
 `choir.Stories` paging is refused by the broker's own bound (the cursor is 67
 bytes and the bound is 64), 4 times in 3 hours, so a management run that
 wants the second page of candidates cannot have it.
+
+**Fixed 2026-11-19** (lane mgmt-stories-fixes): the line now reads `opening_shown=` (the
+stories of the page the opening delivered), `verb_shown=` (the `choir.Stories`
+calls) and `candidates_shown=` (their sum, so readers of the old line keep
+working; none exist under `scripts/`). The paging bound is fixed in the same
+change.
