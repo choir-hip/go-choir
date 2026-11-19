@@ -40,6 +40,11 @@ const (
 	retrievalFullTextSearch  = "capture_fulltext_search"
 	retrievalFullTextWrite   = "capture_fulltext_write"
 	retrievalFullTextCatchUp = "capture_fulltext_catchup"
+	// The vector index (vector_store.go): a search, one embedder call, one
+	// version's or batch's write.
+	retrievalVectorSearch = "vector_search"
+	retrievalVectorEmbed  = "vector_embed"
+	retrievalVectorWrite  = "vector_write"
 )
 
 // retrievalLogSlowOnly names operations that log only when slower than
@@ -53,6 +58,7 @@ var retrievalLogSlowOnly = map[string]bool{
 	retrievalListEdgesTo:       true,
 	retrievalCaptureIndexWrite: true,
 	retrievalFullTextWrite:     true,
+	retrievalVectorWrite:       true,
 }
 
 const retrievalSlowLog = 100 * time.Millisecond

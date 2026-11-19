@@ -356,7 +356,7 @@ and was at load 9.6.
 - Not measured: full page against lead (needs the real page text), any
   non-English story, a quiet x86 machine.
 
-## 0.10 The server (Node B, 2026-11-19; built, not yet deployed)
+## 0.11 The server (Node B, 2026-11-19; built, not yet deployed)
 
 Station V1 of the night's goal. Code: `nix/embedder.nix`, `nix/postgresql.nix`, the
 caller in `internal/platform/vector_*.go`. Facts below were read from the nixpkgs
@@ -394,6 +394,48 @@ pin (`fe13242`, 2026-10-15), the Hub's LFS listing and llama.cpp's tree on
   `halfvec_cosine_ops`. It is not a trusted extension, so `CREATE EXTENSION vector` is run as
   `postgres` by `go-choir-postgresql-roles` in the `graph` database; corpusd's code only checks
   it is there. Adding it restarts PostgreSQL once on the deploy.
+
+### 0.11.1 The vector index in corpusd (station V2; built, not deployed)
+
+Code: `internal/platform/vector_store.go`, `vector_worker.go`, `vector_search.go`, `vector_import.go`;
+client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run against a real pgvector).
+
+- **Tables** (corpusd's graph database, beside `proj_capture_*`; created by the worker, not by
+  `MigrateRetrieval`, so a missing extension cannot hold the capture projection's retries):
+  `vec_story_passages (story_id, version_id, ordinal, text_sha, day, model, embedding halfvec(256), embedded_on)`,
+  primary key `(story_id, version_id, ordinal)`; `vec_captures (capture_id PK, owner_id, computer_id, text_sha, day, model,
+  embedding halfvec(256), embedded_on)`. `text_sha` is the SHA-256 of the passage text, `model` the GGUF's SHA-256, `day` the
+  version's creation day or the capture's published, else fetched, day. A story version is written whole in one
+  transaction, so one row means all its passages. HNSW on `halfvec_cosine_ops` on each table, built `CONCURRENTLY` under a
+  session advisory lock, an invalid leftover dropped and rebuilt by the next pass.
+- **One writer.** corpusd alone writes vector rows. The worker's vectors and the Mac's first-pass file (input to the import
+  below) pass the same checks (the model's hash, `text_sha` against the passage corpusd cuts itself, public text only) and are
+  written by the same two functions; the import adds a sampled re-embedding here.
+- **Worker.** Each pass derives its list: versions of published stories and opinion pieces without a vector of this model
+  (newest publication first, newest version first), then projected captures without one (newest first, keyset cursor).
+  Owner-private, tombstoned and superseded captures never get one (the full-text index's exclusion); the sweep removes the
+  vectors of a withdrawn story and of a capture that has since become private. **No pacing**: it sends one batch of 4 inputs at
+  a time and waits for the answer, so a search's query waits behind at most one batch (4 passages of about 300 tokens, one to
+  three seconds at the 350 tokens a second measured on this CPU; batches did not change tokens a second). The batch is a size,
+  not a limit; it does not rest for searches, and the unit's low CPU weight is what lets guests win. It backs off only after the
+  embedder's real failure: one line (`embedder down, backing off`), a doubling wait to 5 minutes, one line when it returns. No
+  cap, no queue, nothing dropped; a restart re-derives the gap.
+- **Journal.** `corpusd retrieval op=embed_gap shape=stories|captures ms= rows= have= want= remaining= model=<12>` at the start of
+  a pass and at each batch of 4 (stories count versions); `op=vector_embed`, `vector_write`, and `op=vector_search
+  shape=vector_stories|vector_captures`. `scripts/status-vectors` reads them over ssh (have, want, remaining of each kind, and the
+  last hour's searches and mean ms); the acceptance is that line, not SQL on Node B. Until a pass has passed over them `want`
+  counts owner-private or empty captures and non-public versions; the last line of a phase is exact.
+- **Search.** `Store.SearchVectors`: the nearest story passages (publication id, version id, ordinal, cosine score, day) and, for a
+  named owner and computer, the nearest captures; `since` inclusive and `until` exclusive by day. The query is embedded by the
+  Node B unit with the query prompt. No fusion. When the embedder is down, absent or the tables are not ready, the answer is an
+  empty result whose `Unavailable` says why and no error, so a caller (station V4) answers from BM25 alone and says so; a
+  caller that holds a vector can search without the embedder.
+- **Import** (the Mac's first pass): `POST /internal/platform/vectors/import` on corpusd's loopback port 8086 with the host
+  credential, body one JSON row a line (`kind` `story_passage` or `capture`, `id` a publication version's or a capture's, `ordinal`,
+  `text_sha`, `model`, `dim` 256, `v` base64 of 256 float16); answers 202 and a job, `GET ?job=` reads it. Refused whole for another
+  model or dimension, a malformed row, or a sample of 32 rows re-embedded here that does not reach cosine 0.999. Past that a row is
+  written only when this host cuts the same passage (`text_sha` equal) and the text is public; the rest are counted by reason.
+  A route and not a subcommand because it needs the running process's embedder, text store and database credentials.
 
 ## 1. What the model is
 
