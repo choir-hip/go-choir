@@ -322,7 +322,7 @@ func TestBriefTextCannotCloseTheDataFrame(t *testing.T) {
 func TestBriefLogLineHasEveryField(t *testing.T) {
 	res := buildResearchBrief(context.Background(), planN(2), fixedSearch(briefResult([]map[string]any{briefCapture(1, "p")}, 1)))
 	line := researchBriefLogLine("run-1", "research", 12*time.Millisecond, res)
-	for _, want := range []string{"research brief run=run-1 desk=research ms=12 threads=2 queries=2 stories=1 captures=1 passages=1 newest_held=2026-11-02T10:00:00Z bytes=", " tokens_est=", " dropped=", " left=0 unanswered=0 outcome=delivered", " reason="} {
+	for _, want := range []string{"research brief run=run-1 desk=research ms=12 slowest_ms=0 threads=2 queries=2 stories=1 captures=1 passages=1 newest_held=2026-11-02T10:00:00Z bytes=", " tokens_est=", " dropped=", " left=0 unanswered=0 outcome=delivered", " reason="} {
 		if !strings.Contains(line, want) {
 			t.Errorf("log line lacks %q: %s", want, line)
 		}
@@ -960,7 +960,9 @@ func TestBriefProseNeverReachesTheVerbAsAnOperator(t *testing.T) {
 			sink := &briefSink{}
 			deps := &researchtools.Dependencies{Store: s, Captures: sink}
 			rt.researchDeps = deps
-			ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID})
+			// The searches run on goroutines, as in production, with the desk declared
+	// as reader as the opening does (a read with no declared reader is a gate violation).
+	ctx := withDeskReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID}), agentprofile.Research)
 			res := buildResearchBrief(ctx, briefPlan{threads: []briefThread{{Kind: "objective", Text: "Did the strike end " + form}}}, rt.researchBriefSearcher())
 			if res.outcome == briefFailed || strings.Contains(res.text, sentenceUnanswered) {
 				t.Fatalf("the verb refused the thread (outcome %s):\n%s", res.outcome, res.text)
@@ -1117,7 +1119,9 @@ func briefOverRealTool(t *testing.T, sink researchtools.CaptureSink, plan briefP
 	t.Helper()
 	rt, s := testRuntime(t)
 	rt.researchDeps = &researchtools.Dependencies{Store: s, Captures: sink}
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID})
+	// The searches run on goroutines, as in production, with the desk declared
+	// as reader as the opening does (a read with no declared reader is a gate violation).
+	ctx := withDeskReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID}), agentprofile.Research)
 	return buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
 }
 
