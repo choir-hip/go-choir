@@ -801,9 +801,18 @@ event is absent. The probabilities are the design's.
   three arms and 36 of 40 for four. `read --verdict` prints the derived counts
   ("N of 30 units valid (the claim needs 27, 90% rounded up)"). The event of
   round 2 was 36 of 40; with three arms it is stated on the derived number and
-  the probability is kept (the share, 0.9, is the same). If a stop cut the
-  pilot short, **`void`**: the test of validity did not run. A completed pilot
-  with fewer valid units than that is `false`. The unit's 60-minute rule bounds
+  the probability is kept (the share, 0.9, is the same). **`void`** only when
+  the pilot did not finish (fewer than 10 objectives submitted) or a terminal
+  stop cut an objective short (the 450 stop cancels the running objective):
+  the test of validity did not run. A pause that later resumed (a status read
+  that failed, an unreadable live count) leaves no mark: a finished pilot with
+  30 of 30 valid is `true`. **An arm stopped by the drop-an-arm rule** (three
+  invalid units in a row) leaves units that never ran; those count as **not
+  valid**, so P3 is `false` when fewer than 90% of the planned units are valid
+  for that reason, and the verdict line names the stopped arm: the claim is
+  about whether units come out valid, and an arm stopped for failing is that
+  evidence. Only a stop of the whole pilot is `void`. A completed pilot with
+  fewer valid units than 27 of 30 is `false`. The unit's 60-minute rule bounds
   the wait, so no unit is waited on past 2026-11-20T06:00Z plus an hour.
 
 P1 and P2 come from the same bundles, and both depend on the validity rule,
@@ -845,7 +854,7 @@ on PATH; the CLI runs with a scrubbed environment so no stray key reaches it).
 `computers.json` (default all four; `--arms` a comma list), submits `s00` to the
 chosen arms together, and prints one `PASS` or `FAIL` line per check per
 arm, then one summary line per arm, then `SMOKE OK` (exit 0) or `SMOKE FAILED
-at step N (arm): ...`. A pass writes a stamp naming the four computer ids.
+at step N (arm): ...`. A pass writes a stamp per arm, naming that arm's computer id.
 Steps:
 
 1. the computer answers observability with its recorded id and a build;
@@ -870,7 +879,8 @@ fresh publication read of its documents) and step 12 on the bundles' builds; the
 submission time is the earliest run's creation in the bundle, the build is the
 bundle's boot-layer build, and the stamp's time is the bundle's export time, so
 the six-hour clock starts when the evidence was taken. Its `source` says
-"restamp".
+"restamp". **A restamp never turns a failed smoke into a pass**: it refuses an
+arm whose stamp says failed, prints the prior failure and keeps it.
 
 A cache-answered search cannot be forced; the reader's handling of one is
 tested on the invented bundle only, and the pilot shows whether it occurs.
@@ -879,7 +889,7 @@ tested on the invented bundle only, and the pilot shows whether it occurs.
 (required). It refuses to start, listing every reason, unless **all** hold:
 
 - the three claim ids are rows of the Claims table on `origin/main`, P1 to P3 (section 8);
-- the objective file validates, is the file on `origin/main`, and its SHA-256 is in the P1 row;
+- the objective file validates, **lies inside the repo** (a path outside it is refused), is the file on `origin/main`, and its SHA-256 is in the P1 row;
 - every arm of the header has a passed smoke on its own recorded computer within 6 hours (an arm outside the header, or a failed L, does not count; the header is not required to equal the arms the smoke covered; the refusal names the arm: "smoke has not passed for l");
 - the overlays have at least 90 minutes left;
 - `--credits` is at least 4,500, and `--credits-basis` says where it came from (section 7);
@@ -903,10 +913,39 @@ It stops, printing why and writing the stop to `pilot.json`, when:
 
 - the live tally of the running objective plus the finished ones reaches **450**: every active run of the objective is cancelled; terminal;
 - a test document is found **published**: it prints the document and the arm and says there is no story-unpublish verb and the owner must be told; terminal. A publication read that answers anything but 404 or 200 stops it too;
+- (a recorded computer id in the protected set, the newspaper, the owner's two, a drill computer, is refused wherever `computers.json` is loaded or a computer is minted, as a constant in the driver that is never acted on;)
 - the status read, made before each objective, shows the newspaper's searches getting no provider answer, its Devin calls refused for quota, or Keenable `quota_limited`, or fails: a pause, not terminal; running `pilot` again re-reads it;
 - 2026-11-20T06:00Z passes before an objective starts: terminal;
 - an arm's last three units are invalid: that arm is left out of later objectives, the others go on, and the failure is a finding;
 - the builds disagree: that objective is invalid on every arm, and the driver goes on.
+
+**The 450 bound does not go blind.** Every live read of an objective's searches
+is written to `pilot.json` per arm (`live`). A finished unit counts the larger of
+its bundle's provider calls and its last live count; a unit with no bundle (an
+export that failed) counts its last live count; a submitted unit with neither
+counts a stated worst case of 50 calls (the search-volume record's largest run
+was 44), never zero. A live read that fails is retried at the next poll, and if
+it is still failing when the objective ends the pilot **pauses**: no new
+objective until a rerun reads the live counts of that objective again and every
+read succeeds.
+
+**A kill between a submit and its save does not resubmit.** The driver writes an
+intent per arm to `pilot.json` before any request, and the submission id
+immediately on each 202 (atomic file replace each time). On a rerun an arm with
+an intent and no id is looked up in its own run list (`GET /api/runs?limit=500`,
+the conductor run with the objective's prompt made after the intent): found,
+it is adopted and nothing is submitted; none found and the intent more than
+120 seconds old, it never reached the computer and is submitted; otherwise
+(young intent, several matches) the pilot stops and says it cannot be decided.
+
+**A pilot-gate warning.** The gate compares each stamp's build with the live
+build and prints a WARNING line when they differ (a deploy since the smoke); it
+is not a refusal, because the build check at each objective's submission and end
+is the rule: a deploy that moves the computers' build **during** an objective
+makes every unit of that objective invalid (`build_changed`, and on every arm
+`build_differs_across_arms`), and a build that changes **between** two
+objectives is accepted, since each objective is checked against itself; the
+driver does not compare one objective's build with the previous one's.
 
 315 prints a warning once. A terminal stop is final for this pilot: a second
 `pilot` run refuses. `pilot` is resumable: it reads `pilot.json`, skips
