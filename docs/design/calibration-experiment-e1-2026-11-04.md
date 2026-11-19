@@ -1066,3 +1066,24 @@ Either way:
 - Anything about `gpt-6-luna`: arm L is dropped for the pilot (section 5); tonight's contrast is S against I only.
 - Whether a cache-answered search reproduces at the paper's rate: the 13% is the record's, and the pilot's rate is whatever `cache_answered` shows.
 - A real tail: ten objectives on two S computers give 20 S units; the tail share is descriptive.
+
+### 14.9 What the driver's second review left open (2026-11-19T10:05Z)
+
+The second seat accepted the driver at `05b319a52` with no blocking finding
+and three should-fix items. They are not fixed before the pilot; each bites
+only on a failure the pilot may not meet, and each is named here so a
+verdict that meets one is read with it:
+
+- A submission recovered after a crash between the submit and its save has
+  no build stamp, so all three units of that objective count as not valid.
+  One such crash uses up P3's whole slack (27 of 30).
+- The cost count can be low in three cases: an export that fails when the
+  only live reading came before the research run started counts 0 and not
+  the worst case of 50; so does a submission with an id and no trajectory;
+  a submit that times out at 75 seconds and lands later leaves a run that is
+  neither counted nor watched. The undercount is bounded near 150 calls over
+  the pilot, against a stop at 450 and a credit balance near 10,900.
+- A live reading that keeps failing is retried every 20 seconds for up to an
+  hour before the pilot pauses.
+
+They are fixed before the full run, which waits for the owner (D-E3).
