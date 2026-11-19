@@ -1,0 +1,67 @@
+// The shapes of the Files page's data. Declared here, in Contract; `app.ts` answers them (files.ts) and the generated app.contract.d.ts gives files.ts its types
+// from these lines, so a field is added here and nowhere else. They came from the Swift package's interface (interface/files.json) before Files moved to shared logic.
+
+shape FileCrumb
+  name: string
+  path: string
+
+shape FileRow
+  name: string
+  path: string
+  address: string
+  kind: string
+  kindLabel: string
+  symbol: string
+  isDir: bool
+  size: number
+  sizeLabel: string
+  modifiedLabel: string
+  detail: string
+  place: string
+
+// status: ready | error | empty (a source never answers a "loading" status: the page shows what it has)
+shape FileListing
+  path: string
+  title: string
+  crumbs: FileCrumb[]
+  rows: FileRow[]
+  count: number
+  status: string
+  message: string
+  mode: string
+  sort: string
+  desc: bool
+  query: string
+
+shape CsvRow
+  cells: string[]
+
+// status: ready | error | toolarge | notfound | folder | empty. `target` is the page a PDF, e-book, text, Markdown or code file opens as (a texture: address).
+shape FileInfo
+  address: string
+  path: string
+  folder: string
+  name: string
+  kind: string
+  kindLabel: string
+  size: number
+  sizeLabel: string
+  modifiedLabel: string
+  mime: string
+  status: string
+  message: string
+  src: string
+  local: string
+  truncated: bool
+  rows: CsvRow[]
+  width: number
+  height: number
+  target: string
+
+// What opening a file that is another page's document answered: the page to open, or why not.
+shape FileResolved
+  address: string
+  target: string
+  title: string
+  status: string
+  message: string

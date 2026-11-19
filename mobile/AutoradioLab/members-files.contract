@@ -2,9 +2,7 @@
 // Owned by the files lane. Shapes and source names live in exact-package/interface/files.json; the module answering them is
 // exact-package/apple/AutoradioModule+Files.swift (Kit/ChoirFiles.swift, Kit/Epub.swift). Every name a child component
 // injects is in the lane-5 band of the `provide` list in app.contract. Prefixes: fs = the Files place, fv = the viewers.
-use fileList, fileOpen from "@choir/autoradio"
-use fileMkdir, fileDelete, fileRename, fileUpload from "@choir/autoradio"
-use FileListing, FileInfo from "@choir/autoradio"
+use FileListing, FileInfo, FileResolved from "./files-types.contract"
 use choirPlayPause from "@choir/autoradio"
 
 // Pinch-and-pan geometry for the image viewer (Exact's transform handle, as its interaction-gallery photo viewer does):
@@ -33,8 +31,9 @@ members Autoradio
   // The banner shows the last change's answer ("Deleted ..."), until the person navigates.
   state fsNoteOn = false
 
-  resource fsList = fileList(path=fsPath, mode=fsMode, sort=fsSort, desc=(fsDesc ? "true" : "false"), query=fsQuery) as shape FileListing else empty()
-  mutation fsM as shape FileListing
+  // `fileList` and the changes are not package names: app.ts answers them (files.ts). Arguments are positional: demo, path, mode, sort, desc, query.
+  resource fsList = fileList(dm.on, fsPath, fsMode, fsSort, fsDesc, fsQuery) as shape FileListing else empty()
+  mutation fsM as shape FileListing refreshes fsList, fvInfo
   derive fsNote = match fsM { case some(l) => l.message, case none => "" }
 
   action fsBrowse(path: string)
@@ -76,11 +75,11 @@ members Autoradio
   action fsEditName(v: string)
     fsRenameText = v
   action fsRename
-    send fsM = fileRename(path=fsSel, name=fsRenameText)
+    send fsM = fileRename(dm.on, fsSel, fsRenameText)
     fsSel = ""
     fsNoteOn = true
   action fsDelete(path: string)
-    send fsM = fileDelete(path=path)
+    send fsM = fileDelete(dm.on, path)
     fsSel = ""
     fsNoteOn = true
   action fsNewToggle
@@ -89,25 +88,27 @@ members Autoradio
   action fsEditNew(v: string)
     fsNewName = v
   action fsMakeFolder
-    send fsM = fileMkdir(dir=fsPath, name=fsNewName)
+    send fsM = fileMkdir(dm.on, fsPath, fsNewName)
     fsNewing = false
     fsNewName = ""
     fsNoteOn = true
   // Demo mode and the agent have no picker: the module adds an invented note. Otherwise the system file picker opens.
   action fsUpload
     if dm.on
-      send fsM = fileUpload(from="", name="", dir=fsPath)
+      send fsM = fileUpload(dm.on, "", "", fsPath)
       fsNoteOn = true
     else
       showPicker("files-pick")
   action fsPicked(ps: Picked[])
     if ps.length > 0
-      send fsM = fileUpload(from=(match ps.at(0) { case some(p) => p.path, case none => "" }), name=(match ps.at(0) { case some(p) => p.name, case none => "" }), dir=fsPath)
+      send fsM = fileUpload(dm.on, (match ps.at(0) { case some(p) => p.path, case none => "" }), (match ps.at(0) { case some(p) => p.name, case none => "" }), fsPath)
       fsNoteOn = true
 
   // ------------------------------------------------------------------ the open file (file:/path/name.ext)
   // Asked for every page; the module answers an empty "loading" record for any address that is not a file.
-  resource fvInfo = fileOpen(address=pg.top) as shape FileInfo else empty()
+  resource fvInfo = fileOpen(dm.on, pg.top) as shape FileInfo else empty()
+  // A PDF, e-book, text, Markdown or code file is another page's document: the listener's computer opens it (decision D4) and the deck follows (members-stack openPage).
+  mutation fvRes as shape FileResolved then fileResolved
 
   // A different file resets every viewer.
   state fvSeen = ""

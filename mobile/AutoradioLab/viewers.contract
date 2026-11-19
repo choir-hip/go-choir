@@ -8,7 +8,8 @@
 //   audio  `audio` with native controls and `metadata=` for Now Playing and the lock screen
 //   PDF    `iframe` on a local .pdf shows PDFKit's PDFView: its own scrolling and pinch, page set by `#page=N` in src
 //   e-book chapters become Markdown for `text markup="markdown"` (no EPUB element in Exact; Kit/Epub.swift parses the book)
-use Theme, FileInfo from "@choir/autoradio"
+use Theme from "@choir/autoradio"
+use FileInfo from "./files-types.contract"
 use PageScroll, Card, RowRule, PlainList from "./ui.contract"
 use SkeletonBody from "./transitions.contract"
 
