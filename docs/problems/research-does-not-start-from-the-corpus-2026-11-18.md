@@ -240,8 +240,9 @@ message (`internal/agentcore/research_brief.go`, wired at
 
 What it does:
 
-- The threads are the objective of the newest unread Cast (or Ask) record plus
-  its typed hypotheses and uncertainties and the `questions` list of its
+- The threads are the objective of the unread Cast (or Ask) record of this
+  run's conversation (else the newest with an objective; a clause counts the
+  other unread records that name one) plus its typed hypotheses and uncertainties and the `questions` list of its
   packet: the objective and at most 5 more; the rest are named, not searched.
 - Each thread is one call of the verb's own host function
   (`search_wire_corpus`), as the run's owner and computer, in turn, under one
@@ -251,6 +252,12 @@ What it does:
   starts. A half the verb did not search (captures or published stories, from
   its own notes) is named in the brief and is never read as an empty corpus:
   the outcome is `partial`, or `failed` when both halves failed everywhere.
+  "The corpus holds no page or story matching these threads" is said only when
+  every thread was searched in both halves and the page-text index is whole;
+  a thread the deadline or an error cut, a half not searched, or an index
+  still catching up gives `partial` with the reason in the log, and the text
+  says what was searched and found nothing and what was not searched. A field
+  over its clip (title, url, passage, snippet, id) ends `[cut]`.
   Thread text is searched as plain words (the verb's `since:`, quote and
   `-word` operators are neutralised).
 - It delivers at most 6 captures (with dates, capture ids and the matching
@@ -270,7 +277,7 @@ What it does:
   searches only.
 - One journal line per research run start: `research brief run= desk= ms=
   threads= queries= stories= captures= passages= newest_held= bytes=
-  tokens_est= dropped= outcome=(delivered|empty|partial|failed|skipped|dropped)
+  tokens_est= dropped= left= outcome=(delivered|empty|partial|failed|skipped|dropped)
   reason=`, written once the run memory has taken (or not taken) the text:
   `dropped` means the desk never saw the brief. The
   `corpus search` line gains `caller=brief` or `caller=cell` at its end.
