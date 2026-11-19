@@ -234,8 +234,9 @@ type Store struct {
 	revalidationSource atomic.Pointer[func() int64]
 	// tapeGroup is the coalescing state of queued tape writers (tape_group_commit.go).
 	tapeGroup groupCommit
-	// eventTableWrites is store.event_table as the runtime applied it: the
-	// writer stamps the storage class's ops for choir_events (event_table.go).
+	// eventTableWrites arms the choir_events writer (test-only now: no
+	// production caller since the switch was deleted); the writer stamps
+	// the storage class's ops for choir_events (event_table.go).
 	eventTableWrites atomic.Bool
 	// partitionWrites is store.telemetry_partitions as the runtime applied
 	// it; partitions is the open partition set (telemetry_partition.go).

@@ -31,7 +31,6 @@ import (
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/datavolume"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
-	"github.com/yusefmosiah/go-choir/internal/eventtablegrant"
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
 	"github.com/yusefmosiah/go-choir/internal/holdlock"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
@@ -546,13 +545,6 @@ type Runtime struct {
 	// telemetryDrainDeadline bounds the planned-restart telemetry drain; zero
 	// means the default (telemetry_batching.go).
 	telemetryDrainDeadline time.Duration
-	// eventTableGrantDir overrides where the store.event_table host grant is
-	// read (event_table.go); eventTableGrant is the grant this boot read and
-	// eventTableState the switch as last applied, under eventTableMu.
-	eventTableGrantDir string
-	eventTableMu       sync.Mutex
-	eventTableGrant    *eventtablegrant.Status
-	eventTableState    EventTableStatus
 	// hostRestartTelemetryRestore releases the hold on synchronous mode the
 	// host's planned-restart request took; nil when no host request holds it.
 	// hostRestartDrainFailed records that the hold's drain lost records.
@@ -1309,9 +1301,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// Telemetry batching is decided before the first event of this process, so
 	// the sequence reseed gap applies to every number seeded after a crash.
 	rt.configureTelemetryBatching(ctx)
-	// So is the event-table writer (store.event_table): the host grant and
-	// the owner's setting, read once here.
-	rt.configureEventTable(ctx)
 	// And the telemetry partition writer (store.telemetry_partitions).
 	rt.configureTelemetryPartitions(ctx)
 	if rt.maintenanceHeld() {

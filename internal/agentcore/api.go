@@ -899,10 +899,6 @@ type guestObservabilityResponse struct {
 	// section 6). Served from a snapshot: reading it never waits on the
 	// allocator.
 	StreamSeqLease *store.StreamSeqLeaseStats `json:"stream_seq_lease,omitempty"`
-	// EventTable is store.event_table as applied (event_table.go): the host
-	// grant, the owner's setting, and whether the writer stamps. Absent on a
-	// computer with neither, so the response is unchanged there.
-	EventTable *EventTableStatus `json:"event_table,omitempty"`
 	// TelemetryPartitions is the per-day telemetry files
 	// (store.telemetry_partitions), when any is open or the writer is on.
 	TelemetryPartitions *store.TelemetryPartitionStats `json:"telemetry_partitions,omitempty"`
@@ -1165,9 +1161,6 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.StreamSeqLease = &lease
 		census := h.rt.store.RunMemoryRetirementCensus()
 		resp.RunMemoryRetirement = &census
-		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting || st.StoreFloor > 0 {
-			resp.EventTable = &st
-		}
 		if st := h.rt.store.TelemetryPartitionStats(); st.Writing || len(st.Live) > 0 || st.Retired > 0 {
 			resp.TelemetryPartitions = &st
 		}

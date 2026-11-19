@@ -506,11 +506,6 @@ type ManagerConfig struct {
 	// (CHOIR_HOST_FETCH_VMS; empty by default). See host_fetch.go.
 	HostFetch HostFetchConfig
 
-	// EventTable is the store.event_table grant switch
-	// (CHOIR_EVENT_TABLE_COMPUTERS; empty by default). See
-	// event_table_grant.go.
-	EventTable EventTableConfig
-
 	// DataImageTemplate is the new-computer data image template switch
 	// (VMCTL_DATA_IMAGE_TEMPLATE; off by default). See
 	// data_image_template.go.
@@ -1180,19 +1175,6 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: host fetch route for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, fetchStatus)
 		}
 		for name, content := range fetchFiles {
-			if grantFiles == nil {
-				grantFiles = map[string][]byte{}
-			}
-			grantFiles[name] = content
-		}
-		// Event table (F-c deploy 2): a named computer's disk carries the
-		// grant; its writer then stamps telemetry for choir_events when the
-		// owner's store.event_table is on.
-		eventTableFiles, eventTableStatus := m.cfg.EventTable.eventTableMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
-		if eventTableStatus != "" {
-			log.Printf("vmmanager: event table for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, eventTableStatus)
-		}
-		for name, content := range eventTableFiles {
 			if grantFiles == nil {
 				grantFiles = map[string][]byte{}
 			}
