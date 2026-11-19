@@ -184,8 +184,34 @@ func logCorpusSearch(ctx context.Context, query, computerID string, capturesElap
 		query = query[:200]
 	}
 	run, desk, conv := corpusAttribution(ctx)
-	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t",
-		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped)
+	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t caller=%s",
+		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped, CorpusCallerFrom(ctx))
+}
+
+// CorpusCallerBrief is the caller of a search the host makes for a research
+// run's brief; a search called from a desk's cell names no caller and is
+// logged as CorpusCallerCell.
+const (
+	CorpusCallerBrief = "brief"
+	CorpusCallerCell  = "cell"
+)
+
+type corpusCallerKey struct{}
+
+// WithCorpusCaller names who calls a corpus search, for the journal line
+// (caller=): the brief's searches must be told apart from the desk's own, or a
+// count of runs that searched the web before any corpus read would take the
+// brief for the desk's first corpus read.
+func WithCorpusCaller(ctx context.Context, caller string) context.Context {
+	return context.WithValue(ctx, corpusCallerKey{}, caller)
+}
+
+// CorpusCallerFrom is the caller a context names, CorpusCallerCell by default.
+func CorpusCallerFrom(ctx context.Context) string {
+	if c, _ := ctx.Value(corpusCallerKey{}).(string); strings.TrimSpace(c) != "" {
+		return strings.TrimSpace(c)
+	}
+	return CorpusCallerCell
 }
 
 // corpusAttribution is the run, desk and conversation of a call, cleaned for
