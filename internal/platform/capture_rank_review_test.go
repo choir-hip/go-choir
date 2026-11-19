@@ -170,6 +170,14 @@ func TestRankedAnswerCapsAStorysCitationsAfterEligibility(t *testing.T) {
 func TestVectorHalfNoteSaysWhyItEnded(t *testing.T) {
 	f := newRankFixture(t)
 	f.disagree(t)
+	// Set before the first search: a bounded search that stops waiting leaves
+	// its goroutine running, and that goroutine reads Override.
+	f.emb.Override = func(in string) []float32 {
+		if strings.Contains(in, "query: ") {
+			time.Sleep(300 * time.Millisecond)
+		}
+		return markerVector(in)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, why := f.store.searchVectorsBounded(ctx, VectorSearchRequest{Query: "zorblax", Owner: f.owner, Computer: f.computer})
@@ -178,12 +186,6 @@ func TestVectorHalfNoteSaysWhyItEnded(t *testing.T) {
 	}
 	parent, stop := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer stop()
-	f.emb.Override = func(in string) []float32 {
-		if strings.Contains(in, "query: ") {
-			time.Sleep(300 * time.Millisecond)
-		}
-		return markerVector(in)
-	}
 	_, why = f.store.searchVectorsBounded(parent, VectorSearchRequest{Query: "zorblax", Owner: f.owner, Computer: f.computer})
 	if strings.Contains(why, "within 4s") {
 		t.Fatalf("the caller's own deadline was reported as the vector half's 4 s: %q", why)
