@@ -162,7 +162,9 @@ A commit subject ends with its class and rollback, for example
 - **Landing loop** for any behavior change: commit, push `origin main`, watch
   CI, watch the staging deploy, verify the deployed commit, run the deployed
   proof. Local tests are not proof. `origin/main` is the source of truth;
-  never edit tracked files on Node B.
+  never edit tracked files on Node B. The lead may restart a host service
+  on Node B (owner, 2026-11-19: "Yes, you can restart a host service on
+  Node B"); say so in the next report.
 - Docs-only commits skip CI and deploy by design. Do not weaken those filters.
   Docs-like now means `docs/`, top-level `*.md`, `skills/` (except Go files)
   and developer-side `scripts/` (owner, 2026-11-12); they ship with the next
