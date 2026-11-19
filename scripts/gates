@@ -39,6 +39,7 @@ run go run ./cmd/lockscope -check cmd/lockscope/baseline.txt
 # the selftests CI has no step for but the repo keeps (1 s each)
 run scripts/selftest-store-schema-floor
 run scripts/selftest-test-computer-create
+run python3 -I scripts/selftest-e1
 run scripts/check-v1-writer-purity.sh
 run node frontend/scripts/gen-package-kinds.mjs --check
 run scripts/check-decode-roots.sh
