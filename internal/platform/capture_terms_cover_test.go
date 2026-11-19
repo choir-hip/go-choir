@@ -257,3 +257,20 @@ func TestSearchCaptureTimersDoNotNest(t *testing.T) {
 		t.Fatalf("the terms line (%.0f ms) is not shorter than the text search (%.0f ms): the timers nest", terms.MaxMS, text.MaxMS)
 	}
 }
+
+// C8: an invalid index present after start (a sibling that held the build lock
+// died mid-build) is repaired by the periodic step, not only at start.
+func TestPeriodicStepRepairsAnInvalidCoverIndex(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	if _, err := store.corpus().ExecContext(ctx, `UPDATE pg_index SET indisvalid = false WHERE indexrelid = ?::regclass`, captureTermsCoverIdx); err != nil {
+		t.Skipf("cannot mark an index invalid here: %v", err)
+	}
+	if ex, va := coverIndexState(t, store); !ex || va {
+		t.Fatalf("setup: exists=%v valid=%v", ex, va)
+	}
+	store.retrievalStep(ctx)
+	if ex, va := coverIndexState(t, store); !ex || !va {
+		t.Fatalf("after the periodic step: exists=%v valid=%v, want a valid index", ex, va)
+	}
+}
