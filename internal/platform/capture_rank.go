@@ -35,12 +35,13 @@ package platform
 // Every capture in the answer passes the same checks whichever way it came:
 // it is of the request's owner and computer, public (not owner-private, not
 // tombstoned, not superseded), and in the time window (published time, else
-// fetched time; since inclusive, until exclusive). A story outside the window
+// fetched time, else outside any window; since inclusive, until exclusive). A story outside the window
 // is not walked.
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -54,6 +55,10 @@ const (
 	// rankStoryCitedMax is how many cited captures one story carries into an
 	// answer (the first in capture-id order).
 	rankStoryCitedMax = 8
+	// rankStoryCitedRead is how many cited captures of a story are read: the
+	// cap rankStoryCitedMax is applied after the eligibility checks, so a story
+	// whose first citations are private or of another scope still contributes.
+	rankStoryCitedRead = 4 * rankStoryCitedMax
 	// rankBM25Guaranteed is how many of BM25's best pages are guaranteed a place.
 	rankBM25Guaranteed = 3
 	rankDefaultSize    = 10
@@ -89,9 +94,6 @@ type RankedCapture struct {
 	// Stories are the publications whose latest version cites this page, among
 	// the stories the vector half found.
 	Stories []string `json:"stories,omitempty"`
-	// Score is the cosine similarity of the page's own vector (0 when it was
-	// not found by meaning).
-	Score float64 `json:"score,omitempty"`
 }
 
 // RankedStory is a story the vector half found, with the captures its latest
@@ -222,6 +224,25 @@ func dayInWindow(day string, since, until time.Time) bool {
 	return true
 }
 
+// captureWindowTime is the one time a window judges a capture by: published,
+// else fetched, else none (a capture with neither is outside every window).
+// The term half's SQL (COALESCE(published_at, fetched_at)), the page-text
+// index (its effective time, 0 for none) and the guest's inWindow
+// (researchtools captureTime) are the same rule.
+func captureWindowTime(obj objectgraph.Object) (time.Time, bool) {
+	meta, err := objectgraph.WebCaptureMetadataFromObject(obj)
+	if err != nil {
+		return time.Time{}, false
+	}
+	if t := parseCaptureTime(meta.PublishedAt); t.Valid {
+		return t.Time.UTC(), true
+	}
+	if t := parseCaptureTime(meta.FetchedAt); t.Valid {
+		return t.Time.UTC(), true
+	}
+	return time.Time{}, false
+}
+
 func timeInWindow(at, since, until time.Time) bool {
 	if !since.IsZero() && at.Before(since) {
 		return false
@@ -247,9 +268,22 @@ func (s *Store) searchVectorsBounded(ctx context.Context, req VectorSearchReques
 		res, err := s.SearchVectors(vctx, req)
 		ch <- answer{res, err}
 	}()
+	// why says what ended the wait: the caller (cancelled, or its own deadline
+	// passed) or this half's deadline.
+	ended := func() string {
+		if err := ctx.Err(); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return "the caller's deadline passed before the vector half answered"
+			}
+			return "the caller cancelled before the vector half answered"
+		}
+		return fmt.Sprintf("the vector half did not answer within %s", captureVectorDeadline)
+	}
 	select {
 	case a := <-ch:
 		switch {
+		case a.err != nil && (ctx.Err() != nil || vctx.Err() != nil):
+			return VectorSearchResult{}, ended()
 		case a.err != nil:
 			return VectorSearchResult{}, "the vector search failed: " + a.err.Error()
 		case a.res.Unavailable != "":
@@ -257,7 +291,7 @@ func (s *Store) searchVectorsBounded(ctx context.Context, req VectorSearchReques
 		}
 		return a.res, ""
 	case <-vctx.Done():
-		return VectorSearchResult{}, fmt.Sprintf("the vector half did not answer within %s", captureVectorDeadline)
+		return VectorSearchResult{}, ended()
 	}
 }
 
@@ -278,7 +312,6 @@ type rankCand struct {
 	id      string
 	reasons map[string]bool
 	stories []string
-	score   float64
 }
 
 func (c *rankCand) add(reason string) { c.reasons[reason] = true }
@@ -372,6 +405,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 	}
 	var slots []slot
 	storySeen := map[string]bool{}
+	usedHit := map[string]VectorStoryHit{}
 	for i := range vr.Captures {
 		slots = append(slots, slot{score: vr.Captures[i].Score, capture: &vr.Captures[i]})
 	}
@@ -382,6 +416,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 			continue
 		}
 		storySeen[h.PublicationID] = true
+		usedHit[h.PublicationID] = *h
 		slots = append(slots, slot{score: h.Score, story: h})
 	}
 	sort.SliceStable(slots, func(i, j int) bool { return slots[i].score > slots[j].score })
@@ -404,10 +439,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 			break
 		}
 		if sl.capture != nil {
-			c := touch(sl.capture.CaptureID, RankReasonMeaning)
-			if sl.capture.Score > c.score {
-				c.score = sl.capture.Score
-			}
+			touch(sl.capture.CaptureID, RankReasonMeaning)
 			continue
 		}
 		st := stories[sl.story.PublicationID]
@@ -447,11 +479,52 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 		if _, _, public := captureVectorSource(o); !public {
 			continue
 		}
-		if (!since.IsZero() || !until.IsZero()) && !timeInWindow(captureDay(o), since, until) {
-			continue
+		if !since.IsZero() || !until.IsZero() {
+			if at, ok := captureWindowTime(o); !ok || !timeInWindow(at, since, until) {
+				continue
+			}
 		}
 		vecOrder = append(vecOrder, id)
 	}
+
+	// The cap on a story's citations, after the checks: its first
+	// rankStoryCitedMax eligible citations stay; a page reached only through a
+	// citation beyond them is dropped.
+	eligible := map[string]bool{}
+	for _, id := range vecOrder {
+		eligible[id] = true
+	}
+	allowed := map[string][]string{}
+	for _, p := range pubs {
+		st := stories[p]
+		if st == nil || !st.ok {
+			continue
+		}
+		for _, id := range cited[st.VersionID] {
+			if eligible[id] && len(allowed[p]) < rankStoryCitedMax {
+				allowed[p] = append(allowed[p], id)
+			}
+		}
+	}
+	var kept2 []string
+	for _, id := range vecOrder {
+		c := cands[id]
+		var stk []string
+		for _, p := range c.stories {
+			if containsID(allowed[p], id) {
+				stk = append(stk, p)
+			}
+		}
+		c.stories = stk
+		if len(stk) == 0 {
+			delete(c.reasons, RankReasonStory)
+		}
+		if len(c.reasons) == 0 {
+			continue
+		}
+		kept2 = append(kept2, id)
+	}
+	vecOrder = kept2
 
 	final, kept := placeBM25(vecOrder, bm25, size)
 	ranking.BM25Kept = kept
@@ -460,7 +533,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 		if c == nil {
 			c = &rankCand{id: id, reasons: map[string]bool{RankReasonText: true}}
 		}
-		ranking.Entries = append(ranking.Entries, RankedCapture{CaptureID: id, Reasons: c.reasonList(), Stories: c.stories, Score: c.score})
+		ranking.Entries = append(ranking.Entries, RankedCapture{CaptureID: id, Reasons: c.reasonList(), Stories: c.stories})
 	}
 	if strings.EqualFold(strings.TrimSpace(req.Order), "recent") {
 		sort.SliceStable(ranking.Entries, func(i, j int) bool {
@@ -469,15 +542,16 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 			if !aok || !bok {
 				return aok && !bok
 			}
-			return captureDay(a).After(captureDay(b))
+			at, aok := captureWindowTime(a)
+			bt, bok := captureWindowTime(b)
+			if aok != bok {
+				return aok
+			}
+			return at.After(bt)
 		})
 	}
 
 	// The stories that brought a page into the answer, with their eligible citations.
-	good := map[string]bool{}
-	for _, id := range vecOrder {
-		good[id] = true
-	}
 	used := map[string]bool{}
 	for _, e := range ranking.Entries {
 		for _, p := range e.Stories {
@@ -490,12 +564,8 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 			continue
 		}
 		rs := st.RankedStory
-		rs.Captures = nil
-		for _, id := range cited[st.VersionID] {
-			if good[id] {
-				rs.Captures = append(rs.Captures, id)
-			}
-		}
+		rs.Captures = allowed[p]
+		rs.Score, rs.Day = usedHit[p].Score, usedHit[p].Day
 		ranking.Stories = append(ranking.Stories, rs)
 	}
 
@@ -512,8 +582,8 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 }
 
 // storyWalk reads, for publications, each one's latest version, its title
-// and the captures that version cites (at most rankStoryCitedMax each, first
-// in id order), in three queries however many publications there are. A
+// and the captures that version cites (at most rankStoryCitedRead each, first
+// in id order; the cap of rankStoryCitedMax comes after the checks), in three queries however many publications there are. A
 // withdrawn (tombstoned) or unknown publication is not ok.
 func (s *Store) storyWalk(ctx context.Context, pubs []string) (map[string]*storyInfo, map[string][]string, error) {
 	out := map[string]*storyInfo{}
@@ -591,7 +661,7 @@ func (s *Store) storyWalk(ctx context.Context, pubs []string) (map[string]*story
 	rows, err = s.corpus().QueryContext(ctx, `SELECT from_id, to_id FROM (
 		SELECT from_id, to_id, ROW_NUMBER() OVER (PARTITION BY from_id ORDER BY to_id) AS rn
 		FROM og_edges WHERE from_id IN (`+vin+`) AND kind = 'cites_capture' AND tombstone = FALSE) t
-		WHERE rn <= ? ORDER BY from_id, to_id`, append(versions, rankStoryCitedMax)...)
+		WHERE rn <= ? ORDER BY from_id, to_id`, append(versions, rankStoryCitedRead)...)
 	if err != nil {
 		return nil, nil, err
 	}

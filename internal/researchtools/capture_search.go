@@ -90,7 +90,6 @@ type RankedCapture struct {
 	CaptureID string   `json:"capture_id"`
 	Reasons   []string `json:"reasons"`
 	Stories   []string `json:"stories,omitempty"`
-	Score     float64  `json:"score,omitempty"`
 }
 
 // RankedStory mirrors platform.RankedStory.
