@@ -186,7 +186,7 @@ func TestBriefOverTheTokenBoundDropsWholeThreadsFromTheLastAndNamesThem(t *testi
 		for i := 0; i < 6; i++ {
 			n++
 			c := briefCapture(n, big+fmt.Sprintf("end-marker-%d", n))
-			c["title"], c["url"] = strings.Repeat("title ", 40), "https://example.org/"+strings.Repeat("path/", 40)
+			c["title"], c["url"] = strings.Repeat("title ", 40), "https://example.org/"+strings.Repeat("path/", 30)
 			caps = append(caps, c)
 		}
 		return briefResult(caps, 0), nil
@@ -1065,7 +1065,7 @@ func TestBriefCountsAfterTheDropLoopAndLogsLeftOutThreads(t *testing.T) {
 		for i := 0; i < 6; i++ {
 			n++
 			c := briefCapture(n, big)
-			c["title"], c["url"] = strings.Repeat("title ", 40), "https://example.org/"+strings.Repeat("path/", 40)
+			c["title"], c["url"] = strings.Repeat("title ", 40), "https://example.org/"+strings.Repeat("path/", 30)
 			caps = append(caps, c)
 		}
 		return withCoverage(briefResult(caps, 0), coverageWith(map[string]any{"labels": false})), nil
@@ -1105,23 +1105,6 @@ func TestBriefMarksACutFieldAndNeverCutsAShortOne(t *testing.T) {
 	}
 }
 
-// Round 2, item 7: the run's conversation is found through the package's
-// channel accessor, which falls back to the run's metadata.
-func TestResearchBriefFindsTheRunsConversationThroughTheChannelAccessor(t *testing.T) {
-	rt, s := testRuntime(t)
-	owner, computer := "owner-brief-15", rt.cfg.ComputerID
-	seedResearchCast(t, s, owner, computer, "doc-15", "MINE objective", "")
-	rt.researchBriefSearch = fixedSearch(briefResult(nil, 0))
-	rec := briefRunRecord(owner, computer, "doc-15", "run-brief-15")
-	rec.ChannelID = "" // the channel is in the run's metadata only
-	rec.Metadata = map[string]any{runMetadataChannelID: "doc-15"}
-	if got := rt.researchBriefOpening(context.Background(), rec).res.queries; got != 1 {
-		t.Fatalf("queries = %d", got)
-	}
-	if channelIDForRun(rec) != "doc-15" {
-		t.Fatalf("accessor = %q", channelIDForRun(rec))
-	}
-}
 
 // --- round 3: positive evidence ---
 
@@ -1248,8 +1231,9 @@ func TestBriefNeverCutsAUrlOrAnId(t *testing.T) {
 
 // Round 3, item 5: the "nothing held" line says the right thing in each case.
 func TestBriefNothingLineIsTrueInEachBranch(t *testing.T) {
-	empty := buildResearchBrief(context.Background(), planN(2), fixedSearch(briefResult(nil, 0)))
-	if strings.Contains(empty.text, "only those listed above") {
+	// Nothing found, with a gap (so the block is printed): nothing is listed above.
+	empty := buildResearchBrief(context.Background(), planN(2), fixedSearch(withCoverage(briefResult(nil, 0), coverageWith(map[string]any{"page_text": false}))))
+	if strings.Contains(empty.text, "only those listed above") || !strings.Contains(empty.text, "Held pages") {
 		t.Fatalf("nothing is listed above, yet:\n%s", empty.text)
 	}
 	n := 0

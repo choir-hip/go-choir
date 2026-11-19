@@ -28,23 +28,23 @@ import (
 //     the computer holds;
 //  4. Full is true when any one of page text, labels or published is missing.
 
-// windowSink is a capture store that cannot search: only the window of the
+// noSearchSink is a capture store that cannot search: only the window of the
 // newest captures can be listed.
-type windowSink struct{}
+type noSearchSink struct{}
 
-func (windowSink) WriteCaptures(context.Context, string, string, []sourcegraph.CaptureItem) (sourcegraph.CaptureWriteResult, error) {
+func (noSearchSink) WriteCaptures(context.Context, string, string, []sourcegraph.CaptureItem) (sourcegraph.CaptureWriteResult, error) {
 	return sourcegraph.CaptureWriteResult{}, nil
 }
-func (windowSink) ReadCapture(context.Context, string, int, int) (json.RawMessage, error) {
+func (noSearchSink) ReadCapture(context.Context, string, int, int) (json.RawMessage, error) {
 	return nil, errors.New("not used")
 }
-func (windowSink) ListCaptures(context.Context, string, string, int) ([]objectgraph.Object, error) {
+func (noSearchSink) ListCaptures(context.Context, string, string, int) ([]objectgraph.Object, error) {
 	return nil, nil
 }
 
 // indexSink answers the index and the published search as configured.
 type indexSink struct {
-	windowSink
+	noSearchSink
 	text      *CaptureTextInfo
 	termsOpen bool
 	published PublishedAnswer
@@ -93,8 +93,8 @@ func TestCoverageIsFullOnlyWhenEveryHalfRan(t *testing.T) {
 	}{
 		{"no capture store", nil, SearchCoverage{}, false},
 		{"index answered, page text did not", indexSink{}, SearchCoverage{Labels: true, Published: true}, false},
-		{"window fallback", windowSink{}, SearchCoverage{}, false},
-		{"title and label projection still building", indexSink{text: whole, termsOpen: true}, SearchCoverage{PageText: true, PageTextIndexed: 5, Pages: 5, Published: true}, false},
+		{"window fallback", noSearchSink{}, SearchCoverage{Window: true}, false},
+		{"title and label projection still building", indexSink{text: whole, termsOpen: true}, SearchCoverage{PageText: true, PageTextIndexed: 5, Pages: 5, Window: true, Published: true}, false},
 		{"page text index catching up", indexSink{text: &CaptureTextInfo{Used: true, Indexed: 3, Captures: 5}}, SearchCoverage{PageText: true, PageTextIndexed: 3, Pages: 5, Labels: true, Published: true}, false},
 		{"page text refused", indexSink{text: &CaptureTextInfo{Used: false, Reason: "index not ready"}}, SearchCoverage{Labels: true, Published: true}, false},
 		{"published search failed", indexSink{text: whole, pubErr: errors.New("corpusd 503")}, SearchCoverage{PageText: true, PageTextIndexed: 5, Pages: 5, Labels: true}, false},
