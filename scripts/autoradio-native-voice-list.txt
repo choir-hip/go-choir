@@ -48,6 +48,7 @@ path mobile/AutoradioKit/Sources/AutoradioKit/LiveConfigBackend.swift the config
 path mobile/AutoradioKit/Sources/AutoradioKit/LabRuntime.swift the voice lab: runs and measures the engine and its stages
 path mobile/AutoradioKit/Sources/AutoradioKit/Embedder.swift the on-device embedding model's interface and prompts
 # --- the deck: the queue of prepared audio under shared code (docs/reference/exact/deck.md)
+path mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirPlayback.swift the engine behind the deck: spoken entries through the programme player and remote audio through AVPlayer, and whether sound is reaching the output
 path mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift the deck: plays what shared code hands it, applies the named rules that cannot wait for shared code, keeps the journal of what started and ended with sound rendered
 path mobile/exact-package/apple/AutoradioModule+Deck.swift the deck's names for Exact: reads options, answers the deck's state; decides nothing
 # --- the take recorder and clip fingerprinting
