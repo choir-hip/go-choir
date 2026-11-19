@@ -38,7 +38,8 @@ final class LlamaEmbedder: TrialEmbedder {
         return Array(toks.prefix(Int(max(0, n))))
     }
 
-    func embed(_ text: String) async throws -> (vec: [Float], tokens: Int) {
+    func embed(_ text: String) async throws -> (vec: [Float], tokens: Int) { try embedSync(text) }
+    func embedSync(_ text: String) throws -> (vec: [Float], tokens: Int) {
         var toks = tokens(text)
         if toks.count > Int(llama_n_ctx(ctx)) { toks = Array(toks.prefix(Int(llama_n_ctx(ctx)))) }
         batch.n_tokens = Int32(toks.count)

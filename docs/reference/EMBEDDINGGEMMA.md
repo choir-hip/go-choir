@@ -356,6 +356,27 @@ and was at load 9.6.
 - Not measured: full page against lead (needs the real page text), any
   non-English story, a quiet x86 machine.
 
+## 0.10 The first pass file (station V3, 2026-11-19; the format may change behind `PassFile`)
+
+The first pass is made on the Mac and imported (owner, 2026-11-19: "yes, you can use the mac for embeddings"). Tool: `embed-trial pass`
+(`mobile/EmbedTrial/Sources/EmbedPass`, tests in `Tests/EmbedPassTests`); export: `scripts/embed-pass-export.py`, run on Node B over ssh
+from stdin, read-only, public rows of the paper's owner and computer only. Copies live in `~/.cache/choir-embed-pass/` and are deleted
+after the import is accepted.
+
+- **Input**, one JSON object a line: `kind` (`story_passage` or `capture`), `id` (publication version id, or capture id), `ordinal`
+  (passage number; a capture's lead is 0), `title`, `text`, `text_sha` (sha256 of the text), and optionally `private` or `labels`
+  (a row marked private is counted and never embedded). Passages are cut as `internal/capturefts/passages.go` cuts them; a capture is its
+  lead passage, a story version is all its passages.
+- **Prompt**: `title: <title> | text: <text>` (`title: none` when empty). Q8_0 GGUF (sha256 `2188ac1d...09135`, checked at start), Metal,
+  the pooled vector normalised, the first 256 values taken, re-normalised, stored as float16.
+- **Output**, one JSON object a line, no text: `kind`, `id`, `ordinal`, `text_sha`, `model` (the GGUF's sha256), `dim` 256, `v`
+  (base64 of 256 little-endian float16 values, 512 bytes). Equal text (`text_sha`) is embedded once and its vector written for each key.
+- **Resume**: the output is read at start; keys already written are skipped; a torn last line is cut off. A file of another model hash is
+  refused. Progress line every 5 s: rows, tokens a second (time in the embedder), rows a second, remaining and eta (needs `--total` when
+  the input is a pipe).
+- **Measured** on the dev Mac, Metal, 500 passages of the repo's own trial corpus: 2,427 tokens a second (2,861 on the resumed
+  300), 500 vectors, norms 0.9999 to 1.0001 (fp16).
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image

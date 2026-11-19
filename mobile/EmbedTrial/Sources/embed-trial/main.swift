@@ -1,11 +1,14 @@
 import Foundation
 import AutoradioKit
 import EmbeddingGemma2CoreAI
+import EmbedPass
+import CryptoKit
 
 // embed-trial: EmbeddingGemma 2 on the Mac, both routes. See docs/reference/EMBEDDINGGEMMA.md.
 //   embed-trial bench --route a|b [--gpu 0|1] [--threads 4] [--compute ane|gpu|cpu] [--tag NAME] [--corpus DIR] [--book FILE]
 //   embed-trial quality TAG [TAG ...]       recall@5 and MRR for BM25, vectors, fusion (needs bench output for each TAG)
 //   embed-trial compare TAG TAG             cosine of the same texts across two routes
+//   embed-trial pass --in FILE|- --out FILE [--total N] [--limit N]   the first pass of station V3 (see passCommand below)
 //   embed-trial scan [TAG]                  vector store timings at the corpus size and at 50,000 synthetic vectors
 var args = Array(CommandLine.arguments.dropFirst())
 let cmd = args.isEmpty ? "help" : args.removeFirst()
@@ -190,7 +193,67 @@ func scan() throws {
     }
 }
 
+/// The first pass (station V3, docs/reference/EMBEDDINGGEMMA.md "The first pass file"): rows of the export in, 256-d float16 vectors out.
+/// Resumable from the output (what is written is skipped), safe to kill at any point (a torn last line is dropped on the next start).
+/// `zcat captures.jsonl.gz | embed-trial pass --in - --out ~/.cache/choir-embed-pass/captures.vec.jsonl --total 215000`
+func passCommand() throws {
+    let inPath = opt("in", "-"), outPath = opt("out", ""), limit = Int(opt("limit", "0")) ?? 0
+    guard !outPath.isEmpty else { line("pass: --out FILE is required"); exit(2) }
+    let ggufURL = cacheDir.appendingPathComponent("gguf/embeddinggemma-2-Q8_0.gguf")
+    // The weights are pinned: the official Q8_0 file, sha256 2188ac1d...09135 (docs/reference/EMBEDDINGGEMMA.md section 0).
+    let hash = try sha256Hex(ggufURL)
+    guard hash.hasPrefix("2188ac1d"), hash.hasSuffix("09135") else { line("pass: the GGUF is not the pinned file (sha256 \(hash))"); exit(2) }
+    var total = Int(opt("total", "0")) ?? 0
+    if total == 0, inPath != "-" { total = try lineCount(URL(fileURLWithPath: inPath)) }
+    let outURL = URL(fileURLWithPath: outPath)
+    try FileManager.default.createDirectory(at: outURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    var existing: [String] = []
+    if let d = try? Data(contentsOf: outURL) {
+        var text = String(decoding: d, as: UTF8.self)
+        if !text.isEmpty, !text.hasSuffix("\n") {   // a killed run's torn last line: cut it off before appending
+            let cut = text.lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
+            text = String(text[..<cut]); try Data(text.utf8).write(to: outURL)
+        }
+        existing = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+    } else { FileManager.default.createFile(atPath: outURL.path, contents: nil) }
+    let l = try LlamaEmbedder(path: ggufURL.path, gpu: true, threads: 4)
+    line("[pass] model \(hash.prefix(8)) loaded in \(f1(l.loadMs)) ms; \(existing.count) rows already in \(outPath)")
+    let fh = try FileHandle(forWritingTo: outURL); try fh.seekToEnd()
+    let runner = try PassRunner(model: hash, existing: existing, embed: { try l.embedSync($0) }, sink: { fh.write(Data(($0 + "\n").utf8)) })
+    let t0 = nowMs(); var lastReport = t0
+    func report(final: Bool) {
+        let p = runner.progress, el = (nowMs() - t0) / 1000
+        let remaining = total > 0 ? max(0, total - p.done) : -1
+        let perSec = el > 0 ? Double(p.done) / el : 0
+        let eta = remaining > 0 && perSec > 0 ? String(format: "%.0f min", Double(remaining) / perSec / 60) : "-"
+        line(String(format: "[pass%@] done %d written %d held %d reused %d refused_private %d | %.0f tokens/s (embedding time) %.1f rows/s | remaining %@ eta %@",
+                    final ? " final" : "", p.done, p.written, p.skippedHeld, p.reused, p.refusedPrivate, p.tokensPerSecond, perSec, remaining >= 0 ? "\(remaining)" : "?", eta))
+    }
+    var n = 0
+    if inPath != "-" { guard freopen(inPath, "r", stdin) != nil else { line("pass: cannot open \(inPath)"); exit(2) } }
+    while let ln = readLine(strippingNewline: true) {
+        if ln.isEmpty { continue }
+        let row = try JSONDecoder().decode(PassRow.self, from: Data(ln.utf8))
+        try runner.process(row)
+        n += 1
+        if limit > 0, n >= limit { break }
+        if nowMs() - lastReport > 5000 { report(final: false); lastReport = nowMs() }
+    }
+    try fh.synchronize(); report(final: true)
+}
+func sha256Hex(_ url: URL) throws -> String {
+    var h = SHA256(); let f = try FileHandle(forReadingFrom: url)
+    while let d = try f.read(upToCount: 8 << 20), !d.isEmpty { h.update(data: d) }
+    return h.finalize().map { String(format: "%02x", $0) }.joined()
+}
+func lineCount(_ url: URL) throws -> Int {
+    var n = 0; let f = try FileHandle(forReadingFrom: url)
+    while let d = try f.read(upToCount: 8 << 20), !d.isEmpty { n += d.reduce(0) { $0 + ($1 == 10 ? 1 : 0) } }
+    return n
+}
+
 switch cmd {
+case "pass": try passCommand()
 case "bench": try await bench()
 case "quality": try await quality()
 case "compare": try compare()

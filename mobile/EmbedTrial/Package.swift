@@ -23,9 +23,12 @@ let package = Package(
             linkerSettings: [.linkedFramework("CoreAI"), .linkedFramework("ImageIO"), .linkedFramework("CoreGraphics"),
                              .linkedFramework("AVFoundation"), .linkedFramework("Accelerate")]
         ),
+        // The first pass (station V3): pure Swift, no model; the embedder is handed in.
+        .target(name: "EmbedPass", path: "Sources/EmbedPass"),
+        .testTarget(name: "EmbedPassTests", dependencies: ["EmbedPass"], path: "Tests/EmbedPassTests"),
         .executableTarget(
             name: "embed-trial",
-            dependencies: [.product(name: "AutoradioKit", package: "AutoradioKit"), "llama-trial", "EmbeddingGemma2CoreAI"],
+            dependencies: [.product(name: "AutoradioKit", package: "AutoradioKit"), "llama-trial", "EmbeddingGemma2CoreAI", "EmbedPass"],
             path: "Sources/embed-trial",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
