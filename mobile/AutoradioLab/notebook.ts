@@ -21,6 +21,10 @@ import { authedJSON, HTTPError, SignedOutError } from './api.ts';
 import { textureSource } from './content.ts';
 import { cut } from './takes.ts';
 
+// Hoisted: a regex literal with a \p{...} class is compiled at each evaluation by Hermes (the device's engine), and these ran once per character;
+// on the simulator that took paperFront 390 ms against a 100 ms turn. Compile once, here.
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+
 // ---------------------------------------------------------------------------------------------------------------- lines
 
 export type Line = { id: string; section: string; text: string; tag: string | null; ref: string | null; heard: number | null; of: number | null };
@@ -30,7 +34,7 @@ export const TITLE = 'My notebook';
 export const ASKED_HEADING = 'What you asked for';
 
 /** Letters and digits only, lower case: "U.S." and "us" are one topic. */
-export const topicKey = (s: string): string => [...s.toLowerCase()].filter((c) => /[\p{L}\p{N}]/u.test(c)).join('');
+export const topicKey = (s: string): string => [...s.toLowerCase()].filter((c) => LETTER_OR_DIGIT.test(c)).join('');
 
 export function sectionKey(heading: string): string {
   const h = heading.toLowerCase();

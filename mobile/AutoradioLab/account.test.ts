@@ -7,7 +7,7 @@
 //  S5 the answer never carries a key.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { accountSignOut, WIPES, wipeAll, WIPED_PATHS } from './account.ts';
+import { accountSignOut, WIPES, wipeAll, wipedPaths } from './account.ts';
 
 type Fs = Record<string, unknown>;
 function memStorage(files: string[]) {
@@ -76,7 +76,7 @@ describe('the wipes', () => {
       for (const m of src.matchAll(/(?:const|let)\s+[A-Z_]+\s*(?::\s*string)?\s*=\s*'(app:\/(?:data|cache)\/[^']*)'/g)) found.add(m[1]);
     }
     expect(found.size).toBeGreaterThan(8);
-    const unknown = [...found].filter((p) => !WIPED_PATHS.some((w) => p === w || p.startsWith(w + '/')));
+    const unknown = [...found].filter((p) => !wipedPaths().some((w) => p === w || p.startsWith(w + '/')));
     expect(unknown).toEqual([]);
   });
   test('S4 the standard wipes remove the files the modules keep (a stub storage sees the rm calls)', async () => {

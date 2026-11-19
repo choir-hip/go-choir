@@ -1,3 +1,8 @@
+
+// Hoisted: a regex literal with a \p{...} class is compiled at each evaluation by Hermes (the device's engine), and these ran once per character;
+// on the simulator that took paperFront 390 ms against a 100 ms turn. Compile once, here.
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+const CONTROL = /\p{Cc}/u;
 // Edition setup: the reader picks the topics of their edition on a screen of chips, or says them. Ported from EditionSetup.swift (the logic;
 // the screen is onboarding's). Pure data: the selection, the topic tree, how a spoken sentence becomes edits, what is said back, and how finishing
 // always ends. Saving is a `Storage`-shaped text file the caller passes; nothing here needs the network (E6).
@@ -42,7 +47,7 @@ export const TREE: { label: string; children: string[] }[] = [
 ];
 
 /** Letters and digits only, lower case: "U.S." and "us" are one topic, "Public  Health" and "public health" too. */
-export const key = (s: string): string => [...s.toLowerCase()].filter((c) => /[\p{L}\p{N}]/u.test(c)).join('');
+export const key = (s: string): string => [...s.toLowerCase()].filter((c) => LETTER_OR_DIGIT.test(c)).join('');
 
 /** The label a house section id carries; an unknown id is made readable ("tech_ai" style ids become words). */
 export function labelForSectionID(id: string): string {
@@ -91,10 +96,10 @@ const trimChars = (s: string): string => { let a = 0, b = s.length; while (a < b
 
 /** Typed or spoken words as one tidy topic, or undefined when there is nothing in them (E3). */
 export function tidy(raw: string): string | undefined {
-  let s = [...raw].filter((c) => !/\p{Cc}/u.test(c) || /\s/.test(c)).join('').split(/\s+/).filter((x) => x !== '').join(' ');
+  let s = [...raw].filter((c) => !CONTROL.test(c) || /\s/.test(c)).join('').split(/\s+/).filter((x) => x !== '').join(' ');
   s = trimChars(s);
   if (!s.endsWith('.') && raw.toLowerCase().includes('u.s.') && s.toLowerCase() === 'u.s') s = 'U.S.';
-  if (![...s].some((c) => /[\p{L}\p{N}]/u.test(c))) return undefined;
+  if (![...s].some((c) => LETTER_OR_DIGIT.test(c))) return undefined;
   const cs = [...s];
   if (cs.length > MAX_TOPIC_LENGTH) {
     const cut = cs.slice(0, MAX_TOPIC_LENGTH).join('');
@@ -184,7 +189,7 @@ const MAX_ITEM_WORDS = 6;
 function norm(s: string): string {
   let t = s.toLowerCase().replace(/’/g, "'");
   t = t.replace(/u\.s\./g, 'us');            // keep "u.s." intact as "us"
-  const kept = [...t].map((c) => (/[\p{L}\p{N}]/u.test(c) || " '?,;&".includes(c) ? c : ' ')).join('');
+  const kept = [...t].map((c) => (LETTER_OR_DIGIT.test(c) || " '?,;&".includes(c) ? c : ' ')).join('');
   return kept.split(' ').filter((x) => x !== '').join(' ');
 }
 const trimSet = (s: string, set: string): string => { let a = 0, b = s.length; while (a < b && set.includes(s[a])) a++; while (b > a && set.includes(s[b - 1])) b--; return s.slice(a, b); };

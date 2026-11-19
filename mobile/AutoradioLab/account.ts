@@ -38,8 +38,9 @@ export const WIPES: Wipe[] = [
   { name: 'content', run: (s) => rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]) },
 ];
 
-/** The paths the wipes above cover (account.test.ts S4 compares them with the constants the modules declare). Mail's `app:/cache` is handled by wipeMail. */
-export const WIPED_PATHS: string[] = [
+/** (A function, not a constant: api.ts imports app.ts, which imports this, so a constant read at load can meet a module not yet initialised.)
+ * The paths the wipes above cover (account.test.ts S4 compares them with the constants the modules declare). Mail's `app:/cache` is handled by wipeMail. */
+export const wipedPaths = (): string[] => [
   podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, VECTORS_DIR, CONTENT_DB,
 ];
 

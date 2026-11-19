@@ -8,6 +8,11 @@ import { cutBytes } from './runsheet-entries.ts';
 import { estimateSeconds } from './runsheet-entries.ts';
 import { Bounds, type Entry, type Forecast, type Op } from './runsheet-model.ts';
 
+// Hoisted: a regex literal with a \p{...} class is compiled at each evaluation by Hermes (the device's engine), and these ran once per character;
+// on the simulator that took paperFront 390 ms against a 100 ms turn. Compile once, here.
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+const CONTROL = /\p{Cc}/u;
+
 // ---- segments ----
 
 export type Cite = { ref: string; role: string; label: string };
@@ -73,7 +78,7 @@ export function oneLine(s: string, maxBytes = MAX_TITLE_BYTES): string {
   let t = '';
   for (const ch of s) {
     const u = ch.codePointAt(0) as number;
-    if (/\p{Cc}/u.test(ch)) t += ' ';
+    if (CONTROL.test(ch)) t += ' ';
     else if (STRIPPED.has(u)) continue;
     else t += ch;
   }

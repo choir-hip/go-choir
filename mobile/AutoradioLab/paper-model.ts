@@ -1,3 +1,9 @@
+
+// Hoisted: a regex literal with a \p{...} class is compiled at each evaluation by Hermes (the device's engine), and these ran once per character;
+// on the simulator that took paperFront 390 ms against a 100 ms turn. Compile once, here.
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+const UPPER = /\p{Lu}/u;
+const MARKS = /\p{M}/gu;
 // The paper's data, with no network and no layout: a story of the front list, the views (Front page, My edition,
 // one per category) and My edition's matching. Ported from the Swift this replaced (Layout/PaperModel.swift,
 // PaperViews.swift, EditionSetup.swift's EditionTopics); the failure list V1 to V10 is in paper.test.ts.
@@ -82,7 +88,7 @@ export function weight(s: Story, now: number): number {
 // ---- text helpers
 
 export function slug(s: string): string {
-  const t = Array.from(s.toLowerCase()).map((c) => (/[\p{L}\p{N}]/u.test(c) ? c : '-')).join('');
+  const t = Array.from(s.toLowerCase()).map((c) => (LETTER_OR_DIGIT.test(c) ? c : '-')).join('');
   return t.split('-').filter((x) => x !== '').join('-');
 }
 
@@ -122,7 +128,17 @@ const ALIASES: Record<string, string> = {
 };
 
 /** Letters and digits only, lower case: "U.S." and "us" are one topic. */
-export function key(s: string): string { return Array.from(s.toLowerCase()).filter((c) => /[\p{L}\p{N}]/u.test(c)).join(''); }
+const NOT_LETTER_OR_DIGIT = /[^\p{L}\p{N}]/gu;
+const KEYS = new Map<string, string>();
+/** Letters and digits of a name, lower case (a pure function asked again and again by sections and belongs: remembered, bounded). */
+export function key(s: string): string {
+  const hit = KEYS.get(s);
+  if (hit !== undefined) return hit;
+  const out = s.toLowerCase().replace(NOT_LETTER_OR_DIGIT, '');
+  if (KEYS.size > 4000) KEYS.clear();
+  KEYS.set(s, out);
+  return out;
+}
 
 const MAX_TOPIC = 60;
 const TRIM = ' .,;:!?"\'()-';
@@ -138,7 +154,7 @@ export function topicTidy(raw: string): string | null {
   let s = raw.replace(/[\u0000-\u001f\u007f]/g, '').split(/\s+/).filter((x) => x !== '').join(' ');
   s = trimSet(s);
   if (!s.endsWith('.') && raw.toLowerCase().includes('u.s.') && s.toLowerCase() === 'u.s') s = 'U.S.';
-  if (!/[\p{L}\p{N}]/u.test(s)) return null;
+  if (!LETTER_OR_DIGIT.test(s)) return null;
   const chars = Array.from(s);
   if (chars.length > MAX_TOPIC) {
     const cut = chars.slice(0, MAX_TOPIC).join('');
@@ -178,7 +194,7 @@ export function display(raw: string): string {
   if (t === '') return '';
   const h = HOUSE.find((x) => x.id === t);
   if (h) return h.label;
-  if (t.includes(' ') || /\p{Lu}/u.test(t)) return t;
+  if (t.includes(' ') || UPPER.test(t)) return t;
   return labelForSectionId(t);
 }
 
@@ -260,12 +276,19 @@ const TERMS: Record<string, string[]> = {
 const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'about', 'into', 'over', 'news', 'new']);
 
 function fold(s: string): string {
-  try { return s.normalize('NFD').replace(/\p{M}/gu, ''); } catch { return s; }
+  try { return s.normalize('NFD').replace(MARKS, ''); } catch { return s; }
 }
 /** Lower case, accents folded, letters and digits only, single spaces, a space at both ends so " word " finds a whole word. */
+const PADDED = new Map<string, string>();
 export function padded(s: string): string {
-  const mapped = Array.from(fold(s).toLowerCase()).map((c) => (/[\p{L}\p{N}]/u.test(c) ? c : ' ')).join('');
-  return ' ' + mapped.split(' ').filter((x) => x !== '').join(' ') + ' ';
+  const hit = PADDED.get(s);
+  if (hit !== undefined) return hit;
+  const mapped = Array.from(fold(s).toLowerCase()).map((c) => (LETTER_OR_DIGIT.test(c) ? c : ' ')).join('');
+  const out = ' ' + mapped.split(' ').filter((x) => x !== '').join(' ') + ' ';
+  // Pure, and the keyword lists are asked again for every story and every section: remember the answers (bounded).
+  if (PADDED.size > 4000) PADDED.clear();
+  PADDED.set(s, out);
+  return out;
 }
 
 function has(hay: string, phrase: string): boolean {
