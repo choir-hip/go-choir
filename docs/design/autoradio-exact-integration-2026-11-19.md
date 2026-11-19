@@ -319,3 +319,12 @@ Left from step 3 (small regressions): the one-time import of the old Swift podca
 needed), plain http feeds (the grant is `net.fetch https:` and a test pins it), file names and podcasts in local search (`fileNameDocs`, `podcastDocuments`; mail stays out), mail cards' page text,
 mail catch-up beyond 25 bodies. Done: the paper page passes the story title with the route.
 Steps 5 and 6 (the deck bridge, the run sheet through the deck) are not started.
+
+### Named residuals of the account reconcile (auth rounds 4 and 5, fail-closed, no exposure)
+
+- `account-change`'s stamp write (`stamp2`) records B's key even if a third key landed between the first key read and the end of the wipe; the next launch then wipes for C. Fails closed.
+- A synchronous throw from the native `later` inside `nativeOf` rejects `reconcile` before any shared wipe. The current bridge does not throw synchronously; if it ever does, the
+  launch's first answer fails and the next launch retries.
+- A late native answer on the launch paths only finishes bookkeeping bound to its own sign-out (the marker's token and the stamp are captured when the finish starts); if both
+  changed in between, it does nothing and the next launch's reconcile decides.
+- The wipe marker now holds a per-sign-out token (a UUID), not "1"; an older marker of "1" is still a marker.

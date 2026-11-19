@@ -104,8 +104,10 @@ function sawTime(headerMs: number | null): void {
 
 const enc = new TextEncoder(), dec = new TextDecoder();
 
+let libGen = 0;       // the seam's account generation the library in memory was loaded under: its file writes refuse after a sign-out began (writeCurrent)
 async function loadLibrary(storage: Storage | undefined): Promise<Library> {
   if (lib) return lib;
+  const g = accountGeneration();
   let l = emptyLibrary();
   if (storage) {
     try {
@@ -117,14 +119,14 @@ async function loadLibrary(storage: Storage | undefined): Promise<Library> {
       }
     } catch { /* missing or damaged: an empty library */ }
   }
-  lib = l;
+  lib = l; libGen = g;
   for (const s of l.subscriptions) known.set(feedKey(s.show.feedURL), s.show);
   return l;
 }
 
 async function saveLibrary(storage: Storage | undefined): Promise<void> {
   if (!storage || !lib) return;
-  try { await storage.fs.atomicWriteFile(LIBRARY_FILE, enc.encode(JSON.stringify(lib))); } catch { /* a full disk loses only the copy */ }
+  await writeCurrent(libGen, storage, LIBRARY_FILE, enc.encode(JSON.stringify(lib)));      // a full disk loses only the copy; a sign-out in flight writes nothing, and a file that lands after it is removed
 }
 
 /** FNV-1a over the bytes, twice with different seeds: a file name, not a secret. */

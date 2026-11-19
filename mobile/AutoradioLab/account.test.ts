@@ -309,6 +309,27 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
     expect(dataLeft(m).length).toBe(SEED.length);                                          // it survives the late answer
     expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));   // and the bookkeeping is finished
   });
+  test('round 5: the launch finish\'s late answer belongs to ITS sign-out: a later sign-out\'s marker and stamp are not cleared by it', async () => {
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    W = newWorld('absent'); const m = memFs(SEED);
+    m.files.set(PENDING_FILE, new TextEncoder().encode('token-1')); m.files.set(STAMP_FILE, new TextEncoder().encode('stamp-1'));
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    const r = await settleAccount(m.storage, undefined, nativeOf(async (q) => (q.op === 'signOut' ? (await gate, { done: true }) : phone().later(q)), 20));
+    expect(r.failed).toContain('native');
+    // the user signed in and signed out again: a NEW sign-out's marker and stamp exist, its wipes have not run
+    m.files.set(PENDING_FILE, new TextEncoder().encode('token-2')); m.files.set(STAMP_FILE, new TextEncoder().encode('stamp-2'));
+    release(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
+    expect(new TextDecoder().decode(m.files.get(PENDING_FILE))).toBe('token-2'); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe('stamp-2');
+  });
+  test('round 5: and when nothing changed in between, the late answer does clear its own marker and stamp', async () => {
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    W = newWorld('absent'); const m = memFs(SEED);
+    m.files.set(PENDING_FILE, new TextEncoder().encode('token-1')); m.files.set(STAMP_FILE, new TextEncoder().encode('stamp-1'));
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    await settleAccount(m.storage, undefined, nativeOf(async (q) => (q.op === 'signOut' ? (await gate, { done: true }) : phone().later(q)), 20));
+    release(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
+    expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(false);
+  });
   test('a native sign-out that outlives its deadline keeps its continuation and the marker (finding 4)', async () => {
     W = newWorld('present'); W.hang = true; const m = memFs(SEED);
     await launch(m); resetSettled();

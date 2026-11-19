@@ -3,7 +3,7 @@
 //  W1 the helper itself: before, after.   W2 paper (front list cache).   W3 notebook (text cache).   W4 files (recent list, memory and file).   W5 files (cache download).
 //  Why the others cannot write after the wipe (no test possible or needed):
 //   takes: `saveKept` has no caller in the app (takes.ts:213, grep: only takes.test.ts), so no source writes it.   podcasts: the feed file goes through `writeCurrent` (W6); `saveLibrary` writes
-//   `lib`, which `forget()` sets to null (podcast.ts:76, :125), so a library write after the wipe has nothing to write (the generation check before `loadLibrary` plus that null).
+//   `lib`, which `forget()` sets to null (podcast.ts:76) AND goes through `writeCurrent` too (W7), so a write already inside the atomic write when the wipe's rm runs is removed again.
 //   content: every put goes through `put()` in syncAll, which checks `c.live()` (the store's generation, bumped by `wipe`) immediately before the write (content.ts `const put`).
 //   mail: mail-store.ts `write` (tests R3 and R9 in mail.test.ts).   vectors: search.ts persist runs from the live store that sign-out empties first (account.ts wipes `vectors`).
 import { beforeEach, describe, expect, test } from 'bun:test';
@@ -51,6 +51,18 @@ describe('W6 podcasts', () => {
     const p = P.podcastShow({ address: PM.showAddress('https://feeds.example.com/s.xml'), tick: 0, nowId: '', rev: 0 }, storage);
     await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await p; await new Promise((r) => setTimeout(r, 30));
     expect([...written.keys()].filter((k) => k.startsWith('app:/data/podcast-feeds') || k.includes('feed'))).toEqual([]);
+  });
+});
+
+describe('W7 podcasts: the library file', () => {
+  test('a library write in flight when the sign-out begins is removed again', async () => {
+    P.forget(); written.clear();
+    let release: () => void = () => undefined; const g = new Promise<void>((r) => { release = r; });
+    const slow = { fs: { atomicWriteFile: async (p: string, d: Uint8Array) => { await g; written.set(p, d); }, readFile: async () => { throw new Error('ENOENT'); }, rm: async (p: string) => { written.delete(p); }, mkdir: async () => undefined } } as never;
+    globalThis.fetch = (async () => new Response('{}', { status: 404 })) as never;
+    const p = P.podcastSubscribe('https://feeds.example.com/s.xml', slow);
+    await new Promise((r) => setTimeout(r, 15)); nextGeneration(); release(); await p; await new Promise((r) => setTimeout(r, 30));
+    expect(written.has(P.LIBRARY_FILE)).toBe(false);
   });
 });
 

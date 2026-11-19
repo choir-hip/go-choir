@@ -82,11 +82,14 @@ export type SignOutResult = { done: boolean; failed: string; message: string };
 export const NATIVE_DEADLINE_MS = 30000;
 
 const timeout = (ms: number): Promise<'timeout'> => new Promise((r) => setTimeout(() => r('timeout'), ms));
+/** A token for one sign-out, written into its marker: a late answer from another sign-out is told apart by it. */
+const signoutToken = (): string => crypto.randomUUID();
 /** Fails closed: no storage, or a write that fails, is not a marker. */
 const mark = async (storage: Storage | undefined, path: string, text: string): Promise<boolean> => {
   if (!storage) return false;
   try { await storage.fs.atomicWriteFile(path, new TextEncoder().encode(text)); return true; } catch { return false; }
 };
+const readText = async (storage: Storage, path: string): Promise<string | null> => { try { return new TextDecoder().decode(await storage.fs.readFile(path)); } catch { return null; } };
 const exists = async (storage: Storage, path: string): Promise<boolean> => { try { await storage.fs.stat(path); return true; } catch { return false; } };
 const removeFile = async (storage: Storage | undefined, path: string): Promise<boolean> => {
   if (!storage) return true;
@@ -162,7 +165,13 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
     if (action === 'clear-marker') { await removeFile(storage, PENDING_FILE); continue; }     // then the stamp rules apply to the same key
     if (action === 'adopt') { await mark(storage, STAMP_FILE, k.digest); return { action, failed: [] }; }
     if (action === 'finish') {
-      const done = async (): Promise<void> => { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); };
+      // BOUND to this sign-out: its marker's content (a token written by accountSignOut) and its stamp are captured now; the bookkeeping clears them only if they are still those.
+      // A later sign-out (sign in, sign out again) writes its own marker and stamp, and a stale answer must not delete them.
+      const was = { marker: await readText(storage, PENDING_FILE), stamp: await readText(storage, STAMP_FILE) };
+      const done = async (): Promise<void> => {
+        if ((await readText(storage, PENDING_FILE)) !== was.marker || (await readText(storage, STAMP_FILE)) !== was.stamp) return;
+        await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE);
+      };
       // A late native answer never wipes the shared stores again (they are wiped below, once): it only finishes the bookkeeping that waited on it, and only if the key is still absent.
       let shared: Promise<string[]> | null = null;
       const nativeOk = await native.signOut(() => { void (async () => { if ((await keyState()).state === 'absent' && shared && (await shared).length === 0) await done(); })(); });
@@ -201,7 +210,8 @@ export async function accountSignOut(
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };
   const step = opts.crash ?? ((): void => undefined);
   // The marker first: if the app dies after the key is gone and before the wipes are finished, the next launch finishes them (and if the key is still there, it clears it).
-  if (!(await mark(storage, PENDING_FILE, '1'))) return { done: false, failed: '', message: 'Sign-out did not start. Try again.' };
+  const token = signoutToken();
+  if (!(await mark(storage, PENDING_FILE, token))) return { done: false, failed: '', message: 'Sign-out did not start. Try again.' };
   step('marker');
   // The generation moves and sealing stops BEFORE the native call: a write in flight that would land after the key is gone refuses itself.
   await beginSignOut();
@@ -214,7 +224,7 @@ export async function accountSignOut(
   nativeDone.then(async (r) => {
     if (!late || !r || (r as { done?: unknown }).done !== true) return;
     if ((await keyState()).state === 'present') return;                          // a sign-in finished inside the window: its stores are its own
-    await sharedWipeThen(storage, store, async () => { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); });
+    await sharedWipeThen(storage, store, async () => { if (storage && (await readText(storage, PENDING_FILE)) !== token) return; await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); });
   }, () => undefined);
   const r = await Promise.race([nativeDone.then((x) => x, () => ({ done: false, threw: true })), timeout(opts.deadlineMs ?? NATIVE_DEADLINE_MS)]);
   if (r === 'timeout') { late = true; return { done: false, failed: '', message: 'Sign-out is taking long. It will finish by itself; nothing more to do.' }; }   // the marker stays; sealing stays off
