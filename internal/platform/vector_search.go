@@ -109,6 +109,9 @@ type VectorSearchResult struct {
 	Partial string `json:"partial,omitempty"`
 }
 
+// errVectorsUnsupported is a pgvector without iterative scans (below 0.8.0).
+var errVectorsUnsupported = errors.New("the installed pgvector has no iterative index scans (needs 0.8.0 or later)")
+
 // ErrVectorsUnavailable says the vector tables do not exist yet.
 var ErrVectorsUnavailable = errors.New("vector index is not ready")
 
@@ -125,6 +128,10 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 	}
 	if req.Vector != nil && len(req.Vector) != embedder.Dim {
 		return res, fmt.Errorf("vector search: vector of %d values, want %d", len(req.Vector), embedder.Dim)
+	}
+	if why := s.vec.unsupportedReason(); why != "" {
+		res.Unavailable = why
+		return res, nil
 	}
 	// A search never runs DDL: the worker makes the tables and indexes.
 	if !s.VectorsReady() {
@@ -184,6 +191,10 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 		return h, err
 	})
 	doneStories("vector_stories", len(stories), err)
+	if errors.Is(err, errVectorsUnsupported) {
+		res.Unavailable = err.Error()
+		return res, nil
+	}
 	if err != nil {
 		return res, err
 	}
@@ -203,6 +214,10 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 			return h, err
 		})
 		doneCaptures("vector_captures", len(caps), err)
+		if errors.Is(err, errVectorsUnsupported) {
+			res.Unavailable = err.Error()
+			return res, nil
+		}
 		if err != nil {
 			return res, err
 		}
@@ -293,6 +308,9 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 		fmt.Sprintf(`SET LOCAL hnsw.max_scan_tuples = %d`, vectorMaxScanTuples),
 	} {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			if strings.Contains(err.Error(), "unrecognized configuration parameter") {
+				return nil, "", "", errVectorsUnsupported
+			}
 			return nil, "", "", err
 		}
 	}

@@ -16,12 +16,19 @@ What it reads (internal/platform/vector_worker.go, vector_search.go):
               have= want= remaining= model= refused=`, written at the start of a pass and
               at each batch boundary (refused= counts passages and leads the
               embedder refused: recorded, not retried until the model changes);
-              the newest line of each shape in the last
-              3 days gives have, want and remaining. Stories count versions (a
-              version is written whole); captures count captures. Until a pass
-              has passed over them, want includes captures that turn out to be
-              owner-private or empty and versions that are not public, so
-              remaining is an upper bound until the pass's last line.
+              the newest line of each shape in the last 3 days gives have, want,
+              remaining and refused. Stories count versions (a version is
+              written whole); captures count captures. have, want and remaining
+              are exact: want counts only what satisfies the one SQL predicate
+              (a capture that can never be eligible is in neither), and a
+              passage or lead the embedder refused is held, not remaining. The
+              one inexactness is a capture whose text blob cannot be read right
+              now (skipped, tried again each pass); a version no longer public
+              leaves want when the pass reaches it.
+  extension   the newest of an embed_gap line (the extension works) and the
+              worker's error `the pgvector extension is not installed` or
+              `pgvector X is older than ...`; the first line of the output says
+              "pgvector MISSING or too old" when the error is the newest.
   searches    `op=vector_search shape=vector_stories|vector_captures ms= rows=`
               in the last hour: a count and the mean ms of each shape.
 The journal carries ids and counts only; no text is printed.
@@ -35,7 +42,7 @@ NODE = "node-b"
 
 REMOTE = r"""
 echo "##GAP"
-journalctl -u go-choir-corpusd --since '-3 days' --no-pager -o cat --utc 2>/dev/null | grep -a 'op=embed_gap' | tail -n 200
+journalctl -u go-choir-corpusd --since '-3 days' --no-pager -o cat --utc 2>/dev/null | grep -aE 'op=embed_gap|pgvector extension is not installed|pgvector [0-9.]+ is older' | tail -n 200
 echo "##SEARCH"
 journalctl -u go-choir-corpusd --since '-1 hour' --no-pager -o cat --utc 2>/dev/null | grep -a 'op=vector_search' | tail -n 20000
 echo "##END"
@@ -45,13 +52,22 @@ GAP_RE = re.compile(r"op=embed_gap shape=(stories|captures) ms=([0-9.]+) rows=(\
 SEARCH_RE = re.compile(r"op=vector_search shape=(vector_stories|vector_captures) ms=([0-9.]+) rows=(\d+)")
 
 
+EXT_RE = re.compile(r"(pgvector extension is not installed[^\n]*|pgvector [0-9.]+ is older[^\n]*)")
+
+
 def compute(text):
     """text is journal lines of both kinds, in order."""
     gap = {}
+    extension = None  # the newest of: an embed_gap line (ok) or an extension error (missing)
     search = {"vector_stories": [], "vector_captures": []}
     for ln in text.splitlines():
+        e = EXT_RE.search(ln)
+        if e:
+            extension = "MISSING or too old: " + e.group(1)[:160]
+            continue
         m = GAP_RE.search(ln)
         if m:
+            extension = "ok"
             gap[m.group(1)] = {"have": int(m.group(4)), "want": int(m.group(5)),
                                "remaining": int(m.group(6)), "model": m.group(7),
                                "refused": int(m.group(8) or 0)}
@@ -59,10 +75,10 @@ def compute(text):
         m = SEARCH_RE.search(ln)
         if m:
             search[m.group(1)].append(float(m.group(2)))
-    rep = {"gap": gap, "searches": {}}
+    rep = {"gap": gap, "searches": {}, "extension": extension or "unknown (no worker line in the last 3 days)"}
     for shape, ms in search.items():
         rep["searches"][shape] = {"count": len(ms), "mean_ms": round(sum(ms) / len(ms), 2) if ms else None}
-    lines = []
+    lines = ["pgvector  %s" % rep["extension"]]
     for kind in ("stories", "captures"):
         g = gap.get(kind)
         if g is None:

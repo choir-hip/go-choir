@@ -1629,9 +1629,139 @@ func TestVectorImportAppliesTheWorkersEmptyTitleRule(t *testing.T) {
 		t.Fatalf("%+v captures %d", res, f.count(t, "vec_captures"))
 	}
 	f.pass(t)
-	var n int
-	_ = f.store.corpus().QueryRow(`SELECT COUNT(*) FROM vec_captures WHERE capture_id = ?`, empty).Scan(&n)
-	if n != 0 {
-		t.Fatal("the worker embedded what the import refused")
+	var vec, refused int
+	_ = f.store.corpus().QueryRow(`SELECT COUNT(*) FILTER (WHERE embedding IS NOT NULL), COUNT(*) FILTER (WHERE refused <> '') FROM vec_captures WHERE capture_id = ?`, empty).Scan(&vec, &refused)
+	if vec != 0 || refused != 1 {
+		t.Fatalf("the worker embedded what the import refused (vectors %d, refused rows %d)", vec, refused)
+	}
+}
+
+// ---- round 3: an exact gap, one edge query, the pgvector minimum ----
+
+func TestVectorCaptureGapAndWantAreExactAndNeverReReadWhatCannotBeEligible(t *testing.T) {
+	f := newVecFixture(t)
+	now := time.Now().UTC().Add(-time.Hour)
+	for i := 0; i < 5; i++ {
+		f.capture(t, "o1", "c1", fmt.Sprintf("ok%d", i), "Fine", fmt.Sprintf("fine text %d", i), now, false)
+	}
+	f.capture(t, "o1", "c1", "priv", "Private", "secret", now, true)
+	f.capture(t, "o1", "c1", "tomb", "Tomb", "tomb text", now, false)
+	f.capture(t, "o1", "c1", "super", "Super", "super text", now, false)
+	f.capture(t, "o1", "c1", "empty", "", "", now, false)
+	for _, q := range []string{
+		`UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = '` + mustCaptureID(t, "o1", "tomb") + `'`,
+		`UPDATE og_objects SET superseded_by = 'obj:x' WHERE canonical_id = '` + mustCaptureID(t, "o1", "super") + `'`,
+	} {
+		if _, err := f.store.corpus().Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	logs := fullTextLog(t)
+	res := f.pass(t)
+	if res.CaptureGap != 6 || res.Captures != 5 || res.Refused != 1 {
+		t.Fatalf("first pass %+v: the gap is the 5 fine captures and the empty one", res)
+	}
+	re := regexp.MustCompile(`op=embed_gap shape=captures ms=[0-9.]+ rows=\d+ have=(\d+) want=(\d+) remaining=(\d+) model=\w+ refused=(\d+)`)
+	var last []string
+	for _, ln := range strings.Split(logs.String(), "\n") {
+		if m := re.FindStringSubmatch(ln); m != nil {
+			last = m
+		}
+	}
+	if last == nil || last[1] != "6" || last[2] != "6" || last[3] != "0" || last[4] != "1" {
+		t.Fatalf("last captures line %v: want have=6 want=6 remaining=0 refused=1 (exact, not an upper bound)", last)
+	}
+	// Nothing that can never be eligible is a candidate again.
+	n, err := f.store.captureGapCount(context.Background(), embedder.ModelHash)
+	rows, err2 := f.store.captureGapBatch(context.Background(), embedder.ModelHash, nil, "", 50)
+	if err != nil || err2 != nil || n != 0 || len(rows) != 0 {
+		t.Fatalf("gap after the pass: count %d, rows %d (%v %v)", n, len(rows), err, err2)
+	}
+	before := f.emb.Inputs.Load()
+	if res := f.pass(t); res.Worked() || res.CaptureGap != 0 || f.emb.Inputs.Load() != before {
+		t.Fatalf("second pass %+v", res)
+	}
+}
+
+func TestVectorStoryWalkReadsEdgesInChunksAndAgreesWithPublishedVersions(t *testing.T) {
+	f := newFrontFixture(t)
+	svc := f.svc
+	ctx := context.Background()
+	calls := func() int64 { return svc.store.RetrievalSnapshot().Ops["list_edges_by_kind"].Calls }
+	before := calls()
+	refs, err := svc.eligibleStoryVersions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls() != before {
+		t.Fatalf("the walk made %d per-publication edge reads", calls()-before)
+	}
+	var want []string
+	var after *frontCursor
+	og := svc.ogStore()
+	for {
+		rows, err := svc.frontPublicationBatch(ctx, after, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			if !svc.looksSearchable(row) {
+				continue
+			}
+			vs, err := publishedVersions(ctx, og, row.CanonicalID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := len(vs) - 1; i >= 0; i-- {
+				want = append(want, vs[i].CanonicalID)
+			}
+		}
+		if len(rows) < 200 {
+			break
+		}
+		after = frontCursorAt(rows[len(rows)-1])
+	}
+	var got []string
+	for _, r := range refs {
+		got = append(got, r.VersionID)
+	}
+	if len(got) < 5 || strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("one-statement walk %v, publishedVersions walk %v", got, want)
+	}
+}
+
+func TestVectorRefusesAPgvectorBelowTheMinimumAndTheSearchSaysUnavailable(t *testing.T) {
+	f := newVecFixture(t)
+	f.story(t, "doc-a", 1, "Harbor reopens", storyText("harbor"), time.Time{})
+	f.pass(t)
+	logs := fullTextLog(t)
+	if _, err := f.store.corpus().Exec(`UPDATE pg_extension SET extversion = '0.7.4' WHERE extname = 'vector'`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = f.store.corpus().Exec(`UPDATE pg_extension SET extversion = '0.8.7' WHERE extname = 'vector'`)
+	})
+	err := f.store.ensureVectorTables(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "older than the 0.8.0") || !strings.Contains(logs.String(), "corpusd vectors disabled: pgvector 0.7.4") {
+		t.Fatalf("ensure on 0.7.4: %v\n%s", err, logs.String())
+	}
+	if _, perr := f.svc.RunVectorPass(context.Background()); perr == nil || !strings.Contains(perr.Error(), "older than") {
+		t.Fatalf("pass on 0.7.4: %v", perr)
+	}
+	res, serr := f.store.SearchVectors(context.Background(), VectorSearchRequest{Vector: embedder.FakeVector("harbor")})
+	if serr != nil || !strings.Contains(res.Unavailable, "0.7.4") {
+		t.Fatalf("search on 0.7.4: %+v %v", res, serr)
+	}
+	if !versionLess("0.7.4", "0.8.0") || versionLess("0.10.1", "0.8.0") || versionLess("0.8.0", "0.8.0") || !versionLess("0.8", "0.8.1") {
+		t.Fatal("versionLess")
+	}
+	if _, err := f.store.corpus().Exec(`UPDATE pg_extension SET extversion = '0.8.7' WHERE extname = 'vector'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.ensureVectorTables(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if res, serr = f.store.SearchVectors(context.Background(), VectorSearchRequest{Vector: embedder.FakeVector("harbor")}); serr != nil || res.Unavailable != "" {
+		t.Fatalf("search after restore: %+v %v", res, serr)
 	}
 }
