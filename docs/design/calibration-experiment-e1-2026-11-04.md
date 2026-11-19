@@ -893,7 +893,65 @@ the test computers (documents, runs, captures, key and credential files,
 bundles). It deletes no computer.
 
 ### 14.6 What `setup` and `smoke` showed on 2026-11-19
-SMOKEPLACEHOLDER
+Run on the lead's Mac against `https://choir.news`, three smoke runs (the
+limit set for the builder), the third at 07:21Z. The four computers (ids; no key
+is in the repo or the output):
+
+| Arm | Computer id |
+|---|---|
+| S-a `e1-sa` | `computer-e4e37fe18240fbd17853e3538973f5a9` |
+| S-b `e1-sb` | `computer-745b8716c3f3d7332568fec3b128d65c` |
+| L `e1-l` | `computer-1b48a948cbfd539ba5b3f067983bd236` |
+| I `e1-i` | `computer-bbb984346f27ff99ca3f72c831925374` |
+
+All four ran build `a0e852f56e292a81826a4934a3b6fc9c71bb079c` before and after.
+
+**What worked (seen):** setup (minting, key derivation, overlay `mkdir` of
+`System` then the overlay directory, `put`, `get`); the 400 for an unknown overlay
+with no run started; the 202 with the overlay id; the trajectory id in the
+submission status; `GET /api/runs?trajectory_id`; every trajectory ending
+inside 30 minutes; `choir trace export` with `runs` and `run_events` served;
+the publication read answering 404 for every document of every arm (nothing
+published); the roles seen in every trajectory (`conductor`, `texture`,
+`research`); the overlay inherited by research runs (research runs carry the
+arm's `llm_policy_overlay_id` and `llm_provider`/`llm_model`, Texture's run the
+default `devin/swe-2-flash`).
+
+**Run 3, per arm:**
+
+| Arm | Research runs | Started searches | Provider calls | Served model | Switches | Unit |
+|---|---|---|---|---|---|---|
+| S-a | 1 | 2 | 2 | `devin/swe-2-flash` | 0 | valid |
+| S-b | 1 | 3 | 3 | `devin/swe-2-flash` | 0 | valid |
+| L | 5 | 0 | 0 | none | 0 | **not valid**: `no_model_served_record` |
+| I | 1 | 7 | 7 | `opencode-go/iceman-contributor-free` | 0 | valid |
+
+**What failed: arm L.** Every research run of L failed in about 45 seconds with
+`tool loop iteration 3: gateway call failed: gateway client: provider chatgpt
+model gpt-6-luna: circuit open (model unhealthy)` (in all three runs). The
+gateway's breaker for `chatgpt/gpt-6-luna` was open on 2026-11-19 from 06:51Z to
+07:21Z, so no research call was served and the arm has no model record, no
+search. The smoke fails at step 9 for L. This is a finding about the L route, not
+about the driver: **L cannot run until that breaker is closed** (the breaker
+routes are operator-only; the driver does not read or reset them). The pilot
+refuses while the stamp says the smoke failed; so does the plan: with L out, the
+experiment is three arms (D-E2), which needs an edit to the driver's `ARMS`
+table and a new smoke, or L is waited on.
+
+**What the first two runs showed, fixed in the driver:** run 1 read run ids from
+`run_id` where the bundle's run records say `loop_id` (every research run was
+invisible); `System` had to be made before its overlay directory. Run 2's step 10
+failed on all four arms because the research runs that night searched the corpus
+and not the web (started 0): the smoke objective was changed to ask for
+web reporting, and run 3 shows 2, 3 and 7 started searches. A model that
+chooses not to search leaves a unit valid with started 0; the pilot's
+objectives are real stories, and `no_research` and started 0 are reported.
+
+**Not exercised:** a cache-answered search (the invented bundle only); the
+`reported_model` field (empty on all three arms: no provider reported a
+different id); a timed-out run's cancel and re-export; `pilot`, `read` and
+`end` against the real routes (they ran against the stub only).
+
 
 ### 14.7 After the pilot
 
