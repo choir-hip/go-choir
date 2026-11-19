@@ -12,7 +12,9 @@ package platform
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -171,11 +173,8 @@ func TestVectorHalfNoteSaysWhyItEnded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, why := f.store.searchVectorsBounded(ctx, VectorSearchRequest{Query: "zorblax", Owner: f.owner, Computer: f.computer})
-	if why == "" || strings.Contains(why, "within") {
+	if why != "the caller cancelled before the vector half answered" {
 		t.Fatalf("a cancelled caller was told %q", why)
-	}
-	if !strings.Contains(why, "cancel") {
-		t.Fatalf("the reason %q does not say the caller cancelled", why)
 	}
 	parent, stop := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer stop()
@@ -188,5 +187,102 @@ func TestVectorHalfNoteSaysWhyItEnded(t *testing.T) {
 	_, why = f.store.searchVectorsBounded(parent, VectorSearchRequest{Query: "zorblax", Owner: f.owner, Computer: f.computer})
 	if strings.Contains(why, "within 4s") {
 		t.Fatalf("the caller's own deadline was reported as the vector half's 4 s: %q", why)
+	}
+}
+
+// Delta-review items, as tests first.
+
+// 1. A page two stories cite stands where the story that keeps it put it, not
+// where a story that capped it out stood.
+func TestRankedPageStandsAtTheStoryThatKeepsIt(t *testing.T) {
+	f := newRankFixture(t)
+	now := time.Now().UTC().Add(-time.Hour)
+	var order []string
+	for i := 0; i < 9; i++ {
+		f.page(t, fmt.Sprintf("a%d", i), "cited by A", 99, now)
+		order = append(order, f.id(t, fmt.Sprintf("a%d", i)))
+	}
+	sort.Strings(order)
+	x := order[8] // A's ninth citation in id order: capped out of A (cap 8)
+	f.page(t, "d", "plain", 4, now)
+	f.story(t, "doc-a", 1, "Story A", "Story A vec02 is told here.", time.Time{})
+	f.story(t, "doc-b", 1, "Story B", "Story B vec06 is told here.", time.Time{})
+	f.pass(t)
+	_, va := f.versionOf(t, "Story A", 1)
+	_, vb := f.versionOf(t, "Story B", 1)
+	f.cite(t, va, order...)
+	f.cite(t, vb, x)
+	resp := f.rank(t, "story", func(r *CaptureSearchRequest) { r.Size = 25 })
+	got := entryIDs(resp)
+	pos := func(id string) int {
+		for i, g := range got {
+			if g == id {
+				return i
+			}
+		}
+		return -1
+	}
+	if pos(x) < 0 || pos(f.id(t, "d")) < 0 {
+		t.Fatalf("answer %v lacks X or D", f.keys(t, got, "d"))
+	}
+	if pos(x) < pos(f.id(t, "d")) {
+		t.Fatalf("X (kept by story B, slot 2) stands above D (slot 1) at position %d: it took story A's rank", pos(x))
+	}
+}
+
+// 3. Both lists failing (count and index) is the vector half unavailable; an
+// empty list read exactly is an answer.
+func TestRankedAnswerIsBM25WhenEveryVectorListFailsAndAnswersWhenAnExactListIsEmpty(t *testing.T) {
+	f := newRankFixture(t)
+	f.disagree(t)
+	want := hitIDs2(f.rank(t, "zorblax"))
+	old := vectorSearchStageHook
+	t.Cleanup(func() { vectorSearchStageHook = old })
+	vectorExactOld := vectorExactMaxRows
+	t.Cleanup(func() { vectorExactMaxRows = vectorExactOld })
+	// count and the index read fail (the exact read is not reached after a failed count).
+	vectorSearchStageHook = func(_ context.Context, _ *sql.Tx, stage string) error {
+		if stage == "count" || stage == "index" {
+			return errors.New("stage failed for the test")
+		}
+		return nil
+	}
+	resp := f.rank(t, "zorblax")
+	r := resp.Ranked
+	if r.VectorAnswered || r.VectorUnavailable == "" || strings.Join(entryIDs(resp), ",") != strings.Join(want, ",") {
+		t.Fatalf("ranking %+v; want BM25's %v and unavailable", r, want)
+	}
+	var line string
+	for _, l := range f.journal() {
+		if strings.Contains(l, "shape=ranked") {
+			line = l
+		}
+	}
+	if !strings.Contains(line, " vector=unavailable vector_state=unavailable ") {
+		t.Fatalf("journal %q", line)
+	}
+	// A failed count with the exact read completing leaves a complete, empty list:
+	// it is an answer with 0 rows, not unavailable. (Count failing sets partial; the
+	// exact read still runs only when the count passes, so make the window empty.)
+	vectorSearchStageHook = nil
+	resp = f.rank(t, "zorblax", func(r *CaptureSearchRequest) {
+		r.Since = time.Now().UTC().Add(-48 * time.Hour).Format(time.RFC3339)
+		r.Until = time.Now().UTC().Add(-47 * time.Hour).Format(time.RFC3339)
+	})
+	if r := resp.Ranked; !r.VectorAnswered || r.VectorRows != 0 || r.VectorState != "exact" {
+		t.Fatalf("an empty exact list: %+v", r)
+	}
+}
+
+// 4. The exact window check judges by published/fetched time only, never the
+// object's update time (captureDay's fallback).
+func TestCaptureInWindowNeverFallsBackToTheUpdateTime(t *testing.T) {
+	noTimes := objectgraph.Object{ObjectKind: objectgraph.WebCaptureObjectKind, Metadata: json.RawMessage(`{"schema_version":"x"}`), UpdatedAt: time.Now().UTC()}
+	since, until := time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(time.Hour)
+	if captureInWindow(noTimes, since, until) {
+		t.Fatal("a capture with no readable time was kept in a window by its update time")
+	}
+	if !captureInWindow(noTimes, time.Time{}, time.Time{}) {
+		t.Fatal("no window must keep every capture")
 	}
 }
