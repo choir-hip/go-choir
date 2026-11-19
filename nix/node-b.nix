@@ -1754,15 +1754,6 @@ in
         "VM_SNAPSHOT_TYPE=diff"
         "VM_SNAPSHOT_DIFF_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
-        # store.event_table, the host half (F-c deploy 2,
-        # docs/archive/design/choir-event-table-f-c-2026-10-22.md 4.2): a named
-        # computer's guest writer may stamp its telemetry for choir_events;
-        # the owner's setting store.event_table must also be on. OFF while
-        # empty. ComputerIDs only (no class:test, no "*"): once a computer
-        # stamps, deploy 1 is its rollback floor. A computer reads the grant
-        # at its next cold boot. Rollback: the owner's setting off (live),
-        # then empty this list and deploy.
-        "CHOIR_EVENT_TABLE_COMPUTERS="
         # capsule package mirrors (station FP10,
         # docs/definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md):
         # point the named computers' L2 capsules at go-choir-pkgmirror for
