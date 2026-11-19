@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -875,8 +876,11 @@ const captureTermsCoverLockKey = 7330212470803
 // primary key, slower, until the index is valid: a planner never uses an
 // invalid index. It waits for transactions older than the build to end, so a
 // stuck long transaction delays it but blocks nothing. A failed or cancelled
-// build leaves an invalid index; the next call (the retry loop of
-// StartRetrievalMigrations) drops and rebuilds it.
+// build leaves an invalid index; the next call drops and rebuilds it. Calls
+// come from MigrateRetrieval at start and from every tick of retrievalPeriodic
+// (every 10 minutes by default), so an index left invalid by a process that
+// died while another skipped for its lock is repaired without a restart; once
+// the index is valid a call is one catalog query.
 func (s *Store) ensureCaptureTermsCoverIndex(ctx context.Context) error {
 	if !s.retrievalState.captureIndexReady.Load() {
 		return nil
@@ -890,6 +894,10 @@ func (s *Store) ensureCaptureTermsCoverIndex(ctx context.Context) error {
 	defer conn.Close()
 	var got bool
 	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(?)`, captureTermsCoverLockKey).Scan(&got); err != nil {
+		// The server may have taken the lock before the answer was lost: do not
+		// return this connection to the pool holding a session lock. Closing
+		// after a bad-connection error discards it (and so ends the session).
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		return err
 	}
 	if !got {
