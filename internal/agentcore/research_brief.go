@@ -334,16 +334,20 @@ func nothingRan(c researchtools.SearchCoverage) bool {
 // returns and no goroutine is needed to abandon it.
 //
 // What was searched is read from the verb's coverage object and nowhere else.
-// "The corpus holds no page or story" is claimed only when every thread the
-// record named (the threads past the sixth included) was searched in full and
-// found nothing; any other empty result is partial or failed, with a reason.
+// The brief states what was found and which parts of each thread's search ran;
+// it never claims that anything is absent. Outcomes: delivered, empty (the
+// searches ran and found nothing), failed (no search ran). gaps counts the
+// thread parts not searched, a thread no search answered counting as three.
 //
 // It never returns an error: a brief that could not be built is one plain
 // sentence saying so, and the run starts.
 func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchFunc) researchBriefResult {
-	// The record text is in the message whatever the search finds, so its
-	// labels go on the run on every outcome.
-	res := researchBriefResult{outcome: briefFailed, labels: plan.labels, left: len(plan.left)}
+	// gaps starts as "nothing was searched" (3 parts for every thread, those
+	// past the sixth included) and the rendering path overwrites it, so every
+	// early return carries the one definition. The record's labels are set only
+	// where record text is in the message (the rendered threads): the failure
+	// and skip sentences hold none.
+	res := researchBriefResult{outcome: briefFailed, left: len(plan.left), gaps: 3 * (len(plan.threads) + len(plan.left))}
 	if search == nil {
 		res.reason = "this computer has no corpus search host"
 		res.text = briefFailureText(res.reason)
@@ -441,6 +445,8 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 		res.text = briefFailureText(res.reason)
 		return res
 	}
+	// Past the early returns the message shows the threads' text.
+	res.labels = plan.labels
 	if len(left) > 0 {
 		var numbers []int
 		var texts []string
@@ -534,12 +540,17 @@ func coverageParts(c researchtools.SearchCoverage) (searched, not []string) {
 	case c.Window:
 		searched = append(searched, "the newest captures' titles")
 		not = append(not, "titles and labels of older captures")
+	case c.NoTitleWords:
+		not = append(not, "titles and labels (the thread has no word to match titles on)")
 	default:
 		not = append(not, "titles and labels")
 	}
-	if c.Published {
+	switch {
+	case c.Published && c.PublishedCapped:
+		searched = append(searched, "published stories (in part: the scan stopped at its cap)")
+	case c.Published:
 		searched = append(searched, "published stories")
-	} else {
+	default:
 		not = append(not, "published stories")
 	}
 	return searched, not
@@ -619,15 +630,23 @@ func renderBriefBlock(b briefBlock) string {
 			if len(dates) == 0 {
 				dates = append(dates, "date unknown")
 			}
-			id := wholeOrOmitted(c.CaptureID, researchBriefIDRunes)
-			if id == "" {
-				id = "(omitted: too long to show whole; find the page again with choir.SearchWireCorpus)"
+			// An absent id or url is not printed; an over-long one says so.
+			var id, url string
+			switch {
+			case strings.TrimSpace(c.CaptureID) == "":
+			case wholeOrOmitted(c.CaptureID, researchBriefIDRunes) == "":
+				id = "capture_id=(omitted: too long to show whole; find the page again with choir.SearchWireCorpus) "
+			default:
+				id = "capture_id=" + wholeOrOmitted(c.CaptureID, researchBriefIDRunes) + " "
 			}
-			url := wholeOrOmitted(c.URL, researchBriefURLRunes)
-			if url == "" {
-				url = "(url omitted: too long to show whole)"
+			switch {
+			case strings.TrimSpace(c.URL) == "":
+			case wholeOrOmitted(c.URL, researchBriefURLRunes) == "":
+				url = " (url omitted: too long to show whole)"
+			default:
+				url = " " + wholeOrOmitted(c.URL, researchBriefURLRunes)
 			}
-			fmt.Fprintf(&sb, "  - capture_id=%s %q %s (%s)", id, clipMark(c.Title, researchBriefTitleRunes), url, strings.Join(dates, ", "))
+			fmt.Fprintf(&sb, "  - %s%q%s (%s)", id, clipMark(c.Title, researchBriefTitleRunes), url, strings.Join(dates, ", "))
 			if p := clipMark(c.Passage, researchBriefPassageRunes); p != "" {
 				fmt.Fprintf(&sb, ": %s", p)
 			}
