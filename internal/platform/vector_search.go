@@ -379,6 +379,9 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 	}
 	indexList := func(partial string) ([]T, string, string, error) {
 		got, p := indexCollect()
+		if ctx.Err() != nil {
+			return nil, "", "", ctx.Err()
+		}
 		return got, vecModeIndex, joinSentence(partial, p), nil
 	}
 	filtered := int64(-1)
@@ -410,6 +413,9 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 		return indexList(joinSentence(partial, "the exact scan did not finish: "+why))
 	}
 	out, partialIdx := indexCollect()
+	if ctx.Err() != nil {
+		return nil, "", "", ctx.Err()
+	}
 	if partialIdx != "" {
 		return out, vecModeIndex, joinSentence(partial, partialIdx), nil
 	}

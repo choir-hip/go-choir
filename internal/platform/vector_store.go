@@ -204,7 +204,10 @@ func (s *Store) ensureVectorTables(ctx context.Context) error {
 		if _, err := db.ExecContext(ctx, vectorTablesDDL); err != nil {
 			return fmt.Errorf("vectors: create tables: %w", err)
 		}
-	} else if err := s.migrateVectorColumns(ctx); err != nil {
+	}
+	// Whether the tables were just made or already there (one of them may be an
+	// older schema), the columns are brought current; it reads the catalog first.
+	if err := s.migrateVectorColumns(ctx); err != nil {
 		return err
 	}
 	for _, ix := range vectorPlainIndexes {
@@ -240,6 +243,13 @@ func (s *Store) ensureVectorTables(ctx context.Context) error {
 // lock that conflicts with the HNSW build.
 func (s *Store) migrateVectorColumns(ctx context.Context) error {
 	for _, table := range []string{vecStoryTable, vecCaptureTable} {
+		var exists bool
+		if err := s.corpus().QueryRowContext(ctx, `SELECT to_regclass(?) IS NOT NULL`, table).Scan(&exists); err != nil {
+			return fmt.Errorf("vectors: read %s: %w", table, err)
+		}
+		if !exists {
+			continue
+		}
 		var hasRefused bool
 		var embNullable string
 		if err := s.corpus().QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? AND column_name = 'refused'),
