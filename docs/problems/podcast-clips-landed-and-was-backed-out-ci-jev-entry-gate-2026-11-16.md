@@ -190,3 +190,12 @@ nix and nothing runs them: `check-curated-go-modules`,
 userland or are tools (`test-computer-create`, `test-node-b-growth-meter.sh`,
 `-host-disk-alarm.sh`, `-nix-retention.sh`). After it, a new CI gate cannot be added, and
 a new guard cannot be left unrun, without the exemption file saying why.
+
+Landed 2026-11-19T00:09Z as `30f812959` (five commits from `2e3adaf82`). No
+forecast was entered before it: the landing took three minutes and the lead
+had not written the claim first, as the contract asks. By the time it could
+be written the run before it had failed on a dated gate
+(`dated-switch-gate-turned-main-red-at-midnight-2026-11-19.md`), so the
+outcome was known and a claim would have been worthless. Whether CI accepts
+the new steps is read from the first run that gets past that gate.
+

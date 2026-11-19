@@ -377,3 +377,39 @@ next thing to look at.
 Remaining error: the constant 15 is read from one window; the note counts
 the run, not the question; a model that ignores both is not stopped, by
 design.
+
+## The evening of 2026-11-18: volume fell, and not because of the change (21:20Z to 24:00Z)
+
+The paper's web searches fell from about 470 an hour to 127 in the hour to
+23:26Z. That is not search reuse working. Read from the gateway journal and
+the paper's console:
+
+- The whole computer did less from 21:20Z, an hour before the next deploy:
+  its lines in the gateway journal fell from about 1,200 per ten minutes to
+  50 at 21:20Z and ran at 300 to 1,000 after. The console shows the cause was
+  ordinary: its open stories published at 21:20Z and the next captures
+  arrived in smaller batches. No hold, quota line or wedge.
+- Each run searched as before. Runs that searched, 20:00Z to 21:20Z: median 8
+  started, 3.4% of returned pages read. After the 22:19Z deploy (search reuse
+  and the full-page index, not yet searching for need): median 6 started,
+  5.9% read. There were fewer runs, not fewer searches per run.
+- In the hour 23:00Z to 24:00Z the volume was back: 34 runs that searched,
+  276 searches started, 336 search requests at the gateway.
+
+So an hourly count cannot settle a forecast about this change; searches per
+run and the share of returned pages read can. `scripts/status-corpus-reuse`
+(2026-11-19) prints both from the console and the gateway journal, and
+`scripts/status-hourly` appends a row per whole hour to
+`~/.cache/choir-status/corpus-reuse.tsv`, because the console keeps only
+about 2.5 hours.
+
+What the same reading shows about the corpus, 23:00Z to 24:00Z: the research
+desk made 87 corpus searches (a median of 2 a run; 4 of 34 runs searched the
+web with no corpus search), every one returned a capture with a page-text
+hit, and of 1,754 pages the desk read, 25% were held before the run began,
+57% were captured by the run itself and 17% were new fetches. Over
+21:00Z to 23:40Z the held share was 7%. The desk finds held pages when it
+asks and mostly does not start from them. The next change (the corpus
+brief, lane `corpus-brief`) has the host search the corpus for the run's
+objective and put the result in the run's first message.
+
