@@ -539,22 +539,55 @@ func newCorpusCapture(id string, meta objectgraph.WebCaptureMetadata, label stor
 		PublishedAt: meta.PublishedAt, BlockCount: meta.BlockCount, Matched: []string{}}
 }
 
-// corpusIndexCandidates bounds the candidates corpusd returns for ranking.
-const corpusIndexCandidates = 500
+// corpusIndexCandidates bounds the candidates corpusd reads and returns for
+// the guest's ranking: four times the most a search lists (corpusMaxLimit), a
+// margin because the guest's order inside one word count (field weights, Jev's
+// labels) is not corpusd's (newest first). Before it was 500, and with up to
+// 2,000 label hints a search of a common word read about 1,500 rows and took
+// 8 to 14 seconds on the paper (docs/problems/corpus-search-takes-two-seconds-
+// on-the-paper-2026-11-19.md). corpusd says how many matched in all (the
+// note says so when it cut).
+const corpusIndexCandidates = 4 * corpusMaxLimit
+
+// corpusIDHints bounds the captures sent by id because a label holds a query
+// word: the ones whose labels hold the most of the words.
+const corpusIDHints = corpusMaxLimit * 4
 
 // labelMatchedCaptureIDs are the captures whose labels hold a query word:
 // a capture can reach the needed words through its label alone, and the
-// index holds only the capture's own fields, so these are sent by id.
+// index holds only the capture's own fields, so these are sent by id: at
+// most corpusIDHints of them, those whose labels hold the most query words
+// (then by id), however many labels hold one.
 func labelMatchedCaptureIDs(labels map[string]store.CaptureLabel, terms []string) []string {
-	var out []string
+	type hint struct {
+		id    string
+		words int
+	}
+	var hints []hint
 	for id, label := range labels {
 		text := strings.ToLower(strings.Join([]string{label.Title, label.EventHeadline, label.TopicHeadline, label.Outlet, label.Language, label.Script}, "\n"))
+		n := 0
 		for _, term := range terms {
 			if corpusTermIn(text, term) {
-				out = append(out, id)
-				break
+				n++
 			}
 		}
+		if n > 0 {
+			hints = append(hints, hint{id, n})
+		}
+	}
+	sort.Slice(hints, func(i, j int) bool {
+		if hints[i].words != hints[j].words {
+			return hints[i].words > hints[j].words
+		}
+		return hints[i].id > hints[j].id
+	})
+	if len(hints) > corpusIDHints {
+		hints = hints[:corpusIDHints]
+	}
+	out := make([]string, len(hints))
+	for i, h := range hints {
+		out[i] = h.id
 	}
 	sort.Strings(out)
 	return out

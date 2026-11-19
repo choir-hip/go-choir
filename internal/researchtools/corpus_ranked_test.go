@@ -13,6 +13,7 @@ package researchtools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -172,5 +173,37 @@ func TestRankedMirrorDecodesWhatPlatformWrites(t *testing.T) {
 	want, _ := json.Marshal(in.Ranked)
 	if string(back) != string(want) {
 		t.Fatalf("mirror drifted:\n got  %s\n want %s", back, want)
+	}
+}
+
+// A common word is in thousands of labels; the guest sends the best few by id,
+// not all of them, and asks for a bounded number of candidates.
+func TestGuestSendsBoundedLabelHintsAndCandidates(t *testing.T) {
+	labels := map[string]store.CaptureLabel{}
+	for i := 0; i < 1500; i++ {
+		labels[fmt.Sprintf("cap-%04d", i)] = store.CaptureLabel{EventHeadline: "harbor strike"}
+	}
+	labels["cap-best"] = store.CaptureLabel{EventHeadline: "harbor strike quay dispute"}
+	ids := labelMatchedCaptureIDs(labels, []string{"harbor", "quay", "dispute"})
+	if len(ids) != corpusIDHints {
+		t.Fatalf("%d hints, want %d", len(ids), corpusIDHints)
+	}
+	found := false
+	for _, id := range ids {
+		found = found || id == "cap-best"
+	}
+	if !found {
+		t.Fatal("the label holding the most words was dropped")
+	}
+	again := labelMatchedCaptureIDs(labels, []string{"harbor", "quay", "dispute"})
+	if strings.Join(ids, ",") != strings.Join(again, ",") {
+		t.Fatal("the hints are not deterministic")
+	}
+	deps, rs := rankedWorld(t, CaptureSearchAnswer{})
+	if _, _, _, err := searchCapturesFor(context.Background(), deps, "o", "c", corpusRequest{Query: "harbor", Terms: []string{"harbor"}}, 10); err != nil {
+		t.Fatal(err)
+	}
+	if len(rs.asked) != 1 || rs.asked[0].Candidates != corpusIndexCandidates || corpusIndexCandidates > 4*corpusMaxLimit {
+		t.Fatalf("asked %+v", rs.asked)
 	}
 }
