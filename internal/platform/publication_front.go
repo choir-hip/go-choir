@@ -115,6 +115,9 @@ func encodeFrontCursor(c frontCursor) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
+// frontCursorMaxUnix is the last second of the year 9999.
+const frontCursorMaxUnix = 253402300799
+
 // decodeFrontCursor reads a cursor. One minted before the sub-second part
 // existed (no "n" member) cannot say where inside its second the page ended,
 // so it is read as the end of that second: the page after it starts at the
@@ -136,6 +139,12 @@ func decodeFrontCursor(s string) (*frontCursor, error) {
 		Nanos       *int32 `json:"n"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil || wire.CanonicalID == "" {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+	// Bound on u: the years 1970 through 9999 (Unix seconds 0 to
+	// frontCursorMaxUnix); anything else is not a time this store holds, and
+	// u+1 below must not wrap.
+	if wire.UpdatedAt < 0 || wire.UpdatedAt > frontCursorMaxUnix {
 		return nil, fmt.Errorf("invalid cursor")
 	}
 	if wire.Nanos == nil {

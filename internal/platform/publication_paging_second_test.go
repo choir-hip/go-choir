@@ -214,7 +214,14 @@ func TestPieceIndexWalkIndexesEveryRowOfOneSecond(t *testing.T) {
 func TestFrontListTakesACursorOfAnOldReleaseWithoutSkipping(t *testing.T) {
 	f := newFrontFixture(t)
 	rows := publishSameSecond(t, f, 12)
-	first, err := f.svc.ListFrontStories(context.Background(), 3+4, "")
+	// The fixture's own stories are newer than the Skip rows; the first page
+	// holds all of them plus the four newest Skip rows.
+	everything, err := f.svc.ListFrontStories(context.Background(), 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtureStories := len(everything.Stories) - len(rows)
+	first, err := f.svc.ListFrontStories(context.Background(), fixtureStories+4, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +266,13 @@ func TestFrontCursorIsOpaqueAndJunkIsRefused(t *testing.T) {
 	if err != nil || *back != *zero {
 		t.Fatalf("a whole-second row's own cursor must stay exact: %+v %v", back, err)
 	}
-	for _, bad := range []string{"!!", base64.RawURLEncoding.EncodeToString([]byte(`{"u":1}`))} {
+	enc := func(j string) string { return base64.RawURLEncoding.EncodeToString([]byte(j)) }
+	for _, bad := range []string{"!!", enc(`{"u":1}`),
+		enc(`{"u":9223372036854775807,"id":"obj:x"}`), // u+1 would wrap
+		enc(`{"u":-1,"id":"obj:x"}`),
+		enc(`{"u":253402300800,"id":"obj:x"}`), // first second of year 10000
+		enc(`{"u":9223372036854775807,"n":0,"id":"obj:x"}`),
+	} {
 		if _, err := decodeFrontCursor(bad); err == nil {
 			t.Fatalf("%q accepted", bad)
 		}
