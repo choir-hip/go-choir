@@ -243,6 +243,17 @@ func captureWindowTime(obj objectgraph.Object) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// captureInWindow reports whether a capture is in [since, until) by its window
+// time; with no window every capture is. A capture with no readable time is in
+// no window (its update time never stands in).
+func captureInWindow(obj objectgraph.Object, since, until time.Time) bool {
+	if since.IsZero() && until.IsZero() {
+		return true
+	}
+	at, ok := captureWindowTime(obj)
+	return ok && timeInWindow(at, since, until)
+}
+
 func timeInWindow(at, since, until time.Time) bool {
 	if !since.IsZero() && at.Before(since) {
 		return false
@@ -312,9 +323,11 @@ type rankCand struct {
 	id      string
 	reasons map[string]bool
 	stories []string
-	// at is the slot (rank in the vector order) each reason first reached the
-	// page at; the page stands at the best of the reasons it keeps.
-	at map[string]int
+	// at is the slot (rank in the vector order) its own vector reached the
+	// page at; storyAt the slot of each story that cites it. The page stands
+	// at the best of what it keeps: its own vector and the stories that kept it.
+	at      map[string]int
+	storyAt map[string]int
 }
 
 func (c *rankCand) add(reason string) { c.reasons[reason] = true }
@@ -380,8 +393,10 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 		bm25Only(why)
 		return
 	}
-	if rows := len(vr.Stories) + len(vr.Captures); rows == 0 && vr.Partial != "" {
-		// Every list failed and the index gave nothing: the vectors did not answer.
+	if rows := len(vr.Stories) + len(vr.Captures); rows == 0 && vr.Partial != "" && len(vr.ExactScan) == 0 {
+		// No list gave a row, the result is partial and no list was read
+		// exactly: an empty list that may lack nearer rows is not an answer.
+		// (An empty list read exactly is complete and is an answer.)
 		bm25Only("the vector lists could not be read: " + vr.Partial)
 		return
 	}
@@ -434,7 +449,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 	touch := func(id, reason string, slotIdx int) *rankCand {
 		c := cands[id]
 		if c == nil {
-			c = &rankCand{id: id, reasons: map[string]bool{}, at: map[string]int{}}
+			c = &rankCand{id: id, reasons: map[string]bool{}, at: map[string]int{}, storyAt: map[string]int{}}
 			cands[id] = c
 			order = append(order, id)
 		}
@@ -458,6 +473,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 			c := touch(id, RankReasonStory, slotIdx)
 			if !containsID(c.stories, st.PublicationID) {
 				c.stories = append(c.stories, st.PublicationID)
+				c.storyAt[st.PublicationID] = slotIdx
 			}
 		}
 	}
@@ -490,10 +506,8 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 		if _, _, public := captureVectorSource(o); !public {
 			continue
 		}
-		if !since.IsZero() || !until.IsZero() {
-			if at, ok := captureWindowTime(o); !ok || !timeInWindow(at, since, until) {
-				continue
-			}
+		if !captureInWindow(o, since, until) {
+			continue
 		}
 		vecOrder = append(vecOrder, id)
 	}
@@ -539,8 +553,12 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 	// not where the story it no longer counts for stood.
 	pos := func(id string) int {
 		best := 1 << 30
-		for _, r := range []string{RankReasonMeaning, RankReasonStory} {
-			if at, ok := cands[id].at[r]; ok && cands[id].reasons[r] && at < best {
+		c := cands[id]
+		if at, ok := c.at[RankReasonMeaning]; ok && c.reasons[RankReasonMeaning] {
+			best = at
+		}
+		for _, p := range c.stories { // only the stories that kept it
+			if at := c.storyAt[p]; at < best {
 				best = at
 			}
 		}
