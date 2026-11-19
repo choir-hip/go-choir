@@ -95,18 +95,26 @@ final class ContentStoreTests: XCTestCase {
         let doc = await store.doc("texture:d1")
         XCTAssertEqual(doc.status, "ready"); XCTAssertEqual(doc.title, "My notes")
     }
-    func testMailBoxAndMessageRenderOfflineFromTheStore() async {
-        let r = root(), c = Clock(); let s = ContentStore(root: r, clock: { c.now })
-        var row = MailSummary(); row.id = "m1"; row.subject = "Tunnel vote"; row.fromDisplay = "Ana Example"; row.fromAddress = "ana@example.com"; row.at = "2026-11-14T09:00:00Z"; row.snippet = "Notes."
-        s.put(ContentStore.mailItem(row, text: "Full body about the tunnel.", folder: "inbox", syncedAt: c.now, to: ["me@example.com"])); s.markSynced(.mail)
-        let svc = MailService()
-        svc.offlineRows = { s.mailSummaries(folder: $0) }
-        svc.offlineDetail = { id in s.get("mail:" + id).map { var d = MailDetail(); d.summary = ContentStore.summary($0); d.text = $0.text; return d } }
-        svc.offlineNote = { s.syncedWords(.mail) ?? "never synced" }
-        let box = await svc.box(address: "mailbox:inbox")
-        XCTAssertEqual(box.rows.count, 1, "status \(box.status) \(box.message)"); XCTAssertTrue(box.message.contains("saved on this phone"), box.message)
-        let msg = await svc.message(address: "mail:m1")
-        XCTAssertEqual(msg.status, "ready"); XCTAssertEqual(msg.subject, "Tunnel vote"); XCTAssertTrue(msg.message.contains("last synced"))
+    /// The cutover file's D3: the old mail copy is deleted at the first open of the new code, nothing else is.
+    func testTheOldMailCopyIsDeletedAtOpenAndNothingElseIs() {
+        let r = root(), c = Clock()
+        do {
+            let s = ContentStore(root: r, clock: { c.now })
+            s.put(StoredItem(id: "mail:m1", kind: .mail, title: "SECRET-SUBJECT", text: "SECRET-BODY", date: c.now, address: "mail:m1", syncedAt: c.now, meta: ["folder": "inbox"]))
+            s.put(StoredItem(id: "mail:draft/d1", kind: .mail, title: "SECRET-DRAFT", text: "SECRET-BODY", date: c.now, address: "mail:draft/d1", pinned: true, syncedAt: c.now))
+            s.put(StoredItem(id: "pub:story", kind: .story, title: "A story", text: "Story text.", date: c.now, address: "pub:story", syncedAt: c.now))
+            s.setCheckpoint("mail.inbox.done", "1"); s.setCheckpoint("story.cursor", "x"); s.markSynced(.mail); s.markSynced(.story); s.flush()
+            XCTAssertEqual(s.ids(.mail).count, 2)
+        }
+        let s2 = ContentStore(root: r, clock: { c.now })
+        XCTAssertEqual(s2.ids(.mail).count, 0); XCTAssertNil(s2.get("mail:m1")); XCTAssertNil(s2.get("mail:draft/d1"))
+        XCTAssertNil(s2.checkpoint("mail.inbox.done")); XCTAssertNil(s2.lastSynced(.mail))
+        XCTAssertEqual(s2.get("pub:story")?.text, "Story text."); XCTAssertEqual(s2.checkpoint("story.cursor"), "x"); XCTAssertNotNil(s2.lastSynced(.story))
+        let mailDir = r.appendingPathComponent("items/mail")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: mailDir.path), "the mail files are gone")
+        let drained = s2.drain(); XCTAssertTrue(drained.removed.contains("mail:m1"), "the retrieval index is told the ids left")
+        // Another open finds nothing to delete and writes nothing.
+        XCTAssertEqual(ContentStore(root: r, clock: { c.now }).purgeMail(), 0)
     }
 }
 
@@ -119,59 +127,8 @@ final class ContentSyncTests: XCTestCase {
         let r = root ?? FileManager.default.temporaryDirectory.appendingPathComponent("sy-\(UUID().uuidString)"); dirs.append(r)
         return ContentStore(root: r, clock: { [clock] in clock.now }, log: log)
     }
-    func row(_ i: Int) -> MailSummary { var m = MailSummary(); m.id = "m\(i)"; m.subject = "SECRET-SUBJECT \(i)"; m.fromDisplay = "SECRET-SENDER"; m.snippet = "snip"; m.at = "2026-11-1\(i % 9)T09:00:00Z"; return m }
     func sync(_ s: ContentStore, _ f: ContentSync.Fetchers, log: @escaping @Sendable (String) -> Void = { _ in }) -> ContentSync { ContentSync(store: s, fetch: f, clock: { [clock] in clock.now }, log: log) }
 
-    func mailFetchers(pages: [[Int]], calls: Box<[String]>) -> ContentSync.Fetchers {
-        var f = ContentSync.Fetchers(); f.mailFolders = ["inbox"]
-        f.mailPage = { _, cursor in
-            let n = cursor.flatMap(Int.init) ?? 0; calls.value.append("page\(n)")
-            return (pages[n].map(self.row), n + 1 < pages.count ? String(n + 1) : nil)
-        }
-        f.mailBody = { id in calls.value.append("body:" + id); var d = MailDetail(); d.summary.id = id; d.text = "SECRET-BODY of \(id)"; return d }
-        return f
-    }
-
-    func testMailWalksAllPagesAndKeepsFullBodiesLogsHoldNoContent() async {
-        let calls = Box<[String]>([]), logs = Box<[String]>([]); let s = store { logs.value.append($0) }
-        let sy = sync(s, mailFetchers(pages: [[1, 2], [3, 4], [5]], calls: calls)) { logs.value.append($0) }
-        await sy.syncAll()
-        XCTAssertEqual(s.ids(.mail).count, 5); XCTAssertEqual(s.get("mail:m3")?.text, "SECRET-BODY of m3")
-        let all = logs.value.joined(separator: "\n")
-        XCTAssertTrue(all.contains("content sync mail: fetched 5")); XCTAssertFalse(all.contains("SECRET"), "counts and ids only")
-    }
-    func testAKilledSyncResumesWithoutFetchingHeldBodiesAgain() async {
-        let calls = Box<[String]>([]); let s = store()
-        let busy = Box(0)
-        let sy = sync(s, mailFetchers(pages: [[1, 2, 3], [4, 5, 6]], calls: calls))
-        sy.audioBusy = { busy.value += 1; return busy.value > 4 }        // the radio needs the network after a few requests
-        let r1 = await sy.syncAll()
-        XCTAssertEqual(r1.first { $0.kind == .mail }?.stoppedBy, "radio")
-        let held = s.ids(.mail).filter { s.get($0)?.version == "body" }.count
-        XCTAssertGreaterThan(held, 0); XCTAssertLessThan(held, 6)
-        s.flush()
-        // The app is killed and started again: a new store over the same files, a new syncer, the radio idle.
-        let s2 = ContentStore(root: s.root, clock: { [clock] in clock.now }); let calls2 = Box<[String]>([])
-        let sy2 = sync(s2, mailFetchers(pages: [[1, 2, 3], [4, 5, 6]], calls: calls2))
-        await sy2.syncAll()
-        XCTAssertEqual(s2.ids(.mail).count, 6)
-        XCTAssertEqual(calls2.value.filter { $0.hasPrefix("body:") }.count, 6 - held, "only the missing bodies are fetched")
-    }
-    func testAWalkedFolderStopsAtTheFirstPageThatIsAllHeld() async {
-        let calls = Box<[String]>([]); let s = store()
-        await sync(s, mailFetchers(pages: [[1, 2], [3, 4], [5, 6]], calls: calls)).syncAll()
-        calls.value = []
-        await sync(s, mailFetchers(pages: [[7, 1, 2], [3, 4], [5, 6]], calls: calls)).syncAll()
-        XCTAssertEqual(calls.value.filter { $0.hasPrefix("page") }, ["page0", "page1"], "page 0 had news; page 1 was all held and ended the walk")
-        XCTAssertEqual(calls.value.filter { $0.hasPrefix("body") }, ["body:m7"])
-        XCTAssertEqual(s.ids(.mail).count, 7)
-    }
-    func testAServerThatIgnoresTheCursorDoesNotLoopForever() async {
-        let s = store(); var f = ContentSync.Fetchers(); f.mailFolders = ["inbox"]
-        f.mailPage = { _, _ in ([self.row(1)], "same") }; f.mailBody = { _ in var d = MailDetail(); d.text = "t"; return d }
-        let r = await sync(s, f).syncAll()
-        XCTAssertEqual(r.first { $0.kind == .mail }?.fetched, 1)
-    }
     func testDocumentsAreFetchedWhenTheirVersionChangesAndKeptPinned() async {
         let s = store(); let bodies = Box(0); let ver = Box("v1")
         var f = ContentSync.Fetchers()

@@ -1,0 +1,21 @@
+// Mail's data on the real plan and the web host. app.ts (mail.ts) answers the mail sources: before mail moved they were the Swift package's placeholders.
+// What this cannot see: the pages. The deck mounts a page only when the Swift package says which page is on top (openPages), so `pg.top` is empty here and the
+// mail sources answer "idle" for it, which is itself the check that they are answered by app.ts and held to their shapes (a missing or extra field fails the build
+// of the answer). The signed-in routes need the stored key, which the web host has no way to read, so a request is never made here: the requests, the offline copy,
+// the seal, the sanitiser and every rule of the old Swift tests are in mail.test.ts. The pages are looked at on the simulator and on Android.
+test "with no mail page on top every mail source is answered by app.ts and says idle"
+  clock data
+  expect state mbx.status == "idle"
+  expect state mfr.status == "frame"
+  expect state mmsg.status == "idle"
+  expect state mcmp.status == "idle"
+  expect state msy.status == "idle"
+  expect state mbx.rows.length == 0
+
+test "the mailbox frame is the same four tabs before any fetch"
+  clock data
+  expect state mfr.folder == "inbox"
+  expect state mfr.title == "Inbox"
+  expect state mfr.folders.0 .name == "inbox"
+  expect state mfr.folders.3 .name == "quarantine"
+  expect state mfr.folders.0 .current == true

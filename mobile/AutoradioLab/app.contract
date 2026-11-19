@@ -321,6 +321,7 @@ component Autoradio
     // ---- lane 6: mail ----
     mbx
     mfr
+    msy
     mailTab
     mboxName
     mboxDir

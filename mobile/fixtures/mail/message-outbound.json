@@ -1,0 +1,22 @@
+{
+ "message": {
+  "id": "em_01hz09",
+  "direction": "outbound",
+  "from_address": "listener@example.com",
+  "subject": "Thursday dinner",
+  "snippet": "Are you free?",
+  "trust_status": "trusted",
+  "created_at": "2026-11-18T16:05:00Z",
+  "sent_at": "2026-11-18T16:05:00Z",
+  "read_at": "2026-11-18T16:05:00Z"
+ },
+ "text_body": "Are you free on Thursday evening?",
+ "recipients": {
+  "to": [
+   {
+    "address": "maya.ortiz@example.com",
+    "display": "Maya Ortiz"
+   }
+  ]
+ }
+}

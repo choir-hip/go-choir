@@ -193,10 +193,7 @@ final class RetrievalMoreSourcesTests: XCTestCase {
         XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: ["Autopaper", "Autopaper"]), "I have nothing on that in the paper.")
         XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: []), "I have nothing saved on this phone to search yet.")
     }
-    func testMailFilesPagesTopicsAndRunSheetBecomeDocuments() {
-        var row = MailSummary(); row.id = "m1"; row.fromDisplay = "Ana"; row.subject = "Tunnel vote"; row.snippet = "See the referendum notes."; row.at = "2026-11-14T09:00:00Z"
-        let mail = RetrievalSources.mail([row, MailSummary()])
-        XCTAssertEqual(mail.count, 1); XCTAssertEqual(mail[0].address, "mail:m1"); XCTAssertNotNil(mail[0].date)
+    func testFilesPagesTopicsAndRunSheetBecomeDocuments() {
         let files = RetrievalSources.fileNames([FileEntry(name: "budget-notes.md", path: "/docs/budget-notes.md", isDirectory: false, size: 1, modified: nil), FileEntry(name: "docs", path: "/docs", isDirectory: true, size: 0, modified: nil)])
         XCTAssertEqual(files.map(\.title), ["budget-notes.md"])
         XCTAssertEqual(RetrievalSources.editionTopics(["Science", "Senate"]).first?.text.contains("Senate"), true); XCTAssertTrue(RetrievalSources.editionTopics([]).isEmpty)

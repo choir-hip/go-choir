@@ -2,7 +2,7 @@ import Foundation
 
 // THE LOCAL CONTENT STORE. Owner, 2026-11-16: "we should keep mail on the phone, and we should keep everything on the phone as much as we
 // can. It's mostly just text, so we want to basically have the full content on the phone." Every text the phone is shown or can fetch is kept
-// here in full and indexed from here: retrieval (SavedCorpus), offline pages (ReaderStore, MailService) and "play that" read the same rows.
+// here in full and indexed from here: retrieval (SavedCorpus), offline pages (ReaderStore) and "play that" read the same rows.
 //
 // STORAGE: one file per item (`items/<kind>/<hash>.json`) plus `manifest.json` (metadata, sync checkpoints, last-synced times). Files, not
 // SQLite: the Kit has no SQLite today and a new binding is a new dependency (the system library would need a wrapper written and, in the Exact
@@ -133,6 +133,26 @@ public final class ContentStore: @unchecked Sendable {
             for x in m.metas { metas[x.id] = x; up[x.id] = true }
             checkpoints = m.checkpoints; synced = m.synced
         }
+        purgeMail()
+    }
+
+    /// 2026-11-19, the cutover file's D3: mail moved to shared code (AutoradioLab/mail.ts), whose own sealed copy is a cache of the listener's computer. This store's
+    /// copy is not migrated: at every open, the mail rows, the mail files, the mail sync checkpoints and the "last synced" time are deleted (what is left to delete is
+    /// nothing, so it is cheap and needs no marker), and the retrieval index is told the ids left. Nothing but mail is touched. Returns how many items it removed.
+    @discardableResult
+    func purgeMail() -> Int {
+        guard usable else { return 0 }
+        let mailIDs = ids(.mail)
+        for id in mailIDs { remove(id) }
+        lock.lock()
+        let stale = checkpoints.keys.filter { $0.hasPrefix("mail.") }
+        for k in stale { checkpoints[k] = nil }
+        let hadSynced = synced.removeValue(forKey: ContentKind.mail.rawValue) != nil
+        if !stale.isEmpty || hadSynced { dirty = true }
+        lock.unlock()
+        if let d = dir(.mail), FileManager.default.fileExists(atPath: d.path) { try? FileManager.default.removeItem(at: d) }
+        if !mailIDs.isEmpty || !stale.isEmpty || hadSynced { flush(); log?("content: mail copy deleted (\(mailIDs.count) items)") }
+        return mailIDs.count
     }
     static func defaultRoot() -> URL? {
         guard let d = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
@@ -310,22 +330,5 @@ public final class ContentStore: @unchecked Sendable {
         var d = ReaderDoc(address: address, status: "ready", title: it.title, meta: note, kind: it.kind == .story ? "story" : "document", blocks: blocks, plain: it.text, textBlocks: blocks.count)
         d.source = it.kind == .document ? it.text : ""
         return d
-    }
-
-    /// Mail rows of a folder from the store (newest first), for the mailbox with no network.
-    public func mailSummaries(folder: String) -> [MailSummary] {
-        items(.mail).filter { $0.meta["folder"] == folder }.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }.map { Self.summary($0) }
-    }
-    public static func summary(_ it: StoredItem) -> MailSummary {
-        var m = MailSummary()
-        m.id = String(it.id.dropFirst("mail:".count)); m.direction = it.meta["direction"] ?? ""; m.fromAddress = it.meta["fromAddress"] ?? ""; m.fromDisplay = it.meta["from"] ?? ""
-        m.subject = it.title; m.snippet = it.meta["snippet"] ?? ""; m.trust = it.meta["trust"] ?? ""; m.readAt = it.meta["readAt"] ?? ""; m.at = it.meta["at"] ?? ""
-        return m
-    }
-    public static func mailItem(_ s: MailSummary, text: String, folder: String, syncedAt: Date, to: [String] = []) -> StoredItem {
-        StoredItem(id: "mail:" + s.id, kind: .mail, title: s.subject.isEmpty ? "(no subject)" : s.subject, text: text.isEmpty ? s.snippet : text, date: PaperStory.date(s.at),
-                   address: "mail:" + s.id, source: "Mail", version: text.isEmpty ? "row" : "body", pinned: folder == "drafts", syncedAt: syncedAt,
-                   meta: ["folder": folder, "from": s.fromDisplay, "fromAddress": s.fromAddress, "snippet": s.snippet, "direction": s.direction, "readAt": s.readAt, "trust": s.trust,
-                          "at": s.at, "to": to.joined(separator: ", ")])
     }
 }

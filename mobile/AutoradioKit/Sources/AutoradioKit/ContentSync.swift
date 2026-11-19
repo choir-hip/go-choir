@@ -7,10 +7,7 @@ import Foundation
 //  story     GET /api/platform/publications/front?limit=100 (title, dek, updated_at, words) / GET .../publications/resolve?route= / no bulk body route,
 //            no since: the list is the newest 100; one resolve per story (WOULD NEED: GET .../publications/front?include=text&since=<iso>) / newest
 //            first, a story held with the same updated_at is not fetched again; retention 30 days.
-//  mail      GET /api/email/messages?folder=&limit=100&cursor= (rows, next_cursor; newest first) / GET /api/email/messages/{id} (text_body) / cursor
-//            paging exists, no since and no bodies in the list (WOULD NEED: GET /api/email/messages?folder=&since=<received_at>&include=text) / pages
-//            newest first; stops at the first page whose rows are all held once a folder has been fully walked (`mail.<folder>.done`); a killed first
-//            walk resumes from the top and skips held bodies; read state is refreshed from the rows.
+//  mail      moved to shared code on 2026-11-19 (AutoradioLab/mail.ts keeps the phone's copy of the listener's mail); nothing here fetches it.
 //  document  GET /api/texture/documents?limit=500&cursor= (id, title, updated_at) / GET /api/texture/documents/{id} then /revisions/{rid} (the
 //            Markdown) / cursor paging, no since, no bodies (WOULD NEED: GET /api/texture/documents?include=content&updated_since=) / all pages; a
 //            document is fetched when its updated_at differs from the held version; never evicted.
@@ -34,10 +31,6 @@ public struct SyncReport: Equatable, Sendable {
 
 public final class ContentSync: @unchecked Sendable {
     public struct Fetchers: Sendable {
-        public var mailFolders = ["inbox", "sent", "quarantine"]
-        public var mailPage: @Sendable (_ folder: String, _ cursor: String?) async throws -> (rows: [MailSummary], next: String?) = { _, _ in ([], nil) }
-        public var mailBody: @Sendable (_ id: String) async throws -> MailDetail = { _ in MailDetail() }
-        public var drafts: @Sendable () async throws -> [MailDraftInfo] = { [] }
         public var documentPage: @Sendable (_ cursor: String?) async throws -> (docs: [DocRow], next: String?) = { _ in ([], nil) }
         public var documentBody: @Sendable (_ id: String) async throws -> String? = { _ in nil }
         public var stories: @Sendable () async throws -> [StoryBodies.Story] = { [] }
@@ -79,7 +72,7 @@ public final class ContentSync: @unchecked Sendable {
         defer { lock.lock(); running = false; startedUnder = nil; lock.unlock() }
         var out: [SyncReport] = []
         if let sheet = await fetch.runSheet() { recordRunSheet(sheet); writeMarkSynced(.runsheet) }
-        for step in [syncStories, syncMail, syncDocuments, syncPodcasts, syncFiles] as [() async -> SyncReport] {
+        for step in [syncStories, syncDocuments, syncPodcasts, syncFiles] as [() async -> SyncReport] {
             let r = await step()
             out.append(r)
             writeMarkSynced(r.kind); writeFlush()
@@ -122,54 +115,6 @@ public final class ContentSync: @unchecked Sendable {
                 writePut(StoredItem(id: id, kind: .story, title: s.title, text: text, date: s.date, address: id, source: "Autopaper", version: version, syncedAt: now))
                 r.fetched += 1
             } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { r.failed += 1 }
-        }
-        return r
-    }
-
-    // MARK: mail
-
-    func syncMail() async -> SyncReport {
-        var r = SyncReport(kind: .mail)
-        let now = clock()
-        for folder in fetch.mailFolders {
-            var cursor: String? = nil, seen = Set<String>()
-            let done = store.checkpoint("mail.\(folder).done") == "1"
-            pages: while true {
-                guard await gate(&r) else { return r }
-                let page: (rows: [MailSummary], next: String?)
-                do { page = try await fetch.mailPage(folder, cursor) } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { r.failed += 1; r.stoppedBy = "error"; return r }
-                var anyNew = false
-                for row in page.rows where !row.id.isEmpty {
-                    let id = "mail:" + row.id
-                    if let held = store.get(id), held.version == "body" {
-                        r.skipped += 1
-                        if held.meta["readAt"] != row.readAt { var h = held; h.meta["readAt"] = row.readAt; writePut(h) }       // read state follows the server
-                        continue
-                    }
-                    anyNew = true
-                    guard await gate(&r) else { return r }
-                    do {
-                        let d = try await fetch.mailBody(row.id)
-                        var s = row; if s.id.isEmpty { s.id = d.summary.id }
-                        writePut(ContentStore.mailItem(s, text: d.text, folder: folder, syncedAt: now, to: d.to))
-                        r.fetched += 1
-                    } catch is CancellationError { r.stoppedBy = "cancelled"; return r }
-                    catch { writePut(ContentStore.mailItem(row, text: "", folder: folder, syncedAt: now)); r.failed += 1 }       // the row is kept; the body next run
-                }
-                writeFlush()
-                if let next = page.next, !next.isEmpty, seen.insert(next).inserted {
-                    if done, !anyNew { break pages }          // a walked folder: the first all-held page ends it
-                    cursor = next
-                } else { break }
-            }
-            writeSetCheckpoint("mail.\(folder).done", "1")
-        }
-        if let ds = try? await fetch.drafts() {
-            for d in ds where !d.id.isEmpty {
-                writePut(StoredItem(id: "mail:draft/" + d.id, kind: .mail, title: d.subject.isEmpty ? "(no subject)" : d.subject, text: d.text, date: now, address: "mail:draft/" + d.id,
-                                     source: "Mail", version: "body", pinned: true, syncedAt: now, meta: ["folder": "drafts", "to": d.to.joined(separator: ", ")]))
-                r.fetched += 1
-            }
         }
         return r
     }
@@ -274,13 +219,6 @@ public extension ContentSync.Fetchers {
     static func live() -> ContentSync.Fetchers {
         var f = ContentSync.Fetchers()
         func client() -> ChoirClient { ChoirEnvironment.shared.client() }
-        f.mailPage = { folder, cursor in
-            var q = ["folder": folder, "limit": "100"]; if let cursor { q["cursor"] = cursor }
-            let o = try await client().send("GET", "/api/email/messages", query: q, route: "/api/email/messages").object()
-            return (MailParse.list(o).rows, o["next_cursor"] as? String)
-        }
-        f.mailBody = { id in MailParse.detail(try await client().send("GET", "/api/email/messages/" + PathSegment.encode(id), route: "/api/email/messages/{id}").object()) }
-        f.drafts = { (try await client().send("GET", "/api/email/drafts", route: "/api/email/drafts").object()["drafts"] as? [[String: Any]] ?? []).map(MailParse.draft) }
         f.documentPage = { cursor in
             var q = ["limit": "500"]; if let cursor { q["cursor"] = cursor }
             let o = try await client().send("GET", "/api/texture/documents", query: q, route: "/api/texture/documents").object()
