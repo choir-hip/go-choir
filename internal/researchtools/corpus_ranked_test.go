@@ -158,7 +158,7 @@ func TestGuestLogsTheVectorFieldsAndFallsBackToBM25Order(t *testing.T) {
 // The mirror types decode what platform writes.
 func TestRankedMirrorDecodesWhatPlatformWrites(t *testing.T) {
 	in := platform.CaptureSearchResponse{Ranked: &platform.CaptureRanking{
-		Entries:        []platform.RankedCapture{{CaptureID: "x", Reasons: []string{"text", "story"}, Stories: []string{"p"}, Score: 0.5}},
+		Entries:        []platform.RankedCapture{{CaptureID: "x", Reasons: []string{"text", "story"}, Stories: []string{"p"}, }},
 		Stories:        []platform.RankedStory{{PublicationID: "p", VersionID: "v", Revision: 3, Title: "T", Score: 0.7, Day: "2026-11-19", Captures: []string{"x"}}},
 		VectorAnswered: true, VectorRows: 9, VectorState: "partial", VectorPartial: "captures: x", BM25Kept: 2, Note: "n"}}
 	raw, err := json.Marshal(in)
@@ -205,5 +205,66 @@ func TestGuestSendsBoundedLabelHintsAndCandidates(t *testing.T) {
 	}
 	if len(rs.asked) != 1 || rs.asked[0].Candidates != corpusIndexCandidates || corpusIndexCandidates > 4*corpusMaxLimit {
 		t.Fatalf("asked %+v", rs.asked)
+	}
+}
+
+// Findings of the review of the ranked answer: a page found by meaning is not
+// "labels only"; the appended label tail is newest first under order=recent;
+// the guest's window drops a capture with neither time like the other halves.
+func TestGuestCountsPagesFoundByMeaningApartFromLabelOnlyPages(t *testing.T) {
+	a, b, c := rankedObj(t, "a", "Alpha page"), rankedObj(t, "b", "Beta page"), rankedObj(t, "c", "Gamma page")
+	answer := CaptureSearchAnswer{
+		HitObjects: []objectgraph.Object{a, b, c},
+		Hits:       []CaptureTextHit{{CaptureID: a.CanonicalID, Snippet: "pa", BodyMatch: true}},
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 3, VectorState: "exact", Entries: []RankedCapture{
+			{CaptureID: a.CanonicalID, Reasons: []string{"text", "meaning"}},
+			{CaptureID: b.CanonicalID, Reasons: []string{"meaning"}},
+			{CaptureID: c.CanonicalID, Reasons: []string{"meaning", "story"}, Stories: []string{"p"}},
+		}},
+	}
+	deps, _ := rankedWorld(t, answer)
+	_, _, info, err := searchCapturesFor(context.Background(), deps, "o", "c", corpusRequest{Query: "alpha", Terms: corpusQueryTerms("alpha")}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Body != 1 || info.Meaning != 2 || info.LabelsOnly != 0 {
+		t.Fatalf("by_body %d by_meaning %d by_labels_only %d: meaning pages are not label-only pages", info.Body, info.Meaning, info.LabelsOnly)
+	}
+	logs := captureReadLog(t)
+	logCorpusSearch(context.Background(), "q", "c", 0, nil, "", 0, 0, false, info)
+	if !strings.Contains(logs.String(), " by_labels_only=0 by_meaning=2 ") {
+		t.Fatalf("line %q", logs.String())
+	}
+}
+
+func TestAppendLabelHalfTailIsNewestFirstUnderRecentOrder(t *testing.T) {
+	p := CorpusCapture{CaptureID: "p", FetchedAt: "2026-11-01T00:00:00Z"}
+	old := CorpusCapture{CaptureID: "old", FetchedAt: "2026-10-01T00:00:00Z"}
+	mid := CorpusCapture{CaptureID: "mid", PublishedAt: "2026-10-15T00:00:00Z", FetchedAt: "2026-11-09T00:00:00Z"}
+	newest := CorpusCapture{CaptureID: "new", FetchedAt: "2026-10-30T00:00:00Z"}
+	got := appendLabelHalf([]CorpusCapture{p}, []CorpusCapture{old, mid, newest}, 10, "recent")
+	if strings.Join(ids(got), ",") != "p,new,mid,old" {
+		t.Fatalf("recent tail %v", ids(got))
+	}
+	got = appendLabelHalf([]CorpusCapture{p}, []CorpusCapture{old, mid, newest}, 10, "relevance")
+	if strings.Join(ids(got), ",") != "p,old,mid,new" {
+		t.Fatalf("relevance tail %v", ids(got))
+	}
+}
+
+func TestInWindowDropsACaptureWithNeitherTimeOnEveryKindOfWindow(t *testing.T) {
+	obj := rankedObj(t, "x", "No time")
+	var meta map[string]any
+	_ = json.Unmarshal(obj.Metadata, &meta)
+	meta["fetched_at"], meta["published_at"] = "", ""
+	obj.Metadata, _ = json.Marshal(meta)
+	now := time.Now()
+	for name, w := range map[string][2]time.Time{"since": {now.Add(-time.Hour), {}}, "until": {{}, now.Add(time.Hour)}, "both": {now.Add(-time.Hour), now.Add(time.Hour)}} {
+		if got := inWindow([]objectgraph.Object{obj}, w[0], w[1]); len(got) != 0 {
+			t.Fatalf("%s: kept a capture with neither time", name)
+		}
+	}
+	if got := inWindow([]objectgraph.Object{obj}, time.Time{}, time.Time{}); len(got) != 1 {
+		t.Fatal("no window must keep it")
 	}
 }
