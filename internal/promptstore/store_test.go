@@ -126,6 +126,8 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"for what the brief lacks or says it left out",
 		"A published story carries no date there",
 		"A field marked [cut] was shortened",
+		"is not proof that nothing is held",
+		"one corpus search in your own words before the web",
 		"each thread of the objective as held (with its capture ids), stale or missing",
 		"Search the web only for the stale and missing threads, one question at a time",
 		"read what it returns before you search again",

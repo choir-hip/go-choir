@@ -21,7 +21,18 @@ func TestResearchFirstTurnAsksForAnEarlyInterimPacket(t *testing.T) {
 // from what is held and does not search the corpus for the same words again.
 func TestResearchFirstTurnNamesTheCorpusBrief(t *testing.T) {
 	p, _ := recordsInboxPromptFor(agentprofile.Research)
-	if !strings.Contains(p, "corpus brief") {
+	if !strings.Contains(p, "corpus brief") || !strings.Contains(p, "or a sentence saying why there is none") {
 		t.Fatalf("research first-turn prompt does not mention the corpus brief: %s", p)
+	}
+}
+
+// A brief that found nothing says what the search covered; the first turn says
+// that is not proof, and sends the desk to one corpus search of its own.
+func TestResearchFirstTurnSaysAnEmptyBriefIsNotProof(t *testing.T) {
+	p, _ := recordsInboxPromptFor(agentprofile.Research)
+	for _, want := range []string{"is not proof that nothing is held", "one corpus search in your own words before the web"} {
+		if !strings.Contains(p, want) {
+			t.Fatalf("research first-turn prompt lacks %q: %s", want, p)
+		}
 	}
 }
