@@ -2,6 +2,7 @@ package yaegikernel
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/searchquery"
 )
@@ -24,7 +25,7 @@ const searchEnoughUnread = 15
 
 // allCounts are a cell's SearchAll counts (SearchStats.AllCalls and the rest).
 type allCounts struct {
-	calls, offered, sent, unreadNotes, untagged int
+	calls, offered, sent, freshOverUnread, untagged int
 }
 
 // tagQuestion records that search id was sent for the question with this key.
@@ -44,14 +45,15 @@ func (st *SearchStore) tagQuestion(id, qk string) bool {
 	return true
 }
 
-// unreadNew counts the pages of this run's searches that were new to the run
-// when they came and that the run has not yet tried to read, each once. A page
-// that will not load (a dead link, a 403, a paywall) counts once it was tried. With a question
-// key only the searches sent for that question count; with none, every search
-// of the run does.
-func (st *SearchStore) unreadNew(qk string) int {
+// unreadPages lists the pages of this run's searches that were new to the run
+// when they came and that the run has not yet tried to read, each once, in the
+// order they were found. A page that will not load (a dead link, a 403, a
+// paywall) is gone from the list once it was tried. With a question key only
+// the searches sent for that question count; with none, every search of the
+// run does.
+func (st *SearchStore) unreadPages(qk string) []SearchHit {
 	if st == nil {
-		return 0
+		return nil
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -61,6 +63,7 @@ func (st *SearchStore) unreadNew(qk string) int {
 	}
 	read := st.readSet()
 	seen := map[string]bool{}
+	var out []SearchHit
 	for i := st.runStart; i < len(st.order); i++ {
 		if qk != "" && st.searches[st.order[i]].question != qk {
 			continue
@@ -68,10 +71,67 @@ func (st *SearchStore) unreadNew(qk string) int {
 		for _, h := range st.markOneLocked(i, read).Results {
 			if key := searchHitKey(h.URL); !h.Held && !h.Read && !tried[key] && !seen[key] {
 				seen[key] = true
+				out = append(out, h)
 			}
 		}
 	}
-	return len(seen)
+	return out
+}
+
+// settle waits until none of this run's searches is still running, at most d
+// in all, so a search is judged against the pages the searches before it
+// returned, not before they arrive. A search that has run longer than d is not
+// waited on again: it had its wait.
+func (st *SearchStore) settle(d time.Duration) {
+	if st == nil {
+		return
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	for {
+		st.mu.Lock()
+		pending := false
+		for i := st.runStart; i < len(st.order); i++ {
+			if c := st.searches[st.order[i]]; !c.Done && st.nowTime().Sub(c.startedAt) < d {
+				pending = true
+				break
+			}
+		}
+		changed := st.changed
+		st.mu.Unlock()
+		if !pending {
+			return
+		}
+		select {
+		case <-changed:
+		case <-timer.C:
+			return
+		}
+	}
+}
+
+// knows waits up to d until the store holds search id (its start frame has
+// arrived), and reports whether it does.
+func (st *SearchStore) knows(id string, d time.Duration) bool {
+	if st == nil {
+		return false
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	for {
+		st.mu.Lock()
+		_, ok := st.searches[id]
+		changed := st.changed
+		st.mu.Unlock()
+		if ok {
+			return true
+		}
+		select {
+		case <-changed:
+		case <-timer.C:
+			return false
+		}
+	}
 }
 
 // questionKey is the key of a SearchAll question: the terms of its words, as
@@ -80,22 +140,36 @@ func questionKey(question string) string {
 	return searchquery.Key(question)
 }
 
-// noteUnreadPages tells the desk once a cell that its run holds many unread
-// pages when it starts a plain search. A note only: the search is sent.
-func (s *ChoirScope) noteUnreadPages() {
+// refuseForUnread is the need test every web search passes, SearchAll's
+// wordings and the plain verbs alike. It returns the pages the run holds for
+// the question (qk; every search of the run when empty) that it has not tried
+// to read, and whether they are enough to refuse a search: searchEnoughUnread
+// or more. Unless override is set it first waits for the run's running searches
+// (see settle). A search sent over a refusal with override is counted as
+// fresh_over_unread; the caller counts a refusal as holds_unread.
+func (s *ChoirScope) refuseForUnread(qk string, override bool) (held []SearchHit, refuse bool) {
 	if s == nil || s.searches == nil {
-		return
+		return nil, false
 	}
-	n := s.searches.unreadNew("")
-	if n < searchEnoughUnread {
-		return
+	if !override {
+		s.searches.settle(time.Duration(searchWaitMs) * time.Millisecond)
 	}
-	s.statsMu.Lock()
-	defer s.statsMu.Unlock()
-	if s.reuseQuiet || s.unreadNoted {
-		return
+	held = s.searches.unreadPages(qk)
+	if len(held) < searchEnoughUnread {
+		return held, false
 	}
-	s.unreadNoted = true
-	s.allStat.unreadNotes++
-	s.notes = append(s.notes, fmt.Sprintf("this run holds %d pages new to this run that you have not tried to read, returned by its earlier searches; the search is sent. Read the ones that matter (choir.Searches.Summary(id) lists them), then search again for what is still missing, naming it. A page that will not load counts once you have tried it; fresh sends a search the run holds results for", n))
+	if override {
+		s.statsMu.Lock()
+		s.allStat.freshOverUnread++
+		s.statsMu.Unlock()
+		return held, false
+	}
+	return held, true
+}
+
+// unreadRefusal is what the desk is told when a search is not sent for the
+// pages the run holds: why, how many, and the pages themselves (SearchStub and
+// Search carry them).
+func unreadRefusal(n int) string {
+	return fmt.Sprintf("this run already holds %d pages new to this run that you have not tried to read, returned by its earlier searches. Read the ones that matter, then search again for what is still missing, naming it. A page that will not load counts once you have tried it. To send a search for something these pages cannot hold, pass fresh: choir.Search(query, true)", n)
 }
