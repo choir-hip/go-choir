@@ -16,6 +16,7 @@
 
 import type { Storage } from './app.contract.d.ts';
 import { open, seal, canSeal, forgetKey, sha256, hex } from './mail-seal.ts';
+import { accountGeneration } from './api.ts';
 import type { AttachmentMeta, Summary } from './mail-model.ts';
 
 export const DIR = 'app:/data/mail';
@@ -23,7 +24,10 @@ export const CACHE = 'app:/cache';
 /** The most message files kept; past it the oldest go (the Swift store capped mail at 200 MB, a year at 100 messages a day). */
 export const MAX_FILES = 6000;
 
-export type Env = { storage?: Storage };
+/** `gen`: the account generation (api.ts) the source started under. A write checks it at the last moment before it seals and again before and after the file
+ * is written: a sign-out that began in between (the generation moved) writes nothing, makes no key and leaves no file. */
+export type Env = { storage?: Storage; gen?: number };
+const stale = (env: Env): boolean => env.gen !== undefined && env.gen !== accountGeneration();
 export type FolderCopy = { folder: string; rows: Summary[]; total: number; unread: number; savedAt: number };
 export type MessageCopy = { id: string; folder: string; summary: Summary; text: string; to: string[]; cc: string[]; replyTo: string; attachments: AttachmentMeta[]; savedAt: number };
 export type StateCopy = { done: Record<string, boolean>; syncedAt: Record<string, number>; cursor: Record<string, string> };
@@ -31,39 +35,51 @@ export type StateCopy = { done: Record<string, boolean>; syncedAt: Record<string
 const enc = (v: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(v));
 
 /** Is there a cipher (the native pair, mail-seal.ts)? Without one nothing is written to disk. */
-export const sealed = (_env: Env): boolean => canSeal();
+export const sealed = (env: Env): Promise<boolean> => (stale(env) ? Promise.resolve(false) : canSeal());
 
 export async function fileFor(id: string): Promise<string> { return `${DIR}/msg-${hex((await sha256(new TextEncoder().encode(id))).subarray(0, 16))}.bin`; }
 export const rowsFile = (folder: string): string => `${DIR}/rows-${folder.replace(/[^a-z0-9_-]/g, '_')}.bin`;
 export const STATE_FILE = `${DIR}/state.bin`;
 
-async function write(env: Env, path: string, value: unknown): Promise<boolean> {
-  if (!canSeal() || !env.storage) return false;
+async function write(env: Env, path: string, value: unknown, aad: string): Promise<boolean> {
+  if (!env.storage || stale(env) || !(await canSeal())) return false;
   try {
-    const box = await seal(enc(value));
-    if (!box) return false;                                // the cipher refused (no key could be made): nothing is written
+    const plain = enc(value);
+    if (stale(env)) return false;
+    const box = await seal(plain, aad);
+    if (!box || stale(env)) return false;                  // the cipher refused (no key could be made), or a sign-out began while it sealed: nothing is written
     await env.storage.fs.mkdir(DIR).catch(() => undefined);
+    if (stale(env)) return false;
     await env.storage.fs.atomicWriteFile(path, box);
+    if (stale(env)) { try { await env.storage.fs.rm(path); } catch { /* the wipe will */ } return false; }
     return true;
   } catch { return false; }
 }
 
-async function read<T>(env: Env, path: string): Promise<T | null> {
-  if (!canSeal() || !env.storage) return null;
+async function read<T>(env: Env, path: string, aad: string): Promise<T | null> {
+  if (!env.storage || !(await canSeal())) return null;
   let bytes: Uint8Array;
   try { bytes = new Uint8Array(await env.storage.fs.readFile(path)); } catch { return null; }
-  const plain = await open(bytes);
-  if (plain === null) { try { await env.storage.fs.rm(path); } catch { /* already gone */ } return null; }
-  try { return JSON.parse(new TextDecoder().decode(plain)) as T; } catch { return null; }
+  const o = await open(bytes, aad);
+  if ('why' in o) {
+    // Removed only when the cipher said the data is bad (changed, another record's, an earlier format): a locked Keychain or a bridge error keeps the file.
+    if (o.why === 'bad') { try { await env.storage.fs.rm(path); } catch { /* already gone */ } }
+    return null;
+  }
+  try { return JSON.parse(new TextDecoder().decode(o.plain)) as T; } catch { return null; }
 }
 
-export const saveFolder = (env: Env, c: FolderCopy): Promise<boolean> => write(env, rowsFile(c.folder), c);
-export const loadFolder = (env: Env, folder: string): Promise<FolderCopy | null> => read<FolderCopy>(env, rowsFile(folder));
-export async function saveMessage(env: Env, c: MessageCopy): Promise<boolean> { return write(env, await fileFor(c.id), c); }
-export async function loadMessage(env: Env, id: string): Promise<MessageCopy | null> { const c = await read<MessageCopy>(env, await fileFor(id)); return c && c.id === id ? c : null; }
-export const saveState = (env: Env, s: StateCopy): Promise<boolean> => write(env, STATE_FILE, s);
+const aadRows = (folder: string): string => `rows|${folder}`;
+const aadMsg = (id: string): string => `msg|${id}`;
+export const saveFolder = (env: Env, c: FolderCopy): Promise<boolean> => write(env, rowsFile(c.folder), c, aadRows(c.folder));
+export async function loadFolder(env: Env, folder: string): Promise<FolderCopy | null> { const c = await read<FolderCopy>(env, rowsFile(folder), aadRows(folder)); return c && c.folder === folder ? c : null; }
+/** The text kept of a message is cut at this (the page shows at most MAX_CHARS, mail-model.ts). */
+const KEEP_CHARS = 200_000;
+export async function saveMessage(env: Env, c: MessageCopy): Promise<boolean> { return write(env, await fileFor(c.id), c.text.length > KEEP_CHARS ? { ...c, text: c.text.slice(0, KEEP_CHARS) } : c, aadMsg(c.id)); }
+export async function loadMessage(env: Env, id: string): Promise<MessageCopy | null> { const c = await read<MessageCopy>(env, await fileFor(id), aadMsg(id)); return c && c.id === id ? c : null; }
+export const saveState = (env: Env, s: StateCopy): Promise<boolean> => write(env, STATE_FILE, s, 'state');
 export async function loadState(env: Env): Promise<StateCopy> {
-  const s = await read<StateCopy>(env, STATE_FILE);
+  const s = await read<StateCopy>(env, STATE_FILE, 'state');
   return s && typeof s === 'object' && s.done && s.syncedAt && s.cursor ? s : { done: {}, syncedAt: {}, cursor: {} };
 }
 
@@ -88,39 +104,8 @@ export async function trim(env: Env, max = MAX_FILES): Promise<number> {
   return gone;
 }
 
-/** The held messages, newest first by the date they carry, read and opened one by one (a few hundred at most: the caller says how many). */
-export async function heldMessages(env: Env, limit: number): Promise<MessageCopy[]> {
-  const fs = env.storage?.fs;
-  if (!fs) return [];
-  let names: string[];
-  try { names = (await fs.readdir(DIR)).filter((n) => n.startsWith('msg-')); } catch { return []; }
-  const aged: { n: string; t: number }[] = [];
-  for (const n of names) { try { aged.push({ n, t: (await fs.stat(`${DIR}/${n}`)).modifiedMs }); } catch { /* gone */ } }
-  aged.sort((a, b) => b.t - a.t);
-  const out: MessageCopy[] = [];
-  for (const a of aged.slice(0, limit)) { const m = await read<MessageCopy>(env, `${DIR}/${a.n}`); if (m) out.push(m); }
-  return out.sort((a, b) => (a.summary.at < b.summary.at ? 1 : a.summary.at > b.summary.at ? -1 : 0));
-}
-
-/** Search the phone's copy: the words must all appear (any case) in the sender, subject or text of a held message, or in a held row's preview.
- * Returns message ids, newest first. The global search (X10) will read this; no mail page asks it yet. */
-export async function search(env: Env, query: string, limit = 20, scan = 500): Promise<string[]> {
-  const words = query.toLowerCase().split(/\s+/).filter((w) => w !== '');
-  if (words.length === 0) return [];
-  const seen = new Set<string>();
-  const hits: { id: string; at: string }[] = [];
-  const test = (id: string, at: string, hay: string): void => {
-    if (seen.has(id)) return;
-    const h = hay.toLowerCase();
-    if (words.every((w) => h.includes(w))) { seen.add(id); hits.push({ id, at }); }
-  };
-  for (const m of await heldMessages(env, scan)) test(m.id, m.summary.at, `${m.summary.fromDisplay} ${m.summary.fromAddress} ${m.summary.subject} ${m.text}`);
-  for (const f of ['inbox', 'sent', 'quarantine']) {
-    const c = await loadFolder(env, f);
-    for (const r of c?.rows ?? []) test(r.id, r.at, `${r.fromDisplay} ${r.fromAddress} ${r.subject} ${r.snippet}`);
-  }
-  return hits.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, limit).map((h) => h.id);
-}
+// (There is no search over the phone's copy: the copy is sealed, and a search index of mail would hold its words unsealed. Mail stays out of local search
+// until a search over sealed mail is designed; owner-visible regression, recorded in docs/design/autoradio-exact-integration-2026-11-19.md.)
 
 /** What the old Swift version left where shared code can reach: the "Show original" documents in the cache. Returns how many were removed. */
 export async function forgetOldCopy(storage: Storage | undefined, keep = ''): Promise<number> {

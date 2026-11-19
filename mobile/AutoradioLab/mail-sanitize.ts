@@ -195,13 +195,18 @@ function escapeAttr(s: string): string {
   return out;
 }
 
+/** A link's target, as the sender wrote it and the checker allowed it ('' when it allowed none). Set by `open`. */
+let lastTarget = '';
+const SHOWN_TARGET = 90;
+
 function open(tag: Tag): string {
+  lastTarget = '';
   const parts = ['<' + tag.name];
   const seen = new Set<string>();
   for (const [name, rawValue] of tag.attrs) {
     if (seen.has(name)) continue;
     let value: string | null;
-    if (name === 'href' && tag.name === 'a') value = safeLink(rawValue);
+    if (name === 'href' && tag.name === 'a') { const t = safeLink(rawValue); if (t !== null && lastTarget === '') lastTarget = t; value = null; }   // inert: a tap goes nowhere, the target is written after the link
     else if (name === 'src' && tag.name === 'img') value = safeImage(rawValue);
     else if (name === 'style') value = safeStyle(rawValue);
     else if (GLOBAL_ATTRS.has(name)) value = stripControls(decodeAttr(rawValue));
@@ -220,6 +225,7 @@ export function clean(input: string): string {
   const n = s.length;
   let out = '';
   let i = 0;
+  const links: string[] = [];                                      // the targets of the links now open, written after each one closes
   let skipName: string | null = null;                              // inside a dropWithContent element
   let skipDepth = 0;
   while (i < n) {
@@ -259,6 +265,7 @@ export function clean(input: string): string {
     }
     if (tag.closing) {
       if (ALLOWED_TAGS.has(tag.name) && !VOID_TAGS.has(tag.name)) out += `</${tag.name}>`;
+      if (tag.name === 'a' && links.length > 0) { const t = links.pop()!; if (t !== '') out += ` <small>(${escapeAttr(t.length > SHOWN_TARGET ? t.slice(0, SHOWN_TARGET) + '…' : t)})</small>`; }
       continue;
     }
     if (RAW_TEXT.has(tag.name)) {                                  // skip to the matching end tag (parsed, and ignored, next)
@@ -267,15 +274,20 @@ export function clean(input: string): string {
       continue;
     }
     if (DROP_WITH_CONTENT.has(tag.name)) { skipName = tag.name; skipDepth = 1; continue; }
-    if (ALLOWED_TAGS.has(tag.name)) out += open(tag);
+    if (ALLOWED_TAGS.has(tag.name)) { out += open(tag); if (tag.name === 'a') links.push(lastTarget); }
     // any other tag (html, body, form, input, base, meta, link, unknowns): the tag goes, its text stays
   }
   return out;
 }
 
 /** The whole document "Show original" displays: the cleaned fragment under a CSP that refuses every load but inline style and data: images. */
+/** The most HTML `clean` is given: it builds a code-point array and appends per character, and a page's turn is 100 ms. Over it the owner is told the message is
+ * too large to show in full (never a blank page); the readable text of the message is on the page itself. */
+export const CLEAN_MAX = 120_000;
+export const TOO_LARGE_NOTE = 'This message is too large to show in full here. Its text is on the message page.';
+
 export function sanitized(html: string): string {
-  const t = clean(html);
+  const t = html.length > CLEAN_MAX ? `<p>${TOO_LARGE_NOTE}</p>` : clean(html);
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}">\n` +
     '<meta name="viewport" content="width=device-width, initial-scale=1"><style>:root{color-scheme:light dark}body{font:16px -apple-system,sans-serif;margin:12px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}</style></head>' +
     `<body>${t}</body></html>`;

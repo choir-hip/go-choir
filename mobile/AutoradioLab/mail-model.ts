@@ -56,7 +56,14 @@ export function segment(id: string): string {
 
 const trimWS = (s: string): string => s.trim();
 const HSPACE = '[ \\t\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000]';
-const trimH = (s: string): string => s.replace(new RegExp(`^${HSPACE}+|${HSPACE}+$`, 'g'), '');
+// A scan, not a regex: `^X+|X+$` rescans a long run of spaces from every start (quadratic) on a hostile line.
+const isH = (c: number): boolean => c === 32 || c === 9 || c === 0xA0 || c === 0x1680 || (c >= 0x2000 && c <= 0x200A) || c === 0x202F || c === 0x205F || c === 0x3000;
+const trimH = (s: string): string => {
+  let a = 0, b = s.length;
+  while (a < b && isH(s.charCodeAt(a))) a += 1;
+  while (b > a && isH(s.charCodeAt(b - 1))) b -= 1;
+  return a === 0 && b === s.length ? s : s.slice(a, b);
+};
 
 /** Subject without "Re:", "Fwd:", "[list]" prefixes, lowercased; "" for an empty subject. */
 export function normalizedSubject(subject: string): string {
@@ -112,17 +119,62 @@ export function decodeEntities(s: string): string {
   return out;
 }
 
-/** HTML to plain paragraphs: no script or style, block ends are blank lines, list items are bullets. */
+/** The most of a message's HTML that anything here reads. Every scan below is linear, and the cap is applied BEFORE any of them: a page's turn is
+ * 100 ms of CPU, and the sender chooses the size of the body (a 5 MB message must cost no more than a 300 KB one). Over it, the text is cut and the page says so. */
+export const HTML_MAX = 300_000;
+
+const DROPPED = new Set(['script', 'style', 'head', 'title', 'svg', 'noscript']);
+const BLOCK_END = new Set(['p', 'div', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'table', 'blockquote']);
+const lowerAscii = (s: string): string => s.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
+
+/** HTML to plain paragraphs: no script or style, block ends are blank lines, list items are bullets. One pass over the string with indexOf: no regex
+ * rescans an unclosed `<`, `<!--` or `<script` to the end (that is quadratic). Input is cut at HTML_MAX first. */
 export function htmlToText(html: string): string {
-  let t = html;
-  t = t.replace(/<!--.*?-->/gis, '');
-  t = t.replace(/<(script|style|head|title|svg|noscript)\b.*?<\/\1\s*>/gis, '');
-  t = t.replace(/<br\s*\/?>/gi, '\n');
-  t = t.replace(/<li\b[^>]*>/gi, '\n• ');
-  t = t.replace(/<\/(p|div|tr|h[1-6]|ul|ol|table|blockquote)\s*>/gi, '\n\n');
-  t = t.replace(/<[^>]*>/g, '');
-  t = decodeEntities(t);
-  t = t.replace(/[ \t ]+/g, ' ');
+  const src = html.length > HTML_MAX ? html.slice(0, HTML_MAX) : html;
+  const low = lowerAscii(src);
+  const n = src.length;
+  const noCloser = new Set<string>();                    // a name whose closing tag is absent from here to the end is absent for every later opener too
+  let out = '';
+  let i = 0;
+  while (i < n) {
+    const lt = src.indexOf('<', i);
+    if (lt < 0) { out += src.slice(i); break; }
+    out += src.slice(i, lt);
+    if (low.startsWith('<!--', lt)) {
+      const e = src.indexOf('-->', lt + 4);
+      if (e < 0) { out += src.slice(lt); break; }        // an unclosed comment is text (as the pattern left it); nothing later can close it either
+      i = e + 3; continue;
+    }
+    const gt = src.indexOf('>', lt + 1);
+    if (gt < 0) { out += src.slice(lt); break; }         // no '>' after this '<' means none after any later one
+    const head = low.slice(lt + 1, Math.min(gt, lt + 41));
+    const m = /^(\/?)([a-z][a-z0-9]*)/.exec(head);
+    const closing = !!m && m[1] === '/';
+    const name = m ? m[2] : '';
+    i = gt + 1;
+    if (!closing && DROPPED.has(name)) {
+      if (!noCloser.has(name)) {
+        let from = gt + 1, found = -1, end = -1;
+        for (;;) {
+          const c = low.indexOf('</' + name, from);
+          if (c < 0) break;
+          let k = c + 2 + name.length;
+          while (k < n && /\s/.test(low[k])) k += 1;
+          if (low[k] === '>') { found = c; end = k + 1; break; }
+          from = c + 2;
+        }
+        if (found >= 0) { i = end; continue; }
+        noCloser.add(name);
+      }
+      continue;                                          // no closer: only the tag itself goes
+    }
+    const inner = src.slice(lt + 1, Math.min(gt, lt + 41));
+    if (!closing && name === 'br' && gt - lt <= 40 && /^br\s*\/?$/i.test(inner)) out += '\n';
+    else if (!closing && name === 'li') out += '\n• ';
+    else if (closing && BLOCK_END.has(name) && /^\/[a-z0-9]+\s*$/i.test(src.slice(lt + 1, Math.min(gt, lt + 41)))) out += '\n\n';
+  }
+  let t = decodeEntities(out);
+  t = t.replace(/[ \t\u00A0]+/g, ' ');
   t = t.replace(/ ?\n ?/g, '\n');
   t = t.replace(/\n{3,}/g, '\n\n');
   return trimWS(t);
@@ -145,9 +197,9 @@ export function blocks(text: string, html: string): { blocks: MailBlock[]; htmlO
   const plain = trimWS(text);
   let source = plain;
   let htmlOnly = false;
-  if (plain === '' && trimWS(html) !== '') { source = htmlToText(html); htmlOnly = true; }
-  if (source === '') return { blocks: [{ kind: 'p', text: '(no text)' }], htmlOnly, cut: false };
   let cut = false;
+  if (plain === '' && trimWS(html.length > HTML_MAX ? html.slice(0, HTML_MAX) : html) !== '') { source = htmlToText(html); htmlOnly = true; cut = html.length > HTML_MAX; }
+  if (source === '') return { blocks: [{ kind: 'p', text: '(no text)' }], htmlOnly, cut };
   if (source.length > MAX_CHARS) { source = source.slice(0, MAX_CHARS); cut = true; }
   source = source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const out: MailBlock[] = [];

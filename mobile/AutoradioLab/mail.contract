@@ -191,7 +191,7 @@ component MailMessage
           text mailNote testId="mail-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         // The body, in the reader's type. Quoted earlier messages are folded away until asked for.
         if mailOriginal and mmsg.hasOriginal
-          text "The sender's own layout. Scripts, pictures and links are turned off." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+          text "The sender's own layout. Scripts and pictures are turned off, and a link goes nowhere: its address is written after it." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           iframe src=mmsg.originalPath sandbox="" testId="mail-original-frame" width="100%" height=520 border-radius=th.radiusControl background-color=th.paper2
         if mailOriginal == false or mmsg.hasOriginal == false
           column testId="mail-body" gap=14 margin-top=6

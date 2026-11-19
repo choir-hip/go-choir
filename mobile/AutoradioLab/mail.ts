@@ -12,7 +12,7 @@
 // Logs carry ids and counts only: never a sender, a subject, an address or a word of a message.
 
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON } from './api.ts';
+import { authedJSON, accountGeneration, SignedOutError } from './api.ts';
 import * as M from './mail-model.ts';
 import { sanitized } from './mail-sanitize.ts';
 import * as C from './mail-store.ts';
@@ -51,6 +51,9 @@ export type Ack = { status: string; message: string };
 export type SyncView = { status: string; held: number; fetched: number; note: string };
 
 export const LIST_LIMIT = 100;
+/** What a draft may hold when saved from the phone (the server states no limit; a message is sent by the owner from the approval page). */
+export const MAX_DRAFT_SUBJECT = 998;
+export const MAX_DRAFT_BODY = 200_000;
 /** Bodies fetched by one catch-up answer. A bound on one turn's work, not a limit on the listener: the next open of the mailbox goes on from where this stopped. */
 export const SYNC_BODIES = 25;
 const DEMO_STATES = ['demo-empty', 'demo-loading', 'demo-offline', 'demo-error'];
@@ -62,12 +65,20 @@ type Held = { rows: M.Summary[]; total: number; unread: number; next: string };
 const kept = new Map<string, Held>();
 const autoRead = new Set<string>();
 let drafts: M.DraftInfo[] = [];
+const savedDrafts = new Map<string, string>();       // content -> the draft the server made for it: the same text saved again is not a second draft
 let alias: string | null = null;
 let clock = 0;
 let started = false;
 
 /** Forget what this session holds. */
-export function forget(): void { kept.clear(); autoRead.clear(); drafts = []; alias = null; clock = 0; started = false; }
+export function forget(): void { kept.clear(); autoRead.clear(); drafts = []; savedDrafts.clear(); alias = null; clock = 0; started = false; }
+
+/** A source starts under one account generation (api.ts); a sign-out moves it. Everything a source does with a reply after the await (memory, the sealed
+ * files) checks it first, so a reply that arrived just before the sign-out cannot write the old account's mail into the wiped stores (review 2026-11-19). */
+const stamped = (env: C.Env): C.Env => ({ ...env, gen: accountGeneration() });
+const live = (env: C.Env): void => { if (env.gen !== undefined && env.gen !== accountGeneration()) throw new SignedOutError('signed out while the mail was being read'); };
+/** Between two bodies of a long answer: lets the next turn start (Exact gives a turn about 100 ms of CPU; Bun has no scheduler). */
+const yieldTurn = async (): Promise<void> => { const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler; if (sc?.yield) await sc.yield(); };
 
 /** SIGN-OUT. Removes the phone's copy of the account's mail (every sealed file, every "Show original" document, the key) and what this session holds.
  * The sign-in code calls this once, with the app's `storage` (and `store` when it has it, so the key is forgotten too); it never throws and logs counts only. */
@@ -175,9 +186,11 @@ export async function mailBox(address: string, demo: boolean, env: C.Env): Promi
   if (!address.startsWith('mailbox:')) { const i = emptyBox(); i.status = 'idle'; return i; }
   const v = frame(address);
   if (DEMO_STATES.includes(v.folder)) return demoState(v);
+  env = stamped(env);
   try {
     if (v.folder === 'drafts') {
       const o = (await call(demo, '/api/email/drafts', {})) as { drafts?: unknown[] } | null;
+      live(env);
       drafts = (o?.drafts ?? []).map(M.parseDraft);
       v.rows = drafts.map((d) => ({
         id: d.id, address: 'mail:draft/' + d.id, sender: 'To ' + (d.to[0] ?? '(nobody yet)'), subject: d.subject === '' ? '(no subject)' : d.subject, snippet: d.text.slice(0, 120),
@@ -187,6 +200,7 @@ export async function mailBox(address: string, demo: boolean, env: C.Env): Promi
     } else {
       const o = await call(demo, '/api/email/messages', { query: { folder: v.folder, limit: LIST_LIMIT } });
       const l = M.parseList(o);
+      live(env);
       kept.set(v.folder, { rows: l.rows, total: l.total, unread: l.unread, next: l.next });
       if (!demo) await C.saveFolder(env, { folder: v.folder, rows: l.rows, total: l.total, unread: l.unread, savedAt: clock });
       v.rows = M.threadRows(l.rows, nowOf(l.rows)); v.total = l.total; v.unread = l.unread;
@@ -261,11 +275,13 @@ async function loadMessage(address: string, demo: boolean, wantOriginal: boolean
   const id = M.rest(address);
   if (id === '' || id === 'new' || id.startsWith('reply/') || id.startsWith('draft/')) { v.status = 'idle'; return { view: v, detail: null }; }
   v.id = id; v.address = address;
+  env = stamped(env);
   if (!started) { started = true; await C.forgetOldCopy(env.storage); }      // documents a past session left in the cache
   try {
     let d: M.Detail;
     try {
       d = M.parseDetail(await call(demo, '/api/email/messages/' + M.segment(id), {}));
+      live(env);
       if (!demo) {
         const folder = [...kept.entries()].find(([, h]) => h.rows.some((r) => r.id === id))?.[0] ?? (await C.loadMessage(env, id))?.folder ?? 'inbox';
         await C.saveMessage(env, { id, folder, summary: d.summary, text: d.text, to: d.to, cc: d.cc, replyTo: d.replyTo, attachments: d.attachments, savedAt: clock });
@@ -276,7 +292,7 @@ async function loadMessage(address: string, demo: boolean, wantOriginal: boolean
       d = { summary: held.summary, text: held.text, html: '', replyTo: held.replyTo, to: held.to, cc: held.cc, attachments: held.attachments };
       v.message = savedWords(held.savedAt);
     }
-    if (!kept.has('inbox')) { try { const l = M.parseList(await call(demo, '/api/email/messages', { query: { folder: 'inbox', limit: LIST_LIMIT } })); kept.set('inbox', { rows: l.rows, total: l.total, unread: l.unread, next: l.next }); } catch { await ensureKept(env, 'inbox', demo); } }
+    if (!kept.has('inbox')) { try { const l = M.parseList(await call(demo, '/api/email/messages', { query: { folder: 'inbox', limit: LIST_LIMIT } })); live(env); kept.set('inbox', { rows: l.rows, total: l.total, unread: l.unread, next: l.next }); } catch { await ensureKept(env, 'inbox', demo); } }
     const s = d.summary;
     v.subject = s.subject === '' ? '(no subject)' : s.subject;
     v.sender = M.from(s) === '' ? '(unknown sender)' : M.from(s); v.fromAddress = s.fromAddress;
@@ -371,13 +387,17 @@ export async function mailSaveDraft(address: string, to: string, subject: string
   if (rest.startsWith('reply/')) v.replyTo = rest.slice(6);
   const p = M.problem(to, body);
   if (p !== null) { v.status = 'error'; v.note = p; return v; }          // refused here, no request made
+  if (subject.length > MAX_DRAFT_SUBJECT || body.length > MAX_DRAFT_BODY) { v.status = 'error'; v.note = 'This draft is too long to save from the phone. Shorten it and try again.'; return v; }
+  const same = `${to}\u0000${subject}\u0000${body}`;
+  const already = savedDrafts.get(same);
+  if (already !== undefined) { v.status = 'saved'; v.draftId = already; v.note = 'Saved as a draft. It has not been sent.'; return v; }   // the server has no update route, so the same text is not saved twice
   try {
     const from = await aliasAddress(demo);
     v.sendAs = from;
     const req: Record<string, unknown> = { from_address: from, subject, text_body: body, to_addresses: M.recipients(to) };
     if (v.replyTo !== '') { req.reply_to_message_id = v.replyTo; req.source_kind = 'mail'; req.source_ref = v.replyTo; }
     const d = M.parseDraft(await call(demo, '/api/email/drafts', { method: 'POST', body: req }));
-    v.status = 'saved'; v.draftId = d.id;
+    v.status = 'saved'; v.draftId = d.id; savedDrafts.set(same, d.id);
     v.note = 'Saved as a draft. It has not been sent.';
     console.log('mail: draft saved');
   } catch (e) { v.status = 'error'; v.note = M.words(e).message; }
@@ -413,8 +433,9 @@ export async function mailMarkUnread(address: string, demo: boolean): Promise<Ac
 export async function mailSync(address: string, demo: boolean, env: C.Env): Promise<SyncView> {
   const out: SyncView = { status: '', held: 0, fetched: 0, note: '' };
   if (!address.startsWith('mailbox:') || demo) { out.status = 'idle'; return out; }
+  env = stamped(env);
   const folder = M.rest(address);
-  if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !C.sealed(env) || !env.storage) { out.status = 'idle'; return out; }
+  if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !env.storage || !(await C.sealed(env))) { out.status = 'idle'; return out; }      // no cipher: no body is fetched to be thrown away
   const h = kept.get(folder) ?? (await ensureKept(env, folder, false));
   if (!h) { out.status = 'idle'; return out; }
   const state = await C.loadState(env);
@@ -426,8 +447,10 @@ export async function mailSync(address: string, demo: boolean, env: C.Env): Prom
         if (r.id === '' || (await C.holds(env, r.id))) continue;
         if (budget === 0) { stopped = true; break; }
         const d = M.parseDetail(await call(false, '/api/email/messages/' + M.segment(r.id), {}));
+        live(env);
         await C.saveMessage(env, { id: r.id, folder, summary: d.summary, text: d.text, to: d.to, cc: d.cc, replyTo: d.replyTo, attachments: d.attachments, savedAt: clock });
         budget -= 1; out.fetched += 1;
+        await yieldTurn();
       }
       if (stopped) break;
       if (!first) { state.cursor[folder] = nextCursor; if (nextCursor === '') state.done[folder] = true; }

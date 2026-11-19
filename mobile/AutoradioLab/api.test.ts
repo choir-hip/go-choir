@@ -13,8 +13,10 @@
 //  A10 authedBytes returns the bytes and the content type, and asks for any type.
 //  A11 a changed key (another account signed in) does not reuse the old account's computer id.
 //  A12 a transport failure is an Error, not a SignedOutError.
+//  A13 authedToFile: the body goes to the named app file by the host (`exactBodyTo`), the reply is never read, a path outside app:/cache is refused before the key is read,
+//      a refusal is an error with no file, a sign-out in flight removes the file and drops the reply, a host that wrote nothing is an error.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { authedJSON, authedBytes, SignedOutError, HTTPError, bindNative, resetSession, resetSeam, setDemo, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError, HTTPError, bindNative, resetSession, resetSeam, setDemo, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
 
 const KEY = 'test-key-0001-not-real';
 const KEY2 = 'test-key-0002-not-real';
@@ -194,5 +196,42 @@ describe('review 2026-11-19: demo, generation, redirect, one read', () => {
     await authedJSON('/api/x');
     const api = await import('./api.ts');
     expect(JSON.stringify(Object.values(api).map((v) => typeof v === 'function' ? '' : v))).not.toContain(KEY);
+  });
+});
+
+describe('A13 the signed-in download to a file', () => {
+  const DEST = 'app:/cache/files/abc/talk.mp4';
+  const storage = (removed: string[]) => ({ fs: { rm: async (p: string) => { removed.push(p); } } }) as never;
+  const wrote = (bytes: number) => { const r = new Response('', { status: 200 }) as Response & { exactBodyTo?: unknown }; Object.defineProperty(r, 'exactBodyTo', { value: { path: DEST, bytes } }); return r; };
+  test('the host is asked to write the file; the key goes only in the header; the reply body is never read', async () => {
+    let read = false;
+    handler = () => { const r = wrote(60_000_000); r.arrayBuffer = async () => { read = true; return new ArrayBuffer(0); }; r.text = async () => { read = true; return ''; }; return r; };
+    const got = await authedToFile('/api/files/talk.mp4', DEST, storage([]), { query: { disposition: 'inline' } });
+    expect(got.bytes).toBe(60_000_000); expect(read).toBe(false);
+    expect((calls[0].init as { exactBodyTo?: string }).exactBodyTo).toBe(DEST);
+    expect(header(calls[0], 'Authorization')).toBe(`Bearer ${KEY}`); expect(header(calls[0], 'Accept')).toBe('*/*');
+    expect(calls[0].url).toBe(`${ORIGIN}/api/files/talk.mp4?disposition=inline`); expect((calls[0].init as { redirect?: string }).redirect).toBe('manual');
+  });
+  test('a destination outside app:/cache, with a .. or in a text of its own is refused before the key is read', async () => {
+    for (const d of ['app:/data/x', 'app:/cache/../data/x', 'https://evil.example/x', '/etc/passwd', 'app:/cache']) await expect(authedToFile('/api/files/a', d, storage([]))).rejects.toThrow();
+    expect(calls.length).toBe(0); expect(reads.length).toBe(0);
+  });
+  test('401 is a sign-out, 404 and 500 are errors; none keeps a file', async () => {
+    const removed: string[] = [];
+    handler = () => new Response('', { status: 401 }); await expect(authedToFile('/api/files/a', DEST, storage(removed))).rejects.toBeInstanceOf(SignedOutError);
+    handler = () => new Response('{"error":"gone"}', { status: 404 }); const e = await authedToFile('/api/files/a', DEST, storage(removed)).catch((x) => x);
+    expect(e).toBeInstanceOf(HTTPError); expect(e.status).toBe(404);
+  });
+  test('a host that wrote nothing (an older runtime read the body into memory) is an error, and nothing is kept', async () => {
+    const removed: string[] = [];
+    handler = () => new Response('hello', { status: 200 });
+    await expect(authedToFile('/api/files/a', DEST, storage(removed))).rejects.toThrow(/did not write/);
+    expect(removed).toContain(DEST);
+  });
+  test('a sign-out while the file arrives: the file is removed and the reply is dropped', async () => {
+    const removed: string[] = [];
+    handler = () => { nextGeneration(); return wrote(10); };
+    await expect(authedToFile('/api/files/a', DEST, storage(removed))).rejects.toBeInstanceOf(SignedOutError);
+    expect(removed).toContain(DEST);
   });
 });

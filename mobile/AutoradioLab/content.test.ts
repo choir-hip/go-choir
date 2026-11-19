@@ -15,8 +15,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import {
-  ContentStore, syncAll, noFetchers, newItem, bytesOf, STANDARD_BUDGET, toDoc, mailItem, parseMailRow, storyText, textureSource, liveFetchers, fileVersion,
-  TRANSCRIPTS_PER_RUN, type Db, type Fetchers, type MailRow, type StoredItem,
+  ContentStore, syncAll, noFetchers, newItem, bytesOf, STANDARD_BUDGET, toDoc, storyText, textureSource, liveFetchers, fileVersion,
+  TRANSCRIPTS_PER_RUN, type Db, type Fetchers, type StoredItem,
 } from './content.ts';
 import { Corpus } from './search.ts';
 import { bindNative, resetSession, SignedOutError } from './api.ts';
@@ -104,49 +104,12 @@ describe('C1 to C6 the store', () => {
   });
 });
 
-const row = (i: number): MailRow => ({ id: `m${i}`, subject: `SECRET-SUBJECT ${i}`, from: 'SECRET-SENDER', fromAddress: 'a@example.com', snippet: 'snip', direction: 'inbound', trust: '', readAt: '', at: `2026-11-1${i % 9}T09:00:00Z` });
-function mailFetchers(pages: number[][], calls: string[]): Fetchers {
-  const f = noFetchers(); f.mailFolders = ['inbox'];
-  f.mailPage = async (_folder, cursor) => { const n = cursor ? Number(cursor) : 0; calls.push(`page${n}`); return { rows: pages[n].map(row), next: n + 1 < pages.length ? String(n + 1) : null }; };
-  f.mailBody = async (id) => { calls.push(`body:${id}`); return { row: row(Number(id.slice(1))), text: `SECRET-BODY of ${id}`, to: [] }; };
-  return f;
-}
-
 describe('C7 to C15 the sync', () => {
-  test('C7 mail walks every page and keeps full bodies; logs hold counts and ids only', async () => {
-    const s = await fresh(); const calls: string[] = [], logs: string[] = [];
-    await syncAll(s, mailFetchers([[1, 2], [3, 4], [5]], calls), { now: NOW, log: (l) => logs.push(l) });
-    expect((await s.ids('mail')).length).toBe(5); expect((await s.get('mail:m3'))?.text).toBe('SECRET-BODY of m3');
-    const all = logs.join('\n');
-    expect(all).toContain('content sync mail: fetched 5'); expect(all).not.toContain('SECRET');
-  });
-  test('C8 a killed sync resumes without fetching held bodies again; the radio stops the run', async () => {
-    const s = await fresh(); const calls: string[] = [];
-    let asked = 0;
-    const f1 = mailFetchers([[1, 2, 3], [4, 5, 6]], calls); f1.audioBusy = async () => ++asked > 4;
-    const r1 = await syncAll(s, f1, { now: NOW });
-    expect(r1.find((r) => r.kind === 'mail')?.stoppedBy).toBe('radio');
-    const held = (await s.items('mail')).filter((i) => i.version === 'body').length;
-    expect(held).toBeGreaterThan(0); expect(held).toBeLessThan(6);
-    const calls2: string[] = [];
-    await syncAll(s, mailFetchers([[1, 2, 3], [4, 5, 6]], calls2), { now: NOW });
-    expect((await s.ids('mail')).length).toBe(6);
-    expect(calls2.filter((c) => c.startsWith('body:')).length).toBe(6 - held);
-  });
-  test('C9 a walked folder stops at the first page that is all held', async () => {
-    const s = await fresh(); const calls: string[] = [];
-    await syncAll(s, mailFetchers([[1, 2], [3, 4], [5, 6]], calls), { now: NOW });
-    const again: string[] = [];
-    await syncAll(s, mailFetchers([[7, 1, 2], [3, 4], [5, 6]], again), { now: NOW });
-    expect(again.filter((c) => c.startsWith('page'))).toEqual(['page0', 'page1']);
-    expect(again.filter((c) => c.startsWith('body'))).toEqual(['body:m7']);
-    expect((await s.ids('mail')).length).toBe(7);
-  });
-  test('C9 a server that ignores the cursor does not loop forever', async () => {
-    const s = await fresh(); const f = noFetchers(); f.mailFolders = ['inbox'];
-    f.mailPage = async () => ({ rows: [row(1)], next: 'same' }); f.mailBody = async () => ({ row: row(1), text: 't', to: [] });
+  test('C7 mail is not synced into this plain store: no fetcher, no step, no kind of work', async () => {
+    const s = await fresh(); const f = noFetchers();
     const r = await syncAll(s, f, { now: NOW });
-    expect(r.find((x) => x.kind === 'mail')?.fetched).toBe(1);
+    expect(r.some((x) => x.kind === 'mail')).toBe(false); expect(Object.keys(f).filter((k) => /^mail|^drafts$/.test(k))).toEqual([]);
+    expect(Object.keys(liveFetchers()).filter((k) => /^mail|^drafts$/.test(k))).toEqual([]);
   });
   test('C10 documents are fetched when their version changes and kept pinned', async () => {
     const s = await fresh(); let bodies = 0, ver = 'v1';
@@ -204,9 +167,9 @@ describe('C7 to C15 the sync', () => {
     bindNative(null); resetSession();
     const live = liveFetchers();
     const r2 = await syncAll(s, { ...live, stories: async () => [] }, { now: NOW });
-    expect(r2.find((x) => x.kind === 'mail')?.stoppedBy).toBe('error'); // the first mail page throws SignedOutError: counted, nothing written
+    expect(r2.find((x) => x.kind === 'document')?.stoppedBy).toBe('error'); // the first page throws SignedOutError: counted, nothing written
     expect((await s.summary()).totalBytes).toBe(0);
-    await expect(live.mailPage('inbox', null)).rejects.toBeInstanceOf(SignedOutError);
+    await expect(live.documentPage(null)).rejects.toBeInstanceOf(SignedOutError);
   });
 });
 
@@ -226,17 +189,6 @@ describe('C16 the real routes\' shapes', () => {
       if (u.pathname === '/api/platform/publications/resolve') return j(resolved);
       return new Response('{}', { status: 404 });
     }) as typeof fetch;
-  });
-  test('a mail list row and a message', async () => {
-    const f = liveFetchers();
-    const page = await f.mailPage('inbox', null);
-    expect(calls[0]).toBe('/api/email/messages?folder=inbox&limit=100');
-    expect(page.rows[0]).toMatchObject({ id: 'msg-1', subject: 'Harbor meeting notes', from: 'Ana Example', fromAddress: 'ana@example.com' });
-    expect(page.next).toBe('cursor-2');
-    const body = await f.mailBody('msg-1');
-    expect(body.text).toContain('Agenda'); expect(body.to).toEqual(['Ben Example <ben@example.com>']);
-    expect(parseMailRow({ id: 'x', received_at: '', sent_at: '2026-11-01T00:00:00Z' }).at).toBe('2026-11-01T00:00:00Z');
-    expect(mailItem(page.rows[0], '', 'inbox', NOW).version).toBe('row');
   });
   test('documents: the list drops archived ones; the Markdown comes through the current revision', async () => {
     const f = liveFetchers();

@@ -7,6 +7,7 @@
 // Logs written from here carry counts and ids only, never a title.
 
 import { ORIGIN } from './app.ts';
+import type { Storage } from './app.contract.d.ts';
 
 export { ORIGIN };
 
@@ -67,13 +68,13 @@ export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
 type Account = (typeof KEYCHAIN_ACCOUNTS)[number];
 
 /** The data module's one native module, as far as this file uses it. */
-export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string }): Promise<unknown> };
+export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string }): Promise<unknown> };
 let reader: NativeReader | undefined;
 /** app.ts hands over the module's native handle at every answer. */
 export function bindNative(native: NativeReader | null | undefined): void { reader = native ?? undefined; }
 
 /** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
-export function nativeLater(): ((request: { op: string; account?: Account; b64?: string }) => Promise<unknown>) | null {
+export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string }) => Promise<unknown>) | null {
   return reader && reader.available !== false ? (r) => reader!.later(r) : null;
 }
 
@@ -104,6 +105,19 @@ export function setDemo(on: boolean): void { if (on) demoOn = true; }
 let generation = 0;
 export const accountGeneration = (): number => generation;
 export function nextGeneration(): number { generation += 1; return generation; }
+
+// A SIGN-OUT UNDER WAY (review 2026-11-19, mail seat 1, finding 2). `beginSignOut` runs BEFORE the native sign-out: the generation moves at once (a store write
+// that began under the old one refuses itself, mail-store.ts), and sealing is off until a NEW session is established (a key whose digest is not the one that
+// was signed out) or the sign-out is given up (`abortSignOut`). The native side also makes no mail key once the sign-in key is gone (MailSeal.swift).
+let blockedDigest: string | null = null;
+export const sealingBlocked = (): boolean => blockedDigest !== null;
+export async function beginSignOut(): Promise<void> {
+  nextGeneration(); resetSession();
+  let d = '';
+  try { const s = await keptSession(); if (s) d = await digestOf(s.key); } catch { /* no key to name */ }
+  blockedDigest = d;
+}
+export function abortSignOut(): void { blockedDigest = null; }
 
 /** An id as one path segment (Swift PathSegment.encode): everything but unreserved characters is escaped; "." and ".." too. */
 export function segment(id: string): string {
@@ -139,12 +153,13 @@ async function digestOf(key: string): Promise<string> {
 
 function scrub(text: string, key: string): string { return key ? text.split(key).join('[key]') : text; }
 
-async function send(path: string, opts: Authed, accept: string): Promise<{ r: Response; key: string }> {
+async function send(path: string, opts: Authed, accept: string, extra: Record<string, unknown> = {}): Promise<{ r: Response; key: string }> {
   if (!plainPath(path)) throw new Error('refused: a signed-in path is a plain absolute path on the server');
   if (demoOn) throw new SignedOutError('demo mode makes no signed-in request');
   const sess = await keptSession();
   if (!sess) throw new SignedOutError();
   const key = sess.key;
+  if (blockedDigest !== null && (await digestOf(key)) !== blockedDigest) blockedDigest = null;      // another account signed in: a new session
   const headers: Record<string, string> = { ...(opts.headers ?? {}), Accept: accept, Authorization: `Bearer ${key}` };
   const method = opts.method ?? 'GET';
   let body: string | undefined;
@@ -156,7 +171,7 @@ async function send(path: string, opts: Authed, accept: string): Promise<{ r: Re
     try { headers['X-Choir-Computer'] = await computerId(key, sess.computerId); } catch (e) { console.log(`api: computer id failed: ${e instanceof Error ? e.name : 'error'}`); throw e; }
   }
   try {
-    return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual' } as RequestInit), key };
+    return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual', ...extra } as RequestInit), key };
   } catch (e) {
     throw new Error(scrub(`network: ${e instanceof Error ? e.message : 'request failed'}`, key));
   }
@@ -227,6 +242,22 @@ export async function authedBytes(path: string, opts: Authed = {}): Promise<{ by
   return { bytes, contentType: r.headers.get('content-type') ?? '' };
 }
 
+/** A signed-in GET whose body the HOST writes to an app file as it arrives (`exactBodyTo`, reference.md, fetch row): the bytes never enter JavaScript, so
+ * a 300 MB recording costs neither the engine's 64 MiB heap nor the turn's 100 ms. The file appears whole or not at all (the host stages it beside the
+ * target); a reply that is not 2xx writes nothing and is an error as in `authedBytes`. `dest` is under `app:/cache/`, plain. A sign-out in flight
+ * removes the file and drops the reply; a host that wrote nothing (it read the body into memory) is an error and the file is removed. */
+export async function authedToFile(path: string, dest: string, storage: Storage | undefined, opts: Authed = {}): Promise<{ bytes: number; contentType: string }> {
+  if (!/^app:\/cache\/[^\s?#\\]+$/.test(dest) || dest.split('/').some((s) => s === '.' || s === '..')) throw new Error('refused: a download goes to a plain file under app:/cache/');
+  const gen = generation;
+  const drop = async () => { try { await storage?.fs.rm(dest); } catch { /* absent */ } };
+  const { r, key } = await send(path, opts, '*/*', { exactBodyTo: dest });
+  try { await check(r, path, key); } catch (e) { await drop(); throw e; }
+  const wrote = (r as unknown as { exactBodyTo?: { bytes?: unknown } | null }).exactBodyTo;
+  if (gen !== generation) { await drop(); throw new SignedOutError('signed out while the request was in flight'); }
+  if (!wrote || typeof wrote.bytes !== 'number') { await drop(); throw new Error('the host did not write the file'); }
+  return { bytes: wrote.bytes, contentType: r.headers.get('content-type') ?? '' };
+}
+
 /** The digest of the stored key, or null when there is none or demo mode is on. For the account stamp (account.ts); never the key itself. */
 export async function sessionDigest(): Promise<string | null> {
   if (demoOn) return null;
@@ -236,7 +267,7 @@ export async function sessionDigest(): Promise<string | null> {
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: leave demo mode and the generation as a fresh process has them. */
-export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; }
+export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

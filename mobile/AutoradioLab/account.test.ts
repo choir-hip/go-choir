@@ -205,7 +205,7 @@ describe('S12 the drift guard against what the wipes really remove', () => {
     expect(literals.size).toBeGreaterThan(10);
     const under = (p: string) => removed.some((r) => p === r || p.startsWith(r + '/') || p.startsWith(r + '-'));
     // PENDING_FILE is removed by accountSignOut itself (after a clean wipe), not by the wipes.
-    const missing = [...literals].filter((p) => !under(p) && p !== PENDING_FILE && !p.startsWith('app:/cache/mail-'));
+    const missing = [...literals].filter((p) => !under(p) && !['app:/data', 'app:/cache', 'app:/tmp'].includes(p) && p !== PENDING_FILE && !p.startsWith('app:/cache/mail-'));
     expect(missing).toEqual([]);
     expect(removed).toContain(STAMP_FILE);
     expect(ops).toContain('mailForget');

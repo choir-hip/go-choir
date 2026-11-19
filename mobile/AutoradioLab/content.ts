@@ -9,7 +9,8 @@
 // PER KIND (list route / body route / rule), as the Swift table said:
 //  story     GET /api/platform/publications/front?limit=100 (public) / GET .../publications/resolve?route= / newest first; a story held with the same
 //            updated_at is not fetched again; retention 30 days.
-//  mail      GET /api/email/messages?folder=&limit=100&cursor= / GET /api/email/messages/{id} (text_body) / pages newest first; once a folder has been
+//  (mail is NOT synced here: the phone's mail copy is mail-store.ts, sealed; a sync of mail into this plain SQLite file was deleted, review 2026-11-19.)
+//  [deleted] GET /api/email/messages?folder=&limit=100&cursor= / GET /api/email/messages/{id} (text_body) / pages newest first; once a folder has been
 //            walked (`mail.<folder>.done`) the first all-held page ends it; a killed first walk resumes from the top and skips held bodies.
 //  document  GET /api/texture/documents?limit=500&cursor= / GET /api/texture/documents/{id} then /api/texture/revisions/{rid} (the Markdown) / all pages;
 //            a document is fetched when its updated_at differs from the held version; never evicted.
@@ -188,19 +189,12 @@ export function toDoc(it: StoredItem): Doc {
 export type SyncReport = { kind: Kind; fetched: number; skipped: number; failed: number; stoppedBy: '' | 'radio' | 'cancelled' | 'error' };
 const report = (kind: Kind): SyncReport => ({ kind, fetched: 0, skipped: 0, failed: 0, stoppedBy: '' });
 
-export type MailRow = { id: string; subject: string; from: string; fromAddress: string; snippet: string; direction: string; trust: string; readAt: string; at: string };
-export type MailBody = { row: MailRow; text: string; to: string[] };
 export type DocRow = { id: string; title: string; updated: string };
 export type Story = { route: string; title: string; date: number | null };
 export type FileEntry = { name: string; path: string; isDirectory: boolean; size: number; modified: number | null };
-export type Draft = { id: string; subject: string; text: string; to: string[] };
 export type Heard = { id: string; title: string; text: string; state: 'heard' | 'skipped'; ended: string; ref: string; kind: string };
 
 export type Fetchers = {
-  mailFolders: string[];
-  mailPage(folder: string, cursor: string | null): Promise<{ rows: MailRow[]; next: string | null }>;
-  mailBody(id: string): Promise<MailBody>;
-  drafts(): Promise<Draft[]>;
   documentPage(cursor: string | null): Promise<{ docs: DocRow[]; next: string | null }>;
   documentBody(id: string): Promise<string | null>;
   stories(): Promise<Story[]>;
@@ -215,8 +209,7 @@ export type Fetchers = {
   audioBusy(): Promise<boolean>;
 };
 export const noFetchers = (): Fetchers => ({
-  mailFolders: ['inbox', 'sent', 'quarantine'], mailPage: async () => ({ rows: [], next: null }), mailBody: async (id) => ({ row: { id, subject: '', from: '', fromAddress: '', snippet: '', direction: '', trust: '', readAt: '', at: '' }, text: '', to: [] }),
-  drafts: async () => [], documentPage: async () => ({ docs: [], next: null }), documentBody: async () => null, stories: async () => [], storyBody: async () => null,
+  documentPage: async () => ({ docs: [], next: null }), documentBody: async () => null, stories: async () => [], storyBody: async () => null,
   fileList: async () => [], fileText: async () => null, podcasts: () => [], transcriptTargets: () => [], transcript: async () => null, runSheet: async () => null, audioBusy: async () => false,
 });
 
@@ -241,7 +234,7 @@ export async function syncAll(store: ContentStore, f: Fetchers, o: SyncOptions):
     const out: SyncReport[] = [];
     const sheet = await f.runSheet();
     if (sheet && live()) { await recordRunSheet(store, sheet, o.now); await store.markSynced('runsheet', o.now); }
-    const steps: ((c: Ctx) => Promise<SyncReport>)[] = [syncStories, syncMail, syncDocuments, syncPodcasts, syncFiles];
+    const steps: ((c: Ctx) => Promise<SyncReport>)[] = [syncStories, syncDocuments, syncPodcasts, syncFiles];
     const c: Ctx = { store, f, now: o.now, live };
     for (const step of steps) {
       const r = await step(c);
@@ -280,57 +273,6 @@ async function syncStories(c: Ctx): Promise<SyncReport> {
       r.fetched++;
     } catch { r.failed++; }
   }
-  return r;
-}
-
-export const mailItem = (s: MailRow, text: string, folder: string, syncedAt: number, to: string[] = []): StoredItem => newItem({
-  id: `mail:${s.id}`, kind: 'mail', title: s.subject === '' ? '(no subject)' : s.subject, text: text === '' ? s.snippet : text, date: parseDate(s.at), address: `mail:${s.id}`, source: 'Mail',
-  version: text === '' ? 'row' : 'body', pinned: folder === 'drafts', syncedAt,
-  meta: { folder, from: s.from, fromAddress: s.fromAddress, snippet: s.snippet, direction: s.direction, readAt: s.readAt, trust: s.trust, at: s.at, to: to.join(', ') },
-});
-
-async function syncMail(c: Ctx): Promise<SyncReport> {
-  const r = report('mail');
-  for (const folder of c.f.mailFolders) {
-    let cursor: string | null = null;
-    const seen = new Set<string>();
-    const done = (await c.store.checkpoint(`mail.${folder}.done`)) === '1';
-    for (;;) {
-      if (!(await gate(c, r))) return r;
-      let page: { rows: MailRow[]; next: string | null };
-      try { page = await c.f.mailPage(folder, cursor); } catch { r.failed++; r.stoppedBy = 'error'; return r; }
-      let anyNew = false;
-      for (const row of page.rows.filter((x) => x.id !== '')) {
-        const held = await c.store.get(`mail:${row.id}`);
-        if (held && held.version === 'body') {
-          r.skipped++;
-          if (held.meta.readAt !== row.readAt) await put(c, { ...held, meta: { ...held.meta, readAt: row.readAt } }); // read state follows the server
-          continue;
-        }
-        anyNew = true;
-        if (!(await gate(c, r))) return r;
-        try {
-          const d = await c.f.mailBody(row.id);
-          await put(c, mailItem(row, d.text, folder, c.now, d.to));
-          r.fetched++;
-        } catch { await put(c, mailItem(row, '', folder, c.now)); r.failed++; } // the row is kept; the body next run
-      }
-      if (page.next && page.next !== '' && !seen.has(page.next)) {
-        seen.add(page.next);
-        if (done && !anyNew) break; // a walked folder: the first all-held page ends it
-        cursor = page.next;
-      } else break;
-    }
-    if (c.live()) await c.store.setCheckpoint(`mail.${folder}.done`, '1');
-  }
-  try {
-    for (const d of await c.f.drafts()) {
-      if (d.id === '') continue;
-      await put(c, newItem({ id: `mail:draft/${d.id}`, kind: 'mail', title: d.subject === '' ? '(no subject)' : d.subject, text: d.text, date: c.now, address: `mail:draft/${d.id}`, source: 'Mail',
-        version: 'body', pinned: true, syncedAt: c.now, meta: { folder: 'drafts', to: d.to.join(', ') } }));
-      r.fetched++;
-    }
-  } catch { /* the drafts are asked again next run */ }
   return r;
 }
 
@@ -426,11 +368,6 @@ const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof
 const s = (o: Record<string, unknown>, k: string): string => (typeof o[k] === 'string' ? (o[k] as string) : '');
 const nextOf = (o: Record<string, unknown>): string | null => (typeof o.next_cursor === 'string' && o.next_cursor !== '' ? o.next_cursor : null);
 
-export function parseMailRow(o: Record<string, unknown>): MailRow {
-  return { id: s(o, 'id'), subject: s(o, 'subject'), from: s(o, 'from_display'), fromAddress: s(o, 'from_address'), snippet: s(o, 'snippet'), direction: s(o, 'direction'),
-    trust: s(o, 'trust_status'), readAt: s(o, 'read_at'), at: [s(o, 'received_at'), s(o, 'sent_at'), s(o, 'created_at')].find((x) => x !== '') ?? '' };
-}
-
 /** The text of a resolved publication: its payload text, else its artifact content, as readable lines (no code, rules or embeds). */
 export function storyText(body: unknown): string | null {
   if (!isObj(body)) return null;
@@ -465,22 +402,6 @@ export function liveFetchers(o: { podcasts?: () => Doc[]; transcriptTargets?: Fe
   const base = noFetchers();
   return {
     ...base,
-    mailPage: async (folder, cursor) => {
-      const b = await j('/api/email/messages', { folder, limit: 100, ...(cursor ? { cursor } : {}) });
-      const o2 = isObj(b) ? b : {};
-      return { rows: (Array.isArray(o2.messages) ? o2.messages : []).filter(isObj).map(parseMailRow), next: nextOf(o2) };
-    },
-    mailBody: async (id) => {
-      const b = await j(`/api/email/messages/${encodeURIComponent(id)}`);
-      const o2 = isObj(b) ? b : {};
-      const rec = isObj(o2.recipients) ? o2.recipients : {};
-      const to = (Array.isArray(rec.to) ? rec.to : []).filter(isObj).map((r) => (s(r, 'display') === '' ? s(r, 'address') : `${s(r, 'display')} <${s(r, 'address')}>`));
-      return { row: parseMailRow(isObj(o2.message) ? o2.message : {}), text: s(o2, 'text_body'), to };
-    },
-    drafts: async () => {
-      const b = await j('/api/email/drafts');
-      return (isObj(b) && Array.isArray(b.drafts) ? b.drafts : []).filter(isObj).map((d) => ({ id: s(d, 'id'), subject: s(d, 'subject'), text: s(d, 'text_body'), to: Array.isArray(d.to_addresses) ? d.to_addresses.filter((x): x is string => typeof x === 'string') : [] }));
-    },
     documentPage: async (cursor) => {
       const b = await j('/api/texture/documents', { limit: 500, ...(cursor ? { cursor } : {}) });
       const o2 = isObj(b) ? b : {};

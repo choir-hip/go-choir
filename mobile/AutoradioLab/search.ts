@@ -781,10 +781,7 @@ export async function loadPaperFront(storage: Storage | undefined, dates?: Map<s
   try { return paperFrontDocs(JSON.parse(new TextDecoder().decode(await storage.fs.readFile(PAPER_FRONT_FILE))), dates); } catch { return []; }
 }
 
-/** Mail rows as documents; the body is added when a message is opened. */
-export type MailRow = { id: string; subject: string; from: string; snippet: string; at: number | null };
-export const mailDocs = (rows: MailRow[]): Doc[] =>
-  rows.filter((r) => r.id !== '').map((r) => ({ id: `mail:${r.id}`, kind: 'mail', title: r.subject === '' ? '(no subject)' : r.subject, text: `From ${r.from}. ${r.snippet}`, date: r.at, source: 'Mail', address: `mail:${r.id}` }));
+// (There is no mail document source: mail text in the vector store would sit unsealed in app:/data/vectors. Mail stays out of local search until a search over sealed mail is designed.)
 /** A folder's file names (never their contents): searchable by name, openable by path. */
 export const fileNameDocs = (entries: { path: string; name: string; isDirectory: boolean; modified: number | null }[]): Doc[] =>
   entries.filter((e) => !e.isDirectory).map((e) => ({ id: `file:${e.path}`, kind: 'file', title: e.name, text: e.path, date: e.modified, source: 'Files', address: `file:${e.path}` }));

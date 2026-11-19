@@ -25,6 +25,11 @@ members Autoradio
   action openApproval
     send acct = choirOpenApproval()
   action signOut
+    // The unsent text of a message being written belongs to the account that is leaving (it may quote that account's mail).
+    mailFor = ""
+    mailTo = ""
+    mailSubject = ""
+    mailBody = ""
     send so = accountSignOut(dm.on)
   action refreshRadio
     send acct = choirRefresh()

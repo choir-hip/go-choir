@@ -5,16 +5,18 @@
 // Android owes the same pair in Kotlin (Keystore AES-GCM).
 //
 // No cipher, nothing written: when the native module is absent or refuses (no key could be made), `seal` answers null and mail-store writes no file.
-// Format: "MS2" | the native sealed box (12-byte nonce, ciphertext, 16-byte tag), the whole as AES-GCM's combined form.
+// Format: "MS3" | the native sealed box (12-byte nonce, ciphertext, 16-byte tag), the whole as AES-GCM's combined form.
 
-import { nativeLater } from './api.ts';
+import { nativeLater, sealingBlocked } from './api.ts';
 
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', data as unknown as BufferSource));
 }
 export function hex(b: Uint8Array): string { return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''); }
 
-const MAGIC = new TextEncoder().encode('MS2');
+// MS3: the record's identity (`aad`: kind and id) is authenticated with the data. An MS2 file of the earlier build does not open ("bad") and is removed: the
+// server's copy replaces it at the next sync, nothing is lost.
+const MAGIC = new TextEncoder().encode('MS3');
 
 /** Bytes as base64 for the native call (the bridge is JSON). In slices, so a long file does not build one huge argument list. */
 function b64(bytes: Uint8Array): string {
@@ -28,14 +30,26 @@ function unb64(text: string): Uint8Array {
   return out;
 }
 
-/** Is there a native cipher at all (so a write is worth trying)? */
-export const canSeal = (): boolean => nativeLater() !== null;
+let sealable: boolean | null = null;
+/** Is there a native cipher, learned from ONE probe (`mailCan`) per session: a module that lacks the pair (Android today) answers no, so nothing is fetched
+ * to be thrown away. False while a sign-out is under way, until a new session is established (api.ts `sealingBlocked`). */
+export async function canSeal(): Promise<boolean> {
+  if (sealingBlocked()) return false;
+  const later = nativeLater(); if (!later) return false;
+  if (sealable === null) {
+    try { const r = (await later({ op: 'mailCan' })) as { ok?: boolean } | null; sealable = !!r && r.ok === true; } catch { sealable = false; }
+  }
+  return sealable;
+}
+/** Forget what the probe learned (sign-out, tests). */
+export function forgetProbe(): void { sealable = null; }
 
-/** The sealed bytes, or null when there is no cipher or it refused. */
-export async function seal(plain: Uint8Array): Promise<Uint8Array | null> {
+/** The sealed bytes, or null when there is no cipher or it refused. `aad` names the record (kind and id). */
+export async function seal(plain: Uint8Array, aad: string): Promise<Uint8Array | null> {
+  if (sealingBlocked()) return null;
   const later = nativeLater(); if (!later) return null;
   try {
-    const r = (await later({ op: 'mailSeal', b64: b64(plain) })) as { ok?: boolean; b64?: unknown } | null;
+    const r = (await later({ op: 'mailSeal', b64: b64(plain), aad })) as { ok?: boolean; b64?: unknown } | null;
     if (!r || r.ok !== true || typeof r.b64 !== 'string') return null;
     const box = unb64(r.b64); const out = new Uint8Array(MAGIC.length + box.length);
     out.set(MAGIC); out.set(box, MAGIC.length);
@@ -43,19 +57,23 @@ export async function seal(plain: Uint8Array): Promise<Uint8Array | null> {
   } catch { return null; }
 }
 
-/** The plain bytes, or null when the data is not ours, was changed, or the key is another or gone. */
-export async function open(sealed: Uint8Array): Promise<Uint8Array | null> {
-  const later = nativeLater(); if (!later) return null;
-  if (sealed.length < MAGIC.length + 28) return null;
-  for (let i = 0; i < MAGIC.length; i++) if (sealed[i] !== MAGIC[i]) return null;
+/** `plain`: opened. `bad`: the data is not ours, was changed, or is another record's (the tag failed): it may be removed. `cannot`: nothing could be said
+ * now (no native module, the Keychain locked, a bridge error): the file is KEPT. */
+export type Opened = { plain: Uint8Array } | { why: 'bad' | 'cannot' };
+export async function open(sealed: Uint8Array, aad: string): Promise<Opened> {
+  const later = nativeLater(); if (!later) return { why: 'cannot' };
+  if (sealed.length < MAGIC.length + 28) return { why: 'bad' };
+  for (let i = 0; i < MAGIC.length; i++) if (sealed[i] !== MAGIC[i]) return { why: 'bad' };
   try {
-    const r = (await later({ op: 'mailOpen', b64: b64(sealed.subarray(MAGIC.length)) })) as { ok?: boolean; b64?: unknown } | null;
-    return r && r.ok === true && typeof r.b64 === 'string' ? unb64(r.b64) : null;
-  } catch { return null; }
+    const r = (await later({ op: 'mailOpen', b64: b64(sealed.subarray(MAGIC.length)), aad })) as { ok?: boolean; b64?: unknown; why?: unknown } | null;
+    if (r && r.ok === true && typeof r.b64 === 'string') return { plain: unb64(r.b64) };
+    return { why: r && r.why === 'bad' ? 'bad' : 'cannot' };
+  } catch { return { why: 'cannot' }; }
 }
 
 /** Sign-out: forget the key natively (the files are then unreadable whatever happens to them). Never throws. */
 export async function forgetKey(): Promise<void> {
   const later = nativeLater(); if (!later) return;
+  forgetProbe();
   try { await later({ op: 'mailForget' }); } catch { /* nothing to forget */ }
 }

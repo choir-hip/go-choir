@@ -19,7 +19,8 @@ import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
 import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
 import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
-import { nextGeneration, resetSession, sessionDigest } from './api.ts';
+import { nextGeneration, resetSession, sessionDigest, beginSignOut, abortSignOut } from './api.ts';
+import { forgetOldCopy } from './mail-store.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
  * launch (`settleAccount`) finishes the wipe before any source answers. (Review 2026-11-19, finding 2.) */
@@ -88,12 +89,15 @@ export async function accountSignOut(
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };
   // The marker first: if the app dies after the key is gone and before the wipes are finished, the next launch finishes them.
   if (!(await mark(storage, PENDING_FILE, '1'))) return { done: false, failed: '', message: 'Sign-out did not start. Try again.' };
+  // The generation moves and sealing stops BEFORE the native call: a write in flight that would land after the key is gone refuses itself.
+  await beginSignOut();
   let ok = false;
   try {
     const r = await Promise.race([native.later({ op: 'signOut' }), timeout(opts.deadlineMs ?? NATIVE_DEADLINE_MS)]);
     ok = r !== 'timeout' && !!r && (r as { done?: unknown }).done === true;
   } catch { ok = false; }
   if (!ok) {
+    abortSignOut();
     // Not signed out (the key may still be there): nothing is wiped, so the marker goes, and a retry starts clean.
     try { await storage?.fs.rm(PENDING_FILE); } catch { /* absent */ }
     return { done: false, failed: '', message: 'Sign-out did not finish. Try again.' };
@@ -111,6 +115,7 @@ let settled: Promise<void> | null = null;
 export function settleAccount(storage: Storage | undefined, store: Store | undefined): Promise<void> {
   if (!settled) settled = (async () => {
     if (!storage) return;
+    await forgetOldCopy(storage);                       // a "Show original" document a past session left in the cache (plain text of a message)
     let pending = false;
     try { await storage.fs.stat(PENDING_FILE); pending = true; } catch { /* none */ }
     if (pending) {
