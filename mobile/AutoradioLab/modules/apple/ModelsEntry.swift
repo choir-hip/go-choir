@@ -11,16 +11,19 @@ import ExactPkg_autoradio
 // accounts CredentialReader allows, answering `{found, value}`. It logs nothing. It goes when sign-in itself is moved and the key is
 // kept by Exact's store.
 //
+// The mail cipher (Choir/MailSeal.swift): `mailSeal`, `mailOpen`, `mailForget`, a platform cipher shared code has none of; the key never leaves the Keychain.
+//
 // The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
 // by shared code (AutoradioLab/account.ts); the reason it is native is that the key is a Keychain item the Swift sign-in wrote and the Swift stores
 // (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift. It goes with them when sign-in itself moves.
 final class ModelsModule: ExactModule {
-    override func call(_ request: [String: Any]) -> [String: Any] { CredentialReader().reply(request) }
+    override func call(_ request: [String: Any]) -> [String: Any] { MailSeal().reply(request) ?? CredentialReader().reply(request) }
     override func later(_ request: [String: Any], reply: ExactReply) {
         if (request["op"] as? String) == "signOut" {
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
                 await m.signOutForShared()
+                MailSeal().forget()      // the mail copy's key goes with the account, whatever shared code does next
                 // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done,
                 // and shared code wipes nothing (a retry is safe). This does not change how the Swift sign-out deletes.
                 reply.send(["done": !CredentialReader().keyRemains()])

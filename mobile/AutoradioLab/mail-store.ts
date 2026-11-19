@@ -1,7 +1,7 @@
 // The phone's copy of the listener's mail. The listener's computer (the Mail agent) is the custodian; this is a cache of it, so it is never migrated
 // and never trusted over the server: a list or a message the server just sent replaces what is held. It keeps what the Swift ContentStore kept for
 // mail (rows with their preview, the text of a message and who it went to; not the HTML and not attachments) and what a mailbox needs to open with
-// no network. Every file is sealed (mail-seal.ts) with a key in the secret store; with no key nothing is written, and the mailbox works from memory.
+// no network. Every file is sealed (mail-seal.ts, the platform's AES-GCM through one native pair; the key is native and never seen here); with no cipher nothing is written, and the mailbox works from memory.
 //
 // Where it lives: app:/data/mail/ (kept by the app, not a cache the system may drop), files `rows-<folder>.bin`, `msg-<hash of the id>.bin`,
 // `state.bin`. The Swift store's own folder (Application Support/Autoradio/content/items/mail) is not reachable from here; ContentStore.swift deletes
@@ -11,60 +11,48 @@
 // Ways this can fail (tests in mail.test.ts):
 //  1. No key (a drive that keeps no secrets, a secret store that refuses): nothing on disk, everything else works.   2. A file that does not open (another
 //  key, a changed byte, a half write): it is ignored and removed, the server's answer replaces it.   3. A full disk or a missing grant: the write is lost, the
-//  page is unaffected.   4. Too many messages: the oldest files go first (MAX_FILES).   5. Sign-out: `wipeMail` removes every file and forgets the key.
+//  page is unaffected.   4. Too many messages: the oldest files go first (MAX_FILES).   5. Sign-out: `wipeMail` removes every file and forgets the native key.
 //  6. Logs: counts only, never an id's content.
 
-import type { Storage, Store } from './app.contract.d.ts';
-import { open, seal, newKey, validKey, sha256, hex } from './mail-seal.ts';
+import type { Storage } from './app.contract.d.ts';
+import { open, seal, canSeal, forgetKey, sha256, hex } from './mail-seal.ts';
 import type { AttachmentMeta, Summary } from './mail-model.ts';
 
 export const DIR = 'app:/data/mail';
 export const CACHE = 'app:/cache';
-/** The secret's name; the grant in app.ts is `secret.keep mail-key`. */
-export const KEY_NAME = 'mail-key';
 /** The most message files kept; past it the oldest go (the Swift store capped mail at 200 MB, a year at 100 messages a day). */
 export const MAX_FILES = 6000;
 
-export type Env = { storage?: Storage; store?: Store };
+export type Env = { storage?: Storage };
 export type FolderCopy = { folder: string; rows: Summary[]; total: number; unread: number; savedAt: number };
 export type MessageCopy = { id: string; folder: string; summary: Summary; text: string; to: string[]; cc: string[]; replyTo: string; attachments: AttachmentMeta[]; savedAt: number };
 export type StateCopy = { done: Record<string, boolean>; syncedAt: Record<string, number>; cursor: Record<string, string> };
 
 const enc = (v: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(v));
 
-/** The key, made on first use. Null when the secret store keeps nothing (then nothing is written to disk). */
-export function keyOf(env: Env): string | null {
-  const store = env.store;
-  if (!store) return null;
-  try {
-    const kept = store.get(KEY_NAME);
-    if (validKey(kept)) return kept;
-    const k = newKey();
-    store.set(KEY_NAME, k);
-    return store.get(KEY_NAME) === k ? k : null;      // a drive that does not keep secrets answers null: no key, no copy
-  } catch { return null; }
-}
+/** Is there a cipher (the native pair, mail-seal.ts)? Without one nothing is written to disk. */
+export const sealed = (_env: Env): boolean => canSeal();
 
 export async function fileFor(id: string): Promise<string> { return `${DIR}/msg-${hex((await sha256(new TextEncoder().encode(id))).subarray(0, 16))}.bin`; }
 export const rowsFile = (folder: string): string => `${DIR}/rows-${folder.replace(/[^a-z0-9_-]/g, '_')}.bin`;
 export const STATE_FILE = `${DIR}/state.bin`;
 
 async function write(env: Env, path: string, value: unknown): Promise<boolean> {
-  const k = keyOf(env);
-  if (!k || !env.storage) return false;
+  if (!canSeal() || !env.storage) return false;
   try {
+    const box = await seal(enc(value));
+    if (!box) return false;                                // the cipher refused (no key could be made): nothing is written
     await env.storage.fs.mkdir(DIR).catch(() => undefined);
-    await env.storage.fs.atomicWriteFile(path, await seal(enc(value), k));
+    await env.storage.fs.atomicWriteFile(path, box);
     return true;
   } catch { return false; }
 }
 
 async function read<T>(env: Env, path: string): Promise<T | null> {
-  const k = keyOf(env);
-  if (!k || !env.storage) return null;
+  if (!canSeal() || !env.storage) return null;
   let bytes: Uint8Array;
   try { bytes = new Uint8Array(await env.storage.fs.readFile(path)); } catch { return null; }
-  const plain = await open(bytes, k);
+  const plain = await open(bytes);
   if (plain === null) { try { await env.storage.fs.rm(path); } catch { /* already gone */ } return null; }
   try { return JSON.parse(new TextDecoder().decode(plain)) as T; } catch { return null; }
 }
@@ -159,6 +147,6 @@ export async function wipeFiles(env: Env): Promise<{ files: number; originals: n
     try { await fs.rm(DIR); } catch { /* the folder was never made, or is not empty */ }
   }
   const originals = await forgetOldCopy(env.storage);
-  try { env.store?.forget(KEY_NAME); } catch { /* no secret store */ }
+  await forgetKey();                                      // the native key goes too: whatever stays on a disk is then unreadable
   return { files, originals };
 }

@@ -59,8 +59,8 @@ SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 
 # ---- 3a. SURVEY drive: every place once, trees dumped so the next drive can pick real ids
 step "clock data"; wait_ 6000
-view real-00-first-run 800
-step "tap ob-skip"; wait_ 2500
+view real-00-opens-on-radio 800   # the app opens on the Autoradio page (radio: is the first fixed page); there is no first-run page with a carried key
+place paper 2500
 view real-01-paper-front 1500
 step "tap paper-scroll drag 0 -500"; view real-02-paper-scrolled 900
 step "tap paper-scroll drag 0 -700"; view real-03-paper-scrolled-more 900
@@ -95,7 +95,7 @@ to_top() { step "tap paper-scroll drag 0 700"; wait_ 400; step "tap paper-scroll
 
 # ---- 3b. READ drive: two real stories in the reader, one played, one Texture, a folder, a message
 step "clock data"; wait_ 6000
-step "tap ob-skip"; wait_ 2500
+place paper 2500
 [ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-11-story-1 4000; step "tap reader-scroll drag 0 -600"; view real-12-story-1-scrolled 900; step "tap reader-scroll drag 0 -900"; view real-13-story-1-more 900; }
 goto "paper:front"; wait_ 1200
 [ -n "$STORY2" ] && { to_top; step "tap paper-scroll drag 0 -350"; wait_ 1800; step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
@@ -113,7 +113,7 @@ run_drive read light "" --touch platform
 # ---- 3c. THEME drive: a theme from a Texture, loaded through Settings (the document "Autoradio theme test" on d@e holds one choir-theme block)
 if [ -n "$THEME_DOC" ]; then
   step "clock data"; wait_ 5000
-  step "tap ob-skip"; wait_ 2000
+  place paper 2000
   place settings 900
   step "tap settings-nav-appearance"; wait_ 700
   step "type settings-theme-doc $THEME_DOC"; wait_ 500
@@ -126,7 +126,7 @@ fi
 # ---- 3d. BIG drive: the largest document on d@e (hundreds of versions) opens, or says plainly why not
 if [ -n "$BIG_ROW" ]; then
   step "clock data"; wait_ 5000
-  step "tap ob-skip"; wait_ 2000
+  place paper 2000
   place textures 900; wait_ 2500
   step "tap \"$BIG_ROW\""; view real-23-big-document 9000
   step logs
@@ -136,7 +136,7 @@ fi
 # ---- 3e. ASK drive (REAL_PROMPT=1 only: it is a model call on d@e): a typed question in the bar runs one turn on the computer
 if [ -n "${REAL_PROMPT:-}" ]; then
   step "clock data"; wait_ 5000
-  step "tap ob-skip"; wait_ 2000
+  place paper 2000
   step "type bar-field \"What is the top story on the front page right now?\""; wait_ 500
   view real-24-asked 400
   step "tap bar-send"; wait_ 4000; step tree; shot real-25-asked-sent

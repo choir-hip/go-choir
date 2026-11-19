@@ -18,10 +18,10 @@ process.env.TZ = 'UTC';   // dates are the listener's wall clock; the tests fix 
 //  W1  the old copy: leftover `app:/cache/mail-*.html` are removed at first use; `wipeMail` removes every file and the key; the old Swift store is deleted by ContentStore.swift (its own test).
 //  L1  logs carry counts and ids only (14).   D1  demo mode asks the computer nothing and answers the fixtures.   A1  the grants match the paths the modules use.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { createCipheriv, createHmac } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import * as M from './mail-model.ts';
 import { sanitized, clean, decodeAttr } from './mail-sanitize.ts';
-import { aes256EncryptBlock, ctr, hmacSha256, hex, newKey, open, seal, unhex } from './mail-seal.ts';
+import { hex, open, seal } from './mail-seal.ts';
 import * as C from './mail-store.ts';
 import hostile from '../fixtures/mail/hostile-html.json';
 import inboxList from '../fixtures/mail/inbox-list.json';
@@ -39,7 +39,27 @@ let calls: Req[] = [];
 let route: (r: Req) => { status: number; body: unknown } | 'network' = () => ({ status: 404, body: { error: 'not found' } });
 const mail = await import('./mail.ts');
 const app = await import('./app.ts');
-const reader = { available: true, later: async (r: { op?: string; account?: string }) => (r.op === 'session' ? { found: true, value: 'test-key-0001-not-real', computerId: 'comp-1' } : { found: r.account !== 'key-id', value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-1' }) };
+// The fake platform cipher: what CryptoKit's AES.GCM does natively (combined = 12-byte nonce, ciphertext, 16-byte tag), with a key kept in the
+// fake and never handed out. `refuses` is a native module that can make no key; `forgets` counts mailForget calls.
+let nativeKey: Buffer | null = null; let refuses = false; let forgets = 0; let sealCalls = 0;
+const b64of = (b: Uint8Array): string => Buffer.from(b).toString('base64');
+const reader = { available: true, later: async (r: { op?: string; account?: string; b64?: string }) => {
+  if (r.op === 'session') return { found: true, value: 'test-key-0001-not-real', computerId: 'comp-1' };
+  if (r.op === 'mailForget') { nativeKey = null; forgets += 1; return { ok: true }; }
+  if (r.op === 'mailSeal') {
+    sealCalls += 1; if (refuses) return { ok: false };
+    nativeKey ??= randomBytes(32);
+    const iv = randomBytes(12); const c = createCipheriv('aes-256-gcm', nativeKey, iv);
+    const ct = Buffer.concat([c.update(Buffer.from(r.b64!, 'base64')), c.final()]);
+    return { ok: true, b64: Buffer.concat([iv, ct, c.getAuthTag()]).toString('base64') };
+  }
+  if (r.op === 'mailOpen') {
+    if (!nativeKey) return { ok: false };
+    const all = Buffer.from(r.b64!, 'base64');
+    try { const d = createDecipheriv('aes-256-gcm', nativeKey, all.subarray(0, 12)); d.setAuthTag(all.subarray(all.length - 16)); return { ok: true, b64: Buffer.concat([d.update(all.subarray(12, all.length - 16)), d.final()]).toString('base64') }; } catch { return { ok: false }; }
+  }
+  return { found: r.account !== 'key-id', value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-1' };
+} };
 function stubFetch(): void {
   globalThis.fetch = (async (u: string, init: RequestInit) => {
     const url = new URL(String(u));
@@ -71,20 +91,13 @@ const storage = {
   },
 } as never;
 const mtimes = new Map<string, number>();
-let secrets = new Map<string, string>();
-let keepsSecrets = true;
-const store = {
-  get: (n: string) => (secrets.get(n) ?? null),
-  set: (n: string, v: string) => { if (keepsSecrets) secrets.set(n, v); },
-  forget: (n: string) => { secrets.delete(n); },
-} as never;
-const env = (): C.Env => ({ storage, store });
+const env = (): C.Env => ({ storage });
 
 let logs: string[] = [];
 const realLog = console.log;
 beforeEach(() => {
   resetSession(); bindNative(reader as never); stubFetch();
-  mail.forget(); calls = []; files.clear(); mtimes.clear(); secrets = new Map(); keepsSecrets = true; logs = [];
+  mail.forget(); calls = []; files.clear(); mtimes.clear(); nativeKey = null; refuses = false; forgets = 0; sealCalls = 0; logs = [];
   route = () => ({ status: 404, body: { error: 'not found' } });
   console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
 });
@@ -228,43 +241,32 @@ describe('M7 the sanitiser', () => {
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------- the seal
 
-describe('S1 the seal', () => {
-  test('AES-256 against the FIPS-197 vector (C.3)', () => {
-    const key = unhex('000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f');
-    expect(hex(aes256EncryptBlock(key, unhex('00112233445566778899aabbccddeeff')))).toBe('8ea2b7ca516745bfeafc49904b496089');
-  });
-
-  test('CTR and HMAC agree with Node for random inputs of every length around a block', async () => {
-    for (const n of [0, 1, 15, 16, 17, 31, 32, 33, 100, 1000]) {
-      const key = crypto.getRandomValues(new Uint8Array(32)), nonce = crypto.getRandomValues(new Uint8Array(16)), data = crypto.getRandomValues(new Uint8Array(n));
-      const c = createCipheriv('aes-256-ctr', key, nonce);
-      const want = new Uint8Array(Buffer.concat([c.update(data), c.final()]));
-      expect(hex(await ctr(key, nonce, data))).toBe(hex(want));
-      const mk = crypto.getRandomValues(new Uint8Array(n % 2 === 0 ? 32 : 100));
-      expect(hex(await hmacSha256(mk, data))).toBe(createHmac('sha256', mk).update(data).digest('hex'));
-    }
-    // the counter carries across a byte boundary
-    const key = crypto.getRandomValues(new Uint8Array(32)), nonce = new Uint8Array(16).fill(0xff);
-    const c = createCipheriv('aes-256-ctr', key, nonce);
-    const data = new Uint8Array(64);
-    expect(hex(await ctr(key, nonce, data))).toBe(hex(new Uint8Array(Buffer.concat([c.update(data), c.final()]))));
-  });
-
+describe('S1 the seal (the platform cipher, through one native pair)', () => {
   test('seal then open; a changed byte, another key, a short or foreign file open to nothing; the bytes hold no plain word', async () => {
-    const k = newKey();
     const plain = new TextEncoder().encode(JSON.stringify({ subject: 'Thursday dinner', from: 'maya.ortiz@example.com' }));
-    const sealed = await seal(plain, k);
+    const sealed = (await seal(plain))!;
     expect(hex(sealed)).not.toContain(hex(new TextEncoder().encode('Thursday')));
     expect(new TextDecoder().decode(sealed)).not.toContain('maya');
-    expect(hex((await open(sealed, k))!)).toBe(hex(plain));
-    expect(hex(await seal(plain, k))).not.toBe(hex(sealed));          // a fresh nonce every time
+    expect(hex((await open(sealed))!)).toBe(hex(plain));
+    expect(hex((await seal(plain))!)).not.toBe(hex(sealed));          // a fresh nonce every time
     const bent = Uint8Array.from(sealed); bent[30] ^= 1;
-    expect(await open(bent, k)).toBeNull();
+    expect(await open(bent)).toBeNull();
     const tagBent = Uint8Array.from(sealed); tagBent[tagBent.length - 1] ^= 1;
-    expect(await open(tagBent, k)).toBeNull();
-    expect(await open(sealed, newKey())).toBeNull();
-    expect(await open(sealed.subarray(0, 20), k)).toBeNull();
-    expect(await open(new TextEncoder().encode('{"plain":"json"}'.repeat(8)), k)).toBeNull();
+    expect(await open(tagBent)).toBeNull();
+    expect(await open(sealed.subarray(0, 20))).toBeNull();
+    expect(await open(new TextEncoder().encode('{"plain":"json"}'.repeat(8)))).toBeNull();
+    nativeKey = randomBytes(32);                                       // another key (the native key was forgotten and remade)
+    expect(await open(sealed)).toBeNull();
+  });
+  test('a native module that refuses, or none, seals nothing and nothing is written', async () => {
+    refuses = true;
+    expect(await seal(new Uint8Array([1, 2, 3]))).toBeNull();
+    bindNative(undefined);
+    expect(await seal(new Uint8Array([1]))).toBeNull(); expect(await open(new Uint8Array(40))).toBeNull();
+  });
+  test('the shared code holds no cipher of its own', async () => {
+    const src = await Bun.file(new URL('./mail-seal.ts', import.meta.url)).text();
+    expect(src).not.toMatch(/SBOX|expandKey|encryptBlock|hmac|ctr\(/i);
   });
 });
 
@@ -316,7 +318,7 @@ describe('B1 B2 the mailbox', () => {
     const f = await mail.mailFrame('mailbox:inbox', env());
     expect(f.status).toBe('cached'); expect(f.rows.length).toBe(3);
     // with no copy at all (a fresh phone, or the copy wiped) it says so and shows no rows
-    await mail.wipeMail(storage, store); mail.forget();
+    await mail.wipeMail(storage); mail.forget();
     v = await mail.mailBox('mailbox:inbox', false, env());
     expect(v.status).toBe('offline'); expect(v.rows).toEqual([]); expect(v.cached).toBe(false);
   });
@@ -451,14 +453,14 @@ describe('P1 to P3 the phone\'s copy', () => {
     expect(names.length).toBeGreaterThanOrEqual(2);
     expect(names.every((n) => n.startsWith('app:/data/mail/'))).toBe(true);
     for (const [, b] of files) { const s = new TextDecoder('latin1').decode(b); for (const w of SECRETS) expect(s.includes(w)).toBe(false); }
-    expect(secrets.get('mail-key')).toMatch(/^[0-9a-f]{64}$/);
+    expect(nativeKey).not.toBeNull();                       // a native key was made; shared code never saw it
     const c = await C.loadFolder(env(), 'inbox');
     expect(c!.rows.length).toBe(4);
     expect((await C.loadMessage(env(), 'em_01hz0a'))!.text).toContain('Thursday works for me');
   });
 
-  test('P1 no secret store means no file at all, and the mailbox still works', async () => {
-    keepsSecrets = false; computer();
+  test('P1 a native module that refuses means no file at all, and the mailbox still works', async () => {
+    refuses = true; computer();
     const v = await mail.mailBox('mailbox:inbox', false, env());
     await mail.mailMessage('mail:em_01hz0a', false, false, env());
     expect(v.status).toBe('ready'); expect(files.size).toBe(0);
@@ -497,7 +499,7 @@ describe('P1 to P3 the phone\'s copy', () => {
   });
 
   test('P2 a long folder is walked a budget at a time: the answer says "more", the next one goes on, and every body is fetched once', async () => {
-    files.clear(); secrets.clear(); mail.forget();
+    files.clear(); mail.forget();
     const many = { messages: Array.from({ length: 30 }, (_, i) => ({ id: `em_${String(i).padStart(3, '0')}`, direction: 'inbound', from_address: 'lee.park@example.com', subject: `Subject ${i}`, trust_status: 'trusted', read_at: 'x', created_at: '2026-11-1' + (i % 9) + 'T00:00:00Z', received_at: '2026-11-1' + (i % 9) + 'T00:00:00Z' })), total: 30, unread: 0 };
     route = (r) => (r.path === '/api/email/messages' ? { status: 200, body: many } : { status: 200, body: { message: many.messages.find((m) => r.path.endsWith(m.id)), text_body: 'body ' + r.path } });
     await mail.mailBox('mailbox:inbox', false, env());
@@ -540,23 +542,23 @@ describe('W1 L1 D1 A1', () => {
   test('W1 wipeMail removes every sealed file, every original, the key and the memory; it never throws, even with nothing', async () => {
     computer();
     await mail.mailBox('mailbox:inbox', false, env()); await mail.mailMessage('mail:em_01hz08', false, true, env()); await mail.mailSync('mailbox:inbox', false, env());
-    expect([...files.keys()].some((k) => k.startsWith('app:/data/mail/'))).toBe(true); expect(secrets.has('mail-key')).toBe(true);
+    expect([...files.keys()].some((k) => k.startsWith('app:/data/mail/'))).toBe(true); expect(nativeKey).not.toBeNull();
     files.set('app:/data/paper-front.json', new TextEncoder().encode('{}'));
-    const r = await mail.wipeMail(storage, store);
+    const r = await mail.wipeMail(storage);
     expect(r.files).toBeGreaterThan(0); expect(r.originals).toBe(1);
     expect([...files.keys()]).toEqual(['app:/data/paper-front.json']);
-    expect(secrets.has('mail-key')).toBe(false);
+    expect(nativeKey).toBeNull(); expect(forgets).toBe(1);
     route = () => 'network';
     expect((await mail.mailFrame('mailbox:inbox', env())).status).toBe('frame');                // memory is gone too
-    expect(await mail.wipeMail(storage, store)).toEqual({ files: 0, originals: 0 });
-    expect(await mail.wipeMail(undefined, undefined)).toEqual({ files: 0, originals: 0 });
+    expect(await mail.wipeMail(storage)).toEqual({ files: 0, originals: 0 });
+    expect(await mail.wipeMail(undefined)).toEqual({ files: 0, originals: 0 });
   });
 
   test('L1 logs carry ids and counts, never a sender, a subject, an address or a word of a message', async () => {
     computer();
     await mail.mailBox('mailbox:inbox', false, env()); await mail.mailMessage('mail:em_01hz0a', false, false, env()); await mail.mailSync('mailbox:inbox', false, env());
     await mail.mailSaveDraft('mail:new', 'maya.ortiz@example.com', 'Thursday dinner', 'Seven at the usual place', false);
-    route = () => 'network'; await mail.mailBox('mailbox:inbox', false, env()); await mail.wipeMail(storage, store);
+    route = () => 'network'; await mail.mailBox('mailbox:inbox', false, env()); await mail.wipeMail(storage);
     const all = logs.join('\n');
     restore();
     expect(all.length).toBeGreaterThan(0);
@@ -585,7 +587,7 @@ describe('W1 L1 D1 A1', () => {
     const g = app.grants.split('\n');
     expect(g).toContain(`fs.read ${C.DIR}`); expect(g).toContain(`fs.write ${C.DIR}`);
     expect(g).toContain(`fs.read ${C.CACHE}`); expect(g).toContain(`fs.write ${C.CACHE}`);
-    expect(g).toContain(`secret.keep ${C.KEY_NAME}`);
+    expect(g.some((l) => l.startsWith('secret.'))).toBe(false);          // no secret in Exact's store: the key is the platform's
     expect(g.some((l) => l.startsWith('net.fetch'))).toBe(true);
   });
 });

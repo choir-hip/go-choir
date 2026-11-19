@@ -40,8 +40,7 @@ fs.write app:/cache
 fs.read app:/data/signout-pending
 fs.write app:/data/signout-pending
 fs.read app:/data/account-stamp
-fs.write app:/data/account-stamp
-secret.keep mail-key`;
+fs.write app:/data/account-stamp`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),
@@ -67,12 +66,12 @@ const sources: Sources = {
   fileRename: ([demo, path, name], _s, storage) => fileRename({ demo, path, name }, storage),
   fileUpload: ([demo, from, name, dir], _s, storage) => fileUpload({ demo, from, name, dir }, storage),
   paperFront: ([view, edition, width, tick, focus, picks, demo], _store, storage) => paperFront({ view, edition, width, tick, focus, picks, demo }, storage),
-  // Mail (mail.ts): the phone's copy is sealed under app:/data/mail with the key `mail-key` in the secret store; "Show original" is written under app:/cache/mail-*.html.
-  mailBox: ([address, demo], store, storage) => mail.mailBox(address, demo, { store, storage }),
-  mailFrame: ([address], store, storage) => mail.mailFrame(address, { store, storage }),
-  mailSync: ([address, demo], store, storage) => mail.mailSync(address, demo, { store, storage }),
-  mailMessage: ([address, demo, original], store, storage) => mail.mailMessage(address, demo, original, { store, storage }),
-  mailCompose: ([address, demo], store, storage) => mail.mailCompose(address, demo, { store, storage }),
+  // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
+  mailBox: ([address, demo], _store, storage) => mail.mailBox(address, demo, { storage }),
+  mailFrame: ([address], _store, storage) => mail.mailFrame(address, { storage }),
+  mailSync: ([address, demo], _store, storage) => mail.mailSync(address, demo, { storage }),
+  mailMessage: ([address, demo, original], _store, storage) => mail.mailMessage(address, demo, original, { storage }),
+  mailCompose: ([address, demo], _store, storage) => mail.mailCompose(address, demo, { storage }),
   mailSaveDraft: ([address, to, subject, body, demo]) => mail.mailSaveDraft(address, to, subject, body, demo),
   mailApprovalEmail: ([address, draft, demo]) => mail.mailApprovalEmail(address, draft, demo),
   mailMarkUnread: ([address, demo]) => mail.mailMarkUnread(address, demo),

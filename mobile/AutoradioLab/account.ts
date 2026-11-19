@@ -36,7 +36,7 @@ const rmAll = async (storage: Storage | undefined, paths: string[]): Promise<voi
 /** Every store the shared modules keep. A module that moves in adds one line here (and its path to WIPED_PATHS). */
 export const WIPES: Wipe[] = [
   { name: 'podcasts', run: (s) => podcast.wipe(s) },
-  { name: 'mail', run: (s, k) => wipeMail(s, k) },
+  { name: 'mail', run: (s) => wipeMail(s) },
   { name: 'files', run: (s) => wipeFiles(s) },
   { name: 'paper-front', run: (s) => wipePaper(s) },
   { name: 'takes', run: (s) => wipeKept(s) },

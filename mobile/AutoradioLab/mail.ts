@@ -11,7 +11,7 @@
 // its own error and retry, never a spinner word. Time is never read: "now" is the server's `Date` header from the last reply (or the newest row's date).
 // Logs carry ids and counts only: never a sender, a subject, an address or a word of a message.
 
-import type { Storage, Store } from './app.contract.d.ts';
+import type { Storage } from './app.contract.d.ts';
 import { authedJSON } from './api.ts';
 import * as M from './mail-model.ts';
 import { sanitized } from './mail-sanitize.ts';
@@ -71,9 +71,9 @@ export function forget(): void { kept.clear(); autoRead.clear(); drafts = []; al
 
 /** SIGN-OUT. Removes the phone's copy of the account's mail (every sealed file, every "Show original" document, the key) and what this session holds.
  * The sign-in code calls this once, with the app's `storage` (and `store` when it has it, so the key is forgotten too); it never throws and logs counts only. */
-export async function wipeMail(storage?: Storage, store?: Store): Promise<{ files: number; originals: number }> {
+export async function wipeMail(storage?: Storage): Promise<{ files: number; originals: number }> {
   forget();
-  const r = await C.wipeFiles({ storage, store });
+  const r = await C.wipeFiles({ storage });
   console.log(`mail: wiped files=${r.files} originals=${r.originals}`);
   return r;
 }
@@ -414,7 +414,7 @@ export async function mailSync(address: string, demo: boolean, env: C.Env): Prom
   const out: SyncView = { status: '', held: 0, fetched: 0, note: '' };
   if (!address.startsWith('mailbox:') || demo) { out.status = 'idle'; return out; }
   const folder = M.rest(address);
-  if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !C.keyOf(env) || !env.storage) { out.status = 'idle'; return out; }
+  if (!M.FOLDERS.some((f) => f.name === folder) || folder === 'drafts' || !C.sealed(env) || !env.storage) { out.status = 'idle'; return out; }
   const h = kept.get(folder) ?? (await ensureKept(env, folder, false));
   if (!h) { out.status = 'idle'; return out; }
   const state = await C.loadState(env);

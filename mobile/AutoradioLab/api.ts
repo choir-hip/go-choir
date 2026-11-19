@@ -67,10 +67,15 @@ export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
 type Account = (typeof KEYCHAIN_ACCOUNTS)[number];
 
 /** The data module's one native module, as far as this file uses it. */
-export type NativeReader = { available?: boolean; later(request: { op: 'get'; account: Account } | { op: 'session' }): Promise<unknown> };
+export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string }): Promise<unknown> };
 let reader: NativeReader | undefined;
 /** app.ts hands over the module's native handle at every answer. */
 export function bindNative(native: NativeReader | null | undefined): void { reader = native ?? undefined; }
+
+/** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
+export function nativeLater(): ((request: { op: string; account?: Account; b64?: string }) => Promise<unknown>) | null {
+  return reader && reader.available !== false ? (r) => reader!.later(r) : null;
+}
 
 async function keptItem(account: Account): Promise<string | null> {
   if (!reader || reader.available === false) return null;
