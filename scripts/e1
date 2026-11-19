@@ -109,11 +109,20 @@ ARM_ORDER = ("sa", "sb", "l", "i")
 S_ARMS = ("sa", "sb")
 OTHER_ARMS = ("l", "i")
 
+# The smoke is a positive control for the search accounting (step 10): its
+# run must start a web search so that the rows and the served lines are seen
+# from that arm's computer. The question alone does not make it: a computer
+# asked it three times in a day answers from the pages it holds (S-a,
+# 2026-11-19T13:36Z: 8 corpus searches, 64 capture reads, no web search, the
+# same build on which S-b and I each started one). So the smoke says so in
+# words. The pilot's objectives say nothing of the kind; how much a run
+# searches is what the pilot measures.
 SMOKE_OBJECTIVE = {
     "id": "s00", "kind": "follow_up",
     "prompt": ("Research this event on the web and write a short news story, two short paragraphs: "
                "what the main US stock indexes did at the close of the most recent trading day, and "
-               "what the reporting of that day gives as the reasons. Search the web for today's reporting."),
+               "what the reporting of that day gives as the reasons. Search the web for today's reporting: "
+               "run at least one new web search before you write, even if pages you already hold answer it."),
 }
 
 
