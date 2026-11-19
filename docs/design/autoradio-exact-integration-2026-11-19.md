@@ -376,3 +376,7 @@ finished loading after a sign-out began changes nothing) and 10 (close and pin c
 Named residuals (not built): (4) an Android launch shows the placard deck until the host fact is decided (about 4 s on a host with no native package); (7) a literal `</item>` inside CDATA in a feed can
 still yield a half item; (8) `reader.ts` has no text-size cap (two scans of a very large story could overrun the turn); (11) `proof-real.sh` clears the Swift container but not Exact's `app:/data`, and the
 proof does not exercise the Android deck; a sign-out whose wipe finishes late still does not re-ask the in-memory sources until the next sign-out result (the counter is bumped, but no event carries it to the contract).
+
+Seat 2, round 3, named residuals (none blocking): (4) one hung `atomicWriteFile` blocks every later save of the shared deck (the chain is head-of-line); (5) a save whose generation is captured after `nextGeneration`
+but before `forget()` can land after the wipe's `rm` (Android only, no sign-out there yet); (6) any app-module answer counts as proof of the pages package: a host with the module and no `openPages` would read
+`native` with an empty set (no such host today); (7) S18's late-wipe leg calls `wipeAll` directly, not the timeout continuation's wiring.

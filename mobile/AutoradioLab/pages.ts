@@ -141,8 +141,9 @@ export async function pagesOpen(storage: Storage | undefined, rawAddress: string
   await save(storage, gen);
   return view();
 }
-export async function pagesFocus(storage: Storage | undefined, address: string): Promise<PageList> {
+export async function pagesFocus(storage: Storage | undefined, rawAddress: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
+  const address = canonical(rawAddress);
   if (pages.some((x) => x.address === address)) focusLocked(address);
   await save(storage, gen); return view();
 }

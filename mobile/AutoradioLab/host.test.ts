@@ -61,6 +61,17 @@ describe('round 6: recovery and the time bound', () => {
   });
 });
 
+describe('round 7', () => {
+  test('N1 a probe in flight when the native signal arrives and then times out does not overwrite native with none', async () => {
+    adoptNative(handle(() => new Promise(() => undefined)), 'x');
+    const first = hostMode(80, 20);                                              // the probe hangs; the wait will end in "none"
+    await new Promise((r) => setTimeout(r, 10));
+    expect(await hostMode(80, 20, true)).toBe('native');                         // the signal arrives while it is in flight
+    expect(await first).toBe('native');                                          // the in-flight decision must not say none now
+    expect(await hostMode(80, 20, false)).toBe('native');                        // and the fact stays native
+  });
+});
+
 describe('the twins are idle where there is a native package', () => {
   test('H5 with the flag false (iOS) neither the reader twin nor the notebook twin fetches', async () => {
     let fetches = 0; globalThis.fetch = (async () => { fetches++; return new Response('{}', { status: 200 }); }) as never;

@@ -141,6 +141,10 @@ describe('round 6', () => {
     let v = await P.pagesPin(storage, 'doc:abc@12'); expect(v.rows.find((r) => r.address === 'doc:abc')?.pinned).toBe(true);
     v = await P.pagesClose(storage, 'doc:abc@12'); expect(addrs(v)).not.toContain('doc:abc');
   });
+  test('F1 focus canonicalises the address like open, close and pin', async () => {
+    await P.pagesOpen(storage, 'doc:abc@12', ''); await P.pagesOpen(storage, 'paper:front', '');
+    const v = await P.pagesFocus(storage, 'doc:abc@12'); expect(v.top).toBe('doc:abc');
+  });
   test('O1 an open that finished loading after a sign-out began changes nothing', async () => {
     const api = await import('./api.ts');
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });

@@ -6,6 +6,7 @@ import { nativeLater, nativeHasAnswered } from './api.ts';
 
 let decided: 'native' | 'none' | null = null;
 let inflight: Promise<'native' | 'none'> | null = null;
+const wasNative = (): boolean => decided === 'native';       // read afresh (a signal may have set it while a probe was out)
 export function resetHost(): void { decided = null; inflight = null; }
 
 const probe = async (probeMs: number): Promise<boolean> => {
@@ -35,7 +36,7 @@ export function hostMode(waitMs = 4000, probeMs = 1500, nativeSeen = false): Pro
       const timer = new Promise<'none'>((res) => setTimeout(() => res('none'), waitMs));     // real time, not rounds: a hanging probe cannot stretch it
       const r = await Promise.race([loop, timer]);
       stop = true;
-      decided = r === 'native' || nativeHasAnswered() ? 'native' : 'none';
+      decided = wasNative() || r === 'native' || nativeHasAnswered() ? 'native' : 'none';     // never write "none" over a "native" a signal set while this probe was out
       return decided;
     })().finally(() => { inflight = null; });
   }
