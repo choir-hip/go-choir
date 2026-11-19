@@ -120,7 +120,7 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	}
 	flat := strings.Join(strings.Fields(prompt.Content), " ")
 	for _, want := range []string{
-		"The first message ends with a corpus brief",
+		"The first message ends with a corpus brief, or a sentence saying why there is none",
 		"Search the corpus yourself with choir.SearchWireCorpus",
 		"for what the brief lacks or says it left out",
 		"A published story carries no date there",
