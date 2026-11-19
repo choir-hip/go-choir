@@ -789,6 +789,12 @@ func (s *Store) writeStoryVersionVectors(ctx context.Context, storyID, versionID
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// One writer of a version at a time: concurrent delete-and-insert of the
+	// same rows can deadlock on lock order (seen with eight writers). The lock
+	// ends with the transaction.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(?, 7330212470813))`, versionID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM vec_story_passages WHERE version_id = ?`, versionID); err != nil {
 		return err
 	}
@@ -904,6 +910,10 @@ func (s *Store) writeCaptureVectors(ctx context.Context, rows []captureVectorRow
 	}
 	done := s.retrievalTimer(retrievalVectorWrite)
 	defer func() { done("capture", len(rows), err) }()
+	// Rows in key order, so two writers of overlapping batches lock in the
+	// same order.
+	rows = append([]captureVectorRow(nil), rows...)
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 	tx, err := s.corpus().BeginTx(ctx, nil)
 	if err != nil {
 		return err
