@@ -4,9 +4,8 @@
 Run on Node B as root, over ssh, from stdin, nothing installed and nothing written
 there (the output goes to stdout):
 
-    ssh -C node-b python3 - stories < scripts/embed-pass-export.py | gzip > stories.jsonl.gz
-    ssh -C node-b python3 - captures --after <id> < scripts/embed-pass-export.py | gzip >> captures.jsonl.gz
-    ssh node-b python3 - count < scripts/embed-pass-export.py
+    ssh -C node-b python3 - stories --owner O --computer C [--latest-only | --older-only] < scripts/embed-pass-export.py | gzip > stories.jsonl.gz
+    ssh -C node-b python3 - captures --owner O --computer C [--after <id>] [--since <RFC3339>] < scripts/embed-pass-export.py | gzip >> captures.jsonl.gz
 
 What it reads: PostgreSQL `graph` as the postgres system user (peer authentication, every session
 `default_transaction_read_only = on`), and the plain text blobs corpusd wrote under
@@ -31,8 +30,8 @@ every passage of the version's text.
 """
 import csv, hashlib, json, os, subprocess, sys
 
-PAPER_OWNER = os.environ.get("EMBED_PASS_OWNER", "e5962310-8767-4624-87e5-a9b93a4e1db1")
-PAPER_COMPUTER = os.environ.get("EMBED_PASS_COMPUTER", "computer-1355b83bced1613eb048ee28d66688a8")
+# The script holds no identity: the owner and computer are required arguments (--owner, --computer).
+PAPER_OWNER = PAPER_COMPUTER = ""
 ROOT = "/var/lib/go-choir/platform-artifacts"
 TARGET, MAXP = 1800, 2400
 MAX_INDEXED_BYTES = 256 << 10
@@ -142,6 +141,24 @@ def psql_rows(sql):
     if p.wait() != 0:
         sys.exit("psql failed")
 
+def fetched_since(fetched_at, since):
+    """True when fetched_at (RFC3339, maybe nanoseconds) is at or after since. An unreadable time is kept, not dropped."""
+    from datetime import datetime, timezone
+    def p(x):
+        x = x.strip().replace("Z", "+00:00")
+        if "." in x:
+            head, rest = x.split(".", 1)
+            n = 0
+            while n < len(rest) and rest[n].isdigit():
+                n += 1
+            x = head + "." + rest[:n][:6].ljust(6, "0") + rest[n:]
+        d = datetime.fromisoformat(x)
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    try:
+        return p(fetched_at) >= p(since)
+    except ValueError:
+        return True
+
 def lit(s):
     return "'" + s.replace("'", "''") + "'"
 
@@ -157,8 +174,18 @@ def private_label(meta):
             return True
     return False
 
+class OutsideRoot(Exception):
+    pass
+
 def blob(path_rel, limit=None):
-    with open(os.path.join(ROOT, path_rel), "rb") as f:
+    """Read a file under ROOT and nowhere else: every read (manifest, story text, capture text) goes through here."""
+    if not path_rel or path_rel.startswith("/") or ".." in path_rel.split("/") or "\0" in path_rel:
+        raise OutsideRoot(path_rel)
+    root = os.path.realpath(ROOT)
+    real = os.path.realpath(os.path.join(root, path_rel))
+    if not real.startswith(root + "/"):
+        raise OutsideRoot(path_rel)
+    with open(real, "rb") as f:
         return f.read(limit) if limit else f.read()
 
 def emit(o):
@@ -173,7 +200,7 @@ def row(kind, key_id, ordinal, title, text_bytes, extra):
 
 # ---- the two exports ----
 
-def captures(after, limit, counts):
+def captures(after, since, limit, counts):
     sql = ("select canonical_id, tombstone, superseded_by, metadata from og_objects "
            "where object_kind = 'choir.web_capture' and owner_id = %s and computer_id = %s%s "
            "order by canonical_id%s") % (lit(PAPER_OWNER), lit(PAPER_COMPUTER),
@@ -191,12 +218,16 @@ def captures(after, limit, counts):
             counts["skipped_bad_metadata"] += 1; continue
         if private_label(meta):
             counts["refused_private"] += 1; continue
+        if since and not fetched_since(meta.get("fetched_at", ""), since):
+            counts["skipped_before_since"] += 1; continue
         h = str(meta.get("extracted_text_blob_id", "")).strip()
         h = h[7:] if h.startswith("sha256:") else h
         if len(h) != 64 or any(c not in "0123456789abcdef" for c in h):
             counts["skipped_no_text_blob"] += 1; continue
         try:
             text = blob("capture-bodies/%s/%s" % (h[:2], h), MAX_INDEXED_BYTES + 8)
+        except OutsideRoot:
+            counts["refused_outside_root"] += 1; continue
         except OSError:
             counts["skipped_unreadable_blob"] += 1; continue
         spans = passages(text)
@@ -207,16 +238,20 @@ def captures(after, limit, counts):
             {"published_at": meta.get("published_at", ""), "fetched_at": meta.get("fetched_at", ""), "passages": len(spans)})
         counts["exported"] += 1
 
-def stories(limit, counts):
-    sql = ("select v.canonical_id, p.canonical_id, p.metadata, v.metadata, coalesce(m.body_ref, ''), "
-           "case when coalesce(m.body_ref, '') = '' then convert_from(m.body, 'UTF8') else '' end "
+def stories(limit, counts, group="all"):
+    where_rn = {"latest": "where rn = 1", "older": "where rn > 1"}.get(group, "")
+    sql = ("select vid, pid, pmeta, vmeta, body_ref, body_inline from ("
+           "select v.canonical_id vid, p.canonical_id pid, p.metadata pmeta, v.metadata vmeta, p.updated_at pupd, "
+           "coalesce(m.body_ref, '') body_ref, "
+           "case when coalesce(m.body_ref, '') = '' then convert_from(m.body, 'UTF8') else '' end body_inline, "
+           "row_number() over (partition by p.canonical_id order by (v.metadata::json->>'revision')::int desc, v.canonical_id desc) rn "
            "from og_objects v "
            "join og_edges ev on ev.to_id = v.canonical_id and ev.kind = 'has_version' and not ev.tombstone "
            "join og_objects p on p.canonical_id = ev.from_id and p.object_kind = 'choir.publication' and not p.tombstone "
            "join og_edges em on em.from_id = v.canonical_id and em.kind = 'has_manifest' and not em.tombstone "
            "join og_objects m on m.canonical_id = em.to_id "
-           "where v.object_kind = 'choir.publication_version' and not v.tombstone and v.owner_id = %s "
-           "order by v.canonical_id%s") % (lit(PAPER_OWNER), " limit %d" % limit if limit else "")
+           "where v.object_kind = 'choir.publication_version' and not v.tombstone and v.owner_id = %s) x %s "
+           "order by (rn > 1), pupd desc, pid, rn%s") % (lit(PAPER_OWNER), where_rn, " limit %d" % limit if limit else "")
     seen = set()
     for vid, pid, pmeta_raw, vmeta_raw, body_ref, body_inline in psql_rows(sql):
         if vid in seen:
@@ -231,16 +266,20 @@ def stories(limit, counts):
             counts["refused_not_published"] += 1; continue
         try:
             man = json.loads(body_inline) if body_inline else json.loads(blob(body_ref))
+        except OutsideRoot:
+            counts["refused_outside_root"] += 1; continue
         except (ValueError, OSError):
             counts["skipped_no_manifest"] += 1; continue
         pol = man.get("access_policy") or {}
         if str(pol.get("visibility", "")).strip().lower() != "public" or str(pol.get("route", "")).strip().lower() not in ("", "public"):
             counts["refused_not_public"] += 1; continue
         ref = str(man.get("storage_ref", "")).strip()
-        if not ref or ref.startswith("/") or ".." in ref.split("/"):
+        if not ref:
             counts["skipped_no_text_blob"] += 1; continue
         try:
             text = blob(ref)
+        except OutsideRoot:
+            counts["refused_outside_root"] += 1; continue
         except OSError:
             counts["skipped_unreadable_blob"] += 1; continue
         title = str(man.get("title") or pmeta.get("title") or "").strip()
@@ -255,19 +294,24 @@ def stories(limit, counts):
         counts["exported"] += 1
 
 def main():
-    mode = sys.argv[1] if len(sys.argv) > 1 else "count"
+    global PAPER_OWNER, PAPER_COMPUTER
+    mode = sys.argv[1] if len(sys.argv) > 1 else ""
     argv = sys.argv[2:]
     opt = lambda k, d="": argv[argv.index(k) + 1] if k in argv else d
-    limit, after = int(opt("--limit", "0")), opt("--after")
+    limit, after, since = int(opt("--limit", "0")), opt("--after"), opt("--since")
+    PAPER_OWNER, PAPER_COMPUTER = opt("--owner"), opt("--computer")
+    if mode not in ("stories", "captures") or not PAPER_OWNER or not PAPER_COMPUTER:
+        sys.exit("usage: stories|captures --owner O --computer C [--limit N] [--after ID] [--since RFC3339] [--latest-only|--older-only]")
+    if "--latest-only" in argv and "--older-only" in argv:
+        sys.exit("--latest-only and --older-only are exclusive")
     counts = {"mode": mode, "seen": 0, "exported": 0, "refused_private": 0, "refused_tombstone_or_superseded": 0,
-              "refused_not_published": 0, "refused_not_public": 0, "skipped_bad_metadata": 0, "skipped_no_text_blob": 0,
-              "skipped_unreadable_blob": 0, "skipped_no_text": 0, "skipped_no_manifest": 0, "passages": 0}
+              "refused_not_published": 0, "refused_not_public": 0, "refused_outside_root": 0, "skipped_bad_metadata": 0,
+              "skipped_no_text_blob": 0, "skipped_unreadable_blob": 0, "skipped_no_text": 0, "skipped_no_manifest": 0,
+              "skipped_before_since": 0, "passages": 0}
     if mode == "stories":
-        stories(limit, counts)
-    elif mode == "captures":
-        captures(after, limit, counts)
+        stories(limit, counts, "latest" if "--latest-only" in argv else "older" if "--older-only" in argv else "all")
     else:
-        sys.exit("usage: stories|captures [--limit N] [--after CAPTURE_ID]")
+        captures(after, since, limit, counts)
     sys.stderr.write(json.dumps(counts) + "\n")
 
 if __name__ == "__main__":

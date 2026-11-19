@@ -377,6 +377,33 @@ after the import is accepted.
 - **Measured** on the dev Mac, Metal, 500 passages of the repo's own trial corpus: 2,427 tokens a second (2,861 on the resumed
   300), 500 vectors, norms 0.9999 to 1.0001 (fp16).
 
+**Commands, in order** (from the repo root of a lane; the paper's ids: owner `e5962310-8767-4624-87e5-a9b93a4e1db1`, computer
+`computer-1355b83bced1613eb048ee28d66688a8`; the script holds no identity and refuses without `--owner` and `--computer`; every read of a
+file is confined under `/var/lib/go-choir/platform-artifacts`, refusals counted as `refused_outside_root`):
+
+```
+# 0. once: build the tool through the lock, and make the folder
+cd mobile/EmbedTrial && /usr/bin/lockf -k -t 7200 ~/.cache/autoradio-mac-build.lock swift build -c release && cd ../..
+mkdir -p ~/.cache/choir-embed-pass; D=~/.cache/choir-embed-pass
+O=e5962310-8767-4624-87e5-a9b93a4e1db1; C=computer-1355b83bced1613eb048ee28d66688a8
+E='nice -n 19 python3 -'
+# 1. the latest version of each story (newest publication first), then embed it (watch the counts line on stderr of the export)
+ssh -C -o BatchMode=yes node-b "$E stories --owner $O --computer $C --latest-only" < scripts/embed-pass-export.py | gzip > $D/stories-latest.jsonl.gz
+zcat $D/stories-latest.jsonl.gz | /usr/bin/lockf -k -t 7200 ~/.cache/autoradio-mac-build.lock mobile/EmbedTrial/.build/release/embed-trial pass --in - --out $D/stories-latest.vec.jsonl --total $(zcat $D/stories-latest.jsonl.gz | wc -l)
+# 2. the older versions
+ssh -C -o BatchMode=yes node-b "$E stories --owner $O --computer $C --older-only" < scripts/embed-pass-export.py | gzip > $D/stories-older.jsonl.gz
+zcat $D/stories-older.jsonl.gz | /usr/bin/lockf -k -t 7200 ~/.cache/autoradio-mac-build.lock mobile/EmbedTrial/.build/release/embed-trial pass --in - --out $D/stories-older.vec.jsonl --total $(zcat $D/stories-older.jsonl.gz | wc -l)
+# 3. the captures (id order; add --since <RFC3339> to export only pages fetched at or after a time; to resume an export add --after <last capture id>)
+ssh -C -o BatchMode=yes node-b "$E captures --owner $O --computer $C" < scripts/embed-pass-export.py | gzip > $D/captures.jsonl.gz
+zcat $D/captures.jsonl.gz | /usr/bin/lockf -k -t 7200 ~/.cache/autoradio-mac-build.lock mobile/EmbedTrial/.build/release/embed-trial pass --in - --out $D/captures.vec.jsonl --total $(zcat $D/captures.jsonl.gz | wc -l)
+# 4. after the import is accepted (never before): delete the text and the vectors
+rm -rf ~/.cache/choir-embed-pass
+```
+
+Files in `~/.cache/choir-embed-pass/`: `*.jsonl.gz` are the exported public text (deleted after the import); `*.vec.jsonl` are the vectors
+(no text). A killed embed restarts with the same command and continues from its output. Run the tests with
+`python3 -I scripts/embed_pass_export_test.py` and, in `mobile/EmbedTrial`, `swift test --filter EmbedPassTests` through the lock.
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image
