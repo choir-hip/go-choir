@@ -251,11 +251,12 @@ What it does:
   `corpus-search-takes-two-seconds-on-the-paper-2026-11-19.md`), so six in turn
   would answer about three threads and hold every research run for the whole
   8 s. A call still running at the deadline is that thread's "did not answer".
-  The log's `ms=` is the whole build and `slowest_ms=` the slowest answered
-  search.
+  The log's `ms=` is the whole build and `slowest_ms=` the slowest search that
+  returned.
 - Each thread is one call of the verb's own host function
-  (`search_wire_corpus`), as the run's owner and computer, in turn, under one
-  8 s deadline for the whole build (the run-memory and inbox reads included).
+  (`search_wire_corpus`), as the run's owner and computer, all at the same
+  time (one goroutine per thread, a panic in one is that thread's "did not
+  answer"), under one 8 s deadline for the whole build (the run-memory and inbox reads included).
   A slow or failing corpusd, a run with no objective, owner or computer starts
   the run with one plain sentence saying why there is no brief; the run always
   starts. Per thread the brief says one of three things and nothing more: the
