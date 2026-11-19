@@ -720,7 +720,7 @@ the floor, and decides what a guest may do, read or reach:
 | autoputer, the guest runtime and its HTTP surface | `cmd/autoputer/`, `internal/autoputer/`, `internal/server/`, `internal/apihandler/` |
 | the desk runtime | `internal/agentcore/`, `internal/actorruntime/`, `internal/actor/`, `internal/deskworker/`, `cmd/desk-worker/`, `internal/toolregistry/` |
 | guest credentials and host-guest authentication | `internal/hostauth/`, `internal/dbcred/`, `internal/keyescrow/` |
-| grants and authority | `internal/capfloor/`, `internal/eventtablegrant/`, `internal/owneract/` |
+| grants and authority | `internal/capfloor/`, `internal/eventtablegrant/` (deleted 2026-11-19), `internal/owneract/` |
 | self-development | `internal/selfdev/`, `internal/selfdevprotocol/` |
 | guest egress | `internal/hostfetch/`, `internal/gatewayruntime/` |
 
