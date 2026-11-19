@@ -35,3 +35,44 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
   const parsed = date ? Date.parse(date) : NaN;
   return { body, serverTime: Number.isFinite(parsed) ? parsed : null, raw };
 }
+
+// ---- PROVISIONAL api seam (lane exact-content; the lead drops this commit: lane exact-signin owns the real one) ----
+export class SignedOutError extends Error {}
+export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string> };
+
+/** PROVISIONAL: the session the real seam reads from the secret store. */
+let provisionalSession: { token: string; computer: string } | null = null;
+export function provisionalSetSession(s: { token: string; computer: string } | null): void { provisionalSession = s; }
+
+function authHeaders(opts: Authed): Record<string, string> {
+  if (!provisionalSession) throw new SignedOutError('not signed in');
+  return { authorization: `Bearer ${provisionalSession.token}`, 'x-choir-computer': provisionalSession.computer, ...(opts.headers ?? {}) };
+}
+
+/** A signed-in JSON request to the listener's own computer. Throws SignedOutError when there is no session. */
+export async function authedJSON(path: string, opts: Authed = {}): Promise<Reply> {
+  const headers: Record<string, string> = { accept: 'application/json', ...authHeaders(opts) };
+  let body: string | undefined;
+  if (opts.body !== undefined) { body = JSON.stringify(opts.body); headers['content-type'] = 'application/json'; }
+  const response = await fetch(url(path, opts.query ?? {}), { method: opts.method ?? 'GET', headers, body, exactTimeout: TIMEOUT_MS } as RequestInit);
+  if (response.status === 401) throw new SignedOutError('sign-in refused');
+  if (!response.ok) throw new Error(`${path} answered ${response.status}`);
+  const raw = await response.text();
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error(`${path} answered a body that is not JSON`); }
+  const date = response.headers.get('date');
+  const t = date ? Date.parse(date) : NaN;
+  return { body: parsed, serverTime: Number.isFinite(t) ? t : null, raw };
+}
+
+/** The same, for bytes (a file, a PDF, audio). */
+export async function authedBytes(path: string, opts: Authed = {}): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const headers: Record<string, string> = { ...authHeaders(opts) };
+  let body: BodyInit | undefined;
+  if (opts.body instanceof Uint8Array) body = opts.body as unknown as BodyInit;
+  else if (opts.body !== undefined) { body = JSON.stringify(opts.body); headers['content-type'] = 'application/json'; }
+  const response = await fetch(url(path, opts.query ?? {}), { method: opts.method ?? 'GET', headers, body, exactTimeout: TIMEOUT_MS } as RequestInit);
+  if (response.status === 401) throw new SignedOutError('sign-in refused');
+  if (!response.ok) throw new Error(`${path} answered ${response.status}`);
+  return { bytes: new Uint8Array(await response.arrayBuffer()), contentType: response.headers.get('content-type') ?? '' };
+}
