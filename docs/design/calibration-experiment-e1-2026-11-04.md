@@ -928,7 +928,7 @@ default `devin/swe-2-flash`).
 
 **What failed: arm L.** Every research run of L failed in about 45 seconds with
 `tool loop iteration 3: gateway call failed: gateway client: provider chatgpt
-model gpt-6-luna: circuit open (model unhealthy)` (in all three runs). The
+model gpt-6-luna: circuit open (model unhealthy)`. The
 gateway's breaker for `chatgpt/gpt-6-luna` was open on 2026-11-19 from 06:51Z to
 07:21Z, so no research call was served and the arm has no model record, no
 search. The smoke fails at step 9 for L. This is a finding about the L route, not
