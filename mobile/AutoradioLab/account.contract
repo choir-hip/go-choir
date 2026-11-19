@@ -14,6 +14,8 @@ members Autoradio
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult
   derive signOutNote = match so { case some(a) => a.message, case none => "" }
+  // Changes when a sign-out finished: the shared sources that keep state in memory (the open pages, the notebook) are asked again, so none of the old account's state is shown.
+  derive signedOutTick = match so { case some(a) => a.done ? "out" : "", case none => "" }
   mutation ctl as shape LabState
   mutation down as shape LabState
   mutation up as shape LabState

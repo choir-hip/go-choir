@@ -3,11 +3,11 @@ use notebookPage, notebookAct from "@choir/autoradio"
 use NotebookPageInfo from "@choir/autoradio"
 
 members Autoradio
-  // The Swift page when it answers (iOS); while it is the empty "loading" (or substituted: Android), the shared twin (notebook.ts, a read of the computer's notebook and scorecard through the
-  // signed-in seam). Selecting a line and the steer taps stay native (notebookDo): the shared page is read only.
+  // The Swift page where there is a native package (iOS); where there is none (`noNative`, Android) the shared twin (notebook.ts: a read of the computer's notebook and scorecard through the
+  // signed-in seam; read only: selecting a line and the steer taps stay native). The flag keeps the twin idle on iOS.
   resource nbn = notebookPage() as shape NotebookPageInfo else empty()
-  resource nbs = notebookPageShared("", 0, pgn.top == "") as shape NotebookPageInfo else empty()
-  derive nb = pgn.top == "" ? nbs : nbn
+  resource nbs = notebookPageShared("", 0, noNative, signedOutTick) as shape NotebookPageInfo else empty()
+  derive nb = noNative ? nbs : nbn
   mutation nbm as shape NotebookPageInfo
 
   // refresh | select (arg is a line id; the same again clears it)

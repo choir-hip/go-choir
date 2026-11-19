@@ -4,14 +4,18 @@
 use openPages, pageModel, theme, themeList, barState, demoInfo from "@choir/autoradio"
 use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord, demoSet from "@choir/autoradio"
 use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autoradio"
+use HostCaps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 members Autoradio
-  // The open pages. The Swift package's set (pgn) when it answers (iOS); otherwise the SHARED set (pgs, pages.ts, kept in storage.fs), so the deck mounts a page with no native code (Android).
-  // Every open, close, pin and reopen is sent to both; on iOS the shared set is kept but not read.
+  // Is there a native package? (host.ts: decided once from the native handle, never from what the native set holds). "none" is Android; "" (not decided) and "native" are iOS.
+  resource hc = hostCaps() as shape HostCaps else empty()
+  derive noNative = hc.mode == "none"
+  // The open pages. The Swift package's set (pgn) where there is a package; the SHARED set (pgs, pages.ts, kept in storage.fs) where there is none, so the deck mounts a page with no native code.
+  // Every open, close, pin and reopen is sent to both; on iOS the shared set is kept but never read. A failed or empty native answer keeps its last value (the slot keeps what it had).
   resource pgn = openPages() as shape PageList else empty()
-  resource pgs = pagesView() as shape PageList else empty()
-  derive pg = pgn.top != "" ? pgn : pgs
+  resource pgs = pagesView(signedOutTick) as shape PageList else empty()
+  derive pg = noNative ? pgs : pgn
   resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
   resource th = theme() as shape Theme else empty()
   resource thl = themeList() as shape ThemeList else empty()

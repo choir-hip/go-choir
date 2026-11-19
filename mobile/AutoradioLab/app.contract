@@ -78,6 +78,9 @@ component Autoradio
     openApproval
     signOut
     signOutNote
+    signedOutTick
+    hc
+    noNative
     refreshRadio
     radioPlay
     playStory
