@@ -101,6 +101,15 @@ public final class AccountWipe: @unchecked Sendable {
         for n in (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [] { try? FileManager.default.removeItem(at: dir.appendingPathComponent(n)) }
     }
 
+    /// Mail's copy of the listener's computer, which lives in shared code now (AutoradioLab/mail.ts): its sealed files under `data/mail` and the "Show original"
+    /// documents `cache/mail-*.html`. Sign-out stays here tonight, so it removes them; mail.ts's own `wipeMail` does the same and also forgets the key.
+    public static func removeMailCopy(dataDirectory: URL, cacheDirectory: URL) {
+        try? FileManager.default.removeItem(at: dataDirectory.appendingPathComponent("mail", isDirectory: true))
+        for n in (try? FileManager.default.contentsOfDirectory(atPath: cacheDirectory.path)) ?? [] where n.hasPrefix("mail-") && n.hasSuffix(".html") {
+            try? FileManager.default.removeItem(at: cacheDirectory.appendingPathComponent(n))
+        }
+    }
+
     /// Recordings the listener abandoned (`takes/`) and the take being played (`take-play-*.m4a`).
     static func removeTakeScratch(in tmp: URL) {
         try? FileManager.default.removeItem(at: tmp.appendingPathComponent("takes", isDirectory: true))

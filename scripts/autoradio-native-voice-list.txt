@@ -30,6 +30,7 @@ path mobile/AutoradioKit/Sources/AutoradioKit/VoiceChoice.swift the voice the ra
 path mobile/AutoradioKit/Sources/AutoradioKit/VoiceSampler.swift the voice cards' spoken sample
 path mobile/AutoradioKit/Sources/AutoradioKit/VoiceSetup.swift voice setup: the models and checks of this phone's voice pipeline
 path mobile/AutoradioKit/Sources/AutoradioKit/TurnTimeline.swift the timing trace of a voice turn
+path mobile/AutoradioKit/Sources/AutoradioKit/MailReading.swift hands the text of a message to the radio's voice (speakText); the mail pages themselves are shared code
 path mobile/AutoradioKit/Sources/AutoradioKit/KeptTurns.swift kept microphone turns
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurn.swift generated microphone-turn fixture for voice setup and the model proof
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurnAudio.swift the fixture utterance read by voice setup and the model proof

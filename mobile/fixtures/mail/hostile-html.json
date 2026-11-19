@@ -1,0 +1,500 @@
+[
+ {
+  "name": "unquoted javascript href",
+  "input": "<a href=javascript:alert(1)>x</a>",
+  "banned": [
+   "javascript",
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "unquoted vbscript href",
+  "input": "<a href=vbscript:msgbox(1)>x</a>",
+  "banned": [
+   "vbscript",
+   "msgbox"
+  ]
+ },
+ {
+  "name": "data html href",
+  "input": "<a href=\"data:text/html,<script>alert(1)</script>\">x</a>",
+  "banned": [
+   "data:",
+   "alert",
+   "<script"
+  ]
+ },
+ {
+  "name": "entity-encoded scheme (decimal)",
+  "input": "<a href=\"&#106;avascript:alert(1)\">x</a>",
+  "banned": [
+   "javascript",
+   "&#106",
+   "alert"
+  ]
+ },
+ {
+  "name": "entity-encoded scheme (hex, no semicolon)",
+  "input": "<a href=\"&#x6A avascript:alert(1)\">x</a>",
+  "banned": [
+   "alert"
+  ]
+ },
+ {
+  "name": "entity colon",
+  "input": "<a href=\"javascript&colon;alert(1)\">x</a>",
+  "banned": [
+   "javascript",
+   "alert"
+  ]
+ },
+ {
+  "name": "entity tab inside",
+  "input": "<a href=\"jav&Tab;ascript:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "entity newline inside",
+  "input": "<a href=\"java&NewLine;script:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "raw tab inside",
+  "input": "<a href=\"jav\tascript:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "raw newline inside",
+  "input": "<a href=\"java\nscript:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "control char before",
+  "input": "<a href=\"\u0001javascript:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "leading space",
+  "input": "<a href=\"  javascript:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "upper case",
+  "input": "<a HREF=\"JaVaScRiPt:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href",
+   "HREF"
+  ]
+ },
+ {
+  "name": "zero width inside",
+  "input": "<a href=\"java​script:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "unknown entity in scheme",
+  "input": "<a href=\"java&bogus;script:alert(1)\">x</a>",
+  "banned": [
+   "alert",
+   "href"
+  ]
+ },
+ {
+  "name": "relative url",
+  "input": "<a href=\"//evil.example.com/x\">x</a>",
+  "banned": [
+   "evil.example.com",
+   "href"
+  ]
+ },
+ {
+  "name": "img onerror",
+  "input": "<img src=x onerror=alert(1)>",
+  "banned": [
+   "onerror",
+   "alert"
+  ]
+ },
+ {
+  "name": "img onerror upper",
+  "input": "<IMG SRC=\"x\" ONERROR=\"alert(1)\">",
+  "banned": [
+   "onerror",
+   "ONERROR",
+   "alert"
+  ]
+ },
+ {
+  "name": "img onerror with slash separator",
+  "input": "<img/src=x/onerror=alert(1)>",
+  "banned": [
+   "onerror",
+   "alert"
+  ]
+ },
+ {
+  "name": "handler after quoted value without space",
+  "input": "<a href=\"https://example.com/\"onclick=\"alert(1)\">x</a>",
+  "banned": [
+   "onclick",
+   "alert"
+  ]
+ },
+ {
+  "name": "handler name with NUL",
+  "input": "<p on\u0000click=alert(1)>x</p>",
+  "banned": [
+   "onclick",
+   "alert"
+  ]
+ },
+ {
+  "name": "body onload",
+  "input": "<body onload=alert(1)>hello</body>",
+  "banned": [
+   "onload",
+   "alert",
+   "<body"
+  ]
+ },
+ {
+  "name": "script",
+  "input": "<script>alert(1)</script>after",
+  "banned": [
+   "script",
+   "alert"
+  ]
+ },
+ {
+  "name": "script upper, spaced close",
+  "input": "<SCRIPT >alert(1)</SCRIPT >after",
+  "banned": [
+   "alert",
+   "SCRIPT"
+  ]
+ },
+ {
+  "name": "script without end",
+  "input": "before<script>alert(1)",
+  "banned": [
+   "script",
+   "alert"
+  ]
+ },
+ {
+  "name": "script src",
+  "input": "<script src=https://evil.example.com/x.js></script>",
+  "banned": [
+   "evil.example.com",
+   "script"
+  ]
+ },
+ {
+  "name": "style with import",
+  "input": "<style>@import url(https://evil.example.com/x.css);</style>",
+  "banned": [
+   "evil.example.com",
+   "@import",
+   "<style"
+  ]
+ },
+ {
+  "name": "iframe",
+  "input": "<iframe src=https://evil.example.com></iframe>",
+  "banned": [
+   "evil.example.com",
+   "iframe"
+  ]
+ },
+ {
+  "name": "object",
+  "input": "<object data=https://evil.example.com></object>",
+  "banned": [
+   "evil.example.com",
+   "object"
+  ]
+ },
+ {
+  "name": "embed",
+  "input": "<embed src=https://evil.example.com>",
+  "banned": [
+   "evil.example.com",
+   "embed"
+  ]
+ },
+ {
+  "name": "base",
+  "input": "<base href=https://evil.example.com/><a href=/x>x</a>",
+  "banned": [
+   "evil.example.com",
+   "<base"
+  ]
+ },
+ {
+  "name": "meta refresh",
+  "input": "<meta http-equiv=refresh content=\"0;url=https://evil.example.com\">",
+  "banned": [
+   "evil.example.com",
+   "refresh"
+  ]
+ },
+ {
+  "name": "link stylesheet",
+  "input": "<link rel=stylesheet href=https://evil.example.com/a.css>",
+  "banned": [
+   "evil.example.com",
+   "<link"
+  ]
+ },
+ {
+  "name": "svg onload",
+  "input": "<svg onload=alert(1)><circle/></svg>",
+  "banned": [
+   "svg",
+   "onload",
+   "alert"
+  ]
+ },
+ {
+  "name": "svg with script",
+  "input": "<svg><script>alert(1)</script></svg>after",
+  "banned": [
+   "svg",
+   "script",
+   "alert"
+  ]
+ },
+ {
+  "name": "nested svg",
+  "input": "<svg><svg><a xlink:href=javascript:alert(1)>x</a></svg></svg>after",
+  "banned": [
+   "svg",
+   "alert",
+   "xlink"
+  ]
+ },
+ {
+  "name": "svg unclosed",
+  "input": "<svg><a xlink:href=javascript:alert(1)>x</a>",
+  "banned": [
+   "svg",
+   "alert"
+  ]
+ },
+ {
+  "name": "math",
+  "input": "<math><mtext><script>alert(1)</script></mtext></math>after",
+  "banned": [
+   "math",
+   "alert"
+  ]
+ },
+ {
+  "name": "form action",
+  "input": "<form action=https://evil.example.com><input name=a><button formaction=https://evil.example.com>go</button></form>",
+  "banned": [
+   "evil.example.com",
+   "<form",
+   "<input",
+   "formaction",
+   "<button"
+  ]
+ },
+ {
+  "name": "srcset",
+  "input": "<img src=\"data:image/png;base64,AAAA\" srcset=\"https://evil.example.com/a.png 2x\">",
+  "banned": [
+   "srcset",
+   "evil.example.com"
+  ]
+ },
+ {
+  "name": "remote image",
+  "input": "<img src=\"https://evil.example.com/p.gif\" alt=pixel>",
+  "banned": [
+   "evil.example.com",
+   "src="
+  ]
+ },
+ {
+  "name": "svg image data uri",
+  "input": "<img src=\"data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+\">",
+  "banned": [
+   "svg",
+   "data:image"
+  ]
+ },
+ {
+  "name": "image data uri with html",
+  "input": "<img src=\"data:image/png;base64,AAAA\" onerror=alert(1)>",
+  "banned": [
+   "onerror",
+   "alert"
+  ]
+ },
+ {
+  "name": "css url in style",
+  "input": "<div style=\"background:url(https://evil.example.com/b.png)\">x</div>",
+  "banned": [
+   "evil.example.com",
+   "url("
+  ]
+ },
+ {
+  "name": "css expression",
+  "input": "<div style=\"width:expression(alert(1))\">x</div>",
+  "banned": [
+   "expression",
+   "alert"
+  ]
+ },
+ {
+  "name": "css escaped url",
+  "input": "<div style=\"background:\\75rl(https://evil.example.com)\">x</div>",
+  "banned": [
+   "evil.example.com"
+  ]
+ },
+ {
+  "name": "css comment split",
+  "input": "<div style=\"background:ur/**/l(https://evil.example.com)\">x</div>",
+  "banned": [
+   "evil.example.com"
+  ]
+ },
+ {
+  "name": "css import in style attr",
+  "input": "<div style=\"@import 'https://evil.example.com'\">x</div>",
+  "banned": [
+   "evil.example.com"
+  ]
+ },
+ {
+  "name": "css entity-encoded url",
+  "input": "<div style=\"background:&#117;rl(https://evil.example.com)\">x</div>",
+  "banned": [
+   "evil.example.com"
+  ]
+ },
+ {
+  "name": "background attribute",
+  "input": "<table background=https://evil.example.com/b.png><tr><td>x</td></tr></table>",
+  "banned": [
+   "evil.example.com",
+   "background"
+  ]
+ },
+ {
+  "name": "comment hides tag",
+  "input": "<!--><script>alert(1)</script>-->after",
+  "banned": [
+   "alert",
+   "<script"
+  ]
+ },
+ {
+  "name": "conditional comment",
+  "input": "<!--[if mso]><script>alert(1)</script><![endif]-->after",
+  "banned": [
+   "alert"
+  ]
+ },
+ {
+  "name": "cdata",
+  "input": "<![CDATA[<script>alert(1)</script>]]>after",
+  "banned": [
+   "<script"
+  ]
+ },
+ {
+  "name": "tag with no end",
+  "input": "text<a href=\"https://example.com/\" ",
+  "banned": [
+   "<a"
+  ]
+ },
+ {
+  "name": "lt in quoted attr",
+  "input": "<a title=\"<script>alert(1)</script>\" href=https://example.com/>x</a>",
+  "banned": [
+   "<script",
+   "alert(1)</script"
+  ]
+ },
+ {
+  "name": "noscript",
+  "input": "<noscript><img src=x onerror=alert(1)></noscript>",
+  "banned": [
+   "onerror",
+   "alert"
+  ]
+ },
+ {
+  "name": "template",
+  "input": "<template><script>alert(1)</script></template>",
+  "banned": [
+   "template",
+   "alert"
+  ]
+ },
+ {
+  "name": "textarea closes tag",
+  "input": "<textarea></textarea><img src=x onerror=alert(1)>",
+  "banned": [
+   "onerror",
+   "alert"
+  ]
+ },
+ {
+  "name": "title closes",
+  "input": "<title></title><script>alert(1)</script>",
+  "banned": [
+   "alert"
+  ]
+ },
+ {
+  "name": "id and name for clobbering",
+  "input": "<a id=cookie name=x href=https://example.com/>x</a>",
+  "banned": [
+   "id=",
+   "name="
+  ]
+ },
+ {
+  "name": "class attribute",
+  "input": "<p class=\"x\">x</p>",
+  "banned": [
+   "class"
+  ]
+ },
+ {
+  "name": "target blank",
+  "input": "<a href=https://example.com/ target=_blank>x</a>",
+  "banned": [
+   "target"
+  ]
+ }
+]

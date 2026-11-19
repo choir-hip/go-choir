@@ -339,3 +339,18 @@ the radio). Run `python3 -I mobile/scripts/gen-exact-interface.py` to rewrite
 Swift data the moved page still needs (here the reader's saved topics) becomes a
 small package source the contract passes in as an argument, until its owner page
 moves too.
+
+## Mail on the phone: sealed in shared code (2026-11-19, lane `exact-mail`)
+
+The Mail pages, the signed-in requests to the listener's computer and the phone's copy of the mail are `mail.ts` and its siblings in `mobile/AutoradioLab`
+(`mail-model.ts` pure data, `mail-sanitize.ts` the allowlist HTML cleaner, `mail-seal.ts` the cipher, `mail-store.ts` the copy). Three sends stay native
+(`mailOpenReview`, `mailRead`, `mailAsk`: the in-app web view, the radio's voice, the Swift signal log).
+
+- **At rest.** Exact's secret store keeps the key (Keychain on Apple, Keystore-wrapped files on Android); `crypto.subtle` gives digests only, so AES-256-CTR plus
+  HMAC-SHA-256 are written in TypeScript (`mail-seal.ts`, checked against the FIPS-197 vector and Node's own AES and HMAC) and every file under `app:/data/mail`
+  is sealed. This does not depend on the file protection class of Exact's files, which the cutover file's X0 still has to measure on the owner's iPhone; if X0 shows
+  Exact's files carry the same class the Swift store set, the seal is a second layer, not the first. With no key (a scripted drive keeps no secrets) nothing is written.
+- **Show original.** `iframe` has no `srcdoc` (gaps.md 30), so the cleaned document is written to `app:/cache/mail-<hash>.html` only while it is asked for, and every
+  other `mail-*.html` is removed on each message answer. The server sends `html_body` uncleaned; `mail-sanitize.ts` is the only thing between it and the page.
+- **Sign-out.** Stays in Swift tonight (`AccountWipe.removeMailCopy` removes `app:/data/mail` and `app:/cache/mail-*.html`); `wipeMail(storage, store)` in `mail.ts` does the
+  same and also forgets the key, and is what the shared sign-out will call.

@@ -34,18 +34,6 @@ public enum RetrievalSources {
         return (docs, onAir)
     }
 
-    /// Mail rows (sender, subject, the preview) as documents; the body is added when a message is opened. Not persisted.
-    public static func mail(_ rows: [MailSummary]) -> [SavedCorpus.Document] {
-        rows.filter { !$0.id.isEmpty }.map { r in
-            SavedCorpus.Document(id: "mail:" + r.id, title: r.subject.isEmpty ? "(no subject)" : r.subject, address: "mail:" + r.id,
-                                 text: "From \(r.from). \(r.snippet)", kind: "mail", source: "Mail", date: PaperStory.date(r.at))
-        }
-    }
-    public static func mailMessage(_ d: MailDetail) -> SavedCorpus.Document {
-        let r = d.summary
-        return SavedCorpus.Document(id: "mail:" + r.id, title: r.subject.isEmpty ? "(no subject)" : r.subject, address: "mail:" + r.id,
-                                    text: "From \(r.from). \(d.text.isEmpty ? r.snippet : d.text)", kind: "mail", source: "Mail", date: PaperStory.date(r.at))
-    }
     /// A folder's file names (never their contents): searchable by name, openable by path.
     public static func fileNames(_ entries: [FileEntry]) -> [SavedCorpus.Document] {
         entries.filter { !$0.isDirectory }.map { e in

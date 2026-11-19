@@ -5,6 +5,7 @@ import { clipAct, showClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { bindNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
+import * as mail from './mail.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -30,7 +31,12 @@ fs.read app:/data/recent-files.json
 fs.write app:/data/recent-files.json
 fs.read app:/cache/files
 fs.write app:/cache/files
-fs.read app:/tmp/picked`;
+fs.read app:/tmp/picked
+fs.read app:/data/mail
+fs.write app:/data/mail
+fs.read app:/cache
+fs.write app:/cache
+secret.keep mail-key`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),
@@ -54,6 +60,15 @@ const sources: Sources = {
   fileRename: ([demo, path, name], _s, storage) => fileRename({ demo, path, name }, storage),
   fileUpload: ([demo, from, name, dir], _s, storage) => fileUpload({ demo, from, name, dir }, storage),
   paperFront: ([view, edition, width, tick, focus, picks, demo], _store, storage) => paperFront({ view, edition, width, tick, focus, picks, demo }, storage),
+  // Mail (mail.ts): the phone's copy is sealed under app:/data/mail with the key `mail-key` in the secret store; "Show original" is written under app:/cache/mail-*.html.
+  mailBox: ([address, demo], store, storage) => mail.mailBox(address, demo, { store, storage }),
+  mailFrame: ([address], store, storage) => mail.mailFrame(address, { store, storage }),
+  mailSync: ([address, demo], store, storage) => mail.mailSync(address, demo, { store, storage }),
+  mailMessage: ([address, demo, original], store, storage) => mail.mailMessage(address, demo, original, { store, storage }),
+  mailCompose: ([address, demo], store, storage) => mail.mailCompose(address, demo, { store, storage }),
+  mailSaveDraft: ([address, to, subject, body, demo]) => mail.mailSaveDraft(address, to, subject, body, demo),
+  mailApprovalEmail: ([address, draft, demo]) => mail.mailApprovalEmail(address, draft, demo),
+  mailMarkUnread: ([address, demo]) => mail.mailMarkUnread(address, demo),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
 export const answer: Answer = (source, args, store, storage, native) => { bindNative(native); return sources[source](args, store, storage); };
