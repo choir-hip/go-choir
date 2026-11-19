@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Selftest for scripts/check-autoradio-native-boundary: throwaway git trees, one rule per case.
+Touches nothing in this tree. Commits name an author, so it runs where git has no identity.
+
+Run: python3 -I scripts/selftest-check-autoradio-native-boundary   (exit 0 when every case passes)
+"""
+import json, os, shutil, subprocess, sys, tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+GATE = os.path.join(HERE, "check-autoradio-native-boundary")
+KIT = "mobile/AutoradioKit/Sources/AutoradioKit/"
+GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+LIST = """# fixture voice list
+path mobile/AutoradioKit/Sources/AutoradioKit/Voice/ speaker code
+path mobile/AutoradioKit/Sources/AutoradioKit/LiveAudio.swift the engine
+name lab* the voice lab
+name voiceCards the voice cards
+"""
+fails = []
+
+
+def sh(args, cwd, **kw):
+    return subprocess.run(args, cwd=cwd, capture_output=True, text=True, **kw)
+
+
+def put(root, rel, text):
+    p = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, "w").write(text)
+
+
+def names(root, ns):
+    put(root, "mobile/exact-package/exact.json", json.dumps({"names": [{"source": n, "live": True} for n in ns]}))
+
+
+def make():
+    root = tempfile.mkdtemp(prefix="ar-boundary-")
+    sh(["git", "init", "-q"], root)
+    put(root, KIT + "Pages.swift", "a\nb\nc\n")                 # 3 lines, non-voice
+    put(root, KIT + "LiveAudio.swift", "x\n" * 50)             # voice
+    put(root, KIT + "Voice/Gate.swift", "x\n" * 40)            # voice
+    put(root, "mobile/AutoradioKit/Tests/AutoradioKitTests/PagesTests.swift", "t\n" * 99)  # tests are not counted
+    put(root, "mobile/exact-package/apple/AutoradioModule+Mail.swift", "m\nm\n")           # 2 lines
+    names(root, ["labState", "labStart", "voiceCards", "mailBox"])                         # 1 non-voice name
+    put(root, "scripts/list.txt", LIST)
+    sh(["python3", "-I", GATE, "--root", root, "--voice-list", os.path.join(root, "scripts/list.txt"),
+        "--ceiling", os.path.join(root, "scripts/ceil.txt"), "--update"], root)
+    sh(GIT + ["add", "-A"], root)
+    sh(GIT + ["commit", "-q", "-m", "fixture"], root)
+    return root
+
+
+def gate(root, *extra):
+    r = sh(["python3", "-I", GATE, "--root", root, "--voice-list", os.path.join(root, "scripts/list.txt"),
+            "--ceiling", os.path.join(root, "scripts/ceil.txt"), *extra], root)
+    return r.returncode, r.stdout + r.stderr
+
+
+def case(name, want_rc, want_text, fn):
+    root = make()
+    try:
+        fn(root)
+        rc, out = gate(root)
+        if rc != want_rc or want_text not in out:
+            fails.append("%s: want rc=%d with %r, got rc=%d:\n%s" % (name, want_rc, want_text, rc, out))
+        else:
+            print("ok   " + name)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def ceiling(root):
+    return open(os.path.join(root, "scripts/ceil.txt")).read()
+
+
+case("fixture tree at its ceiling passes", 0, "native boundary holds", lambda r: None)
+case("counts and ceiling are printed", 0, "2 files, 5 lines, 1 interface names", lambda r: None)
+case("a new non-voice Swift file fails", 1, "files is 3, above the ceiling 2",
+     lambda r: put(r, KIT + "Brand.swift", "n\n"))
+case("a new non-voice Swift file, committed or not, fails by lines too", 1, "lines is 6, above the ceiling 5",
+     lambda r: put(r, KIT + "Brand.swift", "n\n"))
+case("more lines in an existing non-voice file fails", 1, "lines is 6, above the ceiling 5",
+     lambda r: put(r, KIT + "Pages.swift", "a\nb\nc\nd\n"))
+case("a deleted non-voice file without lowering the ceiling fails", 1, "below the ceiling",
+     lambda r: os.remove(os.path.join(r, KIT + "Pages.swift")))
+case("a new file on the voice list is not counted", 0, "native boundary holds",
+     lambda r: put(r, KIT + "Voice/More.swift", "v\n" * 500))
+case("a new Kotlin file outside the list fails", 1, "files is 3",
+     lambda r: put(r, "mobile/android/Page.kt", "k\n"))
+case("a new native interface name fails", 1, "names is 2, above the ceiling 1",
+     lambda r: names(r, ["labState", "voiceCards", "mailBox", "fileList"]))
+case("a new interface name under a listed prefix is not counted", 0, "native boundary holds",
+     lambda r: names(r, ["labState", "labAnything", "voiceCards", "mailBox"]))
+case("a name in an interface fragment counts too", 1, "names is 2",
+     lambda r: put(r, "mobile/exact-package/interface/x.json", json.dumps({"names": [{"send": "newThing"}]})))
+case("a list entry that matches nothing fails", 1, "matches nothing",
+     lambda r: put(r, "scripts/list.txt", LIST + "path mobile/AutoradioKit/Sources/Gone.swift gone\n"))
+case("a list line without a reason is refused", 2, "want `path",
+     lambda r: put(r, "scripts/list.txt", LIST + "path mobile/x.swift\n"))
+case("a gitignored file is not counted", 0, "native boundary holds",
+     lambda r: (put(r, ".gitignore", "mobile/exact-package/apple/Kit/\n"),
+                put(r, "mobile/exact-package/apple/Kit/Copy.swift", "c\n" * 100)))
+
+
+def lowered(root):
+    os.remove(os.path.join(root, KIT + "Pages.swift"))
+    rc, out = gate(root, "--update")
+    assert rc == 0, out
+
+
+case("deleting a file and lowering the ceiling passes", 0, "native boundary holds", lowered)
+
+
+def raised(root):
+    put(root, KIT + "Brand.swift", "n\n")
+    rc, out = gate(root, "--update")
+    if rc == 0 or "refusing to raise" not in out:
+        fails.append("--update raised the ceiling: " + out)
+    raise_check = ceiling(root)
+    if "files 2" not in raise_check:
+        fails.append("--update changed the ceiling when it refused")
+
+
+case("--update refuses to raise the ceiling", 1, "above the ceiling", raised)
+
+if fails:
+    print("\n".join(fails))
+    print("SELFTEST FAILED (%d)" % len(fails))
+    sys.exit(1)
+print("selftest-check-autoradio-native-boundary: all cases pass")
