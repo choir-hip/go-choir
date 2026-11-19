@@ -7,6 +7,7 @@ import { adoptNative, setDemo } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import * as pages from './pages.ts';
+import { readerDocShared } from './reader.ts';
 import * as mail from './mail.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -47,6 +48,7 @@ const sources: Sources = {
   settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
+  readerDocShared: ([address]) => readerDocShared(address),
   pagesView: (_a, _store, storage) => pages.pagesView(storage),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
