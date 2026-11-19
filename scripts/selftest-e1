@@ -38,7 +38,17 @@ Failure list, written before the code (each is a case below):
   A3  d pairs the S arms against the arms present, not against L and I
   A4  a three-arm pilot counts four arms in its line, or starts when a header arm has no passed smoke
   A5  the stamp records an arm that failed (l) beside the ones that passed, or a restamp from the stored bundles runs a new smoke
-  flow (stub server)
+  review round (SEND_BACK at 5e4eb1517; each failed before its fix)
+  B1  a pause that resumed, or a terminal stop that cut nothing, voids P3 after a finished pilot
+  B2  the 450 tally goes blind on an export failure or an unreadable live count; the live count is not persisted
+  B3  a kill between submit and save resubmits the objective
+  B4  --restamp turns a failed smoke into a pass
+  B5  an objectives path outside the repo skips the origin/main gate
+  B6  a terminal research run with no finished_at is valid
+  B7  a recorded protected computer id is acted on
+  B9  an arm stopped by the drop-an-arm rule leaves P3 unexplained (it is false, and says why)
+  B10 a build that moved since the smoke passes unremarked
+ flow (stub server)
   F1  the key file is not 0600 or holds anything but the key; a key is printed
   F2  smoke passes with a research run and fails (naming the step) with none, with a foreign model, or with a published document
   F3  the pilot starts without a passed smoke, without the ledger rows on origin/main, with too few credits
@@ -280,6 +290,7 @@ class Stub:
 
     def __init__(self, bundles, published=()):
         self.bundles, self.published, self.counter = bundles, set(published), {}
+        self.build, self.fail_events, self.runs_by_arm = "stubbuild", False, {}
         self.lock = threading.Lock()
         stub = self
 
@@ -307,13 +318,17 @@ class Stub:
                 arm, path = self.arm(), self.path
                 b = stub.bundles.get(arm)
                 if path == "/api/runtime/observability":
-                    return self.send(200, {"build": {"commit": "stubbuild"}, "computer_id": "computer-stub-" + arm})
+                    return self.send(200, {"build": {"commit": stub.build}, "computer_id": "computer-stub-" + arm})
                 if path.startswith("/api/prompt-bar/submissions/"):
                     sid = path.rsplit("/", 1)[1]
                     return self.send(200, {"submission_id": sid, "decision": {"trajectory_id": sid.replace("sub-", "traj-")}})
+                if path.startswith("/api/runs?") and "trajectory_id=" not in path:
+                    return self.send(200, {"runs": stub.runs_by_arm.get(arm, [])})
                 if path.startswith("/api/runs?"):
                     return self.send(200, {"runs": [dict(r, run_id=r["loop_id"]) for r in b["layers"]["runs"]["items"]]})
                 if path.startswith("/api/runs/") and "/events" in path:
+                    if stub.fail_events:
+                        return self.send(500, {"error": "events unavailable"})
                     rid = path.split("/")[3]
                     return self.send(200, {"events": [e for e in b["layers"]["run_events"]["items"] if e["loop_id"] == rid], "next_after": 0})
                 if path.startswith("/api/platform/texture/publications?doc_id="):
@@ -328,6 +343,8 @@ class Stub:
                         return self.send(400, {"error": "model policy overlay did not resolve"})
                     with stub.lock:
                         n = stub.counter[arm] = stub.counter.get(arm, 0) + 1
+                        stub.runs_by_arm.setdefault(arm, []).append({"run_id": "sub-%s-%d" % (arm, n), "agent_role": "conductor", "state": "completed",
+                            "prompt": body.get("text"), "created_at": e1.iso(e1.now()), "metadata": {"trajectory_id": "traj-%s-%d" % (arm, n), "doc_id": "doc-%s-%d" % (arm, n)}})
                     return self.send(202, {"submission_id": "sub-%s-%d" % (arm, n), "doc_id": "doc-%s-%d" % (arm, n),
                                            "model_policy_overlay_id": body["model_policy_overlay_id"], "provider": "stub", "model": "stub"})
                 if path.endswith("/cancel"):
@@ -351,6 +368,8 @@ def opt(name):
 key = os.path.basename(opt("--api-key-file") or "")
 if a[:2] == ["trace", "export"]:
     arm = key.replace("e1-", "").replace(".key", "")
+    if os.path.exists(os.path.join(here, "fail-" + arm)):
+        sys.stderr.write("export refused\n"); sys.exit(1)
     shutil.copy(os.path.join(here, "bundle-" + arm + ".json"), opt("--out"))
     print(json.dumps({"path": opt("--out")}))
 elif a[0] == "files":
@@ -574,6 +593,196 @@ e1.State(state).save("pilot.json", {"objectives": {}, "stops": [], "started_at":
 code, out = run(pilot_args(state, choir, status, repo4))
 check("A4 a header arm with no passed smoke (l) refuses the pilot, naming it", code == 3 and "smoke has not passed for l" in out, out[-400:])
 stub.close()
+
+# ======= review round (SEND_BACK at 5e4eb1517): each case below failed before its fix =======
+def guard(name, fn):
+    try:
+        fn()
+    except Exception as exc:  # a case that crashes is a failed case
+        check(name, False, "raised %s: %s" % (type(exc).__name__, exc))
+
+
+# B1 (blocking) P3 is void only when the pilot did not finish or a terminal stop cut an objective short
+base = {"planned": 10, "submitted": 10, "arms": three}
+u3 = full3({"sa": 3, "sb": 3, "i": 3})
+v = e1.verdicts(u3, dict(base, stops=[{"reason": "status read failed", "terminal": False}]))
+check("B1 a pause that later resumed leaves a finished pilot at P3 true", v["P3"][0] == "true", v)
+v = e1.verdicts(u3, dict(base, stops=[{"reason": "cost: tally 450 reached 450", "terminal": True, "cut": True, "objective": "p10"}]))
+check("B1 a terminal stop that cut an objective short is void", v["P3"][0] == "void", v)
+v = e1.verdicts(u3, dict(base, stops=[{"reason": "published: doc-x", "terminal": True, "cut": False, "objective": "p10"}]))
+check("B1 a terminal stop after the last objective was whole does not void P3", v["P3"][0] == "true", v)
+v = e1.verdicts(u3[:27], dict(base, submitted=9, stops=[{"reason": "deadline", "terminal": True}]))
+check("B1 fewer objectives submitted than planned is void", v["P3"][0] == "void", v)
+
+# B9 an arm stopped by the drop-an-arm rule leaves units that never ran: not valid, so P3 is false
+dropped = [u for u in full3({"sa": 3, "sb": 3, "i": 3}) if not (u["arm"] == "i" and int(u["objective"][1:]) > 3)]
+v = e1.verdicts(dropped, dict(base, stops=[], arm_stopped={"i": True}))
+check("B9 a stopped arm makes P3 false (23 of 30 valid) and says so", v["P3"][0] == "false" and "arm stopped" in v["P3"][1] and "i" in v["P3"][1], v)
+
+# B2 the tally never goes blind
+def b2_pure():
+    check("B2 a unit with a bundle counts the larger of the bundle's calls and the last live count",
+          e1.adjust_calls({"calls": 12}, {"trajectory_id": "t", "live_calls": 30}, True)[0] == 30
+          and e1.adjust_calls({"calls": 12}, {"trajectory_id": "t", "live_calls": 5}, True)[0] == 12)
+    check("B2 a unit with no bundle counts its last live count", e1.adjust_calls({"calls": 0}, {"trajectory_id": "t", "live_calls": 17}, False)[0] == 17)
+    c, basis = e1.adjust_calls({"calls": 0}, {"trajectory_id": "t"}, False)
+    check("B2 a submitted unit with neither is counted at the stated worst case, not zero", c == e1.UNKNOWN_UNIT_CALLS and e1.UNKNOWN_UNIT_CALLS >= 44 and "worst" in basis, (c, basis))
+    check("B2 a unit that was never submitted counts zero", e1.adjust_calls({"calls": 0}, {"submit_error": "x"}, False)[0] == 0)
+
+
+
+guard("B2pure", b2_pure)
+
+# B6 a terminal research run with no finished_at is invalid with its own reason
+nb = bundle("normal")
+for r in nb["layers"]["runs"]["items"]:
+    if r["agent_role"] == "research":
+        r.pop("finished_at")
+u = e1.read_unit(nb, meta())
+check("B6 a completed research run without finished_at is invalid, with its own reason", "research_run_finished_at_missing" in u["reasons"] and not u["valid"], u["reasons"])
+
+# B7 the protected computers are refused outright
+check("B7 the five protected ids are in one constant", len(e1.PROTECTED_COMPUTER_IDS) == 5 and "computer-1355b83bced1613eb048ee28d66688a8" in e1.PROTECTED_COMPUTER_IDS
+      and "computer-03335285269bdba4f94377e56879f9e6" in e1.PROTECTED_COMPUTER_IDS)
+
+
+def b7():
+    stub, state, choir, status, comps = make_world({x: "normal" for x in e1.ARM_ORDER})
+    comps["arms"]["sb"]["computer_id"] = "computer-1355b83bced1613eb048ee28d66688a8"
+    e1.write_private(os.path.join(state, "computers.json"), json.dumps(comps))
+    code, out = run(common(state, choir, status) + ["smoke", "--restamp"])
+    check("B7 a recorded protected id is refused wherever computers.json is loaded", "protected" in str(code) + out, (code, out[-200:]))
+    stub.close()
+
+
+guard("B7", b7)
+
+
+def three_arm_world(published=()):
+    m = {x: "normal" for x in e1.ARM_ORDER}
+    stub, state, choir, status, comps = make_world(m, published)
+    install_all(state, choir, status)
+    run(common(state, choir, status) + ["smoke", "--arms", "sa,sb,i"])
+    repo = make_repo(tempfile.mkdtemp(dir=tmp), arms=three)
+    return stub, state, choir, status, repo
+
+
+# B4 --restamp cannot turn a failed smoke into a pass
+def b4():
+    stub, state, choir, status, repo = three_arm_world()
+    st = e1.State(state)
+    stamp = st.load("smoke.json")
+    stamp["arms"]["sa"].update(passed=False, failed={"step": 6, "name": "every run of the trajectory ended within 30 minutes"})
+    st.save("smoke.json", stamp)
+    code, out = run(common(state, choir, status) + ["smoke", "--restamp", "--arms", "sa,sb,i"])
+    after = st.load("smoke.json")["arms"]
+    check("B4 a restamp refuses an arm whose stamp says failed and keeps the prior failure",
+          code == 1 and after["sa"]["passed"] is False and after["sa"]["failed"]["step"] == 6 and after["sb"]["passed"] and "refused" in out, (code, out[-300:]))
+    stub.close()
+
+
+guard("B4", b4)
+
+
+# B5 an objectives path outside the repo is refused
+def b5():
+    stub, state, choir, status, repo = three_arm_world()
+    outside = os.path.join(tmp, "outside.jsonl")
+    shutil.copy(os.path.join(repo, "docs", "calibration", "e1", "pilot-objectives.jsonl"), outside)
+    a = pilot_args(state, choir, status, repo)
+    a[a.index("--objectives") + 1] = outside
+    code, out = run(a)
+    check("B5 an objectives file outside the repo is refused", code == 3 and "inside the repo" in out, (code, out[-300:]))
+    stub.close()
+
+
+guard("B5", b5)
+
+
+# B10 a build that moved since the smoke is a warning, not a refusal
+def b10():
+    stub, state, choir, status, repo = three_arm_world()
+    stub.build = "newerbuild"
+    code, out = run(pilot_args(state, choir, status, repo))
+    check("B10 the pilot warns when the live build differs from the smoke's, and still runs", code == 4 or code == 0, code)
+    check("B10 the warning names both builds", "WARNING" in out and "stubbuild" in out and "newerbuild" in out, out[:600])
+    stub.close()
+
+
+guard("B10", b10)
+
+# B1 flow: a pause, then completion, settles P3 true
+def b1_flow():
+    saved = e1.STATUS_MIN_GAP_S
+    e1.STATUS_MIN_GAP_S = 0
+    stub, state, choir, status, repo = three_arm_world()
+    counter = os.path.join(os.path.dirname(status), "calls")
+    open(status, "w").write("#!/usr/bin/env python3\nimport json,os,sys\nf=%r\nn=int(open(f).read()) if os.path.exists(f) else 0\nopen(f,'w').write(str(n+1))\n"
+                            "if n==1: sys.exit(2)\nprint(json.dumps({'now':'x','flags':[],'search':{'by':{},'keenable':{'today_calls':5}}}))\n" % counter)
+    code, out = run(pilot_args(state, choir, status, repo))
+    check("B1 flow: a failed status read pauses the pilot before an objective", code == 4 and "STOP before" in out, (code, out[-300:]))
+    code, out = run(pilot_args(state, choir, status, repo))
+    check("B1 flow: the rerun finishes the ten objectives", code == 0 and "PILOT DONE" in out, (code, out[-300:]))
+    code, out = run(common(state, choir, status, repo) + ["read", "--verdict"])
+    p3 = [l for l in out.splitlines() if l.startswith("P3")]
+    check("B1 flow: P3 is true after a pause and a completed pilot", p3 and p3[0].split()[1] == "true", out[-400:])
+    e1.STATUS_MIN_GAP_S = saved
+    stub.close()
+
+
+guard("B1flow", b1_flow)
+
+
+# B2 flow: the live count is persisted; an unreadable live count pauses the pilot until a read succeeds
+def b2_flow():
+    stub, state, choir, status, repo = three_arm_world()
+    stub.fail_events = True
+    code, out = run(pilot_args(state, choir, status, repo))
+    pl = e1.State(state).load("pilot.json")
+    check("B2 flow: a failing live read pauses the pilot after the objective, with the reason", code == 4 and "live" in out and pl.get("pauses"), (code, out[-400:]))
+    check("B2 flow: the objective's units are in the state with their bundles' counts", pl["objectives"]["p01"]["done"] and len(pl["objectives"]["p01"]["units"]) == 3)
+    code, out = run(pilot_args(state, choir, status, repo))
+    check("B2 flow: still failing, the rerun starts no new objective", code == 4 and "p02" not in " ".join(l for l in out.splitlines() if "tally" in l), (code, out[-300:]))
+    stub.fail_events = False
+    code, out = run(pilot_args(state, choir, status, repo))
+    pl = e1.State(state).load("pilot.json")
+    check("B2 flow: once a read succeeds the pilot goes on", code == 0 and "PILOT DONE" in out, (code, out[-300:]))
+    check("B2 flow: the last live count of each unit is persisted", all(isinstance(pl["objectives"]["p02"].get("live", {}).get(x), int) for x in three), pl["objectives"]["p02"].get("live"))
+    stub.close()
+
+
+guard("B2flow", b2_flow)
+
+
+# B3 flow: a kill between submit and save does not resubmit
+def b3_flow():
+    stub, state, choir, status, repo = three_arm_world()
+    objs = e1.load_objectives(os.path.join(repo, "docs", "calibration", "e1", "pilot-objectives.jsonl"))[1]
+    prompt = objs[0]["prompt"]
+    old, fresh = e1.iso(e1.now() - e1.datetime.timedelta(minutes=10)), e1.iso(e1.now() - e1.datetime.timedelta(seconds=5))
+    n0 = dict(stub.counter)
+    stub.runs_by_arm["sa"] = [{"run_id": "sub-sa-77", "agent_role": "conductor", "state": "completed", "prompt": prompt,
+                               "created_at": e1.iso(e1.now() - e1.datetime.timedelta(seconds=3)), "metadata": {"trajectory_id": "traj-sa-77", "doc_id": "doc-sa-77"}}]
+    st = e1.State(state)
+    st.save("pilot.json", {"objectives": {"p01": {"position": 1, "kind": "thin_event", "subs": {}, "units": {}, "done": False,
+                                                  "intent": {"sa": fresh, "sb": old, "i": old}}}, "stops": [], "started_at": None, "arm_stopped": {}})
+    code, out = run(pilot_args(state, choir, status, repo))
+    sub = st.load("pilot.json")["objectives"]["p01"]["subs"]
+    check("B3 flow: an arm with an intent and a matching run is adopted, not resubmitted", sub["sa"]["submission_id"] == "sub-sa-77" and stub.counter.get("sa", 0) == n0.get("sa", 0), (sub.get("sa"), stub.counter))
+    check("B3 flow: an old intent with no run found is submitted", stub.counter.get("sb", 0) == n0.get("sb", 0) + 1 and stub.counter.get("i", 0) == n0.get("i", 0) + 1, stub.counter)
+    stub.close()
+    stub, state, choir, status, repo = three_arm_world()
+    st = e1.State(state)
+    st.save("pilot.json", {"objectives": {"p01": {"position": 1, "kind": "thin_event", "subs": {}, "units": {}, "done": False,
+                                                  "intent": {x: e1.iso(e1.now() - e1.datetime.timedelta(seconds=5)) for x in three}}}, "stops": [], "started_at": None, "arm_stopped": {}})
+    n1 = dict(stub.counter)
+    code, out = run(pilot_args(state, choir, status, repo))
+    check("B3 flow: a fresh intent with no run found cannot be decided: the pilot stops and says so, submitting nothing",
+          code == 4 and "cannot be decided" in out and stub.counter == n1, (code, out[-300:], stub.counter))
+    stub.close()
+
+
+guard("B3flow", b3_flow)
 
 shutil.rmtree(tmp, ignore_errors=True)
 print("selftest-e1: %d passed, %d failed" % (passed, failed))
