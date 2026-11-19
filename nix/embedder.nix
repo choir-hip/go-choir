@@ -95,6 +95,7 @@ let
     , description
     , port
     , threads
+    , blasThreads   # OMP_NUM_THREADS: the size of the BLAS library's own thread team (see below)
     , parallel      # slots
     , ctxSize       # total context; each slot gets ctxSize / parallel (see below)
     , batchSize     # with --embeddings the server runs with batch = ubatch whatever this says
@@ -159,6 +160,18 @@ let
           "--batch-size ${toString batchSize}"
           "--ubatch-size ${toString ubatchSize}"
         ];
+        # An input of 32 tokens or more does its matrix products in the BLAS
+        # backend (ggml-blas.cpp, min_batch = 32), and this build's OpenBLAS
+        # is an OpenMP one whose team was twelve threads on Node B whatever
+        # --threads said (seen; the backend does call
+        # openblas_set_num_threads, and why that did not shrink it is not
+        # known). On a busy host every product then waits for twelve threads
+        # to be scheduled: a 35-token query took 5 s to 9 s and 18 to 46
+        # CPU-seconds on Node B, against 0.24 s to 0.96 s with a team of
+        # two; four 300-token passages 5 s to 12 s against 1.7 s with four
+        # (measured 2026-11-19, docs/reference/EMBEDDINGGEMMA.md 0.12).
+        # OPENBLAS_NUM_THREADS is not read by an OpenMP build.
+        Environment = [ "OMP_NUM_THREADS=${toString blasThreads}" ];
         Restart = "on-failure";
         RestartSec = restartSec;
         CPUWeight = cpuWeight;
@@ -177,6 +190,7 @@ in
     description = "go-choir EmbeddingGemma 2 embedder (llama.cpp server, loopback only)";
     port = 8090;
     threads = 4;
+    blasThreads = 4;
     # 2 slots of 4096 / 2 = 2048 tokens, the model's own input length.
     parallel = 2;
     ctxSize = 4096;
@@ -221,6 +235,7 @@ in
     description = "go-choir EmbeddingGemma 2 embedder, queries (llama.cpp server, loopback only)";
     port = 8091;
     threads = 4;
+    blasThreads = 2;
     parallel = 2;
     ctxSize = 1024;
     batchSize = 512;

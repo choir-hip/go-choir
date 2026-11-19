@@ -701,6 +701,28 @@ cat /var/lib/go-choir/platform-artifacts/vector-import/done/captures.jsonl.job.j
 scripts/status-vectors                                                                    # from a checkout: the last import and have/want/remaining
 ```
 
+## 0.12 The BLAS thread team (measured on Node B, 2026-11-19)
+
+The server's build links a BLAS backend (`libggml-blas.so`, OpenBLAS 0.3.33
+built with OpenMP). `ggml-blas.cpp` at b12259 takes a matrix product when
+every dimension is 32 or more, so **an input of 32 tokens or more runs in
+OpenBLAS and a shorter one in ggml's own kernels**. OpenBLAS ran a team
+of 12 threads on Node B whatever `--threads` said (seen: 12 runnable
+threads with `--threads 1`; the backend calls `openblas_set_num_threads`
+at `ggml-blas.cpp:120`, and why that did not shrink the team is not known);
+`OPENBLAS_NUM_THREADS` is not read by an OpenMP build; `OMP_NUM_THREADS` is.
+
+Seen on Node B at load 20 to 27: a 35-token query took 5 s to 9 s of wall
+time and 18 to 46 CPU-seconds with the default team, 0.24 s to 0.96 s with
+`OMP_NUM_THREADS=2`; four 300-token passages took 5.5 s to 12.3 s by
+default and 1.6 s to 1.8 s with `OMP_NUM_THREADS=4`. Queries under 32
+tokens took 0.03 s to 0.1 s in every setting. `OMP_WAIT_POLICY=passive`,
+`GOMP_SPINCOUNT=0`, `--poll 0` and `--threads` changed nothing. The Mac
+measurement in 0.11 did not show this (a different BLAS and an idle
+machine). Both units set `OMP_NUM_THREADS` (`nix/embedder.nix`): 4 for the
+bulk unit, 2 for the query unit. Not tested: a build without BLAS, and an
+idle Node B.
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image
