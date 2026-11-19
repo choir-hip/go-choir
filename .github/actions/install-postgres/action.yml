@@ -20,5 +20,14 @@ runs:
           done
         fi
         [[ -n "$bindir" ]] || { echo "no PostgreSQL server binaries found" >&2; exit 1; }
+        # pgvector with halfvec and HNSW (0.7 or later) for the vector index's
+        # tests (internal/platform/vector_*_test.go). The PGDG repository the
+        # runner images use carries it; the distribution's 0.6 does not.
+        major="$(basename "$(dirname "$bindir")")"
+        if ! ls /usr/share/postgresql/"$major"/extension/vector--0.[7-9]*.sql >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends "postgresql-$major-pgvector"
+        fi
+        ls /usr/share/postgresql/"$major"/extension/vector--0.[7-9]*.sql >/dev/null || { echo "pgvector 0.7 or later (halfvec) is not installed for PostgreSQL $major" >&2; exit 1; }
         echo "$bindir" >> "$GITHUB_PATH"
         "$bindir/pg_ctl" --version
