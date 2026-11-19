@@ -496,7 +496,7 @@ func rankedStories(rk *CaptureRanking, listed []CorpusCapture) []CorpusStory {
 // the answer, in their own order, up to limit. It ranks nothing together.
 func appendLabelHalf(primary, labelHalf []CorpusCapture, limit int, order string) []CorpusCapture {
 	if strings.EqualFold(order, "recent") {
-		// The tail is newest first, as the answer before it is.
+		// The tail is chosen newest first; the whole list is then put in one time order.
 		labelHalf = append([]CorpusCapture(nil), labelHalf...)
 		sort.SliceStable(labelHalf, func(i, j int) bool {
 			a, _ := time.Parse(time.RFC3339Nano, firstNonEmptyString(labelHalf[i].PublishedAt, labelHalf[i].FetchedAt))
@@ -532,6 +532,14 @@ func appendLabelHalf(primary, labelHalf []CorpusCapture, limit int, order string
 			seen[c.CaptureID] = true
 			out = append(out, c)
 		}
+	}
+	if strings.EqualFold(order, "recent") {
+		// One time order under recent (the rows are the same; only their order).
+		sort.SliceStable(out, func(i, j int) bool {
+			a, _ := time.Parse(time.RFC3339Nano, firstNonEmptyString(out[i].PublishedAt, out[i].FetchedAt))
+			b, _ := time.Parse(time.RFC3339Nano, firstNonEmptyString(out[j].PublishedAt, out[j].FetchedAt))
+			return a.After(b)
+		})
 	}
 	return out
 }

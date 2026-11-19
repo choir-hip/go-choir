@@ -306,7 +306,7 @@ BM25's order when the vectors cannot answer) and merges nothing. Pages the old
 title-and-label half found that the answer does not hold are listed after it, in
 that half's own order, up to the limit; a page both hold gets that half's
 evidence (`matched`: `title`, `body`, `topic`, `outlet`, `language`). A page
-found by meaning or through a story that cites it carries `reasons` and no passage, and `recent` orders the answer newest first (the appended label tail is newest first too, after the answer; the whole list is not one time order).
+found by meaning or through a story that cites it carries `reasons` and no passage, and `recent` orders the answer newest first (with the label half's pages merged in by the same time, published else fetched, so the list is one time order).
 
 **One window rule.** Every half judges a capture by its published time, else its fetched time, else it is outside every window (the term SQL, the page-text index, the exact check of the ranked answer and the guest's `inWindow`); since is inclusive, until exclusive.
 
@@ -327,7 +327,7 @@ query (`since:2026-11-10 order:recent`), which is how a cell that passes only
 a query reaches them. The window also filters the old half. The note says how
 much of the computer's text is searchable so far. The journal line adds
 `text_index`, `text_indexed`, `computer_pages`, `by_body`, `by_title`,
-`by_both`, `by_labels_only`, and still only capture ids.
+`by_both`, `by_labels_only`, `by_meaning` (pages found by meaning or through a story that the text half did not find), and still only capture ids.
 
 ## 3. Resources at 250,000 and a million pages
 
