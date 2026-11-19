@@ -60,7 +60,7 @@ fixed="go.mod go.sum flake.nix flake.lock frontend skills nix scripts/guest-sign
 # Test files and testdata never reach a binary; frontend test output is not
 # the bundle; the host-only nix files are read by no guest closure (the
 # classifier calls these host OS only).
-excluded='(_test\.go$|(^|/)testdata/|^frontend/(tests|playwright-report|test-results|node_modules)/|^nix/(node-b\.nix|hardware\.nix|disks\.nix|node-a-choir-backup-target\.nix|postgresql\.nix|snapshot-vault\.nix|deploy-mail-creds\.sh|deploy-provider-creds\.sh|guest-release-policy\.md|guest-security-surfaces\.txt)$)'
+excluded='(_test\.go$|(^|/)testdata/|^frontend/(tests|playwright-report|test-results|node_modules)/|^nix/(node-b\.nix|hardware\.nix|disks\.nix|node-a-choir-backup-target\.nix|postgresql\.nix|embedder\.nix|snapshot-vault\.nix|deploy-mail-creds\.sh|deploy-provider-creds\.sh|guest-release-policy\.md|guest-security-surfaces\.txt)$)'
 
 # shellcheck disable=SC2086
 lines=$(git ls-tree -r "$rev" -- $dirs $fixed | EXCLUDED="$excluded" awk -F'\t' '$2 ~ ENVIRON["EXCLUDED"] { next } { print }' | LC_ALL=C sort -t$'\t' -k2)
