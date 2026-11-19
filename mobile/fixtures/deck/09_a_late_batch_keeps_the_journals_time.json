@@ -1,0 +1,93 @@
+{
+ "about": "The op carries the deck's own time, however late it is posted: the server judges lateness on ended.at.",
+ "anomalies": [],
+ "dropped": {},
+ "journal": [
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": false,
+   "seconds": 0,
+   "seq": 1,
+   "type": "started"
+  },
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "finished",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": true,
+   "seconds": 3.0,
+   "seq": 2,
+   "type": "ended"
+  }
+ ],
+ "name": "09_a_late_batch_keeps_the_journals_time",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "j1.toqug0.a",
+   "position_seconds": 0.0,
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-19T10:00:00Z",
+    "last_block": 0,
+    "outcome": "finished"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "j2.toqug0.a",
+   "position_seconds": 3.0,
+   "state": "heard"
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0.0,
+  "version": 5
+ },
+ "through": 2,
+ "want": [
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "id": "a",
+   "last_block": 0,
+   "outcome": "finished",
+   "state": "heard"
+  }
+ ]
+}

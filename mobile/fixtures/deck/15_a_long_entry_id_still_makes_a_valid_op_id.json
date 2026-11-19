@@ -1,0 +1,93 @@
+{
+ "about": "",
+ "anomalies": [],
+ "dropped": {},
+ "journal": [
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "reason": "",
+   "rendered": false,
+   "seconds": 0,
+   "seq": 1,
+   "type": "started"
+  },
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "block": 0,
+   "command": "",
+   "end": "finished",
+   "final": 0,
+   "item": "d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "reason": "",
+   "rendered": true,
+   "seconds": 1.0,
+   "seq": 2,
+   "type": "ended"
+  }
+ ],
+ "name": "15_a_long_entry_id_still_makes_a_valid_op_id",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "op": "aired",
+   "op_id": "j1.toqug0.d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "position_seconds": 0.0,
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-19T10:00:05Z",
+    "last_block": 0,
+    "outcome": "finished"
+   },
+   "id": "d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "op": "aired",
+   "op_id": "j2.toqug5.d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "position_seconds": 1.0,
+   "state": "heard"
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "title": "T d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0.0,
+  "version": 5
+ },
+ "through": 2,
+ "want": [
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "id": "d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "last_block": 0,
+   "outcome": "finished",
+   "state": "heard"
+  }
+ ]
+}

@@ -57,8 +57,8 @@ export type DeckState = {
   journal: DeckEvent[];
 };
 
-/** `deckAct` operations. `value` is the new rate for `rate`, the seconds for `seekTo` and `seekBy`, 0 to 1 for `level`. */
-export type DeckOp = 'pause' | 'resume' | 'stop' | 'skip' | 'seekTo' | 'seekBy' | 'rate' | 'level';
+/** `deckAct` operations. `value` is the new rate for `rate`, the seconds for `seekTo` and `seekBy`, 0 to 1 for `level`, and for `trim` how many held items to keep (the rest are dropped). */
+export type DeckOp = 'pause' | 'resume' | 'stop' | 'skip' | 'seekTo' | 'seekBy' | 'rate' | 'level' | 'trim';
 
 /** The deck's names (interface/deck.json). `deckState` is a live source; the rest answer the new state. */
 export const DECK_NAMES = ['deckState', 'deckPlay', 'deckEnqueue', 'deckAct', 'deckAck'] as const;
@@ -71,8 +71,12 @@ export type DeckPort = {
   state(): Promise<DeckState>;
   /** Play this item now, cutting what is playing (its end is "replaced"). */
   play(item: DeckItem): Promise<DeckState>;
-  /** Hold this item after the playing one. An id already held is replaced in place; a fourth is refused (the state's `held` shows it). */
-  enqueue(item: DeckItem): Promise<DeckState>;
+  /**
+   * Hold this item after the playing one. `at` is its place among the held items (0 is next); the held items from `at` on are dropped first,
+   * so the held list is made in order. Absent or -1: at the end. An id already held is removed first. A fourth is refused (the state's
+   * `held` shows it).
+   */
+  enqueue(item: DeckItem, at?: number): Promise<DeckState>;
   act(op: DeckOp, value?: number): Promise<DeckState>;
   /** Journal lines up to `seq` are posted: the deck forgets them. */
   ack(seq: number): Promise<DeckState>;
