@@ -1428,6 +1428,20 @@ nodes:
       about the learning engine"; "let's just build everything". Takes the
       work of choir-autoradio-learning-engine-2026-11-14 forward as built
       stations; conjecture K1 is ledger C120.
+  - id: choir-night-exact-vectors-learning-2026-11-19
+    title: The night of 19 November — the Exact cutover, vectors in pgvector with EmbeddingGemma 2, and the trace read with the calibration experiment (tracks X, V, L)
+    path: docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md
+    status: working  # 2026-11-19 authored on the owner's word; drafted, in review
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-19: "make a throughline goal doc to get this all done
+      tonight". Orders three tracks; track X is
+      choir-autoradio-exact-cutover-2026-11-18, which keeps its own stations.
+      Conjecture N1 is ledger C144.
   - id: choir-autoradio-exact-cutover-2026-11-18
     title: Autoradio, the cutover from Swift to Exact — one shared codebase for iPhone and Android, only voice native (stations X0 to X12, K1 to K3)
     path: docs/definitions/choir-autoradio-exact-cutover-2026-11-18.md

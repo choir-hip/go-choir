@@ -11,6 +11,22 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
+## The night of 2026-11-19: Exact, vectors and learning, three tracks at once
+
+Owner, 2026-11-19: "we need to do the full exact rewrite. make a throughline
+goal doc to get this all done tonight"; "we need to get vectors in pgvector,
+using embeddinggemma2"; "we need to review the traces and investigate all the
+problems"; the calibration experiment "is something that we should do now".
+Goal:
+[`definitions/choir-night-exact-vectors-learning-2026-11-19.md`](definitions/choir-night-exact-vectors-learning-2026-11-19.md).
+Track X is the cutover below, which keeps its stations. Track V is the
+corpus-first retrieval design with pgvector, stories first and one vector a
+captured page. Track L reads the traces of every recurring failure and
+restarts the calibration experiment. State at 2026-11-19T05:40Z: the corpus
+brief is on main (`bfa898f8d`), the faster corpus search is landing, no
+vector exists on the server, and the Exact move stands where it stood on the
+morning of the 18th.
+
 ## Live station (2026-11-18): Autoradio, the cutover from Swift to Exact
 
 Owner, 2026-11-18: "only the voice stuff should be swift. the rest should be
