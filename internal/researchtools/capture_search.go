@@ -48,6 +48,8 @@ type CaptureSearchQuery struct {
 	Until string `json:"until,omitempty"`
 	Order string `json:"order,omitempty"`
 	Limit int    `json:"limit,omitempty"`
+	// Size is how many pages the ranked answer holds.
+	Size int `json:"size,omitempty"`
 }
 
 // CaptureSearchAnswer is corpusd's candidate captures for the guest's own
@@ -64,6 +66,41 @@ type CaptureSearchAnswer struct {
 	HitObjects      []objectgraph.Object `json:"hit_objects,omitempty"`
 	FullText        *CaptureTextInfo     `json:"fulltext,omitempty"`
 	TermsIncomplete bool                 `json:"terms_incomplete,omitempty"`
+	// Ranked is corpusd's one answer (platform.CaptureRanking); nil from a
+	// corpusd that does not make one.
+	Ranked *CaptureRanking `json:"ranked,omitempty"`
+}
+
+// CaptureRanking mirrors platform.CaptureRanking: the pages in the order the
+// guest lists them, and which half answered.
+type CaptureRanking struct {
+	Entries           []RankedCapture `json:"entries"`
+	Stories           []RankedStory   `json:"stories,omitempty"`
+	VectorAnswered    bool            `json:"vector_answered"`
+	VectorRows        int             `json:"vector_rows"`
+	VectorUnavailable string          `json:"vector_unavailable,omitempty"`
+	VectorState       string          `json:"vector_state,omitempty"`
+	VectorPartial     string          `json:"vector_partial,omitempty"`
+	BM25Kept          int             `json:"bm25_kept"`
+	Note              string          `json:"note,omitempty"`
+}
+
+// RankedCapture mirrors platform.RankedCapture.
+type RankedCapture struct {
+	CaptureID string   `json:"capture_id"`
+	Reasons   []string `json:"reasons"`
+	Stories   []string `json:"stories,omitempty"`
+}
+
+// RankedStory mirrors platform.RankedStory.
+type RankedStory struct {
+	PublicationID string   `json:"publication_id"`
+	VersionID     string   `json:"version_id"`
+	Revision      int      `json:"revision"`
+	Title         string   `json:"title,omitempty"`
+	Score         float64  `json:"score"`
+	Day           string   `json:"day"`
+	Captures      []string `json:"captures"`
 }
 
 // CaptureTextHit is one page corpusd found by its text, with the passage

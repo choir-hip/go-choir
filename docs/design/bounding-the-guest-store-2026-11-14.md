@@ -264,7 +264,7 @@ Findings.
   the planner, as in the 2026-10-14 incident
   (`docs/archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md`,
   and `trajectoryRefsSQL`'s own comment, `sql_store.go:760-764`).
-- Overlap for events: while `store.event_table` is off and events live in
+- Overlap for events (the `store.event_table` switch was deleted 2026-11-19; its writer is unreachable in production): while it is off and events live in
   `og_objects`, every event row is in indexes 1 to 6, 18, 19, and in 7 to 12
   where its metadata names a run, trajectory or channel: up to about 13 entries
   an event (the count `computer_setting.go:54-63` and the earlier version of
@@ -571,7 +571,7 @@ tables of `state.db` are small or windowed.
 | `run_memory_entries` + `idx_run_memory_entries_parent`, `_kind`, `_loop_retire` (`schema.go:94-357`) | one message of a run's conversation: `message_json` (2.2 KB average), role, kind, details_json | 2.45 KB [M] | `ProjectionOpRunMemoryEntry` | `ProjectionOpRunMemoryRetire` (`run_memory_retire.go:216`): whole runs, terminal and last written over 7 days ago, not a document custodian's newest 2 completed or passivated runs, 5,000 runs a pass and up to 32 passes in a wake (a wake runs ten minutes after each boot and daily) (`run_memory_retire.go`) |
 | `og_key_index` + 2 indexes (`derived_keys.go:72`) | derived key per object | 0.9 KB [M] | the same projector | dropped with its object (`retireDropBatch`) |
 | `og_edges` + 3 indexes | edge | 0.9 KB | projector | none that I found |
-| `choir_events` + `choir_event_bodies` (`schema.go:33`) | the event table | not in use: `store.event_table` is off and `choir_events` holds 0 rows (`store.split.summary`) | none | n/a |
+| `choir_events` + `choir_event_bodies` (`schema.go:33`) | the event table | not in use: `store.event_table` (deleted 2026-11-19) never ran and `choir_events` holds 0 rows (`store.split.summary`) | none | n/a |
 | `computer_event_index` | one tape event's index row | windowed to about 68 k rows | the appender | `event_index_trim.go` (a pure function of the head) |
 | `texture_*`, `events`, `desktop_*`, `media_*`, `self_development_*` | small; Texture lives in `og_objects` | small [M: one page each] | | |
 
@@ -654,7 +654,7 @@ products read; these may only be bounded by tiering, not by deletion.
 
 | Mechanism | State | Evidence |
 |---|---|---|
-| `store.event_table` (`choir_events`: 4 b-trees an insert instead of 13) | built, off; `choir_events` 0 rows | `computer_setting.go:63,222`, `agentcore/event_table.go:68`; needs a host grant too |
+| `store.event_table` (`choir_events`: 4 b-trees an insert instead of 13) | switch deleted 2026-11-19 (owner ruling 2026-11-03); `choir_events` 0 rows | the setting, host grant and `agentcore/event_table.go` are gone; the table and readers stay |
 | `store.telemetry_partitions` (tool.result per-day files, retired by dropping the file, no row deletes) | built, default off; the paper has it on in part [I from the 11-12 trace] | `computer_setting.go:233`, `agentcore/telemetry_partitions.go:25` |
 | `store.telemetry_retire` | on by default | `computer_setting.go:232` |
 | `store.compact_force`, layout-age compaction | on by the layout rule (7 days); needs 1.2x live free and a planned restart | `compact.go`, `docs/design/paper-compaction-2026-10-31.md` |
@@ -788,7 +788,7 @@ none adds a switch (CLAUDE.md "no switches").
 
 ### Not recommended now
 
-- Enabling `store.event_table`: 4 b-trees an insert instead of 13 for ten
+- (Deleted 2026-11-19; no longer an option.) Enabling `store.event_table`: 4 b-trees an insert instead of 13 for ten
   kinds saves the index share of new events, but it moves rows between
   tables and the host grant makes deploy 1 a rollback floor
   (`computer_setting.go:54-63`); it does not delete the 44 GiB.

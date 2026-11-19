@@ -13,8 +13,10 @@
 #   Store-Floor-Override: <the pre-rollback check, design 4.5, and its result>
 #
 # which says, in the commit itself, that no computer has a store floor above
-# the new epoch (each computer's /api/runtime/observability event_table
-# store_floor). Raising or keeping the epoch always passes.
+# the new epoch (each computer's /api/runtime/observability
+# store_floor; a release from before 2026-11-19 answers
+# event_table.store_floor instead, and an unread answer is not a zero).
+# Raising or keeping the epoch always passes.
 #
 #   scripts/check-store-schema-floor.sh [--base REF] [--head REF]
 #
@@ -88,7 +90,7 @@ A computer whose store has a floor above $head_epoch (events stamped for
 choir_events) would boot a binary that hides them and can hand out their
 numbers again (design 4.5). The supported rollback is deploy 1 (epoch 2).
 If every computer was checked first (design 4.5's pre-rollback check; each
-computer's /api/runtime/observability event_table.store_floor), say so in
+computer's /api/runtime/observability store_floor), say so in
 the head commit:
   Store-Floor-Override: <what was checked, and the result>
 MSG

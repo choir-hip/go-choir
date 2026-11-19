@@ -20,5 +20,21 @@ runs:
           done
         fi
         [[ -n "$bindir" ]] || { echo "no PostgreSQL server binaries found" >&2; exit 1; }
+        # pgvector 0.8.0 or later (halfvec, HNSW, iterative index scans:
+        # internal/platform/vector_search.go vectorMinPgvector) for the vector
+        # index's tests. The version is compared numerically, so 0.10 passes.
+        # PGDG's postgresql-N-pgvector is 0.8.x on the runner images' release.
+        major="$(basename "$(dirname "$bindir")")"
+        control="/usr/share/postgresql/$major/extension/vector.control"
+        pgvector_ok() {
+          local v
+          v="$(sed -n "s/^default_version *= *'\([0-9.]*\)'.*/\1/p" "$control" 2>/dev/null | head -n1)"
+          [[ -n "$v" && "$(printf '%s\n%s\n' 0.8.0 "$v" | sort -V | head -n1)" == "0.8.0" ]]
+        }
+        if ! pgvector_ok; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends "postgresql-$major-pgvector"
+        fi
+        pgvector_ok || { echo "pgvector 0.8.0 or later is not installed for PostgreSQL $major (found: $(sed -n "s/^default_version.*'\(.*\)'.*/\1/p" "$control" 2>/dev/null))" >&2; exit 1; }
         echo "$bindir" >> "$GITHUB_PATH"
         "$bindir/pg_ctl" --version

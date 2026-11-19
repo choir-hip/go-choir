@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -53,7 +54,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 		Order   string `json:"order,omitempty"`
 	}
 	return toolregistry.Tool{Name: "search_wire_corpus",
-		Description: "Search this computer's own corpus by topic, title, outlet, keywords or a whole question: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at, and passage: the part of the page's own text that matched), strongest first. A capture's full text is searched, not only its title: a fact that appears only in a page's body is found. The page-text search takes every word you write (stop words such as the, of, was are dropped), a \"quoted phrase\" as a phrase (searched as its words when no page holds it), and -word or -\"a phrase\" as an exclusion (a passage holding it is not returned). Words found in no page, or so common they carry no weight, are not searched, and the result names them (capture_words_dropped, and captures_note). Punctuation splits words: C++ is searched as c and AT&T as t, so put the distinctive word beside them. since and until (a date such as 2026-11-18, also written since:2026-11-18) restrict captures to pages published or, when the publish time is not known, fetched in that window; order recent (or order:recent) lists, newest first, only the pages at least half as relevant as the best match, and the note says when only the best 300 passages were ranked. Captures marked owner-private are never listed. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
+		Description: "Search this computer's own corpus by topic, title, outlet, keywords or a whole question: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at, and passage: the part of the page's own text that matched), strongest first. A capture's full text is searched, not only its title: a fact that appears only in a page's body is found. The page-text search takes every word you write (stop words such as the, of, was are dropped), a \"quoted phrase\" as a phrase (searched as its words when no page holds it), and -word or -\"a phrase\" as an exclusion (a passage holding it is not returned). Words found in no page, or so common they carry no weight, are not searched, and the result names them (capture_words_dropped, and captures_note). Punctuation splits words: C++ is searched as c and AT&T as t, so put the distinctive word beside them. since and until (a date such as 2026-11-18, also written since:2026-11-18) restrict captures to pages published or, when the publish time is not known, fetched in that window; order recent (or order:recent) lists, newest first, only the pages at least half as relevant as the best match, and the note says when only the best 300 passages were ranked. Captures marked owner-private are never listed. Pages are also found by meaning, not only by their words: a page can be listed for its meaning alone (no passage), or because a published story cites it (reasons: text, meaning, story; via_stories names the story, and stories lists each with the captures it cites). Search by meaning can be unavailable; the note says so and the pages are then those whose text matches. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, outlet, or keywords"},
 			"limit":    map[string]any{"type": "integer", "description": "Max results per list (default 10, at most 25)"},
@@ -109,6 +110,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 				Published: published, PublishedCount: len(published), PublishedNote: publishedNote,
 				Events: events, EventCount: len(events), EventsNote: eventsNote,
 				Captures: captures, CaptureCount: len(captures), CapturesNote: note, CaptureWordsDropped: info.Dropped,
+				Stories: info.Stories,
 			}
 			if len(published) > 0 {
 				body.PublishedFirstNote = publishedFirstNote
@@ -142,6 +144,9 @@ type wireCorpusResult struct {
 	CaptureWordsDropped []string `json:"capture_words_dropped,omitempty"`
 	CaptureCount        int      `json:"capture_count"`
 	CapturesNote        string   `json:"captures_note,omitempty"`
+	// Stories are the published stories found by meaning whose cited
+	// captures are in captures (each capture's via_stories names them).
+	Stories []CorpusStory `json:"stories,omitempty"`
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -184,8 +189,15 @@ func logCorpusSearch(ctx context.Context, query, computerID string, capturesElap
 		query = query[:200]
 	}
 	run, desk, conv := corpusAttribution(ctx)
-	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t caller=%s",
-		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped, CorpusCallerFrom(ctx))
+	// vector= is the rows corpusd's vector half returned, or "unavailable";
+	// vector_state= is exact, approximate or partial (or unavailable);
+	// bm25_kept= is how many of BM25's top three pages had to be inserted.
+	vector, state := "unavailable", "unavailable"
+	if info.VectorAnswered {
+		vector, state = strconv.Itoa(info.VectorRows), info.VectorState
+	}
+	log.Printf("corpus search computer=%s captures_ms=%d captures=%d text_index=%t text_indexed=%d computer_pages=%d by_body=%d by_title=%d by_both=%d by_labels_only=%d by_meaning=%d note=%q query=%q capture_ids=%s run=%s desk=%s conv=%s published=%d events=%d capped=%t vector=%s vector_state=%s bm25_kept=%d caller=%s",
+		computerID, capturesElapsed.Milliseconds(), len(captures), info.TextUsed, info.TextIndexed, info.Captures, info.Body, info.Title, info.Both, info.LabelsOnly, info.Meaning, note, query, strings.Join(ids, ","), run, desk, conv, published, events, capped, vector, state, info.BM25Kept, CorpusCallerFrom(ctx))
 }
 
 // CorpusCallerBrief is the caller of a search the host makes for a research

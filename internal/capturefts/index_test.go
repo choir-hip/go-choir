@@ -479,3 +479,36 @@ func TestMoreScopesThanOpenFilesAllWork(t *testing.T) {
 		t.Fatalf("Scopes: %d %v", len(scopes), err)
 	}
 }
+
+// A page with neither a published nor a fetched time is outside every window,
+// an until-only window included (the term half and the guest drop it too).
+func TestPageWithNeitherTimeIsOutsideEveryWindow(t *testing.T) {
+	ix := newTestIndex(t)
+	put(t, ix, scopeA, "dated", "Quay inspection", "The inspector walked the quay again.\n\n", day0)
+	put(t, ix, scopeA, "undated", "Quay inspection", "The inspector walked the quay again.\n\n", time.Time{})
+	if got := ids(search(t, ix, scopeA, Query{Text: "inspector quay"})); len(got) != 2 {
+		t.Fatalf("no window: %v", got)
+	}
+	for name, q := range map[string]Query{
+		"until only":    {Text: "inspector quay", Until: day0.AddDate(0, 0, 5)},
+		"since only":    {Text: "inspector quay", Since: day0.AddDate(0, 0, -5)},
+		"since + until": {Text: "inspector quay", Since: day0.AddDate(0, 0, -5), Until: day0.AddDate(0, 0, 5)},
+	} {
+		if got := ids(search(t, ix, scopeA, q)); len(got) != 1 || got[0] != "dated" {
+			t.Fatalf("%s: %v, want only the dated page", name, got)
+		}
+	}
+}
+
+// "No time" is an absent time, not a non-positive one: a page of 1960 is in an
+// until-only window as the term half and the guest keep it.
+func TestPageBeforeTheEpochIsInTheWindowItsTimeIsIn(t *testing.T) {
+	ix := newTestIndex(t)
+	old := time.Date(1960, 6, 1, 0, 0, 0, 0, time.UTC)
+	put(t, ix, scopeA, "old", "Quay inspection", "The inspector walked the quay again.\n\n", old)
+	put(t, ix, scopeA, "undated", "Quay inspection", "The inspector walked the quay again.\n\n", time.Time{})
+	got := ids(search(t, ix, scopeA, Query{Text: "inspector quay", Until: time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)}))
+	if len(got) != 1 || got[0] != "old" {
+		t.Fatalf("until 1970: %v, want only the 1960 page", got)
+	}
+}

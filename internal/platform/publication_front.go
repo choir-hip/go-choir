@@ -91,10 +91,23 @@ type FrontPage struct {
 }
 
 // frontCursor is the keyset position after the last publication a page
-// read: publications are ordered by (updated_at, canonical_id) descending.
+// read: publications are ordered by (updated_at, canonical_id) descending,
+// and the cursor holds that pair at the row's full precision (whole seconds
+// in UpdatedAt, the rest in Nanos), because the SQL compares full-precision
+// times. Every caller builds it with frontCursorAt. It is opaque outside this
+// package: a client hands back the string it was given.
 type frontCursor struct {
 	UpdatedAt   int64  `json:"u"`
 	CanonicalID string `json:"id"`
+	// Nanos is the sub-second part of UpdatedAt. It is always written; a
+	// cursor without it was minted before 2026-11-19 (whole seconds only)
+	// and decodeFrontCursor widens it.
+	Nanos int32 `json:"n"`
+}
+
+// frontCursorAt is the cursor after a publication row at full precision.
+func frontCursorAt(row frontPublicationRow) *frontCursor {
+	return &frontCursor{UpdatedAt: row.UpdatedAt.Unix(), Nanos: int32(row.UpdatedAt.Nanosecond()), CanonicalID: row.CanonicalID}
 }
 
 func encodeFrontCursor(c frontCursor) string {
@@ -102,6 +115,15 @@ func encodeFrontCursor(c frontCursor) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
+// frontCursorMaxUnix is the last second of the year 9999.
+const frontCursorMaxUnix = 253402300799
+
+// decodeFrontCursor reads a cursor. One minted before the sub-second part
+// existed (no "n" member) cannot say where inside its second the page ended,
+// so it is read as the end of that second: the page after it starts at the
+// newest row older than the next second, and rows of the cursor's second that
+// were already listed may be listed again. A repeat is acceptable; a skip is
+// not.
 func decodeFrontCursor(s string) (*frontCursor, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -111,11 +133,28 @@ func decodeFrontCursor(s string) (*frontCursor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid cursor")
 	}
-	var c frontCursor
-	if err := json.Unmarshal(raw, &c); err != nil || c.CanonicalID == "" {
+	var wire struct {
+		UpdatedAt   int64  `json:"u"`
+		CanonicalID string `json:"id"`
+		Nanos       *int32 `json:"n"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil || wire.CanonicalID == "" {
 		return nil, fmt.Errorf("invalid cursor")
 	}
-	return &c, nil
+	// Bound on u: the years 1970 through 9999 (Unix seconds 0 to
+	// frontCursorMaxUnix); anything else is not a time this store holds, and
+	// u+1 below must not wrap.
+	if wire.UpdatedAt < 0 || wire.UpdatedAt > frontCursorMaxUnix {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+	if wire.Nanos == nil {
+		// updated_at < the next second, and no tie row: "" sorts below every id.
+		return &frontCursor{UpdatedAt: wire.UpdatedAt + 1}, nil
+	}
+	if *wire.Nanos < 0 || *wire.Nanos >= 1e9 {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+	return &frontCursor{UpdatedAt: wire.UpdatedAt, Nanos: *wire.Nanos, CanonicalID: wire.CanonicalID}, nil
 }
 
 // ErrInvalidFrontCursor marks a cursor the front list did not mint.
@@ -252,7 +291,7 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 			batch = batch[:limit]
 		}
 		for _, pub := range batch {
-			after = &frontCursor{UpdatedAt: pub.UpdatedAt.Unix(), CanonicalID: pub.CanonicalID}
+			after = frontCursorAt(pub)
 			row, ok, err := s.frontRow(ctx, og, pub, opinion)
 			if err != nil {
 				return nil, err
@@ -329,7 +368,7 @@ func (s *Service) listFrontSection(ctx context.Context, og *ObjectGraphStore, li
 		}
 		for _, pub := range batch {
 			scanned++
-			after = &frontCursor{UpdatedAt: pub.UpdatedAt.Unix(), CanonicalID: pub.CanonicalID}
+			after = frontCursorAt(pub)
 			var meta frontPublicationMeta
 			if err := json.Unmarshal(pub.Metadata, &meta); err == nil && meta.PublicationID != "" && !inSection(meta.PublicationID) {
 				continue
@@ -381,7 +420,7 @@ func frontPublicationWindowSQL(after *frontCursor, w newestWindow, want int) (st
 		WHERE object_kind = 'choir.publication' AND tombstone = FALSE`
 	var args []any
 	if after != nil {
-		at := time.Unix(after.UpdatedAt, 0).UTC()
+		at := time.Unix(after.UpdatedAt, int64(after.Nanos)).UTC()
 		query += ` AND (updated_at < ? OR (updated_at = ? AND canonical_id < ?))`
 		args = append(args, at, at, after.CanonicalID)
 	}

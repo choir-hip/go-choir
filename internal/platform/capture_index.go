@@ -526,6 +526,9 @@ type CaptureSearchRequest struct {
 	Until string `json:"until,omitempty"`
 	Order string `json:"order,omitempty"`
 	Limit int    `json:"limit,omitempty"`
+	// Size is how many pages the ranked answer holds (capture_rank.go); the
+	// default is 10 and the most 25. Only a request with a Query is ranked.
+	Size int `json:"size,omitempty"`
 }
 
 // CaptureSearchResponse holds the candidate captures, newest first among
@@ -550,12 +553,17 @@ type CaptureSearchResponse struct {
 	// label projection is still being built: Objects is empty and the caller
 	// uses its own window for that half.
 	TermsIncomplete bool `json:"terms_incomplete,omitempty"`
+	// Ranked is the one answer for a request with a Query: vector order with
+	// BM25's top three pages guaranteed a place, or BM25's pages alone when the
+	// vectors could not answer (capture_rank.go). Every capture it names has
+	// its object in HitObjects.
+	Ranked *CaptureRanking `json:"ranked,omitempty"`
 }
 
 const (
 	captureSearchMaxWords      = 8
 	captureSearchMaxCandidates = 1000
-	captureSearchMaxIDs        = 2000
+	captureSearchMaxIDs        = 200
 	captureSearchIDChunk       = 200
 )
 
@@ -563,6 +571,16 @@ const (
 // source or language hold at least Need of the words, from the term table
 // over all history, plus the captures named by IDs.
 func (s *Store) SearchCaptures(ctx context.Context, req CaptureSearchRequest) (resp CaptureSearchResponse, err error) {
+	resp, err = s.searchCaptureParts(ctx, req)
+	if err == nil && strings.TrimSpace(req.Query) != "" {
+		// After the terms timer has ended, so neither journal line contains
+		// the other.
+		s.rankCaptureAnswer(ctx, req, &resp)
+	}
+	return resp, err
+}
+
+func (s *Store) searchCaptureParts(ctx context.Context, req CaptureSearchRequest) (resp CaptureSearchResponse, err error) {
 	owner, computer := strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID)
 	if strings.TrimSpace(req.Query) != "" && owner != "" && computer != "" {
 		// The text half has its own timer (capture_fulltext_search). The
@@ -572,8 +590,8 @@ func (s *Store) SearchCaptures(ctx context.Context, req CaptureSearchRequest) (r
 			return resp, err
 		}
 	}
-	done := s.retrievalTimer(retrievalCaptureSearch)
-	defer func() { done("terms", len(resp.Objects), err) }()
+	done := s.retrievalTimerExtra(retrievalCaptureSearch, "")
+	defer func() { done("terms", len(resp.Objects), err, fmt.Sprintf(" matched=%d", resp.Matched)) }()
 	if !s.retrievalState.captureIndexComplete.Load() {
 		if resp.FullText != nil && resp.FullText.Used {
 			// The text half answered; the title and label half is still
@@ -601,7 +619,15 @@ func (s *Store) SearchCaptures(ctx context.Context, req CaptureSearchRequest) (r
 	if err := s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index WHERE owner_id = ? AND computer_id = ?`, owner, computer).Scan(&resp.Searched); err != nil {
 		return resp, err
 	}
-	ids, matched, err := s.captureTermCandidates(ctx, owner, computer, words, need, limit)
+	since, err := parseSearchTime("since", req.Since)
+	if err != nil {
+		return resp, err
+	}
+	until, err := parseSearchTime("until", req.Until)
+	if err != nil {
+		return resp, err
+	}
+	ids, matched, err := s.captureTermCandidates(ctx, owner, computer, words, need, limit, since, until)
 	if err != nil {
 		return resp, err
 	}
@@ -680,10 +706,41 @@ func captureTermQuery(owner, computer string, words []string, need int) (string,
 	return query, args
 }
 
+// captureTermRankedQuery is captureTermQuery ranked and cut in SQL: the
+// captures holding at least need of the words, strongest first (words
+// matched, then newest fetched, then id, each descending, as the Go sort it
+// replaces gave), at most limit of them, each row carrying how many captures
+// matched in all. A time window (published time, else fetched; since
+// inclusive, until exclusive) is applied before the cut, so a window that holds
+// few of the strongest matches still returns up to limit of its own.
+func captureTermRankedQuery(owner, computer string, words []string, need, limit int, since, until time.Time) (string, []any) {
+	grouped, args := captureTermQuery(owner, computer, words, need)
+	if grouped == "" {
+		return "", nil
+	}
+	q := `WITH g AS (` + grouped + `) SELECT g.capture_id, g.words, g.fetched, COUNT(*) OVER () AS matched FROM g`
+	if !since.IsZero() || !until.IsZero() {
+		q += ` JOIN proj_capture_index p ON p.capture_id = g.capture_id WHERE COALESCE(p.published_at, p.fetched_at) IS NOT NULL`
+		if !since.IsZero() {
+			q += ` AND COALESCE(p.published_at, p.fetched_at) >= ?`
+			args = append(args, since)
+		}
+		if !until.IsZero() {
+			q += ` AND COALESCE(p.published_at, p.fetched_at) < ?`
+			args = append(args, until)
+		}
+	}
+	q += ` ORDER BY g.words DESC, g.fetched DESC NULLS LAST, g.capture_id DESC LIMIT ?`
+	args = append(args, limit)
+	return q, args
+}
+
 // captureTermCandidates returns up to limit capture ids holding at least
-// need of words (strongest, then newest), and how many met need.
-func (s *Store) captureTermCandidates(ctx context.Context, owner, computer string, words []string, need, limit int) ([]string, int, error) {
-	query, args := captureTermQuery(owner, computer, words, need)
+// need of words (strongest, then newest, inside the window), and how many
+// matched. The ranking and the cut are the statement's: the rows read here
+// are the rows returned.
+func (s *Store) captureTermCandidates(ctx context.Context, owner, computer string, words []string, need, limit int, since, until time.Time) ([]string, int, error) {
+	query, args := captureTermRankedQuery(owner, computer, words, need, limit, since, until)
 	if query == "" {
 		return nil, 0, nil
 	}
@@ -692,43 +749,21 @@ func (s *Store) captureTermCandidates(ctx context.Context, owner, computer strin
 		return nil, 0, fmt.Errorf("capture term search: %w", err)
 	}
 	defer rows.Close()
-	type cand struct {
-		id      string
-		words   int
-		fetched sql.NullTime
-	}
-	var cands []cand
+	var ids []string
+	matched := 0
 	for rows.Next() {
-		var c cand
-		if err := rows.Scan(&c.id, &c.words, &c.fetched); err != nil {
+		var id string
+		var nwords int
+		var fetched sql.NullTime
+		if err := rows.Scan(&id, &nwords, &fetched, &matched); err != nil {
 			return nil, 0, err
 		}
-		cands = append(cands, c)
+		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	sort.SliceStable(cands, func(i, j int) bool {
-		a, b := cands[i], cands[j]
-		if a.words != b.words {
-			return a.words > b.words
-		}
-		if a.fetched.Valid != b.fetched.Valid {
-			return a.fetched.Valid
-		}
-		if !a.fetched.Time.Equal(b.fetched.Time) {
-			return a.fetched.Time.After(b.fetched.Time)
-		}
-		return a.id > b.id
-	})
-	matched := len(cands)
-	if len(cands) > limit {
-		cands = cands[:limit]
-	}
-	ids := make([]string, len(cands))
-	for i, c := range cands {
-		ids[i] = c.id
-	}
+	s.retrievalState.reads.termRows.Add(int64(len(ids)))
 	return ids, matched, nil
 }
 
@@ -748,6 +783,7 @@ func (s *Store) captureObjectsByID(ctx context.Context, owner, computer string, 
 			args = append(args, id)
 		}
 		args = append(args, string(objectgraph.WebCaptureObjectKind), owner, computer)
+		s.retrievalState.reads.objectStatements.Add(1)
 		rows, err := s.corpus().QueryContext(ctx, `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
 			FROM og_objects WHERE canonical_id IN (`+placeholders+`) AND object_kind = ? AND owner_id = ? AND computer_id = ?`, args...)
 		if err != nil {
@@ -760,6 +796,7 @@ func (s *Store) captureObjectsByID(ctx context.Context, owner, computer string, 
 				return nil, err
 			}
 			obj.Body = nil // a capture row carries no body; never hydrate one here
+			s.retrievalState.reads.objectRows.Add(1)
 			byID[obj.CanonicalID] = obj
 		}
 		err = rows.Err()

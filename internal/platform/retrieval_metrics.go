@@ -30,6 +30,10 @@ const (
 	retrievalGetEdge          = "get_edge"
 	retrievalFrontPublication = "front_publications"
 	retrievalCaptureSearch    = "capture_search"
+	// retrievalCaptureRank counts the ranked answer (capture_rank.go). Its
+	// journal line says op=capture_search shape=ranked; /health keeps it apart
+	// so the terms search's own latency stays its own.
+	retrievalCaptureRank      = "capture_search_ranked"
 	retrievalCaptureByURL     = "capture_by_url"
 	retrievalCaptureIndexSync = "capture_index_backfill"
 	// retrievalCaptureIndexWrite is a write, timed beside the reads: the
@@ -40,6 +44,15 @@ const (
 	retrievalFullTextSearch  = "capture_fulltext_search"
 	retrievalFullTextWrite   = "capture_fulltext_write"
 	retrievalFullTextCatchUp = "capture_fulltext_catchup"
+	// The vector index (vector_store.go): a search, one embedder call, one
+	// version's or batch's write.
+	retrievalVectorSearch = "vector_search"
+	retrievalVectorEmbed  = "vector_embed"
+	retrievalVectorWrite  = "vector_write"
+	retrievalVectorSweep  = "vector_sweep"
+	// One statement reads the has_version edges of a chunk of publications
+	// (the vector worker's story walk); rows are the publications answered.
+	retrievalPublishedVersionsOf = "published_versions_of"
 )
 
 // retrievalLogSlowOnly names operations that log only when slower than
@@ -53,6 +66,7 @@ var retrievalLogSlowOnly = map[string]bool{
 	retrievalListEdgesTo:       true,
 	retrievalCaptureIndexWrite: true,
 	retrievalFullTextWrite:     true,
+	retrievalVectorWrite:       true,
 }
 
 const retrievalSlowLog = 100 * time.Millisecond
@@ -108,6 +122,13 @@ type RetrievalSnapshot struct {
 }
 
 func (m *RetrievalMetrics) record(op, shape string, elapsed time.Duration, rows int, err error) {
+	m.recordExtra(op, "", shape, elapsed, rows, err, "")
+}
+
+// recordExtra is record with extra journal fields (" name=value ...") placed
+// before err=, so a reader of the older fields is not moved. logOp, when set,
+// is the op name the journal line carries while the counters are kept under op.
+func (m *RetrievalMetrics) recordExtra(op, logOp, shape string, elapsed time.Duration, rows int, err error, extra string) {
 	if m == nil {
 		return
 	}
@@ -161,7 +182,7 @@ func (m *RetrievalMetrics) record(op, shape string, elapsed time.Duration, rows 
 			errText = errText[:160]
 		}
 	}
-	logf("corpusd retrieval op=%s shape=%s ms=%.2f rows=%d err=%s", op, shapeOrDash(shape), ms, rows, errText)
+	logf("corpusd retrieval op=%s shape=%s ms=%.2f rows=%d%s err=%s", firstNonEmpty(logOp, op), shapeOrDash(shape), ms, rows, extra, errText)
 }
 
 func shapeOrDash(shape string) string {
@@ -266,6 +287,18 @@ func (s *Store) retrievalTimer(op string) func(shape string, rows int, err error
 			return
 		}
 		s.retrieval.record(op, shape, time.Since(start), rows, err)
+	}
+}
+
+// retrievalTimerExtra is retrievalTimer whose record carries extra journal
+// fields chosen when the call ends.
+func (s *Store) retrievalTimerExtra(op, logOp string) func(shape string, rows int, err error, extra string) {
+	start := time.Now()
+	return func(shape string, rows int, err error, extra string) {
+		if s == nil {
+			return
+		}
+		s.retrieval.recordExtra(op, logOp, shape, time.Since(start), rows, err, extra)
 	}
 }
 

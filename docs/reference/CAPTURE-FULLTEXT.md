@@ -288,18 +288,46 @@ the passage matched), `hit_objects` (the capture objects, no body) and
 terms). Deadline 8 s; a failure is reported in `fulltext` and the old half
 still answers.
 
-**Guest merge** (`researchtools.searchCapturesFor`): the text half and the old
-title-and-label half are merged by reciprocal rank (k 60), or by time for
-`recent`; a capture both found rises and carries both halves' evidence
-(`matched`: `title`, `body`, `topic`, `outlet`, `language`) and the passage.
-Each result has what research needs: `capture_id` (citable, `ReadCapture` it),
+**The title-and-label half reads what its caller uses (2026-11-19).** `SearchCaptures` ranks the captures that hold the words
+and cuts to `candidates` in one statement (`captureTermRankedQuery`: words matched, newest fetched, id, each descending, with the
+time window applied before the cut), and says how many matched in all (`matched`, also `matched=` beside `rows=` on the
+`capture_search shape=terms` line). It reads at most `candidates` (the route's most is 1,000) rows of `og_objects` plus at most 200
+id hints (`captureSearchMaxIDs`), in one statement per 200. Before, it fetched every matching term row into Go, sorted there and
+cut afterwards, and the guest asked for 500 candidates and sent up to 2,000 hints, so a search of a common word read about 1,500
+to 2,500 rows (the 8 to 14 second calls of the 07:55Z update). The guest now asks for four times the most it lists (100) and sends
+the 100 label hints that hold the most query words. The term index is still scanned for every match of the words to count them;
+that part is bounded by the matches, not by the caller.
+The cost of the 100-candidate and 100-hint cut is recall: among thousands of pages matching the same number of words, the guest ranks only the newest 100 by its own field weights and labels, so a page it would have ranked first among all of them can be missed (the measurement and the reason are in [the problem record](../problems/corpus-search-takes-two-seconds-on-the-paper-2026-11-19.md)).
+
+**Guest list** (`researchtools.searchCapturesFor`): the guest lists corpusd's one
+ranked answer as it comes (`CaptureSearchResponse.Ranked`, `platform/capture_rank.go`:
+vector order with BM25's top three pages guaranteed a place, or BM25's pages in
+BM25's order when the vectors cannot answer) and merges nothing. Pages the old
+title-and-label half found that the answer does not hold are listed after it, in
+that half's own order, up to the limit; a page both hold gets that half's
+evidence (`matched`: `title`, `body`, `topic`, `outlet`, `language`). A page
+found by meaning or through a story that cites it carries `reasons` and no passage, and `recent` orders the answer newest first (with the label half's pages merged in by the same time, published else fetched, so the list is one time order).
+
+**One window rule.** Every half judges a capture by its published time, else its fetched time, else it is outside every window (the term SQL, the page-text index, the exact check of the ranked answer and the guest's `inWindow`); since is inclusive, until exclusive.
+
+**No similarity floor (open by design).** The vector half returns the nearest pages at any cosine, so a query with nothing near it still gets pages marked `meaning` with no passage; the design's 0.67 floor has not been re-measured on this corpus ([design](../design/corpus-first-retrieval-and-research-2026-11-18.md)).
+
+**The order when the vectors cannot answer** (the rule; section 5 gives the reason it is one rule and not a merge): corpusd's answer
+is then BM25's pages in BM25's order, and the guest lists them first and the title-and-label half's other pages after them, in
+that half's own order. Before station V4 the guest interleaved the two halves by reciprocal rank, so a page only the title and labels
+found could sit above BM25's lower pages; now it sits below all of them. The reason: one ranker's order is kept whole, because
+reciprocal-rank fusion measured worse than either half's order kept (0.856 against 0.926 recall at ten), and a merge in the guest
+would make the answer depend on a half that corpusd cannot see (Jev's labels are the guest's). The cost: a page found only by a
+label stops competing with BM25's lower pages and is reached only after them, up to the limit. The corpus brief reads captures in
+the order given and claims nothing about order (its sweep tests are unchanged and pass); `scripts/status-corpus-reuse` reads
+`vector=`, `vector_state=` and `bm25_kept=` on the guest line and the share of lines the vector half answered. Each result has what research needs: `capture_id` (citable, `ReadCapture` it),
 `url`, `title`, times, and `passage` with its ordinal and the page's passage
 count. The tool takes `since`, `until`, `order`, or the same as words in the
 query (`since:2026-11-10 order:recent`), which is how a cell that passes only
 a query reaches them. The window also filters the old half. The note says how
 much of the computer's text is searchable so far. The journal line adds
 `text_index`, `text_indexed`, `computer_pages`, `by_body`, `by_title`,
-`by_both`, `by_labels_only`, and still only capture ids.
+`by_both`, `by_labels_only`, `by_meaning` (pages found by meaning or through a story that the text half did not find), and still only capture ids.
 
 ## 3. Resources at 250,000 and a million pages
 
@@ -429,7 +457,10 @@ field). The plan in [EMBEDDINGGEMMA.md](EMBEDDINGGEMMA.md) section 0.8 embeds
 ordinal 0 (about 300 tokens; two passages for 512). A hybrid ranker takes two
 lists of `(capture_id, passage_id, score)`: this index's top passages
 (`Search` returns the passage id of each page's best) and the vector index's,
-and fuses by reciprocal rank at passage level, then groups by capture. The
+and combines them, by page, as station V4 does (`capture_rank.go`): the vector order, with BM25's top
+three pages guaranteed a place; with no vectors the order is BM25's whole, with the label half after it (section 2, "The order when
+the vectors cannot answer"). It does not fuse by reciprocal rank: that measured 0.856
+recall at ten against 0.926 for this rule (EMBEDDINGGEMMA.md section 0.9). The
 catch-up's shape (idempotent walk by primary key, skip by lookup, yield) is
 the one to copy.
 

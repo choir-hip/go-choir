@@ -356,6 +356,257 @@ and was at load 9.6.
 - Not measured: full page against lead (needs the real page text), any
   non-English story, a quiet x86 machine.
 
+## 0.11 The server (Node B, 2026-11-19; built, not yet deployed)
+
+Station V1 of the night's goal. Code: `nix/embedder.nix`, `nix/postgresql.nix`, the
+caller in `internal/platform/vector_*.go`. Facts below were read from the nixpkgs
+pin (`fe13242`, 2026-10-15), the Hub's LFS listing and llama.cpp's tree on
+2026-11-19; the unit has **not** been run (nothing was built on x86 or on Node B).
+
+- **llama.cpp.** The nixpkgs `llama-cpp` is 0.6.0 (2026-10-05) and has no
+  `src/models/gemma-embedding2.cpp` (404 at that tag; present at b12259). The module overrides
+  the package to b12259 (`351025ec5`): `src` by rev with hash
+  `sha256-tB+aeXiqzy9D5tBHLNy+AJRjfilggVaX/ppA4YlGM70=`, `npmDepsHash` of `tools/ui` at that
+  commit, no patches, no tests. Both fixed-output hashes were built on the Mac
+  (`fetchFromGitHub`, `fetchNpmDeps`) and matched. The CPU build compiles the C++ of one
+  llama.cpp (no CUDA, no Vulkan) and the web UI's npm build; the time on Node B is not measured.
+- **The model file.** `ggml-org/embeddinggemma-2-GGUF`, `embeddinggemma-2-Q8_0.gguf`, 309,855,456
+  bytes, SHA-256 `2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135`, fetched from
+  the Hub at commit `6ea3e3a3...` by the unit's `ExecStartPre` into
+  `/var/lib/go-choir-embedder` (not the repo, not the Nix store). A file whose hash differs is
+  deleted and the unit fails and retries every 60 s with no start limit.
+- **The unit** `go-choir-embedder`: `llama-server --embeddings --pooling mean --host 127.0.0.1
+  --port 8090 --threads 4 --parallel 2 --ctx-size 4096 --batch-size 2048 --ubatch-size 2048`.
+  `CPUWeight=10`, `Nice=10`, `IOWeight=10`, `MemoryMax=1536M`, `OOMScoreAdjust=500`, dynamic user,
+  secrets paths inaccessible, `Restart=on-failure`. No request limit, no counting. Loopback only;
+  the firewall is unchanged (22, 80, 443). Only corpusd is meant to call it; a loopback port cannot
+  say which local process connects (residual).
+- **Health.** `GET http://127.0.0.1:8090/health`: 200 when the model is loaded, 503 while loading.
+- **Calls.** `POST /v1/embeddings` with `{"input": [text, ...]}` (one call for a batch). The server
+  returns each mean-pooled vector L2-normalised at 768 dimensions (verify on first run: section
+  0.2 says the raw pooled vector is not unit length, so a caller must not rely on it).
+- **What corpusd stores.** The first 256 values, normalised again (Matryoshka), as `halfvec(256)`
+  with the model's hash (the file's SHA-256 above). The input strings are the card's:
+  documents `title: <title> | text: <passage>` (a story passage carries the story's title; a
+  capture's single vector is its title and lead passage), queries `task: search result | query: <q>`.
+  The server adds `<bos>` and `<eos>`.
+- **pgvector.** `postgresql_17.pkgs.pgvector` 0.8.7 in the pin, with `halfvec` and HNSW on
+  `halfvec_cosine_ops`. It is not a trusted extension, so `CREATE EXTENSION vector` is run as
+  `postgres` by `go-choir-postgresql-roles` in the `graph` database; corpusd's code only checks
+  it is there. Adding it restarts PostgreSQL once on the deploy.
+
+### 0.11.1 The vector index in corpusd (station V2; built, not deployed)
+
+Code: `internal/platform/vector_store.go`, `vector_worker.go`, `vector_search.go`, `vector_outcome.go`;
+client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run against a real pgvector).
+
+- **Tables** (corpusd's graph database, beside `proj_capture_*`; created by the worker, not by
+  `MigrateRetrieval`, so a missing extension cannot hold the capture projection's retries):
+  `vec_story_passages (story_id, version_id, ordinal, text_sha, day, model, embedding halfvec(256) NULL, refused, embedded_on)`,
+  primary key `(story_id, version_id, ordinal)`; `vec_captures (capture_id PK, owner_id, computer_id, text_sha, day, model,
+  embedding halfvec(256) NULL, refused, embedded_on)`. A row with no vector and a `refused` reason is a passage or lead the embedder
+  refused (see 0.11.3). `text_sha` is the SHA-256 of the passage text, `model` the GGUF's SHA-256, `day` the
+  version's creation day or the capture's published, else fetched, day. A story version is written whole in one
+  transaction, so one row means all its passages. HNSW on `halfvec_cosine_ops` on each table, built `CONCURRENTLY` under a
+  session advisory lock, an invalid leftover dropped and rebuilt by the next pass.
+- **One writer.** corpusd alone writes vector rows: its embed worker, through two write functions, after the model's hash and the `text_sha` of the
+  passage corpusd cuts itself.
+- **Worker.** (`vectorBatch = 4` is a throughput choice, not a quota or a limit on calls: the largest input the unit takes is 2,048
+  tokens, so a batch is at most about 8,000 tokens and about 20 s of CPU at the measured 350 tokens a second, a query waiting behind it at
+  most that long; four keeps that wait short while a call is still a handful of passages. Nothing is counted against it.)
+  Each pass derives its list: versions of published stories and opinion pieces without a vector of this model
+  (newest publication first, newest version first), then projected captures without one (newest first, keyset cursor).
+  Owner-private, tombstoned and superseded captures never get one (the full-text index's exclusion); the sweep removes the
+  vectors of a withdrawn story and of a capture that has since become private. **No pacing**: it sends one batch of 4 inputs at
+  a time and waits for the answer, so a search's query waits behind at most one batch (4 passages of about 300 tokens, one to
+  three seconds at the 350 tokens a second measured on this CPU; batches did not change tokens a second). The batch is a size,
+  not a limit; it does not rest for searches, and the unit's low CPU weight is what lets guests win. It backs off only after the
+  embedder's real failure: one line (`embedder down, backing off`), a doubling wait to 5 minutes, one line when it returns. No
+  cap, no queue, nothing dropped; a restart re-derives the gap.
+- **Journal.** `corpusd retrieval op=embed_gap shape=stories|captures ms= rows= have= want= remaining= model=<12>` at the start of
+  a pass and at each batch of 4 (stories count versions); `op=vector_embed`, `vector_write`, and `op=vector_search
+  shape=vector_stories|vector_captures`. `scripts/status-vectors` reads them over ssh (have, want, remaining of each kind, and the
+  last hour's searches and mean ms); the acceptance is that line, not SQL on Node B. `remaining` is exact: `want` counts only captures that satisfy the one SQL
+  predicate and story versions that pass it (a capture that can never be eligible is in neither `have` nor `want`; an empty or
+  unembeddable capture is recorded as refused and held). Exceptions, both visible as `skipped` in the pass line: a capture whose text blob cannot be read at the
+  moment, and a version found not public when the pass reaches it. The story walk reads the publications in windows and their
+  version edges in one statement per 500 publications (not one query per publication); an idle pass skips even that (see 0.11.3).
+- **Search.** `Store.SearchVectors`: the nearest story passages (publication id, version id, ordinal, cosine score, day) and, for a
+  named owner and computer, the nearest captures; `since` inclusive and `until` exclusive by day. The query is embedded by the
+  Node B unit with the query prompt. No fusion. When the embedder is down, absent or the tables are not ready, the answer is an
+  empty result whose `Unavailable` says why and no error, so a caller (station V4) answers from BM25 alone and says so; a
+  caller that holds a vector can search without the embedder.
+- **How the index is filled in this landing: by the server's own worker, newest first** (stories newest publication and newest version first,
+  then captures newest first), one pass until its gap is closed. The import of the Mac's first-pass vectors (an operator route and a spool
+  inbox) is built on `lane/vec-inbox` and is **not landed**: its review kept finding defects in how a file that cannot be imported *now* is
+  retried, and the index does not depend on it. Rate: a pass works through the whole gap in batches of 4 with no wait between them (5 minutes when
+  nothing is left). Measured: the unit's 4 threads embed about 350 tokens a second on the build VM (§0.9; 127 to 349 under load there);
+  the Mac's passes averaged 285 tokens a story passage and 232 a capture lead (2,563 tokens/s over 9.0 rows/s; 2,669 over 11.5). Reasoned:
+  45,673 story passages is 13.0 million tokens, about 10 hours; 215,926 captures is 50.1 million tokens, about 40 hours; about **50 hours (two days)** in all at
+  350 tokens a second, 35 hours at 500, over five days at the loaded 127. Not measured on Node B (the unit runs at `CPUWeight` 10 beside the guests).
+- **The ranked answer** (station V4, `platform/capture_rank.go`; landed 2026-11-19 with the index): `SearchCaptures` with a
+  query calls `SearchVectors` once (4 times the answer size of each kind, under a 4 s deadline), keeps only the latest version of each
+  story, replaces a story by the captures its latest version cites (at most 8, `cites_capture` edges), and guarantees BM25's top three
+  pages a place at their BM25 rank. A window narrows the vector scan by day and each page again by its exact time; HNSW filters after
+  the scan, so a narrow window can return few rows (the journal's `vector=` is that count) and the answer is then mostly BM25's. When
+  the vectors are unavailable the answer is BM25's and `vector=unavailable`. Journal: `op=capture_search shape=ranked ... vector= bm25_kept=`.
+  query calls `SearchVectors` once (4 times the answer size of each kind), keeps only the latest version of each story (a story is
+  walked only through the version whose passage passed V2's eligibility predicate), replaces a story by the captures its latest version
+  cites (at most 8, `cites_capture` edges), and guarantees BM25's top three pages a place at their BM25 rank. A window narrows the
+  vector scan by day and each page again by its exact time, also a page reached through a story. **One deadline**: the vector half
+  has 4 s (`captureVectorDeadline`), and each SQL statement's timeout is nine tenths of what is left of it (V2's own 5 s applies only
+  to a caller with no deadline), so the two do not race and an exact read that passes it can still come back `partial`. The answer
+  says how the vector lists were answered: `vector_state=exact` (the true nearest of the filtered rows), `approximate` (the HNSW
+  index's answer on a list over 100,000 rows) or `partial` (an exact read hit the deadline); `vector=` stays the rows returned.
+  When the vectors are unavailable the answer is BM25's and `vector=unavailable vector_state=unavailable`.
+  Journal: `op=capture_search shape=ranked ... vector=<rows>|unavailable vector_state=exact|approximate|partial|unavailable bm25_kept=`.
+
+### 0.11.2 Primary sources for the server and pgvector (read 2026-11-19 from the pinned sources)
+
+llama.cpp b12259 (`351025ec5`), source tree at `/nix/store/i552x14p...-source` (the nix `src` of `nix/embedder.nix`; paths below are in the
+repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `README.md`, `src/hnswscan.c`).
+
+- **Request and response** (`/v1/embeddings`): route `tools/server/server.cpp:196` (`post_embeddings_oai`); handler
+  `tools/server/server-context.cpp:6785` (`handle_embeddings_impl`): `"input"` is a string or an array of strings, an empty array or an
+  empty tokenisation is a 400 (:6839-6849), `--embeddings` is required (:6786-6789) and pooling `none` is refused for this route
+  (:6792). The answer, `tools/server/server-common.cpp:1586-1616`, is `{"data": [{"embedding": [...floats], "index": i, "object":
+  "embedding"}, ...], ...}`; the embedding is a plain float array unless the request says `encoding_format: "base64"`. The client reads
+  `data[].index` and `data[].embedding` and places by index (`internal/embedder/embedder.go`).
+- **Normalisation:** `embd_normalize` defaults to 2 (euclidean), `common/common.h:639`, applied by the server (:6852-6857). corpusd cuts
+  to 256 and normalises again, so it does not depend on this.
+- **BOS and EOS:** the server tokenises with `add_special = true` and `parse_special = true` (`server-context.cpp:6823-6827`,
+  `tokenize_input_subprompt(..., true, true, ...)`), so the vocabulary's own BOS and EOS flags decide (the GGUF sets both, section 0.2).
+  **Consequence to watch:** `parse_special = true` means a passage that contains the literal text of a special token (for example
+  `<bos>`, `<eos>`, `<start_of_turn>`) is tokenised as that token, not as characters. It is rare in prose and the Mac's library path
+  may tokenise differently; the 0.999 sample check does not exercise it. Not changed (the first vectors exist); recorded here.
+- **Context per slot and an input that is too long: an error, not truncation.** Slots: `src/llama-context.cpp:429-432`
+  (`n_ctx_seq = n_ctx / n_seq_max`, padded to 256) unless the KV cache is unified (`common/common.h:594`, default false), so
+  `--ctx-size 4096 --parallel 2` is 2048 tokens a slot. An embedding task cannot be split (`can_split()` is false without a memory module,
+  `server-context.cpp:502-520`), so `server-context.cpp:4076-4098` applies: more tokens than `--ubatch-size` (2048) is
+  "input (N tokens) is too large to process. increase the physical batch size", and more than the slot's context is "input (N
+  tokens) is larger than the max context size ... skipping"; both are errors returned to the client (HTTP 500 / 400), the slot is
+  released, nothing is embedded. A passage over 2048 tokens (about 2,400 CJK runes can reach it) therefore fails loudly: the worker's
+  one-by-one retry logs `embed refused` and records the refusal (0.11.3). It is never silently truncated.
+- **Flags at b12259** (`common/arg.cpp`): `-t/--threads` :1487, `-c/--ctx-size` :1609, `-b/--batch-size` :1639, `-ub/--ubatch-size`
+  :1646, `--pooling` {none,mean,cls,last,rank} :2284, `-np/--parallel` :2515, `-m/--model` :3027, `--host` :3323, `--port` :3339,
+  `--embedding/--embeddings` :3506. `/health`: `tools/server/server.cpp:171`. All used flags exist. Not verified by a run: that the
+  `gemma-embedding2` model loads under these flags on x86 and the 503 while loading (first start on Node B).
+- **pgvector 0.8.7:** `halfvec`, `halfvec_cosine_ops` and HNSW (`sql/vector--0.8.7.sql`; built in the test overlay). Filtering is
+  applied after the index scan; iterative scans (`hnsw.iterative_scan` `strict_order`/`relaxed_order`) arrived in 0.8.0 and stop at
+  `hnsw.max_scan_tuples` (default 20,000) or `work_mem` x `hnsw.scan_mem_multiplier` (README "Filtering", "Iterative Index Scans",
+  `src/hnswscan.c:256-264`). pgvector gives **no signal** when a scan is cut. `strict_order` keeps the rows it returns in distance
+  order; it does not make them the nearest, because HNSW is approximate even unfiltered (recall depends on `hnsw.ef_search`; corpusd
+  uses 200). What corpusd's search guarantees, per list, and how it says so:
+  (1) **Exact** (`exact_scan` in the result): the filtered rows number at most 100,000 (`vectorExactMaxRows`, counted first with the
+  btree on scope and day), or the index came back short of the limit. The statement runs with index scans off, so the planner reads
+  the filtered rows and sorts by true distance: the true nearest of the rows the filter keeps. (2) **Approximate** (`approximate`):
+  more than 100,000 filtered rows (in practice an unwindowed search of the paper's captures or stories): the index's answer, ordered
+  by distance, approximate in which rows it found, and not rechecked when it fills the limit. (3) **`partial`**: set when the count, the exact read or the index read
+  passes the 5 s statement deadline (each under its own savepoint, so no statement of a search is a hard failure; an index read that passes the deadline
+  returns an empty list and says so); an exact read that fails leaves the index's list, which may lack nearer rows. A caller that needs to know has all three.
+  The code states its minimum, 0.8.0 (`vectorMinPgvector`), and the CI action requires it numerically.
+- **The planner and the ORDER BY.** The statements order by the bare distance (`ORDER BY v.embedding <=> $q LIMIT n`; ties are broken in
+  Go), which an HNSW index can serve; `TestVectorSearchStatementUsesTheHNSWIndex` shows the plan uses `idx_vc_hnsw` and `idx_vsp_hnsw`
+  once the alternatives to an ordered index scan are priced out. On a small or unanalysed table the planner may rightly prefer the scope's
+  btree and a sort (seen in the test before ANALYZE); the production plan is to be read with `EXPLAIN (ANALYZE)` on staging.
+- **Memory of the unit** (measured 2026-11-19 on the Mac, one short run): llama.cpp b12259 (`351025ec5`, the trial's source tree)
+  built CPU-only, `llama-embedding -m embeddinggemma-2-Q8_0.gguf -c 4096 -b 2048 -ub 2048 -np 2 --pooling mean -t 4`. A 2,007-token
+  input (the largest batch the unit accepts is 2,048): peak memory footprint 506 MB, maximum resident set 765 MB (the 310 MB model file is
+  mapped, file-backed, reclaimable); a 13-token input: 206 MB footprint, 555 MB resident. The embedding context has no KV cache, and the
+  compute buffer is sized once for the ubatch, so two slots do not double it. `MemoryMax = 1536M` is about twice the largest measured
+  footprint plus the mapped file. Not measured: x86 (the CPU backend's buffers are similar, not identical) and the server process's own
+  overhead (HTTP, tokeniser, a few tens of MB).
+- **The Web UI in the nix build.** `scripts/ui-assets.cmake` takes pre-built assets in `tools/ui/dist` first, then an npm build if
+  `LLAMA_BUILD_UI=ON`, then a download from a Hugging Face bucket; with none of them it fails (seen: a Mac build without network). The
+  nixpkgs derivation runs `npm run build` in `tools/ui` before cmake (`preConfigure`), which is why `npmDepsHash` is overridden; that this
+  produces `tools/ui/dist` at b12259 is read from the cmake script, not built (no x86 builder here).
+
+### 0.11.3 Operating the vector index (what an idle pass costs, refusals, the policy clause, rollback, backups)
+
+- **Idle cost.** A pass with nothing to embed reads: one publication row and three counts (the story mark: newest publication, live
+  publications, live versions, the newest live version's creation time, vector rows held), the refused counts, the captures' gap count (an anti-join of the 215,000 projected
+  captures against `vec_captures`), and the sweep (two `DELETE ... WHERE NOT <predicate>` statements; each row costs a few primary-key
+  lookups, and a story row one JSON parse). It does **not** walk the publications: the walk (one edge read per publication, 10,000 of
+  them) runs when the mark differs from the last complete walk's, and once after a restart. `TestVectorIdlePassReadsOneRowAndTwoCountsNotEveryPublication`
+  proves no edge read happens in an idle pass. The sweep and the gap count are not measured at production size; read
+  `corpusd retrieval op=vector_sweep shape=both ms=` on the first staging pass, every 5 minutes. If the sweep is too dear the search's own
+  predicate still keeps removed text from being returned, so the sweep can then run less often.
+- **What may become a durable state: one rule, in one place** (`embedInputs`, with `embedder.classifyStatus`). A refusal is recorded only
+  when the server **identifies the input** as the problem: its two too-large answers, "input (N tokens) is too large to process" and "input (N
+  tokens) is larger than the max context size" (0.11.2; `embedder.InputRefusedError`). Then the version's row (or the capture's) holds no
+  vector and the reason, so the version is whole in the table and out of the gap, the model is not asked again until the model changes (the row's
+  `model`), `refused=` counts it, and a search returns the version's other passages and never that one (BM25 still finds it). Every other failure
+  is not recorded and is retried: a status error of any code (a 500 without those words, a 503 while loading, a 429, a 404 from a mismatched
+  route) is the server's state, so the pass stops and backs off like a down embedder; a transport or decode failure of one input while the server is
+  healthy leaves that input out of this pass (one log line with its id; passes that do no other work are 5 minutes apart, so the volume is
+  at most one line per input per 5 minutes) and the older captures go on. The audit of every place a failure could become durable:
+  the refused row (only the identified refusal above); the "empty: no title and no text" row (a capture whose text was read and is empty: a
+  property of the data, not a failure); an unreadable text blob or unreadable metadata (skipped, retried every pass); a version whose manifest policy is not public, or with no
+  passages (skipped; walked again when the mark changes); the story idle mark (stored only after a walk with no error). **One function decides
+  what an embedder outcome may do** (`vector_outcome.go`, applied by `embedInputs` for every caller): the server names the input (its two too-large
+  answers) = `refused`, the only effect that may write anything permanent and only about that input; a status error that names no input, or health failing = `down`, nothing
+  durable, the caller stops and the same work is found next pass; one call failing in transport = `skip`, nothing written. The worker's story and capture writers get those three effects and none inspects an error type. (The import's file fates are on `lane/vec-inbox`.) The third too-long wording of the server ("request (N tokens) exceeds
+  the available context size", `server-context.cpp:4098-4102`, a splittable configuration) is not classified: the unit's configuration cannot produce it, and an
+  unrecognised wording degrades to retry, never to a durable refusal. The import's 32-row sample remains a pipeline check and not a per-row check (a design limit).
+- **No DDL on a request path.** Tables and plain indexes are created only when `to_regclass` finds them missing, by the worker and the
+  import; a search that finds no tables answers unavailable. The HNSW builds are `CONCURRENTLY` under advisory locks, with
+  `maintenance_work_mem` reset before the connection returns to the pool.
+- **The story access policy.** The Mac export and the write-time check read the manifest's `access_policy`; the read routes read the
+  `has_policy` object's `access_policy_json` (`service_publication_read.go:465`). The one SQL predicate now also refuses a version whose
+  policy object says its access is not public (visibility `public` and route empty or `public`); a missing, empty or malformed policy object adds
+  no constraint (read with `pg_input_is_valid` and a CASE, so malformed data cannot fail a search or a sweep). The manifest's policy
+  stays a Go check at write time, because it is not always in a database column.
+- **The extension is created when the roles unit runs after PostgreSQL restarts on the new package.** From the evaluated unit
+  (`nix eval` of `go-choir-b`): `postgresql.service` is `Type=notify` (ready when it accepts connections), `go-choir-postgresql-roles` is
+  `After` and `Requires` `postgresql.service`, `RemainAfterExit`, `restartIfChanged = true`, and its script text changes with this
+  work, so the switch restarts it, after PostgreSQL (`After=`), once the server accepts connections. That is why it runs in this deploy; a later restart of
+  PostgreSQL alone restarts it too only by systemd.unit(5) `Requires=` ("stopped (or restarted) if one of the other units is explicitly stopped (or restarted)"), which was
+  not tried here. A
+  `CREATE EXTENSION` that fails is logged and the unit goes on (the switch does not fail); corpusd reports it every five minutes
+  and `scripts/status-vectors` prints `pgvector MISSING or too old` when that is the newest line. `systemctl restart go-choir-postgresql-roles` repeats it.
+- **Pgvector below 0.8.0.** The worker's ensure step reads `extversion`; below the minimum it logs `corpusd vectors disabled: pgvector X is older
+  than the 0.8.0 ...`, the pass fails with that reason, and the search answers `unavailable` with it (a server that errors on
+  `hnsw.iterative_scan` is also taken as unavailable).
+- **The guest content digest.** `scripts/guest-content-digest` hashes the guest's inputs and the deploy refreshes every active
+  computer when it moves. `nix/embedder.nix` is now in its host-only exclusion, beside `postgresql.nix`. Two other things in this work move it
+  regardless: `flake.nix` (the dev shell's PostgreSQL with pgvector; `flake.nix` is a fixed input of the digest) and the Go in
+  `internal/platform` and `internal/embedder` (the guest binaries import `internal/platform`, so any non-test change there moves it). So this
+  deploy refreshes every active computer through the planned, marker-backed path, as any Go change in those packages does; the
+  embedder unit's later flag changes will not.
+- **Rollback.** Reverting V2 (the Go) alone is safe: the worker stops, the tables stay (unused), the search is gone. Reverting V1 (the
+  nix) after the tables exist is **not** safe in one deploy: the old server cannot load `vector.so`; opening an HNSW index (a `DROP`
+  of the table, or any scan) is expected to call the access method from it (not run), and the daily `pg_dump` of `graph` calls `halfvec_out` for every
+  vector and fails (`nix/node-b.nix:287`: a failed dump ends the backup run partial). Order: **deploy 1** carries the revert of
+  V2 plus a roles-unit step `DROP TABLE IF EXISTS vec_story_passages, vec_captures; DROP EXTENSION IF EXISTS vector` while the package
+  still has pgvector; **deploy 2** removes `extensions`, the embedder unit and the step. Between them no dump breaks (the tables are gone
+  after deploy 1). If both go out together PostgreSQL restarts without the plugin before the roles unit runs, the DROP fails (it is
+  non-fatal now), and the dump fails until pgvector is put back.
+- **A table of an earlier schema** (no `refused` column, a NOT NULL embedding) is migrated once by the ensure step after it reads the
+  catalog (`ADD COLUMN IF NOT EXISTS`, `DROP NOT NULL`); a second ensure alters nothing.
+- **Two conditions on the landing plan** (host first, V1; the Go after). (1) The deploy classifier's output must show the guest content digest
+  `same` before the switch is trusted to refresh no guest: if CI cannot compute the digest the state is `unknown` and every active computer is
+  refreshed (`deploy-impact-classify`, `mark_guest_boot_contract`); read it, do not assume it. (2) Landing 1 ships no corpusd that reports a
+  missing extension, so after the host deploy check it by hand: `psql -d graph -c '\dx'` must list `vector`. The vmctl and corpusd restart
+  windows (a guest's capture write is re-offered, below) happen in landing 1 as in any host deploy.
+- **Backups and restores.** From the first deploy the `graph` dump contains the extension and the vector tables; a restore needs a
+  PostgreSQL with pgvector 0.8 or later.
+- **A guest's capture write during the restart.** corpusd's guest-write gate asks vmctl who owns the caller (`authority.go:50-90`); while
+  vmctl or PostgreSQL is down the lookup fails and the refusal is the forbidden-style one. The guest's sink (`researchtools/capture_sink.go`)
+  does not retry: `poll_source.go:261-270` stops the batch on the error and leaves the batch's items out of the handled set, so the next
+  poll offers them again (feed items are not lost); `read.go:161-164` returns the error to the agent, which sees the failed Read. Nothing in the
+  guest drops a capture silently. (No change made.)
+
+### 0.11.4 What the Mac's pass found (the import itself is not landed)
+
+- **The Mac's embedder does not refuse an over-long input: it cuts it.** `LlamaEmbedder.swift` takes `toks.prefix(n_ctx)` (2,048 tokens), so a
+  row the unit would refuse as too large is embedded on the Mac from its first 2,048 tokens. Measured 2026-11-19 on the captures file (215,926 rows, the lead
+  passage; `llama-tokenize` of b12259 with the GGUF over the prompt `title: ... | text: ...` for the 1,656 rows that could possibly reach it: more than 2,400
+  runes, or mostly CJK scripts above 400 runes): **1 row is over 2,048 tokens (the longest, 2,110), 2 more are between 1,800 and 2,048**; every other row
+  is shorter by construction (a Latin or Cyrillic passage of 2,400 runes is about 1,200 tokens). The worker, which fills this landing's index, records its own
+  refusal for such a row.
+- The operator route (`POST /internal/platform/vectors/import`) and the spool inbox (`vector-import/inbox/`) that take the Mac's file are on
+  `lane/vec-inbox`, with their reference text; they are not in this landing.
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image

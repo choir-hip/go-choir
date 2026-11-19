@@ -38,7 +38,8 @@ if [ -z "${LAND_STAGE_DIR:-}" ]; then
   LAND_STAGE_DIR=$stage exec bash "$stage/land" "$@"
 fi
 SELF_DIR=$LAND_STAGE_DIR
-trap 'rm -rf "$LAND_STAGE_DIR"' EXIT
+LAND_LOCK=""  # set once this run holds the tree's lock (guards, below)
+trap 'rm -rf "$LAND_STAGE_DIR"; [ -z "$LAND_LOCK" ] || rm -rf "$LAND_LOCK"' EXIT
 VM=${LAND_VM:-choir-agents}
 PRIMARY=${LAND_PRIMARY:-/Users/wiz/Dev/go-choir}
 POLL=${LAND_POLL:-20}
@@ -141,6 +142,19 @@ gd=$(cd "$(git rev-parse --git-dir)" && pwd -P); cgd=$(cd "$(git rev-parse --git
 [ "$(pwd -P)" != "$(cd "$PRIMARY" 2>/dev/null && pwd -P)" ] || die "refusing to run in the primary checkout $PRIMARY"
 [ -z "$(git status --porcelain --untracked-files=normal)" ] || die "dirty tree; commit or remove: $(git status --short | head -5 | tr '\n' ' ')"
 ORIG=$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)
+# One landing per tree. A run identifies its train by this tree's HEAD, so a second
+# run here (or one left waiting in LAND_HOOK_AFTER_VERIFY) can push the other's
+# commits before their suites ran: docs/problems/two-landings-in-one-tree-pushed-an-unverified-train-2026-11-19.md.
+lockdir="$gd/land.lock"
+if ! mkdir "$lockdir" 2>/dev/null; then
+  opid=$(cat "$lockdir/pid" 2>/dev/null || true)
+  if [ -n "$opid" ] && kill -0 "$opid" 2>/dev/null; then
+    die "another scripts/land (pid $opid) holds this tree ($top); one landing per tree. It may be waiting in LAND_HOOK_AFTER_VERIFY. Stop that pid, or use another worktree."
+  fi
+  say "removing the lock of a landing that is gone (pid ${opid:-unknown})"
+  rm -rf "$lockdir"; mkdir "$lockdir" || die "cannot take the lock $lockdir"
+fi
+echo $$ > "$lockdir/pid"; LAND_LOCK=$lockdir
 # Default: the gates beside this script, so a train based on a main that lacks them still runs them.
 GATES=${LAND_GATES:-$SELF_DIR/gates}
 
@@ -355,8 +369,15 @@ verify() { # $1 = run suites (1/0)
 moves=0
 verify 1
 if [ "$NOPUSH" = 1 ]; then echo "land: --no-push: verified train at $(git rev-parse HEAD); HEAD is the train on a detached head (was $ORIG)"; exit 0; fi
+TRAIN_HEAD=$(git rev-parse HEAD)
+same_train() { [ "$(git rev-parse HEAD)" = "$TRAIN_HEAD" ] || die "this tree's HEAD is $(git rev-parse --short HEAD), not the train this run verified ($(git rev-parse --short "$TRAIN_HEAD")): something else moved the tree. Nothing pushed."; }
 while :; do
-  if [ -n "${LAND_HOOK_AFTER_VERIFY:-}" ]; then eval "$LAND_HOOK_AFTER_VERIFY"; fi
+  if [ -n "${LAND_HOOK_AFTER_VERIFY:-}" ]; then
+    say "running LAND_HOOK_AFTER_VERIFY (pid $$; the push waits for it)"
+    eval "$LAND_HOOK_AFTER_VERIFY"
+    say "LAND_HOOK_AFTER_VERIFY returned"
+  fi
+  same_train
   git fetch -q origin main || die "git fetch origin main failed before push"
   NEW=$(git rev-parse origin/main)
   [ "$NEW" != "$BASE" ] || break
@@ -367,7 +388,7 @@ while :; do
     files=$(git diff --name-only --diff-filter=U | tr '\n' ' '); git rebase --abort >/dev/null 2>&1
     die "rebase onto moved origin/main conflicted in: $files(nothing pushed)"
   fi
-  OLD=$BASE; BASE=$NEW
+  OLD=$BASE; BASE=$NEW; TRAIN_HEAD=$(git rev-parse HEAD)
   prev_all=$PKGS_ALL
   # What the moved commits (OLD..NEW) affect, seen through the rebased tree's graph.
   hit=""
@@ -385,6 +406,7 @@ while :; do
 done
 
 # ------------------------------------------------------------- push + report
+same_train
 git push origin HEAD:main || die "push to main was rejected (main moved at the last instant?). Nothing landed; run scripts/land again."
 short=$(git rev-parse --short=10 HEAD)
 git push -q origin ":refs/heads/lane/land-$short" 2>/dev/null || true

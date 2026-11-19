@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/yusefmosiah/go-choir/internal/apppackage"
+	"github.com/yusefmosiah/go-choir/internal/embedder"
 	"github.com/yusefmosiah/go-choir/internal/frontimportance"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
 	"github.com/yusefmosiah/go-choir/internal/keyescrow"
@@ -74,6 +75,12 @@ func main() {
 	// The published-piece search index is derived from Store B; build it
 	// beside the listener (a search before it is whole says capped).
 	go svc.WarmPublishedPieceIndex(context.Background())
+	// The vector index (docs/reference/EMBEDDINGGEMMA.md, "The server"): the
+	// embed worker derives the stories and captures without a vector and
+	// embeds them through the host's EmbeddingGemma 2 unit. Down is backed
+	// off and logged once.
+	store.SetEmbedder(embedder.NewClient(os.Getenv("CORPUSD_EMBEDDER_URL")))
+	svc.StartVectorWorker(context.Background())
 	// Front rows carry importance scores when the host scorer's file is
 	// present; absent or unreadable, the front list is unchanged.
 	svc.SetFrontImportancePath(cfg.FrontImportancePath)

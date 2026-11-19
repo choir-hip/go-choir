@@ -97,6 +97,8 @@ type Service struct {
 	graphStore         *PublicationGraphStore // graph-native dual-write target
 	// captureBodies reads cited captures' blocks at publish, to pin them.
 	captureBodies *CaptureBodyStore
+	// vecIdle is what the last complete vector story walk saw (vector_worker.go).
+	vecIdle vecIdleMark
 	// overlay supplies the live check overlay served beside a version.
 	overlayMu sync.RWMutex
 	overlay   CheckOverlayProvider

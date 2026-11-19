@@ -598,7 +598,7 @@ in
 {
   # PostgreSQL for the host data system (additive; wired to services at the
   # cutover). Rollback: remove this line.
-  imports = [ ./postgresql.nix ];
+  imports = [ ./postgresql.nix ./embedder.nix ];
 
   # Boot
   boot.loader.efi.canTouchEfiVariables = true;
@@ -1099,6 +1099,9 @@ in
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "CORPUSD_PORT=8086"
+        # The host embedder (nix/embedder.nix): the vector worker and search
+        # embed through it. Down is backed off and logged, never fatal.
+        "CORPUSD_EMBEDDER_URL=http://127.0.0.1:8090"
         # Related stories read switch (internal/platform/publication_related_story.go):
         # the walk reads the research desk's judged related_story pairs. On by
         # owner direction (2026-10-26: "Ofc I want it switched on"). Rollback
@@ -1754,15 +1757,6 @@ in
         "VM_SNAPSHOT_TYPE=diff"
         "VM_SNAPSHOT_DIFF_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
-        # store.event_table, the host half (F-c deploy 2,
-        # docs/archive/design/choir-event-table-f-c-2026-10-22.md 4.2): a named
-        # computer's guest writer may stamp its telemetry for choir_events;
-        # the owner's setting store.event_table must also be on. OFF while
-        # empty. ComputerIDs only (no class:test, no "*"): once a computer
-        # stamps, deploy 1 is its rollback floor. A computer reads the grant
-        # at its next cold boot. Rollback: the owner's setting off (live),
-        # then empty this list and deploy.
-        "CHOIR_EVENT_TABLE_COMPUTERS="
         # capsule package mirrors (station FP10,
         # docs/definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md):
         # point the named computers' L2 capsules at go-choir-pkgmirror for
