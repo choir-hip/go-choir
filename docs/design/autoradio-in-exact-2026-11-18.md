@@ -251,3 +251,39 @@ every shipped source including the app target, refuses an interface entry
 that takes an opaque payload, requires the interface to equal the voice
 list at the end, and carries a planted violation it must catch.
 
+
+## The pattern, as built (2026-11-19)
+
+The Paper page is the first page moved (`mobile/AutoradioLab/paper.ts`, carried onto lane `exact-x12` with the loop fix
+below). The reasons and the Exact rules behind each step are in
+[native-modules.md](../reference/exact/native-modules.md#moving-a-page-to-shared-logic-the-pattern); this is the recipe, in the
+order to do it. Work in a lane; `EXACT2=<lead's build tree>/mobile/.exact-src`; Bun is `~/.bun-1.4.2/bin/bun`.
+
+1. **Failure list first.** Write `<page>.test.ts` (bun: the source called with `globalThis.fetch` stubbed and a fake
+   `storage`, a real captured response in `mobile/fixtures/<page>/`) and `<page>.test.contract` (`answer fetch "<origin>" with
+   200 <one line>`, `fail fetch "<origin>"`, `expect state <resource>.<field> == ...`). Both fail now.
+2. **Files.** New: `<page>.ts` (the source), `<page>-model.ts` (pure data), `<page>-layout.ts` if the page lays out,
+   `<page>-types.contract` (the shapes the package used to own). Edit: `app.ts` (one line in `Sources`, and `grants` for every
+   origin and file it touches; `ORIGIN` is a constant in `app.ts` itself), `api.ts` (the one place requests are built),
+   `members-<page>.contract` (the resource line, positional arguments, `use Shape from "./<page>-types.contract"` in every
+   contract that read the shape). A page reads a TypeScript source as `resource x = name(a, b) as shape S else empty()`
+   with no `use name from "@choir/autoradio"`: a name the contract does not import is answered by `app.ts`.
+3. **Delete in the same change.** The name and shapes from `mobile/exact-package/interface/<page>.json` and its Swift
+   `handle(...)` in `exact-package/apple/AutoradioModule+<Page>.swift`; the Swift source files only that page used and their tests in
+   `AutoradioKit/Sources` and `Tests`; then `python3 -I mobile/scripts/gen-exact-interface.py` (rewrites `exact-package/exact.json`).
+   Grep every deleted type name across `mobile/` (Swift, `.contract`, JSON) and expect no hits. A Swift datum the page still
+   needs becomes one small package source passed in as an argument (Paper: `editionPicks`). In the commit message, name what
+   Swift used to receive from the page and no longer does (Paper dropped the offline-search source `paper-front`, listed
+   in the exact-x12 report).
+4. **Run it (web loop, no native build).** `mobile/scripts/sync-exact-package.sh`; `bun install` and then, in
+   `mobile/AutoradioLab`: `bun exact.mjs contract build app.contract --json --errors-only` (must print `[]`; about 14 s),
+   `bun exact.mjs test web` (about 25 s), `bun test`. `agent web` answers no canned fetch (only authored tests do): it shows
+   the page's offline or error state, which is also proof that `app.ts` is the one answering.
+5. **What the web loop cannot see.** The deck mounts a page only when the package says which page is on top, so on the web
+   the page's tree is empty; assert the resource, and look at the page on the simulator and Android (the lead's builds).
+6. **Commit** the page, its tests, the deletions and the `exact.json` regeneration together, and note the lane's own
+   Ring-Expedite reason.
+
+Carried on `exact-x12`: the loop fix (`MarkAt` and `TetraMarkFace` stage points through lists; the mark's plan code
+fell from 4.6 MB to 269 KB (measured, `agent web` build report); `contract build app.contract` measured 14.0, 14.4 and 14.4 s on 2026-11-19;
+screenshots through `agent web` at clock 0, 1300 and 4200 ms are byte-identical to main's old drawing) and the Paper page.
