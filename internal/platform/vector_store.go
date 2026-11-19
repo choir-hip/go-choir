@@ -112,9 +112,6 @@ type vectorState struct {
 	started     sync.Once
 	// remaining is the last pass's count of rows still without a vector.
 	remaining atomic.Int64
-	importMu  sync.Mutex
-	jobs      map[string]*VectorImportJob
-	lastJob   string
 }
 
 func (v *vectorState) kickChan() chan struct{} {

@@ -137,8 +137,6 @@ type VectorPassResult struct {
 	// are recorded (no vector, the reason) and are not retried until the model
 	// changes.
 	Refused int
-	// Imports are inbox files taken in this pass (one a pass).
-	Imports int
 	// Removed are vectors deleted because their text is no longer public.
 	Removed int
 	// StoryGap and CaptureGap are the counts without a vector at the start.
@@ -147,7 +145,7 @@ type VectorPassResult struct {
 
 // Worked says the pass embedded or removed something.
 func (r VectorPassResult) Worked() bool {
-	return r.StoryVersions+r.Captures+r.Removed+r.Refused+r.Imports > 0
+	return r.StoryVersions+r.Captures+r.Removed+r.Refused > 0
 }
 
 // ---- what the text of a vector is ----
@@ -568,16 +566,6 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 	}
 	if err := emb.Health(ctx); err != nil {
 		return res, fmt.Errorf("%w: %v", errEmbedderDown, err)
-	}
-	// A file waiting in the spool inbox is imported before the gap work, so the
-	// gap it leaves is what the worker then fills.
-	taken, ierr := s.ProcessVectorInbox(ctx)
-	if taken > 0 {
-		s.vecIdle = vecIdleMark{}
-		res.Imports += taken
-	}
-	if ierr != nil {
-		return res, ierr
 	}
 	model := embedder.ModelHash
 	started := time.Now()
@@ -1150,8 +1138,6 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 		return
 	}
 	s.store.vec.started.Do(func() {
-		s.removeStaleVectorSpool()
-		s.recoverVectorInbox()
 		go func() {
 			select {
 			case <-ctx.Done():
