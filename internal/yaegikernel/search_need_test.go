@@ -125,7 +125,7 @@ fmt.Println(len(s.Results))`)
 		t.Fatalf("the plain search must still be sent; host searches = %d", f.searchCalls.Load())
 	}
 	notes := strings.Join(out.Searches, "\n")
-	for _, want := range []string{"40 pages", "new to this run", "not read", "search again for what is still missing, naming it"} {
+	for _, want := range []string{"40 pages", "new to this run", "not tried to read", "search again for what is still missing, naming it"} {
 		if !strings.Contains(notes, want) {
 			t.Fatalf("notes lack %q:\n%s", want, notes)
 		}
