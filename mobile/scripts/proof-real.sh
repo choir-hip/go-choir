@@ -78,8 +78,14 @@ place notebook 900; view real-10c-notebook 4000
 step logs
 run_drive survey light "" --touch platform
 
-STORY1=$(ids "$SHOTS/drive-survey.txt" "paper-story-" | sed -n 1p)
-STORY2=$(ids "$SHOTS/drive-survey.txt" "paper-story-" | sed -n 2p)
+# The stories tapped must be ones the server can resolve (a live front page sometimes holds one that answers 502 "failed to resolve publication": that is the server's, not the app's).
+RESOLVABLE=""
+for id in $(ids "$SHOTS/drive-survey.txt" "paper-story-" | head -8); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://choir.news/api/platform/publications/resolve?route=${id#paper-story-}")
+  [ "$code" = 200 ] && RESOLVABLE="$RESOLVABLE $id"
+done
+STORY1=$(echo $RESOLVABLE | tr ' ' '\n' | sed -n 1p)
+STORY2=$(echo $RESOLVABLE | tr ' ' '\n' | sed -n 2p)
 PLAY1=$(ids "$SHOTS/drive-survey.txt" "paper-play-" | sed -n 1p)
 DOC1=$(ids "$SHOTS/drive-survey.txt" "textures-doc-" | sed -n 3p)
 # a document by its title: the id of the row whose card holds the title text (the tree lists the row, then its texts)
