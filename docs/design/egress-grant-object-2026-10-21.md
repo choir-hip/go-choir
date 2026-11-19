@@ -1,7 +1,8 @@
 # The egress grant object: one model for open egress and app-desk grants (NET-05)
 
-Status: design, green; the record and its rules are built unwired in
-`internal/egressgrant` (red, off). Date: 2026-10-21. Station:
+Status: design, green; the record and its rules were built unwired in
+`internal/egressgrant` (red, off); the code was removed in November 2026
+(never wired; `internal/appnet` with it) and stays in git history. Date: 2026-10-21. Station:
 [FP10 NET-05](../definitions/choir-launch-fp10-net-05-2026-10-21.md). Problem:
 [no grant object for open egress](../problems/no-grant-object-for-open-egress-2026-10-21.md).
 Builds on: the [grants design](engineering-network-grants-2026-10-10.md) §4.0a
