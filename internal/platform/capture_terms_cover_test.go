@@ -20,6 +20,8 @@ import (
 //       from without it;
 //   C5. the index is built in a way that blocks capture writes (not
 //       CONCURRENTLY, or inside a transaction);
+//   C7. the index is built on a table that was never vacuumed, so the scan
+//       still fetches every posting's heap page (no gain until a vacuum);
 //   C6. the two journal lines nest: the terms line contains the text search.
 
 const coverFixtureCaptures = 6000
@@ -46,7 +48,6 @@ func coverFixture(t *testing.T, store *Store) {
 	}
 	exec(fmt.Sprintf(`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, metadata, created_at, updated_at)
 		SELECT capture_id, 'choir.web_capture', 'o', 'c', 'v', 'h' || capture_id, '{}', fetched_at, fetched_at FROM proj_capture_index LIMIT %d`, coverFixtureCaptures))
-	exec(`VACUUM ANALYZE proj_capture_terms`)
 	store.retrievalState.captureIndexReady.Store(true)
 	store.retrievalState.captureIndexComplete.Store(true)
 }
@@ -121,11 +122,12 @@ func TestCaptureTermsCoverIndexIsBuiltByTheMigrationAndRepaired(t *testing.T) {
 func TestCaptureTermSearchReadsPostingsFromTheCoveringIndexAndAnswersTheSame(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	ctx := context.Background()
-	coverFixture(t, store)
-	if err := store.ensureCaptureTermsCoverIndex(ctx); err != nil {
+	// The state before the change: bulk-loaded rows, never vacuumed, no index.
+	if _, err := store.corpus().ExecContext(ctx, `DROP INDEX `+captureTermsCoverIdx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.corpus().ExecContext(ctx, `VACUUM ANALYZE proj_capture_terms`); err != nil {
+	coverFixture(t, store)
+	if err := store.ensureCaptureTermsCoverIndex(ctx); err != nil {
 		t.Fatal(err)
 	}
 	reqs := []CaptureSearchRequest{
