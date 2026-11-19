@@ -260,6 +260,43 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
     broken = false; await launch(m);
     expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));
   });
+  // (The rows "wipe:vectors" and "wiped" above model a wipe that FAILED at that point, not a process kill: a kill is the rows named for the marker, the native steps and the relaunch.)
+  test('round 3, 1: a native sign-out that fails or hangs does not leave the previous account\'s shared stores readable (the shared wipe starts regardless; the marker stays)', async () => {
+    W = newWorld('absent'); W.swift = true; const m = memFs(SEED);
+    m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real'))); m.files.set(PENDING_FILE, new TextEncoder().encode('1'));
+    resetSeam(); resetSettled(); bindNative({ ...phone(), later: async (r: { op: string }) => (r.op === 'signOut' ? { done: false } : phone().later(r)) } as never);
+    const r = await settleAccount(m.storage, undefined);
+    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]);                 // the shared stores are gone
+    expect(m.files.has(PENDING_FILE)).toBe(true); expect(m.files.has(STAMP_FILE)).toBe(true);   // and the retry is kept
+  });
+  test('round 3, 1b: the same for an account change whose native wipe fails: shared stores wiped, the old stamp stays', async () => {
+    W = newWorld('present', 'test-key-B-not-real'); const m = memFs(SEED);
+    m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real')));
+    resetSeam(); resetSettled(); bindNative({ ...phone(), later: async (r: { op: string }) => (r.op === 'wipe' ? { done: false } : phone().later(r)) } as never);
+    const r = await settleAccount(m.storage, undefined);
+    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-A-not-real'));
+  });
+  test('round 3, 2: a late native answer does not wipe a sign-in that completed inside the window (sign-out, and the launch\'s finish)', async () => {
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    const later = async (r: { op: string }) => (r.op === 'signOut' ? (await gate, { done: true }) : phone().later(r));
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const out = await accountSignOut({ demo: false }, m.storage, undefined, { available: true, later } as never, { deadlineMs: 20 });
+    expect(out.done).toBe(false);                                                      // the page was told; the native call is still out
+    // a new sign-in completed inside the window: the key is present (and the new account has written its own data)
+    release(); for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(dataLeft(m).length).toBe(SEED.length);                                      // the late done:true wiped nothing of the new account's
+    // the same for the launch's finish: key absent + marker, the native call hangs past the deadline, a sign-in lands, the late answer arrives
+    let release2: () => void = () => undefined; const gate2 = new Promise<void>((r) => { release2 = r; });
+    W = newWorld('absent'); const m2 = memFs(SEED); m2.files.set(PENDING_FILE, new TextEncoder().encode('1'));
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    const r = await settleAccount(m2.storage, undefined, nativeOf(async (q) => (q.op === 'signOut' ? (await gate2, { done: true }) : phone().later(q)), 20));
+    expect(r.failed).toContain('native');
+    for (const k of SEED) m2.files.set(k, new TextEncoder().encode('new'));             // the shared wipe already ran (round 3, 1); the new account writes afresh
+    W.key = 'present'; W.value = 'test-key-B-not-real';
+    release2(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
+    expect(dataLeft(m2).length).toBe(SEED.length);
+  });
   test('a native sign-out that outlives its deadline keeps its continuation and the marker (finding 4)', async () => {
     W = newWorld('present'); W.hang = true; const m = memFs(SEED);
     await launch(m); resetSettled();

@@ -163,15 +163,20 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
     if (action === 'adopt') { await mark(storage, STAMP_FILE, k.digest); return { action, failed: [] }; }
     if (action === 'finish') {
       const done = async (): Promise<void> => { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); };
-      if (!(await native.signOut(() => { void sharedWipeThen(storage, store, done); }))) return { action, failed: ['native'] };     // the marker and the stamp stay
-      const failed = await sharedWipeThen(storage, store, done);
+      // The late answer wipes only if the key is STILL absent (a sign-in that finished inside the window owns its fresh stores).
+      const nativeOk = await native.signOut(() => { void keyState().then((n) => { if (n.state === 'absent') void sharedWipeThen(storage, store, done); }); });
+      // The shared wipe does not wait on the native answer: the key is gone, so the previous account's shared stores must not stay readable because the native half failed or hung.
+      // Only the stamp and marker wait for both.
+      const failed = await sharedWipeThen(storage, store, nativeOk ? done : async () => undefined);
+      if (!nativeOk) failed.push('native');
       console.log(`account: finished an interrupted sign-out, ${failed.length} failed`);
       return { action, failed };
     }
     if (action === 'account-change') {
       const stamp2 = async (): Promise<void> => { await mark(storage, STAMP_FILE, k.digest); };
-      if (!(await native.wipe(() => { void sharedWipeThen(storage, store, stamp2); }))) return { action, failed: ['native'] };    // the old stamp stays: tried again next launch
-      const failed = await sharedWipeThen(storage, store, stamp2);
+      const nativeOk = await native.wipe(() => { void keyState().then((n) => { if (n.state === 'present' && n.digest === k.digest) void sharedWipeThen(storage, store, stamp2); }); });
+      const failed = await sharedWipeThen(storage, store, nativeOk ? stamp2 : async () => undefined);       // shared stores go regardless; the old stamp stays unless both succeeded
+      if (!nativeOk) failed.push('native');
       console.log(`account: another account signed in, ${failed.length} failed`);
       return { action, failed };
     }
@@ -203,6 +208,7 @@ export async function accountSignOut(
   // A native call that outlives the deadline keeps its continuation: if it answers done:true later, the shared stores are wiped then and the marker goes.
   nativeDone.then(async (r) => {
     if (!late || !r || (r as { done?: unknown }).done !== true) return;
+    if ((await keyState()).state === 'present') return;                          // a sign-in finished inside the window: its stores are its own
     await sharedWipeThen(storage, store, async () => { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); });
   }, () => undefined);
   const r = await Promise.race([nativeDone.then((x) => x, () => ({ done: false, threw: true })), timeout(opts.deadlineMs ?? NATIVE_DEADLINE_MS)]);
@@ -225,10 +231,9 @@ export async function accountSignOut(
 }
 
 let settled: Promise<Reconciled> | null = null;
-let lastReconciled: Reconciled = { action: 'nothing', failed: [] };
 /** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops. */
 export function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
-  if (!settled) settled = (async () => { await forgetOldCopy(storage); lastReconciled = await reconcile(storage, store, native); return lastReconciled; })();
+  if (!settled) settled = (async () => { await forgetOldCopy(storage); return reconcile(storage, store, native); })();
   return settled;
 }
 /** For tests. */

@@ -284,8 +284,10 @@ What the first launch does on the owner's phone (a key, old Swift stores, no sta
 of the key) under `app:/data` and nothing else. Nothing is wiped; the Keychain item is only read. A locked Keychain (before the first unlock) is `unreadable`: nothing happens.
 
 `redirect: 'manual'` (api.ts): the pin's reference (Exact checkout `docs/reference.md`, the `fetch` row, line 2084) says `redirect` is Fetch's: `follow`, `error`, or `manual`,
-which "answers with the 3xx itself" natively; an older prelude would follow, which is why it moves `typescriptRuntime` to 2 (this app is built against a newer one). So a 302 reaches
-`check()` as a status in 300..399 and is refused; the key is not sent on. Not run against a redirecting server on the simulator.
+which "answers with the 3xx itself" natively. `typescriptRuntime` is NOT a key of this app's `app.json`: the build computes it from the module's own source and grants
+(`exact_bake::compat::typescript_runtime_of`, `js/bake/src/lib.rs:1278`) and bakes it into the compatibility id, so a module that names `redirect` is built for a runtime that has it
+(the reference says the field moves the number to 2). A 302 therefore reaches `check()` as a status in 300..399 and is refused; the key is not sent on. Not run against a
+redirecting server on the simulator.
 
 Residuals: a launch-time partial wipe is logged and retried, but the page is told only for a sign-out (the launch result is not bound to a screen); the table is a model of the phone
 (memFs and a fake module), the real Keychain and Swift wipe were not driven; the signed-in drill through the queue `real` is not written yet (step E).

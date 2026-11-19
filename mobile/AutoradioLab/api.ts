@@ -299,12 +299,6 @@ export async function keyState(): Promise<{ state: KeyState; digest: string }> {
   } catch { return none; }
 }
 
-/** The digest of the stored key, or null when there is none or demo mode is on. For the account stamp (account.ts); never the key itself. */
-export async function sessionDigest(): Promise<string | null> {
-  if (demoOn) return null;
-  try { const s = await keptSession(); return s ? await digestOf(s.key) : null; } catch { return null; }
-}
-
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: leave demo mode and the generation as a fresh process has them. */
