@@ -6,8 +6,8 @@ members Autoradio
   // The Swift page when it answers (iOS); while it is the empty "loading" (or substituted: Android), the shared twin (notebook.ts, a read of the computer's notebook and scorecard through the
   // signed-in seam). Selecting a line and the steer taps stay native (notebookDo): the shared page is read only.
   resource nbn = notebookPage() as shape NotebookPageInfo else empty()
-  resource nbs = notebookPageShared("", 0) as shape NotebookPageInfo else empty()
-  derive nb = (nbn.docState == "loading" and nbn.scoreState == "loading") ? nbs : nbn
+  resource nbs = notebookPageShared("", 0, pgn.top == "") as shape NotebookPageInfo else empty()
+  derive nb = pgn.top == "" ? nbs : nbn
   mutation nbm as shape NotebookPageInfo
 
   // refresh | select (arg is a line id; the same again clears it)
