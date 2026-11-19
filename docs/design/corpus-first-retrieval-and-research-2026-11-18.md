@@ -51,7 +51,14 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 
 **Passages are the key.** `lane/capture-fulltext-2` holds one SQLite FTS5 file per computer, owned by corpusd. Passages are about 300 tokens, and their ids are never reused (C, `CAPTURE-FULLTEXT.md` §2, §5). A vector is stored against (scope, passage id). Liveness always comes from the `passages` table, so a vector of a deleted page is never returned.
 
-**Where vectors live: a flat file per scope, beside the FTS file.**
+**Amended 2026-11-19 (owner's rulings R2 and R3 in
+[the night's goal file](../definitions/choir-night-exact-vectors-learning-2026-11-19.md)).**
+- Vectors live in **pgvector**, in corpusd's Postgres (owner: "we need to get vectors in pgvector, using embeddinggemma2"). The flat file below and "Not pgvector now" are withdrawn; they stay as the record of what was weighed.
+- The unit is **every passage of every published story version, and one vector per public captured page** (its title and lead passage), not every passage of every page. That is about 61,000 story passages and 215,000 page vectors at 256 dimensions and half precision, about 140 MB, which removes the size objection to Postgres. A story hit walks to the pages the story cites. One vector per page is the lead's proposal; the owner asked and has not ruled.
+- Still true from below: HNSW filters a window after the search, so a windowed search over-asks and falls back to an exact scan of the window; the embedder refuses no request and counts none; the work list is derived; the ranking is vector order with BM25's top three kept.
+- The first pass is made on the Mac (owner: "yes, you can use the mac for embeddings") from public text only.
+
+**Where vectors live (18 November; withdrawn, see above): a flat file per scope, beside the FTS file.**
 - Each record is the passage id, a day number, 256 int8 values and a scale, about 272 bytes.
 - The file is append-only and memory-mapped, so it sits in the page cache, not corpusd's heap.
 - Search is a brute-force scan. A time window is a range of the file: passage ids rise with indexing time; for pages indexed by the catch-up, the day field filters.
@@ -59,7 +66,7 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 - Speed (A: about 1 G int8 multiply-adds a second in Go on one core): a full scan at 250,000 pages takes about 0.25 s; a 7-day window about 30 ms.
 - Dimension: 256 int8 only. It costs one point of recall@10 (0.918 against 0.927, M). If the model changes, everything is re-embedded; the model's hash is in the file header.
 
-**Not pgvector now.** It would put a derived index into the 4 GiB-capped Postgres, its WAL and the restore set. It has no int8 type (A: halfvec and bit only; check). Window filtering with HNSW is post-filtering. Revisit when either holds: unwindowed p95 above 400 ms, or more than 4 M passages. Either is a measured trigger, not a date.
+**Not pgvector now (withdrawn 2026-11-19, see above).** It would put a derived index into the 4 GiB-capped Postgres, its WAL and the restore set. It has no int8 type (A: halfvec and bit only; check). Window filtering with HNSW is post-filtering. Revisit when either holds: unwindowed p95 above 400 ms, or more than 4 M passages. Either is a measured trigger, not a date.
 
 **The embedder is a host service.**
 - One `llama-server --embedding` process with the official Q8_0 GGUF, as a systemd unit on Node B. It is stateless, with 4 threads and a low CPU weight, so guests win under contention.
@@ -205,7 +212,7 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 | S13 | Remove the title half and the term table's search role | S5, a week of S6 | orange | `by_labels_only` stays near zero for a week | revert | `proj_capture_terms` search |
 
 **Not built yet:**
-- pgvector and HNSW, until the latency trigger above;
+- pgvector and HNSW were listed here until 2026-11-19; they are now stations V1 and V2 of the night's goal file;
 - event wakes;
 - a cross-encoder re-ranker;
 - measuring fact overlap by model;
@@ -218,7 +225,7 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 | Decision | Default |
 |---|---|
 | Captured text to the Mac for the first pass | Yes, for public captures only (owner-private captures are excluded at export). Vectors return; the text copy is deleted after import. If no: Node B and Node A, about 27 h for leads. |
-| pgvector or files | Files now, with the trigger above. |
+| pgvector or files | pgvector (owner, 2026-11-19). Was: files now, with the trigger above. |
 | Gemma licence | Apache 2.0 plus the Prohibited Use Policy. Our use (retrieval over news) is within it. Read the linked licence text before S4 lands, since the link names a `gemma_4_license` page. |
 | Revise-or-new threshold | Same primary event and revised within 72 h, or Jev "same/update" at p 0.8 or more. |
 | Money | Nothing in this plan spends any. Buying more search credits is a separate decision. |

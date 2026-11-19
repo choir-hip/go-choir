@@ -22,7 +22,8 @@ Goal:
 Track X is the cutover below, which keeps its stations. Track V is the
 corpus-first retrieval design with pgvector, stories first and one vector a
 captured page. Track L reads the traces of every recurring failure and
-restarts the calibration experiment. State at 2026-11-19T05:40Z: the corpus
+redesigns and starts the calibration experiment (built on 4 November, never
+started). State at 2026-11-19T05:40Z: the corpus
 brief is on main (`bfa898f8d`), the faster corpus search is landing, no
 vector exists on the server, and the Exact move stands where it stood on the
 morning of the 18th.

@@ -290,16 +290,6 @@ decisions_for_the_owner:
   why: Exact has no PDF text reader, and the phone is an interface into the listener's computer, which can read any file
   options: the listener's computer reads it and the phone asks for the text; a JavaScript PDF library in shared code; keep one native call per platform
   default: the listener's computer reads it; the native PDF code is deleted. A PDF opened with no connection waits for one
-- id: D5
-  question: Do the lab pages (the voice lab, the motion gallery) leave the product app?
-  why: they are part of what makes the pages slow to compile and they ship to listeners
-  options: a second small app in the repo that imports the same components; delete them; keep them
-  default: a second app; the product app has no lab pages
-- id: D6
-  question: If the Tetramark cannot be made cheap to compile as pure page math, may its form change?
-  why: it is 50 of the compiler's 66 seconds today
-  options: any form that looks the same on iPhone, Android and web; keep pure page math and accept the cost
-  default: any form that looks the same; the look is held fixed by screenshots
 - id: D7
   question: What is the first Android voice?
   why: the old test phone cannot run on-device models and may not be reachable at all
