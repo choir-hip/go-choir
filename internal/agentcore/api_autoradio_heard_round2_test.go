@@ -177,10 +177,17 @@ func TestR4_TheDayIsTheListenersDay(t *testing.T) {
 		t.Errorf("(R4) line %q, want prefix %q (UTC date %s)", got, want, at.UTC().Format("2006-01-02"))
 	}
 
-	// No zone: no date, only how many days ago.
+	// No zone: no date, only how many days ago, counted by UTC dates. The
+	// seeds are placed by UTC date (noon, three and two days back), not by
+	// hours before now: 49 hours ago is three UTC dates back during the first
+	// hour of the UTC day, and this test failed in CI at 00:08Z for that.
+	utcNoon := func(daysBack int) time.Time {
+		n := time.Now().UTC()
+		return time.Date(n.Year(), n.Month(), n.Day()-daysBack, 12, 0, 0, 0, time.UTC)
+	}
 	rt2, fake2 := radioRuntime(t, oneStory())
-	seedHeard(t, rt2, heardSeed{stretch: "st-1", route: "harbour-1", version: 1, title: "Harbour reopens", text: "The harbour reopened.", at: time.Now().Add(-72 * time.Hour)})
-	seedHeard(t, rt2, heardSeed{stretch: "st-2", route: "quarry-9", version: 1, title: "Quarry fire", text: "A fire was put out.", at: time.Now().Add(-49 * time.Hour)})
+	seedHeard(t, rt2, heardSeed{stretch: "st-1", route: "harbour-1", version: 1, title: "Harbour reopens", text: "The harbour reopened.", at: utcNoon(3)})
+	seedHeard(t, rt2, heardSeed{stretch: "st-2", route: "quarry-9", version: 1, title: "Quarry fire", text: "A fire was put out.", at: utcNoon(2)})
 	in2 := djInput(t, rt2, fake2, func(m map[string]any) { delete(m, "tz"); delete(m, "local_time") })
 	got := heardLine(in2, "pub:harbour-1@v1")
 	if !strings.HasPrefix(got, "heard: at this version (v1) 3 days ago.") {

@@ -159,7 +159,9 @@ def main():
     ap.add_argument("--report", action="store_true")
     args = ap.parse_args()
     root = os.path.abspath(args.root)
-    today = parse_date(args.today) if args.today else datetime.date.today()
+    # The UTC date, so a run on a developer's machine west of Greenwich and
+    # the CI run of the same minute agree about which dates have passed.
+    today = parse_date(args.today) if args.today else datetime.datetime.now(datetime.timezone.utc).date()
 
     errors, warnings = [], []
     reg_text = read(os.path.join(root, "switches/registry.yaml"))

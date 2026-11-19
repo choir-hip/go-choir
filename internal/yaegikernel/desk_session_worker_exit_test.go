@@ -68,7 +68,12 @@ for {
 func TestDeskSessionWorkerSelfExitRecordsItsOwnCause(t *testing.T) {
 	skipWithoutSocketpair(t)
 	cfg := deskWorkerConfig(t)
-	cfg.ExtraEnv = append(cfg.ExtraEnv, "CHOIR_DESK_WORKER_CHILD_CRASH_AFTER=200ms")
+	// The helper's crash timer starts when the worker process starts, not
+	// when it is ready. At 200ms a loaded CI runner crashed the worker before
+	// its ready frame (run 44426306206: "spawn: desk session worker ready:
+	// frame: read header: EOF"), so the spawn failed instead of the cell.
+	// Three seconds leaves the spawn its time; the cell below sleeps ten.
+	cfg.ExtraEnv = append(cfg.ExtraEnv, "CHOIR_DESK_WORKER_CHILD_CRASH_AFTER=3s")
 	w, err := SpawnDeskSessionWorker(cfg)
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
