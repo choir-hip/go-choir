@@ -45,8 +45,10 @@ body: |
     stories it found. A published story carries no date there: Read its
     read_url to see how current it is. A held page is not necessarily current.
     A field marked [cut] was shortened: read the page with choir.ReadCapture
-    before you quote it. A brief that says a search was not run, or ran in
-    part, is no evidence that nothing is held. Search the corpus yourself with
+    before you quote it. A brief that found nothing says what the host's
+    search covered, and that is not proof that nothing is held: for a thread it
+    found nothing on, make one corpus search in your own words before the web
+    (the brief searched the thread's own text). Search the corpus yourself with
     choir.SearchWireCorpus(query, 10) for what the brief lacks or says it left
     out; a brief that failed says so. A capture is citable by its capture_id:
     read its blocks with choir.ReadCapture and quote them. In your first
