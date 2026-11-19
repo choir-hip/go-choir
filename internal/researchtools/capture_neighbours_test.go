@@ -20,7 +20,7 @@ func TestCorpusdSinkAsksNeighboursInOneRequest(t *testing.T) {
 			t.Errorf("%s %s", r.Method, r.URL.Path)
 		}
 		_ = json.NewDecoder(r.Body).Decode(&got)
-		_, _ = w.Write([]byte(`{"neighbours":{"c1":[{"capture_id":"c9","score":0.8}]},"missing":["c2"],"state":"exact"}`))
+		_, _ = w.Write([]byte(`{"neighbours":{"c1":[{"capture_id":"c9","score":0.8}]},"unembedded":1,"excluded":2,"cut":3,"state":"exact"}`))
 	}))
 	defer srv.Close()
 	sink := NewCorpusdCaptureSink(srv.URL)
@@ -32,7 +32,7 @@ func TestCorpusdSinkAsksNeighboursInOneRequest(t *testing.T) {
 	if got.OwnerID != "o" || got.ComputerID != "c" || len(got.CaptureIDs) != 2 || got.Since != "2026-11-05" || got.Limit != 12 {
 		t.Fatalf("request = %+v", got)
 	}
-	if len(ans.Neighbours["c1"]) != 1 || ans.Neighbours["c1"][0].CaptureID != "c9" || len(ans.Missing) != 1 || ans.State != "exact" {
+	if len(ans.Neighbours["c1"]) != 1 || ans.Neighbours["c1"][0].CaptureID != "c9" || ans.Unembedded != 1 || ans.Excluded != 2 || ans.Cut != 3 || ans.State != "exact" {
 		t.Fatalf("answer = %+v", ans)
 	}
 	if _, err := NewCorpusdCaptureSink("").CaptureNeighbours(context.Background(), CaptureNeighboursQuery{}); err == nil {

@@ -27,7 +27,9 @@ type CaptureNeighbour struct {
 // CaptureNeighboursAnswer mirrors platform.CaptureNeighboursResponse.
 type CaptureNeighboursAnswer struct {
 	Neighbours  map[string][]CaptureNeighbour `json:"neighbours"`
-	Missing     []string                      `json:"missing,omitempty"`
+	Unembedded  int                           `json:"unembedded"`
+	Excluded    int                           `json:"excluded"`
+	Cut         int                           `json:"cut"`
 	Unavailable string                        `json:"unavailable,omitempty"`
 	State       string                        `json:"state,omitempty"`
 }

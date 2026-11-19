@@ -20,6 +20,7 @@ package platform
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -103,12 +104,12 @@ func TestCaptureNeighboursNearestFirstScopedWindowedAndEligible(t *testing.T) {
 	}
 	// N4: a private capture's own id is not answered.
 	res, err = f.store.CaptureNeighbours(context.Background(), CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: []string{id("private"), id("gone")}})
-	if err != nil || len(res.Neighbours) != 0 || len(res.Missing) != 2 {
+	if err != nil || len(res.Neighbours) != 0 || res.Excluded != 2 || res.Unembedded != 0 {
 		t.Fatalf("private ids answered: %+v %v", res, err)
 	}
 	// N2: another computer's capture id named under this scope is not answered.
 	res, err = f.store.CaptureNeighbours(context.Background(), CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: []string{mustCaptureID(t, "o1", "elsewhere")}})
-	if err != nil || len(res.Neighbours) != 0 || len(res.Missing) != 1 {
+	if err != nil || len(res.Neighbours) != 0 || res.Excluded != 1 || res.Unembedded != 0 {
 		t.Fatalf("another computer's id answered: %+v %v", res, err)
 	}
 }
@@ -130,8 +131,8 @@ func TestCaptureNeighboursNeedNoEmbedderAndListWhatIsNotEmbeddedYetAsMissing(t *
 	if got := neighbourIDs(res.Neighbours[mustCaptureID(t, "o1", "a")]); len(got) != 1 || got[0] != mustCaptureID(t, "o1", "b") {
 		t.Fatalf("neighbours of a: %v", got)
 	}
-	if len(res.Missing) != 1 || res.Missing[0] != late.CanonicalID || res.State != "exact" {
-		t.Fatalf("missing %v state %q", res.Missing, res.State)
+	if res.Unembedded != 1 || res.Excluded != 0 || res.Cut != 0 || res.State != "exact" {
+		t.Fatalf("unembedded %d excluded %d cut %d state %q", res.Unembedded, res.Excluded, res.Cut, res.State)
 	}
 }
 
@@ -202,13 +203,76 @@ func TestCaptureNeighboursJournalLineNamesTheCountsAndNoCaptureId(t *testing.T) 
 		t.Fatal(err)
 	}
 	out := buf.String()
-	for _, want := range []string{"op=vector_neighbours", "shape=captures", "rows=1", "ids=2", "missing=1", "state=exact"} {
+	for _, want := range []string{"op=vector_neighbours", "shape=captures", "rows=1", "ids=2", "unembedded=0", "excluded=1", "cut=0", "state=exact"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("journal lacks %q:\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, "choir.web_capture") {
 		t.Fatalf("the journal line names a capture:\n%s", out)
+	}
+}
+
+// N9 the state is told: approximate when the index answers a large list, and
+// the answer is the exact one when the list came back short; exact when the
+// eligible rows are few even if many ineligible vectors share the scope (the
+// count uses the same predicate as the query).
+func TestCaptureNeighboursStateApproximateAndTheCountUsesTheEligibilityPredicate(t *testing.T) {
+	f := newVecFixture(t)
+	now := time.Now().UTC()
+	ids := f.captures(t, "o1", "c1", "s", 12, now.Add(-48*time.Hour), func(i int) string { return fmt.Sprintf("alpha common words number%d", i%3) }, time.Minute)
+	f.pass(t)
+	req := CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: ids[:2], Limit: 5}
+
+	old := vectorExactMaxRows
+	vectorExactMaxRows = 3
+	t.Cleanup(func() { vectorExactMaxRows = old })
+	res, err := f.store.CaptureNeighbours(context.Background(), req)
+	if err != nil || res.State != "approximate" || len(res.Neighbours[ids[0]]) != 5 {
+		t.Fatalf("large list: state %q, %d neighbours, %v", res.State, len(res.Neighbours[ids[0]]), err)
+	}
+	// Nine of the twelve stop being eligible: three eligible rows are an
+	// exact list, though twelve vectors are in the scope.
+	for _, id := range ids[3:] {
+		if _, err := f.store.corpus().Exec(`UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = ?`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err = f.store.CaptureNeighbours(context.Background(), req)
+	if err != nil || res.State != "exact" || len(res.Neighbours[ids[0]]) != 2 {
+		t.Fatalf("ineligible vectors counted: state %q, %d neighbours, %v", res.State, len(res.Neighbours[ids[0]]), err)
+	}
+}
+
+// N10 a deadline cut is partial, and the captures it did not reach are cut,
+// neither unembedded nor excluded.
+func TestCaptureNeighboursDeadlineCutIsPartialNotMissing(t *testing.T) {
+	f := newVecFixture(t)
+	ids := f.captures(t, "o1", "c1", "p", 6, time.Now().UTC().Add(-48*time.Hour), func(i int) string { return fmt.Sprintf("alpha common words number%d", i) }, time.Minute)
+	f.pass(t)
+	old := vectorSearchTxHook
+	vectorSearchTxHook = func(ctx context.Context, tx *sql.Tx) error { time.Sleep(400 * time.Millisecond); return ctx.Err() }
+	t.Cleanup(func() { vectorSearchTxHook = old })
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	res, err := f.store.CaptureNeighbours(ctx, CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: ids})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.State != "partial" || res.Cut != len(ids) || res.Unembedded != 0 || res.Excluded != 0 || len(res.Neighbours) != 0 {
+		t.Fatalf("%+v", res)
+	}
+}
+
+// N11 vectors that are not ready say so without the database's words.
+func TestCaptureNeighboursTablesNotReadyDoesNotEchoTheDatabaseError(t *testing.T) {
+	f := newVecFixture(t)
+	f.store.vec.ready.Store(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // the ensure step fails with a database-side error text
+	res, err := f.store.CaptureNeighbours(ctx, CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: []string{"choir.web_capture:x"}})
+	if err != nil || res.Unavailable != "the vector tables are not ready" {
+		t.Fatalf("%+v %v", res, err)
 	}
 }
 
@@ -247,5 +311,18 @@ func TestCaptureNeighboursRouteAnswersABoundGuestForItsOwnScopeOnly(t *testing.T
 	}
 	if rec := post("10.200.1.2", CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", Since: "not a day", CaptureIDs: req.CaptureIDs}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad since: %d", rec.Code)
+	}
+}
+
+// More named captures than one statement takes are answered in groups of the
+// same request.
+func TestCaptureNeighboursPastOneGroupAreStillOneRequest(t *testing.T) {
+	f := newVecFixture(t)
+	n := captureNeighboursGroup + 20
+	ids := f.captures(t, "o1", "c1", "g", n, time.Now().UTC().Add(-48*time.Hour), func(i int) string { return fmt.Sprintf("alpha common words number%d", i%7) }, time.Second)
+	f.pass(t)
+	res, err := f.store.CaptureNeighbours(context.Background(), CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: ids, Limit: 3})
+	if err != nil || len(res.Neighbours) != n || res.Cut != 0 || res.State != "exact" {
+		t.Fatalf("answered %d of %d, cut %d, state %q: %v", len(res.Neighbours), n, res.Cut, res.State, err)
 	}
 }
