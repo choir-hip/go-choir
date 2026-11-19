@@ -103,7 +103,9 @@ var vectorPlainIndexes = []struct{ name, ddl string }{
 type vectorState struct {
 	mu       sync.RWMutex
 	embedder embedder.Embedder
-	ready    atomic.Bool
+	// queryEmbedder, when not nil, embeds search queries and nothing else.
+	queryEmbedder embedder.Embedder
+	ready         atomic.Bool
 	// unsupported is why the installed pgvector is too old ("" when it is
 	// not); set by ensureVectorTables, read by the search.
 	unsupported atomic.Value
@@ -131,11 +133,40 @@ func (v *vectorState) kickChan() chan struct{} {
 	return v.kick
 }
 
-// SetEmbedder names the embedder the worker, the search and the import use.
+// SetEmbedder names the embedder the worker and the import use for documents.
+// It also serves search queries when no query embedder is set
+// (SetQueryEmbedder).
 func (s *Store) SetEmbedder(e embedder.Embedder) {
 	s.vec.mu.Lock()
 	s.vec.embedder = e
 	s.vec.mu.Unlock()
+}
+
+// SetQueryEmbedder names the embedder that embeds the text of a search query
+// (nix/embedder.nix, the second unit). The worker, the import's sample and
+// every other document embed keep using the embedder SetEmbedder names. With
+// none set, queries go to that one embedder (tests, a developer's machine).
+//
+// A query never falls back to the bulk embedder when this one is down or
+// slow: the vector half is then unavailable, as for any embedder that cannot
+// answer. A fallback would put the query behind the worker's passages in the
+// bulk unit's slots again, which is the defect this exists to remove
+// (docs/problems/search-waits-four-seconds-behind-the-embed-worker-2026-11-19.md).
+func (s *Store) SetQueryEmbedder(e embedder.Embedder) {
+	s.vec.mu.Lock()
+	s.vec.queryEmbedder = e
+	s.vec.mu.Unlock()
+}
+
+// searchEmbedder is the embedder for a search query: the query embedder when
+// one is set, else the one embedder.
+func (s *Store) searchEmbedder() embedder.Embedder {
+	s.vec.mu.RLock()
+	defer s.vec.mu.RUnlock()
+	if s.vec.queryEmbedder != nil {
+		return s.vec.queryEmbedder
+	}
+	return s.vec.embedder
 }
 
 func (s *Store) embedder() embedder.Embedder {

@@ -167,7 +167,12 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 	}
 	q := req.Vector
 	if q == nil {
-		emb := s.embedder()
+		// The query embedder when one is set (never the bulk one in that
+		// case, even when it is down: see SetQueryEmbedder). A query longer
+		// than the unit's slot is refused by the server (embedder.
+		// InputRefusedError); like any other failure it is "unavailable", not
+		// an error to the caller.
+		emb := s.searchEmbedder()
 		if emb == nil {
 			res.Unavailable = "no embedder is configured"
 			return res, nil

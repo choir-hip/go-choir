@@ -14,6 +14,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -80,6 +81,17 @@ func main() {
 	// embeds them through the host's EmbeddingGemma 2 unit. Down is backed
 	// off and logged once.
 	store.SetEmbedder(embedder.NewClient(os.Getenv("CORPUSD_EMBEDDER_URL")))
+	// Search queries go to the host's second unit (nix/embedder.nix, port
+	// 8091) so a query never waits in the bulk unit's slots behind the
+	// worker's passages. Unset: the one embedder serves both.
+	if u := strings.TrimSpace(os.Getenv("CORPUSD_EMBEDDER_QUERY_URL")); u != "" {
+		store.SetQueryEmbedder(embedder.NewClient(u))
+		log.Printf("corpusd embedder: a query embedder is set; search queries embed on it, not on the bulk embedder")
+	} else {
+		// A host that lost the variable is visible in the journal: its
+		// queries wait behind the embed worker again.
+		log.Printf("corpusd embedder: no query embedder (CORPUSD_EMBEDDER_QUERY_URL empty); search queries embed on the one embedder, behind the worker")
+	}
 	svc.StartVectorWorker(context.Background())
 	// Front rows carry importance scores when the host scorer's file is
 	// present; absent or unreadable, the front list is unchanged.
