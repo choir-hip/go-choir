@@ -205,7 +205,8 @@ bad "mail: no error screen" '\[mail-status\] "(Could not|You are offline)' "$SV"
 [ -n "$STORY1" ] && chk "reader: story 1 has a title" '\[page-title\] "[^"]{3,}"' "$RD"
 bad "reader: no error message" '\[reader-message\] "(Could not|Sign in)' "$RD"
 chk "reader: body blocks" '\[reader-block-' "$RD"
-chk "reader: more on this" '\[reader-related-pub:' "$RD"
+# "more on this" depends on the live stories (some have no related items: two runs lacked it with everything else fine), so it is told, not required
+if grep -qE '\[reader-related-pub:' "$RD"; then echo "ok: reader: more on this"; else echo "info: reader: neither story had a 'more on this' list (live content, not a defect)"; fi
 chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 [ -n "$DOC1" ] && chk "texture document: opened" '\[reader-block-' "$RD"
 if [ -n "${REAL_PROMPT:-}" ]; then
