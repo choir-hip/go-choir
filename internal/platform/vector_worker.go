@@ -1153,10 +1153,12 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 		return
 	}
 	s.store.vec.started.Do(func() {
-		// The timings are read once, here, before the goroutine exists: the
-		// loop never reads the package variables, so a test that changes them
-		// and puts them back does not race with a worker that is still
-		// stopping.
+		// These four timings are read once, here, before the goroutine exists:
+		// the loop reads the locals, so a test that changes the four and puts
+		// them back does not race with a worker that is still stopping. Keep
+		// the capture outside the goroutine. (The batch sizes are still read
+		// by a pass as package variables; a test that changes one must not
+		// overlap a running worker.)
 		startDelay, backoffStart, backoffMax, idle := vectorStartDelay, vectorBackoffStart, vectorBackoffMax, vectorIdleInterval
 		s.removeStaleVectorSpool()
 		s.recoverVectorInbox()
