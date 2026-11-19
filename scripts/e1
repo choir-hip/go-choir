@@ -96,8 +96,9 @@ OTHER_ARMS = ("l", "i")
 
 SMOKE_OBJECTIVE = {
     "id": "s00", "kind": "follow_up",
-    "prompt": ("Research this event and write a short news story about it, two short paragraphs: "
-               "the most recent total solar eclipse, and where the next one will be visible."),
+    "prompt": ("Research this event on the web and write a short news story, two short paragraphs: "
+               "what the main US stock indexes did at the close of the most recent trading day, and "
+               "what the reporting of that day gives as the reasons. Search the web for today's reporting."),
 }
 
 
