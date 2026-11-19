@@ -1116,7 +1116,7 @@ func TestVectorWritersOfOneVersionDoNotAbortEachOther(t *testing.T) {
 	for w := 0; w < 8; w++ {
 		go func(w int) {
 			var err error
-			for k := 0; k < 5 && err == nil; k++ {
+			for k := 0; k < 15 && err == nil; k++ {
 				err = f.store.writeStoryVersionVectors(context.Background(), "s", "v", mk(fmt.Sprint("w", w)))
 			}
 			errs <- err
