@@ -576,7 +576,7 @@ integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ..
 | 2 Paper layout | `paper.contract`, `members-paper.contract`, `AutoradioModule+Paper.swift`, `Kit/Layout/*.swift`, `mobile/layouts/default.json`, `interface/paper.json` | its band in `provide` |
 | 3 Texture reader | `reader.contract`, `textures.contract`, `members-reader.contract`, `AutoradioModule+Reader.swift`, `Kit/TextureDoc.swift`, `Kit/Citations.swift`, `interface/reader.json` | its band in `provide` |
 | 4 Cards, launcher, signals | `cards.contract`, `launcher.contract`, `members-cards.contract`, `AutoradioModule+Cards.swift`, `Kit/OpenPagesUI.swift`, `Kit/Signals.swift`, `Kit/Preferences.swift`, `interface/cards.json` | its band in `provide` |
-| 5 Files and viewers | `files.contract`, `viewers.contract`, `members-files.contract`, `AutoradioModule+Files.swift`, `Kit/ChoirFiles.swift`, `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift`, `interface/files.json` | its band in `provide` |
+| 5 Files and viewers | `files.contract`, `viewers.contract`, `members-files.contract`, `AutoradioLab/files.ts` and `files-model.ts` (shared code; Swift's Files service is gone), `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift` | its band in `provide` |
 | 6 Mail | `mail.contract`, `members-mail.contract`, `AutoradioModule+Mail.swift`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift`, `interface/mail.json` | its band in `provide` |
 | 7 Settings, themes, accounts | `settings.contract`, `activity.contract`, `members-settings.contract`, `AutoradioModule+Settings.swift`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`, `interface/settings.json` | its band in `provide` |
 | 8 Onboarding and the edition topics | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `interface/onboarding.json` | its band in `provide` |
@@ -659,7 +659,7 @@ Files is a place, not an app: `file:/` is the listener's computer's files (folde
 size or kind, search under the folder, recent, new folder, add, rename, delete); `file:/path/name.ext` is one file opened as a page, so it
 sits in the pile with everything else. The lane owns `files.contract` (the place and the router), `viewers.contract`,
 `members-files.contract` (prefixes `fs` = the place, `fv` = the viewers), `exact-package/apple/AutoradioModule+Files.swift`,
-`Kit/ChoirFiles.swift`, `Kit/Epub.swift` and `Kit/FilesDemo.generated.swift` (made by `scripts/make-files-fixtures.py`: a PNG, a 3-page PDF,
+`AutoradioLab/files.ts`, `Kit/Epub.swift` and `fixtures/files-demo/tree.json` (made by `scripts/make-files-fixtures.py`: a PNG, a 3-page PDF,
 a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Proof: `scripts/proof-lane5.sh` (`check` builds only the Contract).
 
 - Routes (`internal/autoputer/files.go`): `GET /api/files[/{path}]` (an array of `{name, type, size, modified}`), `?disposition=inline` for
@@ -672,7 +672,7 @@ a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Pr
   session), PDF (an `iframe` on the local `.pdf` is PDFKit's `PDFView`; page by `#page=N`; search by PDFKit in the module), e-book
   (`Epub.swift`: ZIP central directory, raw deflate through Compression, container, OPF spine, XHTML to blocks, then Markdown for
   `text markup="markdown"`), text, Markdown, code, CSV/TSV, and an honest "cannot preview" page with the file's facts.
-- Ways the Swift can fail are listed at the top of `ChoirFiles.swift` and `Epub.swift`; `FilesTests.swift` covers each.
+- Ways the code can fail are listed at the top of `files-model.ts` and `Epub.swift`; `files.test.ts` and `EpubTests.swift` cover each.
 
 ## Integration (lane/ar-app): the nine lanes in one app
 

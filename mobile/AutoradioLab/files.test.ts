@@ -103,6 +103,10 @@ describe('F1 to F6 the pure rules', () => {
   test('F6 CSV', () => {
     expect(M.parseCsv('a,b\r\n"x,1","say ""hi"""\n\nlast')).toEqual([['a', 'b'], ['x,1', 'say "hi"'], ['last']]);
     expect(M.parseCsv('a\tb\n1\t2', '\t')).toEqual([['a', 'b'], ['1', '2']]); expect(M.parseCsv('a\nb\nc', ',', 2).length).toBe(2); expect(M.parseCsv('a"b,c')).toEqual([['a"b', 'c']]);
+    const e = Array.from(enc('é')), smile = Array.from(enc('😀')), ab = Array.from(enc('ab')), trim = (b: number[]) => Array.from(M.withoutPartialUTF8(new Uint8Array(b)));
+    expect(trim([...ab, e[0]])).toEqual(ab); expect(trim([...ab, ...e])).toEqual([...ab, ...e]);
+    for (let k = 1; k < 4; k++) expect(trim([...ab, ...smile.slice(0, k)])).toEqual(ab);
+    expect(trim([...ab, ...smile])).toEqual([...ab, ...smile]); expect(trim([])).toEqual([]); expect(trim([0x80, 0x80])).toEqual([0x80, 0x80]);
     const cut = new TextEncoder().encode('é').slice(0, 1); expect(M.withoutPartialUTF8(cut).length).toBe(0); expect(M.withoutPartialUTF8(enc('aé')).length).toBe(3);
   });
 });
