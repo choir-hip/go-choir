@@ -79,7 +79,7 @@ Role key: **W** writer, **H** header reader, **B** body reader, **M** migration,
 | `internal/storeschema/floor.go` | C | No change. |
 | `internal/agentcore/replay_eligibility.go` | R | No entries needed when the body tables are logical members (section 5). Slice E adds a test that a split store classifies eligible. |
 | `internal/agentcore/replay_object_graph.go`, `runtime.go`, `event_table.go` | C | No change. |
-| `internal/types/event_storage.go`, `internal/eventtablegrant/grant.go`, `internal/vmmanager/event_table_grant.go`, `internal/vmmanager/manager.go`, `internal/vocabmigrate/families.go` | C | No change. |
+| `internal/types/event_storage.go`, `internal/eventtablegrant/grant.go` and `internal/vmmanager/event_table_grant.go` (both deleted 2026-11-19), `internal/vmmanager/manager.go`, `internal/vocabmigrate/families.go` | C | No change. |
 | `internal/platform/` (10 files): `publication_opinion.go`, `store.go`, `capture_index.go`, `objectgraph_store.go`, `corpus_schema.go`, `publication_front.go`, `publication_related_backfill.go`, `retrieval_schema.go`, `artifact_gc.go`, `publication_related.go` | n/a | **Postgres corpus (Store B): excluded, no change.** It shares no SQL with `objectgraph.SQLStore`. |
 
 ### Files outside the grep that must change

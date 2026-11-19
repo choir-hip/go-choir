@@ -503,10 +503,10 @@ func (s *Store) eventTableNewestStreamSeq(ctx context.Context) (int64, error) {
 // lease gate are tested through the stamped rows it makes, and moving that to
 // a test helper is a separate change. The choir_events table, its readers and
 // the stream_seq lease stay: telemetry partitions share the lease gate.
-// With it on, AppendEvent stamps the op of every
-// event whose kind is EventTableEligible, on both paths: the acknowledged write
-// (W1, appendStampedEvent) and the sealer (W2, newTelemetryRecord). The
-// lifecycle fold (W3) never stamps.
+// Armed (by tests only), AppendEvent stamps the op of every event whose kind
+// is EventTableEligible, on both paths: the acknowledged write (W1,
+// appendStampedEvent) and the sealer (W2, newTelemetryRecord). The lifecycle
+// fold (W3) never stamps.
 
 // eventTableFloorEpoch is the store floor once an op may be stamped:
 // deploy 1's epoch, the first that projects and reads choir_events
