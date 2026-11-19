@@ -138,12 +138,12 @@ stations:
   status: working
 - id: XG
   name: The boundary gate, the test map and Bun in CI
-  scope: scripts/check-autoradio-native-boundary as the finish line describes it, with a ceiling that only falls; a file-by-file map of the Swift tests (stay with the voice, port with which station, die); pinned Bun 1.4.2 in the flake and a CI job that runs the logic tests and fails when a shared fixture is read by only one implementation
+  scope: 'scripts/check-autoradio-native-boundary as the finish line describes it, with a ceiling that only falls; a file-by-file map of the Swift tests (stay with the voice, port with which station, die); pinned Bun 1.4.2 in the flake and a CI job that runs the logic tests and fails when a shared fixture is read by only one implementation. Built (2026-11-19, lane/exact-xg): the gate, its self-test, the voice-and-deck list (scripts/autoradio-native-voice-list.txt), the ceiling (scripts/autoradio-native-ceiling.txt), both run by scripts/gates, and the test map (docs/design/autoradio-swift-test-map-2026-11-18.md). Remaining: a CI step for the gate and its self-test (a workflow change, its own review), Bun 1.4.2 pinned in the flake, the CI job that runs bun test in mobile/AutoradioLab and fails when a fixture under mobile/fixtures is read by one implementation only, and the gate''s later rules (it runs the pages on the web host against a fake native side that answers only the voice list, refuses an interface entry with an opaque payload, requires the interface to equal the voice list at the end, carries a planted violation it must catch; the ceiling then goes to zero outside the list).'
   class: yellow
   review: none
   depends_on: []
-  carrier: none yet
-  status: pending
+  carrier: lane/exact-xg
+  status: working
 - id: X3
   name: Sign-in in shared code
   scope: 'device-flow sign-in, accounts, the proof key and computer discovery in TypeScript; the key in Exact''s secret store; one sign-out wipe across both languages with the generation passed to shared code; account and computer settings. ChoirClient stays, fed the identity by one call, until the last station. The old Keychain item is deleted at the move. Decided before it starts: the key is readable on a locked phone (X0), deploy.store stays "0", the wipe order. The owner signs in once more.'

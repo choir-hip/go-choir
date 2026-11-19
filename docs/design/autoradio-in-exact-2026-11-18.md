@@ -251,3 +251,6 @@ every shipped source including the app target, refuses an interface entry
 that takes an opaque payload, requires the interface to equal the voice
 list at the end, and carries a planted violation it must catch.
 
+The file-by-file map of the Swift tests, and where each rule goes, is
+[autoradio-swift-test-map-2026-11-18.md](autoradio-swift-test-map-2026-11-18.md).
+The gate's voice-and-deck list is `scripts/autoradio-native-voice-list.txt`.
