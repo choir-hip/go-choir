@@ -484,8 +484,9 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   btree on scope and day), or the index came back short of the limit. The statement runs with index scans off, so the planner reads
   the filtered rows and sorts by true distance: the true nearest of the rows the filter keeps. (2) **Approximate** (`approximate`):
   more than 100,000 filtered rows (in practice an unwindowed search of the paper's captures or stories): the index's answer, ordered
-  by distance, approximate in which rows it found, and not rechecked when it fills the limit. (3) **`partial`**: set when an exact read
-  passes the 5 s statement deadline; the list is then the index's and may lack nearer rows. A caller that needs to know has all three.
+  by distance, approximate in which rows it found, and not rechecked when it fills the limit. (3) **`partial`**: set when the count, the exact read or the index read
+  passes the 5 s statement deadline (each under its own savepoint, so no statement of a search is a hard failure; an index read that passes the deadline
+  returns an empty list and says so); an exact read that fails leaves the index's list, which may lack nearer rows. A caller that needs to know has all three.
   The code states its minimum, 0.8.0 (`vectorMinPgvector`), and the CI action requires it numerically.
 - **The planner and the ORDER BY.** The statements order by the bare distance (`ORDER BY v.embedding <=> $q LIMIT n`; ties are broken in
   Go), which an HNSW index can serve; `TestVectorSearchStatementUsesTheHNSWIndex` shows the plan uses `idx_vc_hnsw` and `idx_vsp_hnsw`
@@ -509,19 +510,28 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
 ### 0.11.3 Operating the vector index (what an idle pass costs, refusals, the policy clause, rollback, backups)
 
 - **Idle cost.** A pass with nothing to embed reads: one publication row and three counts (the story mark: newest publication, live
-  publications, live versions, vector rows held), the refused counts, the captures' gap count (an anti-join of the 215,000 projected
+  publications, live versions, the newest live version's creation time, vector rows held), the refused counts, the captures' gap count (an anti-join of the 215,000 projected
   captures against `vec_captures`), and the sweep (two `DELETE ... WHERE NOT <predicate>` statements; each row costs a few primary-key
   lookups, and a story row one JSON parse). It does **not** walk the publications: the walk (one edge read per publication, 10,000 of
   them) runs when the mark differs from the last complete walk's, and once after a restart. `TestVectorIdlePassReadsOneRowAndTwoCountsNotEveryPublication`
   proves no edge read happens in an idle pass. The sweep and the gap count are not measured at production size; read
   `corpusd retrieval op=vector_sweep shape=both ms=` on the first staging pass, every 5 minutes. If the sweep is too dear the search's own
   predicate still keeps removed text from being returned, so the sweep can then run less often.
-- **A refused passage.** The server answers an input over its batch or slot with an error status (0.11.2). When a single input fails with a
-  status error while `/health` is up, the worker writes the version (or capture) with that passage's row holding no vector and the
-  reason, so the version is whole in the table and out of the gap, the model is not asked again, and `refused=` in the `embed_gap` line
-  and in `scripts/status-vectors` counts it. A search returns the version's other passages and never the refused one (a refused passage
-  cannot be found by meaning; BM25 still finds it). A refusal is retried when the model changes (the row's `model` differs). A failure that
-  is not a status error (a dropped connection) records nothing and the version is tried again next pass.
+- **What may become a durable state: one rule, in one place** (`embedInputs`, with `embedder.classifyStatus`). A refusal is recorded only
+  when the server **identifies the input** as the problem: its two too-large answers, "input (N tokens) is too large to process" and "input (N
+  tokens) is larger than the max context size" (0.11.2; `embedder.InputRefusedError`). Then the version's row (or the capture's) holds no
+  vector and the reason, so the version is whole in the table and out of the gap, the model is not asked again until the model changes (the row's
+  `model`), `refused=` counts it, and a search returns the version's other passages and never that one (BM25 still finds it). Every other failure
+  is not recorded and is retried: a status error of any code (a 500 without those words, a 503 while loading, a 429, a 404 from a mismatched
+  route) is the server's state, so the pass stops and backs off like a down embedder; a transport or decode failure of one input while the server is
+  healthy leaves that input out of this pass (one log line with its id; passes that do no other work are 5 minutes apart, so the volume is
+  at most one line per input per 5 minutes) and the older captures go on. The audit of every place a failure could become durable:
+  the refused row (only the identified refusal above); the "empty: no title and no text" row (a capture whose text was read and is empty: a
+  property of the data, not a failure); an unreadable text blob or unreadable metadata (skipped, retried every pass); a version whose manifest policy is not public, or with no
+  passages (skipped; walked again when the mark changes); the story idle mark (stored only after a walk with no error); import outcomes
+  (`refused` only for the identified file conditions: another model or dimension, a malformed row or kind, an over-long line, a failed or too thin
+  sample, over 2 GiB, a symlink; `failed` for everything else, which in the inbox lands in `refused/` for a person to retry); an import's dropped rows
+  (never a stored state: the worker fills what the file did not write).
 - **No DDL on a request path.** Tables and plain indexes are created only when `to_regclass` finds them missing, by the worker and the
   import; a search that finds no tables answers unavailable. The HNSW builds are `CONCURRENTLY` under advisory locks, with
   `maintenance_work_mem` reset before the connection returns to the pool.
@@ -533,7 +543,9 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
 - **The extension is created when the roles unit runs after PostgreSQL restarts on the new package.** From the evaluated unit
   (`nix eval` of `go-choir-b`): `postgresql.service` is `Type=notify` (ready when it accepts connections), `go-choir-postgresql-roles` is
   `After` and `Requires` `postgresql.service`, `RemainAfterExit`, `restartIfChanged = true`, and its script text changes with this
-  work, so the switch restarts it, and a restart of PostgreSQL restarts it by propagation, always after the server is ready. A
+  work, so the switch restarts it, after PostgreSQL (`After=`), once the server accepts connections. That is why it runs in this deploy; a later restart of
+  PostgreSQL alone restarts it too only by systemd.unit(5) `Requires=` ("stopped (or restarted) if one of the other units is explicitly stopped (or restarted)"), which was
+  not tried here. A
   `CREATE EXTENSION` that fails is logged and the unit goes on (the switch does not fail); corpusd reports it every five minutes
   and `scripts/status-vectors` prints `pgvector MISSING or too old` when that is the newest line. `systemctl restart go-choir-postgresql-roles` repeats it.
 - **Pgvector below 0.8.0.** The worker's ensure step reads `extversion`; below the minimum it logs `corpusd vectors disabled: pgvector X is older
@@ -553,6 +565,13 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   still has pgvector; **deploy 2** removes `extensions`, the embedder unit and the step. Between them no dump breaks (the tables are gone
   after deploy 1). If both go out together PostgreSQL restarts without the plugin before the roles unit runs, the DROP fails (it is
   non-fatal now), and the dump fails until pgvector is put back.
+- **A table of an earlier schema** (no `refused` column, a NOT NULL embedding) is migrated once by the ensure step after it reads the
+  catalog (`ADD COLUMN IF NOT EXISTS`, `DROP NOT NULL`); a second ensure alters nothing.
+- **Two conditions on the landing plan** (host first, V1; the Go after). (1) The deploy classifier's output must show the guest content digest
+  `same` before the switch is trusted to refresh no guest: if CI cannot compute the digest the state is `unknown` and every active computer is
+  refreshed (`deploy-impact-classify`, `mark_guest_boot_contract`); read it, do not assume it. (2) Landing 1 ships no corpusd that reports a
+  missing extension, so after the host deploy check it by hand: `psql -d graph -c '\dx'` must list `vector`. The vmctl and corpusd restart
+  windows (a guest's capture write is re-offered, below) happen in landing 1 as in any host deploy.
 - **Backups and restores.** From the first deploy the `graph` dump contains the extension and the vector tables; a restore needs a
   PostgreSQL with pgvector 0.8 or later.
 - **A guest's capture write during the restart.** corpusd's guest-write gate asks vmctl who owns the caller (`authority.go:50-90`); while
