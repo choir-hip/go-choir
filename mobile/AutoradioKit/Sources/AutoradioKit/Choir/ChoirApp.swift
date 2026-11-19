@@ -158,6 +158,8 @@ public final class ChoirApp: @unchecked Sendable {
             let p = RunSheetPlayer.shared
             let engine = ChoirPlaybackEngine(app: me)
             p.engine = engine
+            Deck.shared.engine = engine
+            Deck.shared.sessionReady = { [weak me] reason in await me?.ensureEngine(reason: reason) }
             p.sessionReady = { [weak me] reason in await me?.ensureEngine(reason: reason) }       // before every start of playback
             let continuity = PlaybackContinuity(runtime: me.runtime)
             engine.continuity = continuity
@@ -197,7 +199,8 @@ public final class ChoirApp: @unchecked Sendable {
             w.onIdle = { [weak me] in Task { @MainActor in await me?.writeAhead?.writerIdle() } }
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
-            RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
+            Deck.shared.boot()                             // an item the kill left open is closed in the journal first
+            RunSheetStore.shared.restore(journal: Deck.shared.journal)       // the pending ops of the last launch; nothing plays
             if let name = Demo.sheetName, let sheet = Demo.runSheet(name) {          // demo test affordance (Demo.sheetKey): a tour's own run sheet
                 RunSheetStore.shared.replaceForDemo(sheet)
                 Station.shared.holdForDemoSheet = true
@@ -219,6 +222,7 @@ public final class ChoirApp: @unchecked Sendable {
         Task { @MainActor in
             let p = RunSheetPlayer.shared
             if let doc = p.playingDocument, doc == id { p.spokenBlock(idx) }
+            p.checkSound()                                  // the deck's evidence that sound is being rendered
         }
     }
 

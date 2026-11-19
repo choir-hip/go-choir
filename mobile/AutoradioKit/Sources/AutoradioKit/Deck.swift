@@ -1,0 +1,423 @@
+import Foundation
+
+// The deck (station X4): the small native audio surface UNDER shared code. Shared code (TypeScript, the same on both phones) decides what plays
+// next, what counts as heard and what is posted; the deck plays what it is handed, applies a short list of named rules that cannot wait for
+// shared code, keeps ONE state for why it is silent, and keeps a journal of what started and ended with the device's time, the place reached
+// and whether sound was rendered. The names and shapes are docs/reference/exact/deck.md, mobile/exact-package/interface/deck.json and
+// mobile/AutoradioLab/deck.ts; Kotlin implements the same.
+//
+// The sound is behind `PlaybackEngine` (the Swift engine that already exists, unchanged). Today the Swift run sheet player still decides, and it
+// reports to the deck what it started and how it ended (`began`, `soundBegan`, `ended`), so the journal is the evidence from the first day;
+// when the decisions move to shared code, shared code commands the deck (`play`, `enqueue`, `act`) and the player is deleted.
+//
+// The rules the deck applies by itself (design, "The deck applies named rules"):
+//  1. An item with `requiresPreviousHeard` plays only if the item before it ended finished with sound rendered; otherwise it is dropped from
+//     the held list (no journal line; the state's `held` shows it gone).
+//  2. When the audio session cannot be taken the item stays on air with no outcome and is tried again at 1, 2, 4, 8, 15 s (the last repeats).
+//  3. A route loss or the listener's pause is not undone by a timer; the system's interruption ending is.
+//  4. Two items in a row that made no sound stop the deck (state `stopped`); a dead engine must not burn the queue.
+//  5. The deck plays on through the held items with shared code not running.
+// Barge-in (the voice lowering the deck) and one-voice-at-a-time stay in SessionCoordinator and the engine: they are native to native.
+//
+// Ways this can fail, and what is done (each has a test in DeckTests):
+//  - sound that was not made journalled as heard: `rendered` is true only after `soundBegan`, or when the host says played; a finish with none is "failed".
+//  - a kill leaves an item open: the next launch closes it first, as failed ("interrupted by a restart"), before anything is restored.
+//  - journal numbers reused after a relaunch: the number is stored with the lines and acknowledged lines leave but the number never falls.
+//  - the journal grows without bound: it keeps the newest 2000 lines.
+//  - two flags that disagree about why it is silent: one state, set only by the methods below.
+//  - a late end from an item that was replaced closes the new one: an end names the item it is for and is ignored when it is not the current one.
+
+public enum DeckWhy: String, Codable, Sendable {
+    case playing, pausedListener = "paused_listener", pausedSystem = "paused_system", heldSession = "held_session", heldEngine = "held_engine", stopped, empty
+}
+
+public struct DeckItem: Equatable, Sendable {
+    public var id: String
+    public var kind: String                 // "speech" or "audio"
+    public var title = "", show = "", document = ""
+    /// The text in one string, a blank line between paragraphs.
+    public var paragraphs = ""
+    public var url = ""
+    public var start = 0.0, end = 0.0
+    public var block = 0
+    public var seconds = 0.0
+    public var requiresPreviousHeard = false
+    public init(id: String, kind: String) { self.id = id; self.kind = kind }
+    var paragraphList: [String] { paragraphs.components(separatedBy: "\n\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } }
+    var documentID: String { document.isEmpty ? "deck:" + id : document }
+}
+
+/// One line of the journal (the wire shape of `DeckEvent`).
+public struct DeckLine: Codable, Equatable, Sendable {
+    public var seq: Int
+    public var type: String                 // started, sounding, ended, remote, system
+    public var item: String
+    public var at: String                   // RFC 3339, the device's clock
+    public var block: Int
+    public var seconds: Double
+    public var final: Int
+    public var rendered: Bool
+    public var end: String                  // finished, skipped, replaced, stopped, failed
+    public var command: String
+    public var reason: String
+}
+
+extension DeckLine {
+    /// What the run sheet is told of an `ended` line: the twin of deck-ops.ts (the fixtures in mobile/fixtures/deck hold both to one answer).
+    /// Heard only with sound; a finish with none is "could not play".
+    var airedEnd: (state: RunSheetState, outcome: RunSheetOutcome, lastBlock: Int, seconds: Double, reason: String?)? {
+        guard type == "ended" else { return nil }
+        switch end {
+        case "finished": return rendered ? (.heard, .finished, final, seconds, nil) : (.skipped, .failed, 0, 0, "ended with no sound rendered")
+        case "skipped": return (.skipped, .skipped, block, seconds, nil)
+        case "replaced": return (.skipped, .cut, block, seconds, nil)
+        case "stopped": return rendered ? (.heard, .left, block, seconds, nil) : (.skipped, .failed, 0, 0, "stopped before it made a sound")
+        default: return (.skipped, .failed, block, seconds, reason.isEmpty ? "could not play" : reason)
+        }
+    }
+}
+
+/// The journal: ordered, durable, acknowledged by shared code once the server has the ops. A file of its own that survives a kill and is
+/// readable after the first unlock, so it can be written with the screen locked.
+@MainActor public final class DeckJournal {
+    public static let maxLines = 2000
+    public private(set) var lines: [DeckLine] = []
+    public private(set) var seq = 0
+    public private(set) var acked = 0
+    public var now: () -> Date = { Date() }
+    private let storage: URL?
+
+    public init(storage: URL? = nil) {
+        self.storage = storage
+        guard let storage, let d = try? Data(contentsOf: storage), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
+        lines = s.lines; seq = s.seq; acked = s.acked
+    }
+
+    public static func applicationSupportFile() -> URL? {
+        guard let d = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
+        let dir = d.appendingPathComponent("Autoradio", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("deck-journal.json")
+    }
+
+    struct Saved: Codable { var seq: Int; var acked: Int; var lines: [DeckLine] }
+
+    static func stamp(_ d: Date) -> String {
+        let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]
+        return f.string(from: d)
+    }
+
+    @discardableResult
+    func append(_ type: String, item: String, block: Int = 0, seconds: Double = 0, final: Int = 0, rendered: Bool = false, end: String = "",
+                command: String = "", reason: String = "") -> DeckLine {
+        seq += 1
+        let l = DeckLine(seq: seq, type: type, item: item, at: Self.stamp(now()), block: block, seconds: seconds, final: final, rendered: rendered, end: end, command: command, reason: reason)
+        lines.append(l)
+        if lines.count > Self.maxLines { lines.removeFirst(lines.count - Self.maxLines) }
+        save()
+        return l
+    }
+
+    /// Shared code (or the player) has what is up to `n`: those lines go. The number never falls.
+    public func ack(through n: Int) {
+        guard n > acked else { return }
+        acked = min(n, seq)
+        lines.removeAll { $0.seq <= acked }
+        save()
+    }
+
+    /// The item started and not yet ended, if any.
+    public var openItem: String? {
+        var open: String?
+        for l in lines {
+            if l.type == "started" { open = l.item } else if l.type == "ended", l.item == open { open = nil }
+        }
+        return open
+    }
+
+    /// A launch finds an item open (the app was killed): it is closed as failed before anything else reads the journal. A restart is no verdict,
+    /// however much sound there was.
+    @discardableResult
+    public func closeOpenAtBoot() -> DeckLine? {
+        guard let item = openItem else { return nil }
+        let last = lines.last { $0.item == item && ($0.type == "sounding" || $0.type == "started") }
+        let sounded = lines.contains { $0.item == item && $0.type == "sounding" }
+        return append("ended", item: item, block: last?.block ?? 0, seconds: last?.seconds ?? 0, final: last?.final ?? 0, rendered: sounded, end: "failed", reason: "interrupted by a restart")
+    }
+
+    public func wipe() {
+        lines = []; seq = 0; acked = 0
+        if let storage { try? FileManager.default.removeItem(at: storage) }
+    }
+
+    private func save() {
+        guard let storage, let d = try? JSONEncoder().encode(Saved(seq: seq, acked: acked, lines: lines)) else { return }
+        #if os(iOS)
+        try? d.write(to: storage, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        #else
+        try? d.write(to: storage, options: .atomic)
+        #endif
+    }
+}
+
+/// What `deckState` answers.
+public struct DeckSnapshot: Codable, Equatable, Sendable {
+    public var why: DeckWhy
+    public var item: String
+    public var block: Int
+    public var seconds: Double
+    public var duration: Double
+    public var rate: Double
+    public var held: [String]
+    public var seq: Int
+    public var acked: Int
+    public var journal: [DeckLine]
+}
+
+@MainActor public final class Deck {
+    public static let shared = Deck(journal: DeckJournal(storage: DeckJournal.applicationSupportFile()))
+    public static let heldMax = 3
+
+    public let journal: DeckJournal
+    public var engine: PlaybackEngine?
+    /// Called before every start the deck makes itself: the host claims the audio session and readies the engine. nil: ready; else why not.
+    public var sessionReady: ((String) async -> String?)?
+    public var onChange: (() -> Void)?
+    /// Seconds between tries when the session cannot be taken (the last repeats).
+    public var retryDelays: [TimeInterval] = [1, 2, 4, 8, 15]
+
+    public private(set) var current: DeckItem?
+    public private(set) var held: [DeckItem] = []
+    /// The one state of why the deck is silent. `playing` when an item is on and nothing holds it; `empty` with nothing.
+    public private(set) var why: DeckWhy = .empty
+    /// The current item was started by `play` or by playing on (shared code commands the deck), not by the Swift player.
+    public private(set) var commanded = false
+    private var sounded = false
+    private var silentRun = 0
+    private var lastHeard = false           // the item before ended finished with sound
+    private var attempts = 0
+    private var retryTask: Task<Void, Never>?
+    private var generation = 0
+
+    public init(journal: DeckJournal) { self.journal = journal }
+
+    /// At launch, before the run sheet is restored: an item the kill left open is closed in the journal.
+    @discardableResult public func boot() -> DeckLine? { journal.closeOpenAtBoot() }
+
+    // MARK: What the Swift player reports (it still decides)
+
+    /// The player started `id` (sound is expected, none yet).
+    public func began(id: String, kind: String = "speech", block: Int = 0, seconds: Double = 0) {
+        if current?.id == id { return }
+        if current != nil { ended(.replaced) }
+        var i = DeckItem(id: id, kind: kind); i.block = block; i.seconds = seconds
+        current = i; sounded = false; commanded = false; why = .playing; attempts = 0
+        journal.append("started", item: id, block: block, seconds: seconds)
+        changed()
+    }
+
+    /// Sound reached the output for the current item. Written once per item.
+    public func soundBegan(block: Int = 0, seconds: Double = 0, final: Int = 0) {
+        guard let c = current, !sounded else { return }
+        sounded = true
+        journal.append("sounding", item: c.id, block: block, seconds: seconds, final: final, rendered: true)
+    }
+
+    public enum How: String { case finished, skipped, replaced, stopped, failed }
+
+    /// The current item left the air. `played`: the host says a block made sound (a finish counts as sound even if `soundBegan` was never seen).
+    @discardableResult
+    public func ended(_ how: How, played: Bool? = nil, block: Int = 0, seconds: Double = 0, final: Int = 0, reason: String = "", id: String? = nil) -> DeckLine? {
+        guard let c = current, id == nil || id == c.id else { return nil }
+        if played == true { sounded = true }
+        let rendered = sounded
+        let how = (how == .finished && !rendered) ? How.failed : how
+        let line = journal.append("ended", item: c.id, block: block, seconds: seconds, final: final, rendered: rendered, end: how.rawValue,
+                                  reason: how == .failed && reason.isEmpty ? "ended with no sound rendered" : reason)
+        current = nil; sounded = false; commanded = false; retryTask?.cancel(); retryTask = nil; attempts = 0; generation += 1
+        lastHeard = how == .finished && rendered
+        silentRun = rendered ? 0 : silentRun + 1
+        if why != .stopped { why = .empty }
+        changed()
+        return line
+    }
+
+    /// A transport or system word worth keeping in the journal (the lock screen's pause, an interruption beginning).
+    public func note(remote command: String) { journal.append("remote", item: current?.id ?? "", command: command) }
+    public func note(system command: String) { journal.append("system", item: current?.id ?? "", command: command) }
+
+    // MARK: Commands (shared code)
+
+    /// Play this item now, cutting what is playing.
+    @discardableResult
+    public func play(_ item: DeckItem) async -> Bool {
+        if current != nil { ended(.replaced, block: engine?.spokenPosition().block ?? 0, seconds: position().seconds, final: engine?.spokenReport().final ?? 0) }
+        silentRun = 0
+        return await start(item, commanded: true)
+    }
+
+    /// Hold `item` after the playing one at place `at` (nil: the end). Items from `at` on are dropped first; an id already held is removed first;
+    /// a place beyond the limit is refused.
+    public func enqueue(_ item: DeckItem, at: Int? = nil) {
+        held.removeAll { $0.id == item.id }
+        if let at, at >= 0, at < held.count { held.removeSubrange(at...) }
+        guard held.count < Self.heldMax else { changed(); return }
+        held.append(item)
+        if current == nil, why != .stopped { Task { @MainActor in await self.playOn() } }
+        changed()
+    }
+
+    public func trim(keeping n: Int) { if held.count > max(0, n) { held.removeSubrange(max(0, n)...); changed() } }
+
+    public func act(_ op: String, value: Double = 0) async {
+        switch op {
+        case "pause": listenerPaused()
+        case "resume": await resumed()
+        case "stop":
+            if current != nil { ended(.stopped, block: engine?.spokenPosition().block ?? 0, seconds: position().seconds) }
+            held = []; stopEngine(); why = .stopped; changed()
+        case "skip":
+            if current != nil { ended(.skipped, block: engine?.spokenPosition().block ?? 0, seconds: position().seconds, final: engine?.spokenReport().final ?? 0); stopEngine() }
+            await playOn()
+        case "seekTo": engine?.seekRemote(to: value)
+        case "seekBy": engine?.seekRemote(by: value)
+        case "rate": engine?.setRemoteRate(value)
+        case "level": break          // the voice owns the level (SessionCoordinator); nothing the deck decides
+        case "trim": trim(keeping: Int(value))
+        default: break
+        }
+    }
+
+    public func ack(through n: Int) { journal.ack(through: n); changed() }
+
+    public func listenerPaused() {
+        guard current != nil else { return }
+        engine?.pauseRemote(); engine?.pauseSpoken(); why = .pausedListener; note(remote: "pause"); changed()
+    }
+    /// The system took the audio (an interruption began, a route was lost): not undone by a timer.
+    public func systemPaused(routeLost: Bool = false) {
+        guard current != nil else { return }
+        why = .pausedSystem; note(system: routeLost ? "route-lost" : "interruption-began"); changed()
+    }
+    /// The listener pressed play, or the system said to resume.
+    public func resumed() async {
+        guard let c = current else { await playOn(); return }
+        why = .playing; note(remote: "play")
+        if c.kind == "audio" { engine?.resumeRemote() } else { engine?.resumeSpoken() }
+        changed()
+    }
+    /// The system's interruption ended: resumes only when the system paused it, never over the listener's pause.
+    public func systemMayResume() async {
+        guard why == .pausedSystem || why == .heldSession || why == .heldEngine else { return }
+        note(system: "interruption-ended")
+        if why == .heldSession, let c = current { retryTask?.cancel(); retryTask = nil; await begin(c) } else { await resumed() }
+    }
+
+    // MARK: What the engine reports (commanded items)
+
+    /// The spoken document `id` ran out of blocks.
+    public func documentEnded(id: String, anyPlayed: Bool) {
+        guard let c = current, commanded, c.kind == "speech", c.documentID == id else { return }
+        finish(anyPlayed: anyPlayed)
+    }
+    /// Remote audio reached its end.
+    public func remoteEnded() {
+        guard let c = current, commanded, c.kind == "audio" else { return }
+        let r = engine?.remotePosition()
+        engine?.stopRemote()
+        finish(anyPlayed: true, seconds: r?.elapsed ?? 0)
+    }
+    /// The engine was lost in the middle of the item: held, and tried again when the session is back.
+    public func engineLost() {
+        guard current != nil, commanded else { return }
+        why = .heldEngine; note(system: "engine-lost"); changed()
+    }
+
+    private func finish(anyPlayed: Bool, seconds: Double = 0) {
+        let rep = engine?.spokenReport() ?? (block: 0, final: 0, seconds: 0)
+        ended(anyPlayed ? .finished : .failed, played: anyPlayed, block: rep.final, seconds: seconds > 0 ? seconds : rep.seconds, final: rep.final,
+              reason: anyPlayed ? "" : "its document ended with no block heard")
+        Task { @MainActor in await self.playOn() }
+    }
+
+    /// Play on: the first held item the rules allow.
+    private func playOn() async {
+        guard current == nil else { return }
+        if silentRun >= 2 { why = .stopped; changed(); return }
+        while let next = held.first {
+            held.removeFirst()
+            if next.requiresPreviousHeard && !lastHeard { continue }       // rule 1: dropped, no line
+            _ = await start(next, commanded: true)
+            return
+        }
+        why = .empty; changed()
+    }
+
+    private func start(_ item: DeckItem, commanded cmd: Bool) async -> Bool {
+        generation += 1
+        current = item; sounded = false; commanded = cmd; why = .playing; attempts = 0
+        journal.append("started", item: item.id, block: item.block, seconds: item.seconds)
+        changed()
+        return await begin(item)
+    }
+
+    private func begin(_ item: DeckItem) async -> Bool {
+        let my = generation
+        if let notReady = await sessionReady?(item.kind) {
+            guard my == generation, current?.id == item.id else { return false }
+            hold(item, why: notReady)
+            return false
+        }
+        guard my == generation, current?.id == item.id, let engine else { return false }
+        if why == .heldSession { note(system: "session-back") }
+        why = .playing
+        var ok = false
+        if item.kind == "audio", let url = URL(string: item.url) {
+            ok = await engine.playRemote(url: url, title: item.title, show: item.show, start: item.seconds > 0 ? item.seconds : (item.start > 0 ? item.start : nil), end: item.end > 0 ? item.end : nil)
+        } else if item.kind == "speech" {
+            var e = RunSheetEntry(id: item.id, kind: .story, placedBy: .phone, title: item.title, text: item.paragraphs)
+            e.estSeconds = RunSheetEntry.estimateSeconds(words: item.paragraphs)
+            ok = await engine.speak(documentID: item.documentID, entry: e, paragraphs: item.paragraphList)
+        }
+        guard my == generation, current?.id == item.id else { return ok }
+        if !ok {
+            ended(.failed, reason: "the engine could not start it")
+            await playOn()
+        }
+        return ok
+    }
+
+    /// The session cannot be taken: the item stays on air, held, no outcome; tried again at 1, 2, 4, 8, 15 s.
+    private func hold(_ item: DeckItem, why reason: String) {
+        if why != .heldSession { note(system: "session-held") }
+        why = .heldSession
+        attempts += 1
+        let wait = retryDelays[min(attempts - 1, retryDelays.count - 1)]
+        changed()
+        retryTask?.cancel()
+        retryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard let self, !Task.isCancelled, self.why == .heldSession, self.current?.id == item.id else { return }
+            _ = await self.begin(item)
+        }
+    }
+
+    private func stopEngine() { engine?.stopRemote(); engine?.stopSpoken() }
+
+    private func position() -> (block: Int, seconds: Double) {
+        if current?.kind == "audio" { return (0, engine?.remotePosition()?.elapsed ?? 0) }
+        let r = engine?.spokenReport() ?? (block: 0, final: 0, seconds: 0)
+        return (r.block, r.seconds)
+    }
+
+    // MARK: What shared code reads
+
+    public func snapshot() -> DeckSnapshot {
+        let p = position()
+        let dur = current?.kind == "audio" ? (engine?.remotePosition()?.duration ?? 0) : 0
+        return DeckSnapshot(why: why, item: current?.id ?? "", block: p.block, seconds: current == nil ? 0 : p.seconds, duration: dur, rate: 1,
+                            held: held.map(\.id), seq: journal.seq, acked: journal.acked, journal: journal.lines)
+    }
+
+    private func changed() { onChange?() }
+}

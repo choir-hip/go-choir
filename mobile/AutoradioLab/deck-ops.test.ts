@@ -316,3 +316,20 @@ describe('D13 one list of names', () => {
     expect(Object.keys(enq.options)).toEqual([...Object.keys(play.options), 'at']);
   });
 });
+
+describe('D14 the poster over the signed-in seam', () => {
+  test('answers, refusals and silence', async () => {
+    const { routePoster, OPS_PATH } = await import('./deck-post.ts');
+    const { HTTPError, SignedOutError } = await import('./api.ts');
+    const seen: unknown[] = [];
+    const ok = routePoster(async (path, o) => { seen.push([path, o]); return { body: { results: [{ op_id: 'x', applied: true }], sheet_epoch: 3 }, serverTime: null, raw: '' }; });
+    expect(await ok.post([], 3)).toEqual({ kind: 'answeredEpoch', results: [{ op_id: 'x', applied: true }], epoch: 3 });
+    expect(seen[0]).toEqual([OPS_PATH, { method: 'POST', body: { ops: [], sheet_epoch: 3 } }]);
+    const kind = async (e: Error) => (await routePoster(async () => { throw e; }).post([], 0)).kind;
+    expect(await kind(new HTTPError(503, 'x'))).toBe('notYet');
+    expect(await kind(new HTTPError(429, 'x', 5))).toBe('notYet');
+    expect(await kind(new HTTPError(400, 'x'))).toBe('refused');
+    expect(await kind(new SignedOutError('x'))).toBe('offline');
+    expect(await kind(new Error('network: x'))).toBe('offline');
+  });
+});
