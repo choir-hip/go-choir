@@ -23,31 +23,30 @@ Track X is the cutover below, which keeps its stations. Track V is the
 corpus-first retrieval design with pgvector, stories first and one vector a
 captured page. Track L reads the traces of every recurring failure and
 redesigns and starts the calibration experiment (built on 4 November, never
-started). State at 2026-11-19T11:27Z, nothing below is accepted until its
+started). State at 2026-11-19T13:50Z, nothing below is accepted until its
 deployed proof is named in the goal file:
 
-- **V.** The host half is deployed (`40a5bbdff`: pgvector in Node B's
-  PostgreSQL, the embedder unit active on loopback 8090). The vector index
-  and the ranked corpus search are on main (`b6298ae88`) and **not
-  deployed**: they reached main before the landing's suites ran
-  (`problems/two-landings-in-one-tree-pushed-an-unverified-train-2026-11-19.md`),
-  and CI then refused them three ways (a script classified as docs, two
-  test races). The repair for the first is on main (`5ffc8d8d5`); the race
-  fixes and the import of the Mac's vectors (review round 6 accepted) go in
-  together next (`lane/vec-train2`, claim C154). The Mac has embedded every
-  story and is embedding the captures; the files go in through corpusd's
-  inbox once the import is deployed. The event shortlist
-  (`lane/event-shortlist`) lands after the index is filled.
-- **X.** `lane/exact-integ` passes the signed-in simulator tour with the
-  sign-out drill. Sign-in is accepted after four review rounds, mail and
-  the deck after two; one should-fix on the account-change path is being
-  made before the lane lands as one squashed commit. Nothing is on a phone;
-  Android has not been built.
+- **V.** The vector index and the ranked corpus search are deployed
+  (`a8b603d22`, 12:57Z; claims C151 to C154 false on the way, C156 true).
+  The server's own worker fills the index at about 0.4 passages a second
+  beside the paper, days for the 256,000 rows. The Mac's file of 278,048
+  vectors was refused whole by corpusd's sample check: 2,661 rows carried a
+  vector made under another title
+  (`problems/first-vectors-file-refused-equal-text-under-another-title-2026-11-19.md`).
+  The corrected file is in the inbox and is taken at corpusd's next restart
+  (claim C157). `lane/inbox-retry` (a running pass yields to a waiting
+  file; the capture walk reads its gap by page) is in review round 3. The
+  event layer (`lane/event-land`) lands after the index is filled.
+- **X.** The Exact move is on main and deployed (`a8b603d22`, claim C155
+  true): pages, sign-in, sync, mail, files, podcasts, the reader's content
+  and the run sheet are shared code; voice and the deck are native. Nothing
+  new is on a phone. Android builds and fetches the paper's front page but
+  does not yet draw its stories (claim C126 open); `lane/exact-integ`
+  carries the next shift (the deck in shared code, Android pages).
 - **L.** The dated-switch deletions are deployed (`f3874a8bf`, C146 true).
-  The experiment driver is on main (`463ec68f0`); its pilot runs three arms
-  and waits for the vector train's deploy, which refreshes the test
-  computers. The ten objectives are on main
-  (`calibration/e1/pilot-objectives.jsonl`).
+  The experiment driver is on main (`463ec68f0`); the pilot's smoke test
+  passed on two arms at 13:26Z and is being rerun on the third. The ten
+  objectives are on main (`calibration/e1/pilot-objectives.jsonl`).
 
 ## Live station (2026-11-18): Autoradio, the cutover from Swift to Exact
 
