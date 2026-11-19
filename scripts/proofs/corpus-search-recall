@@ -12,11 +12,16 @@ The set is JSON lines, one question a line:
   {"id": "s001", "query": "<the story's headline>",
    "relevant": ["<capture id the story cites>", ...],
    "non_english": ["<the subset of relevant whose page is not in English>", ...]}
-The 200-story set of the design (headline as the query, the pages the story
-cites as the answers) is NOT in the repository: its page text lived in the
-lead's scratch directory (docs/reference/EMBEDDINGGEMMA.md section 0.9). Build it
-on the paper's own data with a custodian-side read of each story's cites_capture
-edges and each page's language, in the format above, and keep it outside the repo.
+The 200-story set of the design is committed as testdata/corpus-recall-200.jsonl:
+the 200 stories of the paper's front on 2026-11-18, each question the story's own
+headline (our published text; no third-party headline is in the file, 0 removed), "id"
+the story's public publication id (pub-..., not its canonical object id), "relevant" the
+canonical ids of the captures the story cited (1,256 of them for 1,253 distinct
+captures, 200 of 200 questions with at least one) and "non_english" the 209 of them whose
+page was detected as not English when the set was made. NO page text and no third-party
+text is in the file. The ids are canonical capture ids as the paper's API gave them on
+2026-11-18; that the deployed corpus still holds each one (captures are append-only, but
+one may since be superseded or private) was not checked.
 
 Each question is POSTed once to URL (corpusd's POST /internal/platform/captures/search:
 {"owner_id","computer_id","query","size","limit"}) and the ranked answer's first
@@ -32,15 +37,17 @@ Exit 0 when recall >= --min-recall (0.92) and the non-English share >= --min-non
 a request failed; 4 when no answer had the vector half (the figures then measure BM25
 alone and say nothing about the ship rule).
 
-Against staging: URL is a corpus-search endpoint the holder of a test computer's
-key can reach, --key-file names a file holding the key (read once, sent as a
-bearer token, never printed). The route above is internal to the host (a bound guest
-or an internal caller); no public route that serves it was found when this was written,
-so a staging run goes through whatever reaches it (a guest's SearchWireCorpus is the same
-code path). Against a local test
-database: serve platform.ObjectGraphHandler.HandleCaptureSearch over a test Store
-with the fake embedder (internal/platform TestRankedRecallScriptRunsAgainstARealHandler
-does) and pass --header 'X-Internal-Caller: true'.
+A deployed run needs the route above, and that route answers only (a) the guest
+vmctl has bound to exactly that owner and computer, from inside that computer, or (b) an
+internal caller on the host (loopback, the X-Internal-Caller header and the host-internal
+credential). Neither is available to a developer without acting on a computer; no
+public route serves corpus search to a holder of a key. This script therefore cannot run
+against staging from a developer's machine: it runs from inside a bound guest, or on the
+host, and the owner decides which. (--key-file sends a bearer token for a route that takes
+one; the route above does not.) Against a local test database: serve
+platform.ObjectGraphHandler.HandleCaptureSearch over a test Store with the fake embedder
+(internal/platform TestRankedRecallScriptRunsAgainstARealHandler does) and pass
+--header 'X-Internal-Caller: true'.
 """
 import argparse
 import json

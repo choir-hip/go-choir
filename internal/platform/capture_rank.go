@@ -25,8 +25,12 @@ package platform
 // Reciprocal-rank fusion measured 0.856 recall at ten against 0.926 for this
 // and is not used. Whatever the vector half cannot do, the answer is BM25's
 // pages in BM25's order and says so (CaptureRanking.VectorUnavailable): a
-// search for meaning never fails the search. The vector half has a deadline
-// (captureVectorDeadline); the answer does not wait past it.
+// search for meaning never fails the search. The vector half has one
+// deadline (captureVectorDeadline), which is also the statement deadline of
+// its SQL; the answer does not wait past it. Which story passages and capture
+// leads the vector half may return is decided by V2's one eligibility
+// predicate in its own SQL (a withdrawn, tombstoned, private or superseded row
+// is not returned); a story is walked only through the version that passed it.
 //
 // Every capture in the answer passes the same checks whichever way it came:
 // it is of the request's owner and computer, public (not owner-private, not
@@ -114,6 +118,14 @@ type CaptureRanking struct {
 	VectorAnswered    bool   `json:"vector_answered"`
 	VectorRows        int    `json:"vector_rows"`
 	VectorUnavailable string `json:"vector_unavailable,omitempty"`
+	// VectorState says how the vector lists were answered: "exact" (every
+	// list is the true nearest of its filtered rows: at most 100,000 rows, or
+	// the index came back short and was read again exactly), "approximate"
+	// (a list is the HNSW index's answer on a larger list) or "partial" (an
+	// exact read passed its deadline; VectorPartial says which). Empty when
+	// the vector half did not answer.
+	VectorState   string `json:"vector_state,omitempty"`
+	VectorPartial string `json:"vector_partial,omitempty"`
 	// BM25Kept is how many of BM25's top three pages had to be inserted.
 	BM25Kept int `json:"bm25_kept"`
 	// Note names a part of the vector half that failed while the rest answered.
@@ -249,6 +261,19 @@ func (s *Store) searchVectorsBounded(ctx context.Context, req VectorSearchReques
 	}
 }
 
+// vectorStateOf says how a vector result was answered: partial when any list
+// could not be completed, else approximate when any list is the index's answer
+// on a larger list, else exact.
+func vectorStateOf(vr VectorSearchResult) (state, partial string) {
+	switch {
+	case vr.Partial != "":
+		return "partial", vr.Partial
+	case len(vr.Approximate) > 0:
+		return "approximate", ""
+	}
+	return "exact", ""
+}
+
 type rankCand struct {
 	id      string
 	reasons map[string]bool
@@ -282,9 +307,9 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 	ranking := &CaptureRanking{Entries: []RankedCapture{}}
 	resp.Ranked = ranking
 	defer func() {
-		extra := " vector=unavailable bm25_kept=0"
+		extra := " vector=unavailable vector_state=unavailable bm25_kept=0"
 		if ranking.VectorAnswered {
-			extra = fmt.Sprintf(" vector=%d bm25_kept=%d", ranking.VectorRows, ranking.BM25Kept)
+			extra = fmt.Sprintf(" vector=%d vector_state=%s bm25_kept=%d", ranking.VectorRows, ranking.VectorState, ranking.BM25Kept)
 		}
 		done("ranked", len(ranking.Entries), nil, extra)
 	}()
@@ -321,6 +346,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 	}
 	ranking.VectorAnswered = true
 	ranking.VectorRows = len(vr.Stories) + len(vr.Captures)
+	ranking.VectorState, ranking.VectorPartial = vectorStateOf(vr)
 
 	// Stories: the latest version of each publication, its title, its citations.
 	storyHits := vr.Stories
