@@ -7,7 +7,11 @@ use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autora
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 members Autoradio
-  resource pg = openPages() as shape PageList else empty()
+  // The open pages. The Swift package's set (pgn) when it answers (iOS); otherwise the SHARED set (pgs, pages.ts, kept in storage.fs), so the deck mounts a page with no native code (Android).
+  // Every open, close, pin and reopen is sent to both; on iOS the shared set is kept but not read.
+  resource pgn = openPages() as shape PageList else empty()
+  resource pgs = pagesView() as shape PageList else empty()
+  derive pg = pgn.top != "" ? pgn : pgs
   resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
   resource th = theme() as shape Theme else empty()
   resource thl = themeList() as shape ThemeList else empty()
@@ -16,6 +20,9 @@ members Autoradio
   mutation pm as shape PageList
   // A second handle, for an action that opens one page and closes another in the same step.
   mutation pc as shape PageList
+  // The shared set's handles (pages.ts); each refreshes the shared view.
+  mutation pms as shape PageList refreshes pgs
+  mutation pcs as shape PageList refreshes pgs
 
   // The layer above the page: "" (none), "launcher" (the stack's pages and the destinations). The expanded player is gone: the
   // Autoradio page (radio.contract, the deck's first card) is where the radio is read.
@@ -33,8 +40,10 @@ members Autoradio
     layer = layer == "launcher" ? "" : "launcher"
   action pinPage(address: string)
     send pm = pagePin(address=address)
+    send pms = pagesPin(address)
   action reopenPage
     send pm = pageReopen()
+    send pms = pagesReopen()
 
   action setTheme(id: string)
     send pm = themeSet(id=id)
