@@ -206,3 +206,66 @@ func TestTheSearchDocsNoLongerCallTheUnreadPagesANoteOnly(t *testing.T) {
 		}
 	}
 }
+
+// From the review of the gate (seat 2, and the coordinator). Failure list,
+// written before the code:
+//  11. SearchAll for a question whose words are all small (an empty term key)
+//      skips the need test and sends every wording.
+//  12. A refused SearchStart called as a bare statement shows the cell nothing:
+//      no line in the cell result, although a reuse refusal has one.
+//  13. The refusal text does not say the held pages may be from any thread of
+//      the run, not only this query's.
+//  14. fresh_over_unread counts a search the host then refused or failed to
+//      start: it must count only a search that was sent.
+
+func TestSearchAllOfAQuestionWithNoTermsFallsBackToTheRunWideCount(t *testing.T) {
+	if k := questionKey("!!! ???"); k != "" {
+		t.Fatalf("the test needs a question with an empty key, got %q", k)
+	}
+	f := newResearchFixture(t)
+	cell := seedUnread(t, f, 40)
+	out := cell(`r, _ := choir.SearchAll("!!! ???", []string{"plain two", "plain three"})
+fmt.Println(r)`)
+	if f.searchCalls.Load() != 1 {
+		t.Fatalf("an empty question key must use the run-wide count; provider asked %d times:\n%s", f.searchCalls.Load(), out.Stdout)
+	}
+	if !strings.Contains(out.Stdout, "not sent (this question already holds 40 pages") {
+		t.Fatalf("stdout:\n%s", out.Stdout)
+	}
+}
+
+func TestARefusedBareSearchStartLeavesANoteInTheCellResult(t *testing.T) {
+	f := newResearchFixture(t)
+	cell := seedUnread(t, f, 40)
+	out := cell(`choir.SearchStart("plain two")`)
+	notes := strings.Join(out.Searches, "\n")
+	for _, want := range []string{"not sent: plain two", "40 pages new to this run", "fresh"} {
+		if !strings.Contains(notes, want) {
+			t.Fatalf("cell result lacks %q:\n%s", want, notes)
+		}
+	}
+}
+
+func TestTheRefusalSaysTheHeldPagesMayBeFromAnyThread(t *testing.T) {
+	f := newResearchFixture(t)
+	cell := seedUnread(t, f, 40)
+	out := cell(`s, _ := choir.SearchStart("plain two")
+fmt.Println(s.Refused)`)
+	if !strings.Contains(out.Stdout, "any thread of this run") {
+		t.Fatalf("stdout:\n%s", out.Stdout)
+	}
+}
+
+func TestFreshOverUnreadCountsOnlyASearchThatWasSent(t *testing.T) {
+	f := newResearchFixture(t)
+	f.hostErr = map[string]string{"plain two": "provider refused"}
+	cell := seedUnread(t, f, 40)
+	out := cell(`_, err := choir.SearchStart("plain two", true)
+fmt.Println(err != nil)`)
+	if !strings.Contains(out.Stdout, "true") {
+		t.Fatalf("the host refusal must reach the cell:\n%s", out.Stdout)
+	}
+	if st := out.SearchStats; st != nil && st.FreshOverUnread != 0 {
+		t.Fatalf("stats = %+v, a search the host refused is not a fresh search sent", st)
+	}
+}

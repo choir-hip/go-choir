@@ -499,15 +499,28 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 			return stub, nil
 		}
 	}
+	over := false
 	if gated {
-		if held, refuse := s.refuseForUnread("", override); refuse {
+		held, refuse := s.refuseForUnread("", override)
+		if refuse {
 			s.noteNotSent("holds_unread")
-			return SearchStub{Query: query, Refused: unreadRefusal(len(held)), Unread: held}, nil
+			why := unreadRefusal(len(held))
+			// A cell that calls SearchStart as a bare statement still sees it.
+			s.statsMu.Lock()
+			s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
+			s.statsMu.Unlock()
+			return SearchStub{Query: query, Refused: why, Unread: held}, nil
 		}
+		over = override && len(held) >= searchEnoughUnread
 	}
 	var out SearchStartResult
 	if err := s.call(ActionSearchStart, SearchStartPayload{Query: query}, &out); err != nil {
 		return SearchStub{}, err
+	}
+	if over {
+		s.statsMu.Lock()
+		s.allStat.freshOverUnread++
+		s.statsMu.Unlock()
 	}
 	// The next search is judged against this one: wait for its start frame.
 	s.searches.knows(out.ID, 2*time.Second)

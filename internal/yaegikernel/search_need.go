@@ -145,8 +145,9 @@ func questionKey(question string) string {
 // the question (qk; every search of the run when empty) that it has not tried
 // to read, and whether they are enough to refuse a search: searchEnoughUnread
 // or more. Unless override is set it first waits for the run's running searches
-// (see settle). A search sent over a refusal with override is counted as
-// fresh_over_unread; the caller counts a refusal as holds_unread.
+// (see settle). With override it never refuses; the caller counts a refusal as
+// holds_unread, and a search sent over one as fresh_over_unread once the host
+// has accepted it.
 func (s *ChoirScope) refuseForUnread(qk string, override bool) (held []SearchHit, refuse bool) {
 	if s == nil || s.searches == nil {
 		return nil, false
@@ -158,18 +159,12 @@ func (s *ChoirScope) refuseForUnread(qk string, override bool) (held []SearchHit
 	if len(held) < searchEnoughUnread {
 		return held, false
 	}
-	if override {
-		s.statsMu.Lock()
-		s.allStat.freshOverUnread++
-		s.statsMu.Unlock()
-		return held, false
-	}
-	return held, true
+	return held, !override
 }
 
 // unreadRefusal is what the desk is told when a search is not sent for the
 // pages the run holds: why, how many, and the pages themselves (SearchStub and
 // Search carry them).
 func unreadRefusal(n int) string {
-	return fmt.Sprintf("this run already holds %d pages new to this run that you have not tried to read, returned by its earlier searches. Read the ones that matter, then search again for what is still missing, naming it. A page that will not load counts once you have tried it. To send a search for something these pages cannot hold, pass fresh: choir.Search(query, true)", n)
+	return fmt.Sprintf("this run already holds %d pages new to this run that you have not tried to read, returned by its earlier searches (they may be from any thread of this run, not only this query's). Read the ones that matter, then search again for what is still missing, naming it. A page that will not load counts once you have tried it. To send a search for something these pages cannot hold, pass fresh: choir.Search(query, true)", n)
 }
