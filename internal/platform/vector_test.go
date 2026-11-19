@@ -20,11 +20,13 @@ package platform
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http/httptest"
 	"os"
@@ -247,9 +249,6 @@ func TestVectorPassNeverEmbedsAnOwnerPrivateCaptureAndSweepsOneThatTurnsPrivate(
 	if err := f.og.PutBatch(context.Background(), objectgraph.Batch{Objects: []objectgraph.Object{pub}}); err != nil {
 		t.Fatal(err)
 	}
-	old := vectorSweepEvery
-	vectorSweepEvery = 0
-	t.Cleanup(func() { vectorSweepEvery = old })
 	res := f.pass(t)
 	if res.Removed != 1 || f.count(t, "vec_captures") != 0 {
 		t.Fatalf("sweep: %+v rows %d", res, f.count(t, "vec_captures"))
@@ -275,7 +274,7 @@ func TestVectorSweepRemovesAWithdrawnStory(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := f.pass(t)
-	if res.Removed != 1 || f.count(t, "vec_story_passages") != 4 {
+	if res.Removed != 4 || f.count(t, "vec_story_passages") != 4 {
 		t.Fatalf("withdrawn story: %+v rows %d", res, f.count(t, "vec_story_passages"))
 	}
 }
@@ -896,5 +895,356 @@ func TestVectorInputsMatchTheMacExportsTitlesAndText(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Fatalf("capture inputs missing: %v", want)
+	}
+}
+
+// ---- review round 1: completeness, eligibility, writers, import bounds ----
+
+// captures puts n captures in one batch: texts come from text(i), each fetched
+// i hours after the first. It returns their ids in order.
+func (f *vecFixture) captures(t *testing.T, owner, computer, tag string, n int, base time.Time, text func(i int) string, step time.Duration) []string {
+	t.Helper()
+	var objs []objectgraph.Object
+	var ids []string
+	for i := 0; i < n; i++ {
+		key := fmt.Sprintf("%s-%d", tag, i)
+		body := text(i)
+		ref, err := f.svc.captureBodies.PutBody([]byte(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := mustCaptureID(t, owner, key)
+		at := base.Add(time.Duration(i) * step)
+		meta, _ := json.Marshal(objectgraph.WebCaptureMetadata{SchemaVersion: objectgraph.WebCaptureSchemaVersion, URL: "https://example.com/" + key, CanonicalURL: "https://example.com/" + key, Title: "T " + key,
+			FetchedAt: at.Format(time.RFC3339Nano), ContentBlobID: ref, ExtractedTextBlobID: ref, BlocksBlobID: ref, Extractor: "x1", DocHash: "h-" + key})
+		objs = append(objs, objectgraph.Object{CanonicalID: id, ObjectKind: objectgraph.WebCaptureObjectKind, OwnerID: owner, ComputerID: computer,
+			ContentHash: "h-" + key, Metadata: meta, CreatedAt: at, UpdatedAt: at})
+		ids = append(ids, id)
+	}
+	if err := f.og.PutBatch(context.Background(), objectgraph.Batch{Objects: objs}); err != nil {
+		t.Fatalf("PutBatch: %v", err)
+	}
+	return ids
+}
+
+func forceIndex(t *testing.T) {
+	t.Helper()
+	old := vectorSearchTxHook
+	vectorSearchTxHook = func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `SET LOCAL enable_seqscan = off`)
+		return err
+	}
+	t.Cleanup(func() { vectorSearchTxHook = old })
+}
+
+func TestVectorSearchWithAFilterIsCompleteNotSilentlyShort(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Truncate(24 * time.Hour).Add(-120 * 24 * time.Hour)
+	// 400 near the query in one scope, 12 far away in another, a few of the
+	// near ones on one day. The index scan reads its candidates by distance;
+	// the filter keeps almost none of them.
+	f.captures(t, "o1", "big", "near", 400, base, func(i int) string { return fmt.Sprintf("alpha common words number%d", i) }, 6*time.Hour)
+	small := f.captures(t, "o1", "small", "far", 12, base, func(i int) string { return fmt.Sprintf("zeta omega unrelated%d", i) }, time.Hour)
+	f.pass(t)
+	forceIndex(t)
+	old := vectorMaxScanTuples
+	vectorMaxScanTuples = 20
+	t.Cleanup(func() { vectorMaxScanTuples = old })
+	ctx := context.Background()
+
+	res, err := f.store.SearchVectors(ctx, VectorSearchRequest{Query: "alpha common words", Owner: "o1", Computer: "small", CaptureLimit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Captures) != len(small) || res.Partial != "" || !strings.Contains(strings.Join(res.ExactScan, ","), "captures") {
+		t.Fatalf("scope: %d of %d captures, exact %v, partial %q", len(res.Captures), len(small), res.ExactScan, res.Partial)
+	}
+	for i := 1; i < len(res.Captures); i++ {
+		if res.Captures[i].Score > res.Captures[i-1].Score {
+			t.Fatal("exact scan out of order")
+		}
+	}
+
+	// A one-day window over the big scope: 4 captures a day, all must come back.
+	day := base.Add(40 * 24 * time.Hour)
+	res, err = f.store.SearchVectors(ctx, VectorSearchRequest{Query: "alpha common words", Owner: "o1", Computer: "big", Since: day, Until: day.Add(24 * time.Hour), CaptureLimit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want int
+	if err := f.store.corpus().QueryRow(`SELECT COUNT(*) FROM vec_captures WHERE computer_id = 'big' AND day = ?::date`, day.Format("2006-01-02")).Scan(&want); err != nil || want == 0 {
+		t.Fatalf("fixture has %d captures that day (%v)", want, err)
+	}
+	if len(res.Captures) != want || res.Partial != "" {
+		t.Fatalf("window: %d of %d captures (exact %v, partial %q)", len(res.Captures), want, res.ExactScan, res.Partial)
+	}
+
+	// A list that fills its limit from the index is not asked again.
+	res, err = f.store.SearchVectors(ctx, VectorSearchRequest{Query: "alpha common words", Owner: "o1", Computer: "big", CaptureLimit: 20})
+	if err != nil || len(res.Captures) != 20 || strings.Contains(strings.Join(res.ExactScan, ","), "captures") {
+		t.Fatalf("full list: %d, exact %v, %v", len(res.Captures), res.ExactScan, err)
+	}
+}
+
+func TestVectorSearchStatementUsesTheHNSWIndex(t *testing.T) {
+	f := newVecFixture(t)
+	f.captures(t, "o1", "big", "near", 400, time.Now().UTC().Add(-48*time.Hour), func(i int) string { return fmt.Sprintf("alpha common words number%d", i) }, time.Minute)
+	f.story(t, "doc-a", 1, "Harbor reopens", storyText("harbor"), time.Time{})
+	f.pass(t)
+	lit := vecLiteral(embedder.FakeVector("alpha"))
+	none := func(a []any) (string, []any) { return "", a }
+	cq, cargs := vectorCaptureQuery(lit, "o1", "big", none, 20)
+	sq, sargs := vectorStoryQuery(lit, none, 20)
+	for name, q := range map[string]struct {
+		sql  string
+		args []any
+		idx  string
+	}{"captures": {cq, cargs, vecCaptureIndex}, "stories": {sq, sargs, vecStoryIndex}} {
+		tx, err := f.store.corpus().Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// With the alternatives to an ordered index scan priced out, the plan
+		// is the HNSW index's (a planner left to itself may rightly prefer the
+		// scope's btree and a sort on a small or unanalysed table; the
+		// production plan is checked on staging with EXPLAIN ANALYZE).
+		_, _ = tx.Exec(`ANALYZE ` + map[string]string{"captures": vecCaptureTable, "stories": vecStoryTable}[name])
+		_, _ = tx.Exec(`SET LOCAL enable_seqscan = off`)
+		_, _ = tx.Exec(`SET LOCAL enable_sort = off`)
+		rows, err := tx.Query(`EXPLAIN `+q.sql, q.args...)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var plan strings.Builder
+		for rows.Next() {
+			var l string
+			_ = rows.Scan(&l)
+			plan.WriteString(l + "\n")
+		}
+		rows.Close()
+		_ = tx.Rollback()
+		if !strings.Contains(plan.String(), q.idx) {
+			t.Fatalf("%s: the statement does not use %s:\n%s", name, q.idx, plan.String())
+		}
+	}
+}
+
+func TestVectorSearchNeverReturnsATextThatStoppedBeingPublicAndTheSweepNeedsNoEmbedder(t *testing.T) {
+	f := newVecFixture(t)
+	now := time.Now().UTC().Add(-time.Hour)
+	f.story(t, "doc-a", 1, "Harbor reopens", storyText("harbor"), time.Time{})
+	f.story(t, "doc-b", 1, "Bridge closes", storyText("bridge"), time.Time{})
+	priv := f.capture(t, "o1", "c1", "becomes-private", "Soon private", "harbor quay words", now, false).CanonicalID
+	gone := f.capture(t, "o1", "c1", "tombstoned", "Soon gone", "harbor quay words", now, false).CanonicalID
+	sup := f.capture(t, "o1", "c1", "superseded", "Soon superseded", "harbor quay words", now, false).CanonicalID
+	keep := f.capture(t, "o1", "c1", "kept", "Kept", "harbor quay words", now, false).CanonicalID
+	f.pass(t)
+	ctx := context.Background()
+	search := func() VectorSearchResult {
+		res, err := f.store.SearchVectors(ctx, VectorSearchRequest{Vector: embedder.FakeVector("harbor quay words"), Owner: "o1", Computer: "c1", CaptureLimit: 50, StoryLimit: 50})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := search(); len(res.Captures) != 4 || len(res.Stories) != 8 {
+		t.Fatalf("before: %d captures %d passages", len(res.Captures), len(res.Stories))
+	}
+	// The texts stop being public. No pass, no sweep: the very next search is clean.
+	p, _ := f.og.GetObject(ctx, priv)
+	p.Metadata = types.StampMetadataLabels(p.Metadata, types.NewLabelSet(types.OwnerPrivateLabel("capture")))
+	p.ContentHash += "-p"
+	if err := f.og.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{p}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = '` + gone + `'`,
+		`UPDATE og_objects SET superseded_by = 'obj:newer' WHERE canonical_id = '` + sup + `'`,
+	} {
+		if _, err := f.store.corpus().Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	docA, _ := publicationIdentityFor("paper-owner", "doc-a")
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET metadata = jsonb_set(metadata::jsonb, '{state}', '"withdrawn"')::text WHERE canonical_id = ?`, docA.CanonicalID); err != nil {
+		t.Fatal(err)
+	}
+	docB, _ := publicationIdentityFor("paper-owner", "doc-b")
+	versions, _ := publishedVersions(ctx, f.og, docB.CanonicalID)
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = ?`, versions[0].CanonicalID); err != nil {
+		t.Fatal(err)
+	}
+	res := search()
+	if len(res.Captures) != 1 || res.Captures[0].CaptureID != keep || len(res.Stories) != 0 {
+		t.Fatalf("after: captures %+v, %d passages: a text that is no longer public was returned", res.Captures, len(res.Stories))
+	}
+	var held int
+	_ = f.store.corpus().QueryRow(`SELECT (SELECT COUNT(*) FROM vec_captures) + (SELECT COUNT(*) FROM vec_story_passages)`).Scan(&held)
+	if held != 4+8 {
+		t.Fatalf("rows %d: the search should not have deleted anything", held)
+	}
+	// The sweep removes them with the embedder down.
+	f.emb.Down.Store(true)
+	pass, err := f.svc.RunVectorPass(ctx)
+	if !errors.Is(err, errEmbedderDown) {
+		t.Fatalf("err %v", err)
+	}
+	if pass.Removed != 3+8 {
+		t.Fatalf("removed %d, want 3 captures and 8 passages", pass.Removed)
+	}
+	_ = f.store.corpus().QueryRow(`SELECT (SELECT COUNT(*) FROM vec_captures) + (SELECT COUNT(*) FROM vec_story_passages)`).Scan(&held)
+	if held != 1 {
+		t.Fatalf("rows left %d, want only the kept capture", held)
+	}
+}
+
+func TestVectorWritersOfOneVersionDoNotAbortEachOther(t *testing.T) {
+	f := newVecFixture(t)
+	if err := f.store.ensureVectorTables(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mk := func(seed string) []storyVectorRow {
+		rows := make([]storyVectorRow, 6)
+		for i := range rows {
+			rows[i] = storyVectorRow{StoryID: "s", VersionID: "v", Ordinal: i, TextSHA: seed, Day: time.Now(), Vec: embedder.FakeVector(fmt.Sprint(seed, i))}
+		}
+		return rows
+	}
+	errs := make(chan error, 16)
+	for w := 0; w < 8; w++ {
+		go func(w int) {
+			var err error
+			for k := 0; k < 5 && err == nil; k++ {
+				err = f.store.writeStoryVersionVectors(context.Background(), "s", "v", mk(fmt.Sprint("w", w)))
+			}
+			errs <- err
+		}(w)
+	}
+	for w := 0; w < 8; w++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("a writer failed: %v", err)
+		}
+	}
+	if f.count(t, "vec_story_passages") != 6 {
+		t.Fatalf("%d rows, want one whole version", f.count(t, "vec_story_passages"))
+	}
+}
+
+func TestVectorCaptureLookupReadsOnlyCaptures(t *testing.T) {
+	f := newVecFixture(t)
+	id := f.capture(t, "o1", "c1", "k1", "One", "one text", time.Now().UTC().Add(-time.Hour), false).CanonicalID
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET object_kind = 'choir.note' WHERE canonical_id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	objs, err := f.store.captureObjectsByIDAny(context.Background(), []string{id})
+	if err != nil || len(objs) != 0 {
+		t.Fatalf("a non-capture object was read as a capture: %v %v", objs, err)
+	}
+}
+
+func TestVectorImportSampleIsRandomStratifiedAndCannotShrinkBelowTheFloor(t *testing.T) {
+	// 150 captures; the vectors are right only at the old fixed stride (every
+	// fifth row). A random sample of 32 cannot all land on the 30 right rows.
+	f := newVecFixture(t)
+	ids := f.captures(t, "o1", "c1", "s", 150, time.Now().UTC().Add(-200*time.Hour), func(i int) string { return fmt.Sprintf("sample text number%d", i) }, time.Minute)
+	rows := f.macRows(t, ids...)
+	for i := range rows {
+		if i%5 != 0 {
+			rows[i].Vec = embedder.FakeVector(fmt.Sprint("wrong", i))
+		}
+	}
+	res, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if !errors.Is(err, ErrVectorImportRefused) || res.SampleSeed == 0 || !strings.Contains(err.Error(), fmt.Sprint(res.SampleSeed)) {
+		t.Fatalf("a fixed-stride file passed or the seed is not recorded: %v (seed %d)", err, res.SampleSeed)
+	}
+	if f.count(t, "vec_captures") != 0 {
+		t.Fatal("rows written from a refused file")
+	}
+	// Every present kind of row is checked: wrong vectors only on a story's
+	// later passages are found.
+	f2, caps := importFixture(t)
+	rows = f2.macRows(t, caps...)
+	for i := range rows {
+		if rows[i].Kind == vectorKindStory && rows[i].Ordinal > 0 {
+			rows[i].Vec = embedder.FakeVector(fmt.Sprint("wrong", i))
+		}
+	}
+	if _, err := f2.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows)); !errors.Is(err, ErrVectorImportRefused) {
+		t.Fatalf("wrong later passages passed: %v", err)
+	}
+	// A file of which too few rows can be checked is refused: 100 rows, 90 of
+	// them with a text this host does not cut.
+	f3 := newVecFixture(t)
+	ids = f3.captures(t, "o1", "c1", "s", 100, time.Now().UTC().Add(-200*time.Hour), func(i int) string { return fmt.Sprintf("floor text number%d", i) }, time.Minute)
+	rows = f3.macRows(t, ids...)
+	for i := 10; i < 100; i++ {
+		rows[i].TextSHA = embedder.TextSHA("another cut")
+	}
+	_, err = f3.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if !errors.Is(err, ErrVectorImportRefused) || !strings.Contains(err.Error(), "can be checked") {
+		t.Fatalf("a file that could be checked on 10 rows passed: %v", err)
+	}
+}
+
+func TestVectorImportBoundsALineAndAVersionGroup(t *testing.T) {
+	f, caps := importFixture(t)
+	path := writeImportFile(t, f.macRows(t, caps...))
+	raw, _ := os.ReadFile(path)
+	long := append([]byte(strings.Repeat("x", vectorImportMaxLine+10)), '\n')
+	bad := filepath.Join(t.TempDir(), "long.ndjson")
+	_ = os.WriteFile(bad, append(append([]byte{}, raw...), long...), 0o600)
+	if _, err := f.svc.ImportVectorFile(context.Background(), bad); !errors.Is(err, ErrVectorImportRefused) || !strings.Contains(err.Error(), "longer than") {
+		t.Fatalf("a long line: %v", err)
+	}
+	if f.count(t, "vec_story_passages")+f.count(t, "vec_captures") != 0 {
+		t.Fatal("rows written from a refused file")
+	}
+	old := vectorImportMaxGroupRows
+	vectorImportMaxGroupRows = 2
+	t.Cleanup(func() { vectorImportMaxGroupRows = old })
+	res, err := f.svc.ImportVectorFile(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Rejected["oversized_version"] != 8 || res.Written != 2 {
+		t.Fatalf("oversized versions: %+v", res)
+	}
+}
+
+func TestVectorImportRouteRefusesASecondImportBeforeReadingItsBody(t *testing.T) {
+	f, caps := importFixture(t)
+	f.store.vec.importMu.Lock()
+	f.store.vec.jobs = map[string]*VectorImportJob{"j": {JobID: "j", State: "running"}}
+	f.store.vec.lastJob = "j"
+	f.store.vec.importMu.Unlock()
+	_ = caps
+	h := &Handler{service: f.svc}
+	body := &failReader{t: t}
+	req := httptest.NewRequest("POST", "/internal/platform/vectors/import", body)
+	req.RemoteAddr = "127.0.0.1:40000"
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+	h.HandleVectorImport(rec, req)
+	if rec.Code != 409 || body.read {
+		t.Fatalf("status %d, body read %v", rec.Code, body.read)
+	}
+}
+
+type failReader struct {
+	t    *testing.T
+	read bool
+}
+
+func (r *failReader) Read([]byte) (int, error) { r.read = true; return 0, io.EOF }
+
+func TestVectorWorkerRemovesAStaleSpoolFileAtStart(t *testing.T) {
+	f := newVecFixture(t)
+	dir := filepath.Join(f.svc.artifactsRoot, vectorImportDirName)
+	_ = os.MkdirAll(dir, 0o750)
+	stale := filepath.Join(dir, "import-123.ndjson")
+	_ = os.WriteFile(stale, []byte("x"), 0o600)
+	f.svc.removeStaleVectorSpool()
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("stale spool file kept")
 	}
 }
