@@ -251,7 +251,7 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 - `intake_labels.go:43` names a "bucket".
 - `CAPTURE-FULLTEXT.md` §5 prescribes reciprocal-rank fusion against the measurement.
 
-## Assessment after four review rounds on the vector index (2026-11-19T09:00Z)
+## Assessment after four review rounds on the vector index (2026-11-19T08:54Z)
 
 The vector index's Go half has been sent back three times (rounds 2, 3
 and 4), each time with one blocking finding, so the contract's rule
