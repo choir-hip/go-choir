@@ -249,3 +249,115 @@ printed; see the open problem in `testing-and-debugging.md`.
   real on the simulator, and an `AVAudioEngine` we start opens the simulator's
   hardware (`audio.md`, `testing-and-debugging.md`). Branch on `context.agent`
   for anything that can block the main thread.
+
+## Moving a page to shared logic: the pattern
+
+Written 2026-11-18 from the Paper page, the first page moved (lane `exact-paper`;
+`mobile/AutoradioLab/paper.ts`). The rule is CLAUDE.md, Product: the phone app is
+Exact, only voice is native. A page moves when its data source is answered by
+`app.ts` instead of by the Swift package. Every step below was done and run on
+the web host; the phone and Android builds are the lead's.
+
+**1. One name, one answerer.** A source is answered by the Swift package or by
+`app.ts`, decided by the name, never both and with no switch. A name the
+contract imports with `use name from "@choir/autoradio"` is the package's. A
+name the contract does not import, used as `resource x = name(a, b) as shape
+Shape else empty()`, is `app.ts`'s (`docs/recipes/fetch-loading-error.md`,
+`reference.md` "Generate TypeScript data-source types": the generated `Sources`
+type has exactly the undeclared names). Both kinds live in one app: the web
+build ran with the package's `openPages`, `theme`, `demoInfo` and our own
+`paperFront` side by side. To move a page: delete the name from
+`exact-package/interface/<page>.json` (and its Swift `handle(...)`), delete the
+`use name` line, keep the resource line but pass **positional** arguments (a
+named argument is a compile error for a source the package does not own:
+`type-named-argument`). Order the arguments as `app.ts` destructures them.
+
+**2. Where types come from.** The package's shapes went with the name. Declare the
+shapes in a `.contract` file (`paper-types.contract`) and `use PaperFront from
+"./paper-types.contract"` in every contract that read them. Never write the same
+shape twice: `bun exact.mjs contract build` writes `app.contract.d.ts` (gitignored)
+from the contract, and `app.ts` imports `Sources`, `Answer`, `Storage` from it, so a
+field added in the contract is a type error in TypeScript until answered. The
+answer is held to its shape at run time, exactly (no extra field, no missing one).
+
+**3. Shape of the TypeScript.** `app.ts` stays small: the grants, a `Sources`
+map with one line per moved name, and the `answer` dispatcher. Logic lives in
+modules it imports (`paper.ts` the source, `paper-model.ts` pure data,
+`paper-layout.ts` pure layout, `api.ts` the one place that builds requests).
+Do not name a module `server.ts`: Exact reads it as the test backend. A source
+never throws for a failure the page has words for; it answers the page's own
+state (`status: "error"`, `message`), so the page shows its existing error and
+retry, never a spinner word. Time is never read: `Date.now()` and `new Date()` are
+refused. The server's `Date` header is "now" for ranking and "2 h ago"; a
+fixed `Date.UTC(...)` of a parsed string is fine. State between answers is a
+module-level `Map` (kept lists), cleared when a `tick` argument changes (a pull to
+refresh).
+
+**4. Grants.** `export const grants` is read by the build without running the
+module: a string or a template of constants **in `app.ts` itself**. An imported
+constant is refused (`grants must be a constant the build reads without running
+the module`). So the origin is `export const ORIGIN = 'https://choir.news'` in
+`app.ts` and `api.ts` imports it; the grant is `net.fetch ${ORIGIN}`. A file the
+module writes (the offline copy) needs `fs.read` and `fs.write` for its exact
+path, spelled in the grant and in the module, and a test (`paper.test.ts`, "the
+grants") asserts the two agree. Server routes the page reads must be public;
+a route that needs a token is a later page's step (`store`, `secret.keep`).
+
+**5. Shared files from outside the app.** `app.json` `typescript.sources` maps a
+folder outside the app to an import name: `{"fixtures": "../fixtures", "layouts":
+"../layouts"}` lets `paper.ts` import `./fixtures/demo/front.json`. A committed
+symlink of the same name (`AutoradioLab/fixtures -> ../fixtures`) lets `bun test`
+and the editor resolve it; the build does not follow symlinks, it follows the
+mount. This is how Go, Swift and Bun tests share one fixture.
+
+**6. Tests, failure list first.** (a) `paper.test.ts`, `bun test`: call
+`paperFront(args, storage)` with `globalThis.fetch` stubbed and a fake `storage`
+(a map of paths to bytes); the canned body is the real captured response
+(`mobile/fixtures/paper/front-live-*.json`, public content, nothing stripped).
+Cover: the real body, an empty list, a 5xx, a thrown transport error, malformed
+bodies, a saved offline copy, one request per list, ordering and trimming rules.
+Bun has no grants and no shape check; the build and `test web` supply them.
+(b) `paper.test.contract`, `bun exact.mjs test web`: `answer fetch "<origin>"
+with 200 <one-line json, at most 64 KiB>` leads the file or a test; `fail fetch
+"<origin>"` fails the first load. Assert `expect state <resource>.<field>`. The
+deck mounts a page only when the package's `openPages` says which is on top, and
+the web host has only that source's placeholder, so on the web the page's own
+tree is not drawn: assert the resource, and look at the page on the simulator
+and on Android. `agent` has no `answer fetch` step; only authored tests do.
+(c) `contract build app.contract --json --errors-only` must print `[]` (it also
+type-checks `app.ts`).
+
+**7. What to delete in the same change.** The Swift source and everything only it
+used (here: PaperSource, PaperComposer, LayoutEngine, TextMeasure, MyEdition,
+PaperViews, PaperCurrentList, FrontOrder, the interface name, its shapes, its Swift
+tests); the places other Swift read what it produced must be fed another way or
+dropped, and the report says which. What stays: Swift the radio or another page
+still uses (`PaperStory`, `StretchCandidates`, `RadioProgramme` read the front for
+the radio). Run `python3 -I mobile/scripts/gen-exact-interface.py` to rewrite
+`exact-package/exact.json`, and `mobile/scripts/sync-exact-package.sh` plus
+`bun install` in `AutoradioLab` so the build sees the smaller package. Whatever
+Swift data the moved page still needs (here the reader's saved topics) becomes a
+small package source the contract passes in as an argument, until its owner page
+moves too.
+
+## Mail on the phone: sealed in shared code (2026-11-19, lane `exact-mail`)
+
+The Mail pages, the signed-in requests to the listener's computer and the phone's copy of the mail are `mail.ts` and its siblings in `mobile/AutoradioLab`
+(`mail-model.ts` pure data, `mail-sanitize.ts` the allowlist HTML cleaner, `mail-seal.ts` the cipher, `mail-store.ts` the copy). Three sends stay native
+(`mailOpenReview`, `mailRead`, `mailAsk`: the in-app web view, the radio's voice, the Swift signal log).
+
+- **At rest.** The cipher is the platform's: ONE native pair on the app module, `mailSeal` and `mailOpen` (`Choir/MailSeal.swift`, CryptoKit AES-256-GCM), with a key
+  made and kept natively in the Keychain (its own item, this device only, after first unlock) and never returned to shared code; Exact's `crypto.subtle` has digests
+  and ECDSA only. Every file under `app:/data/mail` is sealed (format `MS3`), and the record's identity (`msg|<id>`, `rows|<folder>`, `state`) is authenticated data, so a
+  file swapped to another record fails. The native open answers three things: opened, `bad` (the tag failed: the file is removed and fetched again) or `cannot` (no key
+  could be read now: the file is KEPT and nothing is judged). A key is made only while the sign-in key is stored. With no cipher (`mailCan` unanswered: Android today)
+  nothing is written, nothing is fetched for storing, and "Show original" is not offered. `app:/data` is `Library/Application Support/exact/<app id>/data` and IS in a device backup
+  (`host/apple/src/picker.rs:46-51`), which is why the key is this-device-only. Mail is not in local search: a search index of mail would hold its words unsealed, and the plain
+  mail sync in `content.ts` and `mailDocs` in `search.ts` were deleted; a search over sealed mail has to be designed first.
+- **Show original.** `iframe` has no `srcdoc` (gaps.md 30), so the cleaned document is written PLAIN to `app:/cache/mail-<hash>.html` only while it is asked for, and every
+  other `mail-*.html` is removed on each message answer, at sign-out and at every launch. `app:/cache` is `$HOME/Library/Caches/exact/<app id>` (`host/apple/src/picker.rs:52`):
+  under Apple's rules Library/Caches is not in a device backup; the file is plain on the phone while the page is open (residual). A link in it is inert (no `href`; its
+  address is written after it). A body over 120 000 characters shows a statement that it is too large to show in full; the message page shows the text, cut at 200 000 (the HTML is read up to 300 000).
+- **Sign-out.** Shared code leads (`account.ts`): `beginSignOut` moves the account generation and turns sealing off BEFORE the native sign-out; a store write checks the generation
+  before and after it seals and writes; `wipeMail` removes the files and the key. (The Swift registration `AccountWipe.removeMailCopy` is a second path for the same files.)
+  same and also forgets the key, and is what the shared sign-out will call.

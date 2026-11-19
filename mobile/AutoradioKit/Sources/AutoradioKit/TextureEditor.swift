@@ -167,7 +167,7 @@ public struct TextureEditInfo: Codable, Sendable, Equatable {
             guard gen == generation else { s.saving = false; return }
             pending[doc] = draft; savePending()
             if Self.isOffline(error) { s.info.status = "offline"; s.info.label = "Offline: kept on this phone, posts when it can"; scheduleRetry() }
-            else { s.info.status = "failed"; s.info.label = "Not saved: \(FilesService.say(error))"; scheduleRetry() }
+            else { s.info.status = "failed"; s.info.label = "Not saved: \(textureSaveSentence(error))"; scheduleRetry() }
         }
         s.saving = false
         changed()
@@ -245,4 +245,17 @@ public final class RouteTextureAPI: TextureAPI {
         let n = (o["version_number"] as? NSNumber)?.intValue ?? -1
         return (o["revision_id"] as? String ?? "", n + 1)
     }
+}
+
+/// One plain sentence for a failed save (this was the Files service's; the Files page is shared code now).
+func textureSaveSentence(_ error: Error) -> String {
+    if let e = error as? ChoirError {
+        switch e {
+        case .unauthorized, .notSignedIn: return "Sign in again to save."
+        case .transport, .timeout: return "Could not reach your computer. Check the connection and try again."
+        case .forbidden: return "This device is not allowed to save here."
+        default: return "Could not save. \(e)"
+        }
+    }
+    return "Something went wrong saving the document."
 }

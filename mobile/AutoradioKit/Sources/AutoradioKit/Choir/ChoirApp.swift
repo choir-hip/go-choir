@@ -158,6 +158,8 @@ public final class ChoirApp: @unchecked Sendable {
             let p = RunSheetPlayer.shared
             let engine = ChoirPlaybackEngine(app: me)
             p.engine = engine
+            Deck.shared.engine = engine
+            Deck.shared.sessionReady = { [weak me] reason in await me?.ensureEngine(reason: reason) }
             p.sessionReady = { [weak me] reason in await me?.ensureEngine(reason: reason) }       // before every start of playback
             let continuity = PlaybackContinuity(runtime: me.runtime)
             engine.continuity = continuity
@@ -197,7 +199,8 @@ public final class ChoirApp: @unchecked Sendable {
             w.onIdle = { [weak me] in Task { @MainActor in await me?.writeAhead?.writerIdle() } }
             p.aheadChanged = { [weak w] in w?.checkAhead() }
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
-            RunSheetStore.shared.restore()                 // the pending ops of the last launch; nothing plays
+            Deck.shared.boot()                             // an item the kill left open is closed in the journal first
+            RunSheetStore.shared.restore(journal: Deck.shared.journal)       // the pending ops of the last launch; nothing plays
             if let name = Demo.sheetName, let sheet = Demo.runSheet(name) {          // demo test affordance (Demo.sheetKey): a tour's own run sheet
                 RunSheetStore.shared.replaceForDemo(sheet)
                 Station.shared.holdForDemoSheet = true
@@ -219,6 +222,7 @@ public final class ChoirApp: @unchecked Sendable {
         Task { @MainActor in
             let p = RunSheetPlayer.shared
             if let doc = p.playingDocument, doc == id { p.spokenBlock(idx) }
+            p.checkSound()                                  // the deck's evidence that sound is being rendered
         }
     }
 
@@ -372,9 +376,9 @@ public final class ChoirApp: @unchecked Sendable {
     // MARK: Play, next, previous
 
     /// Play this story now (a row, a page's Play): `place now` on the run sheet. What was ahead stays ahead.
-    public func play(route: String) async {
-        let title = lock.withLock { stories.first { $0.route == route }?.title } ?? FrontOrder.shared.stories.first { $0.route == route }?.title ?? ""
-        await MainActor.run { RunSheetPlayer.shared.playNow(.paperStory(route: route, title: title)) }
+    public func play(route: String, title: String = "") async {
+        let heading = title.isEmpty ? (lock.withLock { stories.first { $0.route == route }?.title } ?? "") : title      // the page names the story; the radio's list is the fallback
+        await MainActor.run { RunSheetPlayer.shared.playNow(.paperStory(route: route, title: heading)) }
         await RunSheetPlayer.shared.settle()
     }
 

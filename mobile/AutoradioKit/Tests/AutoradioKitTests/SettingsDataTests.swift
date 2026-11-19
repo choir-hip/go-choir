@@ -147,34 +147,6 @@ final class ThemeLoaderTests: XCTestCase {
 }
 
 final class AccountsTests: XCTestCase {
-    struct FailingAccount: AccountClient { let error: Error; func whoami() async throws -> WhoAmI { throw error } }
-    struct FixedAccount: AccountClient { func whoami() async throws -> WhoAmI { WhoAmI(handle: "h", keyID: "k", keyLabel: "L", scopes: ["a", "b"], computerID: "c") } }
-
-    func testWhoAmIParsesTheRoutesAnswerAndNeverNeedsAnEmail() throws {        // A1
-        let w = try WhoAmI.parse(Demo.fixture("whoami")!)
-        XCTAssertEqual(w.handle, "quiet-heron-41"); XCTAssertEqual(w.scopes, ["owner:acts", "admin"]); XCTAssertEqual(w.computerID, "demo-computer")
-        XCTAssertThrowsError(try WhoAmI.parse(Data(##"{"key_label":"x"}"##.utf8)))
-        XCTAssertThrowsError(try WhoAmI.parse(Data("[]".utf8)))
-    }
-
-    func testAccountViewSaysWhyItFailed() async {                              // A2
-        let m = AccountModel(client: FailingAccount(error: ChoirError.server(status: 404, message: "")), demo: false, signedIn: { true }, baseURL: { "https://example.com" })
-        await m.refresh()
-        XCTAssertEqual(m.view().status, "failed"); XCTAssertTrue(m.view().message.contains("cannot say which account"))
-        let n = AccountModel(client: FailingAccount(error: ChoirError.unauthorized), demo: false, signedIn: { true }, baseURL: { "" })
-        await n.refresh(); XCTAssertTrue(n.view().message.contains("no longer accepted"))
-    }
-
-    func testAccountViewIsEmptyWhenSignedOutAndFilledWhenSignedIn() async {
-        let box = Box(true)
-        let m = AccountModel(client: FixedAccount(), demo: true, signedIn: { box.value }, baseURL: { "https://example.com" })
-        await m.refresh()
-        XCTAssertEqual(m.view().handle, "h"); XCTAssertEqual(m.view().scopes, "a, b"); XCTAssertTrue(m.view().demo)
-        box.value = false
-        XCTAssertEqual(m.view().handle, ""); XCTAssertFalse(m.view().signedIn)
-    }
-    final class Box: @unchecked Sendable { var value: Bool; init(_ v: Bool) { value = v } }
-
     final class FakeComputer: ComputerClient, @unchecked Sendable {
         var outcome: UpdateOutcome = .started
         var snapshots: [ComputerSnapshot]
@@ -218,22 +190,7 @@ final class AccountsTests: XCTestCase {
     }
 }
 
-final class SettingsCatalogTests: XCTestCase {
-    func testValueFallsBackToTheDefaultAndRefusesAnUnknownChoice() {          // S1
-        let d = freshDefaults(); let s = AppSettings(defaults: d)
-        XCTAssertEqual(s.value("talkMode"), "", "the talk setting is gone"); XCTAssertEqual(s.value("swipeLeft"), "close"); XCTAssertEqual(s.value("swipeRight"), "more")
-        XCTAssertFalse(s.set("talkMode", "open"), "no setting by that name any more"); XCTAssertFalse(s.set("nope", "x"))
-        d.set("retired-option", forKey: AppSettings.key("swipeLeft"))
-        XCTAssertEqual(s.value("swipeLeft"), "close", "a stored value that is no longer an option falls back")
-    }
-
-    func testRowsMarkTheSelectedOption() {
-        let s = AppSettings(defaults: freshDefaults()); s.set("swipeLeft", "closeLess")
-        let r = s.rows(group: "gestures").first { $0.id == "swipeLeft" }!
-        XCTAssertEqual(r.choices.filter(\.selected).map(\.id), ["closeLess"]); XCTAssertEqual(r.valueLabel, "Close, and less of this")
-        XCTAssertEqual(s.rows(group: "talk").count, 0); XCTAssertEqual(s.rows(group: "gestures").count, 2)
-    }
-
+final class LearnedTests: XCTestCase {
     func testLearnedListIsCutAtTheNewestReset() {                              // L1, L2
         let e = [SignalEvent(kind: "more-of-this", subject: "pub:a", detail: "Harbor barrier", at: 100),
                  SignalEvent(kind: "close", subject: "pub:b", detail: "", at: 110),

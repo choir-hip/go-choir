@@ -1,79 +1,14 @@
-// Lane file: mail. Owned by the mail lane (mobile/README.md, "File ownership"). Register this lane's sources and sends here:
-//   handle("someSource") { args, reply in reply(json(...)) }          // the names are declared in exact-package/interface/mail.json
-// Reach the shared kit objects through self: pages, signals, themes, pageSources (register a PageSource for your
-// kinds), runtime, choir; call touch(["someSource"]) when a live source changes. The spine calls registerMail() once.
-//
-// The phone never talks to a mail provider: every call goes to the listener's computer (the Mail agent is the sole
-// custodian of email there) through MailService in the kit.
+// Lane file: mail. What is left of Swift mail (2026-11-19: the mailbox, the messages, drafts and the phone's copy are shared code, AutoradioLab/mail.ts).
+// Three sends stay here because only native code can reach what they touch: the app's own web view (the approval page), the radio's voice
+// (read it aloud) and the Swift signal log (the ask the bar records). The phone never talks to a mail provider: that is all in mail.ts.
 import Foundation
 
 extension AutoradioModule {
     func registerMail() {
-        let service = MailService()
-        // No network: the mail the phone holds (ContentStore) is shown, with when it was last synced.
-        service.offlineRows = { ContentStore.shared.mailSummaries(folder: $0) }
-        service.offlineDetail = { id in
-            guard let it = ContentStore.shared.get("mail:" + id), it.version == "body" else { return nil }
-            var d = MailDetail(); d.summary = ContentStore.summary(it); d.text = it.text
-            d.to = (it.meta["to"] ?? "").components(separatedBy: ", ").filter { !$0.isEmpty }
-            return d
-        }
-        service.offlineNote = { ContentStore.shared.syncedWords(.mail) ?? "never synced" }
-        pageSources.register(MailPageSource(service: service))
-        // Sign-out: the cached rows, drafts and original documents in memory, and the mail-*.html files written to the cache folder.
-        let mailOriginals = context.file("app:/cache/mail-x.html")?.deletingLastPathComponent()
-        choir.accountWipe.register("mail") { service.wipe(originalsIn: mailOriginals) }
-
-        handle("mailBox") { [weak self] args, reply in
-            let address = args["address"] as? String ?? ""
-            Task { let v = await service.box(address: address); reply(self?.json(v) ?? [:]); DispatchQueue.main.async { self?.touch(["mailFrame"]) } }
-        }
-
-        // The page's frame and the last list seen for this folder, answered at once with no fetch (the tabs, their counts, the cached rows).
-        handle("mailFrame") { [weak self] args, reply in
-            var v = service.frame(address: args["address"] as? String ?? "")
-            if let rows = service.cachedRows(folder: v.folder) { v.rows = rows; v.status = "cached" } else { v.status = "frame" }
-            reply(self?.json(v) ?? [:])
-        }
-
-        // The message, and beside it the sanitised original document ("Show original") written where an iframe can read it.
-        handle("mailMessage") { [weak self] args, reply in
-            let address = args["address"] as? String ?? ""
-            Task {
-                let v = await service.message(address: address)
-                if v.hasOriginal, let html = service.originalDocument(id: v.id), let url = self?.context.file(v.originalPath) {
-                    try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try? Data(html.utf8).write(to: url, options: .atomic)
-                }
-                if v.status == "ready" { DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame"]) } }   // the read mark changed the counts
-                reply(self?.json(v) ?? [:])
-            }
-        }
-
-        handle("mailCompose") { [weak self] args, reply in
-            let address = args["address"] as? String ?? ""
-            Task { let v = await service.compose(address: address); reply(self?.json(v) ?? [:]) }
-        }
-
-        handle("mailSaveDraft") { [weak self] args, reply in
-            Task {
-                let v = await service.saveDraft(address: args["address"] as? String ?? "", to: args["recipients"] as? String ?? "",
-                                                subject: args["subject"] as? String ?? "", body: args["body"] as? String ?? "")
-                if v.status == "saved" { DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame"]) } }
-                reply(self?.json(v) ?? [:])
-            }
-        }
-
-        // Sending is an owner act. The server refuses it from a key, so the phone asks for the approval link by email.
-        handle("mailApprovalEmail") { [weak self] args, reply in
-            Task {
-                let v = await service.approvalEmail(address: args["address"] as? String ?? "", draft: args["draft"] as? String ?? "")
-                reply(self?.json(v) ?? [:])
-            }
-        }
-
+        // (Sign-out of the mail copy is shared code's: mail.ts `wipeMail`, run by account.ts after the native sign-out; the native key goes in `signOut`.)
         // Open the approval page in the app's own web view like any web link (SourceLink: http and https are in-app; mailto, tel, sms and
         // facetime go to the system; anything else is refused), only on the configured Choir host (same scheme, host and port), over https.
+        // Native because the in-app web view is a native view.
         handle("mailOpenReview") { [weak self] args, reply in
             if let u = URL(string: args["url"] as? String ?? ""), u.scheme == "https", RemoteHost.allows(u) {
                 DispatchQueue.main.async { [weak self] in
@@ -87,17 +22,14 @@ extension AutoradioModule {
             _ = self
         }
 
-        // "Read this to me": the radio reads the message as a programme item (LabRuntime.speakText through the handler that
-        // MailReading holds). The signal records that it was asked, without the text.
+        // "Read this to me": the radio reads the text the page hands over (the message's `spoken`, made by mail.ts) as a programme item
+        // (LabRuntime.speakText through the handler MailReading holds). Native because it is the voice. The signal records that it was asked, without the text.
         handle("mailRead") { [weak self] args, reply in
-            let address = args["address"] as? String ?? ""
-            Task {
-                let v = await service.message(address: address)
-                guard v.status == "ready" else { reply(["status": "error", "message": v.message]); return }
-                MailReading.shared.request(address: address, text: v.spoken)
-                self?.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "mail"))
-                reply(["status": "requested", "message": "Reading it now."])
-            }
+            let address = args["address"] as? String ?? "", text = args["text"] as? String ?? ""
+            guard !text.isEmpty else { reply(["status": "error", "message": "There is nothing to read yet."]); return }
+            MailReading.shared.request(address: address, text: text)
+            self?.signals.record(SignalEvent(kind: "read-aloud", subject: address, detail: "mail"))
+            reply(["status": "requested", "message": "Reading it now."])
         }
 
         // "Summarise this thread", "Reply to ...": the prompt aimed at a message. Recorded as an ask signal about the page, the
@@ -106,15 +38,6 @@ extension AutoradioModule {
             let address = args["address"] as? String ?? "", q = args["question"] as? String ?? ""
             self?.signals.record(SignalEvent(kind: "ask", subject: address, detail: q))
             reply(["status": "asked", "message": "Asked: \(q)"])
-        }
-
-        handle("mailMarkUnread") { [weak self] args, reply in
-            let address = args["address"] as? String ?? ""
-            Task {
-                let ok = await service.setRead(id: PageAddress.rest(of: address), read: false)
-                DispatchQueue.main.async { self?.touch(["mailBox", "mailFrame", "mailMessage"]) }
-                reply(["status": ok ? "ok" : "error", "message": ok ? "" : "Could not mark it unread."])
-            }
         }
     }
 }

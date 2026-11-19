@@ -6,8 +6,8 @@
 // the article stack reads the answer's routes, so a story swipes through the list of the view it was opened from.
 // testIds: page-title, paper-section-front, paper-section-mine, paper-section-<id>, paper-mine-from, paper-edit-edition, paper-choose-topics, paper-mine-note, paper-band-<id>, paper-story-<route>, paper-play-<route>, paper-composition,
 // paper-edition-<big|even|thin|default>, paper-signin, paper-status.
-use Theme, ChoirAuth, DemoInfo, PaperFront, PaperBand, PaperItem from "@choir/autoradio"
-use paperFront from "@choir/autoradio"
+use Theme, ChoirAuth, DemoInfo from "@choir/autoradio"
+use PaperFront, PaperBand, PaperItem from "./paper-types.contract"
 use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge, dyn from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
 
@@ -23,7 +23,7 @@ component StoryActions
     tall: number
   view
     row gap=12 align-items="center"
-      button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
+      button press=playStory(s.route, s.title) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
         row gap=4 align-items="center" min-height=tall
           image "symbol:play-fill" width=14 height=14 color=th.accent
           text "Play" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent line-clamp=1

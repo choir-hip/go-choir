@@ -130,29 +130,15 @@ final class JoinHearItTests: XCTestCase {
         XCTAssertTrue(HearIt.rows(address: "texture:doc1", store: s).isEmpty, "only a published story has clips")
         XCTAssertTrue(HearIt.rows(address: "doc:abc", store: s).isEmpty)
     }
-    func testJ3_QueueAddsTheClipAndSaysSo() async {
+    func testJ3_QueueAddsTheClip() async {
         let s = store([clipRow(hex(1))]); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
-        let note = await ClipActions.run(op: "queue", clipID: hex(1), store: s, player: q)
-        XCTAssertEqual(q.store.ahead(limit: 10).count, 1); XCTAssertEqual(note, "Added to the queue.")
+        HearIt.enqueue(hex(1), store: s, player: q)
+        XCTAssertEqual(q.store.ahead(limit: 10).count, 1)
     }
-    func testJ3_AClipThePhoneDoesNotHaveSaysSoAndDoesNothing() async {
-        let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
-        for op in ["play", "queue", "open"] {
-            let note = await ClipActions.run(op: op, clipID: "gone", store: ClipStore(), player: q)
-            XCTAssertEqual(note, "That clip is not available any more.")
-        }
-        XCTAssertTrue(q.store.ahead(limit: 10).isEmpty); XCTAssertNil(q.store.onAir())
-    }
-    func testJ3_OpenEpisodeGoesToTheBridgeAtTheClipsStart() async {
-        let s = store([clipRow(hex(1), guid: "g1")])
-        var got: (String?, Double)?
-        let saved = PodcastBridge.open; PodcastBridge.open = { e, _, _, at in got = (e, at) }; defer { PodcastBridge.open = saved }
-        let note = await ClipActions.run(op: "open", clipID: hex(1), store: s, player: RunSheetPlayer(store: RunSheetStore()))
-        XCTAssertEqual(got?.0, "g1"); XCTAssertEqual(got?.1, 10); XCTAssertEqual(note, "")
-    }
+    // J3's "a clip the phone does not have says so" and "Open episode names the page at the clip's start" are shared code now: clips.test.ts C5.
     func testJ3_PlayOfAMismatchedFilePlaysTheEpisodeFromItsStartNotTheClip() async {
         let s = store([clipRow(hex(1))]); s.markMismatch(hex(1)); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
-        _ = await ClipActions.run(op: "play", clipID: hex(1), store: s, player: q); await q.settle()
+        await HearIt.play(hex(1), store: s, player: q); await q.settle()
         guard let a = q.store.onAir()?.audioSpec else { return XCTFail("nothing playing") }
         XCTAssertNil(a.start); XCTAssertNil(a.end); XCTAssertEqual(q.store.onAir()?.kind, .episode)
     }
@@ -180,11 +166,7 @@ final class JoinShowClipsTests: XCTestCase {
         XCTAssertTrue(PodcastClips.parse(Data("{}".utf8)).isEmpty)
         XCTAssertTrue(PodcastClips.parse(body([])).isEmpty)
     }
-    func testJ6_ARowCarriesQuoteStoryAndLength() {
-        let s = ClipStore(); s.merge(PodcastClips.parse(body([clipRow(hex(1), feed: "https://example.test/feed.xml")])))
-        let r = HearIt.rows(feed: "https://example.test/feed.xml", store: s)
-        XCTAssertEqual(r.count, 1); XCTAssertEqual(r[0].quote, "A quote."); XCTAssertEqual(r[0].story, "Story"); XCTAssertEqual(r[0].length, "1 min")
-    }
+    // J6's rows (quote, story, length) are shared code now: clips.test.ts C3.
     func testJ6_AFeedIsAskedForOnceAWhileNotOnEveryDraw() {
         let s = ClipStore()
         XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 0)))

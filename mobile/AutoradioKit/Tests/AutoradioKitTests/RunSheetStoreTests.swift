@@ -30,13 +30,17 @@ final class FakeEngine: PlaybackEngine {
     var duration: Double?
     var elapsed = 0.0
     var position: (block: Int, seconds: Double) = (0, 0)
-    func speak(documentID: String, entry: RunSheetEntry, paragraphs: [String]) async -> Bool { log.append("speak:\(entry.id)"); return !failSpeak.contains(entry.id) }
+    var holdSpeak: (() async -> Void)?
+    func speak(documentID: String, entry: RunSheetEntry, paragraphs: [String]) async -> Bool { await holdSpeak?(); log.append("speak:\(entry.id)"); return !failSpeak.contains(entry.id) }
     func playStory(route: String, title: String) async -> String? { log.append("story:\(route)"); return failSpeak.contains(route) ? nil : "choir:\(route)" }
     var report: (block: Int, final: Int, seconds: Double) = (0, 0, 0)
     func spokenReport() -> (block: Int, final: Int, seconds: Double) { report }
     func restartSpoken() { log.append("restart") }
     func resumeSpoken() { log.append("resumeSpoken") }
     var remainder: String?
+    var rendersSound = false
+    func rendering() -> Bool { rendersSound }
+    func pauseSpoken() { log.append("pauseSpoken") }
     func spokenRemainder() -> String? { remainder }
     func spokenPosition() -> (block: Int, seconds: Double) { position }
     func stopSpoken() { log.append("stopSpoken") }

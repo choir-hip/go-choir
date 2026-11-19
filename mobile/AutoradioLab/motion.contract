@@ -1,4 +1,4 @@
-// Motion (lane 9): the alive wait, the motion gallery (`lab:motion`), the wait on its own page (`lab:wait`). Lane 9 owns this file. Pure Contract; every duration is a
+// Motion (lane 9): the alive wait. Lane 9 owns this file. Pure Contract; every duration is a
 // theme token.
 use Theme from "@choir/autoradio"
 use MarkAt from "./mark.contract"
@@ -43,66 +43,3 @@ component AliveWait
             text l testId=(i == shown.length - 1 ? `${testId}-line` : `${testId}-prev-${i}`) font-family=th.fontLabel text-align="center"
               font-size=dyn((i == shown.length - 1 ? 17 : 14)) color=(i == shown.length - 1 ? th.fg : th.muted)
         text `${floor(el)} s` testId=`${testId}-elapsed` font-family=th.fontMono font-size="-exact-caption1" color=th.muted
-
-// `lab:motion`: every mark state at every size, the reduced-motion form, the wait, and the 3D-box experiment.
-component MotionPage
-  inject
-    th: Theme
-    mkT: number
-    mkFrames: number
-    galSince: number
-    waitSince: number
-    galReplay: action
-    waitReplay: action
-  derive states = ["idle", "listening", "thinking", "speaking", "success", "error", "reduced"]
-  derive sizes = [36, 44, 120]
-  view
-    PageScroll(id="motion")
-      text "Motion" role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 testId="page-title" font-family=th.fontHead
-      text `The brand TetraMark, 36 pt (bar), 44 and 120 pt (hero). Three independent blades breathe between the flat symbol and a sharp tetrahedron. The reduced row is the flat brand drawing.` font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      text "Pole A (the flat brand symbol), the midpoint, pole B (a sharp tetrahedron in perspective):" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      row gap=10 align-items="center" testId="mark-poles"
-        MarkAt(state="pose:0", size=104, since=galSince, level=0, step=-1, still=false, testId="mark-pole-a")
-        MarkAt(state="pose:0.5", size=104, since=galSince, level=0, step=-1, still=false, testId="mark-pole-mid")
-        MarkAt(state="pose:1", size=104, since=galSince, level=0, step=-1, still=false, testId="mark-pole-b")
-      text "Thinking at hero, bar (36 pt) and 44 pt, and the brand mark held still:" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      row gap=14 align-items="center" testId="mark-top"
-        MarkAt(state="idle", size=120, since=galSince, level=0, step=-1, still=true, testId="mark-rest-120")
-        MarkAt(state="thinking", size=120, since=galSince, level=0, step=-1, still=false, testId="mark-live-120")
-        column gap=14 align-items="center"
-          MarkAt(state="thinking", size=36, since=galSince, level=0, step=-1, still=false, testId="mark-live-36")
-          MarkAt(state="speaking", size=44, since=galSince, level=0, step=-1, still=false, testId="mark-live-44")
-      row gap=12 align-items="center"
-        button press=galReplay testId="motion-replay" appearance="none"
-          Btn(label="Replay states", primary=false, wide=false)
-        text `${mkFrames} frames, ${floor(mkT)} ms` testId="motion-clock" font-family=th.fontMono font-size="-exact-caption1" color=th.muted
-      for s in states key=s
-        row gap=14 align-items="center" testId=`motion-row-${s}`
-          text s width=76 font-family=th.fontMono font-size="-exact-caption1" color=th.muted
-          for z in sizes key=z
-            row width=(z + 16) height=(z + 16) align-items="center" justify-content="center"
-              MarkAt(state=(s == "reduced" ? "thinking" : s), size=z, since=galSince, level=0, step=-1, still=(s == "reduced"), testId=`mark-${s}-${z}`)
-      text "Thinking with a face per desk step (step 2 of 4)" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      row gap=14 align-items="center"
-        MarkAt(state="thinking", size=96, since=galSince, level=0, step=2, still=false, testId="mark-steps-96")
-        MarkAt(state="listening", size=96, since=galSince, level=1, step=-1, still=false, testId="mark-loud-96")
-      text "The wait (scripted, about 15 s)" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      AliveWait(demo=true, since=waitSince, lines=[], step=0, testId="motion-wait")
-      button press=waitReplay testId="motion-wait-replay" appearance="none"
-        Btn(label="Replay the wait", primary=false, wide=false)
-
-// `lab:wait`: the alive wait alone, the realistic worst case for the frame cost (one hero and the bar's mark).
-component WaitPage
-  inject
-    th: Theme
-    mkT: number
-    mkFrames: number
-    waitSince: number
-    waitReplay: action
-  view
-    PageScroll(id="waitpage")
-      text "The wait" role="heading" aria-level=1 font-size="-exact-title1" font-weight=700 testId="page-title" font-family=th.fontHead
-      AliveWait(demo=true, since=waitSince, lines=[], step=0, testId="wait")
-      button press=waitReplay testId="wait-replay" appearance="none"
-        Btn(label="Replay", primary=false, wide=false)
-      text `${mkFrames} frames, ${floor(mkT)} ms` testId="wait-clock" font-family=th.fontMono font-size="-exact-caption1" color=th.muted

@@ -1,0 +1,11 @@
+// The mark is drawn by Contract alone (mark.contract and tetramark.contract), and a change to how it is drawn must not
+// remove it: the bar's mark is the button that opens the launcher, and its glyph is the three blades of the TetraMark.
+// The onboarding and wait heroes (`MarkAt`, test ids `mark-hero`, `ob-mark-slot`, `ob-wait-slot`) are on pages that come from
+// the native page list, which the web build does not have; `mobile/AutoradioLab/.exact` holds how they were compared instead.
+test "the bar shows the tetramark, and it moves on the clock"
+  clock data
+  expect tree has "bar-mark"
+  expect tree has "mark"
+  expect tree has "mark-glyph"
+  clock +700
+  expect tree has "mark-glyph"

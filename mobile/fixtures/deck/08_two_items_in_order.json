@@ -1,0 +1,135 @@
+{
+ "about": "Every end goes before the next start, so the server never closes an item as left by takeover.",
+ "anomalies": [],
+ "dropped": {},
+ "journal": [
+  {
+   "at": "2026-11-19T10:00:00Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "a",
+   "reason": "",
+   "rendered": false,
+   "seconds": 0,
+   "seq": 1,
+   "type": "started"
+  },
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "block": 2,
+   "command": "",
+   "end": "finished",
+   "final": 2,
+   "item": "a",
+   "reason": "",
+   "rendered": true,
+   "seconds": 30.0,
+   "seq": 2,
+   "type": "ended"
+  },
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "b",
+   "reason": "",
+   "rendered": false,
+   "seconds": 0,
+   "seq": 3,
+   "type": "started"
+  },
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "block": 0,
+   "command": "",
+   "end": "",
+   "final": 0,
+   "item": "b",
+   "reason": "",
+   "rendered": true,
+   "seconds": 0,
+   "seq": 4,
+   "type": "sounding"
+  }
+ ],
+ "name": "08_two_items_in_order",
+ "ops": [
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "a",
+   "op": "aired",
+   "op_id": "j1.toqug0.a",
+   "position_seconds": 0.0,
+   "state": "on_air"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "ended": {
+    "at": "2026-11-19T10:00:05Z",
+    "last_block": 2,
+    "outcome": "finished"
+   },
+   "id": "a",
+   "op": "aired",
+   "op_id": "j2.toqug5.a",
+   "position_seconds": 30.0,
+   "state": "heard"
+  },
+  {
+   "base_version": 0,
+   "by": "phone",
+   "id": "b",
+   "op": "aired",
+   "op_id": "j3.toqug5.b",
+   "position_seconds": 0.0,
+   "state": "on_air"
+  }
+ ],
+ "start": {
+  "entries": [
+   {
+    "est_seconds": 30,
+    "id": "a",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of a",
+    "title": "T a"
+   },
+   {
+    "est_seconds": 30,
+    "id": "b",
+    "kind": "story",
+    "placed_by": "desk",
+    "state": "ahead",
+    "text": "words of b",
+    "title": "T b"
+   }
+  ],
+  "position_seconds": 0.0,
+  "version": 5
+ },
+ "through": 4,
+ "want": [
+  {
+   "at": "2026-11-19T10:00:05Z",
+   "id": "a",
+   "last_block": 2,
+   "outcome": "finished",
+   "state": "heard"
+  },
+  {
+   "at": "",
+   "id": "b",
+   "last_block": 0,
+   "outcome": "",
+   "state": "on_air"
+  }
+ ]
+}

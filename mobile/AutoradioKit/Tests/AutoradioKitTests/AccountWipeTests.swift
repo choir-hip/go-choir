@@ -76,12 +76,6 @@ final class AccountWipeTests: XCTestCase {
         let opening = OpeningCache(dir: root.appendingPathComponent("opening"))
         opening.put(.opening, entry: .paperStory(route: m, title: m), titles: [m], audio: [PreparedAudio(text: m, samples: [0.1, 0.2], rate: 24000)], voice: "v")
         let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
-        let pods = PodcastService(directory: root.appendingPathComponent("pod"), fetch: { _ in
-            Data("<rss><channel><title>\(m)</title><item><guid>g1</guid><title>\(m)</title><enclosure url=\"https://e.example/a.mp3\" type=\"audio/mpeg\"/></item></channel></rss>".utf8) })
-        let feed = "https://example.com/\(m)"
-        pods.subscribe(PodcastShow(feedURL: feed, title: m))
-        pods.report(episodeId: PodcastKey.episode(feed: PodcastKey.feed(feed), id: "g1"), seconds: 42, duration: 600)
-        for _ in 0..<60 where !FileManager.default.fileExists(atPath: root.appendingPathComponent("pod/podcast-feeds").path) { try await Task.sleep(nanoseconds: 50_000_000) }
         let api = FakeAPI()
         let texture = TextureEditor(api: api, storage: root.appendingPathComponent("texture-pending.json")); texture.retryAfter = 3600
         await texture.edit(address: "texture:d1", markdown: m); await texture.flush(address: "texture:d1")
@@ -89,8 +83,6 @@ final class AccountWipeTests: XCTestCase {
         let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
         let content = ContentStore(root: root.appendingPathComponent("content"))
         content.put(StoredItem(id: "mail:1", kind: .mail, title: m, text: m, address: "mail:1")); content.flush()
-        let mailService = MailService(environment: env)
-        write("cache/mail-abc.html", "<p>\(m)</p>")
 
         // What the second review found: the spoken words and the files of the app target.
         let mailReading = MailReading(); mailReading.request(address: m, text: m)
@@ -115,10 +107,8 @@ final class AccountWipeTests: XCTestCase {
         }
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, topicsFile: topics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
                               takeOwn: own, takeMutes: mutes, takeStore: takes, tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
-                              podcasts: pods, texture: texture, environment: env, content: content, corpus: SavedCorpus(),
+                              texture: texture, environment: env, content: content, corpus: SavedCorpus(),
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice)
-        let cacheDir = root.appendingPathComponent("cache")
-        wipe.register("mail") { mailService.wipe(originalsIn: cacheDir) }
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
 
         await wipe.run()
@@ -131,13 +121,11 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertNil(notebook.learning); XCTAssertEqual(notebook.selected, "")
         XCTAssertTrue(steer.taps.isEmpty); XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty); XCTAssertNil(takes.take(m))
         XCTAssertTrue(sheet.sheet.entries.isEmpty); XCTAssertTrue(sheet.pending.isEmpty); XCTAssertNil(sheet.poster, "the poster is rebuilt at the next sign-in")
-        XCTAssertNil(opening.opening(voice: "v")); XCTAssertTrue(pods.subscriptions().isEmpty)
-        XCTAssertNil(pods.position(PodcastKey.episode(feed: PodcastKey.feed(feed), id: "g1"))); XCTAssertNil(pods.cachedFeed(feed))
+        XCTAssertNil(opening.opening(voice: "v"))
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1")); XCTAssertNil(content.get("mail:1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned); XCTAssertTrue(signals.recent(limit: 10).isEmpty)
         XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertNil(EditionSetupSession.shared)
-        XCTAssertNil(mailService.cachedRows(folder: "inbox")); XCTAssertNil(mailService.originalDocument(id: "abc"))
 
         // (c) the next sign-in: the first request of each kind carries nothing of the old account.
         let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""
@@ -149,11 +137,6 @@ final class AccountWipeTests: XCTestCase {
         let newPoster = OfflinePoster(); newPoster.outcome = .answered([]); sheet.poster = newPoster
         sheet.flush(); await sheet.flushTask?.value
         XCTAssertTrue(newPoster.posted.isEmpty, "sheet ops: the old account's pending ops were dropped, not posted under the new key")
-        let pushed = Recorder()
-        pods.syncHooks = PodcastSyncHooks(signedIn: { true }, push: { s in pushed.add(s.title); return true }, pull: { [] })
-        pods.syncIfDue()
-        try await Task.sleep(nanoseconds: 400_000_000)
-        XCTAssertEqual(pushed.all, [], "podcast sync")
         await texture.retryPending(); XCTAssertTrue(api.posts.isEmpty, "texture retry")
         XCTAssertEqual(poster.posted.count, 1, "the old poster was not used again after the first post")
     }
@@ -184,23 +167,6 @@ final class AccountWipeInFlightTests: XCTestCase {
             if let d = try? Data(contentsOf: u), d.range(of: Data(Self.marker.utf8)) != nil { hits.append(u.lastPathComponent) }
         }
         return hits
-    }
-
-    func testContentSyncDoesNotRePutMailAfterTheWipe() async {
-        let m = Self.marker
-        let store = ContentStore(root: root.appendingPathComponent("content"))
-        let entered = Latch(), release = Latch()
-        var f = ContentSync.Fetchers(); f.mailFolders = ["inbox"]
-        f.mailPage = { _, _ in var r = MailSummary(); r.id = "1"; r.subject = m; return ([r], nil) }
-        f.mailBody = { _ in await entered.release(); await release.wait(); throw URLError(.notConnectedToInternet) }      // the catch path puts the row
-        let sync = ContentSync(store: store, fetch: f)
-        let run = Task { await sync.syncAll() }
-        await waitFor(entered)
-        let wipe = AccountWipe(); wipe.register("content") { ContentSync.wipeAccount(store: store, corpus: SavedCorpus()) }
-        await wipe.run()
-        await release.release(); _ = await run.value
-        XCTAssertNil(store.get("mail:1"), "the old account's mail row came back after the wipe")
-        store.flush(); XCTAssertEqual(filesHoldingMarker(), [])
     }
 
     func testDeskStreamAppliesNothingAfterTheWipe() async {
@@ -237,20 +203,7 @@ final class AccountWipeInFlightTests: XCTestCase {
         XCTAssertTrue(store.applyFromDesk(op, generation: AccountWipe.generation).applied)
     }
 
-    func testFeedLoadAfterTheWipeIsNotKept() async throws {
-        let m = Self.marker
-        let entered = Latch(), release = Latch()
-        let pods = PodcastService(directory: root.appendingPathComponent("pod"), fetch: { _ in
-            await entered.release(); await release.wait()
-            return Data("<rss><channel><title>\(m)</title><item><guid>g1</guid><title>\(m)</title><enclosure url=\"https://e.example/a.mp3\" type=\"audio/mpeg\"/></item></channel></rss>".utf8) })
-        let feed = "https://example.com/\(m)"
-        pods.subscribe(PodcastShow(feedURL: feed, title: m))
-        await waitFor(entered)
-        let wipe = AccountWipe(); wipe.register("podcasts") { pods.wipe() }
-        await wipe.run()
-        await release.release(); try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertNil(pods.cachedFeed(feed)); XCTAssertTrue(pods.subscriptions().isEmpty); XCTAssertEqual(filesHoldingMarker(), [])
-    }
+    // testFeedLoadAfterTheWipeIsNotKept moved to AutoradioLab/podcast.test.ts ("a feed that finishes loading after the wipe is not kept").
 
     func testOpeningWriteAheadDoesNotRePutTheOldOpening() async {
         let m = Self.marker

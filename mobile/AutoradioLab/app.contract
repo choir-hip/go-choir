@@ -9,7 +9,7 @@ use BarWebLayer from "./queue.contract"
 
 component Autoradio
   members "./spine.contract"
-  members "./lab.contract"
+  members "./account.contract"
   // ---- one members file per lane (already wired; the lane fills its own) ----
   members "./members-bar.contract"
   members "./members-paper.contract"
@@ -69,52 +69,19 @@ component Autoradio
     record
     editAsk
     sendAsk
-    // ---- integrator (engine, Lab, Choir sign-in, player) ----
+    // ---- integrator (Choir sign-in, player) ----
     au
     pl
     sl
-    st
-    aud
-    stages
-    params
-    turns
-    events
-    configs
-    trace
-    other
-    cfgName
-    cfgUrl
-    expPath
-    expName
-    cmp
-    yieldLabel
     signIn
     cancelSignIn
     openApproval
     signOut
+    signOutNote
     refreshRadio
     radioPlay
     playStory
     listen
-    start
-    stop
-    next
-    previous
-    pick
-    setParam
-    editCfgName
-    saveCfg
-    loadCfg
-    editCfgUrl
-    loadUrl
-    setPolicy
-    setAckTiming
-    inject
-    exportTurn
-    shareExport
-    choose
-    compare
-    replay
     // ---- lane 1: bar, radio, talk ----
     ri
     typing
@@ -321,6 +288,7 @@ component Autoradio
     // ---- lane 6: mail ----
     mbx
     mfr
+    msy
     mailTab
     mboxName
     mboxDir
@@ -354,7 +322,6 @@ component Autoradio
     tx
     acctInfo
     cmpt
-    gestureRows
     learnt
     act
     about
@@ -367,7 +334,6 @@ component Autoradio
     refreshComputer
     wakeComputer
     updateComputer
-    setSetting
     resetLearned
     refreshActivity
     devDetails
@@ -415,27 +381,20 @@ component Autoradio
     // ---- lane 9: motion and the mark ----
     mkT
     mkFrames
+    mdAX
+    mdAY
+    mdBX
+    mdBY
+    mdBZ
+    mdRU
+    mdBN
+    mdFX
+    mdFY
+    mdFZ
     mkSince
     mkCur
     mkPrev
     mkFrom
-    gmMotion
-    gmPrev
-    gmSince
-    gmFrom
-    gmV
-    gmManual
-    gmLevel
-    gmLo
-    gmHi
-    gmPlay
-    gmMove
-    gmRest
-    gmLevelSet
-    galSince
-    waitSince
-    galReplay
-    waitReplay
     // ---- the Autoradio page ----
     rp
     radioAll
@@ -458,6 +417,7 @@ component Autoradio
     qVp
     queuePlay
     queueLater
+    queueFilePlay
     queueDo
     scrubLive
     scrubShown

@@ -159,6 +159,58 @@ public final class ClipStore: @unchecked Sendable {
     }
 }
 
+// MARK: What the native side still needs of the podcast app's names
+// The podcast pages, feeds, subscriptions and positions are shared code now (AutoradioLab/podcast.ts). Native code keeps only what the clip store,
+// the locator and the "Open episode" button of the playing bar need: a feed written one way, the key a podcast play carries as its episode id, and
+// the address of an episode's page. These must agree with podcast-model.ts (`feedKey`, `episodeKey`, `episodeAddress`); PodcastKeyTests pins them.
+
+public enum PodcastKey {
+    /// A feed address as one identity: trimmed, scheme and host lower-cased, no fragment, no trailing slash.
+    public static func feed(_ s: String) -> String {
+        var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let u = URL(string: t), var c = URLComponents(url: u, resolvingAgainstBaseURL: false) {
+            c.scheme = c.scheme?.lowercased(); c.host = c.host?.lowercased(); c.fragment = nil
+            t = c.string ?? t
+        }
+        while t.hasSuffix("/") { t.removeLast() }
+        return t
+    }
+    /// One episode as one string: the feed and the guid. The deck's episode id for a podcast play, and the key of its resume position.
+    public static func episode(feed: String, id: String) -> String { "pod:" + PathSegment.encode(feed) + "/" + PathSegment.encode(id) }
+    public static func parseEpisode(_ key: String) -> (feed: String, id: String)? {
+        guard key.hasPrefix("pod:") else { return nil }
+        let parts = key.dropFirst(4).split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2, let f = String(parts[0]).removingPercentEncoding, let i = String(parts[1]).removingPercentEncoding, !f.isEmpty, !i.isEmpty else { return nil }
+        return (f, i)
+    }
+    /// The page of an episode a clip or the playing bar opens, with the clip's audio and start in the address (the page then plays from the clip's own
+    /// audio when the feed no longer has the episode).
+    public static func episodeAddress(feed: String, id: String, enclosure: String, at: Double) -> String {
+        var a = "podcast:episode/" + PathSegment.encode(feed) + "/" + PathSegment.encode(id)
+        var q: [String] = []
+        if !enclosure.isEmpty { q.append("audio=" + PathSegment.encode(enclosure)) }
+        if at > 0 { q.append("at=" + (at == at.rounded() ? String(Int(at)) : String(at))) }
+        if !q.isEmpty { a += "?" + q.joined(separator: "&") }
+        return a
+    }
+    /// The address when it is an http or https URL with a host, else "".
+    public static func webURL(_ s: String) -> String {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let u = URL(string: t), let sc = u.scheme?.lowercased(), sc == "http" || sc == "https", u.host?.isEmpty == false else { return "" }
+        return t
+    }
+}
+
+/// A shared transcript as the content syncer reads it (kept until the content store moves; see ContentSync).
+public struct PodcastTranscript: Equatable, Sendable {
+    public struct Block: Equatable, Sendable { public var start: Double; public var end: Double; public var text: String
+        public init(start: Double, end: Double, text: String) { self.start = start; self.end = end; self.text = text } }
+    public var durationSeconds: Double?
+    public var source: String
+    public var blocks: [Block]
+    public init(durationSeconds: Double?, source: String, blocks: [Block]) { self.durationSeconds = durationSeconds; self.source = source; self.blocks = blocks }
+}
+
 public enum PodcastClips {
     public static let path = "/api/platform/podcast-clips"
 
@@ -180,8 +232,8 @@ public enum PodcastClips {
     /// One show's clips (`?feed=`): merged into the store; true when the store changed. A 404 (the route is not there yet), a failure or an
     /// empty answer changes nothing and says nothing.
     @discardableResult
-    public static func ensure(client: ChoirClient, feed: String, store: ClipStore = .shared) async -> Bool {
-        guard store.shouldAsk(feed: feed) else { return false }
+    public static func ensure(client: ChoirClient, feed: String, store: ClipStore = .shared, force: Bool = false) async -> Bool {
+        guard force || store.shouldAsk(feed: feed) else { return false }
         store.didAsk(feed: feed)
         guard let r = try? await client.send("GET", path, query: ["feed": feed, "limit": "50"], authenticated: false, route: path) else { return false }
         let before = store.clips(forFeed: feed).count

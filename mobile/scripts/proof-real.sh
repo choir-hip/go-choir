@@ -59,8 +59,8 @@ SIM privacy "$EXACT_SIM" grant all $APP >/dev/null 2>&1
 
 # ---- 3a. SURVEY drive: every place once, trees dumped so the next drive can pick real ids
 step "clock data"; wait_ 6000
-view real-00-first-run 800
-step "tap ob-skip"; wait_ 2500
+view real-00-opens-on-radio 800   # the app opens on the Autoradio page (radio: is the first fixed page); there is no first-run page with a carried key
+place paper 2500
 view real-01-paper-front 1500
 step "tap paper-scroll drag 0 -500"; view real-02-paper-scrolled 900
 step "tap paper-scroll drag 0 -700"; view real-03-paper-scrolled-more 900
@@ -73,6 +73,8 @@ step "tap settings-nav-appearance"; view real-07-settings-appearance 900
 place textures 900; view real-08-textures-list 3500
 place files 900; view real-09-files-root 3500
 place mail 900; view real-10-mail-inbox 3500
+place podcasts 900; view real-10b-podcasts 3500
+place notebook 900; view real-10c-notebook 4000
 step logs
 run_drive survey light "" --touch platform
 
@@ -86,8 +88,11 @@ THEME_ROW=$(docid "$SHOTS/drive-survey.txt" "Autoradio theme test")
 BIG_ROW=$(docid "$SHOTS/drive-survey.txt" "Master document")
 DIR1=$(ids "$SHOTS/drive-survey.txt" "files-row-" | sed -n 1p)
 MAIL1=$(ids "$SHOTS/drive-survey.txt" "mail-row-" | sed -n 1p)
+# a file that opens WITHOUT writing anything: a table or a picture (a text or Markdown file is opened as a Texture document by the computer, which writes; a PDF the same)
+FILE1=$(ids "$SHOTS/drive-survey.txt" "files-row-" | grep -iE '\.(csv|tsv|png|jpe?g|gif)$' | sed -n 1p)
+POD1=$(ids "$SHOTS/drive-survey.txt" "podcast-row-" | sed -n 1p)
 THEME_DOC=${THEME_ROW#textures-doc-texture:}
-echo "picked: theme=${THEME_DOC:+yes} big=${BIG_ROW:+yes} story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes} doc=${DOC1:+yes} dir=${DIR1:+yes} mail=${MAIL1:+yes}"
+echo "picked: file=${FILE1:+yes} podcast=${POD1:+yes} theme=${THEME_DOC:+yes} big=${BIG_ROW:+yes} story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes} doc=${DOC1:+yes} dir=${DIR1:+yes} mail=${MAIL1:+yes}"
 
 # Rows of the live front page sit wherever today's page puts them, and the bar's text field can cover one. Before a row is tapped the
 # list is dragged back to its top (twice, so a long page is covered), where the first card is clear of the bar; the second card's title sits under the bar there, so its tap scrolls it up first.
@@ -95,7 +100,7 @@ to_top() { step "tap paper-scroll drag 0 700"; wait_ 400; step "tap paper-scroll
 
 # ---- 3b. READ drive: two real stories in the reader, one played, one Texture, a folder, a message
 step "clock data"; wait_ 6000
-step "tap ob-skip"; wait_ 2500
+place paper 2500
 [ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-11-story-1 4000; step "tap reader-scroll drag 0 -600"; view real-12-story-1-scrolled 900; step "tap reader-scroll drag 0 -900"; view real-13-story-1-more 900; }
 goto "paper:front"; wait_ 1200
 [ -n "$STORY2" ] && { to_top; step "tap paper-scroll drag 0 -350"; wait_ 1800; step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
@@ -113,7 +118,7 @@ run_drive read light "" --touch platform
 # ---- 3c. THEME drive: a theme from a Texture, loaded through Settings (the document "Autoradio theme test" on d@e holds one choir-theme block)
 if [ -n "$THEME_DOC" ]; then
   step "clock data"; wait_ 5000
-  step "tap ob-skip"; wait_ 2000
+  place paper 2000
   place settings 900
   step "tap settings-nav-appearance"; wait_ 700
   step "type settings-theme-doc $THEME_DOC"; wait_ 500
@@ -126,8 +131,8 @@ fi
 # ---- 3d. BIG drive: the largest document on d@e (hundreds of versions) opens, or says plainly why not
 if [ -n "$BIG_ROW" ]; then
   step "clock data"; wait_ 5000
-  step "tap ob-skip"; wait_ 2000
-  place textures 900; wait_ 2500
+  place paper 2000
+  place textures 900; wait_ 6000        # the list of hundreds of documents is slow on a cold launch (the drive tapped it at 2.5 s and found no row)
   step "tap \"$BIG_ROW\""; view real-23-big-document 9000
   step logs
   run_drive big light "" --touch platform
@@ -136,7 +141,7 @@ fi
 # ---- 3e. ASK drive (REAL_PROMPT=1 only: it is a model call on d@e): a typed question in the bar runs one turn on the computer
 if [ -n "${REAL_PROMPT:-}" ]; then
   step "clock data"; wait_ 5000
-  step "tap ob-skip"; wait_ 2000
+  place paper 2000
   step "type bar-field \"What is the top story on the front page right now?\""; wait_ 500
   view real-24-asked 400
   step "tap bar-send"; wait_ 4000; step tree; shot real-25-asked-sent
@@ -144,6 +149,34 @@ if [ -n "${REAL_PROMPT:-}" ]; then
   step logs
   run_drive ask light "" --touch platform
 fi
+
+# ---- 3f. TOUR drive: a file that opens read only, the podcasts list and a show (no Subscribe), the notebook, the Settings account page once more
+step "clock data"; wait_ 5000
+place files 900; wait_ 2500
+[ -n "$FILE1" ] && { step "tap \"$FILE1\""; view real-30-files-file 4000; }
+place podcasts 900; view real-31-podcasts 3500
+[ -n "$POD1" ] && { step "tap \"$POD1\""; view real-32-podcast-show 3500; }
+place notebook 900; view real-33-notebook 4000
+place settings 900; step "tap settings-nav-account"; view real-34-settings-account 3500
+step logs
+run_drive tour light "" --touch platform
+
+# ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
+# Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the wipe marker and the stamp are gone from the app's files.
+step "clock data"; wait_ 5000
+place paper 2000
+place files 900; view real-40-files-before 3000
+place settings 900; step "tap settings-nav-account"; view real-41-account-before 3500
+step "tap settings-signout"; wait_ 5000; step tree; shot real-42-account-after
+place files 900; view real-43-files-after 3000
+place mail 900; view real-44-mail-after 3000
+place settings 900; step "tap settings-nav-account"; view real-45-account-after-again 3500
+step logs
+run_drive drill light "" --touch platform
+DR="$SHOTS/drive-drill.txt"
+AFTER="$SHOTS/drill-after.txt"; awk '/\[settings-account-signed\][^"]*"No"/ { f = 1 } f' "$DR" > "$AFTER"
+CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
+LEFT=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/dev/null | wc -l | tr -d ' ')
 
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
@@ -164,7 +197,7 @@ bad "paper: no sign-in card" '\[paper-signin-card\]' "$SV"
 chk "settings: the account shows a handle" '\[settings-account-handle\][^"]*"writer-' "$SV"
 bad "settings: account has no failure message" '\[settings-account-message\] "(This|Could|The server)' "$SV"
 chk "textures: documents listed" '\[textures-doc-texture:' "$SV"
-chk "textures: no edition yet shows the make-your-edition card" '\[textures-make-edition\]' "$SV"
+if grep -qE '\[textures-make-edition\]' "$SV"; then echo "info: textures: the make-your-edition card shows (the drill computer has no edition)"; else echo "info: textures: no make-your-edition card (the drill computer has an edition now; that is state, not a defect)"; fi
 bad "textures: no error" '\[textures-message\] "(Could|Sign in)' "$SV"
 chk "files: root listing" '\[files-row-/' "$SV"
 chk "mail: reached the mail place" '\[page-title\] "(Mail|Inbox)"' "$SV"
@@ -172,7 +205,8 @@ bad "mail: no error screen" '\[mail-status\] "(Could not|You are offline)' "$SV"
 [ -n "$STORY1" ] && chk "reader: story 1 has a title" '\[page-title\] "[^"]{3,}"' "$RD"
 bad "reader: no error message" '\[reader-message\] "(Could not|Sign in)' "$RD"
 chk "reader: body blocks" '\[reader-block-' "$RD"
-chk "reader: more on this" '\[reader-related-pub:' "$RD"
+# "more on this" depends on the live stories (some have no related items: two runs lacked it with everything else fine), so it is told, not required
+if grep -qE '\[reader-related-pub:' "$RD"; then echo "ok: reader: more on this"; else echo "info: reader: neither story had a 'more on this' list (live content, not a defect)"; fi
 chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 [ -n "$DOC1" ] && chk "texture document: opened" '\[reader-block-' "$RD"
 if [ -n "${REAL_PROMPT:-}" ]; then
@@ -184,6 +218,20 @@ if [ -n "$THEME_DOC" ]; then
   chk "theme: the Texture's theme is listed" '\[settings-theme-depth-teal-test\]' "$TH"
   bad "theme: no problems reported" '\[settings-theme-problems\]' "$TH"
 fi
+# the tour
+[ -n "$FILE1" ] && chk "files: a file opened" '\[(page-title|viewer-[a-z]+|csv-card|image-view)\]' "$SHOTS/drive-tour.txt"
+chk "podcasts: the place opened" '\[(podcasts-[a-z]+|podcast-row-[^]]*)\]' "$SHOTS/drive-tour.txt"
+chk "notebook: the page opened" '\[notebook-(page|title)\]' "$SHOTS/drive-tour.txt"
+chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' "$SHOTS/drive-tour.txt"
+# the first shared answer after a launch must not run over the device's 100 ms turn (the app logs the failure that says so)
+bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
+# the sign-out drill
+chk "drill: signed in before" '\[settings-account-signed\][^"]*"Yes"' "$DR"
+chk "drill: the account page says signed out after" '\[settings-account-signed\][^"]*"No"' "$DR"
+bad "drill: no failure note on the account page" '\[settings-signout-message\]' "$AFTER"
+bad "drill: Files shows no rows after sign-out" '\[files-row-/' "$AFTER"
+bad "drill: Mail shows no rows after sign-out" '\[mail-row-' "$AFTER"
+[ "$LEFT" = 0 ] && echo "ok: drill: the wipe marker and the stamp are gone from the app's files" || { echo "MISSING: drill: marker or stamp left ($LEFT)"; FAILS="$FAILS [drill files]"; }
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"

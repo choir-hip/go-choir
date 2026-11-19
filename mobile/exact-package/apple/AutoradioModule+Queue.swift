@@ -6,6 +6,14 @@
 import Foundation
 
 extension AutoradioModule {
+    /// The file behind an `app:/cache/files/<hash>/<name>` path from the Files page (exactly two plain parts); nil for any other shape or a missing file.
+    func filesAudioURL(local: String) -> URL? {
+        let parts = local.dropFirst("app:/cache/files/".count).split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard local.hasPrefix("app:/cache/files/"), parts.count == 2, !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else { return nil }
+        let url = filesCacheDisk.appendingPathComponent(parts[0], isDirectory: true).appendingPathComponent(parts[1])
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     func queueInfo() -> QueueInfo {
         var q = onMainThread { RunSheetPlayer.shared.info() }
         if !barWebURL.isEmpty { q.webUrl = barWebURL; q.webHost = URL(string: barWebURL)?.host ?? barWebURL }
@@ -50,13 +58,14 @@ extension AutoradioModule {
             let kind = args["kind"] as? String ?? ""
             let ref = args["ref"] as? String ?? ""
             let title = args["title"] as? String ?? ""
+            let local = args["local"] as? String ?? ""
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                // An audio file in Files is a run sheet entry like everything else: brought to disk, then placed (kind "file", ref its address).
+                // An audio file from Files (kind "file", local the app file the page brought): native because only the Swift run sheet player plays an entry, from a URL on disk.
                 var found = QueueRequest.entry(kind: kind, ref: ref, title: title)
-                if found == nil, kind == "file", let a = await FilesInReader.current?.audioEntry(address: ref) {
-                    found = a.entry
-                    RunSheetPlayer.shared.localFiles[a.entry.id] = a.local          // the phone's own copy: kept here, never posted
+                if found == nil, kind == "file", ref.hasPrefix("file:"), let url = self.filesAudioURL(local: local) {
+                    let e = RunSheetEntry.filesAudio(address: ref, title: title.isEmpty ? (((ref.removingPercentEncoding ?? ref) as NSString).lastPathComponent as NSString).deletingPathExtension : title)
+                    RunSheetPlayer.shared.localFiles[e.id] = url; found = e
                 }
                 if let entry = found {
                     switch mode {

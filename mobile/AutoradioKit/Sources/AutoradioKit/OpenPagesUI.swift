@@ -1,7 +1,7 @@
 import Foundation
 
 // The data behind the pile and the launcher (lane 4): the places with a line of what is new, the recent pages, search over
-// pages / places / stories, and the Undo offer after a close. The drawing is Contract (cards.contract, launcher.contract);
+// pages / places / stories. The drawing is Contract (cards.contract, launcher.contract);
 // nothing here is a view.
 //
 // Ways this can fail (written before the code, per the repo testing rule):
@@ -12,8 +12,6 @@ import Foundation
 //  4. "Recent" lists a page that is open now, or the same address twice: both are filtered; the newest event wins.
 //  5. A recent address from an older build whose scheme is unknown: it gets the default title and the "unknown" kind and is
 //     dropped (it would open a "not built yet" page).
-//  6. The Undo offer outlives its 5 s: `UndoOffer.isOpen(at:)` is a pure function of the clock, so a late touch cannot
-//     leave it showing; a second close replaces the first (only the last closed page is restorable, as the pile keeps one).
 //  7. A place line with newlines or very long text: collapsed to one line and cut at 60 characters.
 
 public struct PlaceInfo: Equatable, Sendable {
@@ -106,12 +104,3 @@ public enum RecentPages {
     }
 }
 
-/// The Undo pill after a close: open for 5 s from the close, naming what was closed.
-public struct UndoOffer: Equatable, Sendable {
-    public static let seconds = 5.0
-    public var title: String
-    public var address: String
-    public var since: Double
-    public init(title: String, address: String, since: Double) { self.title = title; self.address = address; self.since = since }
-    public func isOpen(at now: Double) -> Bool { now >= since && now - since < Self.seconds }
-}

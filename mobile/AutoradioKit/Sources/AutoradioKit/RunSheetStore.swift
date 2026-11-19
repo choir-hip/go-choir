@@ -339,10 +339,21 @@ public struct RouteSheetPoster: RunSheetPoster {
     /// The sheet and the pending ops from the last launch. Nothing plays. An entry that was on air when the app died is closed as `failed`,
     /// by the phone, with the reason "interrupted by a restart": a crash is not the listener leaving (`left` is sign-out) and not a choice, so
     /// it settles nothing (the server records no verdict for `failed`). A crash restart never resumes work.
-    public func restore() {
+    public func restore(journal: DeckJournal? = nil) {
         guard let storage, let d = try? Data(contentsOf: storage), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
         sheet = s.sheet; pending = s.pending; sheetEpoch = s.epoch ?? 0
-        if let e = sheet.onAirEntry { airedEnded(e.id, as: .skipped, outcome: .failed, reason: "interrupted by a restart") }
+        if let e = sheet.onAirEntry {
+            // The deck's journal is read first: an entry that ended and was written there, but whose op the app died before applying, keeps its
+            // verdict and its time. The deck has already closed an item the kill left open, as failed.
+                        if let j = journal, case let lastStart = j.lines.lastIndex(where: { $0.type == "started" && $0.item == e.id }) ?? -1, let at = j.lines.lastIndex(where: { $0.type == "ended" && $0.item == e.id }), at > lastStart,  /* an earlier airing's end is not this one's */ case let l = j.lines[at], let end = l.airedEnd {
+                let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]
+                let at = f.date(from: l.at) ?? now()
+                let saved = now; now = { at }
+                airedEnded(e.id, as: end.state, outcome: end.outcome, report: AirReport(block: end.lastBlock, seconds: end.seconds), reason: end.reason)
+                now = saved
+                j.ack(through: l.seq)
+            } else { airedEnded(e.id, as: .skipped, outcome: .failed, reason: "interrupted by a restart") }
+        }
         else { save() }
         onChange?()
         flush()

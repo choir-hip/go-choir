@@ -1,0 +1,5 @@
+// The answer of sign-out, which shared code leads (account.ts, `accountSignOut`; app.ts answers it).
+shape SignOutResult
+  done: bool
+  failed: string
+  message: string

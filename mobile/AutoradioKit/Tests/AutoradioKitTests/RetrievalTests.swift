@@ -146,30 +146,7 @@ final class RetrievalTimingTests: XCTestCase {
     }
 }
 
-final class RetrievalSourcesTests: XCTestCase {
-    func testPaperFrontCacheBecomesDatedHeadlinesAndABadFileIsEmpty() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("retr-\(UUID().uuidString)"); try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let f = dir.appendingPathComponent("paper-front.json")
-        XCTAssertTrue(RetrievalSources.paperFront(file: f).isEmpty)
-        try Data("not json".utf8).write(to: f); XCTAssertTrue(RetrievalSources.paperFront(file: f).isEmpty)
-        let body = #"{"stories":[{"title":"Senate passes the water bill","dek":"A vote on Tuesday.","route":{"bare":"/p/water"},"updated_at":"2026-11-14T10:00:00Z"},{"title":"","route":{"bare":"/p/none"}}]}"#
-        try Data(body.utf8).write(to: f)
-        let docs = RetrievalSources.paperFront(file: f)
-        XCTAssertEqual(docs.count, 1); XCTAssertEqual(docs[0].address, "pub:/p/water"); XCTAssertNotNil(docs[0].date)
-    }
-    func testEpisodesAndTranscriptsBecomeSearchablePassagesWithTheirMinute() {
-        let show = PodcastShow(feedURL: "https://example.com/feed.xml", title: "Morning Talk", summary: "Politics and weather.")
-        let feed = PodcastFeed(show: show, episodes: [PodcastEpisode(id: "e1", title: "The budget fight", published: 1_794_000_000, notes: "Why the budget stalled."),
-                                                       PodcastEpisode(id: "e2", title: "Rain", published: nil, notes: "Rain notes.")])
-        let tr = PodcastTranscript(durationSeconds: 600, source: "x", blocks: (0..<40).map { .init(start: Double($0) * 15, end: Double($0) * 15 + 15, text: "We discussed the tunnel referendum in detail number \($0).") })
-        let docs = RetrievalSources.podcasts(shows: [show], feed: { _ in feed }, transcript: { $1 == "e1" ? tr : nil })
-        let i = RetrievalIndex(); i.upsertAll(docs.map(\.retrieval))
-        let c = i.retrieve(.init(words: "tunnel referendum"), record: false)
-        XCTAssertEqual(c.items.first?.kind, "transcript"); XCTAssertTrue(c.items.first?.place.hasPrefix("at ") ?? false)
-        XCTAssertEqual(i.retrieve(.init(words: "rain"), record: false).items.first?.date, nil)
-    }
-}
+// RetrievalSourcesTests (podcast episodes and transcripts as searchable passages) went with the Swift podcast source; podcastDocuments in podcast.ts is what the search lane reads.
 
 final class RetrievalHolderTests: XCTestCase {
     func testTheModelIsShownRetrievedItemsWithDatesAndIdsAndTheTurnRecordsThem() async {
@@ -204,10 +181,7 @@ final class RetrievalMoreSourcesTests: XCTestCase {
         XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: ["Autopaper", "Autopaper"]), "I have nothing on that in the paper.")
         XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: []), "I have nothing saved on this phone to search yet.")
     }
-    func testMailFilesPagesTopicsAndRunSheetBecomeDocuments() {
-        var row = MailSummary(); row.id = "m1"; row.fromDisplay = "Ana"; row.subject = "Tunnel vote"; row.snippet = "See the referendum notes."; row.at = "2026-11-14T09:00:00Z"
-        let mail = RetrievalSources.mail([row, MailSummary()])
-        XCTAssertEqual(mail.count, 1); XCTAssertEqual(mail[0].address, "mail:m1"); XCTAssertNotNil(mail[0].date)
+    func testFilesPagesTopicsAndRunSheetBecomeDocuments() {
         let files = RetrievalSources.fileNames([FileEntry(name: "budget-notes.md", path: "/docs/budget-notes.md", isDirectory: false, size: 1, modified: nil), FileEntry(name: "docs", path: "/docs", isDirectory: true, size: 0, modified: nil)])
         XCTAssertEqual(files.map(\.title), ["budget-notes.md"])
         XCTAssertEqual(RetrievalSources.editionTopics(["Science", "Senate"]).first?.text.contains("Senate"), true); XCTAssertTrue(RetrievalSources.editionTopics([]).isEmpty)

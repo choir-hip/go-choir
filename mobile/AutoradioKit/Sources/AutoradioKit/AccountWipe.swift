@@ -51,7 +51,6 @@ public final class AccountWipe: @unchecked Sendable {
         runSheet: RunSheetStore = .shared,
         openingCache: OpeningCache? = nil,
         clips: ClipLocator = .shared,
-        podcasts: PodcastService = .shared,
         texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
         content: ContentStore = .shared,
@@ -63,7 +62,8 @@ public final class AccountWipe: @unchecked Sendable {
         reader: ReaderStore = .shared,
         keptTurns: KeptTurnStore? = nil,
         voice: SpeakerGate = .shared,
-        heldRest: HeldRest = .shared
+        heldRest: HeldRest = .shared,
+        deck: Deck = .shared
     ) {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
@@ -78,9 +78,10 @@ public final class AccountWipe: @unchecked Sendable {
             Self.removeTakeScratch(in: tempDirectory)
         }
         register("run-sheet") { await MainActor.run { runSheet.wipe() } }
+        register("deck") { await MainActor.run { deck.wipe() } }       // the item on air, the held items and the reason too, not only the journal
         if let openingCache { register("opening") { openingCache.wipe() } }
         register("clips") { clips.wipe() }
-        register("podcasts") { podcasts.wipe() }
+        // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).
         register("texture") { await MainActor.run { texture.wipe() } }
         register("playing") { environment.wipePlaying() }
         register("mail-reading") { mailReading.wipe() }

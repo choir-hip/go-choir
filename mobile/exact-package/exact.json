@@ -20,84 +20,6 @@
       "message": "string",
       "micActive": "bool"
     },
-    "StageRow": {
-      "kind": "string",
-      "kindLabel": "string",
-      "id": "string",
-      "name": "string",
-      "summary": "string",
-      "selected": "bool",
-      "network": "bool",
-      "models": "string"
-    },
-    "StageList": {
-      "rows": "StageRow[]"
-    },
-    "ParamRow": {
-      "kind": "string",
-      "stage": "string",
-      "name": "string",
-      "label": "string",
-      "value": "string",
-      "hint": "string"
-    },
-    "ParamList": {
-      "rows": "ParamRow[]"
-    },
-    "TimingRow": {
-      "stage": "string",
-      "startMs": "number",
-      "durMs": "number"
-    },
-    "Trace": {
-      "id": "string",
-      "transcript": "string",
-      "configName": "string",
-      "outcome": "string",
-      "addressedBy": "string",
-      "totalMs": "number",
-      "ackMs": "number",
-      "revisionMs": "number",
-      "audioSwitchMs": "number",
-      "timings": "TimingRow[]",
-      "lines": "string[]"
-    },
-    "TurnRow": {
-      "id": "string",
-      "transcript": "string",
-      "configName": "string",
-      "outcome": "string",
-      "ackMs": "number",
-      "revisionMs": "number"
-    },
-    "TurnList": {
-      "rows": "TurnRow[]"
-    },
-    "AudioInfo": {
-      "state": "string",
-      "policy": "string",
-      "engine": "string",
-      "route": "string",
-      "message": "string",
-      "voiceProcessing": "bool",
-      "audible": "bool",
-      "volume": "number",
-      "lastSwitchMs": "number",
-      "policies": "string[]",
-      "ackTiming": "string",
-      "ackTimings": "string[]"
-    },
-    "ExportInfo": {
-      "path": "string",
-      "documents": "string",
-      "name": "string"
-    },
-    "Lines": {
-      "lines": "string[]"
-    },
-    "Names": {
-      "names": "string[]"
-    },
     "ChoirAuth": {
       "signedIn": "bool",
       "baseURL": "string",
@@ -232,47 +154,6 @@
       "ok": "bool",
       "message": "string"
     },
-    "CardStory": {
-      "route": "string",
-      "address": "string",
-      "title": "string",
-      "dek": "string",
-      "section": "string",
-      "entityLine": "string",
-      "primary": "string",
-      "lift": "number",
-      "n": "number",
-      "dir": "string",
-      "why": "string"
-    },
-    "CardStoryList": {
-      "rows": "CardStory[]",
-      "index": "number",
-      "setAside": "number",
-      "total": "number"
-    },
-    "ToldRow": {
-      "kind": "string",
-      "title": "string",
-      "entities": "string",
-      "when": "string",
-      "route": "string"
-    },
-    "Told": {
-      "count": "number",
-      "rows": "ToldRow[]",
-      "lines": "string[]",
-      "left": "string",
-      "right": "string",
-      "leftLabel": "string",
-      "rightLabel": "string",
-      "note": "string"
-    },
-    "UndoInfo": {
-      "open": "bool",
-      "title": "string",
-      "address": "string"
-    },
     "LauncherPlace": {
       "slug": "string",
       "name": "string",
@@ -294,70 +175,32 @@
       "stories": "number",
       "searchNote": "string"
     },
-    "ShadeRow": {
-      "route": "string",
-      "lift": "number",
-      "rank": "number"
-    },
-    "Shading": {
-      "rows": "ShadeRow[]"
-    },
     "CardAck": {
       "message": "string"
     },
-    "FileCrumb": {
-      "name": "string",
-      "path": "string"
+    "DeckEvent": {
+      "seq": "number",
+      "type": "string",
+      "item": "string",
+      "at": "string",
+      "block": "number",
+      "seconds": "number",
+      "final": "number",
+      "rendered": "bool",
+      "end": "string",
+      "command": "string",
+      "reason": "string"
     },
-    "FileRow": {
-      "name": "string",
-      "path": "string",
-      "address": "string",
-      "kind": "string",
-      "kindLabel": "string",
-      "symbol": "string",
-      "isDir": "bool",
-      "size": "number",
-      "sizeLabel": "string",
-      "modifiedLabel": "string",
-      "detail": "string",
-      "place": "string"
-    },
-    "FileListing": {
-      "path": "string",
-      "title": "string",
-      "crumbs": "FileCrumb[]",
-      "rows": "FileRow[]",
-      "count": "number",
-      "status": "string",
-      "message": "string",
-      "mode": "string",
-      "sort": "string",
-      "desc": "bool",
-      "query": "string"
-    },
-    "CsvRow": {
-      "cells": "string[]"
-    },
-    "FileInfo": {
-      "address": "string",
-      "path": "string",
-      "folder": "string",
-      "name": "string",
-      "kind": "string",
-      "kindLabel": "string",
-      "size": "number",
-      "sizeLabel": "string",
-      "modifiedLabel": "string",
-      "mime": "string",
-      "status": "string",
-      "message": "string",
-      "src": "string",
-      "local": "string",
-      "truncated": "bool",
-      "rows": "CsvRow[]",
-      "width": "number",
-      "height": "number"
+    "DeckState": {
+      "why": "string",
+      "item": "string",
+      "block": "number",
+      "seconds": "number",
+      "duration": "number",
+      "held": "string[]",
+      "seq": "number",
+      "acked": "number",
+      "journal": "DeckEvent[]"
     },
     "HearItRow": {
       "clipID": "string",
@@ -367,103 +210,6 @@
       "quote": "string",
       "story": "string",
       "episodeOnly": "bool"
-    },
-    "ClipRows": {
-      "rows": "HearItRow[]"
-    },
-    "ClipAck": {
-      "status": "string",
-      "message": "string"
-    },
-    "MailRow": {
-      "id": "string",
-      "address": "string",
-      "sender": "string",
-      "subject": "string",
-      "snippet": "string",
-      "stamp": "string",
-      "trust": "string",
-      "direction": "string",
-      "unread": "bool",
-      "hasAttachments": "bool",
-      "count": "number"
-    },
-    "MailFolderRow": {
-      "name": "string",
-      "label": "string",
-      "address": "string",
-      "badge": "string",
-      "current": "bool"
-    },
-    "MailBoxView": {
-      "status": "string",
-      "message": "string",
-      "folder": "string",
-      "title": "string",
-      "unread": "number",
-      "total": "number",
-      "cached": "bool",
-      "rows": "MailRow[]",
-      "folders": "MailFolderRow[]"
-    },
-    "MailBlock": {
-      "kind": "string",
-      "text": "string"
-    },
-    "MailAttachmentRow": {
-      "id": "string",
-      "filename": "string",
-      "size": "string",
-      "kind": "string",
-      "address": "string",
-      "note": "string",
-      "available": "bool"
-    },
-    "MailThreadRow": {
-      "id": "string",
-      "address": "string",
-      "sender": "string",
-      "stamp": "string",
-      "snippet": "string",
-      "current": "bool"
-    },
-    "MailMessageView": {
-      "status": "string",
-      "message": "string",
-      "id": "string",
-      "address": "string",
-      "subject": "string",
-      "sender": "string",
-      "fromAddress": "string",
-      "toLine": "string",
-      "ccLine": "string",
-      "date": "string",
-      "trust": "string",
-      "trustNote": "string",
-      "unread": "bool",
-      "htmlOnly": "bool",
-      "hasOriginal": "bool",
-      "hasQuoted": "bool",
-      "canReply": "bool",
-      "cut": "bool",
-      "originalPath": "string",
-      "blocks": "MailBlock[]",
-      "attachments": "MailAttachmentRow[]",
-      "thread": "MailThreadRow[]",
-      "replyLabel": "string",
-      "spoken": "string"
-    },
-    "MailComposeView": {
-      "status": "string",
-      "forAddress": "string",
-      "sendAs": "string",
-      "toLine": "string",
-      "subject": "string",
-      "body": "string",
-      "draftId": "string",
-      "note": "string",
-      "reviewURL": "string",
-      "replyTo": "string"
     },
     "MailAck": {
       "status": "string",
@@ -571,146 +317,19 @@
       "expanded": "bool",
       "note": "string"
     },
-    "PaperItem": {
-      "route": "string",
-      "title": "string",
-      "dek": "string",
-      "section": "string",
-      "meta": "string",
-      "byline": "string",
-      "entityLabels": "string",
-      "entityIds": "string",
-      "size": "number",
-      "weight": "number",
-      "lineHeight": "number",
-      "lines": "number",
-      "showDek": "bool",
-      "dekSize": "number",
-      "dekLines": "number",
-      "indent": "bool",
-      "rank": "number"
+    "EditionPicks": {
+      "picks": "string"
     },
-    "PaperBand": {
-      "id": "string",
-      "module": "string",
-      "label": "string",
-      "side": "bool",
-      "rule": "bool",
-      "items": "PaperItem[]"
+    "PodNow": {
+      "episodeId": "string",
+      "clip": "bool",
+      "start": "number",
+      "elapsed": "number",
+      "duration": "number"
     },
-    "PaperSection": {
-      "id": "string",
-      "label": "string",
-      "count": "number",
-      "current": "bool"
-    },
-    "PaperFront": {
-      "status": "string",
-      "message": "string",
-      "edition": "string",
-      "layout": "string",
-      "composition": "string",
-      "dateLine": "string",
-      "updated": "string",
-      "sectionId": "string",
-      "sectionLabel": "string",
-      "viewId": "string",
-      "viewLabel": "string",
-      "mineState": "string",
-      "mineFrom": "string",
-      "note": "string",
-      "count": "number",
-      "sections": "PaperSection[]",
-      "bands": "PaperBand[]",
-      "routes": "string[]",
-      "titles": "string[]"
-    },
-    "PodShowRow": {
-      "feedURL": "string",
-      "address": "string",
-      "title": "string",
-      "author": "string",
-      "artwork": "string",
-      "detail": "string",
-      "latest": "string",
-      "latestStamp": "string",
-      "subscribed": "bool",
-      "unplayed": "bool",
-      "unplayedCount": "number"
-    },
-    "PodHomeView": {
-      "status": "string",
-      "message": "string",
-      "query": "string",
-      "searchNote": "string",
-      "syncNote": "string",
-      "searching": "bool",
-      "hasQuery": "bool",
-      "shows": "PodShowRow[]",
-      "results": "PodShowRow[]",
-      "suggestions": "PodShowRow[]"
-    },
-    "PodEpisodeRow": {
-      "key": "string",
-      "address": "string",
-      "title": "string",
-      "stamp": "string",
-      "duration": "string",
-      "snippet": "string",
-      "progress": "string",
-      "unplayed": "bool",
-      "playable": "bool",
-      "current": "bool"
-    },
-    "PodShowView": {
-      "status": "string",
-      "message": "string",
-      "feedURL": "string",
-      "title": "string",
-      "author": "string",
-      "artwork": "string",
-      "summary": "string",
-      "unplayedLine": "string",
-      "subscribed": "bool",
-      "refreshing": "bool",
-      "episodes": "PodEpisodeRow[]"
-    },
-    "PodEpisodeView": {
-      "status": "string",
-      "message": "string",
-      "address": "string",
-      "feedURL": "string",
-      "showTitle": "string",
-      "showAddress": "string",
-      "title": "string",
-      "stamp": "string",
-      "duration": "string",
-      "artwork": "string",
-      "playingFrom": "string",
-      "resumeLabel": "string",
-      "note": "string",
-      "notes": "string[]",
-      "subscribed": "bool",
-      "playable": "bool",
-      "current": "bool",
-      "fromClip": "bool",
-      "hasResume": "bool",
-      "transcriptState": "string",
-      "transcriptNote": "string",
-      "transcriptSource": "string",
-      "transcript": "PodTranscriptRow[]"
-    },
-    "PodAck": {
+    "PodDone": {
       "status": "string",
       "message": "string"
-    },
-    "PodTranscriptRow": {
-      "key": "string",
-      "time": "string",
-      "text": "string",
-      "seconds": "number",
-      "current": "bool",
-      "seekable": "bool"
     },
     "QueueInfo": {
       "current": "string",
@@ -984,18 +603,6 @@
       "ok": "bool",
       "message": "string"
     },
-    "SettingsAccount": {
-      "status": "string",
-      "signedIn": "bool",
-      "handle": "string",
-      "keyID": "string",
-      "keyLabel": "string",
-      "scopes": "string",
-      "computerID": "string",
-      "message": "string",
-      "demo": "bool",
-      "baseURL": "string"
-    },
     "SettingsComputer": {
       "id": "string",
       "state": "string",
@@ -1005,23 +612,6 @@
       "message": "string",
       "epoch": "number",
       "checked": "bool"
-    },
-    "SettingOption": {
-      "id": "string",
-      "label": "string",
-      "detail": "string",
-      "selected": "bool"
-    },
-    "SettingRowInfo": {
-      "id": "string",
-      "label": "string",
-      "help": "string",
-      "value": "string",
-      "valueLabel": "string",
-      "choices": "SettingOption[]"
-    },
-    "SettingRows": {
-      "rows": "SettingRowInfo[]"
     },
     "LearnedItem": {
       "line": "string",
@@ -1270,213 +860,6 @@
   },
   "names": [
     {
-      "source": "labState",
-      "live": true,
-      "answers": "LabState",
-      "substitute": {
-        "default": {
-          "running": false,
-          "paused": true,
-          "phase": "playing",
-          "level": "play",
-          "addressing": "",
-          "transcript": "",
-          "configName": "",
-          "blockIndex": 0,
-          "blockCount": 0,
-          "blockText": "",
-          "residentMB": 0,
-          "thermal": "nominal",
-          "message": "",
-          "micActive": false
-        }
-      }
-    },
-    {
-      "source": "labStages",
-      "live": true,
-      "answers": "StageList",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
-      "source": "labParams",
-      "live": true,
-      "answers": "ParamList",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
-      "source": "labTrace",
-      "live": true,
-      "answers": "Trace",
-      "options": {
-        "turn": "string"
-      },
-      "substitute": {
-        "default": {
-          "id": "",
-          "transcript": "",
-          "configName": "",
-          "outcome": "",
-          "addressedBy": "",
-          "totalMs": 0,
-          "ackMs": 0,
-          "revisionMs": 0,
-          "audioSwitchMs": 0,
-          "timings": [],
-          "lines": []
-        }
-      }
-    },
-    {
-      "source": "labAudio",
-      "live": true,
-      "answers": "AudioInfo",
-      "substitute": {
-        "default": {
-          "state": "none",
-          "policy": "switchOnAddress",
-          "engine": "off",
-          "route": "",
-          "message": "",
-          "voiceProcessing": false,
-          "audible": false,
-          "volume": 1,
-          "lastSwitchMs": 0,
-          "policies": [],
-          "ackTiming": "immediate",
-          "ackTimings": []
-        }
-      }
-    },
-    {
-      "send": "labInject",
-      "answers": "LabState"
-    },
-    {
-      "send": "labSetAudioPolicy",
-      "options": {
-        "policy": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labSetAckTiming",
-      "options": {
-        "timing": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labExportTurn",
-      "options": {
-        "turn": "string"
-      },
-      "answers": "ExportInfo"
-    },
-    {
-      "source": "labTurns",
-      "live": true,
-      "answers": "TurnList",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
-      "source": "labEvents",
-      "live": true,
-      "answers": "Lines",
-      "substitute": {
-        "default": {
-          "lines": []
-        }
-      }
-    },
-    {
-      "source": "labConfigs",
-      "live": true,
-      "answers": "Names",
-      "substitute": {
-        "default": {
-          "names": []
-        }
-      }
-    },
-    {
-      "send": "labStart",
-      "answers": "LabState"
-    },
-    {
-      "send": "labStop",
-      "answers": "LabState"
-    },
-    {
-      "send": "labPlayPause",
-      "answers": "LabState"
-    },
-    {
-      "send": "labNext",
-      "answers": "LabState"
-    },
-    {
-      "send": "labPrevious",
-      "answers": "LabState"
-    },
-    {
-      "send": "labSelectStage",
-      "options": {
-        "kind": "string",
-        "id": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labSetParam",
-      "options": {
-        "kind": "string",
-        "name": "string",
-        "value": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labSaveConfig",
-      "options": {
-        "name": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labLoadConfig",
-      "options": {
-        "name": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labLoadConfigURL",
-      "options": {
-        "url": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labReplay",
-      "options": {
-        "turn": "string"
-      },
-      "answers": "LabState"
-    },
-    {
       "source": "choirAuth",
       "live": true,
       "answers": "ChoirAuth",
@@ -1523,10 +906,6 @@
       "answers": "LabState"
     },
     {
-      "send": "choirSignOut",
-      "answers": "LabState"
-    },
-    {
       "send": "choirOpenApproval",
       "answers": "LabState"
     },
@@ -1557,7 +936,8 @@
     {
       "send": "choirPlay",
       "options": {
-        "route": "string"
+        "route": "string",
+        "title": "string"
       },
       "answers": "LabState"
     },
@@ -1773,61 +1153,6 @@
       "answers": "ShelfAck"
     },
     {
-      "source": "cardStories",
-      "live": true,
-      "answers": "CardStoryList",
-      "substitute": {
-        "default": {
-          "rows": [],
-          "index": 0,
-          "setAside": 0,
-          "total": 0
-        }
-      }
-    },
-    {
-      "source": "storyStack",
-      "live": true,
-      "answers": "CardStoryList",
-      "substitute": {
-        "default": {
-          "rows": [],
-          "index": 0,
-          "setAside": 0,
-          "total": 0
-        }
-      }
-    },
-    {
-      "source": "toldPaper",
-      "live": true,
-      "answers": "Told",
-      "substitute": {
-        "default": {
-          "count": 0,
-          "rows": [],
-          "lines": [],
-          "left": "close",
-          "right": "more",
-          "leftLabel": "Close",
-          "rightLabel": "More of this",
-          "note": ""
-        }
-      }
-    },
-    {
-      "source": "undoOffer",
-      "live": true,
-      "answers": "UndoInfo",
-      "substitute": {
-        "default": {
-          "open": false,
-          "title": "",
-          "address": ""
-        }
-      }
-    },
-    {
       "source": "launcherData",
       "live": true,
       "answers": "LauncherData",
@@ -1847,16 +1172,6 @@
       }
     },
     {
-      "source": "shadingList",
-      "live": true,
-      "answers": "Shading",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
       "send": "storyMore",
       "options": {
         "address": "string",
@@ -1865,293 +1180,74 @@
       "answers": "CardAck"
     },
     {
-      "send": "storyLess",
-      "options": {
-        "address": "string",
-        "surface": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "cardFling",
-      "options": {
-        "address": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "cardClose",
-      "options": {
-        "address": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "cardUndo",
-      "answers": "CardAck"
-    },
-    {
-      "send": "stackDecide",
-      "options": {
-        "address": "string",
-        "side": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "stackUndo",
-      "answers": "CardAck"
-    },
-    {
-      "send": "stackReset",
-      "answers": "CardAck"
-    },
-    {
-      "send": "toldForget",
-      "options": {
-        "address": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "toldReset",
-      "answers": "CardAck"
-    },
-    {
-      "send": "gestureSet",
-      "options": {
-        "side": "string",
-        "meaning": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "source": "fileList",
+      "source": "deckState",
       "live": true,
-      "answers": "FileListing",
-      "options": {
-        "path": "string",
-        "mode": "string",
-        "sort": "string",
-        "desc": "string",
-        "query": "string"
-      },
+      "answers": "DeckState",
       "substitute": {
         "default": {
-          "path": "/",
-          "title": "Files",
-          "crumbs": [],
-          "rows": [],
-          "count": 0,
-          "status": "loading",
-          "message": "",
-          "mode": "browse",
-          "sort": "name",
-          "desc": false,
-          "query": ""
+          "why": "empty",
+          "item": "",
+          "block": 0,
+          "seconds": 0,
+          "duration": 0,
+          "held": [],
+          "seq": 0,
+          "acked": 0,
+          "journal": []
         }
       }
     },
     {
-      "source": "fileOpen",
-      "live": true,
-      "answers": "FileInfo",
+      "send": "deckPlay",
       "options": {
-        "address": "string"
+        "id": "string",
+        "kind": "string",
+        "title": "string",
+        "show": "string",
+        "document": "string",
+        "paragraphs": "string",
+        "url": "string",
+        "start": "number",
+        "end": "number",
+        "block": "number",
+        "seconds": "number",
+        "requiresPreviousHeard": "bool"
       },
-      "substitute": {
-        "default": {
-          "address": "",
-          "path": "",
-          "folder": "/",
-          "name": "",
-          "kind": "other",
-          "kindLabel": "File",
-          "size": 0,
-          "sizeLabel": "",
-          "modifiedLabel": "",
-          "mime": "",
-          "status": "loading",
-          "message": "",
-          "src": "",
-          "local": "",
-          "truncated": false,
-          "rows": [],
-          "width": 0,
-          "height": 0
-        }
-      }
+      "answers": "DeckState"
     },
     {
-      "send": "fileMkdir",
+      "send": "deckEnqueue",
       "options": {
-        "dir": "string",
-        "name": "string"
+        "id": "string",
+        "kind": "string",
+        "title": "string",
+        "show": "string",
+        "document": "string",
+        "paragraphs": "string",
+        "url": "string",
+        "start": "number",
+        "end": "number",
+        "block": "number",
+        "seconds": "number",
+        "requiresPreviousHeard": "bool",
+        "at": "number"
       },
-      "answers": "FileListing"
+      "answers": "DeckState"
     },
     {
-      "send": "fileDelete",
-      "options": {
-        "path": "string"
-      },
-      "answers": "FileListing"
-    },
-    {
-      "send": "fileRename",
-      "options": {
-        "path": "string",
-        "name": "string"
-      },
-      "answers": "FileListing"
-    },
-    {
-      "send": "fileUpload",
-      "options": {
-        "from": "string",
-        "name": "string",
-        "dir": "string"
-      },
-      "answers": "FileListing"
-    },
-    {
-      "source": "showClips",
-      "live": true,
-      "answers": "ClipRows",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
-      "send": "clipAct",
+      "send": "deckAct",
       "options": {
         "op": "string",
-        "id": "string"
+        "value": "number"
       },
-      "answers": "ClipAck"
+      "answers": "DeckState"
     },
     {
-      "source": "mailBox",
-      "live": true,
-      "answers": "MailBoxView",
+      "send": "deckAck",
       "options": {
-        "address": "string"
+        "through": "number"
       },
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "folder": "",
-          "title": "",
-          "unread": 0,
-          "total": 0,
-          "cached": false,
-          "rows": [],
-          "folders": []
-        }
-      }
-    },
-    {
-      "source": "mailFrame",
-      "live": true,
-      "answers": "MailBoxView",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "folder": "",
-          "title": "",
-          "unread": 0,
-          "total": 0,
-          "cached": false,
-          "rows": [],
-          "folders": []
-        }
-      }
-    },
-    {
-      "source": "mailMessage",
-      "live": true,
-      "answers": "MailMessageView",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "id": "",
-          "address": "",
-          "subject": "",
-          "sender": "",
-          "fromAddress": "",
-          "toLine": "",
-          "ccLine": "",
-          "date": "",
-          "trust": "",
-          "trustNote": "",
-          "unread": false,
-          "htmlOnly": false,
-          "hasOriginal": false,
-          "hasQuoted": false,
-          "canReply": false,
-          "cut": false,
-          "originalPath": "",
-          "blocks": [],
-          "attachments": [],
-          "thread": [],
-          "replyLabel": "",
-          "spoken": ""
-        }
-      }
-    },
-    {
-      "source": "mailCompose",
-      "live": true,
-      "answers": "MailComposeView",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "",
-          "forAddress": "",
-          "sendAs": "",
-          "toLine": "",
-          "subject": "",
-          "body": "",
-          "draftId": "",
-          "note": "",
-          "reviewURL": "",
-          "replyTo": ""
-        }
-      }
-    },
-    {
-      "send": "mailSaveDraft",
-      "options": {
-        "address": "string",
-        "recipients": "string",
-        "subject": "string",
-        "body": "string"
-      },
-      "answers": "MailComposeView"
-    },
-    {
-      "send": "mailApprovalEmail",
-      "options": {
-        "address": "string",
-        "draft": "string"
-      },
-      "answers": "MailComposeView"
+      "answers": "DeckState"
     },
     {
       "send": "mailOpenReview",
@@ -2163,7 +1259,8 @@
     {
       "send": "mailRead",
       "options": {
-        "address": "string"
+        "address": "string",
+        "text": "string"
       },
       "answers": "MailAck"
     },
@@ -2172,13 +1269,6 @@
       "options": {
         "address": "string",
         "question": "string"
-      },
-      "answers": "MailAck"
-    },
-    {
-      "send": "mailMarkUnread",
-      "options": {
-        "address": "string"
       },
       "answers": "MailAck"
     },
@@ -2356,157 +1446,52 @@
       "answers": "Onboarding"
     },
     {
-      "source": "paperFront",
+      "source": "editionPicks",
       "live": true,
-      "answers": "PaperFront",
+      "answers": "EditionPicks",
       "options": {
-        "view": "string",
-        "edition": "string",
-        "width": "number",
-        "tick": "number",
         "focus": "string"
       },
       "substitute": {
         "default": {
-          "status": "empty",
-          "message": "",
-          "edition": "",
-          "layout": "",
-          "composition": "",
-          "dateLine": "",
-          "updated": "",
-          "sectionId": "",
-          "sectionLabel": "",
-          "viewId": "",
-          "viewLabel": "",
-          "mineState": "",
-          "mineFrom": "",
-          "note": "",
-          "count": 0,
-          "sections": [],
-          "bands": [],
-          "routes": [],
-          "titles": []
+          "picks": ""
         }
       }
     },
     {
-      "source": "podcastHome",
+      "source": "podcastNow",
       "live": true,
-      "answers": "PodHomeView",
-      "options": {
-        "q": "string",
-        "address": "string"
-      },
+      "answers": "PodNow",
       "substitute": {
         "default": {
-          "status": "loading",
-          "message": "",
-          "query": "",
-          "searchNote": "",
-          "syncNote": "",
-          "searching": false,
-          "hasQuery": false,
-          "shows": [],
-          "results": [],
-          "suggestions": []
+          "episodeId": "",
+          "clip": false,
+          "start": 0,
+          "elapsed": 0,
+          "duration": 0
         }
       }
     },
     {
-      "source": "podcastShow",
-      "live": true,
-      "answers": "PodShowView",
+      "send": "podcastPlayAudio",
       "options": {
-        "address": "string"
+        "op": "string",
+        "id": "string",
+        "url": "string",
+        "title": "string",
+        "show": "string",
+        "start": "number"
       },
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "feedURL": "",
-          "title": "",
-          "author": "",
-          "artwork": "",
-          "summary": "",
-          "unplayedLine": "",
-          "subscribed": false,
-          "refreshing": false,
-          "episodes": []
-        }
-      }
+      "answers": "PodDone"
     },
     {
-      "source": "podcastEpisode",
-      "live": true,
-      "answers": "PodEpisodeView",
+      "send": "clipPlay",
       "options": {
-        "address": "string",
-        "find": "string"
+        "op": "string",
+        "id": "string",
+        "feed": "string"
       },
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "address": "",
-          "feedURL": "",
-          "showTitle": "",
-          "showAddress": "",
-          "title": "",
-          "stamp": "",
-          "duration": "",
-          "artwork": "",
-          "playingFrom": "",
-          "resumeLabel": "",
-          "note": "",
-          "notes": [],
-          "subscribed": false,
-          "playable": false,
-          "current": false,
-          "fromClip": false,
-          "hasResume": false,
-          "transcriptState": "",
-          "transcriptNote": "",
-          "transcriptSource": "",
-          "transcript": []
-        }
-      }
-    },
-    {
-      "send": "podcastSubscribe",
-      "options": {
-        "feedURL": "string"
-      },
-      "answers": "PodAck"
-    },
-    {
-      "send": "podcastUnsubscribe",
-      "options": {
-        "feedURL": "string"
-      },
-      "answers": "PodAck"
-    },
-    {
-      "send": "podcastPlay",
-      "options": {
-        "address": "string",
-        "mode": "string"
-      },
-      "answers": "PodAck"
-    },
-    {
-      "send": "podcastQueue",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PodAck"
-    },
-    {
-      "send": "podcastRefresh",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PodAck"
+      "answers": "PodDone"
     },
     {
       "source": "queueView",
@@ -2541,7 +1526,8 @@
         "mode": "string",
         "kind": "string",
         "ref": "string",
-        "title": "string"
+        "title": "string",
+        "local": "string"
       },
       "answers": "QueueInfo"
     },
@@ -2786,25 +1772,6 @@
       }
     },
     {
-      "source": "settingsAccount",
-      "live": true,
-      "answers": "SettingsAccount",
-      "substitute": {
-        "default": {
-          "status": "",
-          "signedIn": false,
-          "handle": "",
-          "keyID": "",
-          "keyLabel": "",
-          "scopes": "",
-          "computerID": "",
-          "message": "",
-          "demo": false,
-          "baseURL": ""
-        }
-      }
-    },
-    {
       "source": "settingsComputer",
       "live": true,
       "answers": "SettingsComputer",
@@ -2818,19 +1785,6 @@
           "message": "",
           "epoch": 0,
           "checked": false
-        }
-      }
-    },
-    {
-      "source": "settingRows",
-      "live": true,
-      "answers": "SettingRows",
-      "options": {
-        "group": "string"
-      },
-      "substitute": {
-        "default": {
-          "rows": []
         }
       }
     },
@@ -2894,10 +1848,6 @@
       "answers": "SettingsAck"
     },
     {
-      "send": "accountRefresh",
-      "answers": "SettingsAck"
-    },
-    {
       "send": "computerRefresh",
       "answers": "SettingsAck"
     },
@@ -2907,14 +1857,6 @@
     },
     {
       "send": "computerUpdate",
-      "answers": "SettingsAck"
-    },
-    {
-      "send": "settingSet",
-      "options": {
-        "id": "string",
-        "value": "string"
-      },
       "answers": "SettingsAck"
     },
     {

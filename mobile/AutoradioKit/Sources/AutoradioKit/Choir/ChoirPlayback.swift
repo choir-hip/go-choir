@@ -46,6 +46,13 @@ import Foundation
         app.runtime.player.start(at: 0)
     }
 
+    public func pauseSpoken() { app.runtime.player.pause() }
+    /// Sound is reaching the output: the spoken block's rendered seconds are past zero, or remote audio is playing and its position moves.
+    public func rendering() -> Bool {
+        if remote.isPlaying, let p = remote.position(), p.elapsed > 0.05 { return true }
+        if let r = app.runtime.player.renderPosition(), r.seconds > 0 { return true }
+        return false
+    }
     public func spokenRemainder() -> String? { app.runtime.player.remainingText() }
     public func speakFailure() -> String? { app.runtime.player.speakFailure }
 

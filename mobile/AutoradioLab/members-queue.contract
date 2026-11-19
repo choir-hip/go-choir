@@ -11,9 +11,12 @@ members Autoradio
 
   // Play now, or add to the end: kind "story" (ref a route or a pub: address) or "page" (ref a web address).
   action queuePlay(kind: string, ref: string, title: string)
-    send qm = queueAdd(mode="now", kind=kind, ref=ref, title=title)
+    send qm = queueAdd(mode="now", kind=kind, ref=ref, title=title, local="")
   action queueLater(kind: string, ref: string, title: string)
-    send qm = queueAdd(mode="add", kind=kind, ref=ref, title=title)
+    send qm = queueAdd(mode="add", kind=kind, ref=ref, title=title, local="")
+  // An audio file from Files: the page has brought it to an app file (`local`, under app:/cache/files); the run sheet's player plays it from there.
+  action queueFilePlay(mode: string, address: string, local: string, title: string)
+    send qm = queueAdd(mode=mode, kind="file", ref=address, title=title, local=local)
   // toggle | back15 | fwd15 | keep | remove | playAt | skip | clear | openWeb | closeWeb
   action queueDo(op: string, arg: string)
     send qm = queueAct(op=op, arg=arg)

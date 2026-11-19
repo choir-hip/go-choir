@@ -31,7 +31,7 @@ members Autoradio
   derive stackCount = order.length
   // An open paper article is a card in a stack of the front page's articles (owner, 2026-11-15, item 1): a swipe goes to the next
   // article (leftwards) or the previous one (rightwards) and never wraps or returns to the front page. The list is the front
-  // page's reading order for the VIEW the reader is in (Front page, My edition or a category: `paperView`, Kit: PaperFront.routes); the view is state, so it
+  // page's reading order for the VIEW the reader is in (Front page, My edition or a category: `paperView`, paper.ts: pfront.routes); the view is state, so it
   // is still the open view while an article is on top.
   // A page that is not in that list (a Texture, a file) keeps the deck's own cycle.
   derive curIdx = topAddr.startsWith("pub:") ? pfront.routes.indexOf(topAddr.slice(4)) : 0 - 1
@@ -50,7 +50,7 @@ members Autoradio
   derive prog = min(pxAbs / max(vp.width * 0.5, 1), 1)
 
   // Bring a page to the top of the deck (opening it when it is new).
-  // A file (not a folder) is opened by the Kit, which may answer with another page (a PDF is a Reader document, text a Texture document, either
+  // A file (not a folder) is opened through fileResolve, which may answer with another page (a PDF is a Reader document, text a Texture document, either
   // possibly already in the deck): the deck does not take the `file:` address on top, it follows the focus the Kit lands on (followOpen).
   action openPage(address: string, title: string)
     awaiting = (address.startsWith("file:") and address.endsWith("/") == false) ? address : ""
@@ -58,8 +58,19 @@ members Autoradio
     px = 0
     pdrag = false
     flying = false
-    send pm = pageOpen(address=address, title=title)
+    // A file asks the listener's computer first (fileResolve, files.ts): a PDF, e-book, text, Markdown or code file answers the texture: page the computer
+    // opened for it (decision D4), any other file answers its own address. Either way the Kit's pile then opens the answer (fileResolved).
+    if awaiting != ""
+      send fvRes = fileResolve(dm.on, address, title)
+    else
+      send pm = pageOpen(address=address, title=title)
     layer = ""
+  derive fresTarget = match fvRes { case some(r) => r.target != "" ? r.target : r.address, case none => "" }
+  derive fresTitle = match fvRes { case some(r) => r.title, case none => "" }
+  action fileResolved
+    if fresTarget != ""
+      awaiting = fresTarget
+      send pm = pageOpen(address=fresTarget, title=fresTitle)
   action focusPage(address: string)
     order = [address].concat(order.filter(a => a != address))
     px = 0

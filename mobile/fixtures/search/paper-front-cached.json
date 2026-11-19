@@ -1,0 +1,6 @@
+{"stories":[
+ {"title":"Council approves tide barrier for the harbor","dek":"The council voted seven to two to fund the barrier.","route":{"bare":"/pub/texture/tide-barrier-pub1","permalink":"/pub/texture/tide-barrier-pub1/v2"},"updated_at":"2026-11-18T12:16:30.512437918Z","section":"world"},
+ {"title":"Museum reopens its glass hall","dek":"The hall holds three hundred lamps.","route":{"bare":"/pub/texture/glass-hall-pub2"},"updated_at":"2026-11-17T08:00:00Z","section":"culture"},
+ {"title":"","dek":"no title","route":{"bare":"/pub/texture/no-title"}},
+ {"title":"No route","dek":"x"}
+],"sections":[{"id":"world","label":"World"}]}

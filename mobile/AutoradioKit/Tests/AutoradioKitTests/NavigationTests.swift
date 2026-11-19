@@ -25,39 +25,7 @@ import XCTest
 final class NavigationTests: XCTestCase {
     static let lab = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("AutoradioLab")
 
-    private func item(_ route: String, _ title: String = "") -> PaperItem {
-        PaperItem(route: route, title: title.isEmpty ? route.uppercased() : title, dek: "", section: "News", meta: "", byline: "", entityLabels: "", entityIds: "",
-                  size: 17, weight: 600, lineHeight: 20, lines: 2, showDek: false, dekSize: 14, dekLines: 0, indent: false, rank: 0)
-    }
-    private func band(_ items: [PaperItem]) -> PaperBand { PaperBand(id: "b", module: "river", label: "", side: false, rule: false, items: items) }
-
-    // 1.1, 1.2, 1.5, 1.7
-    func testStackIsReadingOrderOnceEachWithMatchingTitles() {
-        let s = PaperFront.stack(of: [band([item("a"), item("b")]), band([item("c"), item("a"), item("")])])
-        XCTAssertEqual(s.routes, ["a", "b", "c"])
-        XCTAssertEqual(s.titles, ["A", "B", "C"])
-    }
-    // 1.1 through the real composer
-    func testComposedFrontCarriesTheStackInPageOrder() {
-        let engine = LayoutEngine(doc: .builtIn, measurer: ApproxMeasurer())
-        let stories = (1...7).map { PaperStory(route: "s\($0)", title: "Story number \($0) of the day") }
-        let f = PaperComposer.front(stories: stories, width: 393, engine: engine)
-        XCTAssertEqual(f.routes, f.bands.flatMap { $0.items.map(\.route) })
-        XCTAssertFalse(f.routes.isEmpty)
-        XCTAssertTrue(Set(f.routes).isSubset(of: Set(stories.map(\.route))), "the page may leave a story out; the stack is what the page shows")
-        XCTAssertEqual(f.routes.count, f.titles.count)
-    }
-    // 1.3, 1.4
-    func testNeighborStopsAtTheEndsAndIgnoresStrangers() {
-        var f = PaperFront.empty()
-        f.routes = ["a", "b", "c"]; f.titles = ["A", "B", "C"]
-        XCTAssertEqual(f.neighbor(of: "a", step: 1), 1)
-        XCTAssertEqual(f.neighbor(of: "b", step: -1), 0)
-        XCTAssertNil(f.neighbor(of: "a", step: -1), "no wrap before the first")
-        XCTAssertNil(f.neighbor(of: "c", step: 1), "no wrap after the last")
-        XCTAssertNil(f.neighbor(of: "texture-x", step: 1), "a page outside the stack has no neighbour")
-        XCTAssertNil(PaperFront.empty().neighbor(of: "a", step: 1))
-    }
+    // 1.1 to 1.5 and 1.7 (the stack's order, once each, no wrap, strangers) are paper.test.ts now: the stack is built by paper.ts.
     // 1.6: the contract steps through the stack of the OPEN VIEW (Front page, My edition or a category) while an article is open: the view is state, not the page on top.
     func testContractStepsThroughTheFrontStack() throws {
         let stack = try String(contentsOf: Self.lab.appendingPathComponent("members-stack.contract"), encoding: .utf8)

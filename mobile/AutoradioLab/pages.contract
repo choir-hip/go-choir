@@ -6,7 +6,8 @@
 // adds its names to its own band in app.contract) and reads its page's model with the `pageModel` source.
 use Theme from "@choir/autoradio"
 use NotYetPage, StackVp, kindOf, kindWord, stackName, frontTitle, isFixed from "./ui.contract"
-use PageList, PaperFront from "@choir/autoradio"
+use PageList from "@choir/autoradio"
+use PaperFront from "./paper-types.contract"
 use PaperPage from "./paper.contract"
 use ReaderPage from "./reader.contract"
 use TexturesPage from "./textures.contract"
@@ -15,22 +16,19 @@ use BooksPage, DocPage from "./books.contract"
 use MailPage, MailboxPage from "./mail.contract"
 use ActivityPage from "./activity.contract"
 use SettingsPage from "./settings.contract"
-use ComponentsPage, TracePage from "./components.contract"
-use MotionPage, WaitPage from "./motion.contract"
-use MarkPage from "./tetramark.contract"
 use OnboardingPage, EditEditionPage from "./onboarding.contract"
 use ConversationPage from "./talk.contract"
 use PodcastPage from "./podcasts.contract"
 use RadioPage from "./radio.contract"
 use NotebookPage from "./notebook.contract"
 
-// A "lab" page is known only at the addresses listed below; any other lab:* address shows the not-yet page, not a blank screen.
+// A kind not listed in `known` shows the not-yet page, not a blank screen.
 component PageHost
   props
     address: string
     kind: string
     title: string
-  derive known = ["radio", "notebook", "paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "onboarding", "books", "doc", "conversation", "podcast"].includes(kind) or (kind == "lab" and ["lab:components", "lab:trace", "lab:motion", "lab:mark", "lab:wait"].includes(address))
+  derive known = ["radio", "notebook", "paper", "reader", "textures", "file", "mail", "mailbox", "activity", "settings", "onboarding", "books", "doc", "conversation", "podcast"].includes(kind)
   view
     column position="absolute" inset=0
       // ---- one line per kind: a lane replaces the component, not this line ----
@@ -60,16 +58,6 @@ component PageHost
         ActivityPage(address=address, title=title)
       if kind == "settings"
         SettingsPage(address=address, title=title)
-      if kind == "lab" and address == "lab:components"
-        ComponentsPage()
-      if kind == "lab" and address == "lab:trace"
-        TracePage()
-      if kind == "lab" and address == "lab:motion"
-        MotionPage()
-      if kind == "lab" and address == "lab:mark"
-        MarkPage()
-      if kind == "lab" and address == "lab:wait"
-        WaitPage()
       if kind == "conversation"
         ConversationPage(address=address, title=title)
       if kind == "onboarding" and address != "onboarding:edit"

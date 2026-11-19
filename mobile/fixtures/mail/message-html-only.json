@@ -1,0 +1,21 @@
+{
+ "message": {
+  "id": "em_01hz08",
+  "direction": "inbound",
+  "from_address": "billing@shop.example.com",
+  "subject": "Your receipt",
+  "snippet": "Thank you",
+  "trust_status": "trusted",
+  "created_at": "2026-11-17T08:30:00Z",
+  "from_display": "Example Shop",
+  "received_at": "2026-11-17T08:30:00Z"
+ },
+ "html_body": "<html><head><style>p{color:red}</style></head><body onload=\"track()\"><h1>Receipt</h1><p>Thank you for your order &amp; your patience.</p><ul><li>One tea</li><li>Two cups</li></ul><img src=\"https://tracker.example.com/pixel.gif\" alt=\"\"><a href=\"javascript:alert(1)\">Open</a><a href=\"https://shop.example.com/orders/1\">Your order</a><script>steal()</script></body></html>",
+ "recipients": {
+  "to": [
+   {
+    "address": "listener@example.com"
+   }
+  ]
+ }
+}

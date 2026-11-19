@@ -1,0 +1,56 @@
+[
+ {
+  "name": "Documents",
+  "type": "directory",
+  "size": 4096,
+  "modified": "2026-11-10T09:00:00.123456789Z"
+ },
+ {
+  "name": "Pictures",
+  "type": "directory",
+  "size": 4096,
+  "modified": "2026-11-01T09:00:00Z"
+ },
+ {
+  "name": "Notes 2.txt",
+  "type": "file",
+  "size": 120,
+  "modified": "2026-11-18T08:00:00Z"
+ },
+ {
+  "name": "Notes 10.txt",
+  "type": "file",
+  "size": 98000,
+  "modified": "2026-11-17T08:00:00Z"
+ },
+ {
+  "name": "notes 1.txt",
+  "type": "file",
+  "size": 12,
+  "modified": "2025-03-02T08:00:00Z"
+ },
+ {
+  "name": "Lantern report.pdf",
+  "type": "file",
+  "size": 1234567,
+  "modified": "2026-11-17T22:00:00Z"
+ },
+ {
+  "name": "Harbor.md",
+  "type": "file",
+  "size": 900,
+  "modified": "2026-11-15T22:00:00Z"
+ },
+ {
+  "name": "readings.csv",
+  "type": "file",
+  "size": 80,
+  "modified": "2026-11-14T22:00:00Z"
+ },
+ {
+  "name": "mystery.dat",
+  "type": "file",
+  "size": 7,
+  "modified": "2026-11-14T22:00:00Z"
+ }
+]

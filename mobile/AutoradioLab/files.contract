@@ -4,7 +4,8 @@
 // testIds: files-search, files-mode-browse, files-mode-recent, files-sort-<key>, files-sort-dir, files-view-list, files-view-grid,
 // files-crumb-<path>, files-row-<path>, files-more-<path>, files-rename-input, files-rename-go, files-delete-<path>,
 // files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
-use Theme, FileListing, FileInfo, FileRow from "@choir/autoradio"
+use Theme from "@choir/autoradio"
+use FileListing, FileInfo, FileRow from "./files-types.contract"
 use PageScroll, Card, RowRule, PlainList from "./ui.contract"
 use Swap, SkeletonRows, SkeletonBody from "./transitions.contract"
 use Chip, ChoiceChip, NoPreview, FileWaiting, ImageViewer, VideoViewer, AudioViewer, CsvViewer from "./viewers.contract"
@@ -19,7 +20,7 @@ component FilePage
   view
     if isFolder
       FilesPlace()
-    else if fvInfo.address != address or fvInfo.status == "loading"
+    else if fvInfo.address != address or fvInfo.status == ""
       FileWaiting(address=address, title=title)
     else if fvInfo.status == "notfound" or fvInfo.status == "error" or fvInfo.status == "toolarge"
       NoPreview(address=address, title=title, message=fvInfo.message)
@@ -182,7 +183,7 @@ component FilesPlace
       if fsNoteOn and fsNote.length > 0
         Card(level=2, testId="files-banner", minHeight=0)
           text fsNote font-family=th.fontLabel font-size="-exact-footnote" color=th.fg padding="10px 14px" testId="files-banner-text"
-      if fsList.status == "loading"
+      if fsList.status == ""
         SkeletonRows(rows=6, testId="files-skeleton")
       if fsList.status == "error"
         Card(level=1, testId="files-error", minHeight=0)

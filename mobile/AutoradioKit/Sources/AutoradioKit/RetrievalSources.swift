@@ -21,44 +21,6 @@ public final class StoryDates: @unchecked Sendable {
 }
 
 public enum RetrievalSources {
-    /// The front list the phone last cached (`paper-front.json`): title, dek and date of up to a hundred stories. No full text.
-    public static func paperFront(file: URL) -> [SavedCorpus.Document] {
-        guard let d = try? Data(contentsOf: file), let o = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return [] }
-        return PaperStory.parseList(o).compactMap { s in
-            guard !s.route.isEmpty, !s.title.isEmpty else { return nil }
-            StoryDates.shared.note("pub:" + s.route, s.updated)
-            return SavedCorpus.Document(id: "front:" + s.route, title: s.title, address: "pub:" + s.route, text: s.dek,
-                                        kind: "story", source: "Autopaper", date: s.updated)
-        }
-    }
-
-    /// Subscribed shows and their cached episodes (title and show notes, dated), from the feeds already on the phone.
-    public static func podcasts(shows: [PodcastShow], feed: (String) -> PodcastFeed?, transcript: (String, String) -> PodcastTranscript?) -> [SavedCorpus.Document] {
-        var out: [SavedCorpus.Document] = []
-        for show in shows {
-            out.append(SavedCorpus.Document(id: "podcast:" + show.feedURL, title: show.title, address: PodcastService.showAddress(show.feedURL),
-                                            text: [show.author, show.summary].filter { !$0.isEmpty }.joined(separator: ". "), kind: "podcast", source: "Podcasts", date: nil))
-            guard let f = feed(show.feedURL) else { continue }
-            for e in f.episodes.prefix(200) where !e.title.isEmpty {
-                let addr = PodcastService.episodeAddress(feed: show.feedURL, id: e.id), when = e.published.map { Date(timeIntervalSince1970: $0) }
-                if let t = transcript(show.feedURL, e.id), !t.blocks.isEmpty {
-                    // Passages keep the second they start at: the part label says where in the episode.
-                    var parts: [RetrievalDoc.Part] = [], cur: [String] = [], start = 0.0, n = 0
-                    for b in t.blocks {
-                        if cur.isEmpty { start = b.start }
-                        cur.append(b.text); n += b.text.count
-                        if n > 1100 { parts.append(.init(label: "at \(Int(start / 60)) min", text: cur.joined(separator: " "))); cur = []; n = 0 }
-                    }
-                    if !cur.isEmpty { parts.append(.init(label: "at \(Int(start / 60)) min", text: cur.joined(separator: " "))) }
-                    out.append(SavedCorpus.Document(id: "podcast-tr:" + addr, title: show.title + ": " + e.title, address: addr, text: "", kind: "transcript", source: "Podcasts", date: when, parts: parts))
-                } else {
-                    out.append(SavedCorpus.Document(id: "podcast:" + addr, title: show.title + ": " + e.title, address: addr, text: e.notes, kind: "podcast", source: "Podcasts", date: when))
-                }
-            }
-        }
-        return out
-    }
-
     /// The run sheet's entries on air and ahead (what "that" and "this" point at), with the address they play from. Heard and skipped entries are history.
     public static func runSheet(_ sheet: RunSheet) -> (docs: [SavedCorpus.Document], onAirTitle: String) {
         var onAir = ""
@@ -72,18 +34,6 @@ public enum RetrievalSources {
         return (docs, onAir)
     }
 
-    /// Mail rows (sender, subject, the preview) as documents; the body is added when a message is opened. Not persisted.
-    public static func mail(_ rows: [MailSummary]) -> [SavedCorpus.Document] {
-        rows.filter { !$0.id.isEmpty }.map { r in
-            SavedCorpus.Document(id: "mail:" + r.id, title: r.subject.isEmpty ? "(no subject)" : r.subject, address: "mail:" + r.id,
-                                 text: "From \(r.from). \(r.snippet)", kind: "mail", source: "Mail", date: PaperStory.date(r.at))
-        }
-    }
-    public static func mailMessage(_ d: MailDetail) -> SavedCorpus.Document {
-        let r = d.summary
-        return SavedCorpus.Document(id: "mail:" + r.id, title: r.subject.isEmpty ? "(no subject)" : r.subject, address: "mail:" + r.id,
-                                    text: "From \(r.from). \(d.text.isEmpty ? r.snippet : d.text)", kind: "mail", source: "Mail", date: PaperStory.date(r.at))
-    }
     /// A folder's file names (never their contents): searchable by name, openable by path.
     public static func fileNames(_ entries: [FileEntry]) -> [SavedCorpus.Document] {
         entries.filter { !$0.isDirectory }.map { e in
@@ -110,12 +60,5 @@ public extension SavedCorpus {
             let ahead = r.docs.filter { $0.source == "Up next" }.prefix(4).map(\.title)
             onAirBrief = (r.onAirTitle.isEmpty ? "Nothing is on air." : "On air now: \(r.onAirTitle).") + (ahead.isEmpty ? "" : " Up next: " + ahead.joined(separator: "; ") + ".")
         }
-    }
-}
-
-public extension PodcastService {
-    /// Documents for retrieval: the library's shows, the episodes of their cached feeds, and the transcripts the phone has fetched.
-    func retrievalDocuments() -> [SavedCorpus.Document] {
-        RetrievalSources.podcasts(shows: subscriptions(), feed: { self.cachedFeed($0) }, transcript: { self.cachedTranscript(feed: $0, id: $1) })
     }
 }

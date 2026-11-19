@@ -1,17 +1,20 @@
 // Lane members file (settings): this lane's states, derives, resources, mutations and actions, as if written in the root.
 // Owned by the settings lane (lane 7). Shapes and source names are in exact-package/interface/settings.json; the module is
 // exact-package/apple/AutoradioModule+Settings.swift. Every name a child component injects is in the lane 7 band of `provide`.
-use themeCards, themeExtras, settingsAccount, settingsComputer, settingRows, learnedInfo, activityInfo, aboutInfo from "@choir/autoradio"
-use themeFromTexture, themeRemove, accountRefresh, computerRefresh, computerWake, computerUpdate from "@choir/autoradio"
-use settingSet, learnedReset, activityRefresh from "@choir/autoradio"
-use ThemeCards, ThemeExtras, SettingsAck, SettingsAccount, SettingsComputer, SettingRows, LearnedInfo, ActivityInfo, AboutInfo from "@choir/autoradio"
+use themeCards, themeExtras, settingsComputer, learnedInfo, activityInfo, aboutInfo from "@choir/autoradio"
+use themeFromTexture, themeRemove, computerRefresh, computerWake, computerUpdate from "@choir/autoradio"
+use learnedReset, activityRefresh from "@choir/autoradio"
+use ThemeCards, ThemeExtras, SettingsAck, SettingsComputer, LearnedInfo, ActivityInfo, AboutInfo from "@choir/autoradio"
+
+use SettingsAccount from "./settings-types.contract"
 
 members Autoradio
   resource tc = themeCards() as shape ThemeCards else empty()
   resource tx = themeExtras() as shape ThemeExtras else empty()
-  resource acctInfo = settingsAccount() as shape SettingsAccount else empty()
+  // The account is answered by app.ts (settings.ts): signed in (the Swift sign-in), demo, and a tick the Refresh button moves.
+  state acctTick = 0
+  resource acctInfo = settingsAccount(au.signedIn, dm.on, acctTick) as shape SettingsAccount else empty()
   resource cmpt = settingsComputer() as shape SettingsComputer else empty()
-  resource gestureRows = settingRows(group="gestures") as shape SettingRows else empty()
   resource learnt = learnedInfo() as shape LearnedInfo else empty()
   resource act = activityInfo() as shape ActivityInfo else empty()
   resource about = aboutInfo() as shape AboutInfo else empty()
@@ -29,15 +32,13 @@ members Autoradio
     send sm = themeRemove(id=id)
 
   action refreshAccount
-    send sm = accountRefresh()
+    acctTick = acctTick + 1
   action refreshComputer
     send sm = computerRefresh()
   action wakeComputer
     send sm = computerWake()
   action updateComputer
     send sm = computerUpdate()
-  action setSetting(id: string, value: string)
-    send sm = settingSet(id=id, value=value)
   action resetLearned
     send sm = learnedReset()
   action refreshActivity

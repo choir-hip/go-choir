@@ -4,11 +4,11 @@
 // testIds: podcasts-search, podcasts-results, podcasts-shows, podcasts-suggestions, podcasts-empty, podcast-row-<feed>, podcast-subscribe,
 //   podcast-unsubscribe, podcast-episode-<key>, podcast-play-<key>, podcast-resume, podcast-play, podcast-queue, podcast-keep, podcast-note,
 //   podcast-playing-from, podcast-retry, podcast-notes.
-use Theme, PodHomeView, PodShowView, PodEpisodeView from "@choir/autoradio"
+use Theme from "@choir/autoradio"
+use PodHomeView, PodShowView, PodEpisodeView, ClipRows from "./podcast-types.contract"
 use PageScroll, PageHeader, SectionHeader, PlainList, LineRow, RowRule, EmptyState, Emerge from "./ui.contract"
 use SkeletonRows, SkeletonBody from "./transitions.contract"
 use ClipRow from "./clips.contract"   // lane autoradio-joins
-use ClipRows from "@choir/autoradio"
 
 // A text action: no capsule, no outline. Accent text (strong ones heavier) with an optional symbol; the caller wraps it in a button.
 component PodAction

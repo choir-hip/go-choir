@@ -56,16 +56,6 @@ final class RealShapeTests: XCTestCase {
         XCTAssertTrue(l.rows[0].meta.contains("5 versions"))
     }
 
-    func testWhoAmIOwnerKeyHasEmptyComputer() throws {
-        let w = try WhoAmI.parse(Data(#"{"handle":"writer-abcdef","key_id":"ak_1","key_label":"CLI key","scopes":["admin","owner:acts"],"computer_id":""}"#.utf8))
-        XCTAssertEqual(w.handle, "writer-abcdef")
-        XCTAssertEqual(w.computerID, "")
-        XCTAssertEqual(ChoirAccountClient.filled(w, stored: "computer-demo-1").computerID, "computer-demo-1", "the account page names the computer the phone found")
-        XCTAssertEqual(ChoirAccountClient.filled(w, stored: nil).computerID, "")
-        let bound = WhoAmI(handle: "h", computerID: "computer-bound")
-        XCTAssertEqual(ChoirAccountClient.filled(bound, stored: "computer-other").computerID, "computer-bound")
-    }
-
     func testEditionNotFoundIsNotAnError() throws {
         XCTAssertEqual(try EditionInfo.parse(Data(#"{"found":false}"#.utf8)), EditionInfo())
         XCTAssertFalse(try EditionInfo.parse(Data(#"{"found":true}"#.utf8)).found, "found without a document id cannot be opened")

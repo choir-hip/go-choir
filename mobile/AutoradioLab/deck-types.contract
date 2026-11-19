@@ -1,0 +1,59 @@
+// The deck's shapes: the small native audio surface that sits UNDER shared code (docs/reference/exact/deck.md). The deck plays
+// what shared code hands it, applies a short list of named rules itself, and keeps a journal of what started and ended. Shared
+// code decides what plays next, what counts as heard and what is posted; the deck never does.
+// The same names and shapes are implemented in Swift (iPhone) and Kotlin (Android). A field is added in this file, in deck.ts and
+// in mobile/exact-package/interface/deck.json together; deck.test.ts holds the three to one list.
+// Every number is seconds or a count; every time is RFC 3339 on the device's clock; an absent value is "" or 0, never null.
+
+// One thing the deck can play. `kind` is "speech" (speak `paragraphs` as the document `document`, in the voice) or "audio" (play the
+// file or stream at `url` from `start` to `end`; `end` 0 means to its end). `paragraphs` is the text in one string with a blank line
+// between paragraphs, because a name's options hold no lists. `block` and `seconds` are where to begin: a paragraph index and the
+// seconds into it (speech), or `seconds` alone (audio). `requiresPreviousHeard` is the one rule the deck applies to the item
+// itself: it plays only if the item before it ended "finished" with sound rendered (a transition after a skipped story is not played).
+shape DeckItem
+  id: string
+  kind: string
+  title: string
+  show: string
+  document: string
+  paragraphs: string
+  url: string
+  start: number
+  end: number
+  block: number
+  seconds: number
+  requiresPreviousHeard: bool
+
+// One line of the journal. `type`: "started" (the item began; `rendered` is false until sound reaches the output, so a
+// "started" line is written again as "sounding" with rendered true), "sounding", "ended" (`end` says how), "remote" (the lock
+// screen or headset pressed `command`: play, pause, toggle, next, previous, seek) or "system" (`command` is interruption-began,
+// interruption-ended, route-lost, session-held, session-back, engine-lost). `end` is "finished" (ran out), "skipped" (the
+// listener or the lock screen moved on), "replaced" (shared code played another item), "stopped" (shared code stopped the
+// deck, a sign-out) or "failed" (it could not play; `reason` is a plain line, no content of the listener's). `block` and
+// `seconds` are where the item was when the line was written, `final` the last block it has. `rendered` is true only when
+// samples reached the output for this item; "finished" with rendered false is written as "failed".
+shape DeckEvent
+  seq: number
+  type: string
+  item: string
+  at: string
+  block: number
+  seconds: number
+  final: number
+  rendered: bool
+  end: string
+  command: string
+  reason: string
+
+// Why the deck is silent (or not), one word, never a set of flags: "playing", "paused_listener", "paused_system", "held_session",
+// "held_engine", "stopped", "empty".
+shape DeckState
+  why: string
+  item: string
+  block: number
+  seconds: number
+  duration: number
+  held: string[]
+  seq: number
+  acked: number
+  journal: DeckEvent[]

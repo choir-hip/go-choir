@@ -1,8 +1,7 @@
 // Lane file: settings, themes, accounts and Activity (lane 7). Sources and sends are declared in interface/settings.json.
 //   themeCards / themeExtras      the themes as preview cards, and the type scale and mark tokens of the one in force
-//   settingsAccount               who am I (GET /auth/whoami; demo: fixture)
+//   (settingsAccount is answered by app.ts: settings.ts)
 //   settingsComputer              status, Wake, Restart to update
-//   settingRows(group)            the talk mode and the gesture meanings (a catalog in the kit, SettingsCatalog)
 //   learnedInfo                   "What the paper has learned" (derived from the gesture events; lane 4 may supply its own)
 //   activityInfo                  Activity: now, the computer, the desk, the paper, the radio's turns
 //   aboutInfo                     the app and server builds
@@ -11,42 +10,29 @@ import Foundation
 
 /// The lane's state, held here because an extension cannot add stored properties to the module.
 final class SettingsLane: @unchecked Sendable {
-    let account: AccountModel
     let computer: ComputerModel
     let activity: ActivityModel
     let themeSource: ThemeSource
     let learned: LearnedProvider
-    let settings = AppSettings.shared
     private let lock = NSLock()
     private var _themeStatus = ""
     private var _server = ""
     var themeStatus: String { get { lock.lock(); defer { lock.unlock() }; return _themeStatus } set { lock.lock(); _themeStatus = newValue; lock.unlock() } }
     var server: String { get { lock.lock(); defer { lock.unlock() }; return _server } set { lock.lock(); _server = newValue; lock.unlock() } }
 
-    init(account: AccountModel, computer: ComputerModel, activity: ActivityModel, themeSource: ThemeSource, learned: LearnedProvider) {
-        self.account = account; self.computer = computer; self.activity = activity; self.themeSource = themeSource; self.learned = learned
+    init(computer: ComputerModel, activity: ActivityModel, themeSource: ThemeSource, learned: LearnedProvider) {
+        self.computer = computer; self.activity = activity; self.themeSource = themeSource; self.learned = learned
     }
 }
 
 extension AutoradioModule {
-    /// Settings owns the gesture meanings (AppSettings swipeLeft / swipeRight); lane 4's Preferences applies them to the next swipe.
-    func syncGestureMeanings() {
-        guard let prefs = CardsState.shared.prefs else { return }
-        let l = AppSettings.shared.value("swipeLeft")
-        _ = prefs.setGesture(side: "left", meaning: ["closeLess": "close-less", "lessInStack": "less-in-stack"][l] ?? l)
-        _ = prefs.setGesture(side: "right", meaning: AppSettings.shared.value("swipeRight"))
-    }
-
     func registerSettings() {
         let demo = Demo.isOn
-        let account = AccountModel(client: demo ? DemoAccountClient() : ChoirAccountClient(), demo: demo,
-                                   signedIn: { [choir] in choir?.authView().signedIn ?? false }, baseURL: { [choir] in choir?.signIn.baseURL ?? "" })
         let computer = ComputerModel(client: demo ? DemoComputerClient() : ChoirComputerClient())
         let activity = ActivityModel(client: demo ? DemoActivityClient() : ChoirActivityClient())
-        let lane = SettingsLane(account: account, computer: computer, activity: activity,
+        let lane = SettingsLane(computer: computer, activity: activity,
                                 themeSource: demo ? DemoThemeSource() : ChoirThemeSource(),
                                 learned: PreferencesLearned(prefs: { CardsState.shared.prefs }, demoSeed: demo))
-        account.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["settingsAccount"]) } }
         computer.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["settingsComputer", "activityInfo"]) } }
         activity.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["activityInfo"]) } }
         activity.signedIn = { [choir] in choir?.authView().signedIn ?? false }
@@ -82,20 +68,6 @@ extension AutoradioModule {
         NotificationCenter.default.addObserver(forName: Platform.reduceMotionChanged, object: nil, queue: .main) { [weak self] _ in
             self?.touch(["theme", "themeExtras", "themeCards"])
         }
-
-        // Signing in or out changes who the account is.
-        let previous = choir.onChange
-        choir.onChange = { [weak self] in
-            previous?()
-            DispatchQueue.main.async {
-                guard let self else { return }
-                if self.choir.authView().signedIn { Task { await account.refresh() } } else { account.clear() }
-                self.touch(["settingsAccount"])
-            }
-        }
-
-        // The gesture meanings are Settings' too, handed to lane 4's Preferences. (The talk mode is gone: voice is hands-free.)
-        syncGestureMeanings()
 
         // ---- themes
         func cards(_ status: String = lane.themeStatus) -> [String: Any] {
@@ -134,14 +106,6 @@ extension AutoradioModule {
             themes.remove(args["id"] as? String ?? ""); lane.themeStatus = ""; touch(["themeCards", "themeList", "theme", "themeExtras"]); reply(ack(true))
         }
 
-        // ---- account
-        handle("settingsAccount") { [unowned self] _, reply in
-            let v = account.view()
-            if v.signedIn, v.status == "idle" { Task { await account.refresh() } }
-            reply(json(v))
-        }
-        handle("accountRefresh") { _, reply in Task { await account.refresh() }; reply(ack(true)) }
-
         // ---- computer
         handle("settingsComputer") { [unowned self] _, reply in
             let v = computer.view()
@@ -151,17 +115,6 @@ extension AutoradioModule {
         handle("computerRefresh") { _, reply in Task { await computer.refresh() }; reply(ack(true)) }
         handle("computerWake") { _, reply in Task { await computer.wake() }; reply(ack(true)) }
         handle("computerUpdate") { _, reply in Task { await computer.restartToUpdate() }; reply(ack(true)) }
-
-        // ---- talk mode and gesture meanings
-        handle("settingRows") { [unowned self] args, reply in
-            reply(["rows": lane.settings.rows(group: args["group"] as? String ?? "").map { json($0) }])
-        }
-        handle("settingSet") { [unowned self] args, reply in
-            let id = args["id"] as? String ?? "", value = args["value"] as? String ?? ""
-            let ok = lane.settings.set(id, value)
-            if ok, id == "swipeLeft" || id == "swipeRight" { syncGestureMeanings(); touch(["toldPaper"]) }
-            touch(["settingRows"]); reply(ack(ok, ok ? "" : "That is not one of the choices."))
-        }
 
         // ---- what the paper has learned
         handle("learnedInfo") { [unowned self] _, reply in

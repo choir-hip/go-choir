@@ -55,8 +55,15 @@ import Foundation
     func setRemoteLevel(_ l: PlayLevel)
     /// The length of the audio at `url`, read without playing it; nil when unknown within `deadline` seconds.
     func remoteDuration(url: URL, deadline: TimeInterval) async -> Double?
+    /// Pause the spoken entry (the listener's pause, or the system's).
+    func pauseSpoken()
+    /// Sound is reaching the output for what is playing now (spoken: rendered seconds past zero; remote: the position is moving). The deck's
+    /// evidence that an item was heard; a deck that cannot tell says false and nothing is ever journalled as rendered by it.
+    func rendering() -> Bool
 }
 extension PlaybackEngine {
+    public func pauseSpoken() {}
+    public func rendering() -> Bool { false }
     public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { nil }
     public func restartSpoken() {}
     public func resumeSpoken() {}
@@ -130,6 +137,8 @@ extension PlaybackEngine {
     /// The entry the player was told to play (it is the entry the store has on air).
     public private(set) var playingId: String?
     public private(set) var playingDocument: String?
+    /// The deck under this player: it keeps the journal of what started and ended, with the device's time and whether sound was rendered.
+    public var deck: Deck
 
     private var textSources: [String: @Sendable (String, Int) async -> [String]?] = [:]
     private var provided: [String: (title: String, paragraphs: [String])] = [:]
@@ -151,6 +160,7 @@ extension PlaybackEngine {
 
     public init(store: RunSheetStore) {
         self.store = store
+        deck = store === RunSheetStore.shared ? Deck.shared : Deck(journal: DeckJournal())       // a test's player never writes the app's journal
         store.onChange = { [weak self] in self?.storeChanged() }
     }
 
@@ -429,6 +439,7 @@ extension PlaybackEngine {
     private func reconcile() {
         if let air = store.onAir() {
             guard air.id != playingId else { return }
+            deckEnd(playingId)                          // what was on air was replaced: the deck's journal says how it left
             rememberPlace(of: playingId, nextKind: air.kind)
             sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil; heldMidEntry = false
             playingId = air.id; playingDocument = nil; audio = nil; pendingEnd = nil
@@ -437,6 +448,7 @@ extension PlaybackEngine {
             return
         }
         if playingId != nil {                         // what was on air was skipped, cut or taken off: its sound stops
+            deckEnd(playingId)
             if let p = playingId, let f = takeFiles.removeValue(forKey: p) { try? FileManager.default.removeItem(at: f) }
             rememberPlace(of: playingId, nextKind: nextToAir()?.kind)
             sessionHeldFor = nil; sessionAttempts = 0; retryTask?.cancel(); retryTask = nil; heldMidEntry = false
@@ -468,6 +480,7 @@ extension PlaybackEngine {
     private var lostAtFirstBlock = false
     /// The spoken document `documentID` lost the engine at a block: the entry on air is held like one whose start could not take the session.
     public func engineLost(documentID: String, block: Int? = nil) {
+        if deck.commanded { deck.engineLost(); return }
         guard let eid = playingId, documentID == playingDocument, let e = store.entry(eid) else { return }
         heldMidEntry = true
         lostAtFirstBlock = block == 0
@@ -625,7 +638,30 @@ extension PlaybackEngine {
         guard my == generation, playingId == entry.id else { return }       // a newer start took over
         if !ok { if message.isEmpty { message = "Could not play \u{201C}\(entry.displayTitle)\u{201D}." }; fail(entry.id, why: message); return }
         silent = 0
+        deck.began(id: entry.id, kind: audio != nil && playingDocument == nil ? "audio" : "speech")
         changed()
+    }
+
+    /// The store says the entry `id` left the air by a cut, a skip or a sign-out: the deck's journal gets the matching end (once).
+    private func deckEnd(_ id: String?) {
+        guard let id, deck.current?.id == id else { return }
+        let r = report(final: false)
+        let how: Deck.How
+        switch store.entry(id)?.ended?.outcome {
+        case .cut?: how = .replaced
+        case .left?: how = .stopped
+        case .failed?: how = .failed
+        default: how = .skipped
+        }
+        deck.ended(how, block: r.block, seconds: r.seconds, final: engine?.spokenReport().final ?? 0)
+        deck.ack(through: deck.journal.seq)             // the store holds the op and keeps it until the server answers
+    }
+
+    /// Called about once a second by the host: if sound is now reaching the output for the entry on air, the deck says so (once per entry).
+    public func checkSound() {
+        guard playingId != nil, engine?.rendering() == true else { return }
+        let r = report(final: false)
+        deck.soundBegan(block: r.block, seconds: r.seconds, final: engine?.spokenReport().final ?? 0)
     }
 
     /// The remote half of an audio entry (after its lead-in, if it had one).
@@ -654,6 +690,11 @@ extension PlaybackEngine {
         print("AUTORADIO entry finished id=\(id) played=\(played)\(why.isEmpty ? "" : " why=\(why)")")
         let r = given ?? report(final: true)
         playingId = nil; playingDocument = nil; audio = nil; paused = false; pendingEnd = nil
+        // The deck's journal first (durable, with the device's time), then the store: a kill between the two is closed from the journal at the
+        // next launch (RunSheetStore.restore). Heard only if sound was rendered.
+        if deck.current?.id != id { deck.began(id: id) }         // an entry that never started is still one line: began and failed
+        let line = deck.ended(played ? .finished : .failed, played: played, block: r.block, seconds: r.seconds, final: r.block, reason: played ? "" : "failed to start", id: id)
+        defer { if let line { deck.ack(through: line.seq) } }
         // A natural end carries the true final block and position; a failure is `failed` by the phone, never a skip.
         if played { store.airedEnded(id, as: .heard, outcome: .finished, report: r) }
         else { store.airedEnded(id, as: .skipped, outcome: .failed) }
@@ -676,6 +717,7 @@ extension PlaybackEngine {
 
     /// The spoken document that was playing ran out of blocks. `anyPlayed`: a block made sound.
     public func documentEnded(id: String, anyPlayed: Bool) {
+        if deck.commanded { deck.documentEnded(id: id, anyPlayed: anyPlayed); return }      // shared code commanded this item: the deck plays on
         guard let eid = playingId, id == playingDocument else { return }
         if turnOpen() { pendingEnd = (id, anyPlayed); return }
         // A clip's lead-in is over: the audio plays now.
@@ -706,6 +748,7 @@ extension PlaybackEngine {
 
     /// Remote audio reached its end, or the clip's end. `generation` is the start it belongs to.
     public func remoteEnded(generation g: Int) {
+        if deck.commanded { deck.remoteEnded(); return }
         guard g == generation, audio != nil, let id = playingId else { return }
         let r = report(final: true)                 // before the sound is stopped: the true position
         engine?.stopRemote()

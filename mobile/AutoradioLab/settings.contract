@@ -5,7 +5,6 @@
 //   settings:voice                voice and models: Components, and the voice setup card (lane 8)
 //   settings:computer             status, Wake, Restart to update
 //   settings:learned              what the paper has learned, with Reset
-//   settings:gestures             what each swipe means (a catalog of choices, applied to the next gesture)
 //   settings:about                app and server builds
 // testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-demo, settings-components, settings-theme-problems,
 //   settings-nav-<screen>, settings-back, settings-theme-doc, settings-theme-load,
@@ -13,7 +12,8 @@
 //   settings-choice-<setting>-<option>, settings-wake, settings-update, settings-computer-*, settings-learned-reset, settings-learned-row,
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
-use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsAccount, SettingsComputer, SettingRowInfo, LearnedInfo, AboutInfo, ThemeCards, SettingRows, ChoirAuth, VoiceProfile from "@choir/autoradio"
+use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsComputer, LearnedInfo, AboutInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
+use SettingsAccount from "./settings-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
 use SkeletonLine from "./transitions.contract"
@@ -34,11 +34,9 @@ component SettingsPage
       ComputerScreen()
     if screen == "learned"
       LearnedScreen()
-    if screen == "gestures"
-      GesturesScreen()
     if screen == "about"
       AboutScreen()
-    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "computer" and screen != "learned" and screen != "gestures" and screen != "about"
+    if screen != "appearance" and screen != "account" and screen != "voice" and screen != "computer" and screen != "learned" and screen != "about"
       RootScreen()
 
 // ---------------------------------------------------------------- shared pieces
@@ -250,16 +248,12 @@ component RootScreen
       PlainList(testId="settings-card-paper")
         NavRow(address="settings:learned", title="What the paper has learned", subtitle="Your more and less of this, with Reset", testId="settings-nav-learned")
         Hairline()
-        NavRow(address="settings:gestures", title="Swipes", subtitle="What each swipe on a story means", testId="settings-nav-gestures")
-        Hairline()
         NavRow(address="activity:", title="Activity", subtitle="What the computer and the desk are doing", testId="settings-nav-activity")
       SectionLabel(label="About")
       PlainList(testId="settings-card-about")
         NavRow(address="settings:about", title="About", subtitle="Builds and server", testId="settings-nav-about")
       SectionLabel(label="Developer")
       PlainList(testId="settings-card-developer")
-        NavRow(address="lab:components", title="Components and Trace", subtitle="Stages, parameters, kept turns", testId="settings-components")
-        Hairline()
         button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" appearance="none" width="100%" box-sizing="border-box" padding="14px 0px"
           column align-items="flex-start" gap=2 width="100%"
             text (dm.on ? "Demo mode is on" : "Demo mode is off") font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
@@ -269,12 +263,6 @@ component RootScreen
           column align-items="flex-start" gap=2 width="100%"
             text (devDetails ? "Demo controls are shown" : "Demo controls are hidden") font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
             text "The paper's editions and composition line, mail's demo states and the reader's demo menu (demo mode only)." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-        Hairline()
-        NavRow(address="lab:motion", title="Motion gallery", subtitle="The mark in every state", testId="settings-motion")
-        Hairline()
-        NavRow(address="lab:mark", title="Mark gallery", subtitle="Play with the tetramark: every motion, and the sliders", testId="settings-mark")
-        Hairline()
-        NavRow(address="lab:wait", title="The wait", subtitle="The alive wait on its own", testId="settings-wait")
 
 // ---------------------------------------------------------------- appearance
 
@@ -344,6 +332,7 @@ component AccountScreen
     tx: ThemeExtras
     acctInfo: SettingsAccount
     au: ChoirAuth
+    signOutNote: string
     refreshAccount: action
     signOut: action
   view
@@ -368,6 +357,9 @@ component AccountScreen
         text acctInfo.message testId="settings-account-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
       if acctInfo.status == "loading"
         SkeletonLine(testId="settings-account-skeleton")
+      // A sign-out that did not finish says so here (account.ts answers the words; a clean one leaves the page, so nothing shows).
+      if signOutNote != ""
+        text signOutNote testId="settings-signout-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.danger
       text "This phone holds its own key. Signing out removes the key from this phone and ends it on the server. Your computer and your documents stay where they are." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
       row gap=12 width="100%"
         button press=refreshAccount testId="settings-account-refresh" appearance="none"
@@ -375,42 +367,6 @@ component AccountScreen
         if au.signedIn
           button press=signOut testId="settings-signout" appearance="none"
             ActionButton(label="Sign out", testId="settings-signout-box", primary=false, danger=true)
-
-// ---------------------------------------------------------------- choices (talk, gestures)
-
-component SettingChoices
-  inject
-    th: Theme
-    tx: ThemeExtras
-    setSetting: action
-  props
-    rows: SettingRowInfo[]
-  view
-    column gap=14 width="100%"
-      for r in rows key=r.id
-        PlainList(testId=`settings-setting-${r.id}`)
-          column width="100%" box-sizing="border-box" padding="14px 0"
-            column gap=4 padding="0px 0px 10px 0px"
-              text r.label font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
-              text r.help font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-            for o in r.choices key=o.id
-              button press=setSetting(r.id, o.id) testId=`settings-choice-${r.id}-${o.id}` role="radio" aria-checked=o.selected appearance="none" width="100%" box-sizing="border-box" padding="10px 0px"
-                row gap=12 align-items="flex-start" width="100%"
-                  column flex=1 min-width=0 gap=2 align-items="flex-start"
-                    text o.label font-family=th.fontHead font-size=dyn(tx.sizeLabel) font-weight=600 color=(o.selected ? th.fg : th.muted)
-                    text o.detail font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-                  SelectMark(state=(o.selected ? "on" : "blank"))
-
-component GesturesScreen
-  inject
-    th: Theme
-    tx: ThemeExtras
-    gestureRows: SettingRows
-  view
-    ToolScroll(id="settings")
-      ScreenTitle(label="Swipes", back=true)
-      text "What each swipe on a story means is yours to choose. A change applies to the next swipe, and every swipe is recorded with the meaning in force." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-      SettingChoices(rows=gestureRows.rows)
 
 // ---------------------------------------------------------------- voice and models
 
@@ -421,12 +377,8 @@ component VoiceScreen
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Voice and models", back=true)
-      text "The voice that reads the paper, and the models that hear you, run on this phone. Their sizes and checks are on the Components page." font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
+      text "The voice that reads the paper, and the models that hear you, run on this phone." font-family=th.fontText font-size=dyn(tx.sizeBody) line-height=tx.lineBody color=th.fg
       VoiceCardsList()
-      PlainList(testId="settings-card-voice")
-        NavRow(address="lab:components", title="Components", subtitle="Models, stages and parameters", testId="settings-voice-components")
-        Hairline()
-        NavRow(address="lab:trace", title="Trace", subtitle="The last turn, step by step", testId="settings-voice-trace")
       text "Voice setup, with the model downloads and the checks for this device, opens from here once first run has it." testId="settings-voice-note" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
 
 // ---------------------------------------------------------------- computer

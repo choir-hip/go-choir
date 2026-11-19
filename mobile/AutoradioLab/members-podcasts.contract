@@ -1,23 +1,38 @@
-// Lane members file (podcasts): the Podcasts app's states, resources, mutations and actions, as if written in the root.
-// Owned by the autoradio-podcasts lane. Shapes and source names live in exact-package/interface/podcasts.json; the module answering
-// them is exact-package/apple/AutoradioModule+Podcasts.swift (Kit: PodcastService.swift, PodcastFeed.swift). Every name a child
-// component injects is in the podcasts band of the `provide` list in app.contract.
-use podcastHome, podcastShow, podcastEpisode, podcastSubscribe, podcastUnsubscribe, podcastPlay, podcastQueue, podcastRefresh from "@choir/autoradio"
-use PodHomeView, PodShowView, PodEpisodeView, PodAck from "@choir/autoradio"
+// Members file (podcasts): the Podcasts app's states, resources, mutations and actions, as if written in the root.
+// The data and the acts run in app.ts (podcast.ts; shapes in podcast-types.contract). Only what needs the platform is the Swift package's, and it is
+// named in interface/podcasts.json: `podcastNow` (what the player is playing and where: only the player knows) and `podcastPlayAudio` (hands one
+// audio address to the player; the lane's deck send replaces it). Every name a child component injects is in the podcasts band of the `provide`
+// list in app.contract.
+use podcastNow, podcastPlayAudio, PodNow, PodDone from "@choir/autoradio"
+use PodHomeView, PodShowView, PodEpisodeView, PodAck, PodHead from "./podcast-types.contract"
 
 members Autoradio
-  resource podHome = podcastHome(q=podQ, address=pg.top) as shape PodHomeView else empty()
-  resource podShow = podcastShow(address=pg.top) as shape PodShowView else empty()
-  resource podEp = podcastEpisode(address=pg.top, find=podFind) as shape PodEpisodeView else empty()
-  mutation pak as shape PodAck
-
   state podQ = ""
   state podFind = ""
+  // A pull to refresh or a retry: asks the feeds, the directory and the computer again (podcast.ts resets what it kept when this changes).
+  state podTick = 0
   // The address a note belongs to ("" none), so one page's note never shows on another.
   state podNoteFor = ""
 
+  // What the player is playing: asked again by the package while a podcast plays.
+  resource podNow = podcastNow() as shape PodNow else empty()
+  // Its playhead, kept every 5 s of progress; `rev` changes when positions did, so the pages below read them again.
+  resource podHead = podcastPlayhead(podNow.episodeId, podNow.clip, podNow.elapsed, podNow.duration) as shape PodHead else empty()
+  // Arguments are positional (named ones belong to a package's sources).
+  resource podHome = podcastHome(podQ, pg.top, podTick) as shape PodHomeView else empty()
+  resource podShow = podcastShow(pg.top, podTick, podNow.episodeId, podHead.rev) as shape PodShowView else empty()
+  resource podEp = podcastEpisode(pg.top, podFind, podTick, podNow.episodeId, podNow.clip, podNow.start, podNow.elapsed, podNow.duration, podHead.rev) as shape PodEpisodeView else empty()
+  mutation pak as shape PodAck then afterPod
+  mutation podHanded as shape PodDone
+
   derive podNoteRaw = match pak { case some(a) => a.message, case none => "" }
   derive podNote = podNoteFor == pg.top ? podNoteRaw : ""
+  derive podPlayOp = match pak { case some(a) => a.play.op, case none => "" }
+  derive podPlayId = match pak { case some(a) => a.play.id, case none => "" }
+  derive podPlayUrl = match pak { case some(a) => a.play.url, case none => "" }
+  derive podPlayTitle = match pak { case some(a) => a.play.title, case none => "" }
+  derive podPlayShow = match pak { case some(a) => a.play.show, case none => "" }
+  derive podPlayStart = match pak { case some(a) => a.play.start, case none => 0 }
 
   action editPodQ(v: string)
     podQ = v
@@ -25,17 +40,22 @@ members Autoradio
     podFind = v
   action podSubscribeTo(feed: string)
     podNoteFor = pg.top
-    send pak = podcastSubscribe(feedURL=feed)
+    send pak = podcastSubscribe(feed)
   action podUnsubscribeFrom(feed: string)
     podNoteFor = pg.top
-    send pak = podcastUnsubscribe(feedURL=feed)
+    send pak = podcastUnsubscribe(feed)
   action podPlayEpisode(address: string, mode: string)
     podNoteFor = pg.top
-    send pak = podcastPlay(address=address, mode=mode)
+    send pak = podcastPlay(address, mode, podNow.episodeId, podNow.clip, podNow.elapsed, podNow.duration)
   action podQueueEpisode(address: string)
     podNoteFor = pg.top
-    send pak = podcastQueue(address=address)
-  action retryPodcasts
+    send pak = podcastQueue(address)
+  // After a write: the pages read again; a play answers the audio to play as data, and the player is handed it.
+  action afterPod
     refresh podHome
     refresh podShow
     refresh podEp
+    if podPlayOp != "" and (podPlayUrl != "" or podPlayOp == "keep")
+      send podHanded = podcastPlayAudio(op=podPlayOp, id=podPlayId, url=podPlayUrl, title=podPlayTitle, show=podPlayShow, start=podPlayStart)
+  action retryPodcasts
+    podTick = podTick + 1

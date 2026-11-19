@@ -130,16 +130,8 @@ extension AutoradioModule {
         // Sends. Every one answers the open-page list, the shape the page host reads.
         handle("pageOpen") { [unowned self] args, reply in
             Task { @MainActor in await TextureEditor.shared.flushAll() }      // leaving a page posts what was typed on it
-            // A PDF or an e-book in Files opens in Reader and text in Texture: the document's own page, never a `file:` page for it (Kit/FilesOpen.swift).
-            if let address = args["address"] as? String, FilesOpen.resolvesElsewhere(address) {
-                // No "Opening…" line: the bar's line channel is the error one (red icon, held for seconds), and it was never cleared on success.
-                Task { [weak self] in
-                    guard let self else { return }
-                    if case .failed(let line) = await FilesOpen.open(address: address, title: args["title"] as? String, pages: self.pages) { BarTracker.shared.say(line) }
-                    DispatchQueue.main.async { self.touch(["openPages", "barState", "shelfList"], now: true); self.runtime.warmResponder(address: self.pages.list().first?.address); reply(self.pageList()) }
-                }
-                return
-            }
+            // A `file:` address reaches here only after the contract asked the listener's computer (fileResolve, AutoradioLab/files.ts): a PDF, e-book, text,
+            // Markdown or code file arrives as its `texture:` address.
             pages.open(args["address"] as? String ?? "", title: args["title"] as? String); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList())
         }
         handle("pageClose") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.close(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
