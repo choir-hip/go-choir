@@ -225,12 +225,20 @@ func TestSearchAllOfAQuestionWithNoTermsFallsBackToTheRunWideCount(t *testing.T)
 	f := newResearchFixture(t)
 	cell := seedUnread(t, f, 40)
 	out := cell(`r, _ := choir.SearchAll("!!! ???", []string{"plain two", "plain three"})
+fmt.Println(len(r.Results))
 fmt.Println(r)`)
 	if f.searchCalls.Load() != 1 {
 		t.Fatalf("an empty question key must use the run-wide count; provider asked %d times:\n%s", f.searchCalls.Load(), out.Stdout)
 	}
-	if !strings.Contains(out.Stdout, "not sent (this question already holds 40 pages") {
-		t.Fatalf("stdout:\n%s", out.Stdout)
+	// Run-wide, so the text says the run, as the plain verbs' refusal does; and
+	// the held pages are in Results, which Next tells the run to read.
+	for _, want := range []string{"not sent (this run already holds 40 pages new to this run", "40\n"} {
+		if !strings.Contains(out.Stdout, want) {
+			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
+		}
+	}
+	if strings.Contains(out.Stdout, "this question already holds") {
+		t.Fatalf("a run-wide count must not be called the question's:\n%s", out.Stdout)
 	}
 }
 
@@ -265,7 +273,13 @@ fmt.Println(err != nil)`)
 	if !strings.Contains(out.Stdout, "true") {
 		t.Fatalf("the host refusal must reach the cell:\n%s", out.Stdout)
 	}
-	if st := out.SearchStats; st != nil && st.FreshOverUnread != 0 {
-		t.Fatalf("stats = %+v, a search the host refused is not a fresh search sent", st)
+	if st := out.SearchStats; st != nil {
+		t.Fatalf("stats = %+v, a search the host refused counts nothing (not started, not fresh_over_unread)", st)
+	}
+	// The same cell's next fresh search is sent, and it alone is counted.
+	out = cell(`_, err := choir.SearchStart("plain three", true)
+fmt.Println(err)`)
+	if st := out.SearchStats; st == nil || st.FreshOverUnread != 1 || st.Started != 1 {
+		t.Fatalf("stats = %+v, want exactly 1 fresh_over_unread and 1 started", st)
 	}
 }
