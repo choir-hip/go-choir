@@ -420,6 +420,9 @@ check "Q3 a list that ends inside the day is said to be incomplete" 'grep -q "ma
 #      unknown numeric field in the middle drops the line; the reasons inside
 #      parentheses are read as fields or lost; the one-line label names the
 #      console's span when --since/--until or --first narrowed the window
+#  R16 not_sent reasons carry holds_unread from every verb: the report names the need test's refusals, the web
+#      searches sent and the refused share of attempts (holds_unread / (holds_unread + started)); fresh_over_unread is
+#      read (an older line's unread_notes still is) and summed, and printed
 #  R15 the event layer's op=event_flush line is not read, or its sums, minted share or vector states are wrong, or a
 #      console without the line prints the section
 #  R10 the hourly script fails, or changes its last line, when the corpus
@@ -594,6 +597,20 @@ check "R14 --first on the deployed shape finds 2 (d-2, d-3)" 'grep -q "found 2" 
 check "R14 the one-line label names --first, not the console span" 'tail -n 1 "$root/out" | grep -q "^Corpus reuse (first 2 runs after 11-19T01:51, found 2)"'
 runcorpus --fixture "$root/cr_d.log" --since 2026-11-19T01:50Z --until 2026-11-19T01:55Z
 check "R14 the one-line label names the --since/--until window" 'tail -n 1 "$root/out" | grep -q "^Corpus reuse (11-19T01:50 to 11-19T01:55)"'
+# R16: the plain verbs' refusals (holds_unread) and the fresh override
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+PRE = "[ 9.0] x-go-choir-run-autoputer-runtime[1]: "
+L = [PRE + "2026/11/19 03:00:00 runtime: other\n",
+ PRE + "2026/11/19 03:10:00 runtime: search run=e-1 desk=research started=1 from_held=0 not_sent=4 (holds_unread=4) search_all_calls=0 wordings_offered=0 wordings_sent=0 fresh_over_unread=1 untagged=0 pages_returned=40 pages_new=40 pages_read=3\n",
+ PRE + "2026/11/19 03:11:00 runtime: search run=e-2 desk=research started=3 from_held=0 not_sent=2 (holds_unread=2) search_all_calls=1 wordings_offered=3 wordings_sent=1 fresh_over_unread=0 untagged=0 pages_returned=60 pages_new=50 pages_read=5\n",
+ PRE + "2026/11/19 03:40:00 runtime: other\n"]
+open(root + "/cr_e.log", "w").write("".join(L))
+PY
+runcorpus --fixture "$root/cr_e.log"
+check "R16 6 searches refused by the need test, 4 sent: 60.0% of attempts" 'grep -q "refused by the need test (holds_unread, every verb) 6; web searches sent 4; refused share of attempts 60.0%" "$root/out"'
+check "R16 fresh_over_unread is read, summed and printed" 'grep -q "fresh_over_unread 1, untagged 0" "$root/out"'
 # R10
 mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 * h' 3
 env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/missing.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
