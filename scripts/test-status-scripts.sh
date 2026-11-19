@@ -578,6 +578,14 @@ env -u BASH_ENV python3 "$vectors" --fixture "$root/vec.log" >"$root/out" 2>&1; 
 check "V1 the newest line of each shape: stories have 120, captures have 14" '[ "$rc" = 0 ] && grep -q "^stories .*have 120  want 118" "$root/out" && grep -q "^captures .*have 14  want 500" "$root/out"'
 check "V2 remaining is the line's own: stories 0 (refused 0, an older line without the field), captures 486 with refused 3, model shown" 'grep -q "^stories .*remaining 0  model 2188ac1deca4  refused 0" "$root/out" && grep -q "^captures .*remaining 486  model 2188ac1deca4  refused 3" "$root/out"'
 check "V3 two story searches mean 15.00 ms, one capture search 30.00 ms" 'grep -q "vector_stories .*2 searches, mean 15.00 ms" "$root/out" && grep -q "vector_captures .*1 searches, mean 30.00 ms" "$root/out"'
+cat >"$root/vec1.log" <<'EOF'
+2026/11/19 05:00:00 corpusd retrieval op=embed_gap shape=stories ms=0.00 rows=0 have=100 want=100 remaining=0 model=2188ac1deca4 refused=0
+2026/11/19 06:00:00 corpusd vectors pass err=vectors: the pgvector extension is not installed in this database and this role cannot create it (go-choir-postgresql-roles makes it as postgres): ERROR (retry in 5s)
+EOF
+env -u BASH_ENV python3 "$vectors" --fixture "$root/vec1.log" >"$root/out" 2>&1
+check "V6 the extension error is newest: the first line says pgvector MISSING" 'head -n1 "$root/out" | grep -q "^pgvector  MISSING or too old: pgvector extension is not installed"'
+env -u BASH_ENV python3 "$vectors" --fixture "$root/vec.log" >"$root/out" 2>&1
+check "V6 an embed_gap line after (or without) an error: pgvector ok" 'head -n1 "$root/out" | grep -q "^pgvector  ok"'
 printf 'nothing here\n' >"$root/vec0.log"
 env -u BASH_ENV python3 "$vectors" --fixture "$root/vec0.log" >"$root/out" 2>&1; rc=$?
 check "V4 no embed_gap line: said so, no numbers invented, searches show -" '[ "$rc" = 0 ] && grep -q "^stories .*no embed_gap line" "$root/out" && grep -q "vector_stories .*0 searches, mean -" "$root/out"'

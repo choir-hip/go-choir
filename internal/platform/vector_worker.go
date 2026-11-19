@@ -22,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -65,10 +67,12 @@ var (
 // what the batch embedded. Written at the start of a pass, at each batch
 // boundary and at the end of a phase, never per row. refused counts the
 // passages (stories) or leads (captures) the embedder refused and that are
-// recorded as such; they are not in the gap. want counts what the
-// derivation could not yet tell cannot have a vector (an owner-private
-// capture, a version that is not public), so remaining is an upper bound
-// until the pass has passed over them; the end-of-phase line is exact.
+// recorded as such; they are not in the gap. want counts only what satisfies
+// the one SQL predicate (captures) or the walk and that predicate (versions),
+// so remaining is exact: a capture that can never be eligible is in neither
+// have nor want. The exceptions are a capture whose text blob cannot be read
+// now and a version the pass finds not public, which leave want when the pass
+// reaches them.
 func logEmbedGap(shape string, since time.Time, rows int, have, want, refused int64) {
 	remaining := max(want-have, 0)
 	log.Printf("corpusd retrieval op=embed_gap shape=%s ms=%.2f rows=%d have=%d want=%d remaining=%d model=%s refused=%d",
@@ -284,14 +288,17 @@ func (s *Service) loadStoryVersionText(ctx context.Context, og *ObjectGraphStore
 
 // eligibleStoryVersions lists every version of every published story or
 // opinion piece, newest publication first and newest version first within a
-// publication. Whether a version's access policy is public is read when it is
-// embedded.
+// publication. The publications come in windows of vectorStoryBatch and their
+// has_version edges in one statement per chunk of publications (the same
+// reading of the edges as publishedVersions: first edge of a revision wins,
+// revision above zero), not one query a publication. Whether a version's
+// access policy is public is read when it is embedded.
 func (s *Service) eligibleStoryVersions(ctx context.Context) ([]storyVersionRef, error) {
-	og := s.ogStore()
-	if og == nil {
+	if s.ogStore() == nil {
 		return nil, errors.New("object graph store unavailable")
 	}
-	var out []storyVersionRef
+	type pubRef struct{ id, title string }
+	var pubs []pubRef
 	seen := map[string]bool{}
 	var after *frontCursor
 	for {
@@ -309,20 +316,79 @@ func (s *Service) eligibleStoryVersions(ctx context.Context) ([]storyVersionRef,
 			}
 			var meta frontPublicationMeta
 			_ = json.Unmarshal(row.Metadata, &meta)
-			versions, err := publishedVersions(ctx, og, row.CanonicalID)
-			if err != nil {
-				return nil, err
-			}
-			for i := len(versions) - 1; i >= 0; i-- {
-				out = append(out, storyVersionRef{StoryID: row.CanonicalID, VersionID: versions[i].CanonicalID, Revision: versions[i].Revision, Title: meta.Title})
-			}
+			pubs = append(pubs, pubRef{row.CanonicalID, meta.Title})
 		}
 		if len(rows) < vectorStoryBatch {
-			return out, nil
+			break
 		}
-		last := rows[len(rows)-1]
-		after = frontCursorAt(last)
+		after = frontCursorAt(rows[len(rows)-1])
 	}
+	var out []storyVersionRef
+	for start := 0; start < len(pubs); start += 500 {
+		chunk := pubs[start:min(start+500, len(pubs))]
+		ids := make([]string, len(chunk))
+		for i, p := range chunk {
+			ids[i] = p.id
+		}
+		byPub, err := s.store.publishedVersionsOf(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range chunk {
+			vs := byPub[p.id]
+			for i := len(vs) - 1; i >= 0; i-- {
+				out = append(out, storyVersionRef{StoryID: p.id, VersionID: vs[i].CanonicalID, Revision: vs[i].Revision, Title: p.title})
+			}
+		}
+	}
+	return out, nil
+}
+
+// publishedVersionsOf reads the has_version edges of many publications in one
+// statement and returns each publication's published versions, oldest
+// revision first, exactly as publishedVersions reads one.
+func (s *Store) publishedVersionsOf(ctx context.Context, pubIDs []string) (map[string][]publishedVersion, error) {
+	out := map[string][]publishedVersion{}
+	if len(pubIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(pubIDs))
+	for i, id := range pubIDs {
+		args[i] = id
+	}
+	rows, err := s.corpus().QueryContext(ctx, `SELECT from_id, to_id, metadata FROM og_edges
+		WHERE kind = 'has_version' AND tombstone = FALSE AND from_id IN (?`+strings.Repeat(",?", len(pubIDs)-1)+`) ORDER BY from_id, created_at, edge_id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	for rows.Next() {
+		var from, to, meta string
+		if err := rows.Scan(&from, &to, &meta); err != nil {
+			return nil, err
+		}
+		var m struct {
+			Revision int `json:"revision"`
+		}
+		if json.Unmarshal([]byte(meta), &m) != nil || m.Revision <= 0 {
+			continue
+		}
+		key := from + "#" + strconv.Itoa(m.Revision)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out[from] = append(out[from], publishedVersion{Revision: m.Revision, CanonicalID: to})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for id := range out {
+		vs := out[id]
+		sort.Slice(vs, func(i, j int) bool { return vs[i].Revision < vs[j].Revision })
+	}
+	return out, nil
 }
 
 // storyVersionsWithVectors is the set of version ids that hold vectors of the
@@ -345,23 +411,25 @@ func (s *Store) storyVersionsWithVectors(ctx context.Context, model string) (map
 	return out, rows.Err()
 }
 
-// captureCounts is the captures projected (want) and the vectors held of the
-// model (have).
+// captureCounts is the captures that should have a vector (want: projected
+// and satisfying vecCaptureEligibleSQL, the one predicate the sweep and the
+// search use) and the vectors held of the model among them (have; a row
+// recording a refusal counts as held). The two are exact: a capture that can
+// never be eligible is in neither.
 func (s *Store) captureCounts(ctx context.Context, model string) (want, have int64, err error) {
-	if err = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index`).Scan(&want); err != nil {
+	if err = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index v WHERE `+vecCaptureEligibleSQL).Scan(&want); err != nil {
 		return
 	}
-	err = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM vec_captures WHERE model = ?`, model).Scan(&have)
+	err = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM vec_captures v WHERE v.model = ? AND `+vecCaptureEligibleSQL, model).Scan(&have)
 	return
 }
 
-// captureGapCount counts projected captures without a vector of the model.
-// It includes captures that cannot have one (owner-private), so it is an
-// upper bound of the work; a pass reports what it embedded.
+// captureGapCount counts eligible projected captures without a row of the
+// model.
 func (s *Store) captureGapCount(ctx context.Context, model string) (int64, error) {
 	var n int64
-	err := s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index p
-		WHERE NOT EXISTS (SELECT 1 FROM vec_captures v WHERE v.capture_id = p.capture_id AND v.model = ?)`, model).Scan(&n)
+	err := s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index v
+		WHERE `+vecCaptureEligibleSQL+` AND NOT EXISTS (SELECT 1 FROM vec_captures x WHERE x.capture_id = v.capture_id AND x.model = ?)`, model).Scan(&n)
 	return n, err
 }
 
@@ -371,17 +439,17 @@ type captureGapRow struct {
 	Eff   time.Time
 }
 
-// captureGapBatch is the next batch of projected captures without a vector,
-// newest first, after the keyset cursor (eff, id).
+// captureGapBatch is the next batch of eligible projected captures without a
+// row of the model, newest first, after the keyset cursor (eff, id).
 func (s *Store) captureGapBatch(ctx context.Context, model string, afterEff *time.Time, afterID string, n int) ([]captureGapRow, error) {
-	q := `SELECT p.capture_id, p.owner_id, COALESCE(p.published_at, p.fetched_at, p.updated_at) AS eff FROM proj_capture_index p
-		WHERE NOT EXISTS (SELECT 1 FROM vec_captures v WHERE v.capture_id = p.capture_id AND v.model = ?)`
+	q := `SELECT v.capture_id, v.owner_id, COALESCE(v.published_at, v.fetched_at, v.updated_at) AS eff FROM proj_capture_index v
+		WHERE ` + vecCaptureEligibleSQL + ` AND NOT EXISTS (SELECT 1 FROM vec_captures x WHERE x.capture_id = v.capture_id AND x.model = ?)`
 	args := []any{model}
 	if afterEff != nil {
-		q += ` AND (COALESCE(p.published_at, p.fetched_at, p.updated_at), p.capture_id) < (?::timestamptz, ?)`
+		q += ` AND (COALESCE(v.published_at, v.fetched_at, v.updated_at), v.capture_id) < (?::timestamptz, ?)`
 		args = append(args, *afterEff, afterID)
 	}
-	q += ` ORDER BY eff DESC, p.capture_id DESC LIMIT ?`
+	q += ` ORDER BY eff DESC, v.capture_id DESC LIMIT ?`
 	args = append(args, n)
 	rows, err := s.corpus().QueryContext(ctx, q, args...)
 	if err != nil {
@@ -459,7 +527,7 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 	if s == nil || s.store == nil {
 		return res, errors.New("vectors: nil service")
 	}
-	if err := s.store.ensureVectorTables(ctx); err != nil && !s.store.VectorsReady() {
+	if err := s.store.ensureVectorTables(ctx); err != nil && (!s.store.VectorsReady() || s.store.vec.unsupportedReason() != "") {
 		return res, err
 	}
 	// The sweep comes first and needs no embedder: a vector whose text is no
@@ -763,6 +831,12 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 		return 0, 0, 0, err
 	}
 	var items []item
+	// Captures the predicate keeps but that have nothing to embed are recorded
+	// as refused, so they leave the gap (and the remaining count) for good.
+	var norow []captureVectorRow
+	record := func(obj objectgraph.Object, why string) {
+		norow = append(norow, captureVectorRow{ID: obj.CanonicalID, Owner: obj.OwnerID, Computer: obj.ComputerID, TextSHA: embedder.TextSHA(""), Day: captureDay(obj), Refused: why})
+	}
 	for _, r := range rows {
 		obj, ok := objs[r.ID]
 		if !ok || !okSQL[r.ID] {
@@ -771,7 +845,7 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 		}
 		title, hash, ok := captureVectorSource(obj)
 		if !ok {
-			skipped++
+			record(obj, "not embeddable: no scope or unreadable metadata")
 			continue
 		}
 		lead, err := captureLeadPassage(s.captureBodies, hash)
@@ -781,13 +855,16 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 			continue
 		}
 		if title == "" && strings.TrimSpace(lead) == "" {
-			skipped++
+			record(obj, "empty: no title and no text")
 			continue
 		}
 		items = append(items, item{obj: obj, lead: lead, title: title, input: embedder.DocumentInput(title, lead), textID: embedder.TextSHA(lead)})
 	}
 	if len(items) == 0 {
-		return 0, skipped, 0, nil
+		if err := s.store.writeCaptureVectors(ctx, norow); err != nil {
+			return 0, skipped, 0, err
+		}
+		return 0, skipped, len(norow), nil
 	}
 	inputs := make([]string, len(items))
 	for i, it := range items {
@@ -797,7 +874,8 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 	if err != nil {
 		return 0, skipped, 0, err
 	}
-	var out []captureVectorRow
+	out := norow
+	refused = len(norow)
 	embedded := 0
 	for i, it := range items {
 		out = append(out, captureVectorRow{ID: it.obj.CanonicalID, Owner: it.obj.OwnerID, Computer: it.obj.ComputerID, TextSHA: it.textID, Day: captureDay(it.obj), Vec: vecs[i], Refused: refusals[i]})
@@ -894,7 +972,7 @@ func (s *Store) captureObjectsByIDAny(ctx context.Context, ids []string) (map[st
 // the Mac export's source, is checked in Go when vectors are written.
 var (
 	vecCaptureEligibleSQL = `EXISTS (SELECT 1 FROM og_objects o WHERE o.canonical_id = v.capture_id AND o.object_kind = '` + string(objectgraph.WebCaptureObjectKind) + `'
-		AND NOT o.tombstone AND COALESCE(o.superseded_by, '') = '' AND o.owner_id = v.owner_id AND o.computer_id = v.computer_id
+		AND NOT o.tombstone AND COALESCE(o.superseded_by, '') = '' AND o.owner_id = v.owner_id AND o.computer_id = v.computer_id AND v.owner_id <> '' AND v.computer_id <> ''
 		AND position('` + types.LabelOwnerPrivatePrefix + `' in o.metadata) = 0)`
 	vecStoryEligibleSQL = `(EXISTS (SELECT 1 FROM og_objects ver WHERE ver.canonical_id = v.version_id AND NOT ver.tombstone)
 		AND EXISTS (SELECT 1 FROM og_objects pub WHERE pub.canonical_id = v.story_id AND NOT pub.tombstone
