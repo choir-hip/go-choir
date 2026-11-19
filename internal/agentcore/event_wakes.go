@@ -423,11 +423,7 @@ func (rt *Runtime) sweepHeldCaptures(ctx context.Context, ownerID, computerID st
 	if rt == nil || rt.store == nil {
 		return
 	}
-	eventsOn := rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents)
 	wakesOn := rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
-	if !eventsOn && !wakesOn {
-		return
-	}
 	key := eventKey(ownerID, computerID)
 	rt.events.mu.Lock()
 	if rt.events.lastSweep == nil {
@@ -464,7 +460,7 @@ func (rt *Runtime) sweepHeldCaptures(ctx context.Context, ownerID, computerID st
 		}
 	}
 	var waiting map[string]string
-	if eventsOn && wakesOn {
+	if wakesOn {
 		idx := rt.eventIndexFor(ownerID, computerID)
 		idx.mu.Lock()
 		if err := idx.loadLocked(ctx, rt.store, ownerID, computerID); err != nil {

@@ -266,8 +266,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		// reads captures on event records, which name the stories that
 		// hold the event (event layer §18), so a label call per capture
 		// would scale calls with captures for nothing.
-		eventWakes := rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents) &&
-			rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
+		eventWakes := rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
 		if len(report.Captured) > 0 && !eventWakes && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
 			// Held for the computer's flush, and waited for here, so the
 			// labels exist before the arrival wakes management (as before
@@ -281,10 +280,10 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 			case <-ctx.Done():
 			}
 		}
-		// With intake.events on, the new captures queue for the event
+		// The new captures queue for the event
 		// layer, which resolves every source's captures together onto
 		// world events off this path (event_layer.go). It never gates the
-		// arrival. With intake.event_wakes on too, the arrival is held:
+		// arrival. With intake.event_wakes on, the arrival is held:
 		// it names the captures and wakes no one, and the captures reach
 		// management on their events' records (event layer §15).
 		// Pending captures from an earlier poll are held too, so the

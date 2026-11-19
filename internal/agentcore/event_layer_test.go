@@ -370,25 +370,20 @@ func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	}
 }
 
-func TestEventLayerOffMakesNoCall(t *testing.T) {
+// The event layer has no setting (owner, 2026-11-19: "I want everything on"):
+// with nothing stored, a queued capture is resolved, and the old key is not a
+// setting a computer can store.
+func TestEventLayerRunsWithNoSetting(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}}
 	rt, owner, computer := eventRuntime(t, judge)
-	// Stored off (the default is on, owner 2026-11-03).
-	if err := rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeEvents, Value: false}); err != nil {
-		t.Fatal(err)
-	}
-	rt.enqueueEventResolution(context.Background(), owner, computer, "src", []sourcegraph.CapturedItem{{CaptureID: "z1", Title: "Anything", URL: "https://a.example.com/z"}})
-	rt.flushEventQueueForTest(context.Background())
-	if judge.callCount() != 0 { // R9
-		t.Fatalf("intake.events is off but Jev was called %d times", judge.callCount())
-	}
-	if err := rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeEvents, Value: true}); err != nil {
-		t.Fatal(err)
-	}
 	rt.enqueueEventResolution(context.Background(), owner, computer, "src", []sourcegraph.CapturedItem{{CaptureID: "z2", Title: "Anything else", URL: "https://a.example.com/z2"}})
 	rt.flushEventQueueForTest(context.Background())
 	if _, found, _ := rt.store.EventMembershipOf(context.Background(), owner, computer, "z2"); !found {
-		t.Fatal("intake.events on: the queued capture was not resolved")
+		t.Error("the queued capture was not resolved")
+	}
+	err := rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: "intake.events", Value: false})
+	if err == nil {
+		t.Error("intake.events is still a setting a computer can store")
 	}
 }
 

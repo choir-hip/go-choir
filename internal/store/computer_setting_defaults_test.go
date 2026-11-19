@@ -23,7 +23,6 @@ var defaultOnFeatures = []string{
 	SettingEngineeringCarryUnfinished,
 	SettingEngineeringSlotsGraph,
 	SettingFilesObject,
-	SettingIntakeEvents,
 	SettingIntakeLabels,
 	SettingTelemetryBatch,
 	SettingTelemetryRetire,
@@ -74,7 +73,7 @@ func TestHeldSettingsKeepTheirOffDefault(t *testing.T) {
 // The retired keys, which nothing read, are gone: a stored row stays
 // invisible and a new one is refused.
 func TestRetiredStoreSettingsAreRemoved(t *testing.T) {
-	for _, key := range []string{"store.debounced_checkpoint", "store.trace_log"} {
+	for _, key := range []string{"store.debounced_checkpoint", "store.trace_log", "intake.events"} {
 		if _, known := KnownComputerSettings[key]; known {
 			t.Errorf("%s is still known", key)
 		}
