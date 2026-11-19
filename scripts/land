@@ -20,7 +20,10 @@
 # ref is pushed there over ssh as well), LAND_PRIMARY (checkout
 # to refuse), LAND_GATES (gate command, default scripts/gates), LAND_POLL
 # (seconds between polls, 20), LAND_POLL_FAILS (consecutive failed polls
-# tolerated, 90), LAND_HOOK_AFTER_VERIFY (shell text run after the checks pass
+# tolerated, 90), LAND_PG_BIN (a directory on the VM, put first on the suites'
+# PATH so dbxtest's initdb and pg_ctl come from it: a copy of the system
+# PostgreSQL with pgvector added, for the vector tests; the VM's own
+# PostgreSQL is not touched), LAND_HOOK_AFTER_VERIFY (shell text run after the checks pass
 # and before the final fetch; the selftest uses it to move main).
 #
 # The script never adds, edits or invents a commit trailer.
@@ -238,6 +241,11 @@ trap fin EXIT
 run() { echo "## \$*"; "\$@"; rc=\$?; [ \$rc -eq 0 ] || { echo "STEP FAILED (\$rc): \$*"; exit \$rc; }; }
 use=\$(df -P "\$HOME" 2>/dev/null | awk 'NR==2{gsub("%","",\$5);print \$5}'); [ "\${use:-0}" -gt 85 ] && go clean -cache
 EOF
+  # LAND_PG_BIN (a path on the VM; $HOME and ~ are expanded there) goes first on PATH.
+  if [ -n "${LAND_PG_BIN:-}" ]; then
+    case "$LAND_PG_BIN" in *[!A-Za-z0-9_./\$~-]*) die "LAND_PG_BIN has characters a path does not" ;; esac
+    printf 'export PATH="%s:$PATH"\n' "${LAND_PG_BIN/#\~/\$HOME}" >>"$1"
+  fi
   # The script self-tests take seconds; they run before the suites, so a gate that
   # refuses does so in the first minute and not after the 100-minute race suites
   # (seen 2026-11-15).
