@@ -43,7 +43,13 @@ fs.write app:/cache
 fs.read app:/data/signout-pending
 fs.write app:/data/signout-pending
 fs.read app:/data/account-stamp
-fs.write app:/data/account-stamp`;
+fs.write app:/data/account-stamp
+fs.read app:/data/open-pages-shared.json
+fs.write app:/data/open-pages-shared.json
+fs.read app:/data/notebook-cache.md
+fs.write app:/data/notebook-cache.md
+fs.read app:/data/takes.json
+fs.write app:/data/takes.json`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),

@@ -392,3 +392,12 @@ describe('S16 the paper page passes the story title with the route (the loss the
     expect(i.names.find((n: { send?: string }) => n.send === 'choirPlay').options).toEqual({ route: 'string', title: 'string' });
   });
 });
+
+describe('S17 every path a wipe covers is a path the app is granted to read and write', () => {
+  test('app.ts grants fs.read and fs.write for each (a denied path fails silently: the notebook cache and the shared open pages were never kept until this was found on Android)', () => {
+    const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8');
+    // not granted on purpose: app:/tmp/picked is read only; the vector store and the content database are not wired to a page yet (their wipes exist for when they are)
+    const missing = wipedPaths().filter((p) => !['app:/tmp/picked', 'app:/data/vectors', 'app:/data/content.db'].includes(p)).filter((p) => !(app.includes(`fs.read ${p}`) && app.includes(`fs.write ${p}`)));
+    expect(missing).toEqual([]);
+  });
+});
