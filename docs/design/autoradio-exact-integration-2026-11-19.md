@@ -18,11 +18,25 @@ Checks on the merged branch (last lines):
 - locked `swift test`: Executed 1146 tests, with 1 test skipped and 0 failures (the settings lane's unconfirmed run is confirmed)
 - native boundary gate: ceiling at 101 files, 22,036 lines after the merges (it only fell)
 - native build through the queue (mode `build`) on the first three-lane merge: exit 0.
+- the silent proof (mode `proof`) at 21b62ad31 (all seven lanes, the sign-out step, the Paper fix): `PROOF OK`. Earlier runs failed at the stale
+  drive and then at the empty Paper page (below).
 
 Fixed while merging: `podcast.test.ts` expected the grant text to end the file (`net.fetch https:` + backtick); the grants are now one
 list, the test reads the line. `takes.ts` had a type error (`Uint8Array` to `BufferSource`) that nothing found until `app.ts` reached it.
 
-### The proof was stale, not broken (a, not b)
+### The device's 100 ms turn (a regression of the Paper move, found by the proof)
+
+On the simulator `paperFront` took 317 to 389 ms of CPU in one turn against Exact's 100 ms budget (`reference.md`, Timers row: "A turn gets
+100 ms of its own CPU time; `await scheduler.yield()` starts another"), so the resource failed and the Paper page drew nothing. Bun runs the same
+code in under a millisecond; Hermes does not. Cause read from the proof's log (`resource pfront failed: ... over the 100 ms budget`): a
+`/[\p{L}\p{N}]/u` literal tested once per character in `key()` and `padded()`, which `sections()` and `belongs()` call per story and per
+section. Fix: the classes are compiled once, `key()` is one replace and both remember their answers (`paper-model.ts`; the same hoist in
+`edition-model.ts`, `notebook.ts`, `programme-model.ts`). The proof then passed the Paper steps. LESSON FOR EVERY TWIN STILL TO BE WIRED
+(`search.ts` BM25 and fusion, `content.ts`, `runsheet-model.ts`, `mail-model.ts`): a source that is fast under Bun can fail on the device. Each
+needs a timed run on the simulator (the proof's log prints the failure) and, where it loops, `await scheduler.yield()` (guard `typeof scheduler`;
+Bun has none).
+
+### The proof was stale (a), and then Paper was broken (b)
 
 The silent proof (`mobile/scripts/proof-sim.sh`) failed on `exact-base` at `tap paper-story-demo-grid-storage`. It is (a): the script
 had not been run since the 2026-11-18 landing. The app opens on the Autoradio page (`radio:` is the first fixed page, `members-stack.contract`),
@@ -105,3 +119,27 @@ Mechanisms chosen:
 3. Step 5: content store and sync on `content.ts`.
 4. The files streaming regression; the podcast positions import; the mail cipher; the paper-title-with-route loss the deck builder named.
 5. Step 6: themes (53 uses), `Preferences`, `Signals`, the stories list.
+
+## Handoff (written at the end of the first pass)
+
+Branch head and state: see the last commit of `lane/exact-integ`. The branch builds natively and the silent proof passes. A fresh integrator
+needs only this file. What the proof does NOT cover: signing out (a write), the Files and Mail pages, podcasts, any sound.
+
+For the owner or the lead to look at (simulator and Android):
+- Sign-out on a signed-in simulator (not demo): the Account screen's Sign out must return to signed-out and leave no podcast library, mail copy, recents
+  or cached files (`account.test.ts` proves the list, not the native call). The one native op `{op:'signOut'}` replies when the Swift sign-out has
+  finished; if it never replies the Account screen stays as it was. NOT proven on a device. Android has no implementation of `signOut` (owed in Kotlin).
+- Paper in demo and signed in; the launcher (the mark); Settings themes. Podcasts, Files and Mail pages were never driven by any proof: drive them
+  once signed in (`real` mode, reads only; its tour has no Files or Mail steps yet: extend it, never tap Save draft or the approval link).
+- Time every shared source that loops on the simulator: the 100 ms turn.
+
+Next steps, in order:
+1. Prove the native-to-shared bridge on the simulator before step 3: a Contract `task ... key=<deck seq> change(action)` whose action sends a
+   TypeScript source and then a package send (`deckEnqueue`). One commit with a bun test of the source and a driver step; print the round trip.
+2. Step 3 (run sheet, director, programme decoder through the deck), RED, in small commits; one poster of `aired` ops; delete the Swift run sheet,
+   radio page, decoder, edition setup, their tests and interface names in the same commit as the wiring. The paper page must pass the story's title
+   with the route to `choirPlay` (an empty title shows on the lock screen for a story not in the radio's list); today the Swift player decides, so
+   the loss is not live.
+3. The mail cipher (native `seal`/`open` with CryptoKit AES-GCM, see above), the files streaming regression (use `exactBodyTo` / `exactBodyFrom`),
+   the podcast positions import, `proof-real.sh` tours for Files and Mail.
+4. Voice-turn spike (stage 2), then steps 4, 5 and 6.
