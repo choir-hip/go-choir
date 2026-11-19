@@ -523,7 +523,7 @@ made (blocks and `next_block`), then at the 1025th call an error with the
 text above. Between cells: the error. Whether it was shown `block_count` and
 used it is read from the cell programs, which are not read.
 
-Cause: **not established**. The evidence leans toward a model-written
+Cause (before the reproduction below; see its update): **not established**. The evidence leans toward a model-written
 program with a stepping or limit mistake, which is model behaviour met by a
 harness that offers a verb whose natural loop is thousands of calls and a
 bound whose message says only "continue". Confidence in "model behaviour
@@ -589,7 +589,7 @@ runs) and the search went on in the same cell batches. Only 16% of the
 searches (63 of 392) went through `SearchAll`; the rest are plain
 `SearchStart`, where the rule is a note and nothing more.
 
-Cause: **model behaviour** under a harness that does not stop it:
+Cause (before the reproduction below; see its update): **model behaviour** under a harness that does not stop it:
 rewording one question many times, in some runs after a note said it already
 held unread pages. Confidence 0.65. It is not many questions (one subject per
 run), and not rewording by the harness (the harness sends what the cell
@@ -636,7 +636,7 @@ of each host, title and URL, under 5,000 bytes) or reads `choir.Searches.Get(id)
 `Held` marks. The prompt tells the desk to pick sources "from the host-deduped
 `choir.Searches.Summary(id)`". Whether a run called `Summary` is not logged.
 
-Cause: **not established**. The titles are available but not given; the
+Cause (before the reproduction below; see its update): **not established**. The titles are available but not given; the
 harness gives a count where a list is what a choice needs, and the logs
 cannot say whether the model looked. Confidence that the share is not a
 failure of attention at all: 0.4; that reading follows the story's needs and
@@ -650,3 +650,199 @@ the same plus held marks) with the same model, and the same with another
 model, measuring pages read, which rank, and whether the packet's sources
 differ. If reads rise with titles shown, it was never looking; if they do
 not, the 6% is what the stories need.
+
+### Reproduction on the drill computer d@e, 2026-11-19 05:31Z to 05:51Z
+
+The coordinator's ruling: no key for the paper is minted tonight, and none
+of the forbidden ones may be used. The cell programs were therefore obtained
+by **reproduction on d@e** (`computer-59c902c5d46caecc0a180a8557164e72`, the
+drill computer, where paid and adversarial runs are allowed). **This is
+evidence about the model and the surface, not proof of what the paper's runs
+did.** The differences from the paper: another computer with a smaller corpus;
+a request sent through the prompt bar (Texture then casts to research), where
+the paper's research is woken by source captures; objectives I wrote, not the
+paper's; nine runs. The research desk ran `devin/swe-2-flash` in every run
+(the `model.served` event: selected provider `devin`, model `swe-2-flash`,
+source `/mnt/persistent/files/System/model-policy.toml`); no setting was
+changed.
+
+**Commands used.** The `choir` binary already in the lane (an arm64 Mac
+build whose `trace export` and `run start` exist; nothing was built on the
+build VM). The key is passed only as a file:
+
+    ./choir run start --api-key-file ~/.config/choir-qa/keys/d-e.key \
+        --computer computer-59c902c5d46caecc0a180a8557164e72 \
+        --idempotency-key l1-repro-<name>-20261119 "<objective>"
+    ./choir trace export --api-key-file ~/.config/choir-qa/keys/d-e.key \
+        --computer computer-59c902c5d46caecc0a180a8557164e72 \
+        --out <scratch>/trace-<name>.json <trajectory id>
+
+A bundle holds the research run's events. The `tool.result` event of a
+`desk_go_eval` call carries `arguments.source` (the cell program, verbatim)
+and `output` (the cell result as the model was shown it, with `searches`, the
+notes the host added); the `desk.cell` event carries `egress_calls` (host
+calls in the cell); `search.served` counts the provider's results; `reuse`
+in the output says whether the session survived the cell. Bundles stay in
+the session's scratch directory, outside the repo.
+
+| name | kind | trajectory | research run |
+| --- | --- | --- | --- |
+| A1 | transit disruption, Wellington | `51ef6111-296f-53fc-848e-4e5c3446fbae` | `a09a618c` |
+| A2 | municipal dispute, Lisbon | `725b94ab-dfa9-5762-947b-cfdbd012cec8` | `37f22797` |
+| A3 | soft feature, Nigerian founders | `342c33d3-e2a5-5dfa-9d4a-74159adcdc7f` | `b1132328` |
+| D1 | thin coverage, night buses in Kaunas | `588e67cd-10b1-5a36-861b-7e92897d1242` | `ee3695ca` |
+| D2 | thin coverage, parking dispute in a Wroclaw district | `91ea5d00-eea1-5590-bd07-85f1692f39ba` | `6dfd6d4f` |
+| D3 | thin coverage, tram closure in Porto | `808bf536-42c1-5b60-a257-f8f1f3de6896` | `ad478c97` |
+| C1 | one long public page read in full (a novel's plain text) | `2b3ebc1e-e68d-5f7f-8013-10bcfb62d0aa` | `4e518c23`, `947cd501` |
+| C2 | the same page, another question | `eb6bf795-e015-5b1c-8562-7a8070876785` | `4b5c85af` |
+| C3 | the same page, another question | `1e1959c2-e5df-5c43-b063-7b31caa7eef2` | `0e30aec5` |
+
+D1 to D3 were added after A1 to A3 came out near the median (6 to 12
+searches, not 39): the paper's big runs were thin-coverage local events in
+other languages, so D1 to D3 are that kind.
+
+#### A and D: the many-search shape
+
+| run | cells | searches served | search cells | verbs | pages returned | distinct URLs tried | share | largest "holds N unread" note shown |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A1 | 50 | 12 | 8 | `SearchAll` 1, `SearchStart` 11 (10 with `fresh` true) | 480 | 38 | 7.9% | 148 |
+| A2 | 65 | 11 | 8 | `SearchStart` 12 (2 with `fresh` true) | 440 | 42 | 9.5% | 71 |
+| A3 | 91 | 6 | 3 | `SearchStart` 6 | 240 | 38 | 15.8% | 76 |
+| D1 | 65 | **89** | 18 | `SearchStart` in loops, 0 `SearchAll` | 3,435 | 48 | 1.4% | 467 |
+| D2 | 35 | 22 | 7 | `SearchStart` | 880 | 27 | 3.1% | 157 |
+| D3 | 70 | 18 | 15 | `SearchStart` | 720 | 63 | 8.8% | 393 |
+
+("Distinct URLs tried" counts the URLs in the source of cells that call
+`Read`, `ReadAll` or `ReadCapture`, failed reads included, so it is an upper
+bound on pages read.) In all, `SearchAll` was called once in 9 runs and
+`SearchStart` about 82 times; in the paper's console, `SearchAll` was in 20 of
+54 runs. The `SearchAll` stop was therefore not the thing meeting the model.
+
+What the programs are.
+
+- **A runs: one cell per idea, one to three searches a cell**, interleaved
+  with reads. A1 cell 2, the only `SearchAll`: `q1, err1 :=
+  choir.SearchAll("Wellington commuter rail signal failure delays", []string{"Wellington Metlink signal
+  failure trains delayed November 2026", "Metro Trains Wellington signal fault commuter delays", "Metlink
+  service alert signal failure Wellington"})`. The result: "1 of 3 wordings
+  sent ... not sent (this question already holds 40 pages new to this run that you
+  have not tried to read)". The model then used `SearchStart` for every search
+  after it, and from cell 17 on passed `true` (fresh) as the second argument
+  each time, for example `s4, _ := choir.SearchStart("Metlink signal fault Wellington trains delays", true)`.
+  The prompt says `fresh` sends a search the run holds results for; the model
+  used it as the default way to send. In A2 it came late (cells 46 and 60).
+- **D1: a looped list of wordings, 18 search cells of 18.** Cell 8, verbatim:
+  `qs := []string{"delfi Kaunas viesasis transportas skundai lapkritis 2026", "Kaunas transporto
+  reorganizacija gyventoju pasisakymai", "Kauno viesasis transportas naktinis eismas naujoves 2026",
+  "Kaunas bus routes changes November 2026 complaints", "Kaunas night service Kautra changes 2026"}`
+  then `for _, q := range qs { s, e := choir.SearchStart(q) ... }` (diacritics
+  dropped here; the program has them). Three to twelve searches a cell, in
+  Lithuanian and English, then a `Summary` of each. Five of those cells
+  failed to compile and the same list was resent in the next cell (nothing
+  had started; the resend is not a repeat of a search).
+- **D2: a list of 5 wordings in a loop at first, then one at a time**; **D3:
+  one at a time, each with a comment to itself** ("Marathon was Nov 8 -- last
+  weekend, not this week ... The main this-week finding: weekend tram
+  closure ... Check its exact wording/date more"), the query written as
+  string pieces joined with `+`. D3 is the thin-coverage run that behaves as
+  the prompt asks: each search is for a named gap.
+
+What the cell results showed the model. After a search: the count line
+(`s3: 1/1 answered, +1 in, 31 of 40 pages new, done`), then (from the second
+search on) the line "new pages in the latest searches: s1 40, s2 36, s3 31",
+then the note "this run holds N pages new to this run that you have not
+tried to read, returned by its earlier searches; the search is sent. Read the ones that
+matter (choir.Searches.Summary(id) lists them), then search again for what
+is still missing, naming it." N in D1 ran 95, 172, 289, 369, 467 over five
+successive searching cells and the next cell searched again each time; in A1,
+36, 75, 113, 148. The note is a note; the model kept searching. The
+note "you have N captured sources and have sent no packet; send an interim
+packet now" also appears and was acted on (D1 cell 4 sends an interim
+packet).
+
+`Summary` or `Get` between searches: yes in most gaps. A1: 5 of the 7 gaps
+between search cells had a `Summary`/`Get` cell; A2: 5 of 7; D1: 23 `Summary`
+calls (it prints a `Summary` of every search it starts, in the same cell).
+So the model looked at titles; in A1 cells 13 and 18 it printed `h.Title`
+and `h.URL` of all 40 results (`for _, h := range s.Results`), and D3 printed
+`h.Snippet` of the pages it chose.
+
+Class for item 2 after reproduction: **model behaviour** (writes a loop over
+a literal list of 3 to 12 wordings of one question, defaults `fresh` to true,
+and searches on while a note says it holds hundreds of unread pages), met
+by a harness whose notes do not stop it and whose stop rule sits on a verb
+the model hardly uses (1 `SearchAll` in 82 searches). Confidence 0.7 that the
+paper's big runs have this shape; 0.5 that they have it for this cause, since
+the paper's runs did use `SearchAll` (it stopped 8 of 37 wordings in
+`5f3ee2dd`). What it does **not** show: why D3 searches by need and D1 does
+not (the objectives differ in language and coverage; one run each).
+
+#### B: the read share, from the same traces
+
+Ranks read, taken from the lists the model had printed (the position of a
+read URL in the earlier printed list of titles and URLs; reads of URLs in no
+printed list are left out: A1 4, A2 17, A3 18, D1 30, D2 4, D3 42, most from
+`Summary` output, which groups by host): in A1, 13 of 34 reads were in the first
+ten ranks, in A2 8 of 25, A3 10 of 20, D1 9 of 18, D2 10 of 23, D3 11 of 21;
+the rest run down to rank 42. So the model does not take the top of the list:
+it chooses by title and host from a list it printed. The share of returned
+pages tried moves from 0.8% (D1) to 15.8% (A3) with how many pages came
+back, not with what the run needed: the same 25 to 63 URLs tried whether 240
+or 3,435 pages were returned. That is the paper's pattern (reads do not follow
+returns) reproduced.
+
+What the model had seen before reading or skipping: titles and URLs of all 40
+results, because it printed them; the snippet only when it printed
+`h.Snippet` (D3). The host's own cell result carries counts and notes, not
+titles. Class for item 3 after reproduction: **model behaviour**, with the
+harness at most letting a count stand where a list is needed: the model looks
+and chooses, and its reading is set by the task, so 5% to 6% is the arithmetic
+of searching much and reading about 25 to 60 pages, not a failure to look.
+Confidence 0.6. The paper's runs read fewer (a median of 11 pages), so the
+reproduction reads more than the paper; not explained.
+
+#### C: the read loop
+
+The objective needed one long public page read in full (the plain text of a
+novel, 2,567 blocks, 746,912 characters). Three runs.
+
+- **No run stepped `fromBlock` by one.** Every paging loop follows
+  `next_block`: `from = v.NextBlock` (C1, C2) or `from = rc.NextBlock` (C3),
+  guarded by `if v.NextBlock == 0 || v.NextBlock == from { break }`. `maxChars`
+  was `0` (the default 8,000) in C1 and C2 (96 calls a pass) and `60000` in C3
+  (about 13 calls a pass); C2 once passed `80000`.
+- **Each run read the whole page again and again.** Cells that begin a
+  pass at `from := 0`: C1 8, C2 13, C3 14 (of 94, 30 and 20 cells). Host
+  calls in a run: C1 622, C2 1,232 (two passes in a cell: 188 calls), C3 132.
+  The largest number of host calls in any one cell was 188; the bound is
+  1,024, so **no run met the bound and the 3,090-call loop did not
+  reproduce.**
+- **Why the model read it again.** The text did not survive to the next
+  cell. (a) A slice out of range (`s[a:b]` past the end; `reflect.Value.Slice:
+  string slice index out of bounds`) panics the cell and the session
+  (`"reuse":"unsafe_to_reuse"`; `choir.CellOut refused: handle ... is from a
+  session that ended`): C1 4 times, C2 3, C3 2. (b) A cell that fails to
+  compile leaves its variables undefined for the next ("undefined:
+  bookText", "undefined: fullSave", "undefined: pandpFull": the model
+  assigned to a name it expected to exist): 5, 3 and 4 times; C3 cells 4 and
+  5 each re-ran a full 13-call pass to try to set `fullSave` and then
+  `pandpFull`. (c) Compile errors in all (18, 4 and 6 cells; the hints say "At
+  cell top level, `x := v[i]` ... do not compile here"). The model's next
+  cell then re-ran the paging loop with a one-line change. A run that kept
+  the text in a variable that survived read the page once.
+- **A silent model error.** C1 cell 9 declared the block struct with the tag
+  `json:"id"; json:"text"`: the host accepted it, `Text` came back empty,
+  and the cell printed `chars: 2566` for a 2,567-block page; cell 10 fixed it.
+- **At a refusal**: not reached, so what the model does after "continue in the
+  next cell" is not shown.
+
+Class for item 1 after reproduction: **model behaviour inside a harness that
+loses the state it relies on**. The mechanism that is shown to make a run
+read one capture many times is re-paging the whole page in each cell after a
+panic or a compile error; at 100 calls a pass it takes 10 or more passes in
+one cell to reach 1,025. Whether the paper's run did that (a larger page, a
+loop that restarts inside a loop, or a step of one block) is **not
+established**: the 3 x 1,024 pattern is not reproduced, and the page it read
+is unknown. Confidence 0.5 that the paper's loop is this mechanism at a larger
+scale; the cell programs of `c0351184` are still the only thing that settles
+it. The refusal text is not shown to have helped or hurt.

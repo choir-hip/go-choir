@@ -26,9 +26,14 @@ This record holds the rest.
   only), which needs a key bound to the newspaper computer with its run-event
   read scope. None was available, and the owner's key, the operator key and
   the tape were out of bounds. Every statement here about what a model wrote
-  is an inference from counts and code and says so. To finish the work the
-  owner mints a read-scoped key for the newspaper, or runs the export for the
-  runs named in the search-volume record and hands the bundles over.
+  is an inference from counts and code and says so. Later the same night, with
+  no key for the paper to be had, the cell programs were obtained by
+  **reproduction on the drill computer d@e**, nine runs on the same model; see
+  "Reproduction on the drill computer d@e" in the search-volume record. That is
+  evidence about the model and the surface, not proof of what the paper's runs
+  did. The paper's own runs (`c0351184` and the others) are still unread; the
+  owner minting a read-scoped key for the newspaper, or running the export,
+  settles them.
 - The paper's research desk runs `devin/swe-2-flash`. A cause called
   "model behaviour" below means the logs fit the model's choices and no
   harness difference is shown; it is not a claim that another model would do
@@ -183,27 +188,54 @@ weeks.
 
 ## What a controlled comparison would have to vary (for the redesign of the calibration experiment)
 
-For every failure in this record and in the three it links, the log shows
-what the model was shown and what it did, and cannot show why. To tell the
-model's behaviour from the harness's the experiment has three axes, each
-varied alone against a fixed, replayable set of objectives (the first
-message and the held captures of real runs, so the surface is the only
-difference):
+For every failure here and in the three records it links, the log shows what
+the model was shown and what it did, and cannot show why. Nine reproduction
+runs on d@e (2026-11-19, same model) now show what the programs are, which
+changes what is worth varying. To tell the model's behaviour from the
+harness's, the experiment has four axes, each varied alone against a fixed,
+replayable set of objectives (the first message and held captures of real
+runs, so the surface is the only difference):
 
-- **The model**, the surface fixed: the same model several times (variance),
-  and two or more other models. A behaviour that appears in every model is a
-  surface effect; one that appears in one is the model's.
+- **The model**, the surface fixed: the same model several times (variance;
+  one run each told us nothing about a rate: D1 started 89 searches, D3 18
+  on objectives of one kind), and two or more other models. A behaviour that
+  appears in every model is a surface effect; one in one model is the model's.
 - **What the cell shows**, the model fixed: counts only against counts and
-  titles; a refusal that says "continue" against one that names the verb and
-  the capture; a result with `block_count` and position against without.
-- **What the surface permits**, the model fixed: the plain `SearchStart`
-  present or absent; a page-read verb that returns a whole page against one
-  that must be walked; the per-cell bound as now against a lower one.
+  titles; the unread-pages note as now against no note against a note that
+  lists the unread titles (the reproduction shows the note's number climbing
+  95, 172, 289, 369, 467 while the next cell searched again, so the arm
+  "no note" is the control); a refusal that says "continue" against one that
+  names the verb and the capture.
+- **What the surface permits and keeps**, the model fixed: `SearchStart` and
+  `Search` present or absent (1 `SearchAll` in 82 searches: the stop rule is
+  on the verb the model does not use); a page-read verb that returns a whole
+  page against one that must be walked; **the session's state after a panic
+  or a compile error**: today a slice panic ends the session and a failed
+  cell leaves its variables undefined, and the model answers by re-paging the
+  whole page (C1, C2, C3: 8, 13 and 14 full passes). An arm that keeps
+  the variables, or says what survived, tests whether the loop is the model's
+  habit or the harness's lost state; and the per-cell bound as now against a
+  lower one.
+- **The objective's kind**, everything fixed: well-covered news, a local
+  event with thin coverage in another language, one long page. The searches
+  a run starts moved with this kind (6 to 12 on the A runs, 18 to 89 on the
+  thin ones) more than with anything else seen, so a result that pools kinds
+  hides it.
 
-Each arm records, per run: the cell programs (so a loop is a program or a
-sequence), the calls per verb, pages read by rank, searches per subject, and
-whether the answer was found. A failure with a trace behind it (these four
-runs, once exported) names the arms worth running; the 40-objective set in
-the search-volume record is the first. The arms must run on computers that
-hold no live paper, and the paper and the owner's computer hold no arm
-(the goal file's D-rules for L3).
+Each arm records, per run, from the run's own events: the cell programs
+(`tool.result` `arguments.source`, so a loop is a program or a sequence), the
+host calls in each cell (`desk.cell` `egress_calls`), the notes shown, whether
+the session survived each cell (`reuse`), searches by verb and by subject,
+URLs tried by rank in the printed list, and whether the answer was found. The
+export that yields them is `choir trace export` under a key bound to the test
+computer; d@e takes the arms, and **the paper and the owner's computer hold
+no arm**. The research desk's model is read from
+`/mnt/persistent/files/System/model-policy.toml` on the computer: an arm that
+changes the model is a setting that outlives the run, so it is set by the
+owner as an E1 arm on a test computer, not by the reader. What the nine runs
+settle, and what they leave: the read loop is shown to have a mechanism (lost
+session state, then a whole-page re-read each cell) but not its scale (the
+largest cell made 188 host calls against a bound of 1,024); the many-search
+shape is shown (89 searches in 18 cells of looped wordings) but only for a
+thin-coverage kind and one run of it; the read share is shown to follow
+what the task needs and not what searches return.
