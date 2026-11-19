@@ -23,12 +23,32 @@ const (
 	// vectorEfSearch is the HNSW candidate list a search reads; it is raised
 	// from pgvector's 40 (docs/reference/EMBEDDINGGEMMA.md 0.11.2).
 	vectorEfSearch = 200
-	// vectorSearchTimeout is the deadline of each statement of a search.
+	// vectorSearchTimeout is the statement deadline of a search whose context
+	// carries none. A caller that has a deadline (the ranked answer's, 4 s:
+	// capture_rank.go) has that one only: each statement gets what is left of
+	// it, so the two never race.
 	vectorSearchTimeout = "5s"
 	// vectorMinPgvector is the oldest pgvector the code runs on: iterative
 	// index scans (hnsw.iterative_scan, hnsw.max_scan_tuples) are 0.8.0's.
 	vectorMinPgvector = "0.8.0"
 )
+
+// vectorStatementTimeout is nine tenths of the time left to the context's
+// deadline, in whole milliseconds (at least 1), or vectorSearchTimeout when it
+// has none. It is the one deadline, kept a little short so that an exact read
+// that passes it can still hand back the index's list as partial before the
+// context ends.
+func vectorStatementTimeout(ctx context.Context) string {
+	d, ok := ctx.Deadline()
+	if !ok {
+		return vectorSearchTimeout
+	}
+	ms := time.Until(d).Milliseconds() * 9 / 10
+	if ms < 1 {
+		ms = 1
+	}
+	return fmt.Sprintf("%dms", ms)
+}
 
 // vectorMaxScanTuples is how many index tuples an iterative scan may visit
 // before it gives up (pgvector's default is 20,000). A variable so a test can
@@ -300,7 +320,7 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, stmt := range []string{
-		`SET LOCAL statement_timeout = '` + vectorSearchTimeout + `'`,
+		`SET LOCAL statement_timeout = '` + vectorStatementTimeout(ctx) + `'`,
 		// strict_order keeps the answer in distance order whatever the filter
 		// drops; iterative scan keeps reading the graph until the limit is met.
 		`SET LOCAL hnsw.iterative_scan = strict_order`,

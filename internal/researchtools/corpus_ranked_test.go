@@ -63,7 +63,7 @@ func TestGuestListsCorpusdsRankedAnswerWithoutMergingAndCarriesTheNewFields(t *t
 	answer := CaptureSearchAnswer{
 		HitObjects: []objectgraph.Object{a, b, c},
 		Hits:       []CaptureTextHit{{CaptureID: b.CanonicalID, Snippet: "beta passage", BodyMatch: true, Passages: 2}},
-		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 14, BM25Kept: 1,
+		Ranked: &CaptureRanking{VectorAnswered: true, VectorRows: 14, VectorState: "exact", BM25Kept: 1,
 			Entries: []RankedCapture{
 				{CaptureID: c.CanonicalID, Reasons: []string{"meaning", "story"}, Stories: []string{"pub-1"}},
 				{CaptureID: a.CanonicalID, Reasons: []string{"meaning"}},
@@ -86,7 +86,7 @@ func TestGuestListsCorpusdsRankedAnswerWithoutMergingAndCarriesTheNewFields(t *t
 	if strings.Join(got[0].Reasons, ",") != "meaning,story" || strings.Join(got[0].ViaStories, ",") != "pub-1" {
 		t.Fatalf("reasons %+v", got[0])
 	}
-	if !info.VectorAnswered || info.VectorRows != 14 || info.BM25Kept != 1 || len(info.Stories) != 1 ||
+	if !info.VectorAnswered || info.VectorRows != 14 || info.BM25Kept != 1 || info.VectorState != "exact" || len(info.Stories) != 1 ||
 		strings.Join(info.Stories[0].CaptureIDs, ",") != c.CanonicalID || info.Stories[0].Title != "Harbor story" {
 		t.Fatalf("info %+v", info)
 	}
@@ -138,18 +138,18 @@ func TestGuestLogsTheVectorFieldsAndFallsBackToBM25Order(t *testing.T) {
 		return logs.String(), body.Captures
 	}
 	line, caps := run(answer)
-	if !strings.Contains(line, " vector=unavailable bm25_kept=0 caller=cell") || strings.Join(titles(caps), ",") != "Beta page,Alpha page" {
+	if !strings.Contains(line, " vector=unavailable vector_state=unavailable bm25_kept=0 caller=cell") || strings.Join(titles(caps), ",") != "Beta page,Alpha page" {
 		t.Fatalf("unavailable: %v\n%s", titles(caps), line)
 	}
-	answer.Ranked = &CaptureRanking{VectorAnswered: true, VectorRows: 7, BM25Kept: 2, Entries: answer.Ranked.Entries}
-	if line, _ = run(answer); !strings.Contains(line, " vector=7 bm25_kept=2 caller=cell") {
+	answer.Ranked = &CaptureRanking{VectorAnswered: true, VectorRows: 7, VectorState: "approximate", BM25Kept: 2, Entries: answer.Ranked.Entries}
+	if line, _ = run(answer); !strings.Contains(line, " vector=7 vector_state=approximate bm25_kept=2 caller=cell") {
 		t.Fatalf("answered:\n%s", line)
 	}
 	// A corpusd with no ranking (an older one) is BM25's order and is logged unavailable.
 	answer.Ranked = nil
 	answer.FullText = &CaptureTextInfo{Used: true, Indexed: 2, Captures: 2}
 	line, caps = run(answer)
-	if !strings.Contains(line, " vector=unavailable bm25_kept=0 ") || strings.Join(titles(caps), ",") != "Beta page,Alpha page" {
+	if !strings.Contains(line, " vector=unavailable vector_state=unavailable bm25_kept=0 ") || strings.Join(titles(caps), ",") != "Beta page,Alpha page" {
 		t.Fatalf("no ranking: %v\n%s", titles(caps), line)
 	}
 }
@@ -159,7 +159,7 @@ func TestRankedMirrorDecodesWhatPlatformWrites(t *testing.T) {
 	in := platform.CaptureSearchResponse{Ranked: &platform.CaptureRanking{
 		Entries:        []platform.RankedCapture{{CaptureID: "x", Reasons: []string{"text", "story"}, Stories: []string{"p"}, Score: 0.5}},
 		Stories:        []platform.RankedStory{{PublicationID: "p", VersionID: "v", Revision: 3, Title: "T", Score: 0.7, Day: "2026-11-19", Captures: []string{"x"}}},
-		VectorAnswered: true, VectorRows: 9, BM25Kept: 2, Note: "n"}}
+		VectorAnswered: true, VectorRows: 9, VectorState: "partial", VectorPartial: "captures: x", BM25Kept: 2, Note: "n"}}
 	raw, err := json.Marshal(in)
 	if err != nil {
 		t.Fatal(err)

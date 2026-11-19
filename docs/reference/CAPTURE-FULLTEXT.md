@@ -295,7 +295,17 @@ BM25's order when the vectors cannot answer) and merges nothing. Pages the old
 title-and-label half found that the answer does not hold are listed after it, in
 that half's own order, up to the limit; a page both hold gets that half's
 evidence (`matched`: `title`, `body`, `topic`, `outlet`, `language`). A page
-found by meaning or through a story that cites it carries `reasons` and no passage, and `recent` orders the answer newest first. Each result has what research needs: `capture_id` (citable, `ReadCapture` it),
+found by meaning or through a story that cites it carries `reasons` and no passage, and `recent` orders the answer newest first.
+
+**The order when the vectors cannot answer** (the rule; section 5 gives the reason it is one rule and not a merge): corpusd's answer
+is then BM25's pages in BM25's order, and the guest lists them first and the title-and-label half's other pages after them, in
+that half's own order. Before station V4 the guest interleaved the two halves by reciprocal rank, so a page only the title and labels
+found could sit above BM25's lower pages; now it sits below all of them. The reason: one ranker's order is kept whole, because
+reciprocal-rank fusion measured worse than either half's order kept (0.856 against 0.926 recall at ten), and a merge in the guest
+would make the answer depend on a half that corpusd cannot see (Jev's labels are the guest's). The cost: a page found only by a
+label stops competing with BM25's lower pages and is reached only after them, up to the limit. The corpus brief reads captures in
+the order given and claims nothing about order (its sweep tests are unchanged and pass); `scripts/status-corpus-reuse` reads
+`vector=`, `vector_state=` and `bm25_kept=` on the guest line and the share of lines the vector half answered. Each result has what research needs: `capture_id` (citable, `ReadCapture` it),
 `url`, `title`, times, and `passage` with its ordinal and the page's passage
 count. The tool takes `since`, `until`, `order`, or the same as words in the
 query (`since:2026-11-10 order:recent`), which is how a cell that passes only
@@ -433,7 +443,8 @@ ordinal 0 (about 300 tokens; two passages for 512). A hybrid ranker takes two
 lists of `(capture_id, passage_id, score)`: this index's top passages
 (`Search` returns the passage id of each page's best) and the vector index's,
 and combines them, by page, as station V4 does (`capture_rank.go`): the vector order, with BM25's top
-three pages guaranteed a place. It does not fuse by reciprocal rank: that measured 0.856
+three pages guaranteed a place; with no vectors the order is BM25's whole, with the label half after it (section 2, "The order when
+the vectors cannot answer"). It does not fuse by reciprocal rank: that measured 0.856
 recall at ten against 0.926 for this rule (EMBEDDINGGEMMA.md section 0.9). The
 catch-up's shape (idempotent walk by primary key, skip by lookup, yield) is
 the one to copy.

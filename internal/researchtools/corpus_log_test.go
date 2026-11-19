@@ -78,7 +78,7 @@ func TestCorpusSearchLineCarriesRunDeskAndCounts(t *testing.T) {
 	}
 	// A call that names no caller is a cell's verb call; caller is the last
 	// field so parsers of the earlier fields keep working.
-	if line := strings.TrimSpace(out); !strings.HasSuffix(line, " capped=false vector=unavailable bm25_kept=0 caller=cell") {
+	if line := strings.TrimSpace(out); !strings.HasSuffix(line, " capped=false vector=unavailable vector_state=unavailable bm25_kept=0 caller=cell") {
 		t.Fatalf("the line does not end with the caller of a verb call:\n%s", out)
 	}
 }
@@ -102,7 +102,7 @@ func TestCorpusSearchLineNamesTheBriefAsCaller(t *testing.T) {
 	if _, err := tool.Func(WithCorpusCaller(ctx, CorpusCallerBrief), json.RawMessage(`{"query":"harbor strike"}`)); err != nil {
 		t.Fatal(err)
 	}
-	if line := strings.TrimSpace(logs.String()); !strings.HasSuffix(line, " vector=unavailable bm25_kept=0 caller=brief") {
+	if line := strings.TrimSpace(logs.String()); !strings.HasSuffix(line, " vector=unavailable vector_state=unavailable bm25_kept=0 caller=brief") {
 		t.Fatalf("the brief's search does not say so:\n%s", line)
 	}
 }

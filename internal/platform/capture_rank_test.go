@@ -269,7 +269,7 @@ func TestRankedAnswerIsVectorOrderWithBM25sTopThreeInsertedAtTheirRanks(t *testi
 		t.Fatalf("answer %s, want %s", got, strings.Join(all, ","))
 	}
 	r := resp.Ranked
-	if !r.VectorAnswered || r.VectorRows != 15 || r.BM25Kept != 3 || r.VectorUnavailable != "" {
+	if !r.VectorAnswered || r.VectorRows != 15 || r.BM25Kept != 3 || r.VectorUnavailable != "" || r.VectorState != "exact" {
 		t.Fatalf("ranking info %+v", r)
 	}
 	// Reasons: BM25's pages were found by text (and by meaning, lower); the rest by meaning only.
@@ -296,7 +296,7 @@ func TestRankedAnswerIsVectorOrderWithBM25sTopThreeInsertedAtTheirRanks(t *testi
 			line = l
 		}
 	}
-	if !strings.Contains(line, " vector=15 bm25_kept=3") {
+	if !strings.Contains(line, " vector=15 vector_state=exact bm25_kept=3") {
 		t.Fatalf("journal line %q", line)
 	}
 }
@@ -387,7 +387,7 @@ func TestRankedAnswerIsBM25AloneAndSaysSoWhenVectorsCannotAnswer(t *testing.T) {
 				line = l
 			}
 		}
-		if !strings.Contains(line, " vector=unavailable bm25_kept=0") {
+		if !strings.Contains(line, " vector=unavailable vector_state=unavailable bm25_kept=0") {
 			t.Fatalf("%s: journal line %q", name, line)
 		}
 	}
@@ -653,5 +653,86 @@ func TestRankedRecallScriptRunsAgainstARealHandler(t *testing.T) {
 	}
 	if out, code = run(); code != 1 {
 		t.Fatalf("a missed bar: exit %d:\n%s", code, out)
+	}
+}
+
+func TestVectorStateIsExactApproximateOrPartial(t *testing.T) {
+	if s, p := vectorStateOf(VectorSearchResult{ExactScan: []string{"stories", "captures"}}); s != "exact" || p != "" {
+		t.Fatalf("exact: %q %q", s, p)
+	}
+	if s, _ := vectorStateOf(VectorSearchResult{ExactScan: []string{"stories"}, Approximate: []string{"captures"}}); s != "approximate" {
+		t.Fatalf("approximate: %q", s)
+	}
+	if s, p := vectorStateOf(VectorSearchResult{Approximate: []string{"captures"}, Partial: "captures: the exact scan did not finish"}); s != "partial" || p == "" {
+		t.Fatalf("partial: %q %q", s, p)
+	}
+}
+
+func TestRankedAnswerSaysApproximateWhenAListIsTheIndexsAndKeepsANumber(t *testing.T) {
+	f := newRankFixture(t)
+	f.disagree(t)
+	old := vectorExactMaxRows
+	vectorExactMaxRows = 3 // every list is larger: the index answers
+	t.Cleanup(func() { vectorExactMaxRows = old })
+	// A list the index fills to its limit stays the index's; size 1 asks for 4 rows of 15.
+	resp := f.rank(t, "zorblax", func(r *CaptureSearchRequest) { r.Size = 1 })
+	r := resp.Ranked
+	if r == nil || !r.VectorAnswered || r.VectorState != "approximate" || r.VectorRows == 0 {
+		t.Fatalf("ranking %+v", r)
+	}
+	var line string
+	for _, l := range f.journal() {
+		if strings.Contains(l, "shape=ranked") {
+			line = l
+		}
+	}
+	if !strings.Contains(line, " vector_state=approximate bm25_kept=") || !regexp.MustCompile(` vector=\d+ vector_state=`).MatchString(line) {
+		t.Fatalf("journal line %q", line)
+	}
+}
+
+func TestVectorStatementDeadlineIsTheCallersOneDeadline(t *testing.T) {
+	if got := vectorStatementTimeout(context.Background()); got != vectorSearchTimeout {
+		t.Fatalf("no deadline: %q", got)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	got := vectorStatementTimeout(ctx)
+	ms, err := strconv.Atoi(strings.TrimSuffix(got, "ms"))
+	if err != nil || ms < 3000 || ms > 3600 {
+		t.Fatalf("a 4 s deadline gave %q, want about 3,600 ms (nine tenths)", got)
+	}
+}
+
+func TestRankedAnswerDoesNotWalkAWithdrawnStory(t *testing.T) {
+	f := newRankFixture(t)
+	now := time.Now().UTC().Add(-time.Hour)
+	f.page(t, "cited", "plain", 99, now)
+	f.story(t, "doc-a", 1, "Harbor story", "The harbor story vec02 is told here.", time.Time{})
+	f.pass(t)
+	storyID, version := f.versionOf(t, "Harbor story", 1)
+	f.cite(t, version, f.id(t, "cited"))
+	if resp := f.rank(t, "harbor"); len(resp.Ranked.Stories) != 1 {
+		t.Fatalf("fixture: the story is not walked: %+v", resp.Ranked)
+	}
+	for name, stmt := range map[string]string{
+		"version tombstoned":     `UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = '` + version + `'`,
+		"publication tombstoned": `UPDATE og_objects SET tombstone = TRUE WHERE canonical_id = '` + storyID + `'`,
+	} {
+		if _, err := f.store.corpus().Exec(`UPDATE og_objects SET tombstone = FALSE WHERE canonical_id IN ('` + version + `', '` + storyID + `')`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.store.corpus().Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+		resp := f.rank(t, "harbor")
+		if len(resp.Ranked.Stories) != 0 {
+			t.Fatalf("%s: a withdrawn story was walked: %+v", name, resp.Ranked.Stories)
+		}
+		for _, e := range resp.Ranked.Entries {
+			if containsStr(e.Reasons, "story") {
+				t.Fatalf("%s: a capture was reached through a withdrawn story: %+v", name, e)
+			}
+		}
 	}
 }
