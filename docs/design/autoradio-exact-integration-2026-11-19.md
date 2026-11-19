@@ -302,12 +302,12 @@ Not toured: a file opened from Files (the drill computer's root holds no table o
 writes); a mail attachment; takes (no place in the launcher); a kill injected mid-sign-out on the simulator (the queue cannot inject one: the table in `account.test.ts` S14 and
 S15 covers the steps, as a model of the phone, not the real Keychain).
 
-The signed-out screens of the first run (Settings account, Files, Mail "sign-in is no longer accepted" for a whole first drive while the Swift pages said signed in): reproduced in the
-third run's survey drive (cdcb86370) and gone in the following ones. What the log showed: no `api: session` line at all in that drive, so the seam never reached the key read; the later drives
-of the same run, with the same key, were fine. Cause (fitted to the log, now fixed): app.ts bound the native handle with `bindNative(native)` at every answer, so a source answered with a
-missing or unavailable handle REPLACED the working one. `adoptNative` keeps a usable handle against a worse one and logs the state on change; the sixth run logged
-`api: native handle usable (answering fileList)` and every shared page worked. Not proven that a source was ever answered without a handle: the log line that would say so
-shows only `usable`. The failure did not recur in three runs after the change (and was not seen in the three before it only because the first drive is where it showed).
+The signed-out screens of the first run (Settings account, Files, Mail "sign-in is no longer accepted" for a whole first drive while the Swift pages said signed in): they recurred in the first
+drive after an install in the third and seventh `real` runs and not in the others, so it is a race. What the logs showed: no `api: session` line in that drive (the seam never reached a
+successful key read), and a resource's answer is kept until its page asks again. Cause (the best fit, not proven): the simulator's `proof-key` file is imported into the Keychain by the package
+module's init, which can run after the first shared-code read of the key on a fresh install; the read finds no key and the answer is kept. A real device has no ProofKey (the sign-in writes the key
+at a user act, long before any read), so it is not exposed. Fix (simulator only, compiled out of device builds): ModelsEntry.swift imports the proof key before any read. An earlier attempt,
+`adoptNative` (a missing native handle no longer replaces a working one), is kept as harmless but was NOT the cause of the recurrence (the seventh run failed with it in place).
 
 The 100 ms turn on the pages that moved, from the host's own refusals in the run logs: `podHome` was refused ("took 377.8 ms of its own (CPU) time") when the subscribed NPR feed (2.2 MB) came back,
 and 103.5 ms after a first cap of 300 000 characters; with 150 000 the sixth run has no refusal. A feed over 150 000 characters is read to its newest whole items only (older episodes of a very large
