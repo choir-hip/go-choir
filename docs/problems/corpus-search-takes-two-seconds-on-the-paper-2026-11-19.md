@@ -33,26 +33,63 @@ text than the page-text half.
 
 ## Belief
 
-The time is in corpusd, not in the guest or the network: the two operations
-sum to the guest's median. The cause inside each is not known. Guesses to
-test, none confirmed: a scan or a sort over every posting of a common word;
-a count over the whole scope on each call; the ranking step reading more
-rows than it keeps.
+The time is in corpusd, not in the guest or the network. Established by a
+read-only reproduction on the build machine (2026-11-19, 214,000 synthetic
+captures and 2.76 million term rows in Postgres 17; 100,000 pages and 406,463
+passages in the full-text index):
+
+- **The two journal lines nested.** `capture_search shape=terms` timed the whole
+  call, the text search included (`SearchCaptures` started its timer first). Of
+  the 1,315 ms mean, about 750 ms was the text half and about 560 ms the term
+  table. The two lines did not add up; the first one included the second.
+- **Term table.** The statement reads every posting of every query word, prefix
+  expansions included, and sorts them for `COUNT(DISTINCT)`; its time is the sum
+  of the words' postings (about 110 to 150 ms for one word of 82,000 postings,
+  against a posting of a rare word near zero). The primary key does not hold
+  `fetched_at`, so every posting was also a heap fetch (a bitmap heap scan,
+  90,000 buffers for a 185,000-posting query). Not the cause: the `COUNT(*)` of
+  the scope (15 to 20 ms) and fetching the 500 candidate objects.
+- **Text half.** The scan budget bounds the postings read (100,000) but not the
+  work after: the statement joined every matching passage to its passage and
+  page rows and numbered them by page, to keep 300, over a 923 MiB file with 8
+  MiB of SQLite page cache per connection. Reproduced at 100,000 pages with the
+  real budget: 356 to 640 ms at the median, 3.2 s worst, the production figures;
+  after the cut 106 to 163 ms at the median (ninth decile 177 to 969).
+  The reference page's "about 100 ms" came from a run with the budget scaled
+  down and a warm cache.
 
 ## What is being done
 
-- A read-only investigation reproduces the term search on the build machine
-  at about 200,000 pages and reads the query plans (2026-11-19).
-- The corpus brief does not land as built. It will run its threads'
-  searches at the same time under the one deadline, so the wait is the
-  slowest search and not the sum, and it lands only after its latency is
-  measured against these numbers.
+- Built in the lane `capture-search-latency` (orange; Ring-Expedite):
+  1. `idx_pct_cover` on `proj_capture_terms` (`owner_id, computer_id, term,
+     capture_id` INCLUDE `fetched_at`), built `CONCURRENTLY` outside a
+     transaction at start by `ensureCaptureTermsCoverIndex`; an index left
+     invalid by an interrupted build is dropped and rebuilt; the search works,
+     slower, until it is valid; one vacuum follows the build (without it the
+     index gained nothing on a never-vacuumed table). The statement and its
+     ranking are unchanged. On the build machine, 214,000 captures: 257 to 86,
+     744 to 205, 292 to 108, 210 to 84 ms for queries of 124k to 428k postings.
+  2. `capturefts.Search` takes the 1,500 best passages before the joins; the
+     answer is the same (proof in `reference/CAPTURE-FULLTEXT.md`, test
+     `TestTopPassagesAnswerLikeTheFullStatement`), and the old statement runs
+     when the cut could matter and for every windowed query.
+  3. The terms timer no longer contains the text search, so the journal's two
+     lines add up to the call (`TestSearchCaptureTimersDoNotNest`).
+- Not done, a quality decision: lower the scan budget; prune very common words
+  from the term search by document frequency; `pruneTerms` still keeps the three
+  rarest terms over budget.
+- The corpus brief does not land as built. It will run its threads' searches at
+  the same time under the one deadline, and lands only after its latency is
+  measured against the numbers after this change on the paper.
 
 ## Remaining error
 
-- The cause of the term search's time, and whether six searches at once
-  slow each other on corpusd.
-- The maximum of 18.4 seconds on the guest side has no matching corpusd
-  line over 7.2 seconds in the same hour; the rest of that call's time is
-  unexplained.
-- These are one hour's numbers from one computer.
+- The numbers above are synthetic corpora on a shared build machine, not the
+  paper's titles or disk. The after-numbers on the paper (the journal's two
+  lines, the guest's `captures_ms`) are the proof, and are not in yet.
+- Whether six searches at once slow each other on corpusd.
+- The 18.4 second maximum on the guest side has no matching corpusd line over
+  7.2 seconds in the same hour; the rest of that call's time is unexplained.
+- On the live database the index-only scan needs the table's visibility map;
+  autovacuum maintains it, and a vacuum is not run by the code.
+- One hour's numbers from one computer.
