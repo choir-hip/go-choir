@@ -112,6 +112,10 @@ type eventResolveReport struct {
 	Left []eventInput
 	// vec is the flush's vector neighbours (nil: none were asked for).
 	vec *eventVectors
+	// Queued is the questions the flush asked (each waiting capture once:
+	// not a duplicate, not one that already had a membership); ResearchReads
+	// the ones a research desk read or polled.
+	Queued, ResearchReads int
 	// ShortRecent is the recent slot's size. vectorEvents are the distinct
 	// events the captures' vector neighbours led to across the flush's calls,
 	// vectorOnlyEvts those the recent slot did not already offer.
@@ -342,28 +346,30 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		return report, fmt.Errorf("event layer: no Jev judge")
 	}
 	idx := rt.eventIndexFor(ownerID, computerID)
+	// The vector shortlist is fetched before the index is held: the request
+	// can take its whole timeout, and the management Stories read waits on
+	// idx.mu (eventSummary). It is one request for every waiting capture
+	// (never the embedder, never a reason to stop: an answer that is not there
+	// is named in the journal line and the flush goes on with the recent events).
 	idx.mu.Lock()
-	defer idx.mu.Unlock()
-	if err := idx.loadLocked(ctx, rt.store, ownerID, computerID); err != nil {
+	err := idx.loadLocked(ctx, rt.store, ownerID, computerID)
+	waiting := eventPendingLocked(idx, inputs)
+	idx.mu.Unlock()
+	if err != nil {
 		return report, err
 	}
-	var pending []eventInput
+	report.vec = rt.eventNeighbours(ctx, ownerID, computerID, waiting)
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	pending := eventPendingLocked(idx, inputs)
+	report.Queued = len(pending)
 	seen := map[string]bool{}
-	for _, in := range inputs {
-		id := strings.TrimSpace(in.Item.CaptureID)
-		if id == "" || seen[id] || idx.byCapture[id] != "" {
-			continue
+	for _, in := range pending {
+		seen[strings.TrimSpace(in.Item.CaptureID)] = true
+		if in.Research {
+			report.ResearchReads++
 		}
-		seen[id] = true
-		if in.At.IsZero() {
-			in.At = time.Now().UTC()
-		}
-		pending = append(pending, in)
 	}
-	// The vector shortlist: one request for every waiting capture (never the
-	// embedder, never a reason to stop: an answer that is not there is named
-	// in the journal line and the flush goes on with the recent events).
-	report.vec = rt.eventNeighbours(ctx, ownerID, computerID, pending)
 	// The fewest calls: the longest run of waiting captures whose one request
 	// fits the vendor's limits (jevbudget: 255 choices a question, 64k tokens a
 	// request, 32k state plus a question); a split names its limit in the log.
@@ -472,6 +478,25 @@ func (c *eventCandidates) dropLast() bool {
 	return false
 }
 
+// eventPendingLocked is the inputs still waiting for a membership, each capture
+// once. The caller holds idx.mu.
+func eventPendingLocked(idx *eventIndex, inputs []eventInput) []eventInput {
+	var pending []eventInput
+	seen := map[string]bool{}
+	for _, in := range inputs {
+		id := strings.TrimSpace(in.Item.CaptureID)
+		if id == "" || seen[id] || idx.byCapture[id] != "" {
+			continue
+		}
+		seen[id] = true
+		if in.At.IsZero() {
+			in.At = time.Now().UTC()
+		}
+		pending = append(pending, in)
+	}
+	return pending
+}
+
 // eventShortlistFor is the known events a chunk's questions offer.
 func eventShortlistFor(idx *eventIndex, vec *eventVectors, chunk []eventInput, now time.Time) *eventCandidates {
 	c := &eventCandidates{shared: eventShortlist(idx, now), own: make([][]*eventView, len(chunk)), reached: map[*eventView]bool{}}
@@ -487,9 +512,13 @@ func eventShortlistFor(idx *eventIndex, vec *eventVectors, chunk []eventInput, n
 			}
 			v := idx.events[idx.byCapture[nid]]
 			// A neighbour with no membership (a capture no flush has resolved,
-			// a sibling of this flush) offers nothing; an event already
-			// offered to every question, or to this one, is not offered twice.
+			// a sibling of this flush) or whose event is past the index's load
+			// caps offers nothing, and is counted; an event already offered to
+			// every question, or to this one, is not offered twice.
 			if v == nil {
+				if vec != nil {
+					vec.unmapped[nid] = true
+				}
 				continue
 			}
 			c.reached[v] = true
@@ -823,10 +852,17 @@ type eventVectors struct {
 	near map[string][]string
 	// Unavailable is why no neighbours came ("" when corpusd answered).
 	Unavailable string
-	// Rows is the neighbour rows returned; Missing the captures with no vector
-	// (not embedded yet, or not eligible); State how corpusd answered.
-	Rows, Missing int
-	State         string
+	// Rows is the neighbour rows returned. Unembedded are waiting captures
+	// with no vector yet (the case a title-overlap slot used to cover);
+	// Excluded those corpusd will never embed or may not return (private,
+	// tombstoned, superseded, not found); Cut those a deadline did not reach.
+	Rows, Unembedded, Excluded, Cut int
+	// State is ok, approximate or partial; "unavailable" when Unavailable is set.
+	State string
+	// unmapped are the neighbour captures that mapped to no event in the
+	// index (no membership yet, a sibling of the flush, or a membership or
+	// event past the index's load caps), counted once each.
+	unmapped map[string]bool
 }
 
 func (v *eventVectors) nearOf(captureID string) []string {
@@ -841,7 +877,7 @@ func (v *eventVectors) nearOf(captureID string) []string {
 // route, a refusal, a timeout or vectors that are not ready is named in
 // Unavailable and the flush goes on without the vector slot.
 func (rt *Runtime) eventNeighbours(ctx context.Context, ownerID, computerID string, pending []eventInput) *eventVectors {
-	vec := &eventVectors{near: map[string][]string{}}
+	vec := &eventVectors{near: map[string][]string{}, unmapped: map[string]bool{}}
 	if len(pending) == 0 {
 		return vec
 	}
@@ -878,16 +914,32 @@ func (rt *Runtime) eventNeighbours(ctx context.Context, ownerID, computerID stri
 				vec.Rows++
 			}
 		}
-		vec.Missing += len(ans.Missing)
-		if vec.State == "" || ans.State == "partial" || (ans.State == "approximate" && vec.State == "exact") {
-			vec.State = ans.State
-		}
+		vec.Unembedded += ans.Unembedded
+		vec.Excluded += ans.Excluded
+		vec.Cut += ans.Cut
+		vec.State = worseVectorState(vec.State, ans.State)
+	}
+	if vec.Cut > 0 {
+		vec.State = "partial"
 	}
 	if vec.Unavailable != "" {
 		log.Printf("event layer: vector slot unavailable: %s", vec.Unavailable)
-		vec.near, vec.Rows, vec.Missing, vec.State = map[string][]string{}, 0, 0, ""
+		vec.near, vec.Rows, vec.Unembedded, vec.Excluded, vec.Cut, vec.State = map[string][]string{}, 0, 0, 0, 0, "unavailable"
 	}
 	return vec
+}
+
+// worseVectorState folds corpusd's state (exact, approximate, partial) into
+// the flush's (ok, approximate, partial), keeping the worst.
+func worseVectorState(have, got string) string {
+	rank := map[string]int{"": 0, "ok": 1, "approximate": 2, "partial": 3}
+	if got == "exact" || got == "" {
+		got = "ok"
+	}
+	if rank[got] > rank[have] {
+		return got
+	}
+	return have
 }
 
 // noteShortlist adds one call's candidates to the flush's shortlist counts.
@@ -1158,7 +1210,7 @@ func (rt *Runtime) drainEventQueue(layerCtx context.Context, ownerID, computerID
 			log.Printf("event layer: %d captures unresolved: %v", len(items), err)
 			continue
 		}
-		log.Print(eventFlushLine(items, report))
+		log.Print(eventFlushLine(report))
 	}
 }
 
@@ -1194,23 +1246,24 @@ func (rt *Runtime) stopEventLayer() {
 }
 
 // eventFlushLine is the journal line of one flush, the same fields every time
-// (the station V5 acceptance reads them): captures queued and how many were
-// research's pages, the Jev calls, the shortlist by slot (recent: the slot's
-// size; vector: the events the captures' neighbours led to; vector_new: those
-// the recent slot did not already offer), vector=<neighbour rows>|unavailable
-// (and vector_missing: captures with no vector yet), and what became of them.
-func eventFlushLine(items []eventInput, r eventResolveReport) string {
-	research := 0
-	for _, in := range items {
-		if in.Research {
-			research++
-		}
-	}
-	vector, missing := "unavailable", 0
+// (the station V5 acceptance reads them; scripts/status-corpus-reuse): the
+// questions the flush asked (queued: each waiting capture once) and how many
+// were research's pages, the Jev calls, the shortlist by slot (recent: the
+// slot's size; vector: the events the captures' neighbours led to; vector_new:
+// those the recent slot did not already offer), vector=<neighbour rows>|
+// unavailable with vector_state=ok|approximate|partial|unavailable, the
+// captures with no neighbours by reason (missing_unembedded: no vector yet;
+// missing_excluded: private, tombstoned, superseded or unknown; a deadline cut
+// is partial, not missing), the neighbours that mapped to no event
+// (vector_unmapped), and what became of the questions.
+func eventFlushLine(r eventResolveReport) string {
+	vector, state := "unavailable", "unavailable"
+	var unembedded, excluded, unmapped int
 	if r.vec != nil && r.vec.Unavailable == "" {
-		vector, missing = fmt.Sprintf("%d", r.vec.Rows), r.vec.Missing
+		vector, state = fmt.Sprintf("%d", r.vec.Rows), firstNonEmpty(r.vec.State, "ok")
+		unembedded, excluded, unmapped = r.vec.Unembedded, r.vec.Excluded, len(r.vec.unmapped)
 	}
-	return fmt.Sprintf("event layer: resolved %d captures in %d calls: op=event_flush queued=%d research_reads=%d calls=%d shortlist_recent=%d shortlist_vector=%d shortlist_vector_new=%d vector=%s vector_missing=%d joined=%d minted=%d tentative=%d unresolved=%d corroborated=%d cost_usd=%.5f",
-		len(items), r.Calls, len(items), research, r.Calls, r.ShortRecent, len(r.vectorEvents), len(r.vectorOnlyEvts), vector, missing,
+	return fmt.Sprintf("event layer: resolved %d captures in %d calls: op=event_flush queued=%d research_reads=%d calls=%d shortlist_recent=%d shortlist_vector=%d shortlist_vector_new=%d vector=%s vector_state=%s missing_unembedded=%d missing_excluded=%d vector_unmapped=%d joined=%d minted=%d tentative=%d unresolved=%d corroborated=%d cost_usd=%.5f",
+		r.Queued, r.Calls, r.Queued, r.ResearchReads, r.Calls, r.ShortRecent, len(r.vectorEvents), len(r.vectorOnlyEvts), vector, state, unembedded, excluded, unmapped,
 		r.Joined, r.Minted, r.Tentative, r.Unresolved, len(r.Corroborated), r.CostUSD)
 }
