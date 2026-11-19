@@ -207,7 +207,7 @@
             (mkChoirGo devPkgs)
             devPkgs.pkg-config
             # PostgreSQL for dbxtest.Postgres (initdb, pg_ctl) and local dev.
-            devPkgs.postgresql_17
+            (devPkgs.postgresql_17.withPackages (ps: [ ps.pgvector ]))
           ];
         };
 
