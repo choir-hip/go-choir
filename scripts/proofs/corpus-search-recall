@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""corpus-search-recall: recall at ten of the corpus search on a fixed question set
+(station V4 of docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md,
+conjecture N1, ledger claim C144; the design is docs/design/corpus-first-retrieval-and-research-2026-11-18.md).
+
+  corpus-search-recall --set FILE --url URL --owner ID --computer ID
+        [--key-file FILE] [--header 'Name: value'] [--size 10] [--min-recall 0.92]
+        [--min-non-english 0.65] [--json]
+  corpus-search-recall --selftest
+
+The set is JSON lines, one question a line:
+  {"id": "s001", "query": "<the story's headline>",
+   "relevant": ["<capture id the story cites>", ...],
+   "non_english": ["<the subset of relevant whose page is not in English>", ...]}
+The 200-story set of the design (headline as the query, the pages the story
+cites as the answers) is NOT in the repository: its page text lived in the
+lead's scratch directory (docs/reference/EMBEDDINGGEMMA.md section 0.9). Build it
+on the paper's own data with a custodian-side read of each story's cites_capture
+edges and each page's language, in the format above, and keep it outside the repo.
+
+Each question is POSTed once to URL (corpusd's POST /internal/platform/captures/search:
+{"owner_id","computer_id","query","size","limit"}) and the ranked answer's first
+`size` pages are read (answer.ranked.entries[].capture_id; an answer with no
+ranked block, an older corpusd, falls back to answer.hits). Printed:
+  recall@10      the mean over questions of (relevant pages in the first ten) /
+                 (relevant pages); the micro figure (all pages together) beside it
+  non-English    of the pages marked non_english, the share in the first ten
+  vector half    how many answers had it (answer.ranked.vector_answered); the mean
+                 vector_rows and bm25_kept
+Exit 0 when recall >= --min-recall (0.92) and the non-English share >= --min-non-english
+(0.65); 1 when either is under; 2 for a bad argument or an unreadable set or key; 3 when
+a request failed; 4 when no answer had the vector half (the figures then measure BM25
+alone and say nothing about the ship rule).
+
+Against staging: URL is a corpus-search endpoint the holder of a test computer's
+key can reach, --key-file names a file holding the key (read once, sent as a
+bearer token, never printed). The route above is internal to the host (a bound guest
+or an internal caller); no public route that serves it was found when this was written,
+so a staging run goes through whatever reaches it (a guest's SearchWireCorpus is the same
+code path). Against a local test
+database: serve platform.ObjectGraphHandler.HandleCaptureSearch over a test Store
+with the fake embedder (internal/platform TestRankedRecallScriptRunsAgainstARealHandler
+does) and pass --header 'X-Internal-Caller: true'.
+"""
+import argparse
+import json
+import sys
+import threading
+import urllib.error
+import urllib.request
+
+
+def load_set(path):
+    qs = []
+    with open(path, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            q = json.loads(line)
+            if not q.get("query") or not q.get("relevant"):
+                raise ValueError("line %d: query and relevant are required" % n)
+            q.setdefault("non_english", [])
+            qs.append(q)
+    if not qs:
+        raise ValueError("the set is empty")
+    return qs
+
+
+def ask(url, headers, body, timeout):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=dict(headers, **{"Content-Type": "application/json"}), method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
+def top_ids(answer, size):
+    ranked = answer.get("ranked")
+    if ranked is not None:
+        return [e["capture_id"] for e in ranked.get("entries", [])][:size], ranked
+    return [h["capture_id"] for h in answer.get("hits", [])][:size], None
+
+
+def measure(qs, fetch, size):
+    per, hit_all, rel_all, ne_hit, ne_all = [], 0, 0, 0, 0
+    vec_answers, vec_rows, kept = 0, 0, 0
+    for q in qs:
+        ids, ranked = top_ids(fetch(q), size)
+        got = set(ids)
+        rel = set(q["relevant"])
+        h = len(rel & got)
+        per.append(h / len(rel))
+        hit_all += h
+        rel_all += len(rel)
+        ne = set(q["non_english"]) & rel
+        ne_all += len(ne)
+        ne_hit += len(ne & got)
+        if ranked and ranked.get("vector_answered"):
+            vec_answers += 1
+            vec_rows += ranked.get("vector_rows", 0)
+            kept += ranked.get("bm25_kept", 0)
+    return {"questions": len(qs), "recall_at_10": sum(per) / len(per), "recall_micro": hit_all / rel_all,
+            "non_english_pages": ne_all, "non_english_share": (ne_hit / ne_all) if ne_all else None,
+            "vector_answers": vec_answers, "vector_rows_mean": (vec_rows / vec_answers) if vec_answers else None,
+            "bm25_kept_total": kept}
+
+
+def verdict(m, min_recall, min_ne):
+    if m["vector_answers"] == 0:
+        return 4
+    bad = m["recall_at_10"] < min_recall
+    if m["non_english_share"] is not None and m["non_english_share"] < min_ne:
+        bad = True
+    return 1 if bad else 0
+
+
+def report(m, min_recall, min_ne):
+    ne = "no non-English pages in the set" if m["non_english_share"] is None else "%.1f%% of %d pages" % (100 * m["non_english_share"], m["non_english_pages"])
+    return "\n".join([
+        "questions %d" % m["questions"],
+        "recall@10 %.3f (bar %.2f); micro %.3f" % (m["recall_at_10"], min_recall, m["recall_micro"]),
+        "non-English pages in the first ten: %s (bar %.0f%%)" % (ne, 100 * min_ne),
+        "vector half answered %d of %d questions; mean vector rows %s; BM25 pages inserted %d"
+        % (m["vector_answers"], m["questions"], "-" if m["vector_rows_mean"] is None else "%.1f" % m["vector_rows_mean"], m["bm25_kept_total"]),
+    ])
+
+
+def selftest():
+    import http.server
+    import os
+    import tempfile
+
+    pages = {"q1": ["a", "b", "c"], "q2": ["x", "y"]}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            ok = self.headers.get("Authorization") == "Bearer testkey" and self.headers.get("X-Test") == "1"
+            ents = [{"capture_id": c} for c in (["z"] * 7 + pages[body["query"]] if ok else [])][:body["size"]]
+            out = json.dumps({"ranked": {"entries": ents, "vector_answered": True, "vector_rows": 5, "bm25_kept": 1}}).encode()
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(out)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    d = tempfile.mkdtemp()
+    sp, kp = os.path.join(d, "set.jsonl"), os.path.join(d, "key")
+    open(sp, "w").write(json.dumps({"query": "q1", "relevant": ["a", "b", "c"], "non_english": ["c"]}) + "\n" +
+                        json.dumps({"query": "q2", "relevant": ["x", "y", "w"], "non_english": []}) + "\n")
+    open(kp, "w").write("testkey\n")
+    url = "http://127.0.0.1:%d/" % srv.server_port
+    base = [sys.argv[0], "--set", sp, "--url", url, "--owner", "o", "--computer", "c", "--key-file", kp, "--header", "X-Test: 1"]
+    # q1: 3 of 3 in the ten; q2: 2 of 3 -> macro (1 + 0.667)/2 = 0.833; non-English 1 of 1.
+    code = main(base + ["--min-recall", "0.8"])
+    code_low = main(base + ["--min-recall", "0.9"])
+    srv.shutdown()
+    assert code == 0, code
+    assert code_low == 1, code_low
+    print("selftest ok")
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--set")
+    ap.add_argument("--url")
+    ap.add_argument("--owner")
+    ap.add_argument("--computer")
+    ap.add_argument("--key-file")
+    ap.add_argument("--header", action="append", default=[])
+    ap.add_argument("--size", type=int, default=10)
+    ap.add_argument("--min-recall", type=float, default=0.92)
+    ap.add_argument("--min-non-english", type=float, default=0.65)
+    ap.add_argument("--timeout", type=float, default=30)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--selftest", action="store_true")
+    args = ap.parse_args(argv[1:] if argv else None)
+    if args.selftest:
+        return selftest()
+    if not (args.set and args.url and args.owner and args.computer):
+        print("--set, --url, --owner and --computer are required", file=sys.stderr)
+        return 2
+    try:
+        qs = load_set(args.set)
+        headers = {}
+        for h in args.header:
+            k, _, v = h.partition(":")
+            headers[k.strip()] = v.strip()
+        if args.key_file:
+            with open(args.key_file) as f:
+                headers["Authorization"] = "Bearer " + f.read().strip()
+    except (OSError, ValueError) as e:
+        print("cannot read the set or the key: %s" % e.__class__.__name__, file=sys.stderr)
+        return 2
+    failed = []
+
+    def fetch(q):
+        try:
+            return ask(args.url, headers, {"owner_id": args.owner, "computer_id": args.computer, "query": q["query"],
+                                           "size": args.size, "limit": 2 * args.size}, args.timeout)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            failed.append(e.__class__.__name__)
+            return {}
+
+    m = measure(qs, fetch, args.size)
+    if failed:
+        print("%d requests failed (%s); the figures are not a measurement" % (len(failed), failed[0]), file=sys.stderr)
+        return 3
+    print(json.dumps(m) if args.json else report(m, args.min_recall, args.min_non_english))
+    return verdict(m, args.min_recall, args.min_non_english)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

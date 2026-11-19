@@ -57,24 +57,25 @@ func TestParseCorpusWindow(t *testing.T) {
 	}
 }
 
-func TestMergeCaptureHalves(t *testing.T) {
-	a := CorpusCapture{CaptureID: "a", Matched: []string{"body"}, Passage: "pa", FetchedAt: "2026-11-01T00:00:00Z"}
-	b := CorpusCapture{CaptureID: "b", Matched: []string{"title"}, FetchedAt: "2026-11-05T00:00:00Z"}
-	c := CorpusCapture{CaptureID: "c", Matched: []string{"title"}, FetchedAt: "2026-11-03T00:00:00Z"}
-	bBody := b
-	bBody.Matched = []string{"title", "body"}
-	bBody.Passage = "pb"
-	// b is found by both halves and rises above a, which only the text found.
-	got := mergeCaptureHalves([]CorpusCapture{a, bBody}, []CorpusCapture{b, c}, "relevance", 10)
-	if len(got) != 3 || got[0].CaptureID != "b" || got[1].CaptureID != "a" || got[2].CaptureID != "c" || got[0].Passage != "pb" {
-		t.Fatalf("relevance merge: %+v", got)
+// The guest lists corpusd's one answer as it is; it ranks nothing together.
+func TestAppendLabelHalfKeepsTheRankedAnswerAndOnlyAppendsAfterIt(t *testing.T) {
+	a := CorpusCapture{CaptureID: "a", Matched: []string{"body"}, Passage: "pa", Reasons: []string{"text"}}
+	b := CorpusCapture{CaptureID: "b", Matched: []string{"body"}, Reasons: []string{"meaning"}}
+	c := CorpusCapture{CaptureID: "c", Matched: []string{"title"}}
+	d := CorpusCapture{CaptureID: "d", Matched: []string{"outlet"}}
+	// b is also the label half's first page, and under a rank fusion would rise
+	// above a. It stays second; the label half's evidence is added to it.
+	lb := b
+	lb.Matched = []string{"title"}
+	got := appendLabelHalf([]CorpusCapture{a, b}, []CorpusCapture{lb, c, d}, 10)
+	if strings.Join(ids(got), ",") != "a,b,c,d" || !containsString(got[1].Matched, "title") || got[1].Reasons[0] != "meaning" {
+		t.Fatalf("answer %+v", got)
 	}
-	got = mergeCaptureHalves([]CorpusCapture{a, bBody}, []CorpusCapture{b, c}, "recent", 10)
-	if got[0].CaptureID != "b" || got[1].CaptureID != "c" || got[2].CaptureID != "a" {
-		t.Fatalf("recent merge: %+v", got)
+	if got = appendLabelHalf([]CorpusCapture{a, b}, []CorpusCapture{c, d}, 3); strings.Join(ids(got), ",") != "a,b,c" {
+		t.Fatalf("limit: %v", ids(got))
 	}
-	if got := mergeCaptureHalves([]CorpusCapture{a, bBody}, nil, "relevance", 1); len(got) != 1 {
-		t.Fatalf("limit: %+v", got)
+	if got = appendLabelHalf([]CorpusCapture{a, b}, nil, 1); strings.Join(ids(got), ",") != "a" {
+		t.Fatalf("limit: %v", ids(got))
 	}
 }
 

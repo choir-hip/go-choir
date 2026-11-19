@@ -1261,6 +1261,37 @@ func assertNoAbsenceClaim(t *testing.T, label, text string) {
 // Every render path: found, nothing found, did not answer, deadline cut, left
 // out, dropped, the skip and failure sentences, and the real tool over each
 // kind of sink. No absence claim and no description of the search's scope.
+// The ranked answer's new fields (reasons, via_stories, a result-level stories
+// list, a page found by meaning with no passage) are read and ignored safely:
+// the brief lists the page, claims nothing about what is absent or covered.
+func TestBriefReadsTheRankedAnswerShapeAndStillClaimsNothing(t *testing.T) {
+	meaning := briefCapture(7, "")
+	meaning["matched"], meaning["reasons"] = []string{}, []string{"meaning", "story"}
+	meaning["via_stories"] = []string{"pub-1"}
+	raw, _ := json.Marshal(map[string]any{"query": "q", "published": []any{}, "events": []any{},
+		"captures": []map[string]any{meaning, briefCapture(8, "a passage of the page")}, "capture_count": 2,
+		"stories": []map[string]any{{"publication_id": "pub-1", "title": "Harbor story", "revision": 2, "capture_ids": []string{"cap-7"}}}})
+	res := buildResearchBrief(context.Background(), planN(2), fixedSearch(raw))
+	if res.outcome != briefDelivered || res.captures != 1 && res.captures != 2 {
+		t.Fatalf("outcome %q captures %d: %s", res.outcome, res.captures, res.reason)
+	}
+	for _, want := range []string{"cap-7", "cap-8", "a passage of the page"} {
+		if !strings.Contains(res.text, want) {
+			t.Errorf("brief lacks %q:\n%s", want, res.text)
+		}
+	}
+	assertNoAbsenceClaim(t, "ranked shape", res.text)
+	lower := strings.ToLower(res.text)
+	for _, phrase := range scopePhrases {
+		if strings.Contains(lower, strings.ToLower(phrase)) {
+			t.Fatalf("the brief describes its scope (%q):\n%s", phrase, res.text)
+		}
+	}
+	if res.passages != 1 {
+		t.Fatalf("passages %d: a page found by meaning carries none", res.passages)
+	}
+}
+
 func TestBriefNeverClaimsAnAbsenceOrDescribesItsScopeOnAnyPath(t *testing.T) {
 	check := func(label, text string) {
 		t.Helper()

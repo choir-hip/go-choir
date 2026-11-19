@@ -288,11 +288,14 @@ the passage matched), `hit_objects` (the capture objects, no body) and
 terms). Deadline 8 s; a failure is reported in `fulltext` and the old half
 still answers.
 
-**Guest merge** (`researchtools.searchCapturesFor`): the text half and the old
-title-and-label half are merged by reciprocal rank (k 60), or by time for
-`recent`; a capture both found rises and carries both halves' evidence
-(`matched`: `title`, `body`, `topic`, `outlet`, `language`) and the passage.
-Each result has what research needs: `capture_id` (citable, `ReadCapture` it),
+**Guest list** (`researchtools.searchCapturesFor`): the guest lists corpusd's one
+ranked answer as it comes (`CaptureSearchResponse.Ranked`, `platform/capture_rank.go`:
+vector order with BM25's top three pages guaranteed a place, or BM25's pages in
+BM25's order when the vectors cannot answer) and merges nothing. Pages the old
+title-and-label half found that the answer does not hold are listed after it, in
+that half's own order, up to the limit; a page both hold gets that half's
+evidence (`matched`: `title`, `body`, `topic`, `outlet`, `language`). A page
+found by meaning or through a story that cites it carries `reasons` and no passage, and `recent` orders the answer newest first. Each result has what research needs: `capture_id` (citable, `ReadCapture` it),
 `url`, `title`, times, and `passage` with its ordinal and the page's passage
 count. The tool takes `since`, `until`, `order`, or the same as words in the
 query (`since:2026-11-10 order:recent`), which is how a cell that passes only
@@ -429,7 +432,9 @@ field). The plan in [EMBEDDINGGEMMA.md](EMBEDDINGGEMMA.md) section 0.8 embeds
 ordinal 0 (about 300 tokens; two passages for 512). A hybrid ranker takes two
 lists of `(capture_id, passage_id, score)`: this index's top passages
 (`Search` returns the passage id of each page's best) and the vector index's,
-and fuses by reciprocal rank at passage level, then groups by capture. The
+and combines them, by page, as station V4 does (`capture_rank.go`): the vector order, with BM25's top
+three pages guaranteed a place. It does not fuse by reciprocal rank: that measured 0.856
+recall at ten against 0.926 for this rule (EMBEDDINGGEMMA.md section 0.9). The
 catch-up's shape (idempotent walk by primary key, skip by lookup, yield) is
 the one to copy.
 
