@@ -106,7 +106,8 @@ public final class AutoradioModule: ExactPackage {
 
     /// The native half of sign-out: playback stops, the Swift run sheet posts what it holds under the old key, the key goes, the Swift
     /// stores are wiped, the revoke is sent in the background (ChoirApp.signOut). Answers when that has finished.
-    public func signOutForShared() async { await choir?.signOut() }
+    /// `keepKey`: the account CHANGED (a different key is stored): only the old account's Swift stores go, the key stays. Otherwise the whole sign-out.
+    public func signOutForShared(keepKey: Bool = false) async { if keepKey { await choir?.accountWipe.run() } else { await choir?.signOut() } }
 
     public init(context: ExactPackageContext) {
         self.context = context

@@ -4,6 +4,7 @@
 // The kit (package module ExactPkg_autoradio) finds AutoradioModelsRegistrar by name; see ExternalModels.swift there.
 import Foundation
 import ExactPkg_autoradio
+import Security
 
 // The one native call the signed-in seam (api.ts) makes, with the reason only native code can meet: it reads the Keychain item today's
 // sign-in wrote (service news.choir.autoradio.choir), in place. Exact's own secret store keeps items under this app's id, so shared code
@@ -16,17 +17,29 @@ import ExactPkg_autoradio
 // The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
 // by shared code (AutoradioLab/account.ts); the reason it is native is that the key is a Keychain item the Swift sign-in wrote and the Swift stores
 // (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift. It goes with them when sign-in itself moves.
+// The sign-out reconcile (AutoradioLab/account.ts) needs the stored key as THREE answers, which the reader's `nil` cannot give: `keystate` -> present (the item is
+// there), absent (the Keychain answered item-not-found) or unreadable (locked before the first unlock, or any other status). Read only: no data is returned, nothing
+// is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
 final class ModelsModule: ExactModule {
-    override func call(_ request: [String: Any]) -> [String: Any] { MailSeal().reply(request) ?? CredentialReader().reply(request) }
+    static func keyState() -> String {
+        if Demo.isOn { return "unreadable" }
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "news.choir.autoradio.choir", kSecAttrAccount as String: KeyAccount.apiKey, kSecMatchLimit as String: kSecMatchLimitOne]
+        switch SecItemCopyMatching(q as CFDictionary, nil) { case errSecSuccess: return "present"; case errSecItemNotFound: return "absent"; default: return "unreadable" }
+    }
+    override func call(_ request: [String: Any]) -> [String: Any] {
+        if (request["op"] as? String) == "keystate" { return ["state": Self.keyState()] }
+        return MailSeal().reply(request) ?? CredentialReader().reply(request)
+    }
     override func later(_ request: [String: Any], reply: ExactReply) {
-        if (request["op"] as? String) == "signOut" {
+        let op = request["op"] as? String
+        if op == "signOut" || op == "wipe" {
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send(["done": false]); return }
-                await m.signOutForShared()
+                await m.signOutForShared(keepKey: op == "wipe")
                 MailSeal().forget()      // the mail copy's key goes with the account, whatever shared code does next
-                // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done,
-                // and shared code wipes nothing (a retry is safe). This does not change how the Swift sign-out deletes.
-                reply.send(["done": !CredentialReader().keyRemains()])
+                // Truthful: the Keychain delete ignores its status (ChoirClient.swift), so read the item again. Still there: not done, and shared code wipes
+                // nothing (a retry is safe). Idempotent: with the key already gone it only runs the Swift wipe again.
+                reply.send(["done": op == "wipe" || !CredentialReader().keyRemains()])
             }
             return
         }

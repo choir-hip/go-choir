@@ -9,6 +9,15 @@
 // started by a Contract action, so shared code can lead and call native once; no hook is needed, and no shared store can be missed by a
 // native list. The drift guard in account.test.ts (S4) fails when a shared module keeps a path no wipe here covers.
 // Sign-in stays Swift; the key is never read or moved here.
+//
+// ONE FUNCTION decides what a launch and the end of every sign-out do about the account's data (`reconcile`, below): three facts in, one action out.
+//   key state (native, THREE answers: present with a digest / absent = the Keychain said item-not-found / unreadable = locked or anything else),
+//   stamp (the SHA-256 of the key of the account whose data the shared stores hold: none / same / other), marker (`signout-pending`: none / pending).
+// Rules (proved by the table in account.test.ts): an unreadable key never wipes and never adopts. A key present with a pending marker means the native half never
+// deleted the key: the marker goes, nothing is wiped. A key absent with a stamp or a marker means a sign-out is unfinished: finish it (the native sign-out, which is
+// idempotent and reruns the Swift wipe, THEN the shared wipe, THEN the stamp and the marker go). A key present whose digest is not the stamp's is another account: wipe
+// both halves, THEN write the new stamp. A stamp or marker is advanced or removed ONLY when every wipe succeeded; otherwise it stays, the next launch tries again, and
+// the page is told which stores failed. A native call that outlives its deadline keeps its continuation, and the marker stays until it answers or the next launch reconciles.
 import type { Storage, Store } from './app.contract.d.ts';
 import * as podcast from './podcast.ts';
 import { wipeMail } from './mail.ts';
@@ -19,7 +28,7 @@ import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
 import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
 import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
-import { nextGeneration, resetSession, sessionDigest, beginSignOut, abortSignOut } from './api.ts';
+import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
@@ -67,70 +76,159 @@ export async function wipeAll(storage: Storage | undefined, store: Store | undef
   return failed;
 }
 
-export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' }): Promise<unknown> };
+export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe' }): Promise<unknown> };
 export type SignOutResult = { done: boolean; failed: string; message: string };
 /** A deadline, not a limit: a native sign-out that never answers leaves the page retryable. */
 export const NATIVE_DEADLINE_MS = 30000;
 
 const timeout = (ms: number): Promise<'timeout'> => new Promise((r) => setTimeout(() => r('timeout'), ms));
+/** Fails closed: no storage, or a write that fails, is not a marker. */
 const mark = async (storage: Storage | undefined, path: string, text: string): Promise<boolean> => {
-  if (!storage) return true;
+  if (!storage) return false;
   try { await storage.fs.atomicWriteFile(path, new TextEncoder().encode(text)); return true; } catch { return false; }
 };
+const exists = async (storage: Storage, path: string): Promise<boolean> => { try { await storage.fs.stat(path); return true; } catch { return false; } };
+const removeFile = async (storage: Storage | undefined, path: string): Promise<boolean> => {
+  if (!storage) return true;
+  try { await storage.fs.rm(path); } catch { /* absent */ }
+  return !(await exists(storage, path));
+};
 
-/** Sign-out. A native build refuses (done: false, nothing wiped) when its native module is absent: wiping the shared stores while the key stays
- * would report a sign-out that did not happen. The web build has no key to delete and no sign-in; it has nothing to sign out of. */
+/** The stores of the wipe list WITHOUT the stamp: the stamp is advanced or removed only after every one of these succeeded. */
+export const DATA_WIPES: Wipe[] = WIPES.filter((w) => w.name !== 'account-stamp');
+
+// ---- the decision (pure)
+
+export type StampFact = 'none' | 'same' | 'other';
+export type MarkerFact = 'none' | 'pending';
+export type Facts = { key: KeyState; stamp: StampFact; marker: MarkerFact };
+export type Action = 'nothing' | 'adopt' | 'clear-marker' | 'finish' | 'account-change';
+
+export function decide(f: Facts): Action {
+  if (f.key === 'unreadable') return 'nothing';                       // never wipes, never adopts
+  if (f.key === 'present') {
+    if (f.marker === 'pending') return 'clear-marker';                // the native half did not delete the key: nothing was signed out
+    return f.stamp === 'none' ? 'adopt' : f.stamp === 'same' ? 'nothing' : 'account-change';
+  }
+  return f.marker === 'pending' || f.stamp !== 'none' ? 'finish' : 'nothing';   // absent
+}
+
+// ---- the native half, under a deadline
+
+export type Native = { signOut(onLate?: () => void): Promise<boolean>; wipe(onLate?: () => void): Promise<boolean> };
+/** The app module's two ops as booleans. A call that outlives `ms` answers false NOW, but keeps its continuation: `onLate` runs if it answers done:true afterwards. */
+export function nativeOf(later: ((r: { op: string }) => Promise<unknown>) | null, ms = NATIVE_DEADLINE_MS): Native {
+  const call = (op: 'signOut' | 'wipe', onLate?: () => void): Promise<boolean> => {
+    if (!later) return Promise.resolve(false);
+    let timedOut = false;
+    const p: Promise<boolean> = later({ op }).then((r) => !!r && (r as { done?: unknown }).done === true, () => false);
+    void p.then((ok) => { if (timedOut && ok) onLate?.(); });
+    return Promise.race([p, timeout(ms).then(() => { timedOut = true; return false; })]);
+  };
+  return { signOut: (l) => call('signOut', l), wipe: (l) => call('wipe', l) };
+}
+
+export type Reconciled = { action: Action; failed: string[] };
+
+async function stampFact(storage: Storage, digest: string): Promise<StampFact> {
+  let stamp = '';
+  try { stamp = new TextDecoder().decode(await storage.fs.readFile(STAMP_FILE)); } catch { /* none */ }
+  return stamp === '' ? 'none' : stamp === digest ? 'same' : 'other';
+}
+
+/** Most wipes swallow "absent", so a wipe that did nothing looks like one that worked. After the wipes, every path they cover is looked at: a survivor is a failure. */
+async function leftovers(storage: Storage | undefined): Promise<string[]> {
+  if (!storage) return [];
+  const out: string[] = [];
+  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
+  return out;
+}
+
+/** Wipe every shared store; then, ONLY if every one succeeded and nothing is left, run `after`. Returns the names that failed. */
+async function sharedWipeThen(storage: Storage | undefined, store: Store | undefined, after: () => Promise<void>): Promise<string[]> {
+  const failed = [...(await wipeAll(storage, store, DATA_WIPES)), ...(await leftovers(storage))];
+  if (failed.length === 0) await after();
+  return failed;
+}
+
+/** The one function: read the three facts, decide, act. Run at launch (`settleAccount`) and at the end of every sign-out attempt. */
+export async function reconcile(storage: Storage | undefined, store: Store | undefined, native: Native): Promise<Reconciled> {
+  if (!storage) return { action: 'nothing', failed: [] };
+  for (let round = 0; round < 2; round++) {
+    const k = await keyState();
+    const marker: MarkerFact = (await exists(storage, PENDING_FILE)) ? 'pending' : 'none';
+    const stamp: StampFact = k.state === 'present' ? await stampFact(storage, k.digest) : (await exists(storage, STAMP_FILE)) ? 'other' : 'none';
+    const action = decide({ key: k.state, stamp, marker });
+    if (action === 'clear-marker') { await removeFile(storage, PENDING_FILE); continue; }     // then the stamp rules apply to the same key
+    if (action === 'adopt') { await mark(storage, STAMP_FILE, k.digest); return { action, failed: [] }; }
+    if (action === 'finish') {
+      const done = async (): Promise<void> => { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); };
+      if (!(await native.signOut(() => { void sharedWipeThen(storage, store, done); }))) return { action, failed: ['native'] };     // the marker and the stamp stay
+      const failed = await sharedWipeThen(storage, store, done);
+      console.log(`account: finished an interrupted sign-out, ${failed.length} failed`);
+      return { action, failed };
+    }
+    if (action === 'account-change') {
+      const stamp2 = async (): Promise<void> => { await mark(storage, STAMP_FILE, k.digest); };
+      if (!(await native.wipe(() => { void sharedWipeThen(storage, store, stamp2); }))) return { action, failed: ['native'] };    // the old stamp stays: tried again next launch
+      const failed = await sharedWipeThen(storage, store, stamp2);
+      console.log(`account: another account signed in, ${failed.length} failed`);
+      return { action, failed };
+    }
+    return { action, failed: [] };
+  }
+  return { action: 'nothing', failed: [] };
+}
+
+// ---- sign-out
+
 export async function accountSignOut(
   a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
-  opts: { wipes?: Wipe[]; deadlineMs?: number } = {},
+  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
 ): Promise<SignOutResult> {
   // Demo mode has no account of its own: the key on the phone (if any) is the real one, and the demo's sign-out must neither end it nor wipe it.
   if (a.demo) return { done: false, failed: '', message: 'Demo mode has no account to sign out of. Nothing was changed.' };
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };
-  // The marker first: if the app dies after the key is gone and before the wipes are finished, the next launch finishes them.
+  const step = opts.crash ?? ((): void => undefined);
+  // The marker first: if the app dies after the key is gone and before the wipes are finished, the next launch finishes them (and if the key is still there, it clears it).
   if (!(await mark(storage, PENDING_FILE, '1'))) return { done: false, failed: '', message: 'Sign-out did not start. Try again.' };
+  step('marker');
   // The generation moves and sealing stops BEFORE the native call: a write in flight that would land after the key is gone refuses itself.
   await beginSignOut();
-  let ok = false;
-  try {
-    const r = await Promise.race([native.later({ op: 'signOut' }), timeout(opts.deadlineMs ?? NATIVE_DEADLINE_MS)]);
-    ok = r !== 'timeout' && !!r && (r as { done?: unknown }).done === true;
-  } catch { ok = false; }
-  if (!ok) {
+  step('begun');
+  let late = false;
+  let nativeDone: Promise<unknown>;
+  try { nativeDone = native.later({ op: 'signOut' }); } catch { nativeDone = Promise.resolve({ done: false }); }
+  const wipes = opts.wipes ?? DATA_WIPES;
+  // A native call that outlives the deadline keeps its continuation: if it answers done:true later, the shared stores are wiped then and the marker goes.
+  nativeDone.then(async (r) => {
+    if (!late || !r || (r as { done?: unknown }).done !== true) return;
+    await sharedWipeThen(storage, store, async () => { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); });
+  }, () => undefined);
+  const r = await Promise.race([nativeDone.then((x) => x, () => ({ done: false, threw: true })), timeout(opts.deadlineMs ?? NATIVE_DEADLINE_MS)]);
+  if (r === 'timeout') { late = true; return { done: false, failed: '', message: 'Sign-out is taking long. It will finish by itself; nothing more to do.' }; }   // the marker stays; sealing stays off
+  const ans = r as { done?: unknown; threw?: boolean };
+  if (ans.done !== true) {
+    // Not signed out (the key may still be there). An explicit "not done" means the key remains: the marker goes. A throw is unknown: the marker stays and the next
+    // reconcile decides by the key (present: the marker is cleared and nothing is wiped).
     abortSignOut();
-    // Not signed out (the key may still be there): nothing is wiped, so the marker goes, and a retry starts clean.
-    try { await storage?.fs.rm(PENDING_FILE); } catch { /* absent */ }
+    if (!ans.threw) await removeFile(storage, PENDING_FILE);
     return { done: false, failed: '', message: 'Sign-out did not finish. Try again.' };
   }
-  const failed = await wipeAll(storage, store, opts.wipes ?? WIPES);
-  if (failed.length === 0) { try { await storage?.fs.rm(PENDING_FILE); } catch { /* absent */ } }
-  return { done: true, failed: failed.join(','), message: '' };
+  step('native');
+  const run = wipes.map((w) => ({ ...w, run: async (s: Storage | undefined, st: Store | undefined) => { step('wipe:' + w.name); return w.run(s, st); } }));
+  const failed = [...(await wipeAll(storage, store, run)), ...(opts.wipes ? [] : await leftovers(storage))];
+  step('wiped');
+  if (failed.length === 0) { await removeFile(storage, STAMP_FILE); await removeFile(storage, PENDING_FILE); return { done: true, failed: '', message: '' }; }
+  // Signed out, but not everything could be cleared: the marker and the stamp stay, the next launch tries again, and the page says which stores.
+  return { done: true, failed: failed.join(','), message: `Signed out, but these could not be cleared yet: ${failed.join(', ')}. They will be cleared the next time the app starts.` };
 }
 
-let settled: Promise<void> | null = null;
-/** The first answer after a launch waits for this. (1) A sign-out that was cut short (the marker is there): finish the wipes, then the answer
- * is a signed-out one. (2) The stored key belongs to another account than the one whose data the stores hold (the stamp): wipe, then keep the
- * new account's stamp. A phone with no key does nothing here: a locked Keychain looks the same as no key and must not cost anyone their data;
- * the stamp catches the next account instead. (A marker or stamp that cannot be read is treated as absent; no stamp means "adopt".) */
-export function settleAccount(storage: Storage | undefined, store: Store | undefined): Promise<void> {
-  if (!settled) settled = (async () => {
-    if (!storage) return;
-    await forgetOldCopy(storage);                       // a "Show original" document a past session left in the cache (plain text of a message)
-    let pending = false;
-    try { await storage.fs.stat(PENDING_FILE); pending = true; } catch { /* none */ }
-    if (pending) {
-      const failed = await wipeAll(storage, store);
-      if (failed.length === 0) { try { await storage.fs.rm(PENDING_FILE); } catch { /* absent */ } }
-      console.log(`account: finished an interrupted sign-out, ${failed.length} failed`);
-      return;
-    }
-    const now = await sessionDigest();
-    if (!now) return;
-    let stamp = '';
-    try { stamp = new TextDecoder().decode(await storage.fs.readFile(STAMP_FILE)); } catch { /* none: adopt */ }
-    if (stamp !== '' && stamp !== now) { await wipeAll(storage, store); console.log('account: another account signed in; the old one’s data was wiped'); }
-    if (stamp !== now) await mark(storage, STAMP_FILE, now);
-  })();
+let settled: Promise<Reconciled> | null = null;
+let lastReconciled: Reconciled = { action: 'nothing', failed: [] };
+/** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops. */
+export function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
+  if (!settled) settled = (async () => { await forgetOldCopy(storage); lastReconciled = await reconcile(storage, store, native); return lastReconciled; })();
   return settled;
 }
 /** For tests. */

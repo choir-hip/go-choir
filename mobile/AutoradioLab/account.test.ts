@@ -13,10 +13,14 @@
 //  S11 a demo sign-out answers done false BEFORE any native call, marker or wipe (the real account is not the demo's to end).
 //  S12 the drift guard runs the real wipes against a recording storage: every `app:/` literal the modules name is among the recorded removals (or under one),
 //      and the native mail key is forgotten.   S13 the clips remembered in memory are forgotten at sign-out.
+//  S14 THE TABLE (auth round 2, review 2026-11-19): key state (3) x stamp (3) x marker (2): what a launch does, and that it never wipes while the key is unreadable or present+same.
+//  S15 a kill at each step boundary of a sign-out, then a relaunch: (a) a signed-in account's data is never wiped while its key is present, (b) once the key is gone no
+//      store of the old account is left, shared or Swift, and a new account is adopted clean. Findings 1 to 4 of the round are rows here.
 //  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { accountSignOut, WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, PENDING_FILE, STAMP_FILE } from './account.ts';
+import { accountSignOut, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
+import { createHash } from 'node:crypto';
 import { authedJSON, bindNative, resetSeam, SignedOutError } from './api.ts';
 import { ContentStore } from './content.ts';
 import { VectorStore } from './search.ts';
@@ -50,12 +54,6 @@ describe('accountSignOut', () => {
     expect(order).toEqual(['native:signOut', 'wipe:a']);
     expect(r).toEqual({ done: true, failed: '', message: '' });
   });
-  test('S2 a native sign-out that fails wipes nothing shared and leaves no marker', async () => {
-    const order: string[] = []; const m = memFs();
-    const n = { available: true, later: async () => { throw new Error('boom'); } };
-    const r = await accountSignOut({ demo: false }, m.storage, undefined, n as never, { wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }] });
-    expect(order).toEqual([]); expect(r.done).toBe(false); expect(r.message).toContain('Sign-out did not finish'); expect(m.files.has(PENDING_FILE)).toBe(false);
-  });
   test('S2 a native answer that says not done wipes nothing shared', async () => {
     const r = await accountSignOut({ demo: false }, memFs().storage, undefined, native(false) as never, { wipes: [{ name: 'a', run: async () => { throw new Error('must not run'); } }] });
     expect(r.done).toBe(false);
@@ -67,12 +65,6 @@ describe('accountSignOut', () => {
       expect(r.done).toBe(false);
     }
     expect(order).toEqual([]);
-  });
-  test('S7 a native call that never answers is a deadline: done false, nothing wiped, no marker', async () => {
-    const m = memFs(['app:/data/takes.json']);
-    const n = { available: true, later: () => new Promise(() => undefined) };
-    const r = await accountSignOut({ demo: false }, m.storage, undefined, n as never, { deadlineMs: 20 });
-    expect(r.done).toBe(false); expect(m.files.has('app:/data/takes.json')).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(false);
   });
   test('S3 a throwing wipe does not stop the rest and is named; the marker stays for the next launch', async () => {
     const order: string[] = []; const m = memFs();
@@ -88,12 +80,6 @@ describe('accountSignOut', () => {
     const n = { available: true, later: async () => { during = m.files.has(PENDING_FILE); return { done: true }; } };
     await accountSignOut({ demo: false }, m.storage, undefined, n as never, { wipes: [] });
     expect(during).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(false);
-  });
-  test('S6 killed after the native call: the next launch finishes the wipes before it answers', async () => {
-    const m = memFs([PENDING_FILE, 'app:/data/takes.json', 'app:/data/mail/rows-inbox.bin', 'app:/data/podcasts-library.json']);
-    resetSettled(); bindNative(undefined);
-    await settleAccount(m.storage, undefined);
-    expect([...m.files.keys()]).toEqual([]);
   });
 });
 
@@ -166,58 +152,153 @@ describe('S9 sign out A, sign in B', () => {
   });
 });
 
-describe('S10 the account stamp', () => {
-  const sess = (key: string | null) => bindNative({ available: true, later: async () => (key === null ? { found: false } : { found: true, value: key, computerId: '' }) } as never);
-  test('the first launch adopts the account; the same account keeps its data; another one wipes it first; no key wipes nothing', async () => {
-    const m = memFs(['app:/data/takes.json']);
-    resetSeam(); resetSettled(); sess('test-key-A-not-real'); await settleAccount(m.storage, undefined);
-    expect(m.files.has(STAMP_FILE)).toBe(true); expect(m.files.has('app:/data/takes.json')).toBe(true);
-    resetSettled(); await settleAccount(m.storage, undefined); expect(m.files.has('app:/data/takes.json')).toBe(true);
-    resetSettled(); sess(null); await settleAccount(m.storage, undefined); expect(m.files.has('app:/data/takes.json')).toBe(true);
-    resetSettled(); sess('test-key-B-not-real'); await settleAccount(m.storage, undefined);
-    expect(m.files.has('app:/data/takes.json')).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(true);
-  });
-});
+// ---------------------------------------------------------------------------------------------------------------------------------------- the table and the kills
 
-describe('S11 a demo sign-out', () => {
-  test('answers done false before any native call, marker or wipe, and says why', async () => {
-    const log: string[] = []; const m = memFs(['app:/data/takes.json']);
-    const n = { available: true, later: async (r: { op: string }) => { log.push(r.op); return { done: true }; } };
-    const r = await accountSignOut({ demo: true }, m.storage, undefined, n as never, { wipes: [{ name: 'a', run: async () => { log.push('wipe'); } }] });
-    expect(log).toEqual([]); expect(r.done).toBe(false); expect(r.message).toContain('Demo'); expect(m.files.has('app:/data/takes.json')).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(false);
-  });
-});
+const dig = (k: string): string => createHash('sha256').update(k).digest('hex');
+type World = { key: 'present' | 'absent' | 'unreadable'; value: string; swift: boolean; native: string[]; killInNative: boolean; hang: boolean; lateRelease: (() => void) | null };
+let W: World;
+const newWorld = (key: World['key'] = 'present', value = 'test-key-A-not-real'): World => ({ key, value, swift: true, native: [], killInNative: false, hang: false, lateRelease: null });
+/** The app module as the model of the phone: the Keychain item (3 answers), the Swift stores, and sign-out's two native steps (key delete, then Swift wipe). */
+const phone = () => ({ available: true, later: async (r: { op: string }) => {
+  if (r.op === 'keystate') return { state: W.key };
+  if (r.op === 'session') return W.key === 'present' ? { found: true, value: W.value, computerId: '' } : { found: false };
+  if (r.op === 'signOut') {
+    W.native.push('signOut');
+    if (W.hang) await new Promise<void>((res) => { W.lateRelease = res; });
+    W.key = 'absent';                                            // ChoirSignIn.swift:128, the key goes first
+    if (W.killInNative) throw new Error('killed between the key delete and the Swift wipe');
+    W.swift = false;                                             // :129, AccountWipe
+    return { done: true };
+  }
+  if (r.op === 'wipe') { W.native.push('wipe'); W.swift = false; return { done: true }; }
+  return { ok: true };
+} });
+const SEED = ['app:/data/takes.json', 'app:/data/podcasts-library.json', 'app:/data/mail/msg-1.bin'];
+const launch = async (m: ReturnType<typeof memFs>) => { resetSeam(); resetSettled(); bindNative(phone() as never); return settleAccount(m.storage, undefined); };
+const dataLeft = (m: ReturnType<typeof memFs>): string[] => [...m.files.keys()].filter((k) => SEED.includes(k));
 
-describe('S12 the drift guard against what the wipes really remove', () => {
-  test('every app:/ literal in the shared modules is removed (or sits under a removed path) by the real wipes; the mail key is forgotten', async () => {
-    resetSeam(); resetSettled();
-    const removed: string[] = []; const ops: string[] = [];
-    bindNative({ available: true, later: async (r: { op: string }) => { ops.push(r.op); return { ok: true }; } } as never);
-    const m = memFs();
-    const storage = { fs: { ...m.storage.fs, rm: async (p: string) => { removed.push(p); } }, sqlite: {} } as never;
-    const failed = await wipeAll(storage, undefined, WIPES);
-    expect(failed).toEqual([]);
-    const dir = new URL('.', import.meta.url).pathname;
-    const literals = new Set<string>();
-    for (const f of readdirSync(dir).filter((x) => x.endsWith('.ts') && !x.endsWith('.test.ts') && !x.endsWith('.d.ts') && x !== 'app.ts')) {
-      for (const mm of readFileSync(dir + f, 'utf8').matchAll(/['"`](app:\/(?:data|cache|tmp)\/[^'"`$]*)/g)) literals.add(mm[1].replace(/\/$/, ''));
+describe('S14 the table: key x stamp x marker', () => {
+  const keys: World['key'][] = ['present', 'absent', 'unreadable'];
+  const stamps = ['none', 'same', 'other'] as const;
+  const markers = ['none', 'pending'] as const;
+  // What must happen, written out (not derived from decide): the data, the Swift stores, the stamp and the marker after one launch.
+  const expected = (key: World['key'], stamp: string, marker: string) => {
+    if (key === 'unreadable') return { data: true, swift: true, stamp: stamp === 'none' ? 'none' : stamp, marker, native: [] as string[] };
+    if (key === 'present') {
+      if (stamp === 'other') return { data: false, swift: false, stamp: 'new', marker: 'none', native: ['wipe'] };
+      return { data: true, swift: true, stamp: 'new', marker: 'none', native: [] as string[] };         // none: adopt; same: kept; a pending marker is cleared, nothing wiped
     }
-    expect(literals.size).toBeGreaterThan(10);
-    const under = (p: string) => removed.some((r) => p === r || p.startsWith(r + '/') || p.startsWith(r + '-'));
-    // PENDING_FILE is removed by accountSignOut itself (after a clean wipe), not by the wipes.
-    const missing = [...literals].filter((p) => !under(p) && !['app:/data', 'app:/cache', 'app:/tmp'].includes(p) && p !== PENDING_FILE && !p.startsWith('app:/cache/mail-'));
-    expect(missing).toEqual([]);
-    expect(removed).toContain(STAMP_FILE);
-    expect(ops).toContain('mailForget');
+    if (stamp !== 'none' || marker === 'pending') return { data: false, swift: false, stamp: 'none', marker: 'none', native: ['signOut'] };
+    return { data: true, swift: true, stamp: 'none', marker: 'none', native: [] as string[] };
+  };
+  for (const key of keys) for (const stamp of stamps) for (const marker of markers) {
+    test(`key ${key} / stamp ${stamp} / marker ${marker}`, async () => {
+      W = newWorld(key);
+      const m = memFs(SEED);
+      if (stamp === 'same') m.files.set(STAMP_FILE, new TextEncoder().encode(dig(W.value)));
+      if (stamp === 'other') m.files.set(STAMP_FILE, new TextEncoder().encode('f'.repeat(64)));
+      if (marker === 'pending') m.files.set(PENDING_FILE, new TextEncoder().encode('1'));
+      const stampBefore = m.files.get(STAMP_FILE);
+      await launch(m);
+      const e = expected(key, stamp, marker);
+      expect(dataLeft(m).length > 0).toBe(e.data); expect(W.swift).toBe(e.swift); expect(W.native).toEqual(e.native);
+      expect(m.files.has(PENDING_FILE)).toBe(e.marker === 'pending');
+      const st = m.files.get(STAMP_FILE);
+      if (e.stamp === 'new') expect(new TextDecoder().decode(st)).toBe(dig(W.value));
+      else if (e.stamp === 'none') expect(st).toBeUndefined();
+      else expect(st).toEqual(stampBefore);
+    });
+  }
+  test('decide() covers all 18 combinations', () => {
+    let n = 0;
+    for (const key of keys) for (const stamp of stamps) for (const marker of markers) { expect(typeof decide({ key, stamp, marker } as Facts)).toBe('string'); n++; }
+    expect(n).toBe(18);
   });
 });
 
-describe('S13 clips in memory', () => {
-  test('a sign-out forgets the clips a page asked for', async () => {
-    globalThis.fetch = (async () => new Response(JSON.stringify({ clips: [{ clip_id: 'c1', audio_url: 'https://a.example/a.mp3', feed_url: 'https://f.example/x', start: 1, end: 9 }] }), { status: 200 })) as never;
-    await clipAct('play', 'c1');
-    expect(clipsRemembered()).toBe(1);
-    await wipeAll(undefined, undefined, WIPES);
-    expect(clipsRemembered()).toBe(0);
+describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
+  const steps = ['marker', 'begun', 'native', 'wipe:vectors', 'wiped'];
+  for (const step of steps) {
+    test(`killed after "${step}"`, async () => {
+      W = newWorld('present'); const m = memFs(SEED);
+      resetSeam(); resetSettled(); bindNative(phone() as never); await settleAccount(m.storage, undefined);       // the signed-in phone, adopted
+      resetSettled();
+      await accountSignOut({ demo: false }, m.storage, undefined, phone() as never, { crash: (s) => { if (s === step) throw new Error('killed'); } }).catch(() => undefined);
+      const keyGoneAtKill = W.key === 'absent';
+      await launch(m);                                                      // the relaunch
+      if (!keyGoneAtKill) {                                                 // (a) the key was still there: nothing was signed out, nothing may be wiped
+        expect(dataLeft(m).length).toBe(SEED.length); expect(W.swift).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(false);
+      } else {                                                              // (b) the key is gone: nothing of the old account remains, shared or Swift
+        expect(dataLeft(m)).toEqual([]); expect(W.swift).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(false);
+      }
+    });
+  }
+  test('killed between the key delete and the Swift wipe (finding 2): the relaunch reruns the Swift wipe', async () => {
+    W = newWorld('present'); W.killInNative = true; const m = memFs(SEED);
+    await launch(m); resetSettled();
+    await accountSignOut({ demo: false }, m.storage, undefined, phone() as never).catch(() => undefined);
+    expect(W.key).toBe('absent'); expect(W.swift).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(true);
+    W.killInNative = false; W.native = [];
+    await launch(m);
+    expect(W.swift).toBe(false); expect(W.native).toEqual(['signOut']); expect(dataLeft(m)).toEqual([]); expect(m.files.has(PENDING_FILE)).toBe(false);
+  });
+  test('after the marker and before the key delete (finding 1): the relaunch wipes nothing, clears the marker, keeps the stamp', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    await accountSignOut({ demo: false }, m.storage, undefined, phone() as never, { crash: (s) => { if (s === 'marker') throw new Error('killed'); } }).catch(() => undefined);
+    expect(m.files.has(PENDING_FILE)).toBe(true);
+    W.native = []; await launch(m);
+    expect(dataLeft(m).length).toBe(SEED.length); expect(W.native).toEqual([]); expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(true);
+  });
+  test('a stamp is not advanced by a wipe that failed (finding 3): the old stamp stays and the next launch tries again', async () => {
+    W = newWorld('present', 'test-key-B-not-real'); const m = memFs(SEED);
+    m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real')));
+    const rm = m.storage.fs.rm; let broken = true;
+    (m.storage as never as { fs: { rm: (p: string) => Promise<void> } }).fs.rm = async (p: string) => { if (broken && p === 'app:/data/takes.json') throw new Error('disk'); return rm(p); };
+    const r = await launch(m);
+    expect(r.failed.length).toBeGreaterThan(0); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-A-not-real'));      // not relabelled as B's
+    broken = false; await launch(m);
+    expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));
+  });
+  test('a native sign-out that outlives its deadline keeps its continuation and the marker (finding 4)', async () => {
+    W = newWorld('present'); W.hang = true; const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const out = await accountSignOut({ demo: false }, m.storage, undefined, phone() as never, { deadlineMs: 20 });
+    expect(out.done).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(true); expect(dataLeft(m).length).toBe(SEED.length);
+    W.lateRelease!();                                                       // the native call answers done:true after the page was told
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(dataLeft(m)).toEqual([]); expect(m.files.has(PENDING_FILE)).toBe(false); expect(W.swift).toBe(false);
+  });
+  test('a failed native sign-out ("not done") removes the marker and wipes nothing; a throw keeps the marker for the next launch to judge by the key', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    const n = (r: unknown) => ({ available: true, later: async () => r });
+    const a = await accountSignOut({ demo: false }, m.storage, undefined, n({ done: false }) as never);
+    expect(a.done).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(false); expect(dataLeft(m).length).toBe(SEED.length);
+    const b = await accountSignOut({ demo: false }, m.storage, undefined, { available: true, later: async () => { throw new Error('x'); } } as never);
+    expect(b.done).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(true); expect(dataLeft(m).length).toBe(SEED.length);
+    resetSeam(); bindNative(phone() as never); await settleAccount(m.storage, undefined);
+    expect(m.files.has(PENDING_FILE)).toBe(false); expect(dataLeft(m).length).toBe(SEED.length);                   // the key is there: cleared, nothing wiped
+  });
+  test('no storage: a sign-out does not start (it fails closed)', async () => {
+    W = newWorld('present'); const out = await accountSignOut({ demo: false }, undefined, undefined, phone() as never);
+    expect(out.done).toBe(false); expect(W.native).toEqual([]);
+  });
+  test('a partial wipe after a signed-out phone says which stores and keeps the marker', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    const out = await accountSignOut({ demo: false }, m.storage, undefined, phone() as never, { wipes: [{ name: 'a', run: async () => { throw new Error('x'); } }, { name: 'b', run: async () => undefined }] });
+    expect(out.done).toBe(true); expect(out.failed).toBe('a'); expect(out.message).toContain('a'); expect(m.files.has(PENDING_FILE)).toBe(true);
+  });
+  test('a different account B after A signs out is adopted clean: nothing of A remains (shared or Swift)', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    expect((await accountSignOut({ demo: false }, m.storage, undefined, phone() as never)).done).toBe(true);
+    W.key = 'present'; W.value = 'test-key-B-not-real'; W.swift = false;
+    await launch(m);
+    expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));
+  });
+  test('the first launch over an install with a key, old Swift stores and NO stamp adopts and wipes nothing', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    const r = await launch(m);
+    expect(r.action).toBe('adopt'); expect(dataLeft(m).length).toBe(SEED.length); expect(W.swift).toBe(true); expect(W.native).toEqual([]);
   });
 });

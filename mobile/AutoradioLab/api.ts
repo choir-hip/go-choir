@@ -85,10 +85,12 @@ async function keptItem(account: Account): Promise<string | null> {
 }
 
 /** The key and the computer id in ONE native read: a sign-out or a new sign-in between two reads cannot pair an old key with a new computer. */
+let lastFlags = '';
 async function keptSession(): Promise<{ key: string; computerId: string } | null> {
   if (!reader || reader.available === false) return null;
   const r = (await reader.later({ op: 'session' })) as { found?: boolean; value?: unknown; computerId?: unknown } | null;
-  console.log(`api: session found=${String(r?.found)} key=${typeof r?.value === 'string' && r.value !== ''} computer=${typeof r?.computerId === 'string' && r.computerId !== ''}`);   // flags only, never a value
+  const flags = `found=${String(r?.found)} key=${typeof r?.value === 'string' && r.value !== ''} computer=${typeof r?.computerId === 'string' && r.computerId !== ''}`;   // flags only, never a value
+  if (flags !== lastFlags) { lastFlags = flags; console.log(`api: session ${flags}`); }              // on change only: one line per request is volume
   if (!r || r.found !== true || typeof r.value !== 'string' || r.value === '') return null;
   return { key: r.value, computerId: typeof r.computerId === 'string' ? r.computerId : '' };
 }
@@ -262,6 +264,21 @@ export async function authedToFile(path: string, dest: string, storage: Storage 
   if (gen !== generation) { await drop(); throw new SignedOutError('signed out while the request was in flight'); }
   if (!wrote || typeof wrote.bytes !== 'number') { await drop(); throw new Error('the host did not write the file'); }
   return { bytes: wrote.bytes, contentType: r.headers.get('content-type') ?? '' };
+}
+
+export type KeyState = 'present' | 'absent' | 'unreadable';
+/** The stored sign-in key as THREE answers (review 2026-11-19, auth round 2): `present` (with the SHA-256 of the key), `absent` (the Keychain answered item-not-found) or
+ * `unreadable` (locked before the first unlock, any other status, no native module, demo mode, a bridge error). Read only. `unreadable` is never "signed out". */
+export async function keyState(): Promise<{ state: KeyState; digest: string }> {
+  const none = { state: 'unreadable' as KeyState, digest: '' };
+  if (demoOn || !reader || reader.available === false) return none;
+  try {
+    const r = (await reader.later({ op: 'keystate' })) as { state?: unknown; found?: unknown } | null;
+    const st = r && (r.state === 'present' || r.state === 'absent' || r.state === 'unreadable') ? r.state : r && r.found === true ? 'present' : 'unreadable';
+    if (st !== 'present') return { state: st, digest: '' };
+    const sess = await keptSession();
+    return sess ? { state: 'present', digest: await digestOf(sess.key) } : none;
+  } catch { return none; }
 }
 
 /** The digest of the stored key, or null when there is none or demo mode is on. For the account stamp (account.ts); never the key itself. */

@@ -133,8 +133,7 @@ as `SignedOutError` (this is the guard for paper, files, notebook, takes and mai
 throws on an older generation); `redirect: 'manual'` (Exact's fetch supports it: reference.md, fetch row) with a 3xx an error; a durable
 `app:/data/signout-pending` marker written before the native call and cleared after a clean wipe, finished at the next launch by `settleAccount`
 before any source answers; an account stamp (`app:/data/account-stamp`, a SHA-256 of the key): another account's key at launch wipes the old data.
-DEVIATION from the review: a phone with NO key wipes nothing at launch, because a locked Keychain looks the same as no key and must not cost
-anyone their data; the stamp catches the next account. Native `done` is now truthful (the key is re-read after the Swift sign-out). The live
+SUPERSEDED by the reconcile below (the earlier "no key wipes nothing" justification was wrong: with no key no stamp was written, so a later account was adopted without a wipe). Native `done` is now truthful (the key is re-read after the Swift sign-out). The live
 `ContentStore` and `VectorStore` instances register themselves so the wipes empty them and stop a running sync. A 30 s deadline on the native
 call; a missing native module refuses (nothing wiped). Not done: `wipeRunsheet` is not in the wipe list (the shared run sheet store is not wired;
 the Swift `AccountWipe` still wipes it). Tests: api.test.ts D1, D2, G1, R1, O1, K1; account.test.ts S1 to S10 (S8 seeds an in-memory file
@@ -267,3 +266,26 @@ Next steps, in order:
 3. The mail cipher (native `seal`/`open` with CryptoKit AES-GCM, see above), the files streaming regression (use `exactBodyTo` / `exactBodyFrom`),
    the podcast positions import, `proof-real.sh` tours for Files and Mail.
 4. Voice-turn spike (stage 2), then steps 4, 5 and 6.
+
+
+## The account reconcile (third integrator, auth round 2)
+
+`account.ts` `reconcile` is the ONE function that decides, at launch and at the end of every sign-out attempt, from three facts: the key as three native answers
+(`keystate` on the app module: present, absent = the Keychain said item-not-found, unreadable = locked or any other status; read only, nothing written or re-keyed; the
+digest comes from the existing `session` read), the stamp (none, same, other) and the marker (none, pending). The table in `account.test.ts` (S14) runs all 18 combinations; S15
+kills a sign-out at each step and relaunches. Rules: unreadable never wipes and never adopts; present + pending marker clears the marker and wipes nothing; absent + a
+stamp or marker finishes the sign-out (the native `signOut`, idempotent, reruns the Swift wipe; then the shared wipe; then the stamp and the marker go); present + another
+stamp wipes both halves (native `wipe`, which keeps the key) and then writes the new stamp. A stamp or marker moves only after every wipe succeeded AND no path a wipe covers
+is left (most wipes swallow "absent", so survivors are looked for); otherwise it stays, the next launch tries again, and a sign-out names the stores in its message. A native
+call past its 30 s deadline answers the page "taking long", keeps the marker and keeps its continuation (a late `done:true` runs the shared wipe). A sign-out does not start
+without a storage to hold its marker.
+
+What the first launch does on the owner's phone (a key, old Swift stores, no stamp): `keystate` present, stamp none, marker none -> adopt: it writes the stamp (a SHA-256
+of the key) under `app:/data` and nothing else. Nothing is wiped; the Keychain item is only read. A locked Keychain (before the first unlock) is `unreadable`: nothing happens.
+
+`redirect: 'manual'` (api.ts): the pin's reference (Exact checkout `docs/reference.md`, the `fetch` row, line 2084) says `redirect` is Fetch's: `follow`, `error`, or `manual`,
+which "answers with the 3xx itself" natively; an older prelude would follow, which is why it moves `typescriptRuntime` to 2 (this app is built against a newer one). So a 302 reaches
+`check()` as a status in 300..399 and is refused; the key is not sent on. Not run against a redirecting server on the simulator.
+
+Residuals: a launch-time partial wipe is logged and retried, but the page is told only for a sign-out (the launch result is not bound to a screen); the table is a model of the phone
+(memFs and a fake module), the real Keychain and Swift wipe were not driven; the signed-in drill through the queue `real` is not written yet (step E).
