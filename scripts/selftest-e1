@@ -261,7 +261,7 @@ class Stub:
                     sid = path.rsplit("/", 1)[1]
                     return self.send(200, {"submission_id": sid, "decision": {"trajectory_id": sid.replace("sub-", "traj-")}})
                 if path.startswith("/api/runs?"):
-                    return self.send(200, {"runs": b["layers"]["runs"]["items"]})
+                    return self.send(200, {"runs": [dict(r, run_id=r["loop_id"]) for r in b["layers"]["runs"]["items"]]})
                 if path.startswith("/api/runs/") and "/events" in path:
                     rid = path.split("/")[3]
                     return self.send(200, {"events": [e for e in b["layers"]["run_events"]["items"] if e["loop_id"] == rid], "next_after": 0})

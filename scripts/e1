@@ -123,6 +123,12 @@ def iso(dt):
 
 
 # ------------------------------------------------- the pure reading of a bundle ----
+def rid_of(run):
+    """A run's id: the bundle's run records (RunRecord) name it loop_id, the
+    /api/runs list names it run_id."""
+    return run.get("run_id") or run.get("loop_id") or ""
+
+
 def role_of(run):
     return str(run.get("agent_role") or run.get("agent_profile") or "").strip().lower()
 
@@ -259,8 +265,9 @@ def read_unit(bundle, meta):
         why.append("bundle_layer_unserved")
     runs = [r for r in (runs_layer.get("items") or []) if isinstance(r, dict)]
     research = [r for r in runs if role_of(r) in RESEARCH_ROLES]
-    ids = {r.get("run_id") for r in research}
+    ids = {rid_of(r) for r in research}
     u["research_runs"] = len(research)
+    u["run_errors"] = sorted({str(r.get("error"))[:160] for r in research if r.get("error")})
     c = count_events(events_layer.get("items") or [], ids)
     u.update(started=c["started"], done=c["done_rows"], served_lines=c["served_lines"], calls=c["calls"],
              cache_answered=max(c["started"] - c["served_lines"], 0), reads=c["reads"],
@@ -655,7 +662,7 @@ def trajectory_of(api, submission_id):
 def live_calls(api, runs):
     """The providers' calls so far in the research runs of a trajectory, read
     from the live run events (the same sum the bundle gives later)."""
-    ids = [r["run_id"] for r in runs if role_of(r) in RESEARCH_ROLES]
+    ids = [rid_of(r) for r in runs if role_of(r) in RESEARCH_ROLES]
     events = []
     for rid in ids:
         after = 0
@@ -698,7 +705,7 @@ class Waiter:
         self.ended = set()
 
     def poll(self, arm, runs):
-        ids = tuple(sorted(r["run_id"] for r in runs))
+        ids = tuple(sorted(rid_of(r) for r in runs))
         if runs and not any(active(r) for r in runs):
             if self.prev.get(arm) == ids and arm in self.quiet and time.time() - self.quiet[arm] >= SETTLE_S:
                 self.ended.add(arm)
@@ -758,7 +765,7 @@ def cancel_active(recs, subs, arms):
         try:
             for r in list_runs(api, subs[arm]["trajectory_id"]):
                 if active(r):
-                    api.call("POST", "/api/runs/%s/cancel" % urllib.parse.quote(r["run_id"]))
+                    api.call("POST", "/api/runs/%s/cancel" % urllib.parse.quote(rid_of(r)))
         except ApiError:
             pass
 
@@ -877,7 +884,10 @@ def install_overlay(a, st, comps, arm):
     text = overlay_text(arm, comps["overlay_expires_at"])
     local = st.p("overlays", rec["overlay_id"] + ".toml")
     write_private(local, text)
-    choir_files(a, rec, "mkdir", OVERLAY_DIR)  # may already exist: not an error
+    # the files API makes one directory level at a time ("parent directory not
+    # found" otherwise); either may already exist, which is not an error
+    for d in ("System", OVERLAY_DIR):
+        choir_files(a, rec, "mkdir", d)
     p = choir_files(a, rec, "put", "%s/%s.toml" % (OVERLAY_DIR, rec["overlay_id"]), local=local)
     if p.returncode != 0:
         raise SystemExit("e1: files put of the %s overlay failed: %s" % (arm, (p.stderr.strip().splitlines() or ["?"])[-1][:200]))
@@ -977,7 +987,8 @@ def cmd_smoke(a):
         s.check(u["research_runs"] >= 1, arm, 8, "a research run exists in the trajectory", "roles seen: %s" % ", ".join(roles))
         bad = [r for r in u["reasons"] if r in ("foreign_model", "model_switch", "no_model_served_record", "wrong_overlay")]
         s.check(u["research_runs"] >= 1 and not bad, arm, 9, "model.served names only the arm's model, no switch, overlay inherited",
-                "served %s reported %s switches %d%s" % (",".join(u["models"]) or "none", ",".join(u["reported_models"]) or "-", u["switches"], ("; " + ",".join(bad)) if bad else ""))
+                "served %s reported %s switches %d%s%s" % (",".join(u["models"]) or "none", ",".join(u["reported_models"]) or "-", u["switches"], ("; " + ",".join(bad)) if bad else "",
+                                                              ("; run errors: " + " | ".join(u["run_errors"])) if u["run_errors"] else ""))
         s.check(u["started"] >= 1 and u["served_lines"] >= 1, arm, 10, "search_start rows and search.served lines are present",
                 "started %d done %d served lines %d provider calls %d cache-answered %d failed starts %d" %
                 (u["started"], u["done"], u["served_lines"], u["calls"], u["cache_answered"], u["failed_starts"]))

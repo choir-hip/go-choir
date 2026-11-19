@@ -172,12 +172,12 @@
      "agent_role": "texture",
      "created_at": "2026-01-01T00:01:00Z",
      "finished_at": "2026-01-01T00:25:00Z",
+     "loop_id": "run-tex",
      "metadata": {
       "llm_model": "swe-2-flash",
       "llm_policy_overlay_id": "e1-sa",
       "llm_provider": "devin"
      },
-     "run_id": "run-tex",
      "state": "completed",
      "trajectory_id": "traj-fx-wrongmodel",
      "updated_at": "2026-01-01T00:25:00Z"
@@ -187,12 +187,12 @@
      "agent_role": "research",
      "created_at": "2026-01-01T00:02:00Z",
      "finished_at": "2026-01-01T00:18:00Z",
+     "loop_id": "run-res",
      "metadata": {
       "llm_model": "swe-2-flash",
       "llm_policy_overlay_id": "e1-sa",
       "llm_provider": "devin"
      },
-     "run_id": "run-res",
      "state": "completed",
      "trajectory_id": "traj-fx-wrongmodel",
      "updated_at": "2026-01-01T00:18:00Z"
