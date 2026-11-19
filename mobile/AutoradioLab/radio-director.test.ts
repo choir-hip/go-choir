@@ -118,7 +118,7 @@ describe('next, previous and ends', () => {
     expect(store.entry('d-3')?.state).toBe('ahead'); expect(d.message).not.toBe(''); expect(d.wants).toBe(false);
   });
   test('5: a document that ended with no block heard says why and counts as a silent entry', () => {
-    const o = opened(['d-1', 'd-2']);
+    const o = opened([]);              // with something ahead the next start clears the line again
     d.documentEnded('rs:' + o, false, undefined, 'the voice made no sound');
     expect(d.message).toBe('Can’t speak: the voice made no sound'); expect(store.entry(o)?.ended?.outcome).toBe('failed');
   });
