@@ -107,20 +107,33 @@ func ftFiller(n int, salt string) string {
 	return b.String()
 }
 
-// fullTextLog collects the journal lines of a test.
-func fullTextLog(t *testing.T) *bytes.Buffer {
+// fullTextLog collects the journal lines of a test. A test may read it while
+// a worker goroutine is still logging (the vector worker's tests do), so the
+// read takes the same lock as the write.
+func fullTextLog(t *testing.T) *ftLog {
 	t.Helper()
-	var mu sync.Mutex
-	buf := &bytes.Buffer{}
-	w := ftWriterFunc(func(p []byte) (int, error) { mu.Lock(); defer mu.Unlock(); return buf.Write(p) })
-	log.SetOutput(w)
+	l := &ftLog{}
+	log.SetOutput(l)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
-	return buf
+	return l
 }
 
-type ftWriterFunc func(p []byte) (int, error)
+type ftLog struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
 
-func (w ftWriterFunc) Write(p []byte) (int, error) { return w(p) }
+func (l *ftLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *ftLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
 
 func TestFullTextFindsABodyOnlyFactAtOnceWithItsPassage(t *testing.T) {
 	f := newFTFixture(t, true)
