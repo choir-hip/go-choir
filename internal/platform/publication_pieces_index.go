@@ -316,7 +316,7 @@ func (s *Service) refreshPieceIndex(ctx context.Context, budget time.Duration, w
 				return after, true, newest, nil
 			}
 			last := rows[len(rows)-1]
-			after = &frontCursor{UpdatedAt: last.UpdatedAt.Unix(), CanonicalID: last.CanonicalID}
+			after = frontCursorAt(last)
 			if record {
 				ix.mu.Lock()
 				ix.cursor = after

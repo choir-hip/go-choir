@@ -91,15 +91,18 @@ type FrontPage struct {
 }
 
 // frontCursor is the keyset position after the last publication a page
-// read: publications are ordered by (updated_at, canonical_id) descending.
+// read: publications are ordered by (updated_at, canonical_id) descending,
+// and the cursor holds that pair at the row's full precision (whole seconds
+// in UpdatedAt, the rest in Nanos), because the SQL compares full-precision
+// times. Every caller builds it with frontCursorAt. It is opaque outside this
+// package: a client hands back the string it was given.
 type frontCursor struct {
 	UpdatedAt   int64  `json:"u"`
 	CanonicalID string `json:"id"`
-	// Nanos is the sub-second part of UpdatedAt. The front's own cursors
-	// leave it zero and keep whole seconds (a page boundary inside one second
-	// can then skip rows of that second; recorded as a problem, not changed
-	// here); the vector worker sets it, because it must see every row.
-	Nanos int32 `json:"n,omitempty"`
+	// Nanos is the sub-second part of UpdatedAt. It is always written; a
+	// cursor without it was minted before 2026-11-19 (whole seconds only)
+	// and decodeFrontCursor widens it.
+	Nanos int32 `json:"n"`
 }
 
 // frontCursorAt is the cursor after a publication row at full precision.
@@ -112,6 +115,12 @@ func encodeFrontCursor(c frontCursor) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
+// decodeFrontCursor reads a cursor. One minted before the sub-second part
+// existed (no "n" member) cannot say where inside its second the page ended,
+// so it is read as the end of that second: the page after it starts at the
+// newest row older than the next second, and rows of the cursor's second that
+// were already listed may be listed again. A repeat is acceptable; a skip is
+// not.
 func decodeFrontCursor(s string) (*frontCursor, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -121,11 +130,22 @@ func decodeFrontCursor(s string) (*frontCursor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid cursor")
 	}
-	var c frontCursor
-	if err := json.Unmarshal(raw, &c); err != nil || c.CanonicalID == "" {
+	var wire struct {
+		UpdatedAt   int64  `json:"u"`
+		CanonicalID string `json:"id"`
+		Nanos       *int32 `json:"n"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil || wire.CanonicalID == "" {
 		return nil, fmt.Errorf("invalid cursor")
 	}
-	return &c, nil
+	if wire.Nanos == nil {
+		// updated_at < the next second, and no tie row: "" sorts below every id.
+		return &frontCursor{UpdatedAt: wire.UpdatedAt + 1}, nil
+	}
+	if *wire.Nanos < 0 || *wire.Nanos >= 1e9 {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+	return &frontCursor{UpdatedAt: wire.UpdatedAt, Nanos: *wire.Nanos, CanonicalID: wire.CanonicalID}, nil
 }
 
 // ErrInvalidFrontCursor marks a cursor the front list did not mint.
@@ -262,7 +282,7 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 			batch = batch[:limit]
 		}
 		for _, pub := range batch {
-			after = &frontCursor{UpdatedAt: pub.UpdatedAt.Unix(), CanonicalID: pub.CanonicalID}
+			after = frontCursorAt(pub)
 			row, ok, err := s.frontRow(ctx, og, pub, opinion)
 			if err != nil {
 				return nil, err
@@ -339,7 +359,7 @@ func (s *Service) listFrontSection(ctx context.Context, og *ObjectGraphStore, li
 		}
 		for _, pub := range batch {
 			scanned++
-			after = &frontCursor{UpdatedAt: pub.UpdatedAt.Unix(), CanonicalID: pub.CanonicalID}
+			after = frontCursorAt(pub)
 			var meta frontPublicationMeta
 			if err := json.Unmarshal(pub.Metadata, &meta); err == nil && meta.PublicationID != "" && !inSection(meta.PublicationID) {
 				continue

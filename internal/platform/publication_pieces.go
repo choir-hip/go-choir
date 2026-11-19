@@ -99,7 +99,7 @@ func (s *Service) scanPublicationRows(ctx context.Context, max int) (rows []fron
 			return rows, false, nil
 		}
 		last := got[len(got)-1]
-		after = &frontCursor{UpdatedAt: last.UpdatedAt.Unix(), CanonicalID: last.CanonicalID}
+		after = frontCursorAt(last)
 	}
 	rest, err := s.frontPublicationBatch(ctx, after, 1)
 	if err != nil {
