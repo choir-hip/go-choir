@@ -1,0 +1,7 @@
+{"query":"harbor","results":[
+ {"publication_id":"pub-a","publication_version_id":"pub-a-v10","title":"Council backs a tide barrier for the harbor","route_path":"/pub/texture/tide-barrier-a","source_id":"s1","span_id":"x","content_hash":"h","source_revision_hash":"r","snippet":"...dterms that they want a barrier. [5]  The groups seized on the harbor controversy, demanding hearings...","score":3},
+ {"publication_id":"pub-b","title":"Harbor strike ends","route_path":"/pub/texture/harbor-strike-b","snippet":"# Harbor strike ends\n\nDock workers voted to end the strike","score":21},
+ {"publication_id":"pub-c","title":"","route_path":"/pub/texture/no-title","snippet":"x","score":1},
+ {"publication_id":"pub-d","title":"No route","route_path":"","snippet":"x","score":1},
+ {"publication_id":"pub-b2","title":"Harbor strike ends again","route_path":"/pub/texture/harbor-strike-b","snippet":"dup","score":1}
+]}
