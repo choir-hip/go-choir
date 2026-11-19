@@ -381,7 +381,23 @@ pin (`fe13242`, 2026-10-15), the Hub's LFS listing and llama.cpp's tree on
   secrets paths inaccessible, `Restart=on-failure`. No request limit, no counting. Loopback only;
   the firewall is unchanged (22, 80, 443). Only corpusd is meant to call it; a loopback port cannot
   say which local process connects (residual).
-- **Health.** `GET http://127.0.0.1:8090/health`: 200 when the model is loaded, 503 while loading.
+- **A second unit for queries** (2026-11-19, `lane/embed-query`; built, not deployed). The unit above serves documents only (the
+  worker, the import's sample); `go-choir-embedder-query` serves a ranked search's query and nothing else. Why: with the worker busy
+  on the one unit, 156 of 292 query embeds hit the 4 s deadline (a query waited for one of two slots, then was decoded in the same
+  batch as a passage; [the problem record](../problems/search-waits-four-seconds-behind-the-embed-worker-2026-11-19.md)). Same
+  package, same pinned file (its own copy under `/var/lib/go-choir-embedder-query`: both units are `DynamicUser` with a private
+  0750 state directory), same sandboxing, one definition in `nix/embedder.nix` (`mkEmbedderUnit`). Port 8091; flags `--threads 4
+  --parallel 8 --ctx-size 4096 --batch-size 4096 --ubatch-size 512`. Eight slots, because a research run sends its searches
+  together; 4096 / 8 = 512 tokens a slot (`n_ctx_seq = n_ctx / n_seq_max`, `src/llama-context.cpp:429-432`, above), more than any
+  query needs; `--ubatch-size 512` is the same bound (an input over it is "too large to process", over the slot "larger than the
+  max context size", both errors, 0.11.2). `CPUWeight` is the default 100 and there is no `Nice`; `MemoryMax=1024M` (310 MB
+  mapped weights plus a compute buffer for 512 tokens, smaller than the 506 MB measured for 2,048; the 512-token figure is not
+  measured); `OOMScoreAdjust=300` (dies before a guest, after the bulk unit's 500); `RestartSec=10`. corpusd reads
+  `CORPUSD_EMBEDDER_QUERY_URL` (`http://127.0.0.1:8091` on Node B); unset, queries use the one embedder. A query longer than 512
+  tokens, or a query unit that is down or slow, leaves the vector half "unavailable" and the answer BM25's; the query is never
+  retried on the bulk unit (that would put it behind the worker again). The slot, batch and thread numbers are reasoned from the
+  source, not measured on x86; the first staging read is `op=vector_embed shape=query` median and deadline count.
+- **Health.** `GET http://127.0.0.1:8090/health` (the query unit: 8091): 200 when the model is loaded, 503 while loading.
 - **Calls.** `POST /v1/embeddings` with `{"input": [text, ...]}` (one call for a batch). The server
   returns each mean-pooled vector L2-normalised at 768 dimensions (verify on first run: section
   0.2 says the raw pooled vector is not unit length, so a caller must not rely on it).
