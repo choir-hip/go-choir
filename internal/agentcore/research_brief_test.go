@@ -36,7 +36,8 @@ import (
 //     brief or marks labels twice;
 //  3. a slow or failing corpusd delays the run start past the deadline, or
 //     fails the run, instead of one plain sentence that the brief is missing;
-//  4. an empty corpus reads as a failure, or marks labels;
+//  4. an empty corpus reads as a failure, or marks the labels of pages it
+//     did not deliver (it marks only the record's, whose text is in the message);
 //  5. the brief grows without bound: more threads, captures or stories than
 //     the constants allow, or a total over the token bound; a thread is cut
 //     in the middle of a passage rather than dropped whole, or a dropped
@@ -46,7 +47,8 @@ import (
 //  7. a page found under two threads is listed twice;
 //  8. hostile page text closes the data frame;
 //  9. the labels differ from what the verb would give (a passage must carry
-//     the capture floor), or a brief that delivered nothing marks labels;
+//     the capture floor), or a brief that delivered no page marks the
+//     pages' labels (the record's labels are marked whatever the search found);
 //  10. a run with no objective is told something false;
 //  11. the log line lacks a field, or is missing for a skipped or failed run;
 //  12. the brief's pages are counted as pages the run searched for (the
@@ -190,21 +192,25 @@ func TestBriefOverTheTokenBoundDropsWholeThreadsFromTheLastAndNamesThem(t *testi
 	}
 }
 
-func TestBriefOnAnEmptyCorpusSaysSoAndMarksNothing(t *testing.T) {
-	res := buildResearchBrief(context.Background(), planN(2), fixedSearch(briefResult(nil, 0)))
+func TestBriefOnAnEmptyCorpusSaysSoAndMarksOnlyTheRecordsLabels(t *testing.T) {
+	plan := researchBriefThreads([]types.CommitmentRecord{castWithLabels("Harbor?", types.OwnerPrivateLabel("texture"))}, "")
+	res := buildResearchBrief(context.Background(), plan, fixedSearch(briefResult(nil, 0)))
 	if res.outcome != briefEmpty {
 		t.Fatalf("outcome = %q", res.outcome)
 	}
 	if !strings.Contains(res.text, "holds no page or story") {
 		t.Fatalf("an empty corpus is not said plainly:\n%s", res.text)
 	}
-	if len(res.labels) != 0 {
-		t.Fatalf("an empty brief marks labels: %v", res.labels)
+	// The record's label is marked (its text is in the message); the pages'
+	// labels are not (none was delivered): no capture floor, no world.
+	if got := strings.Join(sortedLabels(res.labels), ","); got != "owner_private:texture" {
+		t.Fatalf("an empty brief marks %q, want only the record's label", got)
 	}
 }
 
-func TestBriefFailureIsOnePlainSentenceAndMarksNothing(t *testing.T) {
-	res := buildResearchBrief(briefDeadlineCtx(), planN(3), func(context.Context, string) (json.RawMessage, error) {
+func TestBriefFailureIsOnePlainSentenceAndMarksOnlyTheRecordsLabels(t *testing.T) {
+	plan := researchBriefThreads([]types.CommitmentRecord{castWithLabels("Harbor?", types.OwnerPrivateLabel("texture"))}, "")
+	res := buildResearchBrief(briefDeadlineCtx(), plan, func(context.Context, string) (json.RawMessage, error) {
 		return nil, errors.New("corpusd returned 503")
 	})
 	if res.outcome != briefFailed || !strings.Contains(res.reason, "503") {
@@ -213,8 +219,8 @@ func TestBriefFailureIsOnePlainSentenceAndMarksNothing(t *testing.T) {
 	if !strings.HasPrefix(strings.TrimSpace(res.text), "No corpus brief:") || !strings.Contains(res.text, "503") || !strings.Contains(res.text, "choir.SearchWireCorpus") {
 		t.Fatalf("the missing brief is not stated plainly:\n%s", res.text)
 	}
-	if len(res.labels) != 0 {
-		t.Fatalf("a failed brief marks labels: %v", res.labels)
+	if got := strings.Join(sortedLabels(res.labels), ","); got != "owner_private:texture" {
+		t.Fatalf("a failed brief marks %q, want only the record's label", got)
 	}
 }
 
@@ -958,5 +964,169 @@ func TestExecuteWithToolLoopDeliversTheBriefAndMarksTheRun(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("the run carries %q, lacks %q", got, want)
 		}
+	}
+}
+
+// --- round 2 ---
+
+// Round 2, item 1: prose reaches the real parseCorpusWindow as plain words
+// whatever quotes and dashes surround an operator word.
+func TestBriefProseNeverReachesTheVerbAsAnOperator(t *testing.T) {
+	forms := []string{
+		`"since:the merger"`, "\u201cuntil:2025\u201d", `-order:recent`, `--since:x`, `"-order:recent"`,
+		"\u2212until:2021", `"--"since:2020`, `since:2020 until:2021 order:newest`,
+	}
+	for _, form := range forms {
+		t.Run(form, func(t *testing.T) {
+			rt, s := testRuntime(t)
+			sink := &briefSink{}
+			deps := &researchtools.Dependencies{Store: s, Captures: sink}
+			rt.researchDeps = deps
+			ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID})
+			res := buildResearchBrief(ctx, briefPlan{threads: []briefThread{{Kind: "objective", Text: "Did the strike end " + form}}}, rt.researchBriefSearcher())
+			if res.outcome == briefFailed || strings.Contains(res.text, "Not searched") {
+				t.Fatalf("the verb refused the thread (outcome %s):\n%s", res.outcome, res.text)
+			}
+			if len(sink.searches) != 1 {
+				t.Fatalf("searches = %+v", sink.searches)
+			}
+			q := sink.searches[0]
+			if q.Since != "" || q.Until != "" || q.Order != "relevance" {
+				t.Fatalf("form %s set a window or an order: %+v (query %q)", form, q, q.Query)
+			}
+		})
+	}
+}
+
+// Round 2, item 2: "the corpus holds nothing" only when every thread was
+// searched in both halves and found nothing.
+func TestBriefDoesNotSayEmptyWhenTheDeadlineCutTheLoop(t *testing.T) {
+	restore := researchBriefDeadline
+	t.Cleanup(func() { researchBriefDeadline = restore })
+	researchBriefDeadline = 150 * time.Millisecond
+	calls := 0
+	res := buildResearchBrief(briefDeadlineCtx(), planN(6), func(ctx context.Context, _ string) (json.RawMessage, error) {
+		calls++
+		if calls == 1 {
+			return briefResult(nil, 0), nil
+		}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	if strings.Contains(res.text, "holds no page or story") {
+		t.Fatalf("a brief the deadline cut says the corpus holds nothing:\n%s", res.text)
+	}
+	if res.outcome != briefPartial || res.reason == "" {
+		t.Fatalf("outcome=%q reason=%q, want partial with a reason", res.outcome, res.reason)
+	}
+	if !strings.Contains(res.text, "Not searched") || !strings.Contains(res.text, "Thread 1") || !strings.Contains(res.text, "Nothing") {
+		t.Fatalf("the brief does not say what was searched and found nothing and what was not searched:\n%s", res.text)
+	}
+}
+
+func TestBriefDoesNotSayEmptyWhileTheTextIndexIsCatchingUp(t *testing.T) {
+	var m map[string]any
+	_ = json.Unmarshal(briefResult(nil, 0), &m)
+	m["captures_note"] = "the page text of 100 of this computer's 900 captures is searchable so far; the rest are found by title and labels only"
+	raw, _ := json.Marshal(m)
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
+	if strings.Contains(res.text, "holds no page or story") || res.outcome != briefPartial {
+		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+	}
+	if !strings.Contains(res.text, "page-text index is still catching up") {
+		t.Fatalf("the catching-up index is not said in plain words:\n%s", res.text)
+	}
+}
+
+// A failed deadline-free thread error is a gap too.
+func TestBriefAThreadThatErroredIsAGapNotAnEmptyCorpus(t *testing.T) {
+	calls := 0
+	res := buildResearchBrief(context.Background(), planN(2), func(context.Context, string) (json.RawMessage, error) {
+		calls++
+		if calls == 2 {
+			return nil, errors.New("corpusd returned 500")
+		}
+		return briefResult(nil, 0), nil
+	})
+	if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") {
+		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+	}
+}
+
+// Round 2, item 3: counts come from the kept blocks, and the log counts the
+// threads left out past the sixth.
+func TestBriefCountsAfterTheDropLoopAndLogsLeftOutThreads(t *testing.T) {
+	big := strings.Repeat("harbor ", 70)
+	n := 0
+	search := func(context.Context, string) (json.RawMessage, error) {
+		var caps []map[string]any
+		for i := 0; i < 6; i++ {
+			n++
+			c := briefCapture(n, big)
+			c["title"], c["url"] = strings.Repeat("title ", 40), "https://example.org/"+strings.Repeat("path/", 40)
+			caps = append(caps, c)
+		}
+		var m map[string]any
+		_ = json.Unmarshal(briefResult(caps, 0), &m)
+		m["captures_note"] = researchtools.CapturesNotSearchedNote + ": x"
+		b, _ := json.Marshal(m)
+		return b, nil
+	}
+	plan := planN(6)
+	plan.left = []briefThread{{Kind: "question", Text: "a"}, {Kind: "question", Text: "b"}}
+	res := buildResearchBrief(context.Background(), plan, search)
+	// Every thread's capture half failed: both halves are not failed, so partial.
+	for _, line := range []string{researchBriefLogLine("r", "research", 0, res)} {
+		if !strings.Contains(line, " left=2 ") {
+			t.Fatalf("the log does not count the threads left out: %s", line)
+		}
+	}
+	var capFails int
+	if _, err := fmt.Sscanf(res.reason, "captures not searched for %d of", &capFails); err == nil && capFails > res.threads {
+		t.Fatalf("reason %q counts more threads than were kept (%d)", res.reason, res.threads)
+	}
+}
+
+// Round 2, item 4: a half that found nothing reads differently from a half
+// that was not searched.
+func TestBriefSaysWhichHalfFoundNothingAndWhichWasNotSearched(t *testing.T) {
+	var m map[string]any
+	_ = json.Unmarshal(briefResult(nil, 0), &m)
+	m["captures_note"] = researchtools.CapturesNotSearchedNote + ": x"
+	raw, _ := json.Marshal(m)
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
+	if !strings.Contains(res.text, "Held pages: not searched") || !strings.Contains(res.text, "Published stories: none found") {
+		t.Fatalf("the searched half is not said to have found nothing:\n%s", res.text)
+	}
+}
+
+// Round 2, item 5: a field over its clip is marked cut.
+func TestBriefMarksACutFieldAndNeverCutsAShortOne(t *testing.T) {
+	c := briefCapture(1, strings.Repeat("harbor ", 200))
+	c["title"] = "Short title"
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(briefResult([]map[string]any{c}, 0)))
+	if !strings.Contains(res.text, "[cut]") {
+		t.Fatalf("a cut passage is not marked:\n%s", res.text)
+	}
+	if strings.Count(res.text, "[cut]") != 1 {
+		t.Fatalf("an uncut field is marked cut:\n%s", res.text)
+	}
+}
+
+// Round 2, item 7: the run's conversation is found through the package's
+// channel accessor, which falls back to the run's metadata.
+func TestResearchBriefFindsTheRunsConversationThroughTheChannelAccessor(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-brief-15", rt.cfg.ComputerID
+	seedResearchCast(t, s, owner, computer, "doc-15", "MINE objective", "")
+	rt.researchBriefSearch = fixedSearch(briefResult(nil, 0))
+	rec := briefRunRecord(owner, computer, "doc-15", "run-brief-15")
+	rec.ChannelID = "" // the channel is in the run's metadata only
+	rec.Metadata = map[string]any{runMetadataChannelID: "doc-15"}
+	if got := rt.researchBriefOpening(context.Background(), rec).res.queries; got != 1 {
+		t.Fatalf("queries = %d", got)
+	}
+	if channelIDForRun(rec) != "doc-15" {
+		t.Fatalf("accessor = %q", channelIDForRun(rec))
 	}
 }
