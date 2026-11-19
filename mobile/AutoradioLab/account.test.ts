@@ -393,11 +393,26 @@ describe('S16 the paper page passes the story title with the route (the loss the
   });
 });
 
-describe('S17 every path a wipe covers is a path the app is granted to read and write', () => {
-  test('app.ts grants fs.read and fs.write for each (a denied path fails silently: the notebook cache and the shared open pages were never kept until this was found on Android)', () => {
+describe('S17 the grants and the wipes name the same paths, exactly, in both directions', () => {
+  const grantsOf = (): { read: Set<string>; write: Set<string> } => {
     const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8');
-    // not granted on purpose: app:/tmp/picked is read only; the vector store and the content database are not wired to a page yet (their wipes exist for when they are)
-    const missing = wipedPaths().filter((p) => !['app:/tmp/picked', 'app:/data/vectors', 'app:/data/content.db'].includes(p)).filter((p) => !(app.includes(`fs.read ${p}`) && app.includes(`fs.write ${p}`)));
-    expect(missing).toEqual([]);
+    const read = new Set<string>(), write = new Set<string>();
+    for (const m of app.matchAll(/^fs\.(read|write) (app:\/[^\s`;]+)/gm)) (m[1] === 'read' ? read : write).add(m[2]);
+    return { read, write };
+  };
+  // Not granted on purpose: app:/tmp/picked is read only (a picked file is the system's copy); the vector store and the content database are not wired to a page yet (their wipes exist for when they are).
+  const WIPED_NOT_GRANTED = new Set(['app:/tmp/picked', 'app:/data/vectors', 'app:/data/content.db']);
+  // Granted but not a wipe path of its own: `app:/data/exports` holds files the listener asked to export (not account data); `app:/cache` is the root the mail originals sit under (mail-*.html is removed by wipeMail).
+  const GRANTED_NOT_WIPED = new Set(['app:/data/exports', 'app:/cache']);
+  test('every wiped path is granted for read and write (a denied path fails silently), but the named exceptions', () => {
+    const { read, write } = grantsOf();
+    expect(wipedPaths().filter((p) => !WIPED_NOT_GRANTED.has(p)).filter((p) => !(read.has(p) && write.has(p)))).toEqual([]);
+    for (const p of WIPED_NOT_GRANTED) expect(wipedPaths()).toContain(p);                // an exception that is no longer wiped is a stale exception
+  });
+  test('every granted path is wiped (exact match), but the named exceptions: no store keeps data the sign-out does not know', () => {
+    const { read, write } = grantsOf();
+    const granted = new Set([...read, ...write]);
+    expect([...granted].filter((p) => !GRANTED_NOT_WIPED.has(p)).filter((p) => !wipedPaths().includes(p))).toEqual([]);
+    for (const p of GRANTED_NOT_WIPED) expect(granted.has(p)).toBe(true);
   });
 });

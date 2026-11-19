@@ -52,6 +52,8 @@ let pages: Page[] = [];
 let recency: string[] = [];
 let lastClosed: Page | null = null;
 let loaded = false;
+let loading: Promise<void> | null = null;
+let epoch = 0;                       // bumped by a wipe: a read that began before it belongs to the old account and is dropped
 
 const radioPage = (): Page => ({ address: RADIO, kind: 'radio', title: 'Autoradio', opener: '', pinned: false });
 function focusLocked(address: string): void { recency = [address, ...recency.filter((a) => a !== address)]; }
@@ -63,35 +65,54 @@ function openLocked(p: Page): Page {
     focusLocked(p.address); return pages[i];
   }
   pages.push(p); focusLocked(p.address);
-  for (;;) {                                                               // the pile keeps the 30 most recent unpinned pages
-    if (pages.filter((x) => !x.pinned).length <= LIMIT) break;
-    const oldest = [...recency].reverse().find((a) => pages.find((x) => x.address === a)?.pinned === false);
+  for (;;) {                                                               // the pile keeps the 30 most recent unpinned pages; the radio is never trimmed
+    if (pages.filter((x) => !x.pinned && x.address !== RADIO).length <= LIMIT) break;
+    const oldest = [...recency].reverse().find((a) => a !== RADIO && pages.find((x) => x.address === a)?.pinned === false);
     if (oldest === undefined) break;
     pages = pages.filter((x) => x.address !== oldest); recency = recency.filter((a) => a !== oldest);
   }
   return p;
 }
 
-async function load(storage: Storage | undefined): Promise<void> {
-  if (loaded) return;
-  loaded = true;
-  pages = []; recency = [];
-  if (storage) {
-    try {
-      const s = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(PAGES_FILE))) as { pages?: Page[]; recency?: string[] };
-      const seen = new Set<string>();
-      for (const q of Array.isArray(s.pages) ? s.pages : []) {
-        if (!q || typeof q.address !== 'string') continue;
-        const address = canonical(q.address);
-        if (seen.has(address)) continue; seen.add(address);
-        pages.push({ address, kind: kindOf(address), title: typeof q.title === 'string' ? q.title : defaultTitle(address), opener: typeof q.opener === 'string' ? q.opener : '', pinned: q.pinned === true });
-      }
-      const inRec = new Set<string>();
-      recency = (Array.isArray(s.recency) ? s.recency : []).map(canonical).filter((a) => pages.some((x) => x.address === a) && !inRec.has(a) && (inRec.add(a), true));
-      for (const q of pages) if (!recency.includes(q.address)) recency.push(q.address);
-    } catch { /* none kept yet, or damaged: the radio alone */ }
+/** What a stored file holds, entry by entry: a malformed entry is dropped (or its field takes the default), never half-applied. */
+function validated(raw: unknown): { pages: Page[]; recency: string[] } {
+  const o = typeof raw === 'object' && raw !== null ? (raw as { pages?: unknown; recency?: unknown }) : {};
+  const out: Page[] = []; const seen = new Set<string>();
+  for (const q of Array.isArray(o.pages) ? o.pages : []) {
+    if (typeof q !== 'object' || q === null || typeof (q as { address?: unknown }).address !== 'string') continue;
+    const e = q as { address: string; title?: unknown; opener?: unknown; pinned?: unknown };
+    const address = canonical(e.address);
+    if (address === '' || seen.has(address)) continue; seen.add(address);
+    out.push({ address, kind: kindOf(address), title: typeof e.title === 'string' && e.title !== '' ? e.title : defaultTitle(address), opener: typeof e.opener === 'string' ? e.opener : '', pinned: e.pinned === true });
   }
-  openLocked(radioPage());                                                 // every launch lands on the radio
+  const inRec = new Set<string>(); const rec: string[] = [];
+  for (const a of Array.isArray(o.recency) ? o.recency : []) {
+    if (typeof a !== 'string') continue;
+    const c = canonical(a);
+    if (out.some((x) => x.address === c) && !inRec.has(c)) { inRec.add(c); rec.push(c); }
+  }
+  for (const q of out) if (!inRec.has(q.address)) rec.push(q.address);
+  return { pages: out, recency: rec };
+}
+
+/** One read at a time (single flight): a second caller during the read waits for it. A wipe during the read drops its result and the caller reads again. */
+async function load(storage: Storage | undefined): Promise<void> {
+  for (let tries = 0; !loaded && tries < 3; tries++) {
+    if (!loading) {
+      const mine = epoch;
+      const p: Promise<void> = (async () => {
+        let stored: unknown = null;
+        if (storage) { try { stored = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(PAGES_FILE))); } catch { /* none kept yet, or damaged: the radio alone */ } }
+        if (mine !== epoch) return;                                        // wiped while reading: this is the old account's file
+        const v = validated(stored);
+        pages = v.pages; recency = v.recency;
+        openLocked(radioPage());                                           // every launch lands on the radio
+        loaded = true;
+      })().finally(() => { if (loading === p) loading = null; });
+      loading = p;
+    }
+    await loading;
+  }
 }
 
 async function save(storage: Storage | undefined, gen: number): Promise<void> {
@@ -135,7 +156,11 @@ export async function pagesClose(storage: Storage | undefined, address: string):
 export async function pagesReopen(storage: Storage | undefined): Promise<PageList> {
   await load(storage);
   const p = lastClosed; lastClosed = null;
-  return p ? pagesOpen(storage, p.address, p.title) : view();
+  if (!p) return view();
+  const gen = accountGeneration();
+  openLocked({ ...p });                                                    // the opener it had is kept (the Swift reopen does the same)
+  await save(storage, gen);
+  return view();
 }
 export async function pagesPin(storage: Storage | undefined, address: string): Promise<PageList> {
   const gen = accountGeneration(); await load(storage);
@@ -144,5 +169,5 @@ export async function pagesPin(storage: Storage | undefined, address: string): P
 }
 
 /** Sign-out and tests: only the radio stays; the file is removed by the account wipe. */
-export function forget(): void { pages = []; recency = []; lastClosed = null; loaded = false; }
+export function forget(): void { pages = []; recency = []; lastClosed = null; loaded = false; loading = null; epoch += 1; }
 export async function wipePages(storage: Storage | undefined): Promise<void> { forget(); if (!storage) return; try { await storage.fs.rm(PAGES_FILE); } catch { /* absent */ } }

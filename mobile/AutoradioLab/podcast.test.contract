@@ -1,5 +1,5 @@
-// The podcast and clip pages' data on the real plan and the web host. The deck mounts a page only when the Swift package says which page is on top
-// (openPages), and the web host has only that source's placeholder, so `pg.top` is empty here: the pages' own trees are looked at on the simulator and
+// The podcast and clip pages' data on the real plan and the web host. The deck mounts the page on top of the open set (the Swift package's, else the shared one after host.ts has waited about 4 s for a
+// native package: the web host has none); these checks read the first moments, so `pg.top` is still empty here (verified by `bun exact.mjs test web` after the deck change): the pages' own trees are looked at on the simulator and
 // on Android, and the rules of the sources (feeds, positions, play, clips) are in podcast.test.ts and clips.test.ts under bun test. What this proves
 // is the wiring the build could not: that app.ts answers every name the pages read, with the shapes the pages read, and that none of them throws when
 // no page is open.

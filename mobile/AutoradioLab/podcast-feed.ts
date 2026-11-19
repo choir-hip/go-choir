@@ -48,7 +48,14 @@ export const MAX_PARSE = 80_000;
 
 export function parseFeed(fullText: string, feedURL: string, fetchedAt: number): Feed {
   let text = fullText;
-  if (text.length > MAX_PARSE) { const cut = text.lastIndexOf('</item>', MAX_PARSE); text = text.slice(0, cut > 0 ? cut + 7 : MAX_PARSE) + '</channel></rss>'; }
+  if (text.length > MAX_PARSE) {
+    // Cut only at an item boundary: after the last whole `</item>` inside the cap. If there is none (the first item alone is over the cap), keep the channel header and NO item: a half item is
+    // never shown as an episode (it would have no title or enclosure).
+    const cut = text.lastIndexOf('</item>', MAX_PARSE);
+    const first = text.indexOf('<item');
+    const end = cut > 0 ? cut + 7 : first >= 0 && first < MAX_PARSE ? first : MAX_PARSE;
+    text = text.slice(0, end) + '</channel></rss>';
+  }
   const head = text.slice(0, 400).toLowerCase();
   if (head.includes('<html') || head.includes('<!doctype html')) throw new NotAFeed('That address is a web page, not a podcast feed.');
 

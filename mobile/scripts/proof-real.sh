@@ -87,6 +87,9 @@ for id in $(echo "$SHALLOW" | head -8); do
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://choir.news/api/platform/publications/resolve?route=${id#paper-story-}")
   [ "$code" = 200 ] && RESOLVABLE="$RESOLVABLE $id"
 done
+# Fail loudly rather than quietly tour nothing: no story card at all means the paper page did not draw, which the tour must not pass over.
+grep -q '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" || fail "survey" "no paper-story- line in the survey tree: the paper page showed no story card"
+[ -n "$RESOLVABLE" ] || echo "note: no top-band story resolved on the server (staging answered non-200 for each); the reader steps are skipped (docs/problems/staging-resolve-502-on-a-live-story-2026-11-19.md)"
 STORY1=$(echo $RESOLVABLE | tr ' ' '\n' | sed -n 1p)
 STORY2=$(echo $RESOLVABLE | tr ' ' '\n' | sed -n 2p)
 PLAY1=$(ids "$SHOTS/drive-survey.txt" "paper-play-" | sed -n 1p)

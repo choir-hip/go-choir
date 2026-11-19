@@ -351,3 +351,17 @@ Still Swift, and why (the substituted sources of the Android log):
   `texturesList` (the Textures place), `textureEditInfo`, `editionPicks`, `conversationInfo`, `themeList`/`theme` (themes are Swift data; the default theme is substituted), `signalList`.
 - The Swift `OpenPages` is NOT removed: Swift-initiated opens (the bar's ask-about-this-page, the voice) go through it. Removing it needs those to tell shared code through a one-way call that Android may lack.
 - Contracts that relied on `sf/...` symbols (drawn only on Apple) and `-exact-exit-animation` (refused on Android) have not been audited.
+
+### Seat 1's answers on the Android delta (f8a74ddc9..ced9acc5c)
+
+- The shared path is chosen by one host fact, `host.ts` `hostMode` (spine.contract `noNative`): "native" is decided at once by a usable native handle that answers a probe and is sticky; "none" only after a
+  4 s wait for a handle and a failed probe; unknown is read as native. It is not the native open-pages set's content, so an iPhone cold launch (empty native set until the first native call) runs neither
+  twin and keeps its native set; a failed or empty native answer keeps its last value. Test: `host.test.ts` H1 to H5 (H5: zero fetches with the flag false). On the web host the decision becomes "none" after
+  about 4 s, so `agent web` with a longer wait mounts the shared set; the `*.test.contract` files read the first moments (their comments say so; `bun exact.mjs test web` passes).
+- The feed cap cuts only at a whole item; if the first item alone is over 80 000 characters the show keeps its header and NO episode (tests: "the cap never shows a half item"). What the cap does to episodes:
+  a queued episode keeps playing (the queue entry carries its audio url and title; `podcastQueue` puts both in the entry); but an episode older than the capped list (80 000 characters, about the newest 40 to
+  60 episodes of a feed with long notes) is no longer on the show page, and its address, opened from a saved page or a "continue listening" row with no hint, resolves to "This episode has no audio" (`resolve`,
+  podcast.ts: the feed's episode, else the address's hint). A clip's address carries a hint, so a clip still opens its episode. A yielding parser that reads the whole feed is the better fix; owed.
+- `pages.ts` load is single-flight with an epoch (a wipe during the read drops it; the caller reads again), validates entry by entry, never trims the radio, and a reopen keeps the opener (as Swift does).
+- Named residuals: the in-memory shared state is re-asked after a sign-out through `signedOutTick` (`pagesView`, `notebookPageShared`); the reader twin has no per-account state. A sign-out on Android is not
+  implemented (no native sign-in), so this path has not been exercised there.

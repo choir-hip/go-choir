@@ -4,6 +4,9 @@
 //  P5 the set survives a relaunch (addresses, titles, pins, order) and a damaged file is the radio alone.   P6 the pile keeps 30 unpinned pages, pinned ones stay.
 //  P7 kinds and titles are the Swift ones (a file's name, a section, "texture:my-edition" opens the edition page).   P8 sign-out leaves the radio and no file.
 //  P9 a write that lands after a sign-out began is removed.
+//  P10 a stored file with a malformed entry (a non-string in recency, a page with no address) drops THAT entry and keeps the rest: nothing is half-applied.
+//  P11 two callers at the first read share ONE load (no duplicates, one read).   P12 a wipe during a load: the old account's file does not refill the set.
+//  P13 a close then reopen keeps the opener (as the Swift reopen does).
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as P from './pages.ts';
 import { nextGeneration, resetSeam } from './api.ts';
@@ -37,6 +40,12 @@ describe('pages', () => {
     v = await P.pagesClose(storage, 'pub:/x'); expect(v.top).toBe('textures:');
     v = await P.pagesClose(storage, 'textures:'); expect(v.top).toBe('paper:front');
     expect(addrs(await P.pagesClose(storage, 'nothing:here'))).toEqual(['paper:front', 'radio:']);
+    // the opener is NOT the next most recent: open C from A while B was opened later and focused; closing C must bring A forward, not B
+    P.forget(); files.clear();
+    await P.pagesOpen(storage, 'paper:front', ''); await P.pagesOpen(storage, 'textures:', ''); await P.pagesFocus(storage, 'paper:front');          // front: paper
+    await P.pagesOpen(storage, 'pub:/c', 'C');                                                                                                          // opener: paper:front
+    await P.pagesFocus(storage, 'textures:'); await P.pagesFocus(storage, 'pub:/c');                                                                    // recency now: c, textures, paper
+    v = await P.pagesClose(storage, 'pub:/c'); expect(v.top).toBe('paper:front');                                                                       // the opener, not textures:
   });
   test('P4 reopen brings back the last closed page once', async () => {
     await P.pagesOpen(storage, 'textures:', 'My texts'); await P.pagesClose(storage, 'textures:');
@@ -56,7 +65,7 @@ describe('pages', () => {
     await P.pagesOpen(storage, 'paper:front', ''); await P.pagesPin(storage, 'paper:front');
     for (let i = 0; i < 40; i++) await P.pagesOpen(storage, `pub:/s${i}`, `S${i}`);
     const v = await P.pagesView(storage);
-    expect(v.rows.filter((r) => !r.pinned).length).toBe(30); expect(addrs(v)).toContain('paper:front'); expect(addrs(v)).toContain('pub:/s39'); expect(addrs(v)).not.toContain('pub:/s0');
+    expect(v.rows.filter((r) => !r.pinned && r.address !== 'radio:').length).toBe(30); expect(addrs(v)).toContain('paper:front'); expect(addrs(v)).toContain('pub:/s39'); expect(addrs(v)).not.toContain('pub:/s0'); expect(addrs(v)).toContain('radio:');   // the radio is never trimmed
   });
   test('P7 kinds and titles are the Swift ones', async () => {
     expect(P.kindOf('mailbox:inbox')).toBe('mailbox'); expect(P.kindOf('podcast:show/x')).toBe('podcast'); expect(P.kindOf('weird')).toBe('unknown');
@@ -74,5 +83,42 @@ describe('pages', () => {
     const slow = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async (p: string, d: Uint8Array) => { await gate; files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
     const p = P.pagesOpen(slow, 'paper:front', ''); await new Promise((r) => setTimeout(r, 5)); nextGeneration(); release(); await p;
     expect(files.has(P.PAGES_FILE)).toBe(false);
+  });
+});
+
+describe('load', () => {
+  test('P10 malformed entries are dropped one by one; the rest is kept', async () => {
+    files.set(P.PAGES_FILE, new TextEncoder().encode(JSON.stringify({
+      pages: [{ address: 'paper:front', title: 'Paper', opener: '', pinned: false }, { title: 'no address' }, 7, null, { address: 'textures:', title: 'T', opener: 5, pinned: 'yes' }],
+      recency: ['textures:', 42, null, 'paper:front', 'gone:'],
+    })));
+    const v = await P.pagesView(storage);
+    expect(addrs(v).sort()).toEqual(['paper:front', 'radio:', 'textures:']);
+    expect(v.rows.find((r) => r.address === 'textures:')).toMatchObject({ opener: '', pinned: false });          // wrong types become the defaults
+    await P.pagesOpen(storage, 'file:/', '');                                                                  // and the set is usable and saved
+    expect(JSON.parse(new TextDecoder().decode(files.get(P.PAGES_FILE)!)).pages.length).toBe(4);
+  });
+  test('P11 two callers at the first read share one load', async () => {
+    await P.pagesOpen(storage, 'paper:front', ''); P.forget();
+    let reads = 0; let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    const slow = { fs: { readFile: async (p: string) => { reads++; await gate; return files.get(p)!; }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
+    const a = P.pagesView(slow), b = P.pagesOpen(slow, 'textures:', '');
+    await new Promise((r) => setTimeout(r, 10)); release(); await Promise.all([a, b]);
+    const v = await P.pagesView(slow);
+    expect(reads).toBe(1); expect(addrs(v)).toEqual(['textures:', 'radio:', 'paper:front']); expect(new Set(addrs(v)).size).toBe(v.rows.length);
+  });
+  test('P12 a wipe during a load: the old account\'s file does not refill the set', async () => {
+    await P.pagesOpen(storage, 'paper:front', 'Old account page'); P.forget();
+    let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    const slow = { fs: { readFile: async (p: string) => { await gate; const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
+    const load = P.pagesView(slow); await new Promise((r) => setTimeout(r, 10));
+    await P.wipePages(slow);                                                   // sign-out while the read is out
+    release(); await load;
+    expect(addrs(await P.pagesView(slow))).toEqual(['radio:']);
+  });
+  test('P13 close then reopen keeps the opener', async () => {
+    await P.pagesOpen(storage, 'paper:front', ''); await P.pagesOpen(storage, 'pub:/x', 'X'); await P.pagesClose(storage, 'pub:/x');
+    let v = await P.pagesReopen(storage); expect(v.rows[0]).toMatchObject({ address: 'pub:/x', opener: 'paper:front' });
+    v = await P.pagesClose(storage, 'pub:/x'); expect(v.top).toBe('paper:front');                                    // the opener comes forward again
   });
 });
