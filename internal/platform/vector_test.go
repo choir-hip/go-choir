@@ -427,7 +427,7 @@ func TestVectorPassLogsTheGapReadersLineAtBatchBoundaries(t *testing.T) {
 			gap = append(gap, ln)
 		}
 	}
-	re := regexp.MustCompile(`corpusd retrieval op=embed_gap shape=(stories|captures) ms=[0-9.]+ rows=(\d+) have=(\d+) want=(\d+) remaining=(\d+) model=2188ac1deca4$`)
+	re := regexp.MustCompile(`corpusd retrieval op=embed_gap shape=(stories|captures) ms=[0-9.]+ rows=(\d+) have=(\d+) want=(\d+) remaining=(\d+) model=2188ac1deca4 refused=\d+$`)
 	var lastCap, lastStory []string
 	nCap := 0
 	for _, ln := range gap {
@@ -1366,4 +1366,272 @@ func TestVectorWorkerWritesOnlyWhatTheOnePredicateKeepsEachClause(t *testing.T) 
 		t.Fatalf("second pass %+v (first %+v)", res2, res)
 	}
 	_ = ctx
+}
+
+// ---- round 2: deadlines, refused passages, DDL, idle cost, the policy object ----
+
+func TestVectorSearchSaysPartialWhenTheCountOrTheExactScanPassTheDeadline(t *testing.T) {
+	f := newVecFixture(t)
+	f.captures(t, "o1", "c1", "p", 30, time.Now().UTC().Add(-100*time.Hour), func(i int) string { return fmt.Sprintf("alpha text number%d", i) }, time.Minute)
+	f.pass(t)
+	old := vectorSearchStageHook
+	t.Cleanup(func() { vectorSearchStageHook = old })
+	fail := func(stage string) {
+		vectorSearchStageHook = func(ctx context.Context, tx *sql.Tx, got string) error {
+			if got != stage {
+				return nil
+			}
+			if _, err := tx.ExecContext(ctx, `SET LOCAL statement_timeout = '5ms'`); err != nil {
+				return err
+			}
+			_, err := tx.ExecContext(ctx, `SELECT pg_sleep(2)`)
+			return err
+		}
+	}
+	req := VectorSearchRequest{Query: "alpha text", Owner: "o1", Computer: "c1", CaptureLimit: 10}
+	for _, stage := range []string{"exact", "count"} {
+		fail(stage)
+		res, err := f.store.SearchVectors(context.Background(), req)
+		if err != nil {
+			t.Fatalf("%s timeout failed the search: %v", stage, err)
+		}
+		if !strings.Contains(res.Partial, "captures:") || len(res.Captures) != 10 || !strings.Contains(strings.Join(res.Approximate, ","), "captures") {
+			t.Fatalf("%s: partial %q, %d captures, approximate %v", stage, res.Partial, len(res.Captures), res.Approximate)
+		}
+	}
+	// And a search with no failure is complete.
+	vectorSearchStageHook = nil
+	res, err := f.store.SearchVectors(context.Background(), req)
+	if err != nil || res.Partial != "" {
+		t.Fatalf("clean search: %+v %v", res, err)
+	}
+}
+
+// refusing refuses any input holding "TOOLONG" with a status error, as the
+// server does for an input over its batch, and can fail with a network error.
+type refusing struct {
+	inner embedder.Embedder
+	net   func(in string) bool
+	calls atomic.Int64
+}
+
+func (r *refusing) Health(ctx context.Context) error { return r.inner.Health(ctx) }
+func (r *refusing) Embed(ctx context.Context, in []string) ([][]float32, error) {
+	r.calls.Add(int64(len(in)))
+	for _, x := range in {
+		if strings.Contains(x, "TOOLONG") {
+			return nil, &embedder.StatusError{Code: 500, Body: "input (3000 tokens) is too large to process"}
+		}
+		if r.net != nil && r.net(x) {
+			return nil, errors.New("connection reset by peer")
+		}
+	}
+	return r.inner.Embed(ctx, in)
+}
+
+func TestVectorARefusedPassageIsRecordedAndNotAskedAgain(t *testing.T) {
+	f := newVecFixture(t)
+	text := strings.Replace(storyText("harbor"), "harbor1 reports", "TOOLONG harbor1 reports", 1)
+	f.story(t, "doc-a", 1, "Harbor reopens", text, time.Time{})
+	f.capture(t, "o1", "c1", "refused-cap", "TOOLONG title", "lead text", time.Now().UTC().Add(-time.Hour), false)
+	f.capture(t, "o1", "c1", "fine", "Fine", "harbor lead text", time.Now().UTC().Add(-time.Hour), false)
+	r := &refusing{inner: f.emb}
+	f.store.SetEmbedder(r)
+	logs := fullTextLog(t)
+	res := f.pass(t)
+	if res.StoryVersions != 1 || res.StoryPassages != 3 || res.Refused != 2 || res.Captures != 1 {
+		t.Fatalf("first pass %+v", res)
+	}
+	var vec, ref int
+	_ = f.store.corpus().QueryRow(`SELECT COUNT(*) FILTER (WHERE embedding IS NOT NULL), COUNT(*) FILTER (WHERE refused <> '') FROM vec_story_passages`).Scan(&vec, &ref)
+	if vec != 3 || ref != 1 {
+		t.Fatalf("story rows: %d vectors, %d refused", vec, ref)
+	}
+	if !strings.Contains(logs.String(), "refused=1") && !strings.Contains(logs.String(), "refused=2") {
+		t.Fatalf("no refused= in the gap line:\n%s", logs.String())
+	}
+	// The next pass asks the model nothing.
+	calls := r.calls.Load()
+	res = f.pass(t)
+	if r.calls.Load() != calls || res.Worked() || res.StoryGap != 0 || res.CaptureGap != 0 {
+		t.Fatalf("second pass asked the model again: %+v, %d calls", res, r.calls.Load()-calls)
+	}
+	// A search returns the version's other passages and never the refused one.
+	got, err := f.store.SearchVectors(context.Background(), VectorSearchRequest{Vector: embedder.FakeVector("harbor ledger"), Owner: "o1", Computer: "c1", StoryLimit: 20, CaptureLimit: 20})
+	if err != nil || len(got.Stories) != 3 || len(got.Captures) != 1 {
+		t.Fatalf("search: %d story hits, %d captures, %v", len(got.Stories), len(got.Captures), err)
+	}
+	for _, h := range got.Stories {
+		if h.Ordinal == 1 {
+			t.Fatal("the refused passage was returned")
+		}
+	}
+	// A change of model reopens it.
+	if _, err := f.store.corpus().Exec(`UPDATE vec_story_passages SET model = 'old'; UPDATE vec_captures SET model = 'old'`); err != nil {
+		t.Fatal(err)
+	}
+	if res = f.pass(t); res.StoryVersions != 1 || res.Refused != 2 {
+		t.Fatalf("after a model change: %+v", res)
+	}
+}
+
+func TestVectorAnErrorThatIsNotTheServersRefusalRecordsNothing(t *testing.T) {
+	f := newVecFixture(t)
+	f.story(t, "doc-a", 1, "Harbor reopens", storyText("harbor"), time.Time{})
+	r := &refusing{inner: f.emb, net: func(in string) bool { return strings.Contains(in, "harbor2") }}
+	f.store.SetEmbedder(r)
+	if res, err := f.svc.RunVectorPass(context.Background()); err != nil || res.Skipped != 1 || res.Refused != 0 {
+		t.Fatalf("a dropped connection: %+v %v", res, err)
+	}
+	if f.count(t, "vec_story_passages") != 0 {
+		t.Fatal("a transient failure was recorded as a refusal")
+	}
+	r.net = nil
+	if res := f.pass(t); res.StoryVersions != 1 || res.Refused != 0 {
+		t.Fatalf("recovery: %+v", res)
+	}
+}
+
+func TestVectorEnsureTakesNoLockOnACompleteTableAndSearchRunsNoDDL(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	if err := f.store.ensureVectorTables(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// A concurrent HNSW build holds ShareUpdateExclusive; a CREATE INDEX IF NOT
+	// EXISTS (Share) would wait for it.
+	tx, err := f.store.corpus().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`LOCK TABLE vec_story_passages, vec_captures IN SHARE UPDATE EXCLUSIVE MODE`); err != nil {
+		t.Fatal(err)
+	}
+	short, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	start := time.Now()
+	if err := f.store.ensureVectorTables(short); err != nil {
+		t.Fatalf("ensure while a build holds the lock: %v", err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("ensure waited %v on a lock", time.Since(start))
+	}
+	_ = tx.Rollback()
+	// A search with no tables says unavailable and creates nothing.
+	if _, err := f.store.corpus().Exec(`DROP TABLE vec_story_passages, vec_captures`); err != nil {
+		t.Fatal(err)
+	}
+	f.store.vec.ready.Store(false)
+	res, err := f.store.SearchVectors(ctx, VectorSearchRequest{Query: "harbor"})
+	if err != nil || res.Unavailable == "" {
+		t.Fatalf("search without tables: %+v %v", res, err)
+	}
+	var made bool
+	_ = f.store.corpus().QueryRow(`SELECT to_regclass('vec_story_passages') IS NOT NULL`).Scan(&made)
+	if made {
+		t.Fatal("a search created the tables")
+	}
+}
+
+func TestVectorIndexBuildDoesNotLeaveItsMemorySettingOnTheConnection(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	if err := f.store.ensureVectorTables(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.corpus().Exec(`DROP INDEX idx_vsp_hnsw`); err != nil {
+		t.Fatal(err)
+	}
+	f.store.corpus().SetMaxOpenConns(1)
+	f.store.corpus().SetMaxIdleConns(1)
+	if err := f.store.ensureVectorIndex(ctx, vecStoryTable, vecStoryIndex, "story"); err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	if err := f.store.corpus().QueryRow(`SHOW maintenance_work_mem`).Scan(&got); err != nil || got == "256MB" {
+		t.Fatalf("maintenance_work_mem on the pooled connection: %q %v", got, err)
+	}
+}
+
+func TestVectorIdlePassReadsOneRowAndTwoCountsNotEveryPublication(t *testing.T) {
+	f := newVecFixture(t)
+	for i := 0; i < 5; i++ {
+		f.story(t, fmt.Sprintf("doc-%d", i), 1, fmt.Sprintf("Story %d", i), storyText(fmt.Sprintf("t%d", i)), time.Time{})
+	}
+	f.pass(t)
+	calls := func(op string) int64 { return f.store.RetrievalSnapshot().Ops[op].Calls }
+	edges, pubs := calls("list_edges_by_kind"), calls("front_publications")
+	res := f.pass(t)
+	if res.Worked() || calls("list_edges_by_kind") != edges || calls("front_publications")-pubs != 1 {
+		t.Fatalf("idle pass walked: edge reads %d, publication reads %d, %+v", calls("list_edges_by_kind")-edges, calls("front_publications")-pubs, res)
+	}
+	// A new story, and a new version of an old one, end the idle state.
+	f.story(t, "doc-new", 1, "New story", storyText("fresh"), time.Time{})
+	if res = f.pass(t); res.StoryVersions != 1 {
+		t.Fatalf("new story: %+v", res)
+	}
+	f.story(t, "doc-0", 2, "Story 0 again", storyText("again"), time.Time{})
+	if res = f.pass(t); res.StoryVersions != 1 {
+		t.Fatalf("new version: %+v", res)
+	}
+}
+
+func TestVectorStoryPredicateReadsThePolicyObjectAndIgnoresAMalformedOne(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	// distinct policy JSON, so each version has its own content-addressed policy object
+	_, vOK := f.vecPublish(t, "ok", "Fine", json.RawMessage(`{"visibility":"public","route":"public","n":1}`))
+	_, vPriv := f.vecPublish(t, "became-private", "Private later", json.RawMessage(`{"visibility":"public","route":"public","n":2}`))
+	_, vBad := f.vecPublish(t, "bad-policy", "Bad policy", json.RawMessage(`{"visibility":"public","route":"public","n":3}`))
+	f.pass(t)
+	if f.count(t, "vec_story_passages") != 12 {
+		t.Fatalf("rows %d", f.count(t, "vec_story_passages"))
+	}
+	setPolicy := func(version, accessJSON string) {
+		t.Helper()
+		res, err := f.store.corpus().Exec(`UPDATE og_objects SET metadata = jsonb_build_object('access_policy_json', ?::text, 'export_policy_json', '{}')::text
+			WHERE canonical_id IN (SELECT to_id FROM og_edges WHERE from_id = ? AND kind = 'has_policy')`, accessJSON, version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			t.Fatalf("policy objects updated for %s: %d", version, n)
+		}
+	}
+	setPolicy(vPriv, `{"visibility":"private"}`)
+	setPolicy(vBad, `{not json`)
+	res, err := f.store.SearchVectors(ctx, VectorSearchRequest{Vector: embedder.FakeVector("ledger"), StoryLimit: 50})
+	if err != nil {
+		t.Fatalf("a malformed policy object failed the search: %v", err)
+	}
+	seen := map[string]int{}
+	for _, h := range res.Stories {
+		seen[h.VersionID]++
+	}
+	if seen[vPriv] != 0 || seen[vOK] != 4 || seen[vBad] != 4 {
+		t.Fatalf("hits by version %v", seen)
+	}
+	if pass := f.pass(t); pass.Removed != 4 || f.count(t, "vec_story_passages") != 8 {
+		t.Fatalf("sweep %+v rows %d", pass, f.count(t, "vec_story_passages"))
+	}
+}
+
+func TestVectorImportAppliesTheWorkersEmptyTitleRule(t *testing.T) {
+	f, caps := importFixture(t)
+	empty := f.capture(t, "o1", "c1", "empty", "", "", time.Now().UTC().Add(-time.Hour), false).CanonicalID
+	rows := f.macRows(t, caps...)
+	rows = append(rows, importRow{Kind: vectorKindCapture, ID: empty, Ordinal: 0, TextSHA: embedder.TextSHA(""), Model: embedder.ModelHash, Dim: 256, Vec: embedder.FakeVector("title: none | text: ")})
+	res, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Rejected["no_text"] != 1 || f.count(t, "vec_captures") != 2 {
+		t.Fatalf("%+v captures %d", res, f.count(t, "vec_captures"))
+	}
+	f.pass(t)
+	var n int
+	_ = f.store.corpus().QueryRow(`SELECT COUNT(*) FROM vec_captures WHERE capture_id = ?`, empty).Scan(&n)
+	if n != 0 {
+		t.Fatal("the worker embedded what the import refused")
+	}
 }

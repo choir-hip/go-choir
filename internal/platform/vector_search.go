@@ -39,6 +39,10 @@ var vectorMaxScanTuples = 100000
 // read exactly. Beyond it the list is the HNSW index's approximate nearest.
 var vectorExactMaxRows = 100000
 
+// vectorSearchStageHook runs inside a savepoint before the "count" and the
+// "exact" statements (tests make them fail or pass the deadline).
+var vectorSearchStageHook func(ctx context.Context, tx *sql.Tx, stage string) error
+
 // vectorSearchTxHook runs inside each list's transaction, after the settings
 // and before the first statement (tests steer the planner with it).
 var vectorSearchTxHook func(ctx context.Context, tx *sql.Tx) error
@@ -122,11 +126,17 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 	if req.Vector != nil && len(req.Vector) != embedder.Dim {
 		return res, fmt.Errorf("vector search: vector of %d values, want %d", len(req.Vector), embedder.Dim)
 	}
+	// A search never runs DDL: the worker makes the tables and indexes.
 	if !s.VectorsReady() {
-		if err := s.ensureVectorTables(ctx); err != nil && !s.VectorsReady() {
-			res.Unavailable = "the vector tables are not ready: " + err.Error()
+		present, err := s.vectorTablesPresent(ctx)
+		if err != nil || !present {
+			res.Unavailable = "the vector tables do not exist yet"
+			if err != nil {
+				res.Unavailable += ": " + err.Error()
+			}
 			return res, nil
 		}
+		s.vec.ready.Store(true)
 	}
 	q := req.Vector
 	if q == nil {
@@ -168,7 +178,7 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 	doneStories := s.retrievalTimer(retrievalVectorSearch)
 	sq, sargs := vectorStoryQuery(lit, window, storyLimit)
 	cw, cargsS := window([]any{embedder.ModelHash})
-	stories, mode, partial, err := runVectorList(ctx, s, sq, sargs, storyLimit, `SELECT COUNT(*) FROM vec_story_passages v WHERE v.model = ?`+cw, cargsS, func(rows *sql.Rows) (VectorStoryHit, error) {
+	stories, mode, partial, err := runVectorList(ctx, s, sq, sargs, storyLimit, `SELECT COUNT(*) FROM vec_story_passages v WHERE v.model = ? AND v.embedding IS NOT NULL`+cw, cargsS, func(rows *sql.Rows) (VectorStoryHit, error) {
 		var h VectorStoryHit
 		err := rows.Scan(&h.PublicationID, &h.VersionID, &h.Ordinal, &h.Day, &h.TextSHA, &h.Score)
 		return h, err
@@ -187,7 +197,7 @@ func (s *Store) SearchVectors(ctx context.Context, req VectorSearchRequest) (res
 		doneCaptures := s.retrievalTimer(retrievalVectorSearch)
 		cq, cargs := vectorCaptureQuery(lit, req.Owner, req.Computer, window, capLimit)
 		cw, cargsC := window([]any{embedder.ModelHash, req.Owner, req.Computer})
-		caps, mode, partial, err := runVectorList(ctx, s, cq, cargs, capLimit, `SELECT COUNT(*) FROM vec_captures v WHERE v.model = ? AND v.owner_id = ? AND v.computer_id = ?`+cw, cargsC, func(rows *sql.Rows) (VectorCaptureHit, error) {
+		caps, mode, partial, err := runVectorList(ctx, s, cq, cargs, capLimit, `SELECT COUNT(*) FROM vec_captures v WHERE v.model = ? AND v.embedding IS NOT NULL AND v.owner_id = ? AND v.computer_id = ?`+cw, cargsC, func(rows *sql.Rows) (VectorCaptureHit, error) {
 			var h VectorCaptureHit
 			err := rows.Scan(&h.CaptureID, &h.Day, &h.TextSHA, &h.Score)
 			return h, err
@@ -236,7 +246,7 @@ func vectorStoryQuery(lit string, window func([]any) (string, []any), limit int)
 	w, args := window(args)
 	args = append(args, lit, limit)
 	return `SELECT v.story_id, v.version_id, v.ordinal, to_char(v.day, 'YYYY-MM-DD'), v.text_sha, 1 - (v.embedding <=> ?::halfvec(256)) AS score
-		FROM vec_story_passages v WHERE v.model = ?` + w + ` AND ` + vecStoryEligibleSQL + `
+		FROM vec_story_passages v WHERE v.model = ? AND v.embedding IS NOT NULL` + w + ` AND ` + vecStoryEligibleSQL + `
 		ORDER BY v.embedding <=> ?::halfvec(256) LIMIT ?`, args
 }
 
@@ -247,7 +257,7 @@ func vectorCaptureQuery(lit, owner, computer string, window func([]any) (string,
 	w, args := window(args)
 	args = append(args, lit, limit)
 	return `SELECT v.capture_id, to_char(v.day, 'YYYY-MM-DD'), v.text_sha, 1 - (v.embedding <=> ?::halfvec(256)) AS score
-		FROM vec_captures v WHERE v.model = ? AND v.owner_id = ? AND v.computer_id = ?` + w + ` AND ` + vecCaptureEligibleSQL + `
+		FROM vec_captures v WHERE v.model = ? AND v.embedding IS NOT NULL AND v.owner_id = ? AND v.computer_id = ?` + w + ` AND ` + vecCaptureEligibleSQL + `
 		ORDER BY v.embedding <=> ?::halfvec(256) LIMIT ?`, args
 }
 
@@ -307,36 +317,94 @@ func runVectorList[T any](ctx context.Context, s *Store, query string, args []an
 		}
 		return got, rows.Err()
 	}
-	var filtered int64
-	if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&filtered); err != nil {
-		return nil, "", "", err
+	// The count and the exact read each run under a savepoint: a statement
+	// that passes the deadline (or fails) is undone and the list falls back to
+	// what the index gives, flagged partial; it never fails the search.
+	attempt := func(stage string, fn func() error) (failure string) {
+		if _, err := tx.ExecContext(ctx, `SAVEPOINT vec_try`); err != nil {
+			return err.Error()
+		}
+		err := func() error {
+			if vectorSearchStageHook != nil {
+				if err := vectorSearchStageHook(ctx, tx, stage); err != nil {
+					return err
+				}
+			}
+			return fn()
+		}()
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err().Error()
+			}
+			if _, rerr := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT vec_try`); rerr != nil {
+				return err.Error() + "; " + rerr.Error()
+			}
+			return err.Error()
+		}
+		_, _ = tx.ExecContext(ctx, `RELEASE SAVEPOINT vec_try`)
+		return ""
+	}
+	filtered := int64(-1)
+	if why := attempt("count", func() error {
+		return tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&filtered)
+	}); why != "" {
+		if ctx.Err() != nil {
+			return nil, "", "", ctx.Err()
+		}
+		partial = "the filtered rows could not be counted: " + why
+		filtered = int64(vectorExactMaxRows) + 1 // unknown: take the index
 	}
 	if filtered <= int64(vectorExactMaxRows) {
-		if _, err := tx.ExecContext(ctx, `SET LOCAL enable_indexscan = off`); err != nil {
-			return nil, "", "", err
+		var got []T
+		why := attempt("exact", func() error {
+			if _, err := tx.ExecContext(ctx, `SET LOCAL enable_indexscan = off`); err != nil {
+				return err
+			}
+			var err error
+			got, err = collect()
+			return err
+		})
+		if why == "" {
+			return got, vecModeExact, "", nil
 		}
+		if ctx.Err() != nil {
+			return nil, "", "", ctx.Err()
+		}
+		partial = joinSentence(partial, "the exact scan did not finish: "+why)
 		out, err = collect()
 		if err != nil {
 			return nil, "", "", err
 		}
-		return out, vecModeExact, "", nil
+		return out, vecModeIndex, partial, nil
 	}
 	out, err = collect()
 	if err != nil {
 		return nil, "", "", err
 	}
 	if len(out) >= limit {
-		return out, vecModeIndex, "", nil
+		return out, vecModeIndex, partial, nil
 	}
-	if _, err := tx.ExecContext(ctx, `SET LOCAL enable_indexscan = off`); err != nil {
-		return out, vecModeIndex, "the exact scan could not start: " + err.Error(), nil
-	}
-	again, err := collect()
-	if err != nil {
+	var again []T
+	why := attempt("exact", func() error {
+		if _, err := tx.ExecContext(ctx, `SET LOCAL enable_indexscan = off`); err != nil {
+			return err
+		}
+		var err error
+		again, err = collect()
+		return err
+	})
+	if why != "" {
 		if ctx.Err() != nil {
 			return nil, "", "", ctx.Err()
 		}
-		return out, vecModeIndex, "the exact scan did not finish: " + err.Error(), nil
+		return out, vecModeIndex, joinSentence(partial, "the exact scan did not finish: "+why), nil
 	}
-	return again, vecModeExact, "", nil
+	return again, vecModeExact, partial, nil
+}
+
+func joinSentence(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return a + "; " + b
 }
