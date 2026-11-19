@@ -488,7 +488,7 @@ func jsonPathArg(jsonPath string) string {
 }
 
 // objectTime is an object timestamp at the second precision the front
-// page's cursors and windows compare (they carry whole seconds).
+// page's time windows compare (the story-list cursors keep full precision since 2026-11-19).
 func objectTime(t time.Time) time.Time {
 	return t.UTC().Truncate(time.Second)
 }

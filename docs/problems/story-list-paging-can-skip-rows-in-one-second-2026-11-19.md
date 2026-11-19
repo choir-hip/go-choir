@@ -36,11 +36,25 @@ them without any error. Not measured on the paper.
 
 ## What was done, and the remaining error
 
-The vector worker, which must see every row, now carries the sub-second
-part in its own cursor (an optional `Nanos` field only it sets). The three
-older callers are unchanged, so the front's later pages and the pieces
-index can still skip rows. Not yet known: how many published rows on the
-paper share a second with another (one read-only count over
-`og_objects` would say), and whether any story is missing from the pieces
-index because of it. The fix is to set `Nanos` in the three callers, with
-the same test shape; it is orange and has no builder yet.
+Fixed (lane `paging-skip`, orange): one cursor form for every caller. The
+cursor always carries the row's full-precision time (`u` whole seconds, `n`
+nanoseconds) and the `canonical_id` tie-break the SQL orders by, built only by
+`frontCursorAt`. The two front list loops, `scanPublicationRows` and the
+pieces index walk no longer build a whole-second cursor; that path is deleted.
+Tests (`publication_paging_second_test.go`) put twelve stories in one second,
+some with identical times, and page them through the front list, the section
+list, the scan and the index: each row once.
+
+A cursor minted before this fix (no `n` member) cannot say where in its second
+the page ended, so it is read as the end of that second: the next page starts
+at the newest row older than the following second. Rows of that second that
+were already listed may be listed again once; none is skipped. The cursor is
+opaque to its clients (the web app, the guest's research tools and management's
+listing hand back the string they were given; only `internal/platform` parses
+it). A new cursor shown to an old process during a deploy is not handled: the
+old process reads whole seconds and may skip as it always could.
+
+Remaining: not yet known how many published rows on the paper share a second
+with another (one read-only count over `og_objects` would say), nor whether any
+story is missing from the pieces index because of it; the index repairs itself
+only for rows that change.
