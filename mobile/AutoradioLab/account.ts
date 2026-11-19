@@ -83,7 +83,7 @@ export const NATIVE_DEADLINE_MS = 30000;
 
 const timeout = (ms: number): Promise<'timeout'> => new Promise((r) => setTimeout(() => r('timeout'), ms));
 /** A token for one sign-out, written into its marker: a late answer from another sign-out is told apart by it. */
-const signoutToken = (): string => crypto.randomUUID();
+const signoutToken = (): string => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');      // 16 random bytes, hex (getRandomValues is the call already used on the device, runsheet-entries.ts)
 /** Fails closed: no storage, or a write that fails, is not a marker. */
 const mark = async (storage: Storage | undefined, path: string, text: string): Promise<boolean> => {
   if (!storage) return false;

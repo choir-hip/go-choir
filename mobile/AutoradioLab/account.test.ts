@@ -330,6 +330,15 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
     release(); for (let i = 0; i < 10; i++) await new Promise((q) => setTimeout(q, 5));
     expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(false);
   });
+  test('the marker holds a token of 16 random bytes in hex (from getRandomValues), different for each sign-out', async () => {
+    const seen: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      W = newWorld('present'); W.hang = true; const m = memFs(SEED); await launch(m); resetSettled();
+      await accountSignOut({ demo: false }, m.storage, undefined, phone() as never, { deadlineMs: 10 });
+      seen.push(new TextDecoder().decode(m.files.get(PENDING_FILE))); W.lateRelease?.();
+    }
+    expect(seen[0]).toMatch(/^[0-9a-f]{32}$/); expect(seen[1]).toMatch(/^[0-9a-f]{32}$/); expect(seen[0]).not.toBe(seen[1]);
+  });
   test('a native sign-out that outlives its deadline keeps its continuation and the marker (finding 4)', async () => {
     W = newWorld('present'); W.hang = true; const m = memFs(SEED);
     await launch(m); resetSettled();
