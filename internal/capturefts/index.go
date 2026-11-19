@@ -769,9 +769,9 @@ func (s *scopeDB) rankPassages(ctx context.Context, match string, q Query, topK 
 			WHERE 1 = 1`
 	args := []any{TitleWeight, match}
 	if !q.Since.IsZero() || !q.Until.IsZero() {
-		// A page with neither a published nor a fetched time (eff 0) is outside
+		// A page with neither a published nor a fetched time (eff 0, an absent time; a time before 1970 is a time) is outside
 		// every window, as in the term half and the guest.
-		sqlText += ` AND p.eff > 0`
+		sqlText += ` AND p.eff <> 0`
 	}
 	if !q.Since.IsZero() {
 		sqlText += ` AND p.eff >= ?`
