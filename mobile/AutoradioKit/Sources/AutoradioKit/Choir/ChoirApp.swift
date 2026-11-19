@@ -376,9 +376,9 @@ public final class ChoirApp: @unchecked Sendable {
     // MARK: Play, next, previous
 
     /// Play this story now (a row, a page's Play): `place now` on the run sheet. What was ahead stays ahead.
-    public func play(route: String) async {
-        let title = lock.withLock { stories.first { $0.route == route }?.title } ?? ""
-        await MainActor.run { RunSheetPlayer.shared.playNow(.paperStory(route: route, title: title)) }
+    public func play(route: String, title: String = "") async {
+        let heading = title.isEmpty ? (lock.withLock { stories.first { $0.route == route }?.title } ?? "") : title      // the page names the story; the radio's list is the fallback
+        await MainActor.run { RunSheetPlayer.shared.playNow(.paperStory(route: route, title: heading)) }
         await RunSheetPlayer.shared.settle()
     }
 

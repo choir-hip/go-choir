@@ -936,7 +936,8 @@
     {
       "send": "choirPlay",
       "options": {
-        "route": "string"
+        "route": "string",
+        "title": "string"
       },
       "answers": "LabState"
     },

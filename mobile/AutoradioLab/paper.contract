@@ -23,7 +23,7 @@ component StoryActions
     tall: number
   view
     row gap=12 align-items="center"
-      button press=playStory(s.route) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
+      button press=playStory(s.route, s.title) appearance="none" testId=`paper-play-${s.route}` aria-label=`Play from ${s.title}` flex-shrink=0
         row gap=4 align-items="center" min-height=tall
           image "symbol:play-fill" width=14 height=14 color=th.accent
           text "Play" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent line-clamp=1

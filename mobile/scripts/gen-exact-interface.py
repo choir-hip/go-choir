@@ -38,7 +38,7 @@ names = [
     src("choirStories", "StoryList", default={"rows": []}),
     snd("choirSignIn"), snd("choirOpenApproval"), snd("choirCancelSignIn"), snd("choirRefresh"),
     snd("choirPlayPause"), snd("choirStartRadio"), snd("choirTalkCancel"), snd("choirHandsFreeToggle"),
-    snd("choirPlay", {"route": S}),
+    snd("choirPlay", {"route": S, "title": S}),
     snd("choirAsk", {"text": S, "aim": S}),
     snd("choirListen", {"address": S, "title": S, "text": S}),
 ]

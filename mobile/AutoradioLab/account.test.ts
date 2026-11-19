@@ -302,3 +302,14 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
     expect(r.action).toBe('adopt'); expect(dataLeft(m).length).toBe(SEED.length); expect(W.swift).toBe(true); expect(W.native).toEqual([]);
   });
 });
+
+describe('S16 the paper page passes the story title with the route (the loss the deck builder named)', () => {
+  test('the action, the paper buttons and the interface carry the title', async () => {
+    const c = await Bun.file(new URL('./account.contract', import.meta.url)).text();
+    expect(c).toContain('action playStory(route: string, title: string)'); expect(c).toContain('choirPlay(route=route, title=title)');
+    const p = await Bun.file(new URL('./paper.contract', import.meta.url)).text();
+    expect((p.match(/playStory\(s\.route, s\.title\)/g) ?? []).length).toBeGreaterThanOrEqual(1); expect(p).not.toContain('playStory(s.route)');
+    const i = JSON.parse(await Bun.file(new URL('../exact-package/exact.json', import.meta.url)).text());
+    expect(i.names.find((n: { send?: string }) => n.send === 'choirPlay').options).toEqual({ route: 'string', title: 'string' });
+  });
+});

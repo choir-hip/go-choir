@@ -35,8 +35,9 @@ members Autoradio
     send acct = choirRefresh()
   action radioPlay
     send acct = choirPlayPause()
-  action playStory(route: string)
-    send acct = choirPlay(route=route)
+  // The page that names the story passes its title with the route: a story that is not in the radio's list still has a name on the lock screen.
+  action playStory(route: string, title: string)
+    send acct = choirPlay(route=route, title=title)
   // Listen: the radio reads this text now, headline first (the page's own text; the module cleans it).
   action listen(address: string, title: string, text: string)
     send ctl = choirListen(address=address, title=title, text=text)
