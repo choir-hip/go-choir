@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,6 +77,17 @@ func briefResult(captures []map[string]any, stories int) json.RawMessage {
 
 
 
+
+// threadOf is the index of the thread a query came from (planN's texts). The
+// brief searches its threads at once, so a fake host cannot tell them by call order.
+func threadOf(query string) int {
+	if strings.Contains(query, "objective") {
+		return 0
+	}
+	var n int
+	_, _ = fmt.Sscanf(strings.TrimPrefix(query, "Hypothesis "), "%d", &n)
+	return n
+}
 
 func planN(n int) briefPlan { return briefPlan{threads: briefThreadsN(n)} }
 
@@ -158,11 +171,11 @@ func TestBriefBoundsEachThreadAndNeverRepeatsAPage(t *testing.T) {
 
 func TestBriefOverTheTokenBoundDropsWholeThreadsFromTheLastAndNamesThem(t *testing.T) {
 	big := strings.Repeat("harbor ", 70) // a whole passage under the clip, never cut by the bound
-	n := 0
+	var counter atomic.Int64
 	search := func(context.Context, string) (json.RawMessage, error) {
 		var caps []map[string]any
 		for i := 0; i < 6; i++ {
-			n++
+			n := int(counter.Add(1))
 			c := briefCapture(n, big+fmt.Sprintf("end-marker-%d", n))
 			c["title"], c["url"] = strings.Repeat("title ", 40), "https://example.org/"+strings.Repeat("path/", 30)
 			caps = append(caps, c)
@@ -180,7 +193,7 @@ func TestBriefOverTheTokenBoundDropsWholeThreadsFromTheLastAndNamesThem(t *testi
 		t.Fatalf("the dropped threads are not named with the verb that reads them:\n%s", res.text)
 	}
 	// Every passage that is shown is whole.
-	for i := 1; i <= n; i++ {
+	for i := 1; i <= int(counter.Load()); i++ {
 		m := fmt.Sprintf("end-marker-%d", i)
 		if strings.Contains(res.text, "capture_id=cap-"+fmt.Sprint(i)+" ") && !strings.Contains(res.text, m) {
 			t.Fatalf("passage %d is cut", i)
@@ -248,10 +261,8 @@ func TestBriefKeepsThreadsSearchedBeforeTheDeadline(t *testing.T) {
 	restore := researchBriefDeadline
 	t.Cleanup(func() { researchBriefDeadline = restore })
 	researchBriefDeadline = 200 * time.Millisecond
-	calls := 0
-	res := buildResearchBrief(briefDeadlineCtx(), planN(4), func(ctx context.Context, _ string) (json.RawMessage, error) {
-		calls++
-		if calls == 1 {
+	res := buildResearchBrief(briefDeadlineCtx(), planN(4), func(ctx context.Context, q string) (json.RawMessage, error) {
+		if threadOf(q) == 0 {
 			return briefResult([]map[string]any{briefCapture(1, "first thread page")}, 0), nil
 		}
 		<-ctx.Done()
@@ -639,13 +650,11 @@ func TestBriefClipsFieldsAndCapsNotes(t *testing.T) {
 	huge := strings.Repeat("T", 200<<10)
 	c := briefCapture(1, "passage")
 	c["title"], c["url"], c["capture_id"] = huge, "https://x.example/"+huge, "cap-"+huge
-	n := 0
-	search := func(context.Context, string) (json.RawMessage, error) {
-		n++
-		if n == 1 {
+	search := func(_ context.Context, q string) (json.RawMessage, error) {
+		if threadOf(q) == 0 {
 			return briefResult([]map[string]any{c}, 1), nil
 		}
-		return briefResult([]map[string]any{briefCapture(100+n, "other thread page")}, 0), nil
+		return briefResult([]map[string]any{briefCapture(100+threadOf(q), "other thread page")}, 0), nil
 	}
 	plan := planN(4)
 	for i := 0; i < 40; i++ {
@@ -869,13 +878,18 @@ func TestResearchBriefDeadlineIsStartedByTheOpening(t *testing.T) {
 	owner, computer := "owner-brief-13", rt.cfg.ComputerID
 	seedResearchCast(t, s, owner, computer, "doc-13", "Harbor?", "")
 	var deadline time.Time
+	var mu sync.Mutex
 	rt.researchBriefSearch = func(ctx context.Context, _ string) (json.RawMessage, error) {
+		mu.Lock()
 		deadline, _ = ctx.Deadline()
+		mu.Unlock()
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
 	start := time.Now()
 	b := rt.researchBriefOpening(context.Background(), briefRunRecord(owner, computer, "doc-13", "run-brief-13"))
+	mu.Lock()
+	defer mu.Unlock()
 	if deadline.IsZero() || deadline.After(start.Add(researchBriefDeadline+50*time.Millisecond)) || time.Since(start) > 2*time.Second {
 		t.Fatalf("deadline %v, took %s", deadline, time.Since(start))
 	}
@@ -966,16 +980,14 @@ func TestBriefAThreadTheDeadlineCutDidNotAnswer(t *testing.T) {
 	restore := researchBriefDeadline
 	t.Cleanup(func() { researchBriefDeadline = restore })
 	researchBriefDeadline = 150 * time.Millisecond
-	calls := 0
-	res := buildResearchBrief(briefDeadlineCtx(), planN(6), func(ctx context.Context, _ string) (json.RawMessage, error) {
-		calls++
-		if calls == 1 {
+	res := buildResearchBrief(briefDeadlineCtx(), planN(6), func(ctx context.Context, q string) (json.RawMessage, error) {
+		if threadOf(q) == 0 {
 			return briefResult(nil, 0), nil
 		}
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-	// Thread 1 answered with nothing; thread 2 was cut; threads 3 to 6 were never reached.
+	// Thread 1 answered with nothing; threads 2 to 6 had not returned when the deadline passed.
 	if res.outcome != briefEmpty || res.unanswered != 5 || res.reason == "" {
 		t.Fatalf("outcome=%q unanswered=%d reason=%q", res.outcome, res.unanswered, res.reason)
 	}
@@ -985,10 +997,8 @@ func TestBriefAThreadTheDeadlineCutDidNotAnswer(t *testing.T) {
 }
 
 func TestBriefAThreadThatErroredDidNotAnswer(t *testing.T) {
-	calls := 0
-	res := buildResearchBrief(context.Background(), planN(2), func(context.Context, string) (json.RawMessage, error) {
-		calls++
-		if calls == 2 {
+	res := buildResearchBrief(context.Background(), planN(2), func(_ context.Context, q string) (json.RawMessage, error) {
+		if threadOf(q) == 1 {
 			return nil, errors.New("corpusd returned 500")
 		}
 		return briefResult(nil, 0), nil
@@ -1018,10 +1028,8 @@ func TestBriefUnansweredIsOneDefinitionOnEveryPath(t *testing.T) {
 	if res := buildResearchBrief(context.Background(), plan, failing); res.outcome != briefFailed || res.unanswered != 3 || res.queries != 3 {
 		t.Fatalf("all fail: outcome=%q unanswered=%d queries=%d", res.outcome, res.unanswered, res.queries)
 	}
-	n := 0
-	one := func(context.Context, string) (json.RawMessage, error) {
-		n++
-		if n == 2 {
+	one := func(_ context.Context, q string) (json.RawMessage, error) {
+		if threadOf(q) == 1 {
 			return nil, errors.New("down")
 		}
 		return briefResult(nil, 0), nil
@@ -1054,13 +1062,11 @@ func TestBriefFailureSentenceSaysTheSearchDidNotAnswer(t *testing.T) {
 
 // Every thread says one of three things and nothing more.
 func TestBriefEveryThreadSaysOneOfThreeThings(t *testing.T) {
-	n := 0
-	res := buildResearchBrief(context.Background(), planN(3), func(context.Context, string) (json.RawMessage, error) {
-		n++
-		switch n {
-		case 1:
+	res := buildResearchBrief(context.Background(), planN(3), func(_ context.Context, q string) (json.RawMessage, error) {
+		switch threadOf(q) {
+		case 0:
 			return briefResult([]map[string]any{briefCapture(1, "found it")}, 0), nil
-		case 2:
+		case 1:
 			return briefResult(nil, 0), nil
 		}
 		return nil, errors.New("down")
@@ -1173,7 +1179,7 @@ func TestBriefNeverCutsAUrlOrAnId(t *testing.T) {
 
 func TestBriefAThreadWhosePagesWereAllListedAboveSaysSo(t *testing.T) {
 	res := buildResearchBrief(context.Background(), planN(2), fixedSearch(briefResult([]map[string]any{briefCapture(1, "p")}, 0))) // the same page for both
-	if !strings.Contains(res.text, "The pages found for this thread are listed above.") {
+	if !strings.Contains(res.text, "What the host found for this thread is listed above.") {
 		t.Fatalf("a thread whose pages were all listed above does not say so:\n%s", res.text)
 	}
 	if strings.Contains(res.text, sentenceNothingFound) {
@@ -1382,5 +1388,124 @@ func TestBriefAStoryWithNoAddressPrintsNone(t *testing.T) {
 	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
 	if !strings.Contains(res.text, "  - \"No address story\"\n") || strings.Contains(res.text, "too long") || strings.Contains(res.text, "read_url=") {
 		t.Fatalf("a story with no address prints one:\n%s", res.text)
+	}
+}
+
+// --- round 7: the threads are searched at once ---
+
+// A search that takes about two seconds on the paper (problem record
+// corpus-search-takes-two-seconds-on-the-paper-2026-11-19) cannot be called six
+// times in turn under 8 s. The threads' searches run at the same time.
+func TestBriefSearchesTheThreadsAtOnce(t *testing.T) {
+	const sleep = 150 * time.Millisecond
+	var started atomic.Int64
+	search := func(ctx context.Context, q string) (json.RawMessage, error) {
+		started.Add(1)
+		select {
+		case <-time.After(sleep):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		return briefResult([]map[string]any{briefCapture(threadOf(q)+1, "p")}, 0), nil
+	}
+	start := time.Now()
+	res := buildResearchBrief(briefDeadlineCtx(), planN(6), search)
+	if d := time.Since(start); d > 3*sleep {
+		t.Fatalf("six threads took %s: they were searched in turn (one search is %s)", d, sleep)
+	}
+	if res.outcome != briefDelivered || res.unanswered != 0 || res.queries != 6 || started.Load() != 6 || res.captures != 6 {
+		t.Fatalf("outcome=%q unanswered=%d queries=%d started=%d captures=%d", res.outcome, res.unanswered, res.queries, started.Load(), res.captures)
+	}
+	if res.slowest < sleep || res.slowest > 3*sleep {
+		t.Fatalf("slowest = %s, want about one search (%s)", res.slowest, sleep)
+	}
+}
+
+// Blocks are in thread order whatever order the calls return in, and a page
+// every thread found is listed under the first thread, as before.
+func TestBriefBlocksAreInThreadOrderWhateverOrderTheCallsReturnIn(t *testing.T) {
+	search := func(ctx context.Context, q string) (json.RawMessage, error) {
+		// Later threads return first.
+		time.Sleep(time.Duration(6-threadOf(q)) * 30 * time.Millisecond)
+		return briefResult([]map[string]any{briefCapture(1, "the shared page"), briefCapture(10+threadOf(q), "own page")}, 0), nil
+	}
+	res := buildResearchBrief(briefDeadlineCtx(), planN(6), search)
+	last := -1
+	for i := 1; i <= 6; i++ {
+		at := strings.Index(res.text, fmt.Sprintf("Thread %d (", i))
+		if at < 0 || at < last {
+			t.Fatalf("thread %d is out of order (at %d, previous %d):\n%s", i, at, last, res.text)
+		}
+		last = at
+	}
+	thread1 := res.text[strings.Index(res.text, "Thread 1 ("):strings.Index(res.text, "Thread 2 (")]
+	if strings.Count(res.text, "capture_id=cap-1 ") != 1 || !strings.Contains(thread1, "capture_id=cap-1 ") {
+		t.Fatalf("the shared page is not listed once, under thread 1:\n%s", res.text)
+	}
+}
+
+// One slow call past a short deadline is unanswered; the others are delivered.
+func TestBriefOneSlowCallPastTheDeadlineIsUnansweredAndTheOthersAreDelivered(t *testing.T) {
+	restore := researchBriefDeadline
+	t.Cleanup(func() { researchBriefDeadline = restore })
+	researchBriefDeadline = 120 * time.Millisecond
+	search := func(ctx context.Context, q string) (json.RawMessage, error) {
+		if threadOf(q) == 2 {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return briefResult([]map[string]any{briefCapture(threadOf(q)+1, "answered")}, 0), nil
+	}
+	start := time.Now()
+	res := buildResearchBrief(briefDeadlineCtx(), planN(4), search)
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("took %s past a 120 ms deadline", d)
+	}
+	if res.outcome != briefDelivered || res.unanswered != 1 || res.captures != 3 || strings.Count(res.text, sentenceUnanswered) != 1 {
+		t.Fatalf("outcome=%q unanswered=%d captures=%d:\n%s", res.outcome, res.unanswered, res.captures, res.text)
+	}
+	third := res.text[strings.Index(res.text, "Thread 3 ("):strings.Index(res.text, "Thread 4 (")]
+	if !strings.Contains(third, sentenceUnanswered) {
+		t.Fatalf("the slow thread is not the one that did not answer:\n%s", res.text)
+	}
+}
+
+// A call that returns after the deadline writes nothing the builder has read,
+// and no goroutine outlives the cancelled call.
+func TestBriefALateCallWritesNothingAndLeavesNoGoroutine(t *testing.T) {
+	before := runtime.NumGoroutine()
+	restore := researchBriefDeadline
+	t.Cleanup(func() { researchBriefDeadline = restore })
+	researchBriefDeadline = 60 * time.Millisecond
+	release := make(chan struct{})
+	search := func(ctx context.Context, q string) (json.RawMessage, error) {
+		if threadOf(q) == 0 {
+			return briefResult(nil, 0), nil
+		}
+		// Ignores the deadline and returns late with a page.
+		<-release
+		return briefResult([]map[string]any{briefCapture(99, "too late")}, 0), nil
+	}
+	res := buildResearchBrief(briefDeadlineCtx(), planN(3), search)
+	text := res.text
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := runtime.NumGoroutine(); n > before {
+		t.Fatalf("%d goroutines remain (before %d)", n, before)
+	}
+	if res.text != text || strings.Contains(res.text, "too late") || res.unanswered != 2 {
+		t.Fatalf("a late call changed the brief (unanswered=%d):\n%s", res.unanswered, res.text)
+	}
+}
+
+func TestBriefLogLineHasTheSlowestSearch(t *testing.T) {
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(briefResult(nil, 0)))
+	res.slowest = 1234 * time.Millisecond
+	line := researchBriefLogLine("r", "research", 2*time.Second, res)
+	if !strings.Contains(line, " ms=2000 slowest_ms=1234 threads=1 ") {
+		t.Fatalf("line: %s", line)
 	}
 }
