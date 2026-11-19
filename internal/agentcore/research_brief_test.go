@@ -69,8 +69,33 @@ func briefResult(captures []map[string]any, stories int) json.RawMessage {
 	if captures == nil {
 		captures = []map[string]any{}
 	}
-	b, _ := json.Marshal(map[string]any{"query": "q", "published": pub, "captures": captures, "events": []any{}})
+	b, _ := json.Marshal(map[string]any{"query": "q", "published": pub, "captures": captures, "events": []any{}, "coverage": fullCoverage()})
 	return b
+}
+
+func fullCoverage() map[string]any {
+	return map[string]any{"page_text": true, "page_text_indexed": 10, "pages": 10, "labels": true, "published": true}
+}
+
+// withCoverage returns a result with its coverage object replaced (nil removes it).
+func withCoverage(raw json.RawMessage, cov map[string]any) json.RawMessage {
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	if cov == nil {
+		delete(m, "coverage")
+	} else {
+		m["coverage"] = cov
+	}
+	b, _ := json.Marshal(m)
+	return b
+}
+
+func coverageWith(changes map[string]any) map[string]any {
+	c := fullCoverage()
+	for k, v := range changes {
+		c[k] = v
+	}
+	return c
 }
 
 func planN(n int) briefPlan { return briefPlan{threads: briefThreadsN(n)} }
@@ -608,68 +633,46 @@ func seedResearchCastWithLabels(t *testing.T, s *store.Store, owner, computer, d
 	}
 }
 
-// Review item 2: the verb folds a failed half into a note and answers
-// success. The brief must not read that as an empty corpus.
+// A half the verb did not search is never read as an empty corpus: the brief
+// reads the verb's coverage object, not its prose notes.
 func TestBriefAFailedHalfIsNotAnEmptyCorpus(t *testing.T) {
-	failed := func(capNote, pubNote string, captures []map[string]any, stories int) json.RawMessage {
-		var m map[string]any
-		_ = json.Unmarshal(briefResult(captures, stories), &m)
-		if capNote != "" {
-			m["captures_note"] = capNote
-		}
-		if pubNote != "" {
-			m["published_note"] = pubNote
-		}
-		b, _ := json.Marshal(m)
-		return b
-	}
-	capNote := researchtools.CapturesNotSearchedNote + ": the shared capture store is not configured"
-	pubNote := researchtools.PublishedNotSearchedNote + ": corpusd returned 503 SECRET-DETAIL"
-
-	// Captures half failed, published half empty: partial, not empty.
-	res := buildResearchBrief(context.Background(), planN(2), fixedSearch(failed(capNote, "", nil, 0)))
-	if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") {
-		t.Fatalf("outcome=%q text:\n%s", res.outcome, res.text)
-	}
-	if !strings.Contains(res.text, "Held pages: not searched") || strings.Contains(res.text, "shared capture store") {
-		t.Fatalf("the failed half is not named in plain words (or the raw note leaked):\n%s", res.text)
-	}
-	// Published half failed, captures delivered: partial with the pages.
-	res = buildResearchBrief(context.Background(), planN(1), fixedSearch(failed("", pubNote, []map[string]any{briefCapture(1, "p")}, 0)))
-	if res.outcome != briefPartial || !strings.Contains(res.text, "capture_id=cap-1") || !strings.Contains(res.text, "Published stories: not searched") || strings.Contains(res.text, "SECRET-DETAIL") {
+	// Page text and labels ran, published did not: partial, with the pages.
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult([]map[string]any{briefCapture(1, "p")}, 0), coverageWith(map[string]any{"published": false}))))
+	if res.outcome != briefPartial || !strings.Contains(res.text, "capture_id=cap-1") || !strings.Contains(res.text, "Published stories: not searched") {
 		t.Fatalf("outcome=%q text:\n%s", res.outcome, res.text)
 	}
 	if len(res.labels) == 0 {
 		t.Fatal("delivered pages marked nothing")
 	}
-	// Both halves failed in every thread: failed, one sentence.
-	res = buildResearchBrief(context.Background(), planN(2), fixedSearch(failed(capNote, pubNote, nil, 0)))
+	// Nothing found and a half not searched: never the empty sentence.
+	res = buildResearchBrief(context.Background(), planN(2), fixedSearch(withCoverage(briefResult(nil, 0), coverageWith(map[string]any{"labels": false}))))
+	if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") {
+		t.Fatalf("outcome=%q text:\n%s", res.outcome, res.text)
+	}
+	// Every half failed in every thread: failed, one sentence.
+	none := map[string]any{"page_text": false, "page_text_indexed": 0, "pages": 0, "labels": false, "published": false}
+	res = buildResearchBrief(context.Background(), planN(2), fixedSearch(withCoverage(briefResult(nil, 0), none)))
 	if res.outcome != briefFailed || !strings.HasPrefix(res.text, "No corpus brief:") {
 		t.Fatalf("outcome=%q text:\n%s", res.outcome, res.text)
 	}
-	// A note that is not a failure (a capped search) leaves an empty corpus empty.
-	res = buildResearchBrief(context.Background(), planN(1), fixedSearch(failed("searched all 900 captures; ranked the strongest", "", nil, 0)))
-	if res.outcome != briefEmpty {
-		t.Fatalf("a capped-search note made the outcome %q", res.outcome)
-	}
 }
 
-// The predicates are the verb's own: the notes the real tool writes satisfy
-// them, so a reworded note breaks a test, not the brief silently.
-func TestBriefReadsTheNotesTheRealToolWrites(t *testing.T) {
+// Through the real tool: a computer whose capture store is not configured
+// answers success with no coverage, and the brief says it searched nothing.
+func TestBriefReadsTheCoverageTheRealToolWrites(t *testing.T) {
 	guest, err := store.Open(t.TempDir() + "/runtime.db")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = guest.Close() })
-	deps := researchtools.Dependencies{Store: guest} // no capture store: both halves cannot be searched
+	deps := researchtools.Dependencies{Store: guest} // no capture store
 	raw, err := deps.HostEgress(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c"}),
 		"search_wire_corpus", json.RawMessage(`{"query":"harbor strike"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
-	if res.outcome != briefFailed {
+	if res.outcome != briefFailed || strings.Contains(res.text, "holds no page or story") {
 		t.Fatalf("a computer whose capture store is not configured read as %q:\n%s", res.outcome, res.text)
 	}
 }
@@ -728,6 +731,8 @@ type briefSink struct {
 	mu         sync.Mutex
 	searches   []researchtools.CaptureSearchQuery
 	publishedQ []string
+	// text is what the index says of the page text; nil means it did not answer.
+	text *researchtools.CaptureTextInfo
 }
 
 func (f *briefSink) WriteCaptures(context.Context, string, string, []sourcegraph.CaptureItem) (sourcegraph.CaptureWriteResult, error) {
@@ -743,7 +748,7 @@ func (f *briefSink) SearchCaptures(_ context.Context, q researchtools.CaptureSea
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.searches = append(f.searches, q)
-	return researchtools.CaptureSearchAnswer{}, nil
+	return researchtools.CaptureSearchAnswer{FullText: f.text}, nil
 }
 func (f *briefSink) SearchPublished(_ context.Context, query string, _ int) (researchtools.PublishedAnswer, error) {
 	f.mu.Lock()
@@ -1025,16 +1030,13 @@ func TestBriefDoesNotSayEmptyWhenTheDeadlineCutTheLoop(t *testing.T) {
 }
 
 func TestBriefDoesNotSayEmptyWhileTheTextIndexIsCatchingUp(t *testing.T) {
-	var m map[string]any
-	_ = json.Unmarshal(briefResult(nil, 0), &m)
-	m["captures_note"] = "the page text of 100 of this computer's 900 captures is searchable so far; the rest are found by title and labels only"
-	raw, _ := json.Marshal(m)
-	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
+	cov := coverageWith(map[string]any{"page_text_indexed": 100, "pages": 900})
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult(nil, 0), cov)))
 	if strings.Contains(res.text, "holds no page or story") || res.outcome != briefPartial {
 		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
 	}
-	if !strings.Contains(res.text, "page-text index is still catching up") {
-		t.Fatalf("the catching-up index is not said in plain words:\n%s", res.text)
+	if !strings.Contains(res.text, "100 of 900") {
+		t.Fatalf("the index's reach is not said in plain words:\n%s", res.text)
 	}
 }
 
@@ -1066,35 +1068,25 @@ func TestBriefCountsAfterTheDropLoopAndLogsLeftOutThreads(t *testing.T) {
 			c["title"], c["url"] = strings.Repeat("title ", 40), "https://example.org/"+strings.Repeat("path/", 40)
 			caps = append(caps, c)
 		}
-		var m map[string]any
-		_ = json.Unmarshal(briefResult(caps, 0), &m)
-		m["captures_note"] = researchtools.CapturesNotSearchedNote + ": x"
-		b, _ := json.Marshal(m)
-		return b, nil
+		return withCoverage(briefResult(caps, 0), coverageWith(map[string]any{"labels": false})), nil
 	}
 	plan := planN(6)
 	plan.left = []briefThread{{Kind: "question", Text: "a"}, {Kind: "question", Text: "b"}}
 	res := buildResearchBrief(context.Background(), plan, search)
-	// Every thread's capture half failed: both halves are not failed, so partial.
+	// Every thread's title-and-label half was not searched: partial.
 	for _, line := range []string{researchBriefLogLine("r", "research", 0, res)} {
 		if !strings.Contains(line, " left=2 ") {
 			t.Fatalf("the log does not count the threads left out: %s", line)
 		}
 	}
-	var capFails int
-	if _, err := fmt.Sscanf(res.reason, "captures not searched for %d of", &capFails); err == nil && capFails > res.threads {
-		t.Fatalf("reason %q counts more threads than were kept (%d)", res.reason, res.threads)
+	if want := fmt.Sprintf("titles and labels not searched in full for %d of %d threads", res.threads, res.threads); !strings.Contains(res.reason, want) || res.threads >= 6 {
+		t.Fatalf("reason %q, want %q counted over the %d kept threads (some must have been dropped)", res.reason, want, res.threads)
 	}
 }
 
-// Round 2, item 4: a half that found nothing reads differently from a half
-// that was not searched.
 func TestBriefSaysWhichHalfFoundNothingAndWhichWasNotSearched(t *testing.T) {
-	var m map[string]any
-	_ = json.Unmarshal(briefResult(nil, 0), &m)
-	m["captures_note"] = researchtools.CapturesNotSearchedNote + ": x"
-	raw, _ := json.Marshal(m)
-	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
+	cov := coverageWith(map[string]any{"page_text": false, "page_text_indexed": 0, "pages": 0, "labels": false})
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(withCoverage(briefResult(nil, 0), cov)))
 	if !strings.Contains(res.text, "Held pages: not searched") || !strings.Contains(res.text, "Published stories: none found") {
 		t.Fatalf("the searched half is not said to have found nothing:\n%s", res.text)
 	}
@@ -1128,5 +1120,191 @@ func TestResearchBriefFindsTheRunsConversationThroughTheChannelAccessor(t *testi
 	}
 	if channelIDForRun(rec) != "doc-15" {
 		t.Fatalf("accessor = %q", channelIDForRun(rec))
+	}
+}
+
+// --- round 3: positive evidence ---
+
+// windowOnlySink cannot search: only the window of the newest captures lists.
+type windowOnlySink struct{}
+
+func (windowOnlySink) WriteCaptures(context.Context, string, string, []sourcegraph.CaptureItem) (sourcegraph.CaptureWriteResult, error) {
+	return sourcegraph.CaptureWriteResult{}, nil
+}
+func (windowOnlySink) ReadCapture(context.Context, string, int, int) (json.RawMessage, error) {
+	return nil, errors.New("not used")
+}
+func (windowOnlySink) ListCaptures(context.Context, string, string, int) ([]objectgraph.Object, error) {
+	return nil, nil
+}
+
+func briefOverRealTool(t *testing.T, sink researchtools.CaptureSink, plan briefPlan) researchBriefResult {
+	t.Helper()
+	rt, s := testRuntime(t)
+	rt.researchDeps = &researchtools.Dependencies{Store: s, Captures: sink}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID})
+	return buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
+}
+
+// The reviewer's scenario: no page-text index, and the window fallback. Both
+// searched "nothing" and said so before the coverage object existed.
+func TestBriefNeverSaysEmptyWhenPageTextWasNeverSearched(t *testing.T) {
+	for name, sink := range map[string]researchtools.CaptureSink{
+		"index answered, no page text": &briefSink{},
+		"window fallback":              windowOnlySink{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := briefOverRealTool(t, sink, planN(2))
+			if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") {
+				t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+			}
+			if !strings.Contains(res.text, "page text not searched") && !strings.Contains(res.text, "Page text: not searched") {
+				t.Fatalf("the missing page text is not said:\n%s", res.text)
+			}
+			if res.reason == "" {
+				t.Fatal("no reason for the log")
+			}
+		})
+	}
+}
+
+// Only a search that ran in full and found nothing may say the corpus is empty.
+func TestBriefSaysEmptyOnlyOnAFullCoverageStatement(t *testing.T) {
+	sink := &briefSink{text: &researchtools.CaptureTextInfo{Used: true, Indexed: 7, Captures: 7}}
+	res := briefOverRealTool(t, sink, planN(2))
+	if res.outcome != briefEmpty || !strings.Contains(res.text, "holds no page or story") {
+		t.Fatalf("a full search that found nothing is not said to: outcome=%q\n%s", res.outcome, res.text)
+	}
+}
+
+// A result with a zero-value (or missing) coverage object can never produce
+// the sentence, whatever else it holds or lacks.
+func TestBriefZeroCoverageCanNeverSayEmpty(t *testing.T) {
+	for name, raw := range map[string]json.RawMessage{
+		"no coverage key":  withCoverage(briefResult(nil, 0), nil),
+		"zero coverage":    withCoverage(briefResult(nil, 0), map[string]any{}),
+		"false everywhere": withCoverage(briefResult(nil, 0), map[string]any{"page_text": false, "labels": false, "published": false}),
+		"only published":   withCoverage(briefResult(nil, 0), map[string]any{"published": true}),
+	} {
+		res := buildResearchBrief(context.Background(), planN(3), fixedSearch(raw))
+		if strings.Contains(res.text, "holds no page or story") || res.outcome == briefEmpty || res.outcome == briefDelivered {
+			t.Fatalf("%s: outcome=%q\n%s", name, res.outcome, res.text)
+		}
+	}
+}
+
+// A thread past the sixth was never searched: the sentence is not printed.
+func TestBriefLeftOutThreadsPreventTheEmptySentence(t *testing.T) {
+	plan := planN(2)
+	plan.left = []briefThread{{Kind: "question", Text: "never searched"}}
+	res := buildResearchBrief(context.Background(), plan, fixedSearch(briefResult(nil, 0)))
+	if res.outcome != briefPartial || strings.Contains(res.text, "holds no page or story") || !strings.Contains(res.text, "never searched") {
+		t.Fatalf("outcome=%q:\n%s", res.outcome, res.text)
+	}
+}
+
+// Round 3, item 3: nested operators of any depth are neutralised.
+func TestBriefNeutralisesOperatorsNestedDeep(t *testing.T) {
+	deep := strings.Repeat("since:", 20) + "x"
+	got := plainBriefQuery(deep)
+	if strings.Contains(strings.ToLower(got), "since:") {
+		t.Fatalf("an operator survived: %q", got)
+	}
+	got = plainBriefQuery(strings.Repeat(`"-`, 20) + "order:recent")
+	if strings.Contains(got, "order:") || strings.ContainsAny(got, `"`) {
+		t.Fatalf("an operator survived: %q", got)
+	}
+}
+
+// Round 3, item 4: a url or id is rendered whole or not at all.
+func TestBriefNeverCutsAUrlOrAnId(t *testing.T) {
+	longURL := "https://choir.news/read/" + strings.Repeat("a", 300)
+	c := briefCapture(1, "p")
+	c["url"] = "https://example.org/" + strings.Repeat("b", 300)
+	var m map[string]any
+	_ = json.Unmarshal(briefResult([]map[string]any{c}, 0), &m)
+	m["published"] = []map[string]any{{"title": "t", "read_url": longURL, "route_path": "/pub/short", "kind": "story"}}
+	raw, _ := json.Marshal(m)
+	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
+	if strings.Contains(res.text, longURL) {
+		// whole is allowed only if nothing was cut
+		if strings.Contains(res.text, "[cut]\n") && strings.Contains(res.text, "read_url="+longURL+" [cut]") {
+			t.Fatalf("a read_url is cut:\n%s", res.text)
+		}
+	} else if !strings.Contains(res.text, "/pub/short") {
+		t.Fatalf("a read_url too long to show whole is neither shown nor replaced by the route path:\n%s", res.text)
+	}
+	if strings.Contains(res.text, "b [cut]") || strings.Contains(res.text, "capture_id=cap-1 [cut]") {
+		t.Fatalf("a url or id carries [cut]:\n%s", res.text)
+	}
+	// An id too long to show whole is omitted and said so.
+	c2 := briefCapture(2, "p")
+	c2["capture_id"] = "cap-" + strings.Repeat("i", 200)
+	res = buildResearchBrief(context.Background(), planN(1), fixedSearch(briefResult([]map[string]any{c2}, 0)))
+	if strings.Contains(res.text, "iiiiiiiiii [cut]") || strings.Contains(res.text, "cap-iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii") {
+		t.Fatalf("an over-long id was cut or shown:\n%s", res.text)
+	}
+}
+
+// Round 3, item 5: the "nothing held" line says the right thing in each case.
+func TestBriefNothingLineIsTrueInEachBranch(t *testing.T) {
+	empty := buildResearchBrief(context.Background(), planN(2), fixedSearch(briefResult(nil, 0)))
+	if strings.Contains(empty.text, "only those listed above") {
+		t.Fatalf("nothing is listed above, yet:\n%s", empty.text)
+	}
+	n := 0
+	res := buildResearchBrief(context.Background(), planN(2), func(context.Context, string) (json.RawMessage, error) {
+		n++
+		if n == 1 {
+			return briefResult([]map[string]any{briefCapture(1, "p")}, 0), nil
+		}
+		return briefResult([]map[string]any{briefCapture(1, "p")}, 0), nil // the same page again
+	})
+	if !strings.Contains(res.text, "only those listed above") {
+		t.Fatalf("a thread whose pages were all listed above does not say so:\n%s", res.text)
+	}
+}
+
+// Round 3, item 6: two records with different objectives; the channel is only
+// in the run's metadata. The old rec.ChannelID expression gives "" and picks
+// the newest (the other conversation's); the accessor picks this run's.
+func TestResearchBriefPicksThisRunsRecordWhenOnlyMetadataNamesTheChannel(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer, doc := "owner-brief-16", rt.cfg.ComputerID, "doc-16"
+	mine := types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cast:mine", Kind: types.CommitmentKindDirective,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "MINE harbor objective"},
+		Cast:      &types.CommitmentCast{}, Inbox: "research:" + doc, SenderInbox: "texture:" + doc, Addressee: "research:" + doc,
+		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
+		Provenance: types.CommitmentProvenance{AgentID: "texture:" + doc},
+	}
+	other := mine
+	other.RecordID = "management-cell:cast:other"
+	other.Directive = &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "OTHER newer objective"}
+	other.SenderInbox = "management:" + owner
+	req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "seed-two-" + doc, Records: []types.CommitmentRecord{mine, other}}
+	req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
+	if _, err := s.CommitInboxRecords(context.Background(), req); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	probe := &briefProbe{result: briefResult(nil, 0)}
+	rt.researchBriefSearch = probe.search
+	rec := briefRunRecord(owner, computer, doc, "run-brief-16")
+	rec.ChannelID = ""
+	rec.Metadata = map[string]any{runMetadataChannelID: doc}
+	_ = rt.researchBriefOpening(context.Background(), rec)
+	if len(probe.queries) != 1 || !strings.Contains(probe.queries[0], "MINE") {
+		t.Fatalf("queries = %v, want this run's record (MINE), not the newest", probe.queries)
+	}
+}
+
+// Round 3, item 7: the first-turn sentence is true when the brief was dropped.
+func TestResearchFirstTurnDoesNotPromiseABriefAbsolutely(t *testing.T) {
+	p, _ := recordsInboxPromptFor(agentprofile.Research)
+	if strings.Contains(p, "this message ends with a corpus brief, or a sentence saying why there is none") {
+		t.Fatalf("the sentence is absolute, but a dropped brief leaves neither: %s", p)
+	}
+	if !strings.Contains(p, "normally ends with a corpus brief") || !strings.Contains(p, "search the corpus yourself first") {
+		t.Fatalf("the first turn does not say what to do when neither is there: %s", p)
 	}
 }
