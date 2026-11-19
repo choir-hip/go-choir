@@ -1114,8 +1114,8 @@ func eventQuestion(chunk []eventInput, cands *eventCandidates, summaryRunes int)
 	return stateRaw, questions, alias
 }
 
-// enqueueEventResolution queues a poll's new captures for the next flush,
-// when intake.events is on. A flush runs eventFlushInterval after the first
+// enqueueEventResolution queues a poll's new captures for the next flush;
+// the event layer has no setting. A flush runs eventFlushInterval after the first
 // capture, so captures from many sources share one call; no count of queued
 // captures starts a flush early. One flush at a time drains a computer's
 // queue, in order; captures queued meanwhile are drained by the same flush.
@@ -1129,7 +1129,7 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 // schedule made (research false) or a research desk's read or poll made
 // (research true: the flush's journal line counts them apart).
 func (rt *Runtime) enqueueEventCaptures(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem, research bool) bool {
-	if rt == nil || len(captured) == 0 || !rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents) {
+	if rt == nil || len(captured) == 0 {
 		return false
 	}
 	now := time.Now().UTC()

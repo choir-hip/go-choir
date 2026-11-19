@@ -1598,36 +1598,6 @@
    "note": "LEAVE OFF on the paper (hundreds of story documents would churn the master). Default off, held 2026-11-03 (docs/problems/default-off-switches-audit-2026-11-03.md): owner turns it on once F4/F5 are re-proved on d@e and the paper's story documents feed the master as one batched entry an hour."
   },
   {
-   "id": "intake_events",
-   "kind": "setting",
-   "life": "release",
-   "owner": "intake",
-   "class": "orange",
-   "surface": "paper",
-   "introduced": "2026-10-28",
-   "settings": [
-    "intake.events"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "all",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "On for the paper; paper feature. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
-  },
-  {
    "id": "intake_labels",
    "kind": "setting",
    "life": "release",
