@@ -278,7 +278,7 @@ type storyInfo struct {
 func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest, resp *CaptureSearchResponse) {
 	owner, computer := strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID)
 	size := rankSize(req.Size)
-	done := s.retrievalTimerExtra(retrievalCaptureSearch)
+	done := s.retrievalTimerExtra(retrievalCaptureRank, retrievalCaptureSearch)
 	ranking := &CaptureRanking{Entries: []RankedCapture{}}
 	resp.Ranked = ranking
 	defer func() {
