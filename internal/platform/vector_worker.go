@@ -566,6 +566,17 @@ func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string
 // the sweeps that remove vectors whose text is no longer public. It returns
 // when the gap it found is closed, the context ends, or the embedder fails.
 func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
+	return s.runVectorPass(ctx, vectorInboxCheckEvery, vectorIdleInterval)
+}
+
+// runVectorPass is RunVectorPass with the two timings it needs given, so the
+// worker passes the values it read once at start. Between embed batches, at most
+// once per checkEvery, the pass asks whether the spool inbox holds a file the
+// next pass would take (vectorInboxHasFileForPass; a waiter tried less than
+// idleInterval ago does not count, which bounds the passes a permanently waiting
+// file can cause to one per idleInterval) and, if so, returns early with
+// Yielded set, so a file placed during a long pass is not left waiting for it.
+func (s *Service) runVectorPass(ctx context.Context, checkEvery, idleInterval time.Duration) (VectorPassResult, error) {
 	var res VectorPassResult
 	if s == nil || s.store == nil {
 		return res, errors.New("vectors: nil service")
@@ -672,6 +683,20 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		}
 		log.Printf("corpusd vectors embed kind=%s remaining=%d rate=%.2f/s elapsed=%.0fs", kind, s.store.vec.remaining.Load(), rate, el)
 	}
+	lastInboxCheck := time.Now()
+	yieldToInbox := func() bool {
+		if time.Since(lastInboxCheck) < checkEvery {
+			return false
+		}
+		lastInboxCheck = time.Now()
+		if !s.vectorInboxHasFileForPass(idleInterval) {
+			return false
+		}
+		s.vecIdle = vecIdleMark{}
+		res.Yielded = true
+		log.Printf("corpusd vectors pass yields to the inbox remaining=%d", s.store.vec.remaining.Load())
+		return true
+	}
 	og := s.ogStore()
 	if walk {
 		logEmbedGap("stories", started, 0, storyHave, storyWant, refusedStories)
@@ -712,6 +737,9 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 			batchStart, batchRows, batchUnits = time.Now(), 0, 0
 		}
 		progress("story")
+		if yieldToInbox() {
+			return res, nil
+		}
 	}
 	if batchUnits > 0 || len(gap) > 0 {
 		logEmbedGap("stories", batchStart, batchRows, storyHave, storyWant, refusedStories)
@@ -775,6 +803,9 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 				return res, err
 			}
 			progress("capture")
+			if yieldToInbox() {
+				return res, nil
+			}
 		}
 		if len(page) < vectorGapPage {
 			break // a short page is the end of the gap
@@ -1198,13 +1229,13 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 		return
 	}
 	s.store.vec.started.Do(func() {
-		// These four timings are read once, here, before the goroutine exists:
+		// These five timings are read once, here, before the goroutine exists:
 		// the loop reads the locals, so a test that changes the four and puts
 		// them back does not race with a worker that is still stopping. Keep
 		// the capture outside the goroutine. (The batch sizes are still read
 		// by a pass as package variables; a test that changes one must not
 		// overlap a running worker.)
-		startDelay, backoffStart, backoffMax, idle := vectorStartDelay, vectorBackoffStart, vectorBackoffMax, vectorIdleInterval
+		startDelay, backoffStart, backoffMax, idle, checkEvery := vectorStartDelay, vectorBackoffStart, vectorBackoffMax, vectorIdleInterval, vectorInboxCheckEvery
 		s.removeStaleVectorSpool()
 		s.recoverVectorInbox()
 		go func() {
@@ -1216,7 +1247,7 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 			backoff := backoffStart
 			down := false
 			for {
-				res, err := s.RunVectorPass(ctx)
+				res, err := s.runVectorPass(ctx, checkEvery, idle)
 				if ctx.Err() != nil {
 					return
 				}
@@ -1239,8 +1270,8 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 						down = false
 					}
 					backoff = backoffStart
-					if res.Worked() {
-						wait = 0
+					if res.Worked() || res.Yielded {
+						wait = 0 // a yielded pass is followed at once by the one that takes the file
 					}
 				}
 				if wait > 0 {

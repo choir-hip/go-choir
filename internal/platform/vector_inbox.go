@@ -130,9 +130,47 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 	if err := s.ensureVectorInboxDirs(); err != nil {
 		return 0, fmt.Errorf("vector inbox: %w", err)
 	}
+	pick, _, _, perr := s.pickVectorInboxFile()
+	if perr != nil {
+		return 0, perr
+	}
+	v := &s.store.vec
+	if pick == "" || ctx.Err() != nil {
+		return 0, nil
+	}
+	job, ok := s.beginVectorJob("inbox", pick)
+	if !ok {
+		return 0, nil // the route's job runs; the file waits
+	}
+	done, ierr := s.importInboxFile(ctx, job, pick)
+	v.importMu.Lock()
+	if done {
+		delete(v.inboxDeferred, pick)
+	} else {
+		if v.inboxDeferred == nil {
+			v.inboxDeferred = map[string]time.Time{}
+		}
+		v.inboxDeferred[pick] = time.Now()
+	}
+	v.importMu.Unlock()
+	if done {
+		return 1, nil // importInboxFile returns an error only for a file not done
+	}
+	return 0, ierr
+}
+
+// pickVectorInboxFile is the one rule for which inbox file is taken next: the
+// oldest eligible file (not .part, old enough) that is not waiting, else the
+// waiting one tried longest ago. It returns "" when there is none; waiting says
+// the file was tried and put back, and lastTried when. It prunes the memory of
+// files that have left the inbox.
+func (s *Service) pickVectorInboxFile() (pick string, lastTried time.Time, waiting bool, err error) {
+	if err := s.ensureVectorInboxDirs(); err != nil {
+		return "", time.Time{}, false, fmt.Errorf("vector inbox: %w", err)
+	}
 	entries, rerr := os.ReadDir(s.vectorSpoolDir("inbox"))
 	if rerr != nil {
-		return 0, fmt.Errorf("vector inbox: %w", rerr)
+		return "", time.Time{}, false, fmt.Errorf("vector inbox: %w", rerr)
 	}
 	type cand struct {
 		name string
@@ -170,7 +208,7 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 	}
 	v.importMu.Unlock()
 	sort.Slice(cands, func(i, j int) bool { return cands[i].mod.Before(cands[j].mod) })
-	pick := ""
+	pick = ""
 	for _, c := range cands {
 		if _, waits := deferred[c.name]; !waits {
 			pick = c.name
@@ -189,28 +227,22 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 			}
 		}
 	}
-	if pick == "" || ctx.Err() != nil {
-		return 0, nil
+	if pick != "" {
+		lastTried, waiting = deferred[pick]
 	}
-	job, ok := s.beginVectorJob("inbox", pick)
-	if !ok {
-		return 0, nil // the route's job runs; the file waits
+	return pick, lastTried, waiting, nil
+}
+
+// vectorInboxHasFileForPass says whether a running pass should yield: the inbox
+// holds a file the next pass would take, and it is not a waiter tried less than
+// idle ago (a waiter that cannot be imported now is tried once per idle
+// interval at most, so it cannot make passes spin).
+func (s *Service) vectorInboxHasFileForPass(idle time.Duration) bool {
+	pick, last, waiting, err := s.pickVectorInboxFile()
+	if err != nil || pick == "" {
+		return false
 	}
-	done, ierr := s.importInboxFile(ctx, job, pick)
-	v.importMu.Lock()
-	if done {
-		delete(v.inboxDeferred, pick)
-	} else {
-		if v.inboxDeferred == nil {
-			v.inboxDeferred = map[string]time.Time{}
-		}
-		v.inboxDeferred[pick] = time.Now()
-	}
-	v.importMu.Unlock()
-	if done {
-		return 1, nil // importInboxFile returns an error only for a file not done
-	}
-	return 0, ierr
+	return !waiting || time.Since(last) >= idle
 }
 
 // importInboxFile claims name (a move into running/ that cannot replace), imports
