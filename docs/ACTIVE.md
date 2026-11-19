@@ -44,8 +44,10 @@ deployed proof is named in the goal file:
   does not yet draw its stories (claim C126 open); `lane/exact-integ`
   carries the next shift (the deck in shared code, Android pages).
 - **L.** The dated-switch deletions are deployed (`f3874a8bf`, C146 true).
-  The experiment driver is on main (`463ec68f0`); the pilot's smoke test
-  passed on two arms at 13:26Z and is being rerun on the third. The ten
+  The experiment driver is on main (`463ec68f0`); the pilot started at
+  13:58:36Z (three arms, thirty units; claims C148 to C150) after its smoke
+  test's question was changed to ask for one new web search (C158 true).
+  Nothing that refreshes computers is pushed until it ends. The ten
   objectives are on main (`calibration/e1/pilot-objectives.jsonl`).
 
 ## Live station (2026-11-18): Autoradio, the cutover from Swift to Exact
