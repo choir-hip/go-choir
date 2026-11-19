@@ -210,7 +210,31 @@ NOT DONE (context ran out at a step boundary): step D (paper title with the rout
 local search; mail cards' page text; mail catch-up beyond 25), step E (the signed-in tour: Files, Mail, podcasts, paper, notebook, takes, the local sign-out drill; the cause
 of the signed-out screens in the first `real` run; the first-answer timing against the 100 ms turn), steps F and G (the deck bridge, the run sheet through the deck).
 
-## Left, in order (for a fourth integrator)
+## Left, in order (for a fourth integrator): FIRST, the two reviews that came back after the third pass
+
+A. AUTH RECONCILE (the only blocker left on the app; auth re-review of 09057a63a, SEND_BACK, text in the lead's `review-exact/auth-r2/`). Not started. Make the launch
+   check and the end of every sign-out ONE function over three facts: the key as THREE native answers (present with digest / absent = item-not-found / cannot read now),
+   the stamp (none/same/other) and the marker (none/pending). Rules: "cannot read now" never wipes and never adopts; key present with a pending marker means the native half
+   did not delete the key, so remove the marker and wipe nothing; key absent with a stamp or marker means finish the sign-out (native op under a deadline, idempotent, reruns
+   the Swift wipe, THEN the shared wipe, THEN remove stamp and marker); a stamp or marker is advanced or removed only when every wipe succeeded, else it stays and the page is
+   told which stores failed; a native call past its deadline keeps its continuation and the marker stays. The four findings (each a failing table row): kill after the marker
+   and before the key delete wipes a signed-in phone (account.ts:90, 116-120); kill between key delete and the Swift wipe leaves the Swift stores (ChoirSignIn.swift:128-129);
+   a stamp written after a failed wipe (account.ts:126-127); the marker removed at the deadline while the native call still runs (account.ts:93-99). The CredentialReader read
+   must be read-only (ChoirClient.swift:86 collapses not-found and locked into nil). Table test: key(3) x stamp(3) x marker(2), plus a kill at each sign-out step boundary then
+   a relaunch, asserting (a) no wipe while a key is present, (b) no old-account store left after a new account is adopted (shared, and Swift through a recording stub).
+   Notes: `wipeRunsheet` is not in the wipe list (add it or delete it); `mark` returns true with no storage (fail closed); whether `redirect: 'manual'` is honoured at this pin
+   (read the Exact source; say what protects the key on a 302 if not); log `api: session` on change only. The first launch over a phone with a key, old Swift stores and no
+   stamp must adopt and wipe nothing: say it here. Then the sign-out drill through the queue `real` (clean sign-out; a second account; first launch over a key with stale stores).
+B. DECK (re-review of 09057a63a: no blocking code finding; the problem record for remote audio is `docs/problems/remote-audio-is-recorded-heard-without-sound-2026-11-19.md` on
+   origin/main, commit 7de5bd890; merge origin/main into the lane at a clean point, main's docs win except this file). New commits, tests first: re-run
+   `python3 -I mobile/scripts/gen-exact-interface.py` (exact.json still declares DeckState.rate at :200, :1193; add exact.json to the D16 test); a corrupt journal is moved
+   aside (`deck-journal.bad`) with a `system` line and journalling goes on from the numbers file; an unreadable launch must still close the item a kill left open once the merge
+   succeeds (deck.md:50-52); `wipe()` stops the engine again after an in-flight start resolves; prune lines at or below the acknowledged number at init and merge; one fixture with a
+   `dropped` system line read by all three languages, and delete the tautology at DeckTests.swift:294; deck.md:56 names the wipe by its old name; encode inside the `do`.
+C. MAIL: no further round unless the seal or the sign-out order changes. Open notes: the original is plain on disk while its page is open; no explicit check AT the write for the
+   other moved stores; the compose reset in account.contract is untested (the proof tour must open mail:new after a sign-out).
+
+Then the earlier list:
 
 1. Run `proof` and `real` at the tip again (the queue results of the third pass are in the lead's queue directory).
 2. Step D as above. Mail in search: design a search over sealed mail first.
