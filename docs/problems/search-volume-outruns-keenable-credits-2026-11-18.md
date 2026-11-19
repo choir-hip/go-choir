@@ -413,3 +413,43 @@ asks and mostly does not start from them. The next change (the corpus
 brief, lane `corpus-brief`) has the host search the corpus for the run's
 objective and put the result in the run's first message.
 
+## First hour on searching for need (deployed 2026-11-19T01:14Z at `f62811fec`)
+
+The paper refreshed, planned, at 01:14:15Z. The forecast (C140) reads the
+first 24 research run summaries from 01:34:15Z; at 02:29Z there were 13,
+so it is not settled here.
+
+| | before the deploy, 00:00Z to 01:13Z (19 runs) | after, 01:34Z to 02:28Z (13 runs) |
+| --- | --- | --- |
+| web searches started a run, median | 7 | 4 |
+| web searches started a run, mean | 9.1 | 4.3 |
+| rewordings sent of those offered | not counted | 13 of 25 |
+| searches not sent because the question held unread pages | 0 | 12 |
+| returned pages the run read | 6.5% | 6.3% |
+
+The gateway saw 69 searches from the paper in the hour to 02:21Z, against
+about 500 an hour before the deploy. Fewer runs started in that hour (the
+refresh interrupted work), so the whole fall is not the change's. The share
+of returned pages a run reads did not move: a run that searches less still
+reads about one page in sixteen of what a search returns.
+
+Two things disturbed this reading.
+
+- **A second refresh at 02:28Z.** A change to a status script and its test
+  (`d2c8bfdd0`) was pushed at 02:13Z. `scripts/test-*` is not docs-like
+  (`.github/scripts/ci-docs-like-paths`), so the push ran CI and a deploy,
+  and the deploy refreshed the paper while the forecast's runs were being
+  counted. A developer-side script should not restart the paper; until the
+  classifier separates "CI must run" from "must deploy" for such a script,
+  script changes wait for the next behaviour landing.
+- **One run read one page 3,090 times.** Research run `c0351184` called
+  `read_capture` on a single capture of its own in a loop inside a cell,
+  between 02:13:01Z and 02:14:07Z. The per-cell bound on host calls refused
+  it three times ("this cell made 1025 host calls; at most 1024 per cell"),
+  once in each of three cells, and the run ended with two pages read. The
+  bound worked. The reading did not: `scripts/status-corpus-reuse` counts
+  read lines, so this one run made "pages captured by the run itself" 96%
+  of the window's reads and "held before the run" 0.2%. The script should
+  count each capture once a run. What the cell program was trying to do has
+  not been read from the run's tape.
+
