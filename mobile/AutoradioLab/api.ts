@@ -126,6 +126,15 @@ export async function refreshSealBlock(): Promise<void> {
   try { const sess = await keptSession(); if (sess && (await digestOf(sess.key)) !== blockedDigest) blockedDigest = null; } catch { /* still signed out */ }
 }
 
+/** ONE rule for every moved store's file write (review 2026-11-19): `gen` is the account generation the SOURCE started under (`accountGeneration()` before its request). The write is
+ * refused if a sign-out has moved the generation, and a file that lands after the generation moved is removed again. True when the file is there. */
+export async function writeCurrent(gen: number, storage: Storage | undefined, path: string, bytes: Uint8Array): Promise<boolean> {
+  if (!storage || gen !== generation) return false;
+  try { await storage.fs.atomicWriteFile(path, bytes); } catch { return false; }
+  if (gen !== generation) { try { await storage.fs.rm(path); } catch { /* the wipe will */ } return false; }
+  return true;
+}
+
 /** An id as one path segment (Swift PathSegment.encode): everything but unreserved characters is escaped; "." and ".." too. */
 export function segment(id: string): string {
   if (id === '.') return '%2E';

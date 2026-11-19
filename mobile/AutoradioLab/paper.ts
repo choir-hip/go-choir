@@ -17,7 +17,7 @@ import {
   FRONT, FRONT_LIMIT, LIST_LIMIT, MINE, buildMine, belongs, dateLine, display, isCategory, parseList, parseLiveSections, relative, resolveView, sections,
   type LiveSection, type Section, type Story,
 } from './paper-model.ts';
-import { getJSON } from './api.ts';
+import { getJSON, writeCurrent, accountGeneration } from './api.ts';
 import demoFront from './fixtures/demo/front.json';
 import demoBig from './fixtures/demo/front-big.json';
 import demoEven from './fixtures/demo/front-even.json';
@@ -54,9 +54,8 @@ async function readCache(storage: Storage | undefined): Promise<unknown | null> 
   try { return JSON.parse(new TextDecoder().decode(await storage.fs.readFile(CACHE_FILE))); } catch { return null; }
 }
 
-async function writeCache(storage: Storage | undefined, raw: string): Promise<void> {
-  if (!storage) return;
-  try { await storage.fs.atomicWriteFile(CACHE_FILE, new TextEncoder().encode(raw)); } catch { /* the build has no storage; a full disk loses only the offline copy */ }
+async function writeCache(storage: Storage | undefined, raw: string, gen: number): Promise<void> {
+  await writeCurrent(gen, storage, CACHE_FILE, new TextEncoder().encode(raw));       // a full disk or no storage loses only the offline copy; a sign-out in flight writes nothing
 }
 
 /** The front list (`section` empty) or one category's list. Only the front list is written to the phone. */
@@ -73,12 +72,13 @@ export function listing(section: string, storage: Storage | undefined): Promise<
 }
 
 async function load(section: string, storage: Storage | undefined): Promise<Listing> {
+  const gen = accountGeneration();
   try {
     const query: Record<string, string | number> = { limit: LIST_LIMIT };
     if (section !== '') query.section = section;
     const r = await getJSON(FRONT_PATH, query);
     const stories = parseList(r.body);
-    if (section === '' && stories.length > 0) await writeCache(storage, r.raw);
+    if (section === '' && stories.length > 0) await writeCache(storage, r.raw, gen);
     const res: Listing = { stories, status: 'ready', message: '', sections: parseLiveSections(r.body), serverTime: r.serverTime };
     console.log(`paper: list ${section === '' ? 'front' : 'section ' + section} stories=${stories.length}`);
     return res;

@@ -8,7 +8,7 @@
 //          e-book is read by the computer (decision D4: it extracts the text; the phone shows and speaks it), text, Markdown and code open the same way.
 // Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, authedBytes, authedToFile, SignedOutError } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
 import demoTree from './fixtures/files-demo/tree.json';
 import * as M from './files-model.ts';
 import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
@@ -177,14 +177,15 @@ async function loadRecents(storage: Storage | undefined): Promise<Recent[]> {
   } catch { /* none kept yet */ }
   return recents;
 }
-async function saveRecents(storage: Storage | undefined): Promise<void> {
-  if (!storage || !recents) return;
-  try { await storage.fs.atomicWriteFile(RECENT_FILE, new TextEncoder().encode(JSON.stringify(recents))); } catch { /* a full disk loses only the recent list */ }
+async function saveRecents(storage: Storage | undefined, gen: number = accountGeneration()): Promise<void> {
+  if (!recents) return;
+  await writeCurrent(gen, storage, RECENT_FILE, new TextEncoder().encode(JSON.stringify(recents)));      // a full disk loses only the recent list; a sign-out in flight writes nothing
 }
-async function touch(storage: Storage | undefined, e: Entry, at: number): Promise<void> {
+async function touch(storage: Storage | undefined, e: Entry, at: number, gen: number = accountGeneration()): Promise<void> {
   const list = await loadRecents(storage);
+  if (gen !== accountGeneration()) return;                  // signed out since the source started: neither memory nor the file takes it
   recents = [{ path: e.path, size: e.size, modified: e.modified, openedAt: at }, ...list.filter((r) => r.path !== e.path)].slice(0, RECENT_LIMIT);
-  await saveRecents(storage);
+  await saveRecents(storage, gen);
 }
 async function forgetRecent(storage: Storage | undefined, path: string, prefix = false): Promise<void> {
   const list = await loadRecents(storage);
@@ -281,6 +282,7 @@ export type OpenArgs = Args & { address: string };
 
 /** Open the file a `file:` address names: find it in its folder, bring what its viewer needs, and for a file another page reads, ask the computer to open it. */
 export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNet): Promise<FileInfo> {
+  const gen = accountGeneration();
   const parsed = M.fromAddress(a.address);
   if (!a.address.startsWith('file:') || a.address.endsWith('/') || !parsed) return { ...M.emptyInfo(), address: a.address };
   const { path } = parsed;
@@ -300,7 +302,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
   if (entry.isDirectory) return infoOf(entry, 'folder');
   const kind = M.kindOf(entry.name, false);
   const out = infoOf(entry, 'ready');
-  if (kind === 'other') { await touch(storage, entry, lastNow); return out; }
+  if (kind === 'other') { await touch(storage, entry, lastNow, gen); return out; }
   if (M.opensElsewhere(kind)) {
     const r = await resolveEntry(entry, a.demo, storage, net);
     out.target = r.target; out.status = r.status === 'ready' ? 'ready' : 'error'; out.message = r.message;
@@ -340,7 +342,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
       bytes = bytes ?? new Uint8Array(await storage!.fs.readFile(dest));
       const [w, h] = imageSize(bytes); out.width = w; out.height = h;
     }
-    await touch(storage, entry, lastNow);
+    await touch(storage, entry, lastNow, gen);
   } catch (e) {
     out.status = e instanceof FilesError && e.kind === 'tooLarge' ? 'toolarge' : 'error';
     out.message = say(e);
@@ -379,6 +381,7 @@ function resolveEntry(entry: Entry, demo: boolean, storage: Storage | undefined,
 }
 
 async function doResolve(entry: Entry, demo: boolean, storage: Storage | undefined, net: Net): Promise<FileResolved> {
+  const gen = accountGeneration();
   const address = M.addressOf(entry.path, false);
   const fail = (message: string): FileResolved => ({ address, target: '', title: entry.name, status: 'error', message: `${entry.name} could not be opened. ${message} Tap the file to try again.` });
   if (demo) return fail('Demo files open as documents only on a signed-in phone.');
@@ -393,7 +396,7 @@ async function doResolve(entry: Entry, demo: boolean, storage: Storage | undefin
     const r = await net.json('/api/texture/files/open', { method: 'POST', body: { source_path: entry.path.replace(/^\//, ''), title: entry.name, initial_content: text } });
     const id = (r.body as { doc_id?: unknown } | null)?.doc_id;
     if (typeof id !== 'string' || id === '') return fail('Texture did not open the document.');
-    await touch(storage, entry, lastNow);
+    await touch(storage, entry, lastNow, gen);
     return { address, target: 'texture:' + id, title: entry.name, status: 'ready', message: '' };
   } catch (e) {
     return fail(say(e));

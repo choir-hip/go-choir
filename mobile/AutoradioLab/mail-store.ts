@@ -42,14 +42,13 @@ export const rowsFile = (folder: string): string => `${DIR}/rows-${folder.replac
 export const STATE_FILE = `${DIR}/state.bin`;
 
 async function write(env: Env, path: string, value: unknown, aad: string): Promise<boolean> {
+  // Two checks, each with a test that fails without it: before anything is sealed (no key work for a stale source) and after the file is written (a sign-out that began
+  // while it was being sealed or written removes the file again). The checks between them were redundant and are gone.
   if (!env.storage || stale(env) || !(await canSeal())) return false;
   try {
-    const plain = enc(value);
-    if (stale(env)) return false;
-    const box = await seal(plain, aad);
-    if (!box || stale(env)) return false;                  // the cipher refused (no key could be made), or a sign-out began while it sealed: nothing is written
+    const box = await seal(enc(value), aad);
+    if (!box) return false;                                // the cipher refused (no key could be made): nothing is written
     await env.storage.fs.mkdir(DIR).catch(() => undefined);
-    if (stale(env)) return false;
     await env.storage.fs.atomicWriteFile(path, box);
     if (stale(env)) { try { await env.storage.fs.rm(path); } catch { /* the wipe will */ } return false; }
     return true;

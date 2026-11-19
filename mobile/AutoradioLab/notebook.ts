@@ -17,7 +17,7 @@
 //  N8 no word of the notebook goes to a log
 
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, HTTPError, SignedOutError } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
 import { textureSource } from './content.ts';
 import { cut } from './takes.ts';
 
@@ -137,9 +137,8 @@ export async function loadCache(storage: Storage | undefined): Promise<string | 
   if (!storage) return null;
   try { return new TextDecoder().decode(await storage.fs.readFile(CACHE_FILE)); } catch { return null; }
 }
-export async function saveCache(storage: Storage | undefined, text: string): Promise<void> {
-  if (!storage) return;
-  try { await storage.fs.atomicWriteFile(CACHE_FILE, new TextEncoder().encode(text)); } catch { /* the page reads the computer next time */ }
+export async function saveCache(storage: Storage | undefined, text: string, gen: number = accountGeneration()): Promise<void> {
+  await writeCurrent(gen, storage, CACHE_FILE, new TextEncoder().encode(text));      // a failed write: the page reads the computer next time; a sign-out in flight writes nothing
 }
 /** Sign-out: the text and the file. The Swift sign-out wipe must call this for the shared copy (reported). */
 export async function wipeNotebook(storage: Storage | undefined): Promise<void> { if (!storage) return; try { await storage.fs.rm(CACHE_FILE); } catch { /* absent */ } }
@@ -221,6 +220,7 @@ export async function lookupEdition(get: Get): Promise<{ found: boolean; docID: 
 
 /** The notebook, from the computer, else from the text last read. An unanswered ask is "unavailable", never "no notebook" (N7). */
 export async function loadDoc(get: Get, storage: Storage | undefined): Promise<{ load: DocLoad; text: string | null }> {
+  const gen = accountGeneration();
   const cached = await loadCache(storage);
   const fallback = (address: string): { load: DocLoad; text: string | null } => (cached !== null ? { load: { state: 'found', address, notebook: parse(cached) }, text: cached } : { load: { state: 'unavailable' }, text: null });
   const ed = await lookupEdition(get);
@@ -230,7 +230,7 @@ export async function loadDoc(get: Get, storage: Storage | undefined): Promise<{
   let source: string | null = null;
   try { source = await textureSource(ed.docID, get); } catch { source = null; }
   if (source === null) return fallback(address);
-  await saveCache(storage, source);
+  await saveCache(storage, source, gen);
   return { load: { state: 'found', address, notebook: parse(source) }, text: source };
 }
 
