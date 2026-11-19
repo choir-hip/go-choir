@@ -170,6 +170,18 @@ describe('review 2026-11-19: demo, generation, redirect, one read', () => {
     await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
     expect(calls.length).toBe(0);
   });
+  test('N1 a source answered WITHOUT a usable native handle does not unbind the one that works (the signed-out screens of the first real run)', async () => {
+    const { adoptNative } = await import('./api.ts');
+    resetSeam(); adoptNative(native as never, 'paperFront');
+    adoptNative(undefined, 'mailBox'); adoptNative({ available: false, later: native.later } as never, 'filesList');
+    const r = await authedJSON('/api/x');
+    expect(r.body).toEqual({ ok: true }); expect(header(calls[0], 'Authorization')).toBe(`Bearer ${KEY}`);
+  });
+  test('N1 with no handle ever given, the seam is signed out (nothing invented)', async () => {
+    const { adoptNative } = await import('./api.ts');
+    resetSeam(); adoptNative(undefined, 'x');
+    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
+  });
   test('G1 a reply that finished after a sign-out is dropped as signed out, JSON and bytes', async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => { release = r; });

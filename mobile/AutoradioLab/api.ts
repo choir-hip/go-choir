@@ -72,6 +72,15 @@ export type NativeReader = { available?: boolean; later(request: { op: string; a
 let reader: NativeReader | undefined;
 /** app.ts hands over the module's native handle at every answer. */
 export function bindNative(native: NativeReader | null | undefined): void { reader = native ?? undefined; }
+let lastNative = '';
+/** What app.ts calls at every answer: a handle that is missing or not available NEVER replaces a usable one (the first real run showed Settings, Files and Mail signed out for a whole
+ * launch although the key answered: a source answered without a usable native handle, and the next source's call found none). Logged on change, with the source's name. */
+export function adoptNative(native: NativeReader | null | undefined, source = ''): void {
+  const usable = !!native && native.available !== false;
+  const state = usable ? 'usable' : native ? 'unavailable' : 'missing';
+  if (state !== lastNative) { lastNative = state; console.log(`api: native handle ${state} (answering ${source})`); }
+  if (usable) reader = native!; else if (!reader) reader = native ?? undefined;
+}
 
 /** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
 export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string }) => Promise<unknown>) | null {
@@ -299,7 +308,7 @@ export async function sessionDigest(): Promise<string | null> {
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: leave demo mode and the generation as a fresh process has them. */
-export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; }
+export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

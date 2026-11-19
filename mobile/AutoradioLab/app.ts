@@ -3,7 +3,7 @@ import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { bindNative, setDemo } from './api.ts';
+import { adoptNative, setDemo } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import * as mail from './mail.ts';
@@ -84,7 +84,7 @@ export const DEMO_AT: Record<string, number> = {
   fileList: 0, fileOpen: 0, fileResolve: 0, fileMkdir: 0, fileDelete: 0, fileRename: 0, fileUpload: 0, paperFront: 6,
 };
 export const answer: Answer = async (source, args, store, storage, native) => {
-  bindNative(native);
+  adoptNative(native as never, source);
   const at = DEMO_AT[source];
   if (at !== undefined && (args as unknown[])[at] === true) setDemo(true);
   // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
