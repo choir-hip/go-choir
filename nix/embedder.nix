@@ -96,7 +96,7 @@ let
     , threads
     , parallel      # slots
     , ctxSize       # total context; each slot gets ctxSize / parallel (see below)
-    , batchSize
+    , batchSize     # with --embeddings the server runs with batch = ubatch whatever this says
     , ubatchSize    # the largest input a slot takes (an embedding task cannot be split)
     , cpuWeight
     , nice ? null   # null: no Nice line
@@ -193,19 +193,26 @@ in
   };
 
   # Queries: one short input per search, from guests who are waiting.
-  #   slots: 8. Each task runs in its own slot, so up to 8 queries are in
-  #     flight at once instead of 2 (a research run sends its searches
-  #     together). More than 8 wait for a free slot, for one short decode.
-  #   context: 4096 / 8 = 512 tokens a slot (a multiple of 256, as the server
-  #     pads it). A query is "task: search result | query: " plus a few
-  #     words, tens of tokens; 512 covers a long pasted question. A longer one
-  #     is refused by the server ("input (N tokens) is larger than the max
-  #     context size"), corpusd takes that as "vector half unavailable" and
-  #     answers from the page text; it is never cut and never retried on the
-  #     bulk unit.
-  #   --ubatch-size 512 is the same bound as the slot (an input over it is
-  #     refused as "too large to process"); --batch-size 4096 lets all eight
-  #     slots decode in one batch.
+  # What this unit buys is that a query never waits behind a passage, and the
+  # default CPU weight. It does not buy speed from slots. Measured 2026-11-19
+  # on the dev Mac with this build, CPU only, four threads (EMBEDDINGGEMMA.md
+  # 0.11, "A second unit for queries"): a short query alone 27 ms; 8 at once
+  # all done by 200 ms and 32 at once by 800 ms whether the server had 2, 4
+  # or 8 slots, so the cost is the sum of the tokens and a burst is served at
+  # one query's rate. Two slots had the better median (121 ms against 202 ms
+  # for a burst of 8), so two.
+  #   context: 1024 / 2 = 512 tokens a slot, and --ubatch-size 512 is the same
+  #     bound. A query is "task: search result | query: " plus a few words,
+  #     tens of tokens. One over 512 tokens is refused at once (seen: HTTP 500,
+  #     "input (550 tokens) is too large to process. increase the physical
+  #     batch size (current batch size: 512)"); corpusd takes that as "vector
+  #     half unavailable" and answers from the page text. It is never cut and
+  #     never retried on the bulk unit. The bound is also about what the 4 s
+  #     deadline could hold: a 360-token query took 740 ms on the Mac, and
+  #     Node B's threads are several times slower.
+  #   --batch-size 512: with --embeddings the server sets the batch to the
+  #     ubatch whatever is asked (its log: "setting n_batch = n_ubatch = 512"),
+  #     so the flag says what runs.
   #   weight: the default CPU weight and no Nice, so the kernel treats it as a
   #     guest's own work, not as background.
   systemd.services.go-choir-embedder-query = mkEmbedderUnit {
@@ -213,20 +220,21 @@ in
     description = "go-choir EmbeddingGemma 2 embedder, queries (llama.cpp server, loopback only)";
     port = 8091;
     threads = 4;
-    parallel = 8;
-    ctxSize = 4096;
-    batchSize = 4096;
+    parallel = 2;
+    ctxSize = 1024;
+    batchSize = 512;
     ubatchSize = 512;
     cpuWeight = 100;
     ioWeight = 100;
-    # 310 MB of weights (file-backed, reclaimable) plus a compute buffer sized
-    # for a 512-token ubatch (the bulk unit's 2048-token one measured 506 MB
-    # of footprint, EMBEDDINGGEMMA.md 0.11.2; this one's is smaller, not
-    # measured) and the process: about 0.7 GiB; 1 GiB is the ceiling.
+    # Measured on the Mac with these flags after bursts and a 360-token
+    # query: 591 MB resident, the 310 MB model file (mapped, file-backed,
+    # reclaimable) included. Not measured on x86. 1 GiB is the ceiling.
     memoryMax = "1024M";
     # Dies before a guest, after the bulk unit (500). If it dies, searches lose
-    # their vector half until it is back, which is why the restart is quick.
+    # their vector half until it is back, so the restart is sooner than the
+    # bulk unit's; not so soon that a model file whose hash keeps failing is
+    # downloaded again every few seconds.
     oomScoreAdjust = 300;
-    restartSec = 10;
+    restartSec = 30;
   };
 }
