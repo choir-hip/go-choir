@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/capturefts"
 	"github.com/yusefmosiah/go-choir/internal/embedder"
@@ -129,16 +130,31 @@ func captureLeadPassage(bodies *CaptureBodyStore, textHash string) (string, erro
 	if textHash == "" || bodies == nil {
 		return "", nil
 	}
-	raw, err := bodies.Prefix(textHash, capturefts.MaxIndexedBytes)
+	// The first 256 KiB plus 8 bytes, as the Mac's export reads
+	// (scripts/embed-pass-export.py: blob(..., MAX_INDEXED_BYTES + 8)).
+	raw, err := bodies.Prefix(textHash, capturefts.MaxIndexedBytes+8)
 	if err != nil {
 		return "", err
 	}
-	text := strings.ToValidUTF8(string(raw), "")
+	text := string(raw)
 	spans := capturefts.Passages(text)
 	if len(spans) == 0 {
 		return "", nil
 	}
-	return text[spans[0].Start:spans[0].End], nil
+	return passageText(text[spans[0].Start:spans[0].End]), nil
+}
+
+// passageText is a passage as the text the vector is made of: cut on the raw
+// bytes, then each invalid byte becomes U+FFFD, as the export decodes a
+// passage (bytes.decode("utf-8", "replace") after cutting). Nothing is
+// stripped. (A truncated multi-byte sequence is one U+FFFD in the export and
+// one per byte here; such a passage then differs in text_sha and the import
+// drops its row rather than take it.)
+func passageText(p string) string {
+	if utf8.ValidString(p) {
+		return p
+	}
+	return string([]rune(p))
 }
 
 // captureDay is the day a capture stands for: published, else fetched, else
@@ -202,11 +218,18 @@ func (s *Service) loadStoryVersionText(ctx context.Context, og *ObjectGraphStore
 	if err != nil {
 		return out, false, err
 	}
-	content := strings.ToValidUTF8(string(raw), "")
-	out.Title = strings.TrimSpace(firstNonEmpty(meta.Title, manifest.Title))
+	content := string(raw)
+	// The title as the Mac's export takes it (embed-pass-export.py:
+	// str(man.get("title") or pmeta.get("title") or "").strip()): the
+	// version's manifest title, else the publication's, then stripped. A
+	// whitespace-only manifest title is a title (and strips to none).
+	out.Title = strings.TrimSpace(manifest.Title)
+	if manifest.Title == "" {
+		out.Title = strings.TrimSpace(meta.Title)
+	}
 	out.Day = versionObj.CreatedAt.UTC()
 	for _, sp := range capturefts.Passages(content) {
-		out.Passages = append(out.Passages, content[sp.Start:sp.End])
+		out.Passages = append(out.Passages, passageText(content[sp.Start:sp.End]))
 	}
 	return out, true, nil
 }
