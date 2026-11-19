@@ -137,6 +137,8 @@ type VectorPassResult struct {
 	// are recorded (no vector, the reason) and are not retried until the model
 	// changes.
 	Refused int
+	// Imports are inbox files taken in this pass (one a pass).
+	Imports int
 	// Removed are vectors deleted because their text is no longer public.
 	Removed int
 	// StoryGap and CaptureGap are the counts without a vector at the start.
@@ -145,7 +147,7 @@ type VectorPassResult struct {
 
 // Worked says the pass embedded or removed something.
 func (r VectorPassResult) Worked() bool {
-	return r.StoryVersions+r.Captures+r.Removed+r.Refused > 0
+	return r.StoryVersions+r.Captures+r.Removed+r.Refused+r.Imports > 0
 }
 
 // ---- what the text of a vector is ----
@@ -521,16 +523,14 @@ func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string
 			if herr := emb.Health(ctx); herr != nil {
 				return nil, nil, nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
 			}
-			var ir *embedder.InputRefusedError
-			var se *embedder.StatusError
-			switch {
-			case errors.As(err, &ir):
-				log.Printf("corpusd vectors embed refused shape=%s status=%d err=%v", shape, ir.Code, err)
+			switch classifyEmbedOutcome(err) {
+			case effectRefused:
+				log.Printf("corpusd vectors embed refused shape=%s err=%v", shape, err)
 				if refusals == nil {
 					refusals = map[int]string{}
 				}
-				refusals[i] = clipRunes(strings.TrimSpace(ir.Error()), 200)
-			case errors.As(err, &se):
+				refusals[i] = clipRunes(strings.TrimSpace(err.Error()), 200)
+			case effectDown:
 				return nil, nil, nil, fmt.Errorf("%w: the server answered %v", errEmbedderDown, err)
 			default:
 				if failed == nil {
@@ -571,8 +571,13 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 	}
 	// A file waiting in the spool inbox is imported before the gap work, so the
 	// gap it leaves is what the worker then fills.
-	if s.ProcessVectorInbox(ctx) > 0 {
+	taken, ierr := s.ProcessVectorInbox(ctx)
+	if taken > 0 {
 		s.vecIdle = vecIdleMark{}
+		res.Imports += taken
+	}
+	if ierr != nil {
+		return res, ierr
 	}
 	model := embedder.ModelHash
 	started := time.Now()
