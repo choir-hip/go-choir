@@ -20,13 +20,10 @@ import (
 // search returned without error; its zero value means not searched.
 //
 // Failure list, written before the code:
-//  1. a result has no coverage object, or one that says "searched" for a half
-//     that did not run (no capture store, no page-text answer, the window
-//     fallback, a failed or capped published search);
-//  2. a path nobody set reads as searched (the zero value must be "not");
-//  3. the page text counts as whole while the index covers fewer pages than
-//     the computer holds;
-//  4. Full is true when any one of page text, labels or published is missing.
+//  1. a result has no coverage object, or one that says a part ran when it did
+//     not (no capture store, no page-text answer, the window fallback, a failed
+//     or capped published search, Jev's labels unreadable);
+//  2. a path nobody set reads as searched (the zero value must be "not").
 
 // noSearchSink is a capture store that cannot search: only the window of the
 // newest captures can be listed.
@@ -66,7 +63,8 @@ func coverageOf(t *testing.T, captures CaptureSink) SearchCoverage {
 	}
 	t.Cleanup(func() { _ = guest.Close() })
 	tool := newSearchWireCorpusTool(Dependencies{Store: guest, Captures: captures})
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c"})
+	// A desk reads the labels as itself; the kernel reader stands for it here.
+	ctx := objectgraph.WithReader(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c"}), objectgraph.WriterKernel)
 	out, err := tool.Func(ctx, json.RawMessage(`{"query":"harbor strike"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -112,27 +110,37 @@ func TestCoverageNamesEachPartThatRan(t *testing.T) {
 // Jev's labels are read from the store separately from the index answer. When
 // that read fails, the titles were searched and the labels were not.
 func TestCoverageLabelsAreFalseWhenTheLabelStoreCannotBeRead(t *testing.T) {
-	guest, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	tool := newSearchWireCorpusTool(Dependencies{Store: guest, Captures: indexSink{text: &CaptureTextInfo{Used: true, Indexed: 5, Captures: 5}}})
-	if err := guest.Close(); err != nil {
-		t.Fatal(err)
-	}
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c"})
-	out, err := tool.Func(ctx, json.RawMessage(`{"query":"harbor strike"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var body struct {
-		Coverage SearchCoverage `json:"coverage"`
-	}
-	if err := json.Unmarshal([]byte(out), &body); err != nil {
-		t.Fatal(err)
-	}
-	if !body.Coverage.Titles || body.Coverage.Labels {
-		t.Fatalf("coverage = %+v, want titles searched and labels not", body.Coverage)
+	for name, prepare := range map[string]func(*store.Store, context.Context) context.Context{
+		// The store is closed: the read errors.
+		"store closed": func(s *store.Store, ctx context.Context) context.Context {
+			_ = s.Close()
+			return objectgraph.WithReader(ctx, objectgraph.WriterKernel)
+		},
+		// The call declares no reader: the object graph refuses the read.
+		"no reader declared": func(s *store.Store, ctx context.Context) context.Context { return ctx },
+	} {
+		t.Run(name, func(t *testing.T) {
+			guest, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = guest.Close() })
+			tool := newSearchWireCorpusTool(Dependencies{Store: guest, Captures: indexSink{text: &CaptureTextInfo{Used: true, Indexed: 5, Captures: 5}}})
+			ctx := prepare(guest, toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: "c"}))
+			out, err := tool.Func(ctx, json.RawMessage(`{"query":"harbor strike"}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body struct {
+				Coverage SearchCoverage `json:"coverage"`
+			}
+			if err := json.Unmarshal([]byte(out), &body); err != nil {
+				t.Fatal(err)
+			}
+			if !body.Coverage.Titles || body.Coverage.Labels {
+				t.Fatalf("coverage = %+v, want titles searched and labels not", body.Coverage)
+			}
+		})
 	}
 }
 
