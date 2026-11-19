@@ -291,3 +291,31 @@ redirecting server on the simulator.
 
 Residuals: a launch-time partial wipe is logged and retried, but the page is told only for a sign-out (the launch result is not bound to a screen); the table is a model of the phone
 (memFs and a fake module), the real Keychain and Swift wipe were not driven; the signed-in drill through the queue `real` is not written yet (step E).
+
+
+## Step 4 (the signed-in tour) and what the real runs showed
+
+`mobile/scripts/proof-real.sh` now tours Settings account, Files (root, a folder), Mail (inbox, a message), podcasts (the list, a show), the notebook, the paper and a story, then
+the LOCAL sign-out drill last (tree assertions: signed in before and signed out after, Files and Mail without rows after, the failure note absent, `signout-pending` and
+`account-stamp` gone from the app's files). The proof key has no key id, so nothing is revoked on the server. `real` at 211a6fd28: PROOF OK (33 checks ok; read from the log).
+Not toured: a file opened from Files (the drill computer's root holds no table or picture, and a text or Markdown file is opened by the computer as a Texture document, which
+writes); a mail attachment; takes (no place in the launcher); a kill injected mid-sign-out on the simulator (the queue cannot inject one: the table in `account.test.ts` S14 and
+S15 covers the steps, as a model of the phone, not the real Keychain).
+
+The signed-out screens of the first run (Settings account, Files, Mail "sign-in is no longer accepted" for a whole first drive while the Swift pages said signed in): reproduced in the
+third run's survey drive (cdcb86370) and gone in the following ones. What the log showed: no `api: session` line at all in that drive, so the seam never reached the key read; the later drives
+of the same run, with the same key, were fine. Cause (fitted to the log, now fixed): app.ts bound the native handle with `bindNative(native)` at every answer, so a source answered with a
+missing or unavailable handle REPLACED the working one. `adoptNative` keeps a usable handle against a worse one and logs the state on change; the sixth run logged
+`api: native handle usable (answering fileList)` and every shared page worked. Not proven that a source was ever answered without a handle: the log line that would say so
+shows only `usable`. The failure did not recur in three runs after the change (and was not seen in the three before it only because the first drive is where it showed).
+
+The 100 ms turn on the pages that moved, from the host's own refusals in the run logs: `podHome` was refused ("took 377.8 ms of its own (CPU) time") when the subscribed NPR feed (2.2 MB) came back,
+and 103.5 ms after a first cap of 300 000 characters; with 150 000 the sixth run has no refusal. A feed over 150 000 characters is read to its newest whole items only (older episodes of a very large
+feed are not shown: a regression; a yielding parser is the better fix). Every other moved page (paper, settings, files, mail, notebook, reader) raised no refusal in six runs. A millisecond figure for
+the first answer after a launch was not obtained: `Date.now()` is unavailable in data sources (the analyzer refuses it, `analyze-ambient-api`), so the reconcile's added work
+(a stat, a read, a native `keystate`, a SHA-256) is judged only by the absence of a refusal. A timing seam would need the host's own trace.
+
+Left from step 3 (small regressions): the one-time import of the old Swift podcast positions (the Swift file is `Autoradio/podcasts-library.json`, outside `app:/`, so a native read-and-delete is
+needed), plain http feeds (the grant is `net.fetch https:` and a test pins it), file names and podcasts in local search (`fileNameDocs`, `podcastDocuments`; mail stays out), mail cards' page text,
+mail catch-up beyond 25 bodies. Done: the paper page passes the story title with the route.
+Steps 5 and 6 (the deck bridge, the run sheet through the deck) are not started.
