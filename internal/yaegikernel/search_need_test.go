@@ -40,7 +40,7 @@ fmt.Println(r)`)
 	}
 	for _, want := range []string{
 		`1 "w1 alpha": sent s1 (10 new in first 10, 40 of 40 pages new)`,
-		`2 "w2 beta": not sent (this question already holds 40 pages new to this run that you have not read`,
+		`2 "w2 beta": not sent (this question already holds 40 pages new to this run that you have not tried to read`,
 		`5 "w5 omega": not sent (this question already holds 40 pages`,
 		"then search again for what is still missing, naming it",
 	} {

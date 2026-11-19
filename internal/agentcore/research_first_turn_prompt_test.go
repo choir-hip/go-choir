@@ -15,3 +15,13 @@ func TestResearchFirstTurnAsksForAnEarlyInterimPacket(t *testing.T) {
 		t.Fatalf("research first-turn prompt: %s", p)
 	}
 }
+
+// The first turn says the host searched the corpus for the objective and that
+// its result is part of this message (research_brief.go), so the desk starts
+// from what is held and does not search the corpus for the same words again.
+func TestResearchFirstTurnNamesTheCorpusBrief(t *testing.T) {
+	p, _ := recordsInboxPromptFor(agentprofile.Research)
+	if !strings.Contains(p, "corpus brief") {
+		t.Fatalf("research first-turn prompt does not mention the corpus brief: %s", p)
+	}
+}

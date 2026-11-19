@@ -286,7 +286,7 @@ fmt.Println(r)`)
 	if out.Error != "" {
 		t.Fatalf("cell error: %s", out.Error)
 	}
-	if !strings.Contains(out.Stdout, `2 "w2 beta": not sent (this question already holds 20 pages new to this run that you have not read)`) {
+	if !strings.Contains(out.Stdout, `2 "w2 beta": not sent (this question already holds 20 pages new to this run that you have not tried to read)`) {
 		t.Fatalf("the second wording was sent: the first search was not tagged with its question, so the start frame did not reach the store before the answer:\n%s", out.Stdout)
 	}
 }
