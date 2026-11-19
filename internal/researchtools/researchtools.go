@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/search"
+	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -31,6 +32,11 @@ type Dependencies struct {
 	// SourceAPI is the gateway's keyed source APIs (choir.SourceAPI); nil
 	// when this computer has no gateway.
 	SourceAPI search.SourceAPIClient
+	// OnCaptured, when set, is told of each new capture a research verb wrote
+	// (choir.Read, poll_source), with its title, URL and lead, so the runtime
+	// can queue it for the event layer. The scheduled poll reports its own.
+	// researchRead is true for a page choir.Read fetched. It must not block.
+	OnCaptured func(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem, researchRead bool)
 }
 
 // newSearchWireCorpusTool is choir.SearchWireCorpus: a keyword search of

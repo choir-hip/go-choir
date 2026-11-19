@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
+	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -385,6 +386,11 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 		// Autopaper captures are shared content: written to Store B through
 		// corpusd, never this computer's embedded graph (W1b2).
 		Captures: researchtools.NewCorpusdCaptureSink(rt.cfg.CorpusdURL),
+		// A page research reads or polls joins the event layer like a
+		// scheduled poll's capture (station V5).
+		OnCaptured: func(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem, research bool) {
+			rt.enqueueEventCaptures(ctx, ownerID, computerID, sourceID, captured, research)
+		},
 	}
 	rt.researchDeps = &researchDeps
 	// Texture cites from the same captures research reads into (Cut 2 2a,
