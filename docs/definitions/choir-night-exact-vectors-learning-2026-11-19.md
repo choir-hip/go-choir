@@ -5,7 +5,7 @@ review:
   reviewer: DeepSeek v4.1 flash (seat 2), round 1
   frozen_ref: 7a2eae69f
   verdict: send_back
-  evidence_ref: 'round 1, 2026-11-19T05:44Z: five blocking findings (the design not amended; fusion by reciprocal rank against the design''s measurement; a finish that needed the owner''s phone; a deadline the capture pass cannot meet; conjecture N1 and ledger C144 not the same claim). All answered in the revision that carries this line; re-review pending. The owner''s ruling R1 authorises the night; red stations V1, V2 and L3 each take their own two seats before landing.'
+  evidence_ref: 'round 1, 2026-11-19T05:44Z: five blocking findings (the design not amended; fusion by reciprocal rank against the design''s measurement; a finish that needed the owner''s phone; a deadline the capture pass cannot meet; conjecture N1 and ledger C144 not the same claim). All answered in the revision that carries this line; re-review pending. The owner''s ruling R1 authorises the night; red stations V1, V2, V6, V7b and L3 each take their own two seats before landing. Round 2 (2026-11-19T06:10Z) sent it back again: the design still carried the old worker and file wording, the finish promised E1 running and a cause for every failure, and the cutover file''s sign-in defaults contradicted this file; answered in the revision that carries this line.'
 start:
   captured_at: 2026-11-19T05:20Z
   source:
@@ -43,19 +43,19 @@ start:
       touch: forbidden
       recovery: branch lane/search-ceramic on origin; kept by the owner's word of 2026-11-19
 finish:
-  deliver: 'By the owner''s check-in (2026-11-19T17:30Z; the owner, 05:38Z: "ill probably check in on this in 12 hours"): the Autoradio app''s logic outside voice is shared Exact code as far as it can be proved without the owner awake; research on the paper searches its own corpus by meaning as well as by words, from pgvector, with stories linked to the pages they cite; and every recurring agent failure seen this week has a trace-backed cause and the calibration experiment is running.'
-  artifact: 'three things on main and staging. (X) each area of the app moved to shared code and merged, its Swift deleted, shown on the iPhone simulator and the Android emulator with the drill account; the build on the owner''s iPhone is the newest one that keeps it signed in and is installed, never launched. The cutover file''s own proofs that need the owner (a locked hour on the phone, the owner''s ears, signing in again) are NOT part of tonight''s finish: they are listed in the morning report as waiting. (V) pgvector in Node B''s Postgres holding an EmbeddingGemma 2 vector for every published story version and one for every captured page, an embedder on Node B that keeps them current, and a corpus search in vector order with full-page BM25''s top three kept, which walks from a story to its cited pages. The capture pass takes seven to eight hours on the Mac and starts before the tables exist, so the count of capture vectors imported is read at the check-in, not promised whole. (L) a problem record per recurring failure with its cause classed as the model''s or the harness''s, a redesigned calibration experiment E1, and E1 started on the test computers.'
+  deliver: 'By the owner''s check-in (2026-11-19T17:30Z; the owner, 05:38Z: "ill probably check in on this in 12 hours"): the Autoradio app''s logic outside voice is shared Exact code as far as it can be proved without the owner awake; research on the paper searches its own corpus by meaning as well as by words, from pgvector, with stories linked to the pages they cite; and every recurring agent failure seen this week has a trace-backed cause or a record that its cause is not established, and the calibration experiment is redesigned, reviewed and its pilot started or the reason it could not start reported.'
+  artifact: 'three things on main and staging. (X) each area of the app moved to shared code and merged, its Swift deleted, and shown on the iPhone simulator and the Android emulator with the drill account where a tour ran (the report names the areas with no tour); the build on the owner''s iPhone is the newest one that keeps it signed in and is installed, never launched. The cutover file''s own proofs that need the owner (a locked hour on the phone, the owner''s ears, signing in again) are NOT part of tonight''s finish: they are listed in the morning report as waiting. (V) pgvector in Node B''s Postgres holding an EmbeddingGemma 2 vector for every public published story version and one for each public captured page as far as the first pass reaches (the count is read at the check-in), an embedder on Node B that keeps them current, and a corpus search in vector order with full-page BM25''s top three kept, which walks from a story to its cited pages. The capture pass takes seven to eight hours on the Mac and starts before the tables exist, so the count of capture vectors imported is read at the check-in, not promised whole. (L) a problem record per recurring failure with its cause classed as the model''s, the harness''s or not established, a redesigned and reviewed calibration experiment E1, and its pilot started on test computers or the reason it could not start.'
   acceptance:
     - action: 'scripts/check-autoradio-native-boundary on main (built by station XG)'
       proves: how many Swift sources and interface names remain outside the voice list; the count only falls
       evidence_class: gate output in CI
-    - action: the Android emulator tour and the iPhone simulator tour for each merged Exact area, signed in as the drill account, kept as the tool's tree output and screenshots under the proof folder the tour script names
+    - action: the Android emulator tour and the iPhone simulator tour for each merged Exact area, signed in as the drill account, kept as the tool's tree output and screenshots under the proof folder the tour script names (mobile/scripts/proof-sim.sh on the simulator; the Android tour script is committed by the integration station)
       proves: the moved page shows real staging data on both, from one source; only where a tour ran (an area with no tour is reported as merged and unproved)
       evidence_class: a rerunnable script's output against staging; the lead reads it, a second seat may rerun it
     - action: scripts/status-vectors (built by station V2), which reads corpusd's journal on Node B
       proves: 'have, want and remaining for story vectors and capture vectors: coverage of the first pass'
       evidence_class: a count from production's own journal line, not written by the author
-    - action: the fixed 200-story retrieval set of the design (docs/design/corpus-first-retrieval-and-research-2026-11-18.md, section Fusion and windows) run against the deployed search by a committed script
+    - action: the fixed 200-story retrieval set of the design (docs/design/corpus-first-retrieval-and-research-2026-11-18.md, section Fusion and windows) run against the deployed search by a committed script (station V4 commits the script and the set rebuilt with real page text; the 18 November files are in the lead's scratch folder, not the repo)
       proves: recall at ten of 0.92 or more (the design's bar for S6), and pages not in English in the top ten for 65% or more
       evidence_class: deployed proof
     - action: python3 -I scripts/status-corpus-reuse on the paper after each deploy
@@ -138,7 +138,7 @@ stations:
     status: pending
   - id: V3
     name: The first pass, on the Mac
-    scope: 'an export of public text from Node B (every story version; each public capture''s title and lead passage), embedded on the Mac with Metal by the trial command (mobile/EmbedTrial), imported as vectors; a sample re-embedded on Node B must agree at cosine 0.999 or more; the text copy on the Mac is deleted after the import. Stories first (minutes), then captures (about six hours).'
+    scope: 'an export of public text from Node B (every public story version; each public capture''s title and lead passage), embedded on the Mac with Metal by the trial command (mobile/EmbedTrial), imported as vectors; a sample re-embedded on Node B must agree at cosine 0.999 or more; the text copy on the Mac is deleted after the import. Stories first (about an hour for 61,000 passages), then captures (seven to eight hours).'
     class: yellow (operations); the import it feeds is V2's red code and takes V2's review
     review: 'none for the export and the Mac tool beyond the lead reading the export script (done; every read is confined under the artifacts folder). A partial pass is safe (the worker fills the rest). The text copy is deleted when the import is accepted or at the check-in, whichever is first.'
     depends_on: []
@@ -247,7 +247,7 @@ decisions_for_the_owner:
     question: Do captures get a vector for every passage, or one per page?
     why: 'one per page is 215,000 vectors and six hours on the Mac; every passage is about 850,000 and one to three days'
     options: 'stories only, pages reached through the stories that cite them (the owner''s proposal in R3); stories plus one vector per page (the lead''s answer); every passage of every page (the 18 November design)'
-    default: stories plus one vector per page; the owner asked for thoughts in R3 and has not ruled, so this is the lead's proposal, and the page vectors can be dropped without touching the story path
+    default: 'stories plus one vector per page. This is the lead''s proposal, not the cheapest option: the owner''s stories-only proposal costs one Mac-hour, the page vectors seven or eight more on a Mac that is also building. The pass therefore runs stories first and imports them alone if the page pass is not finished; the page vectors can be dropped without touching the story path'
 owner_rulings:
   - 'on': '2026-11-19'
     decision: R1
@@ -301,9 +301,9 @@ now:
     id: N1
     calibration_claim: C144
     claim: If stories and one vector per captured page live in pgvector, ranked with full-page BM25''s top three kept and walked through citations, then a research run on the paper is answered by meaning from what the computer holds.
-    test: 'ledger C144, word for word: by 2026-11-19T18:00Z, vectors held for every published story version and 95% or more of public captures (scripts/status-vectors), a corpus search a research run makes on the paper answered with the vector half (the journal line''s vector= field, added by V4), and the 200-story set at 0.90 or more against the deployed search (C144''s bar, entered before the review; the acceptance bar above is the design''s 0.92). The effect on web searches a run is a second claim, entered when V4 deploys, with the brief''s hours (C141, C142) as its baseline.'
+    test: 'ledger C144 (its middle clause reads "answered from the fused lists"; the observable reading is the journal line''s vector= field): by 2026-11-19T18:00Z, vectors held for every published story version and 95% or more of public captures (scripts/status-vectors), a corpus search a research run makes on the paper answered with the vector half (the journal line''s vector= field, added by V4), and the 200-story set at 0.90 or more against the deployed search (C144''s bar, entered before the review; the acceptance bar above is the design''s 0.92). The effect on web searches a run is a second claim, entered when V4 deploys, with the brief''s hours (C141, C142) as its baseline.'
     edge: independence
-    delta_o: 'a control for the effect claim: the same 24-run window read before and after V4 with the brief already live, so the brief''s effect is not counted as the vectors''. If the brief did not change what the model searches for, better retrieval may not either, and the lever is in what the desk is asked to do, which track L reads.'
+    delta_o: 'a control for the effect claim: the same 24-run window read before and after V4 with the brief already live, so the brief''s effect is not counted as the vectors''; only runs after the faster search (V0) deployed are read, and each run''s release is recorded. If the brief did not change what the model searches for, better retrieval may not either, and the lever is in what the desk is asked to do, which track L reads.'
     scope_if_supported: the paper's research desk at today's corpus
     status: active
     evidence_refs: []
@@ -312,7 +312,7 @@ now:
     kind: architecture
     status: proposal
     evidence_ref: 'docs/design/corpus-first-retrieval-and-research-2026-11-18.md, section "Amended 2026-11-19"'
-    owner_ratification_ref: 'R2 settles pgvector, the model and the Mac; the dimension, one vector per capture and the order are the lead''s proposal until the owner rules (D3)'
+    owner_ratification_ref: 'R2 settles pgvector, the model and the Mac; the dimension and one vector per capture are the lead''s proposal until the owner rules (D3); the order of the Exact stations is the cutover file''s decision D1'
   belief:
     believed_state: 'full-page BM25 is live and every corpus search returns a page; searching for need cut web searches a run from 7 to 4; the corpus brief is on main and not yet deployed; a corpus search takes two seconds and the fix is landing; no vector exists on the server; the Exact move stands where it stood yesterday morning, with two unmerged lanes; nothing links stories by event'
     main_uncertainty: 'whether nixpkgs'' llama.cpp carries the EmbeddingGemma 2 architecture and whether pgvector fits Postgres''s 4 GiB cap with an HNSW index; and for Exact, how much of a red station can be proved with no ears and a phone that must not be launched'
@@ -345,7 +345,9 @@ but not by a paraphrase, and found a third of the pages not in English where
 vectors found 72% (the design's measurement).
 
 One vector a page is about 215,000 vectors and 120 MB, which removes the
-design's objection to Postgres. Stories in full are a few thousand passages.
+design's objection to Postgres. Stories in full are about 61,000 passages across
+35,000 versions, about an hour on the Mac; with them the whole index is about
+140 MB.
 
 ## What "tonight" can mean
 

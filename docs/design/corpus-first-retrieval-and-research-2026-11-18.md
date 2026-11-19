@@ -75,7 +75,7 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 
 **Backlog without a limit.**
 - The work list is not a queue in memory. It is a fact derived from the index: passages that have no vector.
-- corpusd's embed worker copies the catch-up's shape: walk, skip what is held, rest between batches, yield while searches are in flight. It always takes, in order:
+- corpusd's embed worker copies the catch-up's shape: walk, skip what is held, one batch at a time with no pacing (amended 2026-11-19: it does not rest or yield; a batch is a size, and the unit's low CPU weight is what lets guests win). It always takes, in order (amended 2026-11-19: published story versions first, newest first, then one lead per public capture, newest first; the list below is the 18 November order):
   1. new captures' lead passages, newest first;
   2. published story versions;
   3. the backfill of leads, newest first;
@@ -91,7 +91,7 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 | Node B and Node A together | about 700 tokens/s | about 27 h | about 4.5 days | about 12 days |
 | Mac M1, Metal | about 3,000 tokens/s (M) | about 6 h | about 25 h | about 69 h |
 
-Vectors made on x86 and on the Mac agree (cosine 0.9999, M), so a file made on the Mac can be imported. The import checks it: sampled passages are re-embedded on Node B, and every sample must agree at 0.999 or above. Order of the pass: all published stories first (small, and they serve overlap and the radio), then leads, then whole pages.
+Vectors made on x86 and on the Mac agree (cosine 0.9999, M), so a file made on the Mac can be imported. The import checks it: sampled passages are re-embedded on Node B, and every sample must agree at 0.999 or above. Order of the pass: all published stories first (they serve overlap and the radio), then leads. Whole pages are not embedded (amended 2026-11-19).
 
 **Pages not in English.** Of the non-English pages the 200 stories cited, BM25 put 33% in the top ten and vectors 72% (M). The vector half is what makes those pages usable. The BM25 tokenizer stays as built.
 
@@ -200,8 +200,8 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 | S1 | Research prompt: corpus first, gap list, no rewording bursts | S0 | green (prompt) | Web searches per published revision fall 30% in 7 days against the S0 week, with the held share not lower | revert | `research.yaml:52-54` |
 | S2 | Web results marked "held" by URL across the computer, read with `ReadCapture` | S0 | orange | Of web results, the share held is logged; new Reads of held URLs go to zero | revert | none |
 | S3 | Brief delivered to the first turn (BM25 halves). Built in lane `corpus-brief` 2026-11-18: captures and published stories per thread, no events, no story dates (so no "stale" judgment yet) | S0 | orange | 95% of runs make no web search before their gap packet; web searches a day at or below 50% of the S0 baseline | revert | none |
-| S4 | Embedder unit, corpusd embed worker, vector file; stories then leads | S0 | red (nix, a host model service) | Vectors' recall@10 at least 0.90 on the 200 set with real text; steady-state backlog drains within the day on staging | stop the unit, delete the file | none |
-| S5 | First pass: on the Mac if allowed, else Node B and Node A | S4 | yellow (ops) | `remaining=0` for leads; import samples agree at cosine 0.999 or more | delete the file | none |
+| S4 | Embedder unit, corpusd embed worker, vector tables in pgvector (amended 2026-11-19; was a vector file); stories then leads | S0 | red (nix, a host model service) | Vectors' recall@10 at least 0.90 on the 200 set with real text; steady-state backlog drains within the day on staging | stop the unit, drop the two tables | none |
+| S5 | First pass: on the Mac if allowed, else Node B and Node A | S4 | yellow (ops) | `remaining=0` for leads; import samples agree at cosine 0.999 or more | drop the two tables | none |
 | S6 | Fusion in corpusd: vectors, BM25's top three kept | S4 | orange | The 200 set holds 0.92 or more; non-English pages in the top ten 65% or more | revert | the guest's RRF merge |
 | S7 | Event layer takes research reads; vector shortlist | S4 | orange | Captures minting a new event fall from 85% to at most 60%; of 50 joins hand-read, false merges no higher than the event-wakes bar | revert | the title-overlap slot |
 | S8 | Story event ids at publish, exported; `basis.events` wired; the setting and environment switches removed; finish rule fixed | S7 | red (export, tape) | 80% or more of new stories carry an event; of the audit's 84 clusters, 70% or more share an id | revert | `research.related_story`, `CORPUSD_RELATED*` |

@@ -122,7 +122,7 @@ stations:
   status: working
 - id: X1
   name: The loop is fast
-  scope: 'the Contract compile of our pages falls from 64 s to 15 s or less with the mark looking the same, and this station owns the rest of the time too: the 16 s that remains without the mark is explained and cut, not only reported; the Android refusals and Apple-only symbols are fixed or listed; a proposal for the lab pages leaving the product app'
+  scope: 'the Contract compile of our pages falls from 64 s to 15 s or less with the mark drawn cheaply and still rough by hand (owner, 2026-11-19; no pixel comparison), and this station owns the rest of the time too: the 16 s that remains without the mark is explained and cut, not only reported; the Android refusals and Apple-only symbols are fixed or listed; the lab pages are deleted (owner, 2026-11-19)'
   class: orange
   review: one seat
   depends_on: []
@@ -146,7 +146,7 @@ stations:
   status: working
 - id: X3
   name: Sign-in in shared code
-  scope: 'device-flow sign-in, accounts, the proof key and computer discovery in TypeScript; the key in Exact''s secret store; one sign-out wipe across both languages with the generation passed to shared code; account and computer settings. ChoirClient stays, fed the identity by one call, until the last station. The old Keychain item is deleted at the move. Decided before it starts: the key is readable on a locked phone (X0), deploy.store stays "0", the wipe order. The owner signs in once more.'
+  scope: 'device-flow sign-in, accounts, the proof key and computer discovery in TypeScript; the key in Exact''s secret store; one sign-out wipe across both languages with the generation passed to shared code; account and computer settings. ChoirClient stays, fed the identity by one call, until the last station. The old Keychain item is deleted at the move. Decided before it starts: the key is readable on a locked phone (X0), deploy.store stays "0", the wipe order. The owner signs in once more. Night of 2026-11-19: only the signed-in request seam is built (the stored key read in place by one native reader); sign-in, sign-out and the Keychain item are not touched; proof is on a simulator with the drill account.'
   class: red
   review: two seats
   depends_on:
@@ -222,7 +222,7 @@ stations:
   status: pending
 - id: X11
   name: Settings, onboarding, themes, cards, the bar
-  scope: the remaining page models and demo data as shared code and JSON; settings, voice, speed and theme are moved; the lab pages leave the product app
+  scope: the remaining page models and demo data as shared code and JSON; settings, voice, speed and theme are moved; the lab pages are deleted (owner, 2026-11-19)
   class: orange
   review: one seat
   depends_on:
@@ -284,7 +284,7 @@ decisions_for_the_owner:
   question: The owner signs in again once when sign-in moves, and mail is fetched again once when mail moves. Everything else the owner would miss (podcast subscriptions and positions, book positions, settings, voice, speed, theme) is carried across by a one-time read that is deleted afterwards. Acceptable?
   why: each Swift store dies with its Swift; what is not carried is lost on the owner's phone
   options: as stated; carry nothing and set the phone up again; migrate the key and mail in place too
-  default: as stated, each loss announced the day before
+  default: 'as stated, each loss announced the day before. Superseded for the night of 2026-11-19 by decision D1 of docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md: the owner is asleep, so the stored key is read in place, sign-in and sign-out stay Swift, nothing signs the phone out, and no store''s loss is taken without the owner awake'
 - id: D4
   question: Where is the text of a PDF read?
   why: Exact has no PDF text reader, and the phone is an interface into the listener's computer, which can read any file
@@ -299,7 +299,7 @@ decisions_for_the_owner:
   question: Does TestFlight wait for the cutover?
   why: a TestFlight build this week would be the Swift app
   options: ship the Swift app to testers now and replace it; wait for station X5
-  default: wait; the owner's own phone gets every station as it lands
+  default: 'wait (the owner, 2026-11-19: "yes, testflight waits. next week"); the owner''s own phone gets every station as it lands, except on the night of 2026-11-19, when it gets only builds that keep it signed in and is never launched'
 - id: D9
   question: Does the Mac app follow the phone at each station, or at the end?
   why: it builds from the same pages and the same Swift voice; checking it at every station costs a Mac build each time
