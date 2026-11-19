@@ -24,6 +24,9 @@ ci_go_script_path() {
     scripts/reeng_tracer*.mjs|scripts/rollback/*|scripts/snapshot-vault.sh|scripts/test-node-b-*) return 0 ;;
     scripts/verify-host-hardening.py|scripts/vision_probe.py|scripts/vmm_confinement_verify.py) return 0 ;;
     scripts/vmmanager-netfilter-test.sh|scripts/host_floor_probe.py) return 0 ;;
+    # internal/platform/capture_rank_test.go runs the first against a test corpus;
+    # vector_worker.go names the second as the reader of its journal line.
+    scripts/proofs/corpus-search-recall|scripts/status-vectors) return 0 ;;
     # Named by Go tests under internal/platform (the receipt table scans); the
     # operator's DDL script on the live table and its self-test run in CI
     # (receipts-index-swap job) but are not deployed (deploy-impact-classify).
@@ -32,8 +35,9 @@ ci_go_script_path() {
     scripts/off-host-restore-drill.sh) return 0 ;;
     scripts/node-b-growth-meter) return 0 ;;
     # Named by a Go test (internal/platform tape_sweep_refs_review_test.go);
-    # its README stays docs. ci-impact-classify-test runs only when .github
-    # changes, and this name made it fail then.
+    # its README stays docs. ci-impact-classify-test ran only when .github
+    # changed, and this name made it fail then; scripts/gates runs it on every
+    # landing since 2026-11-19.
     scripts/chaos/*.md) return 1 ;;
     scripts/chaos/*) return 0 ;;
   esac
@@ -62,10 +66,14 @@ ci_deploy_script_path() {
     scripts/gates|scripts/gates-ci-exemptions.txt) return 0 ;;
     # Run by scripts/test-status-scripts.sh, which scripts/gates runs.
     scripts/status-hourly|scripts/status-paper-usage|scripts/status-storage) return 0 ;;
+    # Run by scripts/selftest-e1, which scripts/gates runs.
+    scripts/e1) return 0 ;;
     # CI runs it (the boot prune's ordering test).
     scripts/updater-prune-unit-nix-test.sh) return 0 ;;
     # Read by a gate CI runs (check-jev-entry).
     scripts/jev-entry-baseline.txt) return 0 ;;
+    # Read by a gate scripts/gates runs (check-autoradio-native-boundary).
+    scripts/autoradio-native-ceiling.txt|scripts/autoradio-native-voice-list.txt) return 0 ;;
     scripts/paper-liveness-probe.py|scripts/verify-host-hardening.py|scripts/vmm_confinement_verify.py) return 0 ;;
     scripts/fuzz-broker-protocol.sh|scripts/res10_balloon_stats_probe.sh|scripts/vmmanager-netfilter-test.sh) return 0 ;;
     # Read by a kept script (selftest-guest-token, node_b_host_reboot.py).
