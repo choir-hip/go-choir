@@ -1099,8 +1099,9 @@ in
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "CORPUSD_PORT=8086"
-        # The host embedder (nix/embedder.nix): the vector worker and search
-        # embed through it. Down is backed off and logged, never fatal.
+        # The host's bulk embedder (nix/embedder.nix): the vector worker and
+        # the import's sample check embed documents through it. Down is backed
+        # off and logged, never fatal.
         "CORPUSD_EMBEDDER_URL=http://127.0.0.1:8090"
         # The query unit (same file, port 8091): a ranked search embeds its
         # query there and never on the bulk unit, which the worker keeps busy.

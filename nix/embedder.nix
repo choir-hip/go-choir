@@ -1,7 +1,8 @@
 # The host embedder: llama.cpp's server with the official EmbeddingGemma 2
 # Q8_0 file, on Node B's loopback (docs/reference/EMBEDDINGGEMMA.md, "The
-# server"). corpusd's embed worker and its vector search call it
-# (internal/platform/vector_*.go); nothing else does.
+# server"). corpusd's embed worker and the import's sample check call the bulk
+# unit, and a ranked search's query goes to the query unit below
+# (internal/platform/vector_*.go); nothing else calls either.
 #
 # Three pins, each stated once here:
 #   - llama.cpp b12259 (351025ec5, 2026-11-10). The nixpkgs pin carries 0.6.0
