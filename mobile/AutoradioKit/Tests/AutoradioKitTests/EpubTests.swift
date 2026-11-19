@@ -10,6 +10,40 @@ private func demoData(_ key: String) -> Data {
     return Data(base64Encoded: tree[key]!, options: .ignoreUnknownCharacters)!
 }
 
+
+/// A minimal ZIP writer (stored entries) so tests can build odd books on purpose.
+private func zip(_ files: [(String, String)]) -> Data {
+    var out = Data(); var central = Data()
+    func le16(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8((v >> 8) & 255)] }
+    func le32(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8((v >> 8) & 255), UInt8((v >> 16) & 255), UInt8((v >> 24) & 255)] }
+    for (name, body) in files {
+        let n = Array(name.utf8), b = Data(body.utf8), crc = Int(Zip.crc32(b)), off = out.count
+        var h: [UInt8] = le32(0x04034b50)
+        for v in [20, 0, 0, 0, 0] { h += le16(v) }
+        h += le32(crc); h += le32(b.count); h += le32(b.count); h += le16(n.count); h += le16(0); h += n
+        out.append(contentsOf: h); out.append(b)
+        var c: [UInt8] = le32(0x02014b50)
+        for v in [20, 20, 0, 0, 0, 0] { c += le16(v) }
+        c += le32(crc); c += le32(b.count); c += le32(b.count); c += le16(n.count)
+        for _ in 0..<4 { c += le16(0) }
+        c += le32(0); c += le32(off); c += n
+        central.append(contentsOf: c)
+    }
+    let cdOff = out.count
+    out.append(central)
+    var e: [UInt8] = le32(0x06054b50)
+    for v in [0, 0, files.count, files.count] { e += le16(v) }
+    e += le32(central.count); e += le32(cdOff); e += le16(0)
+    out.append(contentsOf: e)
+    return out
+}
+
+private let container = #"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>"#
+private func opf(_ spine: String, items: String) -> String {
+    #"<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>T</dc:title></metadata><manifest>"# + items + "</manifest><spine>" + spine + "</spine></package>"
+}
+
+
 final class EpubTests: XCTestCase {
     func testDemoBook() throws {
         let book = try Epub.parse(data: demoData("Books/The Lantern Keeper.epub"))
