@@ -293,6 +293,9 @@ func (d *vectorRowDeriver) derive(ctx context.Context, row vectorFileRow) rowInp
 		if err != nil {
 			return rowInput{reason: "no_text"}
 		}
+		if title == "" && strings.TrimSpace(lead) == "" {
+			return rowInput{reason: "no_text"} // the worker's rule: nothing to embed
+		}
 		return rowInput{Input: embedder.DocumentInput(title, lead), TextSHA: embedder.TextSHA(lead), Owner: obj.OwnerID, Comp: obj.ComputerID, Day: captureDay(obj)}
 	}
 	return rowInput{reason: "not_found"}
@@ -401,7 +404,7 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 	if len(sampleInputs) < floor {
 		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (the text or its cut differs)", ErrVectorImportRefused, len(sampleInputs), floor)
 	}
-	got, err := s.embedInputs(ctx, "import_sample", sampleInputs)
+	got, _, err := s.embedInputs(ctx, "import_sample", sampleInputs)
 	if err != nil {
 		return res, err
 	}

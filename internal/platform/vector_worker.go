@@ -63,14 +63,56 @@ var (
 // vectors held, the rows that should have one, and what remains, for stories
 // (versions: a version's passages are written whole) or captures. rows is
 // what the batch embedded. Written at the start of a pass, at each batch
-// boundary and at the end of a phase, never per row. want counts what the
+// boundary and at the end of a phase, never per row. refused counts the
+// passages (stories) or leads (captures) the embedder refused and that are
+// recorded as such; they are not in the gap. want counts what the
 // derivation could not yet tell cannot have a vector (an owner-private
 // capture, a version that is not public), so remaining is an upper bound
 // until the pass has passed over them; the end-of-phase line is exact.
-func logEmbedGap(shape string, since time.Time, rows int, have, want int64) {
+func logEmbedGap(shape string, since time.Time, rows int, have, want, refused int64) {
 	remaining := max(want-have, 0)
-	log.Printf("corpusd retrieval op=embed_gap shape=%s ms=%.2f rows=%d have=%d want=%d remaining=%d model=%s",
-		shape, float64(time.Since(since).Microseconds())/1000, rows, have, want, remaining, embedder.ModelHash[:12])
+	log.Printf("corpusd retrieval op=embed_gap shape=%s ms=%.2f rows=%d have=%d want=%d remaining=%d model=%s refused=%d",
+		shape, float64(time.Since(since).Microseconds())/1000, rows, have, want, remaining, embedder.ModelHash[:12], refused)
+}
+
+// vecIdleMark is what the last complete story walk saw (see storyMark): the
+// next pass skips the walk while the tables still show the same.
+type vecIdleMark struct {
+	valid      bool
+	mark       storyMarkT
+	want, have int64
+}
+
+// storyMarkT is the cheap summary of the publications and versions: the newest
+// publication's update time, the counts of live publications and versions, and
+// the vector rows held.
+type storyMarkT struct {
+	newest         time.Time
+	pubs, versions int64
+	// held is the story vector rows of the current model, so a table that
+	// lost or changed rows since the walk is walked again.
+	held int64
+}
+
+// storyMark reads the mark: one row and three counts.
+func (s *Service) storyMark(ctx context.Context) (storyMarkT, error) {
+	var m storyMarkT
+	rows, err := s.frontPublicationBatch(ctx, nil, 1)
+	if err != nil {
+		return m, err
+	}
+	if len(rows) > 0 {
+		m.newest = rows[0].UpdatedAt
+	}
+	db := s.store.corpus()
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = 'choir.publication' AND NOT tombstone`).Scan(&m.pubs); err != nil {
+		return m, err
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = 'choir.publication_version' AND NOT tombstone`).Scan(&m.versions); err != nil {
+		return m, err
+	}
+	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM vec_story_passages WHERE model = ?`, embedder.ModelHash).Scan(&m.held)
+	return m, err
 }
 
 // errEmbedderDown marks a pass that stopped because the embedder cannot answer.
@@ -84,6 +126,10 @@ type VectorPassResult struct {
 	// input the server refused); they stay in the gap and the next pass tries
 	// them again.
 	Skipped int
+	// Refused are passages and leads the embedder refused in this pass; they
+	// are recorded (no vector, the reason) and are not retried until the model
+	// changes.
+	Refused int
 	// Removed are vectors deleted because their text is no longer public.
 	Removed int
 	// StoryGap and CaptureGap are the counts without a vector at the start.
@@ -92,7 +138,7 @@ type VectorPassResult struct {
 
 // Worked says the pass embedded or removed something.
 func (r VectorPassResult) Worked() bool {
-	return r.StoryVersions+r.Captures+r.Removed > 0
+	return r.StoryVersions+r.Captures+r.Removed+r.Refused > 0
 }
 
 // ---- what the text of a vector is ----
@@ -355,14 +401,18 @@ func (s *Store) captureGapBatch(ctx context.Context, model string, afterEff *tim
 
 // embedInputs embeds inputs in batches. When a batch fails and the embedder
 // still answers, its inputs are tried one by one so one bad input does not
-// hold the rest; the ones that fail come back nil. When the embedder cannot
-// answer the error wraps errEmbedderDown.
-func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string) ([][]float32, error) {
+// hold the rest. An input the server answers with an error status while it is
+// healthy is a refusal (too many tokens for its batch, for example): its
+// vector is nil and refusals names the reason, so the caller records it and
+// does not ask again. Any other failure of a single input (a dropped
+// connection) is returned as an error: nothing is recorded and the next pass
+// tries again. When the embedder cannot answer the error wraps errEmbedderDown.
+func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string) (out [][]float32, refusals map[int]string, err error) {
 	emb := s.store.embedder()
 	if emb == nil {
-		return nil, fmt.Errorf("%w: no embedder configured", errEmbedderDown)
+		return nil, nil, fmt.Errorf("%w: no embedder configured", errEmbedderDown)
 	}
-	out := make([][]float32, len(inputs))
+	out = make([][]float32, len(inputs))
 	for start := 0; start < len(inputs); start += vectorBatch {
 		end := min(start+vectorBatch, len(inputs))
 		done := s.store.retrievalTimer(retrievalVectorEmbed)
@@ -373,24 +423,32 @@ func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string
 			continue
 		}
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 		if herr := emb.Health(ctx); herr != nil {
-			return nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
+			return nil, nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
 		}
 		for i := start; i < end; i++ {
 			one, err := emb.Embed(ctx, inputs[i:i+1])
 			if err != nil {
 				if herr := emb.Health(ctx); herr != nil {
-					return nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
+					return nil, nil, fmt.Errorf("%w: %v", errEmbedderDown, herr)
 				}
-				log.Printf("corpusd vectors embed refused shape=%s err=%v", shape, err)
+				var se *embedder.StatusError
+				if !errors.As(err, &se) {
+					return nil, nil, fmt.Errorf("embed: %w", err)
+				}
+				log.Printf("corpusd vectors embed refused shape=%s status=%d err=%v", shape, se.Code, err)
+				if refusals == nil {
+					refusals = map[int]string{}
+				}
+				refusals[i] = clipRunes(strings.TrimSpace(se.Error()), 200)
 				continue
 			}
 			out[i] = one[0]
 		}
 	}
-	return out, nil
+	return out, refusals, nil
 }
 
 // RunVectorPass derives the gap and embeds it: stories, then captures, then
@@ -423,31 +481,49 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 	started := time.Now()
 	lastLog := started
 
-	// Stories, newest first.
-	eligible, err := s.eligibleStoryVersions(ctx)
+	// Stories, newest first. An idle pass costs one row and two counts: when
+	// the newest publication and the counts of publications and versions are
+	// what the last complete walk saw, the walk (a publication's edge read each)
+	// is not repeated. The mark is a hint derived from the tables and held in
+	// this process only; a restart walks once.
+	mark, err := s.storyMark(ctx)
 	if err != nil {
-		return res, fmt.Errorf("vectors: list stories: %w", err)
+		return res, fmt.Errorf("vectors: story mark: %w", err)
 	}
-	have, err := s.store.storyVersionsWithVectors(ctx, model)
+	refusedStories, refusedCaptures, err := s.store.vectorRefusedCounts(ctx, model)
 	if err != nil {
 		return res, err
 	}
-	var gap []storyVersionRef
-	okSQL, err := s.store.sqlEligibleStoryVersions(ctx, eligible)
-	if err != nil {
-		return res, err
-	}
-	var kept []storyVersionRef
-	for _, ref := range eligible {
-		if okSQL[ref.VersionID] {
-			kept = append(kept, ref)
+	var eligible, gap []storyVersionRef
+	walk := !(s.vecIdle.valid && s.vecIdle.mark == mark)
+	storyWant, storyHave := s.vecIdle.want, s.vecIdle.have
+	if walk {
+		eligible, err = s.eligibleStoryVersions(ctx)
+		if err != nil {
+			return res, fmt.Errorf("vectors: list stories: %w", err)
 		}
-	}
-	eligible = kept
-	for _, ref := range eligible {
-		if !have[ref.VersionID] {
-			gap = append(gap, ref)
+		have, err := s.store.storyVersionsWithVectors(ctx, model)
+		if err != nil {
+			return res, err
 		}
+		okSQL, err := s.store.sqlEligibleStoryVersions(ctx, eligible)
+		if err != nil {
+			return res, err
+		}
+		var kept []storyVersionRef
+		for _, ref := range eligible {
+			if okSQL[ref.VersionID] {
+				kept = append(kept, ref)
+			}
+		}
+		eligible = kept
+		for _, ref := range eligible {
+			if !have[ref.VersionID] {
+				gap = append(gap, ref)
+			}
+		}
+		storyWant = int64(len(eligible))
+		storyHave = storyWant - int64(len(gap))
 	}
 	res.StoryGap = int64(len(gap))
 	captureGap, err := s.store.captureGapCount(ctx, model)
@@ -473,15 +549,16 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		log.Printf("corpusd vectors embed kind=%s remaining=%d rate=%.2f/s elapsed=%.0fs", kind, s.store.vec.remaining.Load(), rate, el)
 	}
 	og := s.ogStore()
-	storyWant := int64(len(eligible))
-	storyHave := storyWant - res.StoryGap
-	logEmbedGap("stories", started, 0, storyHave, storyWant)
+	if walk {
+		logEmbedGap("stories", started, 0, storyHave, storyWant, refusedStories)
+	}
 	batchStart, batchRows, batchUnits := time.Now(), 0, 0
+	storyErrs := 0
 	for _, ref := range gap {
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
-		n, err := s.embedStoryVersion(ctx, og, ref)
+		n, nref, err := s.embedStoryVersion(ctx, og, ref)
 		s.store.vec.remaining.Add(-1)
 		switch {
 		case errors.Is(err, errEmbedderDown) || ctx.Err() != nil:
@@ -491,11 +568,14 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 			return res, err
 		case err != nil:
 			res.Skipped++
+			storyErrs++
 			storyWant--
 			log.Printf("corpusd vectors story version=%s skipped err=%v", ref.VersionID, err)
-		case n > 0:
+		case n+nref > 0:
 			res.StoryVersions++
 			res.StoryPassages += n
+			res.Refused += nref
+			refusedStories += int64(nref)
 			storyHave++
 			batchRows += n
 			embeddedTotal.Add(int64(n))
@@ -504,13 +584,21 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 			storyWant--
 		}
 		if batchUnits++; batchUnits >= vectorBatch {
-			logEmbedGap("stories", batchStart, batchRows, storyHave, storyWant)
+			logEmbedGap("stories", batchStart, batchRows, storyHave, storyWant, refusedStories)
 			batchStart, batchRows, batchUnits = time.Now(), 0, 0
 		}
 		progress("story")
 	}
 	if batchUnits > 0 || len(gap) > 0 {
-		logEmbedGap("stories", batchStart, batchRows, storyHave, storyWant)
+		logEmbedGap("stories", batchStart, batchRows, storyHave, storyWant, refusedStories)
+	}
+	if walk && storyErrs == 0 {
+		// The held count is read after the writes of this walk; the rest of
+		// the mark before it, so a publication that arrived meanwhile shows.
+		if err := s.store.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM vec_story_passages WHERE model = ?`, model).Scan(&mark.held); err != nil {
+			return res, err
+		}
+		s.vecIdle = vecIdleMark{valid: true, mark: mark, want: storyWant, have: storyHave}
 	}
 
 	// Captures, newest first. The keyset cursor passes over a capture that
@@ -519,7 +607,9 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 	if err != nil {
 		return res, err
 	}
-	logEmbedGap("captures", started, 0, capHave, capWant)
+	if res.CaptureGap > 0 || walk {
+		logEmbedGap("captures", started, 0, capHave, capWant, refusedCaptures)
+	}
 	var afterEff *time.Time
 	afterID := ""
 	for {
@@ -536,14 +626,16 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		last := rows[len(rows)-1]
 		afterEff, afterID = &last.Eff, last.ID
 		batchAt := time.Now()
-		n, skipped, err := s.embedCaptureBatch(ctx, rows)
+		n, skipped, nref, err := s.embedCaptureBatch(ctx, rows)
 		s.store.vec.remaining.Add(-int64(len(rows)))
 		res.Captures += n
 		res.Skipped += skipped
-		capHave += int64(n)
+		res.Refused += nref
+		refusedCaptures += int64(nref)
+		capHave += int64(n + nref)
 		capWant -= int64(skipped)
 		embeddedTotal.Add(int64(n))
-		logEmbedGap("captures", batchAt, n, capHave, capWant)
+		logEmbedGap("captures", batchAt, n, capHave, capWant, refusedCaptures)
 		if err != nil {
 			return res, err
 		}
@@ -565,33 +657,37 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 
 // embedStoryVersion embeds every passage of one published version and writes
 // them in one transaction, replacing any rows the version had (another model's).
-// It returns the passages written, 0 for a version that must not have vectors.
-func (s *Service) embedStoryVersion(ctx context.Context, og *ObjectGraphStore, ref storyVersionRef) (int, error) {
+// A passage the embedder refuses is written as a row without a vector and with
+// the reason, so the version is whole in the table, is not in the gap, and the
+// model is not asked again until the model changes; a search finds the
+// version's other passages and never that one. It returns the passages
+// embedded, 0 for a version that must not have vectors.
+func (s *Service) embedStoryVersion(ctx context.Context, og *ObjectGraphStore, ref storyVersionRef) (embedded, refused int, err error) {
 	vt, ok, err := s.loadStoryVersionText(ctx, og, ref.StoryID, ref.VersionID)
 	if err != nil || !ok || len(vt.Passages) == 0 {
-		return 0, err
+		return 0, 0, err
 	}
 	inputs := make([]string, len(vt.Passages))
 	for i, p := range vt.Passages {
 		inputs[i] = embedder.DocumentInput(vt.Title, p)
 	}
-	vecs, err := s.embedInputs(ctx, "story", inputs)
+	vecs, refusals, err := s.embedInputs(ctx, "story", inputs)
 	if err != nil {
-		return 0, err
-	}
-	for i, v := range vecs {
-		if v == nil {
-			return 0, fmt.Errorf("passage %d was refused by the embedder", i)
-		}
+		return 0, 0, err
 	}
 	rows := make([]storyVectorRow, len(vecs))
 	for i := range vecs {
-		rows[i] = storyVectorRow{StoryID: ref.StoryID, VersionID: ref.VersionID, Ordinal: i, TextSHA: embedder.TextSHA(vt.Passages[i]), Day: vt.Day, Vec: vecs[i]}
+		rows[i] = storyVectorRow{StoryID: ref.StoryID, VersionID: ref.VersionID, Ordinal: i, TextSHA: embedder.TextSHA(vt.Passages[i]), Day: vt.Day, Vec: vecs[i], Refused: refusals[i]}
+		if vecs[i] != nil {
+			embedded++
+		} else {
+			refused++
+		}
 	}
 	if err := s.store.writeStoryVersionVectors(ctx, ref.StoryID, ref.VersionID, rows); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return len(rows), nil
+	return embedded, refused, nil
 }
 
 type storyVectorRow struct {
@@ -599,7 +695,18 @@ type storyVectorRow struct {
 	Ordinal            int
 	TextSHA            string
 	Day                time.Time
-	Vec                []float32
+	// Vec is nil for a passage the embedder refused; Refused says why.
+	Vec     []float32
+	Refused string
+}
+
+// vecParam is a vector as a statement parameter: its text form, or an empty
+// string (NULLIF turns it into NULL) for a refused passage.
+func vecParam(v []float32) string {
+	if v == nil {
+		return ""
+	}
+	return vecLiteral(v)
 }
 
 // writeStoryVersionVectors replaces a version's rows with rows, whole. Two
@@ -618,11 +725,11 @@ func (s *Store) writeStoryVersionVectors(ctx context.Context, storyID, versionID
 		return err
 	}
 	for _, r := range rows {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO vec_story_passages (story_id, version_id, ordinal, text_sha, day, model, embedding, embedded_on)
-			VALUES (?, ?, ?, ?, ?::date, ?, ?::halfvec(256), (now() AT TIME ZONE 'UTC')::date)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO vec_story_passages (story_id, version_id, ordinal, text_sha, day, model, embedding, refused, embedded_on)
+			VALUES (?, ?, ?, ?, ?::date, ?, NULLIF(?, '')::halfvec(256), ?, (now() AT TIME ZONE 'UTC')::date)
 			ON CONFLICT (story_id, version_id, ordinal) DO UPDATE SET text_sha = EXCLUDED.text_sha, day = EXCLUDED.day, model = EXCLUDED.model,
-				embedding = EXCLUDED.embedding, embedded_on = EXCLUDED.embedded_on`,
-			storyID, versionID, r.Ordinal, r.TextSHA, r.Day.UTC().Format("2006-01-02"), embedder.ModelHash, vecLiteral(r.Vec)); err != nil {
+				embedding = EXCLUDED.embedding, refused = EXCLUDED.refused, embedded_on = EXCLUDED.embedded_on`,
+			storyID, versionID, r.Ordinal, r.TextSHA, r.Day.UTC().Format("2006-01-02"), embedder.ModelHash, vecParam(r.Vec), r.Refused); err != nil {
 			return err
 		}
 	}
@@ -631,14 +738,14 @@ func (s *Store) writeStoryVersionVectors(ctx context.Context, storyID, versionID
 
 // embedCaptureBatch embeds the captures of rows that may have a vector and
 // writes them. skipped counts the ones that may not or could not.
-func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (written, skipped int, err error) {
+func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (written, skipped, refused int, err error) {
 	ids := make([]string, len(rows))
 	for i, r := range rows {
 		ids[i] = r.ID
 	}
 	objs, err := s.store.captureObjectsByIDAny(ctx, ids)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	type item struct {
 		obj           objectgraph.Object
@@ -653,7 +760,7 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 	}
 	okSQL, err := s.store.sqlEligibleCaptures(ctx, batchObjs)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	var items []item
 	for _, r := range rows {
@@ -680,34 +787,37 @@ func (s *Service) embedCaptureBatch(ctx context.Context, rows []captureGapRow) (
 		items = append(items, item{obj: obj, lead: lead, title: title, input: embedder.DocumentInput(title, lead), textID: embedder.TextSHA(lead)})
 	}
 	if len(items) == 0 {
-		return 0, skipped, nil
+		return 0, skipped, 0, nil
 	}
 	inputs := make([]string, len(items))
 	for i, it := range items {
 		inputs[i] = it.input
 	}
-	vecs, err := s.embedInputs(ctx, "capture", inputs)
+	vecs, refusals, err := s.embedInputs(ctx, "capture", inputs)
 	if err != nil {
-		return 0, skipped, err
+		return 0, skipped, 0, err
 	}
 	var out []captureVectorRow
+	embedded := 0
 	for i, it := range items {
-		if vecs[i] == nil {
-			skipped++
-			continue
+		out = append(out, captureVectorRow{ID: it.obj.CanonicalID, Owner: it.obj.OwnerID, Computer: it.obj.ComputerID, TextSHA: it.textID, Day: captureDay(it.obj), Vec: vecs[i], Refused: refusals[i]})
+		if vecs[i] != nil {
+			embedded++
+		} else {
+			refused++
 		}
-		out = append(out, captureVectorRow{ID: it.obj.CanonicalID, Owner: it.obj.OwnerID, Computer: it.obj.ComputerID, TextSHA: it.textID, Day: captureDay(it.obj), Vec: vecs[i]})
 	}
 	if err := s.store.writeCaptureVectors(ctx, out); err != nil {
-		return 0, skipped, err
+		return 0, skipped, 0, err
 	}
-	return len(out), skipped, nil
+	return embedded, skipped, refused, nil
 }
 
 type captureVectorRow struct {
 	ID, Owner, Computer, TextSHA string
 	Day                          time.Time
 	Vec                          []float32
+	Refused                      string
 }
 
 func (s *Store) writeCaptureVectors(ctx context.Context, rows []captureVectorRow) (err error) {
@@ -722,11 +832,11 @@ func (s *Store) writeCaptureVectors(ctx context.Context, rows []captureVectorRow
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, r := range rows {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO vec_captures (capture_id, owner_id, computer_id, text_sha, day, model, embedding, embedded_on)
-			VALUES (?, ?, ?, ?, ?::date, ?, ?::halfvec(256), (now() AT TIME ZONE 'UTC')::date)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO vec_captures (capture_id, owner_id, computer_id, text_sha, day, model, embedding, refused, embedded_on)
+			VALUES (?, ?, ?, ?, ?::date, ?, NULLIF(?, '')::halfvec(256), ?, (now() AT TIME ZONE 'UTC')::date)
 			ON CONFLICT (capture_id) DO UPDATE SET owner_id = EXCLUDED.owner_id, computer_id = EXCLUDED.computer_id, text_sha = EXCLUDED.text_sha,
-				day = EXCLUDED.day, model = EXCLUDED.model, embedding = EXCLUDED.embedding, embedded_on = EXCLUDED.embedded_on`,
-			r.ID, r.Owner, r.Computer, r.TextSHA, r.Day.UTC().Format("2006-01-02"), embedder.ModelHash, vecLiteral(r.Vec)); err != nil {
+				day = EXCLUDED.day, model = EXCLUDED.model, embedding = EXCLUDED.embedding, refused = EXCLUDED.refused, embedded_on = EXCLUDED.embedded_on`,
+			r.ID, r.Owner, r.Computer, r.TextSHA, r.Day.UTC().Format("2006-01-02"), embedder.ModelHash, vecParam(r.Vec), r.Refused); err != nil {
 			return err
 		}
 	}
@@ -777,15 +887,25 @@ func (s *Store) captureObjectsByIDAny(ctx context.Context, ids []string) (map[st
 // index's exclusion, taken conservatively: the label's prefix anywhere in the
 // metadata text hides the capture). A story passage's is eligible while its
 // version and publication are not tombstoned and the publication is published
-// with a route. A version's access policy is fixed when it is published and is
-// checked when its vectors are written.
+// with a route, and no policy object of the version says its access is not
+// public (the read routes' source, service_publication_read.go:465; read with
+// pg_input_is_valid and a CASE so malformed data never raises: a missing,
+// empty or unreadable policy object adds no constraint). The manifest's policy,
+// the Mac export's source, is checked in Go when vectors are written.
 var (
 	vecCaptureEligibleSQL = `EXISTS (SELECT 1 FROM og_objects o WHERE o.canonical_id = v.capture_id AND o.object_kind = '` + string(objectgraph.WebCaptureObjectKind) + `'
 		AND NOT o.tombstone AND COALESCE(o.superseded_by, '') = '' AND o.owner_id = v.owner_id AND o.computer_id = v.computer_id
 		AND position('` + types.LabelOwnerPrivatePrefix + `' in o.metadata) = 0)`
 	vecStoryEligibleSQL = `(EXISTS (SELECT 1 FROM og_objects ver WHERE ver.canonical_id = v.version_id AND NOT ver.tombstone)
 		AND EXISTS (SELECT 1 FROM og_objects pub WHERE pub.canonical_id = v.story_id AND NOT pub.tombstone
-			AND pub.metadata::jsonb->>'state' = 'published' AND btrim(COALESCE(pub.metadata::jsonb->>'route_path', '')) <> ''))`
+			AND pub.metadata::jsonb->>'state' = 'published' AND btrim(COALESCE(pub.metadata::jsonb->>'route_path', '')) <> '')
+		AND NOT EXISTS (SELECT 1 FROM og_edges pe JOIN og_objects po ON po.canonical_id = pe.to_id
+			WHERE pe.from_id = v.version_id AND pe.kind = 'has_policy' AND NOT pe.tombstone
+			AND CASE WHEN NOT pg_input_is_valid(po.metadata, 'jsonb') THEN false
+				WHEN NOT pg_input_is_valid(COALESCE(po.metadata::jsonb->>'access_policy_json', ''), 'jsonb') THEN false
+				WHEN COALESCE(po.metadata::jsonb->>'access_policy_json', '') = '' THEN false
+				ELSE NOT (lower(btrim(COALESCE((po.metadata::jsonb->>'access_policy_json')::jsonb->>'visibility', ''))) = 'public'
+					AND lower(btrim(COALESCE((po.metadata::jsonb->>'access_policy_json')::jsonb->>'route', ''))) IN ('', 'public')) END))`
 )
 
 // sqlEligibleCaptures returns which of objs satisfy vecCaptureEligibleSQL, the
@@ -858,7 +978,9 @@ func (s *Store) sqlEligibleStoryVersions(ctx context.Context, refs []storyVersio
 
 // sweepVectors deletes the vectors whose text is no longer public, of both
 // kinds, and returns the rows deleted.
-func (s *Store) sweepVectors(ctx context.Context) (int, error) {
+func (s *Store) sweepVectors(ctx context.Context) (n int, err error) {
+	done := s.retrievalTimer(retrievalVectorSweep)
+	defer func() { done("both", n, err) }()
 	removed := 0
 	for _, q := range []struct{ table, pred string }{
 		{vecStoryTable, vecStoryEligibleSQL}, {vecCaptureTable, vecCaptureEligibleSQL},
