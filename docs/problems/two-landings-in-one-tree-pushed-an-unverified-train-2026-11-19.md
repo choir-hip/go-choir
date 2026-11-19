@@ -80,3 +80,18 @@ Changed approach, not another patch: the worker reads its timings once at
 start, so no test can race it by restoring them; the log capture locks its
 reads; a builder's brief for Go code with a background goroutine says to
 run the touched package under the race detector before handing over.
+
+## A fourth failure of another kind (2026-11-19T12:37Z)
+
+Once CI passed and the train deployed, the worker embedded nothing: its
+first statement never ended on the paper's tables
+(`vector-worker-gap-count-never-ends-on-the-paper-2026-11-19.md`). This one
+no landing check could have caught. Read with the three above it says one
+thing about how this subsystem was built: every proof ran on a fake embedder
+and a database of a few rows, and the first contact with the race detector,
+with CI's classifiers and with the paper's 216,942 captures each found a
+defect. The approach changes in two ways for what remains of it (the import,
+the search at full size, the event shortlist): a statement that will run over
+a computer's captures has its plan read on Node B, read only, before it
+lands; and a claim about the ranked search's latency waits for a reading
+taken with the index full.
