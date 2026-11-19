@@ -20,84 +20,6 @@
       "message": "string",
       "micActive": "bool"
     },
-    "StageRow": {
-      "kind": "string",
-      "kindLabel": "string",
-      "id": "string",
-      "name": "string",
-      "summary": "string",
-      "selected": "bool",
-      "network": "bool",
-      "models": "string"
-    },
-    "StageList": {
-      "rows": "StageRow[]"
-    },
-    "ParamRow": {
-      "kind": "string",
-      "stage": "string",
-      "name": "string",
-      "label": "string",
-      "value": "string",
-      "hint": "string"
-    },
-    "ParamList": {
-      "rows": "ParamRow[]"
-    },
-    "TimingRow": {
-      "stage": "string",
-      "startMs": "number",
-      "durMs": "number"
-    },
-    "Trace": {
-      "id": "string",
-      "transcript": "string",
-      "configName": "string",
-      "outcome": "string",
-      "addressedBy": "string",
-      "totalMs": "number",
-      "ackMs": "number",
-      "revisionMs": "number",
-      "audioSwitchMs": "number",
-      "timings": "TimingRow[]",
-      "lines": "string[]"
-    },
-    "TurnRow": {
-      "id": "string",
-      "transcript": "string",
-      "configName": "string",
-      "outcome": "string",
-      "ackMs": "number",
-      "revisionMs": "number"
-    },
-    "TurnList": {
-      "rows": "TurnRow[]"
-    },
-    "AudioInfo": {
-      "state": "string",
-      "policy": "string",
-      "engine": "string",
-      "route": "string",
-      "message": "string",
-      "voiceProcessing": "bool",
-      "audible": "bool",
-      "volume": "number",
-      "lastSwitchMs": "number",
-      "policies": "string[]",
-      "ackTiming": "string",
-      "ackTimings": "string[]"
-    },
-    "ExportInfo": {
-      "path": "string",
-      "documents": "string",
-      "name": "string"
-    },
-    "Lines": {
-      "lines": "string[]"
-    },
-    "Names": {
-      "names": "string[]"
-    },
     "ChoirAuth": {
       "signedIn": "bool",
       "baseURL": "string",
@@ -232,47 +154,6 @@
       "ok": "bool",
       "message": "string"
     },
-    "CardStory": {
-      "route": "string",
-      "address": "string",
-      "title": "string",
-      "dek": "string",
-      "section": "string",
-      "entityLine": "string",
-      "primary": "string",
-      "lift": "number",
-      "n": "number",
-      "dir": "string",
-      "why": "string"
-    },
-    "CardStoryList": {
-      "rows": "CardStory[]",
-      "index": "number",
-      "setAside": "number",
-      "total": "number"
-    },
-    "ToldRow": {
-      "kind": "string",
-      "title": "string",
-      "entities": "string",
-      "when": "string",
-      "route": "string"
-    },
-    "Told": {
-      "count": "number",
-      "rows": "ToldRow[]",
-      "lines": "string[]",
-      "left": "string",
-      "right": "string",
-      "leftLabel": "string",
-      "rightLabel": "string",
-      "note": "string"
-    },
-    "UndoInfo": {
-      "open": "bool",
-      "title": "string",
-      "address": "string"
-    },
     "LauncherPlace": {
       "slug": "string",
       "name": "string",
@@ -293,14 +174,6 @@
       "hits": "LauncherHit[]",
       "stories": "number",
       "searchNote": "string"
-    },
-    "ShadeRow": {
-      "route": "string",
-      "lift": "number",
-      "rank": "number"
-    },
-    "Shading": {
-      "rows": "ShadeRow[]"
     },
     "CardAck": {
       "message": "string"
@@ -933,18 +806,6 @@
       "ok": "bool",
       "message": "string"
     },
-    "SettingsAccount": {
-      "status": "string",
-      "signedIn": "bool",
-      "handle": "string",
-      "keyID": "string",
-      "keyLabel": "string",
-      "scopes": "string",
-      "computerID": "string",
-      "message": "string",
-      "demo": "bool",
-      "baseURL": "string"
-    },
     "SettingsComputer": {
       "id": "string",
       "state": "string",
@@ -954,23 +815,6 @@
       "message": "string",
       "epoch": "number",
       "checked": "bool"
-    },
-    "SettingOption": {
-      "id": "string",
-      "label": "string",
-      "detail": "string",
-      "selected": "bool"
-    },
-    "SettingRowInfo": {
-      "id": "string",
-      "label": "string",
-      "help": "string",
-      "value": "string",
-      "valueLabel": "string",
-      "choices": "SettingOption[]"
-    },
-    "SettingRows": {
-      "rows": "SettingRowInfo[]"
     },
     "LearnedItem": {
       "line": "string",
@@ -1218,213 +1062,6 @@
     }
   },
   "names": [
-    {
-      "source": "labState",
-      "live": true,
-      "answers": "LabState",
-      "substitute": {
-        "default": {
-          "running": false,
-          "paused": true,
-          "phase": "playing",
-          "level": "play",
-          "addressing": "",
-          "transcript": "",
-          "configName": "",
-          "blockIndex": 0,
-          "blockCount": 0,
-          "blockText": "",
-          "residentMB": 0,
-          "thermal": "nominal",
-          "message": "",
-          "micActive": false
-        }
-      }
-    },
-    {
-      "source": "labStages",
-      "live": true,
-      "answers": "StageList",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
-      "source": "labParams",
-      "live": true,
-      "answers": "ParamList",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
-      "source": "labTrace",
-      "live": true,
-      "answers": "Trace",
-      "options": {
-        "turn": "string"
-      },
-      "substitute": {
-        "default": {
-          "id": "",
-          "transcript": "",
-          "configName": "",
-          "outcome": "",
-          "addressedBy": "",
-          "totalMs": 0,
-          "ackMs": 0,
-          "revisionMs": 0,
-          "audioSwitchMs": 0,
-          "timings": [],
-          "lines": []
-        }
-      }
-    },
-    {
-      "source": "labAudio",
-      "live": true,
-      "answers": "AudioInfo",
-      "substitute": {
-        "default": {
-          "state": "none",
-          "policy": "switchOnAddress",
-          "engine": "off",
-          "route": "",
-          "message": "",
-          "voiceProcessing": false,
-          "audible": false,
-          "volume": 1,
-          "lastSwitchMs": 0,
-          "policies": [],
-          "ackTiming": "immediate",
-          "ackTimings": []
-        }
-      }
-    },
-    {
-      "send": "labInject",
-      "answers": "LabState"
-    },
-    {
-      "send": "labSetAudioPolicy",
-      "options": {
-        "policy": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labSetAckTiming",
-      "options": {
-        "timing": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labExportTurn",
-      "options": {
-        "turn": "string"
-      },
-      "answers": "ExportInfo"
-    },
-    {
-      "source": "labTurns",
-      "live": true,
-      "answers": "TurnList",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
-      "source": "labEvents",
-      "live": true,
-      "answers": "Lines",
-      "substitute": {
-        "default": {
-          "lines": []
-        }
-      }
-    },
-    {
-      "source": "labConfigs",
-      "live": true,
-      "answers": "Names",
-      "substitute": {
-        "default": {
-          "names": []
-        }
-      }
-    },
-    {
-      "send": "labStart",
-      "answers": "LabState"
-    },
-    {
-      "send": "labStop",
-      "answers": "LabState"
-    },
-    {
-      "send": "labPlayPause",
-      "answers": "LabState"
-    },
-    {
-      "send": "labNext",
-      "answers": "LabState"
-    },
-    {
-      "send": "labPrevious",
-      "answers": "LabState"
-    },
-    {
-      "send": "labSelectStage",
-      "options": {
-        "kind": "string",
-        "id": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labSetParam",
-      "options": {
-        "kind": "string",
-        "name": "string",
-        "value": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labSaveConfig",
-      "options": {
-        "name": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labLoadConfig",
-      "options": {
-        "name": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labLoadConfigURL",
-      "options": {
-        "url": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "labReplay",
-      "options": {
-        "turn": "string"
-      },
-      "answers": "LabState"
-    },
     {
       "source": "choirAuth",
       "live": true,
@@ -1722,61 +1359,6 @@
       "answers": "ShelfAck"
     },
     {
-      "source": "cardStories",
-      "live": true,
-      "answers": "CardStoryList",
-      "substitute": {
-        "default": {
-          "rows": [],
-          "index": 0,
-          "setAside": 0,
-          "total": 0
-        }
-      }
-    },
-    {
-      "source": "storyStack",
-      "live": true,
-      "answers": "CardStoryList",
-      "substitute": {
-        "default": {
-          "rows": [],
-          "index": 0,
-          "setAside": 0,
-          "total": 0
-        }
-      }
-    },
-    {
-      "source": "toldPaper",
-      "live": true,
-      "answers": "Told",
-      "substitute": {
-        "default": {
-          "count": 0,
-          "rows": [],
-          "lines": [],
-          "left": "close",
-          "right": "more",
-          "leftLabel": "Close",
-          "rightLabel": "More of this",
-          "note": ""
-        }
-      }
-    },
-    {
-      "source": "undoOffer",
-      "live": true,
-      "answers": "UndoInfo",
-      "substitute": {
-        "default": {
-          "open": false,
-          "title": "",
-          "address": ""
-        }
-      }
-    },
-    {
       "source": "launcherData",
       "live": true,
       "answers": "LauncherData",
@@ -1796,81 +1378,10 @@
       }
     },
     {
-      "source": "shadingList",
-      "live": true,
-      "answers": "Shading",
-      "substitute": {
-        "default": {
-          "rows": []
-        }
-      }
-    },
-    {
       "send": "storyMore",
       "options": {
         "address": "string",
         "surface": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "storyLess",
-      "options": {
-        "address": "string",
-        "surface": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "cardFling",
-      "options": {
-        "address": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "cardClose",
-      "options": {
-        "address": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "cardUndo",
-      "answers": "CardAck"
-    },
-    {
-      "send": "stackDecide",
-      "options": {
-        "address": "string",
-        "side": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "stackUndo",
-      "answers": "CardAck"
-    },
-    {
-      "send": "stackReset",
-      "answers": "CardAck"
-    },
-    {
-      "send": "toldForget",
-      "options": {
-        "address": "string"
-      },
-      "answers": "CardAck"
-    },
-    {
-      "send": "toldReset",
-      "answers": "CardAck"
-    },
-    {
-      "send": "gestureSet",
-      "options": {
-        "side": "string",
-        "meaning": "string"
       },
       "answers": "CardAck"
     },
@@ -2713,25 +2224,6 @@
       }
     },
     {
-      "source": "settingsAccount",
-      "live": true,
-      "answers": "SettingsAccount",
-      "substitute": {
-        "default": {
-          "status": "",
-          "signedIn": false,
-          "handle": "",
-          "keyID": "",
-          "keyLabel": "",
-          "scopes": "",
-          "computerID": "",
-          "message": "",
-          "demo": false,
-          "baseURL": ""
-        }
-      }
-    },
-    {
       "source": "settingsComputer",
       "live": true,
       "answers": "SettingsComputer",
@@ -2745,19 +2237,6 @@
           "message": "",
           "epoch": 0,
           "checked": false
-        }
-      }
-    },
-    {
-      "source": "settingRows",
-      "live": true,
-      "answers": "SettingRows",
-      "options": {
-        "group": "string"
-      },
-      "substitute": {
-        "default": {
-          "rows": []
         }
       }
     },
@@ -2821,10 +2300,6 @@
       "answers": "SettingsAck"
     },
     {
-      "send": "accountRefresh",
-      "answers": "SettingsAck"
-    },
-    {
       "send": "computerRefresh",
       "answers": "SettingsAck"
     },
@@ -2834,14 +2309,6 @@
     },
     {
       "send": "computerUpdate",
-      "answers": "SettingsAck"
-    },
-    {
-      "send": "settingSet",
-      "options": {
-        "id": "string",
-        "value": "string"
-      },
       "answers": "SettingsAck"
     },
     {
