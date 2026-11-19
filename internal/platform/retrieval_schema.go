@@ -206,6 +206,7 @@ func (s *Store) MigrateRetrieval(ctx context.Context) error {
 	note("capture_index_tables", s.ensureCaptureIndexTables(ctx))
 	if s.retrievalState.captureIndexReady.Load() {
 		note("capture_index_reconcile", s.ReconcileCaptureIndex(ctx))
+		note("capture_terms_cover_index", s.ensureCaptureTermsCoverIndex(ctx))
 	}
 	return firstErr
 }
@@ -258,15 +259,25 @@ func (s *Store) retrievalPeriodic(ctx context.Context, interval time.Duration) {
 		case <-ticker.C:
 		case <-s.retrievalState.reconcileKick:
 		}
-		if !s.retrievalState.captureIndexReady.Load() {
-			if err := s.ensureCaptureIndexTables(ctx); err != nil {
-				log.Printf("corpusd retrieval capture tables err=%v", err)
-				continue
-			}
+		s.retrievalStep(ctx)
+	}
+}
+
+// retrievalStep is one tick of retrievalPeriodic: tables if lost, reconcile of
+// the projection, and the covering index of the term table if it is missing or
+// was left invalid.
+func (s *Store) retrievalStep(ctx context.Context) {
+	if !s.retrievalState.captureIndexReady.Load() {
+		if err := s.ensureCaptureIndexTables(ctx); err != nil {
+			log.Printf("corpusd retrieval capture tables err=%v", err)
+			return
 		}
-		if err := s.ReconcileCaptureIndex(ctx); err != nil {
-			log.Printf("corpusd retrieval reconcile err=%v", err)
-		}
+	}
+	if err := s.ReconcileCaptureIndex(ctx); err != nil {
+		log.Printf("corpusd retrieval reconcile err=%v", err)
+	}
+	if err := s.ensureCaptureTermsCoverIndex(ctx); err != nil {
+		log.Printf("corpusd retrieval cover index err=%v", err)
 	}
 }
 

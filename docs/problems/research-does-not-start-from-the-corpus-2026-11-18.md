@@ -343,3 +343,71 @@ were on the lane's base, plus only `caller=` on the `corpus search` log line.
 The brief says what it found, that the search found nothing, or that the
 search did not answer. A test sweeps every render path for absence and scope
 phrases so neither can return unnoticed.
+
+## `candidates_shown=0` read from the traces, 2026-11-19 (station L1; read-only)
+
+The paper's console, 02:27Z to 05:22Z, holds 233 `management story choice`
+lines: 157 feed an existing story, 76 open a new one. **186 of the 233 (80%)
+read `candidates_shown=0`**: 139 of the 157 feeds and 47 of the 76 opens.
+
+The count does not mean what the line's name says. `candidates_shown` is
+incremented only in the `choir.Stories` verb
+(`internal/agentcore/intake_view.go:160`, `noteStoriesShown`). A management
+task does not call the verb: the host puts the newest page of the story
+library in its first message (`managementTaskPrompt`, `managementTaskOpening`,
+`management_tasks.go:68-196`, "as choir.Stories(50, \"\") return[s] them"),
+and delivering that page calls `noteStoryLibraryShownAt` and
+`noteEgressRead`, not `noteStoriesShown`. So 0 is "this run made no
+`choir.Stories` call", which is what a run does when the opening already held
+the page. The evidence that the opening carried candidates is that 139 runs
+fed a story by its id without a `choir.Stories` call: a model cannot supply a
+document id it was never shown. The 47 opens with 0 are what a run does
+that saw the page and found no match, or that was shown the "did not come
+with this message" note and did not read the page; the line cannot tell the two
+apart, and nothing logs the note (`openingStoriesNote`).
+
+Cause: **harness** (the instrument, not the model): the line undercounts what
+was shown. Confidence 0.85 for "most zeros are opening-shown", from the
+139 feeds; 0.5 that none of the 47 opens followed a missing page. What the
+management run does after the line is `choir.Done`; the line is written when
+the record commits.
+
+What would settle it: add the opening's story count to the line (a count, an
+ids-free change, yellow), then read the opens: how many of the zeros had a
+page of 50 and chose to open anyway, and what their headlines overlapped. The
+comparison that tells the model from the harness: the same capture batch to
+the same model with the page in the opening, with the page absent (the model
+must call the verb), and with the page cut to the stories whose titles share
+a term with the captures; and the same with another model. The choice between
+feed and open is then compared to a human reading of overlap, not to the
+line.
+
+Seen on the way, in the new record
+([recurring agent failures read from traces](recurring-agent-failures-read-from-traces-2026-11-19.md)):
+`choir.Stories` paging is refused by the broker's own bound (the cursor is 67
+bytes and the bound is 64), 4 times in 3 hours, so a management run that
+wants the second page of candidates cannot have it.
+
+## The brief, measured on the paper (2026-11-19T06:45Z)
+
+The corpus brief deployed at 05:19Z. Read from the paper's console from
+05:39:52Z:
+
+- **It is delivered.** Of the first 30 briefs, 27 were delivered and 3
+  failed the 8 second deadline; 21 had every thread answered. Median 5.9 s,
+  median four threads, about 5,900 tokens. (Ledger C141, true.)
+- **The model searches the web as much as before.** The first 24 search
+  summaries have a median of 4.5 web searches started (mean 7.3, most 40),
+  against 4 before the brief; 4.9% of returned pages were read. (Ledger
+  C142, false, entered at 0.3.)
+
+Belief now: giving the model what the computer holds, unasked, does not
+change what it asks the web for. That fits the trace read's finding that the
+many-search runs are the model rewording one question
+(`recurring-agent-failures-read-from-traces-2026-11-19.md`). Remaining
+error: the window crosses a second refresh at 06:16Z (the faster corpus
+search), two dozen runs is a small sample, and whether the stories the runs
+wrote stood on held pages more often was not read. What would tell: the
+same read over a full day, and the calibration experiment's model arms.
+The brief costs one corpus search of up to six threads a run and no web
+search; it stays.

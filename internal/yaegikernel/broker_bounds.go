@@ -29,6 +29,14 @@ const (
 	maxLeaseListItems   = 256
 	maxLeaseDuration    = 31 * 24 * 60 * 60 // seconds
 
+	// MaxStoriesBeforeBytes bounds choir.Stories' before: a cursor the host
+	// issued (a page's Next: an RFC 3339 time of at most 30 bytes, a bar and
+	// a document id, 67 bytes for the usual 36-byte id). The bound was 64
+	// until 2026-11-19 and refused the host's own cursor; it is the longest
+	// cursor with margin, and the handler still refuses a before that does
+	// not begin with a time.
+	MaxStoriesBeforeBytes = 128
+
 	// One research child's fields (MA6.3): the objective becomes a child's
 	// prompt, the model a catalog name, the role one of two words.
 	MaxResearchObjectiveBytes = 32 << 10
@@ -63,7 +71,7 @@ var payloadBounds = map[BrokerAction]map[string]payloadFieldBound{
 	ActionListEvidence:      {"agent_id": strMax(256), "limit": numRange(0, 1000)},
 	ActionGetRunMemoryEntry: {"entry_id": strMax(256)},
 	ActionSaveEvidence:      {"kind": strMax(128), "source_uri": strMax(8192), "title": strMax(4096)},
-	ActionStories:           {"limit": numRange(0, 500), "before": strMax(64)},
+	ActionStories:           {"limit": numRange(0, 500), "before": strMax(MaxStoriesBeforeBytes)},
 	ActionShotStart:         {"operation_id": strMax(128)},
 	ActionScreens:           {"operation_id": strMax(128)},
 	ActionInstallPacket:     {"release_id": strMax(128)},

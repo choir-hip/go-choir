@@ -51,7 +51,14 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 
 **Passages are the key.** `lane/capture-fulltext-2` holds one SQLite FTS5 file per computer, owned by corpusd. Passages are about 300 tokens, and their ids are never reused (C, `CAPTURE-FULLTEXT.md` §2, §5). A vector is stored against (scope, passage id). Liveness always comes from the `passages` table, so a vector of a deleted page is never returned.
 
-**Where vectors live: a flat file per scope, beside the FTS file.**
+**Amended 2026-11-19 (owner's rulings R2 and R3 in
+[the night's goal file](../definitions/choir-night-exact-vectors-learning-2026-11-19.md)).**
+- Vectors live in **pgvector**, in corpusd's Postgres (owner: "we need to get vectors in pgvector, using embeddinggemma2"). The flat file below and "Not pgvector now" are withdrawn; they stay as the record of what was weighed.
+- The unit is **every passage of every published story version, and one vector per public captured page** (its title and lead passage), not every passage of every page. That is about 61,000 story passages and 215,000 page vectors at 256 dimensions and half precision, about 140 MB, which removes the size objection to Postgres. A story hit walks to the pages the story cites. One vector per page is the lead's proposal; the owner asked and has not ruled.
+- Still true from below: HNSW filters a window after the search, so a windowed search over-asks and falls back to an exact scan of the window; the embedder refuses no request and counts none; the work list is derived; the ranking is vector order with BM25's top three kept.
+- The first pass is made on the Mac (owner: "yes, you can use the mac for embeddings") from public text only.
+
+**Where vectors live (18 November; withdrawn, see above): a flat file per scope, beside the FTS file.**
 - Each record is the passage id, a day number, 256 int8 values and a scale, about 272 bytes.
 - The file is append-only and memory-mapped, so it sits in the page cache, not corpusd's heap.
 - Search is a brute-force scan. A time window is a range of the file: passage ids rise with indexing time; for pages indexed by the catch-up, the day field filters.
@@ -59,7 +66,7 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 - Speed (A: about 1 G int8 multiply-adds a second in Go on one core): a full scan at 250,000 pages takes about 0.25 s; a 7-day window about 30 ms.
 - Dimension: 256 int8 only. It costs one point of recall@10 (0.918 against 0.927, M). If the model changes, everything is re-embedded; the model's hash is in the file header.
 
-**Not pgvector now.** It would put a derived index into the 4 GiB-capped Postgres, its WAL and the restore set. It has no int8 type (A: halfvec and bit only; check). Window filtering with HNSW is post-filtering. Revisit when either holds: unwindowed p95 above 400 ms, or more than 4 M passages. Either is a measured trigger, not a date.
+**Not pgvector now (withdrawn 2026-11-19, see above).** It would put a derived index into the 4 GiB-capped Postgres, its WAL and the restore set. It has no int8 type (A: halfvec and bit only; check). Window filtering with HNSW is post-filtering. Revisit when either holds: unwindowed p95 above 400 ms, or more than 4 M passages. Either is a measured trigger, not a date.
 
 **The embedder is a host service.**
 - One `llama-server --embedding` process with the official Q8_0 GGUF, as a systemd unit on Node B. It is stateless, with 4 threads and a low CPU weight, so guests win under contention.
@@ -68,7 +75,7 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 
 **Backlog without a limit.**
 - The work list is not a queue in memory. It is a fact derived from the index: passages that have no vector.
-- corpusd's embed worker copies the catch-up's shape: walk, skip what is held, rest between batches, yield while searches are in flight. It always takes, in order:
+- corpusd's embed worker copies the catch-up's shape: walk, skip what is held, one batch at a time with no pacing (amended 2026-11-19: it does not rest or yield; a batch is a size, and the unit's low CPU weight is what lets guests win). It always takes, in order (amended 2026-11-19: published story versions first, newest first, then one lead per public capture, newest first; the list below is the 18 November order):
   1. new captures' lead passages, newest first;
   2. published story versions;
   3. the backfill of leads, newest first;
@@ -84,7 +91,7 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 | Node B and Node A together | about 700 tokens/s | about 27 h | about 4.5 days | about 12 days |
 | Mac M1, Metal | about 3,000 tokens/s (M) | about 6 h | about 25 h | about 69 h |
 
-Vectors made on x86 and on the Mac agree (cosine 0.9999, M), so a file made on the Mac can be imported. The import checks it: sampled passages are re-embedded on Node B, and every sample must agree at 0.999 or above. Order of the pass: all published stories first (small, and they serve overlap and the radio), then leads, then whole pages.
+Vectors made on x86 and on the Mac agree (cosine 0.9999, M), so a file made on the Mac can be imported. The import checks it: sampled passages are re-embedded on Node B, and every sample must agree at 0.999 or above. Order of the pass: all published stories first (they serve overlap and the radio), then leads. Whole pages are not embedded (amended 2026-11-19).
 
 **Pages not in English.** Of the non-English pages the 200 stories cited, BM25 put 33% in the top ten and vectors 72% (M). The vector half is what makes those pages usable. The BM25 tokenizer stays as built.
 
@@ -193,8 +200,8 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 | S1 | Research prompt: corpus first, gap list, no rewording bursts | S0 | green (prompt) | Web searches per published revision fall 30% in 7 days against the S0 week, with the held share not lower | revert | `research.yaml:52-54` |
 | S2 | Web results marked "held" by URL across the computer, read with `ReadCapture` | S0 | orange | Of web results, the share held is logged; new Reads of held URLs go to zero | revert | none |
 | S3 | Brief delivered to the first turn (BM25 halves). Built in lane `corpus-brief` 2026-11-18: captures and published stories per thread, no events, no story dates (so no "stale" judgment yet) | S0 | orange | 95% of runs make no web search before their gap packet; web searches a day at or below 50% of the S0 baseline | revert | none |
-| S4 | Embedder unit, corpusd embed worker, vector file; stories then leads | S0 | red (nix, a host model service) | Vectors' recall@10 at least 0.90 on the 200 set with real text; steady-state backlog drains within the day on staging | stop the unit, delete the file | none |
-| S5 | First pass: on the Mac if allowed, else Node B and Node A | S4 | yellow (ops) | `remaining=0` for leads; import samples agree at cosine 0.999 or more | delete the file | none |
+| S4 | Embedder unit, corpusd embed worker, vector tables in pgvector (amended 2026-11-19; was a vector file); stories then leads | S0 | red (nix, a host model service) | Vectors' recall@10 at least 0.90 on the 200 set with real text; steady-state backlog drains within the day on staging | stop the unit, drop the two tables | none |
+| S5 | First pass: on the Mac if allowed, else Node B and Node A | S4 | yellow (ops) | `remaining=0` for leads; import samples agree at cosine 0.999 or more | drop the two tables | none |
 | S6 | Fusion in corpusd: vectors, BM25's top three kept | S4 | orange | The 200 set holds 0.92 or more; non-English pages in the top ten 65% or more | revert | the guest's RRF merge |
 | S7 | Event layer takes research reads; vector shortlist | S4 | orange | Captures minting a new event fall from 85% to at most 60%; of 50 joins hand-read, false merges no higher than the event-wakes bar | revert | the title-overlap slot |
 | S8 | Story event ids at publish, exported; `basis.events` wired; the setting and environment switches removed; finish rule fixed | S7 | red (export, tape) | 80% or more of new stories carry an event; of the audit's 84 clusters, 70% or more share an id | revert | `research.related_story`, `CORPUSD_RELATED*` |
@@ -205,7 +212,7 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 | S13 | Remove the title half and the term table's search role | S5, a week of S6 | orange | `by_labels_only` stays near zero for a week | revert | `proj_capture_terms` search |
 
 **Not built yet:**
-- pgvector and HNSW, until the latency trigger above;
+- pgvector and HNSW were listed here until 2026-11-19; they are now stations V1 and V2 of the night's goal file;
 - event wakes;
 - a cross-encoder re-ranker;
 - measuring fact overlap by model;
@@ -218,7 +225,7 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 | Decision | Default |
 |---|---|
 | Captured text to the Mac for the first pass | Yes, for public captures only (owner-private captures are excluded at export). Vectors return; the text copy is deleted after import. If no: Node B and Node A, about 27 h for leads. |
-| pgvector or files | Files now, with the trigger above. |
+| pgvector or files | pgvector (owner, 2026-11-19). Was: files now, with the trigger above. |
 | Gemma licence | Apache 2.0 plus the Prohibited Use Policy. Our use (retrieval over news) is within it. Read the linked licence text before S4 lands, since the link names a `gemma_4_license` page. |
 | Revise-or-new threshold | Same primary event and revised within 72 h, or Jev "same/update" at p 0.8 or more. |
 | Money | Nothing in this plan spends any. Buying more search credits is a separate decision. |
@@ -243,3 +250,40 @@ The setting is off for a real reason (C, `store/computer_setting.go`): its finis
 - The gateway still has a rate and in-flight limiter on Jev (`gateway/jev_limiter.go:24-45`, wired at `jev.go:72`). `CLAUDE.md` and `SYSTEM1.md` rule 4 forbid one.
 - `intake_labels.go:43` names a "bucket".
 - `CAPTURE-FULLTEXT.md` §5 prescribes reciprocal-rank fusion against the measurement.
+
+## Assessment after four review rounds on the vector index (2026-11-19T08:54Z)
+
+The vector index's Go half has been sent back three times (rounds 2, 3
+and 4), each time with one blocking finding, so the contract's rule
+applies: stop patching and change the approach.
+
+- **What recurred.** Round 3: a status error from the embedder was written
+  as a permanent refusal of the input. Round 4: an input the embedder
+  refuses as too large makes the import refuse the whole file, and a
+  server that cannot answer makes the inbox move the file to `refused/`.
+  These are one defect in three callers. After round 3 the embedder client
+  classifies an outcome in one place, but the worker, the import's sample
+  and the inbox each still decide alone what that outcome does to durable
+  state, and each new caller got it wrong once.
+- **The change of approach.** One function maps an embedder outcome to one
+  of three effects (this input is refused; the server cannot answer now;
+  this call failed), and only the first may write anything permanent, about
+  that input only. The three callers use it and none reads error types. A
+  file is refused only for faults of the file. The builder's last act is a
+  table of every durable failure state and the one condition that reaches
+  it.
+- **The landing is split if the import does not converge.** The store, the
+  worker and the search were sound in round 4 apart from one should-fix (a
+  cancelled caller). If round 5 again blocks on the import or the inbox,
+  the Go half lands without them, the server's own worker fills the index
+  newest first, and the import follows as its own change.
+- **What I got wrong.** I added the inbox, a new caller, between rounds 3
+  and 4, which widened a change that had not converged.
+
+**Round 5, 09:36Z.** The reviewer tried to break the single mapping and found
+no path from a transient condition to anything permanent. It sent the change
+back again on what the retry added: a file left in the inbox counted as work
+done, so the pass loop ran with no wait. So the landing is split as said
+above: `lane/vec-core` is the Go half without the import route and the inbox,
+and the import follows from `lane/vec-inbox` as its own change after its own
+review.

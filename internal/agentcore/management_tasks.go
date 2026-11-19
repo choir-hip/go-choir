@@ -194,6 +194,7 @@ func (o *taskOpening) commit() {
 		exec := toolregistry.ExecutionContext{RunID: rec.RunID, OwnerID: rec.OwnerID, ComputerID: rec.ComputerID}
 		rt.noteEgressRead(context.Background(), exec, yaegikernel.ActionStories, nil, o.storyOut)
 		rt.noteStoryLibraryShownAt(rec.RunID, o.storyHd)
+		rt.noteOpeningStoriesShown(rec.RunID, o.storyOut)
 	}
 }
 

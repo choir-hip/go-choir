@@ -224,7 +224,7 @@ A. AUTH RECONCILE (the only blocker left on the app; auth re-review of 09057a63a
    Notes: `wipeRunsheet` is not in the wipe list (add it or delete it); `mark` returns true with no storage (fail closed); whether `redirect: 'manual'` is honoured at this pin
    (read the Exact source; say what protects the key on a 302 if not); log `api: session` on change only. The first launch over a phone with a key, old Swift stores and no
    stamp must adopt and wipe nothing: say it here. Then the sign-out drill through the queue `real` (clean sign-out; a second account; first launch over a key with stale stores).
-B. DECK (re-review of 09057a63a: no blocking code finding; the problem record for remote audio is `docs/problems/remote-audio-is-recorded-heard-without-sound-2026-11-19.md` on
+B. DECK (the deferred defect: `docs/problems/remote-audio-is-recorded-heard-without-sound-2026-11-19.md`, now in the lane through the merge of origin/main; re-review of 09057a63a: no blocking code finding; the problem record for remote audio is `docs/problems/remote-audio-is-recorded-heard-without-sound-2026-11-19.md` on
    origin/main, commit 7de5bd890; merge origin/main into the lane at a clean point, main's docs win except this file). New commits, tests first: re-run
    `python3 -I mobile/scripts/gen-exact-interface.py` (exact.json still declares DeckState.rate at :200, :1193; add exact.json to the D16 test); a corrupt journal is moved
    aside (`deck-journal.bad`) with a `system` line and journalling goes on from the numbers file; an unreadable launch must still close the item a kill left open once the merge

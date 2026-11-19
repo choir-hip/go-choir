@@ -152,11 +152,19 @@ func (rt *Runtime) storiesEgressWithin(ctx context.Context, deskRole string, exe
 	}
 	if more && len(sums) > 0 {
 		last := sums[len(sums)-1]
-		page.Next = last.UpdatedAt.UTC().Format(time.RFC3339Nano) + "|" + last.DocID
+		page.Next = storiesCursor(last.UpdatedAt, last.DocID)
 	}
 	if before.IsZero() {
 		page.Held = rt.heldCapturesTally(owner, computer)
 	}
 	rt.noteStoriesShown(exec.RunID, len(page.Stories))
 	return json.Marshal(page)
+}
+
+// storiesCursor is a page's Next: at most 30 bytes of time, a bar and the
+// document id (67 bytes with a 36-byte id). The broker bounds the verb's
+// before argument at yaegikernel.MaxStoriesBeforeBytes, above any cursor this
+// makes, so a cursor the host issued is always accepted back.
+func storiesCursor(at time.Time, docID string) string {
+	return at.UTC().Format(time.RFC3339Nano) + "|" + docID
 }

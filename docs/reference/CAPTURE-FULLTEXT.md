@@ -89,11 +89,20 @@ budget of 8,000 (`CHOIR_FTS_BENCH_BUDGET=8000`), 9.7% of its 82,321 passages (a 
 12-word query ran **80 / 112 ms**, 12 words with the common ones kept 66 /
 132 ms, windowed to the newest tenth 35 / 53 ms, in recency order 97 / 135 ms,
 4 words 57 / 204 ms (indexing was 10 ms a page in that run, the VM being busy
-again). This is the evidence for the claim that a search stays near 100 ms and
-under half a second at 250,000 pages; at a million pages it is an
-**extrapolation**, not a measurement: the budget bounds the postings read,
-but the index no longer fits the machine's page cache, and nothing was run
-at that size.
+again). That run, and the table's "80 / 112 ms" for 207,000 pages, scaled the
+budget down to 8% to 10% of the passages and ran on a warm cache; they are not
+what the paper's computer does. **Corrected 2026-11-19, measured**
+(`internal/capturefts` `TestCSLFullText`, lane `capture-search-latency`: 100,000
+synthetic pages, 406,463 passages, 565 MiB, the real 100,000 budget, queries of
+6 and 10 words on the Zipf corpus of the benchmark): a search took 388 to 640 ms
+at the median, 631 to 2,912 ms at the ninth decile and up to 3.2 s at the worst,
+reading 50,000 to 100,000 postings at the median and up to 200,000 at the worst.
+That is the production figure (751 ms mean, 1,311 ms worst on the 214,195-page
+index, one hour of corpusd's journal, 2026-11-19). The budget bounds the postings
+read, not the time: the old statement scored every posting, then joined every
+one of them to its passage and page row and numbered them by page, to keep 300,
+and with 8 MiB of SQLite page cache per connection those joins are random reads
+over the whole file. See "The cut before the joins" below for the repair.
 
 What decided it:
 
@@ -298,6 +307,65 @@ Inputs: 20,000 synthetic pages of 1,308 tokens each (1.1), the production
 code, the busy build VM. **Disk** is measured per page and scaled; **memory**
 is a configured bound; **CPU** is measured per page and per search.
 
+**The cut before the joins (2026-11-19).** `Search` first takes the 1,500
+best-scoring passages (`topPassages`) from the FTS5 table (`ORDER BY score DESC,
+rowid LIMIT 1500`) and joins only those, then applies the same per-page cap of
+three and the same limit of 300 as before. Why the answer is the same: the 1,500
+are the front of the full list in the same order (score, then passage id), so a
+passage's place among its own page's passages, and so the per-page cap, come out
+the same; every passage left out scores no better than the last one taken. So
+when the capped list holds a full 300 and its last passage scores strictly
+better than the last one taken (a tie could be broken for a newer left-out
+passage), or when fewer than 1,500 passages matched at all, nothing left out
+could have entered it. In every other case the old statement runs. A query with
+`since` or `until` always runs the old statement, because its window cuts by
+time after the score order. `TestTopPassagesAnswerLikeTheFullStatement` compares
+the two paths on hits, passage ids, order and scores across cut sizes, limits,
+ties, a page with more than three matching passages, windows, recency order and
+and requires that both the shortcut and the fallback occur;
+`TestTopPassagesEmptyJoinFallsBack` covers passages whose page row is gone (the
+cut joins to nothing while other pages match), no page rows at all, and a query
+nothing matches.
+Measured on the 100,000-page index above, top 10 identical in all 120 queries:
+median 388 to 120 ms (ninth decile 772 to 198), 640 to 174 ms (2,912 to 1,083)
+with common words kept, 429 to 118 ms (631 to 186) for 10 words. The remaining
+time is BM25 scoring of the postings themselves, which only a smaller scan
+budget reduces; that is a quality decision and was not made.
+
+Known cost, not changed: `pruneTerms` always keeps the three rarest terms even
+when their postings exceed the scan budget, so the postings read can exceed
+100,000 (200,000 at the worst in the run above), and the first time a word is
+seen its document frequency is counted by scanning up to the budget (cached for
+an hour).
+
+**The term table (2026-11-19).** The title-and-label search (`proj_capture_terms`)
+is not part of the full-text index, but it shares the call and its time. Its
+statement reads every posting of every query word (prefixes included) and sorts
+them, so its time is the sum of the words' postings; the primary key
+`(owner_id, computer_id, term, capture_id)` did not hold `fetched_at`, so each
+posting also cost a heap fetch. `idx_pct_cover` (same columns, `INCLUDE
+(fetched_at)`) makes it an index-only scan; it is built `CONCURRENTLY` at start and
+repaired on each periodic retrieval tick (10 minutes) by
+`ensureCaptureTermsCoverIndex`, followed by one `VACUUM (ANALYZE)` of the
+table (an index-only scan reads the heap for pages the visibility map does not
+cover, and on a bulk-loaded, never-vacuumed table the index gave no gain at all
+until it was vacuumed). Measured on the build machine at 214,000 captures and
+2.76 million postings, median of five calls of the real `SearchCaptures`, 500
+candidates: 4 words with two very common (124,000 postings) 257 to 86 ms; 8
+common words (428,000 postings) 744 to 205 ms; 6 words with a 3-letter prefix
+(185,000) 292 to 108 ms; 4 words, one very common (153,000) 210 to 84 ms; 4 mid
+words (30,000) 30 to 29 ms. The build took 6.6 s including the vacuum, and a
+writer inserting a row every 2 ms meanwhile saw its slowest insert at 3.4 ms (it
+is not blocked: `CREATE INDEX CONCURRENTLY` excludes only schema changes and
+vacuum). The index is about 390 MB on 2.76 million postings (the primary key is
+387 MB; the covering index is the same size plus `fetched_at`, measured as the
+whole-table growth, not separately), and every write to the term table now
+maintains it as well as the primary key. The primary key could later be replaced
+by a unique covering index on the same columns, which would drop one index's
+write cost and disk; that is not done. The corpusd journal's `capture_search
+shape=terms` line used to include the full-text search; it no longer does, and
+`capture_fulltext_search` is its own line.
+
 | | 20,000 pages (measured) | 207,000 pages (the paper today, est) | 250,000 pages (est) | 1,000,000 pages (est) |
 |---|---|---|---|---|
 | Passages | 82,321 | 0.85 M | 1.03 M | 4.1 M |
@@ -306,7 +374,7 @@ is a configured bound; **CPU** is measured per page and per search.
 | Page cache of the index | at most 96 MiB (a limit on the cache, section 1.2) | same | same | same |
 | Indexing one captured page (inline, in the capture write) | 4 to 10 ms | same | same | same |
 | Catching up every existing page | 84 s to 3.4 min of CPU | 14 to 35 CPU-minutes; about 43 to 105 minutes wall at a third of a core | 17 to 42 CPU-minutes; 52 to 125 min wall | 1.2 to 2.8 CPU-hours; 3.5 to 8.4 h wall |
-| A 12-word search | 196 / 271 ms with no pruning (the whole index is under the budget) | 80 / 112 ms with the budget | same order, bounded by the budget | same order |
+| A 12-word search | 196 / 271 ms with no pruning (the whole index is under the budget) | 80 / 112 ms with the budget was a scaled-budget run, not this size; measured at 100,000 pages with the real budget: 388 to 640 ms before the cut, 120 to 174 ms after | same order, bounded by the budget | same order |
 
 Disk is the number to watch: Node B's headroom is the recurring risk
 (`scripts/status-storage`), and the index is 1.3 GiB for the paper's

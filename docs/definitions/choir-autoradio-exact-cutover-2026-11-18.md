@@ -122,7 +122,7 @@ stations:
   status: working
 - id: X1
   name: The loop is fast
-  scope: 'the Contract compile of our pages falls from 64 s to 15 s or less with the mark looking the same, and this station owns the rest of the time too: the 16 s that remains without the mark is explained and cut, not only reported; the Android refusals and Apple-only symbols are fixed or listed; a proposal for the lab pages leaving the product app'
+  scope: 'the Contract compile of our pages falls from 64 s to 15 s or less with the mark drawn cheaply and still rough by hand (owner, 2026-11-19; no pixel comparison), and this station owns the rest of the time too: the 16 s that remains without the mark is explained and cut, not only reported; the Android refusals and Apple-only symbols are fixed or listed; the lab pages are deleted (owner, 2026-11-19)'
   class: orange
   review: one seat
   depends_on: []
@@ -146,7 +146,7 @@ stations:
   status: working
 - id: X3
   name: Sign-in in shared code
-  scope: 'device-flow sign-in, accounts, the proof key and computer discovery in TypeScript; the key in Exact''s secret store; one sign-out wipe across both languages with the generation passed to shared code; account and computer settings. ChoirClient stays, fed the identity by one call, until the last station. The old Keychain item is deleted at the move. Decided before it starts: the key is readable on a locked phone (X0), deploy.store stays "0", the wipe order. The owner signs in once more.'
+  scope: 'device-flow sign-in, accounts, the proof key and computer discovery in TypeScript; the key in Exact''s secret store; one sign-out wipe across both languages with the generation passed to shared code; account and computer settings. ChoirClient stays, fed the identity by one call, until the last station. The old Keychain item is deleted at the move. Decided before it starts: the key is readable on a locked phone (X0), deploy.store stays "0", the wipe order. The owner signs in once more. Night of 2026-11-19: only the signed-in request seam is built (the stored key read in place by one native reader); sign-in, sign-out and the Keychain item are not touched; a build with the seam reaches the owner''s phone only if the carried-key test passes and two seats accept (the night file''s decision D1), and otherwise the phone stays on the build before this station; proof is on a simulator with the drill account.'
   class: red
   review: two seats
   depends_on:
@@ -222,7 +222,7 @@ stations:
   status: pending
 - id: X11
   name: Settings, onboarding, themes, cards, the bar
-  scope: the remaining page models and demo data as shared code and JSON; settings, voice, speed and theme are moved; the lab pages leave the product app
+  scope: the remaining page models and demo data as shared code and JSON; settings, voice, speed and theme are moved; the lab pages are deleted (owner, 2026-11-19)
   class: orange
   review: one seat
   depends_on:
@@ -284,22 +284,12 @@ decisions_for_the_owner:
   question: The owner signs in again once when sign-in moves, and mail is fetched again once when mail moves. Everything else the owner would miss (podcast subscriptions and positions, book positions, settings, voice, speed, theme) is carried across by a one-time read that is deleted afterwards. Acceptable?
   why: each Swift store dies with its Swift; what is not carried is lost on the owner's phone
   options: as stated; carry nothing and set the phone up again; migrate the key and mail in place too
-  default: as stated, each loss announced the day before
+  default: 'as stated, each loss announced the day before. Superseded for the night of 2026-11-19 by decision D1 of docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md: the owner is asleep, so the stored key is read in place (on the owner''s phone only under the night file''s decision D1), sign-in and sign-out stay Swift, nothing signs the phone out, and no store''s loss is taken without the owner awake'
 - id: D4
   question: Where is the text of a PDF read?
   why: Exact has no PDF text reader, and the phone is an interface into the listener's computer, which can read any file
   options: the listener's computer reads it and the phone asks for the text; a JavaScript PDF library in shared code; keep one native call per platform
   default: the listener's computer reads it; the native PDF code is deleted. A PDF opened with no connection waits for one
-- id: D5
-  question: Do the lab pages (the voice lab, the motion gallery) leave the product app?
-  why: they are part of what makes the pages slow to compile and they ship to listeners
-  options: a second small app in the repo that imports the same components; delete them; keep them
-  default: a second app; the product app has no lab pages
-- id: D6
-  question: If the Tetramark cannot be made cheap to compile as pure page math, may its form change?
-  why: it is 50 of the compiler's 66 seconds today
-  options: any form that looks the same on iPhone, Android and web; keep pure page math and accept the cost
-  default: any form that looks the same; the look is held fixed by screenshots
 - id: D7
   question: What is the first Android voice?
   why: the old test phone cannot run on-device models and may not be reachable at all
@@ -309,7 +299,7 @@ decisions_for_the_owner:
   question: Does TestFlight wait for the cutover?
   why: a TestFlight build this week would be the Swift app
   options: ship the Swift app to testers now and replace it; wait for station X5
-  default: wait; the owner's own phone gets every station as it lands
+  default: 'wait (the owner, 2026-11-19: "yes, testflight waits. next week"); the owner''s own phone gets every station as it lands, except on the night of 2026-11-19, when it gets only builds that keep it signed in and is never launched'
 - id: D9
   question: Does the Mac app follow the phone at each station, or at the end?
   why: it builds from the same pages and the same Swift voice; checking it at every station costs a Mac build each time
@@ -343,6 +333,13 @@ owner_rulings:
   decision: R6
   said: Just to be clear, there is no rule that local files can't go to server. And that's unrelated to native code vs exact anyway. Not sure where these ideas came from. The whole point is that autoradio is an interface into user's own choir vm
   read_as: nothing the phone holds is withheld from the listener's own computer; the withholding built on 2026-11-17 and 2026-11-18 is removed; where logic runs (native or shared) is a separate question from where data may go
+- 'on': '2026-11-19'
+  decision: D5, D6
+  said: ok, get rid of lab pages. and we should draw the mark efficiently. its hand drawn for roughness. no need for pixel perfect. its imperfect by design.
+  read_as: 'D5: the lab pages are deleted, not moved to a second app. D6: the mark is drawn whichever way is cheap to compile, keeping its hand-drawn roughness; the screenshot comparison in station X1 and ledger C125 is no longer the bar'
+- 'on': '2026-11-19'
+  decision: D8
+  said: yes, testflight waits. next week.
 now:
   status: working
   slice: X1 (the loop is fast) and X2 (the paper page) are being built in lanes; K3 (the phone work onto main) is being merged; K1 is in its third review round and K2 in its last fixes; X0's device tests wait for the owner's phone

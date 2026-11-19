@@ -648,29 +648,6 @@ func (ix *Index) Search(ctx context.Context, scope Scope, q Query) (Result, erro
 	}
 	// Candidates come by score, whatever the order asked for; the order is
 	// applied to them below.
-	sqlText := `WITH m AS MATERIALIZED (SELECT rowid AS id, -bm25(passages_fts, ?, 1.0) AS score FROM passages_fts WHERE passages_fts MATCH ?)
-		SELECT id, capture_id, ordinal, start_byte, end_byte, eff, score, title, text_hash, passages, fetched_at, published_at FROM (
-			SELECT p.id AS id, p.capture_id AS capture_id, p.ordinal AS ordinal, p.start_byte AS start_byte, p.end_byte AS end_byte, p.eff AS eff, m.score AS score,
-				pg.title AS title, pg.text_hash AS text_hash, pg.passages AS passages, pg.fetched_at AS fetched_at, pg.published_at AS published_at,
-				ROW_NUMBER() OVER (PARTITION BY p.capture_id ORDER BY m.score DESC, p.id) AS rn
-			FROM m JOIN passages p ON p.id = m.id JOIN pages pg ON pg.capture_id = p.capture_id
-			WHERE 1 = 1`
-	args := []any{TitleWeight, match}
-	if !q.Since.IsZero() {
-		sqlText += ` AND p.eff >= ?`
-		args = append(args, q.Since.Unix())
-	}
-	if !q.Until.IsZero() {
-		sqlText += ` AND p.eff < ?`
-		args = append(args, q.Until.Unix())
-	}
-	sqlText += `) WHERE rn <= ? ORDER BY score DESC, eff DESC, id LIMIT ?`
-	args = append(args, MaxPassagesPerPage, candidatePassages)
-	rows, err := s.db.QueryContext(ctx, sqlText, args...)
-	if err != nil {
-		return res, fmt.Errorf("capturefts: search: %w", err)
-	}
-	defer rows.Close()
 	titleTerms := map[string]bool{}
 	for _, t := range res.Terms {
 		titleTerms[t] = true
@@ -678,32 +655,36 @@ func (ix *Index) Search(ctx context.Context, scope Scope, q Query) (Result, erro
 	best := map[string]*Hit{}
 	var order []string
 	n := 0
-	for rows.Next() {
-		n++
-		var h Hit
-		var eff, fetched int64
-		var published sql.NullInt64
-		if err := rows.Scan(&h.PassageID, &h.CaptureID, &h.Ordinal, &h.Start, &h.End, &eff, &h.Score, &h.Title, &h.TextHash, &h.Passages, &fetched, &published); err != nil {
-			return res, err
-		}
-		h.Time = time.Unix(eff, 0).UTC()
-		h.FetchedAt = time.Unix(fetched, 0).UTC()
-		if published.Valid {
-			h.PublishedAt = time.Unix(published.Int64, 0).UTC()
-		}
-		if prev, ok := best[h.CaptureID]; ok {
-			if h.Score > prev.Score {
-				*prev = h
+	collect := func(rows []Hit) {
+		best, order, n = map[string]*Hit{}, nil, len(rows)
+		for _, h := range rows {
+			if prev, ok := best[h.CaptureID]; ok {
+				if h.Score > prev.Score {
+					*prev = h
+				}
+				continue
 			}
-			continue
+			hc := h
+			best[h.CaptureID] = &hc
+			order = append(order, h.CaptureID)
 		}
-		hc := h
-		best[h.CaptureID] = &hc
-		order = append(order, h.CaptureID)
 	}
-	if err := rows.Err(); err != nil {
+	// A windowed query always runs the full statement: its window cuts the
+	// passages by time after the score order, so a prefix by score is not enough.
+	topK := topPassages
+	if !q.Since.IsZero() || !q.Until.IsZero() {
+		topK = 0
+	}
+	rows, _, ok, err := s.rankPassages(ctx, match, q, topK)
+	if err != nil {
 		return res, err
 	}
+	if !ok {
+		if rows, _, _, err = s.rankPassages(ctx, match, q, 0); err != nil {
+			return res, err
+		}
+	}
+	collect(rows)
 	res.Capped = n >= candidatePassages
 	res.Pages = len(order)
 	top := 0.0
@@ -747,6 +728,95 @@ func (ix *Index) Search(ctx context.Context, scope Scope, q Query) (Result, erro
 		res.Hits = res.Hits[:limit]
 	}
 	return res, nil
+}
+
+// topPassages is how many of a query's best passages are taken before the
+// join to the page rows and the per-page cap (see rankPassages). A variable
+// so tests can use a small one; 0 turns the shortcut off.
+var topPassages = 1500
+
+// rankPassages returns the passages the search ranks pages from: the best
+// per page (at most MaxPassagesPerPage of them), best first, at most
+// candidatePassages in all.
+//
+// With topK > 0 (never for a windowed query) only the topK best-scoring
+// passages are joined to their pages, instead of every passage that holds a
+// query word, which on a large index is 100,000 joins to return 300 rows. The
+// answer is the same as without the shortcut, and ok says so. In plain words:
+// the topK passages are the front of the full list, in the same order (score,
+// then passage id), so a passage's place among its own page's passages is the
+// same in both, and the per-page cap keeps the same passages. Passages left
+// out all score no better than the last one taken. So if the list after the
+// cap holds a full candidatePassages and its last passage scores strictly
+// better than the last one taken (a tie could be broken in favour of a newer
+// passage that was left out), no left-out passage could have entered it. If
+// fewer than topK passages matched at all, nothing was left out. In any other
+// case ok is false and the caller runs the full statement.
+func (s *scopeDB) rankPassages(ctx context.Context, match string, q Query, topK int) (hits []Hit, total int, ok bool, err error) {
+	limit := ""
+	extra := "0 AS matched, 0.0 AS score_floor"
+	if topK > 0 {
+		limit = fmt.Sprintf(" ORDER BY score DESC, rowid LIMIT %d", topK)
+		extra = "(SELECT count(*) FROM m) AS matched, (SELECT min(score) FROM m) AS score_floor"
+	}
+	sqlText := `WITH m AS MATERIALIZED (SELECT rowid AS id, -bm25(passages_fts, ?, 1.0) AS score FROM passages_fts WHERE passages_fts MATCH ?` + limit + `)
+		SELECT id, capture_id, ordinal, start_byte, end_byte, eff, score, title, text_hash, passages, fetched_at, published_at, matched, score_floor FROM (
+			SELECT p.id AS id, p.capture_id AS capture_id, p.ordinal AS ordinal, p.start_byte AS start_byte, p.end_byte AS end_byte, p.eff AS eff, m.score AS score,
+				pg.title AS title, pg.text_hash AS text_hash, pg.passages AS passages, pg.fetched_at AS fetched_at, pg.published_at AS published_at,
+				` + extra + `,
+				ROW_NUMBER() OVER (PARTITION BY p.capture_id ORDER BY m.score DESC, p.id) AS rn
+			FROM m JOIN passages p ON p.id = m.id JOIN pages pg ON pg.capture_id = p.capture_id
+			WHERE 1 = 1`
+	args := []any{TitleWeight, match}
+	if !q.Since.IsZero() {
+		sqlText += ` AND p.eff >= ?`
+		args = append(args, q.Since.Unix())
+	}
+	if !q.Until.IsZero() {
+		sqlText += ` AND p.eff < ?`
+		args = append(args, q.Until.Unix())
+	}
+	sqlText += `) WHERE rn <= ? ORDER BY score DESC, eff DESC, id LIMIT ?`
+	args = append(args, MaxPassagesPerPage, candidatePassages)
+	rows, err := s.db.QueryContext(ctx, sqlText, args...)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("capturefts: search: %w", err)
+	}
+	defer rows.Close()
+	var floor float64
+	for rows.Next() {
+		var h Hit
+		var eff, fetched int64
+		var published sql.NullInt64
+		if err := rows.Scan(&h.PassageID, &h.CaptureID, &h.Ordinal, &h.Start, &h.End, &eff, &h.Score, &h.Title, &h.TextHash, &h.Passages, &fetched, &published, &total, &floor); err != nil {
+			return nil, 0, false, err
+		}
+		h.Time = time.Unix(eff, 0).UTC()
+		h.FetchedAt = time.Unix(fetched, 0).UTC()
+		if published.Valid {
+			h.PublishedAt = time.Unix(published.Int64, 0).UTC()
+		}
+		hits = append(hits, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, false, err
+	}
+	if topK == 0 {
+		return hits, total, true, nil
+	}
+	if len(hits) == 0 {
+		// Nothing joined. total is not read when no row comes back, so this
+		// cannot tell "nothing matched" from "the best passages have no page
+		// row"; the full statement settles it (it is cheap when nothing matched).
+		return nil, 0, false, nil
+	}
+	if total < topK {
+		return hits, total, true, nil
+	}
+	if len(hits) >= candidatePassages && hits[len(hits)-1].Score > floor {
+		return hits, total, true, nil
+	}
+	return nil, total, false, nil
 }
 
 // Scopes lists the scopes that have an index file.

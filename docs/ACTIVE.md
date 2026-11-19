@@ -22,10 +22,27 @@ Goal:
 Track X is the cutover below, which keeps its stations. Track V is the
 corpus-first retrieval design with pgvector, stories first and one vector a
 captured page. Track L reads the traces of every recurring failure and
-restarts the calibration experiment. State at 2026-11-19T05:40Z: the corpus
-brief is on main (`bfa898f8d`), the faster corpus search is landing, no
-vector exists on the server, and the Exact move stands where it stood on the
-morning of the 18th.
+redesigns and starts the calibration experiment (built on 4 November, never
+started). State at 2026-11-19T08:45Z, nothing below is accepted until its
+deployed proof is named in the goal file:
+
+- **V.** The corpus brief and the faster corpus search are deployed
+  (`a0e852f56`; text half median 121 ms, ordinary search median 37 ms, a
+  search matching 1,500 pages still ten seconds). The vector index is built
+  and reviewed four rounds, not deployed: the host half (`lane/vec-host`:
+  pgvector and the embedder unit) lands next and alone, then the Go half
+  (`lane/vec-go`), then ranked search (`lane/ranked-search`, accepted with
+  should-fixes), then the event shortlist (`lane/event-shortlist`). The Mac
+  has embedded every story (45,673 vectors) and is embedding 215,926
+  captures; the files go in through corpusd's import inbox.
+- **X.** Seven areas are merged on `lane/exact-integ` and pass the simulator
+  tour signed in. Review sent auth, the deck journal and mail back; the
+  fixes are in re-review. Nothing is on main or on a phone.
+- **L.** The management story-cursor fix is deployed (`d26a202aa`); the
+  dated-switch deletions are landing (`lane/switch-land`). The experiment
+  driver is built (`lane/e1-driver`); its pilot runs three arms because the
+  gateway's ChatGPT login was refused; the ten objectives are on main
+  (`calibration/e1/pilot-objectives.jsonl`).
 
 ## Live station (2026-11-18): Autoradio, the cutover from Swift to Exact
 
