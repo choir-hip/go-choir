@@ -200,15 +200,15 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computerID string, req corpusRequest, limit int) ([]CorpusCapture, string, corpusSearchInfo, error) {
 	var info corpusSearchInfo
 	if deps.Captures == nil {
-		return nil, "captures not searched: the shared capture store is not configured", info, nil
+		return nil, CapturesNotSearchedNote+": the shared capture store is not configured", info, nil
 	}
 	if strings.TrimSpace(computerID) == "" {
-		return nil, "captures not searched: the run names no computer", info, nil
+		return nil, CapturesNotSearchedNote+": the run names no computer", info, nil
 	}
 	terms := req.Terms
 	query := strings.TrimSpace(req.Query)
 	if len(terms) == 0 && query == "" {
-		return nil, "captures not searched: the query has no search words", info, nil
+		return nil, CapturesNotSearchedNote+": the query has no search words", info, nil
 	}
 	labels := map[string]store.CaptureLabel{}
 	var notes []string
