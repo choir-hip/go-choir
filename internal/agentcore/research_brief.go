@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -64,9 +65,9 @@ var researchBriefDeadline = 8 * time.Second
 
 // Outcomes of a brief, as the log line names them. They say what the brief
 // holds and whether the host's search answered, never what the corpus holds:
-// delivered (a page or story is in the brief), empty (every kept search
-// answered and found nothing), failed (no thread's search answered), skipped,
-// dropped. unanswered= counts the threads whose search did not answer.
+// delivered (a page or story is in the brief), empty (the brief holds no page
+// or story; unanswered= says how many threads did not answer), failed (no
+// thread's search answered), skipped, dropped.
 const (
 	briefDelivered = "delivered"
 	briefEmpty     = "empty"
@@ -276,6 +277,9 @@ type researchBriefResult struct {
 	dropped    []int
 	left       int
 	unanswered int
+	// slowest is the slowest answered search, so the journal shows whether the
+	// wait was one search or the deadline.
+	slowest time.Duration
 }
 
 type briefBlock struct {
@@ -296,7 +300,7 @@ type briefBlock struct {
 const (
 	briefSentenceNothingFound = "Nothing found by the host's search."
 	briefSentenceUnanswered   = "The host's search did not answer for this thread."
-	briefSentenceListedAbove  = "The pages found for this thread are listed above."
+	briefSentenceListedAbove  = "What the host found for this thread is listed above."
 )
 
 const briefSearchTail = " Search the corpus with choir.SearchWireCorpus before the web."
@@ -356,7 +360,54 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 	seenCap, seenStory := map[string]bool{}, map[string]bool{}
 	var blocks []briefBlock
 	answered, firstReason := 0, ""
-	deadline := false
+	// One search for every thread, all at once under the caller's deadline: one
+	// search takes about two seconds on the paper, so six in turn would answer
+	// three threads and hold the run for the whole deadline. No pool, no cap,
+	// no spacing between the calls. Each goroutine owns its own local result
+	// and sends it on a channel with room for every thread, so a call that
+	// returns after the deadline sends into a buffer nobody reads and ends; the
+	// builder reads only what it received before the deadline, in thread order.
+	type searchReply struct {
+		i    int
+		raw  json.RawMessage
+		err  error
+		took time.Duration
+	}
+	replies := make(chan searchReply, len(threads))
+	started := 0
+	for i, th := range threads {
+		if ctx.Err() != nil {
+			break
+		}
+		started++
+		go func(i int, query string) {
+			t0 := time.Now()
+			raw, err := search(ctx, query)
+			replies <- searchReply{i: i, raw: raw, err: err, took: time.Since(t0)}
+		}(i, plainBriefQuery(th.Text))
+	}
+	res.queries = started
+	replied := make([]*searchReply, len(threads))
+collect:
+	for pending := started; pending > 0; {
+		select {
+		case r := <-replies:
+			replied[r.i] = &r
+			pending--
+		case <-ctx.Done():
+			break collect
+		}
+	}
+	// Answers that arrived as the deadline passed are still answers.
+	for drained := false; !drained; {
+		select {
+		case r := <-replies:
+			replied[r.i] = &r
+		default:
+			drained = true
+		}
+	}
+	deadlinePassed := ctx.Err() != nil
 	unanswered := func(i int, th briefThread, why string) {
 		if firstReason == "" {
 			firstReason = why
@@ -365,18 +416,17 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 		b.text = renderBriefBlock(b)
 		blocks = append(blocks, b)
 	}
+	deadlineWhy := "the " + researchBriefDeadline.String() + " deadline passed"
 	for i, th := range threads {
-		if deadline || ctx.Err() != nil {
-			deadline = true
-			unanswered(i, th, "the "+researchBriefDeadline.String()+" deadline passed")
+		r := replied[i]
+		if r == nil {
+			unanswered(i, th, deadlineWhy)
 			continue
 		}
-		res.queries++
-		raw, err := search(ctx, plainBriefQuery(th.Text))
+		raw, err := r.raw, r.err
 		if err != nil {
-			if ctx.Err() != nil {
-				deadline = true
-				unanswered(i, th, "the "+researchBriefDeadline.String()+" deadline passed")
+			if deadlinePassed && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
+				unanswered(i, th, deadlineWhy)
 				continue
 			}
 			unanswered(i, th, "error: "+clipRunes(err.Error(), researchBriefReasonRunes))
@@ -391,6 +441,9 @@ func buildResearchBrief(ctx context.Context, plan briefPlan, search briefSearchF
 			continue
 		}
 		answered++
+		if r.took > res.slowest {
+			res.slowest = r.took
+		}
 		b := briefBlock{number: i + 1, thread: th, answered: true, foundCaptures: len(body.Captures), foundStories: len(body.Published)}
 		for j, c := range body.Captures {
 			if j >= researchBriefCapturesPerThread {
@@ -639,8 +692,8 @@ func researchBriefLogLine(runID, desk string, elapsed time.Duration, res researc
 	if newest == "" {
 		newest = "-"
 	}
-	return fmt.Sprintf("research brief run=%s desk=%s ms=%d threads=%d queries=%d stories=%d captures=%d passages=%d newest_held=%s bytes=%d tokens_est=%d dropped=%s left=%d unanswered=%d outcome=%s reason=%q",
-		runID, desk, elapsed.Milliseconds(), res.threads, res.queries, res.stories, res.captures, res.passages, newest, len(res.text), res.tokens, dropped, res.left, res.unanswered, res.outcome, res.reason)
+	return fmt.Sprintf("research brief run=%s desk=%s ms=%d slowest_ms=%d threads=%d queries=%d stories=%d captures=%d passages=%d newest_held=%s bytes=%d tokens_est=%d dropped=%s left=%d unanswered=%d outcome=%s reason=%q",
+		runID, desk, elapsed.Milliseconds(), res.slowest.Milliseconds(), res.threads, res.queries, res.stories, res.captures, res.passages, newest, len(res.text), res.tokens, dropped, res.left, res.unanswered, res.outcome, res.reason)
 }
 
 // researchBrief is the host-delivered corpus brief of one research run.
