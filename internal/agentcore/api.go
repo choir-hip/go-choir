@@ -899,6 +899,9 @@ type guestObservabilityResponse struct {
 	// section 6). Served from a snapshot: reading it never waits on the
 	// allocator.
 	StreamSeqLease *store.StreamSeqLeaseStats `json:"stream_seq_lease,omitempty"`
+	// StoreFloor is the lowest store schema epoch that may run on this store
+	// (omitted: none). Read it before a Store-Floor-Override.
+	StoreFloor uint64 `json:"store_floor,omitempty"`
 	// TelemetryPartitions is the per-day telemetry files
 	// (store.telemetry_partitions), when any is open or the writer is on.
 	TelemetryPartitions *store.TelemetryPartitionStats `json:"telemetry_partitions,omitempty"`
@@ -1161,6 +1164,11 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.StreamSeqLease = &lease
 		census := h.rt.store.RunMemoryRetirementCensus()
 		resp.RunMemoryRetirement = &census
+		// The floor an operator reads before a Store-Floor-Override; any
+		// writer's floor shows (partitions, choir_events rows).
+		if floor, err := h.rt.store.StoreFloor(); err == nil && floor > 0 {
+			resp.StoreFloor = floor
+		}
 		if st := h.rt.store.TelemetryPartitionStats(); st.Writing || len(st.Live) > 0 || st.Retired > 0 {
 			resp.TelemetryPartitions = &st
 		}
