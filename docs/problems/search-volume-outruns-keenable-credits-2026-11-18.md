@@ -415,9 +415,15 @@ objective and put the result in the run's first message.
 
 ## First hour on searching for need (deployed 2026-11-19T01:14Z at `f62811fec`)
 
-The paper refreshed, planned, at 01:14:15Z. The forecast (C140) reads the
-first 24 research run summaries from 01:34:15Z; at 02:29Z there were 13,
-so it is not settled here.
+The paper refreshed, planned, at 01:14:15Z. The forecast (C140) read the
+first 24 research run summaries from 01:34:15Z, the 24th at 03:13Z, and
+settled false: the median web searches a run is 4 (the forecast needed 4 or
+fewer) and the run read 334 of 6,000 returned pages, 5.6% (it needed 10%).
+Over the 24 runs 22 searches were held back because the question already
+held unread pages, and 46 of 71 offered rewordings were sent. One run still
+started 39 searches and another 17: the rule stops rewordings of one
+question, not a run that asks many questions. The table is the first 13
+runs, read at 02:29Z.
 
 | | before the deploy, 00:00Z to 01:13Z (19 runs) | after, 01:34Z to 02:28Z (13 runs) |
 | --- | --- | --- |
