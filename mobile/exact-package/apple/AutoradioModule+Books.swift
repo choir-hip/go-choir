@@ -9,6 +9,16 @@
 import Foundation
 
 extension AutoradioModule {
+    /// A file name safe for an `app:/` path used in a src: ASCII letters, digits and ".-_" only (the Files page's cacheName, files-model.ts, which this
+    /// copy serves until the Reader's shelf moves).
+    static func cacheName(_ name: String) -> String {
+        let ext = (name as NSString).pathExtension.lowercased()
+        var stem = (name as NSString).deletingPathExtension
+        stem = String(stem.unicodeScalars.map { s in (s.isASCII && (CharacterSet.alphanumerics.contains(s) || s == "-" || s == "_")) ? Character(s) : "-" })
+        if stem.isEmpty || stem.allSatisfy({ $0 == "-" }) { stem = "file" }
+        let safeExt = String(ext.unicodeScalars.filter { $0.isASCII && CharacterSet.alphanumerics.contains($0) }.map(Character.init).prefix(8))
+        return String(stem.prefix(60)) + (safeExt.isEmpty ? "" : "." + safeExt)
+    }
     func registerBooks() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let lib = ReaderShelf(root: support.appendingPathComponent("books"))
@@ -48,7 +58,7 @@ extension AutoradioModule {
         func shareable(_ d: ShelfDoc) -> String {
             guard let from = lib.fileURL(d.id) else { return "" }
             let folder = cacheDisk.appendingPathComponent("reader-\(d.id)", isDirectory: true)
-            let name = FilePath.cacheName(d.fileName)
+            let name = Self.cacheName(d.fileName)
             let to = folder.appendingPathComponent(name)
             if !FileManager.default.fileExists(atPath: to.path) {
                 try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -84,7 +94,6 @@ extension AutoradioModule {
             let sections: [[String: Any]] = t.sections.enumerated().map { ["index": $0.offset, "title": $0.element.title] }
             let src = shown(d)
             let note = d.kind == "pdf" && src.isEmpty ? "The original PDF could not be shown, so its text is here." : ""
-            print(FilesOpen.pageLine(kind: d.kind, pages: t.sections.count, shown: !src.isEmpty))
             reply(["address": a, "id": id, "title": d.title, "author": d.author, "kind": d.kind, "kindLabel": d.kind == "pdf" ? "PDF" : "Book",
                    "status": "ready", "message": note, "src": src, "shareSrc": shareable(d), "sections": sections, "blockCount": d.length, "position": d.position,
                    "resumeSection": t.section(of: d.position), "resumeBlock": d.position])

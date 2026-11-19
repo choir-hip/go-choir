@@ -2,6 +2,7 @@ import type { Answer, Sources } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips } from './clips.ts';
+import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { bindNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
 
@@ -24,7 +25,12 @@ fs.read app:/data/podcasts-library.json
 fs.write app:/data/podcasts-library.json
 fs.read app:/data/podcast-feeds
 fs.write app:/data/podcast-feeds
-net.fetch https:`;
+net.fetch https:
+fs.read app:/data/recent-files.json
+fs.write app:/data/recent-files.json
+fs.read app:/cache/files
+fs.write app:/cache/files
+fs.read app:/tmp/picked`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),
@@ -39,6 +45,14 @@ const sources: Sources = {
   podcastPlayhead: ([id, clip, elapsed, duration], _store, storage) => podcastPlayhead({ id, clip, elapsed, duration }, storage),
   showClips: ([address, tick]) => showClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
+  // Files (files.ts): the listener's computer's files. Positional arguments, demo first.
+  fileList: ([demo, path, mode, sort, desc, query], _s, storage) => fileList({ demo, path, mode, sort, desc, query }, storage),
+  fileOpen: ([demo, address], _s, storage) => fileOpen({ demo, address }, storage),
+  fileResolve: ([demo, address, title], _s, storage) => fileResolve({ demo, address, title }, storage),
+  fileMkdir: ([demo, dir, name], _s, storage) => fileMkdir({ demo, dir, name }, storage),
+  fileDelete: ([demo, path], _s, storage) => fileDelete({ demo, path }, storage),
+  fileRename: ([demo, path, name], _s, storage) => fileRename({ demo, path, name }, storage),
+  fileUpload: ([demo, from, name, dir], _s, storage) => fileUpload({ demo, from, name, dir }, storage),
   paperFront: ([view, edition, width, tick, focus, picks, demo], _store, storage) => paperFront({ view, edition, width, tick, focus, picks, demo }, storage),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.

@@ -147,9 +147,6 @@ public final class OpenPages: @unchecked Sendable {
     @discardableResult
     public func open(_ address: String, title: String? = nil, opener: String? = nil) -> Page {
         let address = PageAddress.canonical(address)
-        // One file is one slot: a PDF, an e-book, text or Markdown in Files is a Reader or Texture document, never also a `file:` page (a placeholder that
-        // stayed beside the document when the open hung or failed). Whoever asks, no such page is made; FilesOpen opens the document's own.
-        if FilesOpen.resolvesElsewhere(address) { return Page(address: address, kind: PageAddress.kind(of: address), title: title ?? PageAddress.defaultTitle(address)) }
         lock.lock()
         let p = openLocked(Page(address: address, kind: PageAddress.kind(of: address),
                                 title: (title?.isEmpty == false ? title! : PageAddress.defaultTitle(address)),

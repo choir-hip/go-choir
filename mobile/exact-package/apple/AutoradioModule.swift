@@ -166,7 +166,6 @@ public final class AutoradioModule: ExactPackage {
         registerPaper()
         registerReader()
         registerCards()
-        registerFiles()
         registerMail()
         registerSettings()
         registerOnboarding()

@@ -60,7 +60,7 @@ export class HTTPError extends Error {
   constructor(status: number, message: string, retryAfter: number | null = null) { super(message); this.name = 'HTTPError'; this.status = status; this.retryAfter = retryAfter; }
 }
 
-export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string> };
+export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string> };
 
 /** The three accounts today's sign-in keeps; the native reader answers no other name. */
 export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
@@ -114,7 +114,10 @@ async function send(path: string, opts: Authed, accept: string): Promise<{ r: Re
   const headers: Record<string, string> = { ...(opts.headers ?? {}), Accept: accept, Authorization: `Bearer ${key}` };
   const method = opts.method ?? 'GET';
   let body: string | undefined;
-  if (opts.body !== undefined) { body = JSON.stringify(opts.body); headers['Content-Type'] = 'application/json'; }
+  if (opts.body instanceof Uint8Array) {
+    // Raw bytes go as they are (a file added to the listener's computer: PUT /api/files/{path}); the caller names the type.
+    body = opts.body as unknown as string; headers['Content-Type'] = headers['content-type'] ?? headers['Content-Type'] ?? 'application/octet-stream'; delete headers['content-type'];
+  } else if (opts.body !== undefined) { body = JSON.stringify(opts.body); headers['Content-Type'] = 'application/json'; }
   if (!path.startsWith('/auth/') && path !== STATUS_PATH) headers['X-Choir-Computer'] = await computerId(key);
   try {
     return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS } as RequestInit), key };

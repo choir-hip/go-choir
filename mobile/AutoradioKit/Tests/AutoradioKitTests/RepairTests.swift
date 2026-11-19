@@ -306,30 +306,7 @@ final class MailSanitizerTests: XCTestCase {
 // MARK: Small ones
 
 final class SmallRepairTests: XCTestCase {
-    func testUTF8TrimDropsOnlyAnUnfinishedSequence() {
-        let e = Array("é".utf8), smile = Array("😀".utf8)       // 2 and 4 bytes
-        func trim(_ b: [UInt8]) -> [UInt8] { Array(FilesService.withoutPartialUTF8(Data(b))) }
-        XCTAssertEqual(trim(Array("ab".utf8) + [e[0]]), Array("ab".utf8), "a lone lead byte goes")
-        XCTAssertEqual(trim(Array("ab".utf8) + e), Array("ab".utf8) + e, "a complete character at the cut stays")
-        for k in 1..<4 { XCTAssertEqual(trim(Array("ab".utf8) + smile.prefix(k)), Array("ab".utf8), "\(k) of 4 bytes goes") }
-        XCTAssertEqual(trim(Array("ab".utf8) + smile), Array("ab".utf8) + smile)
-        XCTAssertEqual(trim(Array("abc".utf8)), Array("abc".utf8))
-        XCTAssertEqual(trim([]), [])
-        XCTAssertEqual(trim([0x80, 0x80]), [0x80, 0x80], "orphan continuation bytes with no lead are left to the decoder")
-    }
-
-    func testReadTextCutsMidCharacterWithoutReplacementCharacter() throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("utf8-\(UUID().uuidString).txt")
-        defer { try? FileManager.default.removeItem(at: url) }
-        try Data((String(repeating: "a", count: 9) + "😀😀").utf8).write(to: url)     // 9 + 8 bytes
-        for limit in 10...12 {
-            let (s, cut) = FilesService.readText(url, limit: limit)
-            XCTAssertTrue(cut)
-            XCTAssertFalse(s.contains("\u{FFFD}"), "limit \(limit): \(s.unicodeScalars.map { $0.value })")
-            XCTAssertEqual(s, String(repeating: "a", count: 9))
-        }
-        XCTAssertEqual(FilesService.readText(url, limit: 13).0, String(repeating: "a", count: 9) + "😀")
-    }
+    // (The UTF-8 trim and the cut-text reads moved with the Files page: AutoradioLab/files.test.ts, F6.)
 
     func testReaderVersionCountIsBounded() {
         let o = (try! JSONSerialization.jsonObject(with: Data(#"""

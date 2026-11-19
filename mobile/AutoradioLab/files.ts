@@ -1,0 +1,442 @@
+// The Files page's data: the listener's own computer's files (folders, search, recent), the open file the viewers read, the changes (new folder, delete,
+// rename, add a file) and what opening a file that is another page's document does. Moved from Swift (Kit/ChoirFiles.swift and its neighbours); the
+// pure parts are in files-model.ts. Routes (internal/autoputer/files.go, custodian ownerfiles), all through the signed-in seam in api.ts:
+//   GET    /api/files[/{path}]   a folder's array of {name, type: "file"|"directory", size, modified}; a file's bytes (?disposition=inline)
+//   POST   /api/files/{path}     make a folder         PUT /api/files/{path}   write a file (raw body)
+//   DELETE /api/files/{path}     delete                PATCH /api/files/{path} {"move_to"}   rename a regular file only
+//   POST   /api/texture/files/open {source_path, title, initial_content} -> {doc_id}: the computer opens the file as a Texture document. A PDF or an
+//          e-book is read by the computer (decision D4: it extracts the text; the phone shows and speaks it), text, Markdown and code open the same way.
+// Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
+import type { Storage } from './app.contract.d.ts';
+import { authedJSON, authedBytes, SignedOutError } from './api.ts';
+import demoTree from './fixtures/files-demo/tree.json';
+import * as M from './files-model.ts';
+import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
+
+export const RECENT_FILE = 'app:/data/recent-files.json';
+export const CACHE_DIR = 'app:/cache/files';
+export const RECENT_LIMIT = 30;
+const SEARCH_FOLDERS = 80, SEARCH_DEPTH = 4, SEARCH_FOUND = 200, TEXTURE_CAP = 1_000_000;
+
+export type Net = { json: typeof authedJSON; bytes: typeof authedBytes };
+const realNet: Net = { json: authedJSON, bytes: authedBytes };
+
+/** What the page may say when a file cannot be had. */
+export class FilesError extends Error {
+  constructor(public kind: 'notFound' | 'exists' | 'tooLarge' | 'unsupported' | 'badName' | 'notADirectory' | 'server', message: string) { super(message); }
+}
+export const say = (e: unknown): string => {
+  if (e instanceof FilesError) return e.message;
+  if (e instanceof SignedOutError) return 'Sign in again to see your files.';
+  const status = (e as { status?: number })?.status;
+  if (status === 401) return 'Sign in again to see your files.';
+  if (status === 403) return 'This device is not allowed to read files.';
+  if (status === 404) return 'That file is not there any more.';
+  if (status === 409) return 'Something with that name is already there.';
+  if (status === 405) return 'This computer does not allow that here yet.';
+  if (typeof status === 'number') return 'Could not read your files.';
+  return 'Could not reach your computer. Check the connection and try again.';
+};
+const BAD_NAME = 'That name cannot be used. Avoid slashes and empty names.';
+
+// ---------------------------------------------------------------- backends
+
+type Backend = {
+  list(path: string): Promise<{ entries: Entry[]; now: number | null }>;
+  fetch(path: string): Promise<Uint8Array>;
+  put(path: string, bytes: Uint8Array): Promise<void>;
+  mkdir(path: string): Promise<void>;
+  remove(path: string): Promise<void>;
+  move(from: string, to: string): Promise<void>;
+};
+
+const route = (path: string): string => (path === '/' ? '/api/files' : '/api/files' + M.encodePath(path));
+
+function choirBackend(net: Net): Backend {
+  return {
+    async list(path) {
+      const r = await net.json(route(path));
+      if (!Array.isArray(r.body)) throw new Error('not a file listing');
+      const entries: Entry[] = [];
+      for (const o of r.body as Record<string, unknown>[]) {
+        const name = o?.name;
+        if (typeof name !== 'string' || !M.validName(name)) continue;
+        entries.push({ name, path: M.join(path, name), isDirectory: o.type === 'directory', size: typeof o.size === 'number' ? o.size : 0, modified: M.parseDate(o.modified) });
+      }
+      return { entries, now: r.serverTime };
+    },
+    async fetch(path) { return (await net.bytes(route(path), { query: { disposition: 'inline' } })).bytes; },
+    async put(path, bytes) { await net.json(route(path), { method: 'PUT', body: bytes, headers: { 'content-type': M.mimeOf(M.nameOf(path)) } }); },
+    async mkdir(path) { await net.json(route(path), { method: 'POST' }); },
+    async remove(path) { await net.json(route(path), { method: 'DELETE' }); },
+    async move(from, to) { await net.json(route(from), { method: 'PATCH', body: { move_to: to } }); },
+  };
+}
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+export function fromBase64(s: string): Uint8Array {
+  const clean = s.replace(/[^A-Za-z0-9+/]/g, '');
+  const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  let o = 0;
+  for (let i = 0; i < clean.length; i += 4) {
+    const a = B64.indexOf(clean[i]), b = B64.indexOf(clean[i + 1]), c = i + 2 < clean.length ? B64.indexOf(clean[i + 2]) : -1, d = i + 3 < clean.length ? B64.indexOf(clean[i + 3]) : -1;
+    out[o++] = (a << 2) | (b >> 4);
+    if (c >= 0 && o < out.length) out[o++] = ((b & 15) << 4) | (c >> 2);
+    if (d >= 0 && o < out.length) out[o++] = ((c & 3) << 6) | d;
+  }
+  return out;
+}
+
+/** Demo mode: a small tree of invented files held in memory so new folders, deletes and renames can be seen working. Fixed times, relative to the clock
+ * it is given, so "Today" and "Yesterday" appear. */
+type Node = { isDir: boolean; data: Uint8Array; modified: number };
+let demoNodes: Map<string, Node> | null = null;
+const DEMO_AGES: Record<string, number> = {
+  'Books/The Lantern Keeper.epub': 20, 'Documents/Council minutes.pdf': 1, 'Documents/Budget 2026.csv': 3, 'Documents/Harbor notes.md': 0, 'Documents/Key list.txt': 40,
+  'Documents/Lamps.swift': 9, 'Documents/Survey readings.dat': 12, 'Pictures/Harbor test card.png': 5, 'Media/Tone 440.wav': 7, 'Media/Pattern.mp4': 8,
+};
+function demoBackend(now: number): Backend {
+  if (!demoNodes) {
+    const nodes = new Map<string, Node>();
+    const day = (n: number) => now - n * 86_400_000;
+    nodes.set('/', { isDir: true, data: new Uint8Array(), modified: day(0) });
+    for (const [k, b64] of Object.entries(demoTree as Record<string, string>)) {
+      const path = '/' + k;
+      for (let d = M.parent(path); d !== '/'; d = M.parent(d)) if (!nodes.has(d)) nodes.set(d, { isDir: true, data: new Uint8Array(), modified: day(2) });
+      nodes.set(path, { isDir: false, data: fromBase64(b64), modified: day(DEMO_AGES[k] ?? 10) });
+    }
+    nodes.set('/Documents/Drafts', { isDir: true, data: new Uint8Array(), modified: day(4) });
+    nodes.set('/Readme.txt', { isDir: false, data: new TextEncoder().encode('Demo files for Autoradio. Everything here is invented.\n'), modified: day(30) });
+    demoNodes = nodes;
+  }
+  const nodes = demoNodes;
+  return {
+    async list(path) {
+      const n = nodes.get(path);
+      if (!n) throw new FilesError('notFound', 'That file is not there any more.');
+      if (!n.isDir) throw new FilesError('notADirectory', 'That is a file, not a folder.');
+      const entries = [...nodes].filter(([k]) => k !== '/' && M.parent(k) === path).map(([k, v]): Entry => ({ name: M.nameOf(k), path: k, isDirectory: v.isDir, size: v.data.length, modified: v.modified }));
+      return { entries, now };
+    },
+    async fetch(path) { const n = nodes.get(path); if (!n || n.isDir) throw new FilesError('notFound', 'That file is not there any more.'); return n.data; },
+    async put(path, bytes) {
+      if (nodes.get(M.parent(path))?.isDir !== true) throw new FilesError('notFound', 'That file is not there any more.');
+      if (nodes.get(path)?.isDir) throw new FilesError('exists', 'Something with that name is already there.');
+      nodes.set(path, { isDir: false, data: bytes, modified: now });
+    },
+    async mkdir(path) {
+      if (nodes.get(M.parent(path))?.isDir !== true) throw new FilesError('notFound', 'That file is not there any more.');
+      if (nodes.has(path)) throw new FilesError('exists', 'Something with that name is already there.');
+      nodes.set(path, { isDir: true, data: new Uint8Array(), modified: now });
+    },
+    async remove(path) {
+      if (path === '/' || !nodes.has(path)) throw new FilesError('notFound', 'That file is not there any more.');
+      for (const k of [...nodes.keys()]) if (k === path || k.startsWith(path + '/')) nodes.delete(k);
+    },
+    async move(from, to) {
+      const n = nodes.get(from);
+      if (!n || from === '/') throw new FilesError('notFound', 'That file is not there any more.');
+      if (n.isDir) throw new FilesError('unsupported', 'Folders cannot be renamed here yet.');
+      if (nodes.has(to)) throw new FilesError('exists', 'Something with that name is already there.');
+      if (nodes.get(M.parent(to))?.isDir !== true) throw new FilesError('notFound', 'That file is not there any more.');
+      nodes.set(to, n); nodes.delete(from);
+    },
+  };
+}
+
+// ---------------------------------------------------------------- state between answers (cleared by forget())
+
+type Recent = { path: string; size: number; modified: number | null; openedAt: number };
+let recents: Recent[] | null = null;
+let lastNow = 0;
+const resolved = new Map<string, Promise<FileResolved>>();
+
+export function forget(): void { recents = null; lastNow = 0; resolved.clear(); demoNodes = null; }
+
+async function loadRecents(storage: Storage | undefined): Promise<Recent[]> {
+  if (recents) return recents;
+  recents = [];
+  if (!storage) return recents;
+  try {
+    const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(RECENT_FILE)));
+    if (Array.isArray(v)) recents = v.filter((r) => r && typeof r.path === 'string' && typeof r.openedAt === 'number').slice(0, RECENT_LIMIT);
+  } catch { /* none kept yet */ }
+  return recents;
+}
+async function saveRecents(storage: Storage | undefined): Promise<void> {
+  if (!storage || !recents) return;
+  try { await storage.fs.atomicWriteFile(RECENT_FILE, new TextEncoder().encode(JSON.stringify(recents))); } catch { /* a full disk loses only the recent list */ }
+}
+async function touch(storage: Storage | undefined, e: Entry, at: number): Promise<void> {
+  const list = await loadRecents(storage);
+  recents = [{ path: e.path, size: e.size, modified: e.modified, openedAt: at }, ...list.filter((r) => r.path !== e.path)].slice(0, RECENT_LIMIT);
+  await saveRecents(storage);
+}
+async function forgetRecent(storage: Storage | undefined, path: string, prefix = false): Promise<void> {
+  const list = await loadRecents(storage);
+  recents = list.filter((r) => r.path !== path && !(prefix && r.path.startsWith(path + '/')));
+  await saveRecents(storage);
+}
+async function renameRecent(storage: Storage | undefined, from: string, to: string): Promise<void> {
+  const list = await loadRecents(storage);
+  recents = list.map((r) => (r.path === from ? { ...r, path: to } : r));
+  await saveRecents(storage);
+}
+
+// ---------------------------------------------------------------- the listing
+
+export type Args = { demo: boolean };
+export type ListArgs = Args & { path: string; mode: string; sort: string; desc: boolean; query: string };
+
+function build(path: string, mode: string, sort: M.SortKey, desc: boolean, query: string, entries: Entry[], now: number, places: Record<string, string> = {}, status?: string, message = ''): FileListing {
+  const rows = entries.map((e) => M.rowOf(e, now, places[e.path] ?? ''));
+  const title = path === '/' ? 'Files' : M.nameOf(path);
+  const empty = rows.length === 0;
+  return {
+    path, title: mode === 'recent' ? 'Recent' : title, crumbs: M.crumbsOf(path), rows, count: rows.length, status: status ?? (empty ? 'empty' : 'ready'),
+    message: message === '' && empty ? (mode === 'recent' ? 'Files you open appear here.' : mode === 'search' ? 'Nothing matches.' : 'This folder is empty.') : message,
+    mode, sort, desc, query,
+  };
+}
+
+const makeBackend = (demo: boolean, net: Net): Backend => (demo ? demoBackend(lastNow || 1_700_000_000_000) : choirBackend(net));
+const noteNow = (n: number | null): number => { if (n !== null) lastNow = n; return lastNow; };
+
+export async function fileList(a: ListArgs, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+  const sort = M.sortKey(a.sort);
+  const path = M.normalize(a.path) ?? '/';
+  const q = a.query.trim();
+  const backend = makeBackend(a.demo, net);
+  try {
+    if (q !== '') return await search(backend, path, q, sort, a.desc);
+    if (a.mode === 'recent') {
+      const list = await loadRecents(storage);
+      const now = lastNow || list.reduce((m, r) => Math.max(m, r.openedAt, r.modified ?? 0), 0);
+      const entries = list.map((r): Entry => ({ name: M.nameOf(r.path), path: r.path, isDirectory: false, size: r.size, modified: r.modified }));
+      const places: Record<string, string> = {};
+      for (const e of entries) places[e.path] = M.parent(e.path) === '/' ? 'Files' : M.nameOf(M.parent(e.path));
+      return build('/', 'recent', sort, a.desc, '', entries, now, places);
+    }
+    const r = await backend.list(path);
+    const now = noteNow(r.now);
+    return build(path, 'browse', sort, a.desc, '', M.sortEntries(r.entries, sort, a.desc), now);
+  } catch (e) {
+    return build(path, a.mode, sort, a.desc, q, [], lastNow, {}, 'error', say(e));
+  }
+}
+
+/** A bounded walk under `path`: names containing the query (case and accents ignored). */
+async function search(backend: Backend, path: string, query: string, sort: M.SortKey, desc: boolean): Promise<FileListing> {
+  const found: Entry[] = [], places: Record<string, string> = {};
+  const queue: [string, number][] = [[path, 0]];
+  const needle = query.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  let visited = 0;
+  while (queue.length > 0 && visited < SEARCH_FOLDERS && found.length < SEARCH_FOUND) {
+    const [dir, depth] = queue.shift()!;
+    visited++;
+    let listed;
+    try { listed = await backend.list(dir); } catch (e) { if (dir === path) throw new FilesError('notFound', 'That file is not there any more.'); continue; }
+    noteNow(listed.now);
+    for (const e of listed.entries) {
+      if (e.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(needle)) { found.push(e); places[e.path] = dir === '/' ? 'Files' : M.nameOf(dir); }
+      if (e.isDirectory && depth < SEARCH_DEPTH) queue.push([e.path, depth + 1]);
+    }
+  }
+  return build(path, 'search', sort, desc, query, M.sortEntries(found, sort, desc), lastNow, places);
+}
+
+// ---------------------------------------------------------------- opening
+
+const cacheKey = (e: Entry): string => M.hash(`${e.path}|${e.size}|${e.modified ?? ''}`);
+
+async function entryAt(backend: Backend, path: string): Promise<Entry | null> {
+  const r = await backend.list(M.parent(path));
+  noteNow(r.now);
+  return r.entries.find((e) => e.path === path) ?? null;
+}
+
+function infoOf(e: Entry, status: string, message = ''): FileInfo {
+  const k = M.kindOf(e.name, e.isDirectory);
+  return {
+    ...M.emptyInfo(), address: M.addressOf(e.path, e.isDirectory), path: e.path, folder: M.parent(e.path), name: e.name, kind: k, kindLabel: M.kindLabel(k), size: e.size,
+    sizeLabel: M.sizeLabel(e.size), modifiedLabel: M.dateLabel(e.modified, lastNow), mime: M.mimeOf(e.name), status, message,
+  };
+}
+
+export type OpenArgs = Args & { address: string };
+
+/** Open the file a `file:` address names: find it in its folder, bring what its viewer needs, and for a file another page reads, ask the computer to open it. */
+export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNet): Promise<FileInfo> {
+  const parsed = M.fromAddress(a.address);
+  if (!a.address.startsWith('file:') || a.address.endsWith('/') || !parsed) return { ...M.emptyInfo(), address: a.address };
+  const { path } = parsed;
+  const backend = makeBackend(a.demo, net);
+  let entry: Entry | null;
+  try {
+    entry = await entryAt(backend, path);
+  } catch (e) {
+    const notFound = e instanceof FilesError && e.kind === 'notFound' || (e as { status?: number })?.status === 404;
+    if (notFound) await forgetRecent(storage, path);
+    return { ...M.emptyInfo(), address: a.address, path, name: M.nameOf(path), status: notFound ? 'notfound' : 'error', message: notFound ? 'That file is not there any more.' : say(e) };
+  }
+  if (!entry) {
+    await forgetRecent(storage, path);
+    return { ...M.emptyInfo(), address: a.address, path, name: M.nameOf(path), status: 'notfound', message: 'That file is not there any more.' };
+  }
+  if (entry.isDirectory) return infoOf(entry, 'folder');
+  const kind = M.kindOf(entry.name, false);
+  const out = infoOf(entry, 'ready');
+  if (kind === 'other') { await touch(storage, entry, lastNow); return out; }
+  if (M.opensElsewhere(kind)) {
+    const r = await resolveEntry(entry, a.demo, storage, net);
+    out.target = r.target; out.status = r.status === 'ready' ? 'ready' : 'error'; out.message = r.message;
+    return out;
+  }
+  const cap = M.maxBytes(kind);
+  if (entry.size > cap) { out.status = 'toolarge'; out.message = `It is ${M.sizeLabel(entry.size)}, too large to open on this phone.`; return out; }
+  try {
+    const name = M.cacheName(entry.name), key = cacheKey(entry), dest = `${CACHE_DIR}/${key}/${name}`;
+    let bytes: Uint8Array | null = null;
+    let have = false;
+    if (storage) { try { have = (await storage.fs.stat(dest)).size === entry.size; } catch { have = false; } }
+    if (!have) {
+      bytes = await backend.fetch(path);
+      if (bytes.length > cap) throw new FilesError('tooLarge', `It is ${M.sizeLabel(bytes.length)}, too large to open on this phone.`);
+      if (storage) { await storage.fs.mkdir(`${CACHE_DIR}/${key}`).catch(() => {}); await storage.fs.writeFile(dest, bytes); }
+    }
+    if (storage) { out.local = dest; out.src = dest; }
+    if (kind === 'csv') {
+      bytes = bytes ?? new Uint8Array(await storage!.fs.readFile(dest));
+      const cut = bytes.length > 256_000;
+      const text = new TextDecoder().decode(cut ? M.withoutPartialUTF8(bytes.slice(0, 256_000)) : bytes);
+      out.rows = M.parseCsv(text, M.extOf(entry.name) === 'tsv' ? '\t' : ',', 300).map((cells) => ({ cells: cells.slice(0, 12) }));
+      out.truncated = cut;
+    } else if (kind === 'image') {
+      bytes = bytes ?? new Uint8Array(await storage!.fs.readFile(dest));
+      const [w, h] = imageSize(bytes); out.width = w; out.height = h;
+    }
+    await touch(storage, entry, lastNow);
+  } catch (e) {
+    out.status = e instanceof FilesError && e.kind === 'tooLarge' ? 'toolarge' : 'error';
+    out.message = say(e);
+  }
+  return out;
+}
+
+/** The pixel size of a PNG, GIF or JPEG from its header (0, 0 when it is not one of those): the pinch-and-pan viewer fits it to its frame. */
+export function imageSize(b: Uint8Array): [number, number] {
+  const u32 = (i: number) => ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0;
+  if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return [u32(16), u32(20)];
+  if (b.length > 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return [b[6] | (b[7] << 8), b[8] | (b[9] << 8)];
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const m = b[i + 1];
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return [(b[i + 7] << 8) | b[i + 8], (b[i + 5] << 8) | b[i + 6]];
+      i += 2 + ((b[i + 2] << 8) | b[i + 3]);
+    }
+  }
+  return [0, 0];
+}
+
+// ---------------------------------------------------------------- a file that is another page's document
+
+/** Ask the listener's computer to open the file as a Texture document (decision D4: it reads a PDF's or an e-book's text itself); the answer's `target` is the
+ * `texture:` page to open. One ask per file version, shared by every caller; a failure is not kept, so a second open asks again. */
+function resolveEntry(entry: Entry, demo: boolean, storage: Storage | undefined, net: Net): Promise<FileResolved> {
+  const key = `${entry.path}|${entry.size}|${entry.modified ?? ''}`;
+  const held = resolved.get(key);
+  if (held) return held;
+  const p = doResolve(entry, demo, storage, net).then((r) => { if (r.status !== 'ready') resolved.delete(key); return r; });
+  resolved.set(key, p);
+  return p;
+}
+
+async function doResolve(entry: Entry, demo: boolean, storage: Storage | undefined, net: Net): Promise<FileResolved> {
+  const address = M.addressOf(entry.path, false);
+  const fail = (message: string): FileResolved => ({ address, target: '', title: entry.name, status: 'error', message: `${entry.name} could not be opened. ${message} Tap the file to try again.` });
+  if (demo) return fail('Demo files open as documents only on a signed-in phone.');
+  const kind = M.kindOf(entry.name, false);
+  try {
+    let text = '';
+    if (kind === 'markdown' || kind === 'text' || kind === 'code') {
+      if (entry.size > TEXTURE_CAP) return fail(`It is ${M.sizeLabel(entry.size)}, too large to open on this phone.`);
+      const bytes = await choirBackend(net).fetch(entry.path);
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return fail('This file is not text.'); }
+    }
+    const r = await net.json('/api/texture/files/open', { method: 'POST', body: { source_path: entry.path.replace(/^\//, ''), title: entry.name, initial_content: text } });
+    const id = (r.body as { doc_id?: unknown } | null)?.doc_id;
+    if (typeof id !== 'string' || id === '') return fail('Texture did not open the document.');
+    await touch(storage, entry, lastNow);
+    return { address, target: 'texture:' + id, title: entry.name, status: 'ready', message: '' };
+  } catch (e) {
+    return fail(say(e));
+  }
+}
+
+export type ResolveArgs = Args & { address: string; title: string };
+export async function fileResolve(a: ResolveArgs, storage?: Storage, net: Net = realNet): Promise<FileResolved> {
+  const parsed = M.fromAddress(a.address);
+  if (!parsed || parsed.isDirectory) return { ...M.emptyResolved(), address: a.address, status: 'error', message: 'That is not a file address.' };
+  const backend = makeBackend(a.demo, net);
+  const name = M.nameOf(parsed.path);
+  try {
+    const entry = await entryAt(backend, parsed.path);
+    if (!entry) return { address: a.address, target: '', title: name, status: 'error', message: `${name} could not be opened. That file is not there any more. Tap the file to try again.` };
+    if (!M.opensElsewhere(M.kindOf(entry.name, false))) return { address: a.address, target: a.address, title: a.title || name, status: 'ready', message: '' };
+    return await resolveEntry(entry, a.demo, storage, net);
+  } catch (e) {
+    return { address: a.address, target: '', title: name, status: 'error', message: `${name} could not be opened. ${say(e)} Tap the file to try again.` };
+  }
+}
+
+// ---------------------------------------------------------------- changes (each answers the refreshed listing of the folder it changed)
+
+async function after(demo: boolean, net: Net, storage: Storage | undefined, dir: string, message: string): Promise<FileListing> {
+  const l = await fileList({ demo, path: dir, mode: 'browse', sort: 'name', desc: false, query: '' }, storage, net);
+  l.message = message;
+  return l;
+}
+
+export async function fileMkdir(a: Args & { dir: string; name: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+  const d = M.normalize(a.dir) ?? '/';
+  if (!M.validName(a.name)) return after(a.demo, net, storage, d, BAD_NAME);
+  try { await makeBackend(a.demo, net).mkdir(M.join(d, a.name)); return after(a.demo, net, storage, d, `Made the folder “${a.name}”.`); }
+  catch (e) { return after(a.demo, net, storage, d, say(e)); }
+}
+
+export async function fileDelete(a: Args & { path: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+  const p = M.normalize(a.path);
+  if (p === null || p === '/') return after(a.demo, net, storage, '/', 'That cannot be deleted.');
+  const d = M.parent(p);
+  try { await makeBackend(a.demo, net).remove(p); await forgetRecent(storage, p, true); return after(a.demo, net, storage, d, `Deleted “${M.nameOf(p)}”.`); }
+  catch (e) { return after(a.demo, net, storage, d, say(e)); }
+}
+
+export async function fileRename(a: Args & { path: string; name: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+  const p = M.normalize(a.path);
+  if (p === null || p === '/') return after(a.demo, net, storage, '/', 'That cannot be renamed.');
+  const d = M.parent(p);
+  if (!M.validName(a.name)) return after(a.demo, net, storage, d, BAD_NAME);
+  const dest = M.join(d, a.name);
+  try { await makeBackend(a.demo, net).move(p, dest); await renameRecent(storage, p, dest); return after(a.demo, net, storage, d, `Renamed to “${a.name}”.`); }
+  catch (e) { return after(a.demo, net, storage, d, say(e)); }
+}
+
+/** Add a copy of a local file into `dir`. `from` is the system picker's copy under app:/tmp/picked (a local file may go to the listener's own computer).
+ * In demo mode with nothing picked, a small invented note is added so the flow can be seen; on a real phone an empty `from` uploads nothing and says so. */
+export async function fileUpload(a: Args & { from: string; name: string; dir: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+  const d = M.normalize(a.dir) ?? '/';
+  let name = a.name, bytes: Uint8Array;
+  if (a.from === '') {
+    if (!a.demo) return after(a.demo, net, storage, d, 'Nothing was chosen to add.');
+    bytes = new TextEncoder().encode('Added from the phone. Invented text.\n');
+    if (name === '') name = 'Added note.txt';
+  } else {
+    try { bytes = new Uint8Array(await storage!.fs.readFile(a.from)); } catch { return after(a.demo, net, storage, d, 'Nothing was chosen to add.'); }
+  }
+  if (!M.validName(name)) return after(a.demo, net, storage, d, BAD_NAME);
+  try { await makeBackend(a.demo, net).put(M.join(d, name), bytes); return after(a.demo, net, storage, d, `Added “${name}”.`); }
+  catch (e) { return after(a.demo, net, storage, d, say(e)); }
+}

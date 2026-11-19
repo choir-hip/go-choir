@@ -298,14 +298,8 @@ public extension ContentSync.Fetchers {
             try await ChoirFront.stories(client: client(), limit: 100).map { StoryBodies.Story(route: $0.route, title: $0.title, date: PaperStory.date($0.updated)) }
         }
         f.storyBody = StoryBodies.resolveFetcher
-        let backend = ChoirFilesBackend()
-        f.fileList = { try await backend.list($0) }
-        f.fileText = { path in
-            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("sync-\(UUID().uuidString)")
-            defer { try? FileManager.default.removeItem(at: tmp) }
-            try await backend.fetch(path, size: 0, to: tmp, maxBytes: Int64(ContentSync.maxFileBytes))
-            return try? String(contentsOf: tmp, encoding: .utf8)
-        }
+        // Files: the Files page moved to shared code (AutoradioLab/files.ts) and no longer hands this syncer a listing or a file's text, so the
+        // syncer's file lists stay empty until the content store moves. Items it already holds stay.
         // The podcasts' shows, episodes and transcripts were read here from the Swift PodcastService. The podcast app is shared code now
         // (AutoradioLab/podcast.ts, `podcastDocuments`); until the content store moves and reads it, the phone's own search holds no podcasts.
         f.runSheet = { await MainActor.run { RunSheetStore.shared.sheet } }
@@ -340,4 +334,10 @@ public enum ContentBoot {
         corpus.setDeltaSource("store") { store.drain() }      // the index reads it at the first question (or the warm-up the app schedules), never here
         return true
     }
+}
+
+/// One entry of a folder as the syncer reads it (the Files page itself is shared code now; this is only the syncer's own row).
+public struct FileEntry: Sendable, Equatable {
+    public var name: String, path: String, isDirectory: Bool, size: Int64, modified: Date?
+    public init(name: String, path: String, isDirectory: Bool, size: Int64, modified: Date?) { self.name = name; self.path = path; self.isDirectory = isDirectory; self.size = size; self.modified = modified }
 }
