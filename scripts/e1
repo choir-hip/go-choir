@@ -53,6 +53,7 @@ import re
 import statistics
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -81,6 +82,18 @@ SETTLE_S = 45
 LIVE_TALLY_S = 180
 CANCEL_WAIT_S = 300
 ARM_FAIL_RUN = 3           # an arm whose last three units were invalid stops
+UNKNOWN_UNIT_CALLS = 50    # a submitted unit with no bundle and no live count: the search-volume record's largest run was 44
+INTENT_DECIDE_AFTER_S = 120  # an intent with no run found this long after it was written never reached the computer
+# Computers this driver never acts on: the newspaper, the owner's, two more
+# owner/platform computers and the drill computer (d@e). A recorded id in this
+# set is refused wherever computers.json is loaded or a computer is made.
+PROTECTED_COMPUTER_IDS = (
+    "computer-1355b83bced1613eb048ee28d66688a8",
+    "computer-03335285269bdba4f94377e56879f9e6",
+    "computer-6c50d6e566143ae32cdb660faa60e24d",
+    "computer-7cc96dc670daf6eccd65919e9f70162a",
+    "computer-59c902c5d46caecc0a180a8557164e72",
+)
 RESEARCH_ROLES = {"research"}
 EFFORT = "low"             # assumed from the repo (see design 14.2)
 KEENABLE_READING = "17,000 credits read by the owner at 2026-11-18T12:38Z"
@@ -285,6 +298,10 @@ def read_unit(bundle, meta):
             why.append("research_run_not_ended")
             break
     for r in research:
+        if r.get("state") in ("completed", "failed", "cancelled") and parse_ts(r.get("finished_at")) is None:
+            why.append("research_run_finished_at_missing")
+            break
+    for r in research:
         fin = parse_ts(r.get("finished_at"))
         if sub is not None and fin is not None and (fin - sub).total_seconds() > WAIT_MIN * 60:
             why.append("research_run_ended_after_%d_min" % WAIT_MIN)
@@ -338,6 +355,22 @@ def pilot_arms(header):
 
 def p3_need(n_units):
     return math.ceil(P3_MIN_SHARE * n_units - 1e-9)
+
+
+def adjust_calls(u, meta, has_bundle):
+    """The calls a unit adds to the cumulative tally: the larger of its bundle's
+    count and the last live count; with no bundle, the last live count; with
+    neither, the stated worst case (UNKNOWN_UNIT_CALLS), never zero, for a unit
+    that was submitted. A unit that was never submitted adds nothing."""
+    live = meta.get("live_calls")
+    if not meta.get("trajectory_id"):
+        return u.get("calls", 0), "none submitted"
+    if has_bundle:
+        c = u.get("calls", 0)
+        return (live, "live count") if live is not None and live > c else (c, "bundle")
+    if live is not None:
+        return live, "live count (no bundle)"
+    return UNKNOWN_UNIT_CALLS, "worst case (no bundle, no live count)"
 
 
 def tally_of(units):
@@ -422,18 +455,24 @@ def verdicts(units, pilot):
                      "%d of %d paired objectives differ by under a factor of %g (the claim needs %d)"
                      % (close, len(pairs), P2_MAX_RATIO, P2_MIN_PAIRS))
     n_valid = sum(1 for u in units if u["valid"])
-    if pilot.get("submitted", 0) < pilot.get("planned", PLANNED) or pilot.get("stops"):
+    # void: the pilot did not finish, or a terminal stop cut an objective short.
+    # A pause that later resumed leaves no mark here; an arm stopped by the
+    # drop-an-arm rule is evidence (units that never ran count as not valid).
+    cut = [s for s in (pilot.get("stops") or []) if s.get("terminal", True) and s.get("cut", True)]
+    if pilot.get("submitted", 0) < pilot.get("planned", PLANNED) or cut:
         out["P3"] = ("void", "%d of %d objectives were submitted%s; %d units valid so far"
                      % (pilot.get("submitted", 0), pilot.get("planned", PLANNED), _why_short(pilot), n_valid))
     else:
         total = len(pilot.get("arms") or ARM_ORDER) * pilot.get("planned", PLANNED)
+        stopped = sorted(x for x, v in (pilot.get("arm_stopped") or {}).items() if v)
         out["P3"] = ("true" if n_valid >= p3_need(total) else "false",
-                     "%d of %d units valid (the claim needs %d, 90%% rounded up)" % (n_valid, total, p3_need(total)))
+                     "%d of %d units valid (the claim needs %d, 90%% rounded up)%s" % (n_valid, total, p3_need(total),
+                     "; arm stopped by the drop-an-arm rule: %s (units that never ran count as not valid)" % ", ".join(stopped) if stopped else ""))
     return out
 
 
 def _why_short(pilot):
-    stops = [s.get("reason", "?") for s in (pilot.get("stops") or [])]
+    stops = [s.get("reason", "?") for s in (pilot.get("stops") or []) if s.get("terminal", True)]
     return "; stops: " + ", ".join(stops) if stops else ""
 
 
@@ -739,13 +778,18 @@ class Waiter:
         self.prev[arm] = ids
 
 
-def wait_arms(a, recs, subs, minutes, committed_calls, out):
-    """Poll the arms' trajectories. Returns (timed_out arms, stop reason or None).
-    Every LIVE_TALLY_S the live search tally of the objective is added to the
-    committed one; at HARD_STOP the active runs of every arm are cancelled."""
+def wait_arms(a, recs, subs, minutes, committed_calls, out, live_out=None, persist=None):
+    """Poll the arms' trajectories. Returns (timed_out arms, stop reason or None,
+    live_failed). Every LIVE_TALLY_S the live search tally of the objective is
+    read per arm into live_out (and persist() is called, so the last count is on
+    disk) and added to the committed one; at HARD_STOP the active runs of every
+    arm are cancelled. A live read that fails is retried at the next poll and,
+    if it is still failing when the wait ends, is returned as live_failed (the
+    pilot pauses: no new objective until a read succeeds)."""
+    live_out = {} if live_out is None else live_out
     waiter = Waiter(subs.keys())
     started = {arm: parse_ts(subs[arm]["submitted_at"]) for arm in subs}
-    last_tally, warned = 0.0, False
+    last_tally, warned, live_failed = 0.0, False, False
     while True:
         t = now()
         for arm in subs:
@@ -762,22 +806,29 @@ def wait_arms(a, recs, subs, minutes, committed_calls, out):
             break
         if time.time() - last_tally >= LIVE_TALLY_S:
             last_tally = time.time()
-            try:
-                live = sum(live_calls(arm_api(recs[x]), list_runs(arm_api(recs[x]), subs[x]["trajectory_id"])) for x in subs)
-            except ApiError as e:
-                out("  live tally unavailable: %s" % e)
-                live = None
-            if live is not None:
-                if committed_calls + live >= HARD_STOP:
-                    out("  STOP: the tally is %d, the hard stop is %d; cancelling every active run of this objective"
-                        % (committed_calls + live, HARD_STOP))
-                    return sorted(x for x in subs if x not in waiter.ended), "cost: tally %d reached %d" % (committed_calls + live, HARD_STOP)
-                if not warned and committed_calls + live >= WARN_AT:
-                    warned = True
-                    out("  WARNING: the tally is %d, past %d (a warning, not a stop; the hard stop is %d)"
-                        % (committed_calls + live, WARN_AT, HARD_STOP))
+            failed = []
+            for x in subs:
+                try:
+                    live_out[x] = live_calls(arm_api(recs[x]), list_runs(arm_api(recs[x]), subs[x]["trajectory_id"]))
+                except ApiError as e:
+                    failed.append("%s: %s" % (x, e))
+            if persist:
+                persist()
+            live_failed = bool(failed)
+            if failed:
+                out("  live tally unreadable (%s); retrying at the next poll" % "; ".join(failed))
+                last_tally = time.time() - LIVE_TALLY_S    # retry at the next poll, not in three minutes
+            live = sum(live_out.get(x, 0) for x in subs)
+            if committed_calls + live >= HARD_STOP:
+                out("  STOP: the tally is %d, the hard stop is %d; cancelling every active run of this objective"
+                    % (committed_calls + live, HARD_STOP))
+                return sorted(x for x in subs if x not in waiter.ended), "cost: tally %d reached %d" % (committed_calls + live, HARD_STOP), live_failed
+            if not warned and committed_calls + live >= WARN_AT:
+                warned = True
+                out("  WARNING: the tally is %d, past %d (a warning, not a stop; the hard stop is %d)"
+                    % (committed_calls + live, WARN_AT, HARD_STOP))
         time.sleep(POLL_S)
-    return sorted(x for x in subs if x not in waiter.ended), None
+    return sorted(x for x in subs if x not in waiter.ended), None, live_failed
 
 
 def cancel_active(recs, subs, arms):
@@ -849,11 +900,18 @@ def say(*parts):
     print(*parts, flush=True)
 
 
+def refuse_protected(computer_id, what):
+    if computer_id in PROTECTED_COMPUTER_IDS:
+        raise SystemExit("e1: %s names %s, a protected computer; this driver never acts on it" % (what, computer_id))
+
+
 def load_arms(a):
     st = State(a.state_dir)
     comps = st.computers()
     if not comps or sorted(comps.get("arms", {})) != sorted(ARM_ORDER):
         raise SystemExit("e1: no four-computer computers.json in %s; run `scripts/e1 setup`" % st.root)
+    for arm, rec in comps["arms"].items():
+        refuse_protected(rec.get("computer_id"), arm)
     return st, comps, comps["arms"]
 
 
@@ -885,6 +943,7 @@ def cmd_setup(a):
             raise SystemExit("e1: qa_test_computer.mjs failed for %s (exit %d): %s" %
                              (label, p.returncode, (p.stderr.strip().splitlines() or ["no output"])[-1][:300]))
         info = json.loads(p.stdout.strip().splitlines()[-1])
+        refuse_protected(info.get("computer_id"), "the minted computer of %s" % label)
         key_file = st.p("keys", label + ".key")
         key_from_credential(info["credential_file"], key_file)
         comps["arms"][arm] = {"label": label, "computer_id": info["computer_id"], "key_file": key_file,
@@ -919,7 +978,7 @@ def install_overlay(a, st, comps, arm):
 
 class Smoke:
     def __init__(self, a, out):
-        self.a, self.out, self.failed, self.fails = a, out, None, {}
+        self.a, self.out, self.failed, self.fails, self.refused = a, out, None, {}, set()
 
     def check(self, ok, arm, n, name, detail=""):
         self.out("%s %-3s %2d %s%s" % ("PASS" if ok else "FAIL", arm, n, name, (": " + detail) if detail else ""))
@@ -1006,7 +1065,7 @@ def cmd_smoke(a):
     if s.failed:
         return finish_smoke(st, comps, s, arms, {"builds": builds})
     # 6 wait
-    timed, _ = wait_arms(a, recs, subs, SMOKE_WAIT_MIN, 0, say)
+    timed, _, _ = wait_arms(a, recs, subs, SMOKE_WAIT_MIN, 0, say)
     for arm in arms:
         s.check(arm not in timed, arm, 6, "every run of the trajectory ended within %d minutes" % SMOKE_WAIT_MIN)
     if timed:
@@ -1051,7 +1110,15 @@ def restamp(a, st, comps, recs, arms, s):
     build (read at export), and the stamp's time is the bundle's export time, so
     the six-hour clock starts when the evidence was taken."""
     lines, builds, exported = {}, {}, {}
+    prior = (st.load("smoke.json") or {}).get("arms") or {}
     for arm in arms:
+        e = prior.get(arm)
+        if e and not e.get("passed"):
+            f = e.get("failed") or {}
+            s.check(False, arm, f.get("step") or 0, "restamp refused: the stamp says %s failed at step %s (%s); a failed smoke is not turned into a pass; "
+                    "run a new smoke" % (arm, f.get("step"), f.get("name")))
+            s.refused.add(arm)
+            continue
         path = st.p("bundles", "s00-%s.json" % arm)
         try:
             with open(path) as f:
@@ -1093,6 +1160,8 @@ def finish_smoke(st, comps, s, arms, detail):
     stamp = {"arms": stamp.get("arms") or {}}
     restamped = detail.get("restamp") or {}
     for arm in arms:
+        if arm in s.refused:
+            continue                      # the prior failure stays on the stamp
         f = s.fails.get(arm) or s.fails.get("all")
         u = lines.get(arm)
         stamp["arms"][arm] = {
@@ -1149,10 +1218,11 @@ def cmd_pilot(a):
         problems.append("ledger: docs/calibration/claude-ledger.md is not on origin/main")
     elif ledger is not None and sha:
         problems += ["ledger: " + p for p in ledger_problems(ledger, claims, sha)]
-        within = os.path.abspath(a.objectives).startswith(os.path.abspath(a.repo) + os.sep)
-        if within:
-            rel = os.path.relpath(os.path.abspath(a.objectives), os.path.abspath(a.repo))
-            pushed = origin_main_file(a, rel)
+        repo_real, obj_real = os.path.realpath(a.repo), os.path.realpath(a.objectives)
+        if not obj_real.startswith(repo_real + os.sep):
+            problems.append("objectives: the file must be inside the repo (%s) so that it can be compared with origin/main" % a.repo)
+        else:
+            pushed = origin_main_file(a, os.path.relpath(obj_real, repo_real))
             if pushed is None or hashlib.sha256(pushed.encode()).hexdigest() != sha:
                 problems.append("objectives: the file is not on origin/main with the same content")
     # every arm of the header needs a passed smoke on its own computer within 6 hours;
@@ -1170,6 +1240,16 @@ def cmd_pilot(a):
         else:
             smoke_lines.append("%s %s (%s)" % (arm, e["at"], e.get("source", "smoke")))
     ids = sorted(recs[x]["computer_id"] for x in parms)
+    warnings = []
+    for arm in parms:
+        stamped = (smoke.get(arm) or {}).get("build")
+        try:
+            live_build = build_of(arm_api(recs[arm]))[0]
+        except ApiError:
+            live_build = ""
+        if stamped and live_build and stamped != live_build:
+            warnings.append("WARNING: the smoke for %s ran on build %s; the computer now reports %s (a deploy since; "
+                            "not a refusal: the build check at each objective's submission and end stays the rule)" % (arm, stamped, live_build))
     exp = parse_ts(comps.get("overlay_expires_at"))
     left_min = (exp - now()).total_seconds() / 60 if exp else -1
     if left_min < EXPIRY_MARGIN_MIN:
@@ -1195,6 +1275,8 @@ def cmd_pilot(a):
     say("  overlays expire %s (%d minutes left)" % (comps["overlay_expires_at"], left_min))
     say("  credits: estimate %s (%s); threshold %s: ok" % ("{:,}".format(a.credits), a.credits_basis, "{:,}".format(CREDIT_MIN)))
     say("  newspaper status read %s: no stop" % rep.get("now"))
+    for w in warnings:
+        say("  " + w)
     say("  stops: tally %d (hard, the providers' calls in search.served), warning at %d, deadline %s" % (HARD_STOP, WARN_AT, DEADLINE))
     pilot["started_at"] = pilot["started_at"] or iso(now())
     apis = {arm: arm_api(recs[arm]) for arm in parms}
@@ -1203,14 +1285,24 @@ def cmd_pilot(a):
         entry = pilot["objectives"].setdefault(obj["id"], {"position": position, "kind": obj["kind"], "subs": {}, "units": {}, "done": False})
         if entry["done"]:
             continue
+        if pilot.get("paused_live"):
+            held = live_probe(st, pilot, recs, apis)
+            if held:
+                say("STOP before %s: %s" % (obj["id"], held))
+                return 4
         reason = pre_objective_stop(a, st, pilot, objectives)
         if reason:
-            pilot["stops"].append(reason)
+            reason["objective"] = obj["id"]
+            # a terminal stop is a mark on the verdict; a pause is only a pause
+            (pilot["stops"] if reason.get("terminal") else pilot.setdefault("pauses", [])).append(reason)
             st.save("pilot.json", pilot)
             say("STOP before %s: %s" % (obj["id"], reason["reason"]))
             return 4
-        run_objective(a, st, comps, recs, apis, pilot, obj, entry)
+        held = run_objective(a, st, comps, recs, apis, pilot, obj, entry)
         st.save("pilot.json", pilot)
+        if held:
+            say("PAUSED after %s: %s" % (obj["id"], held))
+            return 4
         if any(s.get("terminal") for s in pilot["stops"]):
             say("STOPPED: %s" % ", ".join(s["reason"] for s in pilot["stops"]))
             return 4
@@ -1218,13 +1310,30 @@ def cmd_pilot(a):
     return 0
 
 
+def live_probe(st, pilot, recs, apis):
+    """After a live-count failure, the next run reads the live counts of the
+    paused objective again; the pilot goes on only when every read succeeds."""
+    entry = pilot["objectives"].get(pilot["paused_live"]) or {}
+    for arm, meta in (entry.get("units") or {}).items():
+        if not meta.get("trajectory_id"):
+            continue
+        try:
+            c = live_calls(apis[arm], list_runs(apis[arm], meta["trajectory_id"]))
+        except ApiError as e:
+            return "the live search count of %s on %s is still unreadable (%s)" % (pilot["paused_live"], arm, e)
+        meta["live_calls"] = max(c, meta.get("live_calls") or 0)
+    pilot.pop("paused_live", None)
+    st.save("pilot.json", pilot)
+    return None
+
+
 def pre_objective_stop(a, st, pilot, objectives):
     t = now()
     if t >= parse_ts(DEADLINE):
-        return {"reason": "deadline %s passed" % DEADLINE, "terminal": True}
+        return {"reason": "deadline %s passed" % DEADLINE, "terminal": True, "cut": False}
     units = all_units(st, pilot)
     if tally_of(units) >= HARD_STOP:
-        return {"reason": "cost: tally %d reached %d" % (tally_of(units), HARD_STOP), "terminal": True}
+        return {"reason": "cost: tally %d reached %d" % (tally_of(units), HARD_STOP), "terminal": True, "cut": False}
     rep, err = status_read(a, st)
     if err:
         return {"reason": err, "terminal": False}
@@ -1249,36 +1358,93 @@ def all_units(st, pilot):
                         bundle = json.load(f)
                 except ValueError:
                     bundle = None
-            units.append(read_unit(bundle, meta))
+            u = read_unit(bundle, meta)
+            u["calls"], u["calls_basis"] = adjust_calls(u, meta, isinstance(bundle, dict))
+            units.append(u)
     return link_builds(units)
 
 
+class Undecided(Exception):
+    """A submission that may or may not have reached its computer."""
+
+
+def find_submission(api, obj, intent_iso):
+    """After a kill between a submit and its save: look the objective up in the
+    arm's own run list (the conductor run whose prompt is the objective's, made
+    after the intent was written). Returns a sub dict, None (never reached the
+    computer: the intent is old and nothing matches), or raises Undecided."""
+    st_, js = api.call("GET", "/api/runs?limit=500")
+    if st_ != 200 or not isinstance(js, dict):
+        raise Undecided("the arm's run list answered %s" % st_)
+    since = parse_ts(intent_iso) - datetime.timedelta(seconds=2)
+    hits = [r for r in js.get("runs") or []
+            if role_of(r) == "conductor" and str(r.get("prompt") or "").strip() == obj["prompt"].strip()
+            and (parse_ts(r.get("created_at")) or since) >= since]
+    if len(hits) > 1:
+        raise Undecided("%d runs match the objective's prompt" % len(hits))
+    if hits:
+        r, md = hits[0], hits[0].get("metadata") or {}
+        sub = {"submission_id": rid_of(r), "doc_id": md.get("doc_id") or "", "submitted_at": intent_iso}
+        sub["trajectory_id"] = md.get("trajectory_id") or trajectory_of(api, sub["submission_id"])
+        return sub
+    age = (now() - parse_ts(intent_iso)).total_seconds()
+    if age <= INTENT_DECIDE_AFTER_S:
+        raise Undecided("the intent is only %d s old and no run matches yet" % age)
+    return None
+
+
 def run_objective(a, st, comps, recs, apis, pilot, obj, entry):
+    """Returns None, or a reason string when the objective cannot go on (an
+    undecided submission); the pilot pauses."""
     arms = [x for x in pilot["arms"] if not pilot["arm_stopped"].get(x)]
-    if not entry["subs"]:
+    todo = [x for x in arms if x not in entry["subs"]]
+    if todo:
+        intents = entry.setdefault("intent", {})
+        lock = threading.Lock()
+        # an intent without a recorded id: decide from the arm's own run list before submitting anything
+        for arm in todo:
+            if arm in intents:
+                try:
+                    found = find_submission(apis[arm], obj, intents[arm])
+                except (Undecided, ApiError) as e:
+                    return "%s: whether the earlier submission reached the computer cannot be decided (%s); wait and rerun" % (arm, e)
+                if found:
+                    found["build_submit"] = ""
+                    entry["subs"][arm] = found
+                    say("  %s: adopted the submission %s found in its run list (no resubmission)" % (arm, found["submission_id"]))
+                else:
+                    del intents[arm]
+        todo = [x for x in todo if x not in entry["subs"]]
         builds = {}
-        for arm in arms:
+        for arm in todo:
             try:
                 builds[arm] = build_of(apis[arm])[0]
             except ApiError:
                 builds[arm] = ""
+        for arm in todo:                      # the intent is on disk before any request is sent
+            intents[arm] = iso(now())
+        st.save("pilot.json", pilot)
 
         def one(arm):
-            t = now()
+            t = intents[arm]
             try:
                 code, js = submit(apis[arm], obj["prompt"], recs[arm]["overlay_id"])
             except ApiError as e:
-                return arm, {"submit_error": str(e), "submitted_at": iso(t)}
-            if code != 202 or not isinstance(js, dict):
-                return arm, {"submit_error": "answered %s" % code, "submitted_at": iso(t)}
-            return arm, {"submission_id": js["submission_id"], "doc_id": js["doc_id"], "submitted_at": iso(t)}
-
-        with concurrent.futures.ThreadPoolExecutor(len(arms) or 1) as ex:
-            for arm, sub in ex.map(one, arms):
-                sub["build_submit"] = builds.get(arm, "")
+                sub = {"submit_error": str(e), "submitted_at": t}
+            else:
+                if code != 202 or not isinstance(js, dict):
+                    sub = {"submit_error": "answered %s" % code, "submitted_at": t}
+                else:
+                    sub = {"submission_id": js["submission_id"], "doc_id": js["doc_id"], "submitted_at": t}
+            sub["build_submit"] = builds.get(arm, "")
+            with lock:                        # the id is on disk as soon as the 202 is in
                 entry["subs"][arm] = sub
+                st.save("pilot.json", pilot)
+
+        with concurrent.futures.ThreadPoolExecutor(len(todo) or 1) as ex:
+            list(ex.map(one, todo))
         for arm, sub in entry["subs"].items():
-            if "submission_id" in sub:
+            if "submission_id" in sub and "trajectory_id" not in sub:
                 try:
                     sub["trajectory_id"] = trajectory_of(apis[arm], sub["submission_id"])
                 except ApiError as e:
@@ -1286,21 +1452,23 @@ def run_objective(a, st, comps, recs, apis, pilot, obj, entry):
         st.save("pilot.json", pilot)
     live = {arm: s for arm, s in entry["subs"].items() if "trajectory_id" in s and arm not in entry["units"]}
     committed = tally_of(all_units(st, pilot))
-    timed, stop = wait_arms(a, recs, live, WAIT_MIN, committed, say) if live else ([], None)
+    entry.setdefault("live", {})
+    persist = lambda: st.save("pilot.json", pilot)
+    timed, stop, live_failed = wait_arms(a, recs, live, WAIT_MIN, committed, say, entry["live"], persist) if live else ([], None, False)
     if timed:
         cancel_active(recs, live, timed)
         wait_terminal(recs, live, timed, say)
     if stop:
         cancel_active(recs, live, list(live))
         wait_terminal(recs, live, list(live), say)
-        pilot["stops"].append({"reason": stop, "terminal": True})
+        pilot["stops"].append({"reason": stop, "terminal": True, "cut": True, "objective": obj["id"]})
     published_all = []
     for arm in arms:
         sub = entry["subs"][arm]
         meta = {"arm": arm, "objective": obj["id"], "kind": obj["kind"], "position": entry["position"],
                 "overlay_id": recs[arm]["overlay_id"], "provider": recs[arm]["provider"], "model": recs[arm]["model"],
                 "submitted_at": sub["submitted_at"], "build_submit": sub.get("build_submit"), "timed_out": arm in timed or bool(stop and arm in live),
-                "published": [], "submit_error": sub.get("submit_error"), "doc_id": sub.get("doc_id"),
+                "published": [], "submit_error": sub.get("submit_error"), "doc_id": sub.get("doc_id"), "live_calls": entry["live"].get(arm),
                 "trajectory_id": sub.get("trajectory_id"), "submission_id": sub.get("submission_id")}
         try:
             meta["build_end"] = build_of(apis[arm])[0]
@@ -1314,7 +1482,7 @@ def run_objective(a, st, comps, recs, apis, pilot, obj, entry):
                 meta["published"] = pub
                 if problems:
                     meta["publication_check_problems"] = problems
-                    pilot["stops"].append({"reason": "publication could not be checked on %s: %s" % (arm, "; ".join(problems)), "terminal": True})
+                    pilot["stops"].append({"reason": "publication could not be checked on %s: %s" % (arm, "; ".join(problems)), "terminal": True, "cut": False, "objective": obj["id"]})
             except ApiError as e:
                 meta["export_error"] = str(e)
         entry["units"][arm] = meta
@@ -1324,7 +1492,7 @@ def run_objective(a, st, comps, recs, apis, pilot, obj, entry):
         say("PUBLISHED: %s. A test computer published a document. Stopping the pilot. There is no story-unpublish verb "
             "(`choir platform yank` yanks a package release); tell the owner. Test computers must not be public-platform computers."
             % ", ".join("%s on %s" % (d, ARMS[x]["name"]) for x, d in published_all))
-        pilot["stops"].append({"reason": "published: " + ", ".join(d for _, d in published_all), "terminal": True})
+        pilot["stops"].append({"reason": "published: " + ", ".join(d for _, d in published_all), "terminal": True, "cut": False, "objective": obj["id"]})
     units = all_units(st, pilot)
     mine = {u["arm"]: u for u in units if u["objective"] == obj["id"]}
     tally = tally_of(units)
@@ -1344,6 +1512,12 @@ def run_objective(a, st, comps, recs, apis, pilot, obj, entry):
     with open(st.p("outcomes.tsv"), "a") as f:
         f.write(iso(now()) + "\t" + line.replace(" | ", "\t") + "\n")
     os.chmod(st.p("outcomes.tsv"), 0o600)
+    if live_failed:
+        reason = "the live search count was unreadable during %s; no new objective until a live read succeeds" % obj["id"]
+        pilot.setdefault("pauses", []).append({"reason": reason, "objective": obj["id"], "terminal": False})
+        pilot["paused_live"] = obj["id"]
+        return reason
+    return None
 
 
 def all_units_arm(units, arm):
@@ -1358,7 +1532,8 @@ def cmd_read(a):
     units = all_units(st, pilot)
     submitted = sum(1 for e in pilot["objectives"].values() if e.get("subs"))
     parms = pilot.get("arms") or list(ARM_ORDER)
-    meta = {"planned": PLANNED, "submitted": submitted, "stops": pilot.get("stops") or [], "arms": parms}
+    meta = {"planned": PLANNED, "submitted": submitted, "stops": pilot.get("stops") or [], "arms": parms,
+            "arm_stopped": pilot.get("arm_stopped") or {}}
     say("unit table (started = started web searches in every research run of the unit; calls = providers' calls in search.served)")
     say("obj  kind        pos arm  runs started calls cache  valid  reasons")
     for u in units:
