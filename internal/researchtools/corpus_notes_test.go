@@ -42,3 +42,19 @@ func TestCorpusNotesNameAHalfThatWasNotSearched(t *testing.T) {
 		}
 	}
 }
+
+// The catching-up note, which is not a failure, has its own predicate; both
+// not-searched predicates read the start of the note.
+func TestCorpusNotesNameACatchingUpIndexAndReadOnlyTheStart(t *testing.T) {
+	note := "the page text of 100 of this computer's 900 captures " + CaptureTextCatchingUpMarker + "; the rest are found by title and labels only"
+	if !CaptureTextCatchingUp(note) || CapturesNotSearched(note) {
+		t.Fatalf("note %q misread", note)
+	}
+	// A note that merely mentions the words later is not a failure note.
+	if CapturesNotSearched("ranked the strongest; "+CapturesNotSearchedNote) || PublishedNotSearched("x; "+PublishedNotSearchedNote) {
+		t.Fatal("a predicate matched in the middle of a note")
+	}
+	if !CapturesNotSearched("  "+CapturesNotSearchedNote+": x") || !PublishedNotSearched("  "+PublishedNotSearchedNote+": x") {
+		t.Fatal("a padded failure note was not recognised")
+	}
+}
