@@ -1,8 +1,8 @@
 #!/bin/sh
 # End-to-end proof of the spine on a simulator, driven through Exact's agent socket (no human, no device), in demo mode
-# (bundled fixtures, no network, no microphone): the glass bar over a full-bleed page; the radio page first, then the paper and a story opened: the pile shows
-# three cards; switch; one closes by swipe; the theme switches (Depth, Newsprint, dark); play/pause on
-# the bar; the Components page (a talk turn through the injected fixture path, with the stub stages) and the Trace page.
+# (bundled fixtures, no network, no microphone): the glass bar over a full-bleed page; the Autoradio page first (the first fixed page),
+# then the launcher (the mark) opens Paper and a story; the launcher lists both; one is removed; the theme switches (Depth, Newsprint, dark).
+# No audio is started: the bar's play button is only looked for. (The Components and Trace pages are deleted.)
 # Screenshots go to a directory the script prints (PROOF_SHOTS=dir to choose). Last line: PROOF OK, or PROOF FAILED at <step>.
 # Elements are found by test id, never by position.
 #   NOBUILD=1      skip the build (use the installed app)
@@ -51,21 +51,19 @@ attempt=1
 while :; do
   "$HERE/exact.sh" agent ios --touch platform \
     "clock data" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01-radio-first.png" \
-    "tap bar-pages" "clock +600 real" "clock data" "tap pile-places" "clock +600 real" "clock data" "tap place-paper" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01b-paper.png" \
+    "tap bar-mark" "clock +600 real" "clock data" tree "screenshot $SHOTS/01a-launcher.png" \
+    "tap place-paper" "clock +1500 real" "clock data" tree "screenshot $SHOTS/01b-paper.png" \
     "tap paper-story-demo-grid-storage" "clock +800 real" "clock data" tree "screenshot $SHOTS/02-story-page.png" \
-    "tap bar-pages" "clock +600 real" "clock data" tree "screenshot $SHOTS/03-pile-two-cards.png" \
-    "tap pile-places" "clock +600 real" "clock data" "tap launcher-open-paper:front" "clock +600 real" "clock data" tree "screenshot $SHOTS/03b-switched-to-paper.png" \
-    "tap bar-pages" "clock +600 real" "clock data" \
-    "tap card-swipe-paper:front drag -150 0" "clock +800 real" "clock data" tree "screenshot $SHOTS/04-pile-after-swipe.png" \
-    "tap pile-places" "clock +600 real" "clock data" tree "screenshot $SHOTS/05-launcher.png" \
+    "tap bar-mark" "clock +600 real" "clock data" tree "screenshot $SHOTS/03-launcher-two-pages.png" \
+    "tap launcher-open-paper:front" "clock +800 real" "clock data" tree "screenshot $SHOTS/03b-switched-to-paper.png" \
+    "tap bar-mark" "clock +600 real" "clock data" "tap launcher-close-pub:demo-grid-storage" "clock +800 real" "clock data" tree "screenshot $SHOTS/04-after-close.png" \
     "tap place-settings" "clock +600 real" "clock data" tree "screenshot $SHOTS/06-settings-depth.png" \
     "tap settings-theme-newsprint" "clock +600 real" "clock data" tree "screenshot $SHOTS/07-settings-newsprint.png" \
     "tap settings-mode-dark" "clock +800 real" "clock data" tree "screenshot $SHOTS/08-newsprint-dark.png" \
     "tap settings-theme-depth" "clock +600 real" "clock data" tree "screenshot $SHOTS/09-depth-dark.png" \
     "tap settings-mode-light" "clock +800 real" "clock data" tree "screenshot $SHOTS/10-depth-light.png" \
-    "tap bar-pages drag 0 -200" "clock +900 real" "clock data" tree "screenshot $SHOTS/10b-pull-launcher.png" \
-    "tap place-settings" "clock +600 real" "clock data" \
-    "tap bar-voice down" "tap up" "clock +1500 real" "clock data" tree "screenshot $SHOTS/11-playing.png" \
+    "tap bar-mark" "clock +900 real" "clock data" tree "screenshot $SHOTS/10b-launcher.png" \
+    "clock +300 real" "clock data" tree "screenshot $SHOTS/11-bar.png" \
     logs > "$OUT" 2>&1
   rc=$?
   if grep -q "never opened its agent socket\|not foreground-active\|before opening its agent socket\|the app hung up" "$OUT" && [ $attempt -lt 3 ]; then
@@ -83,27 +81,25 @@ must() { # <step name> <fixed text>
 }
 
 must "the app opens on the Autoradio page (the first fixed page)" '[radio-play]'
+must "bar: the mark, the field, the microphone, play" '[bar-mark]'
+must "bar: prompt field" '[bar-field]'
+must "bar: voice button" '[bar-mic]'
+must "launcher: the mark opens it with the places" '[place-paper]'
 must "demo mode: the paper page under the bar" '[page-title] "AUTOPAPER"'
 must "demo mode: a fixture story on the front page" 'The harbor council approves a tide barrier'
-must "bar: floats over the page" '[bar] (pan'
-must "bar: pages button, prompt, voice button" '[bar-pages]'
-must "bar: prompt field with the aim (first run: the invitation)" 'label="Make it yours'
-must "bar: voice button" '[bar-voice]'
 must "open a page: the story is a page" '[page-title] "A regional grid adds its largest battery yet"'
-must "open a page: the bar counts three (radio, paper, story)" '[bar-pages-count] "3"'
-must "pile: a card per page (story)" '[card-pub:demo-grid-storage]'
-must "pile: a card per page (paper)" '[card-paper:front]'
-must "switch: the launcher's open chip brings the first page forward" '[page-title] "AUTOPAPER"'
-must "close by swipe: the count is back to two (the radio and the story)" '[bar-pages-count] "2"'
+must "launcher: the story is in the deck" '[launcher-open-pub:demo-grid-storage]'
+must "launcher: the paper is in the deck" '[launcher-open-paper:front]'
+must "launcher: a remove button on the opened story" '[launcher-close-pub:demo-grid-storage]'
 must "launcher: places" '[place-settings]'
 must "settings: themes and modes" '[settings-theme-newsprint]'
 must "theme switch: Newsprint" 'Showing Newsprint (light)'
 must "theme switch: dark" 'Showing Newsprint (dark)'
 must "theme switch: Depth dark" 'Showing Depth (dark)'
 must "theme switch: back to Depth light" 'Showing Depth (light)'
-must "pull the bar up: the launcher opens" '[launcher-layer]'
-must "play: tap on the voice button starts the radio (bar shows what plays)" '[bar-text]'
-[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 12 ] || fail "screenshots" "fewer than 12 in $SHOTS"
+must "launcher: the mark opens the layer" '[launcher-layer]'
+must "bar: play is there (this proof starts no audio)" '[bar-play]'
+[ "$(ls "$SHOTS"/*.png 2>/dev/null | wc -l)" -ge 11 ] || fail "screenshots" "fewer than 11 in $SHOTS"
 echo "ok: screenshots in $SHOTS"
 if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m5 'ERROR\|Fatal error' "$OUT"; fi
 echo "PROOF OK"
