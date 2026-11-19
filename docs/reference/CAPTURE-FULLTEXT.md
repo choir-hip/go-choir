@@ -292,20 +292,6 @@ much of the computer's text is searchable so far. The journal line adds
 `text_index`, `text_indexed`, `computer_pages`, `by_body`, `by_title`,
 `by_both`, `by_labels_only`, and still only capture ids.
 
-**Coverage.** The verb's answer carries a `coverage` object that says which
-parts of the search ran: `page_text` (corpusd's page-text search answered) and
-`page_text_indexed` (the pages its index holds, as reported; compared with
-nothing), `titles` (the capture index's term table answered), `labels` (Jev's
-labels were also read from the store; they are read separately, so a failed
-read leaves `titles` true and `labels` false), `window` (the window of the
-newest captures was listed, the fallback), `published` (the published-story
-search answered over every publication; a failed or capped search is false).
-A field is true only where that part ran and returned without error; zero
-means not searched. It says nothing of how much a part covered. The research
-brief reads it to say what was searched and what was not, and claims no
-absence from it (problem record
-`research-does-not-start-from-the-corpus-2026-11-18`, rounds 3 and 4).
-
 ## 3. Resources at 250,000 and a million pages
 
 Inputs: 20,000 synthetic pages of 1,308 tokens each (1.1), the production
