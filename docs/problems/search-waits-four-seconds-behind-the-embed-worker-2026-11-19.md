@@ -66,8 +66,36 @@ request with a deadline.
    the paper captures and publishes all day, so the collision stays for
    some share of searches for good.
 
-Option 1 is being built (`lane/embed-query`). It lands only with its plan
-and timing read on Node B first, as the fourth failure's record says.
+Option 1 is built (`lane/embed-query`) and both seats accepted it.
+
+**What was measured before it lands, and what was not (15:02Z).** The timing
+could not be read on Node B first, as this record promised: the unit does
+not exist there, the build VM has no nix to build the pinned server, and
+starting a server by hand on Node B is not the lead's to do. So the pinned
+server was built CPU-only on the dev Mac and run on loopback with the unit's
+flags and three other sets (numbers in `docs/reference/EMBEDDINGGEMMA.md`,
+0.11, "A second unit for queries"). That run changed the unit: the first
+flags (eight slots, a 4,096 batch) were reasoned from the source and two of
+the reasons were wrong. Slots add no speed for short queries (8 at once are
+answered by 200 ms and 32 by 800 ms with 2, 4 or 8 slots; one alone takes
+27 ms), and with `--embeddings` the server sets the batch to the ubatch
+whatever is asked. The unit now runs two slots of 512 tokens. The same run
+showed the defect itself: a short query sent while two 300-token passages
+were in flight took 1,060 ms under every flag set, against 27 ms alone.
+
+Not measured: x86, Node B's threads, and the two units running at once on
+its twelve threads. The first staging read settles it (claim C161): the
+`op=vector_embed shape=query` median and the share at the deadline while the
+worker embeds. Rollback: revert, and queries go back to the one unit.
+
+**A second mitigation, done at 15:13Z.** The worker's backlog is what keeps
+it busy. 2,837 of the 6,293 captures it still wanted were the paper's public
+captures fetched since the first export; they were embedded on the Mac,
+checked (16 rows against the server's embedder, all 1.000) and imported
+through the inbox in 23 s. The running pass yielded to the file 81 s after it
+was placed, which is the first time the yield ran on the server. About
+3,600 remain, of computers other than the paper, which only the server may
+embed (about two and a half hours at its rate).
 
 ## Remaining error
 
