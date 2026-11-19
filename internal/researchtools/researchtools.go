@@ -85,7 +85,6 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			capturesStart := time.Now()
 			captures, note, info, err := searchCapturesFor(ctx, deps, ownerID, exec.ComputerID,
 				corpusRequest{Query: query, Terms: corpusQueryTerms(query), Since: window.Since, Until: window.Until, Order: window.Order}, limit)
-			capturesErr := err
 			if err != nil {
 				captures, note = nil, "captures not searched: "+err.Error()
 			}
@@ -103,24 +102,13 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			}
 			// Published Autopaper stories and opinion pieces, from every
 			// computer: citable once Read captures their read_url.
-			published, publishedNote, publishedRan, publishedCapped := searchPublished(ctx, deps, query, limit)
-			// Coverage is affirmative: each field is true only on the path
-			// where that search returned from the store without error, so a
-			// path nobody set (the window fallback, a future one) reads as
-			// not searched. A failed capture search leaves the captures part
-			// at its zero value.
-			var coverage SearchCoverage
-			if capturesErr == nil {
-				coverage = info.coverage()
-			}
-			coverage.Published, coverage.PublishedCapped = publishedRan, publishedCapped
+			published, publishedNote := searchPublished(ctx, deps, query, limit)
 			logCorpusSearch(ctx, query, exec.ComputerID, capturesElapsed, captures, note, len(published), len(events), info.Capped, info)
 			body := wireCorpusResult{
 				Query:     query,
 				Published: published, PublishedCount: len(published), PublishedNote: publishedNote,
 				Events: events, EventCount: len(events), EventsNote: eventsNote,
 				Captures: captures, CaptureCount: len(captures), CapturesNote: note, CaptureWordsDropped: info.Dropped,
-				Coverage: coverage,
 			}
 			if len(published) > 0 {
 				body.PublishedFirstNote = publishedFirstNote
@@ -138,7 +126,7 @@ const publishedFirstNote = "published lists the paper's own earlier stories and 
 // wireCorpusResult is the search_wire_corpus answer. A struct, not a map: JSON
 // keys must come out published first (a map sorts them alphabetically, which
 // put captures ahead of the paper's own stories). Field names and meanings are
-// unchanged; the order, published_first_note and coverage are new.
+// unchanged; only the order and published_first_note are new.
 type wireCorpusResult struct {
 	PublishedFirstNote string           `json:"published_first_note,omitempty"`
 	Published          []PublishedPiece `json:"published"`
@@ -154,10 +142,6 @@ type wireCorpusResult struct {
 	CaptureWordsDropped []string `json:"capture_words_dropped,omitempty"`
 	CaptureCount        int      `json:"capture_count"`
 	CapturesNote        string   `json:"captures_note,omitempty"`
-	// Coverage states what this search ran (see SearchCoverage). The notes
-	// above are prose for the model; a program that needs to know whether a
-	// half ran reads this.
-	Coverage SearchCoverage `json:"coverage"`
 }
 
 func firstNonEmptyString(values ...string) string {
