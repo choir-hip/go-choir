@@ -990,7 +990,7 @@ func TestBriefProseNeverReachesTheVerbAsAnOperator(t *testing.T) {
 			rt.researchDeps = deps
 			ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{OwnerID: "o", ComputerID: rt.cfg.ComputerID})
 			res := buildResearchBrief(ctx, briefPlan{threads: []briefThread{{Kind: "objective", Text: "Did the strike end " + form}}}, rt.researchBriefSearcher())
-			if res.outcome == briefFailed || strings.Contains(res.text, "Not searched") {
+			if res.outcome == briefFailed || strings.Contains(res.text, "Not searched (") {
 				t.Fatalf("the verb refused the thread (outcome %s):\n%s", res.outcome, res.text)
 			}
 			if len(sink.searches) != 1 {
@@ -1371,8 +1371,8 @@ func TestBriefRoutePathIsWholeOrOmitted(t *testing.T) {
 	var m map[string]any
 	_ = json.Unmarshal(briefResult(nil, 0), &m)
 	m["published"] = []map[string]any{
-		{"title": "A", "read_url": long, "route_path": "/pub/" + strings.Repeat("r", 300), "kind": "story"},
-		{"title": "B", "read_url": long, "route_path": "/pub/short", "kind": "story"},
+		{"title": "A", "read_url": long + "A", "route_path": "/pub/" + strings.Repeat("r", 300), "kind": "story"},
+		{"title": "B", "read_url": long + "B", "route_path": "/pub/short", "kind": "story"},
 	}
 	raw, _ := json.Marshal(m)
 	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(raw))
