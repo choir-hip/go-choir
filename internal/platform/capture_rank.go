@@ -312,6 +312,9 @@ type rankCand struct {
 	id      string
 	reasons map[string]bool
 	stories []string
+	// at is the slot (rank in the vector order) each reason first reached the
+	// page at; the page stands at the best of the reasons it keeps.
+	at map[string]int
 }
 
 func (c *rankCand) add(reason string) { c.reasons[reason] = true }
@@ -377,6 +380,11 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 		bm25Only(why)
 		return
 	}
+	if rows := len(vr.Stories) + len(vr.Captures); rows == 0 && vr.Partial != "" {
+		// Every list failed and the index gave nothing: the vectors did not answer.
+		bm25Only("the vector lists could not be read: " + vr.Partial)
+		return
+	}
 	ranking.VectorAnswered = true
 	ranking.VectorRows = len(vr.Stories) + len(vr.Captures)
 	ranking.VectorState, ranking.VectorPartial = vectorStateOf(vr)
@@ -423,28 +431,31 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 
 	cands := map[string]*rankCand{}
 	var order []string
-	touch := func(id, reason string) *rankCand {
+	touch := func(id, reason string, slotIdx int) *rankCand {
 		c := cands[id]
 		if c == nil {
-			c = &rankCand{id: id, reasons: map[string]bool{}}
+			c = &rankCand{id: id, reasons: map[string]bool{}, at: map[string]int{}}
 			cands[id] = c
 			order = append(order, id)
 		}
 		c.add(reason)
+		if _, ok := c.at[reason]; !ok {
+			c.at[reason] = slotIdx
+		}
 		return c
 	}
 	gather := size * rankGather
-	for _, sl := range slots {
+	for slotIdx, sl := range slots {
 		if len(order) >= gather {
 			break
 		}
 		if sl.capture != nil {
-			touch(sl.capture.CaptureID, RankReasonMeaning)
+			touch(sl.capture.CaptureID, RankReasonMeaning, slotIdx)
 			continue
 		}
 		st := stories[sl.story.PublicationID]
 		for _, id := range cited[st.VersionID] {
-			c := touch(id, RankReasonStory)
+			c := touch(id, RankReasonStory, slotIdx)
 			if !containsID(c.stories, st.PublicationID) {
 				c.stories = append(c.stories, st.PublicationID)
 			}
@@ -524,6 +535,18 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 		}
 		kept2 = append(kept2, id)
 	}
+	// A page that kept only its own vector stands where that vector put it,
+	// not where the story it no longer counts for stood.
+	pos := func(id string) int {
+		best := 1 << 30
+		for _, r := range []string{RankReasonMeaning, RankReasonStory} {
+			if at, ok := cands[id].at[r]; ok && cands[id].reasons[r] && at < best {
+				best = at
+			}
+		}
+		return best
+	}
+	sort.SliceStable(kept2, func(i, j int) bool { return pos(kept2[i]) < pos(kept2[j]) })
 	vecOrder = kept2
 
 	final, kept := placeBM25(vecOrder, bm25, size)

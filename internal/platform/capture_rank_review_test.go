@@ -40,58 +40,51 @@ func TestRankedStoryCarriesTheScoreAndDayOfItsHit(t *testing.T) {
 	}
 }
 
-// capturePlain puts a public capture with neither a published nor a fetched time.
-func (f *rankFixture) captureWithNoTime(t *testing.T, key, text string) objectgraph.Object {
-	t.Helper()
-	obj := f.capture(t, f.owner, f.computer, key, "Page "+key, text, time.Now().UTC(), false)
-	var meta map[string]any
-	if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
-		t.Fatal(err)
-	}
-	meta["fetched_at"], meta["published_at"] = "", ""
-	obj.Metadata, _ = json.Marshal(meta)
-	obj.ContentHash += "-notime"
-	if err := f.og.PutBatch(context.Background(), objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
-		t.Fatal(err)
-	}
-	return obj
-}
-
+// A valid capture always has a fetched time (objectgraph requires it), so a
+// capture with neither time is a projection row whose times are NULL, or a
+// metadata the exact check cannot read. The same rule must hold on every path.
 func TestWindowRuleIsOneRuleForACaptureWithNeitherTime(t *testing.T) {
-	f := newRankFixture(t)
-	now := time.Now().UTC().Add(-time.Hour)
-	f.page(t, "dated", "zorblax harbor", 2, now)
-	notime := f.captureWithNoTime(t, "notime", "zorblax harbor vec01")
-	f.pass(t)
-	until := time.Now().UTC().Add(48 * time.Hour).Format(time.RFC3339)
-	since := time.Now().UTC().Add(-48 * time.Hour).Format(time.RFC3339)
-	// Without a window the capture is found: the control.
-	if got := f.keys(t, entryIDs(f.rank(t, "zorblax harbor")), "dated", "notime"); !strings.Contains(got, "notime") {
-		t.Fatalf("control: %s", got)
+	// The exact check: published, else fetched, else none.
+	mk := func(published, fetched string) objectgraph.Object {
+		meta, _ := json.Marshal(objectgraph.WebCaptureMetadata{SchemaVersion: objectgraph.WebCaptureSchemaVersion, URL: "https://example.com/x", CanonicalURL: "https://example.com/x",
+			Title: "x", PublishedAt: published, FetchedAt: fetched, Extractor: "x1", DocHash: "h",
+			ContentBlobID: "sha256:" + strings.Repeat("a", 64), ExtractedTextBlobID: "sha256:" + strings.Repeat("a", 64), BlocksBlobID: "sha256:" + strings.Repeat("a", 64)})
+		return objectgraph.Object{ObjectKind: objectgraph.WebCaptureObjectKind, Metadata: meta, UpdatedAt: time.Now()}
+	}
+	if at, ok := captureWindowTime(mk("2026-11-01T00:00:00Z", "2026-11-09T00:00:00Z")); !ok || at.Day() != 1 {
+		t.Fatalf("published first: %v %v", at, ok)
+	}
+	if at, ok := captureWindowTime(mk("not a time", "2026-11-09T00:00:00Z")); !ok || at.Day() != 9 {
+		t.Fatalf("fetched when published is unreadable: %v %v", at, ok)
+	}
+	if _, ok := captureWindowTime(objectgraph.Object{ObjectKind: objectgraph.WebCaptureObjectKind, Metadata: json.RawMessage(`{"schema_version":"x"}`), UpdatedAt: time.Now()}); ok {
+		t.Fatal("an object with no readable time got one (its update time must not stand in)")
+	}
+	// The term half: a row whose times are NULL is outside every window.
+	f, objs, base := broadFixture(t, 40)
+	if _, err := f.store.corpus().Exec(`UPDATE proj_capture_index SET published_at = NULL, fetched_at = NULL WHERE capture_id = ?`, objs[0].CanonicalID); err != nil {
+		t.Fatal(err)
 	}
 	for name, mod := range map[string]func(*CaptureSearchRequest){
-		"until only":    func(r *CaptureSearchRequest) { r.Until = until },
-		"since only":    func(r *CaptureSearchRequest) { r.Since = since },
-		"since + until": func(r *CaptureSearchRequest) { r.Since, r.Until = since, until },
+		"until only": func(r *CaptureSearchRequest) { r.Until = base.Add(400 * time.Hour).Format(time.RFC3339) },
+		"since only": func(r *CaptureSearchRequest) { r.Since = base.Add(-400 * time.Hour).Format(time.RFC3339) },
+		"since + until": func(r *CaptureSearchRequest) {
+			r.Since, r.Until = base.Add(-400*time.Hour).Format(time.RFC3339), base.Add(400*time.Hour).Format(time.RFC3339)
+		},
 	} {
-		resp := f.rank(t, "zorblax harbor", mod)
-		for _, id := range entryIDs(resp) {
-			if id == notime.CanonicalID {
-				t.Fatalf("%s: the ranked answer holds a capture with neither time", name)
-			}
+		req := CaptureSearchRequest{OwnerID: "owner-a", ComputerID: "computer-a", Words: []string{"harbor"}, Need: 1, Candidates: 100}
+		mod(&req)
+		resp, err := f.store.SearchCaptures(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
 		}
-		for _, h := range resp.Hits {
-			if h.CaptureID == notime.CanonicalID {
-				t.Fatalf("%s: the page-text half holds a capture with neither time", name)
-			}
+		if resp.Matched != 39 {
+			t.Fatalf("%s: matched %d, want 39 (the capture with no time is out)", name, resp.Matched)
 		}
 		for _, o := range resp.Objects {
-			if o.CanonicalID == notime.CanonicalID {
+			if o.CanonicalID == objs[0].CanonicalID {
 				t.Fatalf("%s: the term half holds a capture with neither time", name)
 			}
-		}
-		if !strings.Contains(f.keys(t, entryIDs(resp), "dated"), "dated") {
-			t.Fatalf("%s: the dated capture is missing", name)
 		}
 	}
 }
@@ -100,14 +93,17 @@ func TestTermSearchOrderTieBreaksOnIdDescendingAndPutsNoFetchedTimeLast(t *testi
 	f := newFTFixture(t, false)
 	base := time.Now().UTC().Truncate(time.Minute).Add(-time.Hour)
 	var objs []objectgraph.Object
-	tied := base // three captures share one fetched time
-	for i := 0; i < 3; i++ {
-		objs = append(objs, f.capture(t, "owner-a", "computer-a", fmt.Sprintf("tie%d", i), "Tidal gauge", "https://example.com/t", "x", tied))
+	for i := 0; i < 3; i++ { // three captures share one fetched time
+		objs = append(objs, f.capture(t, "owner-a", "computer-a", fmt.Sprintf("tie%d", i), "Tidal gauge", "https://example.com/t", "x", base))
 	}
 	newer := f.capture(t, "owner-a", "computer-a", "newer", "Tidal gauge", "https://example.com/n", "x", base.Add(time.Hour))
-	none := f.captureWithoutTimes(t, "none")
+	none := f.capture(t, "owner-a", "computer-a", "none", "Tidal gauge", "https://example.com/z", "x", base.Add(2*time.Hour))
 	f.put(t, append(objs, newer, none)...)
 	if err := f.store.ReconcileCaptureIndex(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// The capture with no fetched time: its term rows hold NULL.
+	if _, err := f.store.corpus().Exec(`UPDATE proj_capture_terms SET fetched_at = NULL WHERE capture_id = ?`, none.CanonicalID); err != nil {
 		t.Fatal(err)
 	}
 	resp, err := f.store.SearchCaptures(context.Background(), CaptureSearchRequest{OwnerID: "owner-a", ComputerID: "computer-a", Words: []string{"tidal"}, Need: 1, Candidates: 10})
@@ -127,16 +123,6 @@ func TestTermSearchOrderTieBreaksOnIdDescendingAndPutsNoFetchedTimeLast(t *testi
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("order\n got  %v\n want %v (newest, then the tie by id descending, then no time last)", got, want)
 	}
-}
-
-func (f *ftFixture) captureWithoutTimes(t *testing.T, key string) objectgraph.Object {
-	t.Helper()
-	obj := f.capture(t, "owner-a", "computer-a", key, "Tidal gauge", "https://example.com/"+key, "x", time.Now().UTC())
-	var meta map[string]any
-	_ = json.Unmarshal(obj.Metadata, &meta)
-	meta["fetched_at"], meta["published_at"] = "", ""
-	obj.Metadata, _ = json.Marshal(meta)
-	return obj
 }
 
 func TestRankedAnswerCapsAStorysCitationsAfterEligibility(t *testing.T) {
