@@ -254,7 +254,7 @@ func TestBriefKeepsThreadsSearchedBeforeTheDeadline(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-	if res.outcome != briefDelivered || !strings.Contains(res.text, "first thread page") || !strings.Contains(res.text, "Not searched") {
+	if res.outcome != briefPartial || !strings.Contains(res.text, "first thread page") || !strings.Contains(res.text, "Not searched") {
 		t.Fatalf("a partial brief is not delivered with what was not searched named:\n%s", res.text)
 	}
 }
@@ -1105,10 +1105,10 @@ func TestBriefMarksACutFieldAndNeverCutsAShortOne(t *testing.T) {
 	c := briefCapture(1, strings.Repeat("harbor ", 200))
 	c["title"] = "Short title"
 	res := buildResearchBrief(context.Background(), planN(1), fixedSearch(briefResult([]map[string]any{c}, 0)))
-	if !strings.Contains(res.text, "[cut]") {
+	if !strings.Contains(res.text, "[cut]\n") {
 		t.Fatalf("a cut passage is not marked:\n%s", res.text)
 	}
-	if strings.Count(res.text, "[cut]") != 1 {
+	if strings.Count(res.text, "[cut]\n") != 1 || strings.Contains(res.text, "Short title [cut]") {
 		t.Fatalf("an uncut field is marked cut:\n%s", res.text)
 	}
 }
