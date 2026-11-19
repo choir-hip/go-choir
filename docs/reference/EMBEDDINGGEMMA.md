@@ -437,6 +437,51 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
   written only when this host cuts the same passage (`text_sha` equal) and the text is public; the rest are counted by reason.
   A route and not a subcommand because it needs the running process's embedder, text store and database credentials.
 
+### 0.11.2 Primary sources for the server and pgvector (read 2026-11-19 from the pinned sources)
+
+llama.cpp b12259 (`351025ec5`), source tree at `/nix/store/i552x14p...-source` (the nix `src` of `nix/embedder.nix`; paths below are in the
+repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `README.md`, `src/hnswscan.c`).
+
+- **Request and response** (`/v1/embeddings`): route `tools/server/server.cpp:196` (`post_embeddings_oai`); handler
+  `tools/server/server-context.cpp:6785` (`handle_embeddings_impl`): `"input"` is a string or an array of strings, an empty array or an
+  empty tokenisation is a 400 (:6839-6849), `--embeddings` is required (:6786-6789) and pooling `none` is refused for this route
+  (:6792). The answer, `tools/server/server-common.cpp:1586-1616`, is `{"data": [{"embedding": [...floats], "index": i, "object":
+  "embedding"}, ...], ...}`; the embedding is a plain float array unless the request says `encoding_format: "base64"`. The client reads
+  `data[].index` and `data[].embedding` and places by index (`internal/embedder/embedder.go`).
+- **Normalisation:** `embd_normalize` defaults to 2 (euclidean), `common/common.h:639`, applied by the server (:6852-6857). corpusd cuts
+  to 256 and normalises again, so it does not depend on this.
+- **BOS and EOS:** the server tokenises with `add_special = true` and `parse_special = true` (`server-context.cpp:6823-6827`,
+  `tokenize_input_subprompt(..., true, true, ...)`), so the vocabulary's own BOS and EOS flags decide (the GGUF sets both, section 0.2).
+  **Consequence to watch:** `parse_special = true` means a passage that contains the literal text of a special token (for example
+  `<bos>`, `<eos>`, `<start_of_turn>`) is tokenised as that token, not as characters. It is rare in prose and the Mac's library path
+  may tokenise differently; the 0.999 sample check does not exercise it. Not changed (the first vectors exist); recorded here.
+- **Context per slot and an input that is too long: an error, not truncation.** Slots: `src/llama-context.cpp:429-432`
+  (`n_ctx_seq = n_ctx / n_seq_max`, padded to 256) unless the KV cache is unified (`common/common.h:594`, default false), so
+  `--ctx-size 4096 --parallel 2` is 2048 tokens a slot. An embedding task cannot be split (`can_split()` is false without a memory module,
+  `server-context.cpp:502-520`), so `server-context.cpp:4076-4098` applies: more tokens than `--ubatch-size` (2048) is
+  "input (N tokens) is too large to process. increase the physical batch size", and more than the slot's context is "input (N
+  tokens) is larger than the max context size ... skipping"; both are errors returned to the client (HTTP 500 / 400), the slot is
+  released, nothing is embedded. A passage over 2048 tokens (about 2,400 CJK runes can reach it) therefore fails loudly: the worker's
+  one-by-one retry logs `embed refused` and skips it, the import's sample cannot embed it. It is never silently truncated.
+- **Flags at b12259** (`common/arg.cpp`): `-t/--threads` :1487, `-c/--ctx-size` :1609, `-b/--batch-size` :1639, `-ub/--ubatch-size`
+  :1646, `--pooling` {none,mean,cls,last,rank} :2284, `-np/--parallel` :2515, `-m/--model` :3027, `--host` :3323, `--port` :3339,
+  `--embedding/--embeddings` :3506. `/health`: `tools/server/server.cpp:171`. All used flags exist. Not verified by a run: that the
+  `gemma-embedding2` model loads under these flags on x86 and the 503 while loading (first start on Node B).
+- **pgvector 0.8.7:** `halfvec`, `halfvec_cosine_ops` and HNSW (`sql/vector--0.8.7.sql`; built in the test overlay). Filtering is
+  applied after the index scan; iterative scans (`hnsw.iterative_scan` `strict_order`/`relaxed_order`) arrived in 0.8.0 and stop at
+  `hnsw.max_scan_tuples` (default 20,000) or `work_mem` x `hnsw.scan_mem_multiplier` (README "Filtering", "Iterative Index Scans",
+  `src/hnswscan.c:256-264`). So a filter that keeps few of the nearest rows can leave a scan short with no signal. corpusd's answer: every
+  list that comes back under its limit is asked again with index scans off (exact, over the btree on scope and day or the table), and
+  a list that cannot be completed in the 5 s statement deadline is flagged `partial`. The code states its minimum, 0.8.0
+  (`vectorMinPgvector`), and the CI action requires it numerically.
+- **The planner and the ORDER BY.** The statements order by the bare distance (`ORDER BY v.embedding <=> $q LIMIT n`; ties are broken in
+  Go), which an HNSW index can serve; `TestVectorSearchStatementUsesTheHNSWIndex` shows the plan uses `idx_vc_hnsw` and `idx_vsp_hnsw`
+  once the alternatives to an ordered index scan are priced out. On a small or unanalysed table the planner may rightly prefer the scope's
+  btree and a sort (seen in the test before ANALYZE); the production plan is to be read with `EXPLAIN (ANALYZE)` on staging.
+- **The import's spool** (`artifacts/vector-import/`) is not under any namespace the artifact collector sweeps
+  (`artifact_gc.go` `artifactGCNamespaces`: projection-base, parts, platform-update, capture-bodies, file-cas-roots, file-cas-chunks, og);
+  corpusd removes leftover spool files when its worker starts.
+
 ## 1. What the model is
 
 - Upstream: `google/embeddinggemma-2` (Gemma 4 family; Matryoshka; text, image
