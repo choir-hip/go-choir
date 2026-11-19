@@ -138,12 +138,44 @@ deadline or the guest's giving up. So the time grows with the rows a search
 returns, at roughly 7 ms a row, and it is spent after the index has answered:
 in reading each candidate.
 
-Belief: a search whose words match many captures returns every match up to a
-cap near 1,500 and reads each one, and nothing a caller does needs 1,500
-candidates (the guest shows ten to thirty). Not yet read from the code: where
-the cap is, what is read per candidate, and which caller's wording produces
-the broad matches (the corpus brief sends a thread's subject as its query,
-and a subject of common words would do it). Until that is read this is a
-hypothesis. No fix is built. The ranked search waiting to land (vector order
-with the best three of BM25) calls the same terms half and inherits the cost.
+Mechanism, read from the code (a hypothesis no more; what was measured and what was not is below):
+
+- The 1,500 to 1,946 rows are two bounds added. The guest asks corpusd for
+  500 term candidates (`corpusIndexCandidates`, `researchtools/corpus_search.go`)
+  and sends up to 2,000 capture ids as hints, those whose Jev label holds any
+  query word (`labelMatchedCaptureIDs`; the 2,000 is `captureSearchMaxIDs`,
+  `platform/capture_index.go`, and the guest reads 2,000 labels). A common word
+  is in most labels, so about 500 plus 1,000 to 1,500 hints were read.
+- corpusd then read every candidate and hint from `og_objects`
+  (`captureObjectsByID`: one statement per 200 ids, every column of the row,
+  metadata JSON included, the body dropped after it is read) and sent the
+  objects, whole, to the guest, which matched and ranked all of them in Go and
+  listed at most 25. So the guest used 25 of about 1,500.
+- Separately, `captureTermCandidates` fetched every matching term row into Go
+  and sorted them there, then cut to the 500: that work grew with the matches.
+- Which wording: any common word in the query reaches a label; the corpus
+  brief sends a thread's subject, so it does.
+
+Measured on the build VM, one synthetic corpus (6,000 captures, one word in the
+title of 4,000, a warm cache), best of ten on the same machine: the old code
+with the old caller's shape (500 candidates, 2,000 hints) read 2,500 rows in 287
+to 473 ms, about 0.1 ms a row. That does not reproduce the paper's 7 ms a row.
+What would explain 7 ms is a cold random read of each `og_objects` row from a
+table of many gigabytes (each of about 1,500 ids a heap page not in memory);
+that was not measured and cannot be on a warm synthetic table. Either way the
+read is proportional to the rows, and the rows were about sixty times what the
+caller used.
+
+The fix (orange, in the ranked-search lane): the term half ranks and cuts in SQL
+before it reads, with the time window applied before the cut, and says how many
+matched (`matched=` beside `rows=` on the `capture_search shape=terms` line);
+corpusd reads at most 200 hints; the guest asks for 100 candidates and sends the
+best 100 hints by label words. The same synthetic search then reads 200 rows.
+Not fixed: the term index is still scanned for every match to count them (4,000
+here, about 40 ms), which is bounded by the matches and not by the caller; and
+the guest's order inside one word count (field weights, labels) is not corpusd's
+(newest first), so with 100 candidates a page the guest would have ranked first
+among thousands of equal-count matches may not be among the newest 100. Ledger
+C143 stays settled false. Read the terms line on the paper again after this
+deploys: the rows and `matched=` of the broad calls first.
 

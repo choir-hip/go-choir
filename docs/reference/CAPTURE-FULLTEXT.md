@@ -288,6 +288,16 @@ the passage matched), `hit_objects` (the capture objects, no body) and
 terms). Deadline 8 s; a failure is reported in `fulltext` and the old half
 still answers.
 
+**The title-and-label half reads what its caller uses (2026-11-19).** `SearchCaptures` ranks the captures that hold the words
+and cuts to `candidates` in one statement (`captureTermRankedQuery`: words matched, newest fetched, id, each descending, with the
+time window applied before the cut), and says how many matched in all (`matched`, also `matched=` beside `rows=` on the
+`capture_search shape=terms` line). It reads at most `candidates` (the route's most is 1,000) rows of `og_objects` plus at most 200
+id hints (`captureSearchMaxIDs`), in one statement per 200. Before, it fetched every matching term row into Go, sorted there and
+cut afterwards, and the guest asked for 500 candidates and sent up to 2,000 hints, so a search of a common word read about 1,500
+to 2,500 rows (the 8 to 14 second calls of the 07:55Z update). The guest now asks for four times the most it lists (100) and sends
+the 100 label hints that hold the most query words. The term index is still scanned for every match of the words to count them;
+that part is bounded by the matches, not by the caller.
+
 **Guest list** (`researchtools.searchCapturesFor`): the guest lists corpusd's one
 ranked answer as it comes (`CaptureSearchResponse.Ranked`, `platform/capture_rank.go`:
 vector order with BM25's top three pages guaranteed a place, or BM25's pages in
