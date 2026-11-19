@@ -17,7 +17,7 @@ func TestStoredRowForARemovedSettingIsInvisibleAndHarmless(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	const owner, computer = "owner-removed", "computer-removed"
-	removed := []string{"research.run_memory_elision", "research.search_caps"}
+	removed := []string{"research.run_memory_elision", "research.search_caps", "store.event_table"}
 	for _, key := range removed {
 		// The raw row, as an older build wrote it.
 		setting := ComputerSetting{OwnerID: owner, ComputerID: computer, Key: key, Value: true, UpdatedAt: time.Now().UTC()}
