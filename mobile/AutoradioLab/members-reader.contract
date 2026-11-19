@@ -7,7 +7,10 @@ use ReaderDoc, TextureList, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@ch
 
 members Autoradio
   // The page in front is a story or a document (readerDoc answers "loading" for any other address).
-  resource rdoc = readerDoc(address=pg.top) as shape ReaderDoc else empty()
+  // The Swift reader's document when it answers a story or document (iOS); otherwise (no native package: `noNative`, spine.contract) the shared twin for stories (reader.ts: a `pub:` page read with no native code, Android). The flag keeps the shared source idle on iOS.
+  resource rdocn = readerDoc(address=pg.top) as shape ReaderDoc else empty()
+  resource rdocs = readerDocShared(pg.top, noNative) as shape ReaderDoc else empty()
+  derive rdoc = noNative ? rdocs : rdocn
   // The Textures place reloads each time it is the page in front.
   resource tlist = texturesList(at=pg.top) as shape TextureList else empty()
   // The block and sentence the radio is reading (set by the radio); what the bar's prompt is aimed at.

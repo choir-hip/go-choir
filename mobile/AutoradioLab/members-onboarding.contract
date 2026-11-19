@@ -57,14 +57,17 @@ members Autoradio
   action obSkip
     send obm = onboardingSkip()
     send pm = pageClose(address="onboarding:setup")
+    send pms = pagesClose("onboarding:setup")
   action obReset
     send obm = onboardingReset()
   // The edition is a Texture page: open it (the reader draws it).
   action obOpenEdition
     send pm = pageOpen(address="onboarding:edit", title="My edition")
+    send pms = pagesOpen("onboarding:edit", "My edition")
     layer = ""
   // Then the front page, and the first story playing.
   action obFinish
     send pm = pageOpen(address="paper:front", title="Paper")
+    send pms = pagesOpen("paper:front", "Paper")
     send acct = choirStartRadio()
     layer = ""

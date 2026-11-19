@@ -28,6 +28,7 @@ import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
 import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
 import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
+import { wipePages, PAGES_FILE } from './pages.ts';
 import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 
@@ -54,6 +55,7 @@ export const WIPES: Wipe[] = [
   { name: 'notebook', run: (s) => wipeNotebook(s) },
   { name: 'vectors', run: async (s) => { await wipeLiveVectors(s); await rmAll(s, [VECTORS_DIR]); } },       // the live in-memory store first, then the files
   { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
+  { name: 'pages', run: (s) => wipePages(s) },                                                                  // the deck's open set (pages.ts): only the radio stays
   { name: 'clips', run: async () => forgetClips() },                                                              // in memory only (public clips, but another account's page asked for them)
   { name: 'account-stamp', run: (s) => rmAll(s, [STAMP_FILE]) },
 ];
@@ -62,22 +64,25 @@ export const WIPES: Wipe[] = [
  * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
   podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE,
-  VECTORS_DIR, CONTENT_DB, PENDING_FILE, STAMP_FILE,
+  VECTORS_DIR, CONTENT_DB, PAGES_FILE, PENDING_FILE, STAMP_FILE,
 ];
 
 /** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply
  * still in flight is dropped as signed out) and no remembered computer. */
-export async function wipeAll(storage: Storage | undefined, store: Store | undefined, wipes: Wipe[] = WIPES): Promise<string[]> {
-  nextGeneration(); resetSession();
+/** Counts every completed wipe, the late continuation's too: the shared sources that keep state in memory are asked again when it changes (signedOutTick). */
+let wipes = 0;
+export const wipeEpoch = (): number => wipes;
+export async function wipeAll(storage: Storage | undefined, store: Store | undefined, wipes_: Wipe[] = WIPES): Promise<string[]> {
+  nextGeneration(); resetSession(); wipes += 1;
   const failed: string[] = [];
-  for (const w of wipes) {
+  for (const w of wipes_) {
     try { await w.run(storage, store); } catch { failed.push(w.name); console.log(`account: wipe ${w.name} failed`); }
   }
   return failed;
 }
 
 export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe' }): Promise<unknown> };
-export type SignOutResult = { done: boolean; failed: string; message: string };
+export type SignOutResult = { done: boolean; failed: string; message: string; epoch: number };
 /** A deadline, not a limit: a native sign-out that never answers leaves the page retryable. */
 export const NATIVE_DEADLINE_MS = 30000;
 
@@ -201,10 +206,19 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
 
 // ---- sign-out
 
+/** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
 export async function accountSignOut(
   a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
   opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
 ): Promise<SignOutResult> {
+  const r = await signOutInner(a, storage, store, native, opts);
+  return { ...r, epoch: wipes };
+}
+
+async function signOutInner(
+  a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
+  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
+): Promise<Omit<SignOutResult, 'epoch'>> {
   // Demo mode has no account of its own: the key on the phone (if any) is the real one, and the demo's sign-out must neither end it nor wipe it.
   if (a.demo) return { done: false, failed: '', message: 'Demo mode has no account to sign out of. Nothing was changed.' };
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };

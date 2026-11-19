@@ -4,10 +4,18 @@
 use openPages, pageModel, theme, themeList, barState, demoInfo from "@choir/autoradio"
 use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord, demoSet from "@choir/autoradio"
 use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autoradio"
+use HostCaps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 members Autoradio
-  resource pg = openPages() as shape PageList else empty()
+  // Is there a native package? (host.ts: decided once from the native handle, never from what the native set holds). "none" is Android; "" (not decided) and "native" are iOS.
+  resource hc = hostCaps(pgn.top != "") as shape HostCaps else empty()
+  derive noNative = hc.mode == "none"
+  // The open pages. The Swift package's set (pgn) where there is a package; the SHARED set (pgs, pages.ts, kept in storage.fs) where there is none, so the deck mounts a page with no native code.
+  // Every open, close, pin and reopen is sent to both; on iOS the shared set is kept but never read. A failed or empty native answer keeps its last value (the slot keeps what it had).
+  resource pgn = openPages() as shape PageList else empty()
+  resource pgs = pagesView(signedOutTick) as shape PageList else empty()
+  derive pg = noNative ? pgs : pgn
   resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
   resource th = theme() as shape Theme else empty()
   resource thl = themeList() as shape ThemeList else empty()
@@ -16,6 +24,9 @@ members Autoradio
   mutation pm as shape PageList
   // A second handle, for an action that opens one page and closes another in the same step.
   mutation pc as shape PageList
+  // The shared set's handles (pages.ts); each refreshes the shared view.
+  mutation pms as shape PageList refreshes pgs
+  mutation pcs as shape PageList refreshes pgs
 
   // The layer above the page: "" (none), "launcher" (the stack's pages and the destinations). The expanded player is gone: the
   // Autoradio page (radio.contract, the deck's first card) is where the radio is read.
@@ -33,8 +44,10 @@ members Autoradio
     layer = layer == "launcher" ? "" : "launcher"
   action pinPage(address: string)
     send pm = pagePin(address=address)
+    send pms = pagesPin(address)
   action reopenPage
     send pm = pageReopen()
+    send pms = pagesReopen()
 
   action setTheme(id: string)
     send pm = themeSet(id=id)

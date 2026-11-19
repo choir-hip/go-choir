@@ -52,7 +52,7 @@ describe('accountSignOut', () => {
     const n = { available: true, later: async (r: { op: string }) => { order.push(`native:${r.op}`); return { done: true }; } };
     const r = await accountSignOut({ demo: false }, storage, undefined, n as never, { wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }] });
     expect(order).toEqual(['native:signOut', 'wipe:a']);
-    expect(r).toEqual({ done: true, failed: '', message: '' });
+    expect(r).toMatchObject({ done: true, failed: '', message: '' });
   });
   test('S2 a native answer that says not done wipes nothing shared', async () => {
     const r = await accountSignOut({ demo: false }, memFs().storage, undefined, native(false) as never, { wipes: [{ name: 'a', run: async () => { throw new Error('must not run'); } }] });
@@ -390,5 +390,48 @@ describe('S16 the paper page passes the story title with the route (the loss the
     expect((p.match(/playStory\(s\.route, s\.title\)/g) ?? []).length).toBeGreaterThanOrEqual(1); expect(p).not.toContain('playStory(s.route)');
     const i = JSON.parse(await Bun.file(new URL('../exact-package/exact.json', import.meta.url)).text());
     expect(i.names.find((n: { send?: string }) => n.send === 'choirPlay').options).toEqual({ route: 'string', title: 'string' });
+  });
+});
+
+describe('S17 the grants and the wipes name the same paths, exactly, in both directions', () => {
+  const grantsOf = (): { read: Set<string>; write: Set<string> } => {
+    const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8');
+    const read = new Set<string>(), write = new Set<string>();
+    for (const m of app.matchAll(/^fs\.(read|write) (app:\/[^\s`;]+)/gm)) (m[1] === 'read' ? read : write).add(m[2]);
+    return { read, write };
+  };
+  // Not granted on purpose: app:/tmp/picked is read only (a picked file is the system's copy); the vector store and the content database are not wired to a page yet (their wipes exist for when they are).
+  const WIPED_NOT_GRANTED = new Set(['app:/tmp/picked', 'app:/data/vectors', 'app:/data/content.db']);
+  // Granted but not a wipe path of its own: `app:/data/exports` holds files the listener asked to export (not account data); `app:/cache` is the root the mail originals sit under (mail-*.html is removed by wipeMail).
+  const GRANTED_NOT_WIPED = new Set(['app:/data/exports', 'app:/cache']);
+  test('every wiped path is granted for read and write (a denied path fails silently), but the named exceptions', () => {
+    const { read, write } = grantsOf();
+    expect(wipedPaths().filter((p) => !WIPED_NOT_GRANTED.has(p)).filter((p) => !(read.has(p) && write.has(p)))).toEqual([]);
+    for (const p of WIPED_NOT_GRANTED) expect(wipedPaths()).toContain(p);                // an exception that is no longer wiped is a stale exception
+  });
+  test('every granted path is wiped (exact match), but the named exceptions: no store keeps data the sign-out does not know', () => {
+    const { read, write } = grantsOf();
+    const granted = new Set([...read, ...write]);
+    expect([...granted].filter((p) => !GRANTED_NOT_WIPED.has(p)).filter((p) => !wipedPaths().includes(p))).toEqual([]);
+    for (const p of GRANTED_NOT_WIPED) expect(granted.has(p)).toBe(true);
+  });
+});
+
+describe('S18 the sign-out counter (round 6)', () => {
+  test('every completed sign-out carries a larger epoch, the second in a process too; a wipe that finishes late bumps it', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); resetSettled();
+    const a = await accountSignOut({ demo: false }, m.storage, undefined, phone() as never);
+    W = newWorld('present'); await launch(m); resetSettled();
+    const b = await accountSignOut({ demo: false }, m.storage, undefined, phone() as never);
+    expect(a.done && b.done).toBe(true); expect(b.epoch).toBeGreaterThan(a.epoch);
+    const { wipeEpoch } = await import('./account.ts');
+    const before = wipeEpoch(); await wipeAll(m.storage, undefined, []);
+    expect(wipeEpoch()).toBeGreaterThan(before);                                           // the late continuation runs wipeAll too: it is counted
+  });
+  test('the contracts pass the epoch and the sign-in state to the shared notebook', async () => {
+    const c = await Bun.file(new URL('./members-notebook.contract', import.meta.url)).text();
+    expect(c).toContain('notebookPageShared("", 0, noNative, signedOutTick, au.signedIn)');
+    expect(await Bun.file(new URL('./account-types.contract', import.meta.url)).text()).toContain('epoch: number');
   });
 });

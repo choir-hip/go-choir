@@ -42,13 +42,20 @@ function episodeOf(it: Item): Episode {
 }
 
 /** Parses a feed. Throws NotAFeed with a sentence the page can show. */
-/** The most of a feed's text that is parsed. A page's turn is 100 ms of CPU and the device parsed a 2.2 MB feed in 378 ms and 103 ms at 300 000 (the third and fifth real runs: `podcastHome` was refused as an
+/** The most of a feed's text that is parsed. A page's turn is 100 ms of CPU and the device parsed a 2.2 MB feed in 378 ms and 103 ms at 300 000 and 102 ms at 150 000 (real runs 3, 5 and 14: `podcastHome` was refused as an
  * Overrun and the page drew nothing). Feeds list the newest episodes first, so a prefix cut at the last whole `</item>` keeps the newest; the rest is not read. */
-export const MAX_PARSE = 150_000;
+export const MAX_PARSE = 80_000;
 
 export function parseFeed(fullText: string, feedURL: string, fetchedAt: number): Feed {
   let text = fullText;
-  if (text.length > MAX_PARSE) { const cut = text.lastIndexOf('</item>', MAX_PARSE); text = text.slice(0, cut > 0 ? cut + 7 : MAX_PARSE) + '</channel></rss>'; }
+  if (text.length > MAX_PARSE) {
+    // Cut only at an item boundary: after the last whole `</item>` inside the cap. If there is none (the first item alone is over the cap), keep the channel header and NO item: a half item is
+    // never shown as an episode (it would have no title or enclosure).
+    const cut = text.lastIndexOf('</item>', MAX_PARSE);
+    const first = text.indexOf('<item');
+    const end = cut > 0 ? cut + 7 : first >= 0 && first < MAX_PARSE ? first : MAX_PARSE;
+    text = text.slice(0, end) + '</channel></rss>';
+  }
   const head = text.slice(0, 400).toLowerCase();
   if (head.includes('<html') || head.includes('<!doctype html')) throw new NotAFeed('That address is a web page, not a podcast feed.');
 

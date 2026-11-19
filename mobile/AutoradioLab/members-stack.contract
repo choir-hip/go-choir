@@ -64,6 +64,7 @@ members Autoradio
       send fvRes = fileResolve(dm.on, address, title)
     else
       send pm = pageOpen(address=address, title=title)
+      send pms = pagesOpen(address, title)
     layer = ""
   derive fresTarget = match fvRes { case some(r) => r.target != "" ? r.target : r.address, case none => "" }
   derive fresTitle = match fvRes { case some(r) => r.title, case none => "" }
@@ -71,12 +72,14 @@ members Autoradio
     if fresTarget != ""
       awaiting = fresTarget
       send pm = pageOpen(address=fresTarget, title=fresTitle)
+      send pms = pagesOpen(fresTarget, fresTitle)
   action focusPage(address: string)
     order = [address].concat(order.filter(a => a != address))
     px = 0
     pdrag = false
     flying = false
     send pm = pageOpen(address=address, title="")
+    send pms = pagesOpen(address, "")
     layer = ""
   // Remove an opened page from the deck (from the launcher). The five key pages stay. The page on top is kept too: it is the one
   // being looked at.
@@ -84,6 +87,7 @@ members Autoradio
     if isFixed(address) == false and address != topAddr
       order = order.filter(a => a != address)
       send pm = pageClose(address=address)
+      send pms = pagesClose(address)
 
   // The drag: `pan` gives the move since its last event, so it accumulates; `panrelease` decides: a long enough or fast enough
   // drag, either way, sends the page off; otherwise it springs back.
@@ -114,13 +118,16 @@ members Autoradio
       px = 0
       flying = false
       send pm = pageOpen(address=go, title=(flyDir < 0 ? prevTitle : nextTitle))
+      send pms = pagesOpen(go, (flyDir < 0 ? prevTitle : nextTitle))
       send pc = pageClose(address=gone)
+      send pcs = pagesClose(gone)
     else
       let nxt = order.slice(1, 2).join("")
       order = order.slice(1).concat(order.slice(0, 1))
       px = 0
       flying = false
       send pm = pageOpen(address=nxt, title="")
+      send pms = pagesOpen(nxt, "")
 
   // The file the Kit is opening, until its page is in front: the deck follows the Kit's focus to whatever page that open lands on, whether the
   // deck had it already or not. It is cleared when that happens, when another page is asked for, and after 20 seconds (a failed open: the bar says why).
@@ -147,6 +154,7 @@ members Autoradio
         order = [pg.top].concat(order.filter(a => a != pg.top and a != topAddr))
       else
         send pm = pageOpen(address=topAddr, title="")
+        send pms = pagesOpen(topAddr, "")
 
   // The deck takes in a page the Kit opened that the deck does not know (something outside the deck opened it). A focus that is only
   // behind the deck (the answer to a move still on its way) is never followed: that would undo a swipe.

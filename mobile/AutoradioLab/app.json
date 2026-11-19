@@ -23,7 +23,8 @@
       "minimumOS": "15.0",
       "window": { "width": 430, "height": 900, "minWidth": 360, "minHeight": 560 }
     },
-    "web": {}
+    "web": {},
+    "android": {}
   },
   "deploy": {
     "store": {

@@ -1,5 +1,6 @@
 // Mail's data on the real plan and the web host. app.ts (mail.ts) answers the mail sources: before mail moved they were the Swift package's placeholders.
-// What this cannot see: the pages. The deck mounts a page only when the Swift package says which page is on top (openPages), so `pg.top` is empty here and the
+// What this cannot see: the pages. The deck mounts the page on top of the open set: the Swift package's (openPages) where there is one, else the shared set (pages.ts, spine.contract `noNative`). A test here runs as the web host, which has
+// no native package, but the decision (host.ts) waits about 4 s for one and these checks read the first moments, so `pg.top` is still empty here (verified by `bun exact.mjs test web` after the deck change) and the
 // mail sources answer "idle" for it, which is itself the check that they are answered by app.ts and held to their shapes (a missing or extra field fails the build
 // of the answer). The signed-in routes need the stored key, which the web host has no way to read, so a request is never made here: the requests, the offline copy,
 // the seal, the sanitiser and every rule of the old Swift tests are in mail.test.ts. The pages are looked at on the simulator and on Android.

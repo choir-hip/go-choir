@@ -6,6 +6,10 @@ import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fil
 import { adoptNative, setDemo } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { accountSignOut, settleAccount } from './account.ts';
+import * as pages from './pages.ts';
+import { hostMode } from './host.ts';
+import { readerDocShared } from './reader.ts';
+import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
@@ -40,11 +44,26 @@ fs.write app:/cache
 fs.read app:/data/signout-pending
 fs.write app:/data/signout-pending
 fs.read app:/data/account-stamp
-fs.write app:/data/account-stamp`;
+fs.write app:/data/account-stamp
+fs.read app:/data/open-pages-shared.json
+fs.write app:/data/open-pages-shared.json
+fs.read app:/data/notebook-cache.md
+fs.write app:/data/notebook-cache.md
+fs.read app:/data/takes.json
+fs.write app:/data/takes.json`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
+  // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
+  readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
+  notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
+  hostCaps: async ([nativeSeen]) => ({ mode: await hostMode(4000, 1500, nativeSeen) }),
+  pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
+  pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),
+  pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
+  pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
+  pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
   accountSignOut: ([demo], store, storage, native) => accountSignOut({ demo }, storage, store, native as never),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),

@@ -14,6 +14,9 @@ members Autoradio
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult
   derive signOutNote = match so { case some(a) => a.message, case none => "" }
+  // The wipe counter as the last sign-out answered it (account.ts wipeEpoch: bumped by every ATTEMPTED wipe, failed ones too, and by a late continuation's wipe); "" before any sign-out answered. It changes with
+  // each sign-out result, so the shared sources that keep state in memory (the open pages, the notebook) are asked again. A late wipe bumps the counter but has no event that carries it here (a residual).
+  derive signedOutTick = match so { case some(a) => `${a.epoch}`, case none => "" }
   mutation ctl as shape LabState
   mutation down as shape LabState
   mutation up as shape LabState

@@ -99,11 +99,11 @@ describe('9 the feed parser', () => {
     expect(notes('<description>Before <p>Inside</p> after</description>')).toBe('Before\n\nInside\n\nafter');
     expect(notes('<content:encoded><ul><li>A</li><li>B</li></ul></content:encoded>')).toContain('A');
   });
-  test('a hostile feed is capped: text, children, depth', () => {
+  test('a hostile feed is capped: text, children, depth (items under the feed cap; one over it is dropped, see "the cap never shows a half item")', () => {
     const big = 'word '.repeat(200) + '\n\n';
-    const n = notes('<description>' + big.repeat(600) + '</description>');
+    const n = notes('<description>' + big.repeat(40) + '</description>');
     expect(n.length).toBeLessThan(260_000); expect(n.length).toBeGreaterThan(1000);
-    const kids = notes('<description>' + '<p>paragraph of some words here</p>'.repeat(20_000) + '</description>');
+    const kids = notes('<description>' + '<p>paragraph of some words here</p>'.repeat(1000) + '</description>');
     expect(kids.length).toBeLessThan(260_000); expect(kids.startsWith('paragraph of some words here')).toBe(true);
     expect(notes('<description>shallow ' + '<div>'.repeat(200) + 'deep words' + '</div>'.repeat(200) + '</description>')).toBe('shallow');
     expect(notes('<description>' + '<div>'.repeat(5) + 'near words' + '</div>'.repeat(5) + '</description>')).toBe('near words');
@@ -472,8 +472,26 @@ describe('feeds over the parse cap (the device\'s 100 ms turn)', () => {
     expect(xml.length).toBeGreaterThan(1_900_000);
     const t = performance.now(); const f = parseFeed(xml, 'https://feeds.example.com/big.xml', 0); const ms = performance.now() - t;
     expect(f.show.title).toBe('Big show'); expect(f.episodes[0].title).toBe('Episode 0');
-    expect(f.episodes.length).toBeGreaterThan(50); expect(f.episodes.length).toBeLessThan(300);
+    expect(f.episodes.length).toBeGreaterThan(20); expect(f.episodes.length).toBeLessThan(300);
     expect(f.episodes.length * 1800).toBeLessThan(MAX_PARSE + 20_000);
     expect(ms).toBeLessThan(500);
+  });
+});
+
+describe('the cap never shows a half item', () => {
+  test('one item larger than the cap yields the show and no episode', async () => {
+    const { parseFeed, MAX_PARSE } = await import('./podcast-feed.ts');
+    const xml = `<?xml version="1.0"?><rss><channel><title>Long notes show</title><item><title>Huge</title><guid>g</guid><description>${'words '.repeat(MAX_PARSE / 4)}</description><enclosure url="https://cdn.example.com/e.mp3" type="audio/mpeg"/></item></channel></rss>`;
+    const f = parseFeed(xml, 'https://feeds.example.com/h.xml', 0);
+    expect(f.show.title).toBe('Long notes show'); expect(f.episodes).toEqual([]);
+  });
+  test('when whole items fit, only whole items come out; the last one is complete', async () => {
+    const { parseFeed, MAX_PARSE } = await import('./podcast-feed.ts');
+    const item = (i: number) => `<item><title>E${i}</title><guid>g${i}</guid><description>${'w '.repeat(2000)}</description><enclosure url="https://cdn.example.com/e${i}.mp3" type="audio/mpeg"/></item>`;
+    const xml = `<?xml version="1.0"?><rss><channel><title>S</title>${Array.from({ length: 60 }, (_, i) => item(i)).join('')}</channel></rss>`;
+    expect(xml.length).toBeGreaterThan(MAX_PARSE);
+    const f = parseFeed(xml, 'https://feeds.example.com/s.xml', 0);
+    expect(f.episodes.length).toBeGreaterThan(5); expect(f.episodes.length).toBeLessThan(60);
+    expect(f.episodes.every((e) => e.title !== '' && e.playable)).toBe(true);
   });
 });

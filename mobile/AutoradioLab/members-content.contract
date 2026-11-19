@@ -94,7 +94,9 @@ members Autoradio
     order = order.filter(a => a != gone)
     px = 0
     send pm = pageOpen(address=nxt, title="")
+    send pms = pagesOpen(nxt, "")
     send pc = pageClose(address=gone)
+    send pcs = pagesClose(gone)
 
   // ---- a Texture document: Edit turns the reader into the editor; every keystroke is told to the Kit, which posts a revision after a pause in
   // typing, at once on Done, and when the page is left (textureFlush). The formatting row never shows Markdown syntax; it drives `format`.

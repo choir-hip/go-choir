@@ -92,3 +92,10 @@ the pages must also get lighter.
    Android enabled, to see what the pages do with no native side.
 3. Until a page is moved, repairs to its Swift are allowed; new features in
    Swift are not.
+
+
+## Update 2026-11-19 (late): what an Android build now shows
+
+With `"android": {}` in the host, an Android build draws the paper page with its real story rows and opens a story's text with no native code. Moved to shared code: the deck's open-page set
+(`pages.ts`), the story reader (`reader.ts`, text only) and the notebook page. Still Swift (and owed in Kotlin where it is voice or audio): the run sheet, the radio page, the queue, the voice, the
+books shelf, the Textures place, takes, themes. The full list with reasons is in `docs/design/autoradio-exact-integration-2026-11-19.md`, "The deck with no native code".

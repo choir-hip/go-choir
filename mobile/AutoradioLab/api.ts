@@ -71,6 +71,9 @@ type Account = (typeof KEYCHAIN_ACCOUNTS)[number];
 export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string }): Promise<unknown> };
 let reader: NativeReader | undefined;
 /** app.ts hands over the module's native handle at every answer. */
+/** True once ANY app-module op has answered (a key read, a key state): the native module is there, and the host decision (host.ts) can no longer say "no native". */
+let nativeAnswered = false;
+export const nativeHasAnswered = (): boolean => nativeAnswered;
 export function bindNative(native: NativeReader | null | undefined): void { reader = native ?? undefined; }
 let lastNative = '';
 /** What app.ts calls at every answer: a handle that is missing or not available NEVER replaces a usable one (the first real run showed Settings, Files and Mail signed out for a whole
@@ -98,6 +101,7 @@ let lastFlags = '';
 async function keptSession(): Promise<{ key: string; computerId: string } | null> {
   if (!reader || reader.available === false) return null;
   const r = (await reader.later({ op: 'session' })) as { found?: boolean; value?: unknown; computerId?: unknown } | null;
+  if (r && typeof r === 'object' && typeof r.found === 'boolean') nativeAnswered = true;
   const flags = `found=${String(r?.found)} key=${typeof r?.value === 'string' && r.value !== ''} computer=${typeof r?.computerId === 'string' && r.computerId !== ''}`;   // flags only, never a value
   if (flags !== lastFlags) { lastFlags = flags; console.log(`api: session ${flags}`); }              // on change only: one line per request is volume
   if (!r || r.found !== true || typeof r.value !== 'string' || r.value === '') return null;
@@ -292,6 +296,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string }> {
   if (demoOn || !reader || reader.available === false) return none;
   try {
     const r = (await reader.later({ op: 'keystate' })) as { state?: unknown; found?: unknown } | null;
+    if (r && typeof r.state === 'string') nativeAnswered = true;
     const st = r && (r.state === 'present' || r.state === 'absent' || r.state === 'unreadable') ? r.state : r && r.found === true ? 'present' : 'unreadable';
     if (st !== 'present') return { state: st, digest: '' };
     const sess = await keptSession();
@@ -302,7 +307,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string }> {
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: leave demo mode and the generation as a fresh process has them. */
-export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; }
+export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

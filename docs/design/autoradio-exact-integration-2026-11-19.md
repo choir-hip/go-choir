@@ -328,3 +328,55 @@ Steps 5 and 6 (the deck bridge, the run sheet through the deck) are not started.
 - A late native answer on the launch paths only finishes bookkeeping bound to its own sign-out (the marker's token and the stamp are captured when the finish starts); if both
   changed in between, it does nothing and the next launch's reconcile decides.
 - The wipe marker now holds a per-sign-out token (a UUID), not "1"; an older marker of "1" is still a marker.
+
+## The deck with no native code (Android), 2026-11-19 late
+
+The lead's Android build of the squashed lane (`"android": {}` in app.json's host, now committed) showed shared code working (the paper front fetched, 100 stories) but nothing on screen:
+the deck's `order` was shared state, but WHICH page is on top came from the Swift OpenPages through `autoradio.openPages` / `pageOpen`, which Android answers NotSupported, so the
+deck drew placards only. What moved, each proved with the queue's `android` mode (a fresh store, `tap place-paper`, then a story):
+
+1. **The open pages** (`pages.ts`, a port of `OpenPages` in Pages.swift: open with the opener recorded, close with the opener coming forward, focus, pin, reopen, the 30-page pile, the radio
+   always open and unclosable, kept in `app:/data/open-pages-shared.json`, wiped at sign-out). `spine.contract` keeps the native set as `pgn` and adds the shared `pgs`; `pg` is the native
+   set when it has a top page (always on iOS) and the shared one otherwise; every open/close/pin/reopen is sent to both (`pms`/`pcs`). Result on Android: `deck-slot-paper:front` holds the
+   paper page with 100 story rows with real titles (`paper-story-/pub/texture/ukraine-and-russia-trade-record-drone-strikes-...`). Tests: `pages.test.ts` P1 to P9.
+2. **The reader for stories** (`reader.ts`): a `pub:` page resolves the public route and shows the story's text as h/p/li/quote blocks. `members-reader.contract` reads it when the Swift reader's
+   answer is the empty "loading" (SUPERSEDED: it is read when the host fact says there is no native package, `noNative`, see "Seat 1's answers"). Result on Android: tapping a story opens the reader page with the title and 55 text blocks. Owed (the Swift reader decodes more): citations, versions, related stories,
+   tables, embeds, hear-it rows, `texture:` documents, editing. Tests: `reader.test.ts` R1 to R5.
+3. **The notebook page**: `notebook.ts` already had the page source; the contract reads it when the host fact says there is no native package (`noNative`; it was first "while the Swift one is empty", which flickered on an iPhone cold launch and was replaced) (read only; selecting a line and steer taps stay native).
+
+Still Swift, and why (the substituted sources of the Android log):
+- Voice and audio, owed in Kotlin: `voiceProfile`, the mic, speech, on-device models, `barState`'s voice fields, `radioPage`/`radioView`, `queueView`/`queueAdd` (the run sheet player), `podcastNow`, the deck's
+  audio names. Not stubbed: they answer NotSupported and the pages that need them draw their idle state.
+- Plain server reads not yet moved (cheapest next): `takesPage` (takes.ts has `page`, but the Swift owns the kept ids and the audio), `shelfList/Doc/Chapter/Find/Follow` (the books/Reader shelf: Swift `ReaderShelf`),
+  `texturesList` (the Textures place), `textureEditInfo`, `editionPicks`, `conversationInfo`, `themeList`/`theme` (themes are Swift data; the default theme is substituted), `signalList`.
+- The Swift `OpenPages` is NOT removed: Swift-initiated opens (the bar's ask-about-this-page, the voice) go through it. Removing it needs those to tell shared code through a one-way call that Android may lack.
+- Contracts that relied on `sf/...` symbols (drawn only on Apple) and `-exact-exit-animation` (refused on Android) have not been audited.
+
+### Seat 1's answers on the Android delta (f8a74ddc9..ced9acc5c)
+
+- The shared path is chosen by one host fact, `host.ts` `hostMode` (spine.contract `noNative`): "native" is decided at once by a usable native handle that answers a probe and is sticky; "none" only after a
+  4 s wait for a handle and a failed probe; unknown is read as native. It is not the native open-pages set's content, so an iPhone cold launch (empty native set until the first native call) runs neither
+  twin and keeps its native set; a failed or empty native answer keeps its last value. Test: `host.test.ts` H1 to H5 (H5: zero fetches with the flag false). On the web host the decision becomes "none" after
+  about 4 s, so `agent web` with a longer wait mounts the shared set; the `*.test.contract` files read the first moments (their comments say so; `bun exact.mjs test web` passes).
+- The feed cap cuts only at a whole item; if the first item alone is over 80 000 characters the show keeps its header and NO episode (tests: "the cap never shows a half item"). What the cap does to episodes:
+  a queued episode keeps playing (the queue entry carries its audio url and title; `podcastQueue` puts both in the entry); but an episode older than the capped list (80 000 characters, about the newest 40 to
+  60 episodes of a feed with long notes) is no longer on the show page, and its address, opened from a saved page or a "continue listening" row with no hint, resolves to "This episode has no audio" (`resolve`,
+  podcast.ts: the feed's episode, else the address's hint). A clip's address carries a hint, so a clip still opens its episode. A yielding parser that reads the whole feed is the better fix; owed.
+- `pages.ts` load is single-flight with an epoch (a wipe during the read drops it; the caller reads again), validates entry by entry, never trims the radio, and a reopen keeps the opener (as Swift does).
+- Named residuals: the in-memory shared state is re-asked after a sign-out through `signedOutTick` (`pagesView`, `notebookPageShared`); the reader twin has no per-account state. A sign-out on Android is not
+  implemented (no native sign-in), so this path has not been exercised there.
+
+### Seat 2's answers (Exact delta at 3015e5e61)
+
+Changed: (1) the host fact cannot be downgraded: any app-module op that answered (a key read or key state, api.ts `nativeHasAnswered`) or the package having answered (`hostCaps(pgn.top != "")`) decides
+"native" for good, and a "none" is re-asked by the contract when the native set gets a top page, so one bad window cannot keep an iPhone on the shared deck; (2) the wait is bounded by real time
+(a timer races the probe loop; a hanging probe no longer stretches it); (3) `SignOutResult.epoch` counts every completed wipe (the late continuation's too) and is what `signedOutTick` carries; the shared
+notebook also takes `au.signedIn`; (4) P12 snapshots the bytes before the wipe and fails without the epoch guard; (6) the shared deck's saves are serialized (the last state wins the file); notes 9 (an open that
+finished loading after a sign-out began changes nothing) and 10 (close and pin canonicalise) are done.
+Named residuals (not built): (4) an Android launch shows the placard deck until the host fact is decided (about 4 s on a host with no native package); (7) a literal `</item>` inside CDATA in a feed can
+still yield a half item; (8) `reader.ts` has no text-size cap (two scans of a very large story could overrun the turn); (11) `proof-real.sh` clears the Swift container but not Exact's `app:/data`, and the
+proof does not exercise the Android deck; a sign-out whose wipe finishes late still does not re-ask the in-memory sources until the next sign-out result (the counter is bumped, but no event carries it to the contract).
+
+Seat 2, round 3, named residuals (none blocking): (4) one hung `atomicWriteFile` blocks every later save of the shared deck (the chain is head-of-line); (5) a save whose generation is captured after `nextGeneration`
+but before `forget()` can land after the wipe's `rm` (Android only, no sign-out there yet); (6) any app-module answer counts as proof of the pages package: a host with the module and no `openPages` would read
+`native` with an empty set (no such host today); (7) S18's late-wipe leg calls `wipeAll` directly, not the timeout continuation's wiring.

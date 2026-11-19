@@ -3,3 +3,5 @@ shape SignOutResult
   done: bool
   failed: string
   message: string
+  // Counts every completed wipe (monotonic): the sources that keep state in memory are asked again when it changes.
+  epoch: number
