@@ -245,17 +245,23 @@ What it does:
   packet: the objective and at most 5 more; the rest are named, not searched.
 - Each thread is one call of the verb's own host function
   (`search_wire_corpus`), as the run's owner and computer, in turn, under one
-  8 s deadline for the whole build. A slow or failing corpusd, an empty corpus
-  or a run with no objective starts the run with one plain sentence (or none);
-  the run always starts.
+  8 s deadline for the whole build (the run-memory and inbox reads included).
+  A slow or failing corpusd, a run with no objective, owner or computer starts
+  the run with one plain sentence saying why there is no brief; the run always
+  starts. A half the verb did not search (captures or published stories, from
+  its own notes) is named in the brief and is never read as an empty corpus:
+  the outcome is `partial`, or `failed` when both halves failed everywhere.
+  Thread text is searched as plain words (the verb's `since:`, quote and
+  `-word` operators are neutralised).
 - It delivers at most 6 captures (with dates, capture ids and the matching
   passage) and 5 published stories a thread, and 8,000 estimated tokens in all
   (it rides on every turn; the verb gives more). Over the bound whole threads
   are dropped from the last and named.
 - A resumed run builds nothing: the first message is replayed from run memory.
-- Labels: what the verb gives for what was delivered (the capture floor when a
-  passage is shown, world otherwise), marked only when the run memory took the
-  text as a fresh start. The run-label union feeds publish admission and the
+- Labels: the labels of the record the objective and threads came from, and
+  what the verb gives for the pages delivered (the capture floor when a passage
+  is shown, world otherwise), marked only when the run memory took the text as
+  a fresh start, on every outcome that put record text in the message. The run-label union feeds publish admission and the
   disclosure gate, so an owner's computer may see the capture label on more
   research runs (the v16 prompt already asks the desk to search the corpus
   first, which gives the same label).
@@ -264,7 +270,9 @@ What it does:
   searches only.
 - One journal line per research run start: `research brief run= desk= ms=
   threads= queries= stories= captures= passages= newest_held= bytes=
-  tokens_est= dropped= outcome=(delivered|empty|failed|skipped) reason=`. The
+  tokens_est= dropped= outcome=(delivered|empty|partial|failed|skipped|dropped)
+  reason=`, written once the run memory has taken (or not taken) the text:
+  `dropped` means the desk never saw the brief. The
   `corpus search` line gains `caller=brief` or `caller=cell` at its end.
   "Runs that made a web search before any corpus read": the first `gateway:
   search request ... run=` against the first `corpus read run=` or
