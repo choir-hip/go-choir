@@ -170,6 +170,9 @@ type retrievalSchemaState struct {
 	// captureIndexComplete: every capture in og_objects is projected (the
 	// search and URL routes answer).
 	captureIndexComplete atomic.Bool
+	// reads counts what the title-and-label search reads (capture_index.go),
+	// so a test can assert the bound on rows and statements, not on time.
+	reads captureReads
 	// captureIndexDirty: an inline projection write failed; the next
 	// reconcile pass repairs it.
 	captureIndexDirty atomic.Bool
@@ -422,3 +425,20 @@ func (s *Store) backfillLookupKeys(ctx context.Context, kind string) (int, error
 
 // lookupKeysPerInsert bounds one backfill statement.
 const lookupKeysPerInsert = 500
+
+// captureReads counts the rows and statements of a corpus search's term half.
+type captureReads struct {
+	termRows         atomic.Int64 // rows the term query returned to Go
+	objectRows       atomic.Int64 // og_objects rows read for the candidates
+	objectStatements atomic.Int64 // statements that read them
+}
+
+type captureReadsSnapshot struct{ termRows, objectRows, objectStatements int64 }
+
+func (r *captureReads) snapshot() captureReadsSnapshot {
+	return captureReadsSnapshot{r.termRows.Load(), r.objectRows.Load(), r.objectStatements.Load()}
+}
+
+func (a captureReadsSnapshot) minus(b captureReadsSnapshot) captureReadsSnapshot {
+	return captureReadsSnapshot{a.termRows - b.termRows, a.objectRows - b.objectRows, a.objectStatements - b.objectStatements}
+}
