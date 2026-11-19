@@ -56,7 +56,7 @@ while :; do
     "tap paper-story-demo-grid-storage" "clock +800 real" "clock data" tree "screenshot $SHOTS/02-story-page.png" \
     "tap bar-mark" "clock +600 real" "clock data" tree "screenshot $SHOTS/03-launcher-two-pages.png" \
     "tap launcher-open-paper:front" "clock +800 real" "clock data" tree "screenshot $SHOTS/03b-switched-to-paper.png" \
-    "tap bar-mark" "clock +600 real" "clock data" "tap launcher-close-pub:demo-grid-storage" "clock +800 real" "clock data" tree "screenshot $SHOTS/04-after-close.png" \
+    "tap bar-mark" "clock +600 real" "clock data" tree "tap launcher-close-pub:demo-grid-storage" "clock +800 real" "clock data" tree "screenshot $SHOTS/04-after-close.png" \
     "tap place-settings" "clock +600 real" "clock data" tree "screenshot $SHOTS/06-settings-depth.png" \
     "tap settings-theme-newsprint" "clock +600 real" "clock data" tree "screenshot $SHOTS/07-settings-newsprint.png" \
     "tap settings-mode-dark" "clock +800 real" "clock data" tree "screenshot $SHOTS/08-newsprint-dark.png" \
