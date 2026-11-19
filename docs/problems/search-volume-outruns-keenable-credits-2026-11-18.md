@@ -459,3 +459,194 @@ Two things disturbed this reading.
   count each capture once a run. What the cell program was trying to do has
   not been read from the run's tape.
 
+
+## Traces read, 2026-11-19 (station L1 of the night's goal file; read-only)
+
+The owner, 2026-11-19: "we need to review the traces and investigate all the
+problems eg the 3090 read loop ... if the problems are at the model level,
+naively changing the harness or prompt may not be correct." The research desk
+of the newspaper runs on `devin/swe-2-flash`. Read from Node B at about
+05:20Z: the gateway journal (search requests carry the run id and the query),
+the paper's guest console (rotated; it now starts at 02:14:45Z, so it holds
+3 hours and 8 minutes), and the code. Counts only, plus a few of the paper's
+public news queries named by kind.
+
+**Where a run's own ledger stands.** The supported read path for a run's
+cell programs and tool results is `choir trace export` (`cmd/choir/trace.go`:
+it pages `GET /api/runs/{id}/events` and builds cells and egress from the
+`desk.cell` and `desk.egress` events). It needs a Choir API key bound to the
+newspaper computer with its run-event read scope; the bundle is an unredacted
+owner trace. No such key was available to this reading, and the paper
+owner's key, the platform operator key and the tape files are out of bounds,
+so **no cell program of any run was read**. Everything below that says what
+a model wrote is therefore an inference from logs and code, marked as such.
+What is needed to finish: either a read-scoped key for the newspaper minted
+by the owner, or the owner running `choir trace export` for run `c0351184`
+and for runs `5f3ee2dd`, `ec43fb3f` and `d1cb7c40` and handing the bundles
+over on the machine. The 02:12Z run's console lines are gone (the surviving
+console starts at 02:14:45Z; only its last two model calls, at 02:14:58Z and
+02:15:06Z, and its summary line, `started=0 ... pages_read=2`, remain).
+
+### Item 1: the read loop (run `c0351184`)
+
+What the logs and code establish.
+
+- The run searched nothing (`started=0`) and ended with two pages read. Its
+  three cells ran 02:13:01Z to 02:14:07Z; each stopped at the 1025th host
+  call, so about 1,030 calls a cell and 3,090 in all (3 x 1,024 = 3,072, and
+  18 other calls). The loop broke on the refusal; it did not run on past it.
+- The refusal text, `internal/yaegikernel/desk_session_worker.go:618`, is
+  "refused: this cell made N host calls; at most 1024 per cell (continue in
+  the next cell)". It says the bound and tells the model to continue in the
+  next cell. It does not say what the calls were, that they were all on one
+  capture, or what a read of the whole capture would take. The bound's own
+  comment says a cell is "meant" to make about a hundred.
+- `choir.ReadCapture(captureID, fromBlock, maxChars)` returns "as many blocks
+  as fit in maxChars (0 means 8000)" and `next_block` when more remain; the
+  server returns at least one block a call and moves forward
+  (`internal/platform/captures.go:366-376`), so a loop that follows
+  `next_block` ends. 3,090 calls on one capture therefore means the program
+  did not follow `next_block` to its end: it either asked for a small
+  `maxChars`, stepped `fromBlock` by one over a very long page, or passed the
+  same `fromBlock` again. A long filing or PDF with a few thousand blocks and a
+  one-block-a-call walk fits the number (3 x 1,024). That is a reading of the
+  arithmetic, not of the program.
+- The same console shows the ordinary shape for comparison: in 3 hours, the
+  most any run read one of its own captures was 18 to 21 times (a long page
+  read in 8,000-character parts), 2,982 `corpus read` lines in all. The loop
+  is 150 times the next largest case. No other `at most 1024 per cell`
+  refusal exists on the paper's consoles, or on any other computer's console
+  on Node B, in the hours they hold; there is no earlier case to compare.
+
+What the model was shown at each step. In each cell: results of the calls it
+made (blocks and `next_block`), then at the 1025th call an error with the
+text above. Between cells: the error. Whether it was shown `block_count` and
+used it is read from the cell programs, which are not read.
+
+Cause: **not established**. The evidence leans toward a model-written
+program with a stepping or limit mistake, which is model behaviour met by a
+harness that offers a verb whose natural loop is thousands of calls and a
+bound whose message says only "continue". Confidence in "model behaviour
+produced the loop": 0.6; in "the surface made it easy": 0.7; both can hold.
+The three cells are the evidence that the message did not change the
+program: the model ran the same shape three times after being told.
+
+What would settle it (read the three cell programs first, with the key):
+whether `fromBlock` advanced between and within cells (a walk that continued
+and nearly finished, against a reset to zero each cell); the `maxChars` it
+passed; whether it printed or used what it read. Then a controlled
+comparison: replay the run's first message and its capture against (a) the
+same model, ten times, to see whether the loop recurs (variance in the
+model); (b) two other models on the same surface (is it this model?); (c) the
+same model with the surface changed one way at a time: `ReadCapture` result
+carrying `block_count` and a line "you have read blocks a to b of n"; the
+refusal text naming the verb that made the calls; and a page-read verb that
+returns the whole page up to a cap, so nothing needs a loop. A loop in (a) and
+(b) alone, and gone under (c), is a harness cause. A loop in (a) and not in
+(b), whatever (c) does, is the model's.
+
+### Item 2: runs that start many web searches
+
+85 runs of the paper's research desk sent 641 search requests between 01:00Z
+and 05:22Z (gateway journal; the run id is on every line). The median run
+sent 4, the largest 44, 42, 39, 38, 27, 26, 18, 18, 17, 15, 14, 14. In the
+console's 54 runs that searched (02:15Z to 05:22Z), the 10 runs that started
+10 or more made 56% of all searches (392 started in all, 7.3 a run; median 4).
+
+Every run of 12 or more searches was about one subject. Taking each run's two
+commonest query terms, 67% to 100% of its queries contain one of them (the
+four named runs: 0.90 to 0.95; the 22 runs of 8 or more searches: median 1.0), and exact repeats are 0 to 6 of a run. The
+wordings read as rewordings, not as separate questions:
+
+- `5f3ee2dd` (39 searches in 3.7 minutes, 02:48Z): one rail disruption on a
+  Melbourne regional line; the queries vary the line, the operator, the date,
+  "buses", "trains cancelled", and add `site:` operators for the operator and
+  the state transport site, with two queries sent twice. Console: 29
+  `SearchAll` calls with 37 wordings offered (29 sent, 8 held back), plus ten
+  plain searches.
+- `ec43fb3f` (42 searches in 6.6 minutes, 03:49Z): one illegal dump on two
+  named streets of one Zagreb district; the queries cycle through the two
+  street names, the district, a local news site and the city sanitation
+  site, quoted and unquoted, in Croatian. Console: two `SearchAll` calls, 12
+  `unread_notes`, no sign it slowed.
+- `d1cb7c40` (44 searches in 6.9 minutes, 05:07Z): one news item about young
+  founders in India. No `SearchAll` call; 44 plain searches; 8 notes that the
+  run held unread pages; 11 pages read of 1,800 returned.
+- `47806e6f` (15 searches, 05:17Z): one query sent seven times in 85
+  seconds. Six of the seven were served from the gateway's cache; the in-run
+  reuse that should answer a same-terms search from the run's own results did
+  not (`from_held=0`). Why is not established (`fresh`, a failed first
+  search, or a gap in the reuse); exact in-run repeats in all, 23 of 641
+  requests in 14 of 85 runs.
+
+What the run was asked (objective size, number of questions) is in the
+run's first message, which the logs do not carry, so it is not read. What is
+read is the shape: one subject, many wordings, results always 40, and 74%
+(`ec43fb3f`: 1,240 of 1,680) to 94% (`d1cb7c40`) of the pages new to the run,
+so the search novelty check never stops them (its design: stops at 80% held).
+The notes of the 15-unread-pages rule were shown (95 notes in 34 of the 54
+runs) and the search went on in the same cell batches. Only 16% of the
+searches (63 of 392) went through `SearchAll`; the rest are plain
+`SearchStart`, where the rule is a note and nothing more.
+
+Cause: **model behaviour** under a harness that does not stop it:
+rewording one question many times, in some runs after a note said it already
+held unread pages. Confidence 0.65. It is not many questions (one subject per
+run), and not rewording by the harness (the harness sends what the cell
+asks). The part that is the harness's is that the prompt (v17) still
+offers `SearchStart` for searches "at once" and that the stop rules are
+attached to the verb the model uses least.
+
+What would settle it: the cell programs of the four runs: did one cell
+write a loop over a list of wordings (a program), or did the model write
+several cells, each a new idea after reading results (a reasoning
+trajectory)? The first is a program shape the harness can bound; the second
+is what the model does when results disappoint. Then a controlled
+comparison on a fixed set of 20 objectives of the hard kind (a local event
+with thin coverage, a non-English locale) and 20 of the easy kind, each run
+with: the same model on the current surface; another model on it; the same
+model with `SearchStart` and `Search` removed so only `SearchAll` exists;
+and the same model with the note replaced by the list of the held unread
+titles. Count searches a run, subjects a run, and whether the answer was
+found. If the count is high only on the hard kind for every model, the
+searching is what thin results cause, and the lever is what a thin result
+says. If it differs by model, it is the model.
+
+### Item 3: a run reads about 6% of the pages its searches return
+
+Over the 54 runs that searched (02:15Z to 05:22Z): 15,867 pages returned,
+12,798 new to the run, 814 read: 5.1% of returned, 6.4% of new. Median run
+6.5%. This is the same as before (5.1% to 6.5%) after two changes.
+
+The strong fact is that **pages read do not follow pages returned**. By
+searches started in a run: 1 to 3 searches, median 7 pages read of 80
+returned; 4 to 6, 10 of 160; 7 to 9, 22.5 of 300; 10 to 20, 25 of 440; 21 or
+more, 13 of 1,680. A run reads 7 to 25 pages whether it was handed 80 or
+1,680. Runs that searched nothing read a median of 3.5 (the corpus). So the
+share falls only because returns scale with searches and reads do not: the
+read count looks set by what the run needs to write, and searching is not
+tied to it.
+
+What the model is shown. The cell result after a search carries a count
+line (`s3: 3/4 answered, +2 in, 12 of 40 pages new`) and, where relevant, a
+note; it does not carry titles or snippets. The titles are shown only if the
+model calls `choir.Searches.Summary(id)` (results by host, the first two hits
+of each host, title and URL, under 5,000 bytes) or reads `choir.Searches.Get(id).Results`
+(each hit with its snippet). `SearchAll` returns the merged results with
+`Held` marks. The prompt tells the desk to pick sources "from the host-deduped
+`choir.Searches.Summary(id)`". Whether a run called `Summary` is not logged.
+
+Cause: **not established**. The titles are available but not given; the
+harness gives a count where a list is what a choice needs, and the logs
+cannot say whether the model looked. Confidence that the share is not a
+failure of attention at all: 0.4; that reading follows the story's needs and
+searching is the misfit: 0.5.
+
+What would settle it: from the cell programs, per run, whether a search was
+followed by a `Summary` or `Get` call before the next search, and which ranks
+were read; then a comparison that varies what the cell result after a search
+shows (counts only, as now; counts and the top ten titles with hosts;
+the same plus held marks) with the same model, and the same with another
+model, measuring pages read, which rank, and whether the packet's sources
+differ. If reads rise with titles shown, it was never looking; if they do
+not, the 6% is what the stories need.

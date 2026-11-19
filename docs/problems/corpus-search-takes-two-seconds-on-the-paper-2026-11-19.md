@@ -56,3 +56,18 @@ rows than it keeps.
   line over 7.2 seconds in the same hour; the rest of that call's time is
   unexplained.
 - These are one hour's numbers from one computer.
+
+## Update, 2026-11-19T05:25Z (station L1; read-only)
+
+Three hours of the paper's console (02:15Z to 05:22Z), 280 `corpus search`
+lines: median `captures_ms` 1,706, ninth decile 4,745, maximum 15,603. The
+earlier hour's median was 2,096 and its ninth decile 5,423, so the time has
+not moved. The corpus brief reached the paper at about 05:24Z. Its first
+three `research brief` lines: 3.4 s with four threads answered, 4.1 s with
+four answered, and one `outcome=failed reason="the 8s deadline passed"` with
+`unanswered=1` (one query, no thread known, nothing found). One failed in
+three so far; three lines is not a rate. The failed brief is the case the
+earlier "brief claimed absence wrongly" defect was about: the desk is told
+the search did not answer, not that nothing is held. The clustering
+assessment of this and two other corpus-search defects is in
+[recurring agent failures read from traces](recurring-agent-failures-read-from-traces-2026-11-19.md).
