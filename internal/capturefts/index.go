@@ -805,9 +805,10 @@ func (s *scopeDB) rankPassages(ctx context.Context, match string, q Query, topK 
 		return hits, total, true, nil
 	}
 	if len(hits) == 0 {
-		// Nothing joined: either nothing matched (total is then 0 and the
-		// answer is empty) or the cut left only passages of pages that are gone.
-		return hits, total, total < topK, nil
+		// Nothing joined. total is not read when no row comes back, so this
+		// cannot tell "nothing matched" from "the best passages have no page
+		// row"; the full statement settles it (it is cheap when nothing matched).
+		return nil, 0, false, nil
 	}
 	if total < topK {
 		return hits, total, true, nil

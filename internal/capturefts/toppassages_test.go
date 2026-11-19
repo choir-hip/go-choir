@@ -19,7 +19,8 @@ import (
 //       full statement (it breaks ties by newest, the cut by passage id);
 //   T4. a windowed query is answered from the best passages overall and loses
 //       the matches inside its window;
-//   T5. an empty answer differs, or errors, with the shortcut;
+//   T5. passages whose page rows are gone (the cut joins to nothing) are
+//       answered as an empty search, though the full statement may find more;
 //   T6. the shortcut is never taken (the test would pass with it dead), or the
 //       fallback is never taken.
 
@@ -77,7 +78,6 @@ func TestTopPassagesAnswerLikeTheFullStatement(t *testing.T) {
 		{Text: "harbor", Limit: 50, Order: ByRecency},
 		{Text: "harbor", Limit: 50, Since: day0.Add(48 * time.Hour)},
 		{Text: "harbor", Limit: 50, Until: day0.Add(48 * time.Hour)},
-		{Text: "zzzznothing", Limit: 50},
 	}
 	took, fell := 0, 0
 	for _, cand := range []int{2, 3, 4, 7, 300} {
@@ -137,4 +137,37 @@ func TestTopPassagesFallBackWhenFewPagesFillTheCut(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("cut larger than the matches: ok=%v err=%v, want the shortcut", ok, err)
 	}
+}
+
+// T5. A cut whose passages all lack a page row joins to nothing; that is not
+// an answer, the full statement must run. And a query nothing matches is
+// answered empty either way.
+func TestTopPassagesEmptyJoinFallsBack(t *testing.T) {
+	ix := topCorpus(t)
+	ctx := context.Background()
+	s, rel, err := ix.acquire(scopeA, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rel()
+	match := PlanQuery("harbor").Match([]string{"harbor"}, nil)
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM pages`); err != nil {
+		t.Fatal(err)
+	}
+	var ok bool
+	hits, _, ok, err := s.rankPassages(ctx, match, Query{Text: "harbor"}, 1500)
+	if err != nil || ok || len(hits) != 0 {
+		t.Fatalf("the best passages have no page rows: ok=%v hits=%d err=%v, want the fallback", ok, len(hits), err)
+	}
+	// Nothing matches at all: the fallback is also empty and cheap.
+	none := PlanQuery("zzzznothing").Match([]string{"zzzznothing"}, nil)
+	hits, _, ok, err = s.rankPassages(ctx, none, Query{Text: "zzzznothing"}, 1500)
+	if err != nil || len(hits) != 0 {
+		t.Fatalf("no match: hits=%d err=%v", len(hits), err)
+	}
+	full, _, fok, err := s.rankPassages(ctx, none, Query{Text: "zzzznothing"}, 0)
+	if err != nil || !fok || len(full) != 0 {
+		t.Fatalf("no match, full statement: %d %v %v", len(full), fok, err)
+	}
+	_ = ok
 }
