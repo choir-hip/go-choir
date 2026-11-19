@@ -54,6 +54,9 @@ var (
 	// runs once per page and the page is fed to the embedder vectorBatch at a
 	// time; it is a size of one read, not a limit on the embedder's calls.
 	vectorGapPage = 512
+	// vectorInboxCheckEvery is how often, at most, a running pass looks between
+	// embed batches for a file in the spool inbox, and yields to it.
+	vectorInboxCheckEvery = 60 * time.Second
 	// vectorStartDelay is how long after boot the first pass waits.
 	vectorStartDelay = 30 * time.Second
 	// vectorIdleInterval is how long a worker with nothing to do waits before
@@ -145,6 +148,9 @@ type VectorPassResult struct {
 	// Imports are inbox files brought to an outcome (done/ or refused/) in this
 	// pass, at most one; a file put back to wait is not counted.
 	Imports int
+	// Yielded says the pass stopped early because the spool inbox holds a file
+	// the next pass would take; the worker starts that pass at once.
+	Yielded bool
 	// Removed are vectors deleted because their text is no longer public.
 	Removed int
 	// StoryGap and CaptureGap are the counts without a vector at the start.
