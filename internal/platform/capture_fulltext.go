@@ -51,6 +51,10 @@ const (
 // answers "timed out" and the guest uses the title and label half alone.
 var captureFullTextSearchTimeout = 8 * time.Second
 
+// captureFullTextSearchHook is a test seam: it runs inside the text search's
+// timer, where a test makes the text half slow.
+var captureFullTextSearchHook func()
+
 // Variables so tests can shrink them.
 var (
 	// captureFullTextBatch is how many captures one catch-up batch reads.
@@ -360,6 +364,9 @@ func (s *Store) searchCaptureFullText(ctx context.Context, owner, computer strin
 		return nil
 	}
 	done := s.retrievalTimer(retrievalFullTextSearch)
+	if captureFullTextSearchHook != nil {
+		captureFullTextSearchHook()
+	}
 	var searchErr error
 	defer func() { done("passages", len(resp.Hits), searchErr) }()
 	ft.searching.Add(1)

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -26,6 +27,9 @@ import (
 const (
 	captureIndexTable = "proj_capture_index"
 	captureTermsTable = "proj_capture_terms"
+	// captureTermsCoverIdx lets the term search read its postings from the
+	// index alone (see ensureCaptureTermsCoverIndex).
+	captureTermsCoverIdx = "idx_pct_cover"
 	// captureScopeChars bounds owner and computer ids in the projection's
 	// keys; a longer id is not projected and is searched by the window
 	// path only.
@@ -558,14 +562,17 @@ const (
 // source or language hold at least Need of the words, from the term table
 // over all history, plus the captures named by IDs.
 func (s *Store) SearchCaptures(ctx context.Context, req CaptureSearchRequest) (resp CaptureSearchResponse, err error) {
-	done := s.retrievalTimer(retrievalCaptureSearch)
-	defer func() { done("terms", len(resp.Objects), err) }()
 	owner, computer := strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID)
 	if strings.TrimSpace(req.Query) != "" && owner != "" && computer != "" {
+		// The text half has its own timer (capture_fulltext_search). The
+		// terms timer starts after it, so the journal's two lines add up to
+		// the call and neither contains the other.
 		if err := s.searchCaptureFullText(ctx, owner, computer, req, &resp); err != nil {
 			return resp, err
 		}
 	}
+	done := s.retrievalTimer(retrievalCaptureSearch)
+	defer func() { done("terms", len(resp.Objects), err) }()
 	if !s.retrievalState.captureIndexComplete.Load() {
 		if resp.FullText != nil && resp.FullText.Used {
 			// The text half answered; the title and label half is still
@@ -626,9 +633,10 @@ func (s *Store) SearchCaptures(ctx context.Context, req CaptureSearchRequest) (r
 	return resp, nil
 }
 
-// captureTermCandidates returns up to limit capture ids holding at least
-// need of words (strongest, then newest), and how many met need.
-func (s *Store) captureTermCandidates(ctx context.Context, owner, computer string, words []string, need, limit int) ([]string, int, error) {
+// captureTermQuery is the statement that finds the captures holding at least
+// need of words, with its arguments; the empty string when no word has a
+// searchable part.
+func captureTermQuery(owner, computer string, words []string, need int) (string, []any) {
 	var parts []string
 	var args []any
 	for i, word := range words {
@@ -662,12 +670,22 @@ func (s *Store) captureTermCandidates(ctx context.Context, owner, computer strin
 		args = append(args, condArgs...)
 	}
 	if len(parts) == 0 {
-		return nil, 0, nil
+		return "", nil
 	}
 	query := `WITH hits AS (` + strings.Join(parts, " UNION ALL ") + `)
 		SELECT capture_id, COUNT(DISTINCT qt) AS words, MAX(fetched_at) AS fetched
 		FROM hits GROUP BY capture_id HAVING COUNT(DISTINCT qt) >= ?`
 	args = append(args, need)
+	return query, args
+}
+
+// captureTermCandidates returns up to limit capture ids holding at least
+// need of words (strongest, then newest), and how many met need.
+func (s *Store) captureTermCandidates(ctx context.Context, owner, computer string, words []string, need, limit int) ([]string, int, error) {
+	query, args := captureTermQuery(owner, computer, words, need)
+	if query == "" {
+		return nil, 0, nil
+	}
 	rows, err := s.corpus().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("capture term search: %w", err)
@@ -832,4 +850,72 @@ func (s *Store) CaptureByURL(ctx context.Context, owner, computer, rawURL string
 		res.FetchedAt = hits[0].fetched.Time.Format(time.RFC3339Nano)
 	}
 	return res, nil
+}
+
+// captureTermsCoverDDL is the covering index of the term search. The primary
+// key finds a word's postings but does not hold fetched_at, so every posting
+// cost a heap fetch (random reads for a common word); with fetched_at
+// INCLUDEd the search is an index-only scan. Measured at 214,000 captures
+// and 2.76 million postings: 228 to 46 ms, 274 to 74 ms, 731 to 178 ms for
+// queries of 124k, 185k and 428k postings. The statement and its ranking are
+// unchanged; the primary key stays (it enforces uniqueness and serves the
+// writers' ON CONFLICT).
+const captureTermsCoverDDL = `CREATE INDEX CONCURRENTLY ` + captureTermsCoverIdx + ` ON ` + captureTermsTable + ` (owner_id, computer_id, term, capture_id) INCLUDE (fetched_at)`
+
+// captureTermsCoverLockKey serializes the build between processes: an index
+// left invalid is rebuilt only by the process holding the lock, so one is never
+// dropped while another is still building it.
+const captureTermsCoverLockKey = 7330212470803
+
+// ensureCaptureTermsCoverIndex builds the covering index of the term table if
+// it is missing, and rebuilds it if an earlier build was interrupted and left
+// it invalid. It builds CONCURRENTLY, outside a transaction, so capture
+// writes continue during the build (CONCURRENTLY holds only a lock that
+// excludes other schema changes and vacuum) and the search keeps using the
+// primary key, slower, until the index is valid: a planner never uses an
+// invalid index. It waits for transactions older than the build to end, so a
+// stuck long transaction delays it but blocks nothing. A failed or cancelled
+// build leaves an invalid index; the next call (the retry loop of
+// StartRetrievalMigrations) drops and rebuilds it.
+func (s *Store) ensureCaptureTermsCoverIndex(ctx context.Context) error {
+	if !s.retrievalState.captureIndexReady.Load() {
+		return nil
+	}
+	// One connection, so the session advisory lock and the statements share a
+	// session.
+	conn, err := s.corpus().Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	var got bool
+	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(?)`, captureTermsCoverLockKey).Scan(&got); err != nil {
+		return err
+	}
+	if !got {
+		return nil // another process is building it
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(?)`, captureTermsCoverLockKey)
+	}()
+	var valid sql.NullBool
+	err = conn.QueryRowContext(ctx, `SELECT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+		WHERE c.relname = ? AND i.indrelid = ?::regclass`, captureTermsCoverIdx, captureTermsTable).Scan(&valid)
+	switch {
+	case err == nil && valid.Bool:
+		return nil
+	case err == nil:
+		log.Printf("corpusd retrieval migrate index=%s was left invalid by an interrupted build; rebuilding", captureTermsCoverIdx)
+		if _, err := conn.ExecContext(ctx, `DROP INDEX CONCURRENTLY IF EXISTS `+captureTermsCoverIdx); err != nil {
+			return fmt.Errorf("drop invalid %s: %w", captureTermsCoverIdx, err)
+		}
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	start := time.Now()
+	if _, err := conn.ExecContext(ctx, captureTermsCoverDDL); err != nil {
+		return fmt.Errorf("build %s: %w", captureTermsCoverIdx, err)
+	}
+	log.Printf("corpusd retrieval migrate index=%s table=%s ms=%d concurrently", captureTermsCoverIdx, captureTermsTable, time.Since(start).Milliseconds())
+	return nil
 }
