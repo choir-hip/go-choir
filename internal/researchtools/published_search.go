@@ -59,21 +59,21 @@ func (c *CorpusdCaptureSink) SearchPublished(ctx context.Context, query string, 
 // searchPublished returns the published pieces for the query and a note
 // that is empty when the search was whole. A search that failed or cannot be
 // made returns no pieces and says so; it never reads as "nothing published".
-func searchPublished(ctx context.Context, deps Dependencies, query string, limit int) ([]PublishedPiece, string) {
+func searchPublished(ctx context.Context, deps Dependencies, query string, limit int) (pieces []PublishedPiece, note string, searched bool) {
 	searcher, ok := deps.Captures.(PublishedSearcher)
 	if !ok {
-		return []PublishedPiece{}, PublishedNotSearchedNote+": the shared store is not configured"
+		return []PublishedPiece{}, "published pieces not searched: the shared store is not configured", false
 	}
 	answer, err := searcher.SearchPublished(ctx, query, limit)
 	if err != nil {
-		return []PublishedPiece{}, PublishedNotSearchedNote+": "+err.Error()
+		return []PublishedPiece{}, "published pieces not searched: "+err.Error(), false
 	}
 	if answer.Pieces == nil {
 		answer.Pieces = []PublishedPiece{}
 	}
-	note := ""
 	if answer.Capped {
-		note = "published search capped: the archive index is still being built, so older pieces may be missing; search again later if a piece you expect is absent"
+		// Answered, but not over every publication: not a full search.
+		return answer.Pieces, "published search capped: the archive index is still being built, so older pieces may be missing; search again later if a piece you expect is absent", false
 	}
-	return answer.Pieces, note
+	return answer.Pieces, "", true
 }
