@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""status-vectors: how far the vector index has got (station V2 of
+docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md).
+
+Read only against Node B: one ssh reads corpusd's journal; nothing is written
+there and no database is queried. Fetching and computing are separate: fetch()
+returns raw journal lines, compute() is pure. --fixture FILE feeds compute()
+journal lines with no network (scripts/test-status-scripts.sh).
+
+  status-vectors [--json] [--fixture FILE] [--node HOST]
+
+Exit 0, or 2 when the fetch failed.
+
+What it reads (internal/platform/vector_worker.go, vector_search.go):
+  embed_gap   `corpusd retrieval op=embed_gap shape=stories|captures ms= rows=
+              have= want= remaining= model=`, written at the start of a pass and
+              at each batch boundary; the newest line of each shape in the last
+              3 days gives have, want and remaining. Stories count versions (a
+              version is written whole); captures count captures. Until a pass
+              has passed over them, want includes captures that turn out to be
+              owner-private or empty and versions that are not public, so
+              remaining is an upper bound until the pass's last line.
+  searches    `op=vector_search shape=vector_stories|vector_captures ms= rows=`
+              in the last hour: a count and the mean ms of each shape.
+The journal carries ids and counts only; no text is printed.
+"""
+import json
+import re
+import subprocess
+import sys
+
+NODE = "node-b"
+
+REMOTE = r"""
+echo "##GAP"
+journalctl -u go-choir-corpusd --since '-3 days' --no-pager -o cat --utc 2>/dev/null | grep -a 'op=embed_gap' | tail -n 200
+echo "##SEARCH"
+journalctl -u go-choir-corpusd --since '-1 hour' --no-pager -o cat --utc 2>/dev/null | grep -a 'op=vector_search' | tail -n 20000
+echo "##END"
+"""
+
+GAP_RE = re.compile(r"op=embed_gap shape=(stories|captures) ms=([0-9.]+) rows=(\d+) have=(\d+) want=(\d+) remaining=(\d+) model=([0-9a-f]+)")
+SEARCH_RE = re.compile(r"op=vector_search shape=(vector_stories|vector_captures) ms=([0-9.]+) rows=(\d+)")
+
+
+def compute(text):
+    """text is journal lines of both kinds, in order."""
+    gap = {}
+    search = {"vector_stories": [], "vector_captures": []}
+    for ln in text.splitlines():
+        m = GAP_RE.search(ln)
+        if m:
+            gap[m.group(1)] = {"have": int(m.group(4)), "want": int(m.group(5)),
+                               "remaining": int(m.group(6)), "model": m.group(7)}
+            continue
+        m = SEARCH_RE.search(ln)
+        if m:
+            search[m.group(1)].append(float(m.group(2)))
+    rep = {"gap": gap, "searches": {}}
+    for shape, ms in search.items():
+        rep["searches"][shape] = {"count": len(ms), "mean_ms": round(sum(ms) / len(ms), 2) if ms else None}
+    lines = []
+    for kind in ("stories", "captures"):
+        g = gap.get(kind)
+        if g is None:
+            lines.append("%-9s no embed_gap line in the last 3 days (worker not started, or nothing yet)" % kind)
+        else:
+            lines.append("%-9s have %d  want %d  remaining %d  model %s" % (kind, g["have"], g["want"], g["remaining"], g["model"]))
+    for shape in ("vector_stories", "vector_captures"):
+        s = rep["searches"][shape]
+        lines.append("%-16s last hour: %d searches, mean %s" % (shape, s["count"], ("%.2f ms" % s["mean_ms"]) if s["count"] else "-"))
+    rep["text"] = "\n".join(lines)
+    return rep
+
+
+def sections(text):
+    out, cur = {}, None
+    for ln in text.splitlines():
+        if ln.startswith("##"):
+            cur = ln[2:].strip()
+            out[cur] = []
+        elif cur:
+            out[cur].append(ln)
+    return out
+
+
+def fetch(node):
+    p = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node, REMOTE],
+                       capture_output=True, text=True, timeout=240)
+    s = sections(p.stdout)
+    if "GAP" not in s or "END" not in s:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    return "\n".join(s["GAP"] + s.get("SEARCH", []))
+
+
+def main(argv):
+    as_json = "--json" in argv
+    node = argv[argv.index("--node") + 1] if "--node" in argv else NODE
+    fixture = argv[argv.index("--fixture") + 1] if "--fixture" in argv else None
+    try:
+        if fixture:
+            with open(fixture) as f:
+                raw = f.read()
+        else:
+            raw = fetch(node)
+        rep = compute(raw)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as e:
+        print("status-vectors: unavailable: %s" % e, file=sys.stderr)
+        return 2
+    print(json.dumps(rep, sort_keys=True) if as_json else rep["text"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
