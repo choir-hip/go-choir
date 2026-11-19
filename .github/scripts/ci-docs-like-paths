@@ -25,8 +25,10 @@ ci_go_script_path() {
     scripts/verify-host-hardening.py|scripts/vision_probe.py|scripts/vmm_confinement_verify.py) return 0 ;;
     scripts/vmmanager-netfilter-test.sh|scripts/host_floor_probe.py) return 0 ;;
     # internal/platform/capture_rank_test.go runs the first against a test corpus;
-    # vector_worker.go names the second as the reader of its journal line.
-    scripts/proofs/corpus-search-recall|scripts/status-vectors) return 0 ;;
+    # vector_worker.go names the second as the reader of its journal line, and
+    # internal/agentcore/event_layer.go names the third as the reader of its
+    # flush line (scripts/test-status-scripts.sh runs it).
+    scripts/proofs/corpus-search-recall|scripts/status-vectors|scripts/status-corpus-reuse) return 0 ;;
     # Named by Go tests under internal/platform (the receipt table scans); the
     # operator's DDL script on the live table and its self-test run in CI
     # (receipts-index-swap job) but are not deployed (deploy-impact-classify).
