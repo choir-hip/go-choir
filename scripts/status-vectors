@@ -29,6 +29,10 @@ What it reads (internal/platform/vector_worker.go, vector_search.go):
               worker's error `the pgvector extension is not installed` or
               `pgvector X is older than ...`; the first line of the output says
               "pgvector MISSING or too old" when the error is the newest.
+  import      `op=vector_import shape=inbox|route ms= rows= written= refused=
+              sample_min_cosine= err= reasons= job= state= file=`: the last
+              import job in the last 3 days, from the spool inbox or the route,
+              with its counts and the rows dropped by reason.
   searches    `op=vector_search shape=vector_stories|vector_captures ms= rows=`
               in the last hour: a count and the mean ms of each shape.
 The journal carries ids and counts only; no text is printed.
@@ -42,7 +46,7 @@ NODE = "node-b"
 
 REMOTE = r"""
 echo "##GAP"
-journalctl -u go-choir-corpusd --since '-3 days' --no-pager -o cat --utc 2>/dev/null | grep -aE 'op=embed_gap|pgvector extension is not installed|pgvector [0-9.]+ is older' | tail -n 200
+journalctl -u go-choir-corpusd --since '-3 days' --no-pager -o cat --utc 2>/dev/null | grep -aE 'op=embed_gap|op=vector_import|pgvector extension is not installed|pgvector [0-9.]+ is older' | tail -n 200
 echo "##SEARCH"
 journalctl -u go-choir-corpusd --since '-1 hour' --no-pager -o cat --utc 2>/dev/null | grep -a 'op=vector_search' | tail -n 20000
 echo "##END"
@@ -52,15 +56,23 @@ GAP_RE = re.compile(r"op=embed_gap shape=(stories|captures) ms=([0-9.]+) rows=(\
 SEARCH_RE = re.compile(r"op=vector_search shape=(vector_stories|vector_captures) ms=([0-9.]+) rows=(\d+)")
 
 
+IMPORT_RE = re.compile(r"op=vector_import shape=(\S+) ms=(\d+) rows=(\d+) written=(\d+) refused=(\d+) sample_min_cosine=([0-9.]+) err=(\S*) reasons=(\S*) job=(\S+) state=(\S+) file=(\S*)")
 EXT_RE = re.compile(r"(pgvector extension is not installed[^\n]*|pgvector [0-9.]+ is older[^\n]*)")
 
 
 def compute(text):
     """text is journal lines of both kinds, in order."""
     gap = {}
+    last_import = None
     extension = None  # the newest of: an embed_gap line (ok) or an extension error (missing)
     search = {"vector_stories": [], "vector_captures": []}
     for ln in text.splitlines():
+        im = IMPORT_RE.search(ln)
+        if im:
+            last_import = {"source": im.group(1), "ms": int(im.group(2)), "rows": int(im.group(3)), "written": int(im.group(4)),
+                           "refused": int(im.group(5)), "min_cosine": float(im.group(6)), "err": im.group(7), "reasons": im.group(8),
+                           "job": im.group(9), "state": im.group(10), "file": im.group(11)}
+            continue
         e = EXT_RE.search(ln)
         if e:
             extension = "MISSING or too old: " + e.group(1)[:160]
@@ -75,7 +87,7 @@ def compute(text):
         m = SEARCH_RE.search(ln)
         if m:
             search[m.group(1)].append(float(m.group(2)))
-    rep = {"gap": gap, "searches": {}, "extension": extension or "unknown (no worker line in the last 3 days)"}
+    rep = {"gap": gap, "import": last_import, "searches": {}, "extension": extension or "unknown (no worker line in the last 3 days)"}
     for shape, ms in search.items():
         rep["searches"][shape] = {"count": len(ms), "mean_ms": round(sum(ms) / len(ms), 2) if ms else None}
     lines = ["pgvector  %s" % rep["extension"]]
@@ -85,6 +97,13 @@ def compute(text):
             lines.append("%-9s no embed_gap line in the last 3 days (worker not started, or nothing yet)" % kind)
         else:
             lines.append("%-9s have %d  want %d  remaining %d  model %s  refused %d" % (kind, g["have"], g["want"], g["remaining"], g["model"], g["refused"]))
+    if last_import:
+        li = last_import
+        lines.append("last import  %s %s%s: %s, rows %d, written %d, dropped %d%s, min cosine %.5f%s" % (
+            li["source"], li["job"], (" file " + li["file"]) if li["file"] else "", li["state"], li["rows"], li["written"], li["refused"],
+            (" (" + li["reasons"] + ")") if li["reasons"] else "", li["min_cosine"], (", err " + li["err"]) if li["err"] else ""))
+    else:
+        lines.append("last import  none in the last 3 days")
     for shape in ("vector_stories", "vector_captures"):
         s = rep["searches"][shape]
         lines.append("%-16s last hour: %d searches, mean %s" % (shape, s["count"], ("%.2f ms" % s["mean_ms"]) if s["count"] else "-"))
