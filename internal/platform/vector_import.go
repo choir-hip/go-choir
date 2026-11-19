@@ -1,0 +1,526 @@
+package platform
+
+// Import of vectors made elsewhere (station V2; the Mac makes the first pass,
+// station V3). The file is input to corpusd, which stays the only writer: a
+// row goes through the checks a worker-made vector goes through (the model's
+// hash, text_sha against the passage this host cuts, public text only) and is
+// written by the same functions, with a sampled re-embedding on top. The form is an operator route on corpusd's host loopback port
+// (POST /internal/platform/vectors/import, X-Internal-Caller plus the host
+// credential, like artifact-gc) rather than a subcommand: a subcommand would
+// be a second process with its own database credentials and its own embedder
+// client, and the route already has both, and the loaded stories' and
+// captures' text beside it. The file is posted from the host (curl
+// --data-binary to 127.0.0.1:8086); the route answers 202 with a job id and
+// GET ?job= reports it.
+//
+// File: one JSON object a line (docs/reference/EMBEDDINGGEMMA.md, "The first
+// pass file"): kind ("story_passage" or "capture"), id (a publication VERSION's
+// canonical id, or a capture's), ordinal, text_sha (SHA-256 of the passage
+// text), model (the GGUF's SHA-256), dim (256) and v (base64 of 256
+// little-endian float16 values). No text.
+//
+// The file is refused whole when any row names another model or dimension, or
+// is malformed, and when a sample re-embedded here by the Node B embedder
+// does not agree (cosine 0.999 or more) with the file's vector. Past those, a
+// row is written only if this host cuts the same passage (text_sha equal) and
+// the text may have a vector (public); a row that does not match is counted
+// and dropped, so a different cut can never be mistaken for ours. A story
+// version is written whole or not at all.
+
+import (
+	"bufio"
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/embedder"
+)
+
+const (
+	vectorKindStory   = "story_passage"
+	vectorKindCapture = "capture"
+	// vectorImportMinCosine is the agreement a re-embedded sample must reach.
+	vectorImportMinCosine = 0.999
+	// vectorImportSamples is how many rows are re-embedded.
+	vectorImportSamples = 32
+	// vectorImportMaxBytes bounds a posted file (an operator route; the
+	// first pass is about 215,000 rows of 700 bytes).
+	vectorImportMaxBytes = 2 << 30
+	vectorImportDirName  = "vector-import"
+)
+
+// ErrVectorImportRefused marks a file refused whole.
+var ErrVectorImportRefused = errors.New("vector import refused")
+
+type vectorFileRow struct {
+	Kind    string `json:"kind"`
+	ID      string `json:"id"`
+	Ordinal int    `json:"ordinal"`
+	TextSHA string `json:"text_sha"`
+	Model   string `json:"model"`
+	Dim     int    `json:"dim"`
+	V       string `json:"v"`
+}
+
+// decodeHalfVector reads a row's v: 256 little-endian float16 values.
+func decodeHalfVector(b64 string) ([]float32, error) {
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, fmt.Errorf("v is not base64: %w", err)
+	}
+	if len(raw) != 2*embedder.Dim {
+		return nil, fmt.Errorf("v is %d bytes, want %d", len(raw), 2*embedder.Dim)
+	}
+	out := make([]float32, embedder.Dim)
+	var sum float64
+	for i := range out {
+		f, ok := halfToFloat32(uint16(raw[2*i]) | uint16(raw[2*i+1])<<8)
+		if !ok {
+			return nil, errors.New("v holds a non-finite value")
+		}
+		out[i] = f
+		sum += float64(f) * float64(f)
+	}
+	if sum == 0 {
+		return nil, errors.New("v is the zero vector")
+	}
+	return out, nil
+}
+
+// halfToFloat32 converts an IEEE 754 half; ok is false for infinity and NaN.
+func halfToFloat32(h uint16) (float32, bool) {
+	sign := uint32(h>>15) & 1
+	exp := int(h>>10) & 0x1f
+	frac := uint32(h & 0x3ff)
+	switch {
+	case exp == 31:
+		return 0, false
+	case exp == 0 && frac == 0:
+		return math.Float32frombits(sign << 31), true
+	case exp == 0:
+		f := float32(frac) * float32(math.Ldexp(1, -24))
+		if sign == 1 {
+			f = -f
+		}
+		return f, true
+	}
+	return math.Float32frombits(sign<<31 | uint32(exp-15+127)<<23 | frac<<13), true
+}
+
+// VectorImportJob is the state of an import.
+type VectorImportJob struct {
+	JobID      string         `json:"job_id"`
+	State      string         `json:"state"` // running | done | refused | failed
+	Error      string         `json:"error,omitempty"`
+	StartedAt  time.Time      `json:"started_at"`
+	FinishedAt *time.Time     `json:"finished_at,omitempty"`
+	Result     *VectorImport  `json:"result,omitempty"`
+	Rejected   map[string]int `json:"rejected,omitempty"`
+}
+
+// VectorImport is what an import did.
+type VectorImport struct {
+	Rows    int `json:"rows"`
+	Written int `json:"written"`
+	// Rejected counts dropped rows by reason: text_mismatch, not_found,
+	// not_public, bad_ordinal, incomplete_version, no_text.
+	Rejected map[string]int `json:"rejected,omitempty"`
+	// Samples re-embedded, and the lowest cosine among them.
+	Samples   int     `json:"samples"`
+	MinCosine float64 `json:"min_cosine"`
+}
+
+func (r *VectorImport) reject(reason string, n int) {
+	if r.Rejected == nil {
+		r.Rejected = map[string]int{}
+	}
+	r.Rejected[reason] += n
+}
+
+// scanVectorFile calls fn for every line of the file, in order.
+func scanVectorFile(path string, fn func(i int, row vectorFileRow, v []float32) error) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	rd := bufio.NewReaderSize(f, 1<<20)
+	for i := 0; ; i++ {
+		line, err := rd.ReadBytes('\n')
+		if len(strings.TrimSpace(string(line))) > 0 {
+			var row vectorFileRow
+			if jerr := json.Unmarshal(line, &row); jerr != nil {
+				return fmt.Errorf("%w: line %d is not a row: %v", ErrVectorImportRefused, i+1, jerr)
+			}
+			v, derr := decodeHalfVector(row.V)
+			if derr != nil {
+				return fmt.Errorf("%w: line %d: %v", ErrVectorImportRefused, i+1, derr)
+			}
+			if err := fn(i, row, v); err != nil {
+				return err
+			}
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// rowInput is what this host derives for a file row: the prompt input, the
+// text's SHA and the key of the row, or a reason it cannot be written.
+type rowInput struct {
+	Input, TextSHA string
+	Owner, Comp    string
+	StoryID        string
+	Day            time.Time
+	reason         string
+}
+
+// vectorRowDeriver derives rows' inputs, holding the last story version.
+type vectorRowDeriver struct {
+	s       *Service
+	og      *ObjectGraphStore
+	version string
+	story   string
+	vt      storyVersionText
+	vtOK    bool
+	vtErr   error
+}
+
+func (d *vectorRowDeriver) storyVersion(ctx context.Context, versionID string) (storyID string, vt storyVersionText, ok bool, err error) {
+	if d.version == versionID {
+		return d.story, d.vt, d.vtOK, d.vtErr
+	}
+	d.version, d.story, d.vt, d.vtOK, d.vtErr = versionID, "", storyVersionText{}, false, nil
+	var storyID2 string
+	qerr := d.s.store.corpus().QueryRowContext(ctx, `SELECT from_id FROM og_edges WHERE to_id = ? AND kind = 'has_version' AND tombstone = FALSE LIMIT 1`, versionID).Scan(&storyID2)
+	if qerr != nil {
+		d.vtErr = qerr
+		return "", d.vt, false, qerr
+	}
+	d.story = storyID2
+	d.vt, d.vtOK, d.vtErr = d.s.loadStoryVersionText(ctx, d.og, storyID2, versionID)
+	return d.story, d.vt, d.vtOK, d.vtErr
+}
+
+func (d *vectorRowDeriver) derive(ctx context.Context, row vectorFileRow) rowInput {
+	switch row.Kind {
+	case vectorKindStory:
+		story, vt, ok, err := d.storyVersion(ctx, row.ID)
+		if err != nil {
+			return rowInput{reason: "not_found"}
+		}
+		if !ok {
+			return rowInput{reason: "not_public"}
+		}
+		if row.Ordinal < 0 || row.Ordinal >= len(vt.Passages) {
+			return rowInput{reason: "bad_ordinal"}
+		}
+		p := vt.Passages[row.Ordinal]
+		return rowInput{Input: embedder.DocumentInput(vt.Title, p), TextSHA: embedder.TextSHA(p), StoryID: story, Day: vt.Day}
+	case vectorKindCapture:
+		objs, err := d.s.store.captureObjectsByIDAny(ctx, []string{row.ID})
+		obj, found := objs[row.ID]
+		if err != nil || !found {
+			return rowInput{reason: "not_found"}
+		}
+		title, hash, ok := captureVectorSource(obj)
+		if !ok {
+			return rowInput{reason: "not_public"}
+		}
+		if row.Ordinal != 0 {
+			return rowInput{reason: "bad_ordinal"}
+		}
+		lead, err := captureLeadPassage(d.s.captureBodies, hash)
+		if err != nil {
+			return rowInput{reason: "no_text"}
+		}
+		return rowInput{Input: embedder.DocumentInput(title, lead), TextSHA: embedder.TextSHA(lead), Owner: obj.OwnerID, Comp: obj.ComputerID, Day: captureDay(obj)}
+	}
+	return rowInput{reason: "not_found"}
+}
+
+// ImportVectorFile imports the file at path. It returns ErrVectorImportRefused
+// (wrapped) when the file is refused whole; nothing is written then.
+func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImport, error) {
+	res := VectorImport{MinCosine: 1}
+	emb := s.store.embedder()
+	if emb == nil {
+		return res, errors.New("vector import: no embedder configured")
+	}
+	if err := s.store.ensureVectorTables(ctx); err != nil && !s.store.VectorsReady() {
+		return res, err
+	}
+	// Pass 1: every row names our model and dimension and decodes.
+	if err := scanVectorFile(path, func(i int, row vectorFileRow, v []float32) error {
+		res.Rows++
+		if row.Model != embedder.ModelHash {
+			return fmt.Errorf("%w: line %d names model %q, this host's is %s", ErrVectorImportRefused, i+1, row.Model, embedder.ModelHash)
+		}
+		if row.Dim != embedder.Dim {
+			return fmt.Errorf("%w: line %d has dim %d, want %d", ErrVectorImportRefused, i+1, row.Dim, embedder.Dim)
+		}
+		if row.Kind != vectorKindStory && row.Kind != vectorKindCapture {
+			return fmt.Errorf("%w: line %d has kind %q", ErrVectorImportRefused, i+1, row.Kind)
+		}
+		return nil
+	}); err != nil {
+		return res, err
+	}
+	if res.Rows == 0 {
+		return res, fmt.Errorf("%w: the file has no rows", ErrVectorImportRefused)
+	}
+
+	// Pass 2: a sample, re-embedded here, must agree with the file.
+	deriver := &vectorRowDeriver{s: s, og: s.ogStore()}
+	step := (res.Rows + vectorImportSamples - 1) / vectorImportSamples
+	var sampleInputs []string
+	var sampleVecs [][]float32
+	if err := scanVectorFile(path, func(i int, row vectorFileRow, v []float32) error {
+		if i%step != 0 {
+			return nil
+		}
+		in := deriver.derive(ctx, row)
+		if in.reason != "" || in.TextSHA != row.TextSHA {
+			return nil // not verifiable here; the write pass drops or accepts it on its own check
+		}
+		sampleInputs = append(sampleInputs, in.Input)
+		sampleVecs = append(sampleVecs, v)
+		return nil
+	}); err != nil {
+		return res, err
+	}
+	if len(sampleInputs) == 0 {
+		return res, fmt.Errorf("%w: no row of the file can be checked against this host's text (the text or its cut differs)", ErrVectorImportRefused)
+	}
+	got, err := s.embedInputs(ctx, "import_sample", sampleInputs)
+	if err != nil {
+		return res, err
+	}
+	for i, g := range got {
+		if g == nil {
+			return res, fmt.Errorf("vector import: the embedder refused sample %d", i)
+		}
+		c := embedder.Cosine(g, sampleVecs[i])
+		res.Samples++
+		if c < res.MinCosine {
+			res.MinCosine = c
+		}
+	}
+	if res.MinCosine < vectorImportMinCosine {
+		return res, fmt.Errorf("%w: a sample of %d rows agrees only to cosine %.5f, need %.3f", ErrVectorImportRefused, res.Samples, res.MinCosine, vectorImportMinCosine)
+	}
+
+	// Pass 3: write. Rows of a story version are contiguous; the version is
+	// written whole when every passage is present and matches, else dropped.
+	var storyGroup []vectorFileRow
+	var storyVecs [][]float32
+	var capBatch []captureVectorRow
+	flushStory := func() error {
+		if len(storyGroup) == 0 {
+			return nil
+		}
+		defer func() { storyGroup, storyVecs = nil, nil }()
+		versionID := storyGroup[0].ID
+		story, vt, ok, err := deriver.storyVersion(ctx, versionID)
+		if err != nil {
+			res.reject("not_found", len(storyGroup))
+			return nil
+		}
+		if !ok {
+			res.reject("not_public", len(storyGroup))
+			return nil
+		}
+		if len(storyGroup) != len(vt.Passages) {
+			res.reject("incomplete_version", len(storyGroup))
+			return nil
+		}
+		byOrd := map[int]int{}
+		for i, r := range storyGroup {
+			byOrd[r.Ordinal] = i
+		}
+		rows := make([]storyVectorRow, len(vt.Passages))
+		for ord, p := range vt.Passages {
+			i, found := byOrd[ord]
+			if !found {
+				res.reject("incomplete_version", len(storyGroup))
+				return nil
+			}
+			if storyGroup[i].TextSHA != embedder.TextSHA(p) {
+				res.reject("text_mismatch", len(storyGroup))
+				return nil
+			}
+			rows[ord] = storyVectorRow{StoryID: story, VersionID: versionID, Ordinal: ord, TextSHA: storyGroup[i].TextSHA, Day: vt.Day, Vec: storyVecs[i]}
+		}
+		if err := s.store.writeStoryVersionVectors(ctx, story, versionID, rows); err != nil {
+			return err
+		}
+		res.Written += len(rows)
+		return nil
+	}
+	flushCaptures := func() error {
+		if len(capBatch) == 0 {
+			return nil
+		}
+		defer func() { capBatch = nil }()
+		if err := s.store.writeCaptureVectors(ctx, capBatch); err != nil {
+			return err
+		}
+		res.Written += len(capBatch)
+		return nil
+	}
+	err = scanVectorFile(path, func(i int, row vectorFileRow, v []float32) error {
+		switch row.Kind {
+		case vectorKindStory:
+			if len(storyGroup) > 0 && storyGroup[0].ID != row.ID {
+				if err := flushStory(); err != nil {
+					return err
+				}
+			}
+			storyGroup = append(storyGroup, row)
+			storyVecs = append(storyVecs, v)
+		case vectorKindCapture:
+			in := deriver.derive(ctx, row)
+			switch {
+			case in.reason != "":
+				res.reject(in.reason, 1)
+			case in.TextSHA != row.TextSHA:
+				res.reject("text_mismatch", 1)
+			default:
+				capBatch = append(capBatch, captureVectorRow{ID: row.ID, Owner: in.Owner, Computer: in.Comp, TextSHA: in.TextSHA, Day: in.Day, Vec: v})
+				if len(capBatch) >= 200 {
+					return flushCaptures()
+				}
+			}
+		}
+		return nil
+	})
+	if err == nil {
+		err = flushStory()
+	}
+	if err == nil {
+		err = flushCaptures()
+	}
+	return res, err
+}
+
+// StartVectorImport spools nothing itself: it runs ImportVectorFile on path
+// in the background and returns the job. One import runs at a time.
+func (s *Service) StartVectorImport(path string, remove bool) (VectorImportJob, error) {
+	v := &s.store.vec
+	v.importMu.Lock()
+	defer v.importMu.Unlock()
+	if v.jobs == nil {
+		v.jobs = map[string]*VectorImportJob{}
+	}
+	if cur := v.jobs[v.lastJob]; cur != nil && cur.State == "running" {
+		return *cur, errors.New("a vector import is already running")
+	}
+	var b [6]byte
+	_, _ = rand.Read(b[:])
+	job := &VectorImportJob{JobID: "vi-" + time.Now().UTC().Format("20060102T150405Z") + "-" + hex.EncodeToString(b[:]), State: "running", StartedAt: time.Now().UTC()}
+	v.jobs[job.JobID] = job
+	v.lastJob = job.JobID
+	go func() {
+		res, err := s.ImportVectorFile(context.Background(), path)
+		if remove {
+			_ = os.Remove(path)
+		}
+		v.importMu.Lock()
+		defer v.importMu.Unlock()
+		now := time.Now().UTC()
+		job.FinishedAt = &now
+		job.Result = &res
+		job.Rejected = res.Rejected
+		switch {
+		case err == nil:
+			job.State = "done"
+		case errors.Is(err, ErrVectorImportRefused):
+			job.State, job.Error = "refused", err.Error()
+		default:
+			job.State, job.Error = "failed", err.Error()
+		}
+		log.Printf("corpusd vectors import job=%s state=%s rows=%d written=%d rejected=%v samples=%d min_cosine=%.5f err=%s",
+			job.JobID, job.State, res.Rows, res.Written, res.Rejected, res.Samples, res.MinCosine, job.Error)
+		s.store.KickVectors()
+	}()
+	return *job, nil
+}
+
+// VectorImportStatus returns a job by id, or the latest when id is empty.
+func (s *Service) VectorImportStatus(id string) (VectorImportJob, bool) {
+	v := &s.store.vec
+	v.importMu.Lock()
+	defer v.importMu.Unlock()
+	if id == "" {
+		id = v.lastJob
+	}
+	job := v.jobs[id]
+	if job == nil {
+		return VectorImportJob{}, false
+	}
+	return *job, true
+}
+
+// HandleVectorImport handles POST (post the file as the body) and GET
+// (?job=<id>, the latest when empty) on /internal/platform/vectors/import.
+func (h *Handler) HandleVectorImport(w http.ResponseWriter, r *http.Request) {
+	if !trustedInternalCaller(r) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		job, ok := h.service.VectorImportStatus(strings.TrimSpace(r.URL.Query().Get("job")))
+		if !ok {
+			writeJSON(w, http.StatusNotFound, apiError{Error: "vector import job not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, job)
+	case http.MethodPost:
+		dir := filepath.Join(h.service.artifactsRoot, vectorImportDirName)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			return
+		}
+		f, err := os.CreateTemp(dir, "import-*.ndjson")
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			return
+		}
+		_, err = io.Copy(f, http.MaxBytesReader(w, r.Body, vectorImportMaxBytes))
+		cerr := f.Close()
+		if err == nil {
+			err = cerr
+		}
+		if err != nil {
+			_ = os.Remove(f.Name())
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "read body: " + err.Error()})
+			return
+		}
+		job, err := h.service.StartVectorImport(f.Name(), true)
+		if err != nil {
+			_ = os.Remove(f.Name())
+			writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, job)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}

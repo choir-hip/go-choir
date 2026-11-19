@@ -557,5 +557,34 @@ check "R10 a corpus failure is shown in its own section and changes neither exit
 env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/cr_a.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
 check "R10 the corpus section prints between the reports and the last line" '[ "$rc" = 0 ] && grep -q "== corpus reuse" "$root/out" && tail -n 1 "$root/out" | grep -q "OK$"'
 
+# status-vectors (station V2). Failure list, written before the code:
+#  V1  the newest embed_gap line of each shape is not the one shown, or one
+#      shape's line is shown for the other
+#  V2  remaining is not the line's own remaining; have and want are not read
+#  V3  searches are not counted per shape, or the mean ms is wrong; none is "-"
+#  V4  a journal with no embed_gap line crashes or invents numbers
+#  V5  the --json output lacks the same numbers; an unreadable fixture exits 2
+vectors="$here/status-vectors"
+cat >"$root/vec.log" <<'EOF'
+2026/11/19 05:00:00 corpusd retrieval op=embed_gap shape=stories ms=0.00 rows=0 have=100 want=120 remaining=20 model=2188ac1deca4
+2026/11/19 05:00:01 corpusd retrieval op=embed_gap shape=captures ms=0.00 rows=0 have=10 want=500 remaining=490 model=2188ac1deca4
+2026/11/19 05:00:30 corpusd retrieval op=embed_gap shape=captures ms=12.50 rows=4 have=14 want=500 remaining=486 model=2188ac1deca4
+2026/11/19 05:01:00 corpusd retrieval op=embed_gap shape=stories ms=900.00 rows=60 have=120 want=118 remaining=0 model=2188ac1deca4
+2026/11/19 05:02:00 corpusd retrieval op=vector_search shape=vector_stories ms=10.00 rows=5 err=
+2026/11/19 05:02:00 corpusd retrieval op=vector_search shape=vector_captures ms=30.00 rows=3 err=
+2026/11/19 05:03:00 corpusd retrieval op=vector_search shape=vector_stories ms=20.00 rows=5 err=
+EOF
+env -u BASH_ENV python3 "$vectors" --fixture "$root/vec.log" >"$root/out" 2>&1; rc=$?
+check "V1 the newest line of each shape: stories have 120, captures have 14" '[ "$rc" = 0 ] && grep -q "^stories .*have 120  want 118" "$root/out" && grep -q "^captures .*have 14  want 500" "$root/out"'
+check "V2 remaining is the line's own: stories 0, captures 486, model shown" 'grep -q "^stories .*remaining 0  model 2188ac1deca4" "$root/out" && grep -q "^captures .*remaining 486" "$root/out"'
+check "V3 two story searches mean 15.00 ms, one capture search 30.00 ms" 'grep -q "vector_stories .*2 searches, mean 15.00 ms" "$root/out" && grep -q "vector_captures .*1 searches, mean 30.00 ms" "$root/out"'
+printf 'nothing here\n' >"$root/vec0.log"
+env -u BASH_ENV python3 "$vectors" --fixture "$root/vec0.log" >"$root/out" 2>&1; rc=$?
+check "V4 no embed_gap line: said so, no numbers invented, searches show -" '[ "$rc" = 0 ] && grep -q "^stories .*no embed_gap line" "$root/out" && grep -q "vector_stories .*0 searches, mean -" "$root/out"'
+env -u BASH_ENV python3 "$vectors" --fixture "$root/vec.log" --json >"$root/out" 2>&1
+check "V5 json carries the numbers" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"gap\"][\"captures\"][\"remaining\"]==486 and d[\"searches\"][\"vector_stories\"][\"count\"]==2" "$root/out"'
+env -u BASH_ENV python3 "$vectors" --fixture "$root/nonexistent.log" >"$root/out" 2>&1; rc=$?
+check "V5 an unreadable fixture exits 2" '[ "$rc" = 2 ]'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
