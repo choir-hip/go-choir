@@ -57,3 +57,26 @@ that a process was gone was a process-list search, which missed it twice.
   the deploy as written; it does not measure what the skipped run would
   have caught that CI does not (CI's PostgreSQL has pgvector only since
   this change, never run before).
+
+## Three CI failures on this train in an hour (clustering, 2026-11-19T11:26Z)
+
+The train then failed CI three ways before anything of it deployed: the
+plan job refused a script a Go test runs as docs-like (C151), and two race
+shards failed on two tests (C153); a third test of the same shape failed in
+the import's landing run. One cluster, two causes:
+
+- **The landing's race run was skipped.** The three test failures are one
+  defect: a test reads or restores something (the captured log, the worker's
+  timing variables, the fake embedder's override) while a goroutine the code
+  under test leaves running still uses it. `scripts/land` runs
+  `internal/platform` under the race detector and fails on all three; the
+  accidental push ran build and gates only. The builders' own runs were
+  without the race detector, so the landing was the first place it would
+  have been seen.
+- **One CI contract test ran nowhere before a push.** Fixed the same hour
+  (`ci-relevant-script-names-reached-main-unseen-2026-11-19.md`).
+
+Changed approach, not another patch: the worker reads its timings once at
+start, so no test can race it by restoring them; the log capture locks its
+reads; a builder's brief for Go code with a background goroutine says to
+run the touched package under the race detector before handing over.
