@@ -93,8 +93,9 @@ var vectorPlainIndexes = []struct{ name, ddl string }{
 	{"idx_vsp_version", `CREATE INDEX idx_vsp_version ON vec_story_passages(version_id)`},
 	{"idx_vsp_day", `CREATE INDEX idx_vsp_day ON vec_story_passages(day)`},
 	{"idx_vc_scope_day", `CREATE INDEX idx_vc_scope_day ON vec_captures(owner_id, computer_id, day)`},
-	{"idx_vsp_refused", `CREATE INDEX idx_vsp_refused ON vec_story_passages(version_id) WHERE refused <> ''`},
-	{"idx_vc_refused", `CREATE INDEX idx_vc_refused ON vec_captures(capture_id) WHERE refused <> ''`},
+	// the per-pass refused counts filter by model and refused
+	{"idx_vsp_refused_model", `CREATE INDEX idx_vsp_refused_model ON vec_story_passages(model) WHERE refused <> ''`},
+	{"idx_vc_refused_model", `CREATE INDEX idx_vc_refused_model ON vec_captures(model) WHERE refused <> ''`},
 }
 
 // vectorState is the vector index's in-memory state: the embedder and the
@@ -203,6 +204,8 @@ func (s *Store) ensureVectorTables(ctx context.Context) error {
 		if _, err := db.ExecContext(ctx, vectorTablesDDL); err != nil {
 			return fmt.Errorf("vectors: create tables: %w", err)
 		}
+	} else if err := s.migrateVectorColumns(ctx); err != nil {
+		return err
 	}
 	for _, ix := range vectorPlainIndexes {
 		var exists bool
@@ -229,6 +232,32 @@ func (s *Store) ensureVectorTables(ctx context.Context) error {
 		}
 	}
 	return firstErr
+}
+
+// migrateVectorColumns brings a table made by an earlier schema (no refused
+// column, a NOT NULL embedding) to the current one. It reads the catalog first
+// and alters only what differs: an ALTER on every pass would take an exclusive
+// lock that conflicts with the HNSW build.
+func (s *Store) migrateVectorColumns(ctx context.Context) error {
+	for _, table := range []string{vecStoryTable, vecCaptureTable} {
+		var hasRefused bool
+		var embNullable string
+		if err := s.corpus().QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? AND column_name = 'refused'),
+			COALESCE((SELECT is_nullable FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? AND column_name = 'embedding'), 'YES')`, table, table).Scan(&hasRefused, &embNullable); err != nil {
+			return fmt.Errorf("vectors: read columns of %s: %w", table, err)
+		}
+		if !hasRefused {
+			if _, err := s.corpus().ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN IF NOT EXISTS refused TEXT NOT NULL DEFAULT ''`); err != nil {
+				return fmt.Errorf("vectors: add refused to %s: %w", table, err)
+			}
+		}
+		if embNullable == "NO" {
+			if _, err := s.corpus().ExecContext(ctx, `ALTER TABLE `+table+` ALTER COLUMN embedding DROP NOT NULL`); err != nil {
+				return fmt.Errorf("vectors: embedding of %s nullable: %w", table, err)
+			}
+		}
+	}
+	return nil
 }
 
 // ensureVectorIndex builds the HNSW index of a table if it is missing, and

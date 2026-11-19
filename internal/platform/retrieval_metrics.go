@@ -46,6 +46,9 @@ const (
 	retrievalVectorEmbed  = "vector_embed"
 	retrievalVectorWrite  = "vector_write"
 	retrievalVectorSweep  = "vector_sweep"
+	// One statement reads the has_version edges of a chunk of publications
+	// (the vector worker's story walk); rows are the publications answered.
+	retrievalPublishedVersionsOf = "published_versions_of"
 )
 
 // retrievalLogSlowOnly names operations that log only when slower than
