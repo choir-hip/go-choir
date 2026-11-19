@@ -269,12 +269,6 @@ component RootScreen
           column align-items="flex-start" gap=2 width="100%"
             text (devDetails ? "Demo controls are shown" : "Demo controls are hidden") font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
             text "The paper's editions and composition line, mail's demo states and the reader's demo menu (demo mode only)." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-        Hairline()
-        NavRow(address="lab:motion", title="Motion gallery", subtitle="The mark in every state", testId="settings-motion")
-        Hairline()
-        NavRow(address="lab:mark", title="Mark gallery", subtitle="Play with the tetramark: every motion, and the sliders", testId="settings-mark")
-        Hairline()
-        NavRow(address="lab:wait", title="The wait", subtitle="The alive wait on its own", testId="settings-wait")
 
 // ---------------------------------------------------------------- appearance
 
