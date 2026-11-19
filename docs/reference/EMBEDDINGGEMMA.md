@@ -397,7 +397,7 @@ pin (`fe13242`, 2026-10-15), the Hub's LFS listing and llama.cpp's tree on
 
 ### 0.11.1 The vector index in corpusd (station V2; built, not deployed)
 
-Code: `internal/platform/vector_store.go`, `vector_worker.go`, `vector_search.go`, `vector_outcome.go`;
+Code: `internal/platform/vector_store.go`, `vector_worker.go`, `vector_search.go`, `vector_import.go`;
 client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run against a real pgvector).
 
 - **Tables** (corpusd's graph database, beside `proj_capture_*`; created by the worker, not by
@@ -409,8 +409,9 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
   version's creation day or the capture's published, else fetched, day. A story version is written whole in one
   transaction, so one row means all its passages. HNSW on `halfvec_cosine_ops` on each table, built `CONCURRENTLY` under a
   session advisory lock, an invalid leftover dropped and rebuilt by the next pass.
-- **One writer.** corpusd alone writes vector rows: its embed worker, through two write functions, after the model's hash and the `text_sha` of the
-  passage corpusd cuts itself.
+- **One writer.** corpusd alone writes vector rows. The worker's vectors and the Mac's first-pass file (input to the import
+  below) pass the same checks (the model's hash, `text_sha` against the passage corpusd cuts itself, public text only) and are
+  written by the same two functions; the import adds a sampled re-embedding here.
 - **Worker.** (`vectorBatch = 4` is a throughput choice, not a quota or a limit on calls: the largest input the unit takes is 2,048
   tokens, so a batch is at most about 8,000 tokens and about 20 s of CPU at the measured 350 tokens a second, a query waiting behind it at
   most that long; four keeps that wait short while a call is still a handful of passages. Nothing is counted against it.)
@@ -436,20 +437,14 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
   Node B unit with the query prompt. No fusion. When the embedder is down, absent or the tables are not ready, the answer is an
   empty result whose `Unavailable` says why and no error, so a caller (station V4) answers from BM25 alone and says so; a
   caller that holds a vector can search without the embedder.
-- **How the index is filled in this landing: by the server's own worker, newest first** (stories newest publication and newest version first,
-  then captures newest first), one pass until its gap is closed. The import of the Mac's first-pass vectors (an operator route and a spool
-  inbox) is built on `lane/vec-inbox` and is **not landed**: its review kept finding defects in how a file that cannot be imported *now* is
-  retried, and the index does not depend on it. Rate: a pass works through the whole gap in batches of 4 with no wait between them (5 minutes when
+- **How the index is filled: by the server's own worker, newest first** (stories newest publication and newest version first,
+  then captures newest first), one pass until its gap is closed, **and by the import below** of vectors the Mac made in a first pass, which
+  spares the worker most of that time; the index does not depend on the import. The worker's rate: a pass works through the whole gap in batches of 4 with no wait between them (5 minutes when
   nothing is left). Measured: the unit's 4 threads embed about 350 tokens a second on the build VM (§0.9; 127 to 349 under load there);
   the Mac's passes averaged 285 tokens a story passage and 232 a capture lead (2,563 tokens/s over 9.0 rows/s; 2,669 over 11.5). Reasoned:
   45,673 story passages is 13.0 million tokens, about 10 hours; 215,926 captures is 50.1 million tokens, about 40 hours; about **50 hours (two days)** in all at
   350 tokens a second, 35 hours at 500, over five days at the loaded 127. Not measured on Node B (the unit runs at `CPUWeight` 10 beside the guests).
 - **The ranked answer** (station V4, `platform/capture_rank.go`; landed 2026-11-19 with the index): `SearchCaptures` with a
-  query calls `SearchVectors` once (4 times the answer size of each kind, under a 4 s deadline), keeps only the latest version of each
-  story, replaces a story by the captures its latest version cites (at most 8, `cites_capture` edges), and guarantees BM25's top three
-  pages a place at their BM25 rank. A window narrows the vector scan by day and each page again by its exact time; HNSW filters after
-  the scan, so a narrow window can return few rows (the journal's `vector=` is that count) and the answer is then mostly BM25's. When
-  the vectors are unavailable the answer is BM25's and `vector=unavailable`. Journal: `op=capture_search shape=ranked ... vector= bm25_kept=`.
   query calls `SearchVectors` once (4 times the answer size of each kind), keeps only the latest version of each story (a story is
   walked only through the version whose passage passed V2's eligibility predicate), replaces a story by the captures its latest version
   cites (at most 8, `cites_capture` edges), and guarantees BM25's top three pages a place at their BM25 rank. A window narrows the
@@ -460,6 +455,12 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
   index's answer on a list over 100,000 rows) or `partial` (an exact read hit the deadline); `vector=` stays the rows returned.
   When the vectors are unavailable the answer is BM25's and `vector=unavailable vector_state=unavailable`.
   Journal: `op=capture_search shape=ranked ... vector=<rows>|unavailable vector_state=exact|approximate|partial|unavailable bm25_kept=`.
+- **Import** (the Mac's first pass): `POST /internal/platform/vectors/import` on corpusd's loopback port 8086 with the host
+  credential, body one JSON row a line (`kind` `story_passage` or `capture`, `id` a publication version's or a capture's, `ordinal`,
+  `text_sha`, `model`, `dim` 256, `v` base64 of 256 float16); answers 202 and a job, `GET ?job=` reads it. Refused whole for another
+  model or dimension, a malformed row, or a sample of 32 rows re-embedded here that does not reach cosine 0.999. Past that a row is
+  written only when this host cuts the same passage (`text_sha` equal) and the text is public; the rest are counted by reason.
+  A route and not a subcommand because it needs the running process's embedder, text store and database credentials.
 
 ### 0.11.2 Primary sources for the server and pgvector (read 2026-11-19 from the pinned sources)
 
@@ -486,7 +487,7 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   "input (N tokens) is too large to process. increase the physical batch size", and more than the slot's context is "input (N
   tokens) is larger than the max context size ... skipping"; both are errors returned to the client (HTTP 500 / 400), the slot is
   released, nothing is embedded. A passage over 2048 tokens (about 2,400 CJK runes can reach it) therefore fails loudly: the worker's
-  one-by-one retry logs `embed refused` and records the refusal (0.11.3). It is never silently truncated.
+  one-by-one retry logs `embed refused` and skips it, the import's sample cannot embed it. It is never silently truncated.
 - **Flags at b12259** (`common/arg.cpp`): `-t/--threads` :1487, `-c/--ctx-size` :1609, `-b/--batch-size` :1639, `-ub/--ubatch-size`
   :1646, `--pooling` {none,mean,cls,last,rank} :2284, `-np/--parallel` :2515, `-m/--model` :3027, `--host` :3323, `--port` :3339,
   `--embedding/--embeddings` :3506. `/health`: `tools/server/server.cpp:171`. All used flags exist. Not verified by a run: that the
@@ -520,6 +521,9 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   `LLAMA_BUILD_UI=ON`, then a download from a Hugging Face bucket; with none of them it fails (seen: a Mac build without network). The
   nixpkgs derivation runs `npm run build` in `tools/ui` before cmake (`preConfigure`), which is why `npmDepsHash` is overridden; that this
   produces `tools/ui/dist` at b12259 is read from the cmake script, not built (no x86 builder here).
+- **The import's spool** (`artifacts/vector-import/`) is not under any namespace the artifact collector sweeps
+  (`artifact_gc.go` `artifactGCNamespaces`: projection-base, parts, platform-update, capture-bodies, file-cas-roots, file-cas-chunks, og);
+  corpusd removes leftover spool files when its worker starts.
 
 ### 0.11.3 Operating the vector index (what an idle pass costs, refusals, the policy clause, rollback, backups)
 
@@ -545,7 +549,14 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   passages (skipped; walked again when the mark changes); the story idle mark (stored only after a walk with no error). **One function decides
   what an embedder outcome may do** (`vector_outcome.go`, applied by `embedInputs` for every caller): the server names the input (its two too-large
   answers) = `refused`, the only effect that may write anything permanent and only about that input; a status error that names no input, or health failing = `down`, nothing
-  durable, the caller stops and the same work is found next pass; one call failing in transport = `skip`, nothing written. The worker's story and capture writers get those three effects and none inspects an error type. (The import's file fates are on `lane/vec-inbox`.) The third too-long wording of the server ("request (N tokens) exceeds
+  durable, the caller stops and the same work is found next pass; one call failing in transport = `skip`, nothing written. The worker, the import's sample and the inbox all get those
+  three effects, none inspects an error type. **A file** is refused (terminal, `refused/`) only for a fault of the file itself (`importFate`): format, model, dimension, bounds,
+  a file that cannot be opened, a `text_sha` this host does not cut the same, a sampled vector that disagrees with this host's embedding of a row it could embed, a symlink or
+  directory. Everything else (the server cannot answer, too few rows could be checked now, a database error) leaves the file in `inbox/` for the next pass (state `retry`
+  in the journal): unstarted work, not resumed work; a file found in `running/` at boot still goes to `interrupted/`. A sampled row the host's embedder refuses as too large is set aside and
+  another is drawn; pass 3 drops the set-aside rows (`oversized`) so the worker records its own refusal; an unsampled oversized row keeps the Mac's vector (see 0.11.4).
+  One consequence: a file whose sample keeps meeting rows that are too large or failing in transport waits (it is logged each pass), it is not refused.
+  Import row drops are never a stored state; the worker fills what the file did not write. The third too-long wording of the server ("request (N tokens) exceeds
   the available context size", `server-context.cpp:4098-4102`, a splittable configuration) is not classified: the unit's configuration cannot produce it, and an
   unrecognised wording degrades to retry, never to a durable refusal. The import's 32-row sample remains a pipeline check and not a per-row check (a design limit).
 - **No DDL on a request path.** Tables and plain indexes are created only when `to_regclass` finds them missing, by the worker and the
@@ -596,16 +607,48 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
   poll offers them again (feed items are not lost); `read.go:161-164` returns the error to the agent, which sees the failed Read. Nothing in the
   guest drops a capture silently. (No change made.)
 
-### 0.11.4 What the Mac's pass found (the import itself is not landed)
+### 0.11.4 The spool inbox (the Mac's file without HTTP or a credential)
 
+`internal/platform/vector_inbox.go`. Whoever can write corpusd's disk on the host already holds more than the host credential, so a
+directory adds no authority; the file passes every check the route applies (`ImportVectorFile`: another model or dimension, a bad row,
+a failed 32-row sample, the 4 KiB line and group bounds, `text_sha` against the host's own cut, public text only) and is one job among
+the route's: one at a time, so a file waits while a route job runs.
+
+```
+/var/lib/go-choir/platform-artifacts/vector-import/
+  inbox/        *.jsonl files wait here; *.part is ignored; a file younger than 60 s is left alone
+  running/      the file being imported (the rename into it is the claim)
+  done/         imported; <name>.job.json beside it
+  refused/      refused or failed (wrong model, bad row, failed sample, over 2 GiB, a symlink, unreadable); <name>.job.json says why
+  interrupted/  found in running/ at start; corpusd never runs it again
+```
+
+- **Rules.** A pass takes the oldest eligible file before the gap work, one at a time. A crash restart resumes nothing: at start
+  anything in `running/` is moved to `interrupted/` and logged (`moved to interrupted/ and not run again`). A file is retried only
+  by a person moving it back to `inbox/`; a file that could not be imported *now* (the server cannot answer, too few sample rows could be checked) stays in `inbox/` untouched and is
+  tried again next pass, and a pass takes one file, the oldest. A file put back because it cannot be imported *now* is not counted as work (the pass keeps its ordinary interval and the idle mark), leaves no job entry (only the journal line; finished jobs are kept to 32), and is tried after any newer file that is not waiting; a file whose sample rows are rejected for the file's own reasons (not found, not public, a text this host cuts differently) is refused even if some other rows were set aside. A symlink, a directory named `*.jsonl` or other non-regular file is moved to `refused/` as it is, never opened or followed. A name already used in `done/` or `refused/` is never overwritten (the new file is `name.2`, its record `name.2.job.json`). Nothing
+  deletes `done/`, `refused/` or `interrupted/`: the artifact collector sweeps named namespaces only (`artifact_gc.go`
+  `artifactGCNamespaces`: none of these), and corpusd removes nothing there. The files are large (the stories about 30 MB, the captures about
+  200 MB); the lead deletes them after reading the job record.
 - **The Mac's embedder does not refuse an over-long input: it cuts it.** `LlamaEmbedder.swift` takes `toks.prefix(n_ctx)` (2,048 tokens), so a
   row the unit would refuse as too large is embedded on the Mac from its first 2,048 tokens. Measured 2026-11-19 on the captures file (215,926 rows, the lead
   passage; `llama-tokenize` of b12259 with the GGUF over the prompt `title: ... | text: ...` for the 1,656 rows that could possibly reach it: more than 2,400
   runes, or mostly CJK scripts above 400 runes): **1 row is over 2,048 tokens (the longest, 2,110), 2 more are between 1,800 and 2,048**; every other row
-  is shorter by construction (a Latin or Cyrillic passage of 2,400 runes is about 1,200 tokens). The worker, which fills this landing's index, records its own
-  refusal for such a row.
-- The operator route (`POST /internal/platform/vectors/import`) and the spool inbox (`vector-import/inbox/`) that take the Mac's file are on
-  `lane/vec-inbox`, with their reference text; they are not in this landing.
+  is shorter than the candidates' bound by construction (a Latin or Cyrillic passage of 2,400 runes is about 1,200 tokens). So one capture's vector is of a truncated passage; the host's
+  worker would have recorded its own refusal for it. If the sample meets it, it is set aside; if not, the Mac's vector stays (a vector of the first 2,048 tokens). Not changed.
+- **The journal line**, one per file (and per route job), the same format: `corpusd retrieval op=vector_import shape=inbox|route ms= rows=
+  written= refused= sample_min_cosine= err= reasons=<reason:n,...> job= state= file=`. `refused=` is the rows dropped, `reasons=` says by
+  which check. `scripts/status-vectors` shows the last one.
+- **To import a file, on Node B as a user who can write that directory (root):**
+
+```
+D=/var/lib/go-choir/platform-artifacts/vector-import/inbox
+cp captures.jsonl "$D/captures.jsonl.part" && mv "$D/captures.jsonl.part" "$D/captures.jsonl"   # copy whole, then rename
+# the worker takes it on its next pass after the file is 60 s old (at most about 5 minutes)
+journalctl -u go-choir-corpusd --since '-30 min' --no-pager -o cat | grep 'op=vector_import'
+cat /var/lib/go-choir/platform-artifacts/vector-import/done/captures.jsonl.job.json      # or refused/captures.jsonl.job.json
+scripts/status-vectors                                                                    # from a checkout: the last import and have/want/remaining
+```
 
 ## 1. What the model is
 
