@@ -279,3 +279,11 @@ applies: stop patching and change the approach.
   newest first, and the import follows as its own change.
 - **What I got wrong.** I added the inbox, a new caller, between rounds 3
   and 4, which widened a change that had not converged.
+
+**Round 5, 09:36Z.** The reviewer tried to break the single mapping and found
+no path from a transient condition to anything permanent. It sent the change
+back again on what the retry added: a file left in the inbox counted as work
+done, so the pass loop ran with no wait. So the landing is split as said
+above: `lane/vec-core` is the Go half without the import route and the inbox,
+and the import follows from `lane/vec-inbox` as its own change after its own
+review.

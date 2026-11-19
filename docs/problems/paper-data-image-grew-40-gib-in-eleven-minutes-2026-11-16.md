@@ -129,5 +129,5 @@ a `store_stalled` line at 08:28Z.
 
 So a deploy that lands during a capture reaches the paper up to an hour
 late, and the copy needs the store's size free on the host: 47 GiB today
-with 141 GiB free before it. Not established today: whether the space
-returned (the next hourly reading will say).
+with 141 GiB free before it. The space returned: the hourly reading at
+09:36Z has 134.2 GiB free and the image at 51.6 GiB.
