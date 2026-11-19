@@ -32,6 +32,12 @@ Failure list, written before the code (each is a case below):
   G2  the objective file is accepted with 9 objectives, a repeated id or a wrong kind mix
   G3  4,499 credits pass; an unknown estimate passes
   G4  a quota-limited Keenable, no-answer searches or refused Devin calls do not stop the pilot
+  arms from the header (decision of 2026-11-19: arm L dropped for the pilot)
+  A1  a header whose arms are empty, repeat, name an unknown arm or lack sa or sb is accepted
+  A2  P3 counts 40 units for four arms; for three it must count 30 and need 27 (90% rounded up), not 36
+  A3  d pairs the S arms against the arms present, not against L and I
+  A4  a three-arm pilot counts four arms in its line, or starts when a header arm has no passed smoke
+  A5  the stamp records an arm that failed (l) beside the ones that passed, or a restamp from the stored bundles runs a new smoke
   flow (stub server)
   F1  the key file is not 0600 or holds anything but the key; a key is printed
   F2  smoke passes with a research run and fails (naming the step) with none, with a foreign model, or with a published document
@@ -223,6 +229,51 @@ check("G5 overlay text is the research role alone with an end", e1.overlay_text(
       '[overlay]\nexpires_at = "2026-01-02T00:00:00Z"\n\n[roles.research]\nprovider = "chatgpt"\nmodel = "gpt-6-luna"\nreasoning_effort = "low"\n')
 
 
+# ---------------------------------------------------------- arms (A1..A3) ----
+def header_variant(arms):
+    lines = open(sample).read().splitlines()
+    h = json.loads(lines[0])
+    h["arms"] = arms
+    p = os.path.join(tmp, "h.jsonl")
+    open(p, "w").write("\n".join([json.dumps(h)] + lines[1:]) + "\n")
+    return p
+
+
+def header_refused(arms):
+    try:
+        e1.load_objectives(header_variant(arms))
+        return False
+    except ValueError:
+        return True
+
+
+check("A1 three arms sa,sb,i load, in the driver's order", e1.pilot_arms(e1.load_objectives(header_variant(["i", "sa", "sb"]))[0]) == ["sa", "sb", "i"])
+check("A1 empty, repeated, unknown, and missing-S headers are refused",
+      header_refused([]) and header_refused(["sa", "sa", "sb"]) and header_refused(["sa", "sb", "z"]) and header_refused(["sa", "i"]) and header_refused(["sb", "i"]))
+check("A1 four arms and the bare S pair load", not header_refused(list(e1.ARM_ORDER)) and not header_refused(["sa", "sb"]))
+
+three = ["sa", "sb", "i"]
+
+
+def full3(vals):
+    return [synth(arm, "p%02d" % (n + 1), s) for n in range(10) for arm, s in vals.items()]
+
+
+u3 = full3({"sa": 3, "sb": 3, "i": 3})
+v = e1.verdicts(u3, {"planned": 10, "submitted": 10, "stops": [], "arms": three})
+check("A2 three arms: 30 units, 27 valid is true", v["P3"][0] == "true" and "27" in v["P3"][1] and "of 30" in v["P3"][1], v)
+for x in [u for u in u3 if u["objective"] in ("p01", "p02", "p03", "p04")][:4]:
+    x["valid"] = False
+v = e1.verdicts(u3, {"planned": 10, "submitted": 10, "stops": [], "arms": three})
+check("A2 three arms: 26 valid is false", v["P3"][0] == "false", v)
+v = e1.verdicts(full({"sa": 3, "sb": 3, "l": 3, "i": 3}), {"planned": 10, "submitted": 10, "stops": [], "arms": list(e1.ARM_ORDER)})
+check("A2 four arms still need 36 of 40", v["P3"][0] == "true" and "36" in v["P3"][1] and "of 40" in v["P3"][1], v)
+units = [synth(a, "p01", s) for a, s in (("sa", 7), ("sb", 7), ("i", 1))]
+d3 = e1.paired_d(units, three)
+check("A3 d is the S mean less I over the arms present", list(d3) == ["p01"] and abs(d3["p01"] - (math.log(8) - math.log(2))) < 1e-9, d3)
+check("A3 d needs every header arm valid", e1.paired_d(units[:2], three) == {})
+
+
 # ----------------------------------------------------------- the stub flow ----
 class Stub:
     """Product routes of four test computers, keyed by bearer key."""
@@ -324,6 +375,7 @@ def make_world(bundles_by_arm, published=()):
         a = e1.ARMS[arm]
         raw = raw.replace('"devin"', '"%s"' % a["provider"]).replace("swe-2-flash", a["model"]).replace('"e1-sa"', '"%s"' % a["label"])
         b = json.loads(raw)
+        b["exported_at"] = e1.iso(e1.now())   # the stored evidence is as old as the export
         stub.bundles[arm] = b
         with open(os.path.join(stubdir, "bundle-%s.json" % arm), "w") as f:
             json.dump(b, f)
@@ -392,7 +444,7 @@ install_all(state, choir, status)
 code, out = run(common(state, choir, status) + ["smoke"])
 check("F2 smoke passes on four normal arms", code == 0 and out.strip().endswith("SMOKE OK") and "choir_sk_" not in out, out[-600:])
 check("F2 smoke prints a line per arm", sum(1 for l in out.splitlines() if l.startswith(("S-a", "S-b", "L ", "I "))) == 4, out)
-check("F2 smoke leaves its stamp on these computers", e1.State(state).load("smoke.json")["passed"] is True)
+check("F2 smoke leaves its stamp on these computers", all(e1.State(state).load("smoke.json")["arms"][x]["passed"] for x in e1.ARM_ORDER))
 stub.close()
 
 for label, mapping, published, step in (("no research", {"sa": "noresearch"}, (), "8"),
@@ -404,18 +456,28 @@ for label, mapping, published, step in (("no research", {"sa": "noresearch"}, ()
     install_all(state, choir, status)
     code, out = run(common(state, choir, status) + ["smoke"])
     check("F2 smoke fails on %s at step %s" % (label, step), code == 1 and ("SMOKE FAILED at step %s (sa)" % step) in out, out[-500:])
-    check("F2 a failed smoke stamps a failure", e1.State(state).load("smoke.json")["passed"] is False)
+    check("F2 a failed smoke stamps a failure", e1.State(state).load("smoke.json")["arms"]["sa"]["passed"] is False)
     stub.close()
 
 # F3 and F4 the pilot
-def make_repo(root, with_ledger=True):
+def objective_text(arms):
+    lines = open(sample).read().splitlines()
+    h = json.loads(lines[0])
+    h["arms"] = arms
+    return "\n".join([json.dumps(h)] + lines[1:]) + "\n"
+
+
+def make_repo(root, with_ledger=True, arms=None):
     remote = os.path.join(root, "remote.git")
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", remote], check=True)
     work = os.path.join(root, "work")
     subprocess.run(["git", "clone", "-q", remote, work], check=True, stderr=subprocess.DEVNULL)
     os.makedirs(os.path.join(work, "docs", "calibration", "e1"))
-    shutil.copy(sample, os.path.join(work, "docs", "calibration", "e1", "pilot-objectives.jsonl"))
-    ledger = good if with_ledger else good.replace("E1-M pilot", "other")
+    text = objective_text(arms or list(e1.ARM_ORDER))
+    open(os.path.join(work, "docs", "calibration", "e1", "pilot-objectives.jsonl"), "w").write(text)
+    osha = hashlib.sha256(text.encode()).hexdigest()
+    ledger = open(os.path.join(FX, "ledger-good.md")).read().replace("SHAPLACEHOLDER", osha)
+    ledger = ledger if with_ledger else ledger.replace("E1-M pilot", "other")
     open(os.path.join(work, "docs", "calibration", "claude-ledger.md"), "w").write(ledger)
     env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@invalid", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@invalid")
     for cmd in (["add", "."], ["commit", "-q", "-m", "x"], ["push", "-q", "origin", "HEAD:main"]):
@@ -480,6 +542,37 @@ run(common(state, choir, status) + ["smoke"])
 stub.published = {"doc-l-2"}
 code, out = run(pilot_args(state, choir, status, repo))
 check("F4 a published test document stops the pilot and says so", code == 4 and "PUBLISHED: doc-l-2" in out and "no story-unpublish verb" in out, out[-700:])
+stub.close()
+
+# A4/A5: a pilot of three arms while L's computer fails its smoke
+m = {x: "normal" for x in e1.ARM_ORDER}
+m["l"] = "noresearch"
+stub, state, choir, status, comps = make_world(m)
+install_all(state, choir, status)
+code, out = run(common(state, choir, status) + ["smoke", "--arms", "sa,sb,i"])
+stamp = e1.State(state).load("smoke.json")
+check("A5 smoke of three arms passes and stamps them", code == 0 and out.strip().endswith("SMOKE OK") and all(stamp["arms"][x]["passed"] for x in three) and "l" not in stamp["arms"], out[-300:])
+code, out = run(common(state, choir, status) + ["smoke"])
+stamp = e1.State(state).load("smoke.json")
+check("A5 a smoke of all four fails on L and the stamp keeps the three that passed", code == 1 and not stamp["arms"]["l"]["passed"] and stamp["arms"]["l"]["failed"]["step"] == 8
+      and all(stamp["arms"][x]["passed"] for x in three), (code, stamp["arms"]["l"]))
+repo3 = make_repo(os.path.join(tmp, "r3") if os.makedirs(os.path.join(tmp, "r3")) is None else tmp, arms=three)
+n_submissions = dict(stub.counter)
+code, out = run(common(state, choir, status) + ["smoke", "--restamp", "--arms", "sa,sb,i"])
+stamp = e1.State(state).load("smoke.json")
+check("A5 a restamp from the stored bundles passes the three arms, submits nothing, and says where it read",
+      code == 0 and stub.counter == n_submissions and all(stamp["arms"][x]["source"].startswith("restamp") and stamp["arms"][x]["passed"] for x in three) and not stamp["arms"]["l"]["passed"], (code, out[-400:]))
+code, out = run(pilot_args(state, choir, status, repo3))
+lines = [l for l in out.splitlines() if l.startswith("p") and "tally" in l]
+check("A4 a three-arm pilot runs ten objectives and counts three arms", code == 0 and len(lines) == 10 and
+      lines[0].startswith("p01 thin_event | sa 4 sb 4 i 4 started | runs 1/1/1 | valid 3/3 | tally 12/450 | build ok | published 0"), (code, lines[:1], out[-300:]))
+code, out = run(common(state, choir, status, repo3) + ["read", "--verdict"])
+p3 = [l for l in out.splitlines() if l.startswith("P3")]
+check("A2 read --verdict prints the derived counts", p3 and "of 30" in p3[0] and "27" in p3[0], out[-400:])
+repo4 = make_repo(os.path.join(tmp, "r4") if os.makedirs(os.path.join(tmp, "r4")) is None else tmp)
+e1.State(state).save("pilot.json", {"objectives": {}, "stops": [], "started_at": None, "arm_stopped": {}})
+code, out = run(pilot_args(state, choir, status, repo4))
+check("A4 a header arm with no passed smoke (l) refuses the pilot, naming it", code == 3 and "smoke has not passed for l" in out, out[-400:])
 stub.close()
 
 shutil.rmtree(tmp, ignore_errors=True)
