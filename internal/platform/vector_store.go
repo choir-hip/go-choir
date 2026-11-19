@@ -95,12 +95,9 @@ type vectorState struct {
 	started  sync.Once
 	// remaining is the last pass's count of rows still without a vector.
 	remaining atomic.Int64
-	// lastCaptureSweep is when the capture sweep last ran.
-	sweepMu          sync.Mutex
-	lastCaptureSweep time.Time
-	importMu         sync.Mutex
-	jobs             map[string]*VectorImportJob
-	lastJob          string
+	importMu  sync.Mutex
+	jobs      map[string]*VectorImportJob
+	lastJob   string
 }
 
 func (v *vectorState) kickChan() chan struct{} {
