@@ -233,7 +233,6 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
     public var block: Int
     public var seconds: Double
     public var duration: Double
-    public var rate: Double
     public var held: [String]
     public var seq: Int
     public var acked: Int
@@ -266,6 +265,17 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
     private var generation = 0
 
     public init(journal: DeckJournal) { self.journal = journal }
+
+    /// Sign-out: the whole deck goes, not only its journal. What was on air, what was held and why it was silent belong to the account that left; a
+    /// late end of that item must not write a line into the next account's journal, and nothing may go on sounding.
+    public func wipe() {
+        retryTask?.cancel(); retryTask = nil; generation += 1
+        let wasPlaying = current != nil
+        current = nil; held = []; why = .empty; sounded = false; commanded = false; silentRun = 0; lastHeard = false; attempts = 0
+        if wasPlaying { stopEngine() }
+        journal.wipe()
+        changed()
+    }
 
     /// At launch, before the run sheet is restored: an item the kill left open is closed in the journal.
     @discardableResult public func boot() -> DeckLine? { journal.closeOpenAtBoot() }
@@ -347,8 +357,6 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
             await playOn()
         case "seekTo": engine?.seekRemote(to: value)
         case "seekBy": engine?.seekRemote(by: value)
-        case "rate": engine?.setRemoteRate(value)
-        case "level": break          // the voice owns the level (SessionCoordinator); nothing the deck decides
         case "trim": trim(keeping: Int(value))
         default: break
         }
@@ -481,7 +489,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
     public func snapshot() -> DeckSnapshot {
         let p = position()
         let dur = current?.kind == "audio" ? (engine?.remotePosition()?.duration ?? 0) : 0
-        return DeckSnapshot(why: why, item: current?.id ?? "", block: p.block, seconds: current == nil ? 0 : p.seconds, duration: dur, rate: 1,
+        return DeckSnapshot(why: why, item: current?.id ?? "", block: p.block, seconds: current == nil ? 0 : p.seconds, duration: dur,
                             held: held.map(\.id), seq: journal.seq, acked: journal.acked, journal: journal.lines)
     }
 

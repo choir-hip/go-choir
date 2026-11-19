@@ -18,6 +18,7 @@ import { wipeKept, KEPT_FILE } from './takes.ts';
 import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
 import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
 import { CONTENT_DB, wipeLiveContent } from './content.ts';
+import { forget as forgetClips } from './clips.ts';
 import { nextGeneration, resetSession, sessionDigest } from './api.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
@@ -43,6 +44,7 @@ export const WIPES: Wipe[] = [
   { name: 'notebook', run: (s) => wipeNotebook(s) },
   { name: 'vectors', run: async (s) => { await wipeLiveVectors(s); await rmAll(s, [VECTORS_DIR]); } },       // the live in-memory store first, then the files
   { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
+  { name: 'clips', run: async () => forgetClips() },                                                              // in memory only (public clips, but another account's page asked for them)
   { name: 'account-stamp', run: (s) => rmAll(s, [STAMP_FILE]) },
 ];
 
@@ -78,9 +80,11 @@ const mark = async (storage: Storage | undefined, path: string, text: string): P
 /** Sign-out. A native build refuses (done: false, nothing wiped) when its native module is absent: wiping the shared stores while the key stays
  * would report a sign-out that did not happen. The web build has no key to delete and no sign-in; it has nothing to sign out of. */
 export async function accountSignOut(
-  _a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
+  a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
   opts: { wipes?: Wipe[]; deadlineMs?: number } = {},
 ): Promise<SignOutResult> {
+  // Demo mode has no account of its own: the key on the phone (if any) is the real one, and the demo's sign-out must neither end it nor wipe it.
+  if (a.demo) return { done: false, failed: '', message: 'Demo mode has no account to sign out of. Nothing was changed.' };
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };
   // The marker first: if the app dies after the key is gone and before the wipes are finished, the next launch finishes them.
   if (!(await mark(storage, PENDING_FILE, '1'))) return { done: false, failed: '', message: 'Sign-out did not start. Try again.' };

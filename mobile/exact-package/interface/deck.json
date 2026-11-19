@@ -5,7 +5,7 @@
       "rendered": "bool", "end": "string", "command": "string", "reason": "string"
     },
     "DeckState": {
-      "why": "string", "item": "string", "block": "number", "seconds": "number", "duration": "number", "rate": "number",
+      "why": "string", "item": "string", "block": "number", "seconds": "number", "duration": "number",
       "held": "string[]", "seq": "number", "acked": "number", "journal": "DeckEvent[]"
     }
   },
@@ -15,7 +15,7 @@
       "live": true,
       "answers": "DeckState",
       "substitute": {
-        "default": { "why": "empty", "item": "", "block": 0, "seconds": 0, "duration": 0, "rate": 1, "held": [], "seq": 0, "acked": 0, "journal": [] }
+        "default": { "why": "empty", "item": "", "block": 0, "seconds": 0, "duration": 0, "held": [], "seq": 0, "acked": 0, "journal": [] }
       }
     },
     {

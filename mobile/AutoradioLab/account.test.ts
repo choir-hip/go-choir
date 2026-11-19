@@ -10,6 +10,9 @@
 //  S7 a native build whose native module is absent refuses (nothing wiped, done false); a native call that never answers is a deadline, done false.
 //  S8 the real wipes empty a real in-memory file system seeded at EVERY `app:/` path any shared module names; a path no wipe covers fails here.
 //  S9 sign out A, sign in B: B sees nothing of A (files, memory, live content store, live vectors, remembered computer, a reply still in flight).
+//  S11 a demo sign-out answers done false BEFORE any native call, marker or wipe (the real account is not the demo's to end).
+//  S12 the drift guard runs the real wipes against a recording storage: every `app:/` literal the modules name is among the recorded removals (or under one),
+//      and the native mail key is forgotten.   S13 the clips remembered in memory are forgotten at sign-out.
 //  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -17,6 +20,7 @@ import { accountSignOut, WIPES, wipeAll, wipedPaths, settleAccount, resetSettled
 import { authedJSON, bindNative, resetSeam, SignedOutError } from './api.ts';
 import { ContentStore } from './content.ts';
 import { VectorStore } from './search.ts';
+import { clipAct, remembered as clipsRemembered } from './clips.ts';
 
 
 /** A real in-memory file system: files and folders, rm removes a folder's children, readdir lists them. */
@@ -172,5 +176,48 @@ describe('S10 the account stamp', () => {
     resetSettled(); sess(null); await settleAccount(m.storage, undefined); expect(m.files.has('app:/data/takes.json')).toBe(true);
     resetSettled(); sess('test-key-B-not-real'); await settleAccount(m.storage, undefined);
     expect(m.files.has('app:/data/takes.json')).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(true);
+  });
+});
+
+describe('S11 a demo sign-out', () => {
+  test('answers done false before any native call, marker or wipe, and says why', async () => {
+    const log: string[] = []; const m = memFs(['app:/data/takes.json']);
+    const n = { available: true, later: async (r: { op: string }) => { log.push(r.op); return { done: true }; } };
+    const r = await accountSignOut({ demo: true }, m.storage, undefined, n as never, { wipes: [{ name: 'a', run: async () => { log.push('wipe'); } }] });
+    expect(log).toEqual([]); expect(r.done).toBe(false); expect(r.message).toContain('Demo'); expect(m.files.has('app:/data/takes.json')).toBe(true); expect(m.files.has(PENDING_FILE)).toBe(false);
+  });
+});
+
+describe('S12 the drift guard against what the wipes really remove', () => {
+  test('every app:/ literal in the shared modules is removed (or sits under a removed path) by the real wipes; the mail key is forgotten', async () => {
+    resetSeam(); resetSettled();
+    const removed: string[] = []; const ops: string[] = [];
+    bindNative({ available: true, later: async (r: { op: string }) => { ops.push(r.op); return { ok: true }; } } as never);
+    const m = memFs();
+    const storage = { fs: { ...m.storage.fs, rm: async (p: string) => { removed.push(p); } }, sqlite: {} } as never;
+    const failed = await wipeAll(storage, undefined, WIPES);
+    expect(failed).toEqual([]);
+    const dir = new URL('.', import.meta.url).pathname;
+    const literals = new Set<string>();
+    for (const f of readdirSync(dir).filter((x) => x.endsWith('.ts') && !x.endsWith('.test.ts') && !x.endsWith('.d.ts') && x !== 'app.ts')) {
+      for (const mm of readFileSync(dir + f, 'utf8').matchAll(/['"`](app:\/(?:data|cache|tmp)\/[^'"`$]*)/g)) literals.add(mm[1].replace(/\/$/, ''));
+    }
+    expect(literals.size).toBeGreaterThan(10);
+    const under = (p: string) => removed.some((r) => p === r || p.startsWith(r + '/') || p.startsWith(r + '-'));
+    // PENDING_FILE is removed by accountSignOut itself (after a clean wipe), not by the wipes.
+    const missing = [...literals].filter((p) => !under(p) && p !== PENDING_FILE && !p.startsWith('app:/cache/mail-'));
+    expect(missing).toEqual([]);
+    expect(removed).toContain(STAMP_FILE);
+    expect(ops).toContain('mailForget');
+  });
+});
+
+describe('S13 clips in memory', () => {
+  test('a sign-out forgets the clips a page asked for', async () => {
+    globalThis.fetch = (async () => new Response(JSON.stringify({ clips: [{ clip_id: 'c1', audio_url: 'https://a.example/a.mp3', feed_url: 'https://f.example/x', start: 1, end: 9 }] }), { status: 200 })) as never;
+    await clipAct('play', 'c1');
+    expect(clipsRemembered()).toBe(1);
+    await wipeAll(undefined, undefined, WIPES);
+    expect(clipsRemembered()).toBe(0);
   });
 });

@@ -119,6 +119,11 @@ describe('signed-in seam', () => {
     const t = await authedJSON('/api/x').catch((x) => x);
     expect(String(t.message)).not.toContain(KEY);
   });
+  test('A9b a key straddling the 200-character cut is scrubbed before the cut, not after', async () => {
+    handler = () => new Response(JSON.stringify({ error: 'x'.repeat(190) + KEY }), { status: 500 });
+    const e = await authedJSON('/api/x').catch((x) => x);
+    expect(String(e.message)).not.toContain(KEY.slice(0, 10));
+  });
   test('A10 bytes', async () => {
     handler = () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'application/pdf' } });
     const r = await authedBytes('/api/file/1');

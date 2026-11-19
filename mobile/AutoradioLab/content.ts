@@ -82,6 +82,9 @@ export class ContentStore {
   generation = 0;
   constructor(readonly db: Db, public budget: Budget = STANDARD_BUDGET) { liveStores.add(this); }
 
+  /** The database is closed: sign-out no longer reaches this store. */
+  dispose(): void { liveStores.delete(this); }
+
   async init(): Promise<void> {
     await this.db.execute('CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, text TEXT NOT NULL, date INTEGER, address TEXT NOT NULL, source TEXT NOT NULL, version TEXT NOT NULL, pinned INTEGER NOT NULL, synced_at INTEGER NOT NULL, meta TEXT NOT NULL, bytes INTEGER NOT NULL)');
     await this.db.execute('CREATE INDEX IF NOT EXISTS items_kind ON items (kind)');

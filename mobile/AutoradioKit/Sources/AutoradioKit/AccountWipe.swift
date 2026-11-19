@@ -78,7 +78,7 @@ public final class AccountWipe: @unchecked Sendable {
             Self.removeTakeScratch(in: tempDirectory)
         }
         register("run-sheet") { await MainActor.run { runSheet.wipe() } }
-        register("deck-journal") { await MainActor.run { deck.journal.wipe() } }
+        register("deck") { await MainActor.run { deck.wipe() } }       // the item on air, the held items and the reason too, not only the journal
         if let openingCache { register("opening") { openingCache.wipe() } }
         register("clips") { clips.wipe() }
         // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).

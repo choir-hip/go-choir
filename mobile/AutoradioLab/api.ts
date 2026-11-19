@@ -196,7 +196,7 @@ async function check(r: Response, path: string, key: string): Promise<void> {
   if (r.ok) return;
   if (r.status === 401) throw new SignedOutError('the key was refused; sign in again');
   let msg = '';
-  try { const o = JSON.parse(await r.text()); if (o && typeof o.error === 'string') msg = o.error.slice(0, 200); } catch { /* the server's string only; never the body */ }
+  try { const o = JSON.parse(await r.text()); if (o && typeof o.error === 'string') msg = scrub(o.error, key).slice(0, 200); } catch { /* the server's string only; never the body */ }
   const retry = Number(r.headers.get('retry-after'));
   if (r.status >= 300 && r.status < 400) throw new HTTPError(r.status, 'redirect refused: the key goes only to the server it was made for');
   const reason = r.status === 403 ? `403: the key lacks the scope for ${path}` : r.status === 429 ? '429: rate limited' : `HTTP ${r.status}`;

@@ -14,6 +14,7 @@ import XCTest
 //  9  one state for why it is silent: pause, system pause, resume
 // 10  the player journals what it starts and how it ends, and an end written before the app died is read before the run sheet is restored
 // 11  the journal is wiped at sign-out
+// 17  the whole deck is wiped at sign-out; 18 no level op, no rate field
 @MainActor
 final class DeckTests: XCTestCase {
     func tmp() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("deck-\(UUID().uuidString).json") }
@@ -210,6 +211,35 @@ final class DeckTests: XCTestCase {
         w.registerStandard(deck: d)
         await w.run()
         XCTAssertEqual(d.journal.seq, 0); XCTAssertTrue(d.journal.lines.isEmpty); XCTAssertFalse(FileManager.default.fileExists(atPath: f.path))
+    }
+
+    // Review 2026-11-19 (deck, seat 2), 7 and 8:
+    //  J6 sign-out wipes the DECK, not only its journal: the item on air, the held items and the reason go, the engine stops, and a late end of the old
+    //     account's item writes nothing into the new account's journal
+    //  J7 the interface carries no `level` op and no `rate` (a no-op and a constant): acts that remain move something
+    func test17_SignOutWipesTheDeckAndALateEndWritesNothing() async {
+        let f = tmp(); defer { try? FileManager.default.removeItem(at: f); try? FileManager.default.removeItem(at: DeckJournal.seqFile(for: f)) }
+        let (d, e) = makeDeck(DeckJournal(storage: f))
+        _ = await d.play(speech("a")); d.soundBegan(); d.enqueue(speech("b"))
+        XCTAssertNotNil(d.current); XCTAssertEqual(d.held.count, 1)
+        let w = AccountWipe(); w.registerStandard(deck: d); await w.run()
+        XCTAssertNil(d.current); XCTAssertTrue(d.held.isEmpty); XCTAssertEqual(d.why, .empty)
+        XCTAssertTrue(e.log.contains("stopSpoken") || e.log.contains("stopRemote"))
+        XCTAssertTrue(d.journal.lines.isEmpty); XCTAssertEqual(d.journal.seq, 0)
+        XCTAssertNil(d.ended(.finished, played: true, id: "a"))      // the late end of the old account's item
+        d.documentEnded(id: "deck:a", anyPlayed: true)
+        XCTAssertTrue(d.journal.lines.isEmpty)
+        // and it plays for the next account as a fresh deck
+        _ = await d.play(speech("c")); XCTAssertEqual(d.journal.lines.first?.item, "c"); XCTAssertEqual(d.journal.lines.first?.seq, 1)
+    }
+    func test18_TheInterfaceTellsNoLie() async {
+        let (d, e) = makeDeck()
+        _ = await d.play(speech("a"))
+        let before = e.log
+        await d.act("level", value: 0.2)       // unknown now: nothing moves, nothing is journalled
+        XCTAssertEqual(e.log, before)
+        let json = String(data: (try? JSONEncoder().encode(d.snapshot())) ?? Data(), encoding: .utf8) ?? ""
+        XCTAssertFalse(json.contains("\"rate\""))
     }
 
     // Review 2026-11-19 (deck, seat 1), A: the journal is never overwritten by a read that failed.

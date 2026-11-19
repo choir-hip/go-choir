@@ -332,6 +332,7 @@ component AccountScreen
     tx: ThemeExtras
     acctInfo: SettingsAccount
     au: ChoirAuth
+    signOutNote: string
     refreshAccount: action
     signOut: action
   view
@@ -356,6 +357,9 @@ component AccountScreen
         text acctInfo.message testId="settings-account-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
       if acctInfo.status == "loading"
         SkeletonLine(testId="settings-account-skeleton")
+      // A sign-out that did not finish says so here (account.ts answers the words; a clean one leaves the page, so nothing shows).
+      if signOutNote != ""
+        text signOutNote testId="settings-signout-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.danger
       text "This phone holds its own key. Signing out removes the key from this phone and ends it on the server. Your computer and your documents stay where they are." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
       row gap=12 width="100%"
         button press=refreshAccount testId="settings-account-refresh" appearance="none"

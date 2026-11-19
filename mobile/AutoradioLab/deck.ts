@@ -47,7 +47,6 @@ export type DeckState = {
   block: number;
   seconds: number;
   duration: number;
-  rate: number;
   /** The ids of the items the deck holds after the one playing, in order. At most DECK_HELD_MAX. */
   held: string[];
   /** The last journal line's number. Numbers rise by one and are never reused, across a relaunch too. */
@@ -57,8 +56,8 @@ export type DeckState = {
   journal: DeckEvent[];
 };
 
-/** `deckAct` operations. `value` is the new rate for `rate`, the seconds for `seekTo` and `seekBy`, 0 to 1 for `level`, and for `trim` how many held items to keep (the rest are dropped). */
-export type DeckOp = 'pause' | 'resume' | 'stop' | 'skip' | 'seekTo' | 'seekBy' | 'rate' | 'level' | 'trim';
+/** `deckAct` operations. `value` is the seconds for `seekTo` and `seekBy`, and for `trim` how many held items to keep (the rest are dropped). */
+export type DeckOp = 'pause' | 'resume' | 'stop' | 'skip' | 'seekTo' | 'seekBy' | 'trim';
 
 /** The deck's names (interface/deck.json). `deckState` is a live source; the rest answer the new state. */
 export const DECK_NAMES = ['deckState', 'deckPlay', 'deckEnqueue', 'deckAct', 'deckAck'] as const;

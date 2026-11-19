@@ -46,7 +46,7 @@ export type Built = {
   seqs: number[];
   /** The last journal number read: everything up to it is either an op above or a line that makes none. */
   through: number;
-  /** "gap:<missing number>", "start_before_end:<number>". */
+  /** "gap:<missing number>", "start_before_end:<number>", "dropped:<number of the deck's own note that the cap dropped lines>". */
   anomalies: string[];
 };
 
@@ -98,7 +98,8 @@ export function opsFromJournal(lines: DeckEvent[], after = 0): Built {
   let open = '';
   for (const line of lines) {
     if (line.seq <= after) continue;
-    if (through > after && line.seq !== through + 1) anomalies.push(`gap:${through + 1}`);
+    if (line.seq !== through + 1) anomalies.push(`gap:${through + 1}`);       // the first unacknowledged line too: the cap's loss starts there
+    if (line.type === 'system' && line.command === 'dropped') anomalies.push(`dropped:${line.seq}`);   // the deck says it dropped unacknowledged lines
     if (line.type === 'started') {
       if (open === line.item) { through = line.seq; continue; }
       if (open !== '') { anomalies.push(`start_before_end:${line.seq}`); break; }

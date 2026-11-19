@@ -78,6 +78,9 @@ const askedFeeds = new Set<string>();
 let askedAll = false;
 let lastTick = 0;
 
+/** For the sign-out test: how many clips are held in memory. */
+export const remembered = (): number => byID.size;
+
 export function forget(): void { byID.clear(); askedFeeds.clear(); askedAll = false; lastTick = 0; }
 
 function merge(clips: Clip[]): void { for (const c of clips) if (!byID.has(c.clipID)) byID.set(c.clipID, c); }

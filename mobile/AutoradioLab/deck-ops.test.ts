@@ -11,6 +11,8 @@
 //  D10 the server's repaired-sheet answer is acknowledged and handed back so the sheet is taken before more is posted.
 //  D11 two posts at once post once.      D12 the HTTP answers map as the Swift poster did.
 //  D13 the names in deck.ts, deck-types.contract and interface/deck.json are one list.
+//  D14 a gap at the FIRST unacknowledged line is named (the cap's loss looks like this).   D15 a `dropped` system line is named, with its number.
+//  D16 the interface carries no `level` op and no `rate` field (a no-op and a constant are lies shared code would believe).
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -95,6 +97,31 @@ describe('D5 order', () => {
   });
 });
 
+describe('D14 D15 what a loss looks like', () => {
+  test('the first unacknowledged line is not the next number: the gap is named, the ops are still built', () => {
+    const r = opsFromJournal([ev(3, 'started'), ev(4, 'ended', { end: 'finished', rendered: true })], 0);
+    expect(r.anomalies).toEqual(['gap:1']); expect(r.ops.length).toBe(2);
+    const s = opsFromJournal([ev(5, 'started'), ev(6, 'ended', { end: 'finished', rendered: true })], 2);
+    expect(s.anomalies).toEqual(['gap:3']);
+    expect(opsFromJournal([ev(3, 'started'), ev(4, 'ended', { end: 'finished', rendered: true })], 2).anomalies).toEqual([]);
+  });
+  test('a system line that says lines were dropped is an anomaly with its number', () => {
+    const r = opsFromJournal([ev(1, 'started'), ev(2, 'system', { item: '', command: 'dropped', reason: 'dropped 200 unacknowledged lines' }), ev(3, 'ended', { end: 'finished', rendered: true })]);
+    expect(r.anomalies).toEqual(['dropped:2']); expect(r.ops.length).toBe(2); expect(r.through).toBe(3);
+    expect(opsFromJournal([ev(1, 'system', { item: '', command: 'engine-lost' })]).anomalies).toEqual([]);
+  });
+});
+
+describe('D16 the interface tells no lie', () => {
+  test('no level op and no rate field in deck.ts, deck-types.contract, interface/deck.json', () => {
+    const dir = import.meta.dir;
+    for (const f of [join(dir, 'deck.ts'), join(dir, 'deck-types.contract'), join(dir, '..', 'exact-package', 'interface', 'deck.json')]) {
+      const src = readFileSync(f, 'utf8');
+      expect(src).not.toMatch(/'level'|"level"|\brate\b/);
+    }
+  });
+});
+
 describe('D6 heldPlan', () => {
   const it = (id: string): DeckItem => item({ id, kind: 'speech', paragraphs: id });
   test('what matches stays; a new one is appended', () => {
@@ -135,7 +162,7 @@ describe('D6 heldPlan', () => {
 // ---- the post
 
 function state(over: Partial<DeckState> = {}): DeckState {
-  return { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, rate: 1, held: [], seq: 0, acked: 0, journal: [], ...over };
+  return { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [], ...over };
 }
 function fakeDeck(over: Partial<DeckState>, calls: string[] = []): DeckPort {
   let s = state(over);

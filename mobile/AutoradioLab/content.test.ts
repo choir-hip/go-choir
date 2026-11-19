@@ -46,13 +46,13 @@ describe('C1 to C6 the store', () => {
     const dir = (await import('node:fs')).mkdtempSync('/tmp/content-test-');
     const a = sqlite(`${dir}/content.db`); const s1 = new ContentStore(a.db); await s1.init();
     await s1.put(newItem({ id: 'mail:m1', kind: 'mail', title: 'Tunnel vote', text: 'Notes.', address: 'mail:m1', date: NOW, meta: { folder: 'inbox' }, version: 'body' }));
-    await s1.setCheckpoint('mail.inbox.done', '1'); await s1.markSynced('mail', NOW); a.raw.close();
+    await s1.setCheckpoint('mail.inbox.done', '1'); await s1.markSynced('mail', NOW); a.raw.close(); s1.dispose();   // a closed database is no live store (sign-out would meet a dead one)
     const b = sqlite(`${dir}/content.db`); const s2 = new ContentStore(b.db); await s2.init();
     expect((await s2.get('mail:m1'))?.meta.folder).toBe('inbox');
     expect(await s2.checkpoint('mail.inbox.done')).toBe('1'); expect(await s2.checkpoint('nope')).toBeNull();
     expect(await s2.syncedWords('mail', NOW + 2 * 3600 * 1000)).toBe('last synced 2 hours ago'); expect(await s2.syncedWords('story', NOW)).toBeNull();
     expect((await s2.itemAt('mail:m1'))?.id).toBe('mail:m1');
-    b.raw.close();
+    b.raw.close(); s2.dispose();
   });
   test('C2 eviction is oldest first by kind and never touches pinned items or documents', async () => {
     const s = await fresh({ ...STANDARD_BUDGET, totalBytes: 5000, retentionDays: {}, perKindBytes: {} });

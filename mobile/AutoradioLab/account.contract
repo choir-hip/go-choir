@@ -13,6 +13,7 @@ members Autoradio
   mutation acct as shape LabState
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult
+  derive signOutNote = match so { case some(a) => a.message, case none => "" }
   mutation ctl as shape LabState
   mutation down as shape LabState
   mutation up as shape LabState

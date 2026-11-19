@@ -16,10 +16,10 @@ code run only while audio is sounding). It keeps one state for why it is silent,
 
 | Name | Kind | Does |
 |---|---|---|
-| `deckState` | source, live | `DeckState`: `why`, `item`, `block`, `seconds`, `duration`, `rate`, `held` (ids), `seq`, `acked`, `journal` (the lines not yet acknowledged) |
+| `deckState` | source, live | `DeckState`: `why`, `item`, `block`, `seconds`, `duration`, `held` (ids), `seq`, `acked`, `journal` (the lines not yet acknowledged) |
 | `deckPlay` | send | play this item now; what was playing ends `replaced` |
 | `deckEnqueue` | send | hold this item after the playing one at place `at` (0 is next; -1 or absent is the end); the held items from `at` on are dropped first; an id already held is removed first; at most 3 are held |
-| `deckAct` | send | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy`, `rate`, `level` or `trim`; `value` as the op needs |
+| `deckAct` | send | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy` or `trim`; `value` as the op needs |
 | `deckAck` | send | the journal lines up to `through` are posted; the deck forgets them |
 
 An item is scalars only (the gate refuses a name that takes an opaque payload): `id`, `kind` (`speech` or `audio`), `title`, `show`,
