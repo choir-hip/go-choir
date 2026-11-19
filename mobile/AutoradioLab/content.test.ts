@@ -19,7 +19,8 @@ import {
   TRANSCRIPTS_PER_RUN, type Db, type Fetchers, type MailRow, type StoredItem,
 } from './content.ts';
 import { Corpus } from './search.ts';
-import { provisionalSetSession, SignedOutError } from './api.ts';
+import { bindNative, resetSession, SignedOutError } from './api.ts';
+const signedIn = { available: true, later: async (r: { account: string }) => ({ found: true, value: r.account === 'api-key' ? 'test-key-0001-not-real' : 'comp-test' }) };
 import mailList from '../fixtures/content/mail-list.json';
 import mailMessage from '../fixtures/content/mail-message.json';
 import documentList from '../fixtures/content/document-list.json';
@@ -200,7 +201,7 @@ describe('C7 to C15 the sync', () => {
     f.stories = async () => { throw new Error('answered 500'); };
     const r = await syncAll(s, f, { now: NOW });
     expect(r.find((x) => x.kind === 'story')?.stoppedBy).toBe('error');
-    provisionalSetSession(null);
+    bindNative(null); resetSession();
     const live = liveFetchers();
     const r2 = await syncAll(s, { ...live, stories: async () => [] }, { now: NOW });
     expect(r2.find((x) => x.kind === 'mail')?.stoppedBy).toBe('error'); // the first mail page throws SignedOutError: counted, nothing written
@@ -213,7 +214,7 @@ describe('C16 the real routes\' shapes', () => {
   let calls: string[];
   beforeEach(() => {
     calls = [];
-    provisionalSetSession({ token: 'test-token', computer: 'c-test' });
+    resetSession(); bindNative(signedIn as never);
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const u = new URL(String(input)); calls.push(u.pathname + u.search);
       const j = (b: unknown): Response => new Response(JSON.stringify(b), { status: 200, headers: { date: new Date(NOW).toUTCString() } });
