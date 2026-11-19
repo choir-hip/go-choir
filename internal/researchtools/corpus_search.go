@@ -170,9 +170,11 @@ type corpusSearchInfo struct {
 	Body, Title, Both, LabelsOnly int
 	// Capped: a candidate bound was hit (the index's or the window's).
 	Capped bool
-	// LabelsSearched: the title-and-label half ran over the capture index's
-	// term table, which answered whole. The window fallback leaves it false.
-	LabelsSearched bool
+	// TitlesSearched: the title half ran over the capture index's term table,
+	// which answered whole. The window fallback leaves it false. LabelsRead:
+	// Jev's labels were read from the store without error.
+	TitlesSearched bool
+	LabelsRead     bool
 	// WindowSearched: the window of the newest captures was listed.
 	WindowSearched bool
 	// Dropped are the query words the text search did not look for (pruned
@@ -220,6 +222,7 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 	if deps.Store != nil {
 		if got, err := deps.Store.RecentCaptureLabels(ctx, ownerID, computerID, corpusLabelScan); err == nil {
 			labels = got
+			info.LabelsRead = true
 		} else {
 			notes = append(notes, "label hints not read: "+err.Error())
 		}
@@ -262,7 +265,7 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
 		}
 	}
-	info.LabelsSearched = searched
+	info.TitlesSearched = searched
 	objs = dropOwnerPrivate(inWindow(objs, req.Since, req.Until))
 	var labelHalf []CorpusCapture
 	if len(terms) > 0 {
@@ -291,7 +294,7 @@ func searchCapturesFor(ctx context.Context, deps Dependencies, ownerID, computer
 			if len(ft.PhraseFallbacks) > 0 {
 				notes = append(notes, "no page holds the phrase "+strings.Join(ft.PhraseFallbacks, ", ")+"; its words were searched instead")
 			}
-			if !textIndexComplete(ft.Indexed, ft.Captures) {
+			if ft.Indexed < int64(ft.Captures) {
 				notes = append(notes, fmt.Sprintf("the page text of %d of this computer's %d captures is searchable so far; the rest are found by title and labels only", ft.Indexed, ft.Captures))
 			}
 		case ft.Reason != "":

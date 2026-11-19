@@ -138,7 +138,7 @@ const publishedFirstNote = "published lists the paper's own earlier stories and 
 // wireCorpusResult is the search_wire_corpus answer. A struct, not a map: JSON
 // keys must come out published first (a map sorts them alphabetically, which
 // put captures ahead of the paper's own stories). Field names and meanings are
-// unchanged; only the order and published_first_note are new.
+// unchanged; the order, published_first_note and coverage are new.
 type wireCorpusResult struct {
 	PublishedFirstNote string           `json:"published_first_note,omitempty"`
 	Published          []PublishedPiece `json:"published"`
