@@ -183,21 +183,42 @@ read into the Keychain and the first shared source's read is the suspect (the se
 affected by ProofKey, but the same read-before-written order should be checked. The textures "make your edition" check was dropped from the
 script (the drill computer's state). Mail and Files rows were still not toured (the survey picks no row: dir= and mail= were empty).
 
-## Left, in order (for a third integrator)
+## Third integrator (2026-11-19, night): what was done
 
-1. The tip has passed `proof` and `real`; run both again after any change.
-2. Step E remainder: the Files, Mail and podcasts tours and the sign-out drill in `proof-real.sh` (reads only; never open a PDF, Save draft, the
-   approval link or Subscribe). Not written.
-3. Step C, files over 48 MB: Exact supports it (`exactBodyTo`, `exactBodyFrom`, reference.md fetch row: to 1 GiB, bytes never enter JavaScript; the
-   body goes to a staging file and replaces the target only when complete; a non-2xx reply leaves the file untouched). Not wired in `files.ts`.
-   Needs a signed-in `authedToFile`/`authedFromFile` beside `authedBytes` in api.ts (same demo, generation and redirect rules; the file under
-   `app:/cache/files`, already granted and wiped) and the Swift limits (800 MB video, 300 MB audio, 60 MB images) as constants.
-4. Step D: podcast listening positions (one native read-and-delete of the old Swift library file), the paper page passing the story title with the
-   route to `choirPlay`, audio from Files into the queue through the deck's names.
-5. Step F, the bridge (a Contract `task ... key=deckState.seq change(action)`): unproven. Step G: not started; the Swift player still decides.
-6. Time every shared source that loops on the simulator against the 100 ms turn (`settleAccount` adds one `stat` and one `readFile` to the first
-   answer after a launch: measure it).
-7. The deck preconditions above; Android's Kotlin for `mailSeal`/`mailOpen` and `signOut`; the earlier list (steps 4 to 6 of the first record).
+Review tip for the re-review: the last commit named in the lead's `review-tip.txt` (auth, deck and mail together: 09057a63a, then ea63bff4f, then 1ea1351a7).
+
+1. Seat 2 on the sign-in seam and the deck (commit 09057a63a). Already fixed before: auth 1, 3, 4, 6, 8, 11 (3ee5d7b06), deck 3 in part and 4 (b7a08ca9b). Fixed: a demo
+   sign-out answers done false before any native call, marker or wipe (auth 2); a failed sign-out is written on the Account page (`signOutNote`, 5); the drift guard runs the
+   real wipes against a recording storage (7); HTTPError scrubs before it cuts (9); `clips` forgotten at sign-out (10); `ContentStore.dispose()` (three `bun test` failures in a
+   full run came from a store a test closed). Deck: the first unacknowledged line's gap is named, and so is the deck's own `dropped` system line (the cap still drops the oldest
+   unacknowledged lines and SAYS so; stopping the deck for a full journal is the worse failure for a radio; chosen and recorded) (3, 5); `Deck.wipe()` clears the item on air,
+   the held items and the reason, stops the engine, registered in the wipe (7); `level` and `rate` deleted from the interface (8). Deck 1 (remote audio recorded as heard
+   without sound) untouched on purpose. Deck 2 (a whole-batch refusal acknowledged) and 6 (start_before_end holds one call) remain preconditions of step G.
+2. Mail, two seats (commits ea63bff4f, 1ea1351a7). Linear scans with the input cut before any scan (htmlToText, trimH; `clean` capped at 120 000 with a plain statement over it);
+   `beginSignOut` before the native call, a generation check at every store write, MailSeal makes no key when the sign-in key is gone; the seal authenticates the record
+   (MS3); the native open answers bad or cannot, only bad removes; a first-use key race; `validate` before a catch-up (a restore re-fetches); no plain mail sync or
+   mailDocs (mail stays out of local search until a search over sealed mail is designed: this REPLACES the mail part of step 3); compose text cleared at sign-out; draft size
+   bound and no double save; `mailCan` probe; a byte budget; demo shows no real rows; links in the original are inert with their target written after them; the reference
+   page `docs/reference/exact/native-modules.md` rewritten. Where `app:/cache` is: `$HOME/Library/Caches/exact/<app id>` (`host/apple/src/picker.rs:52`), outside a device
+   backup by Apple's rule; `app:/data` is in backup. Residuals: the original is plain on disk while its page is open; the other moved stores (paper, files, notebook, takes,
+   podcasts) have the reply-generation guard in `authedJSON`/`authedBytes` and the wipes, but no explicit check AT the write; timeout wording ("You are offline") unchanged;
+   compose is cleared by the sign-out action, not by a task on a signed-out tick, and the cached answers of the last page are not cleared.
+3. Step C, large files (commit 2a17d6ef4). `authedToFile` + `exactBodyTo`; caps 800/300/60 MB; audio from Files in the queue again through `queueAdd` kind `file` with a `local`
+   option (no new native name). The native ceiling was kept by deleting the redundant Swift mail wipe.
+
+NOT DONE (context ran out at a step boundary): step D (paper title with the route; the one-time podcast positions import; plain http feeds; file names and podcasts in
+local search; mail cards' page text; mail catch-up beyond 25), step E (the signed-in tour: Files, Mail, podcasts, paper, notebook, takes, the local sign-out drill; the cause
+of the signed-out screens in the first `real` run; the first-answer timing against the 100 ms turn), steps F and G (the deck bridge, the run sheet through the deck).
+
+## Left, in order (for a fourth integrator)
+
+1. Run `proof` and `real` at the tip again (the queue results of the third pass are in the lead's queue directory).
+2. Step D as above. Mail in search: design a search over sealed mail first.
+3. Step E: extend `mobile/scripts/proof-real.sh` (reads only: a text file, never a PDF; a message, never Save draft or the approval link; podcasts without Subscribe), then the
+   local sign-out drill LAST with a tree assertion that the shared stores are empty and the wipe marker is gone. Measure the first shared answer after launch against 100 ms.
+4. Steps F and G as in the first record; the deck preconditions above, plus deck 2 and 6.
+5. Android: Kotlin for `mailSeal`/`mailOpen`/`mailCan`/`mailForget` and `signOut`; the file resolver for audio from Files after a relaunch.
+6. The earlier list: steps 4 to 6 of the first record.
 
 ## Handoff (written at the end of the first pass)
 
