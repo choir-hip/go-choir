@@ -52,6 +52,11 @@ func classifyEmbedOutcome(err error) embedEffect {
 // few sample rows could be embedded): not a fault of the file.
 var errVectorImportCannotCheck = errors.New("vector import: the file cannot be checked now")
 
+// errVectorImportShortDraw marks a shortfall found in a draw that covered only
+// part of the file (more rows than vectorImportCandidates): the next draw is
+// different, so it is no proof about the rows not drawn.
+var errVectorImportShortDraw = errors.New("the draw covered only part of the file")
+
 type importFateKind int
 
 const (

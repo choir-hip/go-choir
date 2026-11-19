@@ -49,6 +49,14 @@ var (
 	// searches or space its calls: the unit's low CPU weight is what lets
 	// guests win (CLAUDE.md, no limits on our own model calls).
 	vectorBatch = 4
+	// vectorGapPage is how many gap rows one statement reads. The gap statement
+	// scans every projected capture of the computer (about 2 s at 217,000), so it
+	// runs once per page and the page is fed to the embedder vectorBatch at a
+	// time; it is a size of one read, not a limit on the embedder's calls.
+	vectorGapPage = 512
+	// vectorInboxCheckEvery is how often, at most, a running pass looks between
+	// embed batches for a file in the spool inbox, and yields to it.
+	vectorInboxCheckEvery = 60 * time.Second
 	// vectorStartDelay is how long after boot the first pass waits.
 	vectorStartDelay = 30 * time.Second
 	// vectorIdleInterval is how long a worker with nothing to do waits before
@@ -137,8 +145,12 @@ type VectorPassResult struct {
 	// are recorded (no vector, the reason) and are not retried until the model
 	// changes.
 	Refused int
-	// Imports are inbox files taken in this pass (one a pass).
+	// Imports are inbox files brought to an outcome (done/ or refused/) in this
+	// pass, at most one; a file put back to wait is not counted.
 	Imports int
+	// Yielded says the pass stopped early because the spool inbox holds a file
+	// the next pass would take; the worker starts that pass at once.
+	Yielded bool
 	// Removed are vectors deleted because their text is no longer public.
 	Removed int
 	// StoryGap and CaptureGap are the counts without a vector at the start.
@@ -446,9 +458,16 @@ type captureGapRow struct {
 	Eff   time.Time
 }
 
+// captureGapBatchHook is a test seam: it runs before each gap statement of the
+// capture walk, so a test can count them. Set it only while no pass runs.
+var captureGapBatchHook func()
+
 // captureGapBatch is the next batch of eligible projected captures without a
 // row of the model, newest first, after the keyset cursor (eff, id).
 func (s *Store) captureGapBatch(ctx context.Context, model string, afterEff *time.Time, afterID string, n int) ([]captureGapRow, error) {
+	if captureGapBatchHook != nil {
+		captureGapBatchHook()
+	}
 	q := `SELECT v.capture_id, v.owner_id, COALESCE(v.published_at, v.fetched_at, v.updated_at) AS eff FROM proj_capture_index v
 		WHERE ` + vecCaptureEligibleSQL + ` AND NOT EXISTS (SELECT 1 FROM vec_captures x WHERE x.capture_id = v.capture_id AND x.model = ?)`
 	args := []any{model}
@@ -547,6 +566,17 @@ func (s *Service) embedInputs(ctx context.Context, shape string, inputs []string
 // the sweeps that remove vectors whose text is no longer public. It returns
 // when the gap it found is closed, the context ends, or the embedder fails.
 func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
+	return s.runVectorPass(ctx, vectorInboxCheckEvery, vectorIdleInterval)
+}
+
+// runVectorPass is RunVectorPass with the two timings it needs given, so the
+// worker passes the values it read once at start. Between embed batches, at most
+// once per checkEvery, the pass asks whether the spool inbox holds a file the
+// next pass would take (vectorInboxHasFileForPass; a waiter tried less than
+// idleInterval ago does not count, which bounds the passes a permanently waiting
+// file can cause to one per idleInterval) and, if so, returns early with
+// Yielded set, so a file placed during a long pass is not left waiting for it.
+func (s *Service) runVectorPass(ctx context.Context, checkEvery, idleInterval time.Duration) (VectorPassResult, error) {
 	var res VectorPassResult
 	if s == nil || s.store == nil {
 		return res, errors.New("vectors: nil service")
@@ -653,6 +683,20 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		}
 		log.Printf("corpusd vectors embed kind=%s remaining=%d rate=%.2f/s elapsed=%.0fs", kind, s.store.vec.remaining.Load(), rate, el)
 	}
+	lastInboxCheck := time.Now()
+	yieldToInbox := func() bool {
+		if time.Since(lastInboxCheck) < checkEvery {
+			return false
+		}
+		lastInboxCheck = time.Now()
+		if !s.vectorInboxHasFileForPass(idleInterval) {
+			return false
+		}
+		s.vecIdle = vecIdleMark{}
+		res.Yielded = true
+		log.Printf("corpusd vectors pass yields to the inbox remaining=%d", s.store.vec.remaining.Load())
+		return true
+	}
 	og := s.ogStore()
 	if walk {
 		logEmbedGap("stories", started, 0, storyHave, storyWant, refusedStories)
@@ -693,6 +737,9 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 			batchStart, batchRows, batchUnits = time.Now(), 0, 0
 		}
 		progress("story")
+		if yieldToInbox() {
+			return res, nil
+		}
 	}
 	if batchUnits > 0 || len(gap) > 0 {
 		logEmbedGap("stories", batchStart, batchRows, storyHave, storyWant, refusedStories)
@@ -721,30 +768,48 @@ func (s *Service) RunVectorPass(ctx context.Context) (VectorPassResult, error) {
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
-		rows, err := s.store.captureGapBatch(ctx, model, afterEff, afterID, vectorBatch)
+		page, err := s.store.captureGapBatch(ctx, model, afterEff, afterID, vectorGapPage)
 		if err != nil {
 			return res, err
 		}
-		if len(rows) == 0 {
+		if len(page) == 0 {
 			break
 		}
-		last := rows[len(rows)-1]
+		last := page[len(page)-1]
 		afterEff, afterID = &last.Eff, last.ID
-		batchAt := time.Now()
-		n, skipped, nref, err := s.embedCaptureBatch(ctx, rows)
-		s.store.vec.remaining.Add(-int64(len(rows)))
-		res.Captures += n
-		res.Skipped += skipped
-		res.Refused += nref
-		refusedCaptures += int64(nref)
-		capHave += int64(n + nref)
-		capWant -= int64(skipped)
-		embeddedTotal.Add(int64(n))
-		logEmbedGap("captures", batchAt, n, capHave, capWant, refusedCaptures)
-		if err != nil {
-			return res, err
+		// The page is a snapshot. embedCaptureBatch re-checks each row's
+		// eligibility (sqlEligibleCaptures) just before embedding and skips one
+		// that is no longer eligible, and writeCaptureVectors upserts by capture
+		// id, so a row that got a vector meanwhile is only overwritten with the
+		// same model's row; a stale page cannot write a vector for an ineligible
+		// capture.
+		for start := 0; start < len(page); start += vectorBatch {
+			if err := ctx.Err(); err != nil {
+				return res, err
+			}
+			rows := page[start:min(start+vectorBatch, len(page))]
+			batchAt := time.Now()
+			n, skipped, nref, err := s.embedCaptureBatch(ctx, rows)
+			s.store.vec.remaining.Add(-int64(len(rows)))
+			res.Captures += n
+			res.Skipped += skipped
+			res.Refused += nref
+			refusedCaptures += int64(nref)
+			capHave += int64(n + nref)
+			capWant -= int64(skipped)
+			embeddedTotal.Add(int64(n))
+			logEmbedGap("captures", batchAt, n, capHave, capWant, refusedCaptures)
+			if err != nil {
+				return res, err
+			}
+			progress("capture")
+			if yieldToInbox() {
+				return res, nil
+			}
 		}
-		progress("capture")
+		if len(page) < vectorGapPage {
+			break // a short page is the end of the gap
+		}
 	}
 
 	s.store.vec.remaining.Store(0)
@@ -1164,13 +1229,13 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 		return
 	}
 	s.store.vec.started.Do(func() {
-		// These four timings are read once, here, before the goroutine exists:
+		// These five timings are read once, here, before the goroutine exists:
 		// the loop reads the locals, so a test that changes the four and puts
 		// them back does not race with a worker that is still stopping. Keep
 		// the capture outside the goroutine. (The batch sizes are still read
 		// by a pass as package variables; a test that changes one must not
 		// overlap a running worker.)
-		startDelay, backoffStart, backoffMax, idle := vectorStartDelay, vectorBackoffStart, vectorBackoffMax, vectorIdleInterval
+		startDelay, backoffStart, backoffMax, idle, checkEvery := vectorStartDelay, vectorBackoffStart, vectorBackoffMax, vectorIdleInterval, vectorInboxCheckEvery
 		s.removeStaleVectorSpool()
 		s.recoverVectorInbox()
 		go func() {
@@ -1182,7 +1247,7 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 			backoff := backoffStart
 			down := false
 			for {
-				res, err := s.RunVectorPass(ctx)
+				res, err := s.runVectorPass(ctx, checkEvery, idle)
 				if ctx.Err() != nil {
 					return
 				}
@@ -1205,8 +1270,8 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 						down = false
 					}
 					backoff = backoffStart
-					if res.Worked() {
-						wait = 0
+					if res.Worked() || res.Yielded {
+						wait = 0 // a yielded pass is followed at once by the one that takes the file
 					}
 				}
 				if wait > 0 {

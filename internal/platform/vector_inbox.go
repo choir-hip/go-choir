@@ -40,6 +40,14 @@ import (
 // taken, so a copy in progress is not read. Copy as name.part and rename.
 var vectorInboxMinAge = 60 * time.Second
 
+// vectorInboxShortDraws is how many times in a row the same inbox file may fall
+// short of the sample floor in a draw that was only a subset of its rows before
+// it is refused. One short draw of a big file proves nothing about the rows not
+// drawn (each pass draws afresh), so it waits; the same shortfall in this many
+// draws means the file is mostly uncheckable, which is as good as a proof can be
+// without embedding every row. In memory: a restart starts the count again.
+const vectorInboxShortDraws = 3
+
 var vectorInboxDirNames = []string{"inbox", "running", "done", "refused", "interrupted"}
 
 func (s *Service) vectorSpoolDir(sub string) string {
@@ -112,7 +120,7 @@ func moveNoReplace(src, dir, name string) (string, error) {
 }
 
 // ProcessVectorInbox imports one file of the inbox, if one is eligible: the
-// oldest that is not waiting, else the oldest waiting one; none while a job of the
+// oldest that is not waiting, else the waiting one tried longest ago; none while a job of the
 // route runs (the file waits). It returns how many files it brought to an outcome
 // (done/ or refused/): a file that was put back because it could not be imported
 // now is not counted, so the pass is not "work" and waits its ordinary interval.
@@ -122,9 +130,47 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 	if err := s.ensureVectorInboxDirs(); err != nil {
 		return 0, fmt.Errorf("vector inbox: %w", err)
 	}
+	pick, _, _, perr := s.pickVectorInboxFile()
+	if perr != nil {
+		return 0, perr
+	}
+	v := &s.store.vec
+	if pick == "" || ctx.Err() != nil {
+		return 0, nil
+	}
+	job, ok := s.beginVectorJob("inbox", pick)
+	if !ok {
+		return 0, nil // the route's job runs; the file waits
+	}
+	done, ierr := s.importInboxFile(ctx, job, pick)
+	v.importMu.Lock()
+	if done {
+		delete(v.inboxDeferred, pick)
+	} else {
+		if v.inboxDeferred == nil {
+			v.inboxDeferred = map[string]time.Time{}
+		}
+		v.inboxDeferred[pick] = time.Now()
+	}
+	v.importMu.Unlock()
+	if done {
+		return 1, nil // importInboxFile returns an error only for a file not done
+	}
+	return 0, ierr
+}
+
+// pickVectorInboxFile is the one rule for which inbox file is taken next: the
+// oldest eligible file (not .part, old enough) that is not waiting, else the
+// waiting one tried longest ago. It returns "" when there is none; waiting says
+// the file was tried and put back, and lastTried when. It prunes the memory of
+// files that have left the inbox.
+func (s *Service) pickVectorInboxFile() (pick string, lastTried time.Time, waiting bool, err error) {
+	if err := s.ensureVectorInboxDirs(); err != nil {
+		return "", time.Time{}, false, fmt.Errorf("vector inbox: %w", err)
+	}
 	entries, rerr := os.ReadDir(s.vectorSpoolDir("inbox"))
 	if rerr != nil {
-		return 0, fmt.Errorf("vector inbox: %w", rerr)
+		return "", time.Time{}, false, fmt.Errorf("vector inbox: %w", rerr)
 	}
 	type cand struct {
 		name string
@@ -151,44 +197,55 @@ func (s *Service) ProcessVectorInbox(ctx context.Context) (imported int, err err
 			delete(v.inboxDeferred, name) // gone from the inbox
 		}
 	}
-	deferred := map[string]bool{}
-	for name := range v.inboxDeferred {
-		deferred[name] = true
+	for name := range v.inboxShort {
+		if !present[name] {
+			delete(v.inboxShort, name)
+		}
+	}
+	deferred := map[string]time.Time{} // name -> when it was last tried
+	for name, at := range v.inboxDeferred {
+		deferred[name] = at
 	}
 	v.importMu.Unlock()
 	sort.Slice(cands, func(i, j int) bool { return cands[i].mod.Before(cands[j].mod) })
-	pick := ""
+	pick = ""
 	for _, c := range cands {
-		if !deferred[c.name] {
+		if _, waits := deferred[c.name]; !waits {
 			pick = c.name
 			break
 		}
 	}
-	if pick == "" && len(cands) > 0 {
-		pick = cands[0].name // only waiting files are left: try the oldest again
-	}
-	if pick == "" || ctx.Err() != nil {
-		return 0, nil
-	}
-	job, ok := s.beginVectorJob("inbox", pick)
-	if !ok {
-		return 0, nil // the route's job runs; the file waits
-	}
-	done, ierr := s.importInboxFile(ctx, job, pick)
-	v.importMu.Lock()
-	if done {
-		delete(v.inboxDeferred, pick)
-	} else {
-		if v.inboxDeferred == nil {
-			v.inboxDeferred = map[string]bool{}
+	if pick == "" {
+		// Only waiting files are left: try the one tried longest ago (ties keep
+		// the order of cands, which sort.Slice leaves arbitrary for equal
+		// modification times), so a file that can never be imported now does not
+		// starve the others.
+		var last time.Time
+		for _, c := range cands {
+			if at := deferred[c.name]; pick == "" || at.Before(last) {
+				pick, last = c.name, at
+			}
 		}
-		v.inboxDeferred[pick] = true
 	}
-	v.importMu.Unlock()
-	if done {
-		return 1, ierr
+	if pick != "" {
+		lastTried, waiting = deferred[pick]
 	}
-	return 0, ierr
+	return pick, lastTried, waiting, nil
+}
+
+// vectorInboxHasFileForPass says whether a running pass should yield: the inbox
+// holds a file the next pass would pick, and it is not a waiter tried less than
+// idle ago (a waiter that cannot be imported now is tried once per idle
+// interval at most, so it cannot make passes spin). Picking is not taking: the
+// take also needs beginVectorJob, so while a job of the route runs the pass
+// that follows a yield takes nothing, and the file costs one early return per
+// check interval until that job ends.
+func (s *Service) vectorInboxHasFileForPass(idle time.Duration) bool {
+	pick, last, waiting, err := s.pickVectorInboxFile()
+	if err != nil || pick == "" {
+		return false
+	}
+	return !waiting || time.Since(last) >= idle
 }
 
 // importInboxFile claims name (a move into running/ that cannot replace), imports
@@ -220,6 +277,7 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 		ierr = fmt.Errorf("%w: %s is %d bytes, over the %d the import takes", ErrVectorImportRefused, name, fi.Size(), vectorImportMaxBytes)
 	default:
 		res, ierr = s.ImportVectorFile(ctx, run)
+		ierr = s.countShortDraw(name, ierr)
 	}
 	if ctx.Err() != nil && ierr != nil {
 		// Shutdown mid-import: the file stays in running/ and is moved to
@@ -268,4 +326,27 @@ func (s *Service) importInboxFile(ctx context.Context, job *VectorImportJob, nam
 		log.Printf("corpusd vectors inbox: job record of %s not written: %v", final, werr)
 	}
 	return true, nil
+}
+
+// countShortDraw counts, per inbox file, consecutive imports that fell short of
+// the sample floor in a draw that covered only part of the file
+// (errVectorImportShortDraw). At vectorInboxShortDraws the error becomes a
+// refusal naming the count; any other outcome clears the count.
+func (s *Service) countShortDraw(name string, ierr error) error {
+	v := &s.store.vec
+	v.importMu.Lock()
+	defer v.importMu.Unlock()
+	if !errors.Is(ierr, errVectorImportShortDraw) {
+		delete(v.inboxShort, name)
+		return ierr
+	}
+	if v.inboxShort == nil {
+		v.inboxShort = map[string]int{}
+	}
+	v.inboxShort[name]++
+	if n := v.inboxShort[name]; n >= vectorInboxShortDraws {
+		delete(v.inboxShort, name)
+		return fmt.Errorf("%w: the sample fell short of the floor in %d draws in a row, each of %d of the file's rows; the file is mostly uncheckable by this host (last: %v)", ErrVectorImportRefused, n, vectorImportCandidates, ierr)
+	}
+	return ierr
 }

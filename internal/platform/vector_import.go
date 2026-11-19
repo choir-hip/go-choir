@@ -432,7 +432,7 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 	// inspects no error.
 	oversizedKeys := map[string]bool{}
 	rowKey := func(r vectorFileRow) string { return fmt.Sprintf("%s|%s|%d", r.Kind, r.ID, r.Ordinal) }
-	checked, setAside, skippedNow, fileRejected, next := 0, 0, 0, 0, 0
+	checked, setAside, skippedNow, fileRejected, next := 0, 0, 0, 0, 0 // fileRejected: not found, not public, another cut
 	for checked < vectorImportSamples && next < len(order) {
 		var inputs []string
 		var vecs [][]float32
@@ -446,7 +446,7 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 				continue
 			}
 			if in.reason != "" || in.TextSHA != c.row.TextSHA {
-				fileRejected++ // a fault of the file: not found, not public, another cut
+				fileRejected++ // a fault of the file
 				continue
 			}
 			inputs = append(inputs, in.Input)
@@ -479,13 +479,29 @@ func (s *Service) ImportVectorFile(ctx context.Context, path string) (VectorImpo
 		}
 	}
 	if checked < floor {
-		// Candidates rejected for a reason that is the file's (not found, not public, a
-		// text this host cuts differently) are counted apart from those set aside or
-		// skipped: when they alone account for the shortfall the file is refused.
-		if setAside+skippedNow > 0 && fileRejected < floor-checked {
-			return res, fmt.Errorf("%w: only %d rows could be checked, need %d (%d are too large for this host's embedder, %d failed this call); the file waits", errVectorImportCannotCheck, checked, floor, setAside, skippedNow)
+		// Rows set aside (too large for this host) and rows rejected as the file's
+		// own fault (not found, not public, another cut) never come back; rows the
+		// server could not answer for now (skippedNow) are the only ones a later
+		// pass could add. So even if every skipped row had passed, is the floor
+		// reachable?
+		//   - No (checked+skippedNow < floor): the shortfall is the file's own. If
+		//     the draw covered every row the file is refused. If it was only a
+		//     subset (more rows than vectorImportCandidates) the next draw is another
+		//     random subset, so one draw proves nothing: the file waits and is
+		//     counted (errVectorImportShortDraw); the inbox refuses it when it stays
+		//     short vectorInboxShortDraws times in a row.
+		//   - Yes: the shortfall may be the host's state, so the file waits and is
+		//     not counted, however many rows it has. Nothing bounds this wait: rows
+		//     that fail in transport every time while the server is healthy keep the
+		//     file in the inbox until a person looks at it (journal line, state retry).
+		counts := fmt.Sprintf("%d are too large for this host's embedder, %d failed this call, %d are not found, not public, or cut differently by this host", setAside, skippedNow, fileRejected)
+		if checked+skippedNow >= floor {
+			return res, fmt.Errorf("%w: only %d rows could be checked, need %d (%s); the file waits", errVectorImportCannotCheck, checked, floor, counts)
 		}
-		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (the text or its cut differs)", ErrVectorImportRefused, checked, floor)
+		if len(order) < res.Rows {
+			return res, fmt.Errorf("%w: %w: only %d rows could be checked, need %d, in a draw of %d of the file's %d rows (%s); the file waits", errVectorImportCannotCheck, errVectorImportShortDraw, checked, floor, len(order), res.Rows, counts)
+		}
+		return res, fmt.Errorf("%w: only %d rows of the file can be checked against this host's text, need %d (%s; the text or its cut differs, or the rows are too large)", ErrVectorImportRefused, checked, floor, counts)
 	}
 	if res.MinCosine < vectorImportMinCosine {
 		return res, fmt.Errorf("%w: a sample of %d rows (seed %d) agrees only to cosine %.5f, need %.3f", ErrVectorImportRefused, res.Samples, res.SampleSeed, res.MinCosine, vectorImportMinCosine)

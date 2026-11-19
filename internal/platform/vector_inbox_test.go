@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -643,5 +645,305 @@ func TestACutMismatchRefusesTheFileEvenWhenSomeCandidatesWereSetAside(t *testing
 	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
 	if !errors.Is(err, ErrVectorImportRefused) || !strings.Contains(err.Error(), "the text or its cut differs") {
 		t.Fatalf("a file this host cuts differently must be refused, not wait: %v", err)
+	}
+}
+
+// ---- round 7: which waiter is retried, and when a short sample waits ----
+// Failure list, written before the code:
+//   a. TestOnlyTheOldestWaitingFileIsRetriedSoANewerWaiterIsNeverTried: two
+//      deferred files, the older never importable; the newer is never retried;
+//   b. TestAFileWhoseCheckableRowsAreAllSetAsideIsRefusedNotLeftWaiting: rows set
+//      aside for the file's own reason (too large) can never be checked, so the
+//      file waits for ever;
+//   c. TestAFileWhoseShortfallIsOnlyTransientSkipsStaysInTheInbox: the guard that
+//      repair (b) does not refuse a file the server merely could not answer for;
+//   d. the existing waiting-file tests stay as they are.
+
+// stuckEmbedder fails in transport on an input holding STUCK always, and on one
+// holding LATER until open is set.
+type stuckEmbedder struct {
+	inner embedder.Embedder
+	open  atomic.Bool
+}
+
+func (e *stuckEmbedder) Health(ctx context.Context) error { return e.inner.Health(ctx) }
+func (e *stuckEmbedder) Embed(ctx context.Context, in []string) ([][]float32, error) {
+	for _, x := range in {
+		if strings.Contains(x, "STUCK") || (strings.Contains(x, "LATER") && !e.open.Load()) {
+			return nil, errors.New("connection reset by peer")
+		}
+	}
+	return e.inner.Embed(ctx, in)
+}
+
+func TestOnlyTheOldestWaitingFileIsRetriedSoANewerWaiterIsNeverTried(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	stuck := f.captures(t, "o1", "c1", "STUCK", 40, base, func(i int) string { return fmt.Sprintf("STUCK text number%d", i) }, time.Minute)
+	later := f.captures(t, "o1", "c1", "LATER", 40, base, func(i int) string { return fmt.Sprintf("LATER text number%d", i) }, time.Minute)
+	emb := &stuckEmbedder{inner: f.emb}
+	f.store.SetEmbedder(emb)
+	f.inboxPut(t, "a-old.jsonl", f.macRows(t, stuck...), 5*time.Hour)
+	f.inboxPut(t, "b-new.jsonl", f.macRows(t, later...), time.Hour)
+	for i := 0; i < 2; i++ { // both are tried once and both wait
+		if n := inboxTake(t, f); n != 0 {
+			t.Fatalf("pass %d took %d", i, n)
+		}
+	}
+	emb.open.Store(true) // the newer file can be imported now; the older never can
+	for i := 0; i < 4; i++ {
+		inboxTake(t, f)
+	}
+	if !spoolHas(filepath.Join(f.inboxDir("done"), "b-new.jsonl")) {
+		t.Fatal("the newer waiting file was never tried again: the oldest waiter starves it")
+	}
+	if !spoolHas(filepath.Join(f.inboxDir("inbox"), "a-old.jsonl")) {
+		t.Fatal("the stuck file left the inbox")
+	}
+}
+
+func TestAFileWhoseCheckableRowsAreAllSetAsideIsRefusedNotLeftWaiting(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	ids := f.captures(t, "o1", "c1", "TOOLONG", 40, base, func(i int) string { return fmt.Sprintf("TOOLONG text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, f.macRows(t, ids...)))
+	if !errors.Is(err, ErrVectorImportRefused) || errors.Is(err, errVectorImportCannotCheck) {
+		t.Fatalf("a file whose rows are all too large for this host must be refused, not wait: %v", err)
+	}
+}
+
+func TestAFileWhoseShortfallIsOnlyTransientSkipsStaysInTheInbox(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	ids := f.captures(t, "o1", "c1", "FLAKY", 40, base, func(i int) string { return fmt.Sprintf("FLAKY text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	f.inboxPut(t, "t.jsonl", f.macRows(t, ids...), time.Hour)
+	if n := inboxTake(t, f); n != 0 {
+		t.Fatalf("took %d", n)
+	}
+	if !spoolHas(filepath.Join(f.inboxDir("inbox"), "t.jsonl")) || spoolHas(filepath.Join(f.inboxDir("refused"), "t.jsonl")) {
+		t.Fatal("a file the server could not answer for was not left in the inbox")
+	}
+}
+
+// ---- round 7, review: a short draw of a big file is not proof ----
+// Failure list, written before the code:
+//   e. TestAShortDrawOfAFileOverTheCandidateCapWaitsAtFirst: a file of more rows
+//      than the candidate cap, mostly set aside, must not be refused on one random
+//      draw (a guard: the old code waited for ever on it, it does not fail there);
+//   f. TestAFileOverTheCandidateCapThatStaysShortIsRefusedAfterSeveralDraws: it
+//      must not wait for ever either;
+//   g. TestTheRefusalOfAShortSampleNamesTheCountsOfEveryKind: the record the owner
+//      reads says checked, floor, and each kind of row not checked.
+
+// bigMostlyTooLong builds a file of vectorImportCandidates+100 captures of which
+// only 20 can be checked by this host (the floor is 32, so it is short whatever
+// the draw).
+func bigMostlyTooLong(t *testing.T, f *vecFixture) []importRow {
+	t.Helper()
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	n := vectorImportCandidates + 100
+	plain := f.captures(t, "o1", "c1", "plain", 20, base, func(i int) string { return fmt.Sprintf("plain text number%d", i) }, time.Minute)
+	long := f.captures(t, "o1", "c1", "TOOLONG", n-20, base, func(i int) string { return fmt.Sprintf("TOOLONG text number%d", i) }, time.Minute)
+	return f.macRows(t, append(plain, long...)...)
+}
+
+func TestAShortDrawOfAFileOverTheCandidateCapWaitsAtFirst(t *testing.T) {
+	f := newVecFixture(t)
+	rows := bigMostlyTooLong(t, f)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, rows))
+	if !errors.Is(err, errVectorImportCannotCheck) || errors.Is(err, ErrVectorImportRefused) {
+		t.Fatalf("one draw of %d candidates from %d rows proves nothing about the rest: %v", vectorImportCandidates, len(rows), err)
+	}
+}
+
+func TestAFileOverTheCandidateCapThatStaysShortIsRefusedAfterSeveralDraws(t *testing.T) {
+	f := newVecFixture(t)
+	rows := bigMostlyTooLong(t, f)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	f.inboxPut(t, "big.jsonl", rows, time.Hour)
+	for i := 0; i < vectorInboxShortDraws-1; i++ {
+		if n := inboxTake(t, f); n != 0 || !spoolHas(filepath.Join(f.inboxDir("inbox"), "big.jsonl")) {
+			t.Fatalf("draw %d: the file should still wait (took %d)", i+1, n)
+		}
+	}
+	if n := inboxTake(t, f); n != 1 || !spoolHas(filepath.Join(f.inboxDir("refused"), "big.jsonl")) {
+		t.Fatalf("after %d short draws the file must be refused (took %d)", vectorInboxShortDraws, n)
+	}
+}
+
+func TestTheRefusalOfAShortSampleNamesTheCountsOfEveryKind(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	ids := f.captures(t, "o1", "c1", "TOOLONG", 40, base, func(i int) string { return fmt.Sprintf("TOOLONG text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb})
+	_, err := f.svc.ImportVectorFile(context.Background(), writeImportFile(t, f.macRows(t, ids...)))
+	if !errors.Is(err, ErrVectorImportRefused) {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"only 0 rows", "need 20", "40 are too large", "0 failed this call"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("the refusal lacks %q: %v", want, err)
+		}
+	}
+}
+
+// ---- round 8 ----
+// Failure list, written before the code:
+//   j. TestABigFileWhoseRowsAreAllSkippedNowIsNeverRefused: a file over the
+//      candidate cap whose every row fails in transport is the host's state, not
+//      the file's; it counted as a short draw and was refused after three passes;
+//   k. TestAPassYieldsToAFilePlacedMidPass: a pass embedding the gap does not
+//      look at the inbox until it ends (days on the paper's first pass);
+//   l. TestTwoFilesPlacedMidPassAreBothImportedInOrderBeforeTheGapIsDone;
+//   m. TestAPermanentlyWaitingFileDoesNotMakePassesSpin;
+//   n. TestAWaiterTriedLongAgoIsYieldedToAgain: the bound on (m) is the idle
+//      interval, not for ever.
+
+func TestABigFileWhoseRowsAreAllSkippedNowIsNeverRefused(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	ids := f.captures(t, "o1", "c1", "plain", vectorImportCandidates+100, base, func(i int) string { return fmt.Sprintf("plain text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&effectEmbedder{inner: f.emb, allFlaky: true})
+	f.inboxPut(t, "skip.jsonl", f.macRows(t, ids...), time.Hour)
+	for i := 0; i < vectorInboxShortDraws+1; i++ {
+		inboxTake(t, f)
+		if !spoolHas(filepath.Join(f.inboxDir("inbox"), "skip.jsonl")) {
+			t.Fatalf("pass %d: a file short only because the server could not answer was moved out of the inbox", i+1)
+		}
+	}
+}
+
+// placeOnFirstEmbed puts the given files in the inbox when the embedder is first
+// asked for a batch, that is in the middle of a pass, in the pass's own goroutine.
+type placeOnFirstEmbed struct {
+	inner embedder.Embedder
+	once  sync.Once
+	place func()
+}
+
+func (e *placeOnFirstEmbed) Health(ctx context.Context) error { return e.inner.Health(ctx) }
+func (e *placeOnFirstEmbed) Embed(ctx context.Context, in []string) ([][]float32, error) {
+	e.once.Do(e.place)
+	return e.inner.Embed(ctx, in)
+}
+
+func withCheckEvery(d time.Duration) func() {
+	old := vectorInboxCheckEvery
+	vectorInboxCheckEvery = d
+	return func() { vectorInboxCheckEvery = old }
+}
+
+func TestAPassYieldsToAFilePlacedMidPass(t *testing.T) {
+	defer withCheckEvery(0)()
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	gapIDs := f.captures(t, "o1", "c1", "gap", 20, base, func(i int) string { return fmt.Sprintf("gap text number%d", i) }, time.Minute)
+	fileIDs := f.captures(t, "o1", "c1", "file", 10, base, func(i int) string { return fmt.Sprintf("file text number%d", i) }, time.Minute)
+	rows := f.macRows(t, fileIDs...)
+	total := len(gapIDs) + len(fileIDs)
+	f.store.SetEmbedder(&placeOnFirstEmbed{inner: f.emb, place: func() { f.inboxPut(t, "m.jsonl", rows, time.Hour) }})
+	res := f.pass(t)
+	if !res.Yielded {
+		t.Fatalf("the pass did not yield to the file: %+v", res)
+	}
+	if got := f.count(t, "vec_captures"); got >= total {
+		t.Fatalf("the gap was done (%d of %d) before the pass yielded", got, total)
+	}
+	res = f.pass(t)
+	if res.Imports != 1 || res.Yielded || !spoolHas(filepath.Join(f.inboxDir("done"), "m.jsonl")) {
+		t.Fatalf("the next pass should take the file and finish the gap: %+v", res)
+	}
+	if got := f.count(t, "vec_captures"); got != total {
+		t.Fatalf("%d captures with vectors, want %d", got, total)
+	}
+}
+
+func TestTwoFilesPlacedMidPassAreBothImportedInOrderBeforeTheGapIsDone(t *testing.T) {
+	defer withCheckEvery(0)()
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	gapIDs := f.captures(t, "o1", "c1", "gap", 40, base, func(i int) string { return fmt.Sprintf("gap text number%d", i) }, time.Minute)
+	ids1 := f.captures(t, "o1", "c1", "one", 10, base, func(i int) string { return fmt.Sprintf("one text number%d", i) }, time.Minute)
+	ids2 := f.captures(t, "o1", "c1", "two", 10, base, func(i int) string { return fmt.Sprintf("two text number%d", i) }, time.Minute)
+	rows1, rows2 := f.macRows(t, ids1...), f.macRows(t, ids2...)
+	total := len(gapIDs) + len(ids1) + len(ids2)
+	f.store.SetEmbedder(&placeOnFirstEmbed{inner: f.emb, place: func() {
+		f.inboxPut(t, "a.jsonl", rows1, 2*time.Hour)
+		f.inboxPut(t, "b.jsonl", rows2, time.Hour)
+	}})
+	if res := f.pass(t); !res.Yielded {
+		t.Fatalf("pass 1 did not yield: %+v", res)
+	}
+	res := f.pass(t)
+	if res.Imports != 1 || !res.Yielded || !spoolHas(filepath.Join(f.inboxDir("done"), "a.jsonl")) || spoolHas(filepath.Join(f.inboxDir("done"), "b.jsonl")) {
+		t.Fatalf("pass 2 should take a.jsonl only and yield for b.jsonl: %+v", res)
+	}
+	if got := f.count(t, "vec_captures"); got >= total {
+		t.Fatalf("the gap was done (%d of %d) before the second file was taken", got, total)
+	}
+	res = f.pass(t)
+	if res.Imports != 1 || res.Yielded || !spoolHas(filepath.Join(f.inboxDir("done"), "b.jsonl")) {
+		t.Fatalf("pass 3 should take b.jsonl and finish: %+v", res)
+	}
+	if got := f.count(t, "vec_captures"); got != total {
+		t.Fatalf("%d captures with vectors, want %d", got, total)
+	}
+}
+
+func TestAPermanentlyWaitingFileDoesNotMakePassesSpin(t *testing.T) {
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	f.captures(t, "o1", "c1", "gap", 40, base, func(i int) string { return fmt.Sprintf("gap text number%d", i) }, time.Minute)
+	stuck := f.captures(t, "o1", "c1", "STUCK", 40, base, func(i int) string { return fmt.Sprintf("STUCK text number%d", i) }, time.Minute)
+	logs := fullTextLog(t)
+	f.store.SetEmbedder(&stuckEmbedder{inner: f.emb})
+	f.inboxPut(t, "stuck.jsonl", f.macRows(t, stuck...), time.Hour)
+	// The timings are read once by StartVectorWorker, so they are put back at
+	// once, before the worker has run a pass.
+	oStart, oIdle, oCheck := vectorStartDelay, vectorIdleInterval, vectorInboxCheckEvery
+	vectorStartDelay, vectorIdleInterval, vectorInboxCheckEvery = 0, time.Hour, 0
+	ctx, cancel := context.WithCancel(context.Background())
+	f.svc.StartVectorWorker(ctx)
+	vectorStartDelay, vectorIdleInterval, vectorInboxCheckEvery = oStart, oIdle, oCheck
+	defer cancel()
+	deadline := time.Now().Add(20 * time.Second)
+	for f.count(t, "vec_captures") < 40 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the gap was not embedded (%d)", f.count(t, "vec_captures"))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(500 * time.Millisecond)
+	// every pass that tries the waiter says so once
+	if n := strings.Count(logs.String(), "stuck.jsonl was not imported now"); n > 4 {
+		t.Fatalf("the waiting file was tried %d times in the window", n)
+	}
+	if !spoolHas(filepath.Join(f.inboxDir("inbox"), "stuck.jsonl")) {
+		t.Fatal("the waiting file left the inbox")
+	}
+}
+
+func TestAWaiterTriedLongAgoIsYieldedToAgain(t *testing.T) {
+	defer withCheckEvery(0)()
+	f := newVecFixture(t)
+	base := time.Now().UTC().Add(-100 * time.Hour)
+	f.captures(t, "o1", "c1", "gap", 20, base, func(i int) string { return fmt.Sprintf("gap text number%d", i) }, time.Minute)
+	stuck := f.captures(t, "o1", "c1", "STUCK", 40, base, func(i int) string { return fmt.Sprintf("STUCK text number%d", i) }, time.Minute)
+	f.store.SetEmbedder(&stuckEmbedder{inner: f.emb})
+	f.inboxPut(t, "stuck.jsonl", f.macRows(t, stuck...), time.Hour)
+	oIdle := vectorIdleInterval
+	defer func() { vectorIdleInterval = oIdle }()
+	vectorIdleInterval = time.Hour
+	if res := f.pass(t); res.Yielded {
+		t.Fatalf("a waiter tried at the start of this pass must not make it yield: %+v", res)
+	}
+	// more gap work, and the interval has run out for the waiter
+	f.captures(t, "o1", "c1", "more", 20, base, func(i int) string { return fmt.Sprintf("more text number%d", i) }, time.Minute)
+	vectorIdleInterval = 0
+	if res := f.pass(t); !res.Yielded {
+		t.Fatalf("a waiter last tried more than the idle interval ago should be yielded to: %+v", res)
 	}
 }

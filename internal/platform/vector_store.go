@@ -116,9 +116,14 @@ type vectorState struct {
 	jobs      map[string]*VectorImportJob
 	jobOrder  []string
 	lastJob   string
-	// inboxDeferred names inbox files that could not be imported now and wait;
-	// a newer file is taken before them (this process only).
-	inboxDeferred map[string]bool
+	// inboxDeferred maps inbox files that could not be imported now and wait to
+	// the time they were last tried; a file not waiting is taken before them, and
+	// among them the one tried longest ago. In memory only: a restart forgets it,
+	// which only makes every waiter new again.
+	inboxDeferred map[string]time.Time
+	// inboxShort counts, per inbox file, consecutive imports whose sample fell
+	// short of the floor in a draw of only part of the file (countShortDraw).
+	inboxShort map[string]int
 }
 
 func (v *vectorState) kickChan() chan struct{} {

@@ -2063,3 +2063,29 @@ func TestVectorWalkIsTimed(t *testing.T) {
 		t.Fatal("the chunked edge read is not in the retrieval counters")
 	}
 }
+
+// The capture walk reads the gap a page at a time (vectorGapPage) and feeds the
+// embedder vectorBatch at a time from it. Failure list, written before the code:
+//
+//	h. TestTheCaptureWalkReadsTheGapOncePerPageNotOncePerEmbedBatch: one gap
+//	   statement per embed batch of four, each a scan of every capture;
+//	i. the same walk still embeds every capture, one batch at a time.
+func TestTheCaptureWalkReadsTheGapOncePerPageNotOncePerEmbedBatch(t *testing.T) {
+	f := newVecFixture(t)
+	const n = 30
+	for i := 0; i < n; i++ {
+		f.capture(t, "o1", "c1", fmt.Sprintf("k%d", i), "Page", fmt.Sprintf("text %d", i), time.Now().UTC().Add(-time.Hour), false)
+	}
+	oldPage, oldHook := vectorGapPage, captureGapBatchHook
+	vectorGapPage = 10
+	var stmts int
+	captureGapBatchHook = func() { stmts++ }
+	f.pass(t) // synchronous: no goroutine of the code under test outlives it
+	vectorGapPage, captureGapBatchHook = oldPage, oldHook
+	if got := f.count(t, "vec_captures"); got != n {
+		t.Fatalf("%d captures embedded, want %d", got, n)
+	}
+	if want := n/10 + 1; stmts > want {
+		t.Fatalf("%d gap statements for %d captures, want at most %d (a page of 10), not one per batch of %d", stmts, n, want, vectorBatch)
+	}
+}
