@@ -297,6 +297,7 @@ cut afterwards, and the guest asked for 500 candidates and sent up to 2,000 hint
 to 2,500 rows (the 8 to 14 second calls of the 07:55Z update). The guest now asks for four times the most it lists (100) and sends
 the 100 label hints that hold the most query words. The term index is still scanned for every match of the words to count them;
 that part is bounded by the matches, not by the caller.
+The cost of the 100-candidate and 100-hint cut is recall: among thousands of pages matching the same number of words, the guest ranks only the newest 100 by its own field weights and labels, so a page it would have ranked first among all of them can be missed (the measurement and the reason are in [the problem record](../problems/corpus-search-takes-two-seconds-on-the-paper-2026-11-19.md)).
 
 **Guest list** (`researchtools.searchCapturesFor`): the guest lists corpusd's one
 ranked answer as it comes (`CaptureSearchResponse.Ranked`, `platform/capture_rank.go`:
@@ -305,7 +306,11 @@ BM25's order when the vectors cannot answer) and merges nothing. Pages the old
 title-and-label half found that the answer does not hold are listed after it, in
 that half's own order, up to the limit; a page both hold gets that half's
 evidence (`matched`: `title`, `body`, `topic`, `outlet`, `language`). A page
-found by meaning or through a story that cites it carries `reasons` and no passage, and `recent` orders the answer newest first.
+found by meaning or through a story that cites it carries `reasons` and no passage, and `recent` orders the answer newest first (the appended label tail is newest first too, after the answer; the whole list is not one time order).
+
+**One window rule.** Every half judges a capture by its published time, else its fetched time, else it is outside every window (the term SQL, the page-text index, the exact check of the ranked answer and the guest's `inWindow`); since is inclusive, until exclusive.
+
+**No similarity floor (open by design).** The vector half returns the nearest pages at any cosine, so a query with nothing near it still gets pages marked `meaning` with no passage; the design's 0.67 floor has not been re-measured on this corpus ([design](../design/corpus-first-retrieval-and-research-2026-11-18.md)).
 
 **The order when the vectors cannot answer** (the rule; section 5 gives the reason it is one rule and not a merge): corpusd's answer
 is then BM25's pages in BM25's order, and the guest lists them first and the title-and-label half's other pages after them, in
