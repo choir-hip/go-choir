@@ -56,7 +56,13 @@ const (
 	vecCaptureIndexLockKey = 7330212470812
 )
 
-const vectorDDL = `
+// The tables. A row with a NULL embedding and a non-empty refused is a passage
+// (or a capture's lead) the embedder will not take: it keeps its version or
+// capture out of the gap so the model is not asked again, until the model
+// (the row's model column) changes; a search ignores it. Created only when
+// absent: a CREATE TABLE or INDEX run on every pass would take locks that
+// conflict with a concurrent HNSW build.
+const vectorTablesDDL = `
 CREATE TABLE IF NOT EXISTS vec_story_passages (
 	story_id    TEXT NOT NULL,
 	version_id  TEXT NOT NULL,
@@ -64,13 +70,11 @@ CREATE TABLE IF NOT EXISTS vec_story_passages (
 	text_sha    TEXT NOT NULL,
 	day         DATE NOT NULL,
 	model       TEXT NOT NULL,
-	embedding   halfvec(256) NOT NULL,
+	embedding   halfvec(256),
+	refused     TEXT NOT NULL DEFAULT '',
 	embedded_on DATE NOT NULL,
 	PRIMARY KEY (story_id, version_id, ordinal)
 );
-CREATE INDEX IF NOT EXISTS idx_vsp_version ON vec_story_passages(version_id);
-CREATE INDEX IF NOT EXISTS idx_vsp_day ON vec_story_passages(day);
-
 CREATE TABLE IF NOT EXISTS vec_captures (
 	capture_id  TEXT NOT NULL PRIMARY KEY,
 	owner_id    TEXT NOT NULL,
@@ -78,11 +82,20 @@ CREATE TABLE IF NOT EXISTS vec_captures (
 	text_sha    TEXT NOT NULL,
 	day         DATE NOT NULL,
 	model       TEXT NOT NULL,
-	embedding   halfvec(256) NOT NULL,
+	embedding   halfvec(256),
+	refused     TEXT NOT NULL DEFAULT '',
 	embedded_on DATE NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_vc_scope_day ON vec_captures(owner_id, computer_id, day);
 `
+
+// vectorPlainIndexes are the btrees, each created only when pg_class lacks it.
+var vectorPlainIndexes = []struct{ name, ddl string }{
+	{"idx_vsp_version", `CREATE INDEX idx_vsp_version ON vec_story_passages(version_id)`},
+	{"idx_vsp_day", `CREATE INDEX idx_vsp_day ON vec_story_passages(day)`},
+	{"idx_vc_scope_day", `CREATE INDEX idx_vc_scope_day ON vec_captures(owner_id, computer_id, day)`},
+	{"idx_vsp_refused", `CREATE INDEX idx_vsp_refused ON vec_story_passages(version_id) WHERE refused <> ''`},
+	{"idx_vc_refused", `CREATE INDEX idx_vc_refused ON vec_captures(capture_id) WHERE refused <> ''`},
+}
 
 // vectorState is the vector index's in-memory state: the embedder and the
 // counts that coordinate the worker with searches. None of it is durable.
@@ -140,10 +153,20 @@ func vecLiteral(v []float32) string {
 	return b.String()
 }
 
+// vectorTablesPresent reports whether both tables exist (a catalog read; no
+// lock on them).
+func (s *Store) vectorTablesPresent(ctx context.Context) (bool, error) {
+	var ok bool
+	err := s.corpus().QueryRowContext(ctx, `SELECT to_regclass('vec_story_passages') IS NOT NULL AND to_regclass('vec_captures') IS NOT NULL`).Scan(&ok)
+	return ok, err
+}
+
 // ensureVectorTables checks pgvector is installed (creating it where the
-// role may), creates the two tables and builds their indexes. It is
-// idempotent and safe to call concurrently. A missing extension is an error
-// that names the host unit that makes it.
+// role may), creates the tables and plain indexes that are missing and builds
+// the HNSW indexes. It is idempotent and safe to call concurrently, and does
+// nothing to a table that is complete. A missing extension is an error that
+// names the host unit that makes it. It runs DDL, so it is called by the
+// worker and the import, never on a search's path.
 func (s *Store) ensureVectorTables(ctx context.Context) error {
 	db := s.corpus()
 	var have bool
@@ -155,8 +178,26 @@ func (s *Store) ensureVectorTables(ctx context.Context) error {
 			return fmt.Errorf("vectors: the pgvector extension is not installed in this database and this role cannot create it (go-choir-postgresql-roles makes it as postgres): %w", err)
 		}
 	}
-	if _, err := db.ExecContext(ctx, vectorDDL); err != nil {
-		return fmt.Errorf("vectors: create tables: %w", err)
+	present, err := s.vectorTablesPresent(ctx)
+	if err != nil {
+		return fmt.Errorf("vectors: read tables: %w", err)
+	}
+	if !present {
+		if _, err := db.ExecContext(ctx, vectorTablesDDL); err != nil {
+			return fmt.Errorf("vectors: create tables: %w", err)
+		}
+	}
+	for _, ix := range vectorPlainIndexes {
+		var exists bool
+		if err := db.QueryRowContext(ctx, `SELECT to_regclass(?) IS NOT NULL`, ix.name).Scan(&exists); err != nil {
+			return fmt.Errorf("vectors: read index %s: %w", ix.name, err)
+		}
+		if exists {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, ix.ddl); err != nil {
+			return fmt.Errorf("vectors: create index %s: %w", ix.name, err)
+		}
 	}
 	s.vec.ready.Store(true)
 	var firstErr error
@@ -219,14 +260,26 @@ func (s *Store) ensureVectorIndex(ctx context.Context, table, index, which strin
 		return err
 	}
 	start := time.Now()
-	// A build over 200,000 vectors wants memory for its graph; the session
-	// setting ends with this connection.
+	// A build over 200,000 vectors wants memory for its graph. CREATE INDEX
+	// CONCURRENTLY cannot run in a transaction, so the setting is
+	// session-level: it is reset before the connection goes back to the pool.
 	_, _ = conn.ExecContext(ctx, `SET maintenance_work_mem = '256MB'`)
+	defer func() { _, _ = conn.ExecContext(context.WithoutCancel(ctx), `RESET maintenance_work_mem`) }()
 	if _, err := conn.ExecContext(ctx, fmt.Sprintf(`CREATE INDEX CONCURRENTLY IF NOT EXISTS %s ON %s USING hnsw (embedding halfvec_cosine_ops)`, index, table)); err != nil {
 		return fmt.Errorf("build %s: %w", index, err)
 	}
 	log.Printf("corpusd retrieval migrate index=%s table=%s ms=%d concurrently", index, table, time.Since(start).Milliseconds())
 	return nil
+}
+
+// vectorRefusedCounts is how many story passages and capture leads of the
+// current model are recorded as refused by the embedder.
+func (s *Store) vectorRefusedCounts(ctx context.Context, model string) (stories, captures int64, err error) {
+	if err = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM vec_story_passages WHERE model = ? AND refused <> ''`, model).Scan(&stories); err != nil {
+		return
+	}
+	err = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM vec_captures WHERE model = ? AND refused <> ''`, model).Scan(&captures)
+	return
 }
 
 // VectorsReady reports whether the tables exist.
