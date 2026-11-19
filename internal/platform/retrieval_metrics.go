@@ -45,6 +45,7 @@ const (
 	retrievalVectorSearch = "vector_search"
 	retrievalVectorEmbed  = "vector_embed"
 	retrievalVectorWrite  = "vector_write"
+	retrievalVectorSweep  = "vector_sweep"
 )
 
 // retrievalLogSlowOnly names operations that log only when slower than

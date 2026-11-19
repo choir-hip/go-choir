@@ -402,9 +402,10 @@ client and prompt strings in `internal/embedder`. Tests: `vector_test.go` (run a
 
 - **Tables** (corpusd's graph database, beside `proj_capture_*`; created by the worker, not by
   `MigrateRetrieval`, so a missing extension cannot hold the capture projection's retries):
-  `vec_story_passages (story_id, version_id, ordinal, text_sha, day, model, embedding halfvec(256), embedded_on)`,
+  `vec_story_passages (story_id, version_id, ordinal, text_sha, day, model, embedding halfvec(256) NULL, refused, embedded_on)`,
   primary key `(story_id, version_id, ordinal)`; `vec_captures (capture_id PK, owner_id, computer_id, text_sha, day, model,
-  embedding halfvec(256), embedded_on)`. `text_sha` is the SHA-256 of the passage text, `model` the GGUF's SHA-256, `day` the
+  embedding halfvec(256) NULL, refused, embedded_on)`. A row with no vector and a `refused` reason is a passage or lead the embedder
+  refused (see 0.11.3). `text_sha` is the SHA-256 of the passage text, `model` the GGUF's SHA-256, `day` the
   version's creation day or the capture's published, else fetched, day. A story version is written whole in one
   transaction, so one row means all its passages. HNSW on `halfvec_cosine_ops` on each table, built `CONCURRENTLY` under a
   session advisory lock, an invalid leftover dropped and rebuilt by the next pass.
@@ -498,6 +499,46 @@ repository), and pgvector 0.8.7 (`github.com/pgvector/pgvector` tag v0.8.7, `REA
 - **The import's spool** (`artifacts/vector-import/`) is not under any namespace the artifact collector sweeps
   (`artifact_gc.go` `artifactGCNamespaces`: projection-base, parts, platform-update, capture-bodies, file-cas-roots, file-cas-chunks, og);
   corpusd removes leftover spool files when its worker starts.
+
+### 0.11.3 Operating the vector index (what an idle pass costs, refusals, the policy clause, rollback, backups)
+
+- **Idle cost.** A pass with nothing to embed reads: one publication row and three counts (the story mark: newest publication, live
+  publications, live versions, vector rows held), the refused counts, the captures' gap count (an anti-join of the 215,000 projected
+  captures against `vec_captures`), and the sweep (two `DELETE ... WHERE NOT <predicate>` statements; each row costs a few primary-key
+  lookups, and a story row one JSON parse). It does **not** walk the publications: the walk (one edge read per publication, 10,000 of
+  them) runs when the mark differs from the last complete walk's, and once after a restart. `TestVectorIdlePassReadsOneRowAndTwoCountsNotEveryPublication`
+  proves no edge read happens in an idle pass. The sweep and the gap count are not measured at production size; read
+  `corpusd retrieval op=vector_sweep shape=both ms=` on the first staging pass, every 5 minutes. If the sweep is too dear the search's own
+  predicate still keeps removed text from being returned, so the sweep can then run less often.
+- **A refused passage.** The server answers an input over its batch or slot with an error status (0.11.2). When a single input fails with a
+  status error while `/health` is up, the worker writes the version (or capture) with that passage's row holding no vector and the
+  reason, so the version is whole in the table and out of the gap, the model is not asked again, and `refused=` in the `embed_gap` line
+  and in `scripts/status-vectors` counts it. A search returns the version's other passages and never the refused one (a refused passage
+  cannot be found by meaning; BM25 still finds it). A refusal is retried when the model changes (the row's `model` differs). A failure that
+  is not a status error (a dropped connection) records nothing and the version is tried again next pass.
+- **No DDL on a request path.** Tables and plain indexes are created only when `to_regclass` finds them missing, by the worker and the
+  import; a search that finds no tables answers unavailable. The HNSW builds are `CONCURRENTLY` under advisory locks, with
+  `maintenance_work_mem` reset before the connection returns to the pool.
+- **The story access policy.** The Mac export and the write-time check read the manifest's `access_policy`; the read routes read the
+  `has_policy` object's `access_policy_json` (`service_publication_read.go:465`). The one SQL predicate now also refuses a version whose
+  policy object says its access is not public (visibility `public` and route empty or `public`); a missing, empty or malformed policy object adds
+  no constraint (read with `pg_input_is_valid` and a CASE, so malformed data cannot fail a search or a sweep). The manifest's policy
+  stays a Go check at write time, because it is not always in a database column.
+- **Rollback.** Reverting V2 (the Go) alone is safe: the worker stops, the tables stay (unused), the search is gone. Reverting V1 (the
+  nix) after the tables exist is **not** safe in one deploy: the old server cannot load `vector.so`; opening an HNSW index (a `DROP`
+  of the table, or any scan) is expected to call the access method from it (not run), and the daily `pg_dump` of `graph` calls `halfvec_out` for every
+  vector and fails (`nix/node-b.nix:287`: a failed dump ends the backup run partial). Order: **deploy 1** carries the revert of
+  V2 plus a roles-unit step `DROP TABLE IF EXISTS vec_story_passages, vec_captures; DROP EXTENSION IF EXISTS vector` while the package
+  still has pgvector; **deploy 2** removes `extensions`, the embedder unit and the step. Between them no dump breaks (the tables are gone
+  after deploy 1). If both go out together PostgreSQL restarts without the plugin before the roles unit runs, the DROP fails (it is
+  non-fatal now), and the dump fails until pgvector is put back.
+- **Backups and restores.** From the first deploy the `graph` dump contains the extension and the vector tables; a restore needs a
+  PostgreSQL with pgvector 0.8 or later.
+- **A guest's capture write during the restart.** corpusd's guest-write gate asks vmctl who owns the caller (`authority.go:50-90`); while
+  vmctl or PostgreSQL is down the lookup fails and the refusal is the forbidden-style one. The guest's sink (`researchtools/capture_sink.go`)
+  does not retry: `poll_source.go:261-270` stops the batch on the error and leaves the batch's items out of the handled set, so the next
+  poll offers them again (feed items are not lost); `read.go:161-164` returns the error to the agent, which sees the failed Read. Nothing in the
+  guest drops a capture silently. (No change made.)
 
 ## 1. What the model is
 

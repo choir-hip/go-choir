@@ -13,8 +13,10 @@ Exit 0, or 2 when the fetch failed.
 
 What it reads (internal/platform/vector_worker.go, vector_search.go):
   embed_gap   `corpusd retrieval op=embed_gap shape=stories|captures ms= rows=
-              have= want= remaining= model=`, written at the start of a pass and
-              at each batch boundary; the newest line of each shape in the last
+              have= want= remaining= model= refused=`, written at the start of a pass and
+              at each batch boundary (refused= counts passages and leads the
+              embedder refused: recorded, not retried until the model changes);
+              the newest line of each shape in the last
               3 days gives have, want and remaining. Stories count versions (a
               version is written whole); captures count captures. Until a pass
               has passed over them, want includes captures that turn out to be
@@ -39,7 +41,7 @@ journalctl -u go-choir-corpusd --since '-1 hour' --no-pager -o cat --utc 2>/dev/
 echo "##END"
 """
 
-GAP_RE = re.compile(r"op=embed_gap shape=(stories|captures) ms=([0-9.]+) rows=(\d+) have=(\d+) want=(\d+) remaining=(\d+) model=([0-9a-f]+)")
+GAP_RE = re.compile(r"op=embed_gap shape=(stories|captures) ms=([0-9.]+) rows=(\d+) have=(\d+) want=(\d+) remaining=(\d+) model=([0-9a-f]+)(?: refused=(\d+))?")
 SEARCH_RE = re.compile(r"op=vector_search shape=(vector_stories|vector_captures) ms=([0-9.]+) rows=(\d+)")
 
 
@@ -51,7 +53,8 @@ def compute(text):
         m = GAP_RE.search(ln)
         if m:
             gap[m.group(1)] = {"have": int(m.group(4)), "want": int(m.group(5)),
-                               "remaining": int(m.group(6)), "model": m.group(7)}
+                               "remaining": int(m.group(6)), "model": m.group(7),
+                               "refused": int(m.group(8) or 0)}
             continue
         m = SEARCH_RE.search(ln)
         if m:
@@ -65,7 +68,7 @@ def compute(text):
         if g is None:
             lines.append("%-9s no embed_gap line in the last 3 days (worker not started, or nothing yet)" % kind)
         else:
-            lines.append("%-9s have %d  want %d  remaining %d  model %s" % (kind, g["have"], g["want"], g["remaining"], g["model"]))
+            lines.append("%-9s have %d  want %d  remaining %d  model %s  refused %d" % (kind, g["have"], g["want"], g["remaining"], g["model"], g["refused"]))
     for shape in ("vector_stories", "vector_captures"):
         s = rep["searches"][shape]
         lines.append("%-16s last hour: %d searches, mean %s" % (shape, s["count"], ("%.2f ms" % s["mean_ms"]) if s["count"] else "-"))
