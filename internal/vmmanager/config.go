@@ -191,7 +191,6 @@ func LoadConfigFromEnv() ManagerConfig {
 	cfg.FirecrackerNext = loadFirecrackerNextFromEnv(cfg.FirecrackerBinPath, envFlagOn("VM_DATA_DISCARD"))
 	cfg.CapsuleMirrors = loadCapsuleMirrorConfig(os.Getenv)
 	cfg.HostFetch = loadHostFetchConfig(os.Getenv)
-	cfg.EventTable = loadEventTableConfig(os.Getenv)
 
 	if v := strings.TrimSpace(os.Getenv("VMCTL_GUEST_DNS_PORT")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 65536 {
