@@ -24,6 +24,7 @@ func RegisterObjectGraphRoutes(s *server.Server, h *ObjectGraphHandler) {
 	s.HandleFunc("/internal/platform/captures/bodies/", h.HandleCaptureBody)
 	s.HandleFunc("/internal/platform/captures/search", h.HandleCaptureSearch)
 	s.HandleFunc("/internal/platform/captures/by-url", h.HandleCaptureByURL)
+	s.HandleFunc("/internal/platform/captures/neighbours", h.HandleCaptureNeighbours)
 	s.HandleFunc("/internal/platform/captures/", h.HandleCaptureRead)
 }
 
