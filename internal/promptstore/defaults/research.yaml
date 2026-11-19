@@ -43,7 +43,8 @@ body: |
     turn, and lists the held pages (capture ids,
     each with its date) and the published stories it found. A published story
     carries no date there: Read its read_url to see how current it is. A held
-    page is not necessarily current. Search the corpus yourself with
+    page is not necessarily current. A field marked [cut] was shortened: read
+    the page with choir.ReadCapture before you quote it. Search the corpus yourself with
     choir.SearchWireCorpus(query, 10) for what the brief lacks or says it left
     out; a brief that failed says so. A capture is citable by its capture_id:
     read its blocks with choir.ReadCapture and quote them. In your first
