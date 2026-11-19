@@ -1035,10 +1035,21 @@ func (s *Store) captureObjectsByIDAny(ctx context.Context, ids []string) (map[st
 // malformed data from raising; TestVectorSQLPolicyAgreesWithTheReadRoute runs
 // the same inputs through both so they cannot drift. The manifest's policy,
 // the Mac export's source, is checked in Go when vectors are written.
+//
+// The capture predicate ends in OFFSET 0, which changes no result: it is
+// PostgreSQL's fence against pulling an EXISTS up into a join. Pulled up, the
+// planner drove the worker's gap count on the paper from og_objects (it
+// estimated 2 eligible web captures, there were 221,335) into an index range
+// of proj_capture_index holding every capture of the computer, a quadratic
+// nested loop that ran 25 minutes without ending (2026-11-19). Fenced, the
+// predicate is one primary-key read of og_objects per driving row: the same
+// count took 2.3 s there. TestCaptureEligibilityIsProbedPerRowNotJoined holds
+// the shape. The cost that stays: a count or a sweep over a computer's
+// captures is one probe per capture, every pass.
 var (
 	vecCaptureEligibleSQL = `EXISTS (SELECT 1 FROM og_objects o WHERE o.canonical_id = v.capture_id AND o.object_kind = '` + string(objectgraph.WebCaptureObjectKind) + `'
 		AND NOT o.tombstone AND COALESCE(o.superseded_by, '') = '' AND o.owner_id = v.owner_id AND o.computer_id = v.computer_id AND v.owner_id <> '' AND v.computer_id <> ''
-		AND position('` + types.LabelOwnerPrivatePrefix + `' in o.metadata) = 0)`
+		AND position('` + types.LabelOwnerPrivatePrefix + `' in o.metadata) = 0 OFFSET 0)`
 	vecStoryEligibleSQL = `(EXISTS (SELECT 1 FROM og_objects ver WHERE ver.canonical_id = v.version_id AND NOT ver.tombstone)
 		AND EXISTS (SELECT 1 FROM og_objects pub WHERE pub.canonical_id = v.story_id AND NOT pub.tombstone
 			AND pub.metadata::jsonb->>'state' = 'published' AND btrim(COALESCE(pub.metadata::jsonb->>'route_path', '')) <> '')
