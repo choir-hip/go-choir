@@ -126,7 +126,9 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"for what the brief lacks or says it left out",
 		"A published story carries no date there",
 		"A field marked [cut] was shortened",
+		"or says the host's search did not answer",
 		"is not proof that nothing is held",
+		"The host tries to search this computer's corpus",
 		"one corpus search in your own words before the web",
 		"each thread of the objective as held (with its capture ids), stale or missing",
 		"Search the web only for the stale and missing threads, one question at a time",
@@ -143,7 +145,7 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 			t.Errorf("research prompt lacks %q", want)
 		}
 	}
-	for _, absent := range []string{"several searches per thread", "To run searches at once", "Cover every open thread in each round", "all the wordings of one question", "stops when wordings stop finding pages"} {
+	for _, absent := range []string{"several searches per thread", "To run searches at once", "Cover every open thread in each round", "all the wordings of one question", "stops when wordings stop finding pages", "what the host's search covered", "The host searched this computer's corpus", "ran in part"} {
 		if strings.Contains(flat, absent) {
 			t.Errorf("research prompt still says %q", absent)
 		}

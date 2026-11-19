@@ -26,13 +26,19 @@ func TestResearchFirstTurnNamesTheCorpusBrief(t *testing.T) {
 	}
 }
 
-// A brief that found nothing says what the search covered; the first turn says
-// that is not proof, and sends the desk to one corpus search of its own.
+// A brief that found nothing, or says the search did not answer, is not proof
+// that nothing is held; the first turn sends the desk to one corpus search of
+// its own, and does not describe what the host's search covered.
 func TestResearchFirstTurnSaysAnEmptyBriefIsNotProof(t *testing.T) {
 	p, _ := recordsInboxPromptFor(agentprofile.Research)
-	for _, want := range []string{"is not proof that nothing is held", "one corpus search in your own words before the web"} {
+	for _, want := range []string{"or says the host's search did not answer", "is not proof that nothing is held", "one corpus search in your own words before the web", "The host tries to search"} {
 		if !strings.Contains(p, want) {
 			t.Fatalf("research first-turn prompt lacks %q: %s", want, p)
+		}
+	}
+	for _, banned := range []string{"covered", "The host searched this computer"} {
+		if strings.Contains(p, banned) {
+			t.Fatalf("research first-turn prompt still says %q: %s", banned, p)
 		}
 	}
 }
