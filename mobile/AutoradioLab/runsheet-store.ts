@@ -335,3 +335,14 @@ export class RunSheetStore {
     this.flush();
   }
 }
+
+// ---- the seam to the signed-in routes, and sign-out ----
+
+/** The store's requester over the signed-in seam (`authedJSON`): pass `routePoster(signedInRequester(authedJSON))` as the poster. HTTP errors
+ *  carry `status`, which `routePoster` reads; a signed-out call (no session) is "offline": the ops stay pending and nothing is lost. */
+export const signedInRequester = (authedJSON: (path: string, o?: { method?: 'GET' | 'POST'; body?: unknown }) => Promise<{ body: unknown }>): Requester =>
+  (path, opts) => authedJSON(path, opts);
+
+/** Sign-out wipe of everything this area keeps (the run sheet file, its pending ops and epoch). Sign-out itself stays in Swift tonight: the
+ *  Swift `AccountWipe` must call this for the shared copy (left to the lead as a native-to-shared call). */
+export async function wipeRunsheet(storage: Storage): Promise<void> { await storage.remove().catch(() => undefined); }

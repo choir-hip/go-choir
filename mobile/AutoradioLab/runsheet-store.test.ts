@@ -327,3 +327,17 @@ describe('the server\'s bounds', () => {
     expect(s.place(e, 'end').dropped).toBe('local_path');
   });
 });
+
+describe('sign-out', () => {
+  test('wipeRunsheet removes the saved sheet and its pending ops', async () => {
+    const { wipeRunsheet } = await import('./runsheet-store.ts');
+    const mem = memory();
+    const s = new RunSheetStore({ storage: mem });
+    s.place(paperStory('a', 'A'), 'end'); await s.save();
+    expect(mem.text).toBeDefined();
+    await wipeRunsheet(mem);
+    expect(mem.text).toBeUndefined();
+    const s2 = new RunSheetStore({ storage: mem }); await s2.restore();
+    expect(s2.pending.length).toBe(0);
+  });
+});
