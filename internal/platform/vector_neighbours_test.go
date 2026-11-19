@@ -389,6 +389,63 @@ func TestCaptureNeighboursRereadsExactlyOnlyWithinTheExactBounds(t *testing.T) {
 	}
 }
 
+// The call site of the exact re-read gate (CaptureNeighbours, after an index
+// list comes back short). The failure list this test must catch:
+//
+//	F1 the call site stops applying neighbourRereadIsExact (the gate is
+//	   deleted, inverted or replaced by a different bound), so an index
+//	   answer past the exact work bound is read again with an exact scan;
+//	F2 the gate is applied but a refused re-read is still run once, so the
+//	   request makes more than one statement for the group;
+//	F3 the test passes vacuously because no list was short, so the re-read
+//	   was never reachable (checked: the answer holds a list shorter than
+//	   the limit while more rows are held than the limit).
+//
+// Index mode is forced by a work bound of 1 and the statements are counted
+// through vectorSearchTxHook. The hook, in the first statement's rolled-back
+// transaction only, removes all but one other row so the list comes back
+// short while the count taken before it still holds six. The seams are set before CaptureNeighbours starts and restored after it has
+// returned; the call is synchronous.
+func TestCaptureNeighboursShortIndexListIsNotReadAgainPastTheExactBound(t *testing.T) {
+	f := newVecFixture(t)
+	now := time.Now().UTC()
+	for i := 0; i < 6; i++ {
+		f.capture(t, "o1", "c1", fmt.Sprintf("k%d", i), fmt.Sprintf("K%d", i), fmt.Sprintf("quorum valdoria amber treaty number%d", i), now.Add(-time.Duration(i+1)*time.Hour), false)
+	}
+	f.pass(t)
+	q := mustCaptureID(t, "o1", "k0")
+
+	oldWork, oldHook := neighboursExactWork, vectorSearchTxHook
+	var statements int
+	neighboursExactWork = 1
+	vectorSearchTxHook = func(ctx context.Context, tx *sql.Tx) error {
+		statements++
+		if statements == 1 {
+			// The statement's transaction is never committed, so this
+			// removal is undone with it: the list comes back short
+			// while the count taken before it still holds six rows.
+			if _, err := tx.ExecContext(ctx, `DELETE FROM `+vecCaptureTable+` WHERE capture_id NOT IN (?, ?)`, q, mustCaptureID(t, "o1", "k1")); err != nil {
+				return err
+			}
+		}
+		return ctx.Err()
+	}
+	res, err := f.store.CaptureNeighbours(context.Background(), CaptureNeighboursRequest{OwnerID: "o1", ComputerID: "c1", CaptureIDs: []string{q}, Limit: 4})
+	neighboursExactWork, vectorSearchTxHook = oldWork, oldHook
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.State != "approximate" {
+		t.Fatalf("state %q, want approximate (index mode was not forced)", res.State)
+	}
+	if statements != 1 {
+		t.Fatalf("%d statements ran, want 1: a short index list past the exact work bound was read again (F1, F2)", statements)
+	}
+	if got := len(res.Neighbours[q]); got >= 4 {
+		t.Fatalf("the index list holds %d of limit 4: no short list, so the re-read was never reachable (F3)", got)
+	}
+}
+
 func TestIsStatementTimeoutReadsTheDatabasesCode(t *testing.T) {
 	if !isStatementTimeout(fmt.Errorf("query: %w", &pgconn.PgError{Code: "57014", Message: "canceling statement due to statement timeout"})) {
 		t.Error("code 57014 not recognised")
