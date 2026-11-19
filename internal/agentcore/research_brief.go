@@ -279,8 +279,9 @@ type researchBriefResult struct {
 	dropped    []int
 	left       int
 	unanswered int
-	// slowest is the slowest search that returned (answered or not), so the
-	// journal shows whether the wait was one search or the deadline. panicked
+	// slowest is the slowest search whose reply the builder read (answered or
+	// not), so the journal shows whether the wait was one search or the
+	// deadline. panicked
 	// counts searches that panicked (each is an unanswered thread).
 	slowest  time.Duration
 	panicked int

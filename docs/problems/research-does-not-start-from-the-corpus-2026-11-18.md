@@ -251,8 +251,8 @@ What it does:
   `corpus-search-takes-two-seconds-on-the-paper-2026-11-19.md`), so six in turn
   would answer about three threads and hold every research run for the whole
   8 s. A call still running at the deadline is that thread's "did not answer".
-  The log's `ms=` is the whole build and `slowest_ms=` the slowest search that
-  returned.
+  The log's `ms=` is the whole build and `slowest_ms=` the slowest search whose
+  reply the builder read.
 - Each thread is one call of the verb's own host function
   (`search_wire_corpus`), as the run's owner and computer, all at the same
   time (one goroutine per thread, a panic in one is that thread's "did not
@@ -293,7 +293,9 @@ What it does:
   reason=`, written once the run memory has taken (or not taken) the text:
   `dropped` means the desk never saw the brief; `unanswered` counts the threads
   whose search did not answer (0 where no thread was ever known, as in an
-  opening that skips; left-out threads are in `left`). The
+  opening that skips; left-out threads are in `left`). A build in which a
+  search panicked also writes one panic line (the run id and the count, no
+  query text). The
   `corpus search` line gains `caller=brief` or `caller=cell` at its end.
   "Runs that made a web search before any corpus read": the first `gateway:
   search request ... run=` against the first `corpus read run=` or
@@ -317,6 +319,8 @@ What it cannot do:
   host's search." The brief does not describe what a search covered; the
   prompt's one corpus search in the desk's own words, for any thread the brief
   found nothing on, covers it.
+- A search that panics after the deadline is not logged as a panic (its thread
+  still reads "did not answer"); the panic value is formatted with `%v`.
 - The child Report label gap above is not touched.
 
 ## Why the brief does not describe its search (rounds 1 to 6, 2026-11-18)
