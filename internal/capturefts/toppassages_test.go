@@ -140,8 +140,9 @@ func TestTopPassagesFallBackWhenFewPagesFillTheCut(t *testing.T) {
 }
 
 // T5. A cut whose passages all lack a page row joins to nothing; that is not
-// an answer, the full statement must run. And a query nothing matches is
-// answered empty either way.
+// an answer, the full statement must run. The wrong answer this prevents: the
+// three best passages belong to the long page, whose page row is gone, so the
+// cut joins to nothing, yet other pages match.
 func TestTopPassagesEmptyJoinFallsBack(t *testing.T) {
 	ix := topCorpus(t)
 	ctx := context.Background()
@@ -151,23 +152,51 @@ func TestTopPassagesEmptyJoinFallsBack(t *testing.T) {
 	}
 	defer rel()
 	match := PlanQuery("harbor").Match([]string{"harbor"}, nil)
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM pages WHERE capture_id = 'long'`); err != nil {
+		t.Fatal(err)
+	}
+	var res Result
+	withTop(3, 300, func() {
+		hits, _, ok, err := s.rankPassages(ctx, match, Query{Text: "harbor"}, 3)
+		if err != nil || ok || len(hits) != 0 {
+			t.Fatalf("the best passages have no page rows: ok=%v hits=%d err=%v, want the fallback signal", ok, len(hits), err)
+		}
+		res = search(t, ix, scopeA, Query{Text: "harbor", Limit: 50})
+	})
+	found := false
+	for _, h := range res.Hits {
+		if h.CaptureID == "mid00" {
+			found = true
+		}
+		if h.CaptureID == "long" {
+			t.Fatalf("a page without a page row was returned")
+		}
+	}
+	if !found {
+		t.Fatalf("Search with the cut over unjoinable passages lost the pages that match: %v", ids(res))
+	}
+
+	// Genuinely empty: no page rows at all. The shortcut signals the
+	// fallback, which is empty too.
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM pages`); err != nil {
 		t.Fatal(err)
 	}
-	var ok bool
 	hits, _, ok, err := s.rankPassages(ctx, match, Query{Text: "harbor"}, 1500)
 	if err != nil || ok || len(hits) != 0 {
-		t.Fatalf("the best passages have no page rows: ok=%v hits=%d err=%v, want the fallback", ok, len(hits), err)
+		t.Fatalf("no page rows at all: ok=%v hits=%d err=%v, want the fallback signal", ok, len(hits), err)
 	}
-	// Nothing matches at all: the fallback is also empty and cheap.
+	full, _, fok, err := s.rankPassages(ctx, match, Query{Text: "harbor"}, 0)
+	if err != nil || !fok || len(full) != 0 {
+		t.Fatalf("no page rows, full statement: %d %v %v", len(full), fok, err)
+	}
+	// Nothing matches at all: the cut signals the fallback too, which is empty.
 	none := PlanQuery("zzzznothing").Match([]string{"zzzznothing"}, nil)
 	hits, _, ok, err = s.rankPassages(ctx, none, Query{Text: "zzzznothing"}, 1500)
-	if err != nil || len(hits) != 0 {
-		t.Fatalf("no match: hits=%d err=%v", len(hits), err)
+	if err != nil || ok || len(hits) != 0 {
+		t.Fatalf("no match: ok=%v hits=%d err=%v, want the fallback signal", ok, len(hits), err)
 	}
-	full, _, fok, err := s.rankPassages(ctx, none, Query{Text: "zzzznothing"}, 0)
+	full, _, fok, err = s.rankPassages(ctx, none, Query{Text: "zzzznothing"}, 0)
 	if err != nil || !fok || len(full) != 0 {
 		t.Fatalf("no match, full statement: %d %v %v", len(full), fok, err)
 	}
-	_ = ok
 }

@@ -63,7 +63,8 @@ passages in the full-text index):
 - Built in the lane `capture-search-latency` (orange; Ring-Expedite):
   1. `idx_pct_cover` on `proj_capture_terms` (`owner_id, computer_id, term,
      capture_id` INCLUDE `fetched_at`), built `CONCURRENTLY` outside a
-     transaction at start by `ensureCaptureTermsCoverIndex`; an index left
+     transaction at start and repaired on each periodic retrieval tick (10
+     minutes) by `ensureCaptureTermsCoverIndex`; an index left
      invalid by an interrupted build is dropped and rebuilt; the search works,
      slower, until it is valid; one vacuum follows the build (without it the
      index gained nothing on a never-vacuumed table). The statement and its
@@ -92,6 +93,10 @@ passages in the full-text index):
   7.2 seconds in the same hour; the rest of that call's time is unexplained.
 - On the live database the index-only scan needs the table's visibility map;
   the build runs one `VACUUM (ANALYZE)`; autovacuum maintains the map after that.
+- Accepted residuals of the review: the periodic repair builds synchronously in
+  the periodic loop, so a build that waits on an old transaction delays the
+  reconcile until it ends; an unlock error is ignored, so a live session that
+  failed to unlock would keep the advisory lock until the pool closes it.
 - One hour's numbers from one computer.
 
 ## Update, 2026-11-19T05:25Z (station L1; read-only)
