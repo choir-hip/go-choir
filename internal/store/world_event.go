@@ -25,16 +25,6 @@ const (
 	ogKindEventMembership = objectgraph.ObjectKind("choir.event_membership")
 )
 
-// SettingIntakeEventWakes makes production wait on events (event layer
-// §15, V3): a poll's arrival is held, and
-// management wakes on an event's records instead. Off by default; turning
-// it off is the rollback.
-const SettingIntakeEventWakes = "intake.event_wakes"
-
-func init() {
-	KnownComputerSettings[SettingIntakeEventWakes] = false
-}
-
 // WorldEvent is one real-world occurrence.
 type WorldEvent struct {
 	OwnerID      string    `json:"owner_id"`

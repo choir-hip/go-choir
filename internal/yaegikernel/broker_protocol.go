@@ -348,13 +348,14 @@ type StoryEntry struct {
 type StoriesPage struct {
 	Stories []StoryEntry `json:"stories"`
 	Next    string       `json:"next,omitempty"`
-	// Held counts, on the newest page, the captures waiting on their
-	// events, as the last sweep found them (event layer §15): they are in
-	// no record you read until their event is corroborated.
+	// Held is never set now: the held-capture sweep that counted captures
+	// waiting on their events was deleted with intake.event_wakes. The field
+	// stays because the desk protocol's shape is locked.
 	Held *HeldCaptures `json:"held_captures,omitempty"`
 }
 
-// HeldCaptures is the last held-capture sweep's count.
+// HeldCaptures was the last held-capture sweep's count (retired; see
+// StoriesPage.Held).
 type HeldCaptures struct {
 	Waiting  int    `json:"waiting"`  // with an event that is not corroborated
 	Released int    `json:"released"` // sent to you unresolved by that sweep

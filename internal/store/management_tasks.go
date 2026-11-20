@@ -134,7 +134,10 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 		return true
 	}
 	if rec.Captures != nil && len(rec.Captures.Items) > 0 {
-		return !rec.Captures.Held && len(rec.Captures.StartedTasks) == 0
+		// A stored Held arrival with no Event (the retired wait path wrote
+		// them) is a plain arrival; only a held event page waits.
+		held := rec.Captures.Held && rec.Captures.Event != nil
+		return !held && len(rec.Captures.StartedTasks) == 0
 	}
 	if _, fromTask := types.ManagementTaskIDOfInbox(rec.SenderInbox); fromTask && rec.Final && rec.TaskOutcome != nil {
 		stop := ""

@@ -18,7 +18,7 @@ func TestBootAndIdleTickDeclareEveryReader(t *testing.T) {
 	rt, st := testRuntime(t)
 	owner, computer := "owner-boot-reads", rt.cfg.ComputerID
 	ctx := context.Background()
-	if err := st.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeEventWakes, Value: true, UpdatedAt: time.Now().UTC()}); err != nil {
+	if err := st.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeLabels, Value: true, UpdatedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.PutSourceSchedule(withKindCustodian(ctx, "choir.source_schedule"), store.SourceSchedule{
@@ -33,7 +33,7 @@ func TestBootAndIdleTickDeclareEveryReader(t *testing.T) {
 		defer close(done)
 		rt.Start(ctx)
 		_, _ = rt.sweepOverdueSourceSchedules(ctx, time.Now().UTC())
-		_ = rt.intakeSurfacesEnabled(ctx, owner, computer)
+		_ = rt.intakeLabelsEnabled(ctx, owner, computer)
 	}()
 	select {
 	case <-done:

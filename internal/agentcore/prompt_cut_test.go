@@ -51,9 +51,8 @@ func TestPromptCutSizeBoundsAndByteStability(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	owner, computer := "owner-cut", rt.cfg.ComputerID
-	// Management is measured as the paper builds it: intake labels and event
-	// wakes both on.
-	for _, key := range []string{store.SettingIntakeLabels, store.SettingIntakeEventWakes} {
+	// Management is measured as the paper builds it: intake labels on.
+	for _, key := range []string{store.SettingIntakeLabels} {
 		if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: key, Value: true}); err != nil {
 			t.Fatal(err)
 		}

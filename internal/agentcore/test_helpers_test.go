@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -316,6 +317,9 @@ func waitForEvents(t *testing.T, s *store.Store, runID string, expectedKinds []t
 
 func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 	t.Helper()
+	// Poll memory is process-wide; a repeat of a test (go test -count=N) must
+	// not see the previous run's handled feed items.
+	researchtools.ResetPollStateForTests()
 
 	// One directory per test: the SQLite state file is <dir>/state.db, so a
 	// directory shared between tests would share their state.

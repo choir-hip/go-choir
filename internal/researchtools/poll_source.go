@@ -38,6 +38,16 @@ var pollState = struct {
 	handled  map[string]map[string]struct{}
 }{bySource: map[string]sources.Source{}, handled: map[string]map[string]struct{}{}}
 
+// ResetPollStateForTests forgets every source's validators and handled
+// items, the boundary a process restart makes. A test that polls the same
+// source id twice in one process (go test -count=N) calls it first.
+func ResetPollStateForTests() {
+	pollState.Lock()
+	defer pollState.Unlock()
+	pollState.bySource = map[string]sources.Source{}
+	pollState.handled = map[string]map[string]struct{}{}
+}
+
 type poller interface {
 	Poll(ctx context.Context, source *sources.Source) (sources.PollResult, error)
 }

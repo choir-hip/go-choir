@@ -91,7 +91,7 @@ func TestMA66AHundredReadsInOneModelRoundTrip(t *testing.T) {
 	}
 	if err := rt.appendCaptureArrival(ctx, owner, computer, "rss:code-mode", []types.CaptureArrival{
 		{CaptureID: "obj:choir.web_capture:test:code-mode", Title: "a"},
-	}, false); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	rec, err := rt.WakeRecordsInbox(ctx, owner, computer, management)
