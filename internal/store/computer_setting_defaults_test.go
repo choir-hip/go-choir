@@ -38,7 +38,6 @@ var heldDefaults = []string{
 	SettingResearchRelatedStory,  // its finish rule would bind every owner research desk
 	SettingEvidenceGraph,         // owner: measure the import on a paper copy first
 	SettingTelemetryPartitions,   // GC starvation; floor 5 on every computer
-	SettingIntakeEventWakes,      // failed its false-merge bar three times
 	// Experiment arms, not features: none held is the shipped behaviour and
 	// E1's comparator (docs/design/calibration-experiment-e1-2026-11-04.md).
 	SettingCalibrationE1Restate,
@@ -72,7 +71,7 @@ func TestHeldSettingsKeepTheirOffDefault(t *testing.T) {
 // The retired keys, which nothing read, are gone: a stored row stays
 // invisible and a new one is refused.
 func TestRetiredStoreSettingsAreRemoved(t *testing.T) {
-	for _, key := range []string{"store.debounced_checkpoint", "store.trace_log", "intake.events", "dispatch.wide_slots"} {
+	for _, key := range []string{"store.debounced_checkpoint", "store.trace_log", "intake.events", "dispatch.wide_slots", "intake.event_wakes"} {
 		if _, known := KnownComputerSettings[key]; known {
 			t.Errorf("%s is still known", key)
 		}

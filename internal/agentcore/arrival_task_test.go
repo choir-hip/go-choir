@@ -44,7 +44,7 @@ func (f *delegationFixture) arrive(source string, items ...types.CaptureArrival)
 	// with the arrival under the management_task custodian), so it runs with the
 	// gates enforcing.
 	defer objectgraph.SetModeForTest(objectgraph.WriterGateEnforce)()
-	if err := f.rt.appendCaptureArrival(context.Background(), f.owner, f.computer, source, items, false); err != nil {
+	if err := f.rt.appendCaptureArrival(context.Background(), f.owner, f.computer, source, items); err != nil {
 		f.t.Fatalf("arrival %s: %v", source, err)
 	}
 	return types.CaptureArrivalRecordID(source, ids)
@@ -199,7 +199,7 @@ func TestArrivalReplayMintsNoSecondTask(t *testing.T) {
 	}
 	items := []types.CaptureArrival{{CaptureID: "cap-rp1", Title: "Harbor reopens", URL: "https://rp.example/1"}}
 	f.arrive("rss:rp", items...)
-	err := f.rt.appendCaptureArrival(ctx, f.owner, f.computer, "rss:rp", items, false)
+	err := f.rt.appendCaptureArrival(ctx, f.owner, f.computer, "rss:rp", items)
 	if !errors.Is(err, store.ErrLifecycleCommandConflict) {
 		t.Fatalf("second announce = %v, want a command conflict", err)
 	}
@@ -214,7 +214,7 @@ func TestArrivalReplayMintsNoSecondTask(t *testing.T) {
 		t.Fatalf("tasks after a replay = %d", n)
 	}
 	// announceCaptures treats the conflict as announced and drops the captures.
-	rest, err := f.rt.announceCaptures(ctx, f.owner, f.computer, "rss:rp", nil, nil, 10, false)
+	rest, err := f.rt.announceCaptures(ctx, f.owner, f.computer, "rss:rp", nil, nil, 10)
 	if err != nil || len(rest) != 0 {
 		t.Fatalf("announce of nothing = %v, %v", rest, err)
 	}
@@ -231,7 +231,7 @@ func TestArrivalAndTaskCommitAtomically(t *testing.T) {
 		for _, id := range ids {
 			items = append(items, types.CaptureArrival{CaptureID: id, Title: id, URL: "https://at.example/" + id})
 		}
-		req, err := captureArrivalRequest(f.owner, f.computer, source, items, false)
+		req, err := captureArrivalRequest(f.owner, f.computer, source, items)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -273,7 +273,11 @@ func TestArrivalTaskSkipsHeldSettledAndCapsTheTask(t *testing.T) {
 
 	// Held: a record, no task, no wake.
 	held := []types.CaptureArrival{{CaptureID: "cap-hd1", Title: "Waiting on its event", URL: "https://hd.example/1"}}
-	if err := f.rt.appendCaptureArrival(ctx, f.owner, f.computer, "rss:hd", held, true); err != nil {
+	heldReq, err := capturesRecordRequest(f.owner, f.computer, "rss:hd", "arrival-held-hd", true, nil, held)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.rt.commitCapturesRecord(ctx, heldReq); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(f.tasks(types.ManagementTaskQueued)); n != 0 {

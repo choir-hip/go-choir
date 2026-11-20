@@ -100,7 +100,7 @@ func (rt *Runtime) withIntakeTask(ctx context.Context, req types.CommitInboxReco
 			due = append(due, i)
 		}
 	}
-	if len(due) == 0 || !rt.intakeSurfacesEnabled(ctx, req.OwnerID, req.ComputerID) {
+	if len(due) == 0 || !rt.intakeLabelsEnabled(ctx, req.OwnerID, req.ComputerID) {
 		return req, false, nil
 	}
 	parent := persistentManagementAgentID(req.OwnerID)

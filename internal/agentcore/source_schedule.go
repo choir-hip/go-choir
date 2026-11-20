@@ -262,12 +262,8 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		}
 		// With intake.labels on, Jev labels the new captures before the
 		// arrival names them (L2a A1). Labels are their own objects and
-		// never gate the arrival. Under event wakes they retire: management
-		// reads captures on event records, which name the stories that
-		// hold the event (event layer §18), so a label call per capture
-		// would scale calls with captures for nothing.
-		eventWakes := rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
-		if len(report.Captured) > 0 && !eventWakes && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
+		// never gate the arrival.
+		if len(report.Captured) > 0 && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
 			// Held for the computer's flush, and waited for here, so the
 			// labels exist before the arrival wakes management (as before
 			// the batching). No schedule lock is held across the wait:
@@ -283,15 +279,8 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		// The new captures queue for the event
 		// layer, which resolves every source's captures together onto
 		// world events off this path (event_layer.go). It never gates the
-		// arrival. With intake.event_wakes on, the arrival is held:
-		// it names the captures and wakes no one, and the captures reach
-		// management on their events' records (event layer §15).
-		// Pending captures from an earlier poll are held too, so the
-		// arrival never wakes management while production waits on events
-		// (code review, Gemini B3); any never queued are released by the
-		// sweep.
+		// arrival.
 		rt.enqueueEventResolution(ctx, ownerID, computerID, sched.SourceID, report.Captured)
-		held := eventWakes
 		// The poll's new captures reach management as one record (Cut 2
 		// 2b), after any the source still has pending, at most the poll's
 		// limit. Captures a failed append could not announce stay pending
@@ -301,13 +290,10 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 			limit = researchtools.EffectivePollMaxItems(sched.MaxItems)
 		}
 		var arrivalErr error
-		pendingAfter, arrivalErr = rt.announceCaptures(ctx, ownerID, computerID, sched.SourceID, sched.PendingArrivals, report.Captured, limit, held)
+		pendingAfter, arrivalErr = rt.announceCaptures(ctx, ownerID, computerID, sched.SourceID, sched.PendingArrivals, report.Captured, limit)
 		if arrivalErr != nil {
 			log.Printf("source schedule: %s: %v; %d captures pending for the next poll", sched.SourceID, arrivalErr, len(pendingAfter))
 		}
-		// Held captures a crash, a stop or the setting's rollback stranded
-		// go to management (event_wakes.go), from this live poll.
-		rt.sweepHeldCaptures(ctx, ownerID, computerID, time.Now().UTC())
 	}
 
 	sourceScheduleMu.Lock()

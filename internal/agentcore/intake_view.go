@@ -86,8 +86,8 @@ func (rt *Runtime) storiesEgressWithin(ctx context.Context, deskRole string, exe
 		return nil, fmt.Errorf("stories host unavailable")
 	}
 	owner, computer := strings.TrimSpace(exec.OwnerID), strings.TrimSpace(exec.ComputerID)
-	if !rt.intakeSurfacesEnabled(ctx, owner, computer) {
-		return nil, fmt.Errorf("choir.Stories is off on this computer (the owner's intake.labels and intake.event_wakes settings); list documents with choir.ProductAPI(\"GET\", \"/api/texture/documents\", \"\")")
+	if !rt.intakeLabelsEnabled(ctx, owner, computer) {
+		return nil, fmt.Errorf("choir.Stories is off on this computer (the owner's intake.labels settings); list documents with choir.ProductAPI(\"GET\", \"/api/texture/documents\", \"\")")
 	}
 	var req yaegikernel.StoriesPayload
 	if len(payload) > 0 {
@@ -153,9 +153,6 @@ func (rt *Runtime) storiesEgressWithin(ctx context.Context, deskRole string, exe
 	if more && len(sums) > 0 {
 		last := sums[len(sums)-1]
 		page.Next = storiesCursor(last.UpdatedAt, last.DocID)
-	}
-	if before.IsZero() {
-		page.Held = rt.heldCapturesTally(owner, computer)
 	}
 	rt.noteStoriesShown(exec.RunID, len(page.Stories))
 	return json.Marshal(page)

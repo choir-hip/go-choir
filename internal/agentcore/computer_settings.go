@@ -19,13 +19,6 @@ import (
 // owner act through the product API at /api/computer-settings, which is not
 // on management's ProductAPI allowlist.
 
-// intakeSurfacesEnabled reports whether management's intake surface
-// (choir.Stories, Feed, Decline, Delegate) is on: with intake.labels, or
-// with intake.event_wakes, whose event records need it (event layer §15).
-func (rt *Runtime) intakeSurfacesEnabled(ctx context.Context, ownerID, computerID string) bool {
-	return rt.intakeLabelsEnabled(ctx, ownerID, computerID) || rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
-}
-
 // intakeLabelsEnabled reports whether intake.labels is on for the computer.
 // A stored value decides. With nothing stored the default (on, owner
 // 2026-11-03) applies only where intake can happen: the computer has a
@@ -138,8 +131,7 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		// Setting a value it already has writes nothing, so updated_at is
-		// when the value last changed: intake.event_wakes reads it as when
-		// production began waiting on events (event layer §15).
+		// when the value last changed.
 		if current, err := rt.store.GetComputerSetting(r.Context(), ownerID, computerID, key); err == nil && current.Value == value {
 			// The apply is idempotent and re-run for the settings whose
 			// apply can fail after the value is stored (a telemetry sealer
