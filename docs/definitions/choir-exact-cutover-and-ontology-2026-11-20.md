@@ -134,7 +134,7 @@ stations:
     status: working
   - id: X6
     name: Imported documents (the code's "shelf"), onboarding and settings models
-    scope: 'PDF and ebook import, list, search, reading position and read-aloud hand-off in shared code, named for what they are (not "books" or "shelf"); PDF text extraction may need a native op, with its reason. Onboarding and settings page models. Start when two of X3 to X5 have landed a slice.'
+    scope: 'The owner, 2026-11-20: "if you upload a file that''s actually going to your computer, your VM on Choir.news. So uploaded files really shouldn''t be deleted because they''re saved in the cloud." That is true of the Files page (it uploads to the computer) and NOT of the reader''s imports today: an imported PDF or EPUB is kept only on the phone (Application Support/Autoradio/books, AutoradioModule+Books.swift:23). So this station makes an imported document a file on the owner''s computer, with the phone holding a cache; list, search, reading position and read-aloud hand-off in shared code, named for what they are (not "books" or "shelf"); PDF text extraction may need a native op, with its reason. Onboarding and settings page models. Start when two of X3 to X5 have landed a slice.'
     class: orange
     review: one seat a slice
     depends_on: [X1]
@@ -188,6 +188,14 @@ stations:
     name: How much the paper duplicates itself
     scope: 'docs/evidence/duplicate-stories-on-the-paper-2026-11-20.md: the share of a day''s new stories that report a happening an earlier story already covers, with examples and what each duplicate cost in searches and model calls. Sets C2''s threshold and its expected effect.'
     class: yellow (read-only measurement)
+    status: proved
+    result: 'docs/evidence/duplicate-stories-on-the-paper-2026-11-20.md: of 982 stories opened in 24 hours, 17.4% duplicate a story of the previous 72 hours and 20.1% are second-or-later on a covered happening; about one published story in five is a repeat; duplicates and follow-ups took 17.3% of web searches, so consolidation alone leaves about 2,800 to 3,200 a day. The management task that decides to open a story is shown only the newest 50 stories (a median 27 minutes), not the 8 hours its prompt promises; the earlier story was on that page for 6 of 171 duplicates.'
+  - id: C1b
+    name: The open decision sees what the paper holds
+    scope: 'before the ontology lands: management''s story page is the window its prompt promises (headlines only, inside the token bound), and the top held candidates of the last 72 hours are offered to the judge, so a held story is fed and not opened again. Lane dup-open-page.'
+    class: orange
+    review: one seat
+    depends_on: [C1]
     status: working
   - id: C2
     name: A happening has one story
