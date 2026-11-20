@@ -83,7 +83,11 @@ func (s *Store) ListStoryDocuments(ctx context.Context, ownerID, computerID stri
 
 // DocumentIsStory reports whether doc is a story document: its lifecycle
 // trajectory is of kind story, the kind ListStoryDocuments lists. A document
-// with no trajectory is not a story.
+// with no trajectory is not a story. The kind is read through a cache that is
+// never invalidated because a trajectory's kind is written once, when its
+// record is made (lifecycle.go StartLifecycle, lifecycle_continue.go: a
+// continued trajectory is a new record that inherits the kind), and no code
+// updates it.
 func (s *Store) DocumentIsStory(ctx context.Context, doc types.Document) (bool, error) {
 	if strings.TrimSpace(doc.TrajectoryID) == "" {
 		return false, nil

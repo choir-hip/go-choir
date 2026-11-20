@@ -45,8 +45,12 @@ func (h *Handler) textureRootSharedContext(ctx context.Context, ownerID string, 
 	// a listing of up to 50 documents and up to 4 KiB of prompt to each of
 	// them, for context about the owner's open work that a story's research
 	// does not use. Ordinary documents carry it.
+	// A read error carries no excerpt either: the excerpt is optional
+	// context, so the run goes without it rather than risk the circle. (The
+	// digest does not read the kind at all: it batches every document.)
 	if story, err := h.Store.DocumentIsStory(ctx, doc); err != nil {
 		log.Printf("texture root: shared context on %s: story kind: %v", computerID, err)
+		return "", ""
 	} else if story {
 		return "", ""
 	}

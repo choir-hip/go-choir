@@ -29,10 +29,6 @@ const (
 	// without a cold wake run while still bounding active provider-loop residency.
 	DefaultTextureActorParkIdle = 2 * time.Minute
 
-	// DefaultTextureRootDigestInterval is the Texture root digest's debounce
-	// (PD3 S1): a commit on an ordinary document is digested this long after.
-	DefaultTextureRootDigestInterval = 120 * time.Second
-
 	// DefaultRunMemoryContextThresholdTokens is zero so normal runtime
 	// compaction derives from the selected model's context window. Set
 	// RUNTIME_RUN_MEMORY_CONTEXT_THRESHOLD_TOKENS only for explicit diagnostics.
@@ -100,10 +96,6 @@ func LoadConfig() Config {
 		TextureActorParkIdle: durationOr(
 			"RUNTIME_TEXTURE_ACTOR_PARK_IDLE",
 			DefaultTextureActorParkIdle,
-		),
-		TextureRootDigestInterval: durationOr(
-			"RUNTIME_TEXTURE_ROOT_DIGEST_INTERVAL",
-			DefaultTextureRootDigestInterval,
 		),
 		VmctlURL:           envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
 		MaildURL:           os.Getenv("RUNTIME_MAILD_URL"),

@@ -97,12 +97,18 @@ added.
 
 ### texture.root_desk: built and on, 2026-11-19 (no setting)
 
-The owner ruled everything on (2026-11-19). The setting is removed. The two
-conditions held in this audit are now code: story documents (trajectory kind
-story) feed the master as one hourly batch digest, and the 20-an-hour quota
-on root runs is deleted (coalescing bounds the runs); a story run no longer
-carries the master excerpt. The F4/F5 re-proof on d@e is the deployed proof
-`scripts/proof-pd3-root-desk`, run after landing. Row: `docs/current-architecture.md`.
+The owner ruled everything on (2026-11-19). The setting is removed. The
+paper's condition is built as one rule for every document: one batched digest
+an hour, the digest drains an in-memory pending set and names no documents,
+and the 20-an-hour quota on root runs is deleted (one digest an hour and one
+live root run bound them). A story run no longer carries the master excerpt.
+The 2026-11-03 text said "published story documents"; the code batches
+every document of kind story (a living story is a story from the moment it
+opens, drafts included) and, since every commit now rides the one hourly
+digest, every other document too. The code is right and the words were
+narrower than the churn: a draft story commits as often as a published one.
+The F4/F5 re-proof on d@e is the deployed proof `scripts/proof-pd3-root-desk`,
+run after landing. Row: `docs/current-architecture.md`.
 
 ### Not flipped: features held, with the reason and the fix
 

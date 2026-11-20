@@ -158,6 +158,33 @@ func (rh *rootHarness) deliver(w rootWake) {
 	}
 }
 
+// pendingDocs is the documents the scope holds for the next digest (a digest
+// names none).
+func (rh *rootHarness) pendingDocs() []string {
+	rh.h.textureRootMu.Lock()
+	defer rh.h.textureRootMu.Unlock()
+	return append([]string(nil), rh.h.textureRootScopeLocked(rootOwner, rootComputer).pending...)
+}
+
+func (rh *rootHarness) pendingHas(docID string) bool {
+	for _, d := range rh.pendingDocs() {
+		if d == docID {
+			return true
+		}
+	}
+	return false
+}
+
+// rootRuns is every run the master's desk has had.
+func (rh *rootHarness) rootRuns(master string) int {
+	rh.t.Helper()
+	runs, err := rh.s.ListRunsByAgent(rh.t.Context(), rootOwner, "texture:"+master, 100)
+	if err != nil {
+		rh.t.Fatal(err)
+	}
+	return len(runs)
+}
+
 func (rh *rootHarness) marker() (store.TextureRoot, bool) {
 	rh.t.Helper()
 	root, err := rh.s.GetTextureRoot(rh.t.Context(), rootOwner, rootComputer)
@@ -290,16 +317,15 @@ func TestTextureRootCommitsMintOneDebouncedDigest(t *testing.T) {
 		t.Fatalf("two commits minted %d digests, want one", len(digests))
 	}
 	d := digests[0]
-	if d.to != agentcore.TextureRootDigestMailbox || !strings.Contains(d.content, b) {
-		t.Fatalf("digest = %+v, want the root digest mailbox naming %s", d, b)
+	if d.to != agentcore.TextureRootDigestMailbox || strings.Contains(d.content, b) {
+		t.Fatalf("digest = %+v, want the root digest mailbox and no document named in it", d)
 	}
-	if min := rh.clock().Add(rh.core.TextureRootDigestInterval() - time.Second); d.notBefore.Before(min) {
-		t.Fatalf("digest due %s, before the debounce interval (%s from %s)", d.notBefore, rh.core.TextureRootDigestInterval(), rh.clock())
+	if !rh.pendingHas(b) || !rh.pendingHas(c) {
+		t.Fatalf("the scope holds %v, want both %s and %s pending", rh.pendingDocs(), b, c)
 	}
-	if rh.core.TextureRootDigestInterval() != 120*time.Second {
-		t.Fatalf("digest debounce = %s, want the default 120s", rh.core.TextureRootDigestInterval())
+	if min := rh.clock().Add(textureRootBatchInterval - time.Second); d.notBefore.Before(min) {
+		t.Fatalf("digest due %s, before the batch interval (%s from %s)", d.notBefore, textureRootBatchInterval, rh.clock())
 	}
-	_ = c
 }
 
 // An owner revision is a commit on a document too: it mints a digest.
@@ -310,8 +336,8 @@ func TestTextureRootOwnerRevisionMintsADigest(t *testing.T) {
 	if resp := postOwnerInstruction(t, rh.h, "/api/texture/documents/"+b+"/revise", rootOwner, "owner-b-1", "Add the ferry times.", head); resp.Code != http.StatusAccepted {
 		t.Fatalf("owner revise: %d %s", resp.Code, resp.Body.String())
 	}
-	if digests := rh.digests(); len(digests) != 1 || !strings.Contains(digests[0].content, b) {
-		t.Fatalf("an owner revision minted %+v, want one digest naming %s", digests, b)
+	if digests := rh.digests(); len(digests) != 1 || !rh.pendingHas(b) {
+		t.Fatalf("an owner revision minted %+v with %v pending, want one digest and %s pending", digests, rh.pendingDocs(), b)
 	}
 }
 
@@ -604,12 +630,12 @@ func TestTextureRootShortIDIsEightHex(t *testing.T) {
 // fix.
 
 // B1: a digest whose reconcile starts no run (here the master's activation
-// breaker is tripped) keeps its documents and re-arms exactly one digest, at
-// the debounce interval and no sooner, so a tripped breaker makes a poll at
-// the interval and no tight loop. It starts no run, so it makes no model
-// call; there is no hourly quota on our own calls.
-func TestTextureRootNoRunDigestReArmsAtTheInterval(t *testing.T) {
-	rh, master, root, b, _ := rootStarted(t)
+// breaker is tripped) ends: it keeps its documents pending and arms nothing,
+// so a tripped breaker is no poll. It started no run, so it made no model
+// call. The next commit arms the next digest, which carries the earlier
+// documents too.
+func TestTextureRootNoRunDigestEndsAndKeepsItsDocuments(t *testing.T) {
+	rh, master, root, b, c := rootStarted(t)
 	rh.write(rh.h, &root, "master", "Harbor: open. Bridge: closed.", "")
 	passivateRun(t, rh.s, root)
 	head := rh.snapshot(master).HeadRevision.RevisionID
@@ -624,29 +650,27 @@ func TestTextureRootNoRunDigestReArmsAtTheInterval(t *testing.T) {
 	}
 	rh.advance(3 * time.Minute)
 	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, b)
-	for i := 0; i < 30; i++ {
-		digests := rh.digests()
-		last := digests[len(digests)-1]
-		rh.mu.Lock()
-		if !last.notBefore.Before(rh.now) {
-			rh.now = last.notBefore.Add(time.Second)
-		}
-		at := rh.now
-		rh.mu.Unlock()
-		rh.deliver(last)
-		if run, ok := rh.activeRun(master); ok {
-			t.Fatalf("a tripped breaker started root run %s", run.RunID)
-		}
-		after := rh.digests()
-		if n := len(after) - len(digests); n != 1 {
-			t.Fatalf("delivery %d with no run re-armed %d digests, want exactly 1 (the documents are dropped otherwise)", i, n)
-		}
-		if !strings.Contains(after[len(after)-1].content, b) {
-			t.Fatalf("delivery %d re-armed a digest without %s: %s", i, b, after[len(after)-1].content)
-		}
-		if due := after[len(after)-1].notBefore; due.Before(at.Add(rh.core.TextureRootDigestInterval() - time.Second)) {
-			t.Fatalf("delivery %d re-armed a digest due %s, sooner than the interval from %s", i, due, at)
-		}
+	digests := rh.digests()
+	runs := rh.rootRuns(master)
+	rh.deliver(digests[len(digests)-1])
+	if run, ok := rh.activeRun(master); ok {
+		t.Fatalf("a tripped breaker started root run %s", run.RunID)
+	}
+	if n := len(rh.digests()) - len(digests); n != 0 {
+		t.Fatalf("a digest that started no run armed %d more digests, want none (no poll)", n)
+	}
+	if !rh.pendingHas(b) {
+		t.Fatalf("the digest that started no run dropped %s: pending %v", b, rh.pendingDocs())
+	}
+	if got := rh.rootRuns(master); got != runs {
+		t.Fatalf("root runs went %d to %d", runs, got)
+	}
+	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, c)
+	if n := len(rh.digests()) - len(digests); n != 1 {
+		t.Fatalf("the next commit armed %d digests, want 1", n)
+	}
+	if !rh.pendingHas(b) || !rh.pendingHas(c) {
+		t.Fatalf("the next digest's pending set is %v, want both documents", rh.pendingDocs())
 	}
 }
 
@@ -697,8 +721,8 @@ func TestTextureRootTrajectoryChangeNotesItsDocument(t *testing.T) {
 		t.Fatalf("a change on the master's own trajectory armed %d digests", n)
 	}
 	rh.h.NoteTextureRootTrajectoryChange(t.Context(), rootOwner, rootComputer, rh.snapshot(b).Trajectory.TrajectoryID)
-	if digests := rh.digests(); len(digests)-before != 1 || !strings.Contains(digests[len(digests)-1].content, b) {
-		t.Fatalf("a change on %s's trajectory armed %d digests, want one naming it", b, len(digests)-before)
+	if digests := rh.digests(); len(digests)-before != 1 || !rh.pendingHas(b) {
+		t.Fatalf("a change on %s's trajectory armed %d digests, pending %v, want one digest and the document pending", b, len(digests)-before, rh.pendingDocs())
 	}
 }
 
@@ -954,24 +978,25 @@ func (rh *rootHarness) openStory(suffix string) string {
 	return strings.TrimPrefix(receipt.Records[0].Inbox, agentprofile.Texture+":")
 }
 
-// The paper's condition for the root desk: a story document is one whose
-// trajectory is of kind story; a hundred story commits in an hour make one
-// digest, due an hour after the first, and one root run; an ordinary
-// document's commit still digests in two minutes.
-func TestTextureRootAHundredStoryCommitsInAnHourMakeOneRootRun(t *testing.T) {
+// One batched digest for every document (story or ordinary): a hundred
+// commits over fifty minutes make one digest, due an hour after the first,
+// and one root run.
+func TestTextureRootAHundredCommitsInAnHourMakeOneRootRun(t *testing.T) {
 	rh := newRootHarness(t)
-	stories := []string{rh.openStory("s1"), rh.openStory("s2"), rh.openStory("s3")}
+	docs := []string{rh.openStory("s1"), rh.openStory("s2")}
+	o, _ := rh.createDoc("batch-o", "Harbor")
+	docs = append(docs, o)
 	start := rh.clock()
 	for i := 0; i < 100; i++ {
-		rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, stories[i%len(stories)])
-		rh.advance(30 * time.Second) // 100 commits over 50 minutes
+		rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, docs[i%len(docs)])
+		rh.advance(30 * time.Second)
 	}
 	digests := rh.digests()
 	if len(digests) != 1 {
-		t.Fatalf("100 story commits in an hour armed %d digests, want 1", len(digests))
+		t.Fatalf("100 commits in an hour armed %d digests, want 1", len(digests))
 	}
 	if want := start.Add(time.Hour); digests[0].notBefore.Before(want) {
-		t.Fatalf("the story digest is due %s, before an hour from the first commit (%s)", digests[0].notBefore, want)
+		t.Fatalf("the digest is due %s, before an hour from the first commit (%s)", digests[0].notBefore, want)
 	}
 	if _, ok := rh.marker(); ok {
 		t.Fatal("a master was made before the batch was due")
@@ -984,65 +1009,80 @@ func TestTextureRootAHundredStoryCommitsInAnHourMakeOneRootRun(t *testing.T) {
 	if !ok {
 		t.Fatal("the hourly digest made no master")
 	}
-	if _, live := rh.activeRun(marker.DocumentID); !live {
-		t.Fatal("the hourly digest started no root run")
+	if n := rh.rootRuns(marker.DocumentID); n != 1 {
+		t.Fatalf("the batch made %d root runs, want 1", n)
 	}
 	if n := len(rh.digests()); n != 1 {
 		t.Fatalf("delivering the batch armed %d more digests", n-1)
 	}
-	for _, id := range stories {
-		if !strings.Contains(digests[0].content, id) && !rootPromptNames(t, rh, marker.DocumentID, id) {
-			t.Fatalf("the batch run does not name story %s", id)
-		}
-	}
 }
 
-func rootPromptNames(t *testing.T, rh *rootHarness, master, docID string) bool {
-	t.Helper()
-	run, ok := rh.activeRun(master)
-	return ok && strings.Contains(run.Prompt, docID)
-}
-
-// An ordinary document keeps the two-minute digest while a story batch
-// waits; the first digest to come takes every pending document, and the
-// other ends without a run.
-func TestTextureRootOrdinaryCommitDigestsInTwoMinutesWhileAStoryBatchWaits(t *testing.T) {
+// Review finding 1 of 8af45a133: a story commit, then an ordinary commit ten
+// seconds later, then the digest an hour on, make exactly ONE root run. A
+// digest names no documents and a digest that is not the armed one ends, so
+// a second digest cannot rerun documents already digested.
+func TestTextureRootAStoryThenAnOrdinaryCommitMakeExactlyOneRootRun(t *testing.T) {
 	rh := newRootHarness(t)
-	story := rh.openStory("s-wait")
+	story := rh.openStory("s-once")
 	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, story)
-	b, runB := rh.createDoc("ord-b", "Harbor")
+	rh.advance(10 * time.Second)
+	b, runB := rh.createDoc("once-b", "Harbor")
 	rh.write(rh.h, &runB, "harbor", "The harbor is open.", "")
 	digests := rh.digests()
-	if len(digests) != 2 {
-		t.Fatalf("a story note and an ordinary commit armed %d digests, want 2 (the batch and the prompt one)", len(digests))
+	if len(digests) != 1 {
+		t.Fatalf("a story commit and an ordinary commit armed %d digests, want 1", len(digests))
 	}
-	prompt, batch := digests[1], digests[0]
-	if want := rh.clock().Add(rh.core.TextureRootDigestInterval() - time.Second); prompt.notBefore.Before(want) || prompt.notBefore.After(rh.clock().Add(5*time.Minute)) {
-		t.Fatalf("the ordinary digest is due %s, not about two minutes from %s", prompt.notBefore, rh.clock())
+	if !rh.pendingHas(story) || !rh.pendingHas(b) {
+		t.Fatalf("pending %v, want the story and %s", rh.pendingDocs(), b)
 	}
-	if !batch.notBefore.After(rh.clock().Add(30 * time.Minute)) {
-		t.Fatalf("the story digest is due %s, not about an hour out", batch.notBefore)
-	}
-	if !strings.Contains(prompt.content, story) || !strings.Contains(prompt.content, b) {
-		t.Fatalf("the ordinary digest does not carry the pending story and document: %s", prompt.content)
-	}
-	rh.advance(3 * time.Minute)
-	rh.deliver(prompt)
+	rh.mu.Lock()
+	rh.now = digests[0].notBefore.Add(time.Second)
+	rh.mu.Unlock()
+	rh.deliver(digests[0])
 	marker, ok := rh.marker()
 	if !ok {
-		t.Fatal("the ordinary digest made no master")
+		t.Fatal("the digest made no master")
 	}
 	run, live := rh.activeRun(marker.DocumentID)
 	if !live {
-		t.Fatal("the ordinary digest started no root run")
+		t.Fatal("the digest started no root run")
 	}
-	rh.mu.Lock()
-	rh.now = batch.notBefore.Add(time.Second)
-	rh.mu.Unlock()
 	passivateRun(t, rh.s, run)
-	rh.deliver(batch)
-	if n := len(rh.digests()); n != 2 {
-		t.Fatalf("the late batch digest re-armed %d digests, want none (it took nothing)", n-2)
+	// The same digest again, and one carrying an unknown nonce of this
+	// boot (the old design's second digest): neither starts a run.
+	rh.deliver(digests[0])
+	rh.deliver(rootWake{content: `{"v":1,"nonce":"not-armed","boot":"` + textureRootProcessBoot + `"}`})
+	if n := rh.rootRuns(marker.DocumentID); n != 1 {
+		t.Fatalf("the sequence made %d root runs, want exactly 1", n)
+	}
+}
+
+// A planned restart resumes the pre-boot digest, which names no documents
+// (the pending set died with the process): the run is a full refresh of the
+// master. A crash boot never delivers it (agentcore.RestartWorkKinds), and
+// the next commit after boot arms a new digest (see
+// TestTextureRootNextCommitAfterBootMintsANewDigest).
+func TestTextureRootAResumedDigestRunsAFullRefresh(t *testing.T) {
+	rh := newRootHarness(t)
+	_, runB := rh.createDoc("resume-b", "Harbor")
+	rh.write(rh.h, &runB, "harbor", "The harbor is open.", "")
+	// A new process: no scope in memory, and the digest row carries another
+	// boot's id.
+	rh.h.textureRootMu.Lock()
+	rh.h.textureRootScopes = nil
+	rh.h.textureRootMu.Unlock()
+	resumed := `{"v":1,"nonce":"pre-boot-1","boot":"another-boot"}`
+	rh.deliver(rootWake{content: resumed})
+	marker, ok := rh.marker()
+	if !ok {
+		t.Fatal("the resumed digest made no master")
+	}
+	run, live := rh.activeRun(marker.DocumentID)
+	if !live {
+		t.Fatal("the resumed digest started no root run")
+	}
+	if !strings.Contains(run.Prompt, "a full refresh") {
+		t.Fatalf("the resumed digest's run is not a full refresh:\n%s", run.Prompt)
 	}
 }
 
@@ -1075,6 +1115,12 @@ func TestTextureRootStoryRunsCarryNoExcerptAndOrdinaryRunsDo(t *testing.T) {
 	excerpt := ordinaryRun.Prompt[strings.Index(ordinaryRun.Prompt, textureprompts.RootContextLabel()):]
 	if len(excerpt) > textureRootContextMaxBytes+len(textureprompts.RootContextLabel())+4 {
 		t.Fatalf("the excerpt is %d bytes, over the bound", len(excerpt))
+	}
+	if got := fmt.Sprint(storyRun.Metadata["texture_root_excerpt_bytes"]); got != "0" {
+		t.Fatalf("the story run's start record says excerpt bytes %q, want 0", got)
+	}
+	if got := fmt.Sprint(ordinaryRun.Metadata["texture_root_excerpt_bytes"]); got == "0" || got == "<nil>" {
+		t.Fatalf("the ordinary run's start record says excerpt bytes %q, want the excerpt's size", got)
 	}
 	t.Logf("measured: story run listings=%d excerpt_bytes=0; ordinary run listings=%d excerpt_bytes=%d", storyListings, listings, len(excerpt))
 }

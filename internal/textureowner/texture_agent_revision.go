@@ -712,6 +712,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	// turn, never in the prompt core.
 	textureRoot, isTextureRoot := rt.textureRootFor(ctx, ownerID, doc.ComputerID, doc.DocID)
 	rootContextRevisionID := ""
+	rootExcerptBytes, rootExcerptRun := 0, false
 	if isTextureRoot {
 		agentPrompt += rt.textureRootRequestSection(ctx, ownerID, doc, textureRoot, req)
 	} else if textureRoot.DocumentID != "" {
@@ -720,6 +721,9 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		section, revisionID := rt.textureRootSharedContext(ctx, ownerID, doc, textureRoot)
 		agentPrompt += section
 		rootContextRevisionID = revisionID
+		rootExcerptBytes = len(section)
+		rootExcerptRun = true
+		log.Printf("texture root: excerpt on document %s computer %s: carried=%t bytes=%d", doc.DocID, doc.ComputerID, section != "", len(section))
 	}
 
 	// Create the runtime run with Texture agent revision metadata.
@@ -738,6 +742,9 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		"original_prompt":      strings.TrimSpace(req.Prompt),
 		"texture_context_mode": contextMode,
 		"texture_prompt_chars": len(agentPrompt),
+	}
+	if rootExcerptRun {
+		runMetadata["texture_root_excerpt_bytes"] = rootExcerptBytes
 	}
 	if trajectoryID := strings.TrimSpace(doc.TrajectoryID); trajectoryID != "" {
 		runMetadata["trajectory_id"] = trajectoryID

@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -56,26 +57,30 @@ const (
 	// textureRootMaxRevisionBytes bounds the master itself: a root revision
 	// over 48 KiB is refused, so a root run's input stays bounded too.
 	textureRootMaxRevisionBytes = 48 << 10
-	// textureRootStoryBatchInterval is how long a commit on a story document
-	// waits for the root: one batched digest an hour. A story is a document
-	// whose lifecycle trajectory is of kind story (types.TrajectoryKindStory,
-	// the kind the story library lists). Every other document keeps the
-	// textureRootDigestInterval debounce. The batch is the paper's condition
-	// for the root desk: hundreds of story documents commit all day and the
-	// master is one document.
-	textureRootStoryBatchInterval = time.Hour
+	// textureRootBatchInterval is how long the root waits after the first
+	// commit on any other document: one batched digest an hour, whatever
+	// the document. Nothing reads the master within minutes (its readers
+	// are the owner's view, the excerpt on an ordinary run, which is
+	// context, and the rebase notice, which needs a live root and not fresh
+	// text), and hundreds of story documents commit all day while the master
+	// is one document. A digest that meets a live root run waits this long
+	// again.
+	textureRootBatchInterval = time.Hour
 	// textureRootClientRequestPrefix is reserved for the master documents'
 	// create commands (the create handler refuses it).
 	textureRootClientRequestPrefix = "texture-root:"
 )
 
-// textureRootDigest is the digest occurrence's content. Nonce makes each
-// armed digest its own actor row (the mailbox dedupes on content).
+// textureRootDigest is the digest occurrence's content: a nonce and the
+// process that armed it, and no documents. The pending documents live in the
+// scope, in memory; the digest names the one armed digest, so a second
+// digest (a duplicate, or one armed before a failed schedule) ends without a
+// run. A digest of an earlier process is a planned restart's resume: its
+// pending set is gone, so its run is a full refresh.
 type textureRootDigest struct {
-	V     int      `json:"v"`
-	Nonce string   `json:"nonce"`
-	Docs  []string `json:"docs"`
-	Full  bool     `json:"full,omitempty"`
+	V     int    `json:"v"`
+	Nonce string `json:"nonce"`
+	Boot  string `json:"boot"`
 }
 
 // textureRootScope is one computer's digest state, in memory only: a
@@ -85,13 +90,7 @@ type textureRootScope struct {
 	pendingFull bool
 	armedNonce  string
 	armedDue    time.Time
-	// batchNonce and batchDue are the hourly story digest, armed beside the
-	// prompt digest: a commit on an ordinary document arms the prompt one
-	// even while the batch waits, and whichever digest comes first takes
-	// every pending document, so the other finds nothing and ends.
-	batchNonce string
-	batchDue   time.Time
-	seq        int64
+	seq         int64
 }
 
 // textureRootArm is one digest armed under the scope mutex, scheduled after
@@ -99,7 +98,6 @@ type textureRootScope struct {
 type textureRootArm struct {
 	nonce, content string
 	due            time.Time
-	batch          bool
 }
 
 // textureRootWake carries a digest into the master's reconcile.
@@ -225,69 +223,39 @@ func (h *Handler) noteTextureRootChangeOn(ctx context.Context, ownerID, computer
 		log.Printf("texture root: read marker on %s: %v", computerID, err)
 	}
 	now := h.textureRootClock()
-	batch := h.textureRootDocumentIsStory(ctx, ownerID, computerID, docID)
-	due := now.Add(h.Core.TextureRootDigestInterval())
-	if batch {
-		due = now.Add(textureRootStoryBatchInterval)
-	}
 	h.textureRootMu.Lock()
-	arm := h.armTextureRootDigestLocked(computerID, h.textureRootScopeLocked(ownerID, computerID), now, due, false, batch, docID)
+	arm := h.armTextureRootDigestLocked(computerID, h.textureRootScopeLocked(ownerID, computerID), now, now.Add(textureRootBatchInterval), false, docID)
 	h.textureRootMu.Unlock()
 	h.scheduleTextureRootDigest(ctx, ownerID, computerID, arm)
 }
 
-// textureRootDocumentIsStory reports whether docID is a story document: its
-// lifecycle trajectory is of kind story. A read error counts as an ordinary
-// document, which digests at the prompt interval, so a failed read never
-// delays an owner's work.
-func (h *Handler) textureRootDocumentIsStory(ctx context.Context, ownerID, computerID, docID string) bool {
-	ctx = asTextureReader(ctx)
-	doc, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
-	if err != nil {
-		if !errors.Is(err, store.ErrNotFound) {
-			log.Printf("texture root: read document %s on %s: %v", docID, computerID, err)
-		}
-		return false
-	}
-	story, err := h.Store.DocumentIsStory(ctx, doc)
-	if err != nil {
-		log.Printf("texture root: read the kind of document %s on %s: %v", docID, computerID, err)
-		return false
-	}
-	return story
-}
-
 // armTextureRootDigestLocked adds docs to the pending set and arms one
-// digest unless one that would take them is armed and not stale: a prompt
-// digest takes every pending document, so a batch note rides along with an
-// armed prompt digest, and a prompt note is not held by an armed batch (it
-// arms its own, earlier digest). The arm is marked under the mutex, so
-// arming is exactly-once; the caller schedules it after releasing the mutex
-// (scheduleTextureRootDigest), so the actor-log write does not serialize
-// every commit's note.
-func (h *Handler) armTextureRootDigestLocked(computerID string, scope *textureRootScope, now, due time.Time, full, batch bool, docs ...string) *textureRootArm {
+// digest unless one is armed and not stale. The arm is marked under the
+// mutex, so arming is exactly-once; the caller schedules it after releasing
+// the mutex (scheduleTextureRootDigest), so the actor-log write does not
+// serialize every commit's note.
+func (h *Handler) armTextureRootDigestLocked(computerID string, scope *textureRootScope, now, due time.Time, full bool, docs ...string) *textureRootArm {
 	scope.pending = addTextureRootPending(scope.pending, docs...)
 	scope.pendingFull = scope.pendingFull || full
-	fresh := func(nonce string, at time.Time) bool {
-		return nonce != "" && now.Before(at.Add(textureRootStaleArm))
-	}
-	if fresh(scope.armedNonce, scope.armedDue) || (batch && fresh(scope.batchNonce, scope.batchDue)) {
-		return nil // coalesced into an armed digest
+	if scope.armedNonce != "" && now.Before(scope.armedDue.Add(textureRootStaleArm)) {
+		return nil // coalesced into the armed digest
 	}
 	scope.seq++
-	digest := textureRootDigest{V: 1, Nonce: fmt.Sprintf("%d-%d", now.UnixNano(), scope.seq), Docs: append([]string(nil), scope.pending...), Full: scope.pendingFull}
+	digest := textureRootDigest{V: 1, Nonce: fmt.Sprintf("%d-%d", now.UnixNano(), scope.seq), Boot: textureRootProcessBoot}
 	content, err := json.Marshal(digest)
 	if err != nil {
 		log.Printf("texture root: encode digest on %s: %v", computerID, err)
 		return nil
 	}
-	if batch {
-		scope.batchNonce, scope.batchDue = digest.Nonce, due
-	} else {
-		scope.armedNonce, scope.armedDue = digest.Nonce, due
-	}
-	return &textureRootArm{nonce: digest.Nonce, content: string(content), due: due, batch: batch}
+	scope.armedNonce, scope.armedDue = digest.Nonce, due
+	return &textureRootArm{nonce: digest.Nonce, content: string(content), due: due}
 }
+
+// textureRootProcessBoot names this process: a digest of another boot is a
+// planned restart's resume (a crash boot closes pre-boot digests as
+// interrupted, agentcore.RestartWorkKinds), and the pending set it stood for
+// is gone.
+var textureRootProcessBoot = fmt.Sprintf("%d-%d", time.Now().UnixNano(), os.Getpid())
 
 // scheduleTextureRootDigest writes an armed digest to the actor log, outside
 // the scope mutex. A failed write rolls the arm back (when it is still the
@@ -307,18 +275,24 @@ func (h *Handler) scheduleTextureRootDigest(ctx context.Context, ownerID, comput
 	if scope.armedNonce == arm.nonce {
 		scope.armedNonce, scope.armedDue = "", time.Time{}
 	}
-	if scope.batchNonce == arm.nonce {
-		scope.batchNonce, scope.batchDue = "", time.Time{}
-	}
 }
 
-// HandleTextureRootDigest is the digest's dispatch. It runs the ensure step
-// (the marked master's liveness, checked before any activation), then wakes
-// the master's own Texture desk with the documents the digest names, unless
-// a root run is live or the rate bound holds it: then it re-arms one digest.
-// A wake that starts no run (the master's reconcile found a live run in the
-// gap, or its activation breaker is tripped) re-arms one digest too, with the
-// documents kept; it counts against the rate bound, so it cannot loop.
+// HandleTextureRootDigest is the digest's dispatch. A digest names no
+// documents: it drains the scope's pending set, so the two ways a second
+// run on documents already digested could start both end here. A digest that
+// is not the armed one (a duplicate, or one whose schedule failed and was
+// rolled back) ends with no run, and so does one that finds nothing pending.
+// A digest armed by an earlier process is a planned restart's resume (a
+// crash boot closes it as interrupted): the pending set is lost, so its run
+// is a full refresh of the master. It then runs the ensure step (the marked
+// master's liveness, checked before any activation) and wakes the master's
+// own Texture desk with the documents drained, unless a root run is live:
+// then it puts them back and re-arms one digest a batch interval out. A wake
+// that starts no run (the reconcile found a live run in the gap, the
+// activation breaker is tripped, the standing item is closed) puts the
+// documents back and ends: no model call was made, nothing polls, and the
+// next commit arms the next digest. Nothing in the code signals a breaker
+// closing, so none is waited for.
 func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computerID, content string) error {
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if h == nil || h.Store == nil || h.Core == nil || ownerID == "" || computerID == "" {
@@ -332,33 +306,38 @@ func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computer
 	now := h.textureRootClock()
 	h.textureRootMu.Lock()
 	scope := h.textureRootScopeLocked(ownerID, computerID)
-	docs := addTextureRootPending(append([]string(nil), digest.Docs...), scope.pending...)
-	full := digest.Full || scope.pendingFull
+	resumed := digest.Boot != textureRootProcessBoot
+	if !resumed && scope.armedNonce != digest.Nonce {
+		h.textureRootMu.Unlock()
+		log.Printf("texture root: digest %s on %s ended: it is not the armed digest", digest.Nonce, computerID)
+		return nil
+	}
+	docs := append([]string(nil), scope.pending...)
+	full := scope.pendingFull || resumed
 	scope.pending, scope.pendingFull = nil, false
 	if scope.armedNonce == digest.Nonce {
 		scope.armedNonce, scope.armedDue = "", time.Time{}
 	}
-	if scope.batchNonce == digest.Nonce {
-		scope.batchNonce, scope.batchDue = "", time.Time{}
-	}
 	h.textureRootMu.Unlock()
 	if len(docs) == 0 && !full {
-		// The other digest of the pair took these documents already.
-		return nil
+		return nil // another digest took the documents
 	}
-	requeue := func(due time.Time) {
-		h.textureRootMu.Lock()
-		arm := h.armTextureRootDigestLocked(computerID, h.textureRootScopeLocked(ownerID, computerID), now, due, full, false, docs...)
-		h.textureRootMu.Unlock()
-		h.scheduleTextureRootDigest(ctx, ownerID, computerID, arm)
-	}
-	root, created, err := h.ensureTextureRoot(ctx, ownerID, computerID)
-	if err != nil {
+	restore := func() {
 		h.textureRootMu.Lock()
 		scope := h.textureRootScopeLocked(ownerID, computerID)
 		scope.pending = addTextureRootPending(scope.pending, docs...)
 		scope.pendingFull = scope.pendingFull || full
 		h.textureRootMu.Unlock()
+	}
+	requeue := func(due time.Time) {
+		h.textureRootMu.Lock()
+		arm := h.armTextureRootDigestLocked(computerID, h.textureRootScopeLocked(ownerID, computerID), now, due, full, docs...)
+		h.textureRootMu.Unlock()
+		h.scheduleTextureRootDigest(ctx, ownerID, computerID, arm)
+	}
+	root, created, err := h.ensureTextureRoot(ctx, ownerID, computerID)
+	if err != nil {
+		restore()
 		return fmt.Errorf("texture root: ensure the master document: %w", err)
 	}
 	masters := textureRootMasterIDs(root)
@@ -371,39 +350,37 @@ func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computer
 	docs = named
 	full = full || created || len(docs) == 0
 	agentID := currentTextureAgentID(root.DocumentID)
-	interval := h.Core.TextureRootDigestInterval()
 	if active, found, err := h.Core.TextureActiveRunByAgent(ctx, ownerID, computerID, agentID); err != nil {
-		requeue(now.Add(interval))
+		requeue(now.Add(textureRootBatchInterval))
 		log.Printf("texture root: digest on %s re-armed: read the root's active run: %v", computerID, err)
 		return nil
 	} else if found && h.ValidateActivationAuthority(ctx, ownerID, computerID, agentID, active.RunID) == nil {
 		// A root run is live: this digest's documents wait for one digest
 		// after it, so no change is lost to coalescing.
-		requeue(now.Add(interval))
+		requeue(now.Add(textureRootBatchInterval))
 		log.Printf("texture root: digest on %s re-armed: root run %s is live", computerID, active.RunID)
 		return nil
 	}
 	master, err := h.getTextureDocument(ctx, ownerID, root.DocumentID)
 	if err != nil {
-		requeue(now.Add(interval))
+		restore()
 		return fmt.Errorf("texture root: load the master document: %w", err)
 	}
 	rec, err := h.reconcileTextureRootDigest(ctx, master, textureRootWake{Docs: docs, Full: full})
 	if err != nil {
-		requeue(now.Add(interval))
+		restore()
 		return fmt.Errorf("texture root: wake the root: %w", err)
 	}
 	if rec == nil {
-		// The documents wait for one digest at the debounce interval. No run
-		// started, so no model call is made: this re-arm is a poll at the
-		// interval, and it ends when the reconcile starts a run or the
-		// breaker closes. Runs themselves are bounded by coalescing (one
-		// digest takes every pending document) and by there being at most
-		// one live root run (a digest meeting a live run waits an interval).
-		next := now.Add(interval)
-		requeue(next)
-		log.Printf("texture root: digest on %s re-armed for %s: the master's reconcile started no run", computerID, next.Format(time.RFC3339))
+		restore()
+		log.Printf("texture root: digest on %s ended: the master's reconcile started no run", computerID)
+		return nil
 	}
+	kind := "batch"
+	if resumed {
+		kind = "resumed"
+	}
+	log.Printf("texture root: digest on %s started root run %s: kind=%s documents=%d full=%t created=%t", computerID, rec.RunID, kind, len(docs), full, created)
 	return nil
 }
 
