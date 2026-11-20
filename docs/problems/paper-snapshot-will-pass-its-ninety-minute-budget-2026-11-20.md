@@ -119,3 +119,28 @@ Remaining error. Whether this capture finishes inside its 90 minutes is not
 known; it started about 16:55Z, so the answer is due near 18:25Z. If it
 aborts, the paper has gone a day without a restore point and the wall this
 record predicts has arrived a day early.
+
+## That capture finished inside its budget (2026-11-20T18:35Z)
+
+- The paper's console at 18:07:05Z: snapshot at head 13,250,463,
+  52,443,459,584 bytes in 1 h 13 min 25 s; 12,504 chunks, 9,239 uploaded
+  (6.0 GB sealed). Root `ee262a5acf44`. That is 1.40 minutes per GB, against
+  1.61 for the capture of 01:25Z, so the rate is not constant and the
+  "56 GB wall" above is an estimate with at least that much spread.
+- Node B free space at 18:32Z: 64 GiB, under the status script's 65 GiB
+  flag. The image is still 105 GiB allocated 25 minutes after the capture
+  ended.
+- The growth meter's hourly rows show the image's pattern on the two
+  earlier captures: 51.5 to 98.6 GiB at 2026-11-19T08:00Z and back to 51.6
+  by 09:00Z; 52.6 to 100.9 at 2026-11-20T01:01Z, still 100.7 at 02:00Z, back
+  to 53.0 by 03:00Z. So the scratch blocks return to the host within about
+  an hour and a half of a capture ending, not at once. What releases them
+  has not been read.
+- The 60 GiB "floor" in the forecast line is the forecast's own threshold
+  (`FORECAST_FLOOR_GIB` in `scripts/node-b-growth-meter`); nothing acts on
+  it.
+
+Remaining error. Each capture needs about 50 GiB of host space for under
+two hours and adds about 6 GiB of sealed chunks that stay. With 64 GiB free
+at the low point, the host has room for about one more day of this before a
+capture's scratch copy cannot fit, sooner than the time budget fails.
