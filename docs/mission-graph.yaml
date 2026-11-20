@@ -1428,10 +1428,23 @@ nodes:
       about the learning engine"; "let's just build everything". Takes the
       work of choir-autoradio-learning-engine-2026-11-14 forward as built
       stations; conjecture K1 is ledger C120.
+  - id: choir-exact-search-entities-2026-11-20
+    title: Exact, search and entities — demo mode removed, the remaining Swift moved, web searches under 1,000 a day, the entity layer, the remaining settings
+    path: docs/definitions/choir-exact-search-entities-2026-11-20.md
+    status: working  # 2026-11-20 the handoff goal for a new thread, on the owner's word
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-20: "we should make sure the /goal file is correct, then
+      i will start a new thread". Supersedes
+      choir-night-exact-vectors-learning-2026-11-19.
   - id: choir-night-exact-vectors-learning-2026-11-19
     title: The night of 19 November — the Exact cutover, vectors in pgvector with EmbeddingGemma 2, and the trace read with the calibration experiment (tracks X, V, L)
     path: docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md
-    status: working  # 2026-11-19 authored on the owner's word; drafted, in review
+    status: superseded  # 2026-11-20 by choir-exact-search-entities-2026-11-20; its station statuses were never kept
     kind: station
     entrypoint: true
     depends_on: []

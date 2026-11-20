@@ -11,7 +11,19 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## The night of 2026-11-19: Exact, vectors and learning, three tracks at once
+## Live goal from 2026-11-20: Exact, search and entities
+
+The owner, 2026-11-20: "we should make sure the /goal file is correct, then i
+will start a new thread". Goal:
+[`definitions/choir-exact-search-entities-2026-11-20.md`](definitions/choir-exact-search-entities-2026-11-20.md).
+It supersedes the night goal below, whose station statuses were never kept
+and are not to be trusted. What is true at the handoff is in that file's
+`start` block: vectors and the event layer are deployed, entities are not
+built, the search gate is deployed and the paper is still over 1,000 web
+searches a day, the signed-out phone work is deployed, and the owner's phone
+had been in demo mode, which the owner wants removed.
+
+## Superseded: the night of 2026-11-19: Exact, vectors and learning, three tracks at once
 
 Owner, 2026-11-19: "we need to do the full exact rewrite. make a throughline
 goal doc to get this all done tonight"; "we need to get vectors in pgvector,
