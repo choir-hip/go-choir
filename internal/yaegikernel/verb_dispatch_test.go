@@ -28,7 +28,15 @@ func TestVerbDispatchMatchesKernel(t *testing.T) {
 		}
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv == nil || fn.Body == nil || !fn.Name.IsExported() {
+			if !ok || fn.Recv == nil || fn.Body == nil {
+				continue
+			}
+			// startSearch is the one path SearchStart (and SearchAll) send
+			// through: the host call is made there, for the verb SearchStart.
+			verbName := fn.Name.Name
+			if verbName == "startSearch" {
+				verbName = "SearchStart"
+			} else if !fn.Name.IsExported() {
 				continue
 			}
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
@@ -42,10 +50,10 @@ func TestVerbDispatchMatchesKernel(t *testing.T) {
 				}
 				if id, ok := call.Args[0].(*ast.Ident); ok {
 					if a, known := consts[id.Name]; known {
-						if prev, dup := found[fn.Name.Name]; dup && prev != a {
-							t.Errorf("verb %s dispatches both %s and %s", fn.Name.Name, prev, a)
+						if prev, dup := found[verbName]; dup && prev != a {
+							t.Errorf("verb %s dispatches both %s and %s", verbName, prev, a)
 						}
-						found[fn.Name.Name] = a
+						found[verbName] = a
 					}
 				}
 				return true

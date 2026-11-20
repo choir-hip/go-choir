@@ -41,7 +41,7 @@ func TestDeskCellAndEgressRecordRunEvents(t *testing.T) {
 for _, q := range []string{"q1", "q2", "q3"} {
 	q := q
 	go func() {
-		s, err := choir.SearchStart(q)
+		s, err := choir.SearchStart(q, true) // fresh: three searches at once are the point of this test
 		if err == nil {
 			_, err = choir.SearchWait(s.ID, 5000)
 		}

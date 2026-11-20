@@ -112,7 +112,8 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 // searches at once or to cover every open thread in each round with several
 // searches; or does not say that SearchAll sends the next wording only while
 // the question lacks pages to read, nor that a wording left out can be sent
-// alone with fresh.
+// alone with fresh (v18: nor that Search and SearchStart pass the same test and
+// return the held pages when they refuse).
 func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
 	if err != nil {
@@ -139,13 +140,15 @@ func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 		"a page that will not load counts once you have tried it",
 		"then search again for what is still missing, naming it",
 		"mark each page new or held",
-		"can be sent alone with fresh",
+		"choir.Search(query) and choir.SearchStart(query) pass the same test",
+		"they send nothing and return those pages with the reason, which is not an error: read them first",
+		"goes with fresh (choir.Search(query, true))",
 	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("research prompt lacks %q", want)
 		}
 	}
-	for _, absent := range []string{"several searches per thread", "To run searches at once", "Cover every open thread in each round", "all the wordings of one question", "stops when wordings stop finding pages", "what the host's search covered", "The host searched this computer's corpus", "ran in part"} {
+	for _, absent := range []string{"several searches per thread", "To run searches at once", "Cover every open thread in each round", "all the wordings of one question", "stops when wordings stop finding pages", "start a search with choir.SearchStart(query) and read it with", "what the host's search covered", "The host searched this computer's corpus", "ran in part"} {
 		if strings.Contains(flat, absent) {
 			t.Errorf("research prompt still says %q", absent)
 		}

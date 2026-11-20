@@ -115,10 +115,12 @@ type ChoirScope struct {
 	notSentStat map[string]int
 	notes       []string
 	reuseQuiet  bool
-	// allStat counts SearchAll for the run summary; unreadNoted is set once a
-	// cell has told the desk it holds unread pages (search_need.go).
-	allStat     allCounts
-	unreadNoted bool
+	// allStat counts SearchAll and the need test for the run summary.
+	allStat allCounts
+	// sendMu lets one search at a time pass the need test and start
+	// (search_store.go startSearch): the second of a burst is judged against
+	// the pages the first returned.
+	sendMu sync.Mutex
 	// ledger is this session's read ledger (read_ledger.go): every Read, its
 	// capture or its error, so a failed Read is never invisible.
 	ledger readLedger

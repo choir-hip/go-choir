@@ -172,13 +172,21 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 		// Alternative wordings are fallbacks, not multipliers: a question that
 		// already holds enough pages the run has not tried to read is read before it
 		// is searched again.
-		if n := s.searches.unreadNew(qk); qk != "" && n >= searchEnoughUnread {
+		// A question with no terms (an empty key) is judged by the run-wide count.
+		if held, refuse := s.refuseForUnread(qk, false); refuse {
+			n := len(held)
 			stopWhy, stopStat = fmt.Sprintf("this question already holds %d pages new to this run that you have not tried to read", n), "holds_unread"
+			if qk == "" {
+				// The count is the run's, not a question's: say what the plain verbs say.
+				stopWhy = unreadRefusal(n)
+			}
+			// The pages Next sends the run to read are in Results.
+			addPages(held, false)
 			res.Next = "Read the ones that matter (the Results of this value; choir.Searches.Summary(id)), then search again for what is still missing, naming it. A page that will not load counts once you have tried it. A wording left out can be sent now with fresh: choir.Search(wording, true)."
 			notSent(stopWhy, stopStat)
 			continue
 		}
-		stub, err := s.SearchStart(w.Wording)
+		stub, err := s.startSearch(w.Wording, false, false)
 		if err != nil {
 			failures, empties = failures+1, 0
 			failReason = err.Error()

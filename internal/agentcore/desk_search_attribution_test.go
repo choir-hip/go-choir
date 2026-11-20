@@ -66,10 +66,10 @@ func TestRunSearchSummaryLineIsCountsOnly(t *testing.T) {
 	if _, ok := rt.takeRunSearchSummary("run-none"); ok {
 		t.Fatal("a run that searched nothing must log nothing")
 	}
-	rt.noteRunSearchStats("run-9", "research", yaegikernel.SearchStats{Started: 3, FromHeld: 1, NotSent: map[string]int{"covered": 2}, PagesReturned: 100, PagesNew: 40, PagesRead: 6, AllCalls: 2, AllOffered: 9, AllSent: 4, UnreadNotes: 1, Untagged: 2})
-	rt.noteRunSearchStats("run-9", "research", yaegikernel.SearchStats{Started: 1, NotSent: map[string]int{"covered": 1, "stopped_yielding": 2}, PagesReturned: 20, PagesNew: 2, PagesRead: 1, AllCalls: 1, AllOffered: 3, AllSent: 1, Untagged: 1})
+	rt.noteRunSearchStats("run-9", "research", yaegikernel.SearchStats{Started: 3, FromHeld: 1, NotSent: map[string]int{"covered": 2}, PagesReturned: 100, PagesNew: 40, PagesRead: 6, AllCalls: 2, AllOffered: 9, AllSent: 4, FreshOverUnread: 1, Untagged: 2})
+	rt.noteRunSearchStats("run-9", "research", yaegikernel.SearchStats{Started: 1, NotSent: map[string]int{"covered": 1, "holds_unread": 4, "stopped_yielding": 2}, PagesReturned: 20, PagesNew: 2, PagesRead: 1, AllCalls: 1, AllOffered: 3, AllSent: 1, Untagged: 1})
 	line, ok := rt.takeRunSearchSummary("run-9")
-	want := "search run=run-9 desk=research started=4 from_held=1 not_sent=5 (covered=3 stopped_yielding=2) search_all_calls=3 wordings_offered=12 wordings_sent=5 unread_notes=1 untagged=3 pages_returned=120 pages_new=42 pages_read=7"
+	want := "search run=run-9 desk=research started=4 from_held=1 not_sent=9 (covered=3 holds_unread=4 stopped_yielding=2) search_all_calls=3 wordings_offered=12 wordings_sent=5 fresh_over_unread=1 untagged=3 pages_returned=120 pages_new=42 pages_read=7"
 	if !ok || line != want {
 		t.Fatalf("line = %q, want %q", line, want)
 	}

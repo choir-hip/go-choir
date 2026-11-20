@@ -23,8 +23,8 @@ import (
 //     unread pages and what to do next; or not counted under a reason of
 //     their own in the run's counts.
 //  5. fresh stops sending a held or withheld search.
-//  6. A plain SearchStart or Search of a run holding many unread pages carries
-//     no note, or the note stops the search.
+//  6. (Superseded 2026-11-19: a plain search of such a run is refused, not
+//     noted; see search_gate_test.go.)
 //  7. The run counts do not say how many SearchAll calls were made, how many
 //     wordings they were offered and how many they sent.
 
@@ -114,33 +114,6 @@ fmt.Println(s.ID, len(s.Results), err)`)
 	}
 }
 
-func TestAPlainSearchOfARunHoldingUnreadPagesCarriesANoteAndIsSent(t *testing.T) {
-	f := newResearchFixture(t)
-	f.urlsFor = map[string][]string{"w1 alpha": pagesN("a", 1, 40), "plain two": pagesN("p", 1, 5)}
-	cell, _ := searchCell(t, f)
-	cell(`choir.SearchAll("the harbor strike", []string{"w1 alpha"})`)
-	out := cell(`s, _ := choir.Search("plain two")
-fmt.Println(len(s.Results))`)
-	if f.searchCalls.Load() != 2 {
-		t.Fatalf("the plain search must still be sent; host searches = %d", f.searchCalls.Load())
-	}
-	notes := strings.Join(out.Searches, "\n")
-	for _, want := range []string{"40 pages", "new to this run", "not tried to read", "search again for what is still missing, naming it"} {
-		if !strings.Contains(notes, want) {
-			t.Fatalf("notes lack %q:\n%s", want, notes)
-		}
-	}
-	if st := out.SearchStats; st == nil || st.UnreadNotes != 1 {
-		t.Fatalf("stats = %+v, want 1 unread note", st)
-	}
-	// One note per cell, not one per search of a burst.
-	out = cell(`choir.SearchStart("burst one")
-choir.SearchStart("burst two")`)
-	if n := strings.Count(strings.Join(out.Searches, "\n"), "new to this run"); n != 1 {
-		t.Fatalf("%d unread notes for a burst of two, want 1:\n%s", n, strings.Join(out.Searches, "\n"))
-	}
-}
-
 func TestAPlainSearchOfAFreshRunHasNoUnreadNote(t *testing.T) {
 	f := newResearchFixture(t)
 	cell, _ := searchCell(t, f)
@@ -227,17 +200,18 @@ func TestARunThatTriedEveryReturnedPageIsNeverWithheld(t *testing.T) {
 	}
 }
 
-func TestTheWithheldTextAndTheNoteNameFreshAndTried(t *testing.T) {
+func TestTheWithheldTextAndTheRefusalNameFreshAndTried(t *testing.T) {
 	f := newResearchFixture(t)
 	f.urlsFor = map[string][]string{"w1 alpha": pagesN("a", 1, 40), "w2 beta": pagesN("b", 1, 40), "plain two": pagesN("p", 1, 5)}
 	cell, _ := searchCell(t, f)
 	cell(`choir.SearchAll("the harbor strike", []string{"w1 alpha"})`)
 	out := cell(`r, _ := choir.SearchAll("the harbor strike", []string{"w2 beta"})
 fmt.Println(r)
-choir.Search("plain two")`)
+s, _ := choir.Search("plain two")
+fmt.Println(s.Refused)`)
 	both := out.Stdout + "\n" + strings.Join(out.Searches, "\n")
 	if n := strings.Count(both, "fresh"); n < 2 {
-		t.Fatalf("fresh named %d times, want in the withheld text and in the note:\n%s", n, both)
+		t.Fatalf("fresh named %d times, want in the withheld text and in the refusal:\n%s", n, both)
 	}
 	if n := strings.Count(both, "counts once you have tried it"); n < 2 {
 		t.Fatalf("'a page that will not load counts once you have tried it' named %d times, want 2:\n%s", n, both)

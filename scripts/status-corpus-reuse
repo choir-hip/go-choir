@@ -21,7 +21,10 @@ console.log and console.log.1 .. .4 (sudo -n grep, as status-storage does), the
 Go log lines (UTC) the runtime already writes:
   runtime: search run= desk= started= from_held= not_sent= (reasons)
       pages_returned= pages_new= pages_read= [search_all_calls= wordings_offered=
-      wordings_sent= unread_notes= untagged=]    internal/agentcore/search_run_summary.go
+      wordings_sent= fresh_over_unread= untagged=]    internal/agentcore/search_run_summary.go
+  not_sent=N (holds_unread=K ...) counts every web search the need test refused, SearchAll's wordings
+  and choir.Search/SearchStart alike; fresh_over_unread counts searches sent with fresh although
+  the run held 15 or more unread pages (an older line carries unread_notes= instead)
   corpus search computer= ... by_body= by_title= by_both= by_labels_only= by_meaning= ...
       run= desk= conv= published= events= capped= vector=(N|unavailable) vector_state=(exact|approximate|partial|unavailable) bm25_kept=
       caller=   internal/researchtools logCorpusSearch (vector= and bm25_kept= are
@@ -98,7 +101,7 @@ HEADER = ["hour", "runs", "started", "from_held", "not_sent", "pages_returned", 
 
 
 KNOWN_SR = {"started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read", "search_all_calls",
-            "wordings_offered", "wordings_sent", "unread_notes", "untagged"}
+            "wordings_offered", "wordings_sent", "unread_notes", "fresh_over_unread", "untagged"}
 
 
 def stamp_epoch(s):
@@ -147,7 +150,7 @@ def parse_console(text):
                        "returned": kv.get("pages_returned", 0), "new": kv.get("pages_new", 0),
                        "read": kv.get("pages_read", 0), "has_new": has_new,
                        "all_calls": kv.get("search_all_calls", 0), "offered": kv.get("wordings_offered", 0),
-                       "sent": kv.get("wordings_sent", 0), "unread": kv.get("unread_notes", 0),
+                       "sent": kv.get("wordings_sent", 0), "unread": kv.get("unread_notes", 0), "over": kv.get("fresh_over_unread", 0),
                        "untagged": kv.get("untagged", 0), "extra": {k: v for k, v in kv.items() if k not in KNOWN_SR}})
             continue
         m = CS_RE.search(ln)
@@ -234,7 +237,7 @@ def metrics(sr, cs_all, rd_all, gw, rb_all=(), ef_all=()):
     r["new_fields"] = None
     if nw:
         r["new_fields"] = {"lines": len(nw)}
-        for k in ("all_calls", "offered", "sent", "unread", "untagged"):
+        for k in ("all_calls", "offered", "sent", "unread", "over", "untagged"):
             r["new_fields"][k] = sum(e[k] for e in nw)
         r["new_fields"]["sent_share"] = share(r["new_fields"]["sent"], r["new_fields"]["offered"])
     # corpus searches by desk, reads by desk and held x via
@@ -393,12 +396,15 @@ def render(r):
         o.append("  from_held %d" % m["from_held"])
         reasons = ", ".join("%s=%d" % kv for kv in sorted(m["not_sent_reasons"].items()))
         o.append("  not_sent %d%s" % (m["not_sent"], " (%s)" % reasons if reasons else ""))
+        hu = m["not_sent_reasons"].get("holds_unread", 0)
+        o.append("  refused by the need test (holds_unread, every verb) %d; web searches sent %d; refused share of attempts %s"
+                 % (hu, m["started"], pct(hu, hu + m["started"])))
         o.append("  pages_returned %d, pages_new %d, pages_read %d; pages_read / pages_returned %s"
                  % (m["returned"], m["new"], m["read"], pct(m["read"], m["returned"])))
         nf = m["new_fields"]
         if nf:
-            o.append("  (%d lines carry the wording fields) search_all_calls %d, wordings_offered %d, wordings_sent %d (%s), unread_notes %d, untagged %d"
-                     % (nf["lines"], nf["all_calls"], nf["offered"], nf["sent"], pct(nf["sent"], nf["offered"]), nf["unread"], nf["untagged"]))
+            o.append("  (%d lines carry the wording fields) search_all_calls %d, wordings_offered %d, wordings_sent %d (%s), unread_notes %d, fresh_over_unread %d, untagged %d"
+                     % (nf["lines"], nf["all_calls"], nf["offered"], nf["sent"], pct(nf["sent"], nf["offered"]), nf["unread"], nf["over"], nf["untagged"]))
     if m["extra_fields"]:
         o.append("  other numeric fields on the summary lines (sums): " + ", ".join("%s=%d" % kv for kv in sorted(m["extra_fields"].items())))
     o.append("corpus searches by desk:")
