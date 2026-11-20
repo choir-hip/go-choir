@@ -11,8 +11,7 @@ import Foundation
 //  document  GET /api/texture/documents?limit=500&cursor= (id, title, updated_at) / GET /api/texture/documents/{id} then /revisions/{rid} (the
 //            Markdown) / cursor paging, no since, no bodies (WOULD NEED: GET /api/texture/documents?include=content&updated_since=) / all pages; a
 //            document is fetched when its updated_at differs from the held version; never evicted.
-//  file      GET /api/files/{dir} (name, type, size, modified) / GET /api/files/{path} (bytes) / no bulk, no since (WOULD NEED: GET /api/files?recursive=1
-//            &text=1&since=) / breadth first from /, at most 200 folders, text and Markdown under 1 MB; version is size|modified.
+//  file      moved to shared code: the Files page (AutoradioLab/files.ts) reads the server's folders itself and nothing here fetches them.
 //  podcast   show notes: from the feeds the phone already holds (no request). transcript: GET /api/platform/podcast-transcript?feed=&guid= (per
 //            episode, no bulk; WOULD NEED a per-feed `since`) / episodes of the last 14 days of subscribed shows, at most 20 a run.
 //  runsheet  local: heard and skipped entries with their outcome are copied from the sheet when it changes (no request); retention 90 days.
@@ -35,8 +34,6 @@ public final class ContentSync: @unchecked Sendable {
         public var documentBody: @Sendable (_ id: String) async throws -> String? = { _ in nil }
         public var stories: @Sendable () async throws -> [StoryBodies.Story] = { [] }
         public var storyBody: @Sendable (_ route: String) async throws -> String? = { _ in nil }
-        public var fileList: @Sendable (_ path: String) async throws -> [FileEntry] = { _ in [] }
-        public var fileText: @Sendable (_ path: String) async throws -> String? = { _ in nil }
         public var podcasts: @Sendable () -> [SavedCorpus.Document] = { [] }
         public var transcriptTargets: @Sendable () -> [(feed: String, id: String, title: String, date: Date?)] = { [] }
         public var runSheet: @Sendable () async -> RunSheet? = { nil }
@@ -48,10 +45,7 @@ public final class ContentSync: @unchecked Sendable {
         public init(id: String, title: String, updated: String) { self.id = id; self.title = title; self.updated = updated }
     }
 
-    public static let maxFolders = 200, maxFileBytes = 1_000_000, transcriptsPerRun = 20, transcriptDays = 14.0
-    /// A file's version in the store: its size and modified time.
-    public static func fileVersion(_ e: FileEntry) -> String { "\(e.size)|\(e.modified?.timeIntervalSince1970 ?? 0)" }
-    static let textExtensions: Set<String> = ["md", "markdown", "txt", "text", "csv", "json", "rtf"]
+    public static let transcriptsPerRun = 20, transcriptDays = 14.0
 
     let store: ContentStore
     public var fetch: Fetchers
@@ -72,7 +66,7 @@ public final class ContentSync: @unchecked Sendable {
         defer { lock.lock(); running = false; startedUnder = nil; lock.unlock() }
         var out: [SyncReport] = []
         if let sheet = await fetch.runSheet() { recordRunSheet(sheet); writeMarkSynced(.runsheet) }
-        for step in [syncStories, syncDocuments, syncPodcasts, syncFiles] as [() async -> SyncReport] {
+        for step in [syncStories, syncDocuments, syncPodcasts] as [() async -> SyncReport] {
             let r = await step()
             out.append(r)
             writeMarkSynced(r.kind); writeFlush()
@@ -172,33 +166,6 @@ public final class ContentSync: @unchecked Sendable {
         return r
     }
 
-    // MARK: files
-
-    func syncFiles() async -> SyncReport {
-        var r = SyncReport(kind: .file)
-        var queue = ["/"], visited = 0
-        while !queue.isEmpty, visited < Self.maxFolders {
-            let dir = queue.removeFirst(); visited += 1
-            guard await gate(&r) else { return r }
-            let entries: [FileEntry]
-            do { entries = try await fetch.fileList(dir) } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { r.failed += 1; continue }
-            for e in entries {
-                if e.isDirectory { queue.append(e.path); continue }
-                let ext = (e.name as NSString).pathExtension.lowercased()
-                guard Self.textExtensions.contains(ext), e.size <= Int64(Self.maxFileBytes) else { continue }
-                let id = "file:" + e.path, version = Self.fileVersion(e)
-                if store.has(id, version: version) { r.skipped += 1; continue }
-                guard await gate(&r) else { return r }
-                do {
-                    guard let text = try await fetch.fileText(e.path), !text.isEmpty else { r.failed += 1; continue }
-                    writePut(StoredItem(id: id, kind: .file, title: e.name, text: text, date: e.modified, address: id, source: "Files", version: version, syncedAt: clock()))
-                    r.fetched += 1
-                } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { r.failed += 1 }
-            }
-        }
-        return r
-    }
-
     // MARK: the run sheet's history (local)
 
     /// Copy the heard and skipped entries, with how they ended, from a sheet snapshot. No request.
@@ -236,8 +203,6 @@ public extension ContentSync.Fetchers {
             try await ChoirFront.stories(client: client(), limit: 100).map { StoryBodies.Story(route: $0.route, title: $0.title, date: PaperStory.date($0.updated)) }
         }
         f.storyBody = StoryBodies.resolveFetcher
-        // Files: the Files page moved to shared code (AutoradioLab/files.ts) and no longer hands this syncer a listing or a file's text, so the
-        // syncer's file lists stay empty until the content store moves. Items it already holds stay.
         // The podcasts' shows, episodes and transcripts were read here from the Swift PodcastService. The podcast app is shared code now
         // (AutoradioLab/podcast.ts, `podcastDocuments`); until the content store moves and reads it, the phone's own search holds no podcasts.
         f.runSheet = { await MainActor.run { RunSheetStore.shared.sheet } }
@@ -272,10 +237,4 @@ public enum ContentBoot {
         corpus.setDeltaSource("store") { store.drain() }      // the index reads it at the first question (or the warm-up the app schedules), never here
         return true
     }
-}
-
-/// One entry of a folder as the syncer reads it (the Files page itself is shared code now; this is only the syncer's own row).
-public struct FileEntry: Sendable, Equatable {
-    public var name: String, path: String, isDirectory: Bool, size: Int64, modified: Date?
-    public init(name: String, path: String, isDirectory: Bool, size: Int64, modified: Date?) { self.name = name; self.path = path; self.isDirectory = isDirectory; self.size = size; self.modified = modified }
 }
