@@ -15,11 +15,29 @@ import Foundation
 public enum Demo {
     public static let defaultsKey = "AutoradioDemo"
 
-    public static var isOn: Bool {
-        UserDefaults.standard.bool(forKey: defaultsKey) || ProcessInfo.processInfo.environment["AUTORADIO_DEMO"] == "1"
+    /// Demo mode is a proof aid for the simulator and the Mac. On a real phone it is never on: the owner's iPhone
+    /// carried a stored flag across every reinstall (2026-11-20) and showed sample stories with no way to sign in.
+    /// Native because only native code knows it runs on a physical device, and it is read before any page exists.
+    public static var allowedHere: Bool {
+        #if os(iOS) && !targetEnvironment(simulator)
+        return false
+        #else
+        return true
+        #endif
     }
-    public static func setOn(_ on: Bool) {
-        if on { UserDefaults.standard.set(true, forKey: defaultsKey) } else { UserDefaults.standard.removeObject(forKey: defaultsKey) }
+    public static var isOn: Bool { isOn(allowed: allowedHere) }
+    /// The decision, with the device fact passed in so it can be tested. A stored flag on a device that does not
+    /// allow demo mode is removed, so it cannot come back.
+    static func isOn(allowed: Bool, defaults: UserDefaults = .standard, env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard allowed else {
+            if defaults.object(forKey: defaultsKey) != nil { defaults.removeObject(forKey: defaultsKey) }
+            return false
+        }
+        return defaults.bool(forKey: defaultsKey) || env["AUTORADIO_DEMO"] == "1"
+    }
+    public static func setOn(_ on: Bool) { setOn(on, allowed: allowedHere) }
+    static func setOn(_ on: Bool, allowed: Bool, defaults: UserDefaults = .standard) {
+        if on && allowed { defaults.set(true, forKey: defaultsKey) } else { defaults.removeObject(forKey: defaultsKey) }
     }
 
     /// A key store already signed in as the demo listener (the key is a placeholder; nothing leaves the phone).
