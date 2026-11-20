@@ -1,0 +1,16 @@
+// The shapes of the Textures place's list. Declared here and answered by `app.ts` (textures.ts: `texturesList`); they were the Swift package's (interface/reader.json) before the list moved to
+// shared code. status: loading (before the place was ever asked) | ready | error (message holds the words).
+
+shape TextureRow
+  address: string
+  title: string
+  updated: string
+  meta: string
+  edition: bool
+  revising: bool
+
+shape TextureList
+  status: string
+  message: string
+  rows: TextureRow[]
+  hasEdition: bool

@@ -521,20 +521,6 @@
       "source": "string",
       "docId": "string"
     },
-    "TextureRow": {
-      "address": "string",
-      "title": "string",
-      "updated": "string",
-      "meta": "string",
-      "edition": "bool",
-      "revising": "bool"
-    },
-    "TextureList": {
-      "status": "string",
-      "message": "string",
-      "rows": "TextureRow[]",
-      "hasEdition": "bool"
-    },
     "ReaderFollowInfo": {
       "address": "string",
       "blockId": "string",
@@ -1632,22 +1618,6 @@
           "editable": false,
           "source": "",
           "docId": ""
-        }
-      }
-    },
-    {
-      "source": "texturesList",
-      "live": true,
-      "answers": "TextureList",
-      "options": {
-        "at": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "loading",
-          "message": "",
-          "rows": [],
-          "hasEdition": false
         }
       }
     },

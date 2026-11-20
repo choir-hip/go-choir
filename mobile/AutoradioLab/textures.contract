@@ -2,7 +2,8 @@
 // The edition is pinned first; "Make your edition" is a card when there is none; the rest are recent, newest first, and a
 // search field filters them. A document opens in the reader (`texture:<doc>`). "New document" is a prompt, not an empty editor.
 // testIds: page-title, textures-search, textures-edition, textures-make-edition, textures-new, textures-doc-<address>.
-use Theme, TextureList, TextureRow, Onboarding from "@choir/autoradio"
+use Theme, Onboarding from "@choir/autoradio"
+use TextureList, TextureRow from "./textures-types.contract"
 use PageScroll, Card, Btn, RowRule from "./ui.contract"
 use SkeletonRows from "./transitions.contract"
 use FirstRunCard, EditEditionLink from "./onboarding.contract"

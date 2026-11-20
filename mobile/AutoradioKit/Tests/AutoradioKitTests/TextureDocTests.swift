@@ -202,23 +202,6 @@ final class TextureDocTests: XCTestCase {
         XCTAssertEqual(old.revision, 1); XCTAssertTrue(old.newer); XCTAssertTrue(old.historical)
     }
 
-    // Textures list: the edition is pinned first; archived documents are hidden
-    func testTextureList() {
-        let l = TextureList.parse(obj(#"""
-        {"documents":[{"doc_id":"a","title":"Meeting notes","updated_at":"2026-11-09T10:00:00Z","revision_count":3},
-                      {"doc_id":"b","title":"My edition","updated_at":"2026-11-08T10:00:00Z","revision_count":1},
-                      {"doc_id":"c","title":"Old","archived_at":"2026-01-01T00:00:00Z"},
-                      {"title":"no id"},
-                      {"doc_id":"d","title":"","agent_revision_pending":true}]}
-        """#))
-        XCTAssertEqual(l.rows.map(\.address), ["texture:b", "texture:a", "texture:d"])
-        XCTAssertTrue(l.hasEdition)
-        XCTAssertEqual(l.rows[1].meta, "3 versions · Nov 9, 2026")
-        XCTAssertEqual(l.rows[2].title, "Untitled"); XCTAssertTrue(l.rows[2].revising)
-        let none = TextureList.parse(obj(#"{"documents":[]}"#))
-        XCTAssertFalse(none.hasEdition); XCTAssertEqual(none.status, "ready")
-    }
-
     // 6 (source): read-along locates by text, not by the radio's chunking
     func testFollowLocatesByText() {
         let body = bodyDoc(#"{"type":"paragraph","content":[{"type":"text","text":"The first sentence is here. The second sentence follows it."}]},{"type":"paragraph","content":[{"type":"text","text":"A later paragraph about batteries."}]}"#)

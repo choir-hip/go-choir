@@ -217,78 +217,8 @@ public struct ReaderPageSource: PageSource {
     }
 }
 
-// MARK: Textures place
-
-public struct TextureRow: Codable, Sendable, Equatable {
-    public var address: String
-    public var title: String
-    public var updated: String
-    public var meta: String
-    public var edition: Bool
-    public var revising: Bool
-    public init(address: String, title: String, updated: String, meta: String, edition: Bool, revising: Bool) {
-        self.address = address; self.title = title; self.updated = updated; self.meta = meta; self.edition = edition; self.revising = revising
-    }
-}
-
-public struct TextureList: Codable, Sendable, Equatable {
-    public var status: String
-    public var message: String
-    public var rows: [TextureRow]
-    public var hasEdition: Bool
-    public init(status: String = "loading", message: String = "", rows: [TextureRow] = [], hasEdition: Bool = false) {
-        self.status = status; self.message = message; self.rows = rows; self.hasEdition = hasEdition
-    }
-
-    /// The list from GET /api/texture/documents (newest first). The edition is pinned first. A document is the listener's
-    /// edition when its metadata names that role or its title is "My edition" (the server has no marker yet).
-    public static func parse(_ o: [String: Any]) -> TextureList {
-        let docs = (o["documents"] as? [[String: Any]]) ?? []
-        var rows: [TextureRow] = []
-        for d in docs {
-            guard let id = d["doc_id"] as? String, !id.isEmpty else { continue }
-            if d["archived_at"] != nil, !(d["archived_at"] is NSNull) { continue }
-            let title = ((d["title"] as? String) ?? "").rdTrim
-            let meta = d["metadata"] as? [String: Any]
-            let isEdition = (meta?["role"] as? String) == "edition" || title.lowercased().hasPrefix("my edition")
-            let n = TextureDocParser.intValue(d["revision_count"]) ?? 0
-            let when = TextureDocParser.shortDate((d["updated_at"] as? String) ?? "")
-            let pending = (d["agent_revision_pending"] as? Bool) ?? false
-            let metaLine = [pending ? "Being revised" : "", n > 0 ? "\(n) version\(n == 1 ? "" : "s")" : "", when].filter { !$0.isEmpty }.joined(separator: " · ")
-            rows.append(TextureRow(address: "texture:\(id)", title: title.isEmpty ? "Untitled" : title, updated: when, meta: metaLine,
-                                   edition: isEdition, revising: pending))
-        }
-        let ed = rows.filter { $0.edition }, rest = rows.filter { !$0.edition }
-        return TextureList(status: "ready", rows: ed + rest, hasEdition: !ed.isEmpty)
-    }
-
-    /// The server's own answer to "which document is my edition" (GET /api/texture/edition) applied to the list: that document is
-    /// pinned as the edition even when it is not titled "My edition" or is older than the page of documents the list holds.
-    public static func applying(_ ed: EditionInfo?, to list: TextureList) -> TextureList {
-        guard let ed, ed.found else { return list }
-        var l = list
-        let address = "texture:\(ed.docID)"
-        if let i = l.rows.firstIndex(where: { $0.address == address }) {
-            var r = l.rows.remove(at: i); r.edition = true; l.rows.insert(r, at: 0)
-        } else {
-            let when = TextureDocParser.shortDate(ed.updatedAt)
-            l.rows.insert(TextureRow(address: address, title: "My edition", updated: when, meta: when, edition: true, revising: false), at: 0)
-        }
-        l.hasEdition = true
-        return l
-    }
-
-    public static func load() async -> TextureList {
-        do {
-            let r = try await ChoirEnvironment.shared.client().send("GET", "/api/texture/documents", query: ["limit": "100"], route: "/api/texture/documents")
-            return applying(await EditionLookup.fetch(), to: parse(try r.object()))
-        } catch ChoirError.notSignedIn {
-            return TextureList(status: "error", message: "Sign in to see your documents.")
-        } catch {
-            return TextureList(status: "error", message: "Could not load your documents. \(ReaderStore.describe(error))")
-        }
-    }
-}
+// The Textures place's list (TextureRow, TextureList: parse, the pinned edition, the words) is shared code now: AutoradioLab/textures.ts. What stays here is the edition lookup below, which the
+// notebook and the onboarding still ask Swift for.
 
 // MARK: The listener's edition (GET /api/texture/edition)
 

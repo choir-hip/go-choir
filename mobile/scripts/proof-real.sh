@@ -215,6 +215,7 @@ place radio 1500; view real-53-so-radio 2500
 step "tap radio-play-public"; wait_ 6000; step tree; shot real-53b-so-playing
 place settings 900; step "tap settings-nav-account"; view real-54-so-account 3000
 place files 900; view real-55-so-files 2500
+place textures 900; view real-56-so-textures 2500
 step logs
 run_drive signedout light "" --touch platform
 unset NOKEY
@@ -309,6 +310,7 @@ bad "signed out: the paper has no second sign-in line" '\[(paper-signin|paper-si
 bad "signed out: Files has no write actions" '\[(files-upload|files-new-toggle|files-search)\]' "$SO"
 bad "signed out: Mail has no compose" '\[mail-compose\]' "$SO"
 chk "signed out: Settings > Account has Sign in" '\[settings-signin\]' "$SO"
+chk "signed out: Textures says sign in (shared code)" '\[textures-message\] "Sign in to see your documents' "$SO"
 chk "signed out: Files says sign in" 'Sign in to see your files' "$SO"
 bad "signed out: no locked-phone sentence" 'Unlock your phone' "$SO"
 # the sign-out drill
