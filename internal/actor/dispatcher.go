@@ -140,6 +140,10 @@ type Dispatcher struct {
 	jitter func() float64
 	// slots is the shared cap: opts.MaxConcurrent, or defaultSharedSlots.
 	slots int
+	// stats collects the activations at or under activationLogOver for the
+	// per-minute summary line. Observation only, never read by a scheduling
+	// decision.
+	stats activationStats
 }
 
 // defaultSharedSlots is the shared cap when the options set none: twelve
@@ -314,6 +318,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 
 		// Consume the pending projection: one serial activation per due agent.
 		d.dispatchPending(ctx)
+		d.stats.flushIfDue(time.Now(), activationSummaryEvery)
 
 		select {
 		case <-ctx.Done():
@@ -513,7 +518,10 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		d.mu.Unlock()
 		return
 	}
+	rec := activationRecord{agentID: agentID, started: time.Now(), pending: pending}
+	rec.skipCause, rec.slotWait = d.peekSkip(agentID, rec.started)
 	d.logActivationWait(agentID, pending)
+	defer func() { d.finishActivation(rec) }()
 	// The activation's context carries the emission buffer: the dispatch hook
 	// routes this activation's emitted updates into it, and Commit flushes
 	// them atomically with the state head.
@@ -554,7 +562,9 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 			log.Printf("dispatcher: poison %s/%s after %d attempts -> %s cause=earlier deliveries did not complete (crash, kill or a failed commit)", agentID, u.UpdateID, attempts, d.opts.ErrorSink)
 			continue
 		}
+		handleStarted := time.Now()
 		newMemory, herr := d.safeHandleUpdate(actx, agentID, u, memory)
+		rec.handled = append(rec.handled, handledUpdate{kind: u.Kind, dur: time.Since(handleStarted)})
 		// Drain this event's emissions now so a failed handler's partial
 		evEmitted := buf.drain()
 		// A durable-invalid occurrence (ErrDurableInvalid) is an adjudicated
@@ -655,17 +665,22 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 		memory = newMemory
 		incorporated = append(incorporated, u.UpdateID)
 	}
+	rec.incorporated = incorporated
 	if len(incorporated) == 0 && len(emitted) == 0 {
 		return
 	}
 
-	if _, err := d.log.Commit(ctx, agentID, epoch, emitted, incorporated, memory); err != nil {
+	commitStarted := time.Now()
+	_, err = d.log.Commit(ctx, agentID, epoch, emitted, incorporated, memory)
+	rec.commit = time.Since(commitStarted)
+	if err != nil {
 		if err == ErrEpochConflict {
 			// Stale activation: discard; the dispatcher re-fires from the new
 			// head on the next projection read. The buffered emissions die
 			// with it — log the drop so a lost wake is attributable; this
 			// path is otherwise silent and indistinguishable from a missing
 			// send.
+			rec.incorporated = nil // nothing was incorporated: the commit failed
 			ids := make([]string, 0, len(emitted))
 			for _, e := range emitted {
 				ids = append(ids, e.UpdateID)
@@ -673,6 +688,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 			log.Printf("dispatcher: commit %s epoch conflict: discards %d emitted + %d incorporated update(s) emitted_ids=%v", agentID, len(emitted), len(incorporated), ids)
 			return
 		}
+		rec.incorporated = nil
 		log.Printf("dispatcher: commit %s: %v", agentID, err)
 		return
 	}
@@ -695,6 +711,7 @@ func (d *Dispatcher) Stop() {
 		<-d.done
 	}
 	d.wg.Wait()
+	d.stats.flushIfDue(time.Now(), 0)
 }
 
 // safeHandleUpdate converts a handler panic into an ordinary handler error so
