@@ -1,0 +1,16 @@
+// The shapes of the conversation page. Declared here and answered by `app.ts` (conversation.ts: `conversationInfo`); they were the Swift package's (interface/talk.json) before the page's
+// rows moved to shared code. The native side hands over only the raw entries (`ConversationEntries`, interface/talk.json): the voice turn engine writes them.
+
+shape ConversationRow
+  id: string
+  question: string
+  first: string
+  firstSource: string
+  answer: string
+  status: string
+  note: string
+  canRetry: bool
+
+shape ConversationInfo
+  rows: ConversationRow[]
+  empty: bool
