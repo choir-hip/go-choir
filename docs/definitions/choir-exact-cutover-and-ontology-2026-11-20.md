@@ -85,7 +85,8 @@ boundaries:
     - '"I don''t want to over-index on what the BBC did or what some single study with a 60% number says. We actually need to design this from the ground up, recognizing that we have more advanced agents than anyone has had in the past, right? We''re using RLM. We have a whole ontology built in." and "we do have the System 1 models as a tool as well." (2026-11-20)'
     - '"I think the stories we may be doing duplicate stories of the same topics. So that''s one way that we can improve the quality of the paper by consolidating overlapping stories, and also that''ll end up reducing searches." (2026-11-20)'
     - '"the deduplication stuff should be rewritten later to use the ontology. Since for stories with significant overlap we should be revising not making new stories. This way we will develop fewer deep stories on key topics rather than many shallow stories that cover parts of it. In this way choir.news will be very unlike a newspaper which has a new article for every beat of a story. Choir should instead build a singular narrative that incorporates all the article as they accumulate over time" (2026-11-20): a development is a revision of the story that holds the topic, not a new story; the design''s default of opening a follow-on story after 24 hours is overruled. C1b is a stopgap to be rewritten on the ontology.'
-    - '"Ok let''s update to latest exact too" (2026-11-20): the Exact pin moves from de212e671 to upstream.'
+    - '"Ok let''s update to latest exact too"; "I do want to update Exact. We''re going to be writing the latest versions of Exact for some time. We definitely should be on the latest before we write all this exact code." (2026-11-20): the Exact pin moves from de212e671 to upstream FIRST, and is kept current after; X0 is the first station of track X.'
+    - '"a story stops growing when the main point, the main beat changes. for example, an election story, before the election, the story could be about momentum or ads or debate or what someone said. These are all different stories. Then election night, the story is the election results as they''re coming in. Then the next day, the story is who won and who lost. Right? So the point is not to put everything in the same story, but that we can use natural reasoning to cluster things so that We aren''t making new stories every time a newspaper has a new story." (2026-11-20): a story is one main point. New material that serves the same main point revises that story; when the main point changes, a new story begins. The boundary is a judgment made by reasoning (an agent or System 1 reading both), not a time window, a vector threshold or a topic label. This answers Q6.'
     - '"For texture, we should be using exact wysiwyg markdown text editor (research it in exact repo) and their pretext/reflow/textflow text calculation stuff" (2026-11-20). What the source says (docs/reference/exact/markdown-editor-and-textflow.md): Pretext is not part of Exact; textflow and the reflow demo are Exact''s text layout for reading; the Markdown editor is the one we already use, WYSIWYG only on the web, with our patch 0001 hiding syntax on iPhone.'
     - '"if you upload a file that''s actually going to your computer... So uploaded files really shouldn''t be deleted because they''re saved in the cloud." (2026-11-20)'
     - '"The point is that we have two goals right now. To finish the cutover to exact... And to finish the search and ontology work, which involves entities and events. Takes and muting is beside the point." (2026-11-20)'
@@ -111,7 +112,8 @@ stations:
     scope: 'the pin moves from de212e671 (2026-11-16) to upstream HEAD (fb72ddc3a on 2026-11-20, 760 commits). The lead does it in the build tree, since it needs the native build: read the grammar and package-interface diff against our contracts and mobile/exact-package first; re-check patch 0001 (it applies to upstream by git apply --check; never compiled) and drop it if upstream hides syntax; contract build, test web, the native build, proof-real.sh with screenshots read, a phone install. The Apple build was restructured upstream: risk medium-high, unrun. Builders keep working against the old pin until this lands, then rebase. Rollback: the pin file.'
     class: orange
     review: one seat on our diff
-    status: pending
+    status: working
+    note: 'first in track X by the owner''s word. Slices already built against the old pin (X1 to X5) are proved and landed only after they build on the new pin; their builders finish the commit in hand and then rebase. After it lands the pin is moved again whenever upstream has moved a week, as a routine landing.'
   - id: X1
     name: Edition picks and takes in shared code, no carry-over
     scope: lanes exact-edition-picks and exact-takes as rebuilt; one seat each; real proof with screenshots read; land; phone install
@@ -129,18 +131,21 @@ stations:
     scope: 'lane exact-reader, in slices: the read source and text blocks; citations and versions; related; tables and embeds. Each slice deletes its Swift and lowers the ceiling.'
     class: orange
     review: one seat a slice
+    depends_on: [X0]
     status: working
   - id: X4
     name: The bar and the run sheet page models
     scope: 'lane exact-bar-runsheet, in slices; the player and audio session stay native as a state snapshot and commands; the slice that posts run sheet ops to the server is red.'
     class: orange; red for posted ops
     review: one seat; two for posted ops
+    depends_on: [X0]
     status: working
   - id: X5
     name: Mail and files leftovers and the open-pages set
     scope: lane exact-mail-files-rest; dead Swift deleted first; the live mail store's server writes are red
     class: orange; red for the mail store
     review: one seat; two for the mail store
+    depends_on: [X0]
     status: working
   - id: X6
     name: Imported documents (the code's "shelf"), onboarding and settings models
@@ -168,7 +173,7 @@ stations:
     class: green
     review: a panel on the design; no code review
     status: working
-    result: 'the design is written (4a1aaeb4c): judgments as tape records with the graph as their projection; happenings, entities (outlets among them), stories and claims in the Autopaper object graph; choir.World with Get, Find, Neighbors, Walk, Ask, Judge; landings L1 (C1b), L2 (the flush writes recorded judgments, 50 vector neighbours, clustering within a flush), L3 (happenings into the graph; the story-events-e5 lane changed, not landed as is: its index is capped at 10,000 events). It rates under 1,000 searches a day at p 0.10 and 2,400 at p 0.50. Not yet read by the owner; not yet challenged by a panel. To amend for the owner''s ruling: a development revises the story that holds the topic.'
+    result: 'the design is written (4a1aaeb4c): judgments as tape records with the graph as their projection; happenings, entities (outlets among them), stories and claims in the Autopaper object graph; choir.World with Get, Find, Neighbors, Walk, Ask, Judge; landings L1 (C1b), L2 (the flush writes recorded judgments, 50 vector neighbours, clustering within a flush), L3 (happenings into the graph; the story-events-e5 lane changed, not landed as is: its index is capped at 10,000 events). It rates under 1,000 searches a day at p 0.10 and 2,400 at p 0.50. Not yet read by the owner; not yet challenged by a panel. To amend for the owner''s rulings: a story is one main point; material on the same main point revises it and a change of main point starts a new story, judged by reasoning.'
   - id: O1
     name: One identity space
     scope: 'as the design sequences it: events, their members and the story-to-event and capture-to-event edges in the Autopaper object graph beside stories, captures and entities; one id form per thing with the others resolvable; outlets as objects; the custody tension over management and events resolved in doctrine''s terms; the og_edges id columns declared COLLATE "C". No rewrite of large tables in one step.'
@@ -211,7 +216,7 @@ stations:
     status: working
   - id: C2
     name: One narrative per topic
-    scope: 'built on the ontology, replacing C1b. A capture whose happening overlaps significantly with what a story already tells (the same happening, a development of it, or a part of the same situation) becomes material for a revision of that story, with what is new since its last version, and no new story opens; the story deepens over time into a single narrative with its history. What sets "significant overlap" and what keeps one story from swallowing unrelated happenings is the design''s to state and the hand-read''s to check; a research run begins from the event''s state and searches the web only for what the corpus does not hold; duplicates already published are linked, not deleted. Search stations L2 (in review) and L3 (one verb) are absorbed here as the design directs.'
+    scope: 'built on the ontology, replacing C1b. A capture whose happening overlaps significantly with what a story already tells (the same happening, a development of it, or a part of the same situation) becomes material for a revision of that story, with what is new since its last version, and no new story opens; the story deepens over time into a single narrative with its history. The unit is the main point (owner, 2026-11-20): material that serves a story''s main point revises it, and a change of main point starts a new story (before an election: momentum, ads, a debate are different stories; election night is the results coming in; the next day is who won). The judgment is made by reasoning over the story and the new material, recorded with its reason, and scored by a hand read; a research run begins from the event''s state and searches the web only for what the corpus does not hold; duplicates already published are linked, not deleted. Search stations L2 (in review) and L3 (one verb) are absorbed here as the design directs.'
     class: red (run acceptance, desk protocol)
     review: two seats
     depends_on: [O1, O3, C1]
@@ -259,14 +264,9 @@ decisions_for_the_owner:
     why: stock Exact's editor hides syntax only on the web, dims it on iPhone and Mac (our patch hides it on iPhone), and is plain source on Android
     options: [accept on Android for now, build a syntax-hiding editor for Android]
     default: accept for now; Android is outside this mission
-  - id: Q6
-    question: When does one story stop growing and a new one begin?
-    why: the ruling is one narrative per topic; without an edge, a war or an election becomes one endless story
-    options: [never split by time; a parent situation holds child stories; the design proposes a rule and the owner reads examples]
-    default: the design proposes the rule with twenty real examples from the duplicate measurement, and nothing lands on it before the owner has read them
 now:
   status: working
-  as_of: 2026-11-20T23:00Z
+  as_of: 2026-11-20T23:05Z
   slice: 'X2 landing (deb9c9ef0 pushed, CI running); X1 takes rebuilt (481850a2e) in review and proof, edition picks rebuilding; X3 slice 1 (bb751be97), X4 slice 1 (5c71c0839) in review and queued for proof, their builders on the next slices; X5 slice 1 (579d5d74e, dead code, yellow) ready to land; O0 written, unread by the owner; C1 proved; C1b building (lane dup-open-page); L2 (399f0268a) in re-review; P1 recorded'
   source_ref: origin/main deb9c9ef0
   deploy_identity: staging bfc1492c6 until the About row deploys; the owner's iPhone bfc1492c6
@@ -284,7 +284,7 @@ now:
   main_uncertainty: whether the design's identity judgments are cheap and right enough at 5,000 captures a day inside one Jev call a flush; how much of the search volume duplicates really explain (C1 will say); whether the reader and run sheet move in days or weeks
   next_observation: the design's opening page; C1's share of duplicate stories; the first slice of each of X3 to X5
   blocker: none
-  next_action: 'watch CI and the deploy for deb9c9ef0, install on the phone, settle C184; read the four reviews (takes r5, reader r1, bar r1, L2 r2 in the session scratchpad) and the queued proofs; start X0; amend the design for the one-narrative ruling and put it to a panel; land X5 slice 1'
+  next_action: 'watch CI and the deploy for deb9c9ef0, install on the phone, settle C184; read the four reviews (takes r5, reader r1, bar r1, L2 r2 in the session scratchpad) and the queued proofs; start X0 FIRST (the Exact pin to upstream); amend the design for the one-narrative ruling and put it to a panel; land X5 slice 1'
 operating_notes:
   - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review seats are in CLAUDE.md: seat 1 Gemini 4 Hydrogen through the official agy CLI (a Sonnet subagent on a rate limit), seat 2 DeepSeek through the agentic-consensus runner on a frozen copy; orange one seat, red two. After two send-backs of one mechanism, change the mechanism, not the patch.'
   - 'Page moves: rewrite from what the page must do, then delete the Swift; nothing carried over; account ownership (accountGeneration, writeCurrent, the wipe list) from the first commit; tests red before code; slices that each lower the ceiling. The lead runs the one native build and the simulator proof through the queue and reads the screenshots.'

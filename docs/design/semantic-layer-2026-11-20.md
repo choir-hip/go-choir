@@ -16,8 +16,16 @@ that cover parts of it... Choir should instead build a singular narrative
 that incorporates all the article as they accumulate over time." This
 overrules decision 2 of section F3 (a development older than 24 hours opens a
 new story linked by `follows`): a development revises the story that holds
-the topic. Where one narrative ends and another begins is not yet designed;
-this document is to be amended before any landing after L2.
+the topic. The boundary, in the owner's words (2026-11-20T23:05Z): "a story stops growing when the
+main point, the main beat changes... before the election, the story could be
+about momentum or ads or debate or what someone said. These are all different
+stories. Then election night, the story is the election results as they're
+coming in. Then the next day, the story is who won and who lost... the point
+is not to put everything in the same story, but that we can use natural
+reasoning to cluster things so that we aren't making new stories every time a
+newspaper has a new story." So the unit of a story is its main point, the
+join is a reasoned judgment and not a threshold, and this document is to be
+amended on that basis before any landing after L2.
 
 Evidence tags. **M** measured, with the file it comes from. **C** read from
 code at `origin/main` 3620f9232, with file and line. **A** assumed or
