@@ -8,3 +8,5 @@
 # Copied in by scripts/sync-exact-package.sh (the model stages) and built by scripts/build-xcframeworks.sh (the libraries).
 /modules/apple/Models_*.swift
 /modules/apple/*.xcframework
+# Written by scripts/gen-build-info.sh (the commit the app is built from).
+/build-info.gen.ts

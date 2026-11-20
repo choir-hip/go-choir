@@ -3,7 +3,7 @@
 //   settingsComputer              status, Wake, Restart to update
 //   learnedInfo                   "What the paper has learned" (derived from the gesture events; lane 4 may supply its own)
 //   activityInfo                  Activity: now, the computer, the desk, the paper, the radio's turns
-//   aboutInfo                     the app and server builds
+//   aboutInfo                     the app version and build number (Bundle: only native reads it); the commits are about.ts
 import Foundation
 
 /// The lane's state, held here because an extension cannot add stored properties to the module.
@@ -12,8 +12,6 @@ final class SettingsLane: @unchecked Sendable {
     let activity: ActivityModel
     let learned: LearnedProvider
     private let lock = NSLock()
-    private var _server = ""
-    var server: String { get { lock.lock(); defer { lock.unlock() }; return _server } set { lock.lock(); _server = newValue; lock.unlock() } }
 
     init(computer: ComputerModel, activity: ActivityModel, learned: LearnedProvider) {
         self.computer = computer; self.activity = activity; self.learned = learned
@@ -87,21 +85,8 @@ extension AutoradioModule {
         // ---- about
         handle("aboutInfo") { [unowned self] _, reply in
             let info = Bundle.main.infoDictionary ?? [:]
-            if lane.server.isEmpty { Task { [weak self] in await self?.readServerBuild(lane) } }
             reply(["app": (info["CFBundleShortVersionString"] as? String) ?? "dev", "build": (info["CFBundleVersion"] as? String) ?? "",
-                   "server": lane.server, "base": choir.signIn.baseURL, "signedIn": choir.authView().signedIn])
+                   "base": choir.signIn.baseURL, "signedIn": choir.authView().signedIn])
         }
-    }
-
-    /// GET /health (no key): the build the server reports. Plain text only; failures leave it empty.
-    func readServerBuild(_ lane: SettingsLane) async {
-        lane.server = "reading…"
-        do {
-            let r = try await ChoirEnvironment.shared.client().send("GET", "/health", authenticated: false, route: "/health")
-            let o = (try? r.object()) ?? [:]
-            let v = ["commit", "build", "git_sha", "sha", "version"].compactMap { o[$0] as? String }.first ?? ""
-            lane.server = String(v.prefix(40))
-        } catch { lane.server = "" }
-        touch(["aboutInfo"])
     }
 }

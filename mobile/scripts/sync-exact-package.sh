@@ -11,6 +11,7 @@ KIT="$HERE/AutoradioKit/Sources/AutoradioKit"
 MODELS="$HERE/AutoradioKit/Sources/AutoradioModels"
 OUT="$HERE/exact-package/apple"
 APPMOD="$HERE/AutoradioLab/modules/apple"
+"$HERE/scripts/gen-build-info.sh"                        # the commit -> AutoradioLab/build-info.gen.ts (About)
 rm -rf "$OUT/Kit"; mkdir -p "$OUT/Kit"
 find "$KIT" -name '*.swift' -exec cp {} "$OUT/Kit/" \;   # flat: Choir/ and other sub-directories are copied in; names are unique
 /usr/bin/python3 -I - "$OUT" <<'EOF'

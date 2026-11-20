@@ -11,3 +11,7 @@ shape SettingsAccount
   computerID: string
   message: string
   baseURL: string
+
+shape AboutBuild
+  commit: string
+  server: string

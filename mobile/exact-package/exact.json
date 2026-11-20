@@ -633,7 +633,6 @@
     "AboutInfo": {
       "app": "string",
       "build": "string",
-      "server": "string",
       "base": "string",
       "signedIn": "bool"
     },
@@ -1742,7 +1741,6 @@
         "default": {
           "app": "",
           "build": "",
-          "server": "",
           "base": "",
           "signedIn": false
         }

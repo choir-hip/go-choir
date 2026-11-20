@@ -7,6 +7,7 @@
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 "$HERE/scripts/check-exact-pin.sh" || exit 1      # the wrong Exact must never build quietly (see exact.pin)
 BUN="${BUN:-$HOME/.bun-1.4.2/bin/bun}"
+"$HERE/scripts/gen-build-info.sh"                 # About names the commit: never build from the previous commit's build-info.gen.ts
 cd "$HERE/AutoradioLab" || exit 1
 exec env -i HOME="$HOME" USER="$USER" TMPDIR="${TMPDIR:-/tmp}" BUN="$BUN" ${EXACT_SIM:+EXACT_SIM="$EXACT_SIM"} \
   PATH="$(dirname "$BUN"):$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin" \

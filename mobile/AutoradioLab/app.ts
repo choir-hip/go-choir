@@ -5,6 +5,7 @@ import { clipAct, showClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { adoptNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
+import { aboutBuild } from './about.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
@@ -65,6 +66,8 @@ fs.write app:/data/themes`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
+  // The About page's commit rows (about.ts): the app's baked-in commit and the server's, from /health.
+  aboutBuild: ([tick]) => aboutBuild({ tick }),
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([raw]) => conversationInfo(raw),

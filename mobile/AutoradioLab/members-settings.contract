@@ -6,7 +6,7 @@ use computerRefresh, computerWake, computerUpdate from "@choir/autoradio"
 use learnedReset, activityRefresh from "@choir/autoradio"
 use ThemeCards, ThemeExtras, SettingsAck, SettingsComputer, LearnedInfo, ActivityInfo, AboutInfo from "@choir/autoradio"
 
-use SettingsAccount from "./settings-types.contract"
+use SettingsAccount, AboutBuild from "./settings-types.contract"
 
 members Autoradio
   // Themes: themes.ts (shared code); the same two host facts as the theme itself (spine.contract).
@@ -19,6 +19,8 @@ members Autoradio
   resource learnt = learnedInfo() as shape LearnedInfo else empty()
   resource act = activityInfo() as shape ActivityInfo else empty()
   resource about = aboutInfo() as shape AboutInfo else empty()
+  // The commits (shared code, about.ts): the app's own and the server's. The tick is the Refresh button's.
+  resource bld = aboutBuild(acctTick) as shape AboutBuild else empty()
   mutation sm as shape SettingsAck
 
   // The id of a theme Texture typed in Appearance.

@@ -5,7 +5,7 @@
 //   settings:voice                voice and models: Components, and the voice setup card (lane 8)
 //   settings:computer             status, Wake, Restart to update
 //   settings:learned              what the paper has learned, with Reset
-//   settings:about                app and server builds
+//   settings:about                app and server builds (commit rows: about.ts)
 // testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-components, settings-theme-problems,
 //   settings-nav-<screen>, settings-back, settings-theme-doc, settings-theme-load,
 //   settings-theme-status, settings-theme-remove-<id>, settings-signout, settings-account-*,
@@ -13,7 +13,7 @@
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, ThemeCard, ThemeExtras, SettingsComputer, LearnedInfo, AboutInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
-use SettingsAccount from "./settings-types.contract"
+use SettingsAccount, AboutBuild from "./settings-types.contract"
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
@@ -435,6 +435,7 @@ component AboutScreen
     th: Theme
     tx: ThemeExtras
     about: AboutInfo
+    bld: AboutBuild
   view
     ToolScroll(id="settings")
       ScreenTitle(label="About", back=true)
@@ -444,6 +445,8 @@ component AboutScreen
           Hairline()
           FactRow(label="Build", value=(about.build == "" ? "-" : about.build), mono=true, testId="settings-about-build")
           Hairline()
-          FactRow(label="Server build", value=(about.server == "" ? "-" : about.server), mono=true, testId="settings-about-server")
+          FactRow(label="Commit", value=(bld.commit == "" ? "unknown" : bld.commit), mono=true, testId="settings-about-commit")
+          Hairline()
+          FactRow(label="Server build", value=(bld.server == "" ? "not reported" : bld.server), mono=true, testId="settings-about-server")
           Hairline()
           FactRow(label="Server", value=(about.base == "" ? "-" : about.base), mono=true, testId="settings-about-base")
