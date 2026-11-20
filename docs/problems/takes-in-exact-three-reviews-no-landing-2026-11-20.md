@@ -1,6 +1,6 @@
 # The takes page in Exact was sent back three times; the approach to old data is changed
 
-Date: 2026-11-20, recorded 19:45Z by the lead. Lane `exact-takes`, last
+Date: 2026-11-20, recorded 19:41Z by the lead. Lane `exact-takes`, last
 commit `b298cc0f4`. Nothing of it is on main. Claim C179 (the second review
 accepts, p 0.4) settled false.
 
@@ -69,7 +69,7 @@ One build on the changed approach, one review. If that review sends it
 back, the lane stops and the question goes to the owner, as the Texture
 editor did.
 
-## The handle is not proof; a shared take id is (2026-11-20T19:55Z)
+## The handle is not proof; a shared take id is (2026-11-20T19:42Z)
 
 The builder read the server before building and stopped, as briefed. A
 handle is "voice-" plus 24 bits of a hash of the user id
