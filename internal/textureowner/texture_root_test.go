@@ -577,6 +577,7 @@ func TestTextureRootNextCommitAfterBootMintsANewDigest(t *testing.T) {
 	if _, ok := rh.marker(); ok {
 		t.Fatal("boot ran the ensure step")
 	}
+	rh.advance(time.Second) // the nonce is the clock's nanosecond; a real boot is later
 	rh.write(booted, &runC, "bridge", "The bridge is closed.", "")
 	digests := rh.digests()
 	if len(digests) != 2 || digests[1].content == digests[0].content {
