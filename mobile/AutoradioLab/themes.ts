@@ -181,35 +181,34 @@ export function ms(s: string | undefined): number | null {
   if (first.endsWith('s')) { const v = double(first.slice(0, -1)); return v === null ? null : v * 1000; }
   return null;
 }
-export function rgb(s: string): [number, number, number] | null {
-  const v = s.replace(/^[ \t]+|[ \t]+$/g, '');
-  if (v.startsWith('#')) {
-    let h = v.slice(1);
-    if (h.length === 3) h = [...h].map((c) => c + c).join('');
-    if (h.length < 6) return null;
-    const head = h.slice(0, 6);
-    if (!/^[0-9a-fA-F]{6}$/.test(head)) return null;
-    const n = parseInt(head, 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+// A colour is exactly one of: #RGB, #RGBA, #RRGGBB, #RRGGBBAA, or rgb()/rgba() with three numbers 0-255 (or percentages 0-100%) and an optional alpha 0-1 (or 0-100%), written with commas or
+// with spaces and a "/". Anything else (a longer hex, an unknown function name, a missing or extra part, a number out of range) is not a colour and the theme is refused: the browser drops an
+// invalid colour, and a theme must not make text or the sign-in banner vanish that way.
+const NUM = '[+-]?(?:\\d+\\.?\\d*|\\.\\d+)';
+const CHAN = `(${NUM}%?)`;
+const RGB_COMMA = new RegExp(`^rgba?\\(\\s*${CHAN}\\s*,\\s*${CHAN}\\s*,\\s*${CHAN}\\s*(?:,\\s*(${NUM}%?)\\s*)?\\)$`, 'i');
+const RGB_SPACE = new RegExp(`^rgba?\\(\\s*${CHAN}\\s+${CHAN}\\s+${CHAN}\\s*(?:/\\s*(${NUM}%?)\\s*)?\\)$`, 'i');
+function parseColor(input: string): { rgb: [number, number, number]; a: number } | null {
+  const v = input.trim();
+  const hex = /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.exec(v);
+  if (hex) {
+    let h = hex[1];
+    if (h.length <= 4) h = [...h].map((c) => c + c).join('');
+    const n = parseInt(h.slice(0, 6), 16);
+    return { rgb: [(n >> 16) & 255, (n >> 8) & 255, n & 255], a: h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1 };
   }
-  if (v.startsWith('rgb')) {
-    const inner = v.slice(v.indexOf('(') + 1).split(')')[0];
-    if (!v.includes('(')) return null;
-    const nums = inner.split(/[,/ ]+/).filter((p) => p !== '').slice(0, 3).map((p) => double(p)).filter((x): x is number => x !== null);
-    return nums.length === 3 ? [nums[0], nums[1], nums[2]] : null;
-  }
-  return null;
+  const m = RGB_COMMA.exec(v) ?? RGB_SPACE.exec(v);
+  if (!m) return null;
+  const chan = (t: string): number | null => { const pct = t.endsWith('%'); const n = double(pct ? t.slice(0, -1) : t); return n === null ? null : pct ? (n < 0 || n > 100 ? null : n * 2.55) : n < 0 || n > 255 ? null : n; };
+  const c = [chan(m[1]), chan(m[2]), chan(m[3])];
+  if (c.some((x) => x === null)) return null;
+  let a = 1;
+  if (m[4] !== undefined) { const pct = m[4].endsWith('%'); const n = double(pct ? m[4].slice(0, -1) : m[4]); if (n === null) return null; a = pct ? n / 100 : n; if (a < 0 || a > 1) return null; }
+  return { rgb: [c[0] as number, c[1] as number, c[2] as number], a };
 }
-/** The opacity a colour string asks for: 1 for hex of six digits and rgb() of three numbers; the fourth rgb number (or after "/", a fraction or a percent) and the last two hex digits otherwise. */
-export function alphaOf(s: string): number {
-  const v = s.trim();
-  if (v.startsWith('#')) { const h = v.slice(1); return h.length === 8 && /^[0-9a-fA-F]{8}$/.test(h) ? parseInt(h.slice(6), 16) / 255 : h.length === 4 && /^[0-9a-fA-F]{4}$/.test(h) ? parseInt(h[3] + h[3], 16) / 255 : 1; }
-  if (!v.startsWith('rgb') || !v.includes('(')) return 1;
-  const parts = v.slice(v.indexOf('(') + 1).split(')')[0].split(/[,/ ]+/).filter((p) => p !== '');
-  if (parts.length < 4) return 1;
-  const raw = parts[3], n = raw.endsWith('%') ? double(raw.slice(0, -1)) : double(raw);
-  return n === null ? 1 : raw.endsWith('%') ? n / 100 : n;
-}
+export function rgb(s: string): [number, number, number] | null { return parseColor(s)?.rgb ?? null; }
+/** The opacity a colour asks for (1 when it names none); 1 too for a string that is not a colour (rgb() refuses it before the gate looks at alpha). */
+export function alphaOf(s: string): number { return parseColor(s)?.a ?? 1; }
 const lum = (c: [number, number, number]): number => {
   const f = (x: number): number => { const s = x / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
   return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
@@ -541,7 +540,11 @@ async function migrate(storage: Storage | undefined, s: ThemeStore, fresh: () =>
   const skipped = [...(Array.isArray(r.skipped) ? r.skipped.filter((x): x is string => typeof x === 'string' && plain(x)) : []), ...all.slice(LEGACY_FILES).map((e) => e[0])];
   try {
     if (files.length > 0) await ensureDir(storage);
-    for (const [name, body] of files) { await storage.fs.atomicWriteFile(`${THEMES_DIR}/${name}`, new TextEncoder().encode(body)); s.add(body, name, name.startsWith('texture-') ? 'texture' : 'file'); }
+    for (const [name, body] of files) {
+      // A file already in the new place is the newer one (a theme installed by this build, or an earlier try of this carry-over): it is kept, never written over.
+      let there = true; try { await storage.fs.readFile(`${THEMES_DIR}/${name}`); } catch { there = false; }
+      if (!there) { await storage.fs.atomicWriteFile(`${THEMES_DIR}/${name}`, new TextEncoder().encode(body)); s.add(body, name, name.startsWith('texture-') ? 'texture' : 'file'); }
+    }
     for (const name of skipped) s.noteProblem(name, 'could not be carried over from the old place (too large, or too many files); it is still there');
     // The choice is the person's from the old place only when this phone has made none here (a choice file already there wins).
     if (fresh()) s.restore(r.theme, r.mode);       // asked NOW: a choice made while the read was out wins

@@ -344,6 +344,16 @@ describe('a user theme the new gate refuses is told, not replaced (E2)', () => {
   });
 });
 
+describe('colours are exactly colours (E3)', () => {
+  const asPaper = (v: string) => store({ x: { schema_version: 3, id: 'x', name: 'X', colors: { paper: v, fg: '#000000', muted: '#222222', accent: '#0000CC', onAccent: '#FFFFFF' } } }).list(light).length;
+  test('E3 every accepted shape loads and every other shape is refused', () => {
+    for (const ok of ['#FFF', '#ffffff', '#FFFFFF', '#fff', 'rgb(255,255,255)', 'rgb(255 255 255)', 'RGB(255, 255, 255)', 'rgba(255,255,255,1)', 'rgb(255 255 255 / 100%)', 'rgb(100%,100%,100%)', ' #FFFFFF ']) expect(asPaper(ok)).toBe(1);
+    for (const bad of ['rgbx(255,255,255)', '#FFFFFF000', '#FFFFF', '#GGGGGG', '#FF', 'rgb(255,255)', 'rgb(255,255,255,2)', 'rgb(256,255,255)', 'rgb(-1,255,255)', 'rgb(255,255,255', 'rgb 255 255 255', 'rgb(255,255,255) x', 'rgb(255;255;255)', 'rgb(255,255,255,0.5,1)', 'rgb(101%,0%,0%)', 'rgba(255 255 255 255)', 'white', 'hsl(0,0%,100%)', 'transparent', '']) expect([bad, asPaper(bad)]).toEqual([bad, 0]);
+    expect(T.rgb('#FFFFFF000')).toBeNull(); expect(T.rgb('rgbx(0,0,0)')).toBeNull(); expect(T.rgb('rgb(10,20,30)')).toEqual([10, 20, 30]); expect(T.rgb('#abc')).toEqual([170, 187, 204]);
+  });
+  test('E3 the bundled themes still load whole (every colour they name is a colour)', () => { expect(store().problems).toEqual([]); });
+});
+
 describe('the first frame (P1)', () => {
   // The contracts' placeholder is the whole default theme (the bundled light default, resolved), written out by hand in two contract files: this keeps it in step.
   const empty = (o: Record<string, unknown>): string => `empty(${Object.entries(o).map(([k, v]) => `${k}=${typeof v === 'string' ? JSON.stringify(v) : String(v)}`).join(', ')})`;
@@ -489,6 +499,15 @@ describe('the migration from the Swift storage (G1)', () => {
     bindNative(legacy({ files: { '../evil.json': '{}', '.hidden.json': '{}', 'a/b.json': '{}', 'x.txt': '{}', 'ok.json': JSON.stringify(doc('ok')) } }) as never);
     await load(m);
     expect([...m.files.keys()].sort()).toEqual([T.CHOICE_FILE, `${T.THEMES_DIR}/ok.json`].sort());
+  });
+  test('G1 a file already in the new place is kept: the carry-over (and a retry of it) never writes over it', async () => {
+    const m = memFs();
+    const mine = JSON.stringify(doc('mine', { name: 'Newer' }));
+    m.put(`${T.THEMES_DIR}/mine.json`, mine);
+    bindNative(legacy() as never);
+    const s = await load(m);
+    expect(m.text(`${T.THEMES_DIR}/mine.json`)).toBe(mine); expect(s.cards(light).find((c) => c.id === 'mine')?.name).toBe('Newer');
+    expect(m.files.has(`${T.THEMES_DIR}/texture-ember.json`)).toBe(true);                       // the others still come
   });
   test('G1 the first answer does not wait for the carry-over; the revision moves when it is done, so the sources are asked again', async () => {
     const m = memFs(); let release: () => void = () => undefined;

@@ -1,7 +1,7 @@
 // The typographic system (owner, 2026-11-16: "We need to have more typography and use typography to signify what's the difference between static
 // text and a button and a headline. Typography is too same same, sans serif."). The roles are in mobile/docs/typography.md; the contracts name a role's
-// face, never a face: th.fontHead, th.fontText, th.fontLabel, th.fontAction, th.fontMono. Ported from Swift TypographyRulesTests (every case but T8,
-// which tests Theme and ThemeStore and stays in Swift until the themes port).
+// face, never a face: th.fontHead, th.fontText, th.fontLabel, th.fontAction, th.fontMono. Ported from Swift TypographyRulesTests (every case but T8, which
+// checks the role faces of Theme and moved to themes.test.ts with the themes).
 //  T1 a face outside the role set.  T2 a `text` with no role face on itself or an ancestor.  T3 a bare-number font size.
 //  T4 an Action that is not semibold or is uppercase, tracked or italic; a static Label that is not regular unless it is the caps label.
 //  T5 a word inside a button that is not an Action, or an Action outside any control.  T6 uppercase or tracking outside the caps Label; italic outside serif.
