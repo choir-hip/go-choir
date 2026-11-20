@@ -99,6 +99,17 @@ func main() {
 	relay := gateway.NewAnthropicRelayFromEnv()
 	handler.SetAnthropicRelay(relay)
 	log.Printf("gateway: anthropic relay: %s", relay.Status())
+	// The last save of both spend files, after the server has drained: the
+	// calls that finished during the drain are on the file before the
+	// process exits (a failed earlier save is retried once more here).
+	s.AddShutdownHook(func(context.Context) {
+		if err := paidSpend.Flush(); err != nil {
+			log.Printf("gateway: final paid spend save failed: %v", err)
+		}
+		if err := relay.Flush(); err != nil {
+			log.Printf("gateway: final relay spend save failed: %v", err)
+		}
+	})
 	log.Printf("gateway: source api: %s", handler.SourceAPIStatus())
 	// B7: request body caps, read from GATEWAY_BODY_CAPS and
 	// GATEWAY_BODY_LIMITS when the handler was built.

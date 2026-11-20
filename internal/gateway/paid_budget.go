@@ -3,7 +3,9 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"math"
 	"net/http"
@@ -106,6 +108,12 @@ type PaidSpend struct {
 	budgets map[string]float64
 	rec     paidSpendRecord
 	logged  map[string]string // "provider:kind" -> day it was logged
+	// delta is what this process has recorded since its last save that
+	// landed, by UTC day then provider. A save adds it to the file under a
+	// lock, so a second gateway process (a deploy's handoff) never has its
+	// calls overwritten. It is empty without a path.
+	delta map[string]map[string]*providerDay
+	saver spendSaver
 }
 
 // NewPaidSpend builds a ledger with the given budgets (provider -> USD/day;
@@ -155,7 +163,9 @@ func (s *PaidSpend) day() string { return s.now().UTC().Format("2006-01-02") }
 
 // rollLocked moves a finished day into prev. The caller holds s.mu.
 func (s *PaidSpend) rollLocked() {
-	if d := s.day(); s.rec.Day != d {
+	// Only forward: a file or clock that is behind never rolls today's spend
+	// into prev (days are ISO dates, so string order is date order).
+	if d := s.day(); d > s.rec.Day {
 		s.rec.PrevDay, s.rec.Prev = s.rec.Day, s.rec.Today
 		s.rec.Day, s.rec.Today = d, map[string]*providerDay{}
 	}
@@ -195,43 +205,252 @@ func (s *PaidSpend) Record(providerName, computerID, model string, u provider.Us
 	s.rollLocked()
 	_, capped := s.budgets[providerName]
 	usd, priced := paidCallCost(providerName, model, u, capped)
-	d := s.rec.Today[providerName]
-	if d == nil {
-		d = &providerDay{}
-		s.rec.Today[providerName] = d
-	}
-	if d.Computers == nil {
-		d.Computers = map[string]float64{}
-	}
-	d.USD += usd
-	d.InputTokens += int64(u.InputTokens)
-	d.CachedTokens += int64(u.CachedInputTokens)
-	d.OutputTokens += int64(u.OutputTokens)
-	d.Calls++
+	call := providerDay{USD: usd, InputTokens: int64(u.InputTokens), CachedTokens: int64(u.CachedInputTokens),
+		OutputTokens: int64(u.OutputTokens), Calls: 1, Computers: map[string]float64{computerID: usd}}
 	if !priced {
-		d.Unpriced++
+		call.Unpriced = 1
 	}
-	d.Computers[computerID] += usd
-	s.saveLocked()
+	addProviderDay(s.rec.Today, providerName, &call)
+	if s.path != "" {
+		if s.delta == nil {
+			s.delta = map[string]map[string]*providerDay{}
+		}
+		if s.delta[s.rec.Day] == nil {
+			s.delta[s.rec.Day] = map[string]*providerDay{}
+		}
+		addProviderDay(s.delta[s.rec.Day], providerName, &call)
+	}
+	if s.path != "" {
+		defer s.saver.kickSave(s.saveOnce)
+	}
 	return usd
 }
 
-// saveLocked writes the record by atomic rename; a failed write is logged and
-// the in-memory count stands.
-func (s *PaidSpend) saveLocked() {
-	if s.path == "" {
-		return
+// addProviderDay adds src into m[name].
+func addProviderDay(m map[string]*providerDay, name string, src *providerDay) {
+	d := m[name]
+	if d == nil {
+		d = &providerDay{}
+		m[name] = d
 	}
-	raw, err := json.Marshal(s.rec)
-	if err == nil {
-		tmp := s.path + ".tmp"
-		if err = os.WriteFile(tmp, raw, 0o600); err == nil {
-			err = os.Rename(tmp, s.path)
-		}
+	d.USD += src.USD
+	d.InputTokens += src.InputTokens
+	d.CachedTokens += src.CachedTokens
+	d.OutputTokens += src.OutputTokens
+	d.Calls += src.Calls
+	d.Unpriced += src.Unpriced
+	if len(src.Computers) > 0 && d.Computers == nil {
+		d.Computers = map[string]float64{}
+	}
+	for c, v := range src.Computers {
+		d.Computers[c] += v
+	}
+}
+
+// readPaidSpendFile reads the spend file. An absent file is (zero, false,
+// nil): empty. A file that is present but cannot be read, does not parse as
+// the record, or has no day is an error: it is never to be overwritten.
+func readPaidSpendFile(path string) (rec paidSpendRecord, exists bool, err error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return paidSpendRecord{}, false, nil
 	}
 	if err != nil {
-		log.Printf("gateway: paid spend file not written: %v", err)
+		return paidSpendRecord{}, true, fmt.Errorf("%w: %v", errSpendFileBad, err)
 	}
+	if err := json.Unmarshal(raw, &rec); err != nil || rec.Day == "" {
+		return paidSpendRecord{}, true, fmt.Errorf("%w: %s holds no usable day record", errSpendFileBad, path)
+	}
+	if rec.Today == nil {
+		rec.Today = map[string]*providerDay{}
+	}
+	return rec, true, nil
+}
+
+func cloneProviderDays(m map[string]*providerDay) map[string]*providerDay {
+	out := make(map[string]*providerDay, len(m))
+	for name, d := range m {
+		c := *d
+		c.Computers = nil
+		if len(d.Computers) > 0 {
+			c.Computers = make(map[string]float64, len(d.Computers))
+			for k, v := range d.Computers {
+				c.Computers[k] = v
+			}
+		}
+		out[name] = &c
+	}
+	return out
+}
+
+func cloneDelta(d map[string]map[string]*providerDay) map[string]map[string]*providerDay {
+	out := make(map[string]map[string]*providerDay, len(d))
+	for day, m := range d {
+		out[day] = cloneProviderDays(m)
+	}
+	return out
+}
+
+// subtractDelta removes what a save has written from the live delta; calls
+// recorded since the snapshot stay.
+func subtractDelta(live, saved map[string]map[string]*providerDay) map[string]map[string]*providerDay {
+	for day, m := range saved {
+		for name, sd := range m {
+			ld := live[day][name]
+			if ld == nil {
+				continue
+			}
+			ld.USD -= sd.USD
+			ld.InputTokens -= sd.InputTokens
+			ld.CachedTokens -= sd.CachedTokens
+			ld.OutputTokens -= sd.OutputTokens
+			ld.Calls -= sd.Calls
+			ld.Unpriced -= sd.Unpriced
+			for c, v := range sd.Computers {
+				ld.Computers[c] -= v
+			}
+			if ld.Calls <= 0 {
+				delete(live[day], name)
+			}
+		}
+		if len(live[day]) == 0 {
+			delete(live, day)
+		}
+	}
+	if len(live) == 0 {
+		return nil
+	}
+	return live
+}
+
+// mergeDelta adds this process's unsaved calls into the file's record, each
+// to the day it was made on: a finished day's calls land in prev, and a day
+// the file has not reached rolls it first. Calls older than prev are dropped
+// (the file keeps two days).
+func mergeDelta(base *paidSpendRecord, delta map[string]map[string]*providerDay) {
+	days := make([]string, 0, len(delta))
+	for day := range delta {
+		days = append(days, day)
+	}
+	sort.Strings(days)
+	for _, day := range days {
+		var dst map[string]*providerDay
+		switch {
+		case day == base.Day:
+			dst = base.Today
+		case day == base.PrevDay || (base.PrevDay == "" && day < base.Day):
+			base.PrevDay = day
+			if base.Prev == nil {
+				base.Prev = map[string]*providerDay{}
+			}
+			dst = base.Prev
+		case day > base.Day:
+			base.PrevDay, base.Prev = base.Day, base.Today
+			base.Day, base.Today = day, map[string]*providerDay{}
+			dst = base.Today
+		default:
+			continue
+		}
+		for name, pd := range delta[day] {
+			addProviderDay(dst, name, pd)
+		}
+	}
+}
+
+// Flush saves now and returns the error, if any. The gateway calls it once
+// after its server has drained (a SIGTERM's last save); tests call it to read
+// the file.
+func (s *PaidSpend) Flush() error {
+	if s == nil || s.path == "" {
+		return nil
+	}
+	return s.saver.run(s.saveOnce)
+}
+
+// unsavedCalls is the number of calls the file has not seen.
+func (s *PaidSpend) unsavedCalls() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var n int64
+	for _, m := range s.delta {
+		for _, d := range m {
+			n += d.Calls
+		}
+	}
+	return n
+}
+
+// Persistence is the save status shown in the snapshot.
+func (s *PaidSpend) Persistence() SpendPersistence {
+	if s == nil {
+		return SpendPersistence{}
+	}
+	return s.saver.status(s.unsavedCalls())
+}
+
+// saveOnce adds this process's unsaved calls to the file and takes the
+// merged record back, so another gateway process's spend counts here too.
+//
+// It runs on the flusher, never on a guest's call, and holds s.mu only for
+// the two short copies: the file lock (up to spendLockWait), the read and
+// the write happen outside it. A file that is absent is empty; one that is
+// present but unreadable, unparseable or without a day is never written
+// over (the other process's spend may be in it): the error is returned, the
+// delta is kept, and the caps keep counting memory plus delta, which holds
+// everything this process has spent since it started or last merged. A lock
+// not taken in spendLockWait or a failed write likewise keeps the delta.
+//
+// A crash loses at most the calls not yet saved: those recorded during one
+// save (milliseconds when healthy), or, while saves are failing, every call
+// since the last good save (the status says how many). A SIGTERM runs Flush
+// after the server has drained.
+func (s *PaidSpend) saveOnce() error {
+	s.mu.Lock()
+	empty := len(s.delta) == 0
+	s.mu.Unlock()
+	if empty {
+		return nil
+	}
+	unlock, err := lockSpendFile(s.path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	base, exists, err := readPaidSpendFile(s.path)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	snap := cloneDelta(s.delta)
+	var merged paidSpendRecord
+	if exists {
+		merged = base
+		mergeDelta(&merged, snap)
+	} else {
+		// Nobody has saved: memory is this process's whole day.
+		merged = paidSpendRecord{Day: s.rec.Day, Today: cloneProviderDays(s.rec.Today),
+			PrevDay: s.rec.PrevDay, Prev: cloneProviderDays(s.rec.Prev)}
+	}
+	s.mu.Unlock()
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		return err
+	}
+	if err := writeSpendFile(s.path, raw); err != nil {
+		return err
+	}
+	if h := spendSaveWindowHook.Load(); h != nil {
+		(*h)()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.delta = subtractDelta(s.delta, snap)
+	s.rec = merged
+	if len(s.delta) > 0 {
+		mergeDelta(&s.rec, s.delta) // calls made during the save, on top of the saved day
+	}
+	s.rollLocked()
+	return nil
 }
 
 // Refusal is the typed quota error for a provider whose day budget is spent,
@@ -285,6 +504,8 @@ type PaidSpendSnapshot struct {
 	PreviousDay string                       `json:"previous_day,omitempty"`
 	Previous    map[string]PaidSpendProvider `json:"previous,omitempty"`
 	ResetsAt    string                       `json:"resets_at"`
+	// Persistence says whether the day's spend is reaching the file.
+	Persistence *SpendPersistence `json:"persistence,omitempty"`
 }
 
 func (s *PaidSpend) blockLocked(m map[string]*providerDay, withEmptyCapped bool) map[string]PaidSpendProvider {
@@ -318,6 +539,16 @@ func (s *PaidSpend) Snapshot() PaidSpendSnapshot {
 	s.rollLocked()
 	snap := PaidSpendSnapshot{Day: s.rec.Day, Providers: s.blockLocked(s.rec.Today, true),
 		ResetsAt: nextUTCMidnight(s.now()).Format(time.RFC3339)}
+	if s.path != "" {
+		var unsaved int64
+		for _, m := range s.delta {
+			for _, d := range m {
+				unsaved += d.Calls
+			}
+		}
+		p := s.saver.status(unsaved)
+		snap.Persistence = &p
+	}
 	if s.rec.PrevDay != "" {
 		snap.PreviousDay, snap.Previous = s.rec.PrevDay, s.blockLocked(s.rec.Prev, false)
 	}
@@ -434,5 +665,8 @@ func (h *Handler) HandlePaidSpend(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "operator route"})
 		return
 	}
-	writeGatewayJSON(w, http.StatusOK, map[string]any{"paid_spend": h.paidSpend.Snapshot()})
+	// relay_persistence says whether the Anthropic relay's day spend is
+	// reaching its file (unsaved charges, last error), beside the paid
+	// ledger's own persistence block.
+	writeGatewayJSON(w, http.StatusOK, map[string]any{"paid_spend": h.paidSpend.Snapshot(), "relay_persistence": h.anthropicRelay.Persistence()})
 }
