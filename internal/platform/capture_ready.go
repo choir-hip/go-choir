@@ -809,9 +809,9 @@ func (s *Service) entityMentionCounts(ctx context.Context, canonicals map[string
 		}
 		q := `SELECT i.id,
 			(SELECT COUNT(*) FROM (SELECT 1 FROM og_edges e WHERE e.to_id = i.id AND e.kind = 'mentions_entity' AND NOT e.tombstone
-				AND e.from_id >= 'obj:choir.publication:' AND e.from_id < 'obj:choir.publication;' LIMIT ` + fmt.Sprint(entityCountCap) + `) a),
+				AND starts_with(e.from_id, 'obj:choir.publication:') LIMIT ` + fmt.Sprint(entityCountCap) + `) a),
 			(SELECT COUNT(*) FROM (SELECT 1 FROM og_edges e WHERE e.to_id = i.id AND e.kind = 'mentions_entity' AND NOT e.tombstone
-				AND e.from_id >= 'obj:choir.publication:' AND e.from_id < 'obj:choir.publication;' AND position('"role":"central"' in e.metadata) > 0 LIMIT ` + fmt.Sprint(entityCountCap) + `) b)
+				AND starts_with(e.from_id, 'obj:choir.publication:') AND position('"role":"central"' in e.metadata) > 0 LIMIT ` + fmt.Sprint(entityCountCap) + `) b)
 			FROM (VALUES ` + strings.Join(vals, ",") + `) AS i(id)`
 		rows, err := s.store.corpus().QueryContext(ctx, q, args...)
 		if err != nil {

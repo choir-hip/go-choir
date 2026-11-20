@@ -603,7 +603,7 @@ func TestReadyAndEntityReadsUseTheirIndexes(t *testing.T) {
 		_, _ = conn.ExecContext(ctx, `RESET enable_sort`)
 	}()
 	assertPlanIndex(t, "entity mentions newest", explainPlanOn(t, conn, `SELECT edge_id, from_id, metadata, created_at FROM og_edges
-		WHERE to_id = ? AND kind = ? AND NOT tombstone AND from_id >= 'obj:choir.publication:' AND from_id < 'obj:choir.publication;'
+		WHERE to_id = ? AND kind = ? AND NOT tombstone AND starts_with(from_id, 'obj:choir.publication:')
 		ORDER BY created_at DESC, edge_id LIMIT ?`, canonical, string(edgeMentionsEntity), 200), idxEdgesToKindCreated)
 	// A second call finds it valid and builds nothing.
 	if err := f.store.ensureEdgesToKindCreatedIndex(ctx); err != nil {
