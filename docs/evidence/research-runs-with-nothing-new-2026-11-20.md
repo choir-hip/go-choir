@@ -432,3 +432,241 @@ end (5 more for the publication). First versus repeat is by order within
 that shows as first. Percentages are over the 232 runs or 840 searches of the
 window unless a row says otherwise; every per-day figure is an estimate by
 scaling a 6.8-hour window.
+
+## 9. Follow-up: the "Relate refuses role=central" account, read from the ledgers (20:20Z to 21:00Z)
+
+The question: management's replies say research desks cannot finish because
+`choir.Relate` is refused by the v2 vocabulary guard for `role="central"`, the
+finish rule `requireStoryEntitiesRecorded` then holds their Report, they
+escalate, and management's reply wakes them again. Section 2 read management's
+account, not the refusal. This section reads the refusal.
+
+**Answer: the refusal is not in any ledger. The loop is real, but what drives
+it is management's reply record, not a Relate refusal and not the finish rule.**
+
+### 9.1 What the ledgers hold (primary evidence)
+
+Read: the run ledgers (`GET /api/runs/{id}/events`, up to 3,000 events) of 390
+runs between 2026-11-15T11:48Z and 2026-11-20T20:28Z: all 256 runs of section 2, 95
+research runs of 2026-11-19 14:00Z to 18:45Z, the 14 earlier runs of the
+management-reply desks, and the research runs of desk `research:51320559` (the story
+whose desk wrote the oldest blocker notes) from 2026-11-15 to 2026-11-19. Each
+cell's source and output was searched for `vocabfence`, `vocab write guard`,
+`not in v2 vocabulary` and every `choir.Relate` call.
+
+| Finding | Count | Where |
+| --- | --- | --- |
+| A `choir.Relate` cell whose own output is a vocabulary refusal | **0** | no cell, in 390 runs |
+| Relate cells that returned `attached` with `"role":"central"` (some with `"exported":true`) | 51 | first 2026-11-15T11:50:20Z (run 39e727b5), last 2026-11-20T20:08:07Z (run 1afe7b07); e.g. 2026-11-15 14:29:19Z (run dde7058f, three central entities, 15 minutes after management's reply seq 1512 said the guard rejects central), 2026-11-17 07:02:04Z (d98df616, `exported:true`), 2026-11-19 00:23:46Z (922c0f64), 2026-11-20 14:19:06Z (c75555cd) |
+| `story.entities` tape events in the ledgers, phase `recorded`, attachments with the field `entity_role` (920 attachments, 0 with a field `role`) | 190 recorded events in 187 runs on 2026-11-20, latest 20:28:07Z | host-side default (`recordDefaultStoryEntities`) and desk calls alike |
+| `story.entities` phase `analysis_unanswered`, error "the story's head has no text" | 40 on 2026-11-20 (13 more on 2026-11-19 14:00Z to 18:45Z) | StoryAnalysis cannot run on a story whose head has no text; a true platform condition management also names |
+| A run that ended with the finish rule's refusal ("before the final Report, record what this story is about ..." or "the platform could not record them from System 1's top answers") | **0** of 284 runs that have a `story.entities` event | all 236 `recorded` runs and all 47 `analysis_unanswered` runs sent a final ReportPacket; 1 `recorded` run did not |
+| The only real `vocabfence` refusal in any cell | **1** | run a026d733, 2026-11-20T14:05:07.711Z, `choir.Research(...)`: "the call's Cast could not be recorded, so the child did not run: vocab write guard: vocabfence: og:choir.commitment_record:body.subcall.role=\"research_web\" not in v2 vocabulary" (carrier `subcall.role`, not Relate's `attachments`) |
+| Cells that call `choir.Escalate` in these ledgers | 0 | the escalations management answers are not made by a desk cell in the window |
+
+The exact error text management quotes,
+`vocabfence: og:choir.event:body.payload.attachments[0].role="central" not in v2
+vocabulary`, appears in the repo in one place:
+`docs/problems/related-stories-not-showing-on-the-paper-2026-10-27.md` (the
+refusal of 2026-10-26, fixed 2026-10-27 by `d51ae036d`). In the ledgers it
+appears only inside management's own reply records. When it started: the
+oldest reply in the ledgers that names it is a management reply (seq 1512) read
+by desk 51320559's run dde7058f at 2026-11-15T14:28:46Z; the ledger's own
+note of 2026-11-08 already says "the vocabulary-guard hypothesis is falsified:
+research run f3e144b7 (16:44Z) recorded central and incidental entities
+through choir.Relate (the tape writes entity_role, not role)" (commit
+`173aa80fb`). Management's reply seq 1526 (2026-11-16 15:16Z) says "Verified
+across roughly thirty research desks this activation"; I found no desk cell
+that shows it. The desks then save their own evidence notes ("Relate
+vocabulary guard rejects 'central'", 2026-11-16 15:17:19Z, evidence
+`53f1debf`) and read them back through `choir.ListEvidence` on every later run,
+which keeps the claim alive.
+
+What the desks' Relate failures actually were (cell outputs, not replies):
+"entity N: entity_id ... must be ent:<24 hex> or wd:Q<n>" (a model passing
+`extracted:...` or a bare hex), "judgment_ref must be the receipt_ref
+(system1:<id>)", "no System 1 answer with receipt ... in this run", "System 1
+did not rank central first (it gave 0.43); give a reason of at least 20
+characters", and "\"Ukraine\" is not among the analysis's candidates ... novelty
+p(yes) 0.02" (the `name` path used for a known entity). All are the host's own
+argument checks (`story_entities_verb.go:210-215`, `yaegikernel/relate.go:128`),
+and every one was followed in the same run by a call that succeeded.
+
+### 9.2 The code at origin/main (35a721615): where `role` is checked, and why there is no disagreement
+
+- The role enumeration: `internal/types/story_entity.go:30` (`EntityRoleCentral`),
+  `:42` (`EntityRoles`), `:47` (the roles that attach: central, incidental).
+- Relate's own validation: `internal/yaegikernel/relate.go:79` (`ValidateRelate`),
+  `:128` (role must be central or incidental); the host step
+  `internal/agentcore/story_entities_verb.go:120-150` (`relateEgress`: research
+  desks only, setting `research.related_story` on, decode, validate).
+- The tape record: `story_entities_verb.go:81-83`, `Role string
+  json:"entity_role"`, with the comment "the store's vocabulary write guard reads a
+  leaf named \"role\" as a desk role and refuses central and incidental". The
+  desk-facing result struct has `json:"role"` (`:55`); that is a return value,
+  not a tape write.
+- The guard: `internal/store/vocab_migrate_og.go:827` (`ogRoleLeafKeys`: `role`,
+  `profile`, `agent_profile`, `agent_role`, ...), `:853`
+  (`ogRoleFieldsFromJSON`: walks every JSON leaf, takes its last path segment;
+  skips only the model.served / search.served payload role), `:964-977`
+  (`vocabWriteGuard`, which runs only when `s.vocabCutover` is set), and the
+  check `internal/vocabmigrate/fence.go:106` against `v2LiveSet` (`:40`: the
+  desk names management, engineering, research, texture, ...), so the guard is a
+  structural walk, **not** a per-computer vocabulary record that the paper
+  could lack. The one piece of per-computer state is `vocabCutover`
+  (`store.go:188`, set at `vocab_migrate.go:192` and `:257` and at open,
+  `open.go:455-460`): armed on the paper since the cutover.
+- The commit that created and fixed the disagreement: the original refusal was
+  real on 2026-10-26 (`ab3cd44ef` wrote `json:"role"`); `d51ae036d`
+  (2026-10-27 00:07 EDT, "story.entities tape attachments name the entity's role
+  entity_role", red) renamed it; `010259229` added the test that fails without it
+  (`internal/store/story_entities_vocab_fence_test.go`, which cuts the store over
+  first, as production does); `8df73eb57` pins the tape decode. None of today's
+  candidates touches it: `dc584af3b`, `0eef16ec7` and `20af586d3` change no file
+  of `story_entities_*`, `inbox_records.go` or the store's vocabulary code;
+  `2becc9673` (station E2) adds `tentative` to `EntityRoles` and does not change
+  the roles Relate accepts; `605436fdc` edits `inbox_records.go` for
+  `intake.event_wakes`, not the finish rule. What a model is told to pass
+  (`choir.Help("Relate")`) is `role central|incidental`, which Relate accepts.
+- It was working before and is working now: see the 51 and 190 above.
+
+One other path does hit the guard and is real: `choir.Research`'s child cast
+writes `body.subcall.role="research_web"` in a `choir.commitment_record`
+(`subcall_record.go:65` builds it; the guard's skip list at
+`vocab_migrate_og.go:835-851` covers only `choir.event` payload roles of
+model.served and search.served lines). One occurrence in 390 runs
+(2026-11-20T14:05:07Z, run a026d733); a research desk does not need it to
+finish.
+
+### 9.3 Why the finish rule did not hold these desks
+
+The rule is `storyEntitiesGate` (`inbox_records.go:907`), called from the
+final-Report check at `:718` (`requireStoryEntitiesRecorded`, `:898`). It
+returns nil, in this order, when: the tape holds a `recorded` event for the
+story from any run (`:937`); this run's Relate failed on the platform side
+(`:939`); this run's analysis was unanswered with an error (`:941`); then the
+host records the entities itself from System 1's top answers (`:949`,
+`story_entities_default.go`). The runs in the window took these branches:
+
+| Branch | Runs | What the tape holds |
+| --- | --- | --- |
+| a `recorded` event already on the tape for the story, or recorded in the run | 236 | `story.entities` phase `recorded`; the 27 management-reply runs were all on stories whose entities were recorded in earlier runs (none wrote a new event; none called Relate: 0 `choir.Relate(` cells in their 27 ledgers) |
+| `analysis_unanswered` by this run with error "the story's head has no text" | 47 | the marker event; Report accepted |
+| the refusal (no branch frees the Report) | 0 | none |
+
+For the stuck desk the coordinator named (the one whose Report is refused), the
+refusal is earlier than the finish rule: the disclosure gate on the desk
+message (`inbox_records.go:560` `gateMessageDisclosure`, then
+`disclosure_gate.go:517`). Run ae50d61b (desk `research:94226d5a`, story
+"Trump faces backlash after invoking 9/11 ..."), 2026-11-20 19:47:22.034Z and
+19:47:43.853Z, `choir.ReportPacket` and `choir.Report`: "tool_error: disclosure
+refused: owner_private:autopaper (owner_private) at desk_message is ask; System
+1's answer does not clear the rule, and publish-auto work never asks the owner,
+so this attempt is refused". This desk has refused every Report since at least
+2026-11-19 14:33Z (its own `platform_status` notes of 2026-11-19 15:24Z, 17:40Z,
+2026-11-20 03:31Z, 03:33Z, 03:35Z and 14:48Z). Its run carries the labels of
+what it read, and the labels include evidence it saved itself, whose metadata
+names `owner_private:autopaper`, `computers`, `prompt-bar`, `texture`,
+`model-policy`; reading them back puts those labels on every later run. The
+host's story publisher shows the same refusal at the same labels: 10 story
+publishes refused in the console between 19:55:10Z and 20:11:01Z ("not
+published: disclosure refused: owner_private:autopaper (owner_private) at
+publication is ask; ... computers ... model-policy ... prompt-bar ... texture",
+docs 1fa86f8b, 0ee907cc and 3004429b three times). That is a different defect
+from the one management describes (the record of 2026-11-08, "product API reads
+were labelled by URL segment", is the same family). It affects one desk in the
+27 and 10 publishes in 16 minutes; I did not measure how many stories it holds
+overall.
+
+### 9.4 Is it still happening
+
+The management-reply runs: two waves, 2026-11-20 14:48Z (6 runs seen; all
+searched) and 19:34Z to 19:36Z (21 runs, briefs skipped "no objective in the
+unread records" from 19:36Z to 19:45Z in the console; last run ended 19:50Z). In
+the console from 20:30:28Z to 20:54:39Z there is no skipped brief and no
+management-reply run. Earlier reply-woken runs were seen at 2026-11-19 18:37Z
+(e4dc4025, "8 blocker reports"), 2026-11-20 03:14Z and 03:15Z (629f413d,
+61751e7a), 06:49Z and 06:50Z (73e48bf0, 8a3f8138, c59d230d, e7f9def1), 09:06Z
+(f6ad8a98) and 10:40Z (970621f8), so about every 4 to 5 hours, in step with
+management's turns. Whether another wave comes is not known.
+
+### 9.5 The smallest correct fix
+
+There is no defect on the Relate path to fix, so the smallest correct change is
+not in the vocabulary guard or the finish rule. The loop is:
+
+1. a management `reply` or `report` record with an empty objective lands in a
+   research desk's inbox (written by a management cell, an LLM turn, text read
+   from desk escalations);
+2. `inboxUnread` (`inbox_records.go:969`) counts it as unread and
+   `WakeRecordsInbox` (`:1036`, the check at `:1093`) starts a full research run;
+3. the corpus brief logs `outcome=skipped objective_from=none reason="no
+   objective in the unread records"` (`research_brief.go:860`) and the run goes
+   on anyway: 26 of 27 delivered a ReportPacket;
+4. the run's saved evidence note repeats the premise, and the next management
+   turn answers the next escalation the same way.
+
+Fix location and class: `WakeRecordsInbox` (`inbox_records.go:1093`) or
+`inboxUnread` (`:969`): a research desk is not woken for unread records that are
+all management `reply` or `report` records with no objective and no cast, and the
+cursor advances over them (otherwise `inboxUnread` stays true and the
+dispatcher retries them every tick). Class **orange** (runtime behaviour,
+routing; not red: it touches no tape write, run acceptance or auth); one review
+seat; rollback revert. What would have caught it: a test that delivers a
+management reply with no objective to a research inbox and asserts no run
+starts, with the unread count back to zero; none exists because the wake rule
+was only tested for casts (the corpus brief's "no objective" skip is tested as a
+brief, not as a wake). Why CI and `scripts/proofs/entity-e2-deployed.sh` did
+not catch it: the loop is made of model turns; CI has no model, and the proof
+script tests the public entity read (part A) and the ready list (part B), not
+desk wakes.
+
+Two further changes belong to the data, not the code, and are not part of the
+fix: the desks' `blocker` and `platform_status` evidence notes (kinds
+`blocker_close_*`, `platform_status`, `relate_blocker_close_*`, on desk
+51320559 since 2026-11-08 and on 94226d5a) assert a defect the ledgers do not
+show, and management's open escalation (disclosure 3adf5e4c, "consolidated
+escalation ... awaits owner approval") is built on the same premise. Whether to
+correct them is the owner's or the lead's call; I did not touch either.
+
+What the desks do once the wake is fixed: they do not need to recover. They
+are not stuck at the finish rule (0 of 284 runs), and the 26 that sent a
+Report completed. The only stuck desk found (94226d5a) stays stuck, because its
+refusal is the disclosure gate, until its labels are fixed or its evidence notes
+are not read back; and a desk whose open round was never answered is closed at
+run end by the existing rule, with no resumer.
+
+### 9.6 Cost so far, from the ledgers (a lower bound)
+
+The 27 management-reply runs observed (6 in the 14:48Z wave, 21 in the 19:34Z
+wave): 639 tool-loop iterations (each one model call; lower bound, as the
+wave-1 desks beyond the 6 that searched are not observable and run 20fc70e4 was
+passivated), about 265 minutes of run time (58 and 207), 31 web searches
+(wave 1: 10, wave 2: 21; 3.7% of section 1's 840), 18.3 million input tokens (12.3
+million cached) and 0.48 million output tokens on one model (`swe-2-flash`).
+The reply says wave 1 was "43 records from 20 research desks", so about 14
+desks of that wave are not in the 27. Searching runs account for 14 of the 27;
+the other 13 (the 19:35Z wave) spent 0 searches but 3.6 to 15.8 minutes each. Of
+the whole 27, 1 run (dd22d999) produced a revision in its window and 0 a
+publication. Earlier reply waves (the 8 runs listed in 9.4) are not counted.
+
+### 9.7 What I could not confirm
+
+- **A Relate vocabulary refusal at any time.** None in 390 ledgers from
+  2026-11-15T11:48Z. Management's text says "verified across roughly thirty
+  desks" on 2026-11-16; the desks and runs of 2026-11-14 and earlier, and the
+  management cells that wrote the replies (seq 1512 to 1526), were not read, so
+  I cannot exclude a short-lived refusal on 2026-11-15 before 14:29Z (for
+  example from a build older than `d51ae036d`, which the repo history makes
+  unlikely: it is 19 days old).
+- **Who wrote the first escalation.** No desk cell in the window calls
+  `choir.Escalate`; I did not find the cell, run or host path that produced the
+  "43 records from 20 desks".
+- **The tape of a stuck run.** Tape events are readable only through each
+  run's own ledger (the `system1:<computer>` channel events appear there); I did
+  not read the host tape directly.
+- **The 14 other wave-1 desks** and every desk outside the 390 runs.
+- **How many stories are held by the disclosure gate** (10 publish refusals in 16
+  minutes seen; no total).
+- **Whether the deployed guest binary equals origin/main for the files named.**
+  I read origin/main; the deployed commit was not read.
