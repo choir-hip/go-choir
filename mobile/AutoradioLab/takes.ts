@@ -1,7 +1,7 @@
 // Takes, the phone's side, as shared code: the wire (publish, list, mine, delete, record, audio), what a take is, the candidates the programme
 // request offers, the muted voices and the listener's own ids, the Takes section's rows and words. It replaces the Swift Takes.swift (TakesClient,
 // Take, MyTake, TakeRecordSummary, TakeOwn, TakeMutes, TakeStore, TakeCandidates, Mp4Header, the multipart body) and TakesPage.swift.
-// What stays native is the RECORDER (TakeSession: the microphone, the recogniser, the preview player): it is the voice.
+// What stays native is the RECORDER (TakeSession.swift: the microphone, the recogniser, the preview player): it is the voice. The session over it is take-session.ts.
 //
 // THE WIRE (docs/reference/AUTORADIO-TAKES.md; every route is signed in through the listener's own computer):
 //   POST   /api/platform/takes                multipart/form-data: `audio` (take.m4a, audio/mp4; an MP4 whose `mvhd` is 3 to 60 s and within 2 s of the
@@ -198,21 +198,22 @@ export const mineOf = (json: unknown): MyTake[] => (isObj(json) && Array.isArray
 
 // ---------------------------------------------------------------------------------------------------------------- what the phone keeps
 
-export type Kept = { ids: string[]; handle: string; muted: string[] };
+export type Kept = { ids: string[]; handle: string; muted: string[]; /** The Swift app's own ids, handle and mutes have been carried in (take-session.ts carryOver). */ migrated: boolean };
 export const KEPT_FILE = 'app:/data/takes.json';
-export const emptyKept = (): Kept => ({ ids: [], handle: '', muted: [] });
+export const emptyKept = (): Kept => ({ ids: [], handle: '', muted: [], migrated: false });
 
 export async function loadKept(storage: Storage | undefined): Promise<Kept> {
   if (!storage) return emptyKept();
   try {
     const o = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(KEPT_FILE)));
     return { ids: Array.isArray(o.ids) ? o.ids.filter((x: unknown): x is string => typeof x === 'string') : [], handle: typeof o.handle === 'string' ? o.handle : '',
-      muted: Array.isArray(o.muted) ? o.muted.filter((x: unknown): x is string => typeof x === 'string' && validHandle(x)) : [] };
+      muted: Array.isArray(o.muted) ? o.muted.filter((x: unknown): x is string => typeof x === 'string' && validHandle(x)) : [], migrated: o.migrated === true };
   } catch { return emptyKept(); }
 }
-export async function saveKept(storage: Storage | undefined, k: Kept): Promise<void> {
-  if (!storage) return;
-  try { await storage.fs.atomicWriteFile(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: [...k.ids].sort(), handle: k.handle, muted: k.muted }))); } catch { /* a full disk loses only this convenience */ }
+/** True when the file was written (a full disk loses only a convenience, but the carry-over must know). */
+export async function saveKept(storage: Storage | undefined, k: Kept): Promise<boolean> {
+  if (!storage) return false;
+  try { await storage.fs.atomicWriteFile(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: [...k.ids].sort(), handle: k.handle, muted: k.muted, migrated: k.migrated }))); return true; } catch { return false; }
 }
 /** Sign-out: the ids, the handle and the muted voices are the account's. */
 export async function wipeKept(storage: Storage | undefined): Promise<void> { if (!storage) return; try { await storage.fs.rm(KEPT_FILE); } catch { /* absent */ } }
@@ -283,8 +284,7 @@ export async function multipart(u: Upload, boundary: string): Promise<{ body: Ui
 export type Net = (method: 'GET' | 'POST' | 'DELETE', path: string, o?: { query?: Record<string, string | number>; body?: Uint8Array; contentType?: string }) => Promise<{ status: number; json: unknown; bytes: Uint8Array }>;
 
 /** The production Net over the signed-in seam (api.ts): a refusal arrives as an HTTPError carrying its status and the server's short `error` string.
- * GAP, reported: the seam sends every `body` as JSON, so a multipart upload (bytes with their own content type) needs the seam to pass a Uint8Array
- * through as it is; the call below is written for that and does not work until it does. */
+ * The seam passes a Uint8Array body through as it is (api.ts send), so the multipart upload goes with its own content type. */
 export const seamNet: Net = async (method, path, o = {}) => {
   try {
     if (o.body !== undefined || path.endsWith('/audio')) {
@@ -296,7 +296,7 @@ export const seamNet: Net = async (method, path, o = {}) => {
     const r = await authedJSON(path, { method, query: o.query });
     return { status: 200, json: r.body, bytes: new Uint8Array() };
   } catch (e) {
-    if (e instanceof HTTPError) return { status: e.status, json: { error: e.message.replace(/^[^:]*: ?/, '') }, bytes: new Uint8Array() };
+    if (e instanceof HTTPError) return { status: e.status, json: { error: e.message.replace(/^(?:HTTP \d+|\d+: rate limited|\d+: the key lacks the scope for \S+|\d+)(?:: )?/, '') }, bytes: new Uint8Array() };
     throw e;
   }
 };

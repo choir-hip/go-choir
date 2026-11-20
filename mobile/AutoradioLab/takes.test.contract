@@ -1,0 +1,10 @@
+// The Takes section on the real plan and the web host: `tp` is answered by app.ts (take-session.ts) from the recorder's snapshot (the native source takesRecorder, which the web host has only as its
+// placeholder: idle). The web host has no recorder and no key, so the page is the idle one: Record offered, nothing to stop or publish, the 1:00 bound, no rows. What a take does is in take-session.test.ts.
+test "with no recorder the Takes section is answered by app.ts and says idle with Record offered"
+  clock data
+  expect state tp.state == "idle"
+  expect state tp.canRecord == true
+  expect state tp.canStop == false
+  expect state tp.canPublish == false
+  expect state tp.limit == "1:00"
+  expect state tp.mine.length == 0

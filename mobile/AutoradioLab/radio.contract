@@ -10,7 +10,8 @@
 // radio-progress, radio-elapsed, radio-remaining, radio-play, radio-next, radio-why, radio-why-text, radio-forecast, radio-back15, radio-fwd15,
 // radio-speed, radio-speed-slider, radio-speed-down, radio-speed-up, radio-speed-reset, radio-next-list, radio-next-<n>, radio-next-play-<n>,
 // radio-next-grip-<n>, radio-next-all, radio-next-writing, radio-next-empty, radio-notice, radio-builton-<n>, radio-heard-<n>, radio-heard-built-<n>, radio-heard-builton-<n>-<m>.
-use Theme, RadioPageInfo, QueueInfo, TakesPageInfo from "@choir/autoradio"
+use Theme, RadioPageInfo, QueueInfo from "@choir/autoradio"
+use TakesPageInfo from "./takes-types.contract"
 use Btn, SectionHeader, RowRule, BarClear from "./ui.contract"
 use AccountView from "./account-state-types.contract"
 use PaperFront from "./paper-types.contract"

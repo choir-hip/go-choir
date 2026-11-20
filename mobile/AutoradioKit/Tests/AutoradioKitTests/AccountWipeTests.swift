@@ -65,8 +65,8 @@ final class AccountWipeTests: XCTestCase {
         let steerSent = Recorder()
         let steer = SteerQueue(file: root.appendingPathComponent("steer-queue.json"), send: { _ in .offline })
         steer.enqueue(SteerTap(id: "s-1", entryID: "e1", direction: "more", stories: [m], title: m, handle: nil, at: "2026-11-18T00:00:00Z"))
-        let own = TakeOwn(file: root.appendingPathComponent("takes-own.json")); own.add(id: m, handle: m)
-        let mutes = TakeMutes(file: root.appendingPathComponent("takes-muted.json")); mutes.mute(m)
+        let own = TakeOwn(file: root.appendingPathComponent("takes-own.json")); own.replace(ids: [m], handle: m)
+        let mutes = TakeMutes(file: root.appendingPathComponent("takes-muted.json")); mutes.replace([m])
         let takes = TakeStore(); takes.replace([Take.parse(["take_id": m, "publisher": "pub", "state": "live", "transcript": m])!])
         let tmp = root.appendingPathComponent("tmp"); write("tmp/takes/rec.m4a", m); write("tmp/take-play-\(m).m4a", m)
         let sheet = RunSheetStore(storage: root.appendingPathComponent("runsheet.json")); sheet.retryAfter = 3600

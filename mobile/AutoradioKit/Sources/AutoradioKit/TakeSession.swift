@@ -2,21 +2,28 @@ import Foundation
 import AVFoundation
 import Speech
 
-// Recording a take: start, stop, review, publish (design 11.2). This file is the state machine and the system parts behind four small
-// protocols, so the machine is tested with fakes and only the real recorder, recogniser and player need a device.
+// The take RECORDER: the voice half of a take. It holds the microphone and the radio's gate, writes the file, reads it with the on-device recogniser, plays it back for review and stops itself at
+// the ceiling. It decides nothing about publishing: the session (whether to publish, to whom, with what words, the listener's own ids and muted voices) is shared code (AutoradioLab/take-session.ts,
+// takes.ts). The shared code hands over the numbers (`TakeLimits`) and reads one snapshot back (`snapshot`): a phase, the length, the transcript, and `ended`, a CODE for why a take ended without a
+// recording (mic, gate, open, short, empty, large; `ceiling` when the recorder stopped itself and the take is in review). The words for each code are shared code's.
 //
-// Ways this can fail (written before the code; each is a test in TakeSessionTests):
-//   R1  recording starts only when the microphone is allowed and the radio has yielded; the radio is paused the whole time a take is in
-//       hand (recording and review) and given back exactly once, on publish, discard or a failure that ends the take
-//   R2  a take of under 3 s is not kept and says so; the 60 s ceiling stops it by itself and the notice says it did
-//   R3  re-record deletes the previous file before the new one starts; discard deletes the file; nothing leaves the phone before Publish
-//   R4  a transcript that comes back empty cannot be published; the transcript is never editable (there is no setter)
-//   R5  publish uploads, then publishes, and remembers the id and the publisher's handle so the public list never offers the voice back;
-//       a failure after the upload keeps the stored id, so a retry does not upload twice
-//   R6  the entry on air when recording began is `responds_to`; no entry (or an opening, an answer, a take) leaves it absent
-//   R7  logs carry counts and ids, never the words
+// Ways this can fail (each is a test in TakeSessionTests):
+//   R1  recording starts only when the microphone is allowed and the radio has yielded; the radio is paused the whole time a take is in hand (recording and review) and given back exactly once,
+//       on publish (done), discard or a failure that ends the take
+//   R2  a take under the minimum is not kept and says so; the ceiling stops it by itself and says so
+//   R3  re-record deletes the previous file before the new one starts; discard deletes the file; nothing leaves the phone from here
+//   R6  the entry on air when recording began is `responds_to`; no entry leaves it empty
+//   R7  logs carry counts, never the words
 
-public enum TakeState: String, Sendable { case idle, recording, transcribing, review, publishing }
+public enum TakeState: String, Sendable { case idle, recording, transcribing, review }
+
+/// What the shared code asks of the recorder (take-session.ts LIMITS): the spec's numbers, not ours.
+public struct TakeLimits: Sendable, Equatable {
+    public var minSeconds: Double, maxSeconds: Double, maxBytes: Int
+    public init(minSeconds: Double, maxSeconds: Double, maxBytes: Int) { self.minSeconds = minSeconds; self.maxSeconds = maxSeconds; self.maxBytes = maxBytes }
+}
+/// AAC-LC in .m4a, mono, 24 kHz, 32 kbit/s: how the file is written.
+enum TakeRecorderFormat { static let sampleRate = 24_000.0, bitRate = 32_000 }
 
 @MainActor public protocol TakeRecorderEngine: AnyObject {
     func start(to url: URL) throws
@@ -39,55 +46,60 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
 
 @MainActor public final class TakeSession {
     public private(set) var state: TakeState = .idle
-    public private(set) var notice = ""
     public private(set) var transcript = ""
     public private(set) var duration = 0.0
+    public private(set) var bytes = 0
     public private(set) var respondsTo: TakeResponds?
     public private(set) var previewing = false
-    public private(set) var published: Take?
-    public private(set) var mine: [MyTake] = []
-    public private(set) var myRecord: TakeRecordSummary?
+    /// mic | gate | open | short | empty | large | ceiling, or "" (see the header). Cleared by the next start, a discard and done.
+    public private(set) var ended = ""
+    public private(set) var detail = ""
     public var onChange: (() -> Void)?
 
     let recorder: TakeRecorderEngine, transcriber: TakeTranscribing, gate: TakeRadioGate, preview: TakePreviewing
-    let client: () -> TakesClient?
     let micAllowed: () async -> Bool
     let responds: () -> TakeResponds?
-    let own: TakeOwn
     let dir: URL
     let now: () -> Date
+    private var limits = TakeLimits(minSeconds: 3, maxSeconds: 59.5, maxBytes: 512 * 1024)
     private var file: URL?
     private var startedAt: Date?
-    private var storedID: String?
     private var holding = false
-    private var sha: String { file.flatMap { try? Data(contentsOf: $0) }.map(TakesClient.Upload.hex) ?? "" }
 
-    public init(recorder: TakeRecorderEngine, transcriber: TakeTranscribing, gate: TakeRadioGate, preview: TakePreviewing, client: @escaping () -> TakesClient?,
-                micAllowed: @escaping () async -> Bool, responds: @escaping () -> TakeResponds?, own: TakeOwn = .shared, dir: URL, now: @escaping () -> Date = Date.init) {
-        self.recorder = recorder; self.transcriber = transcriber; self.gate = gate; self.preview = preview; self.client = client
-        self.micAllowed = micAllowed; self.responds = responds; self.own = own; self.dir = dir; self.now = now
+    public init(recorder: TakeRecorderEngine, transcriber: TakeTranscribing, gate: TakeRadioGate, preview: TakePreviewing,
+                micAllowed: @escaping () async -> Bool, responds: @escaping () -> TakeResponds?, dir: URL, now: @escaping () -> Date = Date.init) {
+        self.recorder = recorder; self.transcriber = transcriber; self.gate = gate; self.preview = preview
+        self.micAllowed = micAllowed; self.responds = responds; self.dir = dir; self.now = now
     }
 
     public var elapsed: Double { startedAt.map { max(0, now().timeIntervalSince($0)) } ?? (state == .idle ? 0 : duration) }
-    public var canPublish: Bool { state == .review && !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private func changed() { onChange?() }
+
+    /// The snapshot the shared code reads (take-session.ts `Native`).
+    public var snapshot: [String: Any] {
+        ["phase": state.rawValue, "elapsed": elapsed, "seconds": duration, "bytes": bytes, "transcript": transcript, "previewing": previewing, "ended": ended, "detail": detail,
+         "respondsTitle": respondsTo?.title ?? "", "respondsRoute": respondsTo?.route ?? ""]
+    }
+    /// The recording's bytes, for the shared code to upload (the file stays here: the preview plays it).
+    public var audio: Data? { file.flatMap { try? Data(contentsOf: $0) } }
 
     // MARK: Recording
 
     /// Start (from idle) or start again (from review: the previous file is deleted first).
-    public func start() async {
+    public func start(_ l: TakeLimits) async {
         guard state == .idle || state == .review else { return }
-        if state == .review { dropFile(); storedID = nil; transcript = ""; duration = 0 }
-        notice = ""; published = nil
-        guard await micAllowed() else { notice = "The microphone is not allowed. Allow it in Settings to record a take."; if holding { endHold() }; state = .idle; changed(); return }
+        limits = l
+        if state == .review { dropFile(); transcript = ""; duration = 0; bytes = 0 }
+        ended = ""; detail = ""
+        guard await micAllowed() else { ended = "mic"; if holding { endHold() }; state = .idle; changed(); return }
         if !holding {
-            if let why = await gate.yieldForTake() { notice = "Could not start: \(why)"; state = .idle; changed(); return }
+            if let why = await gate.yieldForTake() { ended = "gate"; detail = why; state = .idle; changed(); return }
             holding = true
         }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("take-\(UUID().uuidString.prefix(8).lowercased()).m4a")
         respondsTo = responds()
-        do { try recorder.start(to: url) } catch { notice = "Could not record: the microphone could not be opened."; endHold(); state = .idle; changed(); return }
+        do { try recorder.start(to: url) } catch { ended = "open"; endHold(); state = .idle; changed(); return }
         file = url; startedAt = now(); state = .recording
         print("AUTORADIO take recording started responds=\(respondsTo != nil)")
         changed()
@@ -95,7 +107,7 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
 
     /// The module calls this a few times a second while recording: the ceiling stops it.
     public func tick() async {
-        guard state == .recording, elapsed >= TakeBounds.maxSeconds - TakeBounds.stopEarly else { return }
+        guard state == .recording, elapsed >= limits.maxSeconds else { return }
         await stop(auto: true)
     }
 
@@ -103,102 +115,56 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
         guard state == .recording, let url = file else { return }
         let secs = recorder.stop()
         startedAt = nil
-        // The file's own length when it can be read (it includes the encoder's priming, about 0.11 s); the ceiling is the server's, so clamp to it.
-        let real = (try? Data(contentsOf: url)).flatMap(Mp4Header.durationSeconds) ?? secs
-        duration = min(max(real.isFinite ? real : 0, 0), TakeBounds.maxSeconds)
-        if duration < TakeBounds.minSeconds {
+        // The file's own length when it can be read (it includes the encoder's priming, about 0.11 s).
+        let real = Self.fileSeconds(url) ?? secs
+        duration = max(real.isFinite ? real : 0, 0)
+        if duration < limits.minSeconds {
             try? FileManager.default.removeItem(at: url); file = nil; duration = 0
-            notice = "A take is at least \(Int(TakeBounds.minSeconds)) seconds. Nothing was kept."
-            endHold(); state = .idle; changed(); return
+            ended = "short"; endHold(); state = .idle; changed(); return
         }
-        let bytes = (try? Data(contentsOf: url).count) ?? 0
-        if bytes > TakeBounds.maxBytes || bytes == 0 {
-            try? FileManager.default.removeItem(at: url); file = nil
-            notice = bytes == 0 ? "Nothing was recorded." : "That take is too large to publish. Record a shorter one."
-            endHold(); state = .idle; changed(); return
+        bytes = (try? Data(contentsOf: url).count) ?? 0
+        if bytes > limits.maxBytes || bytes == 0 {
+            let none = bytes == 0
+            try? FileManager.default.removeItem(at: url); file = nil; bytes = 0
+            ended = none ? "empty" : "large"; endHold(); state = .idle; changed(); return
         }
         state = .transcribing
-        notice = auto ? "Stopped at \(Int(TakeBounds.maxSeconds)) seconds, the longest a take can be." : ""
+        ended = auto ? "ceiling" : ""
         changed()
         let words = await transcriber.transcribe(file: url)
         guard state == .transcribing else { return }          // discarded while it was being read
-        transcript = StretchCandidates.cut(words.trimmingCharacters(in: .whitespacesAndNewlines), bytes: TakeBounds.maxTranscriptBytes)
-        if transcript.isEmpty { notice = (notice.isEmpty ? "" : notice + " ") + "Nothing was recognised. Record it again." }
+        transcript = words.trimmingCharacters(in: .whitespacesAndNewlines)
         state = .review
         print("AUTORADIO take recorded seconds=\(Int(duration)) bytes=\(bytes) chars=\(transcript.count)")
         changed()
     }
 
+    static func fileSeconds(_ url: URL) -> Double? {
+        guard let f = try? AVAudioFile(forReading: url), f.processingFormat.sampleRate > 0 else { return nil }
+        return Double(f.length) / f.processingFormat.sampleRate
+    }
+
     // MARK: Review
 
-    public func togglePreview() {
-        guard state == .review, let f = file else { return }
-        if previewing { preview.stop(); previewing = false } else { preview.play(f); previewing = true }
+    public func togglePreview() { setPreview(!previewing) }
+    /// `on` plays the recording; off stops it. Only a take in review is played.
+    public func setPreview(_ on: Bool) {
+        guard on != previewing else { return }
+        if on { guard state == .review, let f = file else { return }; preview.play(f); previewing = true } else { preview.stop(); previewing = false }
         changed()
     }
     /// The preview reached its end.
     public func previewEnded() { previewing = false; changed() }
 
     public func discard() {
-        guard state == .review || state == .recording || state == .transcribing else { return }
         if state == .recording { recorder.cancel() }
-        dropFile(); storedID = nil; transcript = ""; duration = 0; startedAt = nil; notice = ""
-        endHold(); state = .idle; changed()
-    }
-
-    // MARK: Publish
-
-    public func publish() async {
-        guard canPublish, let url = file, let c = client() else {
-            if state == .review, client() == nil { notice = "Sign in to publish a take."; changed() }
-            return
-        }
-        preview.stop(); previewing = false
-        state = .publishing; notice = ""; changed()
-        do {
-            guard let data = try? Data(contentsOf: url) else { throw ChoirError.decode("the recording is gone") }
-            // The server reads the length from the file's own header and holds the claim to within 2 s of it: claim what the file says.
-            let claimed = min(max(Mp4Header.durationSeconds(data).flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? duration, TakeBounds.minSeconds), TakeBounds.maxSeconds)
-            let t = try await c.publish(.init(audio: data, transcript: transcript, duration: claimed, respondsTo: respondsTo))
-            let id = t.takeID
-            own.add(id: id, handle: t.publisher)
-            published = t
-            dropFile(); storedID = nil; transcript = ""; duration = 0
-            endHold(); state = .idle
-            print("AUTORADIO take published id=\(id)")
-            changed()
-            await refresh()
-        } catch {
-            state = .review
-            // The recording is kept (state review, file on disk): nothing is lost when the server is not there yet or refuses.
-            if error is TakesUnavailable { notice = "Takes are not available yet. Your recording is kept; publish it again later." }
-            else if let r = error as? TakesRefused { notice = "\(r.description) Your recording is kept." }
-            else { notice = "Could not publish: \(Self.why(error)). Your recording is kept; try again." }
-            print("AUTORADIO take publish failed: \(Self.why(error))")
-            changed()
-        }
-    }
-
-    static func why(_ e: Error) -> String { (e as? ChoirError).map { $0.description } ?? (e as? TakesUnavailable).map { $0.description } ?? "the connection failed" }
-
-    // MARK: The listener's takes and record
-
-    public func refresh() async {
-        guard let c = client() else { return }
-        do { let m = try await c.mine(); mine = m; for t in m { own.add(id: t.takeID, handle: t.publisher) } }
-        catch is TakesUnavailable { notice = "Takes are not available yet."; changed(); return }
-        catch {}
-        let h = own.handle
-        if !h.isEmpty { myRecord = try? await c.record(publisher: h) }
+        dropFile(); transcript = ""; duration = 0; bytes = 0; startedAt = nil; ended = ""; detail = ""
+        if state != .idle || holding { endHold(); state = .idle }
         changed()
     }
 
-    public func delete(_ id: String) async {
-        guard let c = client() else { return }
-        do { try await c.delete(takeID: id); own.remove(id: id); mine.removeAll { $0.takeID == id }; notice = ""; print("AUTORADIO take deleted id=\(id)") }
-        catch { notice = "Could not delete: \(Self.why(error))." }
-        changed()
-    }
+    /// The take was published (shared code did it): the file goes and the radio is given back.
+    public func done() { discard() }
 
     // MARK: Internals
 
@@ -213,8 +179,8 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
     private var rec: AVAudioRecorder?
     public init() {}
     public func start(to url: URL) throws {
-        let settings: [String: Any] = [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: TakeBounds.sampleRate, AVNumberOfChannelsKey: 1,
-                                       AVEncoderBitRateKey: TakeBounds.bitRate]
+        let settings: [String: Any] = [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: TakeRecorderFormat.sampleRate, AVNumberOfChannelsKey: 1,
+                                       AVEncoderBitRateKey: TakeRecorderFormat.bitRate]
         let r = try AVAudioRecorder(url: url, settings: settings)
         guard r.prepareToRecord(), r.record() else { throw LabError.unavailable("the recorder did not start") }
         rec = r

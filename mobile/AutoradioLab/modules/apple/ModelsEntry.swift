@@ -21,6 +21,9 @@ import Security
 // there), absent (the Keychain answered item-not-found) or unreadable (locked before the first unlock, or any other status). Read only: no data is returned, nothing
 // is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
 //
+// The take recorder's ops (`takeState` ... `takeLegacy`, AutoradioModule+Takes.swift `takeOp`): shared code (AutoradioLab/take-session.ts) leads the Takes section; the reason they are native is the
+// microphone, the radio's gate, the recogniser and the player (the voice), the steer queue, and the Swift programme's copy of the listener's own ids and muted voices. `takeLegacy` only READS the old files.
+//
 // The themes' one-time carry-over (AutoradioLab/themes.ts `migrate`): `{op: "themeLegacy"}` READS what the Swift app kept for the themes: the choice (UserDefaults) and the user's theme files
 // (Application Support/Autoradio/themes). The reason it is native: those are places shared code cannot see (Exact's `app:/data` is another folder). It only reads and removes nothing, so a reverted
 // build still finds its old copy; a later change removes the old copy when phones have moved, and this op goes with it. At most 64 files of at most 64 KiB are sent; the rest are named in `skipped`
@@ -61,6 +64,10 @@ final class ModelsModule: ExactModule {
                 // nothing shared (the key remains: the marker goes); at a launch (account.ts reconcile) the shared stores of the account being left are wiped regardless of this answer and the marker stays. Idempotent: with the key already gone it only runs the Swift wipe again.
                 reply.send(["done": op == "wipe" || !CredentialReader().keyRemains()])
             }
+            return
+        }
+        if let op = op, op.hasPrefix("take") {
+            Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return
         }
         reply.send(call(request))
