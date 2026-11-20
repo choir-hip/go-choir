@@ -154,5 +154,5 @@ func unreadRefusal(n int) string {
 // of its run is still running: that one's pages are not yet known, so this one
 // cannot be judged by them. It returns at once; the cell is never held.
 func runningRefusal(id string) string {
-	return fmt.Sprintf("a search of this run is still running (%s), so this one cannot be judged by the pages it will return. Wait for it (choir.SearchWait(%q, ms)), read what it returns, then search again for what is still missing, naming it. To send this search now anyway, pass fresh: choir.Search(query, true)", id, id)
+	return fmt.Sprintf("a search of this run is still running (%s), so this one cannot be judged by the pages it will return. Wait for it (choir.SearchWait(%q, 15000)), read what it returns, then search again for what is still missing, naming it. To send this search now anyway, pass fresh: choir.Search(query, true)", id, id)
 }

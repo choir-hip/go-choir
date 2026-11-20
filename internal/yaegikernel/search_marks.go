@@ -231,9 +231,9 @@ func searchUsable(c *Search) bool {
 
 // reuseSearch answers query from an earlier search of this run with the same
 // terms (searchquery.Key), started within the window (10 minutes for news,
-// else 30), with no host call. A match still running is waited on (at most as
-// long as choir.Search waits) and then answered from if it did not fail or
-// come back empty. The answer names the search, its age and "fresh", the
+// else 30), with no host call. startSearch refuses a match still running before it gets here (the running
+// rule answers first); one that is waited on here (a caller without that rule)
+// is answered from if it did not fail or come back empty. The answer names the search, its age and "fresh", the
 // argument that sends the search anyway.
 func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
 	if s == nil || s.searches == nil {
