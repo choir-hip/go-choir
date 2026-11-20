@@ -204,6 +204,8 @@ LEFT=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/de
 # story reads; the radio offers to read the public paper; Settings > Account has a Sign in button. Nothing here needs the owner's computer.
 export NOKEY=1
 step "clock data"; wait_ 6000
+# the account card is answered in REAL time (the key read, the host fact): give the first screen several settle steps before it is read
+wait_ 6000; wait_ 6000; wait_ 6000
 view real-50-so-first-screen 2500
 place paper 2500; view real-51-so-paper 3500
 [ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-52-so-story 4000; }
