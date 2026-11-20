@@ -72,7 +72,7 @@ Whether they cost joins in the 50 is not measured.
    asks corpusd for the nearest captures "by the captures' stored vectors, no
    embedder"; a capture not yet embedded returns nothing and is counted in
    `missing_unembedded`. A flush runs one minute after the first queued capture
-   (`eventFlushInterval = 60s`, line 40; timer at 1157-1166). In the span above
+   (`eventFlushInterval = 60s`, line 40; timer at 1159). In the span above
    78% of questions had no vector neighbours. Such a question is offered only
    the 30 newest events (`eventShortlistRecent`, line 48; slot built in
    `eventShortlist`, line 828, within `eventRecentHorizon` of 72 h, line 70).
@@ -80,7 +80,7 @@ Whether they cost joins in the 50 is not measured.
    `eventShortlistFor` (lines 501-530) a neighbour whose capture has no
    membership (`idx.byCapture[nid]` empty) is skipped and counted as
    `vector_unmapped`. Corpusd returns 12 nearest captures (`eventNeighbourLimit`,
-   line 55) and at most 3 distinct events are kept (`eventShortlistVector`,
+   line 59) and at most 3 distinct events are kept (`eventShortlistVector`,
    line 55); most held captures predate the event layer and belong to no event
    (1,074 unmapped neighbours in the span).
 3. **Captures in one flush see each other only as sibling answers, and a
