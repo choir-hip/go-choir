@@ -131,3 +131,23 @@ So a deploy that lands during a capture reaches the paper up to an hour
 late, and the copy needs the store's size free on the host: 47 GiB today
 with 141 GiB free before it. The space returned: the hourly reading at
 09:36Z has 134.2 GiB free and the image at 51.6 GiB.
+
+## Update 2026-11-20: the same step, 48 GiB, and how close it came to the floor
+
+At about 00:03Z on 2026-11-20 the paper took a store snapshot ("snapshot at
+head 13079421: 51391889408 bytes ... in 1h22m51s", logged 01:25:27Z). The
+image went from 52.6 GiB to 100.9 GiB and host free space from 120 GiB
+(00:00Z) to 72 GiB (00:15Z), where it stayed for the 83 minutes of the
+upload; the controller logged 20 failed health checks from 00:02Z to
+00:18Z and no restart. The growth ledger shows seven such steps in four
+days (the one before: 07:00Z to 09:00Z on 2026-11-19, 51 GiB to 98 GiB and
+back).
+
+What this adds: the copy is the size of the store (51 GiB now and
+growing) and is held for the whole upload, so a capture needs the store's
+size free on the host for over an hour. At 76 GiB free, a second capture
+before the first is trimmed, or the store growing another 16 GiB, breaches
+the 60 GiB floor. What schedules a capture is still not read. Whether the
+deploy gate defers while a capture is in flight is not read. The fix is
+structural (stream the pages without a scratch copy, or copy only changed
+pages) and is not designed.
