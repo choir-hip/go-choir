@@ -121,7 +121,7 @@ component Btn
 //     a choice in a set        the chosen word at full strength with a short accent rule under it, the others muted (ChoiceWord, SegmentFace)
 //     an action                a text action in the accent colour, weight 600 (Btn, not primary), or a row with a chevron (ListRow)
 //     THE action of a flow step a flat full-width block, the accent fill, radius 4 to 6 (Btn, primary), ONLY on the flow pages (onboarding, the voice step:
-//                              the page's whole job is the one action); everywhere else an action is an accent text action. A Kit test keeps this.
+//                              the page's whole job is the one action); everywhere else an action is an accent text action. The bun test contract-design-rules.test.ts (R7) keeps this.
 //   Lists: a list that is the page is a PlainList of LineRows on the page's own left edge (Podcasts); a list among other things is a ListGroup of ListRows.
 //   Text: at most three sizes in a card or a row; one accent use per list row (the others muted).
 //     an icon control          the icon alone with a caption under it; on is the accent, off is muted: no ring, no circle (the bar)

@@ -293,7 +293,7 @@ chk "signed out: the paper lists public stories" '\[paper-story-/pub/' "$SO"
 [ -n "$STORY1" ] && chk "signed out: a story reads" '\[reader-block-' "$SO"
 chk "signed out: the radio offers the public paper" '\[radio-play-public\]' "$SO"
 # public playback was STARTED: the now-playing line names one of the public stories listed on the radio page
-T0=$(grep -m1 -A1 '\[radio-public-play-0\]' "$SO" | grep -o 'Text#[0-9]* "[^"]*"' | head -1 | sed -E 's/^Text#[0-9]+ "//; s/"$//' | cut -c1-24)
+T0=$(awk '/\[radio-public-play-0\]/{f=1} f && /Text#[0-9]+ "/{print; exit}' "$SO" | grep -o 'Text#[0-9]* "[^"]*"' | head -1 | sed -E 's/^Text#[0-9]+ "//; s/"$//' | cut -c1-24)
 if [ -n "$T0" ] && grep -E 'NOW PLAYING|Now playing,' "$SO" | grep -qF "$T0"; then echo "ok: signed out: public playback started (now playing: a public story)"; else echo "MISSING: signed out: public playback started (title '$T0')"; FAILS="$FAILS [public playback]"; fi
 # the tree a screenshot was taken of: the lines between the previous screenshot line and this one
 seg() { awk -v m="$1" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$SO"; }

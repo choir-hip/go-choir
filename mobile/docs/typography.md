@@ -2,7 +2,7 @@
 
 Owner: "We need to have more typography and use typography to signify what's the difference between static text and a button and a headline. Typography is too same same, sans serif."
 
-The face tells the reader what a piece of text is. Serif is for things you read; sans is for things that are about the page or that you press. The weight then separates the two sans roles. Faces are the iOS system's: New York (`ui-serif`), the system sans (`system-ui`, or `ui-rounded` for a theme that asks for it), `ui-monospace`. No font files. Contracts name a role token (`th.fontHead` and the rest), never a face; the roles are fixed and a theme no longer chooses the serif or the sans (it may still choose the rounded sans). `tests: TypographyRulesTests`.
+The face tells the reader what a piece of text is. Serif is for things you read; sans is for things that are about the page or that you press. The weight then separates the two sans roles. Faces are the iOS system's: New York (`ui-serif`), the system sans (`system-ui`, or `ui-rounded` for a theme that asks for it), `ui-monospace`. No font files. Contracts name a role token (`th.fontHead` and the rest), never a face; the roles are fixed and a theme no longer chooses the serif or the sans (it may still choose the rounded sans). `tests: mobile/AutoradioLab/contract-typography-rules.test.ts`.
 
 Sizes are system text styles (`font-size="-exact-footnote"`), which follow Dynamic Type. A size that comes from data (a story's headline size, the theme scale) goes through `dyn(px)` (rem, which iOS scales from the body size; at the default setting it is the same number of points).
 

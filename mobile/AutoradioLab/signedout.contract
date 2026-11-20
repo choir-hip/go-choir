@@ -17,4 +17,4 @@ component SignedOutBanner
         text acs.message testId="signedout-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-height=1.3 line-clamp=2 flex=1 min-width=0
         if acs.action == "signIn"
           button press=signIn testId="signedout-signin" appearance="none" flex-shrink=0 aria-label="Sign in"
-            Btn(label="Sign in", primary=true, wide=false)
+            Btn(label="Sign in", primary=false, wide=false)

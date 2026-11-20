@@ -373,7 +373,7 @@ component AccountScreen
         // Signed out (or refused): the way in is HERE, where it says "Signed in: No". A locked phone has none (it says to unlock).
         if acs.action == "signIn"
           button press=signIn testId="settings-signin" appearance="none"
-            ActionButton(label="Sign in", testId="settings-signin-box", primary=true, danger=false)
+            ActionButton(label="Sign in", testId="settings-signin-box", primary=false, danger=false)
         // one Sign in and one Sign out, worded so they do not contradict: a refused phone signs in again, or clears its stored key (sign-out is local first: it removes the key and this phone's data)
         if au.signedIn
           button press=signOut testId="settings-signout" appearance="none"
