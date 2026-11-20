@@ -148,8 +148,5 @@ extension AutoradioModule {
             signals.record(SignalEvent(kind: args["kind"] as? String ?? "", subject: args["subject"] as? String ?? "", detail: args["detail"] as? String ?? ""))
             touch(["signalList"]); reply(pageList())
         }
-        handle("demoSet") { [unowned self] args, reply in
-            Demo.setOn((args["on"] as? String ?? "") == "true"); touch(["demoInfo"]); reply(pageList())
-        }
     }
 }

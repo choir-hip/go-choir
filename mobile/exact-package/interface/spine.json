@@ -327,13 +327,6 @@
     "detail": "string"
    },
    "answers": "PageList"
-  },
-  {
-   "send": "demoSet",
-   "options": {
-    "on": "string"
-   },
-   "answers": "PageList"
   }
  ]
 }

@@ -554,7 +554,9 @@ if it adds a name a child component must `inject`).
   `th.shadow1..3`, `th.material1..3`, `th.motionFastMs`, `th.springStiffness`... No component names a colour, a font or a radius.
   `Card(level, testId, minHeight)`, `Layer(testId)`, `Surface(level, radius, bleed)`, `PageScroll(id)` are in `ui.contract`.
 - **Demo mode** (`Demo.swift`, fixtures in `mobile/fixtures/demo/`): signed in as a demo listener, every request answered from fixtures,
-  no network, no microphone. On (simulator): `xcrun simctl spawn <udid> defaults write news.choir.autoradio.lab AutoradioDemo -bool YES`.
+  no network, no microphone. A proof aid for the simulator and the Mac only: on a physical phone it is never on, and a stored `AutoradioDemo`
+  flag there is removed (and the sample book and demo's open pages and signals, once). There is no control in the app for it. On (simulator):
+  `xcrun simctl spawn <udid> defaults write news.choir.autoradio.lab AutoradioDemo -bool YES`.
   A lane that needs a route adds a fixture file and one `case` in `DemoURLProtocol.route`; `scripts/embed-assets.py` embeds it.
 - `PageSource` (`Pages.swift`): `handles(address)` and `load(address) -> PageModel`; register in your `registerX()` with `pageSources.register(...)`
   (the most recently registered wins). `Signals` (`Signals.swift`): `signals.record(SignalEvent(kind:, subject:, detail:))`.
@@ -565,7 +567,7 @@ if it adds a name a child component must `inject`).
 Existing: `bar-stack`, `bar` (the glass lens), `bar-mark` (opens the launcher), `bar-field`, `bar-mic` (tap to talk, tap to send), `bar-send`, `bar-play`,
 `bar-text` (the now-playing line), `bar-progress`, `page-indicator`, `mark`, `page-deck` (the pan surface), `deck-slot-<address>`, `story-more`, `launcher`,
 `launcher-layer`, `launcher-open-<address>` (bring to the top), `launcher-close-<address>` (remove from the deck), `layer-scrim`, `place-<slug>`, `radio-page` (the Autoradio page, the first deck card), the Takes section (`radio-takes`, `takes-record`, `takes-stop`, `takes-review`, `takes-transcript`, `takes-publish`, `takes-mine-<n>`, `takes-muted-<n>`, `radio-take-mute`; tour `fixtures/tours/takes-record-publish.steps`, wire in `Choir/Takes.swift`), the notebook page (`notebook-page`, `notebook-line-<id>`, `notebook-score-<n>`, `notebook-behind`, `notebook-held-<n>`, `radio-notebook`, `place-notebook`; tour `fixtures/tours/notebook-page.steps`, wire in `Choir/Learning.swift`, model in `Notebook.swift`, fixtures `fixtures/learning/`), `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
-`settings-theme-<id>`, `settings-mode-<light|dark|system>`, `settings-demo`, `settings-components`, `page-title` (every page's heading), plus the
+`settings-theme-<id>`, `settings-mode-<light|dark|system>`, `settings-components`, `page-title` (every page's heading), plus the
 integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ...), unchanged. Keep an id or update `scripts/proof-sim.sh` in the same commit.
 
 ### File ownership (from the plan, section 6) and the one shared line
@@ -622,7 +624,7 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 
 ### Spine decisions a lane must know
 
-- Demo mode is a `defaults` flag (`AutoradioDemo`), signed in with a placeholder key; under the simulator's agent the engine is virtual, and the radio's
+- Demo mode is a `defaults` flag (`AutoradioDemo`) honoured on the simulator and the Mac only (never on a phone), signed in with a placeholder key; under the simulator's agent the engine is virtual, and the radio's
   buttons (`choirPlayPause`, `choirTalkDown`, `choirPlay`) start it virtually (`AutoradioModule+Spine.swift`). Speech recognition is not authorized
   in the proof, so a live turn has no transcript; the proof's turn uses the Lab's stub stages (scripted transcriber) through `inject`.
 - Sign-in is in demo mode skipped; the sign-in screen (`SignInScreen`, lane 8) shows when `au.signedIn == false`.

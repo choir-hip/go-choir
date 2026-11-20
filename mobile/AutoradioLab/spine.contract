@@ -2,7 +2,7 @@
 // a lane does not edit this file (its own members go in members-<lane>.contract). The page stack (open, close, jump, the
 // pager) is in members-stack.contract.
 use openPages, pageModel, theme, themeList, barState, demoInfo from "@choir/autoradio"
-use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord, demoSet from "@choir/autoradio"
+use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord from "@choir/autoradio"
 use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autoradio"
 use HostCaps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
@@ -54,8 +54,6 @@ members Autoradio
   action setMode(mode: string)
     send pm = schemeSet(mode=mode)
     setScheme(mode)
-  action setDemo(on: string)
-    send pm = demoSet(on=on)
   action record(kind: string, subject: string, detail: string)
     send pm = signalRecord(kind=kind, subject=subject, detail=detail)
 

@@ -186,7 +186,7 @@ final class TypographyRulesTests: XCTestCase {
             // Where the serif is the whole content and a chevron would be noise, named with the reason: the paper's story headlines (the front page is the
             // list; Play and Queue are Actions beside them), a block of a book (reading text; a tap places the voice), a file tile (its icon and card),
             // a topic row and the two demo toggles (their line under the title says "Tap to ...").
-            let exempt = ["paper-story-", "doc-block-", "files-row-", "ob-topic-", "settings-demo", "settings-dev-details"].contains { b.text.contains("testId=`\($0)") || b.text.contains("testId=\"\($0)") }
+            let exempt = ["paper-story-", "doc-block-", "files-row-", "ob-topic-", "settings-dev-details"].contains { b.text.contains("testId=`\($0)") || b.text.contains("testId=\"\($0)") }
             let objectCard = inner.contains { $0.text.hasPrefix("Card(") || $0.text.hasPrefix("CardFill(") || $0.text.hasPrefix("PaperCard(") }
             XCTAssertTrue(affordance || objectCard || exempt, "\(b.file):\(b.line) a button whose title is a Headline has no chevron or Action word: the serif alone does not say it is tappable")
         } }
