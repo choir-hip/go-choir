@@ -55,6 +55,34 @@ legacy_clean() {
 # ids found in a drive's tree dump: ids <file> <prefix>  -> every test id that starts with the prefix (one per line, in order)
 ids() { grep -o "\[$2[^]]*\]" "$1" 2>/dev/null | sed 's/^\[//; s/\]$//' | awk '!seen[$0]++'; }
 
+# Paper content is LIVE: the front page replaces its stories within minutes, and a tap on an id read from an earlier drive fails with "no view matches paper-story-..." (it did, in two lanes, in the read drive).
+# So no drive taps a story or a play button picked by another drive. fresh_paper <name> runs a short drive of its own (open the paper, read the tree) right before the drive that taps, and sets
+# F_STORY1, F_STORY2 (stories at the first card's depth that the server can resolve: a live front page sometimes holds one that answers 502 "failed to resolve publication", the server's, not the app's)
+# and F_PLAY (the first play button). The caller copies what it needs into its own names.
+# pick_stories <tree file> <how many>: the resolvable ids, in page order. (Only cards at the first card's depth: a card nested deeper sits in a smaller band, and a tap on one of those sometimes does
+# not press, which is a script risk, not an app one.)
+pick_stories() {
+  first_indent=$(grep -m1 '\[paper-story-/pub/' "$1" | sed -E 's/^( *).*/\1/' | awk '{ print length($0) }')
+  [ -n "$first_indent" ] || return 0
+  n=0
+  for id in $(awk -v n="$first_indent" '/\[paper-story-\/pub\// { match($0, /^ */); if (RLENGTH == n) { match($0, /\[paper-story-[^]]*\]/); id = substr($0, RSTART + 1, RLENGTH - 2); if (!seen[id]++) print id } }' "$1" | head -8); do
+    [ "$n" -lt "$2" ] || break
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://choir.news/api/platform/publications/resolve?route=${id#paper-story-}")
+    [ "$code" = 200 ] && { echo "$id"; n=$((n + 1)); }
+  done
+}
+fresh_paper() {
+  step "clock data"; wait_ 6000
+  place paper 2500
+  step tree
+  run_drive "$1" light "" --touch platform
+  F_STORY1=""; F_STORY2=""
+  PICKED=$(pick_stories "$SHOTS/drive-$1.txt" 2)
+  F_STORY1=$(echo "$PICKED" | sed -n 1p); F_STORY2=$(echo "$PICKED" | sed -n 2p)
+  F_PLAY=$(ids "$SHOTS/drive-$1.txt" "paper-play-" | sed -n 1p)
+  [ -n "$F_STORY1" ] || echo "note: no top-band story resolved just before the $1 drive (staging answered non-200 for each, or the page drew none); its reader steps are skipped (docs/problems/staging-resolve-502-on-a-live-story-2026-11-19.md)"
+}
+
 # ---- 1. new decoders' tests (the whole package, the generators and the wiring greps run in scripts/check-all.sh, which needs no simulator; the lead runs it before a landing)
 export EXACT_SIM="${EXACT_SIM:-$("$HERE/sim-device.sh")}"
 [ -n "$EXACT_SIM" ] || fail "simulator" "no simulator"
@@ -130,21 +158,9 @@ MIGRATED_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/theme-choice.json 
 ls "$CHK"/Library/Caches/exact/*/agent/*/data/themes/ "$CHK"/Library/Application\ Support/exact/*/data/themes/ 2>/dev/null > "$SHOTS/migrated-themes-dir.txt"
 legacy_clean
 
-# The stories tapped must be ones the server can resolve (a live front page sometimes holds one that answers 502 "failed to resolve publication": that is the server's, not the app's).
-RESOLVABLE=""
-# (Only cards at the first card's depth: a card nested deeper sits in a smaller band, and a tap on one of those sometimes does not press, which is a script risk, not an app one.)
-FIRST_INDENT=$(grep -m1 '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" | sed -E 's/^( *).*/\1/' | awk '{ print length($0) }')
-SHALLOW=$(awk -v n="$FIRST_INDENT" '/\[paper-story-\/pub\// { match($0, /^ */); if (RLENGTH == n) { match($0, /\[paper-story-[^]]*\]/); id = substr($0, RSTART + 1, RLENGTH - 2); if (!seen[id]++) print id } }' "$SHOTS/drive-survey.txt")
-for id in $(echo "$SHALLOW" | head -8); do
-  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://choir.news/api/platform/publications/resolve?route=${id#paper-story-}")
-  [ "$code" = 200 ] && RESOLVABLE="$RESOLVABLE $id"
-done
 # Fail loudly rather than quietly tour nothing: no story card at all means the paper page did not draw, which the tour must not pass over.
 grep -q '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" || fail "survey" "no paper-story- line in the survey tree: the paper page showed no story card"
-[ -n "$RESOLVABLE" ] || echo "note: no top-band story resolved on the server (staging answered non-200 for each); the reader steps are skipped (docs/problems/staging-resolve-502-on-a-live-story-2026-11-19.md)"
-STORY1=$(echo $RESOLVABLE | tr ' ' '\n' | sed -n 1p)
-STORY2=$(echo $RESOLVABLE | tr ' ' '\n' | sed -n 2p)
-PLAY1=$(ids "$SHOTS/drive-survey.txt" "paper-play-" | sed -n 1p)
+# (Stories and the play button are NOT taken from the survey: it is minutes old by the time they are tapped. Each drive that taps paper content picks it fresh: fresh_paper.)
 DOC1=$(ids "$SHOTS/drive-survey.txt" "textures-doc-" | sed -n 3p)
 # a document by its title: the id of the row whose card holds the title text (the tree lists the row, then its texts)
 docid() { awk -v t="$2" '/\[textures-doc-texture:/ { match($0, /\[textures-doc-texture:[^]]*\]/); id=substr($0, RSTART+1, RLENGTH-2) } index($0, "\"" t "\"") && id != "" { print id; exit }' "$1"; }
@@ -156,13 +172,16 @@ MAIL1=$(ids "$SHOTS/drive-survey.txt" "mail-row-" | sed -n 1p)
 FILE1=$(ids "$SHOTS/drive-survey.txt" "files-row-" | grep -iE '\.(csv|tsv|png|jpe?g|gif)$' | sed -n 1p)
 POD1=$(ids "$SHOTS/drive-survey.txt" "podcast-row-" | sed -n 1p)
 THEME_DOC=${THEME_ROW#textures-doc-texture:}
-echo "picked: file=${FILE1:+yes} podcast=${POD1:+yes} theme=${THEME_DOC:+yes} big=${BIG_ROW:+yes} story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes} doc=${DOC1:+yes} dir=${DIR1:+yes} mail=${MAIL1:+yes}"
+echo "picked: file=${FILE1:+yes} podcast=${POD1:+yes} theme=${THEME_DOC:+yes} big=${BIG_ROW:+yes} doc=${DOC1:+yes} dir=${DIR1:+yes} mail=${MAIL1:+yes}"
 
 # Rows of the live front page sit wherever today's page puts them, and the bar's text field can cover one. Before a row is tapped the
 # list is dragged back to its top (twice, so a long page is covered), where the first card is clear of the bar; the second card's title sits under the bar there, so its tap scrolls it up first.
 to_top() { step "tap paper-scroll drag 0 700"; wait_ 400; step "tap paper-scroll drag 0 700"; wait_ 600; }
 
 # ---- 3b. READ drive: two real stories in the reader, one played, one Texture, a folder, a message
+fresh_paper pick-read
+STORY1=$F_STORY1; STORY2=$F_STORY2; PLAY1=$F_PLAY
+echo "picked (just before the read drive): story1=${STORY1:+yes} story2=${STORY2:+yes} play=${PLAY1:+yes}"
 step "clock data"; wait_ 6000
 place paper 2500
 [ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-11-story-1 4000; step "tap reader-scroll drag 0 -600"; view real-12-story-1-scrolled 900; step "tap reader-scroll drag 0 -900"; view real-13-story-1-more 900; }
@@ -235,10 +254,12 @@ run_drive tour light "" --touch platform
 
 # ---- 3f2. SPINE drive (local UI only, nothing is written to the computer): the bar, the launcher and its deck, the default themes and the mode switch.
 # Ported from the demo-mode proofs (proof-sim, proof-lane1, proof-lane4, proof-lane7, proof-default-themes, proof-app), which are deleted with demo mode.
+fresh_paper pick-spine
+STORY_SPINE=$F_STORY1
 step "clock data"; wait_ 5000
 view real-60-bar 800
 place paper 2500
-[ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; wait_ 3500; }
+[ -n "$STORY_SPINE" ] && { to_top; step "tap \"$STORY_SPINE\""; wait_ 3500; }
 step "tap bar-mark"; wait_ 900; step tree; shot real-61-launcher
 step "tap \"launcher-open-paper:front\""; wait_ 900
 place settings 900; step "tap settings-nav-appearance"; wait_ 600
@@ -271,6 +292,8 @@ LEFT=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/de
 # ---- 3h. SIGNED-OUT TOUR (the drill above left the Keychain empty): launch with no key. The first screen (the radio) says what is true and offers the one way in; the paper lists the public stories and a
 # story reads; the radio offers to read the public paper; Settings > Account has a Sign in button. Nothing here needs the owner's computer.
 export NOKEY=1
+fresh_paper pick-signedout
+STORY_SO=$F_STORY1
 step "clock data"; wait_ 6000
 # the account card is answered in REAL time (the key read, the host fact): give the first screen several settle steps before it is read
 wait_ 6000; wait_ 6000; wait_ 6000
@@ -278,7 +301,7 @@ view real-50-so-first-screen 2500
 place paper 2500; view real-51-so-paper 3500
 # the end of the page clears the card: the last row is readable above it (read the screenshot)
 for i in 1 2 3 4 5 6; do step "tap paper-scroll drag 0 -1500"; wait_ 300; done; view real-51b-so-paper-end 900; for i in 1 2 3 4 5 6; do step "tap paper-scroll drag 0 1500"; wait_ 300; done
-[ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-52-so-story 4000; step "tap reader-menu"; wait_ 900; place radio 1500; view real-52b-so-after-sheet 2500; }
+[ -n "$STORY_SO" ] && { to_top; step "tap \"$STORY_SO\""; view real-52-so-story 4000; step "tap reader-menu"; wait_ 900; place radio 1500; view real-52b-so-after-sheet 2500; }
 place radio 1500; view real-53-so-radio 2500
 step "tap radio-play-public"; wait_ 6000; step tree; shot real-53b-so-playing
 place settings 900; step "tap settings-nav-account"; view real-54-so-account 3000
@@ -389,7 +412,7 @@ chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO1"
 chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO1"
 chk "signed out: the radio says what it is" 'This is the public paper. Sign in to hear your own programme.' "$SO"
 chk "signed out: the paper lists public stories" '\[paper-story-/pub/' "$SO"
-[ -n "$STORY1" ] && chk "signed out: a story reads" '\[reader-block-' "$SO"
+[ -n "$STORY_SO" ] && chk "signed out: a story reads" '\[reader-block-' "$SO"
 chk "signed out: the radio offers the public paper" '\[radio-play-public\]' "$SO"
 # public playback was STARTED: the now-playing line names one of the public stories listed on the radio page
 T0=$(awk '/\[radio-public-play-0\]/{f=1} f && /Text#[0-9]+ "/{print; exit}' "$SO" | grep -o 'Text#[0-9]* "[^"]*"' | head -1 | sed -E 's/^Text#[0-9]+ "//; s/"$//' | cut -c1-24)
@@ -400,7 +423,7 @@ seg real-51b-so-paper-end > "$SHOTS/seg-paper-end.txt"; seg real-52b-so-after-sh
 chk "signed out: the end of the paper shows its last line (the count)" 'stories . pull down to refresh' "$SHOTS/seg-paper-end.txt"
 chk "signed out: the card is there at the end of the paper" '\[signedout-banner\]' "$SHOTS/seg-paper-end.txt"
 # the reader's menu sheet left open must not hide the card on the next page
-if [ -n "$STORY1" ]; then chk "signed out: after a reader sheet the next page still has the card" '\[signedout-banner\]' "$SHOTS/seg-after-sheet.txt"; fi
+if [ -n "$STORY_SO" ]; then chk "signed out: after a reader sheet the next page still has the card" '\[signedout-banner\]' "$SHOTS/seg-after-sheet.txt"; fi
 # the card is the first child of the bar's own column, before the bar (so it sits whole above the bar at any bar height, the now-playing strip included). The tree dump carries no frames, so this is
 # the structure, not a measured bottom edge; the screenshots are where the placement is read.
 PLACED=$(awk '/\[bar-stack\]/{st=1;bar=0;next} /\[bar\]/{bar=1} /\[signedout-banner\]/{if(st&&!bar)ok++;else bad++} END{print (ok+0)","(bad+0)}' "$SO")
@@ -424,4 +447,5 @@ n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 echo "ok: screenshots in $SHOTS ($n)"
 if grep -q 'ERROR\|Fatal error' "$OUT"; then echo "note: errors in the app log:"; grep -m8 'ERROR\|Fatal error' "$OUT" | sed -E 's/choir_sk_[^[:space:]"'"'"'<>]+/<key>/g' | cut -c1-240; fi
 [ -z "$FAILS" ] || fail "checks:$FAILS"
+[ -s "$SHOTS/retries.txt" ] && { echo "note: $(wc -l < "$SHOTS/retries.txt" | tr -d ' ') drive(s) were run again after the dispatch-log timeout (retry: lines above):"; cat "$SHOTS/retries.txt"; }
 echo "PROOF OK"

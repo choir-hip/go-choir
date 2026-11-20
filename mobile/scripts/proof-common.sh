@@ -20,16 +20,16 @@ step() { printf '%s\n' "$1" >> "$STEPS"; }
 wait_() { step "clock +${1:-700} real"; step "clock data"; }
 shot() { step "screenshot $SHOTS/$1.png"; }
 view() { wait_ "${2:-800}"; step tree; shot "$1"; }   # settle, dump the tree, screenshot <name>
-place() { step "tap bar-mark"; wait_ 600; step "tap place-$1"; wait_ "${2:-900}"; }
+place() { step "clock settle"; step "tap bar-mark"; wait_ 600; step "clock settle"; step "tap place-$1"; wait_ "${2:-900}"; }
 # Put the app in the default theme, light, by its own Settings controls (the proof never trusts what an earlier run left).
 ensure_light() { place settings 900; step "tap settings-theme-default"; wait_ 500; step "tap settings-mode-light"; wait_ 700; }
-goto() { step "tap bar-mark"; wait_ 600; step "tap \"launcher-open-$1\""; wait_ 900; }
+goto() { step "clock settle"; step "tap bar-mark"; wait_ 600; step "clock settle"; step "tap \"launcher-open-$1\""; wait_ 900; }
 
 # run_drive <name> <mode> <onboarding?> <agent flags...>: reset, run the collected steps, retry a refused launch up to 3 times.
 run_drive() {
   name="$1"; mode="$2"; ob="$3"; shift 3
   cp "$STEPS" "$SCRATCH/steps.$name"
-  attempt=1
+  attempt=1; relaunched=0
   while :; do
     reset_state "$mode" "$ob"
     set -f; OLDIFS="$IFS"; IFS='
@@ -40,6 +40,15 @@ run_drive() {
     IFS="$OLDIFS"; set +f
     if grep -q "never opened its agent socket\|not foreground-active\|before opening its agent socket\|the app hung up" "$SCRATCH/$name.txt" && [ $attempt -lt 3 ]; then
       attempt=$((attempt + 1)); echo "launch refused, retry $attempt"; SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 5; continue
+    fi
+    # The dispatch log did not answer within 1 s of a real touch (the app's main thread was busy: Exact's touches.mjs, "realTap" barrier). Exact stops the app's carrier and the touch runner, so the one tap
+    # cannot be played again in the same drive: the drive is run again from a clean app, once, and the retry is logged and counted ("retry: <op>", and in the summary). A second timeout fails.
+    if [ $rc -ne 0 ] && [ $relaunched -eq 0 ] && grep -q "the dispatch log did not answer within 1 s of the touch" "$SCRATCH/$name.txt"; then
+      relaunched=1
+      op=$(grep -o 'op [0-9]*/[0-9]* `[^`]*`' "$SCRATCH/$name.txt" | head -1)
+      echo "retry: $name drive, $op"
+      echo "$name: $op" >> "$SHOTS/retries.txt"
+      SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 5; continue
     fi
     break
   done
