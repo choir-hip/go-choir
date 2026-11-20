@@ -86,7 +86,7 @@ account's own list from the server. The cost is the same as stated above
 and a little wider: an account with no live take (never published, or all
 deleted or withdrawn) does not carry its old mutes.
 
-## The changed approach was sent back too; the lane is stopped for the owner (2026-11-20T20:18Z)
+## The changed approach was sent back too; the lane is stopped for the owner (2026-11-20T20:17Z)
 
 Lane `exact-takes`, last commit `c534f89c0`. Nothing of it is on main. Claim
 C180 (this review accepts, p 0.5) settled false. Review in the session
