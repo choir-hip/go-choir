@@ -175,7 +175,8 @@ def parse_console(text):
                 v = kv.get(k, "")
                 return int(v) if v.isdigit() else None
             ev.append({"k": "rb", "t": t, "run": m.group(2), "desk": m.group(3), "outcome": kv.get("outcome", "?"),
-                       "ms": bnum("ms"), "captures": bnum("captures"), "tokens": bnum("tokens_est")})
+                       "ms": bnum("ms"), "captures": bnum("captures"), "tokens": bnum("tokens_est"),
+                       "from": kv.get("objective_from", "")})
             continue
         m = EF_RE.search(ln)
         if m:
@@ -283,7 +284,8 @@ def metrics(sr, cs_all, rd_all, gw, rb_all=(), ef_all=()):
     r["brief"] = None if not rb_all else {
         "n": len(rb_all), "outcomes": outs, "ms_median": med([e["ms"] for e in rb_all if e["ms"] is not None]),
         "captures_median": med([e["captures"] for e in rb_all if e["captures"] is not None]),
-        "tokens_est_median": med([e["tokens"] for e in rb_all if e["tokens"] is not None])}
+        "tokens_est_median": med([e["tokens"] for e in rb_all if e["tokens"] is not None]),
+        "objective_from": {k: sum(1 for e in rb_all if e.get("from") == k) for k in sorted({e.get("from") for e in rb_all if e.get("from")})}}
     r["gateway_web_searches"] = None if gw is None else len(gw)
     r["event_flush"] = None
     if ef_all:
@@ -434,6 +436,8 @@ def render(r):
         o.append("research briefs: %d (%s); median ms %s, captures %s, tokens_est %s" % (
             b["n"], ", ".join("%s %d" % kv for kv in sorted(b["outcomes"].items())),
             fmt(b["ms_median"]), fmt(b["captures_median"]), fmt(b["tokens_est_median"])))
+        if b.get("objective_from"):
+            o.append("  objective from: %s" % ", ".join("%s %d" % kv for kv in sorted(b["objective_from"].items())))
     f = m["event_flush"]
     if f:
         o.append("event layer: %d flushes, %d questions asked (%d from research's reads), %d Jev calls; joined %d, minted %d (%s of the questions), tentative %d, unresolved %d"
