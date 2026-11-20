@@ -107,9 +107,11 @@ research agent's cursor on its own inbox moves when a run reads, so a later
 run of the same agent starts with the Cast already read and nothing unread.
 That is the likely shape of the skips (the console carries no origin line and
 the saved extract has no wake lines, so the count of later runs among the 51 is
-not seen). The fix takes the objective from the conversation's most recent
-earlier record, else from the open work item the run is assigned, and the brief
-line says which (`objective_from=`).
+not seen). The fix takes the objective from the open work item the run is
+assigned (of this computer), else from the conversation's most recent earlier
+record while its round is still open (an answered round's Cast is not briefed
+again), and the brief line says which (`objective_from=`); the brief text names
+the source too, so a fallback is not read as the run's own prompt.
 
 The 8 s cuts: the brief's own searches took a median 5.6 s and a ninth decile
 8.0 s (110 lines, `caller=brief`) against 1.5 s and 5.2 s for a desk's own

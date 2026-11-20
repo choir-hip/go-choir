@@ -409,5 +409,5 @@ error: the window crosses a second refresh at 06:16Z (the faster corpus
 search), two dozen runs is a small sample, and whether the stories the runs
 wrote stood on held pages more often was not read. What would tell: the
 same read over a full day, and the calibration experiment's model arms.
-The brief costs one corpus search of up to six threads a run and no web
+The brief costs one corpus search of up to three threads a run and no web
 search; it stays.

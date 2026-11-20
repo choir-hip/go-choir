@@ -183,7 +183,7 @@ func TestBriefOverTheTokenBoundDropsWholeThreadsFromTheLastAndNamesThem(t *testi
 		t.Fatalf("brief is %d estimated tokens, bound %d", res.tokens, researchBriefMaxTokens)
 	}
 	if len(res.dropped) == 0 {
-		t.Fatal("six threads of six long passages fit the bound; the test no longer exercises it")
+		t.Fatal("a plan of six threads (more than a real plan keeps; the builder does not cap) of six long passages fits the bound; the test no longer exercises it")
 	}
 	if !strings.Contains(res.text, "choir.SearchWireCorpus") || !strings.Contains(res.text, "Hypothesis 5") {
 		t.Fatalf("the dropped threads are not named with the verb that reads them:\n%s", res.text)
@@ -985,7 +985,7 @@ func TestBriefAThreadTheDeadlineCutDidNotAnswer(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-	// Thread 1 answered with nothing; threads 2 to 6 had not returned when the deadline passed.
+	// Thread 1 answered with nothing; threads 2 to 6 (a six-thread plan built directly) had not returned when the deadline passed.
 	if res.outcome != briefEmpty || res.unanswered != 5 || res.reason == "" {
 		t.Fatalf("outcome=%q unanswered=%d reason=%q", res.outcome, res.unanswered, res.reason)
 	}
@@ -1119,7 +1119,7 @@ func briefOverRealTool(t *testing.T, sink researchtools.CaptureSink, plan briefP
 	return buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
 }
 
-// A thread past the sixth was never searched: it is named, and counted in left.
+// A thread in plan.left was never searched: it is named, and counted in left.
 func TestBriefNamesLeftOutThreadsAndCountsThemAsGaps(t *testing.T) {
 	plan := planN(2)
 	plan.left = []briefThread{{Kind: "question", Text: "never searched"}}
@@ -1416,8 +1416,9 @@ func TestBriefAStoryWithNoAddressPrintsNone(t *testing.T) {
 // --- round 7: the threads are searched at once ---
 
 // A search that takes about two seconds on the paper (problem record
-// corpus-search-takes-two-seconds-on-the-paper-2026-11-19) cannot be called six
-// times in turn under 8 s. The threads' searches run at the same time.
+// corpus-search-takes-two-seconds-on-the-paper-2026-11-19) cannot be called
+// several times in turn under 8 s (a plan keeps three threads; the builder is
+// tested here with six, which it does not cap). The threads' searches run at the same time.
 func TestBriefSearchesTheThreadsAtOnce(t *testing.T) {
 	const sleep = 150 * time.Millisecond
 	var started atomic.Int64

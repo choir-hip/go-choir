@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -199,5 +200,112 @@ func TestBriefSearchesAtMostThreeThreadsAndNamesTheRest(t *testing.T) {
 	plan := researchBriefThreads([]types.CommitmentRecord{cast}, "")
 	if len(plan.threads) != 3 || len(plan.left) != 2 || plan.from != briefFromUnread {
 		t.Fatalf("threads=%d left=%d from=%q", len(plan.threads), len(plan.left), plan.from)
+	}
+}
+
+// Review follow-ups (docs/problems/web-searches-are-sent-without-asking-what-is-held-2026-11-19.md).
+//
+// Failure list, written before the code:
+//  10. a work item of another computer of the same owner, named by the run's
+//      metadata, is searched for the run;
+//  11. a fallback brief says "your objective" as if the run had written it,
+//      so the run cannot tell a record it did not write, or an item, from its
+//      own prompt;
+//  12. a later wake on a record with no objective is briefed with the Cast of
+//      a round that was already answered;
+//  13. a run that is assigned an open work item is briefed on the
+//      conversation's older Cast instead.
+
+func closeRoundOfDoc(t *testing.T, s *store.Store, owner, computer, doc, id string) {
+	t.Helper()
+	final := finalReportRecord("final-"+id, "research:"+doc, "texture:"+doc, time.Now())
+	if _, err := commitUnreadCast(t, s, owner, computer, "final-cmd-"+id, nil, final); err != nil {
+		t.Fatalf("close round: %v", err)
+	}
+}
+
+func TestBriefNeverUsesAWorkItemOfAnotherComputerOfTheSameOwner(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer, doc := "owner-obj-7", rt.cfg.ComputerID, "doc-obj-7"
+	other, err := s.CreateWorkItem(context.Background(), types.WorkItemRecord{OwnerID: owner, ComputerID: "another-computer", TrajectoryID: "traj-obj-7",
+		Objective: "Another computer's objective", AssignedAgentID: "research:" + doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := &briefProbe{result: briefResult(nil, 1)}
+	rt.researchBriefSearch = probe.search
+	rec := briefRunRecord(owner, computer, doc, "run-obj-7")
+	rec.Metadata = map[string]any{"work_item_ids": []string{other.WorkItemID}}
+	rt.researchBriefOpening(context.Background(), rec)
+	if len(probe.queries) != 0 {
+		t.Fatalf("queries = %v, want none: the item belongs to another computer", probe.queries)
+	}
+}
+
+func TestBriefNamesWhereTheObjectiveCameFromInTheText(t *testing.T) {
+	// unread: the run's own record, "your objective".
+	rt, s := testRuntime(t)
+	owner, computer, doc := "owner-obj-8", rt.cfg.ComputerID, "doc-obj-8"
+	seedNumberedCast(t, s, owner, computer, doc, "texture:"+doc, "obj8a", "Did the harbor strike end?")
+	rt.researchBriefSearch = (&briefProbe{result: briefResult(nil, 1)}).search
+	text := rt.researchBriefOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-obj-8")).openingText()
+	if !strings.Contains(text, "for your objective") || strings.Contains(text, "earlier record") || strings.Contains(text, "assigned work item") {
+		t.Fatalf("unread wording:\n%s", text)
+	}
+
+	// conversation: an earlier record of this conversation.
+	readThrough(t, s, owner, computer, doc, 0, 1)
+	text = rt.researchBriefOpening(context.Background(), briefRunRecord(owner, computer, doc, "run-obj-8b")).openingText()
+	if !strings.Contains(text, "an earlier record of this conversation") || strings.Contains(text, "for your objective") || !strings.Contains(text, "(objective of an earlier record of this conversation)") {
+		t.Fatalf("conversation wording:\n%s", text)
+	}
+
+	// assignment: the assigned work item.
+	rt2, s2 := testRuntime(t)
+	fixture := seedTextureLifecycleControl(t, s2, "owner-obj-8c", "obj8c", agentprofile.Research+":control-obj8c", agentprofile.Research)
+	rt2.researchBriefSearch = (&briefProbe{result: briefResult(nil, 1)}).search
+	rec := fixture.run
+	rec.State = types.RunRunning
+	text = rt2.researchBriefOpening(context.Background(), &rec).openingText()
+	if !strings.Contains(text, "your assigned work item") || strings.Contains(text, "for your objective") || !strings.Contains(text, "(objective of your assigned work item)") {
+		t.Fatalf("assignment wording:\n%s", text)
+	}
+}
+
+func TestBriefDoesNotBriefAnAnsweredRoundsCastOnALaterWake(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer, doc := "owner-obj-9", rt.cfg.ComputerID, "doc-obj-9"
+	seedNumberedCast(t, s, owner, computer, doc, "texture:"+doc, "obj9a", "Did the harbor strike end?")
+	readThrough(t, s, owner, computer, doc, 0, 1)
+	closeRoundOfDoc(t, s, owner, computer, doc, "obj9")
+	probe := &briefProbe{result: briefResult(nil, 1)}
+	rt.researchBriefSearch = probe.search
+	logs := briefCaptureLog(t)
+	rec := briefRunRecord(owner, computer, doc, "run-obj-9")
+	b := rt.researchBriefOpening(context.Background(), rec)
+	briefCommitFresh(t, rt, s, rec, b)
+	if len(probe.queries) != 0 || briefFromLine(logs.String()) != "none" {
+		t.Fatalf("queries=%v log=%s: the round was answered", probe.queries, logs.String())
+	}
+}
+
+func TestBriefPrefersTheRunsOpenAssignmentToTheConversationsCast(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner := "owner-obj-10"
+	fixture := seedTextureLifecycleControl(t, s, owner, "obj10", agentprofile.Research+":control-obj10", agentprofile.Research)
+	rec := fixture.run
+	rec.State = types.RunRunning
+	// The fixture's research agent is research:control-obj10; its conversation
+	// is with the document's Texture desk.
+	agent, computer := strings.TrimPrefix(rec.AgentID, "research:"), rec.ComputerID
+	seedNumberedCast(t, s, owner, computer, agent, "texture:"+rec.ChannelID, "obj10a", "An older question about ferries")
+	readThrough(t, s, owner, computer, agent, 0, 1)
+	probe := &briefProbe{result: briefResult(nil, 1)}
+	rt.researchBriefSearch = probe.search
+	logs := briefCaptureLog(t)
+	b := rt.researchBriefOpening(context.Background(), &rec)
+	briefCommitFresh(t, rt, s, &rec, b)
+	if len(probe.queries) != 1 || probe.queries[0] != "research obj10" || briefFromLine(logs.String()) != "assignment" {
+		t.Fatalf("queries=%v log=%s", probe.queries, logs.String())
 	}
 }
