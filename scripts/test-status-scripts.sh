@@ -689,6 +689,22 @@ L = [PRE + "2026/11/19 03:00:00 runtime: other\n",
  PRE + "2026/11/19 03:40:00 runtime: other\n"]
 open(root + "/cr_e.log", "w").write("".join(L))
 PY
+# R17: the measurement fields (Landing 0 of the one-verb note); the old lines above still parse
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+PRE = "[ 9.0] x-go-choir-run-autoputer-runtime[1]: "
+L = [PRE + "2026/11/20 03:00:00 runtime: other\n",
+ PRE + "2026/11/20 03:10:00 runtime: search run=f-1 desk=research started=9 from_held=1 not_sent=2 (search_running=2) search_all_calls=1 wordings_offered=4 wordings_sent=3 fresh_over_unread=0 untagged=0 wordings_running=2 pages_returned=200 pages_new=80 pages_read=10 searches_judged=9 searches_mostly_seen=4 outlets_held_max=7 outlets_held_last=6 reuse_declined_out_of_window=2 reuse_declined_earlier_run=1 resumed_segment=1\n",
+ PRE + "2026/11/20 03:11:00 runtime: search run=f-2 desk=research started=2 from_held=0 not_sent=0 pages_returned=20 pages_new=20 pages_read=1 searches_judged=2 searches_mostly_seen=0 outlets_held_max=2 outlets_held_last=2\n",
+ PRE + "2026/11/20 03:12:00 runtime: search run=f-3 desk=research started=1 from_held=0 not_sent=0 pages_returned=10 pages_new=5 pages_read=1\n",
+ PRE + "2026/11/20 03:40:00 runtime: other\n"]
+open(root + "/cr_f.log", "w").write("".join(L))
+PY
+runcorpus --fixture "$root/cr_f.log"
+check "R17 the measurement fields are summed over the lines that carry them (2 of 3): judged 11, mostly seen 4, running 2, resumed 1" 'grep -q "(2 lines carry the measurement fields) searches judged 11, mostly seen (75% or more already held) 4 (36.4%)" "$root/out" && grep -q "wordings refused as running 2; runs resumed after a restart (counts are one segment) 1" "$root/out"'
+check "R17 the reuse decline reasons are summed by token and the outlets are shown" 'grep -q "reuse declined a prior identical search, by reason: earlier_run=1, out_of_window=2" "$root/out" && grep -q "largest 7" "$root/out"'
+check "R17 the new fields are not listed as unknown numeric fields, and the older lines still count" '! grep -q "other numeric fields" "$root/out" && grep -q "summary lines): 3" "$root/out"'
 runcorpus --fixture "$root/cr_e.log"
 check "R16 6 searches refused by the need test, 4 sent: 60.0% of attempts" 'grep -q "refused by the need test (holds_unread, every verb) 6; web searches sent 4; refused share of attempts 60.0%" "$root/out"'
 check "R16 fresh_over_unread is read, summed and printed" 'grep -q "fresh_over_unread 1, untagged 0" "$root/out"'

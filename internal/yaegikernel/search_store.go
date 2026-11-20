@@ -218,6 +218,8 @@ type SearchStore struct {
 	// counted is what the host has been told (takeStats).
 	startedCounted int
 	counted        map[string][2]int
+	// judged is the searches whose share of already-held pages was counted.
+	judged map[string]bool
 }
 
 func newSearchStore() *SearchStore {
@@ -517,6 +519,8 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 			// ID is the running search's, so SearchWait(stub.ID, ...) works.
 			return SearchStub{ID: id, Query: query, Refused: why, Running: true}, nil
 		}
+	} else {
+		s.noteFreshOverMatch(query)
 	}
 	over := false
 	if gated {
@@ -532,10 +536,12 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 		}
 		over = override && len(held) >= searchEnoughUnread
 	}
+	outlets := s.searches.outletsHeld() // before the send: what the run held when it asked
 	var out SearchStartResult
 	if err := s.call(ActionSearchStart, SearchStartPayload{Query: query}, &out); err != nil {
 		return SearchStub{}, err
 	}
+	s.noteOutlets(outlets)
 	if over {
 		s.statsMu.Lock()
 		s.allStat.freshOverUnread++

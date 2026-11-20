@@ -113,6 +113,12 @@ type ChoirScope struct {
 	statsMu     sync.Mutex
 	heldStat    int
 	notSentStat map[string]int
+	// declineStat counts why in-run reuse declined a prior identical search
+	// (search_measure.go); outletsMax and outletsLast are the distinct outlets
+	// the run held at its sends in the cell.
+	declineStat map[string]int
+	outletsMax  int
+	outletsLast int
 	notes       []string
 	reuseQuiet  bool
 	// allStat counts SearchAll and the need test for the run summary.

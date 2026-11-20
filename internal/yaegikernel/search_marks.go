@@ -111,12 +111,25 @@ type SearchStats struct {
 	// of the run was still running. They are not in AllOffered: the call could
 	// not have sent them, so the sent share of AllOffered stays honest.
 	AllRunning int `json:"all_running,omitempty"`
+	// ReuseDeclined counts, by fixed token, why in-run reuse did not answer a
+	// search although the run had sent an identical one (search_measure.go);
+	// "fresh" counts searches sent over a match that would have answered.
+	ReuseDeclined map[string]int `json:"reuse_declined,omitempty"`
+	// SeenJudged counts finished searches of the run; SeenMostly those whose
+	// pages were 75% or more already held.
+	SeenJudged int `json:"seen_judged,omitempty"`
+	SeenMostly int `json:"seen_mostly,omitempty"`
+	// OutletsMax and OutletsLast are the distinct outlets (registrable
+	// domains) the run held at its sends: the most, and at the latest send.
+	OutletsMax  int `json:"outlets_max,omitempty"`
+	OutletsLast int `json:"outlets_last,omitempty"`
 }
 
 // IsZero reports whether nothing was counted.
 func (a SearchStats) IsZero() bool {
 	return a.Started == 0 && a.FromHeld == 0 && len(a.NotSent) == 0 && a.PagesReturned == 0 && a.PagesNew == 0 && a.PagesRead == 0 &&
-		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.FreshOverUnread == 0 && a.Untagged == 0 && a.AllRunning == 0
+		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.FreshOverUnread == 0 && a.Untagged == 0 && a.AllRunning == 0 &&
+		len(a.ReuseDeclined) == 0 && a.SeenJudged == 0 && a.SeenMostly == 0 && a.OutletsMax == 0 && a.OutletsLast == 0
 }
 
 // Add sums o into a.
@@ -132,6 +145,18 @@ func (a *SearchStats) Add(o SearchStats) {
 	a.FreshOverUnread += o.FreshOverUnread
 	a.Untagged += o.Untagged
 	a.AllRunning += o.AllRunning
+	a.SeenJudged += o.SeenJudged
+	a.SeenMostly += o.SeenMostly
+	a.OutletsMax = max(a.OutletsMax, o.OutletsMax)
+	if o.OutletsMax > 0 || o.OutletsLast > 0 {
+		a.OutletsLast = o.OutletsLast
+	}
+	for k, v := range o.ReuseDeclined {
+		if a.ReuseDeclined == nil {
+			a.ReuseDeclined = map[string]int{}
+		}
+		a.ReuseDeclined[k] += v
+	}
 	for k, v := range o.NotSent {
 		if a.NotSent == nil {
 			a.NotSent = map[string]int{}
@@ -164,6 +189,16 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 		out.PagesReturned += max(returned-prev[0], 0)
 		out.PagesNew += max(fresh-prev[1], 0)
 		st.counted[c.ID] = [2]int{returned, fresh}
+		if c.Done && returned > 0 && !st.judged[c.ID] {
+			if st.judged == nil {
+				st.judged = map[string]bool{}
+			}
+			st.judged[c.ID] = true
+			out.SeenJudged++
+			if c.HeldPages*100 >= seenMostlyPercent*returned {
+				out.SeenMostly++
+			}
+		}
 	}
 	st.mu.Unlock()
 	out.PagesRead = int(s.readStat.Swap(0))
@@ -172,6 +207,9 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 	out.NotSent, s.notSentStat = s.notSentStat, nil
 	out.AllCalls, out.AllOffered, out.AllSent, out.FreshOverUnread = s.allStat.calls, s.allStat.offered, s.allStat.sent, s.allStat.freshOverUnread
 	out.Untagged, out.AllRunning = s.allStat.untagged, s.allStat.running
+	out.ReuseDeclined, s.declineStat = s.declineStat, nil
+	out.OutletsMax, out.OutletsLast = s.outletsMax, s.outletsLast
+	s.outletsMax, s.outletsLast = 0, 0
 	s.allStat = allCounts{}
 	s.statsMu.Unlock()
 	if out.IsZero() {
@@ -234,38 +272,71 @@ func searchUsable(c *Search) bool {
 	return c.Answered > 0 && searchHasResults(c)
 }
 
-// reuseSearch answers query from a finished search of this run with the same
-// terms (searchquery.Key), started within the window (10 minutes for news,
-// else 30), with no host call and no wait. A match still running is not
-// answered from here: startSearch's running rule refuses it at once (or, once
-// it has run two minutes and is no longer waited for, the search is sent). One
-// that failed or came back empty is not reused. The answer names the search,
-// its age and "fresh", the argument that sends the search anyway.
-func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
-	if s == nil || s.searches == nil {
-		return SearchStub{}, false
-	}
-	st := s.searches
+// reuseVerdict finds the finished search of this run that answers query: the
+// same terms (searchquery.Key), started
+// within the window (10 minutes for news, else 30). reason is empty when one
+// was found or when nothing prior is identical; otherwise it is the fixed token
+// for why the latest prior identical search was not used: earlier_run,
+// key_mismatch, out_of_window, running, no_provider_answered, no_results,
+// unknown (unknown would be a bug: it matches every test and was still not
+// used).
+func (st *SearchStore) reuseVerdict(query string) (c Search, age time.Duration, reason string) {
 	key := searchquery.Key(query)
 	window := searchReuseWindow
 	if searchquery.IsTimeSensitive(query) {
 		window = searchReuseWindowNews
 	}
 	st.mu.Lock()
-	var c Search
-	var age time.Duration
-	found := false
+	defer st.mu.Unlock()
 	for i := len(st.order) - 1; i >= st.runStart; i-- {
 		cand := st.searches[st.order[i]]
 		d := st.nowTime().Sub(cand.startedAt)
 		if cand.key != key || d > window || !cand.Done || !searchUsable(cand) {
 			continue
 		}
-		c, age, found = copySearch(cand), d, true
-		break
+		return copySearch(cand), d, ""
 	}
-	st.mu.Unlock()
-	if !found {
+	// Nothing answers. Say why the latest prior identical search did not.
+	for i := len(st.order) - 1; i >= 0; i-- {
+		cand := st.searches[st.order[i]]
+		if cand.key != key && cand.Query != query {
+			continue
+		}
+		switch d := st.nowTime().Sub(cand.startedAt); {
+		case i < st.runStart:
+			reason = "earlier_run"
+		case cand.key != key:
+			reason = "key_mismatch"
+		case d > window:
+			reason = "out_of_window"
+		case !cand.Done:
+			reason = "running"
+		case cand.Answered == 0:
+			reason = "no_provider_answered"
+		case !searchHasResults(cand):
+			reason = "no_results"
+		default:
+			reason = "unknown"
+		}
+		return Search{}, 0, reason
+	}
+	return Search{}, 0, ""
+}
+
+// reuseSearch answers query from a finished search of this run that asked the
+// same terms (reuseVerdict), with no host call and no wait. A match still
+// running is not answered from here: startSearch's running rule refuses it at
+// once (or, once it has run two minutes and is no longer waited for, the
+// search is sent). One that failed or came back empty is not reused. The
+// answer names the search, its age and "fresh", the argument that sends the
+// search anyway.
+func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
+	if s == nil || s.searches == nil {
+		return SearchStub{}, false
+	}
+	c, age, reason := s.searches.reuseVerdict(query)
+	if c.ID == "" {
+		s.noteDeclined(reason)
 		return SearchStub{}, false
 	}
 	why := fmt.Sprintf("answered from your search %s, %s (same terms); send it anyway with fresh", c.ID, agoText(age))
