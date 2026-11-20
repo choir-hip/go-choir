@@ -110,6 +110,28 @@ The key must start with `choir_sk_`. Keys can also be created in the
 SettingsApp "API keys" section (full access unless narrowed under Advanced),
 or via `choir api-key create` if you already have a key.
 
+### Keys already on the lead's Mac
+
+An agent that needs to read a computer on staging usually has a key already.
+Look here before saying a read is refused (2026-11-20: an investigation of the
+paper's events stopped on a 401 because the paper's key had expired ten hours
+earlier, and the owner had to say "you have the key for the paper already").
+
+| What | File (mode 0600, never printed) | Notes |
+| --- | --- | --- |
+| The paper (Autopaper's computer) | `~/.config/choir-qa/test-computers/autopaper-paper.json` | field `api_key`; read and write scopes. Use it for reads; nothing changes on the paper except by deploy |
+| The drill computer (d@e) | `~/.config/choir-qa/keys/d-e.key` | drills and deployed proofs run here |
+| b@c | `~/.config/choir-qa/keys/b-c.key` | |
+| Test computers made by `scripts/qa_test_computer.mjs` | `~/.config/choir-qa/test-computers/<label>.json` | one file per label, with `<label>.storage.json` holding the saved browser session |
+
+The test-computer keys, the paper's among them, **expire after seven days**
+(`expires_at` in the file). A 401 from one of them means: check `expires_at`,
+then renew with `node scripts/qa_renew_key.mjs <label>` (for the paper,
+`autopaper-paper`). The script mints a key with the same scopes from the saved
+session, rewrites the file, revokes the old key and prints only identifiers.
+Load a key in-process from its file (`--api-key-file`, or read the JSON inside
+the script); never put it in an environment dump, a command line or output.
+
 ## Host
 
 - `--host` flag, or

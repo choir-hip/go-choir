@@ -96,6 +96,7 @@ stations:
     review: one seat
     status: working
     state_at_handoff: in review
+    owner_verdict: '2026-11-20 about 05:26Z, with a screenshot of the build installed at 04:44Z playing that day''s stories: "I''m signed in. Idk what you mean by the sign in card or sample stories." The conjecture in `now` held: the phone was in demo mode, not signed out. The owner also said: "Yes, install new builds overnight."'
   - id: D2
     name: Demo mode removed from the product
     scope: 'delete demo mode: the Settings Developer rows, Demo.swift, DemoFixtures.generated.swift (2,191 lines) and every Demo.isOn branch; the demoSet/demoInfo interface names; the demo key store. The twelve proof scripts that set AutoradioDemo (proof-sim, proof-lane1 to 9, proof-mac, proof-default-themes, proof-common) move to real data against staging as d@e (proof-real.sh is the model) or to the web host with canned fetch in shared tests; a proof that cannot move is deleted and named. Also clear what demo mode left on a phone that was in it (the review of D1 was asked to list it).'
@@ -197,7 +198,7 @@ now:
     edge_note: nothing but the owner's eyes reads the phone; the flag may be gone while the key is absent, unreadable or refused, which the card now names; if the owner reports sample stories again the guard is not what is on the phone, so read the installed build before anything else
     delta_o: read the app's account state off the phone through the Exact agent on a device build, so the owner's eyes are not the only instrument
     scope: the owner's iPhone on builds of main after 8a3c1a5ff
-    status: testing
+    status: held (owner verdict, 2026-11-20 05:26Z)
   believed_state: the search gate is deployed and partly effective; the signed-out work is deployed and proved on the simulator; the phone has the demo guard
   main_uncertainty: what the owner's phone shows; whether the event layer mints duplicates; whether the remaining search fixes reach 1,000 a day
   blocker: none
