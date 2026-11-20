@@ -39,6 +39,16 @@ package gateway
 //     final file holds every call (paid and relay).
 // 14. The relay's lock timeout keeps its delta; a relay whose clock is
 //     behind the file's day keeps its own memory (spentToday is not zeroed).
+// 16. A bad file (corrupt content) is moved aside under the lock to
+//     <file>.bad-<UTC time> (mode 0600, bytes kept) at load and at save, the
+//     ledger starts from or continues with its own memory, the next save
+//     writes a fresh file, the status says so, and a restart afterwards
+//     moves nothing. Two processes seeing the same bad file move it once
+//     (the lock makes one mover) and both processes' calls end in the fresh
+//     file. A file that merely cannot be read (not corrupt) is never moved.
+// 17. The relay's dropped charges (the file's day is ahead of this process's
+//     clock; a day turn with unsaved charges) are counted in the status;
+//     the relay's day is forward-only, as the paid ledger's.
 // 15. A lock file that cannot be opened (wrong owner or mode; here it is a
 //     directory) is surfaced in Persistence(), not silent.
 
@@ -353,53 +363,140 @@ func TestPaidSpendConcurrentWritersKeepEveryCall(t *testing.T) { // 13
 	}
 }
 
-func TestPaidSpendBadFileIsNeverOverwritten(t *testing.T) { // 9
+func asideFiles(t *testing.T, dir, base string) []string {
+	t.Helper()
+	ents, _ := os.ReadDir(dir)
+	var out []string
+	for _, e := range ents {
+		if strings.HasPrefix(e.Name(), base+".bad-") {
+			out = append(out, filepath.Join(dir, e.Name()))
+		}
+	}
+	return out
+}
+
+func TestPaidSpendBadFileIsMovedAsideNotOverwritten(t *testing.T) { // 9, 16
 	for name, content := range badSpendFiles {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "spend.json")
+			dir := t.TempDir()
+			path := filepath.Join(dir, "spend.json")
 			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
-			s := newTestSpend(t, path, clk)
+			s := newTestSpend(t, path, clk) // load: a bad file is moved aside at once
 			stopSaver(t, &s.saver)
+			asides := asideFiles(t, dir, "spend.json")
+			if len(asides) != 1 {
+				t.Fatalf("load left %v", asides)
+			}
+			if got, _ := os.ReadFile(asides[0]); string(got) != content {
+				t.Fatalf("the bad file's bytes were not kept: %q", got)
+			}
+			if fi, _ := os.Stat(asides[0]); fi.Mode().Perm() != 0o600 {
+				t.Fatalf("aside mode %v", fi.Mode())
+			}
+			if p := s.Persistence(); p.BadFilesMoved != 1 || !strings.Contains(p.BadFileMovedTo, ".bad-") {
+				t.Fatalf("status does not say: %+v", p)
+			}
+			if _, err := os.Stat(path); err == nil {
+				t.Fatal("the bad file is still in place after load")
+			}
+			// The ledger starts from empty; the next save writes a fresh file.
 			s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 10_000_000}) // over $1
-			if err := s.Flush(); err == nil {
-				t.Fatal("a flush over a bad file reported success")
-			}
-			if got, _ := os.ReadFile(path); string(got) != content {
-				t.Fatalf("bad file was overwritten: %q", got)
-			}
-			// The cap still counts what this process knows: memory plus delta.
-			if s.Refusal("river", riverModel) == nil {
-				t.Fatal("cap check forgot this process's own spend")
-			}
-			p := s.Persistence()
-			if p.UnsavedCalls != 1 || p.LastError == "" || p.LastErrorAt == "" {
-				t.Fatalf("status: %+v", p)
-			}
-			// Repeated failures log once a minute, not per call.
-			for i := 0; i < 5; i++ {
-				s.Record("river", "vm-a", riverModel, provider.Usage{})
-				_ = s.Flush()
-			}
-			if p := s.Persistence(); p.ErrorLogs != 1 || p.UnsavedCalls != 6 {
-				t.Fatalf("log lines %d (want 1), unsaved %d (want 6)", p.ErrorLogs, p.UnsavedCalls)
-			}
-			// The operator repairs the file: the kept delta merges, nothing is lost.
-			good := paidSpendRecord{Day: "2026-11-09", Today: map[string]*providerDay{"river": {Calls: 3, USD: 0.5}}}
-			raw, _ := json.Marshal(good)
-			if err := os.WriteFile(path, raw, 0o600); err != nil {
-				t.Fatal(err)
-			}
 			mustFlush(t, s)
-			if d := readPaidFile(t, path).Today["river"]; d.Calls != 3+6 {
-				t.Fatalf("after repair the file holds %d calls, want 9", d.Calls)
+			if rec := readPaidFile(t, path); rec.Today["river"].Calls != 1 {
+				t.Fatalf("fresh file: %+v", rec)
 			}
-			if p := s.Persistence(); p.UnsavedCalls != 0 || p.LastError != "" {
-				t.Fatalf("status after repair: %+v", p)
+			if s.Refusal("river", riverModel) == nil {
+				t.Fatal("cap forgot this process's own spend")
+			}
+			// A restart now loads the fresh file and moves nothing.
+			again := newTestSpend(t, path, clk)
+			if again.Refusal("river", riverModel) == nil || len(asideFiles(t, dir, "spend.json")) != 1 {
+				t.Fatalf("restart re-armed the cap or moved another file: %v", asideFiles(t, dir, "spend.json"))
 			}
 		})
+	}
+}
+
+func TestPaidSpendFileGoingBadMidRunIsMovedAsideAtSave(t *testing.T) { // 16
+	for name, content := range badSpendFiles {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "spend.json")
+			clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
+			s := newTestSpend(t, path, clk)
+			stopSaver(t, &s.saver)
+			s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 10_000_000})
+			mustFlush(t, s)
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 10})
+			mustFlush(t, s) // persistence resumes: the bad file is set aside, not overwritten
+			asides := asideFiles(t, dir, "spend.json")
+			if len(asides) != 1 {
+				t.Fatalf("asides %v", asides)
+			}
+			if got, _ := os.ReadFile(asides[0]); string(got) != content {
+				t.Fatalf("bad bytes lost: %q", got)
+			}
+			if rec := readPaidFile(t, path); rec.Today["river"].Calls != 2 {
+				t.Fatalf("fresh file holds %+v, want this process's two calls", rec.Today["river"])
+			}
+			if p := s.Persistence(); p.BadFilesMoved != 1 || p.UnsavedCalls != 0 {
+				t.Fatalf("status: %+v", p)
+			}
+		})
+	}
+}
+
+func TestPaidSpendTwoProcessesSeeingABadFileMoveItOnce(t *testing.T) { // 16
+	dir := t.TempDir()
+	path := filepath.Join(dir, "spend.json")
+	clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
+	a, b := newTestSpend(t, path, clk), newTestSpend(t, path, clk)
+	stopSaver(t, &a.saver)
+	stopSaver(t, &b.saver)
+	a.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 100})
+	b.Record("river", "vm-b", riverModel, provider.Usage{InputTokens: 100})
+	if err := os.WriteFile(path, []byte(`{"day":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for _, s := range []*PaidSpend{a, b} {
+		wg.Add(1)
+		go func(s *PaidSpend) { defer wg.Done(); _ = s.Flush() }(s)
+	}
+	wg.Wait()
+	mustFlush(t, a)
+	mustFlush(t, b)
+	if n := len(asideFiles(t, dir, "spend.json")); n != 1 {
+		t.Fatalf("%d bad files moved, want exactly one mover", n)
+	}
+	if rec := readPaidFile(t, path); rec.Today["river"].Calls != 2 {
+		t.Fatalf("both processes' calls must be in the fresh file: %+v", rec.Today["river"])
+	}
+}
+
+func TestPaidSpendUnreadableFileIsNotMovedOrOverwritten(t *testing.T) { // 9: a read error is not a bad file
+	dir := t.TempDir()
+	path := filepath.Join(dir, "spend.json")
+	if err := os.Mkdir(path, 0o700); err != nil { // ReadFile fails with EISDIR
+		t.Fatal(err)
+	}
+	s := newTestSpend(t, path, &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)})
+	stopSaver(t, &s.saver)
+	s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 10})
+	if err := s.Flush(); err == nil {
+		t.Fatal("flush reported success over an unreadable file")
+	}
+	if len(asideFiles(t, dir, "spend.json")) != 0 {
+		t.Fatal("an unreadable (not corrupt) file was moved")
+	}
+	if p := s.Persistence(); p.UnsavedCalls != 1 || p.LastError == "" {
+		t.Fatalf("status: %+v", p)
 	}
 }
 
@@ -430,8 +527,13 @@ func TestPaidSpendUnopenableLockIsSurfaced(t *testing.T) { // 15
 	s := newTestSpend(t, path, &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)})
 	stopSaver(t, &s.saver)
 	s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 10})
-	if err := s.Flush(); err == nil {
-		t.Fatal("no error for a lock that cannot be opened")
+	for i := 0; i < 4; i++ {
+		if err := s.Flush(); err == nil {
+			t.Fatal("no error for a lock that cannot be opened")
+		}
+	}
+	if p := s.Persistence(); p.ErrorLogs != 1 {
+		t.Fatalf("failing saves logged %d lines, want 1 a minute", p.ErrorLogs)
 	}
 	if p := s.Persistence(); p.UnsavedCalls != 1 || !strings.Contains(p.LastError, "lock") {
 		t.Fatalf("status: %+v", p)
@@ -620,46 +722,112 @@ func TestRelayConcurrentWritersKeepEveryCharge(t *testing.T) { // 13
 	}
 }
 
-func TestRelayBadFileIsNeverOverwritten(t *testing.T) { // 9
+func TestRelayBadFileIsMovedAsideAtLoadAndAtSave(t *testing.T) { // 9, 16
 	for name, content := range badSpendFiles {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "relay.json")
+			dir := t.TempDir()
+			path := filepath.Join(dir, "relay.json")
+			clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
+			// At load.
 			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
 			r := newTestRelay(path, clk)
 			stopSaver(t, &r.saver)
 			r.dailyTokens = 1000
-			r.charge("vm-1", relayUsage{InputTokens: 600})
-			if err := r.Flush(); err == nil {
-				t.Fatal("flush over a bad file reported success")
+			r.loadSpend()
+			asides := asideFiles(t, dir, "relay.json")
+			if len(asides) != 1 {
+				t.Fatalf("load left %v", asides)
 			}
-			if got, _ := os.ReadFile(path); string(got) != content {
-				t.Fatalf("bad file was overwritten: %q", got)
+			if got, _ := os.ReadFile(asides[0]); string(got) != content {
+				t.Fatalf("bad bytes lost: %q", got)
 			}
-			if r.spentToday("vm-1") != 600 {
-				t.Fatalf("memory lost its own spend: %d", r.spentToday("vm-1"))
-			}
-			r.charge("vm-1", relayUsage{InputTokens: 600})
-			if !r.budgetSpent("vm-1") {
-				t.Fatal("cap check forgot memory plus delta")
-			}
-			for i := 0; i < 4; i++ {
-				_ = r.Flush()
-			}
-			if p := r.Persistence(); p.ErrorLogs != 1 || p.UnsavedCalls != 2 || p.LastError == "" {
+			if p := r.Persistence(); p.BadFilesMoved != 1 || !strings.Contains(p.BadFileMovedTo, ".bad-") {
 				t.Fatalf("status: %+v", p)
 			}
-			raw, _ := json.Marshal(relaySpendRecord{Day: "2026-11-09", Spent: map[string]int64{"vm-9": 50}})
-			if err := os.WriteFile(path, raw, 0o600); err != nil {
+			r.charge("vm-1", relayUsage{InputTokens: 600})
+			mustFlush(t, r)
+			if rec := readRelayFile(t, path); rec.Spent["vm-1"] != 600 {
+				t.Fatalf("fresh file: %+v", rec)
+			}
+			// At save: the file goes bad while running.
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 				t.Fatal(err)
 			}
+			r.charge("vm-1", relayUsage{InputTokens: 600})
 			mustFlush(t, r)
-			if rec := readRelayFile(t, path); rec.Spent["vm-1"] != 1200 || rec.Spent["vm-9"] != 50 {
-				t.Fatalf("after repair: %+v", rec)
+			if n := len(asideFiles(t, dir, "relay.json")); n != 2 {
+				t.Fatalf("asides %d, want 2", n)
+			}
+			if rec := readRelayFile(t, path); rec.Spent["vm-1"] != 1200 {
+				t.Fatalf("fresh file after the second: %+v", rec)
+			}
+			if !r.budgetSpent("vm-1") {
+				t.Fatal("cap forgot memory")
 			}
 		})
+	}
+}
+
+func TestRelayTwoProcessesSeeingABadFileMoveItOnce(t *testing.T) { // 16
+	dir := t.TempDir()
+	path := filepath.Join(dir, "relay.json")
+	clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
+	a, b := newTestRelay(path, clk), newTestRelay(path, clk)
+	stopSaver(t, &a.saver)
+	stopSaver(t, &b.saver)
+	a.charge("vm-1", relayUsage{InputTokens: 3})
+	b.charge("vm-1", relayUsage{InputTokens: 4})
+	if err := os.WriteFile(path, []byte(`{"day":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for _, r := range []*AnthropicRelay{a, b} {
+		wg.Add(1)
+		go func(r *AnthropicRelay) { defer wg.Done(); _ = r.Flush() }(r)
+	}
+	wg.Wait()
+	mustFlush(t, a)
+	mustFlush(t, b)
+	if n := len(asideFiles(t, dir, "relay.json")); n != 1 {
+		t.Fatalf("%d moved, want one", n)
+	}
+	if rec := readRelayFile(t, path); rec.Spent["vm-1"] != 7 {
+		t.Fatalf("fresh file %+v", rec)
+	}
+}
+
+func TestRelayDroppedChargesAreCountedAndLogged(t *testing.T) { // 17
+	shortLockWait(t, 20*time.Millisecond)
+	path := filepath.Join(t.TempDir(), "relay.json")
+	clkA := &spendClock{time.Date(2026, 11, 10, 0, 5, 0, 0, time.UTC)}
+	clkB := &spendClock{time.Date(2026, 11, 9, 23, 55, 0, 0, time.UTC)} // behind the file
+	a, b := newTestRelay(path, clkA), newTestRelay(path, clkB)
+	stopSaver(t, &a.saver)
+	stopSaver(t, &b.saver)
+	a.charge("vm-1", relayUsage{InputTokens: 50})
+	mustFlush(t, a)
+	// (a) the file's day is ahead of b's: b's two charges are dropped, counted.
+	b.charge("vm-1", relayUsage{InputTokens: 5})
+	b.charge("vm-1", relayUsage{InputTokens: 5})
+	mustFlush(t, b)
+	if p := b.Persistence(); p.DroppedCharges != 2 || p.UnsavedCalls != 0 {
+		t.Fatalf("file-ahead drop not counted: %+v", p)
+	}
+	if got := b.spentToday("vm-1"); got != 10 {
+		t.Fatalf("a clock behind the file must keep its own memory (forward-only day): %d", got)
+	}
+	// (b) a day turn with unsaved charges: counted too.
+	c := newTestRelay(path, clkA)
+	stopSaver(t, &c.saver)
+	release := holdLock(t, path)
+	c.charge("vm-2", relayUsage{InputTokens: 1})
+	clkA.t = clkA.t.Add(24 * time.Hour)
+	c.charge("vm-2", relayUsage{InputTokens: 1}) // the turn drops the unsaved day-10 charge
+	release()
+	if p := c.Persistence(); p.DroppedCharges != 1 {
+		t.Fatalf("day-turn drop not counted: %+v", p)
 	}
 }
 

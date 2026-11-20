@@ -126,16 +126,19 @@ func NewPaidSpend(path string, budgets map[string]float64, now func() time.Time)
 	s := &PaidSpend{now: now, path: path, budgets: budgets, logged: map[string]string{}}
 	s.rec = paidSpendRecord{Day: s.day(), Today: map[string]*providerDay{}}
 	if path != "" {
-		if raw, err := os.ReadFile(path); err == nil {
-			var rec paidSpendRecord
-			if json.Unmarshal(raw, &rec) == nil && rec.Day != "" {
-				if rec.Today == nil {
-					rec.Today = map[string]*providerDay{}
-				}
-				s.rec = rec
-			} else {
-				log.Printf("gateway: paid spend file %s is unreadable; today's spend restarts at $0", path)
-			}
+		rec, exists, err := readPaidSpendFile(path)
+		if errors.Is(err, errSpendFileCorrupt) {
+			// Set the bad file aside (bytes kept) so this start and every
+			// later one is not re-armed at $0 by it; the next save writes a
+			// fresh file. If another process mended it first, use that.
+			s.saver.setAsideIfCorrupt(path, func() error { _, _, e := readPaidSpendFile(path); return e })
+			rec, exists, err = readPaidSpendFile(path)
+		}
+		switch {
+		case err != nil:
+			log.Printf("gateway: paid spend file %s is unreadable (%v); today's spend restarts at $0 and the file is not overwritten", path, err)
+		case exists:
+			s.rec = rec
 		}
 	}
 	return s
@@ -259,7 +262,7 @@ func readPaidSpendFile(path string) (rec paidSpendRecord, exists bool, err error
 		return paidSpendRecord{}, true, fmt.Errorf("%w: %v", errSpendFileBad, err)
 	}
 	if err := json.Unmarshal(raw, &rec); err != nil || rec.Day == "" {
-		return paidSpendRecord{}, true, fmt.Errorf("%w: %s holds no usable day record", errSpendFileBad, path)
+		return paidSpendRecord{}, true, fmt.Errorf("%w: %w: %s holds no usable day record", errSpendFileBad, errSpendFileCorrupt, path)
 	}
 	if rec.Today == nil {
 		rec.Today = map[string]*providerDay{}
@@ -417,6 +420,17 @@ func (s *PaidSpend) saveOnce() error {
 	}
 	defer unlock()
 	base, exists, err := readPaidSpendFile(s.path)
+	if errors.Is(err, errSpendFileCorrupt) {
+		// Never overwritten: set aside under the lock we hold (a second
+		// process that saw the same file waits on the lock, then finds the
+		// fresh file), and carry on from memory.
+		to, qerr := quarantineSpendFile(s.path, time.Now())
+		if qerr != nil {
+			return qerr
+		}
+		s.saver.noteBadMoved(s.path, to)
+		base, exists, err = paidSpendRecord{}, false, nil
+	}
 	if err != nil {
 		return err
 	}
@@ -572,6 +586,9 @@ func (s *PaidSpend) SummaryLine() string {
 		} else {
 			fmt.Fprintf(&b, " %s $%.2f (est)", n, p.USD)
 		}
+	}
+	if pe := snap.Persistence; pe != nil && (pe.UnsavedCalls > 0 || pe.LastError != "" || pe.BadFilesMoved > 0) {
+		fmt.Fprintf(&b, " [spend file: unsaved_calls=%d bad_files_moved=%d last_error=%q]", pe.UnsavedCalls, pe.BadFilesMoved, pe.LastError)
 	}
 	return b.String()
 }

@@ -261,7 +261,7 @@ func (r *AnthropicRelay) relayDay() string { return r.now().UTC().Format("2006-0
 func (r *AnthropicRelay) spentToday(identity string) int64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.spentDay != r.relayDay() {
+	if r.spentDay < r.relayDay() {
 		return 0
 	}
 	return r.spent[identity]
@@ -271,9 +271,14 @@ func (r *AnthropicRelay) spentToday(identity string) int64 {
 // flusher when a spend file is set. It never waits for the file.
 func (r *AnthropicRelay) charge(identity string, u relayUsage) {
 	r.mu.Lock()
-	if day := r.relayDay(); r.spentDay != day || r.spent == nil {
-		// A finished day's unsaved charges are dropped: nothing reads a
-		// finished day (loadSpend and spentToday use the current day only).
+	var dropped int64
+	// Forward only (as the paid ledger's roll): a clock behind the memory's
+	// day keeps the memory.
+	if day := r.relayDay(); r.spent == nil || day > r.spentDay {
+		// A finished day's unsaved charges are dropped, counted and logged:
+		// nothing reads a finished day (loadSpend and spentToday use the
+		// current day only).
+		dropped = r.unsavedCharges
 		r.spent, r.spentDay = map[string]int64{}, day
 		r.spentDelta, r.unsavedCharges = nil, 0
 	}
@@ -288,6 +293,7 @@ func (r *AnthropicRelay) charge(identity string, u relayUsage) {
 		r.unsavedCharges++
 	}
 	r.mu.Unlock()
+	r.saver.noteDropped(dropped, "the UTC day turned before they were saved")
 	if save {
 		r.saver.kickSave(r.saveSpendOnce)
 	}
@@ -316,12 +322,14 @@ func (r *AnthropicRelay) Persistence() SpendPersistence {
 // loadSpend reads the spend file; another day's record, or none, starts the
 // day at zero.
 func (r *AnthropicRelay) loadSpend() {
-	raw, err := os.ReadFile(r.spendFile)
-	if err != nil {
-		return
+	rec, exists, err := readRelaySpendFile(r.spendFile)
+	if errors.Is(err, errSpendFileCorrupt) {
+		// Set the corrupt file aside (bytes kept) so a restart is not
+		// re-armed at zero by it, and the next save writes a fresh file.
+		r.saver.setAsideIfCorrupt(r.spendFile, func() error { _, _, e := readRelaySpendFile(r.spendFile); return e })
+		rec, exists, err = readRelaySpendFile(r.spendFile)
 	}
-	var rec relaySpendRecord
-	if json.Unmarshal(raw, &rec) != nil || rec.Day != r.relayDay() {
+	if err != nil || !exists || rec.Day != r.relayDay() {
 		return
 	}
 	r.spent, r.spentDay = map[string]int64{}, rec.Day
@@ -344,7 +352,7 @@ func readRelaySpendFile(path string) (rec relaySpendRecord, exists bool, err err
 		return relaySpendRecord{}, true, fmt.Errorf("%w: %v", errSpendFileBad, err)
 	}
 	if err := json.Unmarshal(raw, &rec); err != nil || rec.Day == "" {
-		return relaySpendRecord{}, true, fmt.Errorf("%w: %s holds no usable day record", errSpendFileBad, path)
+		return relaySpendRecord{}, true, fmt.Errorf("%w: %w: %s holds no usable day record", errSpendFileBad, errSpendFileCorrupt, path)
 	}
 	return rec, true, nil
 }
@@ -370,6 +378,14 @@ func (r *AnthropicRelay) saveSpendOnce() error {
 	}
 	defer unlock()
 	rec, exists, err := readRelaySpendFile(r.spendFile)
+	if errors.Is(err, errSpendFileCorrupt) {
+		to, qerr := quarantineSpendFile(r.spendFile, time.Now())
+		if qerr != nil {
+			return qerr
+		}
+		r.saver.noteBadMoved(r.spendFile, to)
+		rec, exists, err = relaySpendRecord{}, false, nil
+	}
 	if err != nil {
 		return err
 	}
@@ -383,8 +399,10 @@ func (r *AnthropicRelay) saveSpendOnce() error {
 	if exists && rec.Day > day {
 		// This process's clock is behind the file: its day is finished from
 		// the file's view. Keep memory; drop the delta; leave the file.
+		dropped := r.unsavedCharges
 		r.spentDelta, r.unsavedCharges = nil, 0
 		r.mu.Unlock()
+		r.saver.noteDropped(dropped, "this process's clock is behind the file's day ("+rec.Day+"), so its day "+day+" is finished there")
 		return nil
 	}
 	merged := map[string]int64{}
