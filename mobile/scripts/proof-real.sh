@@ -170,6 +170,7 @@ if [ -n "${REAL_PROMPT:-}" ]; then
   view real-24-asked 400
   step "tap bar-send"; wait_ 4000; step tree; shot real-25-asked-sent
   step "clock +40000 real"; step "clock data"; step tree; shot real-26-answer
+  step "tap bar-answer-text"; wait_ 1500; view real-27-conversation 600       # the conversation page (conversation.ts rows over the native entries)
   step logs
   run_drive ask light "" --touch platform
 fi
@@ -283,6 +284,7 @@ chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 if [ -n "${REAL_PROMPT:-}" ]; then
   chk "typed ask: the engine took the typed words as the turn" 'top story on the front page' "$SHOTS/drive-ask.txt"
   bad "typed ask: no sign-in failure" 'Sign in to talk to your computer' "$SHOTS/drive-ask.txt"
+  chk "conversation: the question is a row (shared code over the native entries)" '\[conversation-row-' "$SHOTS/drive-ask.txt"
 fi
 if [ -n "$THEME_DOC" ]; then
   TH="$SHOTS/drive-theme.txt"
