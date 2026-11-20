@@ -103,7 +103,7 @@ stations:
     class: orange
     review: one seat
     depends_on: [D1]
-    status: working
+    status: landed
   - id: X1
     name: The Textures place in shared code, landed
     scope: lane/exact-textures-place 70a5d3c77; rerun the real proof at the tip, read the screenshots, one seat, land
@@ -189,14 +189,19 @@ stations:
     status: pending
 now:
   status: working
-  as_of: 2026-11-20T08:45Z (lead-docs lane carries this file)
-  slice: the second train (the embed-worker wake, search leads) lands when whole agentcore ends on choir-runner (about 09:20Z); a third train carries entity station E2, the DAMON and event-wakes removals, the dispatcher fix and the re-ask holds; mobile landings go one at a time through the Mac queue
+  as_of: 2026-11-20T11:30Z (lead-docs lane carries this file)
+  slice: the third train (entity station E2 with its follow-up, the DAMON and event-wakes removals) lands when the store suite's rerun ends on choir-runner (about 11:55Z); the fourth (the re-ask holds, accepted on a third review) follows it; mobile lanes go one at a time through the Mac queue
   landed_this_thread:
     - 'W1 7f5ad41e1 (intake.events and dispatch.wide_slots gone): CI 44684974356 ok, deployed 06:18:24Z, the paper logs slots=N/12 and event layer flushes after its refresh. C167 settles after 07:20Z.'
     - 'X1 de7aeb7f7 (the Textures list is shared Exact code): seat 2 accepted the rework; real-data simulator proof PROOF OK at 99b3c5dfb with screenshots read; CI 44688798576 ok, deployed 06:45:49Z.'
     - 'S2 train 84a853ce4 (the brief''s objective, five commits; the search gauge; scripts/status-entities): whole agentcore ok on the tested tree, CI 44698550035 ok, deployed 08:13:40Z. C171 settles after 10:15Z from the paper''s brief lines.'
     - 'D1 6bdddb530 (demo mode never on a real phone, row gone, leftovers cleaned once on a positive trace): seat 2 accepted the fourth version; real-data proof PROOF OK at the landing shape; CI 44701650918 ok; installed on the owner''s iPhone 08:24:22Z. The proof is the owner''s phone when they wake.'
     - 'R1: C148 to C150 settled void (the E1 pilot stopped after two of ten objectives); scripts/e1 end run (arm L''s overlay delete answered 403).'
+    - 'Train C b1257d04a (the embed-worker wake; search leads): whole agentcore ok, CI 44709891003 ok, deployed 09:38:58Z. C170 and C172 settle after 12:10Z.'
+    - 'Design rules 49cbd976d: accepted on re-review; the lead read the signed-out screens (a banner with Sign in on every signed-out page); CI ok, deployed 09:53:38Z.'
+    - 'D2 a7e0e6535 (demo mode deleted from the product; 7,450 lines removed; the leftover cleanup kept): accepted; real proof PROOF OK; CI 44723094577 ok, deployed 11:05:03Z; on the owner''s iPhone at f1aa4df9d since 11:25:55Z. The build queue''s `proof` mode is retired; `real` is the only proof.'
+    - 'H1 gateway G1 f1aa4df9d and its follow-up f883ea88d (the two spend files merged under a file lock by an asynchronous flusher; a corrupt file set aside): red, both seats accepted each; CI 44725241858 ok, deployed 11:16:41Z; the paid counts rose across the restart with no save-failure line. C175 settles after 12:17Z.'
+    - 'C171 settled false as worded: 0 of 16 briefs skipped for want of an objective (66% before), but every one took its objective from the unread record, a source the claim did not name.'
   discovered_this_thread:
     - 'D1: the owner, 05:26Z, with a screenshot: signed in, the day''s real stories. Installs overnight are allowed. Seat 2 sent the cleanup back twice: it must not delete anything on "no readable key", must act only on a positive demo trace, and must mark itself done only after it succeeded. Third version building.'
     - 'S: the search gate did NOT lower the gateway''s rate (162 an hour before, 159 after); about 6 searches a run by the gateway meter. 79% of searches are a story''s first run hunting a second outlet; 1,000 a day is 1.8 a run.'
@@ -211,26 +216,29 @@ now:
     - 'W3: vm_guest_reclaim_damon and intake.event_wakes are deleted as dead paths on lane last-switches (4715d2f02, 6fe318268), in review. owner_act_mode is prepared (ba32aa571, red) and HELD: enforcing it contradicts the owner''s ruling of 2026-10-24 (observe), no observe window with real owner acts was ever read, and a missing proxy key would refuse every owner mode write. Owner decision; default: leave observe.'
     - 'X2 themes (ee067fb8e): sent back: a theme tap could mark the migration done when it never ran; the native delete made a revert lose themes; the first frame was a partial theme; the iOS system colour scheme is unproven. Rework in progress. X2 conversation and Texture edit (b8015a497): built; real proof not yet passed.'
     - 'Design rules (4d1c506f7): five violations fixed and the rule tests moved to bun; the reviewer asks whether Sign in as a text action is still obvious to a signed-out user: the lead reads the screens before landing.'
+    - 'S1 re-ask holds: three reviews. The first version folded `site:` out of the near key and would have answered a second-outlet search from the first outlet''s pages; fixed (site kept, only today''s and yesterday''s dates and weekdays fold, the mostly-seen hold never stops a `site:` search to an outlet not yet held, a paywalled question is released). Accepted; in the fourth train.'
+    - 'X2 conversation and editor move: sent back twice. Second time: a merged save never reached the page''s field, so the next keystroke would revert the other writer''s change; and text with no recorded base was posted over a newer head. Last round in progress.'
+    - 'X2 themes: sent back twice; one blocking left (the carry-over of old themes can silently not run). Last round in progress.'
+    - 'The lead corrected one store test in the event-wakes commit after review (it still asserted that a held arrival wakes no one, the behaviour the reviewed change removes); the store suite is rerun for it.'
     - 'Main''s Swift design and typography rule tests fail and CI does not run them; lane design-rules-fix.'
     - 'Review seat 1 is Gemini 4 Hydrogen through agy (owner, 2026-11-20); in print mode it needs --sandbox --dangerously-skip-permissions in a frozen copy.'
   lanes:
-    - 'train C (scratch clone train2, branch trainC on choir-runner): embed-kick 04bd09713 (seat 2 accepted the id-based rework) and search-leads 6d5da2620 (seat 2 accepted; leads are text with a lexical index, never embedded); whole agentcore running'
-    - 'entity-e2 72532469b: accepted with should-fixes, done; next train'
-    - 'last-switches (W3): DAMON and event-wakes in review; owner_act_mode held'
-    - 'root-desk-r3 7a6d66dc4 (W2): STOPPED for the owner after a sixth send-back by both seats; docs/problems/texture-root-desk-six-reviews-no-landing-2026-11-20.md says why (a wall-clock time is the wrong cursor; the store needs a commit sequence) and what is asked'
-    - 'snapshot-stream 0873aa1fc (H1 S1): STOPPED for the owner after a third send-back by both seats; the budget problem record says why and recommends raising the 90-minute budget as the interim relief'
-    - 'dispatch-deadlines, search-reask-hold (third review): building or in review'
-    - 'exact-demo-gone (D2), exact-themes, exact-convo-edit, design-rules-fix: mobile, through the Mac queue'
+    - 'train D (scratch clone train3): entity-e2 with its follow-up (accepted three times), last-switches (DAMON and event-wakes, accepted on re-review; nix eval of both systems ok); agentcore ok 3805 s; store rerun running'
+    - 'train E (on top of D): search-reask-hold, four commits, accepted on the third review; suites queued'
+    - 'root-desk-r3 7a6d66dc4 (W2): STOPPED for the owner; docs/problems/texture-root-desk-six-reviews-no-landing-2026-11-20.md'
+    - 'snapshot-stream 0873aa1fc (H1 S1): STOPPED for the owner; the budget problem record recommends raising the 90-minute budget as the interim relief'
+    - 'owner-act-enforce ba32aa571 (W3 third setting): HELD for the owner'
+    - 'dispatch-deadlines: building; exact-themes, exact-convo-edit: last review round; exact-demo-leftovers b40917da2 (the wider cleanup): in review'
   conjecture:
     claim: 'the paper''s web searches are mostly a hunt for a second outlet and re-asks of one question; holding re-asks on every verb and telling a run at its start which outlets the corpus already holds removes more than half, and under 1,000 a day needs the second outlet to come from the corpus (events with two outlets) and not from the web'
     test: the gateway's searches a day and searches per run after each landing, with stories a day not lower than the week before
     edge: missing_oracle
     edge_note: the logs carry no outlet per capture, so the size of the second-outlet hold is unknown until Landing 0's fields are deployed
     status: testing
-  believed_state: W1, X1, S2 and D1 are deployed and D1 is on the phone; everything else is on lanes
+  believed_state: W1, X1, S2, D1, D2, the wake, search leads, the design rules and gateway G1 are deployed; D1 and D2 are on the phone; two stations are stopped for the owner
   main_uncertainty: whether any set of caller fixes reaches 1.8 searches a run; whether the event layer joins once captures have vectors; whether the build machine (one heavy run at a time) can carry eleven builders before morning
   blocker: none
-  next_action: land train C when agentcore ends; assemble the third train; read both seats on the root desk
+  next_action: land train D when the store rerun ends, then train E; settle C170, C172 and C175 after 12:10Z; write the owner letter
 operating_notes:
   - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review: seat 1 a Sonnet subagent that did not write the change, seat 2 DeepSeek through the agentic-consensus runner (--include omp-deepseek-v41-flash) on a frozen clean copy; orange one seat, red two.'
   - 'Go compiles and tests on the build machines, never the Mac (gate scripts on the Mac need GOFLAGS=-mod=mod). choir-agents has 3.9 GB of memory: one heavy run at a time under flock ~/agentcore.lock, and stop the test Postgres a killed run leaves. choir-runner (10 GB) is the landing machine; whole agentcore under -race took 69 to 83 minutes on the night of 2026-11-19, so use -timeout 150m.'
