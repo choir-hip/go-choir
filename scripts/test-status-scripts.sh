@@ -493,7 +493,7 @@ runcorpus --fixture "$root/cr_a.log" --gateway-fixture "$root/cr_g.log" --append
 check "R5 whole hours 21:00 and 22:00 only, with a header" '[ "$(cut -f1 "$tsv")" = "$(printf "hour\n2026-11-18T21:00Z\n2026-11-18T22:00Z")" ]'
 check "R5 the 21:00 row: 2 runs, 10 started; the boundary run (22:00:00) is in the 22:00 row" '[ "$(sed -n 2p "$tsv" | cut -f2,3)" = "$(printf "2\t10")" ] && [ "$(sed -n 3p "$tsv" | cut -f2,3)" = "$(printf "2\t2")" ]'
 runcorpus --fixture "$root/cr_a.log" --append "$tsv"
-check "R5 a second run appends nothing new" '[ "$(wc -l <"$tsv")" -eq 3 ] && grep -q "appended 0" "$root/out"'
+check "R5 a second run appends nothing new" '[ "$(wc -l <"$tsv" | tr -d " ")" -eq 3 ] && grep -q "appended 0" "$root/out"'
 runcorpus --fixture "$root/cr_a.log" --append "$here/../corpus-reuse-test.tsv"
 check "R5 a file inside the repo is refused" '[ "$(cat "$root/rc")" = 2 ] && [ ! -e "$here/../corpus-reuse-test.tsv" ]'
 # R15 the event layer's flush line (station V5): flushes, questions, minted share, vector states
@@ -646,6 +646,82 @@ env -u BASH_ENV python3 "$vectors" --fixture "$root/vec.log" --json >"$root/out"
 check "V5 json carries the numbers" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"gap\"][\"captures\"][\"remaining\"]==486 and d[\"searches\"][\"vector_stories\"][\"count\"]==2" "$root/out"'
 env -u BASH_ENV python3 "$vectors" --fixture "$root/nonexistent.log" >"$root/out" 2>&1; rc=$?
 check "V5 an unreadable fixture exits 2" '[ "$rc" = 2 ]'
+
+# search usage (the hourly's "search usage" block and its history file). Failure list, written before the code:
+#  U1  a gateway line outside the last hour is counted in it, one from before 00:00 UTC or after now is counted
+#      anywhere; a cache hit counts as sent; a failed search is not a request
+#  U2  a provider's calls are not the growth of the log's today= count (a first line counts from 0), or a provider
+#      that appears only in today= or only in skipped= is missing (providers are read, not hardcoded)
+#  U3  refusals are not counted per provider by the log's own reason (quota_limited, capped, error, ...)
+#  U4  corpus searches are not the ranked lines; shares with the vector half, median and p90 are wrong; query embeds
+#      that failed or hit the deadline are not counted apart; the paper's cell and brief searches are not split from the rest
+#  U5  the projection is not today's sent / hours elapsed x 24, or the 1,000 target and the owner's sentence are not printed
+#  U6  a journal that could not be read prints 0 instead of "unknown: <reason>", in the block or in the history row
+#  U7  a second run in the same UTC hour adds a row instead of replacing it; --history N does not print the last N rows
+#      aligned; the row holds anything but counts (a vm id, a URL)
+mkdir -p "$root/su"
+cat >"$root/su/full.txt" <<'EOF'
+##GW
+2026/11/19 23:50:00 gateway: search for autoputer vm-1669020adcece51c2f5ff9b6df399ef5 answered 1 of 1 providers (0 cooling, 0 pending) skipped=[] served=miss results=99 unique=99 seen=0 routing=budget escalated=no paid_calls=0 today=[keenable=999]
+2026/11/20 00:10:00 gateway: search for autoputer vm-1669020adcece51c2f5ff9b6df399ef5 answered 1 of 1 providers (2 cooling, 0 pending) skipped=[searxng=success_empty brave=quota_limited] served=miss results=40 unique=40 seen=0 routing=budget escalated=no paid_calls=0 today=[keenable=10 parallel=149/150]
+2026/11/20 00:40:00 gateway: search for autoputer vm-1669020adcece51c2f5ff9b6df399ef5 answered 2 of 2 providers (1 cooling, 0 pending) skipped=[brave=quota_limited] served=miss results=20 unique=18 seen=2 routing=budget escalated=short(0):serper paid_calls=1 today=[keenable=11 serper=1/150]
+2026/11/20 01:00:00 gateway: search for autoputer vm-1669020adcece51c2f5ff9b6df399ef5 answered 1 of 1 providers (0 cooling, 0 pending) skipped=[] served=hit results=40 unique=40 seen=40 routing=cache escalated=no paid_calls=0 today=[]
+2026/11/20 01:10:00 gateway: search for autoputer vm-00000000000000000000000000000002 answered 1 of 1 providers (3 cooling, 0 pending) skipped=[brave=quota_limited parallel=capped serper=error] served=miss results=10 unique=10 seen=0 routing=budget escalated=no paid_calls=0 today=[keenable=12 parallel=150/150]
+2026/11/20 01:20:00 gateway: search failed for autoputer vm-00000000000000000000000000000002
+2026/11/20 01:45:00 gateway: search for autoputer vm-1669020adcece51c2f5ff9b6df399ef5 answered 1 of 1 providers (0 cooling, 0 pending) skipped=[] served=miss results=77 unique=77 seen=0 routing=budget escalated=no paid_calls=0 today=[keenable=13]
+##CORPUS
+2026/11/20 00:20:00 corpusd retrieval op=capture_search shape=ranked ms=100.00 rows=6 vector_state=exact err=
+2026/11/20 00:50:00 corpusd retrieval op=capture_search shape=ranked ms=200.00 rows=6 vector_state=approximate err=
+2026/11/20 01:05:00 corpusd retrieval op=capture_search shape=ranked ms=300.00 rows=6 vector_state=unavailable err=
+2026/11/20 01:05:00 corpusd retrieval op=capture_search shape=terms ms=20.00 rows=6 err=
+2026/11/20 01:05:00 corpusd retrieval op=capture_fulltext_search shape=passages ms=30.00 rows=6 err=
+2026/11/20 01:06:00 corpusd retrieval op=capture_search shape=ranked ms=900.00 rows=6 vector_state=exact err=
+2026/11/20 01:15:00 corpusd retrieval op=capture_search shape=ranked ms=400.00 rows=6 vector_state=approximate err=
+2026/11/20 01:05:00 corpusd retrieval op=vector_embed shape=query ms=100.00 rows=1 err=
+2026/11/20 01:06:00 corpusd retrieval op=vector_embed shape=query ms=5000.00 rows=0 err=context_deadline_exceeded
+2026/11/20 01:07:00 corpusd retrieval op=vector_embed shape=query ms=50.00 rows=0 err=embedder_refused
+##CONSOLE
+2026/11/20 00:20:00 caller=cell
+2026/11/20 01:05:00 caller=cell
+2026/11/20 01:06:00 caller=brief
+##END
+EOF
+awk '/^##GW$/{skip=1; print "##GWFAIL"; next} /^##CORPUS$/{skip=0} /^##CONSOLE$/{skip=1; next} /^##END$/{skip=0} !skip' "$root/su/full.txt" >"$root/su/nogw.txt"
+runsu() { # runsu FIXTURE NOW HISTORY
+  mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 * h' 3
+  env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" \
+    --search-fixture "$1" --search-now "$2" --search-history "$3" >"$root/out" 2>&1; }
+H="$root/su/hist.tsv"; rm -f "$H"
+runsu "$root/su/full.txt" 2026-11-20T01:30Z "$H"
+check "U1 the block prints between the reports and the last line, which stays one line" 'grep -q "^== search usage" "$root/out" && ! tail -n 1 "$root/out" | grep -q "search usage"'
+check "U1 last hour: 4 requests (paper 2, other 1, failed 1), 2 sent, 1 from the cache; the 23:50 and 01:45 lines are in no window" 'grep -q "last hour requests 4 (paper 2, other computers 1, failed 1); sent to providers 2, served from the cache 1" "$root/out"'
+check "U1 today: 5 requests, 3 sent; results 40+20+40+10 = 110" 'grep -q "today     requests 5 (paper 3, other computers 1, failed 1); sent to providers 3, served from the cache 1, joined an identical one in flight 0; results returned 110" "$root/out"'
+check "U2 calls are growth of today=: keenable 2 in the hour and 12 today (10 at the first line); serper 1; parallel 1 then 150 (appears in today= and skipped=)" 'grep -q "keenable  free; calls 2 last hour, 12 today" "$root/out" && grep -q "serper    paid, cap 150/day; calls 1 last hour, 1 today" "$root/out" && grep -q "parallel  paid, cap 150/day; calls 1 last hour, 150 today" "$root/out"'
+check "U2 a provider only in skipped= (searxng, brave) is listed with 0 calls" 'grep -q "searxng   free; calls 0 last hour, 0 today; refused last hour: none; today: success_empty 1" "$root/out" && grep -q "brave     free; calls 0 last hour, 0 today" "$root/out"'
+check "U3 refusals by the log reason: brave quota_limited 2 in the hour and 3 today; parallel capped 1; serper error 1" 'grep -q "brave .*refused last hour: quota_limited 2; today: quota_limited 3" "$root/out" && grep -q "parallel .*refused last hour: capped 1" "$root/out" && grep -q "serper .*refused last hour: error 1" "$root/out"'
+check "U4 corpus: 4 ranked in the hour, 3 with the vector half (75%), exact 1 approximate 1 unavailable 1 in... states" 'grep -q "last hour total 4; with the vector half 3 (75%) \[approximate 2, exact 1, unavailable 1\]; median 350 ms, p90 900 ms" "$root/out"'
+check "U4 today: 5 ranked, 4 with the vector half" 'grep -q "today     total 5; with the vector half 4 (80%)" "$root/out"'
+check "U4 shapes are counted by op:shape" 'grep -q "by shape: capture_fulltext_search:passages 1, capture_search:ranked 4, capture_search:terms 1" "$root/out"'
+check "U4 embeds: 3 asked, 2 failed, 1 of them the deadline" 'grep -q "query embeds: 3; failed 2 (of which deadline/timeout 1)" "$root/out"'
+check "U4 callers: the paper's cell 1 and brief 1 in the hour, the other 2 by difference" 'grep -q "by caller: paper.s cell 1, paper.s brief 1, other callers 2" "$root/out"'
+check "U5 the target constant and the owner's sentence are printed" 'grep -q "owner target: 1000 external web searches a day in total; \"we should be able to get our searches underneath 1,000 per day\" (owner, 2026-11-19)" "$root/out"'
+check "U5 projection: 3 sent in 1.5 h is 48 a day; serper 1 call projects 16, parallel 150 projects 2400 and will hit the cap" 'grep -q "sent today 3 in 1.5 h: a day at this rate is 48 against the target 1000 (under)" "$root/out" && grep -q "serper .*paid 1 calls today, 16 projected; cap 150/day, under the cap" "$root/out" && grep -q "parallel .*150 calls today, 2400 projected; cap 150/day, will hit the cap" "$root/out"'
+check "U5 corpus per web search: 4 / 2 = 2.0 in the hour; with no corpus-reuse section the per-run ratio says unknown" 'grep -q "per external web search, last hour: 2.0 (4 / 2)" "$root/out" && grep -q "per research run: unknown" "$root/out"'
+check "U7 the search block holds no computer id, URL or query" '! sed -n "/^== search usage/,/^$/p" "$root/out" | grep -qE "vm-[0-9a-f]{8}|https?://|SECRET"'
+check "U7 the first run wrote the header and one row of counts only: 4 corpus, 3 with vector, median 350, 4 requests, 1 cached, then keenable 2, parallel 1, serper 1, day 3 sent, 163 calls" '[ "$(wc -l <"$H" | tr -d " ")" = 2 ] && [ "$(sed -n 1p "$H" | tr "\t" "|")" = "utc_hour|corpus_total|corpus_vector|corpus_median_ms|ext_requests|cache_served|calls_brave|calls_keenable|calls_parallel|calls_serper|day_searches_sent|day_provider_calls" ] && [ "$(sed -n 2p "$H" | tr "\t" "|")" = "2026-11-20T01Z|4|3|350|4|1|0|2|1|1|3|163" ] && ! grep -qE "vm-|http" "$H"'
+runsu "$root/su/full.txt" 2026-11-20T01:50Z "$H"
+check "U7 a second run in the same UTC hour replaces that hour's row (still 2 lines)" '[ "$(wc -l <"$H" | tr -d " ")" = 2 ] && [ "$(grep -c "^2026-11-20T01Z" "$H")" = 1 ]'
+runsu "$root/su/full.txt" 2026-11-20T02:10Z "$H"
+check "U7 the next hour adds a row" '[ "$(wc -l <"$H" | tr -d " ")" = 3 ] && sed -n 3p "$H" | grep -q "^2026-11-20T02Z"'
+env -u BASH_ENV python3 "$hourly" --history 1 --search-history "$H" >"$root/out" 2>&1
+check "U7 --history 1 prints the header and the last row only, aligned" '[ "$(wc -l <"$root/out" | tr -d " ")" = 2 ] && head -n1 "$root/out" | grep -q "^hour  *corpus  *w/vec" && tail -n 1 "$root/out" | grep -q "^2026-11-20T02Z"'
+env -u BASH_ENV python3 "$hourly" --history --search-history "$H" >"$root/out" 2>&1
+check "U7 --history alone prints up to 24 rows (here both)" '[ "$(wc -l <"$root/out" | tr -d " ")" = 3 ]'
+H2="$root/su/hist2.tsv"; rm -f "$H2"
+runsu "$root/su/nogw.txt" 2026-11-20T01:30Z "$H2"
+check "U6 an unreadable gateway journal says unknown with the reason, never 0, and the corpus half still prints" 'grep -q "unknown: gateway journal unreadable on the host" "$root/out" && ! grep -q "requests 0" "$root/out" && grep -q "last hour total 4" "$root/out"'
+check "U6 the history row says unknown for what could not be read, not 0" '[ "$(sed -n 2p "$H2" | tr "\t" "|")" = "2026-11-20T01Z|4|3|350|unknown|unknown|unknown|unknown" ]'
+check "U6 without the console the caller split says unknown" 'grep -q "by caller: unknown: paper guest console unreadable" "$root/out"'
 
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

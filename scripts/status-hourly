@@ -7,6 +7,23 @@ needs action (storage mission S9; the combined hourly status tick).
 
   status-hourly [--json] [--paper-fixture FILE] [--storage-fixture FILE]
                 [--corpus-fixture FILE] [--corpus-gateway-fixture FILE] [--corpus-append FILE] [--node HOST]
+  status-hourly --history [N]     the last N (default 24) hourly rows of search usage, no fetch
+
+The "search usage" block (owner, 2026-11-20: "also track the search usage, both
+searching corpus and each external web search provider") is read from three
+journals on Node B in one read-only ssh: the gateway's `gateway: search for
+autoputer <vm> answered N of M providers (...) skipped=[p=reason ...]
+served=miss|hit|joined results= unique= ... today=[p=N(/cap) ...]` line (the
+day's count after the search, per provider it called or skipped as capped) and
+`gateway: search failed for autoputer`; corpusd's `corpusd retrieval
+op=capture_search shape=ranked ... vector_state= ms= err=` (one per corpus
+search) and `op=vector_embed shape=query ms= err=`; and the paper guest
+console's `corpus search computer= ... caller=cell|brief` (the only line that
+says who asked: corpusd's own line carries no caller). Counts only: no query
+text, no URL, no computer id is printed or stored. Each hour appends one row to
+~/.local/state/choir-status/search-usage.tsv (--search-history FILE); a second
+run in the same UTC hour replaces that hour's row. The row's window is the 60
+minutes ending at the run, keyed by the UTC hour of the run.
 
 Exit 0 when no flag is raised in either report and both fetched; non-zero
 otherwise (1 for a flag, 2 when a report was unavailable). --json prints one
@@ -14,13 +31,25 @@ object {paper, storage, line, flags}. The fixture flags are for
 scripts/test-status-scripts.sh; they pass straight to the sub scripts.
 Read only against Node B (see the two scripts).
 """
+import calendar
 import json
 import os
+import re
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAXLEN = 199
+PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+NODE = "node-b"
+# The owner's target for external web searches in total (every provider, every
+# computer), per UTC day.
+OWNER_TARGET_PER_DAY = 1000
+OWNER_TARGET_QUOTE = '"we should be able to get our searches underneath 1,000 per day" (owner, 2026-11-19)'
+HISTORY_FILE = os.path.expanduser("~/.local/state/choir-status/search-usage.tsv")
+HISTORY_FIXED = ["utc_hour", "corpus_total", "corpus_vector", "corpus_median_ms", "ext_requests", "cache_served"]
+HISTORY_TAIL = ["day_searches_sent", "day_provider_calls"]
 
 
 def run(script, args):
@@ -31,6 +60,402 @@ def run(script, args):
     except ValueError:
         msg = (p.stderr.strip().splitlines() or ["no output"])[-1]
         return None, msg[:80]
+
+
+# ---------------------------------------------------------------- search usage
+
+SEARCH_REMOTE = r"""
+D=@DAY@
+J="journalctl --no-pager -o cat --utc --since \"$D 00:00:00 UTC\""
+bad='^(Failed|Hint:|No journal files|Specifying boot)'
+if j=$(eval "$J -u go-choir-gateway" 2>&1) && ! printf '%s\n' "$j" | grep -qaE "$bad"; then
+  echo "##GW"
+  printf '%s\n' "$j" | grep -aE 'gateway: search (for|failed for) autoputer' | sed -E 's/ urls=\[[^]]*\]//; s/^(.*gateway: search failed for autoputer [^ :]*).*$/\1/'
+else echo "##GWFAIL"; fi
+if j=$(eval "$J -u go-choir-corpusd" 2>&1) && ! printf '%s\n' "$j" | grep -qaE "$bad"; then
+  echo "##CORPUS"
+  printf '%s\n' "$j" | grep -aE 'corpusd retrieval op=([a-z_]*search[a-z_]*|vector_embed shape=query) ' | sed -E 's/^(.* corpusd retrieval op=[a-z_]+ shape=[a-z_0-9-]+ ms=[0-9.]+ rows=[0-9]+).* (vector_state=[a-z]+)( .*)?( err=[^ ]*)$/\1 \2\4/'
+else echo "##CORPUSFAIL"; fi
+if sudo -n true 2>/dev/null; then
+  echo "##CONSOLE"
+  sudo -n sh -c "cd /var/lib/go-choir/vm-state/@VM@ && for f in console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
+    grep -a '@DAY2@ [0-9:]* corpus search computer=' |
+    sed -E 's#^.*(@DAY2@ [0-9:]{8}) corpus search computer=[^ ]*.* (caller=[a-z_]*).*$#\1 \2#;t;s#^.*(@DAY2@ [0-9:]{8}) corpus search computer=.*$#\1 caller=-#' |
+    grep -aE '^[0-9/]+ [0-9:]+ caller=[a-z_-]*$'
+else echo "##NOSUDO"; fi
+echo "##END"
+"""
+
+GW_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search for autoputer (\S+) answered (\d+) of (\d+) providers "
+                   r"\((\d+) cooling, (\d+) pending\) skipped=\[([^\]]*)\] served=(\w+) results=(\d+) unique=(\d+)(?: seen=\d+)?"
+                   r"(?: routing=\S+ escalated=\S+ paid_calls=\d+ today=\[([^\]]*)\])?")
+GWFAIL_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search failed for autoputer (\S+)")
+CORPUS_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) corpusd retrieval op=(\w+) shape=(\S+) ms=([0-9.]+) rows=\d+"
+                       r"(?: vector_state=(\w+))? err=(\S*)$")
+CONSOLE_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) caller=(\S+)$")
+# The gateway's default tiers (internal/gateway/searchplane/config.go DefaultProviderTiers); a provider
+# not listed is shown by its cap: capped means paid.
+PROVIDER_TIERS = {"keenable": "free", "searxng": "free", "brave": "free", "serper": "paid", "parallel": "paid",
+                  "tavily": "paid", "serpapi": "paid", "chatgpt": "constrained"}
+TODAY_RE = re.compile(r"^([a-z0-9_]+)=(\d+)(?:/(\d+))?$")
+
+
+def ts(t):
+    return calendar.timegm(time.strptime(t, "%Y/%m/%d %H:%M:%S"))
+
+
+def pctl(xs, q):
+    if not xs:
+        return None
+    xs = sorted(xs)
+    if q == 0.5:
+        return (xs[(len(xs) - 1) // 2] + xs[len(xs) // 2]) / 2.0
+    return xs[min(len(xs) - 1, max(0, int(-(-q * len(xs) // 1)) - 1))]
+
+
+def search_sections(text):
+    out, cur = {}, None
+    for ln in text.splitlines():
+        if ln.startswith("##"):
+            cur = ln[2:].split(" ", 1)[0]
+            out[cur] = []
+        elif cur:
+            out[cur].append(ln)
+    return out
+
+
+def search_fetch(node, now):
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    script = (SEARCH_REMOTE.replace("@DAY2@", day.replace("-", "/")).replace("@DAY@", day).replace("@VM@", PAPER_VM))
+    p = subprocess.run(["ssh", "-C", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node, script],
+                       capture_output=True, text=True, timeout=240)
+    s = search_sections(p.stdout)
+    if "END" not in s:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    return s
+
+
+def gw_usage(lines, now):
+    """The gateway's lines of the UTC day, as counts for [now-3600, now] and the day."""
+    hr = now - 3600
+    day0 = now - now % 86400
+    top, inhour, before = {}, {}, {}
+    W = {"hour": {}, "today": {}}
+    for k in W:
+        W[k] = {"requests": 0, "failed": 0, "served": {}, "paper": 0, "other": 0, "results": 0, "unique": 0,
+                "calls": {}, "skips": {}, "caps": {}}
+    unparsed = 0
+    for ln in lines:
+        m = GW_RE.match(ln)
+        f = None if m else GWFAIL_RE.match(ln)
+        if not m and not f:
+            if "gateway: search for autoputer" in ln:
+                unparsed += 1
+            continue
+        t = ts((m or f).group(1))
+        if t < day0 or t > now:
+            continue
+        wins = [W["today"]] + ([W["hour"]] if t > hr else [])
+        vm = (m or f).group(2)
+        cnt = None
+        if m and m.group(11) is not None:
+            cnt = {}
+            for tok in m.group(11).split():
+                tm = TODAY_RE.match(tok)
+                if tm:
+                    cnt[tm.group(1)] = (int(tm.group(2)), None if tm.group(3) is None else int(tm.group(3)))
+        for w in wins:
+            if f:
+                w["failed"] += 1
+                w["requests"] += 1
+                continue
+            w["requests"] += 1
+            w["paper" if vm == PAPER_VM else "other"] += 1
+            w["served"][m.group(8)] = w["served"].get(m.group(8), 0) + 1
+            w["results"] += int(m.group(9))
+            w["unique"] += int(m.group(10))
+            for tok in m.group(7).split():
+                pn, _, why = tok.partition("=")
+                d = w["skips"].setdefault(pn, {})
+                d[why] = d.get(why, 0) + 1
+        if cnt is not None:
+            # today= is the day's running count; lines are logged as searches finish, so
+            # they can arrive out of order: a window's calls are the growth of the highest
+            # count seen, never a sum of line-to-line steps
+            for pn, (n, cap) in cnt.items():
+                top[pn] = max(top.get(pn, 0), n)
+                if t > hr:
+                    inhour[pn] = max(inhour.get(pn, 0), n)
+                else:
+                    before[pn] = max(before.get(pn, 0), n)
+                if cap is not None:
+                    for w in wins:
+                        w["caps"][pn] = cap
+    for pn, n in top.items():
+        W["today"]["calls"][pn] = n
+    for pn, n in inhour.items():
+        W["hour"]["calls"][pn] = max(0, n - before.get(pn, 0))
+    for w in W.values():
+        for pn in list(w["skips"]) + list(w["caps"]):
+            w["calls"].setdefault(pn, 0)
+    W["unparsed"] = unparsed
+    return W
+
+
+def corpus_usage(lines, console, now):
+    hr = now - 3600
+    day0 = now - now % 86400
+    out = {}
+    for k in ("hour", "today"):
+        out[k] = {"total": 0, "shapes": {}, "states": {}, "ms": [], "embeds": 0, "embed_failed": 0, "embed_deadline": 0,
+                  "paper": None, "callers": {}}
+    for ln in lines:
+        m = CORPUS_RE.match(ln)
+        if not m:
+            continue
+        t = ts(m.group(1))
+        if t < day0 or t > now:
+            continue
+        op, shape, ms, state, err = m.group(2), m.group(3), float(m.group(4)), m.group(5), m.group(6)
+        for k in ("today", "hour"):
+            if k == "hour" and t <= hr:
+                continue
+            w = out[k]
+            key = "%s:%s" % (op, shape)
+            if op == "vector_embed":
+                w["embeds"] += 1
+                if err:
+                    w["embed_failed"] += 1
+                    if re.search(r"deadline|timeout|timed_out", err, re.I):
+                        w["embed_deadline"] += 1
+                continue
+            w["shapes"][key] = w["shapes"].get(key, 0) + 1
+            if op == "capture_search" and shape == "ranked":
+                w["total"] += 1
+                w["ms"].append(ms)
+                w["states"][state or "none"] = w["states"].get(state or "none", 0) + 1
+    if console is not None:
+        for k in out:
+            out[k]["paper"] = 0
+        for ln in console:
+            m = CONSOLE_RE.match(ln)
+            if not m:
+                continue
+            t = ts(m.group(1))
+            if t < day0 or t > now:
+                continue
+            for k in ("today", "hour"):
+                if k == "hour" and t <= hr:
+                    continue
+                out[k]["paper"] += 1
+                out[k]["callers"][m.group(2)] = out[k]["callers"].get(m.group(2), 0) + 1
+    return out
+
+
+def summarize_search(s, now, corpus_report=None):
+    """s: sections from search_fetch (or fixture). Returns the numbers; a value
+    that cannot be read is the string 'unknown: <reason>'."""
+    r = {"now": now, "gateway": None, "corpus": None, "gateway_unknown": None, "corpus_unknown": None, "per_run": None}
+    if "GW" in s:
+        r["gateway"] = gw_usage(s["GW"], now)
+    else:
+        r["gateway_unknown"] = "gateway journal unreadable on the host"
+    if "CORPUS" in s:
+        r["corpus"] = corpus_usage(s["CORPUS"], s.get("CONSOLE"), now)
+        if "CONSOLE" not in s:
+            r["corpus"]["console_unknown"] = "paper guest console unreadable (sudo -n refused)"
+    else:
+        r["corpus_unknown"] = "corpusd journal unreadable on the host"
+    if corpus_report and r["gateway"]:
+        m = corpus_report.get("m") if isinstance(corpus_report, dict) else None
+        if m and m.get("runs"):
+            r["per_run"] = {"runs": m["runs"], "searches": m.get("gateway_web_searches")}
+    return r
+
+
+def f1(x):
+    return "%.0f" % x if x is not None else "unknown"
+
+
+def search_totals(r):
+    """Flat numbers for the history row and the block: per window."""
+    out = {}
+    for k in ("hour", "today"):
+        g = r["gateway"][k] if r["gateway"] else None
+        c = r["corpus"][k] if r["corpus"] else None
+        sent = g["served"].get("miss", 0) if g else None
+        out[k] = {
+            "corpus_total": c["total"] if c else None,
+            "corpus_vector": (sum(v for s, v in c["states"].items() if s in ("exact", "approximate", "partial"))) if c else None,
+            "corpus_median_ms": (pctl(c["ms"], 0.5) if c and c["ms"] else None),
+            "ext_requests": g["requests"] if g else None,
+            "cache_served": (g["served"].get("hit", 0) + g["served"].get("joined", 0)) if g else None,
+            "sent": sent,
+            "calls": dict(g["calls"]) if g else None,
+            "provider_calls": sum(g["calls"].values()) if g else None,
+        }
+    return out
+
+
+def tier_label(pn, cap):
+    tier = PROVIDER_TIERS.get(pn) or ("paid" if cap is not None else "tier unknown")
+    return "%s%s;" % (tier, (", cap %d/day" % cap) if cap is not None else "")
+
+
+def render_search(r, hist_note=None):
+    o = ["== search usage, %s UTC (last hour = the 60 minutes before; today = the UTC day so far) ==" %
+         time.strftime("%Y-%m-%d %H:%M", time.gmtime(r["now"]))]
+    o.append("owner target: %d external web searches a day in total; %s" % (OWNER_TARGET_PER_DAY, OWNER_TARGET_QUOTE))
+    # corpus
+    o.append("-- corpus searches (corpusd: one `op=capture_search shape=ranked` line each) --")
+    if r["corpus"] is None:
+        o.append("  unknown: %s" % r["corpus_unknown"])
+    else:
+        for k, lab in (("hour", "last hour"), ("today", "today")):
+            c = r["corpus"][k]
+            n = c["total"]
+            vec = {s: v for s, v in c["states"].items()}
+            withv = sum(v for s, v in vec.items() if s in ("exact", "approximate", "partial"))
+            share = ("%.0f%%" % (100.0 * withv / n)) if n else "n/a"
+            med, p90 = pctl(c["ms"], 0.5), pctl(c["ms"], 0.9)
+            o.append("  %-9s total %d; with the vector half %d (%s) [%s]; median %s ms, p90 %s ms" % (
+                lab, n, withv, share, ", ".join("%s %d" % (s, v) for s, v in sorted(vec.items())) or "none",
+                f1(med) if med is not None else "n/a", f1(p90) if p90 is not None else "n/a"))
+            o.append("            by shape: %s" % (", ".join("%s %d" % (s, v) for s, v in sorted(c["shapes"].items())) or "none"))
+            o.append("            query embeds: %d; failed %d (of which deadline/timeout %d)" % (c["embeds"], c["embed_failed"], c["embed_deadline"]))
+            if c["paper"] is None:
+                o.append("            by caller: unknown: %s" % r["corpus"].get("console_unknown", "console not read"))
+            else:
+                o.append("            by caller: paper's cell %d, paper's brief %d, other callers %d (corpusd's line carries no computer or "
+                         "caller: the paper's come from its guest console, the rest is the difference)" % (
+                             c["callers"].get("cell", 0), c["callers"].get("brief", 0),
+                             max(0, n - c["paper"])))
+    # web
+    o.append("-- external web search (gateway: `search for autoputer` and `search failed for autoputer`) --")
+    g = r["gateway"]
+    if g is None:
+        o.append("  unknown: %s" % r["gateway_unknown"])
+    else:
+        for k, lab in (("hour", "last hour"), ("today", "today")):
+            w = g[k]
+            sent = w["served"].get("miss", 0)
+            o.append("  %-9s requests %d (paper %d, other computers %d, failed %d); sent to providers %d, served from the cache %d, "
+                     "joined an identical one in flight %d; results returned %d (unique %d)" % (
+                         lab, w["requests"], w["paper"], w["other"], w["failed"], sent, w["served"].get("hit", 0),
+                         w["served"].get("joined", 0), w["results"], w["unique"]))
+        provs = sorted(set(g["hour"]["calls"]) | set(g["today"]["calls"]))
+        o.append("  per provider (calls = growth of the log's today= count; refusals = searches that skipped it, by the log's reason;")
+        o.append("  results per provider are not in the log): ")
+        for pn in provs:
+            cap = g["today"]["caps"].get(pn)
+            def refs(w):
+                d = w["skips"].get(pn, {})
+                return ", ".join("%s %d" % (a, b) for a, b in sorted(d.items())) or "none"
+            o.append("    %-9s %s calls %d last hour, %d today; refused last hour: %s; today: %s" % (
+                pn, tier_label(pn, cap),
+                g["hour"]["calls"].get(pn, 0), g["today"]["calls"].get(pn, 0), refs(g["hour"]), refs(g["today"])))
+        if not provs:
+            o.append("    none seen in the log")
+        if g["unparsed"]:
+            o.append("  NOTE: %d search lines did not match the known shape and are not counted" % g["unparsed"])
+    # ratios and projection
+    t = search_totals(r)
+    o.append("-- ratios and the day's projection --")
+    for k, lab in (("hour", "last hour"), ("today", "today")):
+        c, w = t[k]["corpus_total"], t[k]["sent"]
+        if c is None or w is None:
+            o.append("  corpus searches per external web search, %s: unknown (%s)" % (lab, r["corpus_unknown"] or r["gateway_unknown"]))
+        elif w == 0:
+            o.append("  corpus searches per external web search, %s: n/a (no web search sent; %d corpus searches)" % (lab, c))
+        else:
+            o.append("  corpus searches per external web search, %s: %.1f (%d / %d)" % (lab, c / w, c, w))
+    pr = r.get("per_run")
+    if pr and pr.get("searches") is not None and pr["runs"]:
+        o.append("  external web searches per research run (corpus-reuse section's span): %.1f (%d / %d)" % (
+            pr["searches"] / pr["runs"], pr["searches"], pr["runs"]))
+    else:
+        o.append("  external web searches per research run: unknown (the corpus-reuse section was not read)")
+    if g is None:
+        o.append("  projection: unknown: %s" % r["gateway_unknown"])
+    else:
+        hours = max(1.0 / 60, (r["now"] % 86400) / 3600.0)
+        sent = g["today"]["served"].get("miss", 0)
+        proj = sent / hours * 24
+        o.append("  external web searches sent today %d in %.1f h: a day at this rate is %.0f against the target %d (%s)" % (
+            sent, hours, proj, OWNER_TARGET_PER_DAY, "OVER" if proj > OWNER_TARGET_PER_DAY else "under"))
+        for pn in sorted(g["today"]["calls"]):
+            cap = g["today"]["caps"].get(pn)
+            c = g["today"]["calls"][pn]
+            pp = c / hours * 24
+            o.append("    %-9s %s %d calls today, %.0f projected%s" % (
+                pn, tier_label(pn, cap).rstrip(";").split(",")[0], c, pp,
+                ("; cap %d/day, %s" % (cap, "will hit the cap" if pp > cap else "under the cap")) if cap is not None else ""))
+        o.append("  (one search may call several providers: provider calls today %d; the target counts searches sent)" % sum(g["today"]["calls"].values()))
+    if hist_note:
+        o.append(hist_note)
+    return "\n".join(o)
+
+
+def history_read(path):
+    try:
+        with open(path) as f:
+            lines = [ln.rstrip("\n") for ln in f if ln.strip()]
+    except OSError:
+        return [], []
+    if not lines:
+        return [], []
+    hdr = lines[0].split("\t")
+    return hdr, [dict(zip(hdr, ln.split("\t"))) for ln in lines[1:]]
+
+
+def history_write(path, r):
+    t = search_totals(r)
+    hr = time.strftime("%Y-%m-%dT%HZ", time.gmtime(r["now"]))
+    hdr, rows = history_read(path)
+    why = r["gateway_unknown"] or r["corpus_unknown"]
+    def v(x):
+        return "unknown" if x is None else (("%.0f" % x) if isinstance(x, float) else str(x))
+    h, d = t["hour"], t["today"]
+    row = {"utc_hour": hr, "corpus_total": v(h["corpus_total"]), "corpus_vector": v(h["corpus_vector"]),
+           "corpus_median_ms": v(h["corpus_median_ms"]), "ext_requests": v(h["ext_requests"]),
+           "cache_served": v(h["cache_served"]), "day_searches_sent": v(d["sent"]), "day_provider_calls": v(d["provider_calls"])}
+    for pn, n in (h["calls"] or {}).items():
+        row["calls_" + pn] = str(n)
+    provs = [c for c in hdr if c.startswith("calls_")]
+    for pn in sorted((h["calls"] or {}).keys()):
+        if "calls_" + pn not in provs:
+            provs.append("calls_" + pn)
+    # an hour whose gateway was unread gets 'unknown' for each provider, not 0
+    for c in provs:
+        row.setdefault(c, "unknown" if h["calls"] is None else "0")
+    cols = HISTORY_FIXED + provs + HISTORY_TAIL
+    rows = [x for x in rows if x.get("utc_hour") != hr] + [row]
+    rows.sort(key=lambda x: x.get("utc_hour", ""))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write("\t".join(cols) + "\n")
+        for x in rows:
+            f.write("\t".join(x.get(c, "-") for c in cols) + "\n")
+    os.replace(tmp, path)
+
+
+def history_table(path, n):
+    hdr, rows = history_read(path)
+    if not rows:
+        return "no history yet at %s" % path
+    rows = rows[-n:]
+    short = {"utc_hour": "hour", "corpus_total": "corpus", "corpus_vector": "w/vec", "corpus_median_ms": "med_ms",
+             "ext_requests": "ext_req", "cache_served": "cached", "day_searches_sent": "day_sent", "day_provider_calls": "day_calls"}
+    names = [short.get(c, c.replace("calls_", "")) for c in hdr]
+    cells = [names] + [[x.get(c, "-") for c in hdr] for x in rows]
+    wid = [max(len(r[i]) for r in cells) for i in range(len(hdr))]
+    return "\n".join("  ".join(c.ljust(wid[i]) if i == 0 else c.rjust(wid[i]) for i, c in enumerate(r)) for r in cells)
+
+
+def read_lines(path):
+    with open(path) as f:
+        return f.read().splitlines()
 
 
 def share(x):
@@ -70,6 +495,12 @@ def build_line(paper, storage, problems):
 def main(argv):
     def opt(name):
         return argv[argv.index(name) + 1] if name in argv else None
+    hist_path = opt("--search-history") or HISTORY_FILE
+    if "--history" in argv:
+        i = argv.index("--history")
+        n = int(argv[i + 1]) if i + 1 < len(argv) and argv[i + 1].isdigit() else 24
+        print(history_table(hist_path, n))
+        return 0
     p_args, s_args = [], []
     if opt("--paper-fixture"):
         p_args = ["--fixture", opt("--paper-fixture")]
@@ -95,6 +526,32 @@ def main(argv):
             corpus, cerr = run("status-corpus-reuse", c_args)
         except Exception as e:   # this section never fails the hourly report
             corpus, cerr = None, str(e)[:80]
+    # the search-usage block: the real fetch unless the other reports are fixtures
+    run_search = bool(opt("--search-fixture")) or not (opt("--paper-fixture") or opt("--storage-fixture"))
+    search, search_text = None, None
+    if run_search:
+        now = int(time.time())
+        if opt("--search-now"):
+            now = calendar.timegm(time.strptime(opt("--search-now"), "%Y-%m-%dT%H:%MZ"))
+        try:
+            if opt("--search-fixture"):
+                with open(opt("--search-fixture")) as f:
+                    sect = search_sections(f.read())
+            else:
+                sect = search_fetch(opt("--node") or NODE, now)
+            search = summarize_search(sect, now, corpus)
+            known = search["gateway"] is not None or search["corpus"] is not None
+            note = None
+            if known:
+                try:
+                    history_write(hist_path, search)
+                    note = "history row for %s UTC written to %s (--history shows them)" % (
+                        time.strftime("%Y-%m-%d %H", time.gmtime(now)), hist_path)
+                except OSError as e:
+                    note = "history row not written: %s" % str(e)[:80]
+            search_text = render_search(search, note)
+        except Exception as e:   # this section never fails the hourly report
+            search_text = "== search usage: unavailable: %s ==" % str(e)[:80]
     paper, perr = run("status-paper-usage", p_args)
     storage, serr = run("status-storage", s_args)
     problems = []
@@ -105,7 +562,7 @@ def main(argv):
     line = build_line(paper, storage, problems)
     flagged = bool(problems) or any(r and r["flags"] for r in (paper, storage))
     if "--json" in argv:
-        print(json.dumps({"paper": paper, "storage": storage, "corpus": corpus, "line": line,
+        print(json.dumps({"paper": paper, "storage": storage, "corpus": corpus, "search_usage": search_text, "line": line,
                           "flags": problems + (paper["flags"] if paper else []) + (storage["flags"] if storage else [])},
                          sort_keys=True))
     else:
@@ -114,6 +571,9 @@ def main(argv):
             print()
         if run_corpus:
             print(corpus["text"] if corpus else "== corpus reuse: unavailable: %s ==" % cerr)
+            print()
+        if run_search:
+            print(search_text)
             print()
         print(line)
     if problems:
