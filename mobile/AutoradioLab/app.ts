@@ -6,6 +6,7 @@ import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fil
 import { adoptNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { accountSignOut, settleAccount } from './account.ts';
+import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
@@ -49,6 +50,8 @@ fs.read app:/data/account-stamp
 fs.write app:/data/account-stamp
 fs.read app:/data/open-pages-shared.json
 fs.write app:/data/open-pages-shared.json
+fs.read app:/data/demo-leftovers-cleared
+fs.write app:/data/demo-leftovers-cleared
 fs.read app:/data/notebook-cache.md
 fs.write app:/data/notebook-cache.md
 fs.read app:/data/takes.json
@@ -104,5 +107,8 @@ export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
   // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
   if (source !== 'accountSignOut') await settleAccount(storage, store);
+  // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, finished before the first source runs, so the
+  // modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
+  if (source !== 'accountSignOut') await clearDemoLeftovers(storage);
   return sources[source](args, store, storage, native);
 };

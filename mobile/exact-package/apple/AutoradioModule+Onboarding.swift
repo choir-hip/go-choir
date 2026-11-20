@@ -365,10 +365,6 @@ final class OnboardingController: @unchecked Sendable {
         module.touch(["openPages"])
     }
 
-    static func dayLabel() -> String {
-        let f = DateFormatter(); f.dateFormat = "d MMM"; f.locale = Locale(identifier: "en_US_POSIX"); return f.string(from: Date())
-    }
-
     /// The computer already holds the listener's edition: no card, no offer.
     func markEditionFound() {
         set { progress.editionDone = true; step = "done" }

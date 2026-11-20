@@ -1,6 +1,6 @@
 import Foundation
 
-// "What the paper has learned" reads a LearnedProvider; the default one is derived from the gesture events in `Signals`.
+// "What the paper has learned" reads a LearnedProvider; the product one is `PreferencesLearned`.
 // (The swipe-meaning settings are gone with the swipes, 2026-11-19.)
 //
 // Ways it can fail (tests in SettingsDataTests):
@@ -18,31 +18,6 @@ public struct LearnedLine: Codable, Sendable, Equatable {
 public protocol LearnedProvider: Sendable {
     func lines() async -> [LearnedLine]
     func reset() async
-}
-
-/// Derived from the gesture events: more-of-this and less-of-this, cut at the newest reset marker (L1, L2).
-public final class SignalsLearned: LearnedProvider, @unchecked Sendable {
-    private let signals: Signals
-    public init(signals: Signals) { self.signals = signals }
-
-    public static func lines(from events: [SignalEvent]) -> [LearnedLine] {
-        let newestFirst = events.sorted { $0.at > $1.at }
-        let resetAt = newestFirst.first { $0.kind == "learned-reset" }?.at ?? 0
-        var out: [LearnedLine] = []
-        for e in newestFirst where e.at > resetAt {
-            let what = e.detail.isEmpty ? e.subject : e.detail                                  // L3
-            switch e.kind {
-            case "more-of-this": out.append(LearnedLine(at: e.at, kind: "more", text: "More like this: \(what)"))
-            case "less-of-this": out.append(LearnedLine(at: e.at, kind: "less", text: "Less of this: \(what)"))
-            default: break
-            }
-        }
-        return out.sorted { $0.at > $1.at }
-    }
-    public func lines() async -> [LearnedLine] {
-        Self.lines(from: signals.recent(limit: 200))
-    }
-    public func reset() async { signals.record(SignalEvent(kind: "learned-reset", subject: "settings:learned", detail: "reset by the listener")) }
 }
 
 public struct LearnedRow: Codable, Sendable, Equatable { public var line: String, kind: String, ago: String }
