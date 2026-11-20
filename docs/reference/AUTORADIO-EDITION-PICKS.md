@@ -27,10 +27,15 @@ is the notebook's own line, never the old file's string**:
 - Whether the picks file existed **at the first read of this account generation on this phone**
   (`existedAtOpen`) decides whether the old file may add anything. What the listener does later in
   the same run does not.
-- A proof that cannot be asked (offline, an unreadable notebook, an old file that cannot be read)
-  keeps the old file and the page says so; the same evidence decides at the next launch.
+- A proof that cannot be asked (offline, an unreadable notebook) keeps the old file and the page
+  says so. If the listener then taps, the picks file is written with `"carry":"pending"`: **the
+  proof is still owed to this account's file**. The field lives inside the account's own file, is
+  wiped with it, is written and cleared only through the generation-checked write, and says
+  something about the file, not about the phone's history. At any later open a file with the field
+  is treated as "proof owed" whatever else is true: the proof is run, the proven notebook lines are
+  merged into the current picks, the old file is dropped and the field is cleared in the same write.
 
-### The cells, one test each (`edition-picks.test.ts` P6, c0 to c13)
+### The cells, one test each (`edition-picks.test.ts` P6 c0 to c13 and P6b f2 to f9)
 
 | # | Old file | Picks file at open | Server | Change since open | Action |
 |---|---|---|---|---|---|
@@ -39,7 +44,15 @@ is the notebook's own line, never the old file's string**:
 | c10b | corrupt, or holds no topics | any | not asked | - | drop |
 | c1 | topics | there | not asked | - | drop; adds nothing (a topic taken off never comes back) |
 | c2 | topics | absent | cannot say | none | keep; the page says "could not be checked yet"; next launch decides |
-| c3 | topics | absent | cannot say | yes (a tap) | keep this run; next launch the picks are there, so the file is dropped. **This is the cost**: topics picked in the old build that the listener has not seen, after an offline first launch in which they also tapped, are lost and picked again |
+| c3 | topics | absent | cannot say | yes (a tap) | keep both; the tap writes the picks with `"carry":"pending"`; the next launch owes the proof (f3 to f6) and merges it. No cost any more |
+| f2 | old absent, unreadable or no topics | field | not asked | - | clear the field (an unreadable file stays, a corrupt or empty one goes); nothing to merge; no server call |
+| f3 | topics | field | cannot say | - | keep both; a later launch decides |
+| f4 | topics | field | the account moved on mid-proof | - | write nothing; keep both |
+| f5 | topics | field | answered: no match or no notebook | - | clear the field, drop the old file; the picks are the listener's as they were |
+| f6 | topics | field | answered: match | the clearing/merging write fails | keep both (field and old file) |
+| f7 | no old file ever | none | - | - | the file never carries a field |
+| f8 | topics, the native side slow to say | none | cannot say | a tap before native answered | the write still carries the field (the write waits for the old file's presence to be known) |
+| f9 | any | field | account change | - | the wipe removes the file and the field with it; the next account's proof is against its own notebook |
 | c4 | topics | absent | answered: no notebook, or no match | - | drop; nothing adopted |
 | c5 | topics | absent | answered: match | none | store the notebook's lines in the old file's order; then drop; the first page already shows them |
 | c6 | topics | absent | answered: match | none, the write fails | keep |
@@ -50,8 +63,8 @@ is the notebook's own line, never the old file's string**:
 | c12 | collision | absent | answered | none | the notebook's text is stored ("C", not "C++") |
 | c13 | topics | absent | slow | - | the first page waits up to 3 s for the proof; past it the page says "Looking for the topics you chose before…" and is asked again on a timer until the proof ends |
 
-Plainly, what it costs: a topic picked in the old build and never written to the notebook, every
-topic of an account with no notebook, and c3 above. A topic two accounts both have in their
+Plainly, what it costs: a topic picked in the old build and never written to the notebook, and every
+topic of an account with no notebook. A topic two accounts both have in their
 notebooks is stored from the signed-in account's own line, so nothing of the other account's text
 arrives.
 
@@ -62,7 +75,7 @@ Code: `edition-picks.ts runLegacy`.
 | # | State | Lives in | Belongs to | Cleared by (sign-out, account change) | Can the clearing fail silently? | Across a restart | Test |
 |---|---|---|---|---|---|---|---|
 | 1 | The picks, their own chips, the expanded rows, the last typed message | shared memory (`edition-picks.ts mem`), one per account generation | the account of its `gen` | a moved generation (`accountGeneration`, bumped by `account.ts` before the wipes) starts a new empty memory that reads row 2 again; `wipePicks` drops it | no (memory) | starts empty, reads row 2 | P4 a |
-| 2 | The picks file | `app:/data/edition-topics.json` | the account | `account.ts` store `edition-picks` (`wipePicks`): rm; if rm fails the file is emptied, and an emptied picks file counts as cleared in `leftovers` (so a rm that keeps failing does not re-run the whole shared wipe at every launch); if neither works the store is named failed, the stamp and marker stay and the next launch wipes again. Every write is `writeCurrent` with the generation the change began under, so a write in flight when the account changes lands nowhere (and is removed if it landed) | the rm and the empty write can both fail: not silent, `account.ts` names `edition-picks` and `leftovers()` looks at the path; the retry is at the next launch (a sign-in in the same process before that reads the emptied file or, if neither worked, the old one: the same window as every moved store) | read again | P4 b d, the wipe-list tests |
+| 2 | The picks file (`{"topics":[...]}`, plus `"carry":"pending"` while the proof about the old file is owed) | `app:/data/edition-topics.json` | the account | `account.ts` store `edition-picks` (`wipePicks`): rm; if rm fails the file is emptied, and an emptied picks file counts as cleared in `leftovers` (so a rm that keeps failing does not re-run the whole shared wipe at every launch); if neither works the store is named failed, the stamp and marker stay and the next launch wipes again. Every write is `writeCurrent` with the generation the change began under, so a write in flight when the account changes lands nowhere (and is removed if it landed) | the rm and the empty write can both fail: not silent, `account.ts` names `edition-picks` and `leftovers()` looks at the path; the retry is at the next launch (a sign-in in the same process before that reads the emptied file or, if neither worked, the old one: the same window as every moved store) | read again | P4 b d, the wipe-list tests |
 | 3 | Changes made at the same time (taps, typed words, speech, the carry-over) | one queue (`mutate`), each applied to the state at write time | the account | a change queued for an account that has moved on is skipped when it runs; a change in flight at the end is dropped | no | gone | P3, P4 c |
 | 4 | The native copy of the picks (the DJ's request text, the saved corpus source, `NotebookStore`'s write, the edition writer when the send carries no list) | native memory only (`EditionPicksMirror`), no file | the account (a copy of row 2) | pushed by shared code after the file was written and never for an account that moved on; the empty copy at every wipe (`wipePicks`) and by `AccountWipe` store `edition-picks`; at the first read of each generation | a push can hang or fail: each is bounded (5 s) and the chain goes on; the native wipe is the other path. Until the first push after a restart it is EMPTY AND NOT KNOWN (`known` false). What each reader does then: the DJ's request has no edition topics; the saved corpus has no topics document; `NotebookStore.refresh` writes nothing (it requires `known` and a non-empty list; an empty copy is never written to the notebook); the edition writer refuses ("Your topics are not loaded yet") unless the done send carries the page's own list, which it does. An empty list is the listener's choice only when pushed empty | gone, empty and not known until shared code's first push | P5, `EditionSetupTests` |
 | 5 | The words the voice heard at the setup screen | native memory (`EditionTalk`) | the listener at that moment | taken by shared code on the screen's timer; `clear()` when talking stops and at a wipe; the desk's answer has a deadline (6 s). Words for an account that moved on are answered empty and change nothing | no | gone | P7, `EditionSetupTests` |

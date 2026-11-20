@@ -18,7 +18,12 @@
 //       corrupt or no topics | any     | not asked         | -                 | drop (c10b)
 //       topics   | there              | not asked         | -                 | drop, adds nothing (c1)
 //       topics   | absent             | cannot say        | none              | keep, say so (c2)
-//       topics   | absent             | cannot say        | yes               | keep; next launch the picks are there: dropped, the cost (c3)
+//       topics   | absent             | cannot say        | yes               | keep both; the file says carry:"pending"; next launch the proof is owed (c3)
+//       FIELD cells (the picks file says carry:"pending" at open: the proof is owed whatever else):
+//       old gone / unreadable / no topics | field | not asked | - | clear the field, nothing to merge (f2)
+//       topics | field | cannot say | - | keep both (f3);   account moved mid-proof | field | - | - | write nothing, keep both (f4)
+//       topics | field | answered, no match | - | clear the field, drop (f5);   the clearing write fails | keep both (f6)
+//       no old file ever | none | - | - | the file never carries a field (f7);   a tap before the old file was read still writes it (f8)
 //       topics   | absent             | answered, no match or no notebook | - | drop (c4)
 //       topics   | absent             | answered, match   | none              | adopt the notebook's lines, then drop (c5)
 //       topics   | absent             | answered, match   | none, write fails | keep (c6)
@@ -55,6 +60,7 @@ const storage = {
 const hold = (): (() => void) => { let r: () => void = () => undefined; gate = new Promise<void>((res) => { r = res; }); return r; };
 const text = (p: string): string | undefined => { const b = files.get(p); return b ? new TextDecoder().decode(b) : undefined; };
 const stored = (): string[] | undefined => { const t = text(PICKS_FILE); return t === undefined ? undefined : (JSON.parse(t) as { topics: string[] }).topics; };
+const carry = (): string | undefined => { const t = text(PICKS_FILE); return t === undefined ? undefined : (JSON.parse(t) as { carry?: string }).carry; };
 const put = (p: string, t: string): void => { files.set(p, new TextEncoder().encode(t)); };
 
 // ---- a fake phone: the old file and the native mirror and mailbox are state the test can read back
@@ -270,13 +276,13 @@ describe('P6 the old Swift file: adopted by proof, the notebook\'s own lines', (
     await launch();
     expect(stored()).toBeUndefined(); expect(phone.legacy).not.toBeNull();
   });
-  test('c3: offline first launch, one tap, next launch online: the picks are there, so the old file adds nothing and goes. THIS IS THE COST, stated in the reference page', async () => {
+  test('c3: offline first launch, one tap, next launch online: the file says the proof is still owed, so the old topics are merged in (the cost is closed)', async () => {
     phone.legacy = old('Space', 'Film'); server = { fail: true };
     await toggle(storage, 'Culture', E()); await settle();
-    expect(stored()).toEqual(['Culture']); expect(phone.legacy).not.toBeNull();       // the same launch decides nothing
+    expect(stored()).toEqual(['Culture']); expect(carry()).toBe('pending'); expect(phone.legacy).not.toBeNull();       // the same launch decides nothing, and says so in the file
     accountWith('Space', 'Film');
     await launch();
-    expect(stored()).toEqual(['Culture']); expect(phone.legacy).toBeNull();
+    expect(stored()).toEqual(['Culture', 'Space', 'Film']); expect(carry()).toBeUndefined(); expect(phone.legacy).toBeNull();
   });
   test('c4: an account with no notebook, or a notebook with none of the topics, adopts nothing and the file goes', async () => {
     phone.legacy = old('Space'); server = { edition: { found: false } };
@@ -349,6 +355,71 @@ describe('P6 the old Swift file: adopted by proof, the notebook\'s own lines', (
     const next = await picksPage(storage, {}, E());
     expect(next.picks).toBe('Space'); expect(next.carrying).toBe(false); expect(next.carryNote).toBe('');
     expect((await picksText(storage, E())).picks).toBe('Space');
+  });
+});
+
+describe('P6b the proof still owed (the field in the picks file itself)', () => {
+  const old = (...t: string[]): string => JSON.stringify({ topics: t });
+  const launch = async (e: Env = E()): Promise<void> => { forgetPicks(); await picksText(storage, e); await settle(); };
+  const owed = (topics: string[]): void => put(PICKS_FILE, JSON.stringify({ topics, carry: 'pending' }));
+  test('f2: the old file is gone: the field is cleared, the picks stay, no server call', async () => {
+    owed(['Culture']); let asked = 0; const counting: Get = async (p, q) => { asked += 1; return get(p, q); };
+    await launch({ ...E(), get: counting });
+    expect(stored()).toEqual(['Culture']); expect(carry()).toBeUndefined(); expect(asked).toBe(0);
+  });
+  test('f2b: the old file cannot be read: the field is cleared, the old file stays', async () => {
+    owed(['Culture']); phone.unreadable = true; accountWith('Space');
+    await launch();
+    expect(stored()).toEqual(['Culture']); expect(carry()).toBeUndefined(); expect(phone.unreadable).toBe(true);
+  });
+  test('f2c: the old file holds no topics: the field is cleared and the file goes', async () => {
+    owed(['Culture']); phone.legacy = '{nope'; accountWith('Space');
+    await launch();
+    expect(stored()).toEqual(['Culture']); expect(carry()).toBeUndefined(); expect(phone.legacy).toBeNull();
+  });
+  test('f3: the server still cannot say: both stay, and a later launch decides', async () => {
+    owed(['Culture']); phone.legacy = old('Space'); server = { fail: true };
+    await launch();
+    expect(stored()).toEqual(['Culture']); expect(carry()).toBe('pending'); expect(phone.legacy).not.toBeNull();
+    accountWith('Space'); await launch();
+    expect(stored()).toEqual(['Culture', 'Space']); expect(carry()).toBeUndefined(); expect(phone.legacy).toBeNull();
+  });
+  test('f4: the account moves on mid-proof: nothing is written, both stay', async () => {
+    owed(['Culture']); phone.legacy = old('Space'); accountWith('Space');
+    let release: () => void = () => undefined; const hold2 = new Promise<void>((r) => { release = r; });
+    const slowGet: Get = async (p, q) => { await hold2; return get(p, q); };
+    forgetPicks(); await picksText(storage, { ...E(), get: slowGet, legacyWaitMs: 5 });
+    const before = text(PICKS_FILE);
+    nextGeneration(); release(); await settle(); await new Promise((r) => setTimeout(r, 20));
+    expect(text(PICKS_FILE)).toBe(before); expect(phone.legacy).not.toBeNull();
+  });
+  test('f5: the proof answers with no match: the field is cleared and the old file goes; the picks are the listener\'s as they were', async () => {
+    owed(['Culture']); phone.legacy = old('Space'); accountWith('Gardening');
+    await launch();
+    expect(stored()).toEqual(['Culture']); expect(carry()).toBeUndefined(); expect(phone.legacy).toBeNull();
+  });
+  test('f6: the write that would clear the field fails: both stay', async () => {
+    owed(['Culture']); phone.legacy = old('Space'); accountWith('Space'); failWrites = true;
+    await launch();
+    expect(carry()).toBe('pending'); expect(stored()).toEqual(['Culture']); expect(phone.legacy).not.toBeNull();
+  });
+  test('f7: with no old file the file never carries a field', async () => {
+    await toggle(storage, 'Space', E()); await addTyped(storage, 'Chess', E());
+    expect(text(PICKS_FILE)).toBe('{"topics":["Space","Chess"]}');
+  });
+  test('f8: a tap before the native side has even answered about the old file is still written as owing the proof', async () => {
+    phone.legacy = old('Space'); server = { fail: true };
+    const slow: Device = { ...device(), legacy: async () => { await new Promise((r) => setTimeout(r, 40)); return { found: true, text: phone.legacy ?? '' }; } };
+    await toggle(storage, 'Culture', env(slow));
+    expect(carry()).toBe('pending');
+  });
+  test('f9: an account change wipes the file and the field with it; the next account\'s proof is against its own notebook', async () => {
+    owed(['Culture']); phone.legacy = old('Space');
+    nextGeneration(); await wipePicks(storage, E());
+    expect(files.has(PICKS_FILE)).toBe(false);
+    accountWith('Space');                                       // B's notebook
+    await launch();
+    expect(stored()).toEqual(['Space']); expect(carry()).toBeUndefined();
   });
 });
 
