@@ -2,6 +2,7 @@ package actorruntime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 )
 
@@ -27,7 +27,7 @@ func TestPreBootTextureRootDigestIsInterruptedAfterCrash(t *testing.T) {
 	}
 	boot := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	mailbox := scopedActorMailboxID("owner-1", "computer-1", agentcore.TextureRootDigestMailbox)
-	digest := actor.Update{UpdateID: "digest-1", ToAgentID: mailbox, Kind: agentcore.TextureRootDigestKind, Content: `{"v":1,"docs":["doc-b"]}`, CreatedAt: boot.Add(-time.Minute)}
+	digest := actor.Update{UpdateID: "digest-1", ToAgentID: mailbox, Kind: agentcore.TextureRootDigestKind, Content: `{"v":1,"due":"2026-10-25T11:00:00Z"}`, CreatedAt: boot.Add(-time.Minute)}
 
 	crash := &actorHandler{bootAt: boot}
 	if _, err := crash.HandleUpdate(context.Background(), mailbox, digest, nil); !errors.Is(err, actor.ErrDurableInvalid) {
@@ -62,9 +62,6 @@ func TestLedgerChangeWakesNoteTheTextureRoot(t *testing.T) {
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			f := newRecordsWakeFixture(t, "rootnote", false, false)
-			if err := f.env.store.PutComputerSetting(f.env.ctx, store.ComputerSetting{OwnerID: f.ownerID, ComputerID: f.computerID, Key: store.SettingTextureRootDesk, Value: true}); err != nil {
-				t.Fatal(err)
-			}
 			var digests []string
 			f.env.adapter.Runtime.SetScheduleActor(func(_ context.Context, _, _, to, kind, content, _, _ string, _ time.Time) error {
 				if kind == agentcore.TextureRootDigestKind {
@@ -78,9 +75,7 @@ func TestLedgerChangeWakesNoteTheTextureRoot(t *testing.T) {
 				UpdateID: tc.kind + "-1", ToAgentID: scopedActorMailboxID(f.ownerID, f.computerID, mailbox),
 				Kind: tc.kind, Content: tc.content(f), TrajectoryID: f.trajectoryID, CreatedAt: time.Now().UTC().Add(time.Second),
 			}, nil)
-			if len(digests) != 1 || !strings.Contains(digests[0], f.id) {
-				t.Fatalf("%s on %s armed digests %v, want one naming the document", tc.kind, f.id, digests)
-			}
+			assertRootDigestNotes(t, f, digests, 1, tc.kind)
 		})
 	}
 }
@@ -97,9 +92,6 @@ func TestFateDeadlineNotesTheTextureRootAfterItCommits(t *testing.T) {
 	}{{"ran", nil, 1}, {"held", agentcore.ErrAssignmentSagaHeld, 0}} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newRecordsWakeFixture(t, "fatenote", false, false)
-			if err := f.env.store.PutComputerSetting(f.env.ctx, store.ComputerSetting{OwnerID: f.ownerID, ComputerID: f.computerID, Key: store.SettingTextureRootDesk, Value: true}); err != nil {
-				t.Fatal(err)
-			}
 			var digests []string
 			f.env.adapter.Runtime.SetScheduleActor(func(_ context.Context, _, _, _, kind, content, _, _ string, _ time.Time) error {
 				if kind == agentcore.TextureRootDigestKind {
@@ -115,9 +107,28 @@ func TestFateDeadlineNotesTheTextureRootAfterItCommits(t *testing.T) {
 				Kind: "assigned_engineering_fate_deadline", Content: `{"assignment_id":"assignment-none","attempt":1}`,
 				TrajectoryID: f.trajectoryID, CreatedAt: time.Now().UTC().Add(time.Second),
 			}, nil)
-			if len(digests) != tc.digests || (tc.digests == 1 && !strings.Contains(digests[0], f.id)) {
-				t.Fatalf("fate deadline (%s) armed digests %v, want %d naming %s", tc.name, digests, tc.digests, f.id)
-			}
+			assertRootDigestNotes(t, f, digests, tc.digests, "fate deadline "+tc.name)
 		})
+	}
+}
+
+// A digest carries a version and its due time and names no documents (what
+// is pending is read from the store); the note arms exactly one digest, and a
+// handler that noted nothing arms none.
+func assertRootDigestNotes(t *testing.T, f *recordsWakeFixture, digests []string, want int, what string) {
+	t.Helper()
+	if len(digests) != want {
+		t.Fatalf("%s on %s armed %d digests %v, want %d", what, f.id, len(digests), digests, want)
+	}
+	if want == 0 {
+		return
+	}
+	var digest struct {
+		V    int      `json:"v"`
+		Due  string   `json:"due"`
+		Docs []string `json:"docs"`
+	}
+	if err := json.Unmarshal([]byte(digests[0]), &digest); err != nil || digest.V != 1 || digest.Due == "" || len(digest.Docs) != 0 || strings.Contains(digests[0], f.id) {
+		t.Fatalf("%s armed digest %s (%v), want {v:1, due} naming no document", what, digests[0], err)
 	}
 }

@@ -8,8 +8,7 @@ package agentcore
 //      -> ...ArmsAfterTheStayUpIntervalNeverAtBoot
 //   2. a notice with the state not holding (projected, objects missing)
 //      -> ...OnlyForABaseMovedStackWithItsObjects
-//   3. (S4) there is no switch: texture.root_desk off with a live root still
-//      mints -> ...HasNoSwitch
+//   3. (S4) there is no switch: the notice depends on nothing but a live root
 //   4. D8: no live root consumes an attempt -> ...NoLiveRootMintsNothingAndUsesNoAttempt
 //   5. a live attempt is doubled before it closes -> ...AnAnsweredAttemptIsNotDoubled
 //   6. D10: a re-mint loop; the cap is 3 -> ...CapsAtThreeAttemptsAndStops
@@ -77,7 +76,6 @@ func newRebaseFixtureOn(t *testing.T, moved map[string]string) *rebaseFixture {
 	if _, err := f.s.ClaimTextureRoot(context.Background(), nil, store.TextureRoot{OwnerID: f.owner, ComputerID: computerID, DocumentID: "doc-master", Generation: 1}); err != nil {
 		t.Fatal(err)
 	}
-	f.setSwitch(t, store.SettingTextureRootDesk, true)
 
 	f.now = time.Now().UTC()
 	rt.bootedAt = f.now.Add(-time.Hour) // a long-running boot
@@ -87,13 +85,6 @@ func newRebaseFixtureOn(t *testing.T, moved map[string]string) *rebaseFixture {
 	rt.rebaseAfterFunc = func(time.Duration, func()) rebaseTimerHandle { return noopRebaseTimer{} }
 	t.Cleanup(rt.stopRebaseNotice)
 	return f
-}
-
-func (f *rebaseFixture) setSwitch(t *testing.T, key string, on bool) {
-	t.Helper()
-	if err := f.s.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: f.owner, ComputerID: f.computer, Key: key, Value: on}); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func (f *rebaseFixture) noticeID(n int) string {
@@ -273,14 +264,6 @@ func TestRebaseNoticeOnlyForABaseMovedStackWithItsObjects(t *testing.T) {
 	}
 }
 
-func TestRebaseNoticeHasNoSwitch(t *testing.T) {
-	f := newRebaseFixture(t)
-	f.setSwitch(t, store.SettingTextureRootDesk, false)
-	if out := f.fire(t); out.Minted == "" {
-		t.Fatalf("S4: the notice must not depend on texture.root_desk when the root is live: %+v", out)
-	}
-}
-
 func TestRebaseNoticeNoLiveRootMintsNothingAndUsesNoAttempt(t *testing.T) {
 	// D8: a computer whose store has no root marker.
 	rt, updaterRoot, repo, base := projectionRuntime(t, "computer-noroot")
@@ -295,9 +278,6 @@ func TestRebaseNoticeNoLiveRootMintsNothingAndUsesNoAttempt(t *testing.T) {
 		t.Fatalf("no marker minted %+v", out)
 	}
 	// A settled (not live) master: its trajectory no longer takes a root run.
-	if err := rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: "owner-noroot", ComputerID: "computer-noroot", Key: store.SettingTextureRootDesk, Value: true}); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := rt.store.ClaimTextureRoot(context.Background(), nil, store.TextureRoot{OwnerID: "owner-noroot", ComputerID: "computer-noroot", DocumentID: "doc-missing", Generation: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -469,22 +449,6 @@ func TestRebaseNoticeShowsToTheRootAsARebaseNoticeNotAClosure(t *testing.T) {
 	rec := f.notice(t, 1)
 	if got := inboxRecordKind(*rec); got != "rebase_notice" {
 		t.Fatalf("the root reads the notice as %q, want rebase_notice (not closure)", got)
-	}
-}
-
-// S4: texture.root_desk off is not a rollback of the rebase offer any more;
-// it leaves an armed timer alone (the timer finds no live root and mints none).
-func TestTextureRootDeskOffLeavesTheTimer(t *testing.T) {
-	f := newRebaseFixture(t)
-	if _, err := f.rt.ReconcileSourceProjection(context.Background(), "cast"); err != nil {
-		t.Fatal(err)
-	}
-	if _, armed := f.rt.rebaseNoticeDueAt(); !armed {
-		t.Fatal("fixture: the timer must be armed")
-	}
-	f.rt.applyTextureRootDeskSetting(false)
-	if _, armed := f.rt.rebaseNoticeDueAt(); !armed {
-		t.Fatal("texture.root_desk off must not stop the timer")
 	}
 }
 

@@ -95,6 +95,16 @@ func EmissionsFromCtx(ctx context.Context) *emissionBuffer {
 	return buf
 }
 
+// WithoutEmissions returns ctx with the activation's emission buffer hidden:
+// a send made under it goes out at once instead of riding the activation's
+// fenced commit. For a send whose purpose outlives the activation, where a
+// deferred, failed or epoch-conflicted handler's discarded buffer would
+// strand state the send's caller already recorded (the Texture root's armed
+// digest).
+func WithoutEmissions(ctx context.Context) context.Context {
+	return context.WithValue(ctx, emissionCtxKey{}, (*emissionBuffer)(nil))
+}
+
 // Add appends an emitted update to the activation's buffer.
 func (b *emissionBuffer) Add(u Update) {
 	b.mu.Lock()

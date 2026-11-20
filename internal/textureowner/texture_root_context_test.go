@@ -15,9 +15,9 @@ package textureowner
 //	owner edit) as the root's.
 
 import (
-	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -60,23 +60,18 @@ func hasRootContext(run types.RunRecord) bool {
 	return strings.Contains(run.Prompt, textureprompts.RootContextLabel())
 }
 
-// Off, or on with no master yet, the run is exactly what it was.
-func TestTextureRootContextOffOrNoMasterChangesNothing(t *testing.T) {
-	off := newRootHarness(t, false)
-	_, runOff := off.createDoc("ctx-b", "Harbor")
-	on := newRootHarness(t, true)
-	_, runOn := on.createDoc("ctx-b", "Harbor")
-	if _, ok := on.marker(); ok {
+// With no master yet the run is exactly what it was.
+func TestTextureRootContextNoMasterChangesNothing(t *testing.T) {
+	rh := newRootHarness(t)
+	_, run := rh.createDoc("ctx-b", "Harbor")
+	if _, ok := rh.marker(); ok {
 		t.Fatal("creating a document claimed a master")
 	}
-	if hasRootContext(runOff) || hasRootContext(runOn) {
-		t.Fatal("a run got the master's excerpt with the switch off or no master")
+	if hasRootContext(run) {
+		t.Fatal("a run got the master's excerpt with no master")
 	}
-	if runOff.Prompt != runOn.Prompt {
-		t.Fatalf("on with no master changed the run's prompt:\noff:\n%s\non:\n%s", runOff.Prompt, runOn.Prompt)
-	}
-	if _, ok := runOn.Metadata["texture_root_context_revision_id"]; ok {
-		t.Fatal("on with no master stamped the root context on the run")
+	if _, ok := run.Metadata["texture_root_context_revision_id"]; ok {
+		t.Fatal("no master stamped the root context on the run")
 	}
 }
 
@@ -118,7 +113,7 @@ func TestTextureRootContextReachesOtherDocumentsNotTheMaster(t *testing.T) {
 	passivateRun(t, rh.s, root)
 	rh.advance(3 * time.Minute)
 	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, c)
-	rh.advance(3 * time.Minute)
+	rh.advance(3 * time.Hour) // the gate: a run that moved no watermark waits twice the hour
 	rh.deliver(rh.digests()[len(rh.digests())-1])
 	next, ok := rh.activeRun(master)
 	if !ok || next.RunID == root.RunID {
@@ -230,25 +225,26 @@ func TestTextureRootExcerptPutsTheNewestDocumentsFirst(t *testing.T) {
 	}
 }
 
-// One document listing per run, and on a real computer the newest document
-// survives the cut: the root wrote Harbor (older) before Bridge (newer), each
+// No document listing per run (the order comes from what the master's head
+// recorded), and on a real computer the newest document survives the cut: the root wrote Harbor (older) before Bridge (newer), each
 // over half the bound, and a new document's run sees Bridge.
-func TestTextureRootContextReadsOneListingAndKeepsTheNewest(t *testing.T) {
+func TestTextureRootContextReadsNoListingAndKeepsTheNewest(t *testing.T) {
 	rh, _, root, b, c := rootStarted(t)
 	filler := strings.Repeat("A status line that takes room in the master. ", 50)
 	master := "## Harbor\n\n" + filler + "\n\nrefs: doc=" + b + " work=none\n\n" +
 		"## Bridge\n\n" + filler + "\n\nrefs: doc=" + c + " work=none\n\n" +
 		"## Waits on the owner\n\n- nothing waits on the owner."
 	rh.write(rh.h, &root, "master", master, "")
-	listings := 0
-	rh.h.textureRootListDocuments = func(ctx context.Context, ownerID, computerID string, limit int) ([]types.Document, error) {
-		listings++
-		return rh.s.ListDocumentsByScope(ctx, ownerID, computerID, limit)
+	// The tripwire for item 5 of the fifth review: the excerpt path must not
+	// list and decode every document object of the computer to order 4 KiB.
+	source, err := os.ReadFile("texture_root_context.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(source), "ListDocumentsByScope") || strings.Contains(string(source), "textureRootListDocuments") {
+		t.Fatal("texture_root_context.go lists documents again")
 	}
 	_, run := rh.createDoc("ctx-newest-d", "Ferry")
-	if listings != 1 {
-		t.Fatalf("one run read the document listing %d times, want 1", listings)
-	}
 	if !hasRootContext(run) {
 		t.Fatalf("the new document's run lacks the excerpt:\n%s", run.Prompt)
 	}

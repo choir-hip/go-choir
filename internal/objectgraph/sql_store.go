@@ -1459,6 +1459,64 @@ func ownerBodySinceSQL(kind, ownerID string, matches []JSONFieldMatch, since tim
 	return query, args, nil
 }
 
+// ChangeCursor is a position in the (updated_at, canonical_id) order that
+// ListObjectsChangedSince reads: the rows strictly after it.
+type ChangeCursor struct {
+	At time.Time
+	ID string
+}
+
+// ChangedSinceSQL is ListObjectsChangedSince's query: one kind, one owner and
+// one computer, rows updated at or after a time and strictly after a cursor,
+// oldest first, with a limit. The range on (object_kind, owner_id,
+// updated_at) is served by idx_og_objects_kind_owner_updated, so the work is
+// the rows changed, not the rows of the kind; computer_id is tested on those
+// rows. The plan test pins the index.
+func changedSinceSQL(since time.Time, after ChangeCursor, limit int) (string, []any) {
+	query := objectSelectSQL + `
+		 WHERE h.object_kind = ? AND h.owner_id = ? AND h.updated_at >= ? AND h.computer_id = ? AND h.tombstone = 0`
+	args := []any{nil, nil, since.UTC(), nil}
+	if !after.At.IsZero() {
+		query += ` AND (h.updated_at > ? OR (h.updated_at = ? AND h.canonical_id > ?))`
+		args = append(args, after.At.UTC(), after.At.UTC(), after.ID)
+	}
+	query += ` ORDER BY h.updated_at ASC, h.canonical_id ASC LIMIT ?`
+	args = append(args, NormalizedLimit(limit))
+	return query, args
+}
+
+// ListObjectsChangedSince lists the objects of one kind, owner and computer
+// whose header was updated at or after since and strictly after the cursor,
+// oldest change first (canonical ID breaks ties), at most limit of them.
+func (s *SQLStore) ListObjectsChangedSince(ctx context.Context, kind, ownerID, computerID string, since time.Time, after ChangeCursor, limit int) ([]Object, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph sql: nil store")
+	}
+	if err := checkReadKind(ctx, ObjectKind(kind)); err != nil {
+		return nil, err
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return nil, fmt.Errorf("objectgraph sql: owner_id is required")
+	}
+	query, args := changedSinceSQL(since, after, limit)
+	args[0], args[1], args[3] = kind, ownerID, computerID
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph sql: list changed since: %w", err)
+	}
+	defer rows.Close()
+	var out []Object
+	for rows.Next() {
+		obj, err := scanObject(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
 // recordsByInboxSeqSQL is ListRecordsByInboxSeq's query: an index range on
 // (object_kind, inbox, inbox_seq), ordered by every index column so the
 // engine reads it in index order. The plan-shape tests EXPLAIN this text.

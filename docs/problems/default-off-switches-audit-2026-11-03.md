@@ -95,11 +95,25 @@ a planned refresh since then: the paper migrated at boot on 2026-11-01
 (store split ledger). The frontend is served from main. No guard was
 added.
 
+### texture.root_desk: built and on, 2026-11-19 (no setting)
+
+The owner ruled everything on (2026-11-19). The setting is removed. The
+root desk runs on every computer as one rule: at most one digest-started
+root run an hour, with the digest idempotent against a watermark the root
+writes into its own revisions (`docs/problems/texture-root-digest-had-two-
+authorities-2026-11-20.md`), and the 20-an-hour quota on root runs deleted.
+The root desk does not digest stories (the lead's decision of 2026-11-20:
+they have their own index and publication path, and on the paper they are
+hundreds an hour); a story run carries no master excerpt either. The
+2026-11-03 text said "published story documents"; that is now narrower than
+the code in the other direction: no story, published or draft, reaches the
+root. The F4/F5 re-proof on d@e is the deployed proof `scripts/proof-pd3-root-desk`,
+run after landing. Row: `docs/current-architecture.md`.
+
 ### Not flipped: features held, with the reason and the fix
 
 | Setting | Why on-by-default would break or contradict today | Fix that makes on safe | Owner decision |
 |---|---|---|---|
-| texture.root_desk | The owner set two conditions (switch audit 2026-11-03, group 1). The F4/F5 excerpt order must be re-proved on d@e. On the paper, published-story documents must feed the Master as one batched entry an hour; that is not built, and today every story commit arms a digest (up to 20 root runs an hour) | Build the paper's hourly batch, re-prove F4/F5 on d@e, then default on | "Turn root desk on now on owner computers by a stored setting while the batch is built?" |
 | research.related_story | Its finish rule (`requireStoryEntitiesRecorded`, `recordsInboxPrompt`, `storyAnalysisFor`) treats every `research:<doc>` desk as a story desk. Default on would hold owner research rounds to record entities for a document that was never published | Key the story rules on "the document is a published story", not on the setting. Then default on, so related-story reads work on every computer (owner: "useful regardless of your endpoint") | "Approve keying the story rules on publication, then delete the setting?" |
 | evidence.graph | The owner asked for this to be measured first: "we just spent the last few days working to optimize storage and memory usage. cant undo that". The first write imports the whole agent_evidence table inline, under graphHomeMu, which slot claims also take | Measure on a paper copy (rows, bytes, lock hold), then bound and background the import | "Decide after the paper-copy measurement" |
 | store.telemetry_partitions | GCTelemetryPartitions returns 0 while a staged compact copy exists, so a computer that never restarts never deletes retired partition files. Turning it on writes store floor 5 on every computer, the paper included | Fix the GC starvation (compare the copy's head with the retire op's sequence); then default on (owner: floor 5 accepted) | "Default on once the GC fix lands?" |

@@ -239,6 +239,12 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 		if outcome == types.TextureTurnRevision && len(revision.Content) > textureRootMaxRevisionBytes {
 			return types.LifecycleResult{}, fmt.Errorf("the master document is bounded at 48 KiB and this revision is %d KiB; nothing was committed: keep each document's section to its status and its refs line", (len(revision.Content)+1023)/1024)
 		}
+		if outcome == types.TextureTurnRevision {
+			// The watermark (texture_root_plan.go): the run's cut-off, written
+			// with the revision, in the same commit, so a run that commits
+			// nothing moves nothing.
+			revision.Metadata = withTextureRootWatermark(revision.Metadata, rec.Metadata)
+		}
 	}
 	req := types.ApplyTextureTurnRequest{
 		OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,

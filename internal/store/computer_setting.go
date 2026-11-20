@@ -121,18 +121,6 @@ const SettingTextureHoldTrajectory = "texture.hold_trajectory"
 // (owner, 2026-11-03); a stored off writes nothing and is the rollback.
 const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 
-// SettingTextureRootDesk turns on the Texture root desk (PD3 S1,
-// docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md): commits on
-// other documents mint a debounced texture_root_digest, whose dispatch
-// ensures one master document (named by the texture_root marker) and wakes
-// its own Texture desk, texture:<master>, to render the computer's open
-// work. Off by default, held: the owner turns it on once its excerpt order
-// (F4/F5) is re-proved on d@e and the paper's story documents feed the
-// master as one batched entry an hour (switch audit 2026-11-03, group 1);
-// off mints no digest and creates nothing, and is the
-// rollback: the master stays an ordinary document.
-const SettingTextureRootDesk = "texture.root_desk"
-
 // SettingTelemetryRetire runs the daily telemetry retirement job
 // (telemetry_retire.go): aged choir.event rows of the unread and trace kinds
 // leave the working store by a tape op; they stay on the sealed tape. On by
@@ -195,7 +183,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureOwnerDirections:       true,
 	SettingTextureEvidenceEmbeds:        true,
 	SettingTextureHoldTrajectory:        true,
-	SettingTextureRootDesk:              false,
 	SettingTelemetryRetire:              true,
 	SettingTelemetryPartitions:          false,
 	SettingCompactForce:                 false,

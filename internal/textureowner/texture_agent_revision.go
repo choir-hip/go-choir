@@ -34,10 +34,6 @@ type textureAgentRevisionRequest struct {
 	SourceEntities         []textureSourceEntity `json:"-"`
 	RequestedByRunID       string                `json:"-"`
 	Provenance             map[string]any        `json:"-"`
-	// RootDocuments are the documents a Texture root digest names (PD3 S1);
-	// RootFullRefresh asks for the bounded full refresh instead.
-	RootDocuments   []string `json:"-"`
-	RootFullRefresh bool     `json:"-"`
 }
 
 // HandleTextureAgentRevision handles POST
@@ -712,14 +708,24 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	// turn, never in the prompt core.
 	textureRoot, isTextureRoot := rt.textureRootFor(ctx, ownerID, doc.ComputerID, doc.DocID)
 	rootContextRevisionID := ""
+	rootExcerptBytes, rootExcerptRun := 0, false
+	var rootRunMetadata map[string]any
 	if isTextureRoot {
-		agentPrompt += rt.textureRootRequestSection(ctx, ownerID, doc, textureRoot, req)
+		section, rootMeta, err := rt.textureRootRequestSection(ctx, ownerID, doc, textureRoot)
+		if err != nil {
+			return nil, fmt.Errorf("build the Texture root ledger: %w", err)
+		}
+		agentPrompt += section
+		rootRunMetadata = rootMeta
 	} else if textureRoot.DocumentID != "" {
 		// Every other document's run carries the master's excerpt as
 		// read-only context (PD3 S2), in this turn, never in the core.
 		section, revisionID := rt.textureRootSharedContext(ctx, ownerID, doc, textureRoot)
 		agentPrompt += section
 		rootContextRevisionID = revisionID
+		rootExcerptBytes = len(section)
+		rootExcerptRun = true
+		log.Printf("texture root: excerpt on document %s computer %s: carried=%t bytes=%d", doc.DocID, doc.ComputerID, section != "", len(section))
 	}
 
 	// Create the runtime run with Texture agent revision metadata.
@@ -738,6 +744,9 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		"original_prompt":      strings.TrimSpace(req.Prompt),
 		"texture_context_mode": contextMode,
 		"texture_prompt_chars": len(agentPrompt),
+	}
+	if rootExcerptRun {
+		runMetadata["texture_root_excerpt_bytes"] = rootExcerptBytes
 	}
 	if trajectoryID := strings.TrimSpace(doc.TrajectoryID); trajectoryID != "" {
 		runMetadata["trajectory_id"] = trajectoryID
@@ -780,8 +789,8 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	if isTextureRoot {
 		runMetadata["texture_root"] = true
 		runMetadata["texture_root_generation"] = textureRoot.Generation
-		if len(req.RootDocuments) > 0 && !req.RootFullRefresh {
-			runMetadata["texture_root_documents"] = strings.Join(req.RootDocuments, ",")
+		for key, value := range rootRunMetadata {
+			runMetadata[key] = value
 		}
 	}
 	if scheduledMessageSeq > 0 {

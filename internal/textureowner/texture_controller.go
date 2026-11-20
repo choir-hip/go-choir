@@ -742,7 +742,6 @@ func (rt *Handler) reconcileAgentWakeLockedFor(ctx context.Context, doc types.Do
 		if !ownerHeadPending {
 			revisionReq.Intent = "render_texture_root_digest"
 		}
-		revisionReq.RootDocuments, revisionReq.RootFullRefresh = root.Docs, root.Full
 		if revisionReq.Provenance == nil {
 			revisionReq.Provenance = map[string]any{"request_source": agentcore.TextureRootDigestKind}
 		}

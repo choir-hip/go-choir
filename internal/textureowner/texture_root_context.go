@@ -9,8 +9,7 @@ package textureowner
 // first by their documents' last revision (whatever order the root wrote:
 // S2 paired test F4), without the run's own document's section, cut from
 // the end. Only with
-// texture.root_desk on and a live master the root has written; otherwise
-// the run is unchanged.
+// a live master the root has written; otherwise the run is unchanged.
 
 import (
 	"context"
@@ -32,11 +31,26 @@ const textureRootContextCut = "\n(the rest of the master document is cut here)"
 // textureRootSharedContext is the excerpt section for a run on doc, and the
 // master revision it shows; empty when the marked master is not live or its
 // head is not the root's own writing (its seed, or an owner edit the root
-// has not yet rendered).
+// has not yet rendered), and for a story document.
 func (h *Handler) textureRootSharedContext(ctx context.Context, ownerID string, doc types.Document, root store.TextureRoot) (string, string) {
 	ctx = asTextureReader(ctx)
 	computerID := strings.TrimSpace(doc.ComputerID)
 	if h == nil || h.Store == nil || strings.TrimSpace(root.DocumentID) == "" || root.DocumentID == doc.DocID {
+		return "", ""
+	}
+	// A story run carries no excerpt. On a newsroom the master is a digest of
+	// the stories, so a story run reading it would read its own story back
+	// through the root's summary (circular), and story runs are the highest
+	// volume runs: the excerpt would add a liveness read, a master head read,
+	// and up to 4 KiB of prompt to each of
+	// them, for context about the owner's open work that a story's research
+	// does not use. Ordinary documents carry it.
+	// A read error carries no excerpt either: the excerpt is optional
+	// context, so the run goes without it rather than risk the circle.
+	if story, err := h.Store.DocumentIsStory(ctx, doc); err != nil {
+		log.Printf("texture root: shared context on %s: story kind: %v", computerID, err)
+		return "", ""
+	} else if story {
 		return "", ""
 	}
 	exists, live, err := h.textureRootLive(ctx, ownerID, computerID, root)
@@ -60,31 +74,29 @@ func (h *Handler) textureRootSharedContext(ctx context.Context, ownerID string, 
 	if head.AuthorKind != types.AuthorAppAgent {
 		return "", "" // only the root writes the master as the app agent
 	}
-	excerpt := textureRootExcerpt(head.Content, doc.DocID, h.textureRootRevisedAt(ctx, ownerID, computerID, root))
+	excerpt := textureRootExcerpt(head.Content, doc.DocID, textureRootRevisedAtOf(head))
 	if excerpt == "" {
 		return "", ""
 	}
 	return "\n\n" + textureprompts.RootContextLabel() + "\n\n" + excerpt, head.RevisionID
 }
 
-// textureRootRevisedAt is each listed document's last revision time, from
-// one read of the document listing the root's ledger reads (most recently
-// revised first, the ledger's bound plus the masters). A read error leaves
+// textureRootRevisedAtOf is each document's last revision time as the master's
+// head recorded it when the root read it (the change time of each document
+// the last digest read, and those it carried), so ordering the excerpt reads
+// no document listing: the documents of the last digest are the newest, and
+// the order rule is the same, newest first. A head that records none leaves
 // every section's order as the root wrote it.
-func (h *Handler) textureRootRevisedAt(ctx context.Context, ownerID, computerID string, root store.TextureRoot) map[string]time.Time {
-	ctx = asTextureReader(ctx)
-	list := h.textureRootListDocuments
-	if list == nil {
-		list = h.Store.ListDocumentsByScope
-	}
-	docs, err := list(ctx, ownerID, computerID, textureRootMaxDocuments+len(textureRootMasterIDs(root)))
-	if err != nil {
-		log.Printf("texture root: shared context on %s: list documents: %v", computerID, err)
+func textureRootRevisedAtOf(head types.Revision) map[string]time.Time {
+	state, ok, err := textureRootStateOf(decodeRevisionMetadata(head.Metadata))
+	if err != nil || !ok {
 		return nil
 	}
-	revisedAt := make(map[string]time.Time, len(docs))
-	for _, doc := range docs {
-		revisedAt[doc.DocID] = doc.UpdatedAt
+	revisedAt := make(map[string]time.Time, len(state.Docs))
+	for id, mark := range state.Docs {
+		if at, err := time.Parse(time.RFC3339Nano, mark.At); err == nil {
+			revisedAt[id] = at
+		}
 	}
 	return revisedAt
 }

@@ -185,7 +185,7 @@ func TestNotebookEditionRouteAgreesAndNothingWakesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec, err := f.handler.reconcileAgentWakeLockedFor(ctx, doc, "texture:doc-a", &textureRootWake{Full: true}); rec != nil || err != nil {
+	if rec, err := f.handler.reconcileAgentWakeLockedFor(ctx, doc, "texture:doc-a", &textureRootWake{}); rec != nil || err != nil {
 		t.Errorf("(S10a) a root wake of the notebook: %v %v", rec, err)
 	}
 }

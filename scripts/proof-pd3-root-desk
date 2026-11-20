@@ -3,23 +3,63 @@
 # desk and master document, docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md)
 # on one test computer, through the product API and the choir CLI only.
 #
-#   scripts/proof-pd3-root-desk --computer ID --api-key-file FILE --out DIR [--host URL] [--turns N] [--dry-run]
+#   scripts/proof-pd3-root-desk --computer ID --api-key-file FILE --out DIR [--host URL] [--turns N] [--wait-minutes N] [--journal-cmd CMD] [--dry-run]
 #
-# Phases, each recorded in DIR/evidence.json:
-#   off      texture.root_desk off: no "Master document" exists; N owner
-#            revisions on each of two new documents, latency measured.
-#   on       the switch on; N more revisions each, latency measured; the
-#            master appears, every agent-authored master revision after v0 is
-#            by texture:<master>, and its latest revision names every open
-#            work item of both documents by 8-hex short id (coverage).
-#   isolate  a revision on A whose Texture run is cancelled mid-turn; B
-#            still revises, and the master's next revision follows.
-# Never run it against the paper or an owner's computer.
+# The root desk has no setting: it is on wherever this runs. Every commit on
+# any other document is noted, and one digest, due an hour after the first
+# note, takes them all, so this proof waits up to WAIT minutes (default 80)
+# for the first master revision. Phases, each recorded in DIR/evidence.json:
+#   before   N owner revisions on one new document A, latency measured, taken
+#            before this proof's first commit has reached the master.
+#   batch    N revisions on a second new document B; the proof waits for the
+#            digest and asserts the commits of A and B since the proof began
+#            started exactly ONE digest-started root run, counted from the
+#            computer's journal by its line `texture root: digest on <computer>
+#            started root run ...` (--journal-cmd: a command that prints the
+#            computer's journal since the time it is given as $1 in journalctl's
+#            form, "YYYY-MM-DD HH:MM:SS UTC", for example an ssh to the host
+#            running journalctl --since "$1"). The run list cannot tell a
+#            digest-started run from the master's creation wake, a rebase
+#            notice or an owner act, so it bounds only the total: runs of the
+#            master since T0 are at most the digest-started runs, plus one when
+#            the master did not exist before this proof (the creation wake).
+#            Without --journal-cmd the count is not taken and the verdict is
+#            "incomplete". The computer must be idle apart from this proof:
+#            another document's commit arms the same one digest, and a rebase
+#            notice is a root run this assertion does not allow (rerun). An
+#            unreadable journal, a cancel the proof did not observe and a
+#            master that did not revise after it (a requeued digest) are
+#            "incomplete", never "fail". The
+#            exit status is 0 for pass only (1 fail, 3 incomplete).
+#   after    N more revisions on A, latency measured again (the comparison with
+#            "before": the master must not slow an ordinary document), the
+#            master's every agent-authored revision is by texture:<master>,
+#            and its latest revision carries the refs line of A and of B
+#            (coverage: a document the root did not name fails, whatever the
+#            open work items say, which the proof's own turns have closed).
+#   excerpt  a new document C, created once the master has a root-written
+#            revision; the proof fetches C's first run (run status) and
+#            asserts its prompt carries the master excerpt label, the
+#            excerpt's refs in newest-document-first order (the F4/F5 order;
+#            with fewer than two documents resolved it is "incomplete"),
+#            and run metadata texture_root_excerpt_bytes > 0. It then scans
+#            the runs created since T0 for one on a story-kind trajectory and asserts
+#            its prompt has no excerpt label and texture_root_excerpt_bytes 0;
+#            a story run that carries an excerpt is a "fail"; when the computer
+#            has no story run the verdict is "incomplete", not "pass".
+#   isolate  a revision on A whose Texture run is cancelled mid-turn; B still
+#            revises, and the master's next revision follows (one more batch,
+#            so this phase waits WAIT minutes too).
+# A story is opened by management's intake, which this CLI cannot start, so the
+# story-run check uses a story the computer already has. Never run it against
+# the paper or an owner's computer.
 set -euo pipefail
 
 HOST=${CHOIR_HOST:-https://choir.news}
 TURNS=3
+WAIT=80
 DRY=0
+JOURNAL_CMD=
 while [ $# -gt 0 ]; do
   case "$1" in
     --computer) C=$2; shift 2;;
@@ -27,6 +67,8 @@ while [ $# -gt 0 ]; do
     --out) OUT=$2; shift 2;;
     --host) HOST=$2; shift 2;;
     --turns) TURNS=$2; shift 2;;
+    --wait-minutes) WAIT=$2; shift 2;;
+    --journal-cmd) JOURNAL_CMD=$2; shift 2;;
     --dry-run) DRY=1; shift;;
     *) echo "unknown flag $1" >&2; exit 2;;
   esac
@@ -42,7 +84,7 @@ api() { # method path [json]
   curl -sS -X "$m" "$HOST$p" -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$K")") \
     -H "X-Choir-Computer: $C" -H 'Content-Type: application/json' ${d:+--data "$d"}
 }
-master_doc() { api GET /api/texture/documents | jq -r '[.documents[]? | select(.title=="Master document")] | sort_by(.created_at) | last | .doc_id // empty'; }
+master_doc() { api GET "/api/texture/documents?limit=500" | jq -r '[.documents[]? | select(.title=="Master document")] | sort_by(.created_at) | last | .doc_id // empty'; }
 head_rev() { cli texture read "$1" | jq -r .current_revision_id; }
 
 # Wait for an agent-authored revision newer than revision $2 on doc $1; print
@@ -72,39 +114,72 @@ turns() { # doc label phase -> appends latencies
   done
 }
 
+# master_agent_revs: the count of agent-authored revisions of the master M.
+master_agent_revs() { cli texture history "$1" | jq '[(.entries // [])[] | select(.author_kind != "user")] | length'; }
+# wait_master_rev: wait up to WAIT minutes for the master to have more than $2
+# agent revisions; print the new count or -1.
+wait_master_rev() {
+  local m=$1 have=$2 deadline=$(( $(date +%s) + WAIT * 60 )) n
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    n=$(master_agent_revs "$m"); [ "$n" -gt "$have" ] && { echo "$n"; return 0; }
+    sleep 30
+  done
+  echo -1
+}
+
+# run_prompt: the prompt and metadata of the earliest run of agent $1.
+earliest_run() {
+  local id
+  id=$(cli run list --limit 300 | jq -r --arg a "$1" '[(.runs // .)[] | select(.agent_id == $a)] | sort_by(.created_at) | first | .run_id // empty')
+  [ -n "$id" ] && cli run status "$id"
+}
+
 log "health $(curl -s "$HOST/health" | jq -c '{deployed: .build.deployed_commit}')"
 if [ "$DRY" = 1 ]; then
-  log "dry run: would set texture.root_desk off, create two documents, run $TURNS turns each off and on, check the master's coverage and isolation"
-  api POST /api/computer-settings '{"key":"texture.root_desk","value":false}' >/dev/null
+  log "dry run: would create documents A and B, run $TURNS turns each, wait up to ${WAIT}m for the hourly digest, then check batch count, coverage, excerpt order and isolation"
   exit 0
 fi
 
-# Phase off.
-api POST /api/computer-settings '{"key":"texture.root_desk","value":false}' | tee "$OUT/setting-off.json" >/dev/null
-pre=$(master_doc); log "master before (switch off): ${pre:-none}"
-A=$(cli texture create --title "PD3 proof A: harbors" --content "Write two short paragraphs on how a harbor pilot boards a ship. Use research for one cited fact." --request-id "pd3-proof-A-$(date +%s)" | jq -r .doc_id)
-B=$(cli texture create --title "PD3 proof B: lighthouses" --content "Write two short paragraphs on how a lighthouse lens is cleaned. Use research for one cited fact." --request-id "pd3-proof-B-$(date +%s)" | jq -r .doc_id)
-log "documents A=$A B=$B"
-wait_agent_rev "$A" "$(cli texture history "$A" | jq -r '.entries[-1].revision_id')" 900 >/dev/null
-wait_agent_rev "$B" "$(cli texture history "$B" | jq -r '.entries[-1].revision_id')" 900 >/dev/null
-turns "$A" harbors off; turns "$B" lighthouses off
-off_master=$(master_doc); log "master after the off phase: ${off_master:-none}"
-
-# Phase on.
-api POST /api/computer-settings '{"key":"texture.root_desk","value":true}' | tee "$OUT/setting-on.json" >/dev/null
-# Fresh documents for the on phase: a document whose work drains settles, and
-# a settled document refuses owner revisions (409), so the off phase's pair
-# may be closed by now.
+T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+T0J=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+pre=$(master_doc); log "master before: ${pre:-none}"
+prerevs=0; [ -n "$pre" ] && prerevs=$(master_agent_revs "$pre")
 A=$(cli texture create --title "PD3 proof C: tides" --content "Write two short paragraphs on why there are two tides a day." --request-id "pd3-proof-C-$(date +%s)" | jq -r .doc_id)
-B=$(cli texture create --title "PD3 proof D: canals" --content "Write two short paragraphs on how a canal lock raises a boat." --request-id "pd3-proof-D-$(date +%s)" | jq -r .doc_id)
-log "on-phase documents A=$A B=$B"
 wait_agent_rev "$A" "$(cli texture history "$A" | jq -r '.entries[-1].revision_id')" 900 >/dev/null
+turns "$A" tides before
+B=$(cli texture create --title "PD3 proof D: canals" --content "Write two short paragraphs on how a canal lock raises a boat." --request-id "pd3-proof-D-$(date +%s)" | jq -r .doc_id)
+log "documents A=$A B=$B"
 wait_agent_rev "$B" "$(cli texture history "$B" | jq -r '.entries[-1].revision_id')" 900 >/dev/null
-turns "$A" tides on; turns "$B" canals on
-M=""; for i in $(seq 1 60); do M=$(master_doc); [ -n "$M" ] && break; sleep 15; done
+turns "$B" canals batch
+M=$pre
+if [ -z "$M" ]; then
+  for i in $(seq 1 $((WAIT * 2))); do M=$(master_doc); [ -n "$M" ] && break; sleep 30; done
+fi
 log "master: ${M:-none}"
 [ -n "$M" ] || { echo '{"verdict":"fail","reason":"no master document"}' > "$OUT/evidence.json"; exit 1; }
-sleep 150   # one debounce window after the last turn
+n1=$(wait_master_rev "$M" "$prerevs"); log "master agent revisions: $prerevs before, $n1 after the first digest"
+[ "$n1" -gt 0 ] || { echo '{"verdict":"fail","reason":"the hourly digest produced no master revision"}' > "$OUT/evidence.json"; exit 1; }
+sleep 300   # the batch is one digest: no second root run follows for the same commits
+n2=$(master_agent_revs "$M")
+root_runs=$(cli run list --limit 300 | jq --arg a "texture:$M" --arg t "$T0" '[(.runs // .)[] | select(.agent_id == $a and .created_at >= $t)] | length')
+# Digest-started runs are read from the journal. The master's creation wake
+# (a computer with no master gets one run from the digest that makes it) and
+# a rebase notice are root runs the digest line does not name, so the run list
+# is bounded by the digest count plus one, not required to equal it.
+digest_runs=null; batch_pass=null
+if [ -n "$JOURNAL_CMD" ]; then
+  creation=1; [ -n "$pre" ] && creation=0
+  # An unreadable journal (the command fails or prints nothing) is not a
+  # count of zero: the check is "incomplete", not "fail".
+  if jout=$(bash -c "$JOURNAL_CMD" _ "$T0J" 2>/dev/null) && [ -n "$jout" ]; then
+    digest_runs=$(printf '%s\n' "$jout" | grep -cF -- "texture root: digest on $C started root run" || true)
+    batch_pass=$([ "$digest_runs" -eq 1 ] && [ "$root_runs" -le $((digest_runs + creation)) ] && echo true || echo false)
+  else
+    log "the journal command failed or printed nothing: the digest count is not taken"
+  fi
+fi
+log "root runs of the master since $T0: $root_runs; digest-started: $digest_runs"
+turns "$A" tides after
 cli texture history "$M" > "$OUT/master-history.json"
 cli texture show "$M" > "$OUT/master-show.json"
 content=$(jq -r '.revision.content // .current.content // empty' "$OUT/master-show.json")
@@ -114,6 +189,12 @@ mtraj=$(api GET "/api/texture/documents/$M" | jq -r .trajectory_id)
 cli trace export "$mtraj" --out "$OUT/master-trace.json" >/dev/null
 authors=$(jq -c '[.layers.runs | .. | objects | (.agent_id? // empty) | select(type == "string" and . != "")] | unique' "$OUT/master-trace.json")
 missing='[]'
+# Coverage is checked against what the root wrote, not against open work items
+# alone (the proof's own turns close theirs, which would make that vacuous): the
+# master must carry the refs line of each document the proof changed.
+for d in "$A" "$B"; do
+  printf '%s' "$content" | grep -qF "refs: doc=$d" || missing=$(echo "$missing" | jq -c --arg w "$d" '. + [$w]')
+done
 for d in "$A" "$B"; do
   traj=$(api GET "/api/texture/documents/$d" | jq -r .trajectory_id)
   cli lifecycle snapshot "$traj" > "$OUT/snapshot-$d.json"
@@ -124,6 +205,39 @@ for d in "$A" "$B"; do
 done
 log "master authors: $authors; missing open items: $missing"
 
+# Phase excerpt: a new document's first run carries the master's excerpt, its
+# sections in the order of the documents' last revision, newest first.
+C=$(cli texture create --title "PD3 proof E: bridges" --content "Write two short paragraphs on how a bascule bridge is counterweighted." --request-id "pd3-proof-E-$(date +%s)" | jq -r .doc_id)
+sleep 20
+earliest_run "texture:$C" > "$OUT/excerpt-run.json" || echo '{}' > "$OUT/excerpt-run.json"
+label="Context, read-only: an excerpt of this computer's master document"
+excerpt_present=$(jq -r --arg l "$label" '(.run // .) | (.prompt // "") | contains($l)' "$OUT/excerpt-run.json")
+excerpt_bytes=$(jq -r '(.run // .) | (.metadata.texture_root_excerpt_bytes // 0)' "$OUT/excerpt-run.json")
+# The excerpt's refs lines name documents; their order must follow the
+# documents' updated_at, newest first, among those it names.
+api GET "/api/texture/documents?limit=500" > "$OUT/documents.json"
+order_pass=$(jq -r --arg l "$label" --slurpfile docs "$OUT/documents.json" '
+  ((.run // .) | (.prompt // "")) as $p
+  | ($p | index($l)) as $at
+  | (if $at == null then "" else $p[$at:] end) as $t
+  | [$t | scan("refs: doc=([0-9a-f-]{36})") | .[0]] as $ids
+  | ($docs[0].documents // []) as $d
+  | [$ids[] as $i | ($d[] | select(.doc_id == $i) | .updated_at)] as $times
+  | if ($times | length) < 2 then null else ($times == ($times | sort | reverse)) end' "$OUT/excerpt-run.json")
+# A story run: the recent runs whose trajectory is of kind story.
+story_found=false; story_pass=null
+for tid in $(cli run list --limit 300 | jq -r --arg t "$T0" '[(.runs // .)[] | select(((.agent_id // "") | startswith("texture:")) and .created_at >= $t) | .metadata.trajectory_id // empty] | unique | .[]' 2>/dev/null | head -60); do
+  kind=$(cli lifecycle snapshot "$tid" | jq -r '(.snapshot.trajectory // .trajectory // {}).kind // empty')
+  [ "$kind" = story ] || continue
+  rid=$(cli run list --limit 300 | jq -r --arg t "$tid" --arg t0 "$T0" '[(.runs // .)[] | select(.metadata.trajectory_id == $t and .created_at >= $t0)] | sort_by(.created_at) | last | .run_id // empty')
+  [ -n "$rid" ] || continue
+  cli run status "$rid" > "$OUT/story-run.json"
+  story_found=true
+  story_pass=$(jq -r --arg l "$label" '(.run // .) | (.prompt // "") as $p | if $p == "" then null else (($p | contains($l) | not) and ((.metadata.texture_root_excerpt_bytes // 0) == 0)) end' "$OUT/story-run.json")
+  break
+done
+log "excerpt present: $excerpt_present ($excerpt_bytes bytes); order newest first: $order_pass; story run found: $story_found, no excerpt: $story_pass"
+
 # Phase isolate.
 h=$(head_rev "$A")
 cli texture revise "$A" --expected-head "$h" --prompt "Owner turn (isolate): rewrite the whole document in full, in four paragraphs." --request-id "pd3-proof-iso-$(date +%s)" > "$OUT/iso-revise.json"
@@ -133,17 +247,35 @@ log "A's running Texture run: ${run:-none}"
 mrev=$(head_rev "$M")
 turns "$B" canals isolate
 isoB=$(tail -1 "$OUT/latency.jsonl" | jq -r .seconds)
-for i in $(seq 1 30); do [ "$(head_rev "$M")" != "$mrev" ] && break; sleep 15; done
-mnext=$(head_rev "$M")
+mnext=$mrev
+for i in $(seq 1 $((WAIT * 2))); do mnext=$(head_rev "$M"); [ "$mnext" != "$mrev" ] && break; sleep 30; done
+bef=$(jq -s '[.[] | select(.phase == "before") | .seconds] | sort | if length == 0 then null else .[(length / 2 | floor)] end' "$OUT/latency.jsonl")
+aft=$(jq -s '[.[] | select(.phase == "after") | .seconds] | sort | if length == 0 then null else .[(length / 2 | floor)] end' "$OUT/latency.jsonl")
 
-jq -n --arg A "$A" --arg B "$B" --arg M "$M" --arg pre "$pre" --arg offm "$off_master" \
+jq -n --arg A "$A" --arg B "$B" --arg C "$C" --arg M "$M" --arg pre "$pre" \
   --argjson authors "$authors" --argjson missing "$missing" --arg run "$run" \
   --arg mrev "$mrev" --arg mnext "$mnext" --arg isoB "$isoB" \
+  --argjson prerevs "$prerevs" --argjson n1 "$n1" --argjson n2 "$n2" --argjson batch "$batch_pass" \
+  --argjson bef "$bef" --argjson aft "$aft" \
+  --argjson expres "$excerpt_present" --argjson ord "$order_pass" --argjson exbytes "$excerpt_bytes" \
+  --argjson sfound "$story_found" --argjson spass "$story_pass" --argjson rruns "$root_runs" --argjson druns "$digest_runs" \
   --slurpfile lat "$OUT/latency.jsonl" '{
-  documents: {A: $A, B: $B, master: $M},
-  off_inert: {master_before: $pre, master_after_off_phase: $offm, pass: ($pre == "" and $offm == "")},
+  documents: {A: $A, B: $B, C: $C, master: $M},
+  master_before: $pre,
+  batch: {agent_revisions_before: $prerevs, after_first_digest: $n1, after_wait: $n2, root_runs_since_start: $rruns, digest_started_runs: $druns, pass: $batch},
   authors: $authors, author_pass: ($authors == ["texture:" + $M]),
   coverage: {missing: $missing, pass: ($missing | length == 0)},
-  isolation: {cancelled_run: $run, b_latency_s: ($isoB | tonumber), master_before: $mrev, master_after: $mnext, pass: ($run != "" and ($isoB | tonumber) >= 0 and $mnext != $mrev)},
+  excerpt: {present: $expres, bytes: $exbytes, newest_first: $ord, pass: (if $ord == null then null else ($expres and $ord and $exbytes > 0) end), story_run_found: $sfound, story_run_has_none: $spass},
+  latency_comparison: {median_before_s: $bef, median_after_s: $aft, ratio: (if $bef and $aft and $bef > 0 then ($aft / $bef) else null end)},
+  isolation: {cancelled_run: $run, b_latency_s: ($isoB | tonumber), master_before: $mrev, master_after: $mnext, pass: (if $run == "" or $mnext == $mrev then null else (($isoB | tonumber) >= 0) end)},
   latency: ($lat | group_by(.phase) | map({phase: .[0].phase, seconds: (map(.seconds) | sort)}))
-}' | tee "$OUT/evidence.json"
+}' > "$OUT/evidence-body.json"
+verdict_json=$(jq '. + {verdict: (
+    if ([.batch.pass, .author_pass, .coverage.pass, .excerpt.pass, .isolation.pass] | any(. == false)) or (.excerpt.story_run_found and .excerpt.story_run_has_none == false) then "fail"
+    elif ([.batch.pass, .isolation.pass, .excerpt.pass, .excerpt.story_run_has_none] | any(. == null)) or (.excerpt.story_run_found | not) then "incomplete"
+    else "pass" end)}' "$OUT/evidence-body.json" | tee "$OUT/evidence.json")
+case $(printf '%s' "$verdict_json" | jq -r .verdict) in
+  pass) exit 0;;
+  incomplete) exit 3;;
+  *) exit 1;;
+esac

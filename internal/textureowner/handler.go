@@ -75,15 +75,19 @@ type Handler struct {
 	evidenceSource     candidateEvidenceSource
 	textureWakeLocksMu sync.Mutex
 	textureWakeLocks   map[string]*textureWakeLock
-	// The Texture root's digest state (PD3 S1, texture_root.go): in memory
-	// only, so a restart forgets it. textureRootNow overrides the clock in
-	// tests.
-	textureRootMu     sync.Mutex
-	textureRootScopes map[string]*textureRootScope
-	textureRootNow    func() time.Time
-	// textureRootListDocuments overrides the document listing the root's
-	// shared context reads (one read per run); nil is the store's.
-	textureRootListDocuments func(ctx context.Context, ownerID, computerID string, limit int) ([]types.Document, error)
+	// The Texture root's armed digest (PD3 S1, texture_root.go): per scope,
+	// the time until which a digest is believed on its way. In memory only;
+	// a restart forgets it, which costs one spare digest. textureRootNow
+	// overrides the clock in tests.
+	textureRootMu    sync.Mutex
+	textureRootArmed map[string]time.Time
+	textureRootNow   func() time.Time
+	// textureRootAfterScan runs in tests between the root's scan and its
+	// ledger reads, to inject a commit into that window.
+	textureRootAfterScan func()
+	// textureRootReadSnapshot overrides the ledger's snapshot read in tests;
+	// nil reads the store.
+	textureRootReadSnapshot func(ctx context.Context, ownerID, computerID, trajectoryID string) (types.LifecycleSnapshot, error)
 }
 
 func (h *Handler) lockTextureWakeScope(ownerID, computerID, docID string) func() {
