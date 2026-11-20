@@ -94,7 +94,8 @@ stations:
     scope: 'lane/exact-demo-off 8a3c1a5ff: read the review (scratch review-demo/r1, or rerun seat 2), answer it, land. Then ask what the owner''s phone shows.'
     class: orange
     review: one seat
-    status: in review
+    status: working
+    state_at_handoff: in review
   - id: D2
     name: Demo mode removed from the product
     scope: 'delete demo mode: the Settings Developer rows, Demo.swift, DemoFixtures.generated.swift (2,191 lines) and every Demo.isOn branch; the demoSet/demoInfo interface names; the demo key store. The twelve proof scripts that set AutoradioDemo (proof-sim, proof-lane1 to 9, proof-mac, proof-default-themes, proof-common) move to real data against staging as d@e (proof-real.sh is the model) or to the web host with canned fetch in shared tests; a proof that cannot move is deleted and named. Also clear what demo mode left on a phone that was in it (the review of D1 was asked to list it).'
@@ -107,7 +108,8 @@ stations:
     scope: lane/exact-textures-place 70a5d3c77; rerun the real proof at the tip, read the screenshots, one seat, land
     class: orange
     review: one seat
-    status: built, unreviewed
+    status: working
+    state_at_handoff: built, unreviewed
   - id: X2
     name: The remaining page logic out of Swift, smallest first
     scope: 'in the order of docs/evidence/exact-swift-pages-to-move-2026-11-20.md: conversation info, Texture edit info, themes, takes, edition picks (with its writers), the books shelf; then the full reader (citations, versions, related, tables, embeds, texture: documents, editing), the bar and run sheet page models, onboarding and settings models, mail and files remnants, and the native open-pages set. Each: tests ported first, Swift deleted in the same change, the boundary ceiling lowered, real proof with screenshots read, one seat. Voice, audio, speech, the on-device models and what the platform forces stay native with the reason beside each call.'
@@ -120,19 +122,22 @@ stations:
     scope: 'settle C163 from scripts/status-corpus-reuse over two hours after 03:18Z with at least 20 searching runs (restate it for tip 8407f6c33 if needed). Seat 2''s should-fixes on the refuse-while-running rule: a same-terms running search still waits 15 s in reuse; SearchAll does not apply the running rule to its wordings; the refusal''s example call is not valid Go; the two-minute age and run-end escape are untested.'
     class: orange
     review: one seat
-    status: deployed; follow-ups pending
+    status: landed
+    state_at_handoff: deployed; follow-ups pending
   - id: S2
     name: Runs that start with no objective get one (fix 4)
     scope: lane/brief-objective bb5c2bf5a; whole agentcore under -race seen passing, one seat, land, measure brief outcomes
     class: orange
     review: one seat
-    status: built, suite not seen passing
+    status: working
+    state_at_handoff: built, suite not seen passing
   - id: S3
     name: Search leads and the one search verb (fixes 2 and 3, L1 to L4)
     scope: 'lane/search-leads 8f7ba1dce is L1: fix the dropped writes, read the FAIL, see the suites pass, one seat, land. Then L2 to L4 of the design: the corpus says how strong and recent its best answer is, and one verb choir.Search decides held, sent or sent-with-since.'
     class: orange (L1); red where the desk protocol or run acceptance changes
     review: per landing
-    status: L1 built, unverified
+    status: working
+    state_at_handoff: L1 built, unverified
   - id: S4
     name: The day's number
     scope: a full UTC day under 1,000 web searches on the paper with research still publishing (stories a day not lower than the week before), read from the search usage history
@@ -150,19 +155,22 @@ stations:
     class: red (export, tape)
     review: two seats
     depends_on: [E1]
-    status: not designed
+    status: pending
+    state_at_handoff: not designed
   - id: W1
     name: Two settings removed (intake.events, dispatch.wide_slots)
     scope: 'switches-land a144865d1: read ~/sw-run.out on choir-runner (actor, actorruntime, store, provideriface, textureowner, agentcore under -race), add Security-Effect trailers backed by review-switches r1, gates, land; settle C167. State the measurement and the rollback trigger for 8 to 12 slots in the commit.'
     class: orange
     review: done (both seats accepted)
-    status: suites running
+    status: working
+    state_at_handoff: suites running
   - id: W2
     name: The Texture root desk on everywhere
     scope: lane/root-desk-on after its rework (both seats' findings are in this file's branches_in_flight); two seats again; deployed proof on d@e; claim C165 restated against log lines that exist
     class: red
     review: two seats
-    status: rework
+    status: working
+    state_at_handoff: rework
   - id: W3
     name: The last three settings
     scope: owner_act_mode, intake.event_wakes, vm_guest_reclaim_damon (table in the previous thread's scratch switches/table.md; rebuild it from switches/registry.yaml if gone)
@@ -182,7 +190,14 @@ now:
   status: working
   slice: D1, then W1 and X1 in parallel with S2 and S3 as their suites finish
   candidate: lane/exact-demo-off 8a3c1a5ff
-  conjecture: 'the owner''s phone was never signed out; it was in demo mode, and with demo impossible on a device it will show their real account or the signed-out card. TEST: the owner''s words after opening the 04:44Z build. EDGE: the flag is gone but the key is also absent, unreadable or refused, which the card now names. If the owner reports sample stories again, the guard is not what is on the phone: read the installed build before anything else.'
+  conjecture:
+    claim: the owner's phone was never signed out; it was in demo mode, and with demo impossible on a device it shows their real account or the signed-out card
+    test: the owner's words after opening the build installed at 04:44Z
+    edge: missing_oracle
+    edge_note: nothing but the owner's eyes reads the phone; the flag may be gone while the key is absent, unreadable or refused, which the card now names; if the owner reports sample stories again the guard is not what is on the phone, so read the installed build before anything else
+    delta_o: read the app's account state off the phone through the Exact agent on a device build, so the owner's eyes are not the only instrument
+    scope: the owner's iPhone on builds of main after 8a3c1a5ff
+    status: testing
   believed_state: the search gate is deployed and partly effective; the signed-out work is deployed and proved on the simulator; the phone has the demo guard
   main_uncertainty: what the owner's phone shows; whether the event layer mints duplicates; whether the remaining search fixes reach 1,000 a day
   blocker: none
