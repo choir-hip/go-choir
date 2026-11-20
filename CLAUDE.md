@@ -21,10 +21,13 @@ wins unless this file carries a newer, explicitly promoted update.
   microphone, speech and the on-device models are native (Swift on iPhone,
   Kotlin on Android). Everything else is written once in Exact and runs on
   both: pages, page logic, the server client, sign-in, sync, the run sheet,
-  mail, files, the reader, podcasts, takes, the notebook. No new feature
-  adds logic to `mobile/AutoradioKit` or `mobile/exact-package/apple`
-  outside voice; a repair to existing Swift is allowed until its page is
-  moved. A new native call needs a reason only native code can meet, written
+  mail, files, the reader, podcasts, takes, the notebook. The rule, more
+  clearly (owner, 2026-11-20): "get everything in exact, as much as
+  possible". So a change to a page still in Swift moves that part to Exact
+  where Exact can carry it, and does not repair the Swift; Swift is touched
+  only where voice or the platform leaves no other way, with the reason
+  beside it. No new feature adds logic to `mobile/AutoradioKit` or
+  `mobile/exact-package/apple` outside voice. A new native call needs a reason only native code can meet, written
   beside it. Where the app stands against this rule:
   [docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md](docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md).
 - The roadmap is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md); the
