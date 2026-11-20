@@ -12,8 +12,7 @@ import Foundation
 //            Markdown) / cursor paging, no since, no bodies (WOULD NEED: GET /api/texture/documents?include=content&updated_since=) / all pages; a
 //            document is fetched when its updated_at differs from the held version; never evicted.
 //  file      moved to shared code: the Files page (AutoradioLab/files.ts) reads the server's folders itself and nothing here fetches them.
-//  podcast   show notes: from the feeds the phone already holds (no request). transcript: GET /api/platform/podcast-transcript?feed=&guid= (per
-//            episode, no bulk; WOULD NEED a per-feed `since`) / episodes of the last 14 days of subscribed shows, at most 20 a run.
+//  podcast   moved to shared code (AutoradioLab/podcast.ts); nothing here fetches shows, notes or transcripts.
 //  runsheet  local: heard and skipped entries with their outcome are copied from the sheet when it changes (no request); retention 90 days.
 //
 // WAYS THIS CAN FAIL (tests in ContentSyncTests, fake fetchers and a fake clock):
@@ -34,18 +33,13 @@ public final class ContentSync: @unchecked Sendable {
         public var documentBody: @Sendable (_ id: String) async throws -> String? = { _ in nil }
         public var stories: @Sendable () async throws -> [StoryBodies.Story] = { [] }
         public var storyBody: @Sendable (_ route: String) async throws -> String? = { _ in nil }
-        public var podcasts: @Sendable () -> [SavedCorpus.Document] = { [] }
-        public var transcriptTargets: @Sendable () -> [(feed: String, id: String, title: String, date: Date?)] = { [] }
         public var runSheet: @Sendable () async -> RunSheet? = { nil }
-        public var transcript: @Sendable (_ feed: String, _ id: String) async throws -> PodcastTranscript? = { _, _ in nil }
         public init() {}
     }
     public struct DocRow: Sendable, Equatable {
         public var id: String, title: String, updated: String
         public init(id: String, title: String, updated: String) { self.id = id; self.title = title; self.updated = updated }
     }
-
-    public static let transcriptsPerRun = 20, transcriptDays = 14.0
 
     let store: ContentStore
     public var fetch: Fetchers
@@ -66,7 +60,7 @@ public final class ContentSync: @unchecked Sendable {
         defer { lock.lock(); running = false; startedUnder = nil; lock.unlock() }
         var out: [SyncReport] = []
         if let sheet = await fetch.runSheet() { recordRunSheet(sheet); writeMarkSynced(.runsheet) }
-        for step in [syncStories, syncDocuments, syncPodcasts] as [() async -> SyncReport] {
+        for step in [syncStories, syncDocuments] as [() async -> SyncReport] {
             let r = await step()
             out.append(r)
             writeMarkSynced(r.kind); writeFlush()
@@ -137,32 +131,6 @@ public final class ContentSync: @unchecked Sendable {
             guard let next = page.next, !next.isEmpty, seen.insert(next).inserted else { break }
             cursor = next
         }
-        return r
-    }
-
-    // MARK: podcasts
-
-    func syncPodcasts() async -> SyncReport {
-        var r = SyncReport(kind: .podcast)
-        let now = clock()
-        for d in fetch.podcasts() where !d.id.hasPrefix("podcast-tr:") {
-            let id = d.id, version = "\(d.text.utf8.count)"
-            if store.has("pc:" + id, version: version) { r.skipped += 1; continue }
-            writePut(StoredItem(id: "pc:" + id, kind: .podcast, title: d.title, text: d.text, date: d.date, address: d.address, source: "Podcasts", version: version, syncedAt: now)); r.fetched += 1
-        }
-        var tr = SyncReport(kind: .transcript)
-        for t in fetch.transcriptTargets().prefix(Self.transcriptsPerRun) {
-            if let d = t.date, now.timeIntervalSince(d) > Self.transcriptDays * 86400 { continue }
-            let id = "tr:" + t.feed + "|" + t.id
-            if store.has(id) { tr.skipped += 1; continue }
-            guard await gate(&tr) else { r.stoppedBy = tr.stoppedBy; return r }
-            do {
-                guard let x = try await fetch.transcript(t.feed, t.id), !x.blocks.isEmpty else { tr.failed += 1; continue }
-                writePut(StoredItem(id: id, kind: .transcript, title: t.title, text: x.blocks.map(\.text).joined(separator: " "), date: t.date,
-                                     address: PodcastKey.episodeAddress(feed: t.feed, id: t.id, enclosure: "", at: 0), source: "Podcasts", version: "1", syncedAt: now)); tr.fetched += 1
-            } catch is CancellationError { r.stoppedBy = "cancelled"; return r } catch { tr.failed += 1 }
-        }
-        r.fetched += tr.fetched; r.skipped += tr.skipped; r.failed += tr.failed
         return r
     }
 
