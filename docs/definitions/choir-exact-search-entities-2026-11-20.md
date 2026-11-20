@@ -217,7 +217,7 @@ now:
     - 'train C (scratch clone train2, branch trainC on choir-runner): embed-kick 04bd09713 (seat 2 accepted the id-based rework) and search-leads 6d5da2620 (seat 2 accepted; leads are text with a lexical index, never embedded); whole agentcore running'
     - 'entity-e2 72532469b: accepted with should-fixes, done; next train'
     - 'last-switches (W3): DAMON and event-wakes in review; owner_act_mode held'
-    - 'root-desk-r3 7a6d66dc4 (W2): both seats reading'
+    - 'root-desk-r3 7a6d66dc4 (W2): STOPPED for the owner after a sixth send-back by both seats; docs/problems/texture-root-desk-six-reviews-no-landing-2026-11-20.md says why (a wall-clock time is the wrong cursor; the store needs a commit sequence) and what is asked'
     - 'snapshot-stream (H1 S1), dispatch-deadlines, search-reask-hold: building'
     - 'exact-demo-gone (D2), exact-themes, exact-convo-edit, design-rules-fix: mobile, through the Mac queue'
   conjecture:
