@@ -56,7 +56,6 @@ final class SpineTests: XCTestCase {
     }
 
     func testDemoServesFixturesAndRefusesTheRest() {
-        XCTAssertEqual(Demo.stories().count, 4)
         let (ok, _) = DemoURLProtocol.route(path: "/api/platform/publications/front", query: [])
         XCTAssertEqual(ok, 200)
         let (no, _) = DemoURLProtocol.route(path: "/api/other", query: [])

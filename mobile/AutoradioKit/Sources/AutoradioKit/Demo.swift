@@ -4,10 +4,8 @@ import Foundation
 // (the engine is already virtual under the Exact agent). Every lane builds and proves its screens on the simulator
 // against this. Fixtures live in mobile/fixtures/demo/*.json and are embedded by scripts/embed-assets.py.
 //
-//   Turn it on (simulator):  xcrun simctl spawn <udid> defaults write news.choir.autoradio.lab AutoradioDemo -bool YES
-//   Turn it off:             ... defaults delete news.choir.autoradio.lab AutoradioDemo
-//   or at run time:          the `demoSet` send (Components page, "Demo mode"), then relaunch.
-//
+//   On (simulator): xcrun simctl spawn <udid> defaults write news.choir.autoradio.lab AutoradioDemo -bool YES; off: defaults delete.
+//   No control in the app turns it on, and on a physical phone it is never on (see `allowedHere`).
 // What is stubbed: GET /api/platform/publications/front, /resolve and /api/compute/status (from fixtures); every other
 // route answers 404 {"error":"demo mode serves fixtures only"} so a lane that needs a route adds a fixture here
 // (add the file under mobile/fixtures/demo/ and one `case` in DemoURLProtocol.route, nowhere else).
@@ -15,11 +13,50 @@ import Foundation
 public enum Demo {
     public static let defaultsKey = "AutoradioDemo"
 
-    public static var isOn: Bool {
-        UserDefaults.standard.bool(forKey: defaultsKey) || ProcessInfo.processInfo.environment["AUTORADIO_DEMO"] == "1"
+    /// A proof aid for the simulator and the Mac; never on a real phone (the owner's iPhone, stuck in it, 2026-11-20).
+    /// Native: only native code knows it runs on a device, and it is read before any page exists.
+    public static var allowedHere: Bool {
+        #if os(macOS) || targetEnvironment(simulator)
+        return true
+        #else
+        return false          // a phone or any platform not named: closed
+        #endif
     }
-    public static func setOn(_ on: Bool) {
-        if on { UserDefaults.standard.set(true, forKey: defaultsKey) } else { UserDefaults.standard.removeObject(forKey: defaultsKey) }
+    public static var isOn: Bool { isOn(allowed: allowedHere) }
+    /// The decision, with the device fact passed in for tests. Where demo is not allowed a stored flag is removed.
+    static func isOn(allowed: Bool, defaults: UserDefaults = .standard, env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        guard allowed else {
+            if defaults.object(forKey: defaultsKey) != nil { defaults.removeObject(forKey: defaultsKey) }
+            return false
+        }
+        return defaults.bool(forKey: defaultsKey) || env["AUTORADIO_DEMO"] == "1"
+    }
+    static let clearedKey = "AutoradioDemoLeftoversCleared"          // recorded once `clearLeftovers` has run on this device
+    /// Native because the platform forces it: this removes on-disk state the native code wrote (the shelf, the stores' files).
+    /// Needs a positive demo trace: the sample book only if the shelf lists it, pages and signals only for the fixture addresses
+    /// demo produced; onboarding, topics and voice setup are never touched. Once per device, whatever the flag was; marked after the removals.
+    public static func clearLeftovers(support: URL, allowed: Bool = allowedHere, defaults: UserDefaults = .standard) {
+        guard !allowed, !defaults.bool(forKey: clearedKey) else { return }
+        var ok = true
+        let shelf = ReaderShelf(root: support.appendingPathComponent("books"))
+        if shelf.doc(ReaderSample.id) != nil { shelf.remove(id: ReaderSample.id); ok = shelf.doc(ReaderSample.id) == nil }
+        let file = support.appendingPathComponent("open-pages.json")
+        if let d = try? Data(contentsOf: file), var o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+           let pages = o["pages"] as? [[String: Any]], let recency = o["recency"] as? [String] {
+            let p = pages.filter { !isDemoAddress($0["address"] as? String ?? "") }, r = recency.filter { !isDemoAddress($0) }
+            o["pages"] = p; o["recency"] = r
+            if p.count != pages.count || r.count != recency.count { ok = (try? JSONSerialization.data(withJSONObject: o).write(to: file, options: .atomic)) != nil && ok }
+        }
+        let log = support.appendingPathComponent("signals.jsonl")
+        if let all = (try? String(contentsOf: log, encoding: .utf8))?.split(separator: "\n") {
+            let keep = all.filter { (try? JSONDecoder().decode(SignalEvent.self, from: Data($0.utf8))).map { !isDemoAddress($0.subject) } ?? true }
+            if keep.count != all.count { ok = (try? keep.map { $0 + "\n" }.joined().write(to: log, atomically: true, encoding: .utf8)) != nil && ok }
+        }
+        if ok { defaults.set(true, forKey: clearedKey) }
+    }
+    /// Exactly what demo mode opens and records: `pub:` plus a fixture story id (`pub:demo-x`, `pub:/demo-x`, `pub:/demo-x#b2`).
+    static func isDemoAddress(_ a: String) -> Bool {
+        a.hasPrefix("pub:") && DemoFixtureData.files["resolve-" + (a.dropFirst(4).drop { $0 == "/" }.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")] != nil
     }
 
     /// A key store already signed in as the demo listener (the key is a placeholder; nothing leaves the phone).
@@ -27,16 +64,11 @@ public enum Demo {
         InMemoryKeyStore([KeyAccount.apiKey: "choir_sk_demo", KeyAccount.computerID: "demo-computer", KeyAccount.keyID: "demo-key"])
     }
 
-    /// A URLSession whose every request is answered from the fixtures.
-    public static func session() -> URLSession {
+    /// Wire the shared Choir environment to the fixtures (a session whose every request is answered from them). Call before ChoirApp is made.
+    public static func install(into env: ChoirEnvironment = .shared) {
         let c = URLSessionConfiguration.ephemeral
         c.protocolClasses = [DemoURLProtocol.self]
-        return URLSession(configuration: c)
-    }
-
-    /// Wire the shared Choir environment to the fixtures. Call before ChoirApp is made.
-    public static func install(into env: ChoirEnvironment = .shared) {
-        env.session = session()
+        env.session = URLSession(configuration: c)
         env.keys = keys()
     }
 
@@ -67,17 +99,6 @@ public enum Demo {
     }
 
     public static func fixture(_ name: String) -> Data? { DemoFixtureData.files[name].map { Data($0.utf8) } }
-
-    /// The demo front page as stories, for pages that list them without a request.
-    public static func stories() -> [ChoirStory] {
-        guard let d = fixture("front"), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-              let list = o["stories"] as? [[String: Any]] else { return [] }
-        return list.compactMap { s in
-            guard let title = s["title"] as? String, let route = (s["route"] as? [String: Any])?["bare"] as? String else { return nil }
-            return ChoirStory(title: title, dek: s["dek"] as? String ?? "", route: route, section: s["section"] as? String ?? "",
-                              words: s["words"] as? Int ?? 0, updated: s["updated_at"] as? String ?? "")
-        }
-    }
 }
 
 final class DemoURLProtocol: URLProtocol {
@@ -87,42 +108,24 @@ final class DemoURLProtocol: URLProtocol {
 
     override func startLoading() {
         let url = request.url ?? URL(string: "https://demo.invalid/")!
-        // The programme route (station P1): a short stretch in the wire shape, so the simulator plays segments with no computer.
-        if url.path == "/api/autoradio/programme", request.httpMethod == "POST" {
-            let resp = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/event-stream"])!
-            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-            var sent = request.httpBody ?? Data()
-            if let st = request.httpBodyStream { st.open(); var buf = [UInt8](repeating: 0, count: 4096)
-                while st.hasBytesAvailable { let n = st.read(&buf, maxLength: buf.count); if n <= 0 { break }; sent.append(buf, count: n) }; st.close() }
-            let cause = ((try? JSONSerialization.jsonObject(with: sent)) as? [String: Any])?["cause"] as? String ?? "open"
-            client?.urlProtocol(self, didLoad: Data(DemoStretch.body(cause: cause).utf8))
-            client?.urlProtocolDidFinishLoading(self)
-            return
-        }
-        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         var sent = request.httpBody ?? Data()
         if let st = request.httpBodyStream { st.open(); var buf = [UInt8](repeating: 0, count: 4096)
             while st.hasBytesAvailable { let n = st.read(&buf, maxLength: buf.count); if n <= 0 { break }; sent.append(buf, count: n) }; st.close() }
-        // A Texture revision posted from the phone's editor: demo mode keeps it and answers the new head (TextureDemo.posted).
-        if request.httpMethod == "POST", let answer = TextureDemo.post(path: url.path, body: sent) {
-            let resp = HTTPURLResponse(url: url, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
-            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: answer)
-            client?.urlProtocolDidFinishLoading(self)
-            return
-        }
-        if let (status, body) = TakesDemo.answer(method: request.httpMethod ?? "GET", path: url.path + ((url.query ?? "").contains("mine=1") ? "?mine" : ""), body: sent) {
-            let resp = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
-            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+        func reply(_ status: Int, _ body: Data, _ type: String = "application/json") {
+            client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": type])!, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: body)
             client?.urlProtocolDidFinishLoading(self)
-            return
         }
-        let (status, body) = Self.route(path: url.path, query: items)
-        let resp = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
-        client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: body)
-        client?.urlProtocolDidFinishLoading(self)
+        // The programme route (station P1): a short stretch in the wire shape, so the simulator plays segments with no computer.
+        if url.path == "/api/autoradio/programme", request.httpMethod == "POST" {
+            let cause = ((try? JSONSerialization.jsonObject(with: sent)) as? [String: Any])?["cause"] as? String ?? "open"
+            return reply(200, Data(DemoStretch.body(cause: cause).utf8), "text/event-stream")
+        }
+        // A Texture revision posted from the phone's editor: demo mode keeps it and answers the new head (TextureDemo.posted).
+        if request.httpMethod == "POST", let answer = TextureDemo.post(path: url.path, body: sent) { return reply(201, answer) }
+        if let (status, body) = TakesDemo.answer(method: request.httpMethod ?? "GET", path: url.path + ((url.query ?? "").contains("mine=1") ? "?mine" : ""), body: sent) { return reply(status, body) }
+        let (status, body) = Self.route(path: url.path, query: URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+        reply(status, body)
     }
 
     /// One case per stubbed route. A lane adds its fixture file and a case here.

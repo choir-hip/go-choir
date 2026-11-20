@@ -6,7 +6,7 @@
 //   settings:computer             status, Wake, Restart to update
 //   settings:learned              what the paper has learned, with Reset
 //   settings:about                app and server builds
-// testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-demo, settings-components, settings-theme-problems,
+// testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-components, settings-theme-problems,
 //   settings-nav-<screen>, settings-back, settings-theme-doc, settings-theme-load,
 //   settings-theme-demo-texture, settings-theme-status, settings-theme-remove-<id>, settings-signout, settings-account-*,
 //   settings-choice-<setting>-<option>, settings-wake, settings-update, settings-computer-*, settings-learned-reset, settings-learned-row,
@@ -200,8 +200,6 @@ component RootScreen
     tc: ThemeCards
     acctInfo: SettingsAccount
     cmpt: SettingsComputer
-    dm: DemoInfo
-    setDemo: action
     devDetails: bool
     toggleDevDetails: action
     voicep: VoiceProfile
@@ -255,11 +253,6 @@ component RootScreen
         NavRow(address="settings:about", title="About", subtitle="Builds and server", testId="settings-nav-about")
       SectionLabel(label="Developer")
       PlainList(testId="settings-card-developer")
-        button press=setDemo(dm.on ? "false" : "true") testId="settings-demo" appearance="none" width="100%" box-sizing="border-box" padding="14px 0px"
-          column align-items="flex-start" gap=2 width="100%"
-            text (dm.on ? "Demo mode is on" : "Demo mode is off") font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
-            text (dm.on ? "Takes effect at the next launch. Tap to turn off." : "Fixtures and no network, from the next launch. Tap to turn on.") font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-        Hairline()
         button press=toggleDevDetails testId="settings-dev-details" appearance="none" width="100%" box-sizing="border-box" padding="14px 0px"
           column align-items="flex-start" gap=2 width="100%"
             text (devDetails ? "Demo controls are shown" : "Demo controls are hidden") font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
