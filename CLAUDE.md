@@ -28,7 +28,11 @@ wins unless this file carries a newer, explicitly promoted update.
   only where voice or the platform leaves no other way, with the reason
   beside it. No new feature adds logic to `mobile/AutoradioKit` or
   `mobile/exact-package/apple` outside voice. A new native call needs a reason only native code can meet, written
-  beside it. Where the app stands against this rule:
+  beside it. **A page moved to Exact carries nothing over from
+  the Swift build** (owner, 2026-11-20: "The app is very new. We haven't
+  launched it yet. I don't need to save anything"): the shared code starts
+  fresh and never reads the old native file; no migration, marker or proof
+  of ownership. This holds until the app is launched. Where the app stands against this rule:
   [docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md](docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md).
 - The roadmap is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md); the
   live station is [docs/ACTIVE.md](docs/ACTIVE.md).
