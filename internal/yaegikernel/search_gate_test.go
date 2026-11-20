@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // Every web search a run sends passes the need test
@@ -148,7 +149,7 @@ fmt.Println(s.Refused)`)
 	if f.searchCalls.Load() != 1 {
 		t.Fatalf("the second search was sent (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
-	for _, want := range []string{"<nil> true true", "a search of this run is still running (s1)", `choir.SearchWait("s1"`, "fresh"} {
+	for _, want := range []string{"<nil> true true", "a search of this run is still running (s1)", `choir.SearchWait("s1", 15000)`, "fresh"} {
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
 		}
@@ -313,5 +314,71 @@ fmt.Println(err != nil)`)
 fmt.Println(err)`)
 	if st := out.SearchStats; st == nil || st.FreshOverUnread != 1 || st.Started != 1 {
 		t.Fatalf("stats = %+v, want exactly 1 fresh_over_unread and 1 started", st)
+	}
+}
+
+// Follow-ups to the review of the running rule. Failure list, written first:
+//  15. SearchAll sends a wording while another search of the run is running.
+//  16. The refusal's example call is not valid Go (SearchWait(id, ms)).
+//  17. A running search that has run two minutes still holds the next back.
+//  18. A search of an earlier run still holds the next run's search back.
+
+func TestSearchAllAppliesTheRunningRuleToEachWording(t *testing.T) {
+	f := newResearchFixture(t)
+	f.runningFor = map[string]bool{"burst one": true}
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchStart("burst one")`)
+	out := cell(`r, err := choir.SearchAll("another question", []string{"burst two", "burst three"})
+fmt.Println(err)
+fmt.Println(r)`)
+	if f.searchCalls.Load() != 1 {
+		t.Fatalf("SearchAll sent a wording while a search of the run ran (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
+	}
+	if !strings.Contains(out.Stdout, "still running (s1)") {
+		t.Fatalf("each wording must say the running search:\n%s", out.Stdout)
+	}
+	if st := out.SearchStats; st == nil || st.NotSent["search_running"] != 2 {
+		t.Fatalf("stats = %+v, want 2 search_running (one per wording)", st)
+	}
+}
+
+func TestTheRunningRefusalExampleIsValidGo(t *testing.T) {
+	why := runningRefusal("s7")
+	if !strings.Contains(why, `choir.SearchWait("s7", 15000)`) {
+		t.Fatalf("the example call must be valid Go with a number for ms: %s", why)
+	}
+	if strings.Contains(why, "ms)") {
+		t.Fatalf("the refusal still shows a placeholder argument: %s", why)
+	}
+}
+
+func TestARunningSearchOlderThanTwoMinutesNoLongerHoldsTheNextBack(t *testing.T) {
+	f := newResearchFixture(t)
+	clk := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	f.scope.searches.now = func() time.Time { return clk }
+	f.runningFor = map[string]bool{"burst one": true}
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchStart("burst one")`)
+	clk = clk.Add(searchWaitMax - time.Second)
+	cell(`choir.SearchStart("burst two")`)
+	if f.searchCalls.Load() != 1 {
+		t.Fatalf("just under two minutes the running search still holds the next back (calls %d)", f.searchCalls.Load())
+	}
+	clk = clk.Add(2 * time.Second)
+	cell(`choir.SearchStart("burst two")`)
+	if f.searchCalls.Load() != 2 {
+		t.Fatalf("after two minutes the host's search is not waited on; the next is sent (calls %d)", f.searchCalls.Load())
+	}
+}
+
+func TestARunningSearchOfAnEarlierRunDoesNotHoldTheNextRunBack(t *testing.T) {
+	f := newResearchFixture(t)
+	f.runningFor = map[string]bool{"burst one": true}
+	cell, hooks := searchCell(t, f)
+	cell(`choir.SearchStart("burst one")`)
+	hooks.Begin(SessionFrame{RunID: "run-2"})
+	cell(`choir.SearchStart("burst two")`)
+	if f.searchCalls.Load() != 2 {
+		t.Fatalf("a search left running by the earlier run must not hold the new run back (calls %d)", f.searchCalls.Load())
 	}
 }
