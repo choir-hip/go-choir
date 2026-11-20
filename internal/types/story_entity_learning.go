@@ -79,6 +79,9 @@ type StoryEntityAlias struct {
 // EntityGrowthPath is the public growth read.
 const EntityGrowthPath = "/api/platform/entities/growth"
 
+// EntityPagePrefix is the public read of one entity: GET <prefix><entity id>.
+const EntityPagePrefix = "/api/platform/entities/"
+
 // EntityGrowthResponse is the growth read: a series per UTC day, oldest
 // first, and the lexicon now.
 type EntityGrowthResponse struct {

@@ -661,6 +661,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(types.StoryEntitiesPath, h.HandleStoryEntities)
 	s.HandleFunc(types.StoryEntityCandidatesPath, h.HandleStoryEntityCandidates)
 	s.HandleFunc(entityGrowthInternalPath, h.HandleInternalEntityGrowth)
+	s.HandleFunc(EntityPageInternalPrefix, h.HandleInternalEntityPage)
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)
 	s.HandleFunc("/internal/platform/publications/versions/", h.HandleInternalPublicationVersion)

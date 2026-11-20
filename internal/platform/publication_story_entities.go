@@ -222,7 +222,7 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 	for i, e := range req.Entities {
 		n := i + 1
 		id, role := strings.TrimSpace(e.EntityID), strings.TrimSpace(e.Role)
-		if !types.EntityRoles[role] {
+		if !types.StoryEntityRole(role) {
 			return "", nil, nil, fmt.Errorf("entity %d: unknown role %q", n, role)
 		}
 		canonical, err := entityCanonicalFor(owner, id)

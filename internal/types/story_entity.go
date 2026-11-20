@@ -31,8 +31,21 @@ const (
 	EntityRoleIncidental = "incidental"
 )
 
-// EntityRoles are the roles an attachment may have.
-var EntityRoles = map[string]bool{EntityRoleCentral: true, EntityRoleIncidental: true}
+// EntityRoleTentative is a capture's link to an entity that fell below the
+// join threshold (docs/design/entity-layer-2026-11-20.md section 4.3). It is
+// kept and shown, but counted nowhere: every reader that counts reads central
+// only, and a story never has it (StoryEntityRole).
+const EntityRoleTentative = "tentative"
+
+// EntityRoles are the roles a mention edge may have: a story's central or
+// incidental, and a capture's tentative besides.
+var EntityRoles = map[string]bool{EntityRoleCentral: true, EntityRoleIncidental: true, EntityRoleTentative: true}
+
+// StoryEntityRole reports a role a published story may attach an entity
+// under: the research desk's two. Tentative is a capture link's alone.
+func StoryEntityRole(role string) bool {
+	return role == EntityRoleCentral || role == EntityRoleIncidental
+}
 
 // The entity types (ontology §4.2).
 const (

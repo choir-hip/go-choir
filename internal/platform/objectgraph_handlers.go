@@ -39,6 +39,17 @@ type ObjectGraphHandler struct {
 	// captureIndex is the platform store whose capture projection the
 	// search and URL lookup routes read (nil: they refuse).
 	captureIndex *Store
+	// readyService answers the ready list of the neighbours route
+	// (capture_ready.go); nil: a request for it gets the plain answer.
+	readyService *Service
+}
+
+// ConfigureReadyList gives the handler the service whose entity lexicon the
+// ready list's candidates read.
+func (h *ObjectGraphHandler) ConfigureReadyList(svc *Service) {
+	if h != nil {
+		h.readyService = svc
+	}
 }
 
 // NewObjectGraphHandler builds a handler that exposes both Service-level

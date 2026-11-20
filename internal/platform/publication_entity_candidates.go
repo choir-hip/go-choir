@@ -496,6 +496,9 @@ func entityMentions(ctx context.Context, og *ObjectGraphStore, canonical string)
 func mentionCounts(edges []objectgraph.Edge) (stories, central int) {
 	all, cen := map[string]bool{}, map[string]bool{}
 	for _, e := range edges {
+		if mentionRole(e) == types.EntityRoleTentative {
+			continue // a tentative link is counted nowhere
+		}
 		all[e.FromID] = true
 		if mentionRole(e) == types.EntityRoleCentral {
 			cen[e.FromID] = true

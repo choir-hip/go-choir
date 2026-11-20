@@ -46,6 +46,15 @@ type CaptureNeighboursRequest struct {
 	CaptureIDs []string `json:"capture_ids"`
 	Since      string   `json:"since,omitempty"`
 	Limit      int      `json:"limit,omitempty"`
+	// Ready asks for the ready list as well (capture_ready.go): this
+	// computer's captures that are ready to be judged and have no resolution
+	// row, with their neighbours' links and entity candidates, and the count
+	// of those still waiting for a vector. ReadyLimit bounds the list (default
+	// 100, at most 500); ReadySince is a day or time before which captures are
+	// not listed. An old corpusd ignores all three, and an old guest sends none.
+	Ready      bool   `json:"ready,omitempty"`
+	ReadyLimit int    `json:"ready_limit,omitempty"`
+	ReadySince string `json:"ready_since,omitempty"`
 }
 
 // CaptureNeighbour is one nearby capture and its cosine similarity.
@@ -75,6 +84,9 @@ type CaptureNeighboursResponse struct {
 	// index's answer on a large list) or partial (some were cut, or an exact
 	// read did not finish).
 	State string `json:"state,omitempty"`
+	// Ready is the ready list, present only when the request set Ready and
+	// this corpusd has one: its absence tells a new guest it has not.
+	Ready *CaptureReadyList `json:"ready,omitempty"`
 }
 
 var errBadNeighbours = errors.New("bad neighbours request")
@@ -461,7 +473,13 @@ func (h *ObjectGraphHandler) HandleCaptureNeighbours(w http.ResponseWriter, r *h
 		writeJSON(w, status, apiError{Error: msg})
 		return
 	}
-	res, err := h.captureIndex.CaptureNeighbours(r.Context(), req)
+	var res CaptureNeighboursResponse
+	var err error
+	if req.Ready && h.readyService != nil {
+		res, err = h.readyService.CaptureReadyList(r.Context(), req)
+	} else {
+		res, err = h.captureIndex.CaptureNeighbours(r.Context(), req)
+	}
 	if err != nil {
 		if errors.Is(err, errBadNeighbours) {
 			writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})

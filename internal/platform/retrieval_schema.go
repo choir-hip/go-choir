@@ -167,6 +167,8 @@ type retrievalSchemaState struct {
 	// captureIndexReady: the capture projection tables exist (capture
 	// writes maintain them).
 	captureIndexReady atomic.Bool
+	// captureResolutionReady: proj_capture_resolution exists (capture_resolution.go).
+	captureResolutionReady atomic.Bool
 	// captureIndexComplete: every capture in og_objects is projected (the
 	// search and URL routes answer).
 	captureIndexComplete atomic.Bool
@@ -211,6 +213,7 @@ func (s *Store) MigrateRetrieval(ctx context.Context) error {
 		note("capture_index_reconcile", s.ReconcileCaptureIndex(ctx))
 		note("capture_terms_cover_index", s.ensureCaptureTermsCoverIndex(ctx))
 	}
+	note("edges_to_kind_created", s.ensureEdgesToKindCreatedIndex(ctx))
 	return firstErr
 }
 
@@ -281,6 +284,9 @@ func (s *Store) retrievalStep(ctx context.Context) {
 	}
 	if err := s.ensureCaptureTermsCoverIndex(ctx); err != nil {
 		log.Printf("corpusd retrieval cover index err=%v", err)
+	}
+	if err := s.ensureEdgesToKindCreatedIndex(ctx); err != nil {
+		log.Printf("corpusd retrieval edges index err=%v", err)
 	}
 }
 
