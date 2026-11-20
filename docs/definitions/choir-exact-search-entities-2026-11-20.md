@@ -189,7 +189,7 @@ stations:
     status: pending
 now:
   status: working
-  as_of: 2026-11-20T14:02Z (lead-docs lane carries this file)
+  as_of: 2026-11-20T16:28Z (lead-docs lane carries this file)
   slice: four trains and the phone cleanups are deployed; the themes are in a last bounded fix; the owner letter is published; C176 (the re-ask holds on the paper) settles after 16:30Z
   landed_this_thread:
     - 'W1 7f5ad41e1 (intake.events and dispatch.wide_slots gone): CI 44684974356 ok, deployed 06:18:24Z, the paper logs slots=N/12 and event layer flushes after its refresh. C167 settles after 07:20Z.'
@@ -208,6 +208,9 @@ now:
     - 'Train E 20af586d3 (the re-ask holds, four commits; desk protocol lock 18.9.0, the lead''s commit, not reviewed by a seat): CI 44741404137 ok, deployed 13:24:44Z. C176 settles after 16:30Z.'
     - 'C170 settled false narrowly (unembedded at flush fell from 78% to about 12%, bar 10%); C172 true; C175 true by a narrower reading.'
     - 'The owner letter: docs/reports/overnight-exact-search-entities-2026-11-20.md.'
+    - 'After the letter: the conversation rows f981ead7c (split from the stopped editor lane; typed-ask proof read), the themes e90932c94 (accepted on a fourth review; three should-fixes open) and the About page bfc1492c6 (the commit the app was built from and the server''s commit; the owner could not tell builds apart) are on main, CI ok each. C176 settled true: the gateway''s web searches fell 35% in the three hours after the re-ask holds (455 to 294), about 2,350 a day at the new rate.'
+    - 'Flags recorded from the hourly ticks: Node B free fell 7.1 GiB in six hours overnight (cause not established; six deploys) and stands at 114 GiB, six days to the floor; the paper made 166 synthetic and 130 river calls on 2026-11-20 (bedrock $0.55 of 40, river $0.18 of 10, synthetic $1.53 estimated), read as fallbacks under Devin quota refusals, not traced.'
+    - 'The lead shut the proof simulator down at about 14:38Z while the build queue was using it, which failed one builder''s proof; the lead does not touch the simulator while the queue is busy.'
   discovered_this_thread:
     - 'D1: the owner, 05:26Z, with a screenshot: signed in, the day''s real stories. Installs overnight are allowed. Seat 2 sent the cleanup back twice: it must not delete anything on "no readable key", must act only on a positive demo trace, and must mark itself done only after it succeeded. Third version building.'
     - 'S: the search gate did NOT lower the gateway''s rate (162 an hour before, 159 after); about 6 searches a run by the gateway meter. 79% of searches are a story''s first run hunting a second outlet; 1,000 a day is 1.8 a run.'
@@ -233,7 +236,6 @@ now:
     - 'snapshot-stream 0873aa1fc (H1 S1): STOPPED for the owner; the budget problem record recommends raising the 90-minute budget as the interim relief'
     - 'exact-convo-edit 4b58dba83 (X2 conversation rows and the Texture editor): STOPPED for the owner after a third send-back; docs/problems/texture-editor-in-exact-three-reviews-no-landing-2026-11-20.md; the two conversation-row commits drew no blocking finding and could land alone'
     - 'owner-act-enforce ba32aa571 (W3 third setting): HELD for the owner'
-    - 'exact-themes 7945b568d: the carry-over finding is fixed; sent back for a broken mobile check script and two should-fixes; one bounded fix in progress'
     - 'dispatch-deadlines 04a06df51: internal/actor fails its suite on the build machine (600 s timeout); not landed; no round since 11:29Z'
     - 'landed lanes not removed (lane rm refuses without --force because the landed commits were rebased): exact-demo-leftovers, entity-e2-ids, search-reask-hold, last-switches, embed-kick'
   conjecture:
@@ -249,7 +251,7 @@ now:
 operating_notes:
   - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review: seat 1 a Sonnet subagent that did not write the change, seat 2 DeepSeek through the agentic-consensus runner (--include omp-deepseek-v41-flash) on a frozen clean copy; orange one seat, red two.'
   - 'Go compiles and tests on the build machines, never the Mac (gate scripts on the Mac need GOFLAGS=-mod=mod). choir-agents has 3.9 GB of memory: one heavy run at a time under flock ~/agentcore.lock, and stop the test Postgres a killed run leaves. choir-runner (10 GB) is the landing machine; whole agentcore under -race took 69 to 83 minutes on the night of 2026-11-19, so use -timeout 150m.'
-  - 'A builder''s report is a claim. Before a landing, see the suite''s ok line yourself, look at the proof''s screenshots yourself, and enter the calibration claim in docs/calibration/claude-ledger.md (next free id C177).'
+  - 'A builder''s report is a claim. Before a landing, see the suite''s ok line yourself, look at the proof''s screenshots yourself, and enter the calibration claim in docs/calibration/claude-ledger.md (next free id C179).'
   - 'State times only after date -u. The ledger and reports are in UTC; the owner is UTC-5.'
 receipts:
   - 'previous goal: docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md (superseded by this file; its station statuses were never updated and are not to be trusted)'
