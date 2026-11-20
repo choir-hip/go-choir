@@ -156,7 +156,7 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 }
 
 // SetAsOwner is the owner's mode write carrying the owner-act receipt the
-// handler verified (nil when it carried none and the policy observes).
+// handler verified (a policy that is configured refuses a write without one).
 func (c *SelfDevelopmentModeCAS) SetAsOwner(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest, ownerAct *owneract.Verified) (SelfDevelopmentMode, error) {
 	return c.set(ctx, computerID, request, ModeWriterHostInternal, ownerAct)
 }
@@ -203,12 +203,9 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 					return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: owner act lookup: %w", replayErr)
 				}
 				if replayed {
-					if refuseErr := c.ownerActs.refuse(ErrOwnerActRefused, "mode write", computerID, "owner-act receipt "+ownerAct.ReceiptID+" was already used"); refuseErr != nil {
-						return SelfDevelopmentMode{}, refuseErr
-					}
-					ownerAct = nil
+					return SelfDevelopmentMode{}, c.ownerActs.refuse(ErrOwnerActRefused, "mode write", computerID, "owner-act receipt "+ownerAct.ReceiptID+" was already used")
 				}
-			} else if c.ownerActs.Enforcing() {
+			} else {
 				return SelfDevelopmentMode{}, fmt.Errorf("%w: no verified owner-act receipt", ErrOwnerActRefused)
 			}
 		} else {
@@ -421,18 +418,16 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		// S1: the owner's write must carry the proxy's owner-act
-		// receipt. In observe a missing or invalid one is logged.
+		// receipt; a missing or invalid one is refused.
 		var ownerAct *owneract.Verified
 		if authority := h.selfDevelopmentModes.ownerActs; authority != nil {
 			verified, verifyErr := authority.verifyModeWrite(r, computerID, request)
 			if verifyErr != nil {
-				if refuseErr := authority.refuse(ErrOwnerActRefused, "mode write", computerID, verifyErr.Error()); refuseErr != nil {
-					writeJSON(w, http.StatusForbidden, apiError{Error: refuseErr.Error()})
-					return
-				}
-			} else {
-				ownerAct = verified
+				refuseErr := authority.refuse(ErrOwnerActRefused, "mode write", computerID, verifyErr.Error())
+				writeJSON(w, http.StatusForbidden, apiError{Error: refuseErr.Error()})
+				return
 			}
+			ownerAct = verified
 		}
 		mode, err := h.selfDevelopmentModes.SetAsOwner(r.Context(), computerID, request, ownerAct)
 		if err != nil {

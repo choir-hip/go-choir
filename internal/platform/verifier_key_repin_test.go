@@ -42,7 +42,7 @@ type verifierRepinWorld struct {
 	signer    *owneract.Signer
 }
 
-func newVerifierRepinWorld(t *testing.T, mode OwnerActMode) *verifierRepinWorld {
+func newVerifierRepinWorld(t *testing.T) *verifierRepinWorld {
 	t.Helper()
 	platformStore, root := openTestPlatformStore(t)
 	service := NewService(platformStore, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
@@ -71,7 +71,7 @@ func newVerifierRepinWorld(t *testing.T, mode OwnerActMode) *verifierRepinWorld 
 		t.Fatal(err)
 	}
 	h := &Handler{checkpointAuthority: authority}
-	h.ConfigurePackageOwnerActs(NewOwnerActAuthority(mode, verifier))
+	h.ConfigurePackageOwnerActs(NewOwnerActAuthority(verifier))
 	return &verifierRepinWorld{t: t, store: platformStore, authority: authority, handler: h, signer: signer}
 }
 
@@ -154,7 +154,7 @@ func (w *verifierRepinWorld) post(path string, body any, internal bool, receipt 
 }
 
 func TestVerifierKeyPreflightAnswersThePinState(t *testing.T) {
-	w := newVerifierRepinWorld(t, OwnerActEnforce)
+	w := newVerifierRepinWorld(t)
 	ctx := t.Context()
 	now := time.Date(2026, 10, 26, 21, 28, 39, 0, time.UTC)
 	pinned, presented := newTestVerifierKey(t), newTestVerifierKey(t)
@@ -196,7 +196,7 @@ func TestVerifierKeyPreflightAnswersThePinState(t *testing.T) {
 }
 
 func TestVerifierKeyRepinIsTheOwnersActAndReplacesThePin(t *testing.T) {
-	w := newVerifierRepinWorld(t, OwnerActEnforce)
+	w := newVerifierRepinWorld(t)
 	ctx := t.Context()
 	pinnedAt := time.Date(2026, 10, 26, 21, 28, 39, 0, time.UTC)
 	pinned, presented := newTestVerifierKey(t), newTestVerifierKey(t)
@@ -296,8 +296,8 @@ func TestVerifierKeyRepinIsTheOwnersActAndReplacesThePin(t *testing.T) {
 	}
 }
 
-func TestVerifierKeyRepinRefusesWithoutAReceiptEvenInObserveMode(t *testing.T) {
-	w := newVerifierRepinWorld(t, OwnerActObserve)
+func TestVerifierKeyRepinRefusesWithoutAReceipt(t *testing.T) {
+	w := newVerifierRepinWorld(t)
 	now := time.Date(2026, 10, 26, 21, 28, 39, 0, time.UTC)
 	pinned, presented := newTestVerifierKey(t), newTestVerifierKey(t)
 	w.genesis("computer-observe", 10, now)
@@ -320,7 +320,7 @@ func TestVerifierKeyRepinRefusesWithoutAReceiptEvenInObserveMode(t *testing.T) {
 // checkpoint signed by it passes the pin. Without an owner act it stays
 // refused (review of 9a465a7f2, DeepSeek #2: no one-way door).
 func TestVerifierKeyRepinReactivatesARevokedKeyOnlyByTheOwnersAct(t *testing.T) {
-	w := newVerifierRepinWorld(t, OwnerActEnforce)
+	w := newVerifierRepinWorld(t)
 	ctx := t.Context()
 	pinnedAt := time.Date(2026, 10, 26, 21, 28, 39, 0, time.UTC)
 	original, regenerated := newTestVerifierKey(t), newTestVerifierKey(t)
@@ -388,7 +388,7 @@ func TestVerifierKeyRepinReactivatesARevokedKeyOnlyByTheOwnersAct(t *testing.T) 
 // ([C1, C2)) must never resolve again; one before C1 (its first window) and
 // one from C2 on resolve.
 func TestReactivatedVerifierKeyNeverResolvesInsideItsRevokedGap(t *testing.T) {
-	w := newVerifierRepinWorld(t, OwnerActEnforce)
+	w := newVerifierRepinWorld(t)
 	ctx := t.Context()
 	pinnedAt := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
 	k1, k2 := newTestVerifierKey(t), newTestVerifierKey(t)

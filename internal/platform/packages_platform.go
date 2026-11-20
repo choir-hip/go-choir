@@ -134,8 +134,8 @@ func (h *Handler) authorizePlatformOperatorToken(w http.ResponseWriter, r *http.
 	return name, true
 }
 
-// verifyPlatformOperatorAct verifies an operator account's receipt for req,
-// in every owner-act mode (a platform act is never admitted on observe).
+// verifyPlatformOperatorAct verifies an operator account's receipt for req;
+// a platform act is never admitted unverified.
 func (h *Handler) verifyPlatformOperatorAct(r *http.Request, req PlatformYankRequest) (*owneract.Verified, int, error) {
 	authority := h.packageOwnerActs
 	if authority == nil || authority.verifier == nil {

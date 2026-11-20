@@ -267,8 +267,8 @@ func (f *cleanRebaseFixture) write(t *testing.T, c *cleanRebaseCase, operation s
 	}, receiptDigest
 }
 
-func (f *cleanRebaseFixture) authority(c *cleanRebaseCase, mode OwnerActMode, jobs fakeJobs) *OwnerActAuthority {
-	a := NewOwnerActAuthority(mode, nil)
+func (f *cleanRebaseFixture) authority(c *cleanRebaseCase, jobs fakeJobs) *OwnerActAuthority {
+	a := NewOwnerActAuthority(nil)
 	if c.jobs {
 		host := fakeHost{fakeJobs: jobs, digest: crDeployedDigest, commit: crBootedBase}
 		switch c.deployedCommit {
@@ -312,7 +312,7 @@ func TestCleanRebaseGate(t *testing.T) {
 		}
 		jobs := fakeJobs{}
 		event, _ := f.write(t, c, fmt.Sprintf("op-next-%d", n), jobs)
-		return f.judge(t, f.authority(c, OwnerActEnforce, jobs), event)
+		return f.judge(t, f.authority(c, jobs), event)
 	}
 	admitted := func(name string, mutate func(*cleanRebaseCase)) {
 		t.Helper()
@@ -422,7 +422,7 @@ func TestCleanRebaseGateNeverAppliedOnAFreshComputer(t *testing.T) {
 	c.applied = false
 	jobs := fakeJobs{}
 	event, _ := f.write(t, c, "op-2", jobs)
-	if reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event); err != nil || !strings.Contains(reason, "applied no self-development change") {
+	if reason, err := f.judge(t, f.authority(c, jobs), event); err != nil || !strings.Contains(reason, "applied no self-development change") {
 		t.Fatalf("got %q %v", reason, err)
 	}
 }
@@ -436,7 +436,7 @@ func TestCleanRebaseGateAdmitsEveryDevelopingMode(t *testing.T) {
 		c := newCleanRebaseCase()
 		jobs := fakeJobs{}
 		event, _ := f.write(t, c, "op-2", jobs)
-		if reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event); reason != "" || err != nil {
+		if reason, err := f.judge(t, f.authority(c, jobs), event); reason != "" || err != nil {
 			t.Fatalf("mode %q refused: %q %v", mode, reason, err)
 		}
 	}
@@ -449,7 +449,7 @@ func TestCleanRebaseGateModeCheck(t *testing.T) {
 		c := newCleanRebaseCase()
 		jobs := fakeJobs{}
 		event, _ := f.write(t, c, "op-2", jobs)
-		reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event)
+		reason, err := f.judge(t, f.authority(c, jobs), event)
 		if err != nil || !strings.Contains(reason, "mode") {
 			t.Fatalf("mode %q: got %q %v", mode, reason, err)
 		}
@@ -463,42 +463,42 @@ func TestCleanRebaseGateReceiptDigestMismatch(t *testing.T) {
 	event, receiptDigest := f.write(t, c, "op-2", jobs)
 	// The tape answers the digest with other bytes.
 	f.tape[fmt.Sprintf("%d/%s", tapestore.NSPayload, receiptDigest)] = append(f.tape[fmt.Sprintf("%d/%s", tapestore.NSPayload, receiptDigest)], ' ')
-	reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event)
+	reason, err := f.judge(t, f.authority(c, jobs), event)
 	if err != nil || !strings.Contains(reason, "do not hash") {
 		t.Fatalf("got %q %v", reason, err)
 	}
 	// An authority whose receipt is not on the tape at all is a read error.
 	event.AuthorityRef = selfdevprotocol.CleanRebaseAuthority(hexOf('d'))
 	event.InputArtifactRefs = append(event.InputArtifactRefs, "artifact:sha256:"+hexOf('d'))
-	if reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event); err == nil && reason == "" {
+	if reason, err := f.judge(t, f.authority(c, jobs), event); err == nil && reason == "" {
 		t.Fatal("a receipt not on the tape was admitted")
 	}
 	event.AuthorityRef = selfdevprotocol.CleanRebaseAuthorityPrefix + "not-a-digest"
-	if reason, _ := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event); !strings.Contains(reason, "names no receipt digest") {
+	if reason, _ := f.judge(t, f.authority(c, jobs), event); !strings.Contains(reason, "names no receipt digest") {
 		t.Fatalf("malformed authority: %q", reason)
 	}
 }
 
-func TestCleanRebaseGateRefusesEvenInObserve(t *testing.T) {
+func TestCleanRebaseGateRefusesAForgedChain(t *testing.T) {
 	f := newCleanRebaseFixture(t)
 	c := newCleanRebaseCase()
 	c.priorMarked = false // a forged chain
 	jobs := fakeJobs{}
 	event, _ := f.write(t, c, "op-2", jobs)
-	a := f.authority(c, OwnerActObserve, jobs)
+	a := f.authority(c, jobs)
 	tx, err := f.store.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
 	if err := a.admitEffectAccepted(context.Background(), tx, event, hexOf('e')); !errors.Is(err, ErrEffectAdmissionRefused) {
-		t.Fatalf("observe admitted a refused clean rebase: %v", err)
+		t.Fatalf("admitted a refused clean rebase: %v", err)
 	}
-	// A read error refuses in observe too.
+	// A read error refuses too.
 	event.AuthorityRef = selfdevprotocol.CleanRebaseAuthority(hexOf('d'))
 	event.InputArtifactRefs = append(event.InputArtifactRefs, "artifact:sha256:"+hexOf('d'))
 	if err := a.admitEffectAccepted(context.Background(), tx, event, hexOf('e')); !errors.Is(err, ErrEffectAdmissionRefused) {
-		t.Fatalf("observe admitted a clean rebase whose receipt is unreadable: %v", err)
+		t.Fatalf("admitted a clean rebase whose receipt is unreadable: %v", err)
 	}
 }
 
@@ -542,7 +542,7 @@ func TestCleanRebaseGateAdmitsAChainOfCleanRebases(t *testing.T) {
 		AuthorityRef: selfdevprotocol.CleanRebaseAuthority(digest), InputArtifactRefs: []string{"artifact:sha256:" + hexOf('5'), "artifact:sha256:" + digest},
 	}
 	first.deployedCommit = nextBase
-	a := f.authority(first, OwnerActEnforce, jobs)
+	a := f.authority(first, jobs)
 	if reason, err := f.judge(t, a, event); reason != "" || err != nil {
 		t.Fatalf("chain refused: %q %v", reason, err)
 	}
@@ -564,11 +564,11 @@ func TestCleanRebaseGateRefusesAPlatformComputer(t *testing.T) {
 	jobs := fakeJobs{}
 	event, _ := f.write(t, c, "op-2", jobs)
 	// The same event, valid for an ordinary computer, is refused on the paper's.
-	if reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event); reason != "" || err != nil {
+	if reason, err := f.judge(t, f.authority(c, jobs), event); reason != "" || err != nil {
 		t.Fatalf("control: the ordinary computer's clean rebase refused: %q %v", reason, err)
 	}
 	event.ComputerID = paperComputerID
-	reason, err := f.judge(t, f.authority(c, OwnerActEnforce, jobs), event)
+	reason, err := f.judge(t, f.authority(c, jobs), event)
 	if err != nil || !strings.Contains(reason, "platform computer") {
 		t.Fatalf("clean rebase on the paper computer: %q %v", reason, err)
 	}

@@ -151,7 +151,7 @@ func TestListingReceiptIsNotReplayed(t *testing.T) {
 	w := newPkgWorld(t)
 	r1 := w.build("<p>v2</p>\n", "owner-a", nil)
 	w.published(r1)
-	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActEnforce, verifier))
+	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(verifier))
 	w.signer = signer
 
 	withdraw := ListingChange{State: pkgrelease.StateWithdrawn}

@@ -201,7 +201,7 @@ func newP4Fixture(t *testing.T) *p4Fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	authority := platform.NewOwnerActAuthority(platform.OwnerActEnforce, ownerVerifier)
+	authority := platform.NewOwnerActAuthority(ownerVerifier)
 	modes, err := platform.NewSelfDevelopmentModeCAS(store, platformKey)
 	if err != nil {
 		t.Fatal(err)

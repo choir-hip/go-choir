@@ -3,6 +3,8 @@ package platform
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
+	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
 
@@ -41,24 +44,38 @@ type pdFixture struct {
 	*consensusFixture
 	w     *pkgWorld
 	patch []byte
-	shots [][]byte
+	// signer is the owner's key; the package acts below carry its receipts.
+	signer *owneract.Signer
+	shots  [][]byte
 	// queryComputer overrides the computer_id the guest names in the URL.
 	queryComputer string
 }
 
 func newPDFixture(t *testing.T) *pdFixture {
 	t.Helper()
-	f := newConsensusFixture(t, OwnerActEnforce)
+	f := newConsensusFixture(t)
 	w := newPkgWorld(t)
 	f.handler.ConfigurePackageBase(context.Background(), w.repo)
-	f.handler.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActObserve, nil))
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := owneract.NewSigner(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := owneract.NewVerifier(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.handler.ConfigurePackageOwnerActs(NewOwnerActAuthority(verifier))
 	if err := f.handler.ConfigureConsensusActuator(f.actuator); err != nil {
 		t.Fatal(err)
 	}
 	f.handler.publisherAddress = func(context.Context, string) (string, error) { return "001@choir.test", nil }
 	f.handler.guestLookup = fakeGuestLookup{"172.16.0.2": {Found: true, UserID: pdOwner, ComputerID: f.computerID}}
 	f.builds.boots = map[string]string{f.bootedBase: w.base}
-	pf := &pdFixture{consensusFixture: f, w: w, shots: [][]byte{defaultBeforeShot(t), defaultShot(t)}}
+	pf := &pdFixture{consensusFixture: f, w: w, signer: signer, shots: [][]byte{defaultBeforeShot(t), defaultShot(t)}}
 	pf.patch = pf.patchFor("<p>v2</p>\n")
 	return pf
 }

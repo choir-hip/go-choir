@@ -164,13 +164,11 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 	// A receipt acts once (review 291 F4): one that already wrote a version
 	// of this listing is a replay, for instance of a withdraw after the
 	// owner reinstated. A refused act writes nothing, so it spends nothing.
-	if actor != "owner_act:unverified" {
-		for _, version := range chains[releaseID] {
-			if version.StateActor == actor {
-				writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonOwnerActReplayed, Detail: fmt.Sprintf(
-					"this owner-act receipt already wrote version %d of the listing; each act is a new receipt", version.Version)})
-				return
-			}
+	for _, version := range chains[releaseID] {
+		if version.StateActor == actor {
+			writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonOwnerActReplayed, Detail: fmt.Sprintf(
+				"this owner-act receipt already wrote version %d of the listing; each act is a new receipt", version.Version)})
+			return
 		}
 	}
 	if current.State == pkgrelease.StateYanked {

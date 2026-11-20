@@ -17,8 +17,8 @@ import (
 // approval"; contract in internal/selfdevprotocol/clean_rebase.go). An
 // effect_accepted whose authority is platform-clean-rebase:<receipt digest>
 // is admitted only when the receipt, the prior decision, the two bundles on
-// the tape and the host build all agree. The branch always enforces: observe
-// would admit exactly the guest-forged acceptance it exists to stop.
+// the tape and the host build all agree. The branch always refuses what does not
+// agree: it exists to stop the guest-forged acceptance.
 //
 // The branch applies to every computer, whatever its tier (owner ruling
 // 2026-11-04: "I want automatic rebase to work the same. I don't want test
@@ -208,7 +208,7 @@ func (a *OwnerActAuthority) cleanRebaseLink(ctx context.Context, tx *sql.Tx, eve
 		return none, "the prior decision accepted another bundle than the receipt's prior bundle", nil
 	}
 	// The prior authority must be one corpusd checked and marked when it
-	// admitted it (an observe-mode refusal is admitted but never marked).
+	// admitted it (an acceptance admitted without a trace was never marked).
 	priorAuthority := strings.TrimSpace(prior.AuthorityRef)
 	switch {
 	case strings.HasPrefix(priorAuthority, AuthorityExternalOwner) && strings.TrimSpace(strings.TrimPrefix(priorAuthority, AuthorityExternalOwner)) != "":

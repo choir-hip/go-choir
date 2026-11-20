@@ -18,8 +18,9 @@ import (
 // event for a sequence already taken is refused (400). F21 of
 // docs/problems/event-appender-wedges-clustering-assessment-2026-11-12.md.
 func TestAppendRouteAnswersAResendWithTheStoredReceipt(t *testing.T) {
-	f := newAdmissionFixture(t, OwnerActObserve)
+	f := newAdmissionFixture(t)
 	head := f.seedHead(t, f.computerID)
+	f.mintOffer(t, head, digestOf('c'), digestOf('0'))
 	service := NewService(f.store, filepath.Join(t.TempDir(), "artifacts"), filepath.Join(t.TempDir(), "platform-signing.key"))
 	artifacts, err := NewEventArtifactService(service, platformTestKeyResolver{key: service.signingKey.Public})
 	if err != nil {

@@ -215,7 +215,7 @@ type Handler struct {
 	platformSignerDigest       string
 	// ownerActSigner is the proxy's own host-owner-act key (S1): it signs
 	// that the proxy authenticated the owner for one act. nil: no receipts
-	// are minted (corpusd's CHOIR_OWNER_ACT_MODE decides what follows).
+	// are minted, and corpusd refuses the owner act that needs one.
 	ownerActSigner *owneract.Signer
 	// routeCacheTTL bounds the short-lived computer-route memo
 	// (resolveComputerURL + ensureComputerVersionRoute). vmctl remains the

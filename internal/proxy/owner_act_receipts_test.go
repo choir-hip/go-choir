@@ -150,7 +150,7 @@ func TestOwnerActEndToEndThroughCorpusdEnforce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	corpusd := openTestCorpusdModes(t, platform.NewOwnerActAuthority(platform.OwnerActEnforce, verifier))
+	corpusd := openTestCorpusdModes(t, platform.NewOwnerActAuthority(verifier))
 	env := newOwnerActEnv(t)
 	env.handler.cfg.CorpusdURL = corpusd.URL
 	body, _ := armBody(t, 0, "arm-e2e")
@@ -204,7 +204,7 @@ func TestRetiredModesAreRefusedThroughTheProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	corpusd := openTestCorpusdModes(t, platform.NewOwnerActAuthority(platform.OwnerActEnforce, verifier))
+	corpusd := openTestCorpusdModes(t, platform.NewOwnerActAuthority(verifier))
 	env := newOwnerActEnv(t)
 	env.handler.cfg.CorpusdURL = corpusd.URL
 	env.handler.ownerActSigner = signer

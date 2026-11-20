@@ -127,10 +127,21 @@ func newPkgWorld(t *testing.T) *pkgWorld {
 	pkgGit(t, repo, nil, "", "commit", "-q", "-m", "base")
 	w := &pkgWorld{t: t, h: h, repo: repo, base: pkgGit(t, repo, nil, "", "rev-parse", "HEAD")}
 	h.ConfigurePackageBase(context.Background(), repo)
-	// corpusd always configures an owner-act authority (cmd/corpusd); the
-	// world runs it in observe with no key, so a publish without a receipt
-	// lists as owner_act:unverified.
-	h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActObserve, nil))
+	// corpusd always configures an owner-act authority (cmd/corpusd), and it
+	// refuses a publish without a receipt: the world holds the owner's key,
+	// and its publish helpers carry a receipt for what they publish.
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.signer, err = owneract.NewSigner(private); err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := owneract.NewVerifier(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigurePackageOwnerActs(NewOwnerActAuthority(verifier))
 	return w
 }
 
@@ -557,7 +568,7 @@ func TestPackagePublishBindsThePublisherAndTheBlobs(t *testing.T) {
 	// A record naming a blob the store does not hold.
 	other := w.build("<p>never uploaded</p>\n", "owner-a", nil)
 	body, _ = json.Marshal(map[string]any{"release_id": other.id, "record": json.RawMessage(other.raw), "owner_id": "owner-a", "computer_id": "computer-a1"})
-	wantPkgRefusal(t, w.do(pkgCall{method: http.MethodPost, path: packagesRoute + "/releases", internal: true, body: body}), http.StatusConflict, pkgrelease.ReasonBlobMismatch)
+	wantPkgRefusal(t, w.do(pkgCall{method: http.MethodPost, path: packagesRoute + "/releases", internal: true, receipt: w.receiptFor(other), body: body}), http.StatusConflict, pkgrelease.ReasonBlobMismatch)
 }
 
 func TestPackageBlobUploadCapNamesTheSize(t *testing.T) {
@@ -592,7 +603,7 @@ func TestPackagePublishVerifiesTheOwnersActReceipt(t *testing.T) {
 
 	t.Run("enforce", func(t *testing.T) {
 		w := newPkgWorld(t)
-		w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActEnforce, verifier))
+		w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(verifier))
 		b := w.build("<p>v2</p>\n", "owner-a", nil)
 		if rec := w.publishWith(b, ""); rec.Code != http.StatusForbidden {
 			t.Fatalf("L6 no receipt under enforce = %d %s", rec.Code, rec.Body.String())
@@ -605,14 +616,6 @@ func TestPackagePublishVerifiesTheOwnersActReceipt(t *testing.T) {
 		view := w.published(b)
 		if view.Listing.StateActor == "owner_act:unverified" || !strings.HasPrefix(view.Listing.StateActor, "owner_act:") {
 			t.Fatalf("state actor = %q, want the receipt digest", view.Listing.StateActor)
-		}
-	})
-	t.Run("observe", func(t *testing.T) {
-		w := newPkgWorld(t)
-		w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActObserve, verifier))
-		view := w.published(w.build("<p>v2</p>\n", "owner-a", nil))
-		if view.Listing.StateActor != "owner_act:unverified" {
-			t.Fatalf("observe without a receipt: state actor = %q", view.Listing.StateActor)
 		}
 	})
 }

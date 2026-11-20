@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -27,17 +26,11 @@ import (
 // issues goes into an append-only log, and an effect_accepted append is
 // admitted only when its authority traces to one of them.
 
-// EnvOwnerActMode selects the rollout mode: observe (the default, also when
-// unset) logs what enforce would refuse and allows it; enforce refuses. Any
-// other value is treated as enforce (fail closed, as hostauth does).
-const EnvOwnerActMode = "CHOIR_OWNER_ACT_MODE"
-
-type OwnerActMode string
-
-const (
-	OwnerActObserve OwnerActMode = "observe"
-	OwnerActEnforce OwnerActMode = "enforce"
-)
+// Owner acts always refuse: there is no observe mode. A missing, forged,
+// expired, replayed or unbound owner-act receipt on a mode write or a package
+// publish is refused, and so is an effect_accepted whose authority corpusd
+// cannot trace. (The rollout ran in observe until 2026-11-20; the setting that
+// chose between the two, CHOIR_OWNER_ACT_MODE, is deleted.)
 
 // Authority prefixes an effect_accepted may carry.
 const (
@@ -48,10 +41,10 @@ const (
 
 var (
 	// ErrOwnerActRefused refuses an owner mode write whose owner-act
-	// receipt is missing, invalid or replayed (enforce only).
+	// receipt is missing, invalid or replayed.
 	ErrOwnerActRefused = errors.New("owner act refused")
 	// ErrEffectAdmissionRefused refuses an effect_accepted whose authority
-	// corpusd cannot trace (enforce only).
+	// corpusd cannot trace.
 	ErrEffectAdmissionRefused = errors.New("effect_accepted admission refused")
 )
 
@@ -104,10 +97,8 @@ CREATE INDEX IF NOT EXISTS platform_update_offers_computer_idx ON platform_updat
 // guest's own expiry check and its append.
 const platformUpdateOfferAdmissionGrace = 2 * time.Minute
 
-// OwnerActAuthority is corpusd's S1 policy: the rollout mode and the
-// proxy's pinned public key.
+// OwnerActAuthority is corpusd's S1 policy: the proxy's pinned public key.
 type OwnerActAuthority struct {
-	mode     OwnerActMode
 	verifier *owneract.Verifier
 	note     string
 	now      func() time.Time
@@ -118,40 +109,26 @@ type OwnerActAuthority struct {
 }
 
 // NewOwnerActAuthority builds a policy. A nil verifier refuses every
-// receipt (fail closed in enforce).
-func NewOwnerActAuthority(mode OwnerActMode, verifier *owneract.Verifier) *OwnerActAuthority {
-	if mode != OwnerActObserve {
-		mode = OwnerActEnforce
-	}
-	return &OwnerActAuthority{mode: mode, verifier: verifier, now: func() time.Time { return time.Now().UTC() }}
+// receipt (fail closed).
+func NewOwnerActAuthority(verifier *owneract.Verifier) *OwnerActAuthority {
+	return &OwnerActAuthority{verifier: verifier, now: func() time.Time { return time.Now().UTC() }}
 }
 
-// LoadOwnerActAuthorityFromEnv reads EnvOwnerActMode and the proxy's
-// public key (owneract.LoadVerifierFromEnv). A missing or bad key never
-// stops corpusd: in observe it is logged, in enforce every owner act is
-// refused until the key is fixed.
+// LoadOwnerActAuthorityFromEnv reads the proxy's public key
+// (owneract.LoadVerifierFromEnv). A missing or bad key never stops corpusd:
+// every owner act is refused until the key is fixed.
 func LoadOwnerActAuthorityFromEnv() *OwnerActAuthority {
-	raw := strings.ToLower(strings.TrimSpace(os.Getenv(EnvOwnerActMode)))
-	mode := OwnerActEnforce
-	note := ""
-	switch OwnerActMode(raw) {
-	case "", OwnerActObserve:
-		mode = OwnerActObserve
-	case OwnerActEnforce:
-	default:
-		note = fmt.Sprintf("unknown %s %q treated as enforce", EnvOwnerActMode, raw)
-	}
 	verifier, path, err := owneract.LoadVerifierFromEnv()
-	authority := NewOwnerActAuthority(mode, verifier)
+	authority := NewOwnerActAuthority(verifier)
 	switch {
 	case err != nil:
-		authority.note = joinNote(note, err.Error())
+		authority.note = err.Error()
 	case verifier == nil && path == "":
-		authority.note = joinNote(note, "no owner-act public key configured")
+		authority.note = "no owner-act public key configured"
 	case verifier == nil:
-		authority.note = joinNote(note, "owner-act public key absent at "+path)
+		authority.note = "owner-act public key absent at " + path
 	default:
-		authority.note = joinNote(note, "owner-act key "+verifier.KeyID()+" from "+path)
+		authority.note = "owner-act key " + verifier.KeyID() + " from " + path
 	}
 	return authority
 }
@@ -168,21 +145,13 @@ func (a *OwnerActAuthority) Status() string {
 	if a == nil {
 		return "owner-act gate not configured"
 	}
-	return fmt.Sprintf("mode=%s; %s", a.mode, a.note)
+	return "refuses without a verified receipt; " + a.note
 }
 
-// Enforcing reports whether refusals refuse.
-func (a *OwnerActAuthority) Enforcing() bool { return a != nil && a.mode == OwnerActEnforce }
-
-// refuse logs a refusal and returns the error enforce returns; in observe
-// it returns nil and the caller proceeds.
+// refuse logs a refusal and returns the error that refuses.
 func (a *OwnerActAuthority) refuse(sentinel error, what, computerID, reason string) error {
-	if a.Enforcing() {
-		log.Printf("owner-act: enforce: refused %s computer=%s: %s", what, computerID, reason)
-		return fmt.Errorf("%w: %s", sentinel, reason)
-	}
-	log.Printf("owner-act: observe: would refuse %s computer=%s: %s", what, computerID, reason)
-	return nil
+	log.Printf("owner-act: refused %s computer=%s: %s", what, computerID, reason)
+	return fmt.Errorf("%w: %s", sentinel, reason)
 }
 
 // OwnerActKindForMode names the owner act a mode write is: off and apply
@@ -316,35 +285,20 @@ func (r modeReceiptLogRow) field(name string) string {
 // event.
 func (a *OwnerActAuthority) admitEffectAccepted(ctx context.Context, tx *sql.Tx, event computerevent.Event, eventDigest string) error {
 	reason, mark, err := a.effectAcceptedRefusal(ctx, tx, event, eventDigest)
-	// P4: the consensus branch always enforces. There is no pre-P4
-	// consensus traffic to observe, and observe would admit exactly the
-	// guest-forged quorum the branch exists to stop. The clean rebase
-	// branch (owner 2026-11-04) always enforces for the same reason. So does
-	// every authority but the platform update: owner approval is retired
-	// (an external-owner effect_accepted has nothing left to observe), and an
-	// empty or unknown authority was never legitimate traffic. Only the
-	// platform update offer keeps the observe window.
-	enforce := a.Enforcing() || strings.TrimSpace(event.AuthorityRef) != AuthorityPlatformUpdate
+	// Every authority is judged and refused here: the consensus branch (P4)
+	// and the clean rebase branch (owner 2026-11-04) from their first day,
+	// owner approval is retired, an empty or unknown authority was never
+	// legitimate traffic, and the platform update offer's observe window
+	// ended 2026-11-20.
 	if err != nil {
-		if enforce {
-			return fmt.Errorf("%w: authority lookup failed: %v", ErrEffectAdmissionRefused, err)
-		}
-		log.Printf("owner-act: observe: effect_accepted authority lookup failed computer=%s event=%s: %v", event.ComputerID, eventDigest, err)
-		return nil
+		return fmt.Errorf("%w: authority lookup failed: %v", ErrEffectAdmissionRefused, err)
 	}
 	if reason != "" {
-		if enforce && !a.Enforcing() {
-			log.Printf("owner-act: enforce (every authority but the platform update): refused effect_accepted %s computer=%s: %s", eventDigest, event.ComputerID, reason)
-			return fmt.Errorf("%w: %s", ErrEffectAdmissionRefused, reason)
-		}
 		return a.refuse(ErrEffectAdmissionRefused, "effect_accepted "+eventDigest+" authority="+event.AuthorityRef, event.ComputerID, reason)
 	}
 	if mark != nil {
 		if err := mark(); err != nil {
-			if enforce {
-				return fmt.Errorf("%w: record admission: %v", ErrEffectAdmissionRefused, err)
-			}
-			log.Printf("owner-act: observe: record admission failed computer=%s event=%s: %v", event.ComputerID, eventDigest, err)
+			return fmt.Errorf("%w: record admission: %v", ErrEffectAdmissionRefused, err)
 		}
 	}
 	return nil

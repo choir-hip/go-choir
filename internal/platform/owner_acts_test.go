@@ -36,7 +36,7 @@ func newTestOwnerActSigner(t *testing.T) *owneract.Signer {
 	return signer
 }
 
-func testOwnerActAuthority(t *testing.T, mode OwnerActMode, signer *owneract.Signer) *OwnerActAuthority {
+func testOwnerActAuthority(t *testing.T, signer *owneract.Signer) *OwnerActAuthority {
 	t.Helper()
 	var verifier *owneract.Verifier
 	if signer != nil {
@@ -46,7 +46,7 @@ func testOwnerActAuthority(t *testing.T, mode OwnerActMode, signer *owneract.Sig
 			t.Fatal(err)
 		}
 	}
-	return NewOwnerActAuthority(mode, verifier)
+	return NewOwnerActAuthority(verifier)
 }
 
 // mintModeAct signs what the proxy signs for a mode write.
@@ -103,7 +103,7 @@ func (f *modeAuthorityFixture) ownerWith(t *testing.T, request SetSelfDevelopmen
 func TestOwnerActModeWriteEnforceRefusesMissingForgedExpiredAndReplayed(t *testing.T) {
 	f := newModeAuthorityFixture(t)
 	signer := newTestOwnerActSigner(t)
-	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActEnforce, signer))
+	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, signer))
 	arm := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeApply, ExpectedGeneration: 0, IdempotencyKey: "arm-1"}
 	unchanged := func(label string) {
 		t.Helper()
@@ -193,31 +193,11 @@ func TestOwnerActModeWriteEnforceRefusesMissingForgedExpiredAndReplayed(t *testi
 
 func TestOwnerActModeWriteEnforceWithoutKeyRefusesEveryOwnerWrite(t *testing.T) {
 	f := newModeAuthorityFixture(t)
-	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActEnforce, nil))
+	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, nil))
 	arm := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeApply, ExpectedGeneration: 0, IdempotencyKey: "arm-1"}
 	// 6: enforce with no public key configured.
 	if code, _, body := f.ownerWith(t, arm, encodeAct(t, mintModeAct(t, newTestOwnerActSigner(t), f.computerID, "owner-1", arm, time.Now()))); code != http.StatusForbidden {
 		t.Fatalf("no key configured: %d %s", code, body)
-	}
-}
-
-func TestOwnerActModeWriteObserveLogsAndAllows(t *testing.T) {
-	f := newModeAuthorityFixture(t)
-	signer := newTestOwnerActSigner(t)
-	f.modes.ConfigureOwnerActs(testOwnerActAuthority(t, OwnerActObserve, signer))
-	arm := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeApply, ExpectedGeneration: 0, IdempotencyKey: "arm-1"}
-	code, armed, body := f.ownerWith(t, arm, "")
-	if code != http.StatusOK || armed.Mode != SelfDevelopmentModeApply {
-		t.Fatalf("observe without receipt: %d %s", code, body)
-	}
-	if _, named := armed.Receipt.KindFields["owner_act_receipt_digest"]; named {
-		t.Fatalf("observe recorded an owner act it never verified: %#v", armed.Receipt.KindFields)
-	}
-	// A valid receipt is recorded in observe too.
-	off := SetSelfDevelopmentModeRequest{Mode: SelfDevelopmentModeOff, ExpectedGeneration: 1, IdempotencyKey: "off-1"}
-	code, offMode, body := f.ownerWith(t, off, encodeAct(t, mintModeAct(t, signer, f.computerID, "owner-1", off, time.Now())))
-	if code != http.StatusOK || offMode.Receipt.KindFields["owner_act_receipt_digest"] == nil {
-		t.Fatalf("observe with receipt: %d %s", code, body)
 	}
 }
 
@@ -234,11 +214,11 @@ type admissionFixture struct {
 	store  *Store
 }
 
-func newAdmissionFixture(t *testing.T, mode OwnerActMode) *admissionFixture {
+func newAdmissionFixture(t *testing.T) *admissionFixture {
 	t.Helper()
 	f := newModeAuthorityFixture(t)
 	signer := newTestOwnerActSigner(t)
-	authority := testOwnerActAuthority(t, mode, signer)
+	authority := testOwnerActAuthority(t, signer)
 	f.modes.ConfigureOwnerActs(authority)
 	store := f.modes.store
 	_, key, err := ed25519.GenerateKey(rand.Reader)
@@ -332,7 +312,7 @@ func refused(t *testing.T, label string, err error) {
 }
 
 func TestEffectAdmissionRefusesOwnerApprovalAndUnknownAuthority(t *testing.T) {
-	f := newAdmissionFixture(t, OwnerActEnforce)
+	f := newAdmissionFixture(t)
 	head := f.seedHead(t, f.computerID)
 	bundle := digestOf('b')
 	// Owner approval is retired: an external-owner effect_accepted is refused
@@ -345,7 +325,7 @@ func TestEffectAdmissionRefusesOwnerApprovalAndUnknownAuthority(t *testing.T) {
 }
 
 func TestEffectAdmissionPlatformUpdateNeedsAnOfferCorpusdMinted(t *testing.T) {
-	f := newAdmissionFixture(t, OwnerActEnforce)
+	f := newAdmissionFixture(t)
 	head := f.seedHead(t, f.computerID)
 	content := digestOf('c')
 	offerDigest := digestOf('0')
@@ -371,25 +351,32 @@ func TestEffectAdmissionPlatformUpdateNeedsAnOfferCorpusdMinted(t *testing.T) {
 	}
 }
 
-// Observe mode keeps its window for the platform update only. Owner approval
-// is retired and an empty or unknown authority was never legitimate traffic,
-// so a guest cannot append them under the fleet's observe default
-// (nix/node-b.nix ownerActMode).
-func TestEffectAdmissionObserveStillRefusesRetiredAndUnknownAuthorities(t *testing.T) {
-	f := newAdmissionFixture(t, OwnerActObserve)
+// There is no observe window left: owner approval is retired, an empty or
+// unknown authority was never legitimate traffic, and a platform update with
+// no offer corpusd minted is refused like the rest.
+func TestEffectAdmissionRefusesRetiredUnknownAndUnofferedAuthorities(t *testing.T) {
+	f := newAdmissionFixture(t)
 	head := f.seedHead(t, f.computerID)
 	inputs := []string{"artifact:sha256:" + digestOf('f')}
-	refused(t, "observe external-owner", f.append(t, accepted(t, head, "external-owner:x", "op-1", digestOf('b'), inputs, digestOf('d'))))
-	refused(t, "observe unknown authority", f.append(t, accepted(t, head, "guest:self", "op-1", digestOf('b'), inputs, digestOf('d'))))
-	// The platform update still observes: an offer corpusd never minted is
-	// only logged.
-	if err := f.append(t, accepted(t, head, AuthorityPlatformUpdate, "", digestOf('c'), nil, digestOf('0'))); err != nil {
-		t.Fatalf("observe refused a platform update: %v", err)
+	refused(t, "external-owner", f.append(t, accepted(t, head, "external-owner:x", "op-1", digestOf('b'), inputs, digestOf('d'))))
+	refused(t, "unknown authority", f.append(t, accepted(t, head, "guest:self", "op-1", digestOf('b'), inputs, digestOf('d'))))
+	refused(t, "platform update with no offer", f.append(t, accepted(t, head, AuthorityPlatformUpdate, "", digestOf('c'), nil, digestOf('0'))))
+}
+
+// mintOffer records a platform update offer corpusd issued for content, so a
+// platform-update effect_accepted citing offerDigest is admitted.
+func (f *admissionFixture) mintOffer(t *testing.T, head computerevent.Head, content, offerDigest string) {
+	t.Helper()
+	offer := selfdevprotocol.PlatformUpdateOffer{ComputerID: f.computerID, UpdateID: "u-" + offerDigest[:8], BaseEventHead: head.CanonicalEventHead,
+		ExpiresAt: time.Now().UTC().Add(5 * time.Minute).Format(time.RFC3339Nano)}
+	offer.Manifest.ContentDigest = content
+	if err := recordPlatformUpdateOfferIssued(context.Background(), f.store.db, offer, offerDigest, time.Now().UTC()); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestEffectAdmissionRefusalIsA403AtTheAppendRoute(t *testing.T) {
-	f := newAdmissionFixture(t, OwnerActEnforce)
+	f := newAdmissionFixture(t)
 	head := f.seedHead(t, f.computerID)
 	service := NewService(f.store, filepath.Join(t.TempDir(), "artifacts"), filepath.Join(t.TempDir(), "platform-signing.key"))
 	artifacts, err := NewEventArtifactService(service, platformTestKeyResolver{key: service.signingKey.Public})

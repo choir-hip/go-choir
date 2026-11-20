@@ -71,9 +71,8 @@ func (h *Handler) ConfigurePackageBase(ctx context.Context, dir string) {
 }
 
 // ConfigurePackageOwnerActs installs the owner-act policy package publish
-// verifies its receipt under (CHOIR_OWNER_ACT_MODE): enforce refuses a
-// publish without a receipt binding the release; observe logs and lists it
-// as unverified. Unset, the proxy's owner-act gate is the act, as for the
+// verifies its receipt under: a publish without a receipt binding the release
+// is refused. Unset, the proxy's owner-act gate is the act, as for the
 // software release publish.
 func (h *Handler) ConfigurePackageOwnerActs(authority *OwnerActAuthority) {
 	if h != nil {
@@ -258,7 +257,7 @@ func (h *Handler) packageActor(r *http.Request, ownerID, computerID, kind string
 	if authority == nil {
 		// No authority is a wiring fault, not observe: a red route's
 		// unconfigured default refuses (review 274 F3). cmd/corpusd always
-		// configures one, in the mode CHOIR_OWNER_ACT_MODE names.
+		// configures one.
 		return "", http.StatusServiceUnavailable, packageAPIError{Error: what + ": no owner-act authority is configured", Reason: "owner_act_unconfigured"}
 	}
 	verified, err := func() (owneract.Verified, error) {
@@ -281,10 +280,8 @@ func (h *Handler) packageActor(r *http.Request, ownerID, computerID, kind string
 		return verified, nil
 	}()
 	if err != nil {
-		if refused := authority.refuse(ErrOwnerActRefused, what, computerID, err.Error()); refused != nil {
-			return "", http.StatusForbidden, packageAPIError{Error: refused.Error()}
-		}
-		return "owner_act:unverified", 0, packageAPIError{}
+		refused := authority.refuse(ErrOwnerActRefused, what, computerID, err.Error())
+		return "", http.StatusForbidden, packageAPIError{Error: refused.Error()}
 	}
 	// A receipt replayed inside its five minutes can only repeat the act it
 	// names, and only a host-internal caller carries one: a publish is

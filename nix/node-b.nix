@@ -193,9 +193,10 @@ let
   # traces every effect_accepted to it (or to an offer corpusd minted).
   # Both files are root 0600, generated once at activation; the private key
   # reaches only the proxy and the public key only corpusd, each through
-  # LoadCredential=. Rollout: "observe" logs "owner-act: observe: would
-  # refuse"; flip to "enforce" after a clean window. Rollback: "observe".
-  ownerActMode = "observe";
+  # LoadCredential=. corpusd refuses an owner mode write, a package publish or
+  # a platform-update effect_accepted without a verified receipt or a traceable
+  # offer ("owner-act: refused ..."); there is no observe mode (deleted
+  # 2026-11-20; CHOIR_OWNER_ACT_MODE is no longer read).
   ownerActKeyFile = "/var/lib/go-choir/secrets/owner-act-signing-key";
   ownerActPublicKeyFile = "${ownerActKeyFile}.pub";
   # PostgreSQL clients (nix/postgresql.nix; internal/dbcred.ApplyPGDSN). The
@@ -1117,7 +1118,6 @@ in
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
       ] ++ pgClientEnv ++ [
         "CORPUSD_VMCTL_URL=http://127.0.0.1:8083"
-        "CHOIR_OWNER_ACT_MODE=${ownerActMode}"
         # The public Autopaper front list shows only the designated paper
         # computer's owner (Cut 2 2b; docs/archive/reports/reeng-autopaper-paper-computer-2026-10-13.md),
         # so tracer test computers' stories stay off choir.news's front page.
@@ -2662,7 +2662,7 @@ in
     chmod 0600 ${issuerTokenFile}
   '';
 
-  # S1 owner-act key (ownerActMode). Ed25519, generated once, PEM, root
+  # S1 owner-act key. Ed25519, generated once, PEM, root
   # 0600, never printed. The public key is re-derived whenever it is missing.
   # Rotate by deleting both files and redeploying; the proxy and corpusd
   # must both restart (every deploy restarts them). A key that cannot be

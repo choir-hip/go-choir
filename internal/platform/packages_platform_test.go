@@ -233,7 +233,7 @@ func TestPublisherForceRequestIsANoteAndExecutesNothing(t *testing.T) {
 //	O6  a receipt from a guest transport writes;
 //	O7  the act writes without its receipt recorded first, or the same
 //	    receipt acts twice;
-//	O8  observe mode (CHOIR_OWNER_ACT_MODE unset) admits an unverified act;
+//	O8  an unverified act is admitted under some owner-act mode;
 //	O9  the roster parses a malformed or upper-case id, or too many.
 
 const testOperatorUser = "1111aaaa-2222-3333-4444-55555555beef"
@@ -279,8 +279,9 @@ func TestPlatformYankByOperatorAccountSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// O8: observe, the default on Node B; the route verifies anyway.
-	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActObserve, verifier))
+	// O8: the route verifies under the owner-act authority; no mode lets an
+	// unverified act through.
+	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(verifier))
 	r1 := w.build("<p>one</p>\n", "owner-a", nil)
 	w.published(r1)
 	r2 := w.build("<p>two</p>\n", "owner-a", &r1)
@@ -379,7 +380,7 @@ func TestPlatformYankByOperatorAccountSession(t *testing.T) {
 		t.Fatalf("token path = %d %s", rec.Code, rec.Body.String())
 	}
 	// No verifier key: the receipt path refuses, the token path still works.
-	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActEnforce, nil))
+	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(nil))
 	if rec := w.yankByReceipt(good(), req, nil); rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("no verifier = %d %s", rec.Code, rec.Body.String())
 	}

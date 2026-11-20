@@ -68,9 +68,9 @@ type consensusFixture struct {
 	armedMode  SelfDevelopmentMode
 }
 
-func newConsensusFixture(t *testing.T, mode OwnerActMode) *consensusFixture {
+func newConsensusFixture(t *testing.T) *consensusFixture {
 	t.Helper()
-	af := newAdmissionFixture(t, mode)
+	af := newAdmissionFixture(t)
 	head := af.seedHead(t, af.computerID)
 	builds := &stubHostBuilds{jobs: map[string]hostbuild.Job{}}
 	actuator, err := NewConsensusActuator(af.store, af.modes, af.modes.signingKey, builds)
@@ -215,7 +215,7 @@ func (f *consensusFixture) decide(t *testing.T, request ConsensusRequest) (Conse
 }
 
 func TestConsensusPosterMintsADecisionFromTwoSignedBallots(t *testing.T) {
-	f := newConsensusFixture(t, OwnerActEnforce)
+	f := newConsensusFixture(t)
 	for _, op := range []string{"op-1", "op-4"} {
 		f.recordBuild(t, f.hostRequest(op), hostbuild.StateDone, f.modeKey)
 	}
@@ -408,7 +408,7 @@ func TestConsensusPosterMintsADecisionFromTwoSignedBallots(t *testing.T) {
 }
 
 func TestConsensusPosterRefusesAPlatformComputer(t *testing.T) {
-	f := newConsensusFixture(t, OwnerActEnforce)
+	f := newConsensusFixture(t)
 	request := f.request(t, "op-1")
 	request.Subject.ComputerID = paperComputerID
 	if _, err := f.actuator.Decide(context.Background(), paperComputerID, request); !errors.Is(err, ErrConsensusRefused) || !strings.Contains(err.Error(), "platform computer") {
@@ -439,7 +439,7 @@ func TestConsensusPosterRefusesAPlatformComputer(t *testing.T) {
 }
 
 func TestConsensusPosterDecidesUnderALegacyRowsReceipt(t *testing.T) {
-	f := newConsensusFixture(t, OwnerActEnforce)
+	f := newConsensusFixture(t)
 	f.recordBuild(t, f.hostRequest("op-1"), hostbuild.StateDone, f.modeKey)
 	// d@e's row says propose_only: the receipt's new_mode is apply under the
 	// normaliser, and the decision binds that receipt's digest and generation.
@@ -480,8 +480,7 @@ func (f *consensusFixture) modeRef(t *testing.T) string {
 }
 
 func TestConsensusGateAdmitsOnlyADecisionThePosterMinted(t *testing.T) {
-	// Observe: the S1 branches only log; the consensus branch enforces.
-	f := newConsensusFixture(t, OwnerActObserve)
+	f := newConsensusFixture(t)
 	f.recordBuild(t, f.hostRequest("op-1"), hostbuild.StateDone, f.modeKey)
 	response, err := f.decide(t, f.request(t, "op-1"))
 	if err != nil {
@@ -532,7 +531,7 @@ func TestConsensusGateAdmitsOnlyADecisionThePosterMinted(t *testing.T) {
 }
 
 func TestConsensusGateStopsWhenTheOwnerWritesOffOrTheModeMoves(t *testing.T) {
-	f := newConsensusFixture(t, OwnerActEnforce)
+	f := newConsensusFixture(t)
 	f.recordBuild(t, f.hostRequest("op-1"), hostbuild.StateDone, f.modeKey)
 	response, err := f.decide(t, f.request(t, "op-1"))
 	if err != nil {
@@ -560,7 +559,7 @@ func TestConsensusGateStopsWhenTheOwnerWritesOffOrTheModeMoves(t *testing.T) {
 }
 
 func TestConsensusRouteIsTheGuestsAndAnswersTyped(t *testing.T) {
-	f := newConsensusFixture(t, OwnerActEnforce)
+	f := newConsensusFixture(t)
 	f.recordBuild(t, f.hostRequest("op-1"), hostbuild.StateDone, f.modeKey)
 	f.recordBuild(t, f.hostRequest("op-2"), hostbuild.StateFailed, f.modeKey)
 	f.recordBuild(t, f.hostRequest("op-3"), hostbuild.StateRunning, f.modeKey)

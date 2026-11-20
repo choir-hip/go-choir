@@ -1101,30 +1101,6 @@
    "ready_to_retire": true
   },
   {
-   "id": "owner_act_mode",
-   "kind": "let_binding",
-   "life": "release",
-   "owner": "texture",
-   "class": "red",
-   "surface": "auth",
-   "introduced": "2026-10-28",
-   "nix": [
-    "ownerActMode"
-   ],
-   "ladder": [
-    "observe",
-    "enforce"
-   ],
-   "target_ring": "R4",
-   "soak_x": 2,
-   "expires": "2026-11-25",
-   "ring": "all",
-   "nix_value": "observe",
-   "retire": "delete the observe mode once enforce",
-   "hold": "owner",
-   "hold_question": "observe by owner ruling 2026-10-24 17:5x; when does enforce start?"
-  },
-  {
    "id": "gateway_bearer_binding",
    "kind": "let_binding",
    "life": "release",

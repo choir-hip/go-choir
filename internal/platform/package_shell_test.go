@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
 
@@ -101,9 +102,22 @@ func TestShellUpdateWithdrawAndReinstateStayOwnerOnly(t *testing.T) {
 		t.Fatalf("publish = %d %s", w.Code, w.Body.String())
 	}
 	act := func(state string) pkgrelease.Listing {
-		body, _ := json.Marshal(PackageListingRequest{OwnerID: pdOwner, ComputerID: f.computerID, ListingChange: ListingChange{State: state, Reason: "test"}})
+		change := ListingChange{State: state, Reason: "test"}
+		body, _ := json.Marshal(PackageListingRequest{OwnerID: pdOwner, ComputerID: f.computerID, ListingChange: change})
 		r := httptest.NewRequest(http.MethodPut, listingsRoute+"/"+b.id, strings.NewReader(string(body)))
 		r.Header.Set("X-Internal-Caller", "true")
+		receipt, err := f.signer.Mint(owneract.Act{
+			Kind: owneract.ActPackageListing, OwnerUserID: pdOwner, AuthMethod: owneract.AuthMethodSession,
+			CredentialRef: "session:test", ComputerID: f.computerID, Subject: PackageListingSubject(b.id, change),
+		}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := owneract.Encode(receipt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Header.Set(owneract.Header, encoded)
 		rec := httptest.NewRecorder()
 		f.handler.HandleListings(rec, r)
 		if rec.Code != http.StatusOK {

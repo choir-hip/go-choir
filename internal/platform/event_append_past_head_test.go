@@ -13,8 +13,9 @@ import (
 // host's head has moved past its sequence: the guest's kept row can be settled
 // late. (existingComputerEventReceipt runs before the head is reduced.)
 func TestAppendRouteAnswersAResendAfterTheHeadMovedPast(t *testing.T) {
-	f := newAdmissionFixture(t, OwnerActObserve)
+	f := newAdmissionFixture(t)
 	head := f.seedHead(t, f.computerID)
+	f.mintOffer(t, head, digestOf('c'), digestOf('0'))
 	service := NewService(f.store, filepath.Join(t.TempDir(), "artifacts"), filepath.Join(t.TempDir(), "platform-signing.key"))
 	artifacts, err := NewEventArtifactService(service, platformTestKeyResolver{key: service.signingKey.Public})
 	if err != nil {

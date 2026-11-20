@@ -212,7 +212,7 @@ func TestReleasesListedBeforeTheRulingArePublic(t *testing.T) {
 func TestPublishPreviewsWhatBecomesPublicAndNeedsItConfirmed(t *testing.T) {
 	w := newPkgWorld(t)
 	r1 := w.build("<p>v2</p>\n", "owner-a", nil)
-	rec := w.publishConfirming(r1, "", "")
+	rec := w.publishConfirming(r1, w.receiptFor(r1), "")
 	var refusal PackageListingRefusal
 	if rec.Code != http.StatusConflict || json.Unmarshal(rec.Body.Bytes(), &refusal) != nil || refusal.Reason != pkgrelease.ReasonConfirmPathsRequired || refusal.Preview == nil {
 		t.Fatalf("P3 an unconfirmed publish = %d %s, want 409 confirm_paths_required with a preview", rec.Code, rec.Body.String())
@@ -237,15 +237,15 @@ func TestPublishPreviewsWhatBecomesPublicAndNeedsItConfirmed(t *testing.T) {
 		t.Fatalf("P3 the preview published: %d %s", rec.Code, rec.Body.String())
 	}
 	// Confirmed for other paths: refused, nothing written.
-	wantPkgRefusal(t, w.publishConfirming(r1, "", strings.Repeat("f", 64)), http.StatusConflict, pkgrelease.ReasonConfirmPathsMismatch)
+	wantPkgRefusal(t, w.publishConfirming(r1, w.receiptFor(r1), strings.Repeat("f", 64)), http.StatusConflict, pkgrelease.ReasonConfirmPathsMismatch)
 	w.wantInvisible(r1, "owner-b")
 	// Confirmed: published, and public.
-	if rec := w.publishConfirming(r1, "", refusal.Preview.PathsDigest); rec.Code != http.StatusCreated {
+	if rec := w.publishConfirming(r1, w.receiptFor(r1), refusal.Preview.PathsDigest); rec.Code != http.StatusCreated {
 		t.Fatalf("a confirmed publish = %d %s", rec.Code, rec.Body.String())
 	}
 	w.wantVisible(r1, "owner-b")
 	// A republish of what is already public needs no confirmation.
-	if rec := w.publishConfirming(r1, "", ""); rec.Code != http.StatusOK {
+	if rec := w.publishConfirming(r1, w.receiptFor(r1), ""); rec.Code != http.StatusOK {
 		t.Fatalf("a republish = %d %s", rec.Code, rec.Body.String())
 	}
 }
@@ -465,7 +465,7 @@ func TestPackageListingActVerifiesTheOwnersReceipt(t *testing.T) {
 	w := newPkgWorld(t)
 	r1 := w.build("<p>v2</p>\n", "owner-a", nil)
 	w.published(r1)
-	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActEnforce, verifier))
+	w.h.ConfigurePackageOwnerActs(NewOwnerActAuthority(verifier))
 
 	// A2: no receipt under enforce.
 	if rec := w.state(r1, "owner-a", pkgrelease.StateWithdrawn); rec.Code != http.StatusForbidden {

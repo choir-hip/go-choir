@@ -158,7 +158,8 @@ func main() {
 	}
 	// S1 owner-act receipts and the effect_accepted admission gate
 	// (docs/problems/effect-accepted-admitted-without-authority-2026-10-15.md).
-	// CHOIR_OWNER_ACT_MODE: observe (default) logs "would refuse"; enforce refuses.
+	// An owner mode write without a verified receipt is refused; there is no
+	// observe mode.
 	ownerActs := platform.LoadOwnerActAuthorityFromEnv()
 	log.Printf("corpusd: owner acts: %s", ownerActs.Status())
 	eventCAS.ConfigureEffectAdmission(ownerActs)
