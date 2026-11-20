@@ -189,20 +189,39 @@ stations:
     status: pending
 now:
   status: working
-  slice: D1, then W1 and X1 in parallel with S2 and S3 as their suites finish
-  candidate: lane/exact-demo-off 8a3c1a5ff
+  as_of: 2026-11-20T05:45Z (new thread; lead-docs lane carries this file)
+  slice: W1 lands when whole agentcore ends on choir-runner; then one train of S1 follow-ups, S2, S3 L1 and the gauge; D1 install and landing; X1 after its review fixes
+  discovered_this_thread:
+    - 'D1: the owner, 05:26Z, with a screenshot: signed in, the day''s real stories. The demo conjecture held. Installs overnight are allowed.'
+    - 'S: the search gate did NOT lower the gateway''s rate (162 an hour before, 159 after). The per-run figure it was judged by reads terminal-record summaries and loses the longest runs; the gateway meter says about 6 a run (docs/evidence/who-sends-the-web-searches-2026-11-20.md). C163 settled true by its test and wrong in meaning.'
+    - 'S: about 544 research runs a day for about 402 stories; 1,000 searches a day is 1.8 a run. 79% of searches are a story''s first run hunting a second outlet (a story publishes with two distinct outlets); eight heavy runs sent 59% of a window, half of it re-asks. Every listed fix together leaves an estimated 1,100 to 2,800 a day (docs/evidence/what-starts-research-runs-and-what-is-new-2026-11-20.md; the plan is the last section of docs/definitions/corpus-first-search-one-verb-2026-11-19.md, Landings 0 to 4).'
+    - 'E1: hand read done with the paper key (renewed; skills/choir-cli/SKILL.md says where keys live): of the 50 newest minted events 10 should have joined, 25 right, 15 unclear. Causes: same-flush siblings; "the 30 newest events" is three minutes of events; 78% of captures had no vector at flush; failed batches are never retried (docs/evidence/event-join-rate-hand-read-2026-11-20.md).'
+    - 'E2: an entity layer ALREADY runs for stories, behind the research.related_story setting (6,687 entities in corpusd, about 17% non-entities, duplicate ids, no merges); captures have none. Design: docs/design/entity-layer-2026-11-20.md, stations E0 to E8 (its own ids; E0 is the baseline script and hand read).'
+    - 'Main''s Swift design and typography rule tests fail (radio, settings and signedout contracts) and CI does not run them; lane design-rules-fix.'
+    - 'The real proof fails on a 1 s touch deadline when the Mac is loaded by builders'' test runs (load 23); rerun proofs when it is quiet.'
+    - 'Review seat 1 is Gemini 4 Hydrogen through agy (owner, 2026-11-20); in print mode it needs --sandbox --dangerously-skip-permissions in a frozen copy.'
+  lanes:
+    - 'switches-land 3719aae68 (W1): rebased, trailers backed by review-switches r1; five suites ok, agentcore running'
+    - 'exact-demo-off 1e516665b+ (D1): review answered; a follow-up makes the cleanup run on a phone that already lost the flag'
+    - 'exact-textures-place 50ea5b49a+ (X1): seat 2 sent back; fixes in progress'
+    - 'exact-convo-edit, exact-themes (X2), design-rules-fix: building'
+    - 'searchgate-followups 80c92a904 (S1): seat 2 accepts with should-fixes, done on search-reask-hold with Landings 0 and 1'
+    - 'brief-objective (S2): seat 2 accepts; should-fixes in progress. Estimated worth under 100 searches a day'
+    - 'search-leads 74abd31d1 (S3 L1): fixed, platform suite ok; in review'
+    - 'search-gauge b41441260: the gateway meter in the status scripts; lands with the train'
+    - 'root-desk-r3 (W2): both seats sent 62e9ac65c back (two stale actorruntime tests, rollback text, an armed nonce with a discarded digest); rework squashes to one commit'
+    - 'embed-kick: corpusd wakes the embed worker on a capture write, after confirming the cause in production'
+    - 'entity-e0: scripts/status-entities and the 200-attachment hand read'
   conjecture:
-    claim: the owner's phone was never signed out; it was in demo mode, and with demo impossible on a device it shows their real account or the signed-out card
-    test: the owner's words after opening the build installed at 04:44Z
-    edge: missing_oracle
-    edge_note: nothing but the owner's eyes reads the phone; the flag may be gone while the key is absent, unreadable or refused, which the card now names; if the owner reports sample stories again the guard is not what is on the phone, so read the installed build before anything else
-    delta_o: read the app's account state off the phone through the Exact agent on a device build, so the owner's eyes are not the only instrument
-    scope: the owner's iPhone on builds of main after 8a3c1a5ff
-    status: held (owner verdict, 2026-11-20 05:26Z)
-  believed_state: the search gate is deployed and partly effective; the signed-out work is deployed and proved on the simulator; the phone has the demo guard
-  main_uncertainty: what the owner's phone shows; whether the event layer mints duplicates; whether the remaining search fixes reach 1,000 a day
+    claim: 'the paper''s web searches are mostly a hunt for a second outlet and re-asks of one question; holding re-asks on every verb and telling a run at its start which outlets the corpus already holds removes more than half, and under 1,000 a day needs the second outlet to come from the corpus (events with two outlets) and not from the web'
+    test: the gateway's searches a day and searches per run after each landing, with stories a day not lower than the week before
+    edge: missing_measurement
+    edge_note: the logs carry no outlet per capture, so the size of the second-outlet hold is unknown until Landing 0's fields are deployed
+    status: testing
+  believed_state: the phone is signed in and right; nothing from this thread is deployed yet except docs
+  main_uncertainty: whether any set of caller fixes reaches 1.8 searches a run; whether the event layer joins once captures have vectors
   blocker: none
-  next_action: read the demo fix's review and land D1; ask the owner what the phone shows
+  next_action: land W1 when agentcore ends; build and install the demo fix
 operating_notes:
   - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review: seat 1 a Sonnet subagent that did not write the change, seat 2 DeepSeek through the agentic-consensus runner (--include omp-deepseek-v41-flash) on a frozen clean copy; orange one seat, red two.'
   - 'Go compiles and tests on the build machines, never the Mac (gate scripts on the Mac need GOFLAGS=-mod=mod). choir-agents has 3.9 GB of memory: one heavy run at a time under flock ~/agentcore.lock, and stop the test Postgres a killed run leaves. choir-runner (10 GB) is the landing machine; whole agentcore under -race took 69 to 83 minutes on the night of 2026-11-19, so use -timeout 150m.'
