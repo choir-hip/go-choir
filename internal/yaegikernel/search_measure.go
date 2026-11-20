@@ -50,6 +50,7 @@ func (s *ChoirScope) noteOutlets(n int) {
 	}
 	s.statsMu.Lock()
 	s.outletsLast = n
+	s.outletsSends++
 	if n > s.outletsMax {
 		s.outletsMax = n
 	}
@@ -71,13 +72,6 @@ func (st *SearchStore) outletsHeld() int {
 		}
 	}
 	return len(seen)
-}
-
-// judgedCount is how many searches have been counted as seen or not.
-func (st *SearchStore) judgedCount() int {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return len(st.judged)
 }
 
 // secondLevel are the labels that make a two-letter country domain a public

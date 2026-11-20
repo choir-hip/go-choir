@@ -99,7 +99,7 @@ fmt.Println(b)`)
 	if !strings.Contains(out.Stdout, "s1 s1 s2\n") {
 		t.Fatalf("ids: the reworded query must come back as s1, the one with another word as s2:\n%s", out.Stdout)
 	}
-	if !strings.Contains(out.Stdout, "s1 not sent: answered from your search s1, under a minute ago (same terms); send it anyway with fresh") {
+	if !strings.Contains(out.Stdout, "s1 not sent: answered from your search s1, under a minute ago (same question); send it anyway with fresh") {
 		t.Fatalf("the stub does not say it was answered from s1:\n%s", out.Stdout)
 	}
 	if got := f.searchCalls.Load(); got != 2 {

@@ -54,6 +54,26 @@ type readLedger struct {
 	// ReadCapture: a capture made from a returned page counts as that page
 	// tried (search_need.go).
 	captureURLs []string
+	// saved holds the state of runs this session served and left, so a run
+	// whose cell returns after another run's finds its reads again (a desk
+	// session serves runs in turn). savedOrder is oldest first; memory is
+	// bounded to the last savedRunsMax runs.
+	saved      map[string]ledgerState
+	savedOrder []string
+}
+
+// savedRunsMax is how many left runs' ledgers a session keeps.
+const savedRunsMax = 16
+
+// ledgerState is one run's part of the ledger.
+type ledgerState struct {
+	reads               []ReadEntry
+	noted               int
+	packetSent          bool
+	packedID, packedURL map[string]bool
+	nudged              map[string]bool
+	warnings            []string
+	captureURLs         []string
 }
 
 // beginRun resets the ledger when a cell of a new run binds. An empty run id
@@ -67,10 +87,22 @@ func (l *readLedger) beginRun(runID string) (changed bool) {
 	if l.runID == runID {
 		return false
 	}
+	if l.runID != "" {
+		if l.saved == nil {
+			l.saved = map[string]ledgerState{}
+		}
+		if _, ok := l.saved[l.runID]; !ok {
+			l.savedOrder = append(l.savedOrder, l.runID)
+		}
+		l.saved[l.runID] = ledgerState{l.reads, l.noted, l.packetSent, l.packedID, l.packedURL, l.nudged, l.warnings, l.captureURLs}
+		for len(l.savedOrder) > savedRunsMax {
+			delete(l.saved, l.savedOrder[0])
+			l.savedOrder = l.savedOrder[1:]
+		}
+	}
 	l.runID = runID
-	l.reads, l.noted, l.packetSent, l.nudged, l.warnings = nil, 0, false, nil, nil
-	l.packedID, l.packedURL = nil, nil
-	l.captureURLs = nil
+	st := l.saved[runID] // zero when the run is new to this session
+	l.reads, l.noted, l.packetSent, l.packedID, l.packedURL, l.nudged, l.warnings, l.captureURLs = st.reads, st.noted, st.packetSent, st.packedID, st.packedURL, st.nudged, st.warnings, st.captureURLs
 	return true
 }
 

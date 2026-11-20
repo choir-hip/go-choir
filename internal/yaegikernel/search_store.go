@@ -105,6 +105,14 @@ type Search struct {
 	Error     string   `json:"error,omitempty"`
 	// Refused is why no search was sent; Results are then the unread pages.
 	Refused string `json:"refused,omitempty"`
+	// Running is set with Refused when another search of this run is still
+	// running: ID is then that search's, not an answer to this query.
+	Running bool `json:"running,omitempty"`
+	// Reused says this query was not sent: it asks the same question as an
+	// earlier search of the run, and this value IS that search (ID, Query and
+	// Results are its, not an answer to a new query). ReusedFrom is its id.
+	Reused     string `json:"reused,omitempty"`
+	ReusedFrom string `json:"reused_from,omitempty"`
 
 	// startedAt and key let SearchStart answer a later query with the same
 	// terms from this search (search_marks.go reuseSearch).
@@ -113,6 +121,15 @@ type Search struct {
 	// question is the key of the SearchAll question that sent this search,
 	// empty for a plain search (search_need.go).
 	question string
+	// run is the run the session was serving when the search's FIRST frame
+	// arrived (usually its start frame): a frame that lands after another run
+	// bound is attributed to that run.
+	run string
+	// near is searchquery.NearKey of the query (the question once date words,
+	// operators, quotes and order are set aside), nearTerms its terms; both
+	// are empty when nothing is left (search_hold.go).
+	near      string
+	nearTerms []string
 }
 
 // SearchCount is how far one search has come.
@@ -198,9 +215,11 @@ type SearchStore struct {
 	order    []string
 	// changed is closed and replaced on every apply, waking SearchWait.
 	changed chan struct{}
-	// runStart is the index in order of the first search of the current run:
-	// held is judged against searches from there on (markRunStart).
-	runStart int
+	// run is the id of the run the session is serving now: held is judged
+	// against that run's searches only (markRunStart). A desk session serves
+	// several runs in turn, so a search carries the run it was started under
+	// and a run that returns finds its own searches again.
+	run string
 	// now is the clock (nil: time.Now); a test sets it.
 	now func() time.Time
 	// readKeys returns the searchHitKey of every page this run read; nil
@@ -216,8 +235,7 @@ type SearchStore struct {
 	pos   map[string]int
 	first map[string]int
 	// counted is what the host has been told (takeStats).
-	startedCounted int
-	counted        map[string][2]int
+	counted map[string][2]int
 	// judged is the searches whose share of already-held pages was counted.
 	judged map[string]bool
 }
@@ -235,7 +253,7 @@ func (st *SearchStore) apply(f SearchFrame) {
 	defer st.mu.Unlock()
 	s := st.searches[f.ID]
 	if s == nil {
-		s = &Search{ID: f.ID, startedAt: st.nowTime()}
+		s = &Search{ID: f.ID, startedAt: st.nowTime(), run: st.run}
 		st.searches[f.ID] = s
 		st.pos[f.ID] = len(st.order)
 		st.order = append(st.order, f.ID)
@@ -244,6 +262,7 @@ func (st *SearchStore) apply(f SearchFrame) {
 	case SearchFrameStart:
 		s.Query = f.Query
 		s.key = searchquery.Key(f.Query)
+		s.near, s.nearTerms = nearOf(f.Query, st.nowTime())
 		s.Providers = append([]string(nil), f.Providers...)
 		s.Cooling = append([]string(nil), f.Cooling...)
 	case SearchFrameProvider:
@@ -480,7 +499,7 @@ func searchHitKey(raw string) string {
 // holds searchEnoughUnread or more pages it has not tried to read, the search
 // is not sent and the stub says why and carries those pages; fresh sends it.
 func (s *ChoirScope) SearchStart(query string, fresh ...bool) (SearchStub, error) {
-	return s.startSearch(query, len(fresh) > 0 && fresh[0], true)
+	return s.startSearch(query, len(fresh) > 0 && fresh[0], true, "")
 }
 
 // startSearch is the one path a web search takes to the host. gated is false
@@ -488,7 +507,7 @@ func (s *ChoirScope) SearchStart(query string, fresh ...bool) (SearchStub, error
 // One search at a time passes the need test and starts (sendMu): the next is
 // judged only when none of the run's searches is still running (it is refused
 // at once otherwise, never waited for: a cell cannot time out on it).
-func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub, error) {
+func (s *ChoirScope) startSearch(query string, override, gated bool, qk string) (SearchStub, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return SearchStub{}, fmt.Errorf("choir: SearchStart needs a query")
@@ -518,6 +537,18 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 			s.statsMu.Unlock()
 			// ID is the running search's, so SearchWait(stub.ID, ...) works.
 			return SearchStub{ID: id, Query: query, Refused: why, Running: true}, nil
+		}
+		// The web has shown what it has for this question: the same need test for
+		// every verb, SearchAll's wordings included (search_hold.go).
+		if pages, held := s.searches.mostlySeen(query, qk, s.searches.nowTime()); held {
+			s.noteNotSent("mostly_seen")
+			why := mostlySeenRefusal(len(pages))
+			s.statsMu.Lock()
+			if !s.reuseQuiet {
+				s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
+			}
+			s.statsMu.Unlock()
+			return SearchStub{Query: query, Refused: why, Unread: pages}, nil
 		}
 	} else {
 		s.noteFreshOverMatch(query)

@@ -64,8 +64,8 @@ func (st *SearchStore) unreadPages(qk string) []SearchHit {
 	read := st.readSet()
 	seen := map[string]bool{}
 	var out []SearchHit
-	for i := st.runStart; i < len(st.order); i++ {
-		if qk != "" && st.searches[st.order[i]].question != qk {
+	for i := 0; i < len(st.order); i++ {
+		if !st.inRun(i) || (qk != "" && st.searches[st.order[i]].question != qk) {
 			continue
 		}
 		for _, h := range st.markOneLocked(i, read).Results {
@@ -87,7 +87,10 @@ func (st *SearchStore) runningSearch() string {
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	for i := len(st.order) - 1; i >= st.runStart; i-- {
+	for i := len(st.order) - 1; i >= 0; i-- {
+		if !st.inRun(i) {
+			continue
+		}
 		if c := st.searches[st.order[i]]; !c.Done && st.nowTime().Sub(c.startedAt) < searchWaitMax {
 			return c.ID
 		}

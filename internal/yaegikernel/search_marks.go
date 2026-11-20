@@ -16,22 +16,37 @@ import (
 // the order the searches were started in, so a burst fired at one instant
 // still has a first, a second and a third.
 
-// markRunStart makes searches started from now on the first of a new run:
-// pages an earlier run returned are new again.
-func (st *SearchStore) markRunStart() {
+// inRun reports whether search i started under the run the session is serving.
+func (st *SearchStore) inRun(i int) bool {
+	return st.searches[st.order[i]].run == st.run
+}
+
+// markRunStart makes runID the run the session serves: its searches are held
+// against each other, and pages another run's searches returned are new again.
+// A run the session served before finds its own searches and their pages (the
+// held set is rebuilt from them), so another run's cell between two of its
+// cells does not wipe what it holds.
+func (st *SearchStore) markRunStart(runID string) {
 	if st == nil {
 		return
 	}
 	st.mu.Lock()
-	st.runStart = len(st.order)
+	defer st.mu.Unlock()
+	st.run = runID
 	st.first = map[string]int{}
-	st.mu.Unlock()
+	for i, id := range st.order {
+		if c := st.searches[id]; c.run == runID {
+			for _, a := range c.Arrivals {
+				st.noteKeysLocked(i, a.Results)
+			}
+		}
+	}
 }
 
 // noteKeysLocked records that search idx returned these pages, for the held
-// test. A search of an earlier run records nothing.
+// test. A search of another run records nothing.
 func (st *SearchStore) noteKeysLocked(idx int, hits []SearchHit) {
-	if idx < st.runStart {
+	if !st.inRun(idx) {
 		return
 	}
 	if st.first == nil {
@@ -58,7 +73,7 @@ func (st *SearchStore) readSet() map[string]bool {
 // marks. It reads only that search's results.
 func (st *SearchStore) markOneLocked(i int, read map[string]bool) Search {
 	c := copySearch(st.searches[st.order[i]])
-	if i < st.runStart {
+	if !st.inRun(i) {
 		return c
 	}
 	for j := range c.Results {
@@ -123,13 +138,16 @@ type SearchStats struct {
 	// domains) the run held at its sends: the most, and at the latest send.
 	OutletsMax  int `json:"outlets_max,omitempty"`
 	OutletsLast int `json:"outlets_last,omitempty"`
+	// OutletsSends counts the sends those two were taken at, so a send that held
+	// no outlet is the latest value, not a stale one.
+	OutletsSends int `json:"outlets_sends,omitempty"`
 }
 
 // IsZero reports whether nothing was counted.
 func (a SearchStats) IsZero() bool {
 	return a.Started == 0 && a.FromHeld == 0 && len(a.NotSent) == 0 && a.PagesReturned == 0 && a.PagesNew == 0 && a.PagesRead == 0 &&
 		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.FreshOverUnread == 0 && a.Untagged == 0 && a.AllRunning == 0 &&
-		len(a.ReuseDeclined) == 0 && a.SeenJudged == 0 && a.SeenMostly == 0 && a.OutletsMax == 0 && a.OutletsLast == 0
+		len(a.ReuseDeclined) == 0 && a.SeenJudged == 0 && a.SeenMostly == 0 && a.OutletsMax == 0 && a.OutletsLast == 0 && a.OutletsSends == 0
 }
 
 // Add sums o into a.
@@ -148,9 +166,10 @@ func (a *SearchStats) Add(o SearchStats) {
 	a.SeenJudged += o.SeenJudged
 	a.SeenMostly += o.SeenMostly
 	a.OutletsMax = max(a.OutletsMax, o.OutletsMax)
-	if o.OutletsMax > 0 || o.OutletsLast > 0 {
+	if o.OutletsSends > 0 {
 		a.OutletsLast = o.OutletsLast
 	}
+	a.OutletsSends += o.OutletsSends
 	for k, v := range o.ReuseDeclined {
 		if a.ReuseDeclined == nil {
 			a.ReuseDeclined = map[string]int{}
@@ -178,13 +197,14 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 		st.counted = map[string][2]int{}
 	}
 	marked := st.markedLocked()
-	out.Started = len(marked) - st.startedCounted
-	st.startedCounted = len(marked)
 	for i, c := range marked {
-		if i < st.runStart {
+		if !st.inRun(i) {
 			continue
 		}
-		prev := st.counted[c.ID]
+		prev, counted := st.counted[c.ID]
+		if !counted {
+			out.Started++ // only this run's searches: another run's are its own line's
+		}
 		returned, fresh := len(c.Results), c.NewPages
 		out.PagesReturned += max(returned-prev[0], 0)
 		out.PagesNew += max(fresh-prev[1], 0)
@@ -208,8 +228,8 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 	out.AllCalls, out.AllOffered, out.AllSent, out.FreshOverUnread = s.allStat.calls, s.allStat.offered, s.allStat.sent, s.allStat.freshOverUnread
 	out.Untagged, out.AllRunning = s.allStat.untagged, s.allStat.running
 	out.ReuseDeclined, s.declineStat = s.declineStat, nil
-	out.OutletsMax, out.OutletsLast = s.outletsMax, s.outletsLast
-	s.outletsMax, s.outletsLast = 0, 0
+	out.OutletsMax, out.OutletsLast, out.OutletsSends = s.outletsMax, s.outletsLast, s.outletsSends
+	s.outletsMax, s.outletsLast, s.outletsSends = 0, 0, 0
 	s.allStat = allCounts{}
 	s.statsMu.Unlock()
 	if out.IsZero() {
@@ -252,73 +272,80 @@ func (st *SearchStore) latestYield(n int) string {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	marked := st.markedLocked()
-	if len(marked)-st.runStart < n {
+	var mine []Search
+	for i, c := range marked {
+		if st.inRun(i) {
+			mine = append(mine, c)
+		}
+	}
+	if len(mine) < n {
 		return ""
 	}
 	parts := make([]string, 0, n)
-	for _, c := range marked[len(marked)-n:] {
+	for _, c := range mine[len(mine)-n:] {
 		parts = append(parts, fmt.Sprintf("%s %d", c.ID, c.NewPages))
 	}
 	return "new pages in the latest searches: " + strings.Join(parts, ", ")
 }
 
-// searchUsable reports whether a search can answer another query: it is
-// still running, or it ended with at least one provider answering and at
-// least one page. A search that failed, or found nothing, is tried again.
+// searchUsable reports whether a FINISHED search can answer another query: at
+// least one provider answered and at least one page came back. A search that
+// failed, or found nothing, is tried again. Its only caller requires Done.
 func searchUsable(c *Search) bool {
-	if !c.Done {
-		return true
-	}
 	return c.Answered > 0 && searchHasResults(c)
 }
 
 // reuseVerdict finds the finished search of this run that answers query: the
-// same terms (searchquery.Key), started
-// within the window (10 minutes for news, else 30). reason is empty when one
-// was found or when nothing prior is identical; otherwise it is the fixed token
-// for why the latest prior identical search was not used: earlier_run,
-// key_mismatch, out_of_window, running, no_provider_answered, no_results,
-// unknown (unknown would be a bug: it matches every test and was still not
-// used).
+// same terms (searchquery.Key) or the same question (searchquery.NearKeyAt: a
+// wording that differs only by a recency decoration: today's or yesterday's
+// date, a weekday, "today"), started within the window (10 minutes for news,
+// else 30). reason is empty when one was found or when no prior search of the
+// session asked the same question; otherwise it is the fixed token for why the
+// latest such search was not used: earlier_run, out_of_window, running,
+// no_provider_answered, no_results. Near-key matches are reported the same way
+// as exact ones.
 func (st *SearchStore) reuseVerdict(query string) (c Search, age time.Duration, reason string) {
 	key := searchquery.Key(query)
+	near, _ := nearOf(query, st.nowTime())
 	window := searchReuseWindow
 	if searchquery.IsTimeSensitive(query) {
 		window = searchReuseWindowNews
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	for i := len(st.order) - 1; i >= st.runStart; i-- {
+	asks := func(cand *Search) bool {
+		return cand.key == key || (near != "" && cand.near == near) || cand.Query == query
+	}
+	for i := len(st.order) - 1; i >= 0; i-- {
+		if !st.inRun(i) {
+			continue
+		}
 		cand := st.searches[st.order[i]]
 		d := st.nowTime().Sub(cand.startedAt)
-		if cand.key != key || d > window || !cand.Done || !searchUsable(cand) {
+		if !asks(cand) || d > window || !cand.Done || !searchUsable(cand) {
 			continue
 		}
 		return copySearch(cand), d, ""
 	}
-	// Nothing answers. Say why the latest prior identical search did not.
+	// Nothing answers. Say why the latest search that asked the same question
+	// did not.
 	for i := len(st.order) - 1; i >= 0; i-- {
 		cand := st.searches[st.order[i]]
-		if cand.key != key && cand.Query != query {
+		if !asks(cand) {
 			continue
 		}
 		switch d := st.nowTime().Sub(cand.startedAt); {
-		case i < st.runStart:
-			reason = "earlier_run"
-		case cand.key != key:
-			reason = "key_mismatch"
+		case !st.inRun(i):
+			return Search{}, 0, "earlier_run"
 		case d > window:
-			reason = "out_of_window"
+			return Search{}, 0, "out_of_window"
 		case !cand.Done:
-			reason = "running"
+			return Search{}, 0, "running"
 		case cand.Answered == 0:
-			reason = "no_provider_answered"
+			return Search{}, 0, "no_provider_answered"
 		case !searchHasResults(cand):
-			reason = "no_results"
-		default:
-			reason = "unknown"
+			return Search{}, 0, "no_results"
 		}
-		return Search{}, 0, reason
 	}
 	return Search{}, 0, ""
 }
@@ -339,7 +366,7 @@ func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
 		s.noteDeclined(reason)
 		return SearchStub{}, false
 	}
-	why := fmt.Sprintf("answered from your search %s, %s (same terms); send it anyway with fresh", c.ID, agoText(age))
+	why := fmt.Sprintf("answered from your search %s, %s (same question); send it anyway with fresh", c.ID, agoText(age))
 	s.statsMu.Lock()
 	s.heldStat++
 	if !s.reuseQuiet {
