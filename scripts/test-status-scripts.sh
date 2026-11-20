@@ -499,6 +499,82 @@ runcorpus --fixture "$root/cr_a.log" --append "$tsv"
 check "R5 a second run appends nothing new" '[ "$(wc -l <"$tsv" | tr -d " ")" -eq 3 ] && grep -q "appended 0" "$root/out"'
 runcorpus --fixture "$root/cr_a.log" --append "$here/../corpus-reuse-test.tsv"
 check "R5 a file inside the repo is refused" '[ "$(cat "$root/rc")" = 2 ] && [ ! -e "$here/../corpus-reuse-test.tsv" ]'
+# S1..S6 the gateway meter (station search-gauge; docs/evidence/who-sends-the-web-searches-2026-11-20.md).
+# The console's `runtime: search run=` line is written only at a run's terminal record, so it loses runs still
+# running, runs with no terminal record and counts lost to a restart (265 searches in the journal, 183 in the
+# lines). The gateway request line carries run= and, as the journal is read, a query hash qh=.
+#  S1  searches per research run are not computed from the gateway request lines grouped by run=: runs that searched,
+#      sum, median, p90, max, the share of requests from runs with 8 or more; another computer's lines are in them;
+#      served miss/hit/joined (from the answer lines) are not split into sent and from-cache
+#  S2  the console-summary figure is not labelled as terminal records only, or the gap to the gateway is not a number
+#  S3  same-run repeats (same run, same qh) are not counted, or a repeat across two runs is counted, or lines with no
+#      qh print a number instead of saying the hash is absent; any query text, URL or computer id is printed
+#  S4  research wakes per hour are not read from `actor wake latency ... target=research:`, or not split by kind, or
+#      another desk's wake is counted
+#  S6  the hour TSV has no runs-that-searched / searches-per-run columns (gateway basis), or an old file's header is
+#      not widened with its rows kept (new cells empty), or a second run appends the hour twice
+python3 - "$root" <<'PYGS'
+import sys
+root = sys.argv[1]
+PRE = "[ 5.0] x-go-choir-run-autoputer-runtime[1]: "
+PV = "vm-1669020adcece51c2f5ff9b6df399ef5"
+def sr(ts, run, started):
+    return f"{PRE}{ts} runtime: search run={run} desk=research started={started} from_held=0 not_sent=0 pages_returned=10 pages_new=5 pages_read=1\n"
+def wk(ts, kind, tgt="research:aaaa"):
+    return f"{PRE}{ts} runtime: actor wake latency kind={kind} target={tgt} waited=1.0s dispatch=0.5s\n"
+L = [PRE + "2026/11/18 20:30:00 runtime: other\n",
+     sr("2026/11/18 21:40:00", "run-A", 5), sr("2026/11/18 21:50:00", "run-B", 3),
+     wk("2026/11/18 21:05:00", "initial_dispatch"), wk("2026/11/18 21:15:00", "initial_dispatch"),
+     wk("2026/11/18 21:25:00", "inbox_record"), wk("2026/11/18 21:26:00", "initial_dispatch", "texture:bbbb"),
+     wk("2026/11/18 22:05:00", "inbox_record"),
+     PRE + "2026/11/18 23:10:00 runtime: other\n"]
+open(root + "/gs_c.log", "w").write("".join(L))
+def rq(ts, run, qh=None, vm=PV, desk="research"):
+    h = "" if qh is None else f"qh={qh} "
+    return f"{ts} gateway: search request from autoputer {vm} ({h}max_results=10 run={run} desk={desk} conv=c)\n"
+def an(ts, served, vm=PV):
+    return f"{ts} gateway: search for autoputer {vm} answered 1 of 1 providers (0 cooling, 0 pending) skipped=[] served={served} results=10 unique=10 seen=0 routing=budget escalated=no paid_calls=0 today=[keenable=1]\n"
+G = []
+t = 0
+def tick():
+    global t
+    t += 60
+    return "2026/11/18 21:%02d:%02d" % (t // 60, t % 60)
+for qh in ("h1", "h1", "h2", "h3", "h4", "h5", "h6", "h7"):     # run-A: 8 requests, one same-run repeat (h1)
+    G.append(rq(tick(), "run-A", qh))
+for qh in ("h1", "h8", "h8"):                                    # run-B: 3, one repeat (h8); h1 also in run-A is not a repeat
+    G.append(rq(tick(), "run-B", qh))
+G.append(rq(tick(), "run-C", "h9"))
+G.append(rq(tick(), "run-X", "h1", vm="vm-00000000000000000000000000000001"))   # another computer
+for s_ in ["miss"] * 9 + ["hit"] * 2 + ["joined"]:
+    G.append(an(tick(), s_))
+G.append(an(tick(), "miss", vm="vm-00000000000000000000000000000001"))
+open(root + "/gs_g.log", "w").write("".join(G))
+# the same, with no hash on the request lines (the journal as it was before the host adds qh=)
+open(root + "/gs_gn.log", "w").write("".join(__import__("re").sub(r"qh=\w+ ", "", l) for l in G))
+PYGS
+runcorpus --fixture "$root/gs_c.log" --gateway-fixture "$root/gs_g.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z
+check "S1 gateway meter: 3 runs searched, 12 requests, median 3, p90 8, max 8; runs with 8 or more sent 66.7%" 'grep -q "gateway meter (run= on the request lines): 3 runs searched, 12 requests, median 3, p90 8, max 8; runs with 8 or more sent 66.7% of the requests" "$root/out"'
+check "S1 the sent / from-cache split is the answer lines: sent to providers 9, served from the cache 2, joined 1 (the other computer is out)" 'grep -q "served by the gateway: sent to providers 9, from the cache 2, joined an identical one in flight 1" "$root/out"'
+check "S2 the console figure is labelled terminal records only and the gap is a number: 2 runs, 8 started; gateway 12; gap 4" 'grep -q "console summary lines (terminal records only): 2 runs, 8 started; gap to the gateway meter: 4 (12 - 8)" "$root/out"'
+check "S3 same-run repeats: run-A 1 + run-B 1 = 2; h1 across two runs is not one" 'grep -q "same-run repeats (same query hash twice in one run): 2" "$root/out"'
+check "S3 no query text, URL or computer id in the report" '! grep -qE "SECRET|https?://|vm-[0-9a-f]{8}|h1|h8" "$root/out"'
+check "S4 research wakes per hour: 21:00 initial_dispatch 2, inbox_record 1 (the texture wake is out); 22:00 inbox_record 1" 'grep -q "2026-11-18T21:00Z  initial_dispatch 2, inbox_record 1" "$root/out" && grep -q "2026-11-18T22:00Z  initial_dispatch 0, inbox_record 1" "$root/out"'
+runcorpus --fixture "$root/gs_c.log" --gateway-fixture "$root/gs_gn.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z
+check "S3 request lines with no hash: the repeats say so, as no number" 'grep -q "same-run repeats: not available (the gateway request lines carry no query hash)" "$root/out"'
+runcorpus --fixture "$root/gs_c.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z
+check "S1 gateway not read: the meter says so, and no gap is invented" 'grep -q "gateway meter: not read" "$root/out" && ! grep -q "gap to the gateway meter" "$root/out"'
+runcorpus --fixture "$root/gs_c.log" --gateway-fixture "$root/gs_g.log" --since 2026-11-18T21:00Z --until 2026-11-18T23:00Z --json
+check "S1 JSON carries the meter" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); g=d[\"m\"][\"gw_meter\"]; assert g[\"runs\"]==3 and g[\"requests\"]==12 and g[\"p90\"]==8 and g[\"repeats\"]==2 and g[\"sent\"]==9 and d[\"m\"][\"gap\"]==4" "$root/out"'
+# S6 the hour rows: columns 22 and 23, gateway basis (cr_g: run-1 and run-2 in the 21:00 hour, run-3 in the 22:00 hour)
+runcorpus --fixture "$root/cr_a.log" --gateway-fixture "$root/cr_g.log" --append "$root/s6.tsv"
+check "S6 the header ends gw_runs_searched, gw_searches_per_run; the 21:00 row has 2 runs and 1.0 a run, 22:00 has 1 and 1.0" '[ "$(head -1 "$root/s6.tsv" | cut -f22,23)" = "$(printf "gw_runs_searched\tgw_searches_per_run")" ] && [ "$(sed -n 2p "$root/s6.tsv" | cut -f22,23)" = "$(printf "2\t1.0")" ] && [ "$(sed -n 3p "$root/s6.tsv" | cut -f22,23)" = "$(printf "1\t1.0")" ]'
+printf 'hour\truns\tstarted\n2026-11-18T20:00Z\t3\t7\n' >"$root/s6o.tsv"
+runcorpus --fixture "$root/cr_a.log" --gateway-fixture "$root/cr_g.log" --append "$root/s6o.tsv"
+check "S6 an old-format file keeps its row (new cells empty) under a widened header, then the new rows" '[ "$(head -1 "$root/s6o.tsv" | cut -f1-3)" = "$(printf "hour\truns\tstarted")" ] && [ "$(head -1 "$root/s6o.tsv" | awk -F"\t" "{print NF}")" = 23 ] && [ "$(sed -n 2p "$root/s6o.tsv" | cut -f1-3)" = "$(printf "2026-11-18T20:00Z\t3\t7")" ] && [ "$(sed -n 2p "$root/s6o.tsv" | awk -F"\t" "{print NF}")" = 23 ] && [ "$(wc -l <"$root/s6o.tsv" | tr -d " ")" = 4 ]'
+runcorpus --fixture "$root/cr_a.log" --gateway-fixture "$root/cr_g.log" --append "$root/s6o.tsv"
+check "S6 a second run appends nothing" '[ "$(wc -l <"$root/s6o.tsv" | tr -d " ")" = 4 ]'
+
 # R15 the event layer's flush line (station V5): flushes, questions, minted share, vector states
 python3 - "$root" <<'PY'
 import sys
@@ -691,6 +767,12 @@ cat >"$root/su/full.txt" <<'EOF'
 2026/11/20 01:10:00 gateway: search for autoputer vm-00000000000000000000000000000002 answered 1 of 1 providers (3 cooling, 0 pending) skipped=[brave=quota_limited parallel=capped serper=error] served=miss results=10 unique=10 seen=0 routing=budget escalated=no paid_calls=0 today=[keenable=12 parallel=150/150]
 2026/11/20 01:20:00 gateway: search failed for autoputer vm-00000000000000000000000000000002
 2026/11/20 01:45:00 gateway: search for autoputer vm-1669020adcece51c2f5ff9b6df399ef5 answered 1 of 1 providers (0 cooling, 0 pending) skipped=[] served=miss results=77 unique=77 seen=0 routing=budget escalated=no paid_calls=0 today=[keenable=13]
+2026/11/19 23:50:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (max_results=10 run=r9 desk=research conv=c)
+2026/11/20 00:10:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (max_results=10 run=r1 desk=research conv=c)
+2026/11/20 00:40:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (max_results=10 run=r1 desk=research conv=c)
+2026/11/20 00:41:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (max_results=10 run=r1 desk=research conv=c)
+2026/11/20 01:00:00 gateway: search request from autoputer vm-1669020adcece51c2f5ff9b6df399ef5 (max_results=10 run=r2 desk=research conv=c)
+2026/11/20 01:10:00 gateway: search request from autoputer vm-00000000000000000000000000000002 (max_results=10 run=r7 desk=research conv=c)
 ##CORPUS
 2026/11/20 00:20:00 corpusd retrieval op=capture_search shape=ranked ms=100.00 rows=6 vector_state=exact err=
 2026/11/20 00:50:00 corpusd retrieval op=capture_search shape=ranked ms=200.00 rows=6 vector_state=approximate err=
@@ -728,9 +810,15 @@ check "U4 embeds: 3 asked, 2 failed, 1 of them the deadline" 'grep -q "query emb
 check "U4 callers: the paper's cell 1 and brief 1 in the hour, the other 2 by difference" 'grep -q "by caller: paper.s cell 1, paper.s brief 1, other callers 2" "$root/out"'
 check "U5 the target constant and the owner's sentence are printed" 'grep -q "owner target: 1000 external web searches a day in total; \"we should be able to get our searches underneath 1,000 per day\" (owner, 2026-11-19)" "$root/out"'
 check "U5 projection: 3 sent in 1.5 h is 48 a day; serper 1 call projects 16, parallel 150 projects 2400 and will hit the cap" 'grep -q "sent today 3 in 1.5 h: a day at this rate is 48 against the target 1000 (under)" "$root/out" && grep -q "serper .*paid 1 calls today, 16 projected; cap 150/day, under the cap" "$root/out" && grep -q "parallel .*150 calls today, 2400 projected; cap 150/day, will hit the cap" "$root/out"'
-check "U5 corpus per web search: 4 / 2 = 2.0 in the hour; with no corpus-reuse section the per-run ratio says unknown" 'grep -q "per external web search, last hour: 2.0 (4 / 2)" "$root/out" && grep -q "per research run: unknown" "$root/out"'
+check "U5 corpus per web search: 4 / 2 = 2.0 in the hour; with no corpus-reuse section the per-run ratio says unknown" 'grep -q "per external web search, last hour: 2.0 (4 / 2)" "$root/out" && grep -q "per research run (console summary lines, terminal records only): unknown" "$root/out"'
+check "S5 the gateway meter per run, from the request lines' run=: hour 3 / 2 runs = 1.5, today 4 / 2 = 2.0; the paper's lines only, the 23:50 line out" 'grep -q "external web searches per research run (gateway journal, run=): last hour 1.5 (3 / 2 runs); today 2.0 (4 / 2 runs)" "$root/out"'
+check "S5 the request lines are not counted as requests or as unparsed" '! grep -q "did not match the known shape" "$root/out"'
+runsu "$root/su/full.txt" 2026-11-20T01:30Z "$root/su/h4.tsv"
+env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/gs_c.log" \
+  --corpus-gateway-fixture "$root/gs_g.log" --corpus-append "$root/h5.tsv" --search-fixture "$root/su/full.txt" --search-now 2026-11-20T01:30Z --search-history "$root/su/h4.tsv" >"$root/out" 2>&1
+check "S5 with the corpus section read, the console-summary figure is labelled and gives the gap: 8 / 2 runs = 4.0, gap 4" 'grep -q "per research run (console summary lines, terminal records only; the corpus-reuse span): 4.0 (8 / 2 runs); the gap to the gateway.s count over that span is 4" "$root/out"'
 check "U7 the search block holds no computer id, URL or query" '! sed -n "/^== search usage/,/^$/p" "$root/out" | grep -qE "vm-[0-9a-f]{8}|https?://|SECRET"'
-check "U7 the first run wrote the header and one row of counts only: 4 corpus, 3 with vector, median 350, 4 requests, 1 cached, then keenable 2, parallel 1, serper 1, day 3 sent, 163 calls" '[ "$(wc -l <"$H" | tr -d " ")" = 2 ] && [ "$(sed -n 1p "$H" | tr "\t" "|")" = "utc_hour|corpus_total|corpus_vector|corpus_median_ms|ext_requests|cache_served|calls_brave|calls_keenable|calls_parallel|calls_serper|day_searches_sent|day_provider_calls" ] && [ "$(sed -n 2p "$H" | tr "\t" "|")" = "2026-11-20T01Z|4|3|350|4|1|0|2|1|1|3|163" ] && ! grep -qE "vm-|http" "$H"'
+check "U7 the first run wrote the header and one row of counts only: 4 corpus, 3 with vector, median 350, 4 requests, 1 cached, then keenable 2, parallel 1, serper 1, day 3 sent, 163 calls" '[ "$(wc -l <"$H" | tr -d " ")" = 2 ] && [ "$(sed -n 1p "$H" | tr "\t" "|")" = "utc_hour|corpus_total|corpus_vector|corpus_median_ms|ext_requests|cache_served|calls_brave|calls_keenable|calls_parallel|calls_serper|day_searches_sent|day_provider_calls|runs_searched|searches_per_run" ] && [ "$(sed -n 2p "$H" | tr "\t" "|")" = "2026-11-20T01Z|4|3|350|4|1|0|2|1|1|3|163|2|1.5" ] && ! grep -qE "vm-|http" "$H"'
 runsu "$root/su/full.txt" 2026-11-20T01:50Z "$H"
 check "U7 a second run in the same UTC hour replaces that hour's row (still 2 lines)" '[ "$(wc -l <"$H" | tr -d " ")" = 2 ] && [ "$(grep -c "^2026-11-20T01Z" "$H")" = 1 ]'
 runsu "$root/su/full.txt" 2026-11-20T02:10Z "$H"
@@ -742,7 +830,8 @@ check "U7 --history alone prints up to 24 rows (here both)" '[ "$(wc -l <"$root/
 H2="$root/su/hist2.tsv"; rm -f "$H2"
 runsu "$root/su/nogw.txt" 2026-11-20T01:30Z "$H2"
 check "U6 an unreadable gateway journal says unknown with the reason, never 0, and the corpus half still prints" 'grep -q "unknown: gateway journal unreadable on the host" "$root/out" && ! grep -q "requests 0" "$root/out" && grep -q "last hour total 4" "$root/out"'
-check "U6 the history row says unknown for what could not be read, not 0" '[ "$(sed -n 2p "$H2" | tr "\t" "|")" = "2026-11-20T01Z|4|3|350|unknown|unknown|unknown|unknown" ]'
+check "U6 the history row says unknown for what could not be read, not 0" '[ "$(sed -n 2p "$H2" | tr "\t" "|")" = "2026-11-20T01Z|4|3|350|unknown|unknown|unknown|unknown|unknown|unknown" ]'
+check "S5 an unreadable gateway says unknown for the per-run meter too" 'grep -q "per research run (gateway journal, run=): unknown: gateway journal unreadable" "$root/out"'
 check "U6 without the console the caller split says unknown" 'grep -q "by caller: unknown: paper guest console unreadable" "$root/out"'
 
 # status-entities (station E0 of docs/design/entity-layer-2026-11-20.md). Failure list, written before the code:
@@ -795,6 +884,15 @@ runent --newest 6 --json
 check "N8 json carries the numbers" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"stories\"]==6 and d[\"with_entities\"]==4 and d[\"dup_count\"]==2 and d[\"nonentity_count\"]==2 and d[\"entities_total\"]==6690" "$root/out"'
 env -u BASH_ENV python3 "$entities" --front-fixture "$root/nonexistent.json" --growth-fixture "$root/ent_growth.json" >"$root/out" 2>&1; rc=$?
 check "N8 an unreadable fixture exits 2" '[ "$rc" = 2 ]'
+# S5: a history file written before the per-run columns still prints, and the next write keeps its rows
+H3="$root/su/hist3.tsv"
+printf 'utc_hour\tcorpus_total\tcorpus_vector\tcorpus_median_ms\text_requests\tcache_served\tcalls_keenable\tday_searches_sent\tday_provider_calls\n2026-11-20T00Z\t4\t3\t350\t4\t1\t2\t3\t5\n' >"$H3"
+env -u BASH_ENV python3 "$hourly" --history --search-history "$H3" >"$root/out" 2>&1
+check "S5 --history on an old-format file prints its row" '[ "$(wc -l <"$root/out" | tr -d " ")" = 2 ] && tail -n 1 "$root/out" | grep -q "^2026-11-20T00Z"'
+runsu "$root/su/full.txt" 2026-11-20T01:30Z "$H3"
+check "S5 the next write widens the header and keeps the old row, its new cells -" '[ "$(wc -l <"$H3" | tr -d " ")" = 3 ] && [ "$(sed -n 2p "$H3" | cut -f1,2)" = "$(printf "2026-11-20T00Z\t4")" ] && [ "$(sed -n 2p "$H3" | awk -F"\t" "{print \$(NF-1) \"|\" \$NF}")" = "-|-" ] && [ "$(sed -n 3p "$H3" | awk -F"\t" "{print \$(NF-1) \"|\" \$NF}")" = "2|1.5" ]'
+env -u BASH_ENV python3 "$hourly" --history --search-history "$H3" >"$root/out" 2>&1
+check "S5 --history prints the widened file with the new columns" 'head -n1 "$root/out" | grep -q "runs_searched"'
 
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

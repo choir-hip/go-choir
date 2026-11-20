@@ -38,16 +38,30 @@ Go log lines (UTC) the runtime already writes:
       vector_unmapped= joined= minted= tentative= unresolved= corroborated= cost_usd=
       internal/agentcore eventFlushLine (station V5; the event layer's acceptance, design
       S7: the minted share of the questions asked falls from 85% to 60% or less)
+  actor wake latency kind=(initial_dispatch|inbox_record) target=research:<id>   the wake of a research
+      agent: the only line that says research runs start; counted per UTC hour, by kind
 and, from the gateway journal, "search request from autoputer <paper vm>
-(... run= desk= conv=)" lines: the web searches the paper sent.
-The query and note text are removed on Node B before the lines leave it, and
-the script never prints one. It prints ids, counts and desks only.
+(... qh= run= desk= conv=)" lines (one per web search the paper asked for; the
+RELIABLE meter, because the line is written when the search arrives and carries run=)
+and "search for autoputer <paper vm> answered ... served=miss|hit|joined" lines (written
+when the search ends; no run=, so sent-versus-cache is a window figure, not a per-run one).
+The query text is replaced on Node B by qh=, the first 10 hex of its SHA-1 (so a repeat
+can be counted), and the note text is removed; the script never prints a query, a hash,
+a URL or a computer id. It prints counts and desks only. A journal read without qh= (python3
+missing on the host, or an older script) says so and prints no repeat count.
+
+The console's summary line is written only at a run's terminal record from counts held in
+memory, so it loses runs still running, runs with no terminal record and counts lost to a
+restart (2026-11-20, 03:27 to 05:14Z: 265 searches in the journal, 183 in the lines). The
+report prints both meters and the gap between them as a number.
 
 What it cannot see:
   - Rotation. The console rotates at about 1 MB and keeps about 2.5 hours. A
     window that starts before the oldest console line is partial; the output
     says so. The gateway journal is kept longer, so its count can cover more
     than the console does; both are printed with their own spans.
+  - Sent versus cache is exact only for the window (the answer lines carry no run=); the
+    per-run figures count every request, hits and joins included.
   - A run still in flight has no summary line (it is written at the run's end),
     and only a run that searched writes one. Runs that never searched are not
     in these numbers. Corpus search and read lines of a run whose summary is
@@ -82,7 +96,7 @@ DEFAULT_APPEND = os.path.join("~", ".cache", "choir-status", "corpus-reuse.tsv")
 RESEARCH = "research"
 
 STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
-QUOTED_RE = re.compile(r' (?:note|query|reason)="(?:[^"\\]|\\.)*"')
+QUOTED_RE = re.compile(r'(?<=[ (])(?:note|query|reason)="(?:[^"\\]|\\.)*"')   # the gateway's line opens it with "(query="
 SR_RE = re.compile(STAMP + r" runtime: search run=(\S+) desk=(\S+)(.*)$")   # the rest is read as key=number pairs, in any order
 REASONS_RE = re.compile(r"not_sent=\d+ \(([^)]*)\)")
 NUM_KV_RE = re.compile(r"\b(\w+)=(\d+)\b")
@@ -91,13 +105,18 @@ RB_RE = re.compile(STAMP + r" research brief run=(\S+) desk=(\S+) (.*)$")
 EF_RE = re.compile(STAMP + r" event layer: resolved \d+ captures in \d+ calls: op=event_flush (.*)$")
 RD_RE = re.compile(STAMP + r" corpus read run=(\S+) desk=(\S+) conv=\S+ capture=\S+ held=(\S+) via=(\S+)")
 GW_RE = re.compile(STAMP + r" .*search request from autoputer (\S+) \(.*?run=(\S+) desk=(\S+) conv=")
+GWA_RE = re.compile(STAMP + r" .*search for autoputer (\S+) answered .*? served=(\w+)")
+QH_RE = re.compile(r"[ (]qh=(\w+)")
+WK_RE = re.compile(STAMP + r" runtime: actor wake latency kind=(\w+) target=research:")
+HEAVY_RUN = 8   # a run with this many searches or more is "heavy" in the share line
 ANY_STAMP_RE = re.compile(STAMP)
 KV_RE = re.compile(r"(\w+)=(\S*)")
 
 HEADER = ["hour", "runs", "started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read",
           "wordings_offered", "wordings_sent", "corpus_searches", "corpus_searches_with_capture",
           "corpus_searches_with_text_hit", "corpus_searches_with_text_fields", "corpus_searches_brief", "reads", "research_reads_held",
-          "research_reads_own", "research_reads_new", "runs_web_no_corpus", "gateway_web_searches"]
+          "research_reads_own", "research_reads_new", "runs_web_no_corpus", "gateway_web_searches",
+          "gw_runs_searched", "gw_searches_per_run"]
 
 
 KNOWN_SR = {"started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read", "search_all_calls",
@@ -190,6 +209,10 @@ def parse_console(text):
                        "excluded": fnum("missing_excluded"), "unmapped": fnum("vector_unmapped"),
                        "vstate": kv.get("vector_state", "unknown")})
             continue
+        m = WK_RE.search(ln)
+        if m:
+            ev.append({"k": "wk", "t": t, "kind": m.group(2)})
+            continue
         m = RD_RE.search(ln)
         if m:
             ev.append({"k": "rd", "t": t, "run": m.group(2), "desk": m.group(3), "held": m.group(4), "via": m.group(5)})
@@ -197,12 +220,50 @@ def parse_console(text):
 
 
 def parse_gateway(text):
-    ev = []
+    """The paper's search request lines (ev) and its answer lines (ans: when each ended and how it was served)."""
+    ev, ans = [], []
     for ln in text.splitlines():
-        m = GW_RE.search(QUOTED_RE.sub("", ln))
+        ln = QUOTED_RE.sub("", ln)
+        m = GW_RE.search(ln)
         if m and m.group(2) == PAPER_VM:
-            ev.append({"t": stamp_epoch(m.group(1)), "run": m.group(3), "desk": m.group(4)})
-    return ev
+            q = QH_RE.search(ln)
+            ev.append({"t": stamp_epoch(m.group(1)), "run": m.group(3), "desk": m.group(4), "qh": q.group(1) if q else None})
+            continue
+        m = GWA_RE.search(ln)
+        if m and m.group(2) == PAPER_VM:
+            ans.append({"t": stamp_epoch(m.group(1)), "served": m.group(3)})
+    return ev, ans
+
+
+def p90(xs):
+    xs = sorted(xs)
+    return xs[max(0, -(-9 * len(xs) // 10) - 1)]
+
+
+def gw_meter(gw, ans):
+    """Web searches per research run from the gateway's request lines grouped by run=; sent / cache from the answer lines."""
+    per, noid = {}, 0
+    for e in gw:
+        if e["run"] in ("-", ""):
+            noid += 1
+        else:
+            per[e["run"]] = per.get(e["run"], 0) + 1
+    xs = list(per.values())
+    tot = sum(xs)
+    served = {}
+    for e in ans:
+        served[e["served"]] = served.get(e["served"], 0) + 1
+    hashed = any(e["qh"] for e in gw)
+    seen = {}
+    for e in gw:
+        if e["qh"] and e["run"] not in ("-", ""):
+            k = (e["run"], e["qh"])
+            seen[k] = seen.get(k, 0) + 1
+    return {"requests": len(gw), "unattributed": noid, "runs": len(xs), "median": med(xs), "p90": p90(xs) if xs else None,
+            "max": max(xs, default=None), "heavy_runs": sum(1 for x in xs if x >= HEAVY_RUN),
+            "heavy_share": share(sum(x for x in xs if x >= HEAVY_RUN), tot),
+            "answers": len(ans), "sent": served.get("miss", 0), "cache": served.get("hit", 0), "joined": served.get("joined", 0),
+            "hashed": hashed, "repeats": sum(c - 1 for c in seen.values() if c > 1) if hashed else None}
 
 
 def pct(a, b):
@@ -217,7 +278,7 @@ def med(xs):
     return None if not xs else statistics.median(xs)
 
 
-def metrics(sr, cs_all, rd_all, gw, rb_all=(), ef_all=()):
+def metrics(sr, cs_all, rd_all, gw, rb_all=(), ef_all=(), gw_ans=()):
     """The numbers for the run summaries in sr, the corpus searches and reads
     in cs_all/rd_all (joined on run=), and the gateway events gw (or None)."""
     r = {"runs": len(sr)}
@@ -287,6 +348,8 @@ def metrics(sr, cs_all, rd_all, gw, rb_all=(), ef_all=()):
         "tokens_est_median": med([e["tokens"] for e in rb_all if e["tokens"] is not None]),
         "objective_from": {k: sum(1 for e in rb_all if e.get("from") == k) for k in sorted({e.get("from") for e in rb_all if e.get("from")})}}
     r["gateway_web_searches"] = None if gw is None else len(gw)
+    r["gw_meter"] = None if gw is None else gw_meter(gw, gw_ans)
+    r["gap"] = None if gw is None else len(gw) - r["started"]   # gateway meter minus the summary lines' sum
     r["event_flush"] = None
     if ef_all:
         f = {k: sum(e[k] for e in ef_all) for k in ("queued", "research", "calls", "joined", "minted", "tentative",
@@ -307,7 +370,7 @@ def compute(console_text, gateway_text, since=None, until=None, first=None, afte
         lo = extra_lo if lo is None else min(lo, extra_lo)
     if extra_hi is not None:
         hi = extra_hi if hi is None else max(hi, extra_hi)
-    gw_all = parse_gateway(gateway_text) if gateway_text is not None else None
+    gw_all, ans_all = parse_gateway(gateway_text) if gateway_text is not None else (None, None)
 
     def inwin(t):
         return (since is None or t >= since) and (until is None or t < until)
@@ -335,7 +398,21 @@ def compute(console_text, gateway_text, since=None, until=None, first=None, afte
         keep = {e["run"] for e in sr}
         rb = [e for e in rb if e["run"] in keep]
     ef = [e for e in win if e["k"] == "ef"]
-    rep["m"] = metrics(sr, cs, rd, gw, rb, ef)
+    gans = None if ans_all is None else [e for e in ans_all if g_lo is not None and g_hi is not None and g_lo <= e["t"] < g_hi]
+    rep["m"] = metrics(sr, cs, rd, gw, rb, ef, gans or [])
+    wakes = {}
+    for e in win:
+        if e["k"] == "wk":
+            h = time.strftime("%Y-%m-%dT%H:00Z", time.gmtime(e["t"] - e["t"] % 3600))
+            wakes.setdefault(h, {})
+            wakes[h][e["kind"]] = wakes[h].get(e["kind"], 0) + 1
+    rep["m"]["wakes"] = wakes
+    gwh = {}
+    for e in (gw or []):
+        if e["run"] not in ("-", ""):
+            h = time.strftime("%Y-%m-%dT%H:00Z", time.gmtime(e["t"] - e["t"] % 3600))
+            gwh.setdefault(h, set()).add(e["run"])
+    rep["m"]["gw_runs_by_hour"] = {h: len(v) for h, v in gwh.items()} if gw is not None else None
     rep["gateway_span"] = None
     if gw_all:
         rep["gateway_span"] = [iso(min(e["t"] for e in gw_all)), iso(max(e["t"] for e in gw_all))]
@@ -365,16 +442,16 @@ def one_line(r):
     rr = m["research_reads"]
     tot = rr["held"] + rr["own"] + rr["new"]
     cs = sum(d["n"] for d in m["corpus_searches"].values())
-    return ("Corpus reuse (%s): %d runs searched, %d web searches started, %s of returned pages read, %d corpus searches, "
+    return ("Corpus reuse (%s): %d runs searched, %d web searches started (summary lines), %s of returned pages read, %d corpus searches, "
             "research reads %s held before the run, %s own, %s new%s."
             % (span, m["runs"], m["started"], pct(m["read"], m["returned"]), cs,
                pct(rr["held"], tot), pct(rr["own"], tot), pct(rr["new"], tot),
-               "" if m["gateway_web_searches"] is None else "; gateway saw %d web searches" % m["gateway_web_searches"]))
+               "" if m["gateway_web_searches"] is None else "; gateway saw %d web searches in %d runs" % (m["gateway_web_searches"], m["gw_meter"]["runs"])))
 
 
 def render(r):
     m = r["m"]
-    o = ["== corpus reuse (paper %s) ==" % PAPER_VM]
+    o = ["== corpus reuse (the paper computer) =="]
     c = r["covers"]
     if c["oldest"] is None:
         o.append("console: no lines found")
@@ -445,12 +522,41 @@ def render(r):
         o.append("  vector states of the flushes: %s; captures with no vector yet %d, excluded %d; neighbours mapped to no event %d"
                  % (", ".join("%s %d" % kv for kv in sorted(f["states"].items())), f["unembedded"], f["excluded"], f["unmapped"]))
     p = m["per_run"]
-    o.append("per run (joined on run=; cell searches only): corpus searches median %s, web searches started median %s, reads median %s; "
+    o.append("per run (joined on run=; cell searches only): corpus searches median %s, web searches started (summary lines) median %s, reads median %s; "
              "runs with a web search and no corpus search at all: %d of %d"
              % (fmt(p["corpus_searches_median"]), fmt(p["web_started_median"]), fmt(p["reads_median"]), p["web_without_corpus"], m["runs"]))
-    if m["gateway_web_searches"] is None:
+    gm = m["gw_meter"]
+    if gm is None:
         o.append("web searches the paper sent (gateway journal): not read")
+        o.append("gateway meter: not read; no per-run figure from the journal and no gap to the summary lines")
     else:
+        o.append("web searches per research run, gateway meter (run= on the request lines): %d runs searched, %d requests, median %s, p90 %s, max %s; "
+                 "runs with %d or more sent %s of the requests (%d runs)%s"
+                 % (gm["runs"], gm["requests"], fmt(gm["median"]), fmt(gm["p90"]), fmt(gm["max"]), HEAVY_RUN, pct(gm["heavy_share"] or 0, 1) if gm["heavy_share"] is not None else "n/a",
+                    gm["heavy_runs"], "" if not gm["unattributed"] else "; %d requests carried no run=" % gm["unattributed"]))
+        if gm["answers"]:
+            o.append("served by the gateway: sent to providers %d, from the cache %d, joined an identical one in flight %d (answer lines; a window figure, they carry no run=)"
+                     % (gm["sent"], gm["cache"], gm["joined"]))
+        else:
+            o.append("served by the gateway: no answer lines read")
+        o.append("console summary lines (terminal records only): %d runs, %d started; gap to the gateway meter: %d (%d - %d)"
+                 % (m["runs"], m["started"], m["gap"], gm["requests"], m["started"]))
+        if gm["repeats"] is None:
+            o.append("same-run repeats: not available (the gateway request lines carry no query hash)")
+        else:
+            o.append("same-run repeats (same query hash twice in one run): %d" % gm["repeats"])
+    wk = m["wakes"]
+    if wk:
+        o.append("research wakes per UTC hour (actor wake latency, target=research:; a wake starts a research run; counted over the window's lines, edge hours partial):")
+        kinds = ["initial_dispatch", "inbox_record"] + sorted({k for v in wk.values() for k in v} - {"initial_dispatch", "inbox_record"})
+        for h in sorted(wk):
+            extra = ""
+            if m["gw_runs_by_hour"] is not None:
+                extra = "; runs that searched (gateway) %d" % m["gw_runs_by_hour"].get(h, 0)
+            o.append("  %s  %s%s" % (h, ", ".join("%s %d" % (k, wk[h].get(k, 0)) for k in kinds), extra))
+    else:
+        o.append("research wakes per hour: no actor wake line for a research target in the window")
+    if m["gateway_web_searches"] is not None:
         o.append("web searches the paper sent in the window (gateway journal): %d%s" % (
             m["gateway_web_searches"], "" if not r["gateway_span"] else " (journal lines span %s to %s)" % tuple(r["gateway_span"])))
     o.append(r["line"])
@@ -476,6 +582,7 @@ def hour_rows(rep, since, until):
         rd = [e for e in ev if e["k"] == "rd" and sel(e)]
         g = None if gw is None else [e for e in gw if sel(e)]
         m = metrics(sr, cs, rd, g, [e for e in ev if e["k"] == "rb" and sel(e)])
+        gm = m["gw_meter"]
         csv = list(m["corpus_searches"].values())
         rr = m["research_reads"]
         nf = m["new_fields"]
@@ -483,7 +590,9 @@ def hour_rows(rep, since, until):
                m["returned"], m["new"], m["read"], nf["offered"] if nf else "", nf["sent"] if nf else "",
                sum(d["n"] for d in csv), sum(d["ge1"] for d in csv), sum(d["th"] for d in csv), sum(d["tf"] for d in csv),
                sum(d["brief"] for d in csv), sum(m["reads_by_desk"].values()), rr["held"], rr["own"], rr["new"], m["per_run"]["web_without_corpus"],
-               "" if g is None else len(g)]
+               "" if g is None else len(g),
+               "" if gm is None else gm["runs"],
+               "" if gm is None or not gm["runs"] else "%.1f" % ((gm["requests"] - gm["unattributed"]) / gm["runs"])]
         rows.append(row)
     return rows
 
@@ -496,8 +605,19 @@ def append_rows(path, rows):
     exists = os.path.exists(path)
     if exists:
         with open(path) as f:
-            for ln in f:
-                have.add(ln.split("\t", 1)[0])
+            lines = f.read().splitlines()
+        for ln in lines:
+            have.add(ln.split("\t", 1)[0])
+        old = lines[0].split("\t") if lines else []
+        if old and old != HEADER and HEADER[:len(old)] == old:
+            # an older file: widen the header, keep every row, leave the new cells empty
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                f.write("\t".join(HEADER) + "\n")
+                for ln in lines[1:]:
+                    c = ln.split("\t")
+                    f.write("\t".join(c + [""] * (len(HEADER) - len(c))) + "\n")
+            os.replace(tmp, path)
     new = [r for r in rows if r[0] not in have]
     if not new and exists:
         return 0
@@ -515,14 +635,22 @@ dir=/var/lib/go-choir/vm-state/@VM@
 sudo -n true 2>/dev/null || echo "##NOSUDO"
 echo "##CONSOLE"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
-  grep -a -E 'runtime: search run=|corpus search computer=|corpus read run=|research brief run=' |
-  sed -E 's/ (note|query|reason)="([^"\\]|\\.)*"//g'
+  grep -a -E 'runtime: search run=|corpus search computer=|corpus read run=|research brief run=|runtime: actor wake latency kind=[a-z_]+ target=research:' |
+  sed -E 's/([ (])(note|query|reason)="([^"\\]|\\.)*"/\1/g'
 echo "##RANGE"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
   grep -a -o -E '[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' | sed -n '1p;$p'
 echo "##GATEWAY"
-journalctl -u go-choir-gateway --since '-26 hours' --no-pager -o cat --utc 2>/dev/null | grep -a 'search request from autoputer @VM@' |
-  sed -E 's/ query="([^"\\]|\\.)*"//'
+journalctl -u go-choir-gateway --since '-26 hours' --no-pager -o cat --utc 2>/dev/null |
+  grep -a -E 'search request from autoputer @VM@|search for autoputer @VM@ answered' |
+  if command -v python3 >/dev/null 2>&1; then python3 -c 'import sys,re,hashlib
+Q=chr(34)
+qre=re.compile("(?<=[ (])query="+Q+"((?:[^"+Q+"\\\\]|\\\\.)*)"+Q)
+ure=re.compile(r" urls=\[[^]]*\]")
+for l in sys.stdin:
+    l=ure.sub("",l.rstrip("\n"))
+    print(qre.sub(lambda m:"qh="+hashlib.sha1(m.group(1).encode()).hexdigest()[:10],l,1))'
+  else sed -E 's/([ (])query="([^"\\]|\\.)*"/\1/; s/ urls=\[[^]]*\]//'; fi
 echo "##END"
 """.replace("@VM@", PAPER_VM)
 
