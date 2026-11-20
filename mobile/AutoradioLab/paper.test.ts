@@ -65,7 +65,7 @@ describe('F1 the real front answer', () => {
     expect(f.sections.map((s) => s.id)).toEqual(['world', 'us', 'politics', 'business', 'tech_ai', 'science', 'health', 'climate', 'culture', 'sports']);
     const all = parseList(real);
     expect(f.sections.find((s) => s.id === 'world')!.count).toBe(all.filter((s) => s.section === 'world' || s.sections.includes('world')).length);
-    expect(f.dateLine).toBe('Wed 18 Nov');
+    expect(f.dateLine).toMatch(/^(Tue 17|Wed 18|Thu 19) Nov$/);       // the reader's local date: a day either side of the fixture's UTC day
     expect(f.updated).toMatch(/^Updated /);
     expect(f.bands[0].items[0].size).toBeGreaterThan(0);
   });
@@ -329,5 +329,13 @@ describe('F13 demo mode', () => {
     expect(calls.length).toBe(0);
     expect(f.status).toBe('ready'); expect(f.composition).toBe('colead+pair+briefs+river+opinion'); expect(f.edition).toBe('even');
     expect((await paperFront(args({ demo: true }), storage)).status).toBe('ready');
+  });
+});
+
+describe('the paper masthead date is the reader\'s local date', () => {
+  test('11:30 pm local on 19 Nov reads Thu 19 Nov whatever the zone (it was UTC: Fri 20 in the evening in the Americas)', async () => {
+    const { dateLine } = await import('./paper-model.ts');
+    expect(dateLine(new Date(2026, 10, 19, 23, 30).getTime())).toBe('Thu 19 Nov');
+    expect(dateLine(new Date(2026, 10, 20, 0, 10).getTime())).toBe('Fri 20 Nov');
   });
 });
