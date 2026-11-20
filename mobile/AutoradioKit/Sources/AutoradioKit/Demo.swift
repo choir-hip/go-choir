@@ -26,19 +26,19 @@ public enum Demo {
     /// The decision, with the device fact passed in for tests. Where demo is not allowed a stored flag is removed.
     static func isOn(allowed: Bool, defaults: UserDefaults = .standard, env: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
         guard allowed else {
-            if defaults.object(forKey: defaultsKey) != nil { defaults.removeObject(forKey: defaultsKey); defaults.set(true, forKey: leftoverKey) }
+            if defaults.object(forKey: defaultsKey) != nil { defaults.removeObject(forKey: defaultsKey) }
             return false
         }
         return defaults.bool(forKey: defaultsKey) || env["AUTORADIO_DEMO"] == "1"
     }
-    /// Set when a device finds the stored flag (demo left content); `clearLeftovers` acts once and clears it.
-    static let leftoverKey = "AutoradioDemoLeftovers"
+    static let clearedKey = "AutoradioDemoLeftoversCleared"          // recorded once `clearLeftovers` has run on this device
 
     /// Native because the platform forces it: this removes on-disk state the native code wrote (the shelf, the stores' files).
     /// Conservative: the sample book and `demo-` addresses go always; onboarding, edition topics and voice setup carry no mark of
-    /// origin, so they go only when no real key is stored. `recent-files.json` stays for the same reason. The Keychain is never touched.
-    public static func clearLeftovers(support: URL, hasRealKey: Bool, defaults: UserDefaults = .standard) {
-        guard defaults.bool(forKey: leftoverKey) else { return }; defaults.removeObject(forKey: leftoverKey)
+    /// origin, so they go only when no real key is stored; `recent-files.json` stays. The Keychain is never touched.
+    /// Once per device (demo not allowed), whatever the stored flag was; never on the simulator or the Mac.
+    public static func clearLeftovers(support: URL, hasRealKey: Bool, allowed: Bool = allowedHere, defaults: UserDefaults = .standard) {
+        guard !allowed, !defaults.bool(forKey: clearedKey) else { return }; defaults.set(true, forKey: clearedKey)
         ReaderShelf(root: support.appendingPathComponent("books")).remove(id: ReaderSample.id)
         if !hasRealKey { AccountWipe.removeFiles(["onboarding.json", "edition-topics.json", "voice-setup.json"].map { support.appendingPathComponent($0) }) }
         let file = support.appendingPathComponent("open-pages.json")
