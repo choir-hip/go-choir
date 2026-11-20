@@ -1,37 +1,36 @@
-// The Autoradio page (docs/design/autoradio-page-2026-11-17.md): one source, `radioPage`, which is the run sheet made readable, and one
-// send, `radioPageAct`, for the gestures on it. The model is the Kit's (RadioPage.swift); this file only gathers its input.
-//   radioPage      RadioPageInfo: the status line, the card on air, up next, suggestions, heard
-//   radioPageAct   op reorder|remove|play|replay, arg the entry's id, to the id it now sits above ("" for the end)
-// Declared in interface/radio.json. It reads the run sheet and sends the ops the bar and the old sheet sent; it keeps no state of its own.
+// The Autoradio page (docs/design/autoradio-page-2026-11-17.md): the page is shared code (AutoradioLab/radio-page.ts, over radio-model.ts). This file answers its FACTS and carries out its gestures.
+//   radioPageFacts   RadioPageFacts: the run sheet as the store holds it, and what only native code knows (the player, the desk's flags, the audio's place, the takes)
+//   radioPageAct     op reorder|remove|play|replay, arg the entry's id, to the id it now sits above ("" for the end). Native until the queue and its posted ops move: it changes the sheet,
+//                    so it posts ops. It answers {ok}; the page is read again.
+// Declared in interface/radio.json.
 import Foundation
 
 extension AutoradioModule {
-    func radioPageInfo() -> RadioPageInfo {
-        let tracker = BarTracker.shared
-        return onMainThread {
-            let player = RunSheetPlayer.shared
-            let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
-            let radio = player.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route,
-                                                         nextTitle: player.store.ahead(limit: 1).first?.displayTitle ?? ""))
-            let q = player.info()
-            var i = RadioPageInput(sheet: player.store.sheet)
-            // The page dims and says "Listening" while a turn is open: the engine's phase, read here (the bar's own states are bar.ts's).
-            let snap = runtime.snapshot()
-            if ["candidate", "addressed", "capturing", "ended"].contains(snap.phase) { i.barState = "listening"; i.heardWords = snap.transcript.isEmpty ? "Listening…" : snap.transcript }
-            i.playing = radio.playing
-            i.sentences = radio.sentences; i.sentenceIndex = radio.sentenceIndex; i.progress = radio.progress
-            i.remoteAudio = q.audio; i.elapsedLabel = q.elapsedLabel; i.remainingLabel = q.remainingLabel
-            i.wants = player.wantsToPlay; i.message = q.message; i.notice = q.notice; i.writing = q.writing; i.dry = q.dry
-            if let r = player.store.onAir()?.paperRoute { i.published = PublishedTimes.shared.words(route: r) }
-            i.versions = PublishedTimes.shared.versions()
-            i.takeLookup = { TakeStore.shared.take($0) }
-            i.stale = Set(player.store.sheet.ahead().filter { player.store.isStale($0) }.map(\.id))
-            return RadioPage.make(i)
-        }
+    /// Native because only native code holds these: the sheet (until the queue moves), the player's sentence and the audio's place in it, the desk's state, the takes. It decides nothing.
+    @MainActor func radioPageFacts() -> RadioPageFacts {
+        let tracker = BarTracker.shared, player = RunSheetPlayer.shared
+        let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
+        let radio = player.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route,
+                                                     nextTitle: player.store.ahead(limit: 1).first?.displayTitle ?? ""))
+        let q = player.info()
+        var f = RadioPageFacts()
+        f.at = Date().timeIntervalSince1970
+        var sheet = player.store.sheet; sheet.appliedOps = []
+        f.sheet = (try? JSONEncoder().encode(sheet)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        f.playing = radio.playing
+        f.sentences = radio.sentences; f.sentenceIndex = radio.sentenceIndex; f.progress = radio.progress
+        f.remoteAudio = q.audio; f.remoteElapsed = q.elapsed; f.remoteDuration = q.duration
+        f.wants = player.wantsToPlay; f.message = q.message; f.notice = q.notice; f.writing = q.writing; f.dry = q.dry
+        if let r = player.store.onAir()?.paperRoute { f.publishedAt = PublishedTimes.shared.updated(route: r) }
+        let versions = PublishedTimes.shared.versions().sorted { $0.key < $1.key }
+        f.versionRoutes = versions.map(\.key); f.versionNumbers = versions.map(\.value)
+        f.stale = player.store.sheet.ahead().filter { player.store.isStale($0) }.map(\.id)
+        if let id = player.store.onAir()?.takeID, let t = TakeStore.shared.take(id) { f.takeTranscript = t.transcript; f.takeRecord = (t.record ?? TakeRecordSummary()).words }
+        return f
     }
 
     func registerRadioPage() {
-        handle("radioPage") { [unowned self] _, reply in reply(json(radioPageInfo())) }
+        handle("radioPageFacts") { [unowned self] _, reply in reply(json(MainActor.assumeIsolated { self.radioPageFacts() })) }
         handle("radioPageAct") { [unowned self] args, reply in
             let op = args["op"] as? String ?? ""
             let id = args["arg"] as? String ?? ""
@@ -51,7 +50,7 @@ extension AutoradioModule {
                 default: break
                 }
                 self.touch(["queueView", "radioView", "barFacts"], now: true)
-                reply(self.json(self.radioPageInfo()))
+                reply(["ok": true, "message": ""])
             }
         }
     }
