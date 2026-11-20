@@ -206,7 +206,7 @@ describe('M1 to M6 the model', () => {
   });
 
   test('plain words for a failure', () => {
-    expect(M.words(new SignedOutError()).message).toBe('Sign in again to read your mail.');
+    expect(M.words(new SignedOutError()).message).toBe('Sign in to read your mail.');
     expect(M.words(new HTTPError(404, 'not found')).message).toBe('This message is gone.');
     expect(M.words(new HTTPError(400, 'HTTP 400: unsupported folder "junk"')).message).toContain('unsupported folder');
     expect(M.words(new HTTPError(403, '')).message).toBe('This phone is not allowed to do that yet.');

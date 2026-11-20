@@ -114,6 +114,7 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
 // also answers "not found" in demo (CredentialReader.swift), for the sources that carry no flag.
 let demoOn = false;
 export function setDemo(on: boolean): void { if (on) demoOn = true; }
+export const isDemo = (): boolean => demoOn;
 
 // ACCOUNT GENERATION (finding 5). Bumped by sign-out before the wipes. A reply that started under an older generation is dropped as signed out,
 // so a request in flight at sign-out can never write the old account's data back into a store the wipe just emptied.
@@ -237,9 +238,13 @@ async function computerId(key: string, kept: string): Promise<string> {
   return discovering.p;
 }
 
+/** The digest of the key the server last refused (a 401): the account state says "rejected" while that key is the stored one, and another key clears it. */
+let rejected = '';
+export const rejectedDigest = (): string => rejected;
+export const hasNativeHandle = (): boolean => !!reader && reader.available !== false;
 async function check(r: Response, path: string, key: string): Promise<void> {
   if (r.ok) return;
-  if (r.status === 401) throw new SignedOutError('the key was refused; sign in again');
+  if (r.status === 401) { try { rejected = await digestOf(key); } catch { /* the digest is a convenience */ } throw new SignedOutError('the key was refused; sign in again'); }
   let msg = '';
   try { const o = JSON.parse(await r.text()); if (o && typeof o.error === 'string') msg = scrub(o.error, key).slice(0, 200); } catch { /* the server's string only; never the body */ }
   const retry = Number(r.headers.get('retry-after'));
@@ -291,7 +296,7 @@ export async function authedToFile(path: string, dest: string, storage: Storage 
 export type KeyState = 'present' | 'absent' | 'unreadable';
 /** The stored sign-in key as THREE answers (review 2026-11-19, auth round 2): `present` (with the SHA-256 of the key), `absent` (the Keychain answered item-not-found) or
  * `unreadable` (locked before the first unlock, any other status, no native module, demo mode, a bridge error). Read only. `unreadable` is never "signed out". */
-export async function keyState(): Promise<{ state: KeyState; digest: string }> {
+export async function keyState(): Promise<{ state: KeyState; digest: string; error?: boolean }> {
   const none = { state: 'unreadable' as KeyState, digest: '' };
   if (demoOn || !reader || reader.available === false) return none;
   try {
@@ -301,13 +306,13 @@ export async function keyState(): Promise<{ state: KeyState; digest: string }> {
     if (st !== 'present') return { state: st, digest: '' };
     const sess = await keptSession();
     return sess ? { state: 'present', digest: await digestOf(sess.key) } : none;
-  } catch { return none; }
+  } catch { return { ...none, error: true }; }
 }
 
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: leave demo mode and the generation as a fresh process has them. */
-export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; }
+export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

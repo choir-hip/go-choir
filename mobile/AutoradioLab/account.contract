@@ -5,11 +5,16 @@ use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPa
 use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
 use LabState from "@choir/autoradio"
 use SignOutResult from "./account-types.contract"
+use AccountView, HostPage from "./account-state-types.contract"
 
 members Autoradio
   resource au = choirAuth() as shape ChoirAuth else empty()
   resource pl = choirPlayer() as shape ChoirPlayer else empty()
   resource sl = choirStories() as shape StoryList else empty()
+  // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, a page change, the app coming back to the front (the phone
+  // unlocked: a key that could not be read yet is read again). An unreadable key is "locked", never "signed out".
+  resource hpg = exactPage() as shape HostPage else empty()
+  resource acs = accountState(`${au.signedIn}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}`, pg.top) as shape AccountView else empty()
   mutation acct as shape LabState
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult

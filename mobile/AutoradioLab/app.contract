@@ -5,6 +5,7 @@
 use PageDeck from "./pages.contract"
 use BarShell from "./bar.contract"
 use SignInScreen from "./onboarding.contract"
+use SignedOutBanner from "./signedout.contract"
 use BarWebLayer from "./queue.contract"
 
 component Autoradio
@@ -78,6 +79,8 @@ component Autoradio
     openApproval
     signOut
     signOutNote
+    acs
+    hpg
     signedOutTick
     hc
     noNative
@@ -421,6 +424,7 @@ component Autoradio
     queuePlay
     queueLater
     queueFilePlay
+    playPublic
     queueDo
     scrubLive
     scrubShown
@@ -462,6 +466,9 @@ component Autoradio
       if layer != ""
         box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=(max(th.behindDim3, 0.4)) press=hideLayer
       // elevation 2: the glass bar, always on top, with the launcher and the player rising from it
+      // signed out, locked or refused: the sentence and the one way in, above the bar, on every page
+      if au.status != "pending" and onbd == false
+        SignedOutBanner()
       BarShell()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
       // Settings, Account): the code screen then covers the app until it is approved or cancelled.

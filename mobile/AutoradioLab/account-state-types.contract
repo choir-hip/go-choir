@@ -1,0 +1,10 @@
+// What the app says about the account (account-state.ts): state signedIn | signedOut | locked | rejected | unknown, the sentence, and the action ("signIn" or "").
+shape AccountView
+  state: string
+  message: string
+  action: string
+
+// The page's own facts the host gives (exactPage): the app coming back to the front (visible) is when the key is read again, so a phone that was locked and is unlocked now says so.
+shape HostPage
+  visibilityState: string
+  hasFocus: bool

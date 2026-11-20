@@ -8,6 +8,7 @@ import { settingsAccount } from './settings.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
+import { accountState } from './account-state.ts';
 import { readerDocShared } from './reader.ts';
 import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
@@ -58,6 +59,7 @@ const sources: Sources = {
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
+  accountState: ([tick, top]) => accountState(tick, top),
   hostCaps: async ([nativeSeen]) => ({ mode: await hostMode(4000, 1500, nativeSeen) }),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),

@@ -31,8 +31,11 @@ reset_state() {
   rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
   rm -f "$CONT/Library/Preferences/$APP.plist"
   mkdir -p "$CONT/Documents"
-  cp "$KEYFILE" "$CONT/Documents/proof-key" || fail "reset" "could not place the key file"
-  chmod 600 "$CONT/Documents/proof-key"
+  if [ -n "${NOKEY:-}" ]; then rm -f "$CONT/Documents/proof-key"      # a launch with no key at all (the sign-out drill before it emptied the Keychain)
+  else
+    cp "$KEYFILE" "$CONT/Documents/proof-key" || fail "reset" "could not place the key file"
+    chmod 600 "$CONT/Documents/proof-key"
+  fi
 }
 
 # ids found in a drive's tree dump: ids <file> <prefix>  -> every test id that starts with the prefix (one per line, in order)
@@ -197,6 +200,21 @@ AFTER="$SHOTS/drill-after.txt"; awk '/\[settings-account-signed\][^"]*"No"/ { f 
 CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
 LEFT=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/dev/null | wc -l | tr -d ' ')
 
+# ---- 3h. SIGNED-OUT TOUR (the drill above left the Keychain empty): launch with no key. The first screen (the radio) says what is true and offers the one way in; the paper lists the public stories and a
+# story reads; the radio offers to read the public paper; Settings > Account has a Sign in button. Nothing here needs the owner's computer.
+export NOKEY=1
+step "clock data"; wait_ 6000
+view real-50-so-first-screen 2500
+place paper 2500; view real-51-so-paper 3500
+[ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-52-so-story 4000; }
+place radio 1500; view real-53-so-radio 2500
+place settings 900; step "tap settings-nav-account"; view real-54-so-account 3000
+place files 900; view real-55-so-files 2500
+step logs
+run_drive signedout light "" --touch platform
+unset NOKEY
+SO="$SHOTS/drive-signedout.txt"
+
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
 SV="$SHOTS/drive-survey.txt"; RD="$SHOTS/drive-read.txt"
@@ -246,6 +264,16 @@ chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' 
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
 # the shared twins are the Android path: on iOS the shared reader must never fetch (it logs "reader: story blocks=" when it does)
 bad "iOS: the shared reader twin never fetched" 'console: reader: story blocks=' "$OUT"
+# the signed-out tour
+chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO"
+chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO"
+chk "signed out: the radio says what it does" 'Reading the public paper. Sign in to hear your own programme.' "$SO"
+chk "signed out: the paper lists public stories" '\[paper-story-/pub/' "$SO"
+[ -n "$STORY1" ] && chk "signed out: a story reads" '\[reader-block-' "$SO"
+chk "signed out: the radio offers the public paper" '\[radio-play-public\]' "$SO"
+chk "signed out: Settings > Account has Sign in" '\[settings-signin\]' "$SO"
+chk "signed out: Files says sign in" 'Sign in to see your files' "$SO"
+bad "signed out: no locked-phone sentence" 'Unlock your phone' "$SO"
 # the sign-out drill
 chk "drill: signed in before" '\[settings-account-signed\][^"]*"Yes"' "$DR"
 chk "drill: the account page says signed out after" '\[settings-account-signed\][^"]*"No"' "$DR"
