@@ -550,7 +550,7 @@ func TestTheTimeBudgetAbortsTheStreamAndRecordsNothing(t *testing.T) {
 	// inside it (a slow race build), which TestABudgetAbortInTheWitness
 	// covers. Here the stream is what runs out.
 	fixed := liveWitness(t, f)
-	f.cfg.Witness = func(context.Context, *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+	f.cfg.Witness = func(context.Context, *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
 		return fixed, nil
 	}
 	f.cfg.pageHook = func(pgno int64) {
@@ -563,7 +563,7 @@ func TestTheTimeBudgetAbortsTheStreamAndRecordsNothing(t *testing.T) {
 	if !errors.Is(err, ErrTimeBudget) {
 		t.Fatalf("err = %v, want ErrTimeBudget", err)
 	}
-	if !strings.Contains(err.Error(), "pages copied") {
+	if !strings.Contains(err.Error(), "pages read") {
 		t.Fatalf("the abort does not say how far it got: %v", err)
 	}
 	if time.Since(started) > 10*time.Second {
@@ -696,7 +696,7 @@ func TestSnapshotRegistersItsChunksBeforeTheEvent(t *testing.T) {
 	if len(f.chunks.roots) != 1 || !equalStrings(f.chunks.roots[0], ref.Record.Manifest.Files[0].Chunks) {
 		t.Fatalf("registered roots %v", f.chunks.roots)
 	}
-	if ref.Stats.UploadTime <= 0 || ref.Stats.PinTime < ref.Stats.CopyTime || ref.Stats.CopyTime <= 0 || ref.Stats.Pages != ref.Record.PageCount {
+	if ref.Stats.StreamTime <= 0 || ref.Stats.PinTime < ref.Stats.WitnessTime || ref.Stats.CopyTime != 0 || ref.Stats.ScratchBytes != 0 || ref.Stats.Pages != ref.Record.PageCount {
 		t.Fatalf("stats %+v", ref.Stats)
 	}
 	if !bytes.Equal([]byte(ref.Record.Manifest.ComputerID), []byte(testComputer)) {

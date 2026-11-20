@@ -292,19 +292,32 @@ func TestTheStatusReportsThePinAndThePhases(t *testing.T) {
 	}
 	h.deps.Take = func(context.Context, time.Duration) (snapshot.Ref, error) {
 		return snapshot.Ref{EventID: "e", Record: snapshot.Record{StoreHeadSequence: h.head, PlaintextSize: 99},
-			Stats: snapshot.Stats{PinTime: 2 * time.Second, CopyTime: time.Second, WitnessTime: 3 * time.Second, UploadTime: 4 * time.Second,
-				ScratchBytes: 99, PinWALStart: 10, PinWALEnd: 110, PinEvents: 7}}, nil
+			Stats: snapshot.Stats{PinTime: 2 * time.Second, CopyTime: time.Second, WitnessTime: 3 * time.Second, StreamTime: 3 * time.Second, DrainTime: time.Second,
+				ScratchBytes: 99, PinWALStart: 10, PinWALEnd: 110, PinEvents: 7,
+				PinWALFramesStart: 100, PinWALFramesEnd: 612, PinWALFrameBytes: 2097152, PinWALFramesKnown: true}}, nil
 	}
 	if outcome, _ := h.run(p, now); outcome != snapshotTaken {
 		t.Fatal(outcome)
 	}
 	st := p.status(now)
 	if st.LastPinSeconds != 2 || st.LastCopySeconds != 1 || st.LastWitnessSeconds != 3 || st.LastUploadSeconds != 4 ||
-		st.LastScratchBytes != 99 || st.LastPinWALGrowthBytes != 100 || st.LastPinEvents != 7 {
+		st.LastScratchBytes != 99 || st.LastPinWALGrowthBytes != 100 || st.LastPinEvents != 7 ||
+		st.LastPinWALFrames != 512 || st.LastPinWALFrameBytes != 2097152 || !st.LastPinWALFramesKnown {
 		t.Fatalf("status %+v", st)
 	}
 	if !strings.Contains(st.LastDetail, "pin ") || strings.Contains(st.LastDetail, "read transaction") {
 		t.Fatalf("last_detail %q must say pin and never read transaction", st.LastDetail)
+	}
+	// S1: the log line names the WAL growth during the hold and the time in the
+	// witness and in the upload separately (the paper's problem record needs
+	// the split).
+	for _, want := range []string{"wal +512 frames (+2097152 bytes) during the hold, file +100 bytes", "pin 2s", "witness 3s", "stream 3s", "drain 1s"} {
+		if !strings.Contains(st.LastDetail, want) {
+			t.Fatalf("last_detail %q lacks %q", st.LastDetail, want)
+		}
+	}
+	if strings.Contains(st.LastDetail, "copy ") && strings.Contains(st.LastDetail, "pages/s") {
+		t.Fatalf("last_detail %q still reports a copy rate", st.LastDetail)
 	}
 }
 
@@ -369,5 +382,59 @@ func TestTheProductionConstructorWiresEveryHook(t *testing.T) {
 	release()
 	if n, err := deps.StoreBytes(context.Background()); err != nil || n <= 0 {
 		t.Fatalf("store bytes %d, %v", n, err)
+	}
+}
+
+// Review of 41fbba5c0: a capture writes nothing store-sized, so the free-space
+// rule is the smaller of the store's size and the WAL tripwire, plus the floor:
+// 14 GiB for the paper's 51 GB store (not about 53), never more than the rule it
+// replaces, and the refusal names its terms.
+func TestTheFreeSpaceRuleIsTheWALBoundPlusTheFloorForALargeStore(t *testing.T) {
+	h, p, now := dueHarness(t, "first")
+	h.deps.StoreBytes = func(context.Context) (int64, error) { return 51_391_889_408, nil }
+	need := uint64(snapshotMaxPinWALBytes) + snapshotFreeFloor
+	if need != 14<<30 {
+		t.Fatalf("need = %d, want 14 GiB", need)
+	}
+	h.free = need - 1
+	outcome, detail := h.run(p, now)
+	if outcome != snapshotRefused || h.takes != 0 {
+		t.Fatalf("free = need-1: outcome=%s takes=%d detail=%q", outcome, h.takes, detail)
+	}
+	for _, want := range []string{fmt.Sprint(h.free), fmt.Sprint(need), fmt.Sprint(uint64(snapshotMaxPinWALBytes)), "51391889408", "tripwire"} {
+		if !strings.Contains(detail, want) {
+			t.Fatalf("the refusal %q does not name %q", detail, want)
+		}
+	}
+	h.free = need
+	if outcome, detail := h.run(p, now); outcome != snapshotTaken || h.takes != 1 {
+		t.Fatalf("free = need: outcome=%s takes=%d detail=%q", outcome, h.takes, detail)
+	}
+}
+
+// A store smaller than the bound keeps the old term: its own size plus the floor.
+func TestASmallStoreNeedsItsOwnSizePlusTheFloor(t *testing.T) {
+	h, p, now := dueHarness(t, "first")
+	h.deps.StoreBytes = func(context.Context) (int64, error) { return 3 << 30, nil }
+	h.free = 5<<30 - 1
+	if outcome, _ := h.run(p, now); outcome != snapshotRefused {
+		t.Fatalf("outcome %s with free under 5 GiB", outcome)
+	}
+	h.free = 5 << 30
+	if outcome, detail := h.run(p, now); outcome != snapshotTaken {
+		t.Fatalf("outcome %s: %q", outcome, detail)
+	}
+}
+
+// The status shows a capture in flight and the WAL its pin holds.
+func TestTheStatusShowsTheLivePinWAL(t *testing.T) {
+	p := &snapshotProducer{}
+	if st := p.status(time.Now()); st.InFlight || st.PinWALHeldBytesNow != 0 {
+		t.Fatalf("idle status %+v", st)
+	}
+	p.inFlight.Store(true)
+	p.pinHeldBytes.Store(12345)
+	if st := p.status(time.Now()); !st.InFlight || st.PinWALHeldBytesNow != 12345 {
+		t.Fatalf("running status %+v", st)
 	}
 }

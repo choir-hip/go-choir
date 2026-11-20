@@ -174,7 +174,7 @@ Scope, small enough for one builder in about an hour:
 - `ReadReleased` (the checkpoint after the long read,
   `snapshot_producer.go:885-890`) still fires at the rollback, which is now
   after the stream.
-- The producer's log line (`snapshot_producer.go:647`) adds `wal +N bytes`
+- The producer's log line (`snapshot_producer.go:647`) adds `wal +N frames (+B bytes)`
   (`Stats.PinWALEnd - PinWALStart`) and keeps `scratch` at 0.
 - The free-space rule stays as it is in S1 (store size plus floor). That is
   conservative: it refuses at least as often as today.
@@ -202,19 +202,162 @@ Failure list, written before the tests:
 9. A rolled-back binary (842e0fda6's) restores a snapshot S1 made: same
    format, same chunk cut, so `restoreOne` accepts it.
 
-Deployed proof on d@e, with observables the author cannot write:
+Deployed proof on d@e, with observables the author cannot write. The WAL
+figure is the frames the pin made the WAL hold (the `log` counter of
+`wal_checkpoint`, sampled after the read mark is held and again just before it
+is released, times the page size), not the WAL file's size: the file stays at
+the 64 MiB journal limit's slack and is reused from its start, so a short
+capture on d@e reads zero file growth and says nothing (review of `fab0d6a0e`).
 
 - At d@e's next natural capture after the deploy (the producer's `due_why`
   says when; nothing is forced), its console prints `runtime: snapshot
-  taken: ...` with a nonzero witness time, and `GET /api/runtime/observability`
-  shows `snapshot_producer.last_scratch_bytes: 0` and
-  `last_pin_wal_growth_bytes` above zero.
+  taken: ...` with `wal +N frames (+B bytes) during the hold, file ...`, and a
+  nonzero witness time and upload time, and `GET /api/runtime/observability`
+  shows `snapshot_producer.last_scratch_bytes: 0`,
+  `last_pin_wal_frames_known: true` and `last_pin_wal_frames` at least
+  `last_pin_events` (every event appended under the pin is one commit and so at
+  least one frame). `last_pin_wal_growth_bytes` (the file) may read zero and is
+  not a condition.
 - A restore of d@e to a checkpoint above that capture (`choir computer
   restore --host=<host> --computer=<d@e> --checkpoint-file=<file>`,
   `cmd/choir/commands.go:462`) answers `"witness_matched":true`.
 - On the paper, read only, no drill: the hourly growth ledger in the 48
   hours after the deploy shows no data-image step over 15 GiB while its
   console shows a `snapshot taken` line in that window.
+- What to watch on the first computer with a large store (the paper, or a test
+  computer made large first, see "Measuring S1 before the paper takes it"):
+  the WAL frames over the hold; the count and duration of `store_stalled`
+  answers from `/health` during the pin and during the checkpoint after it
+  (`CheckpointAfterLongRead`, whose log line `store: wal bound: checkpoint after
+  snapshot capture: ... wal A -> B bytes in D` and the observability `wal`
+  block's `last_checkpoint` carry its duration, frames and the WAL's size
+  after it); read latency on the store while the WAL is large; and that the
+  WAL file is back under the 64 MiB limit after the next commit.
+  `scripts/proofs/snapshot-pin-observe.sh` prints these every sample.
+
+### What stops a pin that holds too much, and the paper's first capture
+
+**The tripwire.** The capture's ticker (every minute, the same one as the
+free-space guard) reads the WAL's frame count and cancels the capture when the
+frames added since the read mark was held, times the page size, pass 12 GiB
+(`snapshotMaxPinWALBytes`, `snapshot.ErrPinWALBound`): the read is released,
+nothing is recorded and the producer's failure line says so. 12 GiB is this
+design's figure (about 8 GiB for a 71-minute pin at 2 MiB/s, with margin), not a
+measurement, and it is a safety refusal, not a setting. Before this tripwire the
+only mid-capture stop was the 2 GiB free-space floor, and the pre-check admits a
+capture at store-size free, so about 51 GiB of WAL would have been allowed.
+
+**The checkpoint after the pin, and the write connection.** SQLite's own
+rules, read in the amalgamation behind modernc v1.49 (`wal.c`, `sqlite3.c`),
+decide this; the code states them beside itself (`internal/store/wal_bound.go`):
+a PASSIVE checkpoint never calls the busy handler, takes only the checkpoint
+lock (plus read lock 0 for the copy), never the WAL write lock, and copies only
+frames up to the smallest reader mark, so it blocks no writer and no reader; it
+answers BUSY (`busy=1, log=-1`) and does nothing when another checkpoint or a
+reader on read lock 0 is in its way; the WAL restarts at the first commit after
+every frame is backfilled, by whichever connection backfilled. But
+`wal_autocheckpoint` (default 1000 frames, per connection, never overridden)
+runs a PASSIVE checkpoint inside the commit on the committing connection, and
+the store's single write connection (`SetMaxOpenConns(1)`) is held until it
+returns. After a long pin the first commit would backfill the whole WAL there:
+about 22 s per GiB on the 2026-11-12 reading (1 min 21 s for 3.67 GB), about 3
+minutes for 8 GiB, with every write, append and `/health` (which reads through
+that same connection, `textureHandle`) waiting. A side-connection checkpoint
+alone loses that race (review of `41fbba5c0`). So, in S1:
+
+1. before the pin, `Store.SuspendAutoCheckpoint` sets `wal_autocheckpoint=0` on the
+   write connection; its resume is deferred around the whole `Take`, so it runs
+   on every path (error, cancel, tripwire, panic). The pragma belongs to the
+   connection: a process that dies comes up with the default;
+2. after the pin, `CheckpointAfterLongRead` runs PASSIVE on its own connection
+   (opened `mode=rw`, so a missing file is an error, never an empty database) in a
+   retry loop: BUSY, or a pass a reader's mark kept from finishing, is retried
+   after a growing pause until every frame is backfilled or a 15 minute budget
+   (five times the 3 minutes) ends it; each pass logs the frames backfilled and
+   its time. It applies to every caller (the compact copy, the capsule copy);
+3. only after it, the automatic checkpoint is restored, so the write connection
+   does not do the large backfill itself. If the budget ends first the
+   restored automatic checkpoint finishes what is left on the write connection:
+   that stall is the one case this does not remove, and the budget and the log
+   line say when it happened.
+
+SQLite gives no way to stop a PASSIVE checkpoint after a number of frames, so
+bounded steps are not possible; retrying a busy pass is. A test builds a 400 MiB
+WAL under a pin, releases it, and shows a write and a health-style read through
+the write connection each return within 2 seconds while the backfill runs. Not
+measured: the same at the paper's 8 GiB, the disk's effect on read latency during
+the backfill, and how often the side connection finds the checkpoint lock busy.
+
+**Decision rule for the paper's first capture** (read from `runtime: snapshot
+taken`, the observability block, `/health` and the host's growth ledger):
+
+| Observable | Within | Beyond | Action |
+|---|---|---|---|
+| WAL held by the pin (`last_pin_wal_frame_bytes`) | up to 12 GiB | the tripwire cancels the capture by itself, nothing recorded | the lead reverts S1 if the paper's first capture is cancelled by the tripwire |
+| `store_stalled` answers from `/health`, during the pin and the checkpoint after it | at most 5 failed checks in total, none of a run longer than 60 seconds | more than 5, or any run over 60 seconds | the lead reverts S1 |
+| Checkpoint after the pin (the log's per-pass lines and `wal.last_checkpoint.duration`, which now covers every pass) | up to 3 minutes for 8 GiB and no `store_stalled` during it | over the 15 minute budget (the log says so), or a `store_stalled` run over 60 seconds during it | the lead reverts S1 |
+| Capture duration (`pin` plus `drain`; the checkpoint after the pin has its own 15 minutes) | up to 75 minutes | 75 to 90 minutes: S1 stays, the witness-speed design (problem record `paper-snapshot-will-pass-its-ninety-minute-budget`) is the next step at once; over 90 minutes: the budget aborts it, nothing recorded | the lead escalates, no revert needed |
+| Data image step in the hourly growth ledger | under 15 GiB | 15 GiB or more | the lead reverts S1 |
+| WAL file back under 64 MiB after the next commit | yes | no, 24 hours later | the lead opens a record; no revert |
+
+Thresholds are the design's own claims (12 GiB, 5 failed health checks) and the
+two readings the record holds; none is a measurement of the paper's pin.
+
+**Residuals.** (1) The capture-side check that the bytes uploaded are the bytes
+witnessed (the copy's digest, `crossCheckCopy` and `ErrCopyDigest` of
+842e0fda6) is gone; only a restore verifies a snapshot. A cheap capture-side
+check is not available: the witness is a logical digest of tables, with no
+page-level digest to compare a hash of the streamed pages with; and the one
+snapshot property it checked holds by construction here. The deployed proof's
+one restore of d@e is the only evidence it works. (2) The tripwire leaves the
+chunks already stored on the host unrooted until its grace; "nothing recorded"
+means no root and no event. (3) A computer whose write rate trips the bound at
+every capture would retry at every due tick and never record a snapshot; the
+producer's status (`last_outcome`, `consecutive_refusals`) shows it, nothing
+alerts on it, and the lead reads it on every computer after the deploy. (4) The
+free-space pre-check is changed in S1, not S2: a capture needs the smaller of the
+store's size and the 12 GiB bound, plus the 2 GiB floor (14 GiB for the paper,
+not about 53); S2 can still make it follow the measured WAL. The database file's
+growth during the backfill is not in that term and is not measured.
+
+### Measuring S1 before the paper takes it
+
+The trade in section 3 rests on one reading: 3.67 GB of WAL in 30 minutes
+(about 2 MiB/s) on 2026-11-12 under post-restart load on a 22 GB store (an
+earlier reading the same day was 1.99 GB, about 1.1 MiB/s), and a 0.89 MB/s
+reading after a boot on 2026-11-20. The pin is also longer than the pin of
+842e0fda6 (witness plus the upload draining, about 71 minutes). Whether a
+multi-GiB WAL held for that long slows reads, and how long the checkpoint after
+it stalls writers (1 min 21 s on 2026-11-12, `store_stalled` at 10.7 s on
+2026-11-09), is unmeasured. So S1 is unproven until it is measured on a test
+computer with a large store under sustained writes, before the paper takes it.
+
+Procedure (the lead runs it on d@e; nothing touches the paper):
+
+1. Deploy S1 to staging so d@e runs it. Note d@e's store size
+   (`PRAGMA page_size`, `page_count`) and the capture floor (free space must be
+   store size plus 2 GiB, S1 keeps that rule).
+2. Make d@e's store large. **Not verified: no route to write synthetic rows into
+   a computer's store was found while building S1**; the lead names one (a
+   d@e-only drill route, or a synthetic-row writer run inside the guest). Target
+   a store of 20 GB or more with real-sized rows, so the witness takes minutes,
+   not seconds. A small store cannot answer the question: the pin is the
+   witness time and the WAL is what is written meanwhile.
+3. Start sustained writes at 2 MiB/s or more into d@e's store for the whole
+   capture (the same writer; 1 MiB commits).
+4. Run `SNAPSHOT_OBSERVE_HEADER=... scripts/proofs/snapshot-pin-observe.sh
+   <d@e runtime url> 30 240` from before the capture is due until after the
+   checkpoint, and keep the console.
+5. Read: frames and bytes held at the pin's end (`last_pin_wal_frame_bytes`)
+   against the writer's rate times the pin; `store_stalled` count and the
+   duration of each run of 503s, in the pin and in the minutes after it;
+   `ckpt_took` and `ckpt_wal_after`; store read latency while the WAL is large
+   (a timed read from the guest, as `/health` is); `wal_file` back under 64 MiB.
+6. Settle: the paper takes S1 only if the WAL held is under the free space with
+   the floor to spare at the paper's rate, no `store_stalled` run during the pin
+   exceeds what the health guard tolerates, and the checkpoint after the pin
+   stalls writers for under 10 seconds. Otherwise S1 does not ship to the paper
+   and option E (a host reflink after a guest freeze) is reopened.
 
 Rollback: revert S1. The restore format is unchanged, so snapshots taken
 under S1 stay restorable by the reverted binary.
@@ -233,7 +376,8 @@ stays, for a scratch left by a rolled-back binary.
 
 Claim for the ledger: "After S1 is deployed, the paper's first capture
 shows no data-image step over 15 GiB in the hourly growth ledger and its
-`last_pin_wal_growth_bytes` (or the log line's `wal +N`) is under 12 GiB."
+`last_pin_wal_frame_bytes` (or the log line's `wal +N frames (+B bytes)`) is
+under 12 GiB."
 Probability 0.75. Settle by the growth ledger and the paper's console
 within 48 hours of the deploy.
 

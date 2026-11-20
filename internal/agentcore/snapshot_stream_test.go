@@ -187,7 +187,7 @@ func streamConfig(t *testing.T, store *choirstore.Store, tape *streamTape, ciphe
 		Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
 			return store.HeadTx(ctx, tx, streamComputer)
 		},
-		Witness:     LiveStoreWitness,
+		Witness:     LiveStoreWitnessTx,
 		ScratchDir:  filepath.Join(t.TempDir(), "snapshot-tmp"),
 		Cipher:      cipher,
 		Chunks:      tape,

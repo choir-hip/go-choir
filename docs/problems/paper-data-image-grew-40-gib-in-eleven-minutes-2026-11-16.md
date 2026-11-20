@@ -151,3 +151,14 @@ the 60 GiB floor. What schedules a capture is still not read. Whether the
 deploy gate defers while a capture is in flight is not read. The fix is
 structural (stream the pages without a scratch copy, or copy only changed
 pages) and is not designed.
+
+## What changed, 2026-11-20 (S1 built, not deployed)
+
+S1 of `design/snapshot-without-scratch-copy-2026-11-20.md` (lane
+`snapshot-stream`) stops the capture writing the store into `snapshot-tmp`: it
+runs the witness and then streams the pages from the one read transaction that
+read the head. The cost moves from the store's size on the data volume to the
+WAL the reader pins. Not yet deployed; the record stays open until the paper's
+first capture after the deploy shows no data-image step over 15 GiB in the
+growth ledger and `last_pin_wal_frame_bytes` under 12 GiB. **The trade is unproven**: the 2 MiB/s WAL rate rests on one reading (3.67 GB in 30 minutes on 2026-11-12, post-restart load, a 22 GB store; another that day was 1.1 MiB/s) and a 71-minute pin with a multi-GiB WAL has not been measured for read latency or for the checkpoint after it (1 min 21 s on 2026-11-12). S1 must be measured on a test computer with a large store under sustained writes before the paper takes it: `design/snapshot-without-scratch-copy-2026-11-20.md`, "Measuring S1 before the paper takes it". Rollback leaves a
+binary that sweeps `snapshot-tmp` at boot.

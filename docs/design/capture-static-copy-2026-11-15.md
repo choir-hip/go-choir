@@ -1,5 +1,7 @@
 # Capture through a static copy: design section and failure list before code
 
+**Superseded 2026-11-20** by `snapshot-without-scratch-copy-2026-11-20.md` (S1): the capture no longer writes a scratch copy. This document describes the mechanism of 842e0fda6 as it was; read it for why the copy was added.
+
 Date: 2026-11-15. Stage one of the lane `lane/capture-static-copy`: no
 production code. Class: red (section 4). Origin: item 2 of
 `docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md`.

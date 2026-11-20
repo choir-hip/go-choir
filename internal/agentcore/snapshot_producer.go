@@ -35,17 +35,18 @@ import (
 //     (the local computer_event_index answers it);
 //  3. two snapshots run at once, or one runs during a boot, a maintenance
 //     hold, a self-development apply or while an engineering capsule is live;
-//  4. the scratch copy of the store (a store-sized file on the data volume,
-//     docs/design/capture-static-copy-2026-11-15.md) is left behind by a crash
-//     or an abort and wedges the producer, or is removed after the free-space
-//     measurement instead of before it, or is written while a compaction
-//     writes its own store-sized copy (the attempt takes the store-copy token
-//     first, then removes what an earlier attempt left, then measures; boot
-//     removes the scratch before anything else needs the space);
+//  4. a scratch copy left by a rolled-back binary (the capture writes none
+//     since S1 of docs/design/snapshot-without-scratch-copy-2026-11-20.md)
+//     wedges the producer, or is removed after the free-space measurement
+//     instead of before it, or is present while a compaction writes its own
+//     store-sized copy (the attempt takes the store-copy token first, then
+//     removes what an earlier attempt left, then measures; boot removes the
+//     scratch before anything else needs the space);
 //  5. a long read transaction pins the WAL and the volume fills with WAL while
-//     it runs (the pin lasts the copy only; the producer refuses under the
-//     store's size plus a free-space floor, the copy checks free space every
-//     64 MiB, and the whole capture has a time budget,
+//     it runs (the pin lasts the witness and the page stream; the producer
+//     refuses under the store's size plus a free-space floor (S2 replaces that
+//     rule), the capture checks free space every minute, and the whole capture
+//     has a time budget,
 //     CHOIR_SNAPSHOT_MAX_DURATION, after which it aborts and says why);
 //  6. a snapshot that crashes the computer is retried at every boot (a crash
 //     loop: the attempt guard closes it after snapshotAttemptLimit starts);
@@ -53,7 +54,7 @@ import (
 //     (every refusal is logged with its reason and retried at the next tick).
 //
 // There is no size cap, but a capture needs the store's size free on the data
-// volume for its scratch copy, plus the floor; the host stores only the chunks
+// volume (a rule kept from the scratch copy until S2), plus the floor; the host stores only the chunks
 // it does not already hold. The producer ships ON for every
 // computer. A free-space or busy refusal is a correctness refusal, not an off
 // switch; CHOIR_SNAPSHOT_DISABLE=1 is the emergency override only.
@@ -74,13 +75,12 @@ const (
 	// tick). Not half: each of the paper's snapshots writes about 25 GB of new
 	// chunks to the host, and at half it would take two a day.
 	snapshotDefaultTailEvents = recoveryplan.MaxRecoveryTailEvents / 4 * 3
-	// The capture is bounded as a whole: the copy (which pins the WAL), the
-	// witness on the copy and the upload; past this the attempt aborts with a
-	// logged reason and the next attempt waits out its backoff. The witness
-	// alone measured 22 to 35 minutes on the paper's 21 GiB store (2026-11-12);
-	// the pin is now the copy only, and the free-space guard every 64 MiB of the
-	// copy is the real bound on the WAL it pins. This is a deadline, not a
-	// switch.
+	// The capture is bounded as a whole: the witness and the page stream (the
+	// read transaction pins the WAL for both) and the upload; past this the
+	// attempt aborts with a logged reason and the next attempt waits out its
+	// backoff. The witness alone measured 22 to 35 minutes on the paper's 21 GiB
+	// store (2026-11-12); the free-space guard every minute is the bound on the
+	// WAL the pin grows. This is a deadline, not a switch.
 	snapshotDefaultMaxDuration = 90 * time.Minute
 	// After a failed attempt the next one waits snapshotBackoffFloor, doubling
 	// per consecutive failure up to snapshotBackoffCeiling; a success resets
@@ -92,10 +92,20 @@ const (
 	// a call limit.
 	snapshotBackoffFloor   = 2 * snapshotTickEvery
 	snapshotBackoffCeiling = 3 * time.Hour
-	// The WAL grows while the copy pins it, and the copy itself is as large as
-	// the store. A capture needs the store's size plus this floor free on the
-	// data volume; the copy checks it every 64 MiB it writes.
+	// The WAL grows while the capture's read pins it. Until S2 a capture needs
+	// the store's size plus this floor free on the data volume (the rule of the
+	// scratch copy, kept: it refuses at least as often as the WAL needs); the
+	// capture checks the floor every minute.
 	snapshotFreeFloor = uint64(2) << 30
+	// snapshotMaxPinWALBytes bounds the WAL a capture's read pin may make the
+	// store hold: past it the capture is cancelled, the read released and
+	// nothing recorded (snapshot.ErrPinWALBound). 12 GiB is the design's figure
+	// (docs/design/snapshot-without-scratch-copy-2026-11-20.md section 3 and S1:
+	// about 8 GiB for a 71-minute pin at the planning rate of 2 MiB/s, with
+	// margin; the rate is one reading, so the bound is the design's number and
+	// not a measurement). A safety refusal on the disk the pin can fill, not a setting; the capture
+	// checks it every minute.
+	snapshotMaxPinWALBytes = int64(12) << 30
 
 	// The restore request is one blocking request of ten minutes (proxy
 	// PROXY_REPLAY_COMPLETENESS_TIMEOUT, nix/node-b.nix; the guest's write
@@ -236,6 +246,9 @@ type snapshotProducer struct {
 	// bounds the wait. A restart asked for in the instant before a stream
 	// starts still cuts it: that costs one attempt, never state.
 	inFlight atomic.Bool
+	// pinHeldBytes is the bytes the running capture's pin has made the WAL hold,
+	// at the capture's latest tick (zero between captures).
+	pinHeldBytes atomic.Int64
 
 	mu       sync.Mutex
 	stop     chan struct{}
@@ -543,7 +556,7 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	}
 	release, holder, ok := d.HoldCopy()
 	if !ok {
-		return snapshotRefused, fmt.Sprintf("the store-copy token is held by %s: its store-sized copy and this capture's scratch copy are not written together (retrying at the next tick)", holder)
+		return snapshotRefused, fmt.Sprintf("the store-copy token is held by %s: its store-sized copy and this capture's pinned WAL are not held together (retrying at the next tick)", holder)
 	}
 	// Every return from here gives the token back; release is idempotent.
 	defer release()
@@ -571,15 +584,31 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 	if err != nil {
 		return snapshotRefused, "cannot measure free space (fails closed): " + err.Error()
 	}
-	// One rule for every kind of capture: every capture copies. The staged compact
-	// copy needs no term: its bytes are already missing from free.
-	need := uint64(storeBytes) + snapshotFreeFloor
+	// One rule for every kind of capture. A capture writes nothing store-sized
+	// any more; what it can fill the volume with is the WAL its read pin holds,
+	// which the capture's tripwire caps at snapshotMaxPinWALBytes, and the
+	// capture's guard stops it at the floor. The pin lasts about 1.6 minutes per
+	// GB of store (the paper's 82 min 51 s for 51.39 GB) and the WAL grows about
+	// 2 MiB/s (one reading), so the WAL is about 0.19 GiB per GB of store: the
+	// store's size covers it five times over, and the bound caps it. So a capture
+	// needs min(store size, the bound) plus the floor, which is never more than
+	// the rule it replaces (the store's size plus the floor, kept from the
+	// scratch copy) and is 14 GiB, not about 50, for the paper. After the pin the
+	// backfill can extend the database file by at most the frames it copies,
+	// mostly rewrites of pages already in the file: not measured, and not in this
+	// term. The staged compact copy needs no term: its bytes are already missing
+	// from free.
+	walTerm := uint64(storeBytes)
+	if bound := uint64(snapshotMaxPinWALBytes); walTerm > bound {
+		walTerm = bound
+	}
+	need := walTerm + snapshotFreeFloor
 	if free < need {
 		staged := ""
 		if n := d.StagedCopyBytes(); n > 0 {
 			staged = fmt.Sprintf("; a staged compact copy of %d bytes (state.db.compact) is on the volume and a capture never removes it", n)
 		}
-		return snapshotRefused, fmt.Sprintf("free space %d bytes on the data volume is under the %d bytes this capture needs: the store's %d bytes for the scratch copy plus the %d-byte floor%s", free, need, storeBytes, snapshotFreeFloor, staged)
+		return snapshotRefused, fmt.Sprintf("free space %d bytes on the data volume is under the %d bytes this capture needs: %d bytes for the WAL its read pin can hold (the smaller of the store's %d bytes and the %d-byte tripwire) plus the %d-byte floor%s", free, need, walTerm, storeBytes, snapshotMaxPinWALBytes, snapshotFreeFloor, staged)
 	}
 
 	// A snapshot that crashes the computer is not retried forever.
@@ -644,10 +673,10 @@ func (p *snapshotProducer) evaluate(ctx context.Context, d snapshotDeps, set sna
 		}
 	}
 	st := ref.Stats
-	return snapshotTaken, fmt.Sprintf("%s snapshot at head %d: %d bytes (%d pages of %d) in %s, event %s; %d chunks, %d uploaded (%d bytes sealed), %d already held, %d repeated, %d probe errors; copy %s (%.0f pages/s), pin %s, witness %s, upload %s",
+	return snapshotTaken, fmt.Sprintf("%s snapshot at head %d: %d bytes (%d pages of %d) in %s, event %s; %d chunks, %d uploaded (%d bytes sealed), %d already held, %d repeated, %d probe errors; %s, pin %s, witness %s, stream %s, drain %s",
 		reason, ref.Record.StoreHeadSequence, ref.Record.PlaintextSize, st.Pages, st.PageSize, took.Round(time.Millisecond), ref.EventID,
 		st.Chunks, st.ChunksUploaded, st.BytesUploaded, st.ChunksHeld, st.ChunksRepeated, st.ProbeErrors,
-		st.CopyTime.Round(time.Millisecond), pagesPerSecond(st), st.PinTime.Round(time.Millisecond), st.WitnessTime.Round(time.Millisecond), st.UploadTime.Round(time.Millisecond))
+		walGrowthText(st), st.PinTime.Round(time.Millisecond), st.WitnessTime.Round(time.Millisecond), st.StreamTime.Round(time.Millisecond), st.DrainTime.Round(time.Millisecond))
 }
 
 // forget makes the next evaluation read the newest snapshot, the head and the
@@ -738,16 +767,33 @@ type snapshotProducerStatus struct {
 	CaptureKnown bool `json:"capture_known"`
 
 	// The last capture's pin and phases: the pin is the interval with an open
-	// reader on the state store, timed independently of the copy; the WAL growth
+	// reader on the state store (the witness and the page stream); the WAL growth
 	// over the pin and the events appended during it normalise it by the write
 	// rate. Zero before the first capture of this process.
-	LastPinSeconds        float64 `json:"last_pin_seconds"`
-	LastCopySeconds       float64 `json:"last_copy_seconds"`
-	LastWitnessSeconds    float64 `json:"last_witness_seconds"`
-	LastUploadSeconds     float64 `json:"last_upload_seconds"`
-	LastScratchBytes      int64   `json:"last_scratch_bytes"`
-	LastPinWALGrowthBytes int64   `json:"last_pin_wal_growth_bytes"`
-	LastPinEvents         uint64  `json:"last_pin_events"`
+	LastPinSeconds     float64 `json:"last_pin_seconds"`
+	LastCopySeconds    float64 `json:"last_copy_seconds"`
+	LastWitnessSeconds float64 `json:"last_witness_seconds"`
+	// LastStreamSeconds is the page reads under the pin; LastDrainSeconds what
+	// the uploader needed after the pin was released. last_upload_seconds is
+	// their sum (what it measured in the first S1 build: the stream start to the
+	// last chunk stored), kept so a reader of the old field is not misled.
+	LastStreamSeconds float64 `json:"last_stream_seconds"`
+	LastDrainSeconds  float64 `json:"last_drain_seconds"`
+	LastUploadSeconds float64 `json:"last_upload_seconds"`
+	LastScratchBytes  int64   `json:"last_scratch_bytes"`
+	// LastPinWALGrowthBytes is the WAL file's size change over the pin: it
+	// reads zero for a capture inside the file's slack. The figure to read is
+	// LastPinWALFrameBytes (frames the pin made the WAL hold, times the page
+	// size); LastPinWALFrames is the frame count.
+	LastPinWALGrowthBytes int64 `json:"last_pin_wal_growth_bytes"`
+	LastPinWALFrames      int64 `json:"last_pin_wal_frames"`
+	LastPinWALFrameBytes  int64 `json:"last_pin_wal_frame_bytes"`
+	LastPinWALFramesKnown bool  `json:"last_pin_wal_frames_known"`
+	// InFlight is true while a capture runs; PinWALHeldBytesNow is the bytes its
+	// pin has made the WAL hold at its latest tick (zero between captures).
+	InFlight           bool   `json:"in_flight"`
+	PinWALHeldBytesNow int64  `json:"pin_wal_held_bytes_now"`
+	LastPinEvents      uint64 `json:"last_pin_events"`
 }
 
 // status is the producer's state for the observability route.
@@ -756,6 +802,7 @@ func (p *snapshotProducer) status(_ time.Time) snapshotProducerStatus {
 	defer p.mu.Unlock()
 	ev := p.eval
 	st := snapshotProducerStatus{
+		InFlight: p.inFlight.Load(), PinWALHeldBytesNow: p.pinHeldBytes.Load(),
 		NewestSequence: ev.NewestSeq, HeadSequence: ev.Head, TailEvents: ev.Tail,
 		ReplayRate: ev.Rate, ReplayRateSource: "assumed", EstimatedReplaySeconds: ev.Est.Seconds(),
 		ReplayBoundSeconds: snapshotReplayBound.Seconds(),
@@ -766,9 +813,12 @@ func (p *snapshotProducer) status(_ time.Time) snapshotProducerStatus {
 	if p.haveCapture {
 		ls := p.lastStats
 		st.LastPinSeconds, st.LastCopySeconds = ls.PinTime.Seconds(), ls.CopyTime.Seconds()
-		st.LastWitnessSeconds, st.LastUploadSeconds = ls.WitnessTime.Seconds(), ls.UploadTime.Seconds()
+		st.LastWitnessSeconds = ls.WitnessTime.Seconds()
+		st.LastStreamSeconds, st.LastDrainSeconds = ls.StreamTime.Seconds(), ls.DrainTime.Seconds()
+		st.LastUploadSeconds = (ls.StreamTime + ls.DrainTime).Seconds()
 		st.LastScratchBytes, st.LastPinEvents = ls.ScratchBytes, ls.PinEvents
 		st.LastPinWALGrowthBytes = ls.PinWALEnd - ls.PinWALStart
+		st.LastPinWALFrames, st.LastPinWALFrameBytes, st.LastPinWALFramesKnown = ls.PinWALFramesEnd-ls.PinWALFramesStart, ls.PinWALFrameBytes, ls.PinWALFramesKnown
 	}
 	if ev.Rate == 0 {
 		st.ReplayRate = snapshotAssumedReplayRate
@@ -796,13 +846,15 @@ func (p *snapshotProducer) status(_ time.Time) snapshotProducerStatus {
 	return st
 }
 
-// pagesPerSecond is the copy's rate: the state file's pages (the scratch's size
-// over the page size; Stats.Pages also counts the partitions) over the page loop.
-func pagesPerSecond(st snapshot.Stats) float64 {
-	if st.CopyTime <= 0 || st.PageSize <= 0 {
-		return 0
+// walGrowthText names what the pin made the WAL hold: the frames (times the page
+// size) between the read mark being held and released, which shows growth the
+// WAL file's slack hides, and the file's own size change as a second figure.
+func walGrowthText(st snapshot.Stats) string {
+	file := st.PinWALEnd - st.PinWALStart
+	if !st.PinWALFramesKnown {
+		return fmt.Sprintf("wal frames unknown, file %+d bytes during the hold", file)
 	}
-	return float64(st.ScratchBytes/int64(st.PageSize)) / st.CopyTime.Seconds()
+	return fmt.Sprintf("wal +%d frames (+%d bytes) during the hold, file %+d bytes", st.PinWALFramesEnd-st.PinWALFramesStart, st.PinWALFrameBytes, file)
 }
 
 // snapshotDepsForRuntime binds the producer to this runtime. It returns false
@@ -870,36 +922,52 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 			// releasedHead is the head sequence when the read transaction ended,
 			// for the events appended during the pin.
 			var releasedHead atomic.Uint64
+			// The write connection's automatic checkpoint is off while the pin
+			// is held and until the checkpoint after it has backfilled the WAL
+			// (CheckpointAfterLongRead runs in ReadReleased, which TakeSnapshot
+			// joins before it returns), so the first commit after the pin never
+			// backfills gigabytes on the connection every write and /health
+			// share. The deferred resume runs on every path, panics included; the
+			// pragma is per connection, so a crash restarts with the default.
+			if resume, err := store.SuspendAutoCheckpoint(ctx); err != nil {
+				log.Printf("runtime: snapshot: could not turn off the automatic checkpoint for the capture (the first commit after the pin may backfill the WAL itself): %v", err)
+			} else {
+				defer resume()
+			}
+			defer rt.snapshots.pinHeldBytes.Store(0)
 			ref, err := snapshot.TakeSnapshot(ctx, snapshot.Config{
 				ComputerID: computerID,
 				DB:         store.ReadDB(),
-				// The head is the first statement of the read transaction that copies
-				// the pages, and is read again from the copy before the witness.
+				// The head is the first statement of the read transaction that runs
+				// the witness and streams the pages.
 				Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
 					return store.HeadTx(ctx, tx, computerID)
 				},
-				// The witness runs on the static copy, outside the read transaction.
-				Witness: LiveStoreWitness,
-				// The pin on the WAL ends when the copy does; the bound backfills it
-				// then (on every path), not when the whole capture returns.
+				// The witness runs inside that transaction, before the pages.
+				Witness: LiveStoreWitnessTx,
+				// The pin on the WAL ends when the last page is handed over; the bound
+				// backfills it then (on every path), not when the uploads finish.
 				ReadReleased: func(ctx context.Context) {
 					if head, err := store.Head(ctx, computerID); err == nil && head != nil {
 						releasedHead.Store(head.Sequence)
 					}
 					store.CheckpointAfterLongRead(ctx, "snapshot capture")
 				},
-				WALBytes:   func() int64 { return store.WALStats().WALBytes },
-				ScratchDir: scratchDir,
-				// The scratch copy and the WAL it pins grow on the data volume; the
-				// copy checks this every 64 MiB it writes and the capture every
-				// minute.
+				WALBytes:  func() int64 { return store.WALStats().WALBytes },
+				WALFrames: store.WALFrames,
+				// The tripwire on the WAL the pin may hold.
+				MaxPinWALBytes: snapshotMaxPinWALBytes,
+				WALSampled:     func(held int64) { rt.snapshots.pinHeldBytes.Store(held) },
+				ScratchDir:     scratchDir,
+				// The WAL the capture pins grows on the data volume; the capture
+				// checks this every minute.
 				FreeSpace: func() error {
 					free, err := freeBytesOnVolume(dataDir)
 					if err != nil {
 						return fmt.Errorf("snapshot: cannot measure free space during the capture (fails closed): %w", err)
 					}
 					if free < snapshotFreeFloor {
-						return fmt.Errorf("snapshot: free space %d bytes on the data volume fell under the %d-byte floor during the capture (the scratch copy and the pinned WAL)", free, snapshotFreeFloor)
+						return fmt.Errorf("snapshot: free space %d bytes on the data volume fell under the %d-byte floor during the capture (the pinned WAL)", free, snapshotFreeFloor)
 					}
 					return nil
 				},

@@ -257,7 +257,7 @@ func seedRestoreBase(t *testing.T, ctx context.Context, rt *Runtime, cas *replay
 		Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
 			return scratch.HeadTx(ctx, tx, computerID)
 		},
-		Witness:    LiveStoreWitness,
+		Witness:    LiveStoreWitnessTx,
 		ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
 		Cipher:     rt.privateArtifactCipher,
 		Chunks:     fake,

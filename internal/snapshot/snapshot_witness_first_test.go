@@ -17,16 +17,16 @@ import (
 //  W1. the witness runs after the upload, so an attempt that cannot finish its
 //      witness inside the budget has already uploaded the store.
 //
-// W2 (the witness shares the pages' transaction) is gone with the mechanism it
-// pinned: the witness runs on a static copy, tied to the head by the cross-check
-// (snapshot_static_copy_test.go).
+// W2 (the witness shares the pages' transaction) is back with S1 of
+// docs/design/snapshot-without-scratch-copy-2026-11-20.md
+// (snapshot_stream_capture_test.go).
 
 // W1: the witness is the long step on the paper (22 to 35 minutes); a budget
 // abort inside it must have uploaded nothing.
 func TestABudgetAbortInTheWitnessUploadsNothing(t *testing.T) {
 	f := newFixture(t, ChunkSize*3)
 	f.cfg.MaxDuration = 200 * time.Millisecond
-	f.cfg.Witness = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+	f.cfg.Witness = func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
 		<-ctx.Done()
 		return selfdevprotocol.VMLocalContentWitness{}, ctx.Err()
 	}

@@ -154,8 +154,8 @@ func TestProductionRestoreTapeSkipsAPrunedCandidateWithoutDownloadingIt(t *testi
 		Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 			return &computerevent.Head{ComputerID: computerID, Sequence: seq, CanonicalEventHead: strings.Repeat("e", 64)}, nil
 		},
-		Witness: func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
-			digests, err := computerversion.SQLiteStateExtractor{DB: db, Database: "texture"}.Digests(ctx)
+		Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+			digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
 			if err != nil {
 				return selfdevprotocol.VMLocalContentWitness{}, err
 			}

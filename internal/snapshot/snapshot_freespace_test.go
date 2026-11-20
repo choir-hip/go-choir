@@ -28,7 +28,7 @@ func TestTheCaptureAbortsWhenFreeSpaceFallsUnderTheFloor(t *testing.T) {
 		return nil
 	}
 	// A long witness: only the free-space check can end it.
-	f.cfg.Witness = func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
+	f.cfg.Witness = func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
 		select {
 		case <-ctx.Done():
 			return selfdevprotocol.VMLocalContentWitness{}, ctx.Err()

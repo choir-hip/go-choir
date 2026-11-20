@@ -7,20 +7,21 @@
 //
 // Capture opens one read-only transaction on the store's read pool and reads
 // the event head as its first statement, so the head belongs to the
-// transaction's WAL snapshot. It then reads every database page of that
-// snapshot through SQLite's sqlite_dbpage virtual table (pages as the snapshot
-// sees them, WAL included) into a scratch copy on the data volume
-// (docs/design/capture-static-copy-2026-11-15.md) and ends the transaction: the
-// pin on the WAL lasts the copy, not the witness. The copy is tied to the head
-// before anything is witnessed (page size, page count and every column of the
-// head row read from the opened copy equal the transaction's), the witness v3 is
-// computed on the static copy, and the chunks are cut, sealed and uploaded from
-// the copy; a digest taken while writing is checked while uploading, so the
-// bytes uploaded are the bytes witnessed. The scratch is removed right after
-// the upload and on every error path. Writers and appends never wait for the
-// copy, but the open transaction pins the WAL until it ends, so the capture has
-// a time budget. The telemetry partitions are streamed afterwards, each from
-// its own read transaction, without a copy.
+// transaction's WAL snapshot. In that same transaction it runs the witness v3
+// (the digests a restore recomputes on the reassembled file), then reads every
+// database page of that snapshot through SQLite's sqlite_dbpage virtual table
+// (pages as the snapshot sees them, WAL included) and hands them straight to
+// the uploader. Head, witness and pages are one state because SQLite gives one
+// read transaction one snapshot; nothing is written to disk
+// (docs/design/snapshot-without-scratch-copy-2026-11-20.md; the scratch copy of
+// 842e0fda6 is no longer written). The witness runs before the pages, so an
+// attempt that cannot finish it uploads nothing. Writers and appends never wait
+// for the capture, but the open transaction pins the WAL until the last page is
+// handed over: the WAL grows by what is written meanwhile (Stats.PinWALFrameBytes,
+// from the WAL's frame count; the file size, PinWALStart and PinWALEnd, hides
+// growth inside the file's slack), and the capture has a time budget and a free-space guard. The
+// telemetry partitions are streamed afterwards, each from its own read
+// transaction.
 //
 // Storage reuses the file CAS: the page stream is cut into chunks of a fixed
 // number of pages (ChunkSize / page size, so 1024 pages of 4 KiB: chunk i is
@@ -62,7 +63,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -87,9 +87,9 @@ const (
 	uploadWorkers = 4
 )
 
-// ErrTimeBudget means the copy, the witness and the upload did not finish
-// within Config.MaxDuration. The read transaction is rolled back, the scratch
-// is removed, nothing is registered and no event is appended.
+// ErrTimeBudget means the witness and the stream did not finish within
+// Config.MaxDuration. The read transaction is rolled back, nothing is
+// registered and no event is appended.
 var ErrTimeBudget = errors.New("snapshot: exceeded the time budget")
 
 // ErrNoSnapshot means the tape holds no usable snapshot_recorded event.
@@ -191,17 +191,46 @@ type Stats struct {
 	// chunks are in the counts above.
 	PartitionFiles int
 	// PinTime is the interval with an open reader on the state store, timed
-	// from the transaction's start to its release and independently of
-	// CopyTime, the page loop alone. WitnessTime is the witness on the copy,
-	// UploadTime the upload of the state file from the copy, ScratchBytes the
-	// copy's size, PinWALStart and PinWALEnd the WAL file's size at both ends of
-	// the pin (Config.WALBytes), PinEvents the events appended during it
-	// (filled by the producer).
-	PinTime, CopyTime, WitnessTime, UploadTime time.Duration
-	ScratchBytes                               int64
-	PinWALStart, PinWALEnd                     int64
-	PinEvents                                  uint64
+	// from the transaction's start to its release (the witness and the page
+	// reads). WitnessTime is the witness inside it; StreamTime is the page
+	// reads (the uploads overlap them, under the pin); DrainTime is what the
+	// uploader needed after the pin was released to store the last chunks. PinWALStart and PinWALEnd are the WAL file's size at both
+	// ends of the pin (Config.WALBytes), PinEvents the events appended during it
+	// (filled by the producer). CopyTime and ScratchBytes are the scratch copy's,
+	// always zero since S1 (deleted with the copy code).
+	PinTime, CopyTime, WitnessTime, StreamTime, DrainTime time.Duration
+	ScratchBytes                                          int64
+	PinWALStart, PinWALEnd                                int64
+	// PinWALFramesStart and PinWALFramesEnd are the WAL's frame count sampled
+	// (Config.WALFrames) after the read mark is held and just before it is
+	// released; PinWALFrameBytes is their difference times the page size: what
+	// the pin made the WAL hold, whatever slack the WAL file already had.
+	// PinWALFramesKnown is false when the count could not be read.
+	PinWALFramesStart, PinWALFramesEnd, PinWALFrameBytes int64
+	PinWALFramesKnown                                    bool
+	PinEvents                                            uint64
 }
+
+// ErrPinWALBound means the capture's read pin made the WAL hold more than
+// Config.MaxPinWALBytes. The capture is cancelled, the read released and
+// nothing recorded: a safety refusal on the disk the pin can fill, not a setting.
+var ErrPinWALBound = errors.New("snapshot: the WAL held by the pin passed its bound")
+
+// ErrPinWALUnchecked means the bound could not be checked: maxUnknownWALTicks
+// samples in a row could not read the WAL's frame count.
+var ErrPinWALUnchecked = errors.New("snapshot: the WAL held by the pin could not be measured")
+
+// maxUnknownWALTicks is how many consecutive ticks may fail to read the WAL's
+// frame count before the capture is cancelled as unable to check its bound.
+// A sample is unknown when the checkpoint that reads it was busy twice, failed,
+// or answered below the start. Five ticks (five minutes at the one-minute
+// default) is about 600 MiB at the planning rate of 2 MiB/s, against a 12 GiB
+// bound: long enough that a lock collision never cancels a healthy capture, short
+// enough that a counter that cannot be read does not run an unbounded pin.
+const maxUnknownWALTicks = 5
+
+// errStreamGeometry means the page stream's geometry is not the transaction's.
+var errStreamGeometry = errors.New("snapshot: the page stream is not the transaction's geometry")
 
 // ErrCopyHeadMismatch means the copy's page geometry or head row is not the
 // read transaction's.
@@ -274,10 +303,10 @@ type Config struct {
 	// state the head names (the projection head commits with the rows it
 	// summarizes). It returns nil for an empty store.
 	Head func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error)
-	// Witness computes the witness v3 on the copy's own read-only DB, with the
-	// same extractor configuration the restore check uses on the reassembled
-	// file.
-	Witness func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error)
+	// Witness computes the witness v3 inside tx, the transaction whose pages
+	// are then streamed, with the same extractor configuration the restore
+	// check uses on the reassembled file.
+	Witness func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error)
 	// FileTreeRoot optionally names the Files tree root to record.
 	FileTreeRoot func(ctx context.Context) (string, error)
 	// Partitions, when set, adds the store's telemetry partitions.
@@ -285,13 +314,13 @@ type Config struct {
 	Cipher     *computerevent.PrivateArtifactCipher
 	Chunks     ChunkStore
 	Appender   Appender
-	// MaxDuration, when positive, bounds the whole capture: the copy (which pins
-	// the WAL), the witness and the uploads. The capture aborts with
+	// MaxDuration, when positive, bounds the whole capture: the witness and the
+	// page stream (which pin the WAL) and the uploads. The capture aborts with
 	// ErrTimeBudget, which leaves no root and no event.
 	MaxDuration time.Duration
 	// FreeSpace, when set, is checked every FreeSpaceEvery (default a minute)
-	// while the capture runs and, during the copy, every scratchSyncBytes
-	// written: the pinned WAL and the scratch grow on the guest's disk. A
+	// while the capture runs: the pinned WAL grows on the guest's disk. The
+	// same ticker checks MaxPinWALBytes. A
 	// non-nil result ends the capture with that error as its cause, so a
 	// snapshot cannot push the guest to ENOSPC.
 	FreeSpace      func() error
@@ -303,21 +332,37 @@ type Config struct {
 	// commit writes in the middle of the stream).
 	pageHook func(pgno int64)
 
-	// ScratchDir is the directory the copy lives in (required). The producer
-	// removes it before the attempt; the capture creates it and removes it
-	// again on every path.
+	// ScratchDir is the directory the scratch copy lived in. Since S1 the
+	// capture neither creates nor requires it; S3 deletes the field with the
+	// copy code.
 	ScratchDir string
 	// ReadReleased runs once, from the transaction's release, on every path
 	// (success, error, cancellation, budget). It runs in its own goroutine with
 	// a context the caller cannot cancel and, when MaxDuration is positive, a
-	// fresh MaxDuration deadline; the witness does not wait for it and the
+	// fresh MaxDuration deadline; the uploads do not wait for it and the
 	// capture joins it before returning. A timeout is the hook's own concern: it
 	// never fails the attempt.
 	ReadReleased func(ctx context.Context)
-	// ScratchRemoved runs once, after the scratch is removed, on every path.
+	// ScratchRemoved is never called since S1 (no scratch is written); S3
+	// deletes it.
 	ScratchRemoved func()
-	// WALBytes reports the state store's WAL file size, for the pin's growth.
+	// WALBytes reports the state store's WAL file size. The file does not
+	// shrink below the journal size limit and is reused from its start after a
+	// restart, so its growth under-reports the WAL a pin holds (a capture inside
+	// the slack reads zero): WALFrames is the figure to read.
 	WALBytes func() int64
+	// WALFrames reports the number of frames in the state store's WAL (the
+	// `log` counter of wal_checkpoint). It is sampled after the read mark is
+	// held and again just before it is released.
+	WALFrames func(ctx context.Context) (int64, error)
+	// MaxPinWALBytes, when positive (and WALFrames is set), bounds what the pin
+	// may make the WAL hold: at every FreeSpaceEvery tick the frames added since
+	// the read mark was held, times the page size, are compared with it, and
+	// past it the capture is cancelled with ErrPinWALBound.
+	MaxPinWALBytes int64
+	// WALSampled, when set, receives the bytes the pin has made the WAL hold
+	// at every tick where the count was read (for the producer's live status).
+	WALSampled func(heldBytes int64)
 
 	afterCopy    func(path string)
 	afterWitness func(path string)
@@ -333,8 +378,6 @@ func (c Config) validate() error {
 		return errors.New("snapshot: store is required")
 	case c.Head == nil || c.Witness == nil:
 		return errors.New("snapshot: head and witness readers are required")
-	case strings.TrimSpace(c.ScratchDir) == "":
-		return errors.New("snapshot: a scratch directory is required")
 	case c.Cipher == nil || c.Chunks == nil || c.Appender == nil:
 		return errors.New("snapshot: cipher, chunk store and appender are required")
 	}
@@ -546,9 +589,9 @@ const scratchFileName = "state.db"
 const copyBufferBytes = 4 << 20
 
 // capture opens the one read transaction, takes the head (first statement), the
-// page geometry and the partition list, copies every page of the transaction's
-// snapshot to the scratch file and ends the transaction. Everything after that
-// runs on the static copy: the tie to the head, the witness, the upload.
+// partition list and the page geometry, runs the witness in it, streams every
+// page of its snapshot to the uploader and ends the transaction. Head, witness
+// and pages are one WAL snapshot by construction.
 func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr error) {
 	budgetCtx := ctx
 	if cfg.MaxDuration > 0 {
@@ -558,16 +601,32 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 	}
 	runCtx, cancel := context.WithCancelCause(budgetCtx)
 	defer cancel(nil)
-	if cfg.FreeSpace != nil {
+	// The guard's state: the WAL's frame count once the read mark is held (the
+	// capture sets it after the head) and until the pin is released, for the
+	// tripwire below.
+	var walArmed atomic.Bool
+	var walStartFrames, walGuardPageSize atomic.Int64
+	tripwire := cfg.MaxPinWALBytes > 0 && cfg.WALFrames != nil
+	guardDone := make(chan struct{})
+	var guardWG sync.WaitGroup
+	// The guard is joined before capture returns, after the run's context is
+	// cancelled, so no tick (and no WAL sample) outlives the capture.
+	defer func() {
+		close(guardDone)
+		cancel(nil)
+		guardWG.Wait()
+	}()
+	if cfg.FreeSpace != nil || tripwire {
 		every := cfg.FreeSpaceEvery
 		if every <= 0 {
 			every = time.Minute
 		}
-		guardDone := make(chan struct{})
-		defer close(guardDone)
+		guardWG.Add(1)
 		go func() {
+			defer guardWG.Done()
 			tick := time.NewTicker(every)
 			defer tick.Stop()
+			unknown := 0
 			for {
 				select {
 				case <-guardDone:
@@ -575,8 +634,40 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 				case <-runCtx.Done():
 					return
 				case <-tick.C:
-					if err := cfg.FreeSpace(); err != nil {
-						cancel(err)
+					if cfg.FreeSpace != nil {
+						if err := cfg.FreeSpace(); err != nil {
+							cancel(err)
+							return
+						}
+					}
+					if !tripwire || !walArmed.Load() {
+						continue
+					}
+					frames, err := cfg.WALFrames(runCtx)
+					// An answer below the start (the WAL cannot restart under the
+					// pin) is as unknown as an error or a busy checkpoint.
+					if err == nil && frames < walStartFrames.Load() {
+						err = fmt.Errorf("the WAL holds %d frames, fewer than the %d at the start of the pin", frames, walStartFrames.Load())
+					}
+					if !walArmed.Load() || runCtx.Err() != nil {
+						return // the pin was released while the sample was taken
+					}
+					if err != nil {
+						unknown++
+						log.Printf("snapshot: the WAL held by the pin could not be measured (%d of %d unknown samples in a row): %v", unknown, maxUnknownWALTicks, err)
+						if unknown >= maxUnknownWALTicks {
+							cancel(fmt.Errorf("%w: %d samples in a row could not read the WAL's frame count, so the %d-byte bound cannot be checked; the capture is cancelled, the read released and nothing recorded", ErrPinWALUnchecked, unknown, cfg.MaxPinWALBytes))
+							return
+						}
+						continue
+					}
+					unknown = 0
+					held := (frames - walStartFrames.Load()) * walGuardPageSize.Load()
+					if cfg.WALSampled != nil {
+						cfg.WALSampled(held)
+					}
+					if held > cfg.MaxPinWALBytes {
+						cancel(fmt.Errorf("%w: the pin has made the WAL hold %d bytes (%d frames of %d bytes), over the %d-byte bound; the capture is cancelled, the read released and no root or event recorded", ErrPinWALBound, held, frames-walStartFrames.Load(), walGuardPageSize.Load(), cfg.MaxPinWALBytes))
 						return
 					}
 				}
@@ -599,20 +690,6 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		defer release()
 	}
 
-	// The scratch is removed on every path (once), and its hook fires once.
-	var removeOnce sync.Once
-	removeScratch := func() {
-		removeOnce.Do(func() {
-			if err := os.RemoveAll(cfg.ScratchDir); err != nil {
-				log.Printf("snapshot: could not remove the scratch directory %s (the next attempt fails closed until it can): %v", cfg.ScratchDir, err)
-			}
-			if cfg.ScratchRemoved != nil {
-				cfg.ScratchRemoved()
-			}
-		})
-	}
-	defer removeScratch()
-
 	// The read-released hook is joined before capture returns. This defer is
 	// registered before the rollback's, so it runs after it.
 	var hookWG sync.WaitGroup
@@ -623,8 +700,39 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		return out, fmt.Errorf("snapshot: begin read transaction: %w", cause(err))
 	}
 	pinStart := time.Now()
-	if cfg.WALBytes != nil {
-		out.stats.PinWALStart = cfg.WALBytes()
+	// The WAL is sampled once the read mark is held (after the head, which is
+	// the first statement), never before: a restart or truncate between the
+	// sample and the mark would read as negative growth.
+	walSampled := false
+	var walPageSize int
+	sampleWAL := func(end bool) {
+		if cfg.WALBytes != nil {
+			if end {
+				out.stats.PinWALEnd = cfg.WALBytes()
+			} else {
+				out.stats.PinWALStart = cfg.WALBytes()
+			}
+		}
+		if cfg.WALFrames != nil {
+			// Not tied to the run's context: the end sample is taken while the
+			// capture is being cancelled too.
+			fctx, stop := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+			defer stop()
+			frames, err := cfg.WALFrames(fctx)
+			switch {
+			case err != nil:
+				log.Printf("snapshot: could not read the WAL's frame count (the frame growth is not reported): %v", err)
+				out.stats.PinWALFramesKnown = false
+			case end:
+				out.stats.PinWALFramesEnd = frames
+				if frames < out.stats.PinWALFramesStart {
+					out.stats.PinWALFramesKnown = false
+				}
+			default:
+				out.stats.PinWALFramesStart = frames
+				out.stats.PinWALFramesKnown = true
+			}
+		}
 	}
 	txOpen := true
 	// rollback is the one place the transaction ends, on every return. It takes
@@ -634,11 +742,15 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 			return
 		}
 		txOpen = false
+		walArmed.Store(false) // no tick may cancel a capture whose pin has ended
+		if walSampled {
+			sampleWAL(true) // still pinned: the frames the reader holds back
+			if out.stats.PinWALFramesKnown && walPageSize > 0 {
+				out.stats.PinWALFrameBytes = (out.stats.PinWALFramesEnd - out.stats.PinWALFramesStart) * int64(walPageSize)
+			}
+		}
 		_ = tx.Rollback()
 		out.stats.PinTime = time.Since(pinStart)
-		if cfg.WALBytes != nil {
-			out.stats.PinWALEnd = cfg.WALBytes()
-		}
 		if cfg.ReadReleased != nil {
 			hookWG.Add(1)
 			go func() {
@@ -676,64 +788,44 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 	if err != nil {
 		return out, err
 	}
-
-	// The copy: every page of the snapshot to the scratch file, then the pin
-	// ends. Nothing after this holds the WAL.
-	copyStart := time.Now()
-	scratchPath, digest, copyErr := copyPages(runCtx, cfg, tx, pageSize, pageCount, cause)
-	out.stats.CopyTime = time.Since(copyStart)
-	rollback()
-	if copyErr != nil {
-		return out, copyErr
-	}
-	out.stats.ScratchBytes = int64(pageSize) * pageCount
-	if cfg.afterCopy != nil {
-		cfg.afterCopy(scratchPath)
+	walPageSize = pageSize
+	sampleWAL(false)
+	walSampled = true
+	if out.stats.PinWALFramesKnown {
+		walStartFrames.Store(out.stats.PinWALFramesStart)
+		walGuardPageSize.Store(int64(pageSize))
+		walArmed.Store(true)
 	}
 
-	// The tie, then the witness, on the static copy.
-	copyDB, err := dbx.OpenSQLite(scratchPath, dbx.SQLiteOptions{ReadOnly: true, ReadConns: 1})
-	if err != nil {
-		return out, fmt.Errorf("%w: open the copy: %v", ErrCopyHeadMismatch, err)
-	}
-	closeCopy := func() {
-		if copyDB != nil {
-			_ = copyDB.Close()
-			copyDB = nil
-		}
-	}
-	defer closeCopy()
-	if err := crossCheckCopy(runCtx, cfg, copyDB.Read, scratchPath, pageSize, pageCount, out.head, cause); err != nil {
-		return out, err
-	}
+	// The witness first, in this transaction, so an attempt that cannot finish
+	// it uploads nothing (0d2f0bd46); then the pages, from the same snapshot.
+	// Nothing is written to disk: the pages go from sqlite_dbpage to the
+	// uploader (docs/design/snapshot-without-scratch-copy-2026-11-20.md).
 	witnessStart := time.Now()
-	if out.witness, err = cfg.Witness(runCtx, copyDB.Read); err != nil {
+	if out.witness, err = cfg.Witness(runCtx, tx); err != nil {
 		return out, fmt.Errorf("snapshot: witness of the snapshot: %w", cause(err))
 	}
 	out.stats.WitnessTime = time.Since(witnessStart)
-	closeCopy()
-	// The whole copy's cache goes now: the upload re-reads it from disk, which
-	// is also what makes its digest check mean something.
-	dropSourceCache(scratchPath, 0, 0)
-	if cfg.afterWitness != nil {
-		cfg.afterWitness(scratchPath)
-	}
 
-	uploadStart := time.Now()
-	fs, err := streamScratch(runCtx, cfg, dek, cancel, cause, scratchPath, pageSize, pageCount, digest)
+	streamStart := time.Now()
+	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, tx, cfg.pageHook)
+	out.stats.StreamTime = time.Since(streamStart)
+	// The pin ends once the last page is handed over; the uploader finishes
+	// after it.
+	rollback()
+	drainStart := time.Now()
 	if err != nil {
 		return out, err
 	}
-	out.stats.UploadTime = time.Since(uploadStart)
+	if fs.pageSize != pageSize || fs.pageCount != pageCount {
+		cancel(errStreamGeometry)
+		fs.up.finish()
+		return out, fmt.Errorf("%w: the stream had %d pages of %d bytes, the transaction %d of %d", errStreamGeometry, fs.pageCount, fs.pageSize, pageCount, pageSize)
+	}
 	if err := fs.finish(runCtx); err != nil {
 		return out, err
 	}
-	if fs.digestErr != nil {
-		return out, fs.digestErr
-	}
-	// The scratch is no longer needed: remove it before the partitions, the
-	// manifest and the append.
-	removeScratch()
+	out.stats.DrainTime = time.Since(drainStart)
 	out.pageSize, out.pageCount, out.pagesPerChunk = fs.pageSize, fs.pageCount, fs.pagesPerChunk
 	out.entry = filecas.FileEntry{Path: StateFileName, Mode: 0o600, Size: int64(fs.pageSize) * fs.pageCount, Chunks: fs.up.digests}
 	out.stats.Pages = fs.pageCount
@@ -1045,10 +1137,10 @@ type fileStream struct {
 	digestErr error
 }
 
-// streamFile reads every page of tx's database snapshot (a telemetry partition's)
-// into chunks handed to a new uploader. On an error it stops and drains the uploader itself; on
+// streamFile reads every page of tx's database snapshot (the state file's or a
+// telemetry partition's) into chunks handed to a new uploader. On an error it stops and drains the uploader itself; on
 // success the caller finishes it (fileStream.finish).
-func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, cause func(error) error, tx *sql.Tx) (*fileStream, error) {
+func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, cause func(error) error, tx *sql.Tx, pageHook func(pgno int64)) (*fileStream, error) {
 	fs := &fileStream{}
 	if err := tx.QueryRowContext(runCtx, `PRAGMA page_size`).Scan(&fs.pageSize); err != nil {
 		return nil, fmt.Errorf("snapshot: page size: %w", cause(err))
@@ -1114,6 +1206,9 @@ func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.C
 		if pgno != pages+1 || len(data) != pageSize {
 			_ = rows.Close()
 			return fail(fmt.Errorf("snapshot: page stream out of order or short: got page %d of %d bytes after %d pages (page size %d)", pgno, len(data), pages, pageSize))
+		}
+		if pageHook != nil {
+			pageHook(pgno)
 		}
 		buf = append(buf, data...)
 		pages++
@@ -1186,7 +1281,7 @@ func capturePartition(runCtx context.Context, cfg Config, dek []byte, cancel con
 		_ = ptx.Rollback()
 		return capturedPartition{}, fmt.Errorf("snapshot: read %s: %w", part.Path, cause(err))
 	}
-	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, ptx)
+	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, ptx, nil)
 	_ = ptx.Rollback()
 	if err != nil {
 		return capturedPartition{}, fmt.Errorf("%s: %w", part.Path, err)

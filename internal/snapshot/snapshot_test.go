@@ -152,6 +152,17 @@ func testCipher(t *testing.T, computerID string) *computerevent.PrivateArtifactC
 	return c
 }
 
+// witnessOfTx is the capture's witness: computed inside the transaction whose
+// pages are streamed (the production one is agentcore.LiveStoreWitnessTx).
+func witnessOfTx(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+	digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
+	if err != nil {
+		return selfdevprotocol.VMLocalContentWitness{}, err
+	}
+	return selfdevprotocol.WitnessFromDigests(digests)
+}
+
+// witnessOf is what a restore recomputes on the reassembled file.
 func witnessOf(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
 	digests, err := computerversion.SQLiteStateExtractor{DB: db, Database: "texture"}.Digests(ctx)
 	if err != nil {
@@ -197,7 +208,7 @@ func newFixture(t *testing.T, bytesApprox int) *fixture {
 			Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 				return &computerevent.Head{ComputerID: testComputer, Sequence: 41, CanonicalEventHead: strings.Repeat("e", 64)}, nil
 			},
-			Witness:    witnessOf,
+			Witness:    witnessOfTx,
 			ScratchDir: filepath.Join(t.TempDir(), "snapshot-tmp"),
 			Cipher:     cipher,
 			Chunks:     chunks,

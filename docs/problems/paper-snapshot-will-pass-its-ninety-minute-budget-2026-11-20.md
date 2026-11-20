@@ -44,3 +44,18 @@ to about 65 GB, roughly six days. It does not remove the wall.
 3. Design the witness so its time does not grow with the whole store, or
    decide which gives way at the budget. The owner question is recorded in
    the design with its default (neither gives way; this record stands).
+
+## What changed, 2026-11-20 (S1 built, not deployed)
+
+S1 removes the scratch copy (about 12 minutes of the capture) and adds to the
+producer's log line `wal +N frames (+B bytes) during the hold` and the pin, the witness and
+the upload as separate times. The next capture after the deploy therefore
+measures the split this record lacks. The wall is not removed: the witness
+still grows with the store, and the owner question in the design (section 9)
+is still open.
+
+The pin is longer under S1 than under the copy (the witness plus the upload
+draining, about 71 minutes), and the WAL rate that makes that acceptable (2
+MiB/s) rests on one reading; S1 is unproven until it is measured on a test
+computer with a large store under sustained writes (the design's "Measuring S1
+before the paper takes it").
