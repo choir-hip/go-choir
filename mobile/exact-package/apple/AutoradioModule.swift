@@ -90,6 +90,8 @@ public final class AutoradioModule: ExactPackage {
     /// The spine's shared kit objects: every lane reads these and none replaces them.
     var pages: OpenPages!
     var signals: Signals!
+    /// How many times the app has resigned active (the editor's flush signal, AutoradioModule+TextureEdit.swift).
+    var textureResigns = 0
     var themes: ThemeStore!
     let pageSources = PageSources()
     /// name -> handler. Looked up first in `later`; the integrator's switch below answers the rest.
@@ -187,6 +189,7 @@ public final class AutoradioModule: ExactPackage {
         registerNotebook()       // my notebook (station L6)
         registerBooks()   // lane autoradio-reader
         registerTalk()
+        registerTextureEdit()   // the editor's background signal (shared code flushes; AutoradioModule+TextureEdit.swift)
         registerPodcasts()      // lane autoradio-podcasts
         registerJoins()         // lane autoradio-joins
         Task { [choir] in await choir?.refresh() }

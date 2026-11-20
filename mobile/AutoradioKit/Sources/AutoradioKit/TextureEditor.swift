@@ -80,3 +80,17 @@ public final class RouteTextureAPI: TextureAPI {
         return (o["revision_id"] as? String ?? "", n + 1)
     }
 }
+
+/// The unsent edit the build before shared-code editing kept: Application Support/Autoradio/texture-pending.json, `{"<doc>": "<markdown>"}`. Only native code can reach this place (it is outside every Exact
+/// grant), so shared code (AutoradioLab/texture-edit.ts) asks for it through the app module's `textureOldPending` call, merges it, and only then asks `textureOldPendingRemove`. Sign-out removes it too (AccountWipe).
+public enum LegacyTexturePending {
+    public static var file: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio/texture-pending.json")
+    }
+    /// The file's text, or nil when there is none (or it cannot be read).
+    public static func read(_ url: URL? = file) -> String? {
+        guard let url, let d = try? Data(contentsOf: url) else { return nil }
+        return String(data: d, encoding: .utf8) ?? ""      // undecodable: an empty text, which shared code finds damaged and removes
+    }
+    public static func remove(_ url: URL? = file) { if let url { try? FileManager.default.removeItem(at: url) } }
+}

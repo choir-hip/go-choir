@@ -55,6 +55,11 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        // The editor's three native questions (texture-edit.ts, AutoradioModule+TextureEdit.swift): the unsent edit the build before this one kept in Application Support (read; removed only when shared code has written it
+        // durably in its own place), and how many times the app has gone to the background.
+        if op == "textureOldPending" { let t = LegacyTexturePending.read(); reply.send(t == nil ? ["found": false] : ["found": true, "text": t!]); return }
+        if op == "textureOldPendingRemove" { LegacyTexturePending.remove(); reply.send(["ok": true]); return }
+        if op == "textureResigned" { Task { @MainActor in reply.send(["count": AutoradioModule.current?.textureResigns ?? 0]) }; return }
         reply.send(call(request))
     }
 }

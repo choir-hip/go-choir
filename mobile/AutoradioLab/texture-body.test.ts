@@ -3,6 +3,11 @@
 //  B3 an embed, a table and an unknown node survive edits around them; deleting the paragraph before an embed keeps the embed.   B4 an edited table keeps its node (opaqueEdits).
 //  B5 a new document gets an editor-compatible body (marks, nesting, ids, no link mark).   B6 the Markdown is kept byte for byte (the original body, whatever the Markdown said).
 //  B7 the pieces: blocks (fences), key, list markers, inline marks, the Markdown a body writes.
+// Review round 1 (2026-11-20), the failure list for the merge written before the code:
+//  B8 a book-length document (6000 blocks): one edit is cheap (well under the 100 ms turn), every untouched node is the original, nothing allocates a table of 6000 x 6000.
+//  B9 a document with EVERY block changed (the worst case for a diff) finishes in time and still writes a body with one node per block; blocks that did not change keep their node.
+//  B10 diffPairs: equal to the exact longest common subsequence where the table is affordable; pairs are increasing; a large middle with no unique lines is bounded, not hung.
+//  B11 merge3: edits in different places combine; the same line changed two ways is a conflict (null); an insertion by each side at different places combine; text neither side touched is byte for byte.
 import { describe, expect, test } from 'bun:test';
 import * as B from './texture-body.ts';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -11,7 +16,7 @@ const FX = new URL('../fixtures/', import.meta.url).pathname;
 const json = (p: string) => JSON.parse(readFileSync(FX + p, 'utf8'));
 function fixtures(): { name: string; body: B.Node }[] {
   const out: { name: string; body: B.Node }[] = [];
-  for (const f of readdirSync(FX + 'demo').sort().filter((n) => n.startsWith('resolve-'))) { const b = json('demo/' + f)?.artifact?.body_doc; if (b) out.push({ name: f, body: b }); }
+  for (const f of readdirSync(FX + 'texture').sort().filter((n) => n.startsWith('story-'))) { const b = json('texture/' + f)?.artifact?.body_doc; if (b) out.push({ name: f, body: b }); }
   out.push({ name: 'letter-citations-embed', body: json('texture/letter-citations-embed.json').body_doc });
   out.push({ name: 'rich-mixed', body: json('texture/rich-mixed.json').body_doc });
   return out;
@@ -108,5 +113,64 @@ describe('the body merge', () => {
     expect(B.inline('a  \nb').map((n) => n.type)).toEqual(['text', 'hard_break', 'text']);
     expect(B.inline('**a *b* c**').map((n) => [n.text, n.marks?.map((m: B.Node) => m.type)])).toEqual([['a ', ['strong']], ['b', ['strong', 'emphasis']], [' c', ['strong']]]);
     expect(B.markdownFrom({ doc: { content: [{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'H' }] }, { type: 'embed' }, { type: 'ordered_list', attrs: { start: 3 }, content: [{ type: 'list_item', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x', marks: [{ type: 'strong' }] }] }] }] }] } })).toBe('## H\n\n3. **x**');
+  });
+  const doc = (n: number, f: (i: number) => string = (i) => `Paragraph ${i} has its own words ${i * 7919}.`): { body: B.Node; md: string } => {
+    const nodes = Array.from({ length: n }, (_, i) => ({ type: 'paragraph', attrs: { id: `p${i}` }, content: [{ type: 'text', text: f(i) }] }));
+    return { body: { schema: 'choir.texture_doc.v1', doc: { type: 'doc', content: nodes } }, md: nodes.map((x) => x.content[0].text).join('\n\n') };
+  };
+  test('B8 a book-length document: one edit is cheap and keeps every other node', () => {
+    const { body, md } = doc(6000);
+    const edited = md.replace('Paragraph 3000 has', 'Paragraph 3000 now has');
+    const t0 = performance.now();
+    const r = B.merge(body, md, edited);
+    expect(performance.now() - t0).toBeLessThan(100);
+    const before = top(body), after = top(r.body);
+    expect(after.length).toBe(6000);
+    const changed = after.map((a, i) => (a === before[i] ? -1 : i)).filter((i) => i >= 0);
+    expect(changed).toEqual([3000]);
+    expect(after[3000].attrs.id).toBe('p3000');
+  });
+  test('B9 every block changed, and blocks inserted at the front: bounded', () => {
+    const { body, md } = doc(3000);
+    const all = doc(3000, (i) => `Rewritten ${i} entirely differently ${i * 31}.`).md;
+    const t0 = performance.now();
+    const r = B.merge(body, md, all);
+    expect(performance.now() - t0).toBeLessThan(500);
+    expect(top(r.body).length).toBe(3000);
+    const shifted = 'New first\n\n' + md;                                                // everything moves down by one: the anchors find the rest
+    const r2 = B.merge(body, md, shifted);
+    expect(top(r2.body).length).toBe(3001);
+    expect(top(r2.body).filter((n, i) => i > 0 && n === top(body)[i - 1]).length).toBeGreaterThan(2900);
+  });
+  test('B10 diffPairs is the exact LCS where affordable and bounded where not', () => {
+    const lcs = (a: string[], b: string[]): number => { const t = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0)); for (let i = a.length - 1; i >= 0; i--) for (let k = b.length - 1; k >= 0; k--) t[i][k] = a[i] === b[k] ? t[i + 1][k + 1] + 1 : Math.max(t[i + 1][k], t[i][k + 1]); return t[0][0]; };
+    const pick = (seed: number, n: number, alpha: number): string[] => { let x = seed; return Array.from({ length: n }, () => { x = (x * 1103515245 + 12345) & 0x7fffffff; return String.fromCharCode(97 + (x >> 8) % alpha); }); };
+    for (const [sa, sb] of [[1, 2], [3, 4], [5, 6]]) {
+      const a = pick(sa, 40, 4), b = pick(sb, 35, 4);
+      const pairs = B.diffPairs(a, b);
+      expect(pairs.length).toBe(lcs(a, b));
+      pairs.forEach(([i, k], x) => { expect(a[i]).toBe(b[k]); if (x > 0) { expect(i).toBeGreaterThan(pairs[x - 1][0]); expect(k).toBeGreaterThan(pairs[x - 1][1]); } });
+    }
+    const big = pick(7, 4000, 3), big2 = pick(8, 4000, 3);                                // no unique lines at all: the gap stays unpaired, in time
+    const t0 = performance.now();
+    const bp = B.diffPairs(big, big2);
+    expect(performance.now() - t0).toBeLessThan(300);
+    bp.forEach(([i, k]) => expect(big[i]).toBe(big2[k]));
+    expect(B.diffPairs([], ['a'])).toEqual([]); expect(B.diffPairs(['a'], ['a'])).toEqual([[0, 0]]);
+  });
+  test('B11 merge3', () => {
+    const base = 'one\ntwo\nthree\nfour\nfive';
+    expect(B.merge3(base, 'one\nTWO\nthree\nfour\nfive', 'one\ntwo\nthree\nfour\nFIVE')).toBe('one\nTWO\nthree\nfour\nFIVE');
+    expect(B.merge3(base, 'one\nTWO\nthree\nfour\nfive', 'one\nDEUX\nthree\nfour\nfive')).toBeNull();
+    expect(B.merge3(base, 'one\nTWO\nthree\nfour\nfive', 'one\nTWO\nthree\nfour\nfive')).toBe('one\nTWO\nthree\nfour\nfive');
+    expect(B.merge3(base, 'zero\n' + base, base + '\nsix')).toBe('zero\n' + base + '\nsix');
+    expect(B.merge3(base, base, 'x')).toBe('x'); expect(B.merge3(base, 'y', base)).toBe('y');
+    expect(B.merge3(base, 'one\n\n\ntwo\nthree\nfour\nfive', 'one\ntwo\nthree\nfour\nFIVE  ')).toBe('one\n\n\ntwo\nthree\nfour\nFIVE  ');      // blank lines and trailing spaces are theirs, untouched
+    expect(B.merge3(base, 'one\ntwo\nthree\nfour', 'one\ntwo\nTHREE\nfour\nfive')).toBe('one\ntwo\nTHREE\nfour');       // one side deleted the last line, the other changed a middle one
+    const big = Array.from({ length: 8000 }, (_, i) => `line ${i}`).join('\n');
+    const t0 = performance.now();
+    const m = B.merge3(big, big.replace('line 10\n', 'line ten\n'), big.replace('line 7000\n', 'line seven thousand\n'));
+    expect(performance.now() - t0).toBeLessThan(100);
+    expect(m).toBe(big.replace('line 10\n', 'line ten\n').replace('line 7000\n', 'line seven thousand\n'));
   });
 });

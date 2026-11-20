@@ -12,8 +12,8 @@ const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' 
 
 /** The page's rows from the native entries (oldest first): newest first, cancelled ones dropped (a thank you, a cancel, a question asked again are not answers or failures).
  * A row can be asked again when it failed, or was answered but carries a note ("The answer was cut off", "The full answer did not arrive"). */
-export function info(raw: unknown): Info {
-  const list = obj(raw) && Array.isArray(raw.entries) ? raw.entries : [];
+export function info(entries: unknown): Info {
+  const list = Array.isArray(entries) ? entries : obj(entries) && Array.isArray(entries.entries) ? entries.entries : [];
   const rows: Row[] = [];
   for (let i = list.length - 1; i >= 0; i--) {
     const e = list[i];

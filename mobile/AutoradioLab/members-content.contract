@@ -18,9 +18,9 @@ members Autoradio
   state ctlPanel = ""
 
   // ---- your own Texture document: edited in rich text with Exact's Markdown editor (texture-edit.ts, shared code). The text is kept on the phone at once; the revision is posted after a pause in typing
-  // (edPause: the timer restarts with every keystroke), on Done, when the page in front changes and when the phone goes to the background (the source flushes when `visibilityState` is hidden or the
-  // page is not the document's). A failed or offline save is tried again every 30 seconds while this page says so (edRetry).
-  resource edInfo = textureEditInfo(pg.top, dm.on, hpg.visibilityState) as shape TextureEditInfo else empty()
+  // (edPause: the timer restarts with every keystroke), on Done, when the page in front changes and when the phone goes to the background (the source flushes when `visibilityState` is hidden, when the native side counts a
+  // willResignActive (`visibilityState` is not established on an iPhone for lock and unlock), or when the page is not the document's). A failed or offline save is tried again every 30 seconds while this page says so (edRetry).
+  resource edInfo = textureEditInfo(pg.top, hpg.visibilityState) as shape TextureEditInfo else empty()
   mutation edm as shape TextureEditInfo refreshes edInfo
   mutation edsm as shape TextureEditInfo refreshes edInfo
   state edRetryTick = 0
@@ -29,10 +29,10 @@ members Autoradio
   task edRetry when edInfo.status == "offline" or edInfo.status == "failed" key=edRetryTick
     after(30000, edRetryGo)
   action edSave
-    send edsm = textureFlush(pg.top, dm.on)
+    send edsm = textureFlush(pg.top)
   action edRetryGo
     edRetryTick = edRetryTick + 1
-    send edsm = textureFlush(pg.top, dm.on)
+    send edsm = textureFlush(pg.top)
   state edOn = false
   state edFor = ""
   state edDraft = ""
@@ -125,10 +125,10 @@ members Autoradio
     edOn = false
     ctlOpen = false
     ctlPanel = ""
-    send edsm = textureFlush(pg.top, dm.on)
+    send edsm = textureFlush(pg.top)
   action edInput(value: string)
     edDraft = value
-    send edm = textureEdit(pg.top, value, dm.on)
+    send edm = textureEdit(pg.top, value)
   action edSelected(s)
     edFormats = s.formats
     edUnavail = s.unavailable

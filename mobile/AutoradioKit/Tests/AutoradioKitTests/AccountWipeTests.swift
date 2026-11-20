@@ -8,6 +8,7 @@ import XCTest
 //  3  after the next sign-in the first turn, programme, steer flush, sheet post and podcast sync carry no marker
 //  4  pending run sheet ops are dropped at sign-out, never posted under the next key
 //  5  the revoke is sent in the background with the old key, after the local key is gone
+//  6  the unsent Texture edit the build before shared-code editing kept (LegacyTexturePending) is removed too: private text does not survive sign-out
 @MainActor
 final class AccountWipeTests: XCTestCase {
     static let marker = "MARKER-7731"
@@ -67,6 +68,7 @@ final class AccountWipeTests: XCTestCase {
         let opening = OpeningCache(dir: root.appendingPathComponent("opening"))
         opening.put(.opening, entry: .paperStory(route: m, title: m), titles: [m], audio: [PreparedAudio(text: m, samples: [0.1, 0.2], rate: 24000)], voice: "v")
         let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
+        write("texture-pending.json", "{\"d1\": \"\(m)\"}")        // the old build's unsent edit
         let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
         let content = ContentStore(root: root.appendingPathComponent("content"))
         content.put(StoredItem(id: "mail:1", kind: .mail, title: m, text: m, address: "mail:1")); content.flush()
@@ -95,7 +97,8 @@ final class AccountWipeTests: XCTestCase {
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, topicsFile: topics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
                               takeOwn: own, takeMutes: mutes, takeStore: takes, tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
                               environment: env, content: content, corpus: SavedCorpus(),
-                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice)
+                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
+                              texturePending: root.appendingPathComponent("texture-pending.json"))
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
 
         await wipe.run()

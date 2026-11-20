@@ -267,6 +267,93 @@ function root(content: Node[], like: Node | null): Node {
   return out;
 }
 
+
+// MARK: Diff (bounded)
+
+/** Cells of the exact table `diffPairs` may allocate (about 4 MB as Int32): Exact gives an answer a 64 MiB heap and 100 ms of CPU (docs/reference/EXACT.md), and a book-length document is thousands of lines. */
+export const EXACT_CELLS = 1_000_000;
+
+/** The pairs [i, k] with a[i] === b[k], increasing in both: a longest common subsequence where it is affordable, else a good one found by anchors.
+ * The common head and tail are paired first (an edit is local, so the middle is small). A middle of at most EXACT_CELLS cells is the exact table. A larger middle is cut at the lines that
+ * occur once in each side (a patience diff), and each gap between anchors is done the same way; a gap with no anchor and too large for the table stays unpaired (its lines count as changed:
+ * correct, only coarser). Memory is linear in the lines; time is near linear. */
+export function diffPairs(a: string[], b: string[]): [number, number][] {
+  const out: [number, number][] = [];
+  diffMiddle(a, b, 0, a.length, 0, b.length, out);
+  return out;
+}
+
+function diffMiddle(a: string[], b: string[], a0: number, a1: number, b0: number, b1: number, out: [number, number][]): void {
+  while (a0 < a1 && b0 < b1 && a[a0] === b[b0]) { out.push([a0, b0]); a0 += 1; b0 += 1; }          // the common head, then the common tail (an edit is local)
+  const tail: [number, number][] = [];
+  while (a1 > a0 && b1 > b0 && a[a1 - 1] === b[b1 - 1]) { a1 -= 1; b1 -= 1; tail.push([a1, b1]); }
+  const m = a1 - a0, p = b1 - b0;
+  if (m > 0 && p > 0) {
+    if ((m + 1) * (p + 1) <= EXACT_CELLS) exactTable(a, b, a0, a1, b0, b1, out);
+    else {
+      let pa = a0, pb = b0;
+      for (const [i, k] of uniqueAnchors(a, b, a0, a1, b0, b1)) { diffMiddle(a, b, pa, i, pb, k, out); out.push([i, k]); pa = i + 1; pb = k + 1; }
+      if (pa > a0 || pb > b0) diffMiddle(a, b, pa, a1, pb, b1, out);                                  // no anchor at all: the gap stays unpaired
+    }
+  }
+  for (let t = tail.length - 1; t >= 0; t--) out.push(tail[t]);
+}
+
+function exactTable(a: string[], b: string[], a0: number, a1: number, b0: number, b1: number, out: [number, number][]): void {
+  const m = a1 - a0, p = b1 - b0, w = p + 1;
+  const t = new Int32Array((m + 1) * w);
+  for (let i = m - 1; i >= 0; i--) for (let k = p - 1; k >= 0; k--) t[i * w + k] = a[a0 + i] === b[b0 + k] ? t[(i + 1) * w + k + 1] + 1 : Math.max(t[(i + 1) * w + k], t[i * w + k + 1]);
+  let i = 0, k = 0;
+  while (i < m && k < p) {
+    if (a[a0 + i] === b[b0 + k]) { out.push([a0 + i, b0 + k]); i += 1; k += 1; }
+    else if (t[(i + 1) * w + k] >= t[i * w + k + 1]) i += 1; else k += 1;
+  }
+}
+
+/** Lines that occur exactly once in a[a0,a1) and once in b[b0,b1), as the longest increasing run of their positions (patience sorting). */
+function uniqueAnchors(a: string[], b: string[], a0: number, a1: number, b0: number, b1: number): [number, number][] {
+  const countA = new Map<string, number>(), countB = new Map<string, number>(), posB = new Map<string, number>();
+  for (let i = a0; i < a1; i++) countA.set(a[i], (countA.get(a[i]) ?? 0) + 1);
+  for (let k = b0; k < b1; k++) { countB.set(b[k], (countB.get(b[k]) ?? 0) + 1); posB.set(b[k], k); }
+  const cand: [number, number][] = [];
+  for (let i = a0; i < a1; i++) if (countA.get(a[i]) === 1 && countB.get(a[i]) === 1) cand.push([i, posB.get(a[i])!]);
+  const tails: number[] = [], prev: number[] = new Array<number>(cand.length).fill(-1);
+  for (let x = 0; x < cand.length; x++) {
+    let lo = 0, hi = tails.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (cand[tails[mid]][1] < cand[x][1]) lo = mid + 1; else hi = mid; }
+    if (lo > 0) prev[x] = tails[lo - 1];
+    tails[lo] = x;
+  }
+  const res: [number, number][] = [];
+  for (let x = tails.length > 0 ? tails[tails.length - 1] : -1; x >= 0; x = prev[x]) res.push(cand[x]);
+  return res.reverse();
+}
+
+/** A three-way merge of text by lines: what `mine` changed from `base` and what `theirs` changed from `base`, together. Null when both changed the same lines differently (a conflict).
+ * Lines are kept as they are, so what neither side touched is byte for byte what it was. */
+export function merge3(base: string, mine: string, theirs: string): string | null {
+  if (mine === theirs) return mine;
+  if (mine === base) return theirs;
+  if (theirs === base) return mine;
+  const o = base.split('\n'), a = mine.split('\n'), b = theirs.split('\n');
+  const ma = new Int32Array(o.length).fill(-1), mb = new Int32Array(o.length).fill(-1);
+  for (const [i, k] of diffPairs(o, a)) ma[i] = k;
+  for (const [i, k] of diffPairs(o, b)) mb[i] = k;
+  const out: string[] = [];
+  let io = 0, ia = 0, ib = 0;
+  const same = (x: string[], y: string[]): boolean => x.length === y.length && x.every((l, i) => l === y[i]);
+  for (let i = 0; i <= o.length; i++) {
+    const end = i === o.length;
+    if (!end && !(ma[i] >= 0 && mb[i] >= 0)) continue;                                              // a line only one side kept is not a place the two agree on
+    const ea = end ? a.length : ma[i], eb = end ? b.length : mb[i];
+    const co = o.slice(io, i), ca = a.slice(ia, ea), cb = b.slice(ib, eb);
+    if (same(ca, co)) out.push(...cb); else if (same(cb, co) || same(ca, cb)) out.push(...ca); else return null;
+    if (!end) out.push(o[i]);
+    io = i + 1; ia = ea + 1; ib = eb + 1;
+  }
+  return out.join('\n');
+}
+
 /** An edited node keeps the id it had, and a paragraph keeps its citations (they stay at the end, where the web editor puts them). */
 function carry(old: Node, fresh: Node): void {
   const id = old.attrs && typeof old.attrs === 'object' ? (old.attrs as Node).id : undefined;
@@ -285,13 +372,14 @@ export function merge(original: Node | null, originalMarkdown: string, newMarkdo
     const nodes = n.map(nodeFor);
     return { body: root(nodes.length === 0 ? [paragraph('')] : nodes, original), opaqueEdits: 0 };
   }
-  // Which original node each original block is (forward, by what it says and what it is).
+  // Which original node each original block is (forward, by what it says and what it is). The nodes' keys are read once: a document of thousands of blocks must not pay for them per block.
   const map: (number | null)[] = b.map(() => null);
+  const sKeys = s.map(nodeKey), sTypes = s.map((x) => (typeof x.type === 'string' ? x.type : ''));
   let cursor = 0;
   for (let i = 0; i < b.length; i++) {
     const k = kindOf(b[i]), kk = key(b[i]);
     for (let j = cursor; j < s.length; j++) {
-      if (compatible(k, typeof s[j].type === 'string' ? s[j].type : '') && nodeKey(s[j]) === kk) { map[i] = j; cursor = j + 1; break; }
+      if (sKeys[j] === kk && compatible(k, sTypes[j])) { map[i] = j; cursor = j + 1; break; }
     }
   }
   // Nodes no block claims (an embed, a source flow, an unknown node) stay after the block that came before them.
@@ -306,13 +394,9 @@ export function merge(original: Node | null, originalMarkdown: string, newMarkdo
     else if (lastClaimed !== null) attach.set(lastClaimed, [...(attach.get(lastClaimed) ?? []), s[j]]);
     else lead.push(s[j]);
   }
-  // Block diff (longest common subsequence on the exact source).
+  // Block diff: the pairs of equal blocks, in order (diffPairs: bounded in time and memory for a document of any length).
   const m = b.length, p = n.length;
-  const lcs: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(p + 1).fill(0));
-  for (let i = m - 1; i >= 0; i--) for (let k = p - 1; k >= 0; k--) lcs[i][k] = b[i] === n[k] ? lcs[i + 1][k + 1] + 1 : Math.max(lcs[i + 1][k], lcs[i][k + 1]);
-  const pairs: [number, number][] = [];
-  let i = 0, k = 0;
-  while (i < m && k < p) { if (b[i] === n[k]) { pairs.push([i, k]); i += 1; k += 1; } else if (lcs[i + 1][k] >= lcs[i][k + 1]) i += 1; else k += 1; }
+  const pairs = diffPairs(b, n);
   pairs.push([m, p]);
   const out: Node[] = [...lead];
   let opaque = 0, pi = 0, pk = 0;
