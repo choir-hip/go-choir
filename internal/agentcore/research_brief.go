@@ -14,6 +14,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -31,9 +32,14 @@ import (
 // (it is part of the first message, which every later call carries); the verb,
 // choir.SearchWireCorpus, gives more when the desk asks.
 const (
-	// researchBriefMaxThreads is the objective plus at most five further
-	// threads; threads beyond it are named, not searched.
-	researchBriefMaxThreads = 6
+	// researchBriefMaxThreads is the objective plus at most two further
+	// threads; threads beyond it are named, not searched. The searches run at
+	// once and share one corpusd: on the paper, brief searches (five at a time)
+	// had a median of 5.6 s and a ninth decile of 8.0 s, against 1.5 s and
+	// 5.2 s for a desk's own search (the console, 2026-11-19 17:41Z to
+	// 19:18Z), and the brief's 8 s deadline cut 9 of 22 delivered briefs. Fewer
+	// searches at once is less work for the same corpusd.
+	researchBriefMaxThreads = 3
 	// researchBriefCapturesPerThread and researchBriefStoriesPerThread bound
 	// what one thread's search contributes.
 	researchBriefCapturesPerThread = 6
@@ -76,6 +82,16 @@ const (
 	// briefDropped: the brief was built but the run memory did not take its
 	// text, so the desk never saw it.
 	briefDropped = "dropped"
+)
+
+// Where a brief's objective came from, as the log line's objective_from names
+// it: the run's unread records, the most recent earlier record of the same
+// conversation that carries one, the work item assigned to the run, or none.
+const (
+	briefFromUnread       = "unread"
+	briefFromConversation = "conversation"
+	briefFromAssignment   = "assignment"
+	briefFromNone         = "none"
 )
 
 // briefThread is one thing the Cast asks about.
@@ -162,6 +178,8 @@ type briefPlan struct {
 	threads, left []briefThread
 	labels        types.LabelSet
 	others        int
+	// from is where the threads came from (briefFrom*); "" when there are none.
+	from string
 }
 
 // recordBriefThreads lists the threads one record carries: a Texture Cast's
@@ -215,6 +233,7 @@ func researchBriefThreads(recs []types.CommitmentRecord, conversation string) br
 		return plan
 	}
 	plan.others = withObjective - 1
+	plan.from = briefFromUnread
 	plan.labels = labelsOfRecord(recs[chosen])
 	seen := map[string]bool{}
 	for _, th := range recordBriefThreads(recs[chosen]) {
@@ -271,7 +290,7 @@ type researchBriefResult struct {
 	newest                                        string
 	tokens                                        int
 	// dropped are the 1-based numbers of threads left out for the bound; left
-	// counts the threads past the sixth, which were never searched.
+	// counts the threads past the limit, which were never searched.
 	// unanswered counts the threads whose search did not answer (the call
 	// errored, timed out, was cut by the deadline, was never reached, or its
 	// result could not be decoded); left-out threads are in left, not here. It
@@ -284,6 +303,10 @@ type researchBriefResult struct {
 	// counts searches that panicked (each is an unanswered thread).
 	slowest  time.Duration
 	panicked int
+	// from is where the objective came from (briefFrom*), "" when no plan was
+	// read; unread counts the unread records the run's inbox held.
+	from   string
+	unread int
 }
 
 type briefBlock struct {
@@ -713,8 +736,12 @@ func researchBriefLogLine(runID, desk string, elapsed time.Duration, res researc
 	if newest == "" {
 		newest = "-"
 	}
-	return fmt.Sprintf("research brief run=%s desk=%s ms=%d slowest_ms=%d threads=%d queries=%d stories=%d captures=%d passages=%d newest_held=%s bytes=%d tokens_est=%d dropped=%s left=%d unanswered=%d outcome=%s reason=%q",
-		runID, desk, elapsed.Milliseconds(), res.slowest.Milliseconds(), res.threads, res.queries, res.stories, res.captures, res.passages, newest, len(res.text), res.tokens, dropped, res.left, res.unanswered, res.outcome, res.reason)
+	from := res.from
+	if from == "" {
+		from = briefFromNone
+	}
+	return fmt.Sprintf("research brief run=%s desk=%s objective_from=%s unread=%d ms=%d slowest_ms=%d threads=%d queries=%d stories=%d captures=%d passages=%d newest_held=%s bytes=%d tokens_est=%d dropped=%s left=%d unanswered=%d outcome=%s reason=%q",
+		runID, desk, from, res.unread, elapsed.Milliseconds(), res.slowest.Milliseconds(), res.threads, res.queries, res.stories, res.captures, res.passages, newest, len(res.text), res.tokens, dropped, res.left, res.unanswered, res.outcome, res.reason)
 }
 
 // researchBrief is the host-delivered corpus brief of one research run.
@@ -774,19 +801,33 @@ func (rt *Runtime) researchBriefOpening(ctx context.Context, rec *types.RunRecor
 	// The reads declare the run's desk as their reader, as its own cells do.
 	ctx = withDeskReader(ctx, rec.AgentProfile)
 	inbox := agentIDForRun(rec)
-	recs, err := rt.researchBriefRecords(ctx, rec, inbox)
+	recs, after, err := rt.researchBriefRecords(ctx, rec, inbox)
 	if err != nil {
 		b.res = researchBriefResult{outcome: briefFailed, reason: "the inbox was not readable: " + err.Error()}
 		b.res.text = briefNoBriefText(b.res.reason)
 		return done()
 	}
-	plan := researchBriefThreads(recs, types.InboxConversationID(deskmanifest.DocumentInbox(channelIDForRun(rec)), inbox))
+	conversation := types.InboxConversationID(deskmanifest.DocumentInbox(channelIDForRun(rec)), inbox)
+	plan := researchBriefThreads(recs, conversation)
 	if len(plan.threads) == 0 {
-		return skip("no objective in the unread records", "the unread records name no objective")
+		// A later run of the same research agent starts with its conversation's
+		// Cast already read, and a wake can carry records that name no objective.
+		// The objective is then the conversation's most recent one, or the work
+		// item the run is assigned.
+		plan = rt.researchBriefEarlierPlan(ctx, rec, inbox, conversation, after)
+		if len(plan.threads) == 0 {
+			plan = rt.researchBriefAssignmentPlan(ctx, rec)
+		}
+	}
+	if len(plan.threads) == 0 {
+		skip("no objective in the unread records", "the unread records name no objective")
+		b.res.from, b.res.unread = briefFromNone, len(recs)
+		return b
 	}
 	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
 	ctx = researchtools.WithCorpusCaller(ctx, researchtools.CorpusCallerBrief)
 	b.res = buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
+	b.res.from, b.res.unread = plan.from, len(recs)
 	if b.res.panicked > 0 {
 		// Once per brief, with the run and no query text.
 		log.Printf("runtime: research brief run=%s: a corpus search panicked (%d of %d threads); the run starts without those threads", rec.RunID, b.res.panicked, len(plan.threads))
@@ -796,22 +837,99 @@ func (rt *Runtime) researchBriefOpening(ctx context.Context, rec *types.RunRecor
 
 // researchBriefRecords reads the records the run will see, without marking
 // them read.
-func (rt *Runtime) researchBriefRecords(ctx context.Context, rec *types.RunRecord, inbox string) ([]types.CommitmentRecord, error) {
+// It also returns the reader's cursor, where the unread records begin.
+func (rt *Runtime) researchBriefRecords(ctx context.Context, rec *types.RunRecord, inbox string) ([]types.CommitmentRecord, int64, error) {
 	after, err := rt.store.ReaderCursor(ctx, rec.OwnerID, rec.ComputerID, inbox, inbox)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	head, err := rt.store.InboxHead(ctx, rec.OwnerID, rec.ComputerID, inbox)
 	if err != nil {
-		return nil, err
+		return nil, after, err
 	}
 	if head <= after {
-		return nil, nil
+		return nil, after, nil
 	}
 	if head > after+cellRecordsWindowSeqs {
 		head = after + cellRecordsWindowSeqs
 	}
-	return rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, inbox, after, head)
+	recs, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, inbox, after, head)
+	return recs, after, err
+}
+
+// researchBriefEarlierPlan is the plan of the most recent record of this
+// run's conversation, among the records the reader has already read (the last
+// cellRecordsWindowSeqs before its cursor), that carries an objective. A
+// record of another conversation is never used. An unreadable range is no
+// plan: the assignment is tried next.
+func (rt *Runtime) researchBriefEarlierPlan(ctx context.Context, rec *types.RunRecord, inbox, conversation string, after int64) briefPlan {
+	if after <= 0 || conversation == "" {
+		return briefPlan{}
+	}
+	from := after - cellRecordsWindowSeqs
+	if from < 0 {
+		from = 0
+	}
+	earlier, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, inbox, from, after)
+	if err != nil {
+		return briefPlan{}
+	}
+	var mine []types.CommitmentRecord
+	for _, r := range earlier {
+		if r.ConversationID == conversation {
+			mine = append(mine, r)
+		}
+	}
+	plan := researchBriefThreads(mine, conversation)
+	if len(plan.threads) == 0 {
+		return briefPlan{}
+	}
+	// "other unread records" would be false here: none of these is unread.
+	plan.others, plan.from = 0, briefFromConversation
+	return plan
+}
+
+// researchBriefAssignmentPlan is the plan of the open work items the run is
+// assigned (its metadata names them; the lifecycle controls that started it
+// bound them). The objective is the item's, and is already in the run's
+// prompt (lifecycleControlActivationPromptForProfile), so showing it again in
+// the brief adds no text the run does not hold: the plan marks no labels.
+func (rt *Runtime) researchBriefAssignmentPlan(ctx context.Context, rec *types.RunRecord) briefPlan {
+	ids := lifecycleControlWorkIDsForRun(rec)
+	if len(ids) == 0 {
+		return briefPlan{}
+	}
+	sorted := make([]string, 0, len(ids))
+	for id := range ids {
+		sorted = append(sorted, id)
+	}
+	sort.Strings(sorted)
+	agentID := agentIDForRun(rec)
+	var plan briefPlan
+	seen := map[string]bool{}
+	for _, id := range sorted {
+		item, err := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.ComputerID, id)
+		if errors.Is(err, store.ErrNotFound) {
+			item, err = rt.store.GetWorkItem(ctx, rec.OwnerID, id)
+		}
+		if err != nil || item.Status != types.WorkItemOpen || strings.TrimSpace(item.AssignedAgentID) != agentID {
+			continue
+		}
+		text := boundBriefText(item.Objective)
+		if text == "" || seen[strings.ToLower(text)] {
+			continue
+		}
+		seen[strings.ToLower(text)] = true
+		if len(plan.threads) < researchBriefMaxThreads {
+			plan.threads = append(plan.threads, briefThread{Kind: "objective", Text: text})
+		} else {
+			plan.left = append(plan.left, briefThread{Kind: "objective", Text: text})
+		}
+	}
+	if len(plan.threads) > 0 {
+		plan.from = briefFromAssignment
+	}
+	return plan
 }
 
 // researchBriefSearcher is the corpus search the brief uses: the verb's own

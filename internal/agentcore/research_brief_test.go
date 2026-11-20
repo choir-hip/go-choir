@@ -107,7 +107,7 @@ func fixedSearch(raw json.RawMessage) briefSearchFunc {
 	return func(context.Context, string) (json.RawMessage, error) { return raw, nil }
 }
 
-func TestBriefThreadsAreTheObjectivePlusFiveAndNameWhatIsLeftOut(t *testing.T) {
+func TestBriefThreadsAreTheObjectivePlusTwoAndNameWhatIsLeftOut(t *testing.T) {
 	cast := types.CommitmentRecord{Kind: types.CommitmentKindDirective, Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast,
 		Objective: "Did the harbor strike end?", Body: `{"kind":"question","summary":"s","questions":["Who signed?","When does the port reopen?"]}`},
 		Cast: &types.CommitmentCast{
@@ -116,11 +116,11 @@ func TestBriefThreadsAreTheObjectivePlusFiveAndNameWhatIsLeftOut(t *testing.T) {
 		}}
 	plan := researchBriefThreads([]types.CommitmentRecord{cast}, "")
 	threads, left := plan.threads, plan.left
-	if len(threads) != 6 || threads[0].Kind != "objective" || threads[0].Text != "Did the harbor strike end?" {
+	if len(threads) != 3 || threads[0].Kind != "objective" || threads[0].Text != "Did the harbor strike end?" {
 		t.Fatalf("threads = %+v", threads)
 	}
-	if len(left) != 2 {
-		t.Fatalf("threads left out = %+v (8 threads, 6 kept)", left)
+	if len(left) != 5 {
+		t.Fatalf("threads left out = %+v (8 threads, 3 kept)", left)
 	}
 	// Free text only: the objective alone.
 	plain := types.CommitmentRecord{Kind: types.CommitmentKindDirective, Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "Just this"}}
