@@ -740,5 +740,56 @@ check "U6 an unreadable gateway journal says unknown with the reason, never 0, a
 check "U6 the history row says unknown for what could not be read, not 0" '[ "$(sed -n 2p "$H2" | tr "\t" "|")" = "2026-11-20T01Z|4|3|350|unknown|unknown|unknown|unknown" ]'
 check "U6 without the console the caller split says unknown" 'grep -q "by caller: unknown: paper guest console unreadable" "$root/out"'
 
+# status-entities (station E0 of docs/design/entity-layer-2026-11-20.md). Failure list, written before the code:
+#  N1  entities total is not the growth read's lexicon count, or kind is invented (the public reads carry no kind: it must say so)
+#  N2  stories with and without entities are not counted over the NEWEST N only (a story past N leaks in)
+#  N3  attachments per story: median and p90 (nearest rank) over the stories that have entities are wrong
+#  N4  entities attached to one story only: wrong count (an entity on two stories counts as none)
+#  N5  duplicate candidates: containment (Trump / Donald Trump) or initials (UAE / United Arab Emirates) missed, an
+#      unrelated pair (Italy / France) reported, or the list holds more than 20 pairs while the count stays total
+#  N6  non-entity candidates: a demonym (Chinese) or a common word (Health) missed, a real name (Italy) flagged
+#  N7  Wikidata share: not the wd: ids over distinct entities
+#  N8  the last line is not one line under 200 chars; --json lacks the numbers; an unreadable fixture does not exit 2
+entities="$here/status-entities"
+python3 - "$root" <<'PY'
+import json, sys
+root = sys.argv[1]
+def e(i, l): return {"id": i, "label": l}
+A, B, C = e("ent:a", "Trump"), e("ent:b", "Donald Trump"), e("ent:c", "Chinese")
+D, E, F = e("ent:d", "UAE"), e("ent:e", "United Arab Emirates"), e("ent:f", "Health")
+G, W = e("ent:g", "Italy"), e("wd:Q142", "France")
+stories = [
+  {"publication_id": "p1", "title": "one", "entities": [A, B, C]},
+  {"publication_id": "p2", "title": "two", "entities": [D, E, F, A]},
+  {"publication_id": "p3", "title": "three", "entities": [G]},
+  {"publication_id": "p4", "title": "four"},
+  {"publication_id": "p5", "title": "five"},
+  {"publication_id": "p6", "title": "six", "entities": [W, G]},
+]
+json.dump({"stories": stories, "next_cursor": ""}, open(root + "/ent_front.json", "w"))
+json.dump({"lexicon": {"entities": 6690, "keys": 9120, "stopwords": 34}, "stoplist": ["AI"], "days": []}, open(root + "/ent_growth.json", "w"))
+many = [{"publication_id": "q%d" % i, "title": "t", "entities": [e("ent:x%d" % i, "Zq" + chr(97 + i // 26) + chr(97 + i % 26) + " Beta"), e("ent:y%d" % i, "Zq" + chr(97 + i // 26) + chr(97 + i % 26))]} for i in range(30)]
+json.dump({"stories": many, "next_cursor": ""}, open(root + "/ent_front_many.json", "w"))
+PY
+runent() { env -u BASH_ENV python3 "$entities" --front-fixture "$root/ent_front.json" --growth-fixture "$root/ent_growth.json" "$@" >"$root/out" 2>&1; echo $? >"$root/rc"; }
+runent --newest 6
+check "N1 entities total is the lexicon count and kind is said to be unavailable" 'grep -q "^entities total  6690" "$root/out" && grep -q "^by kind  unavailable" "$root/out"'
+check "N2 stories 6, with entities 4, without 2" 'grep -q "^stories  6 newest: 4 with entities (66.7%), 2 without" "$root/out"'
+runent --newest 5
+check "N2 only the newest N: 5 stories, 3 with, 2 without" 'grep -q "^stories  5 newest: 3 with entities (60.0%), 2 without" "$root/out"'
+runent --newest 6
+check "N3 per story over stories with entities (3,4,1,2): median 2.5, p90 4" 'grep -q "^attachments per story  median 2.5  p90 4  max 4" "$root/out"'
+check "N4 six entities sit on one story, of 8 distinct in the window" 'grep -q "^entities on one story only  6 of 8 distinct" "$root/out"'
+check "N5 two duplicate candidates: Trump / Donald Trump and UAE / United Arab Emirates, nothing else" 'grep -q "^duplicate candidates  2 " "$root/out" && grep -q "Trump  /  Donald Trump" "$root/out" && grep -q "UAE  /  United Arab Emirates" "$root/out" && ! grep -q "Italy  /  France" "$root/out"'
+check "N6 two non-entity candidates: Chinese, Health; not Italy" 'grep -q "^non-entity candidates  2 " "$root/out" && grep -q "Chinese" "$root/out" && grep -q "Health" "$root/out" && ! grep -q "Italy .*(stories" "$root/out"'
+check "N7 one of 8 distinct entities carries a Wikidata id" 'grep -q "^wikidata  1 of 8 distinct (12.5%)" "$root/out"'
+check "N8 the last line is one line, under 200 chars, with the counts" '[ "$(cat "$root/rc")" = 0 ] && [ "$(tail -n 1 "$root/out" | wc -c)" -lt 200 ] && tail -n 1 "$root/out" | grep -q "^entities: .*dup 2 .*non-entity 2"'
+env -u BASH_ENV python3 "$entities" --front-fixture "$root/ent_front_many.json" --growth-fixture "$root/ent_growth.json" --newest 30 >"$root/out" 2>&1
+check "N5 the count is the total (30) and the list holds 20" 'grep -q "^duplicate candidates  30 " "$root/out" && [ "$(grep -c "  /  " "$root/out")" = 20 ]'
+runent --newest 6 --json
+check "N8 json carries the numbers" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"stories\"]==6 and d[\"with_entities\"]==4 and d[\"dup_count\"]==2 and d[\"nonentity_count\"]==2 and d[\"entities_total\"]==6690" "$root/out"'
+env -u BASH_ENV python3 "$entities" --front-fixture "$root/nonexistent.json" --growth-fixture "$root/ent_growth.json" >"$root/out" 2>&1; rc=$?
+check "N8 an unreadable fixture exits 2" '[ "$rc" = 2 ]'
+
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

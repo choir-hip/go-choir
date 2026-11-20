@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""status-entities: how good the story entity layer is, from the two public
+reads that exist (station E0 of docs/design/entity-layer-2026-11-20.md).
+
+Read only, no key, no ssh: two public routes on the paper's site.
+  GET /api/platform/publications/front?limit=100[&cursor=C]   the newest stories, each with its
+      central entities as {id, label} (at most 12 a story, role central only)
+  GET /api/platform/entities/growth                           the lexicon counts (entities, keys, stopwords)
+Fetching and computing are separate: fetch() returns the parsed reads, compute() is pure.
+--front-fixture FILE and --growth-fixture FILE feed compute() with no network
+(scripts/test-status-scripts.sh).
+
+  status-entities [--newest N] [--base URL] [--sample K --seed S] [--json]
+                  [--front-fixture FILE] [--growth-fixture FILE]
+
+--newest N   the newest N stories (default 300; the front list is paged 100 at a time, one request a second).
+--sample K   print K attachments (story title, entity id, label) drawn with random.Random(S) from the
+             attachments of the newest N stories sorted by (publication id, entity id): rerun with the same
+             seed and the same stories and you get the same rows. Default seed 20261120.
+Exit 0, or 2 when a read failed.
+
+What the public reads cannot tell (said in the output, never guessed):
+  - an entity's kind (person, organisation, place ...), aliases and Wikidata id are not served; the Wikidata
+    share is read from the id prefix (wd:) only. Kind is "unavailable". The row body is {id, label} (E5 in
+    internal/platform/publication_story_entities_read.go).
+  - only central attachments are served, at most 12 a story: the counts are of those.
+  - "entities total" is the whole lexicon (growth read), over all stories since 2026-10-26; every other
+    number is over the newest N stories.
+
+The two rules, deterministic, written here so a later station can be scored against the same ones:
+  duplicate candidate  two distinct ids in the window whose normalised labels (lower case, accents and
+      punctuation dropped, "the" dropped) are such that one's tokens are a proper subset of the other's
+      ("Trump" / "Donald Trump"), or one is an all-capitals form whose letters are the initials of the
+      other's tokens ("UAE" / "United Arab Emirates"). Alias overlap needs aliases, which are not public.
+  non-entity candidate  a label that is one token and is a demonym or adjective (list DEMONYMS), or is a
+      common word, role or topic (list COMMON), or has no capital letter, or is only digits and
+      punctuation. A one-token real name ("Italy") is not flagged.
+The lists are deliberately short and are the owner of the rule: a name the lists miss is a miss.
+"""
+import argparse
+import json
+import math
+import random
+import re
+import sys
+import time
+import unicodedata
+import urllib.request
+
+BASE = "https://choir.news"
+TOP = 20
+
+DEMONYMS = set("""chinese indian american russian canadian haitian somali british french german italian japanese korean
+israeli iranian palestinian ukrainian european african asian western eastern northern southern arab muslim jewish
+christian turkish mexican brazilian spanish dutch swedish polish greek egyptian saudi syrian iraqi afghan pakistani
+australian irish scottish welsh cuban venezuelan argentine colombian lebanese yemeni sudanese ethiopian nigerian
+kenyan federal national global international republican democratic conservative liberal""".split())
+COMMON = set("""health pedestrian vote votes national officer officers women men energy city legislation parliament
+council committee government courts school schools state states president minister mayor senator
+report reports news today city company companies market markets economy business
+politics election elections war peace trade tax taxes money bank banks security defense defence military
+law laws bill bills nothing neon gulf ipo ai api million billion thousands hundreds dozens early major
+nearly record online social official officials details calls young people family children students""".split())
+STOP_TOKENS = {"the", "of", "and", "for", "de", "la", "le", "von", "van"}
+
+
+def norm_tokens(label):
+    s = unicodedata.normalize("NFKD", label)
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    toks = re.findall(r"[a-z0-9]+", s)
+    return [t for t in toks if t != "the"]
+
+
+def initials_of(label):
+    toks = [t for t in re.findall(r"[A-Za-z0-9]+", label) if t.lower() not in STOP_TOKENS]
+    return "".join(t[0] for t in toks).lower()
+
+
+def all_caps_form(label):
+    letters = re.sub(r"[^A-Za-z]", "", label)
+    return len(letters) >= 2 and letters.isupper()
+
+
+def non_entity_reason(label):
+    toks = re.findall(r"[^\W_]+", label, flags=re.UNICODE)
+    if not toks or not any(c.isalpha() for c in label):
+        return "no letters"
+    if not any(c.isupper() for c in label):
+        return "no capital"
+    if len(toks) == 1:
+        w = toks[0].lower()
+        if w in DEMONYMS:
+            return "demonym or adjective"
+        if w in COMMON:
+            return "common word"
+    return ""
+
+
+def pct(a, b):
+    return "%.1f%%" % (100.0 * a / b) if b else "-"
+
+
+def nearest_rank(sorted_vals, p):
+    if not sorted_vals:
+        return 0
+    return sorted_vals[max(0, math.ceil(p * len(sorted_vals)) - 1)]
+
+
+def median(sorted_vals):
+    n = len(sorted_vals)
+    if not n:
+        return 0
+    return sorted_vals[n // 2] if n % 2 else (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2.0
+
+
+def compute(stories, growth, newest, sample=0, seed=20261120):
+    stories = stories[:newest]
+    with_ent = [s for s in stories if s.get("entities")]
+    counts = sorted(len(s["entities"]) for s in with_ent)
+    story_ids = {}   # entity id -> set of story ids
+    label = {}
+    for s in stories:
+        for e in s.get("entities") or []:
+            story_ids.setdefault(e["id"], set()).add(s["publication_id"])
+            label.setdefault(e["id"], e["label"])
+    nstory = {i: len(v) for i, v in story_ids.items()}
+    distinct = len(story_ids)
+    once = sum(1 for n in nstory.values() if n == 1)
+    wd = sum(1 for i in story_ids if i.startswith("wd:"))
+
+    # duplicate candidates: containment and initials
+    toks = {i: norm_tokens(l) for i, l in label.items()}
+    byfirst = {}
+    for i, t in toks.items():
+        for w in set(t):
+            byfirst.setdefault(w, set()).add(i)
+    pairs = {}
+    for a, ta in toks.items():
+        if not ta:
+            continue
+        # containment: every token of a in b, b strictly longer
+        cands = set.intersection(*[byfirst[w] for w in set(ta)])
+        for b in cands:
+            if b != a and set(ta) < set(toks[b]):
+                pairs[frozenset((a, b))] = ("containment", a, b)
+        if all_caps_form(label[a]):
+            ini = re.sub(r"[^a-z0-9]", "", label[a].lower())
+            for b, lb in label.items():
+                if b != a and not all_caps_form(lb) and len(toks[b]) >= 2 and initials_of(lb) == ini:
+                    pairs[frozenset((a, b))] = ("initials", a, b)
+    plist = []
+    for how, a, b in pairs.values():
+        plist.append({"how": how, "a": label[a], "b": label[b], "a_id": a, "b_id": b,
+                      "stories": nstory[a] + nstory[b]})
+    plist.sort(key=lambda p: (-p["stories"], p["a"], p["b"]))
+
+    ne = []
+    for i, l in label.items():
+        r = non_entity_reason(l)
+        if r:
+            ne.append({"label": l, "id": i, "reason": r, "stories": nstory[i]})
+    ne.sort(key=lambda p: (-p["stories"], p["label"]))
+
+    rep = {
+        "entities_total": (growth.get("lexicon") or {}).get("entities"),
+        "lexicon_keys": (growth.get("lexicon") or {}).get("keys"),
+        "stopwords": (growth.get("lexicon") or {}).get("stopwords"),
+        "stories": len(stories), "with_entities": len(with_ent), "without_entities": len(stories) - len(with_ent),
+        "per_story_median": median(counts), "per_story_p90": nearest_rank(counts, 0.9),
+        "per_story_max": counts[-1] if counts else 0, "attachments": sum(counts),
+        "distinct": distinct, "one_story": once, "wikidata": wd,
+        "dup_count": len(plist), "dup_top": plist[:TOP],
+        "nonentity_count": len(ne), "nonentity_top": ne[:TOP],
+    }
+    if sample:
+        rows = sorted((s["publication_id"], e["id"], s.get("title", ""), e["label"])
+                      for s in stories for e in (s.get("entities") or []))
+        rng = random.Random(seed)
+        rep["sample"] = {"seed": seed, "of": len(rows), "rows": rng.sample(rows, min(sample, len(rows)))}
+    lines = []
+    ent = rep["entities_total"]
+    lines.append("entities total  %s in the lexicon (%s keys, %s stopwords)" % (ent if ent is not None else "unknown", rep["lexicon_keys"], rep["stopwords"]))
+    lines.append("by kind  unavailable: the public reads serve {id, label} only")
+    lines.append("stories  %d newest: %d with entities (%s), %d without" % (rep["stories"], rep["with_entities"], pct(rep["with_entities"], rep["stories"]), rep["without_entities"]))
+    lines.append("attachments per story  median %s  p90 %s  max %s  (over stories with entities; %d central attachments; the read serves at most 12)" % (
+        "%g" % rep["per_story_median"], rep["per_story_p90"], rep["per_story_max"], rep["attachments"]))
+    lines.append("entities on one story only  %d of %d distinct (%s)" % (once, distinct, pct(once, distinct)))
+    lines.append("wikidata  %d of %d distinct (%s)  (id prefix wd:; the field itself is not served)" % (wd, distinct, pct(wd, distinct)))
+    lines.append("duplicate candidates  %d pairs (containment or initials; alias overlap needs aliases, not public); top %d by stories:" % (len(plist), min(TOP, len(plist))))
+    for p in plist[:TOP]:
+        lines.append("  %s  /  %s  (%s, %d stories)" % (p["a"], p["b"], p["how"], p["stories"]))
+    lines.append("non-entity candidates  %d labels (one demonym or common word, no capital, no letters); top %d by stories:" % (len(ne), min(TOP, len(ne))))
+    for p in ne[:TOP]:
+        lines.append("  %s  (%s, %d stories)" % (p["label"], p["reason"], p["stories"]))
+    if sample:
+        sm = rep["sample"]
+        lines.append("sample  %d of %d attachments, seed %d (publication id, entity id, title, label):" % (len(sm["rows"]), sm["of"], sm["seed"]))
+        for r in sm["rows"]:
+            lines.append("  " + "\t".join(r))
+    lines.append("entities: %s lexicon; %d stories, %s with entities; %d attachments (median %g a story, p90 %s); %s on one story only; wikidata %s; dup %d pairs; non-entity %d labels" % (
+        ent if ent is not None else "?", rep["stories"], pct(rep["with_entities"], rep["stories"]), rep["attachments"],
+        rep["per_story_median"], rep["per_story_p90"], pct(once, distinct), pct(wd, distinct), len(plist), len(ne)))
+    rep["text"] = "\n".join(lines)
+    return rep
+
+
+def get_json(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "status-entities/1"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def fetch(base, newest):
+    stories, cursor = [], ""
+    while len(stories) < newest:
+        url = "%s/api/platform/publications/front?limit=100%s" % (base, ("&cursor=" + cursor) if cursor else "")
+        page = get_json(url)
+        stories += page.get("stories") or []
+        cursor = page.get("next_cursor") or ""
+        if not cursor:
+            break
+        time.sleep(1)   # one request a second
+    time.sleep(1)
+    growth = get_json(base + "/api/platform/entities/growth")
+    return stories, growth
+
+
+def main(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--newest", type=int, default=300)
+    ap.add_argument("--base", default=BASE)
+    ap.add_argument("--sample", type=int, default=0)
+    ap.add_argument("--seed", type=int, default=20261120)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--front-fixture")
+    ap.add_argument("--growth-fixture")
+    a = ap.parse_args(argv)
+    try:
+        if a.front_fixture or a.growth_fixture:
+            with open(a.front_fixture) as f:
+                stories = json.load(f).get("stories") or []
+            with open(a.growth_fixture) as f:
+                growth = json.load(f)
+        else:
+            stories, growth = fetch(a.base.rstrip("/"), a.newest)
+    except Exception as e:
+        print("status-entities: read failed: %s" % e, file=sys.stderr)
+        return 2
+    rep = compute(stories, growth, a.newest, a.sample, a.seed)
+    print(json.dumps({k: v for k, v in rep.items() if k != "text"}, indent=1) if a.json else rep["text"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
