@@ -459,10 +459,11 @@ function serverWords(e: unknown): string {
   return m ? m[1] : '';
 }
 
+import { WORDS } from './words.ts';
 export function words(e: unknown): Words {
   const name = (e as { name?: string } | null)?.name ?? '';
   const message = String((e as Error | null)?.message ?? '');
-  if (name === 'SignedOutError') return { status: 'error', message: 'Sign in again to read your mail.' };
+  if (name === 'SignedOutError') { const reason = (e as { reason?: string }).reason; return { status: 'error', message: reason === 'locked' ? WORDS.locked : reason === 'unknown' ? WORDS.unknown : reason === 'refused' ? 'Sign in again to read your mail.' : 'Sign in to read your mail.' }; }
   const status = statusOf(e);
   if (status === 401) return { status: 'error', message: 'Sign in again to read your mail.' };
   if (status === 403) return { status: 'error', message: 'This phone is not allowed to do that yet.' };

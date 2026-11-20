@@ -144,7 +144,7 @@ describe('F7 to F9 the listing', () => {
   test('F8 a missing folder, a refused key and an unreachable computer each end in a stated error', async () => {
     const miss = await list({ path: '/Nope' }); expect(miss.status).toBe('error'); expect(miss.message).toBe('That file is not there any more.'); expect(miss.rows).toEqual([]);
     fail = () => Object.assign(new Error('x'), { status: 401 }); expect((await list()).message).toBe('Sign in again to see your files.');
-    fail = () => new SignedOutError('no session'); expect((await list()).message).toBe('Sign in again to see your files.');
+    fail = () => new SignedOutError('no session'); expect((await list()).message).toBe('Sign in to see your files.');
     fail = () => Object.assign(new Error('x'), { status: 403 }); expect((await list()).message).toBe('This device is not allowed to read files.');
     fail = () => new Error('offline'); expect((await list()).message).toBe('Could not reach your computer. Check the connection and try again.');
     tree['/Documents'] = []; fail = null;
@@ -280,7 +280,7 @@ describe('F11 a file that is another page\'s document', () => {
   });
   test('fileOpen of a PDF page answers the same target, and the page can show an error', async () => {
     fail = (c) => (c.path === '/api/texture/files/open' ? new SignedOutError('x') : null);
-    const i = await open('file:/Lantern report.pdf'); expect(i.status).toBe('error'); expect(i.message).toContain('Sign in again');
+    const i = await open('file:/Lantern report.pdf'); expect(i.status).toBe('error'); expect(i.message).toContain('Sign in');
   });
 });
 

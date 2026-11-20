@@ -8,6 +8,7 @@
 //   mail-unread, mail-note, mail-body, mail-quoted-toggle, mail-original-frame, mail-saved-note, mail-attachment-<id>, mail-thread-<id>,
 //   mail-field-to, mail-field-subject, mail-field-body, mail-save, mail-draft-status, mail-approval, mail-open-review.
 use Theme, DemoInfo from "@choir/autoradio"
+use AccountView from "./account-state-types.contract"
 use MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
 use PageScroll, Card, Btn, ChoiceWord, RowRule, dyn from "./ui.contract"
 use Swap, SkeletonRows, SkeletonBody, tLayout, tOut from "./transitions.contract"
@@ -71,6 +72,7 @@ fn mailLabel(n: string): string = n == "inbox" ? "Inbox" : (n == "drafts" ? "Dra
 component MailboxPage
   inject
     th: Theme
+    acs: AccountView
     mbx: MailBoxView
     mfr: MailBoxView
     msy: MailSyncView
@@ -92,8 +94,9 @@ component MailboxPage
     PageScroll(id="mailbox")
       row align-items="center" gap=12
         text "Mail" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 testId="page-title" flex=1
-        button press=openPage("mail:new", "New message") testId="mail-compose" appearance="none"
-          Btn(label="New message", primary=false, wide=false)
+        if acs.state == "signedIn"
+          button press=openPage("mail:new", "New message") testId="mail-compose" appearance="none"
+            Btn(label="New message", primary=false, wide=false)
       row flex-wrap="wrap" gap=8 width="100%"
         for n in tabs key=n
           button press=mailTab(n) testId=`mail-folder-${n}` appearance="none" padding="0px 12px 0px 0px"

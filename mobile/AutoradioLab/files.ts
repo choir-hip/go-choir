@@ -8,6 +8,7 @@
 //          e-book is read by the computer (decision D4: it extracts the text; the phone shows and speaks it), text, Markdown and code open the same way.
 // Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
 import type { Storage } from './app.contract.d.ts';
+import { WORDS } from './words.ts';
 import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
 import demoTree from './fixtures/files-demo/tree.json';
 import * as M from './files-model.ts';
@@ -27,7 +28,7 @@ export class FilesError extends Error {
 }
 export const say = (e: unknown): string => {
   if (e instanceof FilesError) return e.message;
-  if (e instanceof SignedOutError) return 'Sign in again to see your files.';
+  if (e instanceof SignedOutError) return e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : e.reason === 'refused' ? 'Sign in again to see your files.' : 'Sign in to see your files.';
   const status = (e as { status?: number })?.status;
   if (status === 401) return 'Sign in again to see your files.';
   if (status === 403) return 'This device is not allowed to read files.';

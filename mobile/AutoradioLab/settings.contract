@@ -14,6 +14,7 @@
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsComputer, LearnedInfo, AboutInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
 use SettingsAccount from "./settings-types.contract"
+use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
 use SkeletonLine from "./transitions.contract"
@@ -335,12 +336,14 @@ component AccountScreen
     signOutNote: string
     refreshAccount: action
     signOut: action
+    signIn: action
+    acs: AccountView
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Account and devices", back=true)
       PlainList(testId="settings-card-account")
         column width="100%" box-sizing="border-box" padding="6px 0"
-          FactRow(label="Signed in", value=(au.signedIn ? "Yes" : "No"), mono=false, testId="settings-account-signed")
+          FactRow(label="Signed in", value=(au.signedIn ? "Yes" : (acs.state == "locked" or acs.state == "unknown" ? "Not known" : "No")), mono=false, testId="settings-account-signed")
           Hairline()
           FactRow(label="You are", value=(acctInfo.handle == "" ? "Not shown yet" : acctInfo.handle), mono=false, testId="settings-account-handle")
           Hairline()
@@ -353,17 +356,23 @@ component AccountScreen
           FactRow(label="Computer", value=(acctInfo.computerID == "" ? "-" : acctInfo.computerID), mono=true, testId="settings-account-computer")
           Hairline()
           FactRow(label="Server", value=(acctInfo.baseURL == "" ? "-" : acctInfo.baseURL), mono=true, testId="settings-account-server")
-      if acctInfo.message != ""
+      if acctInfo.message != "" and acs.state != "locked" and acs.state != "unknown"
         text acctInfo.message testId="settings-account-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
       if acctInfo.status == "loading"
         SkeletonLine(testId="settings-account-skeleton")
       // A sign-out that did not finish says so here (account.ts answers the words; a clean one leaves the page, so nothing shows).
       if signOutNote != ""
         text signOutNote testId="settings-signout-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.danger
+      if acs.message != ""
+        text acs.message testId="settings-account-state" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.fg
       text "This phone holds its own key. Signing out removes the key from this phone and ends it on the server. Your computer and your documents stay where they are." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
       row gap=12 width="100%"
         button press=refreshAccount testId="settings-account-refresh" appearance="none"
           ActionButton(label="Refresh", testId="settings-account-refresh-box", primary=false, danger=false)
+        // Signed out (or refused): the way in is HERE, where it says "Signed in: No". A locked phone has none (it says to unlock).
+        if acs.action == "signIn"
+          button press=signIn testId="settings-signin" appearance="none"
+            ActionButton(label="Sign in", testId="settings-signin-box", primary=true, danger=false)
         if au.signedIn
           button press=signOut testId="settings-signout" appearance="none"
             ActionButton(label="Sign out", testId="settings-signout-box", primary=false, danger=true)

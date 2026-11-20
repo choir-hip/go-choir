@@ -50,8 +50,11 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
 // There is no refresh: the key is long-lived and the server answers 401 when it is revoked (the Swift client did the same).
 
 /** The listener has no usable session: nothing was kept, or the server refused the key (401). Pages answer their sign-in state. */
+/** Why there is no session: `none` (no key), `locked` (the key exists but cannot be read yet: before the first unlock), `refused` (the server refused the key, a 401). Pages say a different thing for each. */
+export type SignedOutReason = 'none' | 'locked' | 'refused' | 'unknown';
 export class SignedOutError extends Error {
-  constructor(message = 'not signed in') { super(message); this.name = 'SignedOutError'; }
+  reason: SignedOutReason;
+  constructor(message = 'not signed in', reason: SignedOutReason = 'none') { super(message); this.name = 'SignedOutError'; this.reason = reason; }
 }
 
 /** The server answered a status outside 200 to 299 (other than 401). `message` is only the server's own short `error` string. */
@@ -96,6 +99,12 @@ async function keptItem(account: Account): Promise<string | null> {
   return r && r.found === true && typeof r.value === 'string' && r.value !== '' ? r.value : null;
 }
 
+/** No session: is the key absent, or only unreadable (locked)? One read-only native question. */
+async function noSessionReason(): Promise<SignedOutReason> {
+  if (!reader) return 'none';                                // no handle at all: the host has no key store; the page says there is nothing signed in (the card says whether signing in exists)
+  try { const r = (await reader?.later({ op: 'keystate' })) as { state?: unknown } | null | undefined; return r && r.state === 'unreadable' ? 'locked' : r && r.state === 'absent' ? 'none' : 'unknown'; } catch { return 'unknown'; }       // a bridge that throws or says nothing: say so, never "sign in"
+}
+
 /** The key and the computer id in ONE native read: a sign-out or a new sign-in between two reads cannot pair an old key with a new computer. */
 let lastFlags = '';
 async function keptSession(): Promise<{ key: string; computerId: string } | null> {
@@ -114,6 +123,7 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
 // also answers "not found" in demo (CredentialReader.swift), for the sources that carry no flag.
 let demoOn = false;
 export function setDemo(on: boolean): void { if (on) demoOn = true; }
+export const isDemo = (): boolean => demoOn;
 
 // ACCOUNT GENERATION (finding 5). Bumped by sign-out before the wipes. A reply that started under an older generation is dropped as signed out,
 // so a request in flight at sign-out can never write the old account's data back into a store the wipe just emptied.
@@ -186,7 +196,7 @@ async function send(path: string, opts: Authed, accept: string, extra: Record<st
   if (!plainPath(path)) throw new Error('refused: a signed-in path is a plain absolute path on the server');
   if (demoOn) throw new SignedOutError('demo mode makes no signed-in request');
   const sess = await keptSession();
-  if (!sess) throw new SignedOutError();
+  if (!sess) throw new SignedOutError('not signed in', await noSessionReason());
   const key = sess.key;
   if (blockedDigest !== null && (await digestOf(key)) !== blockedDigest) blockedDigest = null;      // another account signed in: a new session
   const headers: Record<string, string> = { ...(opts.headers ?? {}), Accept: accept, Authorization: `Bearer ${key}` };
@@ -237,9 +247,13 @@ async function computerId(key: string, kept: string): Promise<string> {
   return discovering.p;
 }
 
+/** The digest of the key the server last refused (a 401): the account state says "rejected" while that key is the stored one, and another key clears it. */
+let rejected = '';
+export const rejectedDigest = (): string => rejected;
+export const hasNativeHandle = (): boolean => !!reader && reader.available !== false;
 async function check(r: Response, path: string, key: string): Promise<void> {
-  if (r.ok) return;
-  if (r.status === 401) throw new SignedOutError('the key was refused; sign in again');
+  if (r.ok) { rejected = ''; return; }                                // the server took the key again: it is no longer refused
+  if (r.status === 401) { try { rejected = await digestOf(key); } catch { /* the digest is a convenience */ } throw new SignedOutError('the key was refused; sign in again', 'refused'); }
   let msg = '';
   try { const o = JSON.parse(await r.text()); if (o && typeof o.error === 'string') msg = scrub(o.error, key).slice(0, 200); } catch { /* the server's string only; never the body */ }
   const retry = Number(r.headers.get('retry-after'));
@@ -291,7 +305,7 @@ export async function authedToFile(path: string, dest: string, storage: Storage 
 export type KeyState = 'present' | 'absent' | 'unreadable';
 /** The stored sign-in key as THREE answers (review 2026-11-19, auth round 2): `present` (with the SHA-256 of the key), `absent` (the Keychain answered item-not-found) or
  * `unreadable` (locked before the first unlock, any other status, no native module, demo mode, a bridge error). Read only. `unreadable` is never "signed out". */
-export async function keyState(): Promise<{ state: KeyState; digest: string }> {
+export async function keyState(): Promise<{ state: KeyState; digest: string; error?: boolean }> {
   const none = { state: 'unreadable' as KeyState, digest: '' };
   if (demoOn || !reader || reader.available === false) return none;
   try {
@@ -301,13 +315,13 @@ export async function keyState(): Promise<{ state: KeyState; digest: string }> {
     if (st !== 'present') return { state: st, digest: '' };
     const sess = await keptSession();
     return sess ? { state: 'present', digest: await digestOf(sess.key) } : none;
-  } catch { return none; }
+  } catch { return { ...none, error: true }; }
 }
 
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: leave demo mode and the generation as a fresh process has them. */
-export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; }
+export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

@@ -8,6 +8,7 @@ import { settingsAccount } from './settings.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
+import { accountState } from './account-state.ts';
 import { readerDocShared } from './reader.ts';
 import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
@@ -58,7 +59,8 @@ const sources: Sources = {
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
-  hostCaps: async ([nativeSeen]) => ({ mode: await hostMode(4000, 1500, nativeSeen) }),
+  accountState: ([tick, top, demo, host]) => accountState(tick, top, demo, host),
+  hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
@@ -77,8 +79,8 @@ const sources: Sources = {
   showClips: ([address, tick]) => showClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
   // Files (files.ts): the listener's computer's files. Positional arguments, demo first.
-  fileList: ([demo, path, mode, sort, desc, query], _s, storage) => fileList({ demo, path, mode, sort, desc, query }, storage),
-  fileOpen: ([demo, address], _s, storage) => fileOpen({ demo, address }, storage),
+  fileList: ([demo, path, mode, sort, desc, query, _acct], _s, storage) => fileList({ demo, path, mode, sort, desc, query }, storage),
+  fileOpen: ([demo, address, _acct], _s, storage) => fileOpen({ demo, address }, storage),
   fileResolve: ([demo, address, title], _s, storage) => fileResolve({ demo, address, title }, storage),
   fileMkdir: ([demo, dir, name], _s, storage) => fileMkdir({ demo, dir, name }, storage),
   fileDelete: ([demo, path], _s, storage) => fileDelete({ demo, path }, storage),
@@ -86,10 +88,10 @@ const sources: Sources = {
   fileUpload: ([demo, from, name, dir], _s, storage) => fileUpload({ demo, from, name, dir }, storage),
   paperFront: ([view, edition, width, tick, focus, picks, demo], _store, storage) => paperFront({ view, edition, width, tick, focus, picks, demo }, storage),
   // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
-  mailBox: ([address, demo], _store, storage) => mail.mailBox(address, demo, { storage }),
+  mailBox: ([address, demo, _acct], _store, storage) => mail.mailBox(address, demo, { storage }),
   mailFrame: ([address, demo], _store, storage) => mail.mailFrame(address, demo, { storage }),
   mailSync: ([address, demo], _store, storage) => mail.mailSync(address, demo, { storage }),
-  mailMessage: ([address, demo, original], _store, storage) => mail.mailMessage(address, demo, original, { storage }),
+  mailMessage: ([address, demo, original, _acct], _store, storage) => mail.mailMessage(address, demo, original, { storage }),
   mailCompose: ([address, demo], _store, storage) => mail.mailCompose(address, demo, { storage }),
   mailSaveDraft: ([address, to, subject, body, demo]) => mail.mailSaveDraft(address, to, subject, body, demo),
   mailApprovalEmail: ([address, draft, demo]) => mail.mailApprovalEmail(address, draft, demo),
@@ -99,7 +101,7 @@ const sources: Sources = {
 // Where the demo flag sits in a source's arguments (the sources that carry it). The signed-in seam is told at every answer; once in demo it stays
 // in demo until the process ends (api.ts `setDemo`), and the native reader answers "not found" in demo for the sources that carry no flag.
 export const DEMO_AT: Record<string, number> = {
-  settingsAccount: 1, accountSignOut: 0, mailBox: 1, mailFrame: 1, mailSync: 1, mailMessage: 1, mailCompose: 1, mailSaveDraft: 4, mailApprovalEmail: 2, mailMarkUnread: 1,
+  settingsAccount: 1, accountState: 2, accountSignOut: 0, mailBox: 1, mailFrame: 1, mailSync: 1, mailMessage: 1, mailCompose: 1, mailSaveDraft: 4, mailApprovalEmail: 2, mailMarkUnread: 1,
   fileList: 0, fileOpen: 0, fileResolve: 0, fileMkdir: 0, fileDelete: 0, fileRename: 0, fileUpload: 0, paperFront: 6,
 };
 export const answer: Answer = async (source, args, store, storage, native) => {

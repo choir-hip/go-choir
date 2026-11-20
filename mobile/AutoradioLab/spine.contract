@@ -9,7 +9,7 @@ use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 members Autoradio
   // Is there a native package? (host.ts: decided once from the native handle, never from what the native set holds). "none" is Android; "" (not decided) and "native" are iOS.
-  resource hc = hostCaps(pgn.top != "") as shape HostCaps else empty()
+  resource hc = hostCaps(pgn.top != "", lockTick) as shape HostCaps else empty()
   derive noNative = hc.mode == "none"
   // The open pages. The Swift package's set (pgn) where there is a package; the SHARED set (pgs, pages.ts, kept in storage.fs) where there is none, so the deck mounts a page with no native code.
   // Every open, close, pin and reopen is sent to both; on iOS the shared set is kept but never read. A failed or empty native answer keeps its last value (the slot keeps what it had).

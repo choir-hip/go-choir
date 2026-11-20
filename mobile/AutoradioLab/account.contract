@@ -5,11 +5,30 @@ use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPa
 use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
 use LabState from "@choir/autoradio"
 use SignOutResult from "./account-types.contract"
+use AccountView, HostPage from "./account-state-types.contract"
 
 members Autoradio
   resource au = choirAuth() as shape ChoirAuth else empty()
   resource pl = choirPlayer() as shape ChoirPlayer else empty()
   resource sl = choirStories() as shape StoryList else empty()
+  // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, a page change, the app coming back to the front (the phone
+  // unlocked: a key that could not be read yet is read again). An unreadable key is "locked", never "signed out".
+  resource hpg = exactPage() as shape HostPage else empty()
+  // The tick: anything that can change the answer. The app coming back to the front (visibility, focus), a sign-in flow's progress (au.status, au.message), a sign-out (the epoch), a page change, the host fact and demo mode (every input of the answer is in the tick). NOT the statuses of other pages' sources: a resource is asked only when something reads it, so waiting on them left the card unanswered at launch (found by the signed-out tour). A refusal (401) shows at the next page change or return to the front, and a counter that moves every 3 s while the key is locked, so "locked" cannot stick if no event arrives.
+  state lockTick = 0
+  action bumpLock
+    lockTick = lockTick + 1
+  // Also re-asked (with the host fact, spine.contract hc) while the answer is open: an unreadable key, a handle not bound yet, a host with no sign-in: a native module that arrives late corrects the state without a page change.
+  task rereadLocked when acs.state == "locked" or acs.state == "unknown" or acs.state == "noSignIn" key=lockTick
+    after(3000, bumpLock)
+  // A page that hit a refusal (the server said 401 to this phone's key: api.ts records it) shows its error; the account sentence is asked again at that moment, not at the next tick, so the card
+  // appears when it happens. Any error asks again (the answer is the same when the error was only the network): one keystate read.
+  task noteRefusal when mbx.status == "error" or fsList.status == "error" key=pg.top
+    after(100, bumpLock)
+  // The card is the first thing in the bar's own column (bar.contract), so it sits whole above the bar at every bar height (the "On:" line, the now-playing strip, the answer card). Not over the code screen, a
+  // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
+  derive bannerOn = acs.message != "" and au.status != "pending" and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == ""
+  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${dm.on}`, pg.top, dm.on, hc.mode) as shape AccountView else empty()
   mutation acct as shape LabState
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult

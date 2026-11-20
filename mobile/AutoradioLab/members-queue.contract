@@ -1,6 +1,6 @@
 // Lane members file (queue): the one playback queue as the screens read it. Owned by lane autoradio-queue.
 // Source and sends are declared in exact-package/interface/queue.json. Every screen's Play and Add to queue go through queueAdd.
-use queueView, queueAdd, queueAct from "@choir/autoradio"
+use queueView, queueAdd, queueAct, choirPlay from "@choir/autoradio"
 use QueueInfo from "@choir/autoradio"
 use StackVp from "./ui.contract"
 
@@ -17,6 +17,12 @@ members Autoradio
   // An audio file from Files: the page has brought it to an app file (`local`, under app:/cache/files); the run sheet's player plays it from there.
   action queueFilePlay(mode: string, address: string, local: string, title: string)
     send qm = queueAdd(mode=mode, kind="file", ref=address, title=title, local=local)
+  // Signed out the radio reads the PUBLIC paper: the first story now (the native player), the second queued after it. The rows of the radio page play or queue their own.
+  action playPublic(first: string, firstTitle: string, second: string, secondTitle: string)
+    if first != ""
+      send acct = choirPlay(route=first, title=firstTitle)
+    if second != ""
+      send qm = queueAdd(mode="add", kind="story", ref=second, title=secondTitle, local="")
   // toggle | back15 | fwd15 | keep | remove | playAt | skip | clear | openWeb | closeWeb
   action queueDo(op: string, arg: string)
     send qm = queueAct(op=op, arg=arg)

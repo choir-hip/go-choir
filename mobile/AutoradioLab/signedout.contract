@@ -1,0 +1,20 @@
+// Signed out (or locked, or refused) is a clear state with one way in, on every page (owner, 2026-11-20: "im logged out but no obvious way to sign in"). A slim card above the bar says what is true
+// (the sentence is account-state.ts, the app's one list) and, when signing in is the answer, the one plain action: the existing browser device flow (`signIn`). A locked phone gets the sentence
+// and no action. "Not now" on the paper's own line may hide that line; it never hides this.
+use Theme from "@choir/autoradio"
+use AccountView from "./account-state-types.contract"
+use Btn from "./ui.contract"
+
+component SignedOutBanner
+  inject
+    th: Theme
+    acs: AccountView
+    signIn: action
+  view
+    if acs.message != ""
+      // compact: the sentence (at most two lines) and the button side by side; no button where signing in is not possible or not the answer (a locked phone, a host with no native package)
+      row testId="signedout-banner" margin="0px 12px 8px 12px" gap=10 padding="8px 12px" align-items="center" box-sizing="border-box" background-color=th.paper2 border-radius=th.radiusCard box-shadow=th.shadow2
+        text acs.message testId="signedout-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-height=1.3 line-clamp=2 flex=1 min-width=0
+        if acs.action == "signIn"
+          button press=signIn testId="signedout-signin" appearance="none" flex-shrink=0 aria-label="Sign in"
+            Btn(label="Sign in", primary=true, wide=false)

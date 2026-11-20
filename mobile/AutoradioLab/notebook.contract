@@ -6,11 +6,13 @@
 // notebook-score-state, notebook-score-<n>, notebook-bykind-<n>, notebook-noverdict, notebook-behind, notebook-behind-text, notebook-evidence-<n>, notebook-evidence-note,
 // notebook-steer, notebook-held, notebook-held-<n>.
 use Theme, NotebookPageInfo from "@choir/autoradio"
+use AccountView from "./account-state-types.contract"
 use ToolScroll, Btn, SectionHeader, RowRule from "./ui.contract"
 
 component NotebookPage
   inject
     th: Theme
+    acs: AccountView
     nb: NotebookPageInfo
     notebookDo: action
     openPage: action
@@ -23,7 +25,7 @@ component NotebookPage
         text "My notebook" role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 color=th.fg testId="notebook-title"
         text "What Autoradio has been told about you, and what it has learned. You can change any line." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
         row gap=16 align-items="center"
-          if nb.docAddress != ""
+          if nb.docAddress != "" and acs.state == "signedIn"
             button press=openPage(nb.docAddress, "My notebook") testId="notebook-edit" appearance="none" aria-label="Open the notebook to edit it"
               Btn(label="Edit the notebook", primary=false, wide=false)
           button press=notebookDo("refresh", "") testId="notebook-refresh" appearance="none" aria-label="Refresh the notebook"

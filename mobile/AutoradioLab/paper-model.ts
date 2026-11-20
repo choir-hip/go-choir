@@ -103,10 +103,10 @@ export function relative(d: number | null, now: number): string {
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-/** "Wed 18 Nov", in UTC. */
+/** "Wed 18 Nov", the reader's LOCAL date (the radio's masthead is local too; this was UTC and showed tomorrow's date in the evening in the Americas). */
 export function dateLine(ms: number): string {
   const d = new Date(ms);
-  return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 // ---- topics (the house list and the ways a reader says one)

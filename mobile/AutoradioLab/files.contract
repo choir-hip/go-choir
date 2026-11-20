@@ -5,6 +5,7 @@
 // files-crumb-<path>, files-row-<path>, files-more-<path>, files-rename-input, files-rename-go, files-delete-<path>,
 // files-new-toggle, files-new-input, files-new-go, files-upload, files-banner, files-list, files-empty; page-title on every page.
 use Theme from "@choir/autoradio"
+use AccountView from "./account-state-types.contract"
 use FileListing, FileInfo, FileRow from "./files-types.contract"
 use PageScroll, Card, RowRule, PlainList from "./ui.contract"
 use Swap, SkeletonRows, SkeletonBody from "./transitions.contract"
@@ -115,6 +116,7 @@ component FileTile
 component FilesPlace
   inject
     th: Theme
+    acs: AccountView
     fsList: FileListing
     fsMode: string
     fsSort: string
@@ -143,14 +145,17 @@ component FilesPlace
       // the title with the two things you can add at its trailing edge, as Mail's New message is
       row align-items="center" gap=4 width="100%"
         text "Files" role="heading" aria-level=1 testId="page-title" font-size="-exact-large-title" font-weight=700 flex=1 min-width=0 font-family=th.fontHead
-        if fsMode == "browse"
+        // writing needs the owner's computer: no New folder, Add a file or search signed out (the card above the bar is the way in)
+        if fsMode == "browse" and acs.state == "signedIn"
           Chip(label="New folder", active=fsNewing, testId="files-new-toggle", press=fsNewToggle)
-        Chip(label="Add a file", active=false, testId="files-upload", press=fsUpload)
+        if acs.state == "signedIn"
+          Chip(label="Add a file", active=false, testId="files-upload", press=fsUpload)
       // Search the names under this folder (a bounded walk); Enter sends it. The field is the system's search field.
-      input type="search" value=fsDraft input=fsEditQuery submit=fsSearch placeholder="Search files" aria-label="Search files" testId="files-search"
-        enterkeyhint="search" font-family=th.fontLabel font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
-        ::placeholder
-          color=th.muted
+      if acs.state == "signedIn"
+        input type="search" value=fsDraft input=fsEditQuery submit=fsSearch placeholder="Search files" aria-label="Search files" testId="files-search"
+          enterkeyhint="search" font-family=th.fontLabel font-size=17 color=th.fg min-height=48 padding="8px 0px" border-width=0 background-color="transparent"
+          ::placeholder
+            color=th.muted
       RowRule(indent=0)
       // one row: the two modes (a set) at the left; at the right the sort (tap to change what it sorts by; the arrow turns it round) and the view
       row gap=4 align-items="center" width="100%" testId="files-sorts"
@@ -187,7 +192,7 @@ component FilesPlace
         SkeletonRows(rows=6, testId="files-skeleton")
       if fsList.status == "error"
         Card(level=1, testId="files-error", minHeight=0)
-          text fsList.message font-family=th.fontLabel font-size="-exact-subheadline" color=th.danger padding=16
+          text fsList.message font-family=th.fontLabel font-size="-exact-subheadline" color=(acs.state == "signedIn" ? th.danger : th.fg) padding=16
       if fsList.status == "empty"
         text fsList.message font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted testId="files-empty"
       if fsList.status == "ready" and fsGrid == false

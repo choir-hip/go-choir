@@ -8,6 +8,7 @@ use Theme, Page from "@choir/autoradio"
 shape StackVp
   width: number
   height: number
+  keyboardHeight: number
 
 // A size in points that follows Dynamic Type: rem is the system body size (17 at the default setting), so this is the same number of points by default.
 fn dyn(px: number): string = `${px / 17}rem`

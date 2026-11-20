@@ -22,6 +22,7 @@ use BarMark from "./tetramark.contract"
 use Launcher from "./launcher.contract"
 use StackVp from "./ui.contract"
 use ContentRow from "./content.contract"
+use SignedOutBanner from "./signedout.contract"
 use tRiseInOf, tRiseOutOf, tOut from "./transitions.contract"
 
 keyframes barPulse
@@ -67,6 +68,7 @@ component BarShell
     bi: BarInfo
     ri: RadioInfo
     raim: ReaderAimInfo
+    bannerOn: bool
     ob: Onboarding
     mmsg: MailMessageView
     vp: StackVp
@@ -125,6 +127,8 @@ component BarShell
   derive panelH = vp.height * 0.62
   view
     column testId="bar-stack" position="absolute" left=0 right=0 bottom=0 z-index=20
+      if bannerOn
+        SignedOutBanner()
       // the launcher rises from the lens; the lens stays under it, visible and usable
       if layer == "launcher"
         column testId="launcher" width="100%" height=panelH animation=enter -exact-exit-animation=leave

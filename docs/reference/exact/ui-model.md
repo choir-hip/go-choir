@@ -312,3 +312,16 @@ of the app plan said there was no such primitive; that was wrong. See
 - Do `wrap-flow` and `shape-outside` work with a rectangular box of a side note in a long `list virtualized` row, on iOS?
 - Does a package `UIView` that hosts SwiftUI size correctly inside a Contract
   list row (`intrinsicSize`, `events.intrinsicSize(...)`)?
+
+## Page facts (`exactPage`), what the app uses them for (2026-11-20)
+
+Read in the Exact checkout (`docs/contract-for-agents.md` near "exactPage answers", `docs/agent-pitfalls.md` "An on return task also runs at every launch"): `exactPage()` answers
+`visibilityState` (`visible` / `hidden`), `hasFocus`, `frozen`, `onLine`, `persisted`, `restores` and more, "by the web's names". The pitfalls page says the visibility behaviour was observed on the web and the
+iOS simulator (2026-10-06); it is NOT established here that an iPhone delivers `hidden` and `visible` when the phone locks and unlocks while the app is open. The app therefore does not depend on it alone:
+`account.contract` passes `visibilityState` and `hasFocus` into the account source's arguments (a change re-asks the key), AND a counter that moves every 3 s while the key is "locked", so a locked
+state cannot stick if no event arrives. A gated `task` runs at launch when its gate is already true, so a counter is used instead of an "on return" task.
+
+### The account states and the host wait (2026-11-20)
+
+One source decides the account sentence: `mobile/AutoradioLab/account-state.ts`, asked through `acs` (`account.contract`). States: `signedIn`, `signedOut` (no key: the card and its one Sign in action), `locked` (key unreadable before first unlock: "Unlock your phone to continue", no action), `rejected` (the server said 401 to this key: "sign in again", with the action), `noSignIn` (a host with no native package: no action), `unknown` (nothing rendered). Every Sign in action in the app (the card, Paper, onboarding, Settings) is shown only when `acs.action == "signIn"`; the source never waits itself.
+The host fact `hc.mode` ("native", "none", "" before it is decided) comes from `host.ts`: "native" is sticky; "none" is decided only after a bounded wait for the handle (1.5 s, probe 0.8 s). A handle that binds later is found by the same task that re-asks a `locked`, `unknown` or `noSignIn` answer every 3 s, which also passes its counter to `hostCaps`, so the state corrects with no navigation. A page that fails (mail, files) asks the card again at once. The card hides while the keyboard is up (`exactViewport().keyboardHeight >= 120`, the one general keyboard fact Exact gives; there is no general "a text field has focus" fact, only the bar's `barFocused`), while a web layer is up, and under the reader's aim row.
