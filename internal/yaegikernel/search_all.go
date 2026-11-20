@@ -188,8 +188,22 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 		}
 		stub, err := s.startSearch(w.Wording, false, false)
 		if stub.Refused != "" {
-			// Another search of the run is running: this wording is not sent (the
-			// running rule, applied per wording). It is not a failure.
+			if stub.Running {
+				// Another search of the run is running: this wording is not sent (the
+				// running rule, applied per wording). It is not a failure, and it is
+				// counted apart from the wordings the call could have sent. Nothing
+				// in this call waits, so the other wordings meet the same running
+				// search: the instruction is said once, in Next.
+				s.statsMu.Lock()
+				s.allStat.offered--
+				s.allStat.running++
+				s.statsMu.Unlock()
+				if res.Next == "" {
+					res.Next = fmt.Sprintf("Nothing was sent: a search of this run is still running (%s). Wait for it with choir.SearchWait(%q, 15000), read what it returned, then call SearchAll again for what is still missing. A wording can be sent now with fresh: choir.Search(wording, true).", stub.ID, stub.ID)
+				}
+				notSent(fmt.Sprintf("a search of this run is still running (%s)", stub.ID), "")
+				continue
+			}
 			notSent(stub.Refused, "")
 			continue
 		}

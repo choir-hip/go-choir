@@ -147,7 +147,10 @@ type SearchStub struct {
 	// earlier search of this run, and ID is that search.
 	Reused string `json:"reused,omitempty"`
 	// Refused says why no search was sent.
-	Refused string      `json:"refused,omitempty"`
+	Refused string `json:"refused,omitempty"`
+	// Running is set when the refusal is that another search of this run is
+	// still running; ID is then that search's id, which SearchWait takes.
+	Running bool        `json:"running,omitempty"`
 	Unread  []SearchHit `json:"unread,omitempty"`
 }
 
@@ -494,10 +497,15 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 	}
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
-	// The running rule answers first, before reuse: a same-terms search that is
-	// still running is refused at once, not waited on for up to 15 s. SearchAll
-	// (gated false) applies it to each wording too.
+	// A finished search with the same terms answers first, whatever else
+	// runs: it costs nothing and never sends. Then the running rule: a search
+	// of this run still running is refused at once, not waited on for up to
+	// 15 s, and a same-terms match still running is such a search. SearchAll
+	// (gated false) applies both to each wording too.
 	if !override {
+		if stub, ok := s.reuseSearch(query); ok {
+			return stub, nil
+		}
 		if id := s.searches.runningSearch(); id != "" {
 			s.noteNotSent("search_running")
 			why := runningRefusal(id)
@@ -506,11 +514,8 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 				s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
 			}
 			s.statsMu.Unlock()
-			return SearchStub{Query: query, Refused: why}, nil
-		}
-		// fresh sends the search although this run holds one with the same terms.
-		if stub, ok := s.reuseSearch(query); ok {
-			return stub, nil
+			// ID is the running search's, so SearchWait(stub.ID, ...) works.
+			return SearchStub{ID: id, Query: query, Refused: why, Running: true}, nil
 		}
 	}
 	over := false
@@ -545,7 +550,7 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 // returns its counts. It never waits longer than two minutes.
 func (s *ChoirScope) SearchWait(id string, ms int) (SearchCount, error) {
 	if strings.TrimSpace(id) == "" {
-		return SearchCount{}, fmt.Errorf("choir: SearchWait: the search was not sent (a refused search has no id; its stub says why)")
+		return SearchCount{}, fmt.Errorf("choir: SearchWait needs the id of a search that was sent: this search was not sent. A search refused because the run holds unread pages has no id (read the pages in its stub); one refused because another search of this run is still running carries that running search's id in ID")
 	}
 	d := time.Duration(ms) * time.Millisecond
 	if d < 0 {

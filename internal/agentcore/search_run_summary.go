@@ -64,7 +64,7 @@ func (rt *Runtime) takeRunSearchSummary(runID string) (string, bool) {
 	if len(reasons) > 0 {
 		line += " (" + strings.Join(reasons, " ") + ")"
 	}
-	line += fmt.Sprintf(" search_all_calls=%d wordings_offered=%d wordings_sent=%d fresh_over_unread=%d untagged=%d", s.AllCalls, s.AllOffered, s.AllSent, s.FreshOverUnread, s.Untagged)
+	line += fmt.Sprintf(" search_all_calls=%d wordings_offered=%d wordings_sent=%d fresh_over_unread=%d untagged=%d wordings_running=%d", s.AllCalls, s.AllOffered, s.AllSent, s.FreshOverUnread, s.Untagged, s.AllRunning)
 	line += fmt.Sprintf(" pages_returned=%d pages_new=%d pages_read=%d", s.PagesReturned, s.PagesNew, s.PagesRead)
 	return line, true
 }

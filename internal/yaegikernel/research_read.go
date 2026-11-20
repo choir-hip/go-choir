@@ -158,9 +158,10 @@ func (s *ChoirScope) ReadAll(urls []string) []Page {
 // searchWaitMs bounds the wait of one choir.Search.
 const searchWaitMs = 15000
 
-// Search starts one search, waits for it (at most 15 seconds, after at most
-// 15 more for an equal search of this run that is still running) and returns it:
-// SearchStart, SearchWait and Searches.Get in one call. Results are every
+// Search starts one search, waits for it (at most 15 seconds) and returns it:
+// SearchStart, SearchWait and Searches.Get in one call. A search of this run
+// still running is not waited on: Search returns at once with Refused set, Done
+// false and that search's id in ID. Results are every
 // arrival's hits, each URL once. Done false means a provider was still
 // pending; read choir.Searches.Get(id) later for more.
 func (s *ChoirScope) Search(query string, fresh ...bool) (Search, error) {
@@ -169,6 +170,11 @@ func (s *ChoirScope) Search(query string, fresh ...bool) (Search, error) {
 		return Search{}, err
 	}
 	if stub.Refused != "" {
+		if stub.Running {
+			// Not sent: another search of the run is running. ID is that search's;
+			// Done is false so this does not read as a search that found nothing.
+			return Search{ID: stub.ID, Query: stub.Query, Providers: []string{}, Results: []SearchHit{}, Done: false, Refused: stub.Refused}, nil
+		}
 		// Not sent: the Search holds the pages the run has not read, and why.
 		return Search{Query: stub.Query, Providers: []string{}, Results: stub.Unread, Done: true, Refused: stub.Refused}, nil
 	}

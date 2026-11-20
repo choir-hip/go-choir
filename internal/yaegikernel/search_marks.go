@@ -107,12 +107,16 @@ type SearchStats struct {
 	FreshOverUnread int `json:"fresh_over_unread,omitempty"`
 	// Untagged counts searches SearchAll sent that its gate could not tag.
 	Untagged int `json:"untagged,omitempty"`
+	// AllRunning counts wordings SearchAll did not send because another search
+	// of the run was still running. They are not in AllOffered: the call could
+	// not have sent them, so the sent share of AllOffered stays honest.
+	AllRunning int `json:"all_running,omitempty"`
 }
 
 // IsZero reports whether nothing was counted.
 func (a SearchStats) IsZero() bool {
 	return a.Started == 0 && a.FromHeld == 0 && len(a.NotSent) == 0 && a.PagesReturned == 0 && a.PagesNew == 0 && a.PagesRead == 0 &&
-		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.FreshOverUnread == 0 && a.Untagged == 0
+		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.FreshOverUnread == 0 && a.Untagged == 0 && a.AllRunning == 0
 }
 
 // Add sums o into a.
@@ -127,6 +131,7 @@ func (a *SearchStats) Add(o SearchStats) {
 	a.AllSent += o.AllSent
 	a.FreshOverUnread += o.FreshOverUnread
 	a.Untagged += o.Untagged
+	a.AllRunning += o.AllRunning
 	for k, v := range o.NotSent {
 		if a.NotSent == nil {
 			a.NotSent = map[string]int{}
@@ -166,7 +171,7 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 	out.FromHeld, s.heldStat = s.heldStat, 0
 	out.NotSent, s.notSentStat = s.notSentStat, nil
 	out.AllCalls, out.AllOffered, out.AllSent, out.FreshOverUnread = s.allStat.calls, s.allStat.offered, s.allStat.sent, s.allStat.freshOverUnread
-	out.Untagged = s.allStat.untagged
+	out.Untagged, out.AllRunning = s.allStat.untagged, s.allStat.running
 	s.allStat = allCounts{}
 	s.statsMu.Unlock()
 	if out.IsZero() {
@@ -229,12 +234,13 @@ func searchUsable(c *Search) bool {
 	return c.Answered > 0 && searchHasResults(c)
 }
 
-// reuseSearch answers query from an earlier search of this run with the same
+// reuseSearch answers query from a finished search of this run with the same
 // terms (searchquery.Key), started within the window (10 minutes for news,
-// else 30), with no host call. startSearch refuses a match still running before it gets here (the running
-// rule answers first); one that is waited on here (a caller without that rule)
-// is answered from if it did not fail or come back empty. The answer names the search, its age and "fresh", the
-// argument that sends the search anyway.
+// else 30), with no host call and no wait. A match still running is not
+// answered from here: startSearch's running rule refuses it at once (or, once
+// it has run two minutes and is no longer waited for, the search is sent). One
+// that failed or came back empty is not reused. The answer names the search,
+// its age and "fresh", the argument that sends the search anyway.
 func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
 	if s == nil || s.searches == nil {
 		return SearchStub{}, false
@@ -246,29 +252,20 @@ func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
 		window = searchReuseWindowNews
 	}
 	st.mu.Lock()
-	var id string
+	var c Search
 	var age time.Duration
+	found := false
 	for i := len(st.order) - 1; i >= st.runStart; i-- {
-		c := st.searches[st.order[i]]
-		d := st.nowTime().Sub(c.startedAt)
-		if c.key != key || d > window || !searchUsable(c) {
+		cand := st.searches[st.order[i]]
+		d := st.nowTime().Sub(cand.startedAt)
+		if cand.key != key || d > window || !cand.Done || !searchUsable(cand) {
 			continue
 		}
-		id, age = c.ID, d
+		c, age, found = copySearch(cand), d, true
 		break
 	}
-	running := id != "" && !st.searches[id].Done
 	st.mu.Unlock()
-	if id == "" {
-		return SearchStub{}, false
-	}
-	if running {
-		_, _ = st.wait(id, time.Duration(searchWaitMs)*time.Millisecond)
-	}
-	st.mu.Lock()
-	c := copySearch(st.searches[id])
-	st.mu.Unlock()
-	if c.Done && !searchUsable(&c) {
+	if !found {
 		return SearchStub{}, false
 	}
 	why := fmt.Sprintf("answered from your search %s, %s (same terms); send it anyway with fresh", c.ID, agoText(age))

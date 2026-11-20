@@ -144,7 +144,7 @@ func TestASearchStartedWhileAnotherRunsIsRefusedAtOnce(t *testing.T) {
 choir.SearchStart("burst one")
 t0 := time.Now()
 s, err := choir.SearchStart("burst two")
-fmt.Println(err, s.ID == "", time.Since(t0) < time.Second)
+fmt.Println(err, s.ID == "s1", time.Since(t0) < time.Second)
 fmt.Println(s.Refused)`)
 	if f.searchCalls.Load() != 1 {
 		t.Fatalf("the second search was sent (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
@@ -329,16 +329,82 @@ func TestSearchAllAppliesTheRunningRuleToEachWording(t *testing.T) {
 	cell, _ := searchCell(t, f)
 	cell(`choir.SearchStart("burst one")`)
 	out := cell(`r, err := choir.SearchAll("another question", []string{"burst two", "burst three"})
-fmt.Println(err)
+fmt.Println("err:", err)
+for _, w := range r.Wordings { fmt.Println("wording", w.Wording, "sent:", w.Sent, "why:", w.Why) }
+fmt.Println("next:", r.Next)
 fmt.Println(r)`)
 	if f.searchCalls.Load() != 1 {
 		t.Fatalf("SearchAll sent a wording while a search of the run ran (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
-	if !strings.Contains(out.Stdout, "still running (s1)") {
-		t.Fatalf("each wording must say the running search:\n%s", out.Stdout)
+	// Not a failure: no error, no FAILED line, each wording named not sent with
+	// the running search's id.
+	for _, want := range []string{"err: <nil>", "wording burst two sent: false why: a search of this run is still running (s1)", "wording burst three sent: false why: a search of this run is still running (s1)", `choir.SearchWait("s1", 15000)`} {
+		if !strings.Contains(out.Stdout, want) {
+			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
+		}
 	}
-	if st := out.SearchStats; st == nil || st.NotSent["search_running"] != 2 {
+	if strings.Contains(out.Stdout, "FAILED") {
+		t.Fatalf("a running refusal is not a failure:\n%s", out.Stdout)
+	}
+	// One clear message, not the long refusal once per wording.
+	if n := strings.Count(out.Stdout, "cannot be judged by the pages it will return"); n > 1 {
+		t.Fatalf("the instruction is repeated %d times:\n%s", n, out.Stdout)
+	}
+	st := out.SearchStats
+	if st == nil || st.NotSent["search_running"] != 2 {
 		t.Fatalf("stats = %+v, want 2 search_running (one per wording)", st)
+	}
+	// Running refusals are counted apart: they are not wordings the call was
+	// free to send, so the sent share stays honest.
+	if st.AllOffered != 0 || st.AllRunning != 2 || st.AllSent != 0 {
+		t.Fatalf("stats = %+v, want 0 offered, 2 running, 0 sent", st)
+	}
+}
+
+// A refusal because another search runs carries that search's id in the value,
+// so the instructed next step is reachable from it.
+func TestARunningRefusalCarriesTheRunningSearchID(t *testing.T) {
+	f := newResearchFixture(t)
+	f.runningFor = map[string]bool{"burst one": true}
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchStart("burst one")`)
+	out := cell(`s, _ := choir.SearchStart("burst two")
+fmt.Println(s.ID, s.Refused != "")
+c, err := choir.SearchWait(s.ID, 10)
+fmt.Println(c.ID, err)
+q, err := choir.Search("burst two")
+fmt.Println(q.ID, q.Done, len(q.Results), q.Refused != "", err)`)
+	if want := "s1 true\ns1 <nil>\ns1 false 0 true <nil>"; strings.TrimSpace(out.Stdout) != want {
+		t.Fatalf("stdout:\n%s\nwant:\n%s", out.Stdout, want)
+	}
+	if f.searchCalls.Load() != 1 {
+		t.Fatalf("calls %d", f.searchCalls.Load())
+	}
+}
+
+// SearchWait of an id no search has says what a refused search's id is.
+func TestSearchWaitOfNoIDSaysWhatToDo(t *testing.T) {
+	f := newResearchFixture(t)
+	cell, _ := searchCell(t, f)
+	out := cell(`_, err := choir.SearchWait("", 10)
+fmt.Println(err)`)
+	if !strings.Contains(out.Stdout, "was not sent") || !strings.Contains(out.Stdout, "unread") || !strings.Contains(out.Stdout, "still running") {
+		t.Fatalf("the error must name both refusals:\n%s", out.Stdout)
+	}
+}
+
+// A finished identical search is answered although an unrelated search runs.
+func TestAFinishedMatchIsReusedWhileAnUnrelatedSearchRuns(t *testing.T) {
+	f := newResearchFixture(t)
+	f.urlsFor = map[string][]string{"harbor strike": pagesN("h", 1, 5)}
+	f.runningFor = map[string]bool{"other thing": true}
+	cell, _ := searchCell(t, f)
+	cell(`choir.SearchStart("harbor strike")`)
+	cell(`choir.SearchStart("other thing", true)`)
+	out := cell(`b, _ := choir.SearchStart("strike harbor")
+fmt.Println(b.ID, b.Reused != "", b.Refused == "")`)
+	if strings.TrimSpace(out.Stdout) != "s1 true true" || f.searchCalls.Load() != 2 {
+		t.Fatalf("a finished match is reused even while another search runs (calls %d): %s", f.searchCalls.Load(), out.Stdout)
 	}
 }
 
