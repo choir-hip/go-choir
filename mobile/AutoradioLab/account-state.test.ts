@@ -119,7 +119,7 @@ describe('round 8b (seat 2)', () => {
     const mail = await read('members-mail.contract'), files = await read('members-files.contract'), acc = await read('account.contract');
     expect(mail).toContain('mailBox(mboxAddr, dm.on, acs.state)'); expect(mail).toContain('mailMessage(pg.top, dm.on, mailOriginal, acs.state)');
     expect(files).toContain('fileList(dm.on, fsPath, fsMode, fsSort, fsDesc, fsQuery, acs.state)'); expect(files).toContain('fileOpen(dm.on, pg.top, acs.state)');
-    expect(acc).toContain('${hc.mode}|${dm.on}'); expect(acc).not.toContain('${mbx.status}');
+    expect(acc).toContain('${hc.mode}|${dm.on}'); expect(acc).not.toContain('${mbx.status}'); expect(acc).not.toContain('${nb.docState}');      // a lazily-asked resource in the tick leaves the card unanswered at launch
   });
   test('X1b a late handle never shows a sign-in card first: undecided is unknown, and a "none" decision is the only way to noSignIn', async () => {
     resetSeam();

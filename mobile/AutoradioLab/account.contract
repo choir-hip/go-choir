@@ -14,14 +14,13 @@ members Autoradio
   // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, a page change, the app coming back to the front (the phone
   // unlocked: a key that could not be read yet is read again). An unreadable key is "locked", never "signed out".
   resource hpg = exactPage() as shape HostPage else empty()
-  // The tick: anything that can change the answer. The app coming back to the front (visibility, focus), a sign-in flow's progress (au.status, au.message), a sign-out (the epoch), a page change, the host fact and demo mode (every input of the answer is in the tick), the states of
-  // the sources that ask the server with the key (the notebook, the account page: a refusal shows up there as a 401), and a counter that moves every 3 s while the key is locked, so "locked" cannot stick if no event arrives.
+  // The tick: anything that can change the answer. The app coming back to the front (visibility, focus), a sign-in flow's progress (au.status, au.message), a sign-out (the epoch), a page change, the host fact and demo mode (every input of the answer is in the tick). NOT the statuses of other pages' sources: a resource is asked only when something reads it, so waiting on them left the card unanswered at launch (found by the signed-out tour). A refusal (401) shows at the next page change or return to the front, and a counter that moves every 3 s while the key is locked, so "locked" cannot stick if no event arrives.
   state lockTick = 0
   action bumpLock
     lockTick = lockTick + 1
   task rereadLocked when acs.state == "locked" key=lockTick
     after(3000, bumpLock)
-  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${dm.on}|${nb.docState}|${acctInfo.status}`, pg.top, dm.on, hc.mode) as shape AccountView else empty()
+  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${dm.on}`, pg.top, dm.on, hc.mode) as shape AccountView else empty()
   mutation acct as shape LabState
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult
