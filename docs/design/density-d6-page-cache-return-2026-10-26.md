@@ -138,7 +138,7 @@ paper (critical_protected) while it works. Recorded 2026-11-01 (§12): yes.
 | Free page hinting | never sent (developer preview, documented corruption race) | nowhere | n/a |
 | Balloon inflation (`PATCH /balloon`) | **none**: `fcapi.go` has `Balloon` and `BalloonStatistics` (GET) only | nowhere | n/a |
 | virtio-mem hotplug and unplug | `memory_hotplug.go`, `unplugBeforeSnapshot` | `VM_MEMORY_HOTPLUG=off` | deleted 2026-10-26 (`6013d77d3`); moved only the hotplug region |
-| DAMON_RECLAIM boot arguments | `guest_reclaim.go` (`VM_GUEST_RECLAIM_ONLY`) | two test computers | negative or unread (§2) |
+| DAMON_RECLAIM boot arguments | deleted 2026-11-20 (`guest_reclaim.go`, `VM_GUEST_RECLAIM_ONLY`; measured negative, owner ruled delete) | none | negative (§2); the two test computers cold boot once without the arguments |
 | `memory.reclaim` on a capsule cgroup at teardown | `internal/capsule/teardown_reclaim.go`; raw write `job_memory.go` `writeCgroupFile` (unexported) | every guest (`CHOIR_CAPSULE_TEARDOWN_RECLAIM`, default on) | D3 drill; part of outcome C's burst end |
 | Guest memory reader | `internal/guestmem` (meminfo incl. `Active(file)`, `Inactive(file)`, `Shmem`, `Dirty`; memory by cgroup; page cache by file tree) | every guest, read only | SDC RES-07 |
 | Guest memory-return report | `internal/server/debug_memreturn.go` on `procmem`: DAMON, reporting order, balloon features, buddyinfo, vmstat | every guest | bunch 87, 102 |
