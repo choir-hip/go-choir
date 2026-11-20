@@ -109,8 +109,9 @@ That is the likely shape of the skips (the console carries no origin line and
 the saved extract has no wake lines, so the count of later runs among the 51 is
 not seen). The fix takes the objective from the open work item the run is
 assigned (of this computer), else from the conversation's most recent earlier
-record while its round is still open (an answered round's Cast is not briefed
-again), and the brief line says which (`objective_from=`); the brief text names
+record while the round of that record is the conversation's newest round and
+is still open (an answered Cast, a Cast of an older round, and a record with no
+round are not briefed; a store failure on this read is outcome=failed), and the brief line says which (`objective_from=`); the brief text names
 the source too, so a fallback is not read as the run's own prompt.
 
 The 8 s cuts: the brief's own searches took a median 5.6 s and a ninth decile
