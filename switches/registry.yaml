@@ -1630,38 +1630,6 @@
    "note": "On for the paper since 2026-10-26; route refuses non-platform tiers. Read half is CORPUSD_RELATED_STORY. Default off, held 2026-11-03: its finish rule (requireStoryEntitiesRecorded) treats every research:<doc> desk as a story desk, so default-on would hold owner research rounds to record entities for unpublished documents. Fix: key the story rules on a published story, then default on."
   },
   {
-   "id": "intake_event_wakes",
-   "kind": "setting",
-   "life": "release",
-   "owner": "intake",
-   "class": "red",
-   "surface": "paper",
-   "introduced": "2026-10-28",
-   "settings": [
-    "intake.event_wakes"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "none",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete if the structural assessment retires the event layer",
-   "hold": "owner",
-   "hold_question": "false-merge bar failed 3 times (7.0%, 9.5%, 15-30%); structural assessment first (audit row 40)",
-   "grandfathered_off_until": "2026-11-25"
-  },
-  {
    "id": "store_telemetry_retire",
    "kind": "setting",
    "life": "release",

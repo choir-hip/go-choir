@@ -118,7 +118,7 @@ Vectors made on x86 and on the Mac agree (cosine 0.9999, M), so a file made on t
 - Its shortlist adds vector neighbours of each capture's lead among events' member leads. This replaces the title-overlap slot.
 - Jev still judges, in one call per flush holding every queued capture. No new call site, and nothing split.
 - In the sample window, 63 of 74 captures minted a new event (M). A recency-and-title shortlist plausibly misses reworded reports.
-- Production by event (`intake.event_wakes`) stays held off. This work does not touch it.
+- Production by event (`intake.event_wakes`) was deleted 2026-11-20; this work does not bring it back.
 
 **A story's event ids, at each publish.**
 - An event belongs to a story when two of its cited captures, or 30% of them, are counted members of it (tentative members do not count).

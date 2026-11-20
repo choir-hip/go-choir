@@ -29,7 +29,7 @@ func TestEventLayerGateway502IsRetriedThenHalvedAndLosesNoCapture(t *testing.T) 
 		t.Fatal(err)
 	}
 	// 12 questions refused twice, then two halves of 6.
-	if r.Unresolved != 0 || len(r.Left) != 0 || gw.count() != 4 {
+	if r.Unresolved != 0 || gw.count() != 4 {
 		t.Fatalf("report = %+v, %d gateway requests; want every capture resolved in 4 requests", r, gw.count())
 	}
 }

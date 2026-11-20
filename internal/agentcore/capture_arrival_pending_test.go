@@ -185,7 +185,7 @@ func TestReplayedArrivalKeepsItsDigestAndAConflictClearsPending(t *testing.T) {
 		{CaptureID: "choir.web_capture:r-2", Title: "東京で地震", URL: "https://replay.example/2", Language: "en", Script: sources.ScriptKana},
 		{CaptureID: "choir.web_capture:r-1", Title: "Markets steady", URL: "https://replay.example/1", PublishedAt: "2026-10-14T01:00:00Z", Language: "en", Script: sources.ScriptLatin},
 	}
-	first, err := captureArrivalRequest(owner, computer, sourceID, items, false)
+	first, err := captureArrivalRequest(owner, computer, sourceID, items)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,20 +198,20 @@ func TestReplayedArrivalKeepsItsDigestAndAConflictClearsPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := captureArrivalRequest(owner, computer, sourceID, stored.PendingArrivals, false)
+	again, err := captureArrivalRequest(owner, computer, sourceID, stored.PendingArrivals)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first.CommandID != again.CommandID || first.CommandDigest != again.CommandDigest {
 		t.Fatalf("a replayed arrival changed: %s/%s then %s/%s", first.CommandID, first.CommandDigest, again.CommandID, again.CommandDigest)
 	}
-	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, items, false); err != nil {
+	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, items); err != nil {
 		t.Fatal(err)
 	}
 	// With the host-started task (enforce flip 13.5) the replay finds the
 	// captures leased and conflicts on the digest, which announceCaptures
 	// reads as announced; without a task it replays its receipt.
-	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, stored.PendingArrivals, false); err != nil && !errors.Is(err, store.ErrLifecycleCommandConflict) {
+	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, stored.PendingArrivals); err != nil && !errors.Is(err, store.ErrLifecycleCommandConflict) {
 		t.Fatalf("replaying the same arrival was refused: %v", err)
 	}
 	if records, _ := s.ListInboxRecords(ctx, owner, computer, management, 0, 0); len(records) != 1 {
@@ -223,7 +223,7 @@ func TestReplayedArrivalKeepsItsDigestAndAConflictClearsPending(t *testing.T) {
 	// pending list instead of wedging it.
 	changed := append([]types.CaptureArrival(nil), items...)
 	changed[0].Title = "A different title"
-	left, err := rt.announceCaptures(ctx, owner, computer, sourceID, changed, nil, 5, false)
+	left, err := rt.announceCaptures(ctx, owner, computer, sourceID, changed, nil, 5)
 	if err != nil || len(left) != 0 {
 		t.Fatalf("a conflicting arrival left %v pending (err %v); want the announced captures cleared", left, err)
 	}

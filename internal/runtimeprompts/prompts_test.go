@@ -409,7 +409,7 @@ func TestRLMResearchOverlayListsRelateWithItsContract(t *testing.T) {
 
 func TestOtherDesksOverlaysDoNotTeachSystem1(t *testing.T) {
 	overlays := map[string]string{
-		"management":      RLMManagementOverlay(RLMManagementOverlayOptions{IntakeLabels: true, EventWakes: true}),
+		"management":      RLMManagementOverlay(RLMManagementOverlayOptions{IntakeLabels: true}),
 		"management-off":  RLMManagementOverlay(),
 		"management task": RLMManagementTaskOverlay(RLMManagementTaskOverlayOptions{Deadline: "10m"}),
 		"engineering":     RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true}),

@@ -13,7 +13,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -226,9 +225,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	// and functions (L2a A6); off, the prompt is as before. A computer
 	// setting, so stable across runs.
 	intakeLabels := deskmanifest.AdmitsAssignments(profile) && rec != nil && rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)
-	eventWakes := deskmanifest.AdmitsAssignments(profile) && rec != nil && rt.computerSettingOn(context.Background(), rec.OwnerID, rec.ComputerID, store.SettingIntakeEventWakes)
 	if deskmanifest.AdmitsAssignments(profile) {
-		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels, EventWakes: eventWakes}))
+		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels}))
 	}
 	if deskmanifest.IsAssignmentPerformer(profile) {
 		// The two flags pick one of four fixed overlay variants; the exact

@@ -376,8 +376,9 @@ func TestRecordWakesReaderIsTheOnePredicate(t *testing.T) {
 	if !RecordWakesReader(residual) {
 		t.Fatal("a residual task Report wakes")
 	}
-	// V3 (event layer §15, E12): an arrival held for its events wakes no
-	// one; an event's captures record, not held, does.
+	// Production by event is deleted (intake.event_wakes, 2026-11-20). An
+	// arrival wakes; a stored arrival that an old build held with no event
+	// is read as a plain one, so it wakes too and nothing is stranded.
 	arrival := types.CommitmentRecord{EmitterKind: types.CommitmentEmitterSystem, Inbox: taskParent,
 		Captures: &types.CommitmentCaptures{SourceID: "rss:x", Items: []types.CaptureArrival{{CaptureID: "c1", URL: "https://x.example/1"}}}}
 	if !RecordWakesReader(arrival) {
@@ -385,8 +386,8 @@ func TestRecordWakesReaderIsTheOnePredicate(t *testing.T) {
 	}
 	held := arrival
 	held.Captures = &types.CommitmentCaptures{SourceID: "rss:x", Held: true, Items: arrival.Captures.Items}
-	if RecordWakesReader(held) {
-		t.Fatal("E12: a held arrival wakes no one")
+	if !RecordWakesReader(held) {
+		t.Fatal("a stored held arrival with no event wakes like a plain one")
 	}
 	for id, rec := range map[string]types.CommitmentRecord{"agent": agent, "decline": decline, "crash": crash, "clean": clean, "residual": residual, "arrival": arrival, "held": held} {
 		if RecordWakesReader(rec) != inboxRecordWakes(rec) {

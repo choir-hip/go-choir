@@ -267,8 +267,8 @@ func TestEventLayerLongFlushResolvesEveryChunk(t *testing.T) {
 	}
 	// 450 captures are three calls under the 255-choice limit (199 each); the
 	// 64k request limit forces about seven more (logged, named); none is left.
-	if r.Calls < 3 || r.Calls > 20 || r.Unresolved != 0 || len(r.Left) != 0 {
-		t.Fatalf("report = calls %d, unresolved %d, left %d; want 3 to 20 calls, 0, 0", r.Calls, r.Unresolved, len(r.Left))
+	if r.Calls < 3 || r.Calls > 20 || r.Unresolved != 0 {
+		t.Fatalf("report = calls %d, unresolved %d; want 3 to 20 calls, 0", r.Calls, r.Unresolved)
 	}
 }
 

@@ -19,7 +19,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // The event layer's V1 (docs/reports/event-layer-at-ingestion-design-
@@ -108,8 +107,6 @@ type eventResolveReport struct {
 	CostUSD      float64
 	// Created is each event's members this resolution wrote, by event id.
 	Created map[string][]string
-	// Left are the inputs that ended without a membership.
-	Left []eventInput
 	// vec is the flush's vector neighbours (nil: none were asked for).
 	vec *eventVectors
 	// Queued is the questions the flush asked (each waiting capture once:
@@ -151,16 +148,11 @@ type eventView struct {
 	tentative int
 	last      time.Time
 	// memberships are the event's members, counted and tentative, in
-	// resolution order: an event's captures record names them (§15).
+	// resolution order (the events API lists them).
 	memberships []store.EventMembership
-	// agedWoken is set once the event's aged official wake was minted
-	// this boot; the record id keeps a later boot's retry to a replay.
-	agedWoken bool
 	// corroboratedAt is when the membership that made it corroborated
-	// was resolved. settled is set once its records were checked against
-	// the ledger and cleared by every new member (event_wakes.go).
+	// was resolved.
 	corroboratedAt time.Time
-	settled        bool
 }
 
 func (v *eventView) corroborated() bool { return len(v.origins) >= store.EventMinOrigins }
@@ -170,7 +162,6 @@ func (v *eventView) apply(m store.EventMembership) {
 		v.last = m.CapturedAt
 	}
 	v.memberships = append(v.memberships, m)
-	v.settled = false
 	if m.Tentative {
 		v.tentative++
 		return
@@ -223,10 +214,6 @@ type eventLayer struct {
 	stopped bool
 	ctx     context.Context
 	cancel  context.CancelFunc
-	// lastSweep rate-limits the held-capture sweep per computer; tally is
-	// what the last one counted, for management's Stories page.
-	lastSweep map[string]time.Time
-	tally     map[string]yaegikernel.HeldCaptures
 }
 
 func eventKey(ownerID, computerID string) string { return ownerID + "\x00" + computerID }
@@ -363,9 +350,7 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	defer idx.mu.Unlock()
 	pending := eventPendingLocked(idx, inputs)
 	report.Queued = len(pending)
-	seen := map[string]bool{}
 	for _, in := range pending {
-		seen[strings.TrimSpace(in.Item.CaptureID)] = true
 		if in.Research {
 			report.ResearchReads++
 		}
@@ -404,7 +389,7 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 	// Each call has its own deadline, so a long flush never starves the chunks
 	// behind it. A chunk whose call fails is asked again and halved
 	// (resolveEventChunkAt, jev_failure.go); what still fails leaves its
-	// captures in report.Left (an "unresolved" wake record, not retried again).
+	// captures unresolved (counted in report.Unresolved, not retried again).
 	// The retries, their backoff and the halves run while resolveEvents holds
 	// idx.mu, so a failing flush holds the index for up to eight calls a
 	// chunk (a dial failure ends a chunk's calls at once, jevTransportDown); only eventSummary readers wait on it, and the work is the flush's
@@ -415,12 +400,6 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		chunkCtx, cancel := context.WithCancel(ctx)
 		rt.resolveEventChunk(chunkCtx, idx, ownerID, computerID, chunk, &report)
 		cancel()
-	}
-	for _, in := range inputs {
-		id := strings.TrimSpace(in.Item.CaptureID)
-		if id != "" && seen[id] && idx.byCapture[id] == "" {
-			report.Left = append(report.Left, in)
-		}
 	}
 	return report, nil
 }
@@ -1203,9 +1182,6 @@ func (rt *Runtime) drainEventQueue(layerCtx context.Context, ownerID, computerID
 		rt.events.mu.Unlock()
 		// No deadline across the flush: each chunk has its own (resolveEvents).
 		report, err := rt.resolveEvents(layerCtx, ownerID, computerID, items)
-		if layerCtx.Err() == nil {
-			rt.mintEventWakes(layerCtx, ownerID, computerID, items, report, err)
-		}
 		if err != nil {
 			log.Printf("event layer: %d captures unresolved: %v", len(items), err)
 			continue

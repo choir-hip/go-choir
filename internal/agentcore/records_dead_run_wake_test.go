@@ -77,7 +77,7 @@ func TestRecordsWakeReplacesARunWithNoLiveLoop(t *testing.T) {
 			}
 			if err := rt.appendCaptureArrival(ctx, owner, computer, "rss:test", []types.CaptureArrival{
 				{CaptureID: "obj:choir.web_capture:test:dead-run", Title: "a"},
-			}, false); err != nil {
+			}); err != nil {
 				t.Fatalf("arrival: %v", err)
 			}
 			dispatched = nil

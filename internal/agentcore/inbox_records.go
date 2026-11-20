@@ -107,12 +107,8 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 	labelsOn, labelsRead := false, false
 	parents := map[string]types.EngineeringAssignmentBinding{}
 	for _, rec := range recs {
-		if rec.Captures != nil && rec.Captures.Held && rec.Captures.Event == nil {
-			// A held arrival (event layer §15) is not work: its captures
-			// reach the desk on their events' records. The cursor passes
-			// it; Stories counts what is held.
-			continue
-		}
+		// A stored Held arrival with no Event (the retired wait path wrote
+		// them) is read as a plain arrival, once, like any other.
 		view := inboxRecordView(rec)
 		// Management's Cast that opened an engineering assignment carries
 		// the Texture request it serves (engineering cannot read the
@@ -571,7 +567,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	// intake.labels setting is off (L2a A6): the whole cell commits
 	// nothing.
 	for _, in := range intents {
-		if in.Disposition != "" && !rt.intakeSurfacesEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
+		if in.Disposition != "" && !rt.intakeLabelsEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
 			return nil, fmt.Errorf("reduce: %s: choir.Feed and choir.Decline are off on this computer (the owner's intake.labels setting); leave the captures unfed and undeclined", in.LocalID)
 		}
 	}
@@ -759,7 +755,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID,
 		CommandID: "cell-records:" + r.scope.CellID, Records: records, Cursor: cursor, Tasks: tasks,
 	}
-	if opensStory && deskmanifest.AdmitsAssignments(deskProfile) && rt.intakeSurfacesEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
+	if opensStory && deskmanifest.AdmitsAssignments(deskProfile) && rt.intakeLabelsEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
 		// The story-library head this run last read (R2-5); a run that
 		// never read choir.Stories() has seen head 0. With intake.labels
 		// off, choir.Stories() is off too, and nothing is checked.
