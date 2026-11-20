@@ -8,8 +8,10 @@ package platform
 //
 // It is partial (live edges only, as every one of these reads is) and is
 // built the way the term table's covering index is: CONCURRENTLY, outside a
-// transaction, under a session advisory lock, from MigrateRetrieval and the
-// periodic step, never on a request. A plain CREATE INDEX would block capture
+// transaction, under a session advisory lock, from a goroutine of its own at start
+// (StartRetrievalMigrations) and from the periodic step, never on a request
+// and never in MigrateRetrieval, so a build that waits cannot keep the
+// periodic loop from starting. A plain CREATE INDEX would block capture
 // and story writes to og_edges for the build; the table is about 1 GB with its
 // indexes on the paper (node-b-storage-review-2026-11-12), so the build is
 // tens of seconds, not minutes, and CONCURRENTLY costs only a second pass.
@@ -35,8 +37,20 @@ const (
 	edgesToKindCreatedDDL     = `CREATE INDEX CONCURRENTLY ` + idxEdgesToKindCreated + ` ON og_edges (to_id, kind, created_at DESC, edge_id) WHERE NOT tombstone`
 )
 
+// edgesIndexBuildTimeout bounds one build attempt (a variable so a test can
+// move it). CONCURRENTLY waits for every transaction older than the build; a
+// stuck one would otherwise hold the connection, and whatever waits on this
+// call, for good. A build that times out leaves an invalid index, which the
+// next attempt (the periodic retrieval step) detects, drops and rebuilds.
+var edgesIndexBuildTimeout = 20 * time.Minute
+
 // ensureEdgesToKindCreatedIndex builds the index if it is missing or invalid.
+// It has its own deadline and is never on the path that starts the periodic
+// retrieval loop: StartRetrievalMigrations runs it in a goroutine of its own
+// and retrievalStep retries it.
 func (s *Store) ensureEdgesToKindCreatedIndex(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, edgesIndexBuildTimeout)
+	defer cancel()
 	conn, err := s.corpus().Conn(ctx)
 	if err != nil {
 		return err
@@ -53,6 +67,12 @@ func (s *Store) ensureEdgesToKindCreatedIndex(ctx context.Context) error {
 	defer func() {
 		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(?)`, edgesToKindCreatedLockKey)
 	}()
+	// A conflicting lock is waited for a minute, not for good. The setting is
+	// the session's, so it is reset before the connection goes back to the pool.
+	if _, err := conn.ExecContext(ctx, `SET lock_timeout = '60s'`); err != nil {
+		return err
+	}
+	defer func() { _, _ = conn.ExecContext(context.WithoutCancel(ctx), `RESET lock_timeout`) }()
 	var valid sql.NullBool
 	err = conn.QueryRowContext(ctx, `SELECT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
 		WHERE c.relname = ? AND i.indrelid = 'og_edges'::regclass`, idxEdgesToKindCreated).Scan(&valid)
@@ -73,4 +93,19 @@ func (s *Store) ensureEdgesToKindCreatedIndex(ctx context.Context) error {
 	}
 	log.Printf("corpusd retrieval migrate index=%s table=og_edges ms=%d concurrently", idxEdgesToKindCreated, time.Since(start).Milliseconds())
 	return nil
+}
+
+// kickEdgesToKindCreatedIndex starts a build in the background unless one is
+// running; it returns at once. The start and every periodic tick call it, so
+// a build that timed out is retried and nothing waits for it.
+func (s *Store) kickEdgesToKindCreatedIndex(ctx context.Context) {
+	if s == nil || !s.retrievalState.edgesIndexBuilding.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer s.retrievalState.edgesIndexBuilding.Store(false)
+		if err := s.ensureEdgesToKindCreatedIndex(ctx); err != nil {
+			log.Printf("corpusd retrieval edges index err=%v (retried by the periodic step)", err)
+		}
+	}()
 }

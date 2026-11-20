@@ -169,6 +169,8 @@ type retrievalSchemaState struct {
 	captureIndexReady atomic.Bool
 	// captureResolutionReady: proj_capture_resolution exists (capture_resolution.go).
 	captureResolutionReady atomic.Bool
+	// edgesIndexBuilding: a build of idx_og_edges_to_kind_created is running.
+	edgesIndexBuilding atomic.Bool
 	// captureIndexComplete: every capture in og_objects is projected (the
 	// search and URL routes answer).
 	captureIndexComplete atomic.Bool
@@ -213,7 +215,6 @@ func (s *Store) MigrateRetrieval(ctx context.Context) error {
 		note("capture_index_reconcile", s.ReconcileCaptureIndex(ctx))
 		note("capture_terms_cover_index", s.ensureCaptureTermsCoverIndex(ctx))
 	}
-	note("edges_to_kind_created", s.ensureEdgesToKindCreatedIndex(ctx))
 	return firstErr
 }
 
@@ -228,6 +229,10 @@ func (s *Store) StartRetrievalMigrations(ctx context.Context, interval time.Dura
 		interval = 10 * time.Minute
 	}
 	s.retrievalState.migrateOnce.Do(func() {
+		// The entity read's index builds on its own, whether or not the steps
+		// below finish; a failed or timed out build is retried by every tick of
+		// the periodic step.
+		s.kickEdgesToKindCreatedIndex(ctx)
 		go func() {
 			backoff := 30 * time.Second
 			for {
@@ -285,9 +290,7 @@ func (s *Store) retrievalStep(ctx context.Context) {
 	if err := s.ensureCaptureTermsCoverIndex(ctx); err != nil {
 		log.Printf("corpusd retrieval cover index err=%v", err)
 	}
-	if err := s.ensureEdgesToKindCreatedIndex(ctx); err != nil {
-		log.Printf("corpusd retrieval edges index err=%v", err)
-	}
+	s.kickEdgesToKindCreatedIndex(ctx)
 }
 
 // RetrievalLive reports which retrieval shapes are live (for /health and

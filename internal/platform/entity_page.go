@@ -52,6 +52,11 @@ const (
 	entityPageMaxChecks = 60
 	entityPageChunk     = 10
 	entityPageCoMax     = 5
+	// entityPageCoStories is how many of the listed stories the co-entities
+	// are read from.
+	entityPageCoStories = 10
+	// entityPageGateChecks bounds the central edges a person's gate reads.
+	entityPageGateChecks = 40
 	// entityPageCacheTTL and entityPageCacheMax bound the answer cache.
 	entityPageCacheTTL = time.Minute
 	entityPageCacheMax = 1000
@@ -74,16 +79,15 @@ type EntityPage struct {
 	Type       string   `json:"type"`
 	WikidataID string   `json:"wikidata_id,omitempty"`
 	Aliases    []string `json:"aliases,omitempty"`
-	// Mentions and CentralMentions count the publications with a recorded
-	// mention of the entity (the role central for the second), from the newest
-	// 200 mention edges. They are not checked for the public route: the list
-	// below is, and may be shorter. CountsAtLeast says the edge read was full,
-	// so the entity may have more.
-	Mentions        int               `json:"mentions"`
-	CentralMentions int               `json:"central_mentions"`
-	CountsAtLeast   bool              `json:"counts_at_least,omitempty"`
-	StoryList       []EntityPageStory `json:"story_list"`
-	CoEntities      []types.EntityRef `json:"co_entities"`
+	// Stories and CentralStories count the public stories the walk verified
+	// (the role central for the second), among the newest 200 mention edges and
+	// at most 60 publications. CountsAtLeast says the walk did not reach every
+	// mention, so the entity may have more.
+	Stories        int               `json:"stories"`
+	CentralStories int               `json:"central_stories"`
+	CountsAtLeast  bool              `json:"counts_at_least,omitempty"`
+	StoryList      []EntityPageStory `json:"story_list"`
+	CoEntities     []types.EntityRef `json:"co_entities"`
 }
 
 type entityPageEntry struct {
@@ -96,8 +100,17 @@ type entityPageCache struct {
 	m  map[string]entityPageEntry
 }
 
+// entityPageDeadline bounds one walk (a variable so a test can move it). A
+// walk that overruns answers an error and is not cached.
+var entityPageDeadline = 8 * time.Second
+
+// entityPageWalkHook is called once per walk (a test counts them).
+var entityPageWalkHook func()
+
 // EntityPage answers the entity id's page, nil when there is none (unknown,
-// retired, or a person who has no page).
+// retired, or a person who has no page). One walk per entity answers every
+// `stories` value: the page is computed at the largest size, cached once under
+// the entity's id, and cut to the size asked on read.
 func (s *Service) EntityPage(ctx context.Context, entityID string, stories int) (*EntityPage, error) {
 	if !types.EntityIDRE.MatchString(entityID) {
 		return nil, fmt.Errorf("not an entity id")
@@ -108,16 +121,20 @@ func (s *Service) EntityPage(ctx context.Context, entityID string, stories int) 
 	case stories > entityPageMaxStories:
 		stories = entityPageMaxStories
 	}
-	key := entityID + "|" + strconv.Itoa(stories)
 	now := time.Now()
 	s.entityPages.mu.Lock()
-	if e, ok := s.entityPages.m[key]; ok && now.Sub(e.at) < entityPageCacheTTL {
+	if e, ok := s.entityPages.m[entityID]; ok && now.Sub(e.at) < entityPageCacheTTL {
 		s.entityPages.mu.Unlock()
-		return e.page, nil
+		return cutEntityPage(e.page, stories), nil
 	}
 	s.entityPages.mu.Unlock()
 
-	page, err := s.computeEntityPage(ctx, entityID, stories)
+	if entityPageWalkHook != nil {
+		entityPageWalkHook()
+	}
+	wctx, cancel := context.WithTimeout(ctx, entityPageDeadline)
+	defer cancel()
+	page, err := s.computeEntityPage(wctx, entityID, entityPageMaxStories)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +142,7 @@ func (s *Service) EntityPage(ctx context.Context, entityID string, stories int) 
 	if s.entityPages.m == nil {
 		s.entityPages.m = map[string]entityPageEntry{}
 	}
-	if _, have := s.entityPages.m[key]; !have && len(s.entityPages.m) >= entityPageCacheMax {
+	if _, have := s.entityPages.m[entityID]; !have && len(s.entityPages.m) >= entityPageCacheMax {
 		// Full: drop the oldest entry (and any expired one met), not the
 		// table, so a stranger cannot keep the hits cold by filling it.
 		oldest, oldestAt := "", now
@@ -140,9 +157,65 @@ func (s *Service) EntityPage(ctx context.Context, entityID string, stories int) 
 			delete(s.entityPages.m, oldest)
 		}
 	}
-	s.entityPages.m[key] = entityPageEntry{at: now, page: page}
+	s.entityPages.m[entityID] = entityPageEntry{at: now, page: page}
 	s.entityPages.mu.Unlock()
-	return page, nil
+	return cutEntityPage(page, stories), nil
+}
+
+// cutEntityPage is the page with at most n stories listed (a copy; the cached
+// page is never changed).
+func cutEntityPage(p *EntityPage, n int) *EntityPage {
+	if p == nil {
+		return nil
+	}
+	out := *p
+	if len(out.StoryList) > n {
+		out.StoryList = out.StoryList[:n:n]
+	}
+	return &out
+}
+
+// publicStoryMemo remembers, within one walk, which publications are on the
+// public route and their rows.
+type publicStoryMemo struct {
+	s     *Service
+	og    *ObjectGraphStore
+	known map[string]*FrontStory // nil value: checked, not public
+}
+
+// check reports the public rows of the publications named, reading each once.
+func (m *publicStoryMemo) check(ctx context.Context, pubs []string) error {
+	ids := map[string]bool{}
+	for _, p := range pubs {
+		if _, ok := m.known[p]; !ok {
+			ids[p] = true
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	infos, err := m.s.relatedPublications(ctx, m.og, ids)
+	if err != nil {
+		return err
+	}
+	for p := range ids {
+		info, ok := infos[p]
+		if !ok || !info.eligible {
+			m.known[p] = nil
+			continue
+		}
+		story, ok, err := m.s.frontStory(ctx, m.og, frontPublicationRow{CanonicalID: p, Metadata: info.obj.Metadata, UpdatedAt: info.obj.UpdatedAt.UTC()})
+		if err != nil {
+			return err
+		}
+		if !ok {
+			m.known[p] = nil // not on the public route
+			continue
+		}
+		st := story
+		m.known[p] = &st
+	}
+	return nil
 }
 
 func (s *Service) computeEntityPage(ctx context.Context, entityID string, limit int) (*EntityPage, error) {
@@ -179,7 +252,43 @@ func (s *Service) computeEntityPage(ctx context.Context, entityID string, limit 
 	if canonical == "" {
 		return nil, nil
 	}
-	edges, err := s.entityMentionsNewest(ctx, canonical, entityPageEdgeLimit)
+	memo := &publicStoryMemo{s: s, og: og, known: map[string]*FrontStory{}}
+
+	// The person gate comes first and from the central edges alone: a person
+	// with no Wikidata id needs two public stories they are central to, however
+	// old and however many incidental mentions came since. The edges are
+	// capped (entityPageGateChecks, newest first), and the walk stops at two.
+	if row.Type == types.EntityTypePerson && row.WikidataID == "" {
+		central, err := s.entityMentionsNewest(ctx, canonical, entityPageGateChecks, true)
+		if err != nil {
+			return nil, err
+		}
+		public := 0
+		seen := map[string]bool{}
+		var pubs []string
+		for _, e := range central {
+			if !seen[e.FromID] {
+				seen[e.FromID] = true
+				pubs = append(pubs, e.FromID)
+			}
+		}
+		for start := 0; start < len(pubs) && public < entityPageMinPeopleStories; start += entityPageChunk {
+			chunk := pubs[start:min(start+entityPageChunk, len(pubs))]
+			if err := memo.check(ctx, chunk); err != nil {
+				return nil, err
+			}
+			for _, p := range chunk {
+				if memo.known[p] != nil {
+					public++
+				}
+			}
+		}
+		if public < entityPageMinPeopleStories {
+			return nil, nil
+		}
+	}
+
+	edges, err := s.entityMentionsNewest(ctx, canonical, entityPageEdgeLimit, false)
 	if err != nil {
 		return nil, err
 	}
@@ -203,56 +312,55 @@ func (s *Service) computeEntityPage(ctx context.Context, entityID string, limit 
 		pubs = append(pubs, pubRole{e.FromID, role})
 	}
 	page := &EntityPage{EntityID: entityID, Name: strings.TrimSpace(row.Name), Type: row.Type, WikidataID: row.WikidataID,
-		Aliases: row.Aliases, CountsAtLeast: len(edges) >= entityPageEdgeLimit,
-		StoryList: []EntityPageStory{}, CoEntities: []types.EntityRef{}}
-	for _, p := range pubs {
-		page.Mentions++
-		if p.role == types.EntityRoleCentral {
-			page.CentralMentions++
-		}
-	}
+		Aliases: row.Aliases, StoryList: []EntityPageStory{}, CoEntities: []types.EntityRef{}}
 
-	// The walk: the newest publications, checked for the public route in
-	// small chunks, until the list is full and a person's page is decided.
-	needsGate := row.Type == types.EntityTypePerson && row.WikidataID == ""
-	publicCentral := 0
-	for start := 0; start < len(pubs) && start < entityPageMaxChecks; start += entityPageChunk {
-		if len(page.StoryList) >= limit && (!needsGate || publicCentral >= entityPageMinPeopleStories) {
-			break
+	// The walk: the newest publications, checked for the public route in small
+	// chunks. The counts are of what the walk verified, so a reader learns
+	// nothing of a publication that is not public; CountsAtLeast says the walk
+	// did not reach every mention (the edge read was full, or the check bound
+	// came first), so the entity may have more.
+	checked := min(len(pubs), entityPageMaxChecks)
+	page.CountsAtLeast = len(edges) >= entityPageEdgeLimit || len(pubs) > checked
+	for start := 0; start < checked; start += entityPageChunk {
+		chunk := pubs[start:min(start+entityPageChunk, checked)]
+		names := make([]string, len(chunk))
+		for i, p := range chunk {
+			names[i] = p.pub
 		}
-		chunk := pubs[start:min(start+entityPageChunk, len(pubs), entityPageMaxChecks)]
-		ids := map[string]bool{}
-		for _, p := range chunk {
-			ids[p.pub] = true
-		}
-		infos, err := s.relatedPublications(ctx, og, ids)
-		if err != nil {
+		if err := memo.check(ctx, names); err != nil {
 			return nil, err
 		}
 		for _, p := range chunk {
-			info, ok := infos[p.pub]
-			if !ok || !info.eligible {
+			story := memo.known[p.pub]
+			if story == nil {
 				continue
 			}
-			story, ok, err := s.frontStory(ctx, og, frontPublicationRow{CanonicalID: p.pub, Metadata: info.obj.Metadata, UpdatedAt: info.obj.UpdatedAt.UTC()})
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				continue // not on the public route
-			}
+			page.Stories++
 			if p.role == types.EntityRoleCentral {
-				publicCentral++
+				page.CentralStories++
 			}
 			if len(page.StoryList) < limit {
-				page.StoryList = append(page.StoryList, EntityPageStory{FrontStory: story, Role: p.role})
+				page.StoryList = append(page.StoryList, EntityPageStory{FrontStory: *story, Role: p.role})
 			}
 		}
 	}
-	if needsGate && publicCentral < entityPageMinPeopleStories {
-		return nil, nil
+	// Publications past the check bound that the person gate already verified
+	// are counted and listed too (no further reads): an old story an entity is
+	// central to is not lost behind newer mentions.
+	for _, p := range pubs[checked:] {
+		story := memo.known[p.pub]
+		if story == nil {
+			continue
+		}
+		page.Stories++
+		if p.role == types.EntityRoleCentral {
+			page.CentralStories++
+		}
+		if len(page.StoryList) < limit {
+			page.StoryList = append(page.StoryList, EntityPageStory{FrontStory: *story, Role: p.role})
+		}
 	}
-	page.CoEntities = s.entityPageCoEntities(ctx, og, canonical, page.StoryList)
+	page.CoEntities = s.entityPageCoEntities(ctx, og, canonical, page.StoryList[:min(len(page.StoryList), entityPageCoStories)])
 	return page, nil
 }
 
@@ -260,10 +368,15 @@ func (s *Service) computeEntityPage(ctx context.Context, entityID string, limit 
 // newest first. A capture's link to the entity (station E3) is not a story's
 // mention and must not fill the window the page reads (it uses
 // idx_og_edges_to_kind_created).
-func (s *Service) entityMentionsNewest(ctx context.Context, canonical string, limit int) ([]objectgraph.Edge, error) {
+func (s *Service) entityMentionsNewest(ctx context.Context, canonical string, limit int, centralOnly bool) ([]objectgraph.Edge, error) {
+	roleCond := ""
+	if centralOnly {
+		// The role is read from the edge's JSON, not matched as text.
+		roleCond = ` AND CASE WHEN pg_input_is_valid(metadata, 'jsonb') THEN metadata::jsonb->>'role' = 'central' ELSE FALSE END`
+	}
 	rows, err := s.store.corpus().QueryContext(ctx, `SELECT edge_id, from_id, metadata, created_at FROM og_edges
 		WHERE to_id = ? AND kind = ? AND NOT tombstone
-			AND from_id >= 'obj:choir.publication:' AND from_id < 'obj:choir.publication;'
+			AND from_id >= 'obj:choir.publication:' AND from_id < 'obj:choir.publication;'`+roleCond+`
 		ORDER BY created_at DESC, edge_id LIMIT ?`, canonical, string(edgeMentionsEntity), limit)
 	if err != nil {
 		return nil, fmt.Errorf("entity page: mentions of %s: %w", canonical, err)

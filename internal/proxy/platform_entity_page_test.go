@@ -35,7 +35,7 @@ func TestPlatformEntityPageIsPublicChecksTheIdAndMapsCorpusdsAnswers(t *testing.
 		gotInternal, gotQuery = r.Header.Get("X-Internal-Caller"), r.URL.RawQuery
 		switch r.URL.Path {
 		case "/internal/platform/entities/" + known:
-			_ = json.NewEncoder(w).Encode(platform.EntityPage{EntityID: known, Name: "Halvorsen Dynamics", Type: "organization", Mentions: 2, StoryList: []platform.EntityPageStory{}, CoEntities: []types.EntityRef{}})
+			_ = json.NewEncoder(w).Encode(platform.EntityPage{EntityID: known, Name: "Halvorsen Dynamics", Type: "organization", Stories: 2, StoryList: []platform.EntityPageStory{}, CoEntities: []types.EntityRef{}})
 		case "/internal/platform/entities/" + types.MintedEntityID("Nobody"):
 			http.Error(w, `{"error":"secret detail"}`, http.StatusNotFound)
 		default:
@@ -55,7 +55,7 @@ func TestPlatformEntityPageIsPublicChecksTheIdAndMapsCorpusdsAnswers(t *testing.
 	}
 	w := do(http.MethodGet, types.EntityPagePrefix+known+"?stories=7")
 	var got platform.EntityPage
-	if w.Code != http.StatusOK || gotInternal != "true" || gotQuery != "stories=7" || json.Unmarshal(w.Body.Bytes(), &got) != nil || got.Mentions != 2 {
+	if w.Code != http.StatusOK || gotInternal != "true" || gotQuery != "stories=7" || json.Unmarshal(w.Body.Bytes(), &got) != nil || got.Stories != 2 {
 		t.Fatalf("status %d internal %q query %q body %s", w.Code, gotInternal, gotQuery, w.Body.String())
 	}
 	if cc := w.Header().Get("Cache-Control"); cc != "public, max-age=60" {

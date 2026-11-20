@@ -59,7 +59,7 @@ func TestEntityPageServesAnOrganisationWithItsStoriesNewestFirst(t *testing.T) {
 	l.attachEntities(c, newEntity("Quay Authority", types.EntityTypeOrganization, types.EntityRoleCentral))
 	id := types.MintedEntityID("Halvorsen Dynamics")
 	p := l.page(id, 0)
-	if p == nil || p.Name != "Halvorsen Dynamics" || p.Type != types.EntityTypeOrganization || p.Mentions != 2 || p.CentralMentions != 1 || p.CountsAtLeast {
+	if p == nil || p.Name != "Halvorsen Dynamics" || p.Type != types.EntityTypeOrganization || p.Stories != 2 || p.CentralStories != 1 || p.CountsAtLeast {
 		t.Fatalf("page = %+v", p)
 	}
 	if len(p.StoryList) != 2 || p.StoryList[0].PublicationID != b.PublicationID || p.StoryList[0].Role != types.EntityRoleIncidental ||
@@ -70,7 +70,7 @@ func TestEntityPageServesAnOrganisationWithItsStoriesNewestFirst(t *testing.T) {
 	if len(p.CoEntities) != 1 || p.CoEntities[0].Name != "Quay Authority" {
 		t.Fatalf("co-entities = %+v", p.CoEntities)
 	}
-	if p1 := l.page(id, 1); len(p1.StoryList) != 1 || p1.Mentions != 2 {
+	if p1 := l.page(id, 1); len(p1.StoryList) != 1 || p1.Stories != 2 {
 		t.Fatalf("one story asked for: %+v", p1)
 	}
 }
@@ -96,7 +96,7 @@ func TestEntityPageServesAPersonOnlyWithAWikidataIdOrTwoCentralStories(t *testin
 		t.Fatal("an incidental mention made a page")
 	}
 	l.attachEntities(c, types.StoryEntity{EntityID: jane.EntityID, Role: types.EntityRoleCentral})
-	if p := l.page(jane.EntityID, 0); p == nil || p.CentralMentions != 2 || len(p.StoryList) != 3 {
+	if p := l.page(jane.EntityID, 0); p == nil || p.CentralStories != 2 || len(p.StoryList) != 3 {
 		t.Fatalf("a person central in two stories has no page: %+v", p)
 	}
 	// A person with a page is a co-entity; one without is left out.
@@ -141,10 +141,10 @@ func TestEntityPageLeavesOutStoriesNotOnThePublicRouteAndTentativeMentions(t *te
 		t.Fatal(err)
 	}
 	p := l.page(h.EntityID, 0)
-	// The list is of what is served; the counts are of the mentions recorded
-	// (the private story's edge counts, the tentative capture's does not).
-	if p == nil || len(p.StoryList) != 1 || p.StoryList[0].PublicationID != a.PublicationID || p.Mentions != 2 || p.CentralMentions != 2 {
-		t.Fatalf("page = %+v, want the one public story listed and 2 recorded", p)
+	// The list and the counts are of what the walk verified as public: the
+	// private story's edge and the tentative capture's are in neither.
+	if p == nil || len(p.StoryList) != 1 || p.StoryList[0].PublicationID != a.PublicationID || p.Stories != 1 || p.CentralStories != 1 {
+		t.Fatalf("page = %+v, want the one public story listed and counted", p)
 	}
 }
 
@@ -197,12 +197,12 @@ func TestEntityPageAnswersAreCachedForAMinuteAndBounded(t *testing.T) {
 	h := newEntity("Halvorsen Dynamics", types.EntityTypeOrganization, types.EntityRoleCentral)
 	l.attachEntities(a, h)
 	first, err := l.svc.EntityPage(context.Background(), h.EntityID, 0)
-	if err != nil || first == nil || first.Mentions != 1 {
+	if err != nil || first == nil || first.Stories != 1 {
 		t.Fatalf("%+v %v", first, err)
 	}
 	b := l.publish("doc-b", 1, "Turbines ship", l.capture("https://wire.example/b", "", "Turbines ship"))
 	l.attachEntities(b, types.StoryEntity{EntityID: h.EntityID, Role: types.EntityRoleCentral})
-	if again, _ := l.svc.EntityPage(context.Background(), h.EntityID, 0); again == nil || again.Mentions != 1 {
+	if again, _ := l.svc.EntityPage(context.Background(), h.EntityID, 0); again == nil || again.Stories != 1 {
 		t.Fatalf("a second read within the minute was not the cached one: %+v", again)
 	}
 	// A miss is cached too, so ids that do not exist cost one read a minute.
@@ -212,7 +212,7 @@ func TestEntityPageAnswersAreCachedForAMinuteAndBounded(t *testing.T) {
 			t.Fatalf("%+v %v", p, err)
 		}
 	}
-	if e, ok := l.svc.entityPages.m[missing+"|20"]; !ok || e.page != nil {
+	if e, ok := l.svc.entityPages.m[missing]; !ok || e.page != nil {
 		t.Fatalf("the miss is not cached: %+v", l.svc.entityPages.m)
 	}
 	// The table is bounded: past entityPageCacheMax it starts over.
@@ -229,7 +229,7 @@ func TestEntityPageAnswersAreCachedForAMinuteAndBounded(t *testing.T) {
 	if n := len(l.svc.entityPages.m); n != entityPageCacheMax {
 		t.Fatalf("cache holds %d entries after it was full, want %d", n, entityPageCacheMax)
 	}
-	if _, ok := l.svc.entityPages.m[h.EntityID+"|20"]; !ok {
+	if _, ok := l.svc.entityPages.m[h.EntityID]; !ok {
 		t.Fatal("the new entry is not cached")
 	}
 }
@@ -252,7 +252,7 @@ func TestEntityPageReadsPublicationMentionsAmongCaptureLinks(t *testing.T) { // 
 		}
 	}
 	p := l.page(h.EntityID, 0)
-	if p == nil || p.Mentions != 1 || p.CentralMentions != 1 || p.CountsAtLeast || len(p.StoryList) != 1 || p.StoryList[0].PublicationID != a.PublicationID {
+	if p == nil || p.Stories != 1 || p.CentralStories != 1 || p.CountsAtLeast || len(p.StoryList) != 1 || p.StoryList[0].PublicationID != a.PublicationID {
 		t.Fatalf("capture links changed the page: %+v", p)
 	}
 	// A person's gate still sees the publication's mentions.
@@ -267,7 +267,85 @@ func TestEntityPageReadsPublicationMentionsAmongCaptureLinks(t *testing.T) { // 
 			t.Fatal(err)
 		}
 	}
-	if pj := l.page(jane.EntityID, 0); pj == nil || pj.CentralMentions != 2 {
+	if pj := l.page(jane.EntityID, 0); pj == nil || pj.CentralStories != 2 {
 		t.Fatalf("capture links hid a person's page: %+v", pj)
+	}
+}
+
+func TestEntityPageGateReadsCentralEdgesNotTheNewestWindow(t *testing.T) { // review 2b item 3
+	l := newPageLab(t)
+	a := l.publish("doc-a", 1, "Story A", l.capture("https://wire.example/a", "", "Story A"))
+	b := l.publish("doc-b", 1, "Story B", l.capture("https://wire.example/b", "", "Story B"))
+	jane := newEntity("Jane Roe", types.EntityTypePerson, types.EntityRoleCentral)
+	l.attachEntities(a, jane)
+	l.attachEntities(b, types.StoryEntity{EntityID: jane.EntityID, Role: types.EntityRoleCentral})
+	canonical, _ := entityCanonicalFor(labOwner, jane.EntityID)
+	// Newer than both: more incidental mentions than the walk checks.
+	for i := 0; i < entityPageMaxChecks+10; i++ {
+		from := fmt.Sprintf("obj:choir.publication:%s:later-%d", labOwner, i)
+		if err := l.svc.ogStore().PutEdge(context.Background(), makeEdge(from, canonical, edgeMentionsEntity, time.Now().UTC().Add(time.Duration(i+1)*time.Second), mentionMetadata(types.EntityRoleIncidental))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := l.page(jane.EntityID, 0)
+	if p == nil {
+		t.Fatal("a person central in two public stories has no page because newer mentions came after")
+	}
+	if p.Stories != 2 || p.CentralStories != 2 || len(p.StoryList) != 2 || !p.CountsAtLeast {
+		t.Fatalf("page = %+v, want the two verified stories, counted and listed, with the counts marked at least", p)
+	}
+	// Central only in one public story and many incidental ones: no page.
+	pat := newEntity("Pat Poe", types.EntityTypePerson, types.EntityRoleCentral)
+	l.attachEntities(a, pat)
+	pc, _ := entityCanonicalFor(labOwner, pat.EntityID)
+	for i := 0; i < 5; i++ {
+		from := fmt.Sprintf("obj:choir.publication:%s:inc-%d", labOwner, i)
+		if err := l.svc.ogStore().PutEdge(context.Background(), makeEdge(from, pc, edgeMentionsEntity, time.Now().UTC(), mentionMetadata(types.EntityRoleIncidental))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if l.page(pat.EntityID, 0) != nil {
+		t.Fatal("a person central in one story and incidental in others has a page")
+	}
+}
+
+func TestEntityPageOneWalkAnswersEveryStoriesValueAndTheWalkHasADeadline(t *testing.T) { // review 2b item 4
+	l := newPageLab(t)
+	for i := 0; i < 3; i++ {
+		s := l.publish(fmt.Sprint("doc-", i), 1, fmt.Sprint("Story ", i), l.capture(fmt.Sprint("https://wire.example/", i), "", fmt.Sprint("Story ", i)))
+		l.attachEntities(s, newEntity("Halvorsen Dynamics", types.EntityTypeOrganization, types.EntityRoleCentral))
+	}
+	id := types.MintedEntityID("Halvorsen Dynamics")
+	l.svc.entityPages.mu.Lock()
+	l.svc.entityPages.m = nil
+	l.svc.entityPages.mu.Unlock()
+	walks := 0
+	entityPageWalkHook = func() { walks++ }
+	defer func() { entityPageWalkHook = nil }()
+	for n := 1; n <= entityPageMaxStories; n++ {
+		p, err := l.svc.EntityPage(context.Background(), id, n)
+		if err != nil || p == nil || len(p.StoryList) != min(n, 3) || p.Stories != 3 {
+			t.Fatalf("stories=%d: %+v %v", n, p, err)
+		}
+	}
+	if walks != 1 || len(l.svc.entityPages.m) != 1 {
+		t.Fatalf("%d walks and %d cache entries for 50 variants of one id, want 1 and 1", walks, len(l.svc.entityPages.m))
+	}
+	// The cached page is never cut by a smaller ask.
+	if p, _ := l.svc.EntityPage(context.Background(), id, 50); len(p.StoryList) != 3 {
+		t.Fatalf("the cached page was cut: %d", len(p.StoryList))
+	}
+	// A walk that overruns its deadline answers an error and caches nothing.
+	l.svc.entityPages.mu.Lock()
+	l.svc.entityPages.m = nil
+	l.svc.entityPages.mu.Unlock()
+	old := entityPageDeadline
+	entityPageDeadline = time.Nanosecond
+	defer func() { entityPageDeadline = old }()
+	if p, err := l.svc.EntityPage(context.Background(), id, 0); err == nil {
+		t.Fatalf("an overrun walk answered %+v", p)
+	}
+	if len(l.svc.entityPages.m) != 0 {
+		t.Fatal("an error was cached")
 	}
 }

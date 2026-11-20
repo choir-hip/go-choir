@@ -644,3 +644,91 @@ func explainPlanOn(t *testing.T, conn *sql.Conn, query string, args ...any) stri
 	}
 	return strings.Join(lines, "\n")
 }
+
+// ---- the index build (review 2b item 1) ----
+
+func edgesIndexState(t *testing.T, s *Store) (exists, valid bool) {
+	t.Helper()
+	var v sql.NullBool
+	err := s.corpus().QueryRow(`SELECT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = ? AND i.indrelid = 'og_edges'::regclass`, idxEdgesToKindCreated).Scan(&v)
+	if err == sql.ErrNoRows {
+		return false, false
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return true, v.Bool
+}
+
+func TestEdgesIndexBuildTimesOutLeavesAnInvalidIndexAndTheNextTryRepairsIt(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	if _, err := f.store.corpus().Exec(`DROP INDEX IF EXISTS ` + idxEdgesToKindCreated); err != nil {
+		t.Fatal(err)
+	}
+	// A transaction that holds an xid: CREATE INDEX CONCURRENTLY waits for it.
+	tx, err := f.store.corpus().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO og_edges (edge_id, from_id, to_id, kind, metadata, created_at, tombstone) VALUES ('edge:hold', 'a', 'b', 'k', '{}', now(), FALSE)`); err != nil {
+		t.Fatal(err)
+	}
+	old := edgesIndexBuildTimeout
+	edgesIndexBuildTimeout = 700 * time.Millisecond
+	start := time.Now()
+	err = f.store.ensureEdgesToKindCreatedIndex(ctx)
+	edgesIndexBuildTimeout = old
+	if err == nil || time.Since(start) > 10*time.Second {
+		_ = tx.Rollback()
+		t.Fatalf("a build behind an old transaction: err %v after %v, want an error at its deadline", err, time.Since(start))
+	}
+	if exists, valid := edgesIndexState(t, f.store); !exists || valid {
+		_ = tx.Rollback()
+		t.Fatalf("after the timeout: exists %v valid %v, want an invalid index left behind", exists, valid)
+	}
+	// Nothing else held: the session lock and lock_timeout went back clean.
+	var lt string
+	if err := f.store.corpus().QueryRow(`SHOW lock_timeout`).Scan(&lt); err != nil || lt != "0" {
+		t.Logf("lock_timeout on a pooled connection: %q %v", lt, err)
+	}
+	_ = tx.Rollback()
+	// The next try detects the invalid index, drops it and rebuilds.
+	if err := f.store.ensureEdgesToKindCreatedIndex(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if exists, valid := edgesIndexState(t, f.store); !exists || !valid {
+		t.Fatalf("after the retry: exists %v valid %v", exists, valid)
+	}
+}
+
+func TestMigrateRetrievalDoesNotBuildTheEdgesIndexAndTheKickIsSingleFlight(t *testing.T) {
+	f := newVecFixture(t)
+	ctx := context.Background()
+	if _, err := f.store.corpus().Exec(`DROP INDEX IF EXISTS ` + idxEdgesToKindCreated); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.MigrateRetrieval(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if exists, _ := edgesIndexState(t, f.store); exists {
+		t.Fatal("MigrateRetrieval built the entity read's index: its wait would hold up the periodic loop")
+	}
+	// The kick builds in the background, once at a time.
+	f.store.retrievalState.edgesIndexBuilding.Store(true)
+	f.store.kickEdgesToKindCreatedIndex(ctx) // a build is running: nothing starts
+	time.Sleep(300 * time.Millisecond)
+	if exists, _ := edgesIndexState(t, f.store); exists {
+		t.Fatal("a second build started beside a running one")
+	}
+	f.store.retrievalState.edgesIndexBuilding.Store(false)
+	f.store.kickEdgesToKindCreatedIndex(ctx)
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, valid := edgesIndexState(t, f.store); valid {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("the kicked build did not finish")
+}
