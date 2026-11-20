@@ -131,25 +131,3 @@ public final class Conversation: @unchecked Sendable {
         ChoirApp.plain(stage: "desk", message: "\(error)")
     }
 }
-
-public struct ConversationRow: Codable, Sendable, Equatable {
-    public var id = "", question = "", first = "", firstSource = "", answer = "", status = "", note = ""
-    public var canRetry = false
-    public init() {}
-}
-public struct ConversationInfo: Codable, Sendable, Equatable {
-    public var rows: [ConversationRow] = []
-    public var empty = true
-    public init() {}
-    public static func make(_ entries: [ConversationEntry]) -> ConversationInfo {
-        var i = ConversationInfo()
-        for e in entries.reversed() where e.status != "cancelled" {
-            var r = ConversationRow()
-            r.id = e.id; r.question = e.question; r.first = e.first; r.firstSource = e.firstSource; r.answer = e.answer
-            r.status = e.status; r.note = e.note; r.canRetry = e.status == "failed" || (e.status == "answered" && !e.note.isEmpty)
-            i.rows.append(r)
-        }
-        i.empty = i.rows.isEmpty
-        return i
-    }
-}

@@ -78,7 +78,6 @@ final class ConversationTests: XCTestCase {
         var b = BarInfo(); BarTracker.decorate(&b, with: c.visible())
         XCTAssertEqual(b.answerState, "failed"); XCTAssertTrue(b.canRetry); XCTAssertEqual(b.answerNote, "I can't reach the paper right now.")
         XCTAssertEqual(b.question, "What changed?")
-        XCTAssertTrue(ConversationInfo.make(c.entries()).rows.first?.canRetry ?? false)
     }
     func testANewQuestionClosesTheOldOneAndLateSentencesAreIgnored() {
         let c = Conversation()
@@ -100,7 +99,6 @@ final class ConversationTests: XCTestCase {
         let c = Conversation()
         c.begin(id: "t1", question: "thanks"); c.cancelOpen()
         XCTAssertNil(c.visible())
-        XCTAssertTrue(ConversationInfo.make(c.entries()).empty)
     }
     func testFirstAnswerThenFullAnswerIsOneEntry() {
         let c = Conversation()
@@ -239,7 +237,6 @@ final class SavedAnswerTests: XCTestCase {
         XCTAssertEqual(entry.status, "failed")
         XCTAssertFalse(entry.note.isEmpty)
         XCTAssertTrue(spoken(log).contains("desk:" + entry.note), "the failure is spoken, never a silent turn: \(spoken(log))")
-        XCTAssertTrue(ConversationInfo.make(Conversation.shared.entries()).rows.first?.canRetry ?? false)
     }
 
     func testTheServerAnswerNeverArrivingThenCancelLeavesNoFailureCard() async throws {

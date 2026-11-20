@@ -1,13 +1,13 @@
 // Lane file: talk (lane autoradio-talk). The conversation (what was asked and what came back), the bar's answer card actions, and the
 // queue-by-voice adapter. Sources and sends are declared in interface/talk.json (and the card's fields in BarInfo, interface/spine.json).
-//   conversationInfo           the conversation page: every question and its answer, newest first
+//   conversationEntries       the voice turn engine's entries, oldest first, whole (the page's rows are AutoradioLab/conversation.ts: shared code)
 //   answerAction(action, id)   the card's buttons: "retry" asks the same words again, "dismiss" hides the card, "cancel" stops the turn
 import Foundation
 import ExactPackage
 
 extension AutoradioModule {
     func registerTalk() {
-        Conversation.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState", "conversationInfo"], now: true) } }
+        Conversation.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState", "conversationEntries"], now: true) } }
 
         // The queue by voice (owner, 2026-11-15). The paper's list is what the DJ may add; the rest goes through the run sheet
         // (Kit/TurnQueueWire.swift): `turnQueueJSON()` goes out with every turn as the `queue` field, the `queue_ops` event comes back whole to
@@ -27,7 +27,8 @@ extension AutoradioModule {
         handle("voiceLearn") { _, reply in SpeakerGate.shared.forget(); reply(["ok": true, "message": ""]) }
         handle("voiceForget") { _, reply in SpeakerGate.shared.forget(); reply(["ok": true, "message": ""]) }
 
-        handle("conversationInfo") { [unowned self] _, reply in reply(self.json(ConversationInfo.make(Conversation.shared.entries()))) }
+        // Native because the voice turn engine writes the entries; it hands them over as they are and decides nothing.
+        handle("conversationEntries") { [unowned self] _, reply in reply(["entries": Conversation.shared.entries().map { self.json($0) }]) }
         handle("answerAction") { [unowned self] args, reply in
             let action = args["action"] as? String ?? "", id = args["id"] as? String ?? ""
             switch action {

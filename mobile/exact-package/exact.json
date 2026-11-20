@@ -783,7 +783,7 @@
       "record": "string",
       "handle": "string"
     },
-    "ConversationRow": {
+    "ConversationEntry": {
       "id": "string",
       "question": "string",
       "first": "string",
@@ -791,11 +791,10 @@
       "answer": "string",
       "status": "string",
       "note": "string",
-      "canRetry": "bool"
+      "startedAt": "number"
     },
-    "ConversationInfo": {
-      "rows": "ConversationRow[]",
-      "empty": "bool"
+    "ConversationEntries": {
+      "entries": "ConversationEntry[]"
     },
     "VoiceProfile": {
       "learned": "bool",
@@ -2059,13 +2058,12 @@
       "answers": "TakesPageInfo"
     },
     {
-      "source": "conversationInfo",
+      "source": "conversationEntries",
       "live": true,
-      "answers": "ConversationInfo",
+      "answers": "ConversationEntries",
       "substitute": {
         "default": {
-          "rows": [],
-          "empty": true
+          "entries": []
         }
       }
     },
