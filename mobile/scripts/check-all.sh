@@ -12,11 +12,10 @@ fail() { echo "CHECKS FAILED at $1"; [ -n "${2:-}" ] && echo "$2"; exit 1; }
 cd "$M" || fail "cd"
 
 # 1. generators, which must leave the tree as it was (a stale generated file is a failure) ...
-python3 -I "$HERE/embed-assets.py" >/dev/null 2>&1 || fail "embed-assets"
 python3 -I "$HERE/gen-exact-interface.py" >/dev/null 2>&1 || fail "gen-exact-interface"
 python3 -I "$HERE/gen-tetramark.py" --check >/dev/null 2>&1 || fail "tetramark drift" "run scripts/gen-tetramark.py"
-[ -z "$(git status --short -- AutoradioKit/Sources/AutoradioKit/BundledThemes.generated.swift exact-package/exact.json exact-package/package.json 2>/dev/null | grep -v '^??' | head -1)" ] || {
-  git diff --stat -- AutoradioKit/Sources/AutoradioKit/BundledThemes.generated.swift exact-package/exact.json | tail -3; fail "generated files" "a generator changed a tracked file: commit what it wrote (or stash your own edit first: this check cannot tell them apart)"; }
+[ -z "$(git status --short -- exact-package/exact.json exact-package/package.json 2>/dev/null | grep -v '^??' | head -1)" ] || {
+  git diff --stat -- exact-package/exact.json | tail -3; fail "generated files" "a generator changed a tracked file: commit what it wrote (or stash your own edit first: this check cannot tell them apart)"; }
 # ... and the checks
 python3 -I "$HERE/check-strings.py" >/dev/null 2>&1 || { python3 -I "$HERE/check-strings.py" 2>&1 | tail -10; fail "strings"; }
 python3 -I "$HERE/check-no-loading.py" 2>&1 | tail -10; python3 -I "$HERE/check-no-loading.py" >/dev/null 2>&1 || fail "a Loading or Opening string"

@@ -1,6 +1,6 @@
 // The design rule (owner, 2026-11-15): "i want no pills. no pills. no outlined bubbles. pills promote bad design, bad typography." Controls read as
 // controls through type, position and one affordance, not a container. The rule is written at the top of ui.contract; these tests keep it.
-// Ported from Swift DesignRulesTests (every case but R1, which tests ThemeStore and stays in Swift until the themes port).
+// Ported from Swift DesignRulesTests (every case but R1, the theme radius clamp, which moved to themes.test.ts with the themes).
 //  R2 a contract draws a capsule: `th.radiusPill`, or a border-radius above 12, outside ui.contract (every contract is scanned).
 //  R3 a contract draws an outline (`border-style="solid"`, or a `border-width` with a colour) outside ui.contract. A hairline above a row is a rule.
 //  R5 a circle or a half-height rounding: a box whose border-radius is half its height or more outside ui.contract; across lines in every contract.
