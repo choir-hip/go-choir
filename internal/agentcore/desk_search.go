@@ -107,8 +107,10 @@ type searchDone struct {
 
 // startSearch serves choir.SearchStart for the session key's worker. It
 // returns once the gateway has named the providers it started; record is
-// called when the stream ends, before the worker hears of it.
-func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker *yaegikernel.DeskSessionWorker, client search.Client, payload json.RawMessage, record func(searchDone)) (json.RawMessage, error) {
+// called when the stream ends, before the worker hears of it. leads, when set,
+// is given every provider arrival's results in one call when the search ends
+// (it must not block).
+func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker *yaegikernel.DeskSessionWorker, client search.Client, payload json.RawMessage, record func(searchDone), leads func(query string, results []search.Result)) (json.RawMessage, error) {
 	var req yaegikernel.SearchStartPayload
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("search_start: decode: %w", err)
@@ -161,7 +163,7 @@ func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker
 		searches.end(id)
 		return nil, fmt.Errorf("search_start: %w", err)
 	}
-	go forwardSearch(streamCtx, worker, stream, id, query, func(done searchDone) {
+	go forwardSearch(streamCtx, worker, stream, id, query, leads, func(done searchDone) {
 		searches.end(id)
 		if record != nil {
 			record(done)
@@ -173,8 +175,12 @@ func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker
 // forwardSearch pushes each provider's answer to the worker as it lands,
 // then the search's end. A stream cancelled with its session ends quietly:
 // the worker is gone.
-func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, stream *search.Stream, id, query string, finish func(searchDone)) {
+func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, stream *search.Stream, id, query string, leads func(string, []search.Result), finish func(searchDone)) {
 	defer func() { _ = stream.Close() }()
+	// The whole search's results become leads corpusd holds in one write,
+	// however the search ends (search_leads.go).
+	batch := searchLeadBatch{query: query, leads: leads}
+	defer batch.flush()
 	done := searchDone{id: id, query: query, started: time.Now(), total: len(stream.Start.Providers)}
 	for {
 		a, err := stream.Next()
@@ -197,6 +203,7 @@ func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, s
 		for _, r := range a.Results {
 			arrival.Results = append(arrival.Results, yaegikernel.SearchHit{Title: r.Title, URL: r.URL, Snippet: strings.TrimSpace(r.Snippet), PublishedAt: r.PublishedAt, Score: r.Score, Provider: r.Provider})
 		}
+		batch.add(a.Results)
 		done.arrived++
 		done.providers = append(done.providers, types.SearchServedUsage{Provider: a.Provider, Calls: 1, Answered: boolInt(arrival.Answered()), Results: len(a.Results)})
 		if arrival.Answered() {

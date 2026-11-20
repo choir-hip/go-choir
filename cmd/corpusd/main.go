@@ -268,6 +268,8 @@ func main() {
 		log.Fatalf("corpusd capture bodies: %v", err)
 	}
 	ogHandler.ConfigureCaptureIndex(store)
+	// Search leads: their own table and readiness, made a little after boot.
+	store.StartSearchLeads(context.Background())
 	// The captured pages' full-text index, beside the capture projection:
 	// derived from the capture objects and their text blobs, rebuilt by its
 	// catch-up (docs/reference/CAPTURE-FULLTEXT.md).
