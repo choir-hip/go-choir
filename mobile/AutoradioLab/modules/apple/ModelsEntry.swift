@@ -22,7 +22,7 @@ import Security
 // is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
 //
 // The take recorder's ops (`takeState` ... `takeLegacy`, AutoradioModule+Takes.swift `takeOp`): shared code (AutoradioLab/take-session.ts) leads the Takes section; the reason they are native is the
-// microphone, the radio's gate, the recogniser and the player (the voice), the steer queue, and the Swift programme's copy of the listener's own ids and muted voices. `takeLegacy` only READS the old files.
+// microphone, the radio's gate, the recogniser and the player (the voice), the steer queue, and the Swift programme's copy of the listener's own ids and muted voices. `takeLegacy` READS the old files and `takeLegacyDrop` deletes them once shared code has decided with proof of ownership (take-session.ts refresh).
 //
 // The themes' one-time carry-over (AutoradioLab/themes.ts `migrate`): `{op: "themeLegacy"}` READS what the Swift app kept for the themes: the choice (UserDefaults) and the user's theme files
 // (Application Support/Autoradio/themes). The reason it is native: those are places shared code cannot see (Exact's `app:/data` is another folder). It only reads and removes nothing, so a reverted

@@ -79,42 +79,34 @@ final class TakesTests: XCTestCase {
         XCTAssertEqual(back, e); XCTAssertEqual(back.kind, .take)
     }
 
-    func testT6TheProgrammesCopyOfOwnIdsAndMutesIsWhatSharedCodePushedAndSurvivesARelaunch() {
+    func testT6TheProgrammesCopyOfOwnIdsAndMutesIsWhatSharedCodePushedAndSurvivesARelaunch() throws {
         let d = FileManager.default.temporaryDirectory.appendingPathComponent("mirror-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: d) }
-        let fo = d.appendingPathComponent("takes-own.json"), fm = d.appendingPathComponent("takes-muted.json")
+        let fo = d.appendingPathComponent("takes-copy-own.json"), fm = d.appendingPathComponent("takes-copy-muted.json")
         let own = TakeOwn(file: fo), mutes = TakeMutes(file: fm)
+        let t = try XCTUnwrap(Take.parse(["take_id": "take-1", "publisher": "voice-x", "state": "live"]))
         own.replace(ids: ["take-2", "take-1"], handle: "voice-me0001"); mutes.replace(["voice-3fa2c1", "bad handle"])
-        XCTAssertEqual(TakeOwn(file: fo).allIDs, ["take-1", "take-2"]); XCTAssertEqual(TakeOwn(file: fo).handle, "voice-me0001")
+        XCTAssertTrue(TakeOwn(file: fo).owns(t)); XCTAssertEqual(TakeOwn(file: fo).handle, "voice-me0001")
         XCTAssertEqual(TakeMutes(file: fm).all, ["voice-3fa2c1"], "a handle that is not one is not kept")
         own.replace(ids: [], handle: ""); mutes.replace([])
-        XCTAssertEqual(TakeMutes(file: fm).all, []); XCTAssertEqual(TakeOwn(file: fo).allIDs, [])
+        XCTAssertEqual(TakeMutes(file: fm).all, []); XCTAssertFalse(TakeOwn(file: fo).owns(t))
+        XCTAssertEqual(TakeFiles.url("takes-copy-own.json")?.lastPathComponent, "takes-copy-own.json")
+        XCTAssertNotEqual(TakeLegacy.own, TakeFiles.url("takes-copy-own.json"), "the programme's copy is not the old file: a push never recreates it")
     }
 
-    func testTheOldFilesAreReadAsTheyWereWrittenByTheOldBuild() throws {
+    /// The old files are read as the old build wrote them and removed only by `drop`.
+    func testTheOldFilesAreReadAsTheyWereWrittenAndOnlyDropRemovesThem() throws {
         let d = FileManager.default.temporaryDirectory.appendingPathComponent("old-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); defer { try? FileManager.default.removeItem(at: d) }
-        try Data(#"{"handle":"voice-me0001","ids":["take-a","take-b"]}"#.utf8).write(to: d.appendingPathComponent("takes-own.json"))
-        try Data(#"["voice-9b0e44"]"#.utf8).write(to: d.appendingPathComponent("takes-muted.json"))
-        let own = TakeOwn(file: d.appendingPathComponent("takes-own.json")), mutes = TakeMutes(file: d.appendingPathComponent("takes-muted.json"))
-        XCTAssertEqual(own.allIDs, ["take-a", "take-b"]); XCTAssertEqual(own.handle, "voice-me0001"); XCTAssertEqual(mutes.all, ["voice-9b0e44"])
-        XCTAssertTrue(FileManager.default.fileExists(atPath: d.appendingPathComponent("takes-own.json").path), "reading removes nothing")
-    }
-
-    /// Row 2 of the takes state table: the carry-over is a phone's upgrade. With the marker there, the old files are never handed out again, whatever they still hold.
-    func testTheCarryOverMarkerIsDurableAndHidesTheOldFilesFromAnyLaterAccount() throws {
-        let d = FileManager.default.temporaryDirectory.appendingPathComponent("legacy-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); defer { try? FileManager.default.removeItem(at: d) }
-        let own = TakeOwn(file: d.appendingPathComponent("o.json")), mutes = TakeMutes(file: d.appendingPathComponent("m.json")), marker = d.appendingPathComponent("takes-carried")
-        own.replace(ids: ["take-a"], handle: "voice-A"); mutes.replace(["voice-Am"])
-        var r = TakeLegacy.read(own: own, mutes: mutes, marker: marker)
-        XCTAssertEqual(r["found"] as? Bool, true); XCTAssertEqual(r["carried"] as? Bool, false); XCTAssertEqual(r["ids"] as? [String], ["take-a"]); XCTAssertEqual(r["handle"] as? String, "voice-A")
-        XCTAssertTrue(TakeLegacy.markCarried(marker: marker)); XCTAssertTrue(TakeLegacy.markCarried(marker: marker), "idempotent")
-        r = TakeLegacy.read(own: own, mutes: mutes, marker: marker)       // the files are still full (a failed unlink): the answer is empty and says carried
-        XCTAssertEqual(r["found"] as? Bool, false); XCTAssertEqual(r["carried"] as? Bool, true); XCTAssertEqual(r["ids"] as? [String], []); XCTAssertEqual(r["muted"] as? [String], [])
-        own.wipe(); mutes.wipe()
-        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), "the account wipe of the two stores does not touch the marker")
-        XCTAssertEqual(TakeLegacy.read(own: own, mutes: mutes, marker: nil)["carried"] as? Bool, false); XCTAssertFalse(TakeLegacy.markCarried(marker: nil))
+        let own = d.appendingPathComponent("takes-own.json"), muted = d.appendingPathComponent("takes-muted.json")
+        XCTAssertEqual(TakeLegacy.read(own: own, muted: muted)["present"] as? Bool, false)
+        try Data(#"{"handle":"voice-me0001","ids":["take-a","take-b"]}"#.utf8).write(to: own)
+        try Data(#"["voice-9b0e44"]"#.utf8).write(to: muted)
+        let r = TakeLegacy.read(own: own, muted: muted)
+        XCTAssertEqual(r["present"] as? Bool, true); XCTAssertEqual(r["ids"] as? [String], ["take-a", "take-b"]); XCTAssertEqual(r["muted"] as? [String], ["voice-9b0e44"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: own.path), "reading removes nothing")
+        XCTAssertTrue(TakeLegacy.drop(own: own, muted: muted)); XCTAssertFalse(FileManager.default.fileExists(atPath: own.path)); XCTAssertFalse(FileManager.default.fileExists(atPath: muted.path))
+        XCTAssertTrue(TakeLegacy.drop(own: own, muted: muted), "dropping what is already gone is done"); XCTAssertTrue(TakeLegacy.drop(own: nil, muted: nil))
     }
 
     func testRespondsToFromTheEntryOnAir() async {

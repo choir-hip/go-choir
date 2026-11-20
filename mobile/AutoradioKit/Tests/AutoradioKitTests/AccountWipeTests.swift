@@ -56,7 +56,7 @@ final class AccountWipeTests: XCTestCase {
 
     /// Row 1 of the takes state table (docs/reference/AUTORADIO-TAKES.md): a take in review is the account's; after sign-out (or an account change) the recorder is idle, its file is gone and the radio is
     /// given back, so the next account is never shown it and can never publish it.
-    func testATakeInReviewIsGoneAfterTheWipeAndTheMarkerOfTheUpgradeIsNot() async {
+    func testATakeInReviewIsGoneAfterTheWipe() async {
         let rec = FakeRecorder(), gate = FakeGate(), clock = Date(timeIntervalSince1970: 1000)
         let dir = root.appendingPathComponent("takes-live")
         let s = TakeSession(recorder: rec, transcriber: FakeTranscriber(words: Self.marker), gate: gate, preview: FakePreview(), micAllowed: { true }, responds: { TakeResponds(route: "r", title: Self.marker) },
@@ -64,13 +64,11 @@ final class AccountWipeTests: XCTestCase {
         TakeSession.live = s
         let limits = TakeLimits(minSeconds: 0, maxSeconds: 59.5, maxBytes: 512 * 1024)
         await s.start(limits); await s.stop(); XCTAssertEqual(s.state, .review); XCTAssertEqual(s.transcript, Self.marker)
-        let carried = root.appendingPathComponent("takes-carried"); XCTAssertTrue(TakeLegacy.markCarried(marker: carried))
         let wipe = AccountWipe(); wipe.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), tempDirectory: root.appendingPathComponent("tmp2"))
         await wipe.run()
         XCTAssertEqual(s.state, .idle); XCTAssertEqual(s.transcript, ""); XCTAssertNil(s.audio); XCTAssertEqual(gate.given, 1)
         XCTAssertEqual(s.snapshot["respondsTitle"] as? String, "", "the story the old account answered is not carried either")
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [], [])
-        XCTAssertTrue(FileManager.default.fileExists(atPath: carried.path), "the upgrade's marker is the phone's, not the account's: the wipe leaves it")
         TakeSession.live = nil
     }
 

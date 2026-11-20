@@ -198,22 +198,22 @@ export const mineOf = (json: unknown): MyTake[] => (isObj(json) && Array.isArray
 
 // ---------------------------------------------------------------------------------------------------------------- what the phone keeps
 
-export type Kept = { ids: string[]; handle: string; muted: string[]; /** The Swift app's own ids, handle and mutes have been carried in (take-session.ts carryOver). */ migrated: boolean };
+export type Kept = { ids: string[]; handle: string; muted: string[] };
 export const KEPT_FILE = 'app:/data/takes.json';
-export const emptyKept = (): Kept => ({ ids: [], handle: '', muted: [], migrated: false });
+export const emptyKept = (): Kept => ({ ids: [], handle: '', muted: [] });
 
 export async function loadKept(storage: Storage | undefined): Promise<Kept> {
   if (!storage) return emptyKept();
   try {
     const o = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(KEPT_FILE)));
     return { ids: Array.isArray(o.ids) ? o.ids.filter((x: unknown): x is string => typeof x === 'string') : [], handle: typeof o.handle === 'string' ? o.handle : '',
-      muted: Array.isArray(o.muted) ? o.muted.filter((x: unknown): x is string => typeof x === 'string' && validHandle(x)) : [], migrated: o.migrated === true };
+      muted: Array.isArray(o.muted) ? o.muted.filter((x: unknown): x is string => typeof x === 'string' && validHandle(x)) : [] };
   } catch { return emptyKept(); }
 }
 /** True when the file is there. The write is held to the account generation like every moved store's (api.ts writeCurrent): `gen` is the generation the DATA belongs to (the overlay's), so a write
  * begun for an account that has since been wiped is refused, and one that lands after the generation moved is removed again. */
 export async function saveKept(storage: Storage | undefined, k: Kept, gen: number = accountGeneration()): Promise<boolean> {
-  return writeCurrent(gen, storage, KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: [...k.ids].sort(), handle: k.handle, muted: k.muted, migrated: k.migrated })));
+  return writeCurrent(gen, storage, KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: [...k.ids].sort(), handle: k.handle, muted: k.muted })));
 }
 /** Sign-out: the ids, the handle and the muted voices are the account's. */
 export async function wipeKept(storage: Storage | undefined): Promise<void> { if (!storage) return; try { await storage.fs.rm(KEPT_FILE); } catch { /* absent */ } }

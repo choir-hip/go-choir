@@ -43,7 +43,7 @@ class FakeDevice implements Device {
   seconds = 10; file: Uint8Array | null = mp4(10);
   refuse: Native['ended'] | '' = ''; detail = '';
   responds = { title: '', route: '' };
-  legacyAnswer: { found: boolean; ids: string[]; handle: string; muted: string[] } | null = null; legacyCalls = 0;
+  legacyFiles: { present: boolean; ids: string[]; handle: string; muted: string[] } | null = null; legacyReads = 0; legacyReadFails = false; dropFails = false; drops = 0;
   mirrored: { ids: string[]; handle: string; muted: string[] }[] = [];
   steered: string[] = [];
   limits: unknown = null;
@@ -68,13 +68,23 @@ class FakeDevice implements Device {
   async done() { this.log.push('done'); this.snap = { ...IDLE }; return this.snap; }
   async steerMute(h: string) { this.steered.push(h); }
   async mirror(k: { ids: string[]; handle: string; muted: string[] }) { this.mirrored.push({ ids: [...k.ids], handle: k.handle, muted: [...k.muted] }); }
-  marker = false;
-  async carried() { this.log.push('carried'); this.marker = true; return true; }
-  async legacy() { this.legacyCalls++; return this.marker ? { found: false, ids: [], handle: '', muted: [], carried: true } : this.legacyAnswer; }
+  async legacy() { this.legacyReads++; if (this.legacyReadFails) return null; return this.legacyFiles ?? { present: false, ids: [], handle: '', muted: [] }; }
+  async dropLegacy() { this.log.push('drop'); this.drops++; if (this.dropFails) return false; this.legacyFiles = null; return true; }
 }
 
 const files = new Map<string, Uint8Array>();
 const storage = { fs: { readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; }, atomicWriteFile: async (p: string, d: Uint8Array) => { files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
+
+
+/** A storage whose WRITE can be held: `entered` settles when a held write has begun, `release` lets it finish (so a test changes the account exactly while a write is in flight). */
+function slowStorage() {
+  let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+  let entered!: () => void; const began = new Promise<void>((r) => { entered = r; });
+  const st = { hold: false, release, entered: began,
+    storage: { fs: { readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; },
+      atomicWriteFile: async (p: string, d: Uint8Array) => { if (st.hold) { entered(); await gate; } files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never };
+  return st;
+}
 
 type Seen = { m: string; p: string; body?: Uint8Array; q?: Record<string, string | number> };
 function netOf(handler: (s: Seen) => { status: number; json?: unknown; bytes?: Uint8Array } | Promise<{ status: number; json?: unknown; bytes?: Uint8Array }>, seen: Seen[] = []): Net {
@@ -340,62 +350,6 @@ describe('S8 record and discard', () => {
 
 // ---------------------------------------------------------------------------------------------------------------- U1 to U3
 
-describe('U1 the carry-over from the Swift files', () => {
-  const legacy = { found: true, ids: ['take-old-1', 'take-old-2'], handle: 'voice-old0001', muted: ['voice-9b0e44', 'bad handle'] };
-  test('own ids, handle and mutes are carried once, unioned, marked, and mirrored back', async () => {
-    const h = setup(); h.dev.legacyAnswer = legacy;
-    const p = await act(h.env, h.o, 'refresh', '');
-    expect(p.handle).toBe('voice-old0001'); expect(p.muted.map((m) => m.handle)).toEqual(['voice-9b0e44']);
-    const kept = JSON.parse(new TextDecoder().decode(files.get(KEPT_FILE)!));
-    expect(kept).toMatchObject({ ids: ['take-old-1', 'take-old-2'], handle: 'voice-old0001', muted: ['voice-9b0e44'], migrated: true });
-    expect(h.dev.mirrored.at(-1)).toMatchObject({ ids: ['take-old-1', 'take-old-2'], muted: ['voice-9b0e44'] });
-    await act(h.env, h.o, 'refresh', ''); await act(h.env, newOverlay(), 'refresh', '');
-    expect(h.dev.legacyCalls).toBe(1);         // the second overlay found the marker in the file
-  });
-  test('what is already in app:/data/takes.json is kept and the old voices are added to it', async () => {
-    const h = setup(); h.dev.legacyAnswer = legacy;
-    files.set(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: ['take-new-1'], handle: 'voice-new0001', muted: ['voice-new-mute'] })));
-    await act(h.env, h.o, 'refresh', '');
-    const k = await loadKept(storage);
-    expect(k.ids.sort()).toEqual(['take-new-1', 'take-old-1', 'take-old-2']); expect(k.handle).toBe('voice-new0001'); expect(k.muted.sort()).toEqual(['voice-9b0e44', 'voice-new-mute']);
-  });
-  test('nothing was found: only the marker is written; no answer: not marked, asked again next time', async () => {
-    const a = setup(); a.dev.legacyAnswer = { found: false, ids: [], handle: '', muted: [] };
-    await act(a.env, a.o, 'refresh', ''); expect((await loadKept(storage)).migrated).toBe(true);
-    const b = setup(); b.dev.legacyAnswer = null;
-    await act(b.env, b.o, 'refresh', ''); expect(files.has(KEPT_FILE)).toBe(false);
-    b.dev.legacyAnswer = legacy; await act(b.env, b.o, 'refresh', ''); expect((await loadKept(storage)).ids).toContain('take-old-1');
-  });
-  test('the marker is not written when the write failed', async () => {
-    const h = setup(); h.dev.legacyAnswer = legacy;
-    const bad = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => { throw new Error('disk full'); }, rm: async () => {} } } as never;
-    const env = { ...h.env, storage: bad };
-    await act(env, h.o, 'refresh', ''); await act(env, h.o, 'refresh', '');
-    expect(h.dev.legacyCalls).toBe(2);        // not carried: asked again
-    expect(h.dev.mirrored).toEqual([]);       // and the native copy was not touched
-  });
-  test('nothing found: the old voices are not mirrored back (nothing is written to the native copy)', async () => {
-    const h = setup(); h.dev.legacyAnswer = { found: false, ids: [], handle: '', muted: [] };
-    await act(h.env, h.o, 'refresh', '');
-    expect(h.dev.mirrored).toEqual([]);
-  });
-});
-
-describe('U2 an action before the carry-over has finished cannot lose the old voices', () => {
-  test('mute, then publish, then delete each carry first', async () => {
-    const h = setup((s) => (s.m === 'DELETE' ? { status: 204 } : happy(s))); h.dev.legacyAnswer = { found: true, ids: ['take-old-1'], handle: 'voice-old0001', muted: ['voice-old-mute'] };
-    await act(h.env, h.o, 'mute', 'voice-3fa2c1');
-    expect((await loadKept(storage)).muted.sort()).toEqual(['voice-3fa2c1', 'voice-old-mute']);
-    expect(h.dev.mirrored.every((m) => m.muted.includes('voice-old-mute'))).toBe(true);
-    const g = setup(); g.dev.legacyAnswer = { found: true, ids: ['take-old-1'], handle: 'voice-old0001', muted: ['voice-old-mute'] };
-    await recorded(g); await act(g.env, g.o, 'publish', '');
-    const k = await loadKept(storage);
-    expect(k.ids.sort()).toEqual(['take-00000000000000b6', 'take-old-1']); expect(k.muted).toEqual(['voice-old-mute']);
-    await act(g.env, g.o, 'delete', 'take-00000000000000b6');
-    expect((await loadKept(storage)).ids).toEqual(['take-old-1']);
-  });
-});
-
 describe('U3 a take in review is the recorder\'s', () => {
   test('a new session (shared code restarted) still shows the take and can publish it once', async () => {
     const h = setup(); await recorded(h);
@@ -415,7 +369,7 @@ describe('U3 a take in review is the recorder\'s', () => {
   });
   test('the client is the shared one: the same wire as takes.ts', async () => {
     const seen: Seen[] = []; const c = client(netOf(happy, seen));
-    expect((await c.list()).length).toBe(0); expect(emptyKept().migrated).toBe(false);
+    expect((await c.list()).length).toBe(0); expect(emptyKept().ids).toEqual([]);
   });
 });
 
@@ -452,10 +406,22 @@ describe('B1 while a publish is in flight the recorder is not touched', () => {
     await act(h.env, h.o, 'publish', ''); expect(h.dev.snap.publishing).toBe(false);
     expect((await act(h.env, h.o, 'discard', '')).state).toBe('idle');
   });
-  test('the other acts still run during a send: delete, mute, unmute, refresh', async () => {
-    const { h, release, first } = await inflight();
+  test('the other acts still run during a send: mute, unmute, delete and refresh each do their work', async () => {
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    const h = setup(async (s) => {
+      if (s.m === 'POST') { await gate; return { status: 201, json: publishFx }; }
+      if (s.m === 'DELETE') return { status: 204 };
+      return { status: 200, json: s.q?.mine ? mineFx : { takes: [] } };
+    });
+    await recorded(h);
+    const first = act(h.env, h.o, 'publish', '');
+    await new Promise((r) => setTimeout(r, 5));
     expect((await act(h.env, h.o, 'mute', 'voice-3fa2c1')).muted).toHaveLength(1);
     expect((await act(h.env, h.o, 'unmute', 'voice-3fa2c1')).muted).toHaveLength(0);
+    const r = await act(h.env, h.o, 'refresh', ''); expect(r.mine.map((m) => m.id)).toEqual(['take-00000000000000a5']);
+    const d = await act(h.env, h.o, 'delete', 'take-00000000000000a5'); expect(d.mine).toEqual([]);
+    expect(h.seen.some((x) => x.m === 'DELETE')).toBe(true);
+    expect(d.state).toBe('publishing');
     release(); await first;
   });
 });
@@ -486,9 +452,7 @@ describe('B2 a new account does not see or rewrite the old account\'s takes data
     await act(h.env, h.o, 'mute', 'voice-OLD');
     expect((await pageFor(h.env, h.o, IDLE)).muted).toHaveLength(1);
     // sign-out: the generation moves, the shared file goes (account.ts wipeKept), the old account's native copy may still be there
-    const asked = h.dev.legacyCalls;
     nextGeneration(); await wipeKept(storage);
-    h.dev.legacyAnswer = { found: true, ids: ['take-OLD'], handle: 'voice-OLDH', muted: ['voice-OLD'] };
     const page = await pageFor(h.env, h.o, IDLE);
     expect(page.muted).toEqual([]); expect(page.handle).toBe(''); expect(page.mine).toEqual([]); expect(page.record).toBe('');
     const p = await act(h.env, h.o, 'mute', 'voice-NEW');
@@ -496,7 +460,6 @@ describe('B2 a new account does not see or rewrite the old account\'s takes data
     const k = await loadKept(storage);
     expect(k.muted).toEqual(['voice-NEW']); expect(k.ids).toEqual([]); expect(k.handle).toBe('');
     expect(h.dev.mirrored.at(-1)?.muted).toEqual(['voice-NEW']);
-    expect(h.dev.legacyCalls).toBe(asked);          // the old files were never asked for again
     // the native copy of the old account is emptied as soon as the change is seen, even if the native wipe had failed
     expect(h.dev.mirrored.some((m) => m.muted.length === 0 && m.ids.length === 0 && m.handle === '')).toBe(true);
   });
@@ -550,51 +513,15 @@ describe('row 1 the recorder\'s live take belongs to the account that made it', 
   });
 });
 
-describe('row 2 the carry-over is a one-time phone upgrade, never a second account\'s', () => {
-  const old = { found: true, ids: ['take-A'], handle: 'voice-A', muted: ['voice-Am'] };
-  test('after A adopted, a wipe whose native unlink failed, a restart and B: nothing of A is adopted', async () => {
-    const h = setup(); h.dev.legacyAnswer = old;
-    await act(h.env, h.o, 'refresh', ''); expect(h.dev.marker).toBe(true);
-    // sign-out: the shared file goes; the native unlink failed (the legacy answer still has A's data); the process restarts (a new overlay); B signs in
-    nextGeneration(); await wipeKept(storage);
-    h.dev.mirrored.length = 0;
-    const fresh = newOverlay();
-    const p = await act(h.env, fresh, 'refresh', '');
-    expect(p.muted).toEqual([]); expect(p.handle).toBe('');
-    const k = await loadKept(storage); expect(k.ids).toEqual([]); expect(k.muted).toEqual([]); expect(k.handle).toBe('');
-    expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });      // the programme's stale copy of A is overwritten by B's state
-  });
-  test('the marker is written after the shared write, and a missing marker is made good on the next process', async () => {
-    const h = setup(); h.dev.legacyAnswer = old;
-    h.dev.carried = async () => false as never;                 // the native write failed this time
-    await act(h.env, h.o, 'refresh', '');
-    expect((await loadKept(storage)).migrated).toBe(true); expect(h.dev.marker).toBe(false);
-    const g = { ...h.env }; h.dev.carried = FakeDevice.prototype.carried;
-    await act(g, newOverlay(), 'refresh', '');
-    expect(h.dev.marker).toBe(true);
-  });
-  test('a failed write leaves no marker', async () => {
-    const h = setup(); h.dev.legacyAnswer = old;
-    const bad = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => { throw new Error('disk full'); }, rm: async () => {} } } as never;
-    await act({ ...h.env, storage: bad }, h.o, 'refresh', '');
-    expect(h.dev.marker).toBe(false);
-  });
-});
-
 describe('row 3 every write of the kept file is held to the account generation', () => {
   test('a mute suspended inside the write while the account changes leaves no file behind', async () => {
-    files.clear();
-    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
-    let hold = false;
-    const slow = { fs: { readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; },
-      atomicWriteFile: async (p: string, d: Uint8Array) => { if (hold) await gate; files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
-    const h = setup(); const env = { ...h.env, storage: slow };
+    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage };
     await act(env, h.o, 'refresh', '');
-    hold = true;
+    sl.hold = true;
     const mute = act(env, h.o, 'mute', 'voice-OLD');
-    await new Promise((r) => setTimeout(r, 5));
-    nextGeneration(); await wipeKept(slow);
-    release(); await mute;
+    await sl.entered;
+    nextGeneration(); await wipeKept(sl.storage);
+    sl.release(); await mute;
     expect(files.has(KEPT_FILE)).toBe(false);
     expect((await pageFor(env, newOverlay(), IDLE)).muted).toEqual([]);
     expect(h.dev.mirrored.at(-1)?.muted ?? []).toEqual([]);          // and the programme was not given the old account's voice
@@ -627,5 +554,129 @@ describe('row 5 a server error listing my takes is said', () => {
     const h = setup((s) => (s.q?.mine ? { status: 500 } : { status: 200, json: { takes: [] } }));
     const p = await act(h.env, h.o, 'refresh', '');
     expect(p.notice).toBe('The server could not list your takes (HTTP 500).');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------- review 3 and the changed approach: ownership is proved, not inferred
+
+const OLD_LIVE = 'take-00000000000000a5';          // the id mine.json lists as live
+const mineOnly = (s: Seen) => (s.m === 'DELETE' ? { status: 204 } : s.p.endsWith('/record') ? { status: 200, json: recordFx } : { status: 200, json: s.q?.mine ? mineFx : { takes: [] } });
+const oldFiles = (o: Partial<{ ids: string[]; handle: string; muted: string[] }> = {}) => ({ present: true, ids: [OLD_LIVE, 'take-dead-1'], handle: 'voice-old0001', muted: ['voice-Am', 'voice-Bm'], ...o });
+
+describe('the old native files are adopted only on proof: an old own id that the server lists as this account\'s live take', () => {
+  test('a match adopts ALL the old ids and mutes (the dead id too), then the old files are deleted, in that order', async () => {
+    const h = setup(mineOnly); h.dev.legacyFiles = oldFiles();
+    const p = await act(h.env, h.o, 'refresh', '');
+    const k = await loadKept(storage);
+    expect(k.ids.sort()).toEqual([OLD_LIVE, 'take-dead-1']); expect(k.muted.sort()).toEqual(['voice-Am', 'voice-Bm']); expect(k.handle).toBe('voice-me0001');     // the server's handle wins
+    expect(p.muted.map((m) => m.handle).sort()).toEqual(['voice-Am', 'voice-Bm']);
+    expect(h.dev.drops).toBe(1); expect(h.dev.legacyFiles).toBeNull();
+    expect(h.dev.mirrored.at(-1)).toMatchObject({ muted: expect.arrayContaining(['voice-Am', 'voice-Bm']) });
+  });
+  test('the next refresh keeps the dead id (nothing prunes the own ids but a delete): it only excludes a take the list no longer offers', async () => {
+    const h = setup(mineOnly); h.dev.legacyFiles = oldFiles();
+    await act(h.env, h.o, 'refresh', ''); await act(h.env, h.o, 'refresh', '');
+    expect((await loadKept(storage)).ids).toContain('take-dead-1');
+  });
+  test('a different account\'s old files (no id in common): nothing is adopted and the files are deleted', async () => {
+    const h = setup(mineOnly); h.dev.legacyFiles = oldFiles({ ids: ['take-A1', 'take-A2'], handle: 'voice-me0001' });     // even the same handle is no proof
+    const p = await act(h.env, h.o, 'refresh', '');
+    const k = await loadKept(storage);
+    expect(k.ids).toEqual([OLD_LIVE]); expect(k.muted).toEqual([]); expect(p.muted).toEqual([]);          // only what the server says is this account's
+    expect(h.dev.drops).toBe(1); expect(h.dev.legacyFiles).toBeNull();
+    expect(h.dev.mirrored.at(-1)?.muted).toEqual([]);
+  });
+  test('an account with no live take adopts nothing (its old mutes are lost at upgrade) and the files are deleted', async () => {
+    const h = setup(() => ({ status: 200, json: { takes: [] } })); h.dev.legacyFiles = oldFiles();
+    const p = await act(h.env, h.o, 'refresh', '');
+    expect(p.muted).toEqual([]); expect((await loadKept(storage)).ids).toEqual([]); expect(h.dev.drops).toBe(1);
+  });
+  test('old files with mutes and no own ids or no handle: nothing to prove with, nothing adopted, deleted', async () => {
+    for (const files of [oldFiles({ ids: [], handle: '' }), oldFiles({ handle: '', ids: ['take-x'] })]) {
+      const h = setup(mineOnly); h.dev.legacyFiles = files;
+      expect((await act(h.env, h.o, 'refresh', '')).muted).toEqual([]); expect(h.dev.drops).toBe(1);
+    }
+  });
+  test('a server or network failure decides nothing: the files stay, nothing is adopted', async () => {
+    for (const handler of [() => ({ status: 500 }), () => ({ status: 404 }), () => { throw new Error('offline'); }, () => { throw new SignedOutError('not signed in'); }]) {
+      const h = setup(handler as never); h.dev.legacyFiles = oldFiles();
+      const p = await act(h.env, h.o, 'refresh', '');
+      expect(h.dev.drops).toBe(0); expect(h.dev.legacyFiles).not.toBeNull(); expect(p.muted).toEqual([]); expect(files.has(KEPT_FILE)).toBe(false);
+    }
+  });
+  test('a native read that did not answer decides nothing either; no files present means no delete', async () => {
+    const a = setup(mineOnly); a.dev.legacyFiles = oldFiles(); a.dev.legacyReadFails = true;
+    await act(a.env, a.o, 'refresh', ''); expect(a.dev.drops).toBe(0);
+    const b = setup(mineOnly); await act(b.env, b.o, 'refresh', ''); expect(b.dev.drops).toBe(0);
+  });
+  test('a failed delete leaves the same decision for the next attempt: adopted once, nothing new, nothing lost', async () => {
+    const h = setup(mineOnly); h.dev.legacyFiles = oldFiles(); h.dev.dropFails = true;
+    await act(h.env, h.o, 'refresh', '');
+    const first = await loadKept(storage); expect(h.dev.drops).toBe(1); expect(h.dev.legacyFiles).not.toBeNull();
+    await act(h.env, newOverlay(), 'refresh', '');                       // a restart: the same evidence, the same decision
+    const second = await loadKept(storage);
+    expect(second).toEqual(first); expect(h.dev.drops).toBe(2);
+    h.dev.dropFails = false; await act(h.env, newOverlay(), 'refresh', ''); expect(h.dev.legacyFiles).toBeNull(); expect(await loadKept(storage)).toEqual(first);
+  });
+  test('the files are deleted only after the adoption was written: a failed write deletes nothing', async () => {
+    const h = setup(mineOnly); h.dev.legacyFiles = oldFiles();
+    const bad = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => { throw new Error('disk full'); }, rm: async () => {} } } as never;
+    await act({ ...h.env, storage: bad }, h.o, 'refresh', '');
+    expect(h.dev.drops).toBe(0); expect(h.dev.legacyFiles).not.toBeNull();
+  });
+  test('the account changing while the proof is being written: nothing is adopted and nothing is deleted', async () => {
+    const h = setup(mineOnly); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage }; h.dev.legacyFiles = oldFiles(); sl.hold = true;
+    const refresh = act(env, h.o, 'refresh', '');
+    await sl.entered;
+    nextGeneration(); await wipeKept(sl.storage);
+    sl.release(); await refresh;
+    expect(files.has(KEPT_FILE)).toBe(false); expect(h.dev.drops).toBe(0); expect(h.dev.legacyFiles).not.toBeNull();
+  });
+  test('after A signed out and the native unlink failed, B (different ids) adopts nothing and the files go', async () => {
+    const h = setup(mineOnly); h.dev.legacyFiles = oldFiles();
+    await act(h.env, h.o, 'refresh', '');                      // A adopted; suppose A's copy is still in the files
+    nextGeneration(); await wipeKept(storage);
+    h.dev.legacyFiles = oldFiles();                            // the unlink failed
+    const bNet = setup((s) => (s.q?.mine ? { status: 200, json: { takes: [{ ...mineFx.takes[0], take_id: 'take-00000000000000b9', publisher: 'voice-bbbbbb' }] } } : { status: 200, json: { takes: [] } }));
+    const env = { ...h.env, net: bNet.env.net };
+    const p = await act(env, newOverlay(), 'refresh', '');
+    const k = await loadKept(storage);
+    expect(k.ids).toEqual(['take-00000000000000b9']); expect(k.muted).toEqual([]); expect(k.handle).toBe('voice-bbbbbb'); expect(p.muted).toEqual([]); expect(h.dev.legacyFiles).toBeNull();
+  });
+});
+
+describe('the programme\'s copy is pushed from shared code, first thing', () => {
+  test('a signed-in session pushes this account\'s state (empty when unknown) before it asks the server anything', async () => {
+    const h = setup(mineOnly);
+    await act(h.env, h.o, 'refresh', '');
+    expect(h.dev.mirrored[0]).toEqual({ ids: [], handle: '', muted: [] });
+    files.set(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: ['take-B'], handle: 'voice-B', muted: ['voice-Bm'] })));
+    const g = setup(mineOnly); files.set(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: ['take-B'], handle: 'voice-B', muted: ['voice-Bm'] })));
+    await act(g.env, g.o, 'refresh', '');
+    expect(g.dev.mirrored[0]).toEqual({ ids: ['take-B'], handle: 'voice-B', muted: ['voice-Bm'] });
+  });
+});
+
+describe('S1 a publish that finished for another account changes nothing of the next one', () => {
+  test('the generation moves while the write of the new id is in flight: no "published as", no done, no discard of the next account\'s take', async () => {
+    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage };
+    await recorded(h); sl.hold = true;
+    const pub = act(env, h.o, 'publish', '');
+    await sl.entered;
+    nextGeneration(); await wipeKept(sl.storage);
+    sl.release(); await pub;
+    expect(h.dev.log).not.toContain('done'); expect(h.dev.log.filter((x) => x === 'discard').length).toBeLessThanOrEqual(1);       // at most the one `sync` makes for the old account
+    expect(h.o.published).toBe('');
+  });
+});
+
+describe('S4 a write that landed just before the account changed is not kept or sent on', () => {
+  test('a mute whose write was in flight when the generation moved: not mirrored, not sent to the steer queue', async () => {
+    const h = setup(); const sl = slowStorage(); const env = { ...h.env, storage: sl.storage }; sl.hold = true;
+    const mute = act(env, h.o, 'mute', 'voice-OLD');
+    await sl.entered;
+    nextGeneration(); await wipeKept(sl.storage); sl.release(); await mute;
+    expect(h.dev.steered).toEqual([]); expect(h.dev.mirrored.every((m) => !m.muted.includes('voice-OLD'))).toBe(true);
+    expect((await pageFor(env, h.o, IDLE)).muted).toEqual([]);
   });
 });

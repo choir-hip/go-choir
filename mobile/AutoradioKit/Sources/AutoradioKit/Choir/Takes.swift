@@ -144,9 +144,9 @@ enum TakeFiles {
     }
 }
 
-/// The listener's own takes (ids and handle), so the public list never offers their own voice back. A READ-ONLY copy of shared code's data, pushed with `replace`; also the old file `TakeLegacy` reads once.
+/// The listener's own takes (ids and handle), so the public list never offers their own voice back. A READ-ONLY copy of shared code's data, pushed with `replace` (never the old files: `TakeLegacy`).
 public final class TakeOwn: @unchecked Sendable {
-    public static let shared = TakeOwn(file: TakeFiles.url("takes-own.json"))
+    public static let shared = TakeOwn(file: TakeFiles.url("takes-copy-own.json"))
     private let lock = NSLock()
     private var ids: Set<String> = []
     private var _handle = ""
@@ -158,8 +158,6 @@ public final class TakeOwn: @unchecked Sendable {
         }
     }
     public var handle: String { lock.lock(); defer { lock.unlock() }; return _handle }
-    /// The ids as the file holds them (the carry-over's read).
-    public var allIDs: [String] { lock.lock(); defer { lock.unlock() }; return ids.sorted() }
     public func owns(_ t: Take) -> Bool { lock.lock(); defer { lock.unlock() }; return ids.contains(t.takeID) || (!_handle.isEmpty && t.publisher == _handle) }
     /// Shared code's copy: the whole state, kept in the same file as before.
     public func replace(ids new: [String], handle h: String) {
@@ -177,24 +175,25 @@ public final class TakeOwn: @unchecked Sendable {
     }
 }
 
-/// The carry-over's two native calls (take-session.ts carryOver; docs/reference/AUTORADIO-TAKES.md, "The phone's own state"). The marker is durable and the account wipe leaves it.
+/// The Swift app's OLD files. take-session.ts `refresh` decides about them (ownership is proved by the server, never inferred): `read` removes nothing, `drop` deletes both.
 public enum TakeLegacy {
-    public static let marker = TakeFiles.url("takes-carried")
-    public static func read(own: TakeOwn = .shared, mutes: TakeMutes = .shared, marker: URL? = TakeLegacy.marker) -> [String: Any] {
-        let done = marker.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
-        let ids = done ? [] : own.allIDs, handle = done ? "" : own.handle, muted = done ? [] : mutes.all
-        return ["found": !ids.isEmpty || !handle.isEmpty || !muted.isEmpty, "carried": done, "ids": ids, "handle": handle, "muted": muted]
+    public static let own = TakeFiles.url("takes-own.json"), muted = TakeFiles.url("takes-muted.json")
+    public static func read(own: URL? = TakeLegacy.own, muted: URL? = TakeLegacy.muted) -> [String: Any] {
+        let there = { (u: URL?) in u.map { FileManager.default.fileExists(atPath: $0.path) } ?? false }
+        let ids = (own.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["ids"] as? [String]) ?? []
+        let mutes = (muted.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String] }) ?? []
+        return ["present": there(own) || there(muted), "ids": ids, "muted": mutes]
     }
-    public static func markCarried(marker: URL? = TakeLegacy.marker) -> Bool {
-        guard let m = marker else { return false }; try? FileManager.default.createDirectory(at: m.deletingLastPathComponent(), withIntermediateDirectories: true)
-        return (try? Data("1".utf8).write(to: m, options: .atomic)) != nil
+    public static func drop(own: URL? = TakeLegacy.own, muted: URL? = TakeLegacy.muted) -> Bool {
+        for u in [own, muted] { if let u { try? FileManager.default.removeItem(at: u) } }
+        return ![own, muted].contains { $0.map { FileManager.default.fileExists(atPath: $0.path) } ?? false }
     }
 }
 
 /// Voices the listener will not hear: a READ-ONLY copy of shared code's list (app:/data/takes.json), pushed with `replace`; the file is the old Swift one, kept current so a reverted build and the
 /// carry-over find it.
 public final class TakeMutes: @unchecked Sendable {
-    public static let shared = TakeMutes(file: TakeFiles.url("takes-muted.json"))
+    public static let shared = TakeMutes(file: TakeFiles.url("takes-copy-muted.json"))
     private let lock = NSLock()
     private var handles: [String] = []
     private let file: URL?

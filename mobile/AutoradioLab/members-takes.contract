@@ -14,7 +14,7 @@ members Autoradio
   // record | stop | preview | rerecord | discard | publish | delete | mute | unmute | refresh; arg is a take id or a publisher handle
   action takesDo(op: string, arg: string)
     send tpm = takesAct(op, arg)
-  // The listener's takes and record are read when the phone is signed in (and the old Swift ids and muted voices are carried over first, take-session.ts carryOver).
+  // The listener's takes and record are read when the phone is signed in (take-session.ts refresh: the programme copy is pushed first, and the old Swift files are adopted only on proof of ownership).
   action takesLoad
     send tpm = takesAct("refresh", "")
   task takesLoadTask when au.signedIn key=au.signedIn
