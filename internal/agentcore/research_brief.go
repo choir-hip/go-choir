@@ -740,8 +740,8 @@ func researchBriefLogLine(runID, desk string, elapsed time.Duration, res researc
 	if from == "" {
 		from = briefFromNone
 	}
-	return fmt.Sprintf("research brief run=%s desk=%s objective_from=%s unread=%d ms=%d slowest_ms=%d threads=%d queries=%d stories=%d captures=%d passages=%d newest_held=%s bytes=%d tokens_est=%d dropped=%s left=%d unanswered=%d outcome=%s reason=%q",
-		runID, desk, from, res.unread, elapsed.Milliseconds(), res.slowest.Milliseconds(), res.threads, res.queries, res.stories, res.captures, res.passages, newest, len(res.text), res.tokens, dropped, res.left, res.unanswered, res.outcome, res.reason)
+	return fmt.Sprintf("research brief run=%s desk=%s ms=%d slowest_ms=%d threads=%d queries=%d stories=%d captures=%d passages=%d newest_held=%s bytes=%d tokens_est=%d dropped=%s left=%d unanswered=%d outcome=%s objective_from=%s unread=%d reason=%q",
+		runID, desk, elapsed.Milliseconds(), res.slowest.Milliseconds(), res.threads, res.queries, res.stories, res.captures, res.passages, newest, len(res.text), res.tokens, dropped, res.left, res.unanswered, res.outcome, from, res.unread, res.reason)
 }
 
 // researchBrief is the host-delivered corpus brief of one research run.
