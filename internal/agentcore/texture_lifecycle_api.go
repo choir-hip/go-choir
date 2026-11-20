@@ -111,22 +111,13 @@ func (rt *Runtime) TextureActorParkIdle() time.Duration {
 }
 
 // TextureRootDigestInterval is the Texture root digest's debounce: a digest
-// is due this long after the change that armed it, and root runs started by
-// digests are at least this far apart (runtime configuration, default 120 s).
+// is due this long after the commit on an ordinary document that armed it
+// (runtime configuration, default 120 s); a story document waits an hour.
 func (rt *Runtime) TextureRootDigestInterval() time.Duration {
 	if rt == nil || rt.cfg.TextureRootDigestInterval <= 0 {
 		return provideriface.DefaultTextureRootDigestInterval
 	}
 	return rt.cfg.TextureRootDigestInterval
-}
-
-// TextureRootDigestPerHour bounds root runs started by digests in any hour
-// (runtime configuration, default 20).
-func (rt *Runtime) TextureRootDigestPerHour() int {
-	if rt == nil || rt.cfg.TextureRootDigestPerHour <= 0 {
-		return provideriface.DefaultTextureRootDigestPerHour
-	}
-	return rt.cfg.TextureRootDigestPerHour
 }
 
 // ScheduleActor records a durable actor occurrence due at notBefore through

@@ -31,11 +31,23 @@ const textureRootContextCut = "\n(the rest of the master document is cut here)"
 // textureRootSharedContext is the excerpt section for a run on doc, and the
 // master revision it shows; empty when the marked master is not live or its
 // head is not the root's own writing (its seed, or an owner edit the root
-// has not yet rendered).
+// has not yet rendered), and for a story document.
 func (h *Handler) textureRootSharedContext(ctx context.Context, ownerID string, doc types.Document, root store.TextureRoot) (string, string) {
 	ctx = asTextureReader(ctx)
 	computerID := strings.TrimSpace(doc.ComputerID)
 	if h == nil || h.Store == nil || strings.TrimSpace(root.DocumentID) == "" || root.DocumentID == doc.DocID {
+		return "", ""
+	}
+	// A story run carries no excerpt. On a newsroom the master is a digest of
+	// the stories, so a story run reading it would read its own story back
+	// through the root's summary (circular), and story runs are the highest
+	// volume runs: the excerpt would add a liveness read, a master head read,
+	// a listing of up to 50 documents and up to 4 KiB of prompt to each of
+	// them, for context about the owner's open work that a story's research
+	// does not use. Ordinary documents carry it.
+	if story, err := h.Store.DocumentIsStory(ctx, doc); err != nil {
+		log.Printf("texture root: shared context on %s: story kind: %v", computerID, err)
+	} else if story {
 		return "", ""
 	}
 	exists, live, err := h.textureRootLive(ctx, ownerID, computerID, root)

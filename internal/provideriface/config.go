@@ -30,12 +30,8 @@ const (
 	DefaultTextureActorParkIdle = 2 * time.Minute
 
 	// DefaultTextureRootDigestInterval is the Texture root digest's debounce
-	// and the least spacing of digest-started root runs (PD3 S1).
+	// (PD3 S1): a commit on an ordinary document is digested this long after.
 	DefaultTextureRootDigestInterval = 120 * time.Second
-
-	// DefaultTextureRootDigestPerHour bounds digest-started root runs in any
-	// hour (PD3 S1).
-	DefaultTextureRootDigestPerHour = 20
 
 	// DefaultRunMemoryContextThresholdTokens is zero so normal runtime
 	// compaction derives from the selected model's context window. Set
@@ -108,10 +104,6 @@ func LoadConfig() Config {
 		TextureRootDigestInterval: durationOr(
 			"RUNTIME_TEXTURE_ROOT_DIGEST_INTERVAL",
 			DefaultTextureRootDigestInterval,
-		),
-		TextureRootDigestPerHour: intOr(
-			"RUNTIME_TEXTURE_ROOT_DIGEST_PER_HOUR",
-			DefaultTextureRootDigestPerHour,
 		),
 		VmctlURL:           envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
 		MaildURL:           os.Getenv("RUNTIME_MAILD_URL"),
