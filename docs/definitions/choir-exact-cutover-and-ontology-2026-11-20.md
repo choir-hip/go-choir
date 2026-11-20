@@ -31,7 +31,7 @@ start:
     - 'lane/story-events-e5 (no pushed commit): a published story carries its event ids. Red. Not to land until the design confirms its shape.'
     - 'Stopped for the owner, kept: root-desk-r3 7a6d66dc4; snapshot-stream 0873aa1fc; exact-convo-edit 4b58dba83 (the Texture editor); owner-act-enforce ba32aa571; dispatch-deadlines 04a06df51 (failing suite). lane/search-ceramic ad404a072 is kept by the owner''s word.'
 finish:
-  deliver: 'Everything in Autoradio outside voice is shared Exact code, and the paper knows what it already holds: every story, capture, event, entity and outlet is an object in one identity space that an agent can query from its cell, so a happening is covered by one story that grows, and the web is searched only for what is new.'
+  deliver: 'Everything in Autoradio outside voice is shared Exact code, and the paper knows what it already holds: every story, capture, event, entity and outlet is an object in one identity space that an agent can query from its cell, so the paper builds one deep, growing narrative for each topic that takes in every development as it arrives, where a newspaper would print a new article for each beat, and the web is searched only for what is new.'
   artifact: 'on main and staging: (X) each remaining page''s logic in mobile/AutoradioLab with its Swift deleted and the native ceiling lowered; (O) the unified semantic layer of docs/design/semantic-layer-2026-11-20.md landed station by station, with the typed cell library; (C) story consolidation running on the paper; (P) the publishing defects fixed. On the owner''s phone: a build of main after each group of page moves.'
   acceptance:
     - action: scripts/check-autoradio-native-boundary on main, reported at every hourly tick
@@ -62,7 +62,7 @@ finish:
     required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance, device_install]
 value:
   better_means: 'three gaps close: non-voice native lines fall to what voice and the platform force; a happening on the paper has one story, linked to its events, entities and sources in one graph an agent can query; web searches a day fall under 1,000 because the paper can tell what is new.'
-  goodharting_would_be: 'Swift moved behind a thin native wrapper, or a page moved with its tests deleted; a typed library nobody''s cell calls; entities and events counted as linked while judgments are still a hash and a mint; consolidation that lowers the story count by dropping coverage; a search count that falls because fewer runs start; a design document counted as the layer.'
+  goodharting_would_be: 'Swift moved behind a thin native wrapper, or a page moved with its tests deleted; a typed library nobody''s cell calls; entities and events counted as linked while judgments are still a hash and a mint; consolidation that lowers the story count by dropping coverage, or one story that swallows unrelated happenings and reads as a list; a search count that falls because fewer runs start; a design document counted as the layer.'
 homotopy:
   realism_axis: 'from one page slice proved on the simulator, to no page logic in Swift and the owner''s phone; from the library answering on d@e, to the paper''s research desks using it in their runs; from an hour''s search count after a deploy, to a full UTC day.'
 boundaries:
@@ -84,6 +84,10 @@ boundaries:
     - '"we need to really architect the events and entities... That every story has a semantic representation, so that we''re building a whole ontology... re-architect it so that it''s all unified rather than ad hoc. make it so that it''s easy for agents in their REPL to query and use it." (2026-11-20)'
     - '"I don''t want to over-index on what the BBC did or what some single study with a 60% number says. We actually need to design this from the ground up, recognizing that we have more advanced agents than anyone has had in the past, right? We''re using RLM. We have a whole ontology built in." and "we do have the System 1 models as a tool as well." (2026-11-20)'
     - '"I think the stories we may be doing duplicate stories of the same topics. So that''s one way that we can improve the quality of the paper by consolidating overlapping stories, and also that''ll end up reducing searches." (2026-11-20)'
+    - '"the deduplication stuff should be rewritten later to use the ontology. Since for stories with significant overlap we should be revising not making new stories. This way we will develop fewer deep stories on key topics rather than many shallow stories that cover parts of it. In this way choir.news will be very unlike a newspaper which has a new article for every beat of a story. Choir should instead build a singular narrative that incorporates all the article as they accumulate over time" (2026-11-20): a development is a revision of the story that holds the topic, not a new story; the design''s default of opening a follow-on story after 24 hours is overruled. C1b is a stopgap to be rewritten on the ontology.'
+    - '"Ok let''s update to latest exact too" (2026-11-20): the Exact pin moves from de212e671 to upstream.'
+    - '"For texture, we should be using exact wysiwyg markdown text editor (research it in exact repo) and their pretext/reflow/textflow text calculation stuff" (2026-11-20). What the source says (docs/reference/exact/markdown-editor-and-textflow.md): Pretext is not part of Exact; textflow and the reflow demo are Exact''s text layout for reading; the Markdown editor is the one we already use, WYSIWYG only on the web, with our patch 0001 hiding syntax on iPhone.'
+    - '"if you upload a file that''s actually going to your computer... So uploaded files really shouldn''t be deleted because they''re saved in the cloud." (2026-11-20)'
     - '"The point is that we have two goals right now. To finish the cutover to exact... And to finish the search and ontology work, which involves entities and events. Takes and muting is beside the point." (2026-11-20)'
     - '"we should be able to get our searches underneath 1,000 per day... we only need to search for things which are new information for us" (2026-11-19).'
     - '"be sure to use the lander and builder vms on node a. The key constraint is our local cpu usage. Exact builds should be fast though, so the more we port to exact the faster it gets." (2026-11-20)'
@@ -102,6 +106,12 @@ boundaries:
     - TestFlight; Android sign-in and voice in Kotlin; the Mac app
     - any change to search providers, their keys or spending
 stations:
+  - id: X0
+    name: Exact moved to upstream
+    scope: 'the pin moves from de212e671 (2026-11-16) to upstream HEAD (fb72ddc3a on 2026-11-20, 760 commits). The lead does it in the build tree, since it needs the native build: read the grammar and package-interface diff against our contracts and mobile/exact-package first; re-check patch 0001 (it applies to upstream by git apply --check; never compiled) and drop it if upstream hides syntax; contract build, test web, the native build, proof-real.sh with screenshots read, a phone install. The Apple build was restructured upstream: risk medium-high, unrun. Builders keep working against the old pin until this lands, then rebase. Rollback: the pin file.'
+    class: orange
+    review: one seat on our diff
+    status: pending
   - id: X1
     name: Edition picks and takes in shared code, no carry-over
     scope: lanes exact-edition-picks and exact-takes as rebuilt; one seat each; real proof with screenshots read; land; phone install
@@ -140,10 +150,11 @@ stations:
     depends_on: [X1]
     status: pending
   - id: X7
-    name: The Texture editor
-    scope: 'a written model of the four versions of a text the editor keeps, with a test for each step, before any code (docs/problems/texture-editor-in-exact-three-reviews-no-landing-2026-11-20.md). Live text is at stake; the no-carry-over ruling does not answer it.'
+    name: The Texture editor on what Exact's editor already holds
+    scope: 'docs/reference/exact/markdown-editor-and-textflow.md: Exact''s editor holds the draft, the selection and undo. So the field is the draft, and shared code keeps one pair (the field''s text and the revision it descends from); a merge writes into the field''s value and Exact applies it as a minimal edit with the caret kept. Tests for each step before code. Patch 0001 (no syntax visible on iPhone) proved once on the simulator. Known costs: a remote merge clears undo; on Android stock Exact shows Markdown source (owner decision Q5). Textflow and the reflow measure are reader work: use them for the reader''s layout as a slice of X3.'
     class: red
     review: two seats
+    depends_on: [X0]
     status: pending
   - id: X8
     name: What is left native, counted and justified
@@ -157,6 +168,7 @@ stations:
     class: green
     review: a panel on the design; no code review
     status: working
+    result: 'the design is written (4a1aaeb4c): judgments as tape records with the graph as their projection; happenings, entities (outlets among them), stories and claims in the Autopaper object graph; choir.World with Get, Find, Neighbors, Walk, Ask, Judge; landings L1 (C1b), L2 (the flush writes recorded judgments, 50 vector neighbours, clustering within a flush), L3 (happenings into the graph; the story-events-e5 lane changed, not landed as is: its index is capped at 10,000 events). It rates under 1,000 searches a day at p 0.10 and 2,400 at p 0.50. Not yet read by the owner; not yet challenged by a panel. To amend for the owner''s ruling: a development revises the story that holds the topic.'
   - id: O1
     name: One identity space
     scope: 'as the design sequences it: events, their members and the story-to-event and capture-to-event edges in the Autopaper object graph beside stories, captures and entities; one id form per thing with the others resolvable; outlets as objects; the custody tension over management and events resolved in doctrine''s terms; the og_edges id columns declared COLLATE "C". No rewrite of large tables in one step.'
@@ -191,15 +203,15 @@ stations:
     status: proved
     result: 'docs/evidence/duplicate-stories-on-the-paper-2026-11-20.md: of 982 stories opened in 24 hours, 17.4% duplicate a story of the previous 72 hours and 20.1% are second-or-later on a covered happening; about one published story in five is a repeat; duplicates and follow-ups took 17.3% of web searches, so consolidation alone leaves about 2,800 to 3,200 a day. The management task that decides to open a story is shown only the newest 50 stories (a median 27 minutes), not the 8 hours its prompt promises; the earlier story was on that page for 6 of 171 duplicates.'
   - id: C1b
-    name: The open decision sees what the paper holds
-    scope: 'before the ontology lands: management''s story page is the window its prompt promises (headlines only, inside the token bound), and the top held candidates of the last 72 hours are offered to the judge, so a held story is fed and not opened again. Lane dup-open-page.'
+    name: The open decision sees what the paper holds (a stopgap)
+    scope: 'to be rewritten on the ontology (owner, 2026-11-20). Before the ontology lands: management''s story page is the window its prompt promises (headlines only, inside the token bound), and the top held candidates of the last 72 hours are offered to the judge, so a held story is fed and not opened again. Lane dup-open-page.'
     class: orange
     review: one seat
     depends_on: [C1]
     status: working
   - id: C2
-    name: A happening has one story
-    scope: 'a capture that joins an event a published story already reports becomes a new-version trigger for that story (with what is new since its last version), not a new story; a research run begins from the event''s state and searches the web only for what the corpus does not hold; duplicates already published are linked, not deleted. Search stations L2 (in review) and L3 (one verb) are absorbed here as the design directs.'
+    name: One narrative per topic
+    scope: 'built on the ontology, replacing C1b. A capture whose happening overlaps significantly with what a story already tells (the same happening, a development of it, or a part of the same situation) becomes material for a revision of that story, with what is new since its last version, and no new story opens; the story deepens over time into a single narrative with its history. What sets "significant overlap" and what keeps one story from swallowing unrelated happenings is the design''s to state and the hand-read''s to check; a research run begins from the event''s state and searches the web only for what the corpus does not hold; duplicates already published are linked, not deleted. Search stations L2 (in review) and L3 (one verb) are absorbed here as the design directs.'
     class: red (run acceptance, desk protocol)
     review: two seats
     depends_on: [O1, O3, C1]
@@ -242,12 +254,22 @@ decisions_for_the_owner:
     why: the lead read it that way and built it
     options: [yes, an incrementing build number instead]
     default: the commit and time
+  - id: Q5
+    question: On Android, is Markdown source with a preview acceptable for the Texture editor until Exact offers more?
+    why: stock Exact's editor hides syntax only on the web, dims it on iPhone and Mac (our patch hides it on iPhone), and is plain source on Android
+    options: [accept on Android for now, build a syntax-hiding editor for Android]
+    default: accept for now; Android is outside this mission
+  - id: Q6
+    question: When does one story stop growing and a new one begin?
+    why: the ruling is one narrative per topic; without an edge, a war or an election becomes one endless story
+    options: [never split by time; a parent situation holds child stories; the design proposes a rule and the owner reads examples]
+    default: the design proposes the rule with twenty real examples from the duplicate measurement, and nothing lands on it before the owner has read them
 now:
   status: working
-  as_of: 2026-11-20T22:50Z
-  slice: X1 to X5 in motion with five builders; O0 with the design pass; C1 measuring; P1 investigating
-  source_ref: origin/main 79dbca58d; code bfc1492c6
-  deploy_identity: staging bfc1492c6; the owner's iPhone bfc1492c6
+  as_of: 2026-11-20T23:00Z
+  slice: 'X2 landing (deb9c9ef0 pushed, CI running); X1 takes rebuilt (481850a2e) in review and proof, edition picks rebuilding; X3 slice 1 (bb751be97), X4 slice 1 (5c71c0839) in review and queued for proof, their builders on the next slices; X5 slice 1 (579d5d74e, dead code, yellow) ready to land; O0 written, unread by the owner; C1 proved; C1b building (lane dup-open-page); L2 (399f0268a) in re-review; P1 recorded'
+  source_ref: origin/main deb9c9ef0
+  deploy_identity: staging bfc1492c6 until the About row deploys; the owner's iPhone bfc1492c6
   candidate: none frozen
   conjecture:
     claim: 'most of the paper''s web searches are first runs of stories about happenings it already covers or already holds captures for; when a joining capture becomes a new version of the existing story and a run starts from the event''s state, first runs a day fall by at least 40% and web searches fall under 1,500 a day within two full UTC days of C2''s deploy, with distinct happenings published a day not lower than the week before'
@@ -262,12 +284,12 @@ now:
   main_uncertainty: whether the design's identity judgments are cheap and right enough at 5,000 captures a day inside one Jev call a flush; how much of the search volume duplicates really explain (C1 will say); whether the reader and run sheet move in days or weeks
   next_observation: the design's opening page; C1's share of duplicate stories; the first slice of each of X3 to X5
   blocker: none
-  next_action: land X2 and X1 as their reviews return; read the design and bring Q1 to the owner; commit C1's evidence and set C2's threshold from it
+  next_action: 'watch CI and the deploy for deb9c9ef0, install on the phone, settle C184; read the four reviews (takes r5, reader r1, bar r1, L2 r2 in the session scratchpad) and the queued proofs; start X0; amend the design for the one-narrative ruling and put it to a panel; land X5 slice 1'
 operating_notes:
   - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review seats are in CLAUDE.md: seat 1 Gemini 4 Hydrogen through the official agy CLI (a Sonnet subagent on a rate limit), seat 2 DeepSeek through the agentic-consensus runner on a frozen copy; orange one seat, red two. After two send-backs of one mechanism, change the mechanism, not the patch.'
   - 'Page moves: rewrite from what the page must do, then delete the Swift; nothing carried over; account ownership (accountGeneration, writeCurrent, the wipe list) from the first commit; tests red before code; slices that each lower the ceiling. The lead runs the one native build and the simulator proof through the queue and reads the screenshots.'
   - 'Go compiles and tests on the Node A build machines (ssh choir-runner; each builder its own directory), never the Mac; gate scripts on the Mac need GOFLAGS=-mod=mod. Before a landing run the tree-scanning checks too (the objectgraph registry test, the Nix vendor hash): docs/problems/train-landed-red-objectgraph-registry-and-vendor-hash-2026-11-20.md.'
-  - 'Production differs from tests in collation (en_US.UTF-8): no text range predicate on ids. A builder''s report is a claim: see the suite''s ok line and the screenshots yourself, and enter the calibration claim first (next free id C184).'
+  - 'Production differs from tests in collation (en_US.UTF-8): no text range predicate on ids. A builder''s report is a claim: see the suite''s ok line and the screenshots yourself, and enter the calibration claim first (next free id C185).'
   - 'Waits use a file''s content or age, never pgrep -f (it matches its own command line). State times only after date -u.'
 receipts:
   - 'previous goal: docs/definitions/choir-exact-search-entities-2026-11-20.md (superseded by this file; its landed_this_thread list is the record of what landed on 2026-11-20)'

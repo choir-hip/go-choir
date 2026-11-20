@@ -9,6 +9,16 @@ E3 on, and the graph half of
 [corpus-first-retrieval-and-research-2026-11-18.md](corpus-first-retrieval-and-research-2026-11-18.md).
 Owner decisions with defaults are in section F3; claims to precommit in F4.
 
+**Owner ruling after this was written (2026-11-20T23:00Z).** "for stories with significant
+overlap we should be revising not making new stories. This way we will
+develop fewer deep stories on key topics rather than many shallow stories
+that cover parts of it... Choir should instead build a singular narrative
+that incorporates all the article as they accumulate over time." This
+overrules decision 2 of section F3 (a development older than 24 hours opens a
+new story linked by `follows`): a development revises the story that holds
+the topic. Where one narrative ends and another begins is not yet designed;
+this document is to be amended before any landing after L2.
+
 Evidence tags. **M** measured, with the file it comes from. **C** read from
 code at `origin/main` 3620f9232, with file and line. **A** assumed or
 estimated by me. **U** not verified. Ground truth for what exists is
