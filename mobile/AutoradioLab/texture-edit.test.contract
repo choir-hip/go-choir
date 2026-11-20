@@ -1,0 +1,10 @@
+// The editor's source is asked from the first page of a launch, not only when a document is in front: its answer carries what the launch retry, the 30 s retry (edInfo.waiting) and the sign-out
+// warning (edInfo.unsent) read. The web host has no document page (pg.top is empty in the first moments, see mail.test.contract), so this is the radio-page case: the source answers its idle
+// shape with no kept text and no request. (That a kept text is retried from that page, and posted, is texture-edit-wiring.test.ts G2 over a fake server.)
+test "from a page that is not a document the editor source answers idle, with nothing kept"
+  clock data
+  expect state edInfo.status == "idle"
+  expect state edInfo.editable == false
+  expect state edInfo.unsent == 0
+  expect state edInfo.waiting == 0
+  expect state edInfo.kept == ""

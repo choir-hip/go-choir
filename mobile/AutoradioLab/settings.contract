@@ -14,6 +14,7 @@
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
 use Theme, ThemeList, ThemeCard, ThemeExtras, SettingsComputer, LearnedInfo, AboutInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
 use SettingsAccount from "./settings-types.contract"
+use TextureEditInfo from "./texture-edit-types.contract"
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
 use VoiceCardsList from "./voice.contract"
@@ -313,6 +314,8 @@ component AccountScreen
     acctInfo: SettingsAccount
     au: ChoirAuth
     signOutNote: string
+    signOutAsk: bool
+    edInfo: TextureEditInfo
     refreshAccount: action
     signOut: action
     signIn: action
@@ -343,6 +346,8 @@ component AccountScreen
       // A sign-out that did not finish says so here (account.ts answers the words; a clean one leaves the page, so nothing shows).
       if signOutNote != ""
         text signOutNote testId="settings-signout-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.danger
+      if signOutAsk and edInfo.unsent > 0
+        text `${edInfo.unsent.toFixed(0)} unsent ${edInfo.unsent == 1 ? "edit" : "edits"} on this phone will be removed. Press again to sign out.` testId="settings-signout-unsent" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.danger
       if acs.message != ""
         text acs.message testId="settings-account-state" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.fg
       text "This phone holds its own key. Signing out removes the key from this phone and ends it on the server. Your computer and your documents stay where they are." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
@@ -356,7 +361,7 @@ component AccountScreen
         // one Sign in and one Sign out, worded so they do not contradict: a refused phone signs in again, or clears its stored key (sign-out is local first: it removes the key and this phone's data)
         if au.signedIn
           button press=signOut testId="settings-signout" appearance="none"
-            ActionButton(label=(acs.state == "rejected" ? "Clear this phone" : "Sign out"), testId="settings-signout-box", primary=false, danger=true)
+            ActionButton(label=(signOutAsk and edInfo.unsent > 0 ? "Remove them and sign out" : (acs.state == "rejected" ? "Clear this phone" : "Sign out")), testId="settings-signout-box", primary=false, danger=true)
 
 // ---------------------------------------------------------------- voice and models
 

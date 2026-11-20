@@ -8,14 +8,20 @@
 //  - When it is posted: 2 seconds after the last keystroke, at once on Done, and when the phone goes to the background. The WAIT is the contract's (members-content.contract: a `task after(2000)`
 //    keyed by the draft, so each keystroke restarts it; a source cannot sleep between answers); `textureFlush` is what it calls. Never two saves at once; a burst of typing is one revision.
 //  - The newest text is kept on the phone from the first keystroke (`app:/data/texture-pending.json`) and removed when it is posted, so a kill, a bad network or a missed background flush loses
-//    nothing. It is posted when the route answers (the contract asks again every 30 s while the page says offline or failed, and the first answer after a launch posts what an earlier launch kept).
-//    The newest text wins; the parent is the head at that moment.
+//    nothing. Each kept text records the revision it descends from (`base`). It is posted when the route answers: the contract asks again every 30 s while anything is waiting, on ANY page
+//    (`textureFlush('')`), and the first answer after a launch retries what an earlier launch kept, whatever page is in front.
+//  - The invariants of the owner's real documents (review round 2; each is tested in texture-edit.test.ts with texts the field can really produce):
+//    I1 No keystroke after a merge removes another writer's change. The field is never told a merge, so EVERY save is a three-way merge: base = the field's text at the last successful save (`ref`),
+//       ours = the field now, theirs = the head as last read (a 409 re-reads it). A field that lags the head can never revert it.
+//    I2 A kept text with no recorded base (typed when the head could not be read; every entry of the old build's file) is never posted over a head it is not equal to: it becomes a kept conflict. Equal to
+//       the head: cleared. Opening a document reads its head (`textureEditInfo`), so typing offline afterwards has a base.
+//    I3 A kept conflict is readable and copyable (`info.kept`) after the editor closes and after a relaunch, is never overwritten (a second one is refused with a sentence; the new text stays in the field
+//       and in the ordinary kept set, and cannot post until the conflict is copied or discarded), and goes only by `textureDiscard`.
+//    I4 Sign-out can say how many unsent edits it removes (`info.unsent`).
 //  - Sign-out or an account change: the sessions and the pending file go (account.ts WIPES `texture-edit`); a save in flight finds the account generation changed and keeps nothing. The kept
 //    file names the account (the SHA-256 of the sign-in key, api.ts keyState): another account's file is not loaded and is removed; after the account generation moves, nothing of it shows or posts.
-//  - A head that moved (review round 1): the server refuses a stale parent with 409. The editor then re-reads the head and merges the draft onto it by lines (texture-body.ts `merge3`, three-way, from the
-//    revision the draft was written over); when the two changed the same lines it posts nothing, keeps the text with its base revision, and says so (status `conflict`, no retry). A kept text is written
-//    with the revision it was written over, so a relaunch merges the same way and never posts over a newer version. The app's own topic sync (Notebook.swift, still Swift) posts behind this session; the
-//    first save after it meets a 409 and takes this road, so a stale base cannot last.
+//  - A head that moved: the server refuses a stale parent with 409. The editor re-reads the head and merges by lines (texture-body.ts `merge3`); the same lines changed both ways post nothing, keep the text
+//    as a conflict, and say so (status `conflict`, no retry). The app's own topic sync (Notebook.swift, still Swift) posts behind this session; the first save after it takes this road.
 //
 // What stays native, and why. Three calls on the app module, each with its reason:
 //  1. `{op: 'textureSaved'}` after a save: the Swift reader forgets its copy and the Swift content store keeps the new text ("kept and searchable at once"). Both stores are Swift until the reader and the content store move.
@@ -36,27 +42,31 @@ import { WORDS } from './words.ts';
 import * as Body from './texture-body.ts';
 
 export const PENDING_FILE = 'app:/data/texture-pending.json';
-export type Info = { status: string; label: string; address: string; editable: boolean };
+export type Info = { status: string; label: string; address: string; editable: boolean; kept: string; unsent: number; waiting: number };
 export type Net = { json(path: string, opts?: { method?: 'GET' | 'POST'; body?: unknown }): Promise<Reply> };
 export type Deps = { net?: Net; storage?: Storage; native?: (request: Record<string, unknown>) => Promise<unknown> };
 type Head = { content: string; body: Body.Node | null; revisionId: string; version: number };
-/** The revision a draft was written over, when that is not the head the next post goes against (`content` null until it is read). */
-type Origin = { id: string; content: string | null };
-type Session = { base: Head; draft: string | null; status: string; label: string; saving: boolean; gen: number; origin: Origin | null; conflictDraft: string | null; key: { text: string; id: string } | null };
-/** What is kept for a document: the newest text, and the revision it was written over ('' when that is not known: text from the build before this one, or typed with no route). */
+/** The field's lineage: `text` is what the field held at the last successful save (or the head's text when it opened), `id` the revision that lineage descends from. `text` is null until read (a kept text
+ * written over an older revision names only the id). */
+type Ref = { id: string; text: string | null };
+type Session = { base: Head; ref: Ref; unbased: boolean; draft: string | null; status: string; label: string; saving: boolean; gen: number; key: { text: string; id: string } | null };
+/** What is kept for a document: the newest text, and the revision it descends from ('' when that is not known). */
 type Kept = { text: string; base: string };
 
 const real: Net = { json: (path, opts) => authedJSON(path, opts) };
 const obj = (v: unknown): v is Body.Node => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-const idle = (address = '', editable = false): Info => ({ status: 'idle', label: '', address, editable });
 /** The words when the same lines were changed here and elsewhere: plain, and they say the text is safe. */
 export const CONFLICT_WORDS = 'Not saved: this document changed somewhere else, and your changes could not be combined with it. Your text is kept on this phone.';
+/** A conflict is already kept for this document: nothing new is posted until it is copied or discarded. */
+export const BLOCKED_WORDS = 'Not saved: text kept on this phone from an earlier conflict is waiting for this document. Copy or discard it first.';
 /** The draft could not be turned into a body (a damaged `body_doc`): a bug or bad data, never "offline". */
 class MergeError extends Error { constructor(e: unknown) { super(e instanceof Error ? e.message : 'merge failed'); this.name = 'MergeError'; } }
 
 const sessions = new Map<string, Session>();
 let pending = new Map<string, Kept>();
+/** Kept text that could not be combined with a newer head (or had no base): shown, copyable, removed only by `textureDiscard` or sign-out. One per document. */
+let conflicts = new Map<string, Kept>();
 let loading: Promise<void> | null = null;
 let retried = false;
 /** The documents whose text an EARLIER launch kept (read from the file): only these are posted by the first answer; text typed in this session is its own session's to post. */
@@ -68,7 +78,7 @@ let scopeGen: number | null = null;
 let resignSeen = 0;
 let digestMemo: { gen: number; digest: string } | null = null;
 
-function clear(): void { epoch += 1; sessions.clear(); pending = new Map(); earlier = new Set(); loading = null; retried = false; scopeGen = null; resignSeen = 0; digestMemo = null; }
+function clear(): void { epoch += 1; sessions.clear(); pending = new Map(); conflicts = new Map(); earlier = new Set(); loading = null; retried = false; scopeGen = null; resignSeen = 0; digestMemo = null; }
 /** Sign-out, an account change, tests: nothing of the old account stays. */
 export async function wipeTextureEdit(storage: Storage | undefined): Promise<void> {
   clear();
@@ -92,7 +102,7 @@ export function editableDoc(address: string): string | null {
 function scope(): void {
   const g = accountGeneration();
   if (scopeGen === null) { scopeGen = g; return; }
-  if (scopeGen !== g) { scopeGen = g; pending = new Map(); earlier = new Set(); loading = Promise.resolve(); retried = true; }
+  if (scopeGen !== g) { scopeGen = g; pending = new Map(); conflicts = new Map(); earlier = new Set(); loading = Promise.resolve(); retried = true; }
 }
 /** The SHA-256 of the sign-in key ('' when it cannot be read: locked, no native module). Remembered while the account generation stands. */
 async function ownerDigest(): Promise<string> {
@@ -109,23 +119,31 @@ function loadPending(d: Deps): Promise<void> {
   if (!loading) loading = doLoad(d);
   return loading;
 }
+const readKept = (v: unknown): Map<string, Kept> => {
+  const m = new Map<string, Kept>();
+  if (obj(v)) for (const [doc, k] of Object.entries(v)) if (obj(k) && typeof k.text === 'string') m.set(doc, { text: k.text, base: str(k.base) });
+  return m;
+};
 async function doLoad(d: Deps): Promise<void> {
   const mine = epoch, gen = accountGeneration();
   if (!d.storage) return;
   try {
     const o = JSON.parse(new TextDecoder().decode(await d.storage.fs.readFile(PENDING_FILE)));
-    if (obj(o) && o.v === 2 && obj(o.docs)) {
+    if (obj(o) && o.v === 2) {
       const k = await keyState();
       const foreign = k.state === 'absent' || (k.state === 'present' && str(o.account) !== '' && str(o.account) !== k.digest);       // signed out, or another account's text
       if (mine !== epoch || gen !== accountGeneration()) return;
       if (foreign) { try { await d.storage.fs.rm(PENDING_FILE); } catch { /* absent */ } }
-      else for (const [doc, v] of Object.entries(o.docs)) if (obj(v) && typeof v.text === 'string' && !pending.has(doc)) { pending.set(doc, { text: v.text, base: str(v.base) }); earlier.add(doc); }
+      else {
+        for (const [doc, v] of readKept(o.docs)) if (!pending.has(doc)) { pending.set(doc, v); earlier.add(doc); }
+        for (const [doc, v] of readKept(o.conflicts)) if (!conflicts.has(doc)) conflicts.set(doc, v);
+      }
     }
   } catch { /* none kept, or damaged: none */ }
   await migrateOldFile(d, mine, gen);
 }
 /** The build before this one kept an unsent edit outside app:/ (see the header, native call 2). Read, merged, written durably in the new place, THEN removed from the old: a crash in between loses
- * nothing and sends nothing twice. Text with no known base ('') is posted as that build did: the newest text wins, the parent is the head at that moment. */
+ * nothing and sends nothing twice. That build recorded no base, so none of its text is ever posted over a head it is not equal to: the first retry makes it a kept conflict (I2). */
 async function migrateOldFile(d: Deps, mine: number, gen: number): Promise<void> {
   if (!d.native || !d.storage) return;
   let r: { found?: unknown; text?: unknown } | null;
@@ -136,21 +154,32 @@ async function migrateOldFile(d: Deps, mine: number, gen: number): Promise<void>
   try { old = JSON.parse(str(r.text)); } catch { /* damaged */ }
   if (!obj(old)) { await remove(); return; }                                       // nothing in it can be kept; do not read it again at every launch
   if (mine !== epoch || gen !== accountGeneration()) return;
-  for (const [doc, text] of Object.entries(old)) if (typeof text === 'string' && !pending.has(doc)) { pending.set(doc, { text, base: '' }); earlier.add(doc); }
+  for (const [doc, text] of Object.entries(old)) if (typeof text === 'string' && !pending.has(doc) && !conflicts.has(doc)) { pending.set(doc, { text, base: '' }); earlier.add(doc); }
   if (!(await savePending(d))) return;                                             // not durable in the new place: the old file stays
   if (mine !== epoch || gen !== accountGeneration()) return;
   await remove();
 }
-/** True when the file is as `pending` says (or there is nowhere to write it). */
+/** True when the file is as the kept sets say (or there is nowhere to write it). */
 async function savePending(d: Deps): Promise<boolean> {
   if (!d.storage) return true;
   const gen = accountGeneration();
-  if (pending.size === 0) { try { await d.storage.fs.rm(PENDING_FILE); } catch { /* absent */ } return true; }
+  if (pending.size === 0 && conflicts.size === 0) { try { await d.storage.fs.rm(PENDING_FILE); } catch { /* absent */ } return true; }
   const account = await ownerDigest();
-  const bytes = new TextEncoder().encode(JSON.stringify({ v: 2, account, docs: Object.fromEntries(pending) }));
+  const bytes = new TextEncoder().encode(JSON.stringify({ v: 2, account, docs: Object.fromEntries(pending), conflicts: Object.fromEntries(conflicts) }));
   return writeCurrent(gen, d.storage, PENDING_FILE, bytes).catch(() => false);
 }
 const keep = (doc: string, text: string, base: string): void => { pending.set(doc, { text, base }); };
+/** Move a text that cannot be posted into the conflict shelf. False when the shelf already holds one for this document (it is never overwritten). */
+function shelve(doc: string, k: Kept): boolean {
+  if (conflicts.has(doc)) return false;
+  conflicts.set(doc, k);
+  return true;
+}
+const counts = (): { unsent: number; waiting: number } => {
+  const docs = new Set([...pending.keys(), ...conflicts.keys()]);
+  return { unsent: docs.size, waiting: [...pending.keys()].filter((k) => !conflicts.has(k)).length };
+};
+const idle = (address = '', editable = false): Info => ({ status: 'idle', label: '', address, editable, kept: '', ...counts() });
 
 // MARK: the server's routes (as the web uses them)
 
@@ -225,10 +254,16 @@ async function session(doc: string, d: Deps): Promise<Session | null> {
     const again = sessions.get(doc);
     if (again && again.gen === gen) return again;
     if (gen !== accountGeneration()) return null;
-    const s: Session = { base: head, draft: null, status: 'idle', label: '', saving: false, gen, origin: null, conflictDraft: null, key: null };
+    const s: Session = { base: head, ref: { id: head.revisionId, text: head.content }, unbased: false, draft: null, status: 'idle', label: '', saving: false, gen, key: null };
     sessions.set(doc, s);
     return s;
   } catch { return null; }
+}
+/** A kept text enters a session: written over the head's revision (nothing to do), over an older one (merged), or over none known (never posted: I2). */
+function adopt(s: Session, k: Kept): void {
+  s.draft = k.text;
+  if (k.base === '') s.unbased = true;
+  else if (k.base !== s.base.revisionId) s.ref = { id: k.base, text: null };
 }
 /** What the native side says about the app going to the background (see the header, native call 3). */
 async function resignCount(d: Deps): Promise<number> {
@@ -238,17 +273,21 @@ async function resignCount(d: Deps): Promise<number> {
 export async function textureEditInfo(address: string, d: Deps = {}, hidden = false): Promise<Info> {
   const doc = editableDoc(address);
   await loadPending(d);
-  if (!retried) { retried = true; for (const k of [...earlier]) if (pending.has(k) && !sessions.has(k)) await retryOne(k, d); }          // what an earlier launch or a bad network kept
+  if (!retried) { retried = true; for (const k of [...earlier]) if (pending.has(k) && !sessions.has(k)) await retryOne(k, d); }          // what an earlier launch kept, from whatever page is in front
   let away = hidden;
   if (d.native && (sessions.size > 0 || pending.size > 0)) { const n = await resignCount(d); if (n > resignSeen) { resignSeen = n; away = true; } }
   if (away) await flushAll(d);                                                                                                       // the phone went to the background: what is waiting is posted now
   else for (const k of [...sessions.keys()]) if (k !== doc) await save(k, d);                                                        // the page in front is not that document's: leaving a page posts what was typed on it
+  if (doc !== null && !sessions.has(doc)) await session(doc, d);                                                                     // the document is in front: its head is read now, so typing offline later has a base (I2)
   return doc === null ? idle() : info(doc, address);
 }
 function info(doc: string, address: string): Info {
   const s = sessions.get(doc);
-  if (s && s.gen === accountGeneration()) return { status: s.status, label: s.label, address, editable: true };
-  if (pending.has(doc)) return { status: 'offline', label: 'Edits kept on this phone', address, editable: true };
+  const kept = conflicts.get(doc)?.text ?? '';
+  const c = counts();
+  if (s && s.gen === accountGeneration() && !(kept !== '' && s.status === 'idle')) return { status: s.status, label: s.label, address, editable: true, kept, ...c };
+  if (kept !== '') return { status: 'conflict', label: CONFLICT_WORDS, address, editable: true, kept, ...c };
+  if (pending.has(doc)) return { status: 'offline', label: 'Edits kept on this phone', address, editable: true, kept, ...c };
   return idle(address, true);
 }
 
@@ -257,23 +296,27 @@ export async function textureEdit(address: string, markdown: string, d: Deps = {
   const doc = editableDoc(address);
   if (doc === null) return idle();
   await loadPending(d);
-  const had = sessions.has(doc);
+  // An earlier launch's kept text is not the field's (the field was reseeded from the head): the new typing never overwrites it. It goes to the conflict shelf; if the shelf is taken, the new text is refused.
+  const old = pending.get(doc);
+  if (old && earlier.has(doc) && old.text !== markdown && (sessions.get(doc)?.draft ?? null) === null) {
+    if (!shelve(doc, old)) { const i = info(doc, address); return { ...i, status: 'conflict', label: BLOCKED_WORDS }; }
+    pending.delete(doc); earlier.delete(doc);
+  }
   const s = await session(doc, d);
-  if (!s) { keep(doc, markdown, pending.get(doc)?.base ?? ''); await savePending(d); return info(doc, address); }       // no head yet (offline): the text is kept and posted when the route answers
-  if (!had && s.origin === null) { const b = pending.get(doc)?.base ?? ''; if (b !== '' && b !== s.base.revisionId) s.origin = { id: b, content: null }; }   // kept over an older revision: merged, not laid over
+  if (!s) { keep(doc, markdown, pending.get(doc)?.base ?? ''); await savePending(d); return info(doc, address); }       // no head yet (offline): kept, with no base unless it had one
   s.draft = markdown;
-  const over = s.origin?.id ?? s.base.revisionId;
-  if (markdown === s.base.content && s.origin === null) { s.status = 'idle'; s.label = ''; pending.delete(doc); }
+  const over = s.unbased ? '' : s.ref.id;
+  if (markdown === s.base.content && !s.unbased) { s.status = 'idle'; s.label = ''; pending.delete(doc); s.ref = { id: s.base.revisionId, text: markdown }; }
   else { s.status = 'dirty'; s.label = 'Editing'; keep(doc, markdown, over); }
   await savePending(d);
   return info(doc, address);
 }
 
-/** Post now what is waiting (Done, the pause in typing, the retry). */
+/** Post now what is waiting (Done, the pause in typing). With no document (''), the global retry: every kept edit, whatever page is in front. */
 export async function textureFlush(address: string, d: Deps = {}): Promise<Info> {
   const doc = editableDoc(address);
-  if (doc === null) return idle();
   await loadPending(d);
+  if (doc === null) { if (address === '') await flushAll(d); return idle(); }
   if (sessions.has(doc)) await save(doc, d);
   else if (pending.has(doc)) await retryOne(doc, d);
   return info(doc, address);
@@ -284,96 +327,95 @@ export async function flushAll(d: Deps = {}): Promise<void> {
   await loadPending(d);
   for (const doc of [...pending.keys()]) if (!sessions.has(doc)) await retryOne(doc, d);
 }
+/** Throw away the conflict kept for this document (the owner asked; the contract asks once). The ordinary kept text, if any, is untouched. */
+export async function textureDiscard(address: string, d: Deps = {}): Promise<Info> {
+  const doc = editableDoc(address);
+  if (doc === null) return idle();
+  await loadPending(d);
+  if (conflicts.delete(doc)) {
+    await savePending(d);
+    const s = sessions.get(doc);
+    if (s && s.status === 'conflict') { s.status = s.draft !== null && s.draft !== s.base.content ? 'dirty' : 'idle'; s.label = s.status === 'dirty' ? 'Editing' : ''; }
+  }
+  return info(doc, address);
+}
 
 const headingOf = (text: string): string => text.split(/\r?\n|\r/).map((l) => l.replace(/^[#\s]+|\s+$/g, '')).find((l) => l !== '')?.slice(0, 120) ?? 'Document';
 
-type Rebased = { kind: 'ok' | 'same' | 'conflict' | 'unchanged'; text: string; from: Origin | null };
-/** The head moved since `draft` was written (a 409, or a text kept over an older revision): read the head and lay the draft over it, three-way, from the revision it was written over.
- * `session.base` becomes the head. 'same': the head already says it (a post whose answer was lost). 'conflict': the same lines changed both ways; the session keeps its origin. 'unchanged': the head is the origin. */
-async function rebase(net: Net, doc: string, s: Session, draft: string): Promise<Rebased> {
-  const o = s.origin!;
-  const head = await fetchHead(net, doc);
-  if (head.revisionId === o.id) return { kind: 'unchanged', text: draft, from: null };
-  const from: Origin = { id: o.id, content: o.content ?? (await fetchRevision(net, o.id)).content };
-  s.base = head;
-  if (head.content === draft) { s.origin = null; return { kind: 'same', text: draft, from }; }
-  if (head.content === from.content) { s.origin = null; return { kind: 'ok', text: draft, from }; }
-  const m = Body.merge3(from.content!, draft, head.content);
-  if (m === null) { s.origin = from; return { kind: 'conflict', text: draft, from }; }
-  s.origin = null;
-  return { kind: 'ok', text: m, from };
+/** The text cannot be posted: it goes to the shelf and the owner is told. A shelf already taken keeps it as the ordinary kept text and says it is waiting. */
+async function conflict(doc: string, s: Session, text: string, d: Deps): Promise<void> {
+  if (shelve(doc, { text, base: s.unbased ? '' : s.ref.id })) { pending.delete(doc); s.status = 'conflict'; s.label = CONFLICT_WORDS; }
+  else { keep(doc, text, s.unbased ? '' : s.ref.id); s.status = 'conflict'; s.label = BLOCKED_WORDS; }
+  s.unbased = false;
+  await savePending(d);
 }
 
 async function save(doc: string, d: Deps): Promise<void> {
   const s = sessions.get(doc);
-  if (!s || s.saving || s.gen !== accountGeneration() || s.draft === null) return;
-  if (s.draft === s.base.content && s.origin === null) { if (pending.delete(doc)) await savePending(d); return; }      // the head already says it: nothing to post, nothing to keep
-  if (s.status === 'conflict' && s.conflictDraft === s.draft) return;                                                     // told; waiting for the owner's next edit
+  if (!s || s.saving || s.gen !== accountGeneration()) return;
+  if (s.draft === null) { const k = pending.get(doc); if (k === undefined) return; adopt(s, k); }                            // kept text meets a session (a launch, or the head was unreadable when it was typed)
+  if (s.draft === null) return;
+  if (s.draft === s.base.content) {                                                                                           // the head already says it: nothing to post, nothing to keep
+    s.unbased = false; s.ref = { id: s.base.revisionId, text: s.draft };
+    if (pending.delete(doc)) await savePending(d);
+    return;
+  }
+  if (conflicts.has(doc)) { s.status = 'conflict'; s.label = BLOCKED_WORDS; return; }                                       // a kept conflict is never overwritten, and nothing posts behind it
+  if (s.unbased) { await conflict(doc, s, s.draft, d); return; }                                                              // no recorded base: never posted over the head (I2)
   const net = d.net ?? real;
   const gen = s.gen, mine = epoch;
   const snapshot = s.draft;
-  let draft = snapshot, posted = false, conflict = false, merged: Body.Merged | null = null, from: Origin | null = null;
+  let posted = false, shelved = false, merged: Body.Merged | null = null, text = snapshot;
   let r: { revisionId: string; version: number } | null = null;
   s.saving = true; s.status = 'saving'; s.label = 'Saving';
   try {
     let refused: unknown = null;
     for (let attempt = 0; r === null; attempt++) {
-      if (s.origin) {
-        const rb = await rebase(net, doc, s, draft);
-        if (gen !== accountGeneration() || mine !== epoch) { s.saving = false; return; }
-        if (rb.kind === 'unchanged') throw refused ?? new HTTPError(409, 'document head changed; reload the latest version before saving');
-        if (rb.from) from = rb.from;
-        if (rb.kind === 'conflict') { conflict = true; break; }
-        if (rb.kind === 'same') { r = { revisionId: s.base.revisionId, version: s.base.version }; break; }
-        draft = rb.text;
-      }
-      if (draft === s.base.content) { r = { revisionId: s.base.revisionId, version: s.base.version }; break; }
-      try { merged = Body.merge(s.base.body, s.base.content, draft); } catch (e) { throw new MergeError(e); }
-      if (!s.key || s.key.text !== draft) s.key = { text: draft, id: uuid() };
-      try {
-        r = await postRevision(net, doc, draft, merged.body, s.base.revisionId, s.key.id);
-        posted = true;
-      } catch (e) {
+      // I1: the field's text at the last save is the common ground; the head is theirs. A head that is not what the field was is merged, not overwritten.
+      const refText = s.ref.text ?? (await fetchRevision(net, s.ref.id)).content;
+      if (s.ref.text === null) s.ref = { id: s.ref.id, text: refText };
+      if (gen !== accountGeneration() || mine !== epoch) { s.saving = false; return; }
+      const theirs = s.base.content;
+      if (theirs === refText) text = snapshot;
+      else { const m = Body.merge3(refText, snapshot, theirs); if (m === null) { shelved = true; break; } text = m; }
+      if (text === s.base.content) { r = { revisionId: s.base.revisionId, version: s.base.version }; break; }                // the head already says it (a post whose answer was lost)
+      try { merged = Body.merge(s.base.body, s.base.content, text); } catch (e) { throw new MergeError(e); }
+      if (!s.key || s.key.text !== text) s.key = { text, id: uuid() };
+      try { r = await postRevision(net, doc, text, merged.body, s.base.revisionId, s.key.id); posted = true; }
+      catch (e) {
         if (!isStale(e) || attempt >= 3) throw e;
-        refused = e;                                                                           // the head moved under us: read it, merge, post again with the fresh parent
-        s.origin = { id: s.base.revisionId, content: s.base.content };
+        refused = e;                                                                           // the head moved under us: read it again, merge, post with the fresh parent
+        const head = await fetchHead(net, doc);
+        if (gen !== accountGeneration() || mine !== epoch) { s.saving = false; return; }
+        if (head.revisionId === s.base.revisionId) throw refused;                               // not a moved head: the server's own refusal
+        s.base = head;
       }
     }
     if (gen !== accountGeneration() || mine !== epoch) { s.saving = false; return; }            // signed out meanwhile: nothing of it is kept
-    const typed = s.draft !== snapshot;                                                           // the owner typed while it was posting
-    if (conflict) {
-      s.status = 'conflict'; s.label = CONFLICT_WORDS; s.conflictDraft = s.draft;
-      keep(doc, s.draft ?? draft, s.origin?.id ?? s.base.revisionId); await savePending(d);
-      s.saving = false;
-      return;
-    }
-    if (posted) s.base = { content: draft, body: merged!.body, revisionId: r!.revisionId, version: r!.version };
-    s.origin = null;
-    if (!typed) { s.draft = draft; pending.delete(doc); }
-    else { if (draft !== snapshot && from) s.origin = from; keep(doc, s.draft!, s.origin?.id ?? s.base.revisionId); }       // newer text than what was posted: kept, and merged over what this post changed
+    if (shelved) { await conflict(doc, s, s.draft ?? snapshot, d); s.saving = false; return; }
+    if (posted) s.base = { content: text, body: merged!.body, revisionId: r!.revisionId, version: r!.version };
+    s.ref = text === snapshot ? { id: s.base.revisionId, text: snapshot } : { id: s.ref.id, text: snapshot };      // the field still holds `snapshot`; the head holds `text`
+    if (s.draft === snapshot) pending.delete(doc); else keep(doc, s.draft!, s.ref.id);                              // typed meanwhile: kept, and merged over what this post changed
     await savePending(d);
-    if (d.native) { try { await d.native({ op: 'textureSaved', doc, title: headingOf(draft), text: draft, version: s.base.version }); } catch { /* the Swift reader and search catch up at the next sync */ } }
+    if (d.native) { try { await d.native({ op: 'textureSaved', doc, title: headingOf(text), text, version: s.base.version }); } catch { /* the Swift reader and search catch up at the next sync */ } }
     s.status = 'saved'; s.label = s.base.version > 0 ? `Saved · version ${s.base.version}` : 'Saved';
   } catch (e) {
     if (gen !== accountGeneration() || mine !== epoch) { s.saving = false; return; }
-    const newest = s.draft !== snapshot && s.draft !== null ? s.draft : draft;                  // typing during a failing save is not undone by the older text
-    keep(doc, newest, s.origin?.id ?? s.base.revisionId); await savePending(d);
+    const newest = s.draft !== null && s.draft !== snapshot ? s.draft : snapshot;               // typing during a failing save is not undone by the older text
+    keep(doc, newest, s.ref.id); await savePending(d);
     if (isOffline(e)) { s.status = 'offline'; s.label = 'Offline: kept on this phone, posts when it can'; }
     else { s.status = 'failed'; s.label = `Not saved: ${saveSentence(e)}`; }
   }
   s.saving = false;
-  if (s.draft !== null && (s.draft !== s.base.content || s.origin !== null) && s.status === 'saved') await save(doc, d);      // typed while it was posting
+  if (s.status === 'saved' && s.draft !== null && s.draft !== snapshot) await save(doc, d);      // typed while it was posting
 }
 
 async function retryOne(doc: string, d: Deps): Promise<void> {
-  const kept = pending.get(doc);
-  if (kept === undefined) return;
+  if (!pending.has(doc) || conflicts.has(doc)) return;                                           // a kept conflict blocks the retry: nothing posts behind it
   let s = sessions.get(doc);
   if (!s || s.gen !== accountGeneration()) {
     s = (await session(doc, d)) ?? undefined;
     if (!s) return;                                                  // the route did not answer: still kept
   }
-  s.draft = kept.text;
-  if (s.origin === null && kept.base !== '' && kept.base !== s.base.revisionId) s.origin = { id: kept.base, content: null };      // written over an older revision than the head: merged, never laid over
   await save(doc, d);
 }

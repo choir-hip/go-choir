@@ -10,6 +10,7 @@
 //          reader-card-source-<anchor>, reader-card-open-<anchor>, reader-source-<n>, reader-sources, reader-related-<address>,
 //          reader-sheet(-layer, -scrim), reader-web(-view; the host, close, read, add and safari are in content.contract), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
+use TextureEditInfo from "./texture-edit-types.contract"
 use ReaderFollowInfo, ReaderAimInfo from "@choir/autoradio"
 use PageScroll, Card, Layer, Btn, BarClear, RowRule from "./ui.contract"
 use ClipRow from "./clips.contract"   // lane autoradio-joins
@@ -359,6 +360,7 @@ component ReaderBody
     toggleCite: action
     listen: action
     clipNote: string
+    edInfo: TextureEditInfo
   props
     address: string
   resource vp = exactViewport() as shape ReaderViewport
@@ -374,6 +376,9 @@ component ReaderBody
       scroll id="reader-scroll" testId="reader-scroll" overflow-x="hidden" flex=1 min-height=0 width="100%"
         column width="100%" align-items="center" padding-top=`calc(env(safe-area-inset-top) + ${rdoc.revising ? 72 : 12}px)`
           animation=(th.reducedMotion ? "none" : `readerEmerge ${th.motionEnterMs * 1.6}ms ease-out both`)
+          if edInfo.kept != "" and edInfo.address == address
+            column width="100%" max-width="38rem" box-sizing="border-box"
+              KeptConflict(address=address)
           column width="100%" max-width="38rem" padding-left=20 padding-right=20 box-sizing="border-box" color=th.fg font-family=th.fontText
             // header: kicker, menu, headline, standfirst, byline and version line
             row align-items="center" gap=8 margin-bottom=remv(0.5)
@@ -510,6 +515,29 @@ component ReaderMessage
         button press=openPage("paper:front", "Paper") testId="reader-message-back" appearance="none" margin-top=8
           Btn(label="Back to the paper", primary=false, wide=false)
 
+// A conflict kept on the phone (texture-edit.ts: text that could not be combined with a newer version of the document): read-only, above the editor and above the document, so the owner can read it, copy it
+// and, only when they choose, discard it (the first press asks; the second removes it). Typing in the editor never touches it. One accent action (Copy); Discard is muted.
+component KeptConflict
+  inject
+    th: Theme
+    edInfo: TextureEditInfo
+    edKeptCopy: action
+    edKeptDiscard: action
+    edDiscardAsk: string
+  props
+    address: string
+  view
+    column testId="kept-conflict" width="100%" gap=8 padding="12px 20px" box-sizing="border-box"
+      text "Kept on this phone: this earlier edit could not be combined with a newer version of the document." testId="kept-conflict-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+      scroll id="kept-conflict-scroll" testId="kept-conflict-scroll" overflow-x="hidden" max-height=160 width="100%"
+        text edInfo.kept testId="kept-conflict-text" font-family=th.fontText font-size="-exact-body" line-height=1.5 color=th.fg
+      row gap=16 align-items="center"
+        button press=edKeptCopy testId="kept-copy" appearance="none" aria-label="Copy the kept text"
+          Btn(label="Copy", primary=false, wide=false)
+        button press=edKeptDiscard testId="kept-discard" appearance="none" aria-label="Discard the kept text"
+          row align-items="center" min-height=44
+            text (edDiscardAsk == address ? "Discard for good?" : "Discard") font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.muted
+
 // The document as text you edit: Exact's Markdown editor over the document's own Markdown (the formatting is drawn, and the controls are in
 // the content row above the bar). It fills the screen from the status bar to the top of the lens, like a Reader document.
 component TextureEditArea
@@ -520,8 +548,11 @@ component TextureEditArea
     edInput: action
     edSelected: action
     ctlClear: number
+    edInfo: TextureEditInfo
   view
     column flex=1 min-height=0 width="100%" testId="texture-edit-area" padding-top="env(safe-area-inset-top)" box-sizing="border-box"
+      if edInfo.kept != "" and edInfo.address == rdoc.address
+        KeptConflict(address=rdoc.address)
       column flex=1 min-height=0 margin-bottom=`calc(env(safe-area-inset-bottom) + ${ctlClear}px)`
         textarea id="texture-editor" markup="markdown" value=edDraft input=edInput select=edSelected testId="texture-editor" aria-label=`Edit ${rdoc.title}`
           width="100%" flex=1 min-height=0 box-sizing="border-box" padding="16px 20px" border-width=0 background-color="transparent"

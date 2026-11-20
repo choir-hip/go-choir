@@ -19,21 +19,31 @@ members Autoradio
 
   // ---- your own Texture document: edited in rich text with Exact's Markdown editor (texture-edit.ts, shared code). The text is kept on the phone at once; the revision is posted after a pause in typing
   // (edPause: the timer restarts with every keystroke), on Done, when the page in front changes and when the phone goes to the background (the source flushes when `visibilityState` is hidden, when the native side counts a
-  // willResignActive (`visibilityState` is not established on an iPhone for lock and unlock), or when the page is not the document's). A failed or offline save is tried again every 30 seconds while this page says so (edRetry).
+  // willResignActive (`visibilityState` is not established on an iPhone for lock and unlock), or when the page is not the document's). Anything waiting is tried again every 30 seconds on ANY page (edRetry: `textureFlush("")`); its gate reads `edInfo.waiting`, so the source is asked from the first page of a launch.
   resource edInfo = textureEditInfo(pg.top, hpg.visibilityState) as shape TextureEditInfo else empty()
   mutation edm as shape TextureEditInfo refreshes edInfo
   mutation edsm as shape TextureEditInfo refreshes edInfo
   state edRetryTick = 0
   task edPause when edOn and edInfo.status == "dirty" key=edDraft
     after(2000, edSave)
-  task edRetry when edInfo.status == "offline" or edInfo.status == "failed" key=edRetryTick
+  task edRetry when edInfo.waiting > 0 key=edRetryTick
     after(30000, edRetryGo)
   action edSave
     send edsm = textureFlush(pg.top)
   action edRetryGo
     edRetryTick = edRetryTick + 1
-    send edsm = textureFlush(pg.top)
+    send edsm = textureFlush("")
   state edOn = false
+  // A conflict kept on the phone is read-only text above the editor (reader.contract KeptConflict): Copy writes it to the clipboard; Discard asks once (the first press names the document, the second removes the kept text).
+  state edDiscardAsk = ""
+  action edKeptCopy
+    copyText(edInfo.kept)
+  action edKeptDiscard
+    if edDiscardAsk == topAddr
+      send edsm = textureDiscard(pg.top)
+      edDiscardAsk = ""
+    else
+      edDiscardAsk = topAddr
   state edFor = ""
   state edDraft = ""
   state edFormats = ""

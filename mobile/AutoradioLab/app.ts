@@ -66,10 +66,11 @@ const sources: Sources = {
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([entries]) => conversationInfo(entries),
-  // Editing your own Texture document (texture-edit.ts). The one native call after a save is `{op: 'textureSaved'}` (the Swift reader and content store catch up).
+  // Editing your own Texture document (texture-edit.ts). Its native calls are `textureSaved` after a save (the Swift reader and content store catch up), `textureOldPending`/`textureOldPendingRemove` (the old build's unsent edit, once) and `textureResigned` (the app went to the background); texture-edit.ts says why each is native.
   textureEditInfo: ([address, visibility], _s, storage, native) => textureEdit.textureEditInfo(address, editDeps(storage, native), visibility === 'hidden'),
   textureEdit: ([address, markdown], _s, storage, native) => textureEdit.textureEdit(address, markdown, editDeps(storage, native)),
   textureFlush: ([address], _s, storage, native) => textureEdit.textureFlush(address, editDeps(storage, native)),
+  textureDiscard: ([address], _s, storage, native) => textureEdit.textureDiscard(address, editDeps(storage, native)),
   texturesList: ([at]) => texturesListShared(at),
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),

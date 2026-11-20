@@ -1,8 +1,13 @@
 // The shape of the editor's state. Declared here and answered by `app.ts` (texture-edit.ts: `textureEditInfo`, `textureEdit`, `textureFlush`); it was the Swift package's (interface/textedit.json)
-// before the editor moved to shared code. status: idle | dirty | saving | saved | offline | failed. label is the words the page shows.
+// before the editor moved to shared code. status: idle | dirty | saving | saved | offline | failed | conflict. label is the words the page shows.
+// kept: the text of a conflict kept on the phone for THIS document ("" when none): shown read-only above the editor, with Copy and Discard. unsent: how many documents have unsent text on this phone (kept edits
+// and conflicts, any document): sign-out says so. waiting: how many of those are retried every 30 s (a conflict is not).
 
 shape TextureEditInfo
   status: string
   label: string
   address: string
   editable: bool
+  kept: string
+  unsent: number
+  waiting: number

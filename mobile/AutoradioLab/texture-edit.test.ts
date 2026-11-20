@@ -19,6 +19,17 @@
 //  L1 `Body.merge` throwing (a damaged body_doc) leaves `saving` released and says "failed", not "offline"; the next save works.   L2 a 6000-block document: an edit is one cheap revision; a worst-case rewrite finishes.
 //  A1 a kept edit is the account's: after the generation moved nothing of it shows or posts.   A2 the kept file names the account (the key's digest); another account's file is not loaded and is removed.
 //  P1 saving a draft equal to the head clears the kept copy (note 8).
+// Review round 2 (2026-11-20, SEND_BACK: these are the owner's real documents). The INVARIANTS, each tested with texts the editor's field can really produce (the field holds what the owner last
+// typed, and is reseeded from the head only when the editor opens; nothing writes a merge back into it):
+//  I1 no keystroke after a three-way merge removes another writer's change. Every save is a three-way merge of (base = the field's text at the last successful save, ours = the field now, theirs = the
+//     head): a field that lags the head can never revert it. K1 (a, b, c), K1d.
+//  I2 a kept text with no recorded base (typed when the head could not be read; every line of the old build's file) is never posted over a head that is not equal to it: it becomes a kept conflict. If it
+//     equals the head it is cleared. N1 (moved head), N2 (equal head), N3 (typed offline with no session), M1-M5 (the upgrade).
+//  I3 a kept conflict is readable and copyable after the editor closes and after a relaunch (`info.kept`), is never overwritten by typing (a second text for the document is refused with a plain
+//     sentence and stays in the field and in the ordinary kept set), and goes only by Discard. C1-C4.
+//  I4 sign-out can say how many unsent edits it will remove (`info.unsent`, kept edits and conflicts, any document). U1.
+//  I5 the retry is global: `textureFlush('')` retries every kept edit whatever page is in front, and the first answer after a launch retries what an earlier launch kept even when the page in front
+//     is not a document (the radio page). G1, G2.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as E from './texture-edit.ts';
 import { SignedOutError, HTTPError, resetSeam, nextGeneration, bindNative, type Reply } from './api.ts';
@@ -218,15 +229,15 @@ describe('the editor', () => {
   const OLD = JSON.stringify({ d1: 'Kept by the old build\n\nSecond' });          // the old build's file, as Swift wrote it: {"<doc>": "<markdown>"}
   const newFile = (): { v: number; account: string; docs: Record<string, { text: string; base: string }> } => JSON.parse(new TextDecoder().decode(files.get(E.PENDING_FILE)!));
 
-  test('M1 the old build\'s unsent edit is carried over: read, merged, durable, then removed, then sent', async () => {
+  test('M1 the old build\'s unsent edit is carried over: read, merged, durable, removed; over a head that is not equal to it, it is kept as a conflict and NOT posted', async () => {
     const s = server(), n = nativeFake(OLD), d = { net: s.net, storage, native: n.call };
     const i = await E.textureEditInfo(A, d);
     expect(n.log.slice(0, 2)).toEqual(['textureOldPending', 'textureOldPendingRemove']);
     expect(n.st.old).toBeNull();                                                      // the old file is gone
-    expect(s.posts.length).toBe(1); expect(s.posts[0].body.content).toBe('Kept by the old build\n\nSecond'); expect(s.posts[0].body.parent_revision_id).toBe('r1');
-    expect(i.status).toBe('saved');
-    expect(files.size).toBe(0);                                                       // posted: nothing kept
-    await E.flushAll(d); expect(s.posts.length).toBe(1);
+    expect(s.posts.length).toBe(0);                                                   // no base: never posted over the head
+    expect(i.status).toBe('conflict'); expect(i.kept).toBe('Kept by the old build\n\nSecond');
+    expect(newFile().conflicts.d1.text).toBe('Kept by the old build\n\nSecond'); expect(newFile().docs.d1).toBeUndefined();
+    await E.flushAll(d); expect(s.posts.length).toBe(0);
   });
   test('M1b the new file is written BEFORE the old one is removed', async () => {
     const down = server({ failure: new TypeError('Network request failed') });
@@ -235,20 +246,19 @@ describe('the editor', () => {
     const call = async (r: Record<string, unknown>) => { if (r.op === 'textureOldPendingRemove') order.push(`remove after ${fsLog.filter((x) => x === 'write').length} write(s); file kept: ${files.has(E.PENDING_FILE)}`); return n.call(r); };
     await E.textureEditInfo(A, { net: down.net, storage, native: call });
     expect(order).toEqual(['remove after 1 write(s); file kept: true']);
-    expect(newFile().docs.d1.text).toBe('Kept by the old build\n\nSecond');
+    expect(newFile().conflicts.d1.text).toBe('Kept by the old build\n\nSecond');
     expect(n.st.old).toBeNull();
   });
-  test('M2 a crash between the write and the remove sends nothing twice', async () => {
+  test('M2 a crash between the write and the remove changes nothing the next launch', async () => {
     const s = server(), n = nativeFake(OLD); n.st.removeFails = true;
-    const down = server({ failure: new TypeError('x') });
-    await E.textureEditInfo(A, { net: down.net, storage, native: n.call });           // launch 1: merged and written, the remove fails (a crash), the post fails (offline)
-    expect(n.st.old).not.toBeNull(); expect(newFile().docs.d1.text).toBe('Kept by the old build\n\nSecond');
+    await E.textureEditInfo(A, { net: s.net, storage, native: n.call });             // launch 1: merged and written, the remove fails (a crash)
+    expect(n.st.old).not.toBeNull(); expect(newFile().conflicts.d1.text).toBe('Kept by the old build\n\nSecond');
     E.resetTextureEdit(); n.st.removeFails = false;
-    await E.textureEditInfo(A, { net: s.net, storage, native: n.call });              // launch 2: the old file is merged again (no change), removed, the text is sent once
-    expect(s.posts.length).toBe(1); expect(n.st.old).toBeNull();
-    E.resetTextureEdit(); n.st.old = OLD;                                              // launch 3: the old file came back (the remove had failed once more); the head already says it
+    await E.textureEditInfo(A, { net: s.net, storage, native: n.call });              // launch 2: the old file is merged again (nothing new), removed
+    expect(s.posts.length).toBe(0); expect(n.st.old).toBeNull(); expect(newFile().conflicts.d1.text).toBe('Kept by the old build\n\nSecond');
+    E.resetTextureEdit(); n.st.old = OLD;                                              // launch 3: the old file came back
     await E.textureEditInfo(A, { net: s.net, storage, native: n.call });
-    expect(s.posts.length).toBe(1); expect(files.size).toBe(0);
+    expect(s.posts.length).toBe(0); expect(Object.keys(newFile().conflicts)).toEqual(['d1']);
   });
   test('M3 the new place wins for the same document; a damaged old file is removed', async () => {
     const down = server({ failure: new TypeError('x') });
@@ -282,15 +292,32 @@ describe('the editor', () => {
     n.st.resigns = 2;
     await E.textureEditInfo(A, d); expect(s.posts.length).toBe(2);
   });
-  test('K1 a 409 re-reads the head and merges: both changes land in one revision', async () => {
+  test('K1 a 409 merges, and the NEXT keystroke does not revert the other writer (the field is not told the merge)', async () => {
     const s = server({ content: 'one\n\ntwo\n\nthree' }), d = { net: s.net, storage };
-    await E.textureEdit(A, 'ONE\n\ntwo\n\nthree', d);                                 // the session base is r1
-    s.other('one\n\ntwo\n\nTHREE');                                                     // someone else (the notebook's topic sync) saved r2
+    await E.textureEdit(A, 'ONE\n\ntwo\n\nthree', d);                                 // the field holds what the owner typed; the session base is r1
+    s.other('one\n\ntwo\n\nTHREE');                                                     // another writer (the notebook's topic sync, the web) saved r2
     const i = await E.textureFlush(A, d);
     expect(s.posts.length).toBe(1); expect(s.posts[0].body.content).toBe('ONE\n\ntwo\n\nTHREE'); expect(s.posts[0].body.parent_revision_id).toBe('r2');
     expect(i.status).toBe('saved'); expect(files.size).toBe(0);
-    await E.textureEdit(A, 'ONE\n\ntwo!\n\nTHREE', d); await E.textureFlush(A, d);        // the base moved with it: no second conflict
-    expect(s.posts.length).toBe(2); expect(s.posts[1].body.parent_revision_id).toBe('r3');
+    // (b) the owner keeps typing: the field still holds "three", not the merge
+    await E.textureEdit(A, 'ONE\n\ntwo!\n\nthree', d); await E.textureFlush(A, d);
+    expect(s.head().content).toBe('ONE\n\ntwo!\n\nTHREE');                              // the other writer's THREE survives the keystroke
+    expect(s.posts[1].body.parent_revision_id).toBe('r3');
+    // (c) the owner edits the very line they edited before: no false conflict with their own earlier change
+    await E.textureEdit(A, 'ONE!\n\ntwo!\n\nthree', d); await E.textureFlush(A, d);
+    expect(s.head().content).toBe('ONE!\n\ntwo!\n\nTHREE'); expect(s.posts.length).toBe(3);
+    // the other writer again, between two keystrokes
+    s.other('ONE!\n\ntwo!\n\nTHREE\n\nfour');
+    await E.textureEdit(A, 'ONE!\n\ntwo!!\n\nthree', d); const k = await E.textureFlush(A, d);
+    expect(s.head().content).toBe('ONE!\n\ntwo!!\n\nTHREE\n\nfour'); expect(k.status).toBe('saved');
+  });
+  test('K1d a head that moved with the owner NOT typing again is not touched, and what the owner typed back to the head posts nothing', async () => {
+    const s = server({ content: 'one\n\ntwo' }), d = { net: s.net, storage };
+    await E.textureEdit(A, 'ONE\n\ntwo', d); await E.textureFlush(A, d);               // r2
+    s.other('ONE\n\ntwo\n\nnew');                                                         // r3 by someone else
+    await E.textureEdit(A, 'ONE\n\ntwo', d);                                              // the field text equals the last save: the head is theirs, nothing is ours
+    await E.textureFlush(A, d);
+    expect(s.head().content).toBe('ONE\n\ntwo\n\nnew'); expect(s.posts.length).toBe(1);
   });
   test('K2 the same line changed both ways: nothing is posted, the text is kept, the owner is told', async () => {
     const s = server({ content: 'one\n\ntwo' }), d = { net: s.net, storage };
@@ -299,16 +326,13 @@ describe('the editor', () => {
     const i = await E.textureFlush(A, d);
     expect(s.posts.length).toBe(0);
     expect(i.status).toBe('conflict'); expect(i.label).toContain('changed somewhere else'); expect(i.label).toContain('kept on this phone');
-    expect(newFile().docs.d1).toEqual({ text: 'ONE\n\ntwo', base: 'r1' });
+    expect(newFile().conflicts.d1).toEqual({ text: 'ONE\n\ntwo', base: 'r1' }); expect(i.kept).toBe('ONE\n\ntwo');
     await E.flushAll(d); await E.textureFlush(A, d); expect(s.posts.length).toBe(0);    // no retry loop, no overwrite
     expect(s.head().content).toBe('uno\n\ntwo');
   });
   test('K3 a relaunch: pending text written over an older revision is merged, or kept and told', async () => {
     const s = server({ content: 'one\n\ntwo\n\nthree' }), d = { net: s.net, storage };
-    const noRoute: E.Net = { json: async () => { throw new TypeError('Network request failed'); } };
-    await E.textureEdit(A, 'ONE\n\ntwo\n\nthree', { net: noRoute, storage });          // no head read here: the text is kept with no base yet...
-    expect(newFile().docs.d1.base).toBe('');
-    await E.textureEdit(A, 'ONE\n\ntwo\n\nthree', d); E.resetTextureEdit();              // ...and with the head read, the base is r1
+    await E.textureEdit(A, 'ONE\n\ntwo\n\nthree', d); E.resetTextureEdit();           // typed over r1, kept with base r1; the app is killed
     expect(newFile().docs.d1.base).toBe('r1');
     s.other('one\n\ntwo\n\nTHREE');
     const i = await E.textureEditInfo(A, d);                                              // the launch: merged onto r2
@@ -396,5 +420,117 @@ describe('the editor', () => {
     key.v = 'key-one'; E.resetTextureEdit();
     await E.textureEdit(A, 'Mine again\n\nSecond', { net: down.net, storage }); E.resetTextureEdit();
     expect((await E.textureEditInfo(A, { net: up.net, storage })).status).toBe('saved');  // the same account: loaded and sent
+  });
+
+  // ---- review round 2
+  const noRoute: E.Net = { json: async () => { throw new TypeError('Network request failed'); } };
+  test('N1 a kept text with no base over a head that is not equal to it is a conflict: never posted, kept', async () => {
+    await E.textureEdit(A, 'Typed with no route\n\nSecond', { net: noRoute, storage });              // no head could be read: no base
+    expect(newFile().docs.d1.base).toBe('');
+    E.resetTextureEdit();
+    const s = server();
+    const i = await E.textureEditInfo(A, { net: s.net, storage });                                  // the launch
+    expect(s.posts.length).toBe(0); expect(i.status).toBe('conflict'); expect(i.kept).toBe('Typed with no route\n\nSecond');
+    expect(newFile().conflicts.d1.text).toBe('Typed with no route\n\nSecond');
+    await E.textureFlush(A, { net: s.net, storage }); await E.flushAll({ net: s.net, storage }); expect(s.posts.length).toBe(0);
+  });
+  test('N2 a kept text with no base that equals the head is cleared', async () => {
+    await E.textureEdit(A, 'Hello world\n\nSecond', { net: noRoute, storage }); E.resetTextureEdit();
+    const s = server();
+    const i = await E.textureEditInfo(A, { net: s.net, storage });
+    expect(s.posts.length).toBe(0); expect(i.kept).toBe(''); expect(files.size).toBe(0);
+  });
+  test('N3 typing while the head cannot be read, then the route comes back: a conflict, not a post', async () => {
+    const s = server();
+    await E.textureEdit(A, 'Offline words\n\nSecond', { net: noRoute, storage });                  // same process, no session
+    const i = await E.textureFlush(A, { net: s.net, storage });
+    expect(s.posts.length).toBe(0); expect(i.status).toBe('conflict'); expect(i.kept).toBe('Offline words\n\nSecond');
+  });
+  test('N4 opening a document reads its head, so typing offline afterwards HAS a base and posts when the route returns', async () => {
+    const s = server();
+    await E.textureEditInfo(A, { net: s.net, storage });                                            // the editor's page appears: the head is read now
+    await E.textureEdit(A, 'Typed on the train\n\nSecond', { net: noRoute, storage });
+    expect(newFile().docs.d1.base).toBe('r1');
+    const i = await E.textureFlush(A, { net: s.net, storage });
+    expect(i.status).toBe('saved'); expect(s.posts.length).toBe(1);
+  });
+  test('C1 a kept conflict is readable after the editor closes and after a relaunch, and typing does not overwrite it', async () => {
+    await E.textureEdit(A, 'Kept words\n\nSecond', { net: noRoute, storage }); E.resetTextureEdit();
+    const s = server(), d = { net: s.net, storage };
+    expect((await E.textureEditInfo(A, d)).kept).toBe('Kept words\n\nSecond');
+    E.resetTextureEdit();                                                                            // another relaunch: still there
+    expect((await E.textureEditInfo(A, d)).kept).toBe('Kept words\n\nSecond');
+    expect((await E.textureEditInfo('paper:front', d)).kept).toBe('');                               // only for its own document
+    const t = await E.textureEdit(A, 'Fresh typing\n\nSecond', d);                                   // the owner opens the editor (the field holds the head) and types
+    expect(t.kept).toBe('Kept words\n\nSecond'); expect(newFile().conflicts.d1.text).toBe('Kept words\n\nSecond');
+    const f = await E.textureFlush(A, d);
+    expect(s.posts.length).toBe(0); expect(f.status).toBe('conflict'); expect(f.label).toContain('Copy or discard');
+    expect(newFile().docs.d1.text).toBe('Fresh typing\n\nSecond');                                    // the new typing is kept in the ordinary set, beside the conflict
+  });
+  test('C2 Discard removes the conflict only, and then the typing posts', async () => {
+    await E.textureEdit(A, 'Kept words\n\nSecond', { net: noRoute, storage }); E.resetTextureEdit();
+    const s = server(), d = { net: s.net, storage };
+    await E.textureEditInfo(A, d); await E.textureEdit(A, 'Fresh typing\n\nSecond', d);
+    const g = await E.textureDiscard(A, d);
+    expect(g.kept).toBe(''); expect(newFile().conflicts).toEqual({});
+    const f = await E.textureFlush(A, d);
+    expect(f.status).toBe('saved'); expect(s.posts.map((p) => p.body.content)).toEqual(['Fresh typing\n\nSecond']);
+  });
+  test('C3 a second text with no base, while a conflict is kept, is refused with a plain sentence and the first is untouched', async () => {
+    await E.textureEdit(A, 'First kept\n\nSecond', { net: noRoute, storage }); E.resetTextureEdit();
+    const s = server(), d = { net: s.net, storage };
+    await E.textureEditInfo(A, d);                                                                    // the first is a conflict now
+    E.resetTextureEdit();
+    await E.textureEdit(A, 'Second kept\n\nSecond', { net: noRoute, storage });                       // typed with no route, a conflict already kept (loaded from the file)
+    const j = await E.textureEdit(A, 'Second kept, more\n\nSecond', { net: noRoute, storage });
+    expect(newFile().conflicts.d1.text).toBe('First kept\n\nSecond');
+    expect(j.kept).toBe('First kept\n\nSecond');
+    await E.textureEditInfo(A, d);                                                                    // the route is back: the second is a conflict too, but there is no room: said, kept, not posted
+    const f = await E.textureFlush(A, d);
+    expect(s.posts.length).toBe(0); expect(f.label).toContain('Copy or discard'); expect(newFile().conflicts.d1.text).toBe('First kept\n\nSecond');
+  });
+  test('C4 an earlier launch\'s kept text is not overwritten by new typing when the route was down at launch', async () => {
+    const s = server();
+    await E.textureEditInfo(A, { net: s.net, storage }); await E.textureEdit(A, 'Unsent before the kill\n\nSecond', { net: noRoute, storage }); E.resetTextureEdit();
+    const j = await E.textureEdit(A, 'Typed after relaunch\n\nSecond', { net: noRoute, storage });     // the route is still down: the field was reseeded from the head
+    expect(j.kept).toBe('Unsent before the kill\n\nSecond');                                           // shelved, not destroyed
+    expect(newFile().docs.d1.text).toBe('Typed after relaunch\n\nSecond');
+  });
+  test('U1 the unsent count: kept edits and conflicts, for any document', async () => {
+    const s = server(), d = { net: s.net, storage };
+    expect((await E.textureEditInfo('paper:front', d)).unsent).toBe(0);
+    await E.textureEdit(A, 'Typed\n\nSecond', { net: noRoute, storage });                              // d1 kept, no base
+    await E.textureEdit('texture:d2', 'Other doc text', { net: noRoute, storage });                    // d2 kept
+    const i = await E.textureEditInfo('paper:front', { net: noRoute, storage });
+    expect(i.unsent).toBe(2); expect(i.waiting).toBe(2);
+    E.resetTextureEdit();
+    const k = await E.textureEditInfo('paper:front', d);                                               // launch: d1 becomes a conflict, d2 has no route here (404): still kept
+    expect(k.unsent).toBe(2); expect(k.waiting).toBe(1);
+    await E.wipeTextureEdit(storage);
+    expect((await E.textureEditInfo('paper:front', d)).unsent).toBe(0);
+  });
+  test('G1 the retry is global: textureFlush("") posts every kept edit whatever page is in front', async () => {
+    const s = server();
+    await E.textureEditInfo(A, { net: s.net, storage });
+    await E.textureEdit(A, 'Typed on the train\n\nSecond', { net: noRoute, storage });
+    expect((await E.textureEditInfo('paper:front', { net: noRoute, storage })).waiting).toBe(1);
+    const i = await E.textureFlush('', { net: s.net, storage });
+    expect(s.posts.length).toBe(1); expect(i.waiting).toBe(0); expect(files.size).toBe(0);
+  });
+  test('G2 the launch retry runs from a page that is not a document', async () => {
+    const s0 = server();
+    await E.textureEditInfo(A, { net: s0.net, storage }); await E.textureEdit(A, 'Kept over r1\n\nSecond', { net: noRoute, storage }); E.resetTextureEdit();
+    const s = server();
+    const i = await E.textureEditInfo('radio:', { net: s.net, storage });                              // the radio page is in front
+    expect(s.posts.length).toBe(1); expect(i.waiting).toBe(0); expect(files.size).toBe(0);
+  });
+  test('C5 the route is back after the launch retry failed: the document opens (a session), the owner types, and the earlier kept text is shelved, not overwritten', async () => {
+    const s0 = server();
+    await E.textureEditInfo(A, { net: s0.net, storage }); await E.textureEdit(A, 'Kept over r1\n\nSecond', { net: noRoute, storage }); E.resetTextureEdit();
+    const s = server();
+    await E.textureEditInfo('radio:', { net: noRoute, storage });                                        // the launch retry could not reach the route
+    await E.textureEditInfo(A, { net: s.net, storage });                                                 // the route is back; the document opens
+    const t = await E.textureEdit(A, 'Typed fresh\n\nSecond', { net: s.net, storage });
+    expect(t.kept).toBe('Kept over r1\n\nSecond'); expect(newFile().conflicts.d1.text).toBe('Kept over r1\n\nSecond');
   });
 });

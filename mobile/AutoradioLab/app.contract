@@ -77,6 +77,7 @@ component Autoradio
     openApproval
     signOut
     signOutNote
+    signOutAsk
     acs
     hpg
     signedOutTick
@@ -210,6 +211,9 @@ component Autoradio
     edUrl
     edBegin
     edDone
+    edKeptCopy
+    edKeptDiscard
+    edDiscardAsk
     edInput
     edSelected
     edFormat

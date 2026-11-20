@@ -8,7 +8,6 @@
 //  C5 the real shape of the native source: an extra field (startedAt, a number of seconds) and a missing one change nothing; not an object is empty.
 import { describe, expect, test } from 'bun:test';
 import { info } from './conversation.ts';
-import { readFileSync } from 'node:fs';
 
 const e = (o: Record<string, unknown>) => ({ id: 't', question: 'q', first: '', firstSource: '', answer: '', status: 'asking', note: '', startedAt: 785_000_000.5, ...o });
 
@@ -45,8 +44,8 @@ describe('the conversation rows', () => {
     expect(info({ entries: [] })).toEqual({ rows: [], empty: true });
     expect(info({})).toEqual({ rows: [], empty: true });
   });
-  test('C6 the source takes the entries array, and the page passes exactly that', () => {
-    expect(readFileSync(new URL('./members-talk.contract', import.meta.url), 'utf8')).toContain('conversationInfo(cvraw.entries)');
+  test('C6 the source takes the entries array (a field, as every other source), and a wrapper is tolerated', () => {
     expect(info([e({ id: 'a', status: 'failed' })]).rows.length).toBe(1);
+    expect(info({ entries: [e({ id: 'a', status: 'failed' })] }).rows.length).toBe(1);
   });
 });

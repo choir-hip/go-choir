@@ -63,13 +63,19 @@ members Autoradio
     send acct = choirCancelSignIn()
   action openApproval
     send acct = choirOpenApproval()
+  // Unsent Texture text kept on this phone (texture-edit.ts) goes with the account: the first press says how many edits will be removed, the second signs out.
+  state signOutAsk = false
   action signOut
-    // The unsent text of a message being written belongs to the account that is leaving (it may quote that account's mail).
-    mailFor = ""
-    mailTo = ""
-    mailSubject = ""
-    mailBody = ""
-    send so = accountSignOut()
+    if edInfo.unsent > 0 and signOutAsk == false
+      signOutAsk = true
+    else
+      signOutAsk = false
+      // The unsent text of a message being written belongs to the account that is leaving (it may quote that account's mail).
+      mailFor = ""
+      mailTo = ""
+      mailSubject = ""
+      mailBody = ""
+      send so = accountSignOut()
   action refreshRadio
     send acct = choirRefresh()
   action radioPlay

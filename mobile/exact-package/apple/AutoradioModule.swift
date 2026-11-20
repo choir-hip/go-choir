@@ -91,7 +91,7 @@ public final class AutoradioModule: ExactPackage {
     var pages: OpenPages!
     var signals: Signals!
     /// How many times the app has resigned active (the editor's flush signal, AutoradioModule+TextureEdit.swift).
-    var textureResigns = 0
+    public var textureResigns = 0
     var themes: ThemeStore!
     let pageSources = PageSources()
     /// name -> handler. Looked up first in `later`; the integrator's switch below answers the rest.
