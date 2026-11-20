@@ -189,7 +189,7 @@ stations:
     status: pending
 now:
   status: working
-  as_of: 2026-11-20T14:05Z (lead-docs lane carries this file)
+  as_of: 2026-11-20T14:02Z (lead-docs lane carries this file)
   slice: four trains and the phone cleanups are deployed; the themes are in a last bounded fix; the owner letter is published; C176 (the re-ask holds on the paper) settles after 16:30Z
   landed_this_thread:
     - 'W1 7f5ad41e1 (intake.events and dispatch.wide_slots gone): CI 44684974356 ok, deployed 06:18:24Z, the paper logs slots=N/12 and event layer flushes after its refresh. C167 settles after 07:20Z.'
