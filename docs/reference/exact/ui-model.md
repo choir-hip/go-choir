@@ -312,3 +312,11 @@ of the app plan said there was no such primitive; that was wrong. See
 - Do `wrap-flow` and `shape-outside` work with a rectangular box of a side note in a long `list virtualized` row, on iOS?
 - Does a package `UIView` that hosts SwiftUI size correctly inside a Contract
   list row (`intrinsicSize`, `events.intrinsicSize(...)`)?
+
+## Page facts (`exactPage`), what the app uses them for (2026-11-20)
+
+Read in the Exact checkout (`docs/contract-for-agents.md` near "exactPage answers", `docs/agent-pitfalls.md` "An on return task also runs at every launch"): `exactPage()` answers
+`visibilityState` (`visible` / `hidden`), `hasFocus`, `frozen`, `onLine`, `persisted`, `restores` and more, "by the web's names". The pitfalls page says the visibility behaviour was observed on the web and the
+iOS simulator (2026-10-06); it is NOT established here that an iPhone delivers `hidden` and `visible` when the phone locks and unlocks while the app is open. The app therefore does not depend on it alone:
+`account.contract` passes `visibilityState` and `hasFocus` into the account source's arguments (a change re-asks the key), AND a counter that moves every 3 s while the key is "locked", so a locked
+state cannot stick if no event arrives. A gated `task` runs at launch when its gate is already true, so a counter is used instead of an "on return" task.

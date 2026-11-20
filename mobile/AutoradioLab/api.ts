@@ -50,8 +50,11 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
 // There is no refresh: the key is long-lived and the server answers 401 when it is revoked (the Swift client did the same).
 
 /** The listener has no usable session: nothing was kept, or the server refused the key (401). Pages answer their sign-in state. */
+/** Why there is no session: `none` (no key), `locked` (the key exists but cannot be read yet: before the first unlock), `refused` (the server refused the key, a 401). Pages say a different thing for each. */
+export type SignedOutReason = 'none' | 'locked' | 'refused';
 export class SignedOutError extends Error {
-  constructor(message = 'not signed in') { super(message); this.name = 'SignedOutError'; }
+  reason: SignedOutReason;
+  constructor(message = 'not signed in', reason: SignedOutReason = 'none') { super(message); this.name = 'SignedOutError'; this.reason = reason; }
 }
 
 /** The server answered a status outside 200 to 299 (other than 401). `message` is only the server's own short `error` string. */
@@ -94,6 +97,11 @@ async function keptItem(account: Account): Promise<string | null> {
   if (!reader || reader.available === false) return null;
   const r = (await reader.later({ op: 'get', account })) as { found?: boolean; value?: unknown } | null;
   return r && r.found === true && typeof r.value === 'string' && r.value !== '' ? r.value : null;
+}
+
+/** No session: is the key absent, or only unreadable (locked)? One read-only native question. */
+async function noSessionReason(): Promise<SignedOutReason> {
+  try { const r = (await reader?.later({ op: 'keystate' })) as { state?: unknown } | null | undefined; return r && r.state === 'unreadable' ? 'locked' : 'none'; } catch { return 'none'; }
 }
 
 /** The key and the computer id in ONE native read: a sign-out or a new sign-in between two reads cannot pair an old key with a new computer. */
@@ -187,7 +195,7 @@ async function send(path: string, opts: Authed, accept: string, extra: Record<st
   if (!plainPath(path)) throw new Error('refused: a signed-in path is a plain absolute path on the server');
   if (demoOn) throw new SignedOutError('demo mode makes no signed-in request');
   const sess = await keptSession();
-  if (!sess) throw new SignedOutError();
+  if (!sess) throw new SignedOutError('not signed in', await noSessionReason());
   const key = sess.key;
   if (blockedDigest !== null && (await digestOf(key)) !== blockedDigest) blockedDigest = null;      // another account signed in: a new session
   const headers: Record<string, string> = { ...(opts.headers ?? {}), Accept: accept, Authorization: `Bearer ${key}` };
@@ -243,8 +251,8 @@ let rejected = '';
 export const rejectedDigest = (): string => rejected;
 export const hasNativeHandle = (): boolean => !!reader && reader.available !== false;
 async function check(r: Response, path: string, key: string): Promise<void> {
-  if (r.ok) return;
-  if (r.status === 401) { try { rejected = await digestOf(key); } catch { /* the digest is a convenience */ } throw new SignedOutError('the key was refused; sign in again'); }
+  if (r.ok) { rejected = ''; return; }                                // the server took the key again: it is no longer refused
+  if (r.status === 401) { try { rejected = await digestOf(key); } catch { /* the digest is a convenience */ } throw new SignedOutError('the key was refused; sign in again', 'refused'); }
   let msg = '';
   try { const o = JSON.parse(await r.text()); if (o && typeof o.error === 'string') msg = scrub(o.error, key).slice(0, 200); } catch { /* the server's string only; never the body */ }
   const retry = Number(r.headers.get('retry-after'));

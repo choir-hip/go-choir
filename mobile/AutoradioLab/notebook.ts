@@ -17,6 +17,7 @@
 //  N8 no word of the notebook goes to a log
 
 import type { Storage } from './app.contract.d.ts';
+import { WORDS } from './words.ts';
 import { authedJSON, HTTPError, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
 import { textureSource } from './content.ts';
 import { cut } from './takes.ts';
@@ -156,7 +157,7 @@ export type Card = {
   noVerdictReasons: Record<string, number>; byKind: Group[]; byCause: Group[];
 };
 export type Read = { card: Card; rows: Row[]; next: string | null; truncated: boolean };
-export type Load = { state: 'ready'; read: Read } | { state: 'notyet' | 'offline' | 'signedout' };
+export type Load = { state: 'ready'; read: Read } | { state: 'notyet' | 'offline' } | { state: 'signedout'; reason: string };
 
 const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const int = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : 0);
@@ -198,7 +199,7 @@ export async function readLearning(get: Get, limit = 200): Promise<Load> {
     const read = parseLearning(await get('/api/autoradio/learning', { limit: Math.min(Math.max(limit, 1), 200) }));
     return read ? { state: 'ready', read } : { state: 'notyet' };
   } catch (e) {
-    if (e instanceof SignedOutError) return { state: 'signedout' };
+    if (e instanceof SignedOutError) return { state: 'signedout', reason: e.reason };
     if (e instanceof HTTPError && (e.status === 404 || e.status === 501)) return { state: 'notyet' };
     return { state: 'offline' };
   }
@@ -288,7 +289,7 @@ export function page(i: { doc: DocLoad | null; learning: Load | null; selected: 
   else if (L.state === 'ready') { o.scoreState = 'ready'; read = L.read; }
   else if (L.state === 'notyet') { o.scoreState = 'notyet'; o.scoreNotice = 'The scorecard is not available yet. Your computer does not have it, so nothing is shown rather than a guess.'; }
   else if (L.state === 'offline') { o.scoreState = 'offline'; o.scoreNotice = 'The scorecard could not be reached. It will show when your computer answers.'; }
-  else { o.scoreState = 'signedout'; o.scoreNotice = 'Sign in to see the scorecard.'; }
+  else if (L.state === 'signedout') { o.scoreState = 'signedout'; o.scoreNotice = L.reason === 'locked' ? WORDS.locked : L.reason === 'refused' ? 'Sign in again to see the scorecard.' : 'Sign in to see the scorecard.'; }
   if (read) {
     const c = read.card;
     if (c.settled === 0) o.score = [{ label: 'Forecasts settled', value: '0' }, { label: 'Still open', value: String(c.open) }];

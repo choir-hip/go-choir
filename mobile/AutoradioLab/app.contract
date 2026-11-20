@@ -467,7 +467,8 @@ component Autoradio
         box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=(max(th.behindDim3, 0.4)) press=hideLayer
       // elevation 2: the glass bar, always on top, with the launcher and the player rising from it
       // signed out, locked or refused: the sentence and the one way in, above the bar, on every page
-      if au.status != "pending" and onbd == false
+      // not over the code screen, a sheet (the launcher, the player), the bar's field with the keyboard up, or the content controls
+      if au.status != "pending" and onbd == false and layer == "" and barFocused == false and ctlUp == false
         SignedOutBanner()
       BarShell()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,

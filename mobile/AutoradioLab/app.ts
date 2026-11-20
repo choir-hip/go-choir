@@ -59,7 +59,7 @@ const sources: Sources = {
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
-  accountState: ([tick, top]) => accountState(tick, top),
+  accountState: ([tick, top, demo]) => accountState(tick, top, demo),
   hostCaps: async ([nativeSeen]) => ({ mode: await hostMode(4000, 1500, nativeSeen) }),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),
@@ -101,7 +101,7 @@ const sources: Sources = {
 // Where the demo flag sits in a source's arguments (the sources that carry it). The signed-in seam is told at every answer; once in demo it stays
 // in demo until the process ends (api.ts `setDemo`), and the native reader answers "not found" in demo for the sources that carry no flag.
 export const DEMO_AT: Record<string, number> = {
-  settingsAccount: 1, accountSignOut: 0, mailBox: 1, mailFrame: 1, mailSync: 1, mailMessage: 1, mailCompose: 1, mailSaveDraft: 4, mailApprovalEmail: 2, mailMarkUnread: 1,
+  settingsAccount: 1, accountState: 2, accountSignOut: 0, mailBox: 1, mailFrame: 1, mailSync: 1, mailMessage: 1, mailCompose: 1, mailSaveDraft: 4, mailApprovalEmail: 2, mailMarkUnread: 1,
   fileList: 0, fileOpen: 0, fileResolve: 0, fileMkdir: 0, fileDelete: 0, fileRename: 0, fileUpload: 0, paperFront: 6,
 };
 export const answer: Answer = async (source, args, store, storage, native) => {

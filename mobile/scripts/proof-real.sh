@@ -208,12 +208,15 @@ view real-50-so-first-screen 2500
 place paper 2500; view real-51-so-paper 3500
 [ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-52-so-story 4000; }
 place radio 1500; view real-53-so-radio 2500
+step "tap radio-play-public"; wait_ 6000; step tree; shot real-53b-so-playing
 place settings 900; step "tap settings-nav-account"; view real-54-so-account 3000
 place files 900; view real-55-so-files 2500
 step logs
 run_drive signedout light "" --touch platform
 unset NOKEY
 SO="$SHOTS/drive-signedout.txt"
+# the FIRST screen's dump only: the text of the drive up to the first screenshot step (real-50), not the whole drive
+SO1="$SHOTS/signedout-first.txt"; awk '{ print } /real-50-so-first-screen/ { exit }' "$SO" > "$SO1"
 
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
@@ -265,12 +268,15 @@ bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
 # the shared twins are the Android path: on iOS the shared reader must never fetch (it logs "reader: story blocks=" when it does)
 bad "iOS: the shared reader twin never fetched" 'console: reader: story blocks=' "$OUT"
 # the signed-out tour
-chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO"
-chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO"
-chk "signed out: the radio says what it does" 'Reading the public paper. Sign in to hear your own programme.' "$SO"
+chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO1"
+chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO1"
+chk "signed out: the radio says what it is" 'This is the public paper. Sign in to hear your own programme.' "$SO1"
 chk "signed out: the paper lists public stories" '\[paper-story-/pub/' "$SO"
 [ -n "$STORY1" ] && chk "signed out: a story reads" '\[reader-block-' "$SO"
 chk "signed out: the radio offers the public paper" '\[radio-play-public\]' "$SO"
+# public playback was STARTED: the now-playing line names one of the public stories listed on the radio page
+T0=$(grep -m1 -A1 '\[radio-public-play-0\]' "$SO" | grep -o 'Text#[0-9]* "[^"]*"' | head -1 | sed -E 's/^Text#[0-9]+ "//; s/"$//' | cut -c1-24)
+if [ -n "$T0" ] && grep -E 'NOW PLAYING|Now playing,' "$SO" | grep -qF "$T0"; then echo "ok: signed out: public playback started (now playing: a public story)"; else echo "MISSING: signed out: public playback started (title '$T0')"; FAILS="$FAILS [public playback]"; fi
 chk "signed out: Settings > Account has Sign in" '\[settings-signin\]' "$SO"
 chk "signed out: Files says sign in" 'Sign in to see your files' "$SO"
 bad "signed out: no locked-phone sentence" 'Unlock your phone' "$SO"

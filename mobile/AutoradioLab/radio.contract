@@ -122,10 +122,10 @@ component RadioPage
                 button press=radioPlay testId="radio-retry" appearance="none" flex-shrink=0 aria-label=rp.action
                   Btn(label=rp.action, primary=false, wide=false)
           // Signed out the radio still has something to read aloud: the PUBLIC paper's front page (the same list the paper shows: shared code, paper.ts). Play reads the first story and queues the
-          // second; each row plays or queues its own. The programme and the voice need the owner's computer (the sentence at the top says so, with the one way in).
-          if acs.state == "signedOut" and pfront.routes.length > 0
+          // second; each row plays or queues its own. The programme and the voice need the owner's computer (the card above the bar says so, with the one way in). Locked, refused and no-sign-in states offer the public paper too: it is public either way..
+          if (acs.state == "signedOut" or acs.state == "locked" or acs.state == "rejected" or acs.state == "noSignIn") and pfront.routes.length > 0
             column gap=10 width="100%" testId="radio-public"
-              text "Today's public paper" font-family=th.fontLabel font-size="-exact-footnote" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted
+              text "The public paper" font-family=th.fontLabel font-size="-exact-footnote" font-weight=600 letter-spacing=0.9 text-transform="uppercase" color=th.muted
               button press=playPublic(pfront.routes.slice(0, 1).join(""), pfront.titles.slice(0, 1).join(""), pfront.routes.slice(1, 2).join(""), pfront.titles.slice(1, 2).join("")) testId="radio-play-public" appearance="none" align-self="flex-start" aria-label="Play the public paper"
                 Btn(label="Play the public paper", primary=true, wide=false)
               for t, i in pfront.titles.slice(0, 6) key=i

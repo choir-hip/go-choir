@@ -5,7 +5,7 @@
 test "without a session the Files place says so in words, not a spinner"
   clock data
   expect state fsList.status == "error"
-  expect state fsList.message == "Sign in again to see your files."
+  expect state fsList.message == "Sign in to see your files."
   expect state fsList.count == 0
   expect state fsList.title == "Files"
 
