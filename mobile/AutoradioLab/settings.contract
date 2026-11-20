@@ -443,7 +443,9 @@ component AboutScreen
         column width="100%" box-sizing="border-box" padding="6px 0"
           FactRow(label="Autoradio", value=(about.app == "" ? "-" : about.app), mono=false, testId="settings-about-app")
           Hairline()
-          FactRow(label="Build", value=(bld.build == "" ? "unknown" : bld.build), mono=true, testId="settings-about-build")
+          FactRow(label="Build", value=(about.build == "" ? "-" : about.build), mono=true, testId="settings-about-build")
+          Hairline()
+          FactRow(label="Commit", value=(bld.commit == "" ? "unknown" : bld.commit), mono=true, testId="settings-about-commit")
           Hairline()
           FactRow(label="Server build", value=(bld.server == "" ? "not reported" : bld.server), mono=true, testId="settings-about-server")
           Hairline()

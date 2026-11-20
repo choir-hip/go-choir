@@ -550,6 +550,14 @@ type CaptureSearchRequest struct {
 	// Size is how many pages the ranked answer holds (capture_rank.go); the
 	// default is 10 and the most 25. Only a request with a Query is ranked.
 	Size int `json:"size,omitempty"`
+	// ConversationID, when set, lets the ranked answer's sufficiency block say
+	// which held leads an earlier search of that conversation returned
+	// (capture_sufficiency.go). It filters nothing.
+	ConversationID string `json:"conversation_id,omitempty"`
+	// Sufficiency asks the ranked answer for its sufficiency block and held
+	// leads (capture_sufficiency.go). Only the host's measurement asks; every
+	// other caller's answer and latency are as before.
+	Sufficiency bool `json:"sufficiency,omitempty"`
 }
 
 // CaptureSearchResponse holds the candidate captures, newest first among

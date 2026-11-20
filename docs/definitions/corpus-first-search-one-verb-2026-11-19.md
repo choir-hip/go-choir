@@ -14,7 +14,7 @@ conversation ids that returned it, `tried_at` and `capture_id`. A lead is
 **not embedded**: the embedder makes about 37,000 passages a day, a day's
 searches return about 190,000 results, and the capture backlog is still
 unfilled. L2 finds a held lead by its URL key or by a full-text match on
-title and snippet (a `tsvector` with a GIN index, `SearchLeadsByText`).
+title and snippet (a `tsvector` with a GIN index; L2 reads it with `SearchLeadsByWords`, which needs at least half of the query's prepared words, lower case with function words dropped, the guest's corpus-search rule).
 corpusd is its custodian. Only the host writes it: `agentcore/desk_search.go`
 sends all of a search's results in one write when the search ends; the Read
 path sets `tried_at`, and `capture_id` when the read captures the page.
@@ -49,6 +49,8 @@ The first matching row decides:
 | 4 | unread leads at least K | held | the leads |
 | 5 | strong exists and all are tried | sent with since = newest strong minus lag | "sent: new since T" |
 | 6 | no strong capture | sent | "nothing held for this" |
+
+L2 measures row 0 at 10 and at 30 minutes (`scripts/search-sufficiency-replay --reuse-min`): no rule says which words are news words, so the 10-minute share is the conservative bound and the 30-minute share the upper one.
 
 A run is never starved: row 3 costs at most ten free reads; rows 1, 2, 5
 and 6 always send. No cap, no switch, no extra model call.

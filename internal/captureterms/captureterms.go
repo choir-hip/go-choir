@@ -268,3 +268,32 @@ func runeWidth(s string) int {
 	_, n := utf8.DecodeRuneInString(s)
 	return n
 }
+
+// Stopwords are the function words a corpus query drops before it is matched
+// (the guest's corpus search and the search-lead reads share this one list).
+var Stopwords = map[string]bool{
+	"a": true, "an": true, "the": true, "and": true, "or": true, "of": true, "in": true, "on": true, "at": true,
+	"to": true, "for": true, "from": true, "by": true, "with": true, "about": true, "is": true, "are": true,
+	"was": true, "were": true, "what": true, "whats": true, "what's": true, "who": true, "how": true, "why": true,
+	"when": true, "where": true, "which": true, "latest": true, "current": true, "recent": true,
+}
+
+// QueryWords lowercases a query, strips punctuation from each word, drops
+// function words and repeats, and keeps at most max words (all when max <= 0).
+func QueryWords(query string, max int) []string {
+	var words []string
+	seen := map[string]bool{}
+	for _, word := range strings.Fields(strings.ToLower(query)) {
+		word = strings.TrimFunc(word, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+		word = strings.TrimSuffix(word, "'s")
+		if word == "" || Stopwords[word] || seen[word] {
+			continue
+		}
+		seen[word] = true
+		words = append(words, word)
+		if max > 0 && len(words) == max {
+			break
+		}
+	}
+	return words
+}

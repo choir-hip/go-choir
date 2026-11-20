@@ -11,6 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/yusefmosiah/go-choir/internal/captureterms"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -91,28 +92,7 @@ type corpusField struct {
 // corpusQueryTerms lowercases the query, strips punctuation from each word,
 // and drops function words, keeping at most corpusMaxTerms words.
 func corpusQueryTerms(query string) []string {
-	var terms []string
-	seen := map[string]bool{}
-	for _, word := range strings.Fields(strings.ToLower(query)) {
-		word = strings.TrimFunc(word, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
-		word = strings.TrimSuffix(word, "'s")
-		if word == "" || corpusStopwords[word] || seen[word] {
-			continue
-		}
-		seen[word] = true
-		terms = append(terms, word)
-		if len(terms) == corpusMaxTerms {
-			break
-		}
-	}
-	return terms
-}
-
-var corpusStopwords = map[string]bool{
-	"a": true, "an": true, "the": true, "and": true, "or": true, "of": true, "in": true, "on": true, "at": true,
-	"to": true, "for": true, "from": true, "by": true, "with": true, "about": true, "is": true, "are": true,
-	"was": true, "were": true, "what": true, "whats": true, "what's": true, "who": true, "how": true, "why": true,
-	"when": true, "where": true, "which": true, "latest": true, "current": true, "recent": true,
+	return captureterms.QueryWords(query, corpusMaxTerms)
 }
 
 // corpusTermIn reports whether term starts a word of lower (already

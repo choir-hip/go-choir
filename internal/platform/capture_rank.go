@@ -94,6 +94,17 @@ type RankedCapture struct {
 	// Stories are the publications whose latest version cites this page, among
 	// the stories the vector half found.
 	Stories []string `json:"stories,omitempty"`
+	// Cosine is the best cosine of the vector slots that brought the page into
+	// the answer (its own passage, or a story passage that cites it); 0 when
+	// the vector half did not reach it (a page found by text alone).
+	Cosine float64 `json:"cosine,omitempty"`
+	// At is the page's time, RFC 3339: published when known, else fetched
+	// (the time the window checks use); empty when it has none.
+	At string `json:"at,omitempty"`
+	// Read is true when a lead of this computer for the page's URL has a mark:
+	// some run tried the URL, or a capture of it was stored from a search
+	// result (set by the sufficiency block; false when leads could not be read).
+	Read bool `json:"read,omitempty"`
 }
 
 // RankedStory is a story the vector half found, with the captures its latest
@@ -132,6 +143,11 @@ type CaptureRanking struct {
 	BM25Kept int `json:"bm25_kept"`
 	// Note names a part of the vector half that failed while the rest answered.
 	Note string `json:"note,omitempty"`
+	// Sufficiency says how strong and recent the best answer is, and Leads
+	// are the held web-search results that match the query (capture_sufficiency.go).
+	// L2 of the one search verb: measured, decides nothing.
+	Sufficiency *Sufficiency `json:"sufficiency,omitempty"`
+	Leads       []RankedLead `json:"leads,omitempty"`
 }
 
 func rankSize(n int) int {
@@ -328,6 +344,8 @@ type rankCand struct {
 	// at the best of what it keeps: its own vector and the stories that kept it.
 	at      map[string]int
 	storyAt map[string]int
+	// score is the best cosine among the slots that touched it.
+	score float64
 }
 
 func (c *rankCand) add(reason string) { c.reasons[reason] = true }
@@ -355,6 +373,12 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 	done := s.retrievalTimerExtra(retrievalCaptureRank, retrievalCaptureSearch)
 	ranking := &CaptureRanking{Entries: []RankedCapture{}}
 	resp.Ranked = ranking
+	// Registered before the timer's defer, so it runs after the timer has
+	// ended: the sufficiency block and the held leads (L2), for a request that
+	// asks, are not part of the ranked answer's latency in the journal.
+	if req.Sufficiency {
+		defer func() { s.addSufficiency(ctx, req, resp, ranking) }()
+	}
 	defer func() {
 		extra := " vector=unavailable vector_state=unavailable bm25_kept=0"
 		if ranking.VectorAnswered {
@@ -380,6 +404,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 			ranking.Entries = append(ranking.Entries, RankedCapture{CaptureID: id, Reasons: []string{RankReasonText}})
 		}
 	}
+
 	since, _ := parseSearchTime("since", req.Since)
 	until, _ := parseSearchTime("until", req.Until)
 	vecUntil := until
@@ -446,7 +471,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 
 	cands := map[string]*rankCand{}
 	var order []string
-	touch := func(id, reason string, slotIdx int) *rankCand {
+	touch := func(id, reason string, slotIdx int, score float64) *rankCand {
 		c := cands[id]
 		if c == nil {
 			c = &rankCand{id: id, reasons: map[string]bool{}, at: map[string]int{}, storyAt: map[string]int{}}
@@ -454,6 +479,9 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 			order = append(order, id)
 		}
 		c.add(reason)
+		if score > c.score {
+			c.score = score
+		}
 		if _, ok := c.at[reason]; !ok {
 			c.at[reason] = slotIdx
 		}
@@ -465,12 +493,12 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 			break
 		}
 		if sl.capture != nil {
-			touch(sl.capture.CaptureID, RankReasonMeaning, slotIdx)
+			touch(sl.capture.CaptureID, RankReasonMeaning, slotIdx, sl.score)
 			continue
 		}
 		st := stories[sl.story.PublicationID]
 		for _, id := range cited[st.VersionID] {
-			c := touch(id, RankReasonStory, slotIdx)
+			c := touch(id, RankReasonStory, slotIdx, sl.score)
 			if !containsID(c.stories, st.PublicationID) {
 				c.stories = append(c.stories, st.PublicationID)
 				c.storyAt[st.PublicationID] = slotIdx
@@ -574,7 +602,7 @@ func (s *Store) rankCaptureAnswer(ctx context.Context, req CaptureSearchRequest,
 		if c == nil {
 			c = &rankCand{id: id, reasons: map[string]bool{RankReasonText: true}}
 		}
-		ranking.Entries = append(ranking.Entries, RankedCapture{CaptureID: id, Reasons: c.reasonList(), Stories: c.stories})
+		ranking.Entries = append(ranking.Entries, RankedCapture{CaptureID: id, Reasons: c.reasonList(), Stories: c.stories, Cosine: c.score, At: entryTime(byID, id)})
 	}
 	if strings.EqualFold(strings.TrimSpace(req.Order), "recent") {
 		sort.SliceStable(ranking.Entries, func(i, j int) bool {

@@ -3,7 +3,7 @@
 //   settingsComputer              status, Wake, Restart to update
 //   learnedInfo                   "What the paper has learned" (derived from the gesture events; lane 4 may supply its own)
 //   activityInfo                  Activity: now, the computer, the desk, the paper, the radio's turns
-//   aboutInfo                     the app version (Bundle: only native reads it); the build and server commits are about.ts
+//   aboutInfo                     the app version and build number (Bundle: only native reads it); the commits are about.ts
 import Foundation
 
 /// The lane's state, held here because an extension cannot add stored properties to the module.
@@ -85,7 +85,7 @@ extension AutoradioModule {
         // ---- about
         handle("aboutInfo") { [unowned self] _, reply in
             let info = Bundle.main.infoDictionary ?? [:]
-            reply(["app": (info["CFBundleShortVersionString"] as? String) ?? "dev",
+            reply(["app": (info["CFBundleShortVersionString"] as? String) ?? "dev", "build": (info["CFBundleVersion"] as? String) ?? "",
                    "base": choir.signIn.baseURL, "signedIn": choir.authView().signedIn])
         }
     }

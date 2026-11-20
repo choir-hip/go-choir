@@ -97,6 +97,32 @@ CREATE TABLE IF NOT EXISTS search_leads (
 );
 `
 
+// search_query_times is when each query was last searched on a computer: the
+// time of the search itself, which a lead's last_returned_at is not (a later,
+// different query that returns the same lead moves that). One row per (owner,
+// computer, query key), written in the transaction that writes the search's
+// leads, pruned with them. Id and key columns are COLLATE "C" so equality and
+// the primary key do not depend on the database's locale.
+const searchQueryTimesDDL = `
+CREATE TABLE IF NOT EXISTS search_query_times (
+	owner_id         TEXT COLLATE "C" NOT NULL,
+	computer_id      TEXT COLLATE "C" NOT NULL,
+	query_key        TEXT COLLATE "C" NOT NULL,
+	last_searched_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (owner_id, computer_id, query_key)
+);
+`
+
+// The retention delete reads this index; the table is small (one row per query
+// a computer searched in 30 days), so it is made plainly.
+const searchQueryTimesIndexDDL = `CREATE INDEX IF NOT EXISTS idx_sqt_searched ON search_query_times(last_searched_at)`
+
+// searchLeadConvIndex serves the conversation read (conversation_ids @> ...). It is built
+// CONCURRENTLY, after the table is ready, so a deploy onto a table that holds
+// a day of leads never blocks the lead writes; until it is built the
+// conversation read is not made (its counts are unknown, not zero).
+const searchLeadConvIndex = "idx_sl_conv"
+
 // searchLeadIndexes are created only when pg_class lacks them. The GIN index
 // serves SearchLeadsByText; the last_returned_at index serves the retention
 // delete; the scope index serves a computer's newest leads.
@@ -144,7 +170,8 @@ func leadQueryKey(q string) string {
 // searchLeadState is the table's own readiness: made by ensureSearchLeads,
 // independent of the vector tables.
 type searchLeadState struct {
-	ready   atomic.Bool
+	ready     atomic.Bool
+	convIndex atomic.Bool
 	started sync.Once
 }
 
@@ -169,7 +196,58 @@ func (s *Store) ensureSearchLeads(ctx context.Context) error {
 			return fmt.Errorf("search leads: create index %s: %w", ix.name, err)
 		}
 	}
+	if _, err := db.ExecContext(ctx, searchQueryTimesDDL); err != nil {
+		return fmt.Errorf("search leads: create query times: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, searchQueryTimesIndexDDL); err != nil {
+		return fmt.Errorf("search leads: create query times index: %w", err)
+	}
+	// Lead writes and the other reads are on from here; the conversation
+	// index is built after, without a lock that blocks writes. A failed build
+	// does not undo that: the maintenance loop retries it (retryConvIndex).
 	s.leads.ready.Store(true)
+	if err := s.ensureConvIndex(ctx); err != nil {
+		log.Printf("corpusd search_leads op=ensure_conv_index err=%v (lead writes are on; conversation counts are unknown until the index is built; retrying)", err)
+	}
+	return nil
+}
+
+// retryConvIndex builds the conversation index when it is not built. It
+// returns (0, true) once built, else the next wait (doubled, at most five
+// minutes) and false.
+func (s *Store) retryConvIndex(ctx context.Context, wait time.Duration) (time.Duration, bool) {
+	if s.leads.convIndex.Load() {
+		return 0, true
+	}
+	if err := s.ensureConvIndex(ctx); err != nil {
+		next := min(wait*2, 5*time.Minute)
+		log.Printf("corpusd search_leads op=ensure_conv_index err=%v (lead writes are on; conversation counts are unknown; retry in %s)", err, next)
+		return next, false
+	}
+	return 0, true
+}
+
+// ensureConvIndex builds the conversation index CONCURRENTLY (a failed build
+// leaves an invalid index, which is dropped and built again) and marks it.
+func (s *Store) ensureConvIndex(ctx context.Context) error {
+	db := s.corpus()
+	var valid sql.NullBool
+	err := db.QueryRowContext(ctx, `SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass(?)`, searchLeadConvIndex).Scan(&valid)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("search leads: read index %s: %w", searchLeadConvIndex, err)
+	}
+	if err == nil && !valid.Bool {
+		if _, err := db.ExecContext(ctx, `DROP INDEX CONCURRENTLY IF EXISTS `+searchLeadConvIndex); err != nil {
+			return fmt.Errorf("search leads: drop invalid index %s: %w", searchLeadConvIndex, err)
+		}
+		err = sql.ErrNoRows
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, err := db.ExecContext(ctx, `CREATE INDEX CONCURRENTLY IF NOT EXISTS `+searchLeadConvIndex+` ON search_leads USING GIN (conversation_ids)`); err != nil {
+			return fmt.Errorf("search leads: create index %s: %w", searchLeadConvIndex, err)
+		}
+	}
+	s.leads.convIndex.Store(true)
 	return nil
 }
 
@@ -186,6 +264,11 @@ func (s *Store) PruneSearchLeads(ctx context.Context, keep time.Duration, limit 
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
+	if _, err := s.corpus().ExecContext(ctx, `DELETE FROM search_query_times WHERE ctid IN (
+		SELECT ctid FROM search_query_times WHERE last_searched_at < now() - make_interval(secs => ?) ORDER BY last_searched_at LIMIT ?)`,
+		keep.Seconds(), limit); err != nil {
+		return int(n), err
+	}
 	return int(n), nil
 }
 
@@ -206,6 +289,10 @@ func (s *Store) StartSearchLeads(ctx context.Context) {
 				case <-time.After(wait):
 				}
 				if s.searchLeadsReady() {
+					if next, built := s.retryConvIndex(ctx, wait); !built {
+						wait = next
+						continue
+					}
 					n, err := s.PruneSearchLeads(ctx, searchLeadRetention, searchLeadPruneBatch)
 					log.Printf("corpusd search_leads op=prune deleted=%d err=%v", n, err)
 					wait = time.Hour
@@ -223,13 +310,101 @@ func (s *Store) StartSearchLeads(ctx context.Context) {
 }
 
 // SearchLeadsByText returns a computer's leads whose title or snippet matches
-// every word of the query, newest return first. It is what L2 calls to find a
-// held lead by words; a query of no words matches nothing.
+// every word of the query, newest return first. L2 reads by words through
+// SearchLeadsByWords (the guest's half-of-the-words rule); this exact-match
+// read is for tests and lookups. A query of no words matches nothing.
 func (s *Store) SearchLeadsByText(ctx context.Context, ownerID, computerID, query string, limit int) ([]SearchLead, error) {
 	if !s.searchLeadsReady() {
 		return nil, errSearchLeadsNotReady
 	}
 	return s.readLeads(ctx, `AND tsv @@ plainto_tsquery('simple', ?) AND plainto_tsquery('simple', ?)::text <> ''`, []any{query, query}, ownerID, computerID, limit)
+}
+
+// SearchQueryTime is when this exact query key (leadQueryKey) was last
+// searched on the computer; ok is false when it never was (or was pruned).
+func (s *Store) SearchQueryTime(ctx context.Context, ownerID, computerID, queryKey string) (time.Time, bool, error) {
+	if !s.searchLeadsReady() {
+		return time.Time{}, false, errSearchLeadsNotReady
+	}
+	var at time.Time
+	err := s.corpus().QueryRowContext(ctx, `SELECT last_searched_at FROM search_query_times WHERE owner_id = ? AND computer_id = ? AND query_key = ?`,
+		ownerID, computerID, queryKey).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	return at.UTC(), err == nil, err
+}
+
+// SearchLeadsBySameQuery returns the computer's leads that a search of this
+// query key returned at or after since (the time SearchQueryTime gave): the
+// earlier search's leads, newest return first. A lead keeps its latest eight
+// query keys, so a lead returned by eight later searches no longer names it.
+func (s *Store) SearchLeadsBySameQuery(ctx context.Context, ownerID, computerID, queryKey string, since time.Time, limit int) ([]SearchLead, error) {
+	if !s.searchLeadsReady() {
+		return nil, errSearchLeadsNotReady
+	}
+	if strings.TrimSpace(queryKey) == "" {
+		return nil, nil
+	}
+	return s.readLeads(ctx, `AND last_returned_at >= ? AND ? = ANY(query_keys)`, []any{since, queryKey}, ownerID, computerID, limit)
+}
+
+// leadWordsNeeded is how many of n query words a lead's title and snippet must
+// hold: the guest's corpus search rule (all of one or two words, else half,
+// rounded up), so a question with a word the headline lacks ("news") still
+// finds the headline.
+func leadWordsNeeded(n int) int {
+	if n <= 2 {
+		return n
+	}
+	return (n + 1) / 2
+}
+
+// SearchLeadsByWords returns the computer's leads returned since the given
+// time whose title and snippet hold at least leadWordsNeeded of the words
+// (already prepared: lower case, function words dropped; see
+// captureterms.QueryWords), newest return first. The GIN index narrows by any
+// of the words; the count decides. No words match nothing.
+func (s *Store) SearchLeadsByWords(ctx context.Context, ownerID, computerID string, words []string, since time.Time, limit int) ([]SearchLead, error) {
+	if !s.searchLeadsReady() {
+		return nil, errSearchLeadsNotReady
+	}
+	if len(words) == 0 {
+		return nil, nil
+	}
+	var anyOf, count []string
+	var args []any
+	args = append(args, since)
+	for range words {
+		anyOf = append(anyOf, `plainto_tsquery('simple', ?)`)
+	}
+	for _, w := range words {
+		args = append(args, w)
+	}
+	for _, w := range words {
+		count = append(count, `(CASE WHEN tsv @@ plainto_tsquery('simple', ?) THEN 1 ELSE 0 END)`)
+		args = append(args, w)
+	}
+	where := `AND last_returned_at >= ? AND tsv @@ (` + strings.Join(anyOf, ` || `) + `) AND ` + strings.Join(count, ` + `) + ` >= ` + fmt.Sprint(leadWordsNeeded(len(words)))
+	return s.readLeads(ctx, where, args, ownerID, computerID, limit)
+}
+
+var errSearchLeadsConvIndex = errors.New("search leads: the conversation index is not built yet")
+
+// SearchLeadsByConversation returns the computer's leads that a search of the
+// conversation returned since the given time, newest return first.
+func (s *Store) SearchLeadsByConversation(ctx context.Context, ownerID, computerID, conversationID string, since time.Time, limit int) ([]SearchLead, error) {
+	if !s.searchLeadsReady() {
+		return nil, errSearchLeadsNotReady
+	}
+	if !s.leads.convIndex.Load() {
+		return nil, errSearchLeadsConvIndex
+	}
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return nil, nil
+	}
+	return s.readLeads(ctx, `AND last_returned_at >= ? AND conversation_ids @> ARRAY[?]::text[]`, []any{since, clipRunes(conversationID, searchLeadConvRunes)}, ownerID, computerID, limit)
 }
 
 // SearchLeadsByURL returns a computer's lead for each URL (by capture key).
@@ -358,6 +533,13 @@ func (s *Store) WriteSearchLeads(ctx context.Context, w SearchLeadsWrite) (rows 
 			conversation_ids = `+merge("conversation_ids"),
 		w.OwnerID, w.ComputerID, string(qJSON), string(cJSON), string(recs)); err != nil {
 		return 0, err
+	}
+	if len(queries) > 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO search_query_times (owner_id, computer_id, query_key, last_searched_at) VALUES (?, ?, ?, now())
+			ON CONFLICT (owner_id, computer_id, query_key) DO UPDATE SET last_searched_at = EXCLUDED.last_searched_at`,
+			w.OwnerID, w.ComputerID, queries[0]); err != nil {
+			return 0, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err

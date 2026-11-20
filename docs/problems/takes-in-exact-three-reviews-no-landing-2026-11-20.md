@@ -129,21 +129,3 @@ file is missing).
 
 Default taken: nothing lands; the lane is kept; no fifth round without the
 owner's choice.
-
-## The owner's rulings on takes (2026-11-20T22:34Z)
-
-- Takes belongs in the product: "Yes, takes absolutely belongs in the
-  product".
-- Its real interface is voice, not a button: "it's not a separate feature
-  that you start by clicking a button. It's that you're talking to the
-  agent, and then anything you say is recorded and you can decide to publish
-  it. So the real interface for takes needs to be initiated from voice."
-  The "Record a take" button on the radio page is not that design. It is
-  left as it is for now ("we can just leave it as it is"); the voice-first
-  design is a later piece of work and is not started.
-- Muting was never asked for: "I did ask for takes. I never asked for
-  muting." It was added with the takes work of 2026-11-18. The owner has
-  muted no voice. It is left in place, not removed.
-- So the fourth review's blocker has no cost to decide: the new build never
-  reads the old muted-voices file, carries the own take ids only on the id
-  proof, and one review follows (lane `exact-takes`, in progress).

@@ -50,6 +50,11 @@ type CaptureSearchQuery struct {
 	Limit int    `json:"limit,omitempty"`
 	// Size is how many pages the ranked answer holds.
 	Size int `json:"size,omitempty"`
+	// ConversationID names the conversation whose earlier searches' leads the
+	// sufficiency block reports separately; it filters nothing.
+	ConversationID string `json:"conversation_id,omitempty"`
+	// Sufficiency asks for the ranked answer's sufficiency block and leads.
+	Sufficiency bool `json:"sufficiency,omitempty"`
 }
 
 // CaptureSearchAnswer is corpusd's candidate captures for the guest's own
@@ -83,6 +88,49 @@ type CaptureRanking struct {
 	VectorPartial     string          `json:"vector_partial,omitempty"`
 	BM25Kept          int             `json:"bm25_kept"`
 	Note              string          `json:"note,omitempty"`
+	// Sufficiency and Leads mirror platform.Sufficiency and platform.RankedLead
+	// (landing L2 of the one search verb): measured, and no caller decides on
+	// them yet.
+	Sufficiency *Sufficiency `json:"sufficiency,omitempty"`
+	Leads       []RankedLead `json:"leads,omitempty"`
+}
+
+// Sufficiency mirrors platform.Sufficiency.
+type Sufficiency struct {
+	BestCosine              float64               `json:"best_cosine"`
+	Strong                  int                   `json:"strong"`
+	NewestStrongAt          string                `json:"newest_strong_at,omitempty"`
+	NewestStrongAgeSeconds  int64                 `json:"newest_strong_age_seconds,omitempty"`
+	UnreadStrong            int                   `json:"unread_strong"`
+	LeadsMatched            int                   `json:"leads_matched"`
+	UnreadLeads             int                   `json:"unread_leads"`
+	UnreadLeadsConversation int                   `json:"unread_leads_conversation"`
+	UnreadLeadsWords        int                   `json:"unread_leads_words"`
+	SameTerms               *bool                 `json:"same_terms,omitempty"`
+	SameTermsAgeSeconds     int64                 `json:"same_terms_age_seconds,omitempty"`
+	Thresholds              SufficiencyThresholds `json:"thresholds"`
+	Note                    string                `json:"note,omitempty"`
+}
+
+// SufficiencyThresholds mirrors platform.SufficiencyThresholds.
+type SufficiencyThresholds struct {
+	StrongCosine float64 `json:"strong_cosine"`
+	HorizonHours float64 `json:"horizon_hours"`
+	LagHours     float64 `json:"lag_hours"`
+	ReuseMinutes float64 `json:"reuse_minutes"`
+}
+
+// RankedLead mirrors platform.RankedLead.
+type RankedLead struct {
+	URL            string `json:"url"`
+	Title          string `json:"title,omitempty"`
+	Snippet        string `json:"snippet,omitempty"`
+	PublishedAt    string `json:"published_at,omitempty"`
+	LastReturnedAt string `json:"last_returned_at"`
+	TimesReturned  int    `json:"times_returned"`
+	Tried          bool   `json:"tried"`
+	Conversation   bool   `json:"conversation,omitempty"`
+	SameTerms      bool   `json:"same_terms,omitempty"`
 }
 
 // RankedCapture mirrors platform.RankedCapture.
@@ -90,6 +138,9 @@ type RankedCapture struct {
 	CaptureID string   `json:"capture_id"`
 	Reasons   []string `json:"reasons"`
 	Stories   []string `json:"stories,omitempty"`
+	Cosine    float64  `json:"cosine,omitempty"`
+	At        string   `json:"at,omitempty"`
+	Read      bool     `json:"read,omitempty"`
 }
 
 // RankedStory mirrors platform.RankedStory.

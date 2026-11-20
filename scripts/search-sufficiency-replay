@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""search-sufficiency-replay: what rows 3, 4 and 5 of the one search verb's table
+would have done to a logged day of web searches, for candidate thresholds
+(landing L2 of docs/definitions/corpus-first-search-one-verb-2026-11-19.md).
+
+Developer-side and read-only: it reads files you give it and prints counts. It
+reads no production system itself. The input is the host's lines
+
+  search sufficiency op=search_sufficiency run= desk= conv= q= words= ms= corpus= best=
+      strong= newest_strong_age_s= unread_strong= leads_matched= unread_leads=
+      unread_leads_conv= unread_leads_words= same_terms= same_terms_age_s=
+      reuse_min= tau_s= h_h= lag_h= top= decision=sent why= err=
+                                          internal/agentcore/search_sufficiency.go
+
+taken from the host's console or journal by any documented read-only path (the
+way scripts/status-corpus-reuse reads the guest console on Node B; the console
+rotates at about 2.5 hours, so a day is several reads concatenated; repeated
+lines are counted once: a whole line, timestamp included, repeated; two
+searches of the same words at different times are two searches). A line may
+carry a timestamp prefix.
+
+  search-sufficiency-replay LOG [LOG ...] [--tau 0.70,0.75,0.80,0.85]
+        [--horizon-h 24,72,168,720] [--lag-h 0,6,24] [--k 15]
+        [--reuse-min 10,30] [--outcomes FILE]
+
+For each (tau, horizon) it re-derives strong captures from the logged top=
+list (cosine:age_seconds:r|u per entry), then applies the table's rows in
+order to every logged search:
+  row 0  same terms searched on this computer within the reuse window held
+         (--reuse-min: the design's window is 30 minutes, 10 for news
+         words; the log has no news-word rule, so row 0 is printed at 10 and
+         at 30, and the 10-minute share is the conservative bound)
+  row 3  at least one strong entry no lead marks read             held
+  row 4  unread leads >= K (the untried union of the conversation's
+         leads and the word-matched ones, by URL key)             held
+  row 5  strong exists, all read: sent with since = newest strong less lag
+  row 6  no strong entry                                          sent
+and prints the share of searches each row takes. For row 5 and each lag it
+prints the median hours the since-window cuts off (newest strong age less lag;
+a non-positive value means the lag reaches back past the newest strong page).
+Row 1 is not a row here: a search whose corpus call did not answer with a
+vector half (corpus=vector_unavailable or failed; the embedder is shared and
+corpusd gives up at 4 s, so expect some) and a search with an unknown count
+(-1, same_terms=unknown: a leads read failed) cannot be decided. They are left
+out of every share, and counted and printed. Row 2 (a `why` given) does not
+exist before L3 and is not in the log.
+
+What it can NOT compute from the log alone, and says so:
+  - only searches the guest let through are logged: a search the guest's own
+    gate held never reaches the host. Shares are shares of SENT searches.
+  - "unread" is computer-wide (a lead marks the URL tried), not per run.
+  - the share of searches that found a genuinely new, later-cited page that a
+    row would wrongly have held (the design's acceptance: under 5%) needs, per
+    search, whether a returned page was first captured after the search and
+    cited by a later story version. No log records that. With --outcomes FILE
+    (tab-separated: run, q, new_cited 0|1, from a join you built) the script
+    computes it; without, it prints "not computed" and nothing in its place.
+  - unread_leads is logged at one setting (a lead holds at least half of the
+    prepared query words, the guest's corpus-search rule, or a search of the
+    conversation returned it, read 7 days back and at most 200 a kind); it
+    does not change with tau.
+The script prints counts and hashes only, never a query, a URL or an address.
+"""
+import argparse
+import re
+import statistics
+import sys
+
+LINE_RE = re.compile(r"search sufficiency op=search_sufficiency (.*)$")
+KV_RE = re.compile(r"(\w+)=(\S*)")
+DEFAULT_REUSE_MIN = 30
+
+
+REQUIRED = ("same_terms_age_s", "reuse_min", "unread_leads", "unread_strong", "top", "decision", "err")
+
+
+def parse(texts, skipped=None):
+    """Distinct complete log lines, in order of first appearance. A line cut off
+    before its tail (a truncated console read) is not decided: it is counted in
+    skipped[0]."""
+    seen, out = set(), []
+    for text in texts:
+        for line in text.splitlines():
+            m = LINE_RE.search(line)
+            if not m:
+                continue
+            kv = dict(KV_RE.findall(m.group(1)))
+            if any(f not in kv for f in REQUIRED):
+                if skipped is not None:
+                    skipped[0] += 1
+                continue
+            key = line.strip()
+            if key in seen:
+                continue
+            seen.add(key)
+            kv["_top"] = parse_top(kv.get("top", "none"))
+            out.append(kv)
+    return out
+
+
+def parse_top(s):
+    out = []
+    if s in ("", "none"):
+        return out
+    for part in s.split(","):
+        bits = part.split(":")
+        if len(bits) != 3:
+            continue
+        try:
+            out.append((float(bits[0]), int(bits[1]), bits[2] == "r"))
+        except ValueError:
+            pass
+    return out
+
+
+def num(kv, name, default=0):
+    try:
+        return int(kv.get(name, default))
+    except ValueError:
+        return default
+
+
+def excluded(kv):
+    """Why a search cannot be decided ("vector" or "unknown"), or None."""
+    if kv.get("corpus") != "answered":
+        return "vector"
+    if num(kv, "unread_strong") < 0 or num(kv, "unread_leads") < 0 or kv.get("same_terms") == "unknown":
+        return "unknown"
+    return None
+
+
+def decide(kv, tau, horizon_s, k, reuse_min=None):
+    """The first matching row and the newest strong age (row 5 only); row None when excluded."""
+    if excluded(kv):
+        return None, None
+    reuse_s = 60 * (reuse_min if reuse_min is not None else num(kv, "reuse_min", DEFAULT_REUSE_MIN))
+    if kv.get("same_terms") == "true" and num(kv, "same_terms_age_s") <= reuse_s:
+        return 0, None
+    strong = [(c, a, r) for (c, a, r) in kv["_top"] if c >= tau and 0 <= a <= horizon_s]
+    if any(not r for (_, _, r) in strong):
+        return 3, None
+    if num(kv, "unread_leads") >= k:
+        return 4, None
+    if strong:
+        return 5, min(a for (_, a, _) in strong)
+    return 6, None
+
+
+def replay(rows, taus, horizons_h, lags_h, k, reuses_min):
+    results = []
+    for tau in taus:
+      for h in horizons_h:
+        for reuse in reuses_min:
+            decisions = [decide(kv, tau, h * 3600, k, reuse) for kv in rows]
+            counts = {r: 0 for r in (0, 3, 4, 5, 6)}
+            for row, _ in decisions:
+                if row is not None:
+                    counts[row] += 1
+            cuts = {}
+            for lag in lags_h:
+                ages = [(a - lag * 3600) / 3600 for (row, a) in decisions if row == 5]
+                cuts[lag] = statistics.median(ages) if ages else None
+            results.append((tau, h, reuse, counts, cuts, [d[0] for d in decisions]))
+    return results
+
+
+def pct(a, b):
+    return "n/a" if not b else "%.1f%%" % (100.0 * a / b)
+
+
+def load_outcomes(path):
+    out = {}
+    with open(path) as f:
+        for line in f:
+            bits = line.rstrip("\n").split("\t")
+            if len(bits) >= 3 and bits[2] in ("0", "1"):
+                out[(bits[0], bits[1])] = bits[2] == "1"
+    return out
+
+
+def render(rows, results, outcomes, k, skipped=0):
+    total = len(rows)
+    lines = ["searches in the log (distinct lines): %d" % total,
+             "skipped as incomplete: %d (a line cut off before its tail fields)" % skipped]
+    if total == 0:
+        lines.append("no `search sufficiency` lines found: nothing to replay")
+        return "\n".join(lines)
+    why = [excluded(kv) for kv in rows]
+    n_vec, n_unk = why.count("vector"), why.count("unknown")
+    n = total - n_vec - n_unk
+    lines.append("excluded from the shares: %d (vector unavailable or call failed: %d; unknown counts: %d); decided: %d" % (
+        n_vec + n_unk, n_vec, n_unk, n))
+    if n == 0:
+        lines.append("nothing to decide")
+        return "\n".join(lines)
+    decided = [kv for kv, w in zip(rows, why) if w is None]
+    best = [float(kv["best"]) for kv in decided if kv.get("best") not in (None, "")]
+    if best:
+        qs = statistics.quantiles(best, n=4) if len(best) > 1 else [best[0]] * 3
+        lines.append("best cosine over decided searches: quartiles %.3f / %.3f / %.3f" % (qs[0], qs[1], qs[2]))
+    lines.append("K (unread leads that hold, row 4) = %d; logged at tau_s=%s h_h=%s lag_h=%s reuse_min=%s" % (
+        k, rows[0].get("tau_s", "?"), rows[0].get("h_h", "?"), rows[0].get("lag_h", "?"), rows[0].get("reuse_min", "?")))
+    lines.append("")
+    lines.append("shares of the %d decided searches" % n)
+    lines.append("row 0 is printed at each reuse window: the design says 30 minutes, 10 for news words, and the log has no news-word rule, "
+                 "so the 10-minute share is the conservative bound (it holds only what is held under the stricter window)")
+    lines.append("tau   H(h)  reuse row0    row3    row4    row5    row6    held(0,3,4)  since cut, median h, by lag")
+    for tau, h, reuse, counts, cuts, _ in results:
+        held = counts[0] + counts[3] + counts[4]
+        cut = " ".join("lag%g=%s" % (lag, "n/a" if v is None else "%.1f" % v) for lag, v in cuts.items())
+        lines.append("%.2f  %-5g %-5g %-7s %-7s %-7s %-7s %-7s %-12s %s" % (
+            tau, h, reuse, pct(counts[0], n), pct(counts[3], n), pct(counts[4], n),
+            pct(counts[5], n), pct(counts[6], n), pct(held, n), cut))
+    lines.append("")
+    if outcomes is None:
+        lines.append("wrongly held (searches that found a genuinely new, later-cited page and a row would have held): "
+                     "not computed. No log records whether a returned page was captured after the search and cited by a later story "
+                     "version; pass --outcomes FILE (run, q, new_cited per line, tab-separated) built from such a join.")
+    else:
+        joined = [(i, outcomes[(kv.get("run", ""), kv.get("q", ""))]) for i, kv in enumerate(rows)
+                  if why[i] is None and (kv.get("run", ""), kv.get("q", "")) in outcomes]
+        new = [i for i, v in joined if v]
+        lines.append("outcomes joined for %d of %d decided searches; %d found a new, later-cited page" % (len(joined), n, len(new)))
+        lines.append("tau   H(h)  reuse wrongly held of those  (the design accepts under 5%)")
+        for tau, h, reuse, _, _, decided_rows in results:
+            wrong = sum(1 for i in new if decided_rows[i] in (0, 3, 4))
+            lines.append("%.2f  %-5g %-5g %s (%d of %d)" % (tau, h, reuse, pct(wrong, len(new)), wrong, len(new)))
+    lines.append("")
+    lines.append("limits: only searches the guest let through are logged; unread is computer-wide; "
+                 "row 2 (a `why`) does not exist before L3; unread leads match by words and conversation, not by meaning, "
+                 "looking back 7 days and reading at most 200 leads a kind (the design says any run, and leads are kept 30 days), "
+                 "so row 4 is understated; the decided searches leave out those the embedder could not answer in time.")
+    return "\n".join(lines)
+
+
+def floats(s):
+    return [float(x) for x in s.split(",") if x.strip()]
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("logs", nargs="+")
+    ap.add_argument("--tau", default="0.70,0.75,0.80,0.85")
+    ap.add_argument("--horizon-h", default="24,72,168,720")
+    ap.add_argument("--lag-h", default="0,6,24")
+    ap.add_argument("--k", type=int, default=15)
+    ap.add_argument("--reuse-min", default="10,30")
+    ap.add_argument("--outcomes")
+    a = ap.parse_args(argv)
+    texts = []
+    for p in a.logs:
+        with open(p, errors="replace") as f:
+            texts.append(f.read())
+    skipped = [0]
+    rows = parse(texts, skipped)
+    outcomes = load_outcomes(a.outcomes) if a.outcomes else None
+    results = replay(rows, floats(a.tau), floats(a.horizon_h), floats(a.lag_h), a.k, floats(a.reuse_min))
+    print(render(rows, results, outcomes, a.k, skipped[0]))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

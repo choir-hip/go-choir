@@ -703,6 +703,14 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 							}
 						}, rt.searchLeadObserver(cellExec.OwnerID, cellExec.ComputerID, cellExec.ChannelID))
 						if err == nil {
+							// L2 of the one search verb: one ranked corpus question
+							// for the same query, once the search has started, off
+							// this path, logged and used for nothing else
+							// (search_sufficiency.go).
+							var sq yaegikernel.SearchStartPayload
+							if json.Unmarshal(payload, &sq) == nil {
+								rt.measureSearchSufficiency(egrCtx, cellExec, sq.Query)
+							}
 							// An async search bypasses deskEgress; its read taints here.
 							rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
 						}
