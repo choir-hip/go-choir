@@ -287,6 +287,13 @@ chk "signed out: the radio offers the public paper" '\[radio-play-public\]' "$SO
 # public playback was STARTED: the now-playing line names one of the public stories listed on the radio page
 T0=$(grep -m1 -A1 '\[radio-public-play-0\]' "$SO" | grep -o 'Text#[0-9]* "[^"]*"' | head -1 | sed -E 's/^Text#[0-9]+ "//; s/"$//' | cut -c1-24)
 if [ -n "$T0" ] && grep -E 'NOW PLAYING|Now playing,' "$SO" | grep -qF "$T0"; then echo "ok: signed out: public playback started (now playing: a public story)"; else echo "MISSING: signed out: public playback started (title '$T0')"; FAILS="$FAILS [public playback]"; fi
+# the card is the first child of the bar's own column, before the bar (so it sits whole above the bar at any bar height, the now-playing strip included). The tree dump carries no frames, so this is
+# the structure, not a measured bottom edge; the screenshots are where the placement is read.
+PLACED=$(awk '/\[bar-stack\]/{st=1;bar=0;next} /\[bar\]/{bar=1} /\[signedout-banner\]/{if(st&&!bar)ok++;else bad++} END{print (ok+0)","(bad+0)}' "$SO")
+case "$PLACED" in 0,*) echo "MISSING: signed out: the card is placed above the bar ($PLACED)"; FAILS="$FAILS [card placement]";; *,0) echo "ok: signed out: the card is the bar column's first child on every screen ($PLACED)";; *) echo "MISSING: signed out: a card is not above the bar ($PLACED)"; FAILS="$FAILS [card placement]";; esac
+bad "signed out: the paper has no second sign-in line" '\[(paper-signin|paper-signin-away|paper-signin-card)\]' "$SO"
+bad "signed out: Files has no write actions" '\[(files-upload|files-new-toggle|files-search)\]' "$SO"
+bad "signed out: Mail has no compose" '\[mail-compose\]' "$SO"
 chk "signed out: Settings > Account has Sign in" '\[settings-signin\]' "$SO"
 chk "signed out: Files says sign in" 'Sign in to see your files' "$SO"
 bad "signed out: no locked-phone sentence" 'Unlock your phone' "$SO"

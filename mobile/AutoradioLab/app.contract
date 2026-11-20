@@ -116,6 +116,7 @@ component Autoradio
     tlist
     rfollow
     raim
+    bannerOn
     openCites
     sheet
     sheetFor
@@ -466,11 +467,6 @@ component Autoradio
       if layer != ""
         box testId="layer-scrim" position="absolute" inset=0 background-color=th.fg opacity=(max(th.behindDim3, 0.4)) press=hideLayer
       // elevation 2: the glass bar, always on top, with the launcher and the player rising from it
-      // signed out, locked or refused: the sentence and the one way in, above the bar, on every page
-      // not over the code screen, a sheet (the launcher, the player), the bar's field with the keyboard up, or the content controls. It IS on the first-run page ("Make it yours"): a signed-out first launch
-      // opens there, and that is the first screen the owner sees (the signed-out tour found it had no way in).
-      if au.status != "pending" and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == ""
-        SignedOutBanner()
       BarShell()
       // Signed out the paper still reads and plays. Signing in is asked for when an action needs it (Sign in on the paper,
       // Settings, Account): the code screen then covers the app until it is approved or cancelled.

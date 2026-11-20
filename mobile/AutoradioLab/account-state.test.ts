@@ -24,7 +24,7 @@ afterEach(() => { globalThis.fetch = realFetch; });
 describe('accountState', () => {
   test('X1 no key: signedOut with the action and a sentence; no handle: noSignIn', async () => {
     const s = await accountState('');
-    expect(s).toMatchObject({ state: 'signedOut', action: 'signIn' }); expect(s.message).toBe(WORDS.signedOut); expect(WORDS.signedOut).toContain('mail'); expect(WORDS.signedOut).not.toContain('again');
+    expect(s).toMatchObject({ state: 'signedOut', action: 'signIn' }); expect(s.message).toBe(WORDS.signedOut); expect(WORDS.signedOut.length).toBeLessThan(60); expect(WORDS.signedOut).not.toContain('again');
     resetSeam(); expect((await accountState('', '', false, 'none')).state).toBe('noSignIn');                 // no handle at all: no sign-in is possible here (no dead button)
   });
   test('X2 locked then readable: locked (no sign-in action), then signedIn; signedOut never appears; nothing is wiped', async () => {
