@@ -68,3 +68,20 @@ mutes them again. That loss is chosen over the leak.
 One build on the changed approach, one review. If that review sends it
 back, the lane stops and the question goes to the owner, as the Texture
 editor did.
+
+## The handle is not proof; a shared take id is (2026-11-20T19:55Z)
+
+The builder read the server before building and stopped, as briefed. A
+handle is "voice-" plus 24 bits of a hash of the user id
+(`internal/types/autoradio_takes.go:35-38`), and the server's own comment
+calls it display only: two accounts can share one
+(`internal/platform/takes.go:141-142`). So the rule in "Belief" above would
+have been a fourth guard with a window.
+
+A take id is 64 bits of a hash over the account's publisher key and the
+audio. The old own file holds ids the old build copied from the server's
+list of the account's takes. The rule built instead: the old files are
+adopted only when at least one id in the old own file is in the signed-in
+account's own list from the server. The cost is the same as stated above
+and a little wider: an account with no live take (never published, or all
+deleted or withdrawn) does not carry its old mutes.
