@@ -159,7 +159,7 @@ public final class TakeOwn: @unchecked Sendable {
     }
     public var handle: String { lock.lock(); defer { lock.unlock() }; return _handle }
     public func owns(_ t: Take) -> Bool { lock.lock(); defer { lock.unlock() }; return ids.contains(t.takeID) || (!_handle.isEmpty && t.publisher == _handle) }
-    /// Shared code's copy: the whole state, kept in the same file as before.
+    /// Shared code's copy: the whole state, in `takes-copy-own.json`.
     public func replace(ids new: [String], handle h: String) {
         lock.lock(); ids = Set(new); _handle = Take.validHandle(h) ? h : ""; lock.unlock(); save()
     }
@@ -175,23 +175,8 @@ public final class TakeOwn: @unchecked Sendable {
     }
 }
 
-/// The Swift app's OLD files. take-session.ts `refresh` decides about them (ownership is proved by the server, never inferred): `read` removes nothing, `drop` deletes both.
-public enum TakeLegacy {
-    public static let own = TakeFiles.url("takes-own.json"), muted = TakeFiles.url("takes-muted.json")
-    public static func read(own: URL? = TakeLegacy.own, muted: URL? = TakeLegacy.muted) -> [String: Any] {
-        let there = { (u: URL?) in u.map { FileManager.default.fileExists(atPath: $0.path) } ?? false }
-        let ids = (own.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["ids"] as? [String]) ?? []
-        let mutes = (muted.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String] }) ?? []
-        return ["present": there(own) || there(muted), "ids": ids, "muted": mutes]
-    }
-    public static func drop(own: URL? = TakeLegacy.own, muted: URL? = TakeLegacy.muted) -> Bool {
-        for u in [own, muted] { if let u { try? FileManager.default.removeItem(at: u) } }
-        return ![own, muted].contains { $0.map { FileManager.default.fileExists(atPath: $0.path) } ?? false }
-    }
-}
-
-/// Voices the listener will not hear: a READ-ONLY copy of shared code's list (app:/data/takes.json), pushed with `replace`; the file is the old Swift one, kept current so a reverted build and the
-/// carry-over find it.
+/// Voices the listener will not hear: a READ-ONLY copy of shared code's list (app:/data/takes.json), pushed with `replace`, kept in `takes-copy-muted.json`
+/// (not the old muted file, which nothing reads).
 public final class TakeMutes: @unchecked Sendable {
     public static let shared = TakeMutes(file: TakeFiles.url("takes-copy-muted.json"))
     private let lock = NSLock()

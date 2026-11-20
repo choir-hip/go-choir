@@ -1,8 +1,7 @@
 // The take RECORDER's native side (the voice): the radio's gate, the microphone, the file, the recogniser, the preview. The Takes section is shared code (AutoradioLab/take-session.ts); this file hands it
 // one snapshot (source `takesRecorder`, interface/takes.json) and answers its ops (`takeOp`, public: ModelsEntry.swift calls it) and fetches another listener's take for the run sheet.
 //   ops: takeState | takeStart(min/maxSeconds, maxBytes) | takeStop | takePreview(mode) | takePublishing(on) | takeDiscard | takeDone | takeAudio | takeSteerMute (the steer queue is native)
-//        takeMirror (the Swift programme still filters takes by the listener's own ids and muted voices; shared code owns them and pushes a copy) | takeLegacy, takeLegacyDrop (the old files:
-//        read, then deleted once shared code has decided about them, with proof: docs/reference/AUTORADIO-TAKES.md, "The phone's own state")
+//        takeMirror (the Swift programme still filters takes by the listener's own ids and muted voices; shared code owns them and pushes a copy). The pre-release build's old files are never read.
 import AVFoundation
 import Foundation
 
@@ -85,8 +84,6 @@ extension AutoradioModule {
         switch r["op"] as? String ?? "" {      // the ops that need no recorder never depend on it being up
         case "takeSteerMute": if let h = r["handle"] as? String, !h.isEmpty { SteerQueue.shared.enqueue(.mute(handle: h)); await SteerQueue.shared.flush() }; return [:]
         case "takeMirror": TakeOwn.shared.replace(ids: r["ids"] as? [String] ?? [], handle: r["handle"] as? String ?? ""); TakeMutes.shared.replace(r["muted"] as? [String] ?? []); return [:]
-        case "takeLegacy": return TakeLegacy.read()
-        case "takeLegacyDrop": return ["ok": TakeLegacy.drop()]
         default: break
         }
         guard let s = TakesHost.shared?.session else { return (r["op"] as? String) == "takeStart" ? ["ended": "open"] : [:] }

@@ -10,7 +10,7 @@
 //   takeSteerMute                  the learning engine's steer queue is native (SteerQueue)
 //   takeMirror                     the Swift programme still reads the listener's own ids and muted voices to filter the takes it offers (RadioProgramme); shared code is the owner of that
 //                                  data (app:/data/takes.json) and pushes a copy, first thing in a signed-in session and on every account change
-//   takeLegacy / takeLegacyDrop    the Swift app's OLD files (takes-own.json, takes-muted.json): read, and deleted once a decision was made about them (see refresh: ownership is proved)
+//                                  Nothing is carried from the pre-release build: the old Swift files (takes-own.json, takes-muted.json) are never read here (docs/reference/AUTORADIO-TAKES.md)
 // A take in review belongs to the recorder, not to this module: a restart of the shared code finds it (`takeState`) and can publish it; a failed publish never drops it.
 import type { Storage } from './app.contract.d.ts';
 import { accountGeneration, nativeLater, SignedOutError } from './api.ts';
@@ -50,8 +50,6 @@ export function parseNative(v: unknown): Native {
   };
 }
 
-/** What the old Swift files hold (the programme's own copy now lives in other files). `present`: either file exists. */
-export type Legacy = { present: boolean; ids: string[]; muted: string[] };
 export type Device = {
   state(): Promise<Native>;
   start(l: ReturnType<typeof limits>): Promise<Native>;
@@ -66,10 +64,6 @@ export type Device = {
   done(): Promise<Native>;
   steerMute(handle: string): Promise<void>;
   mirror(k: { ids: string[]; handle: string; muted: string[] }): Promise<void>;
-  /** Null when native did not answer. */
-  legacy(): Promise<Legacy | null>;
-  /** Delete the old files. True when both are gone. */
-  dropLegacy(): Promise<boolean>;
 };
 
 /** The device over the app module's `later`, or null when there is no module (Android today, the web). */
@@ -96,11 +90,6 @@ export function nativeDevice(): Device | null {
     },
     async steerMute(handle) { await later({ op: 'takeSteerMute', handle }); },
     async mirror(k) { await later({ op: 'takeMirror', ids: k.ids, handle: k.handle, muted: k.muted }); },
-    async legacy() {
-      const r = (await later({ op: 'takeLegacy' })) as Record<string, unknown> | null;
-      return r && typeof r.present === 'boolean' ? { present: r.present, ids: strs(r.ids), muted: strs(r.muted) } : null;
-    },
-    async dropLegacy() { const r = (await later({ op: 'takeLegacyDrop' })) as { ok?: unknown } | null; return r?.ok === true; },
   };
 }
 
@@ -120,8 +109,8 @@ export const newOverlay = (): Overlay => ({ notice: '', published: '', mine: [],
 export type Env = { device: Device | null; storage: Storage | undefined; net: Net };
 export const liveEnv = (storage: Storage | undefined): Env => ({ device: nativeDevice(), storage, net: seamNet });
 
-/** Everything this module holds in memory belongs to ONE account. When the generation moved (a sign-out, an account change: account.ts bumps it before the wipes) the overlay is dropped whole, no
- * recorder's take is discarded, and the native programme's copy is emptied at once, even if the native wipe had failed. */
+/** Everything this module holds in memory belongs to ONE account. When the generation moved (a sign-out, an account change: account.ts bumps it before the wipes) the overlay is dropped whole,
+ * the recorder's take is discarded, and the native programme's copy is emptied at once, even if the native wipe had failed. */
 async function sync(env: Env, o: Overlay): Promise<boolean> {
   const g = accountGeneration();
   if (o.gen === g) return false;
@@ -137,7 +126,6 @@ async function keptOf(env: Env, o: Overlay): Promise<Kept> { return (o.kept ??= 
 /** Keep it (the write is held to the generation `gen` the data belongs to) and give the native programme its copy. The mirror follows the file: a copy is never pushed that was not written. */
 async function keep(env: Env, o: Overlay, k: Kept, gen: number, mirror = true): Promise<boolean> {
   if (!(await saveKept(env.storage, k, gen))) return false;
-  if (accountGeneration() !== gen || o.gen !== gen) return false;      // the account changed as the write landed: nothing of it is kept or sent on
   o.kept = k;
   if (mirror) { try { await env.device?.mirror(k); } catch { /* the programme keeps its last copy */ } }
   return true;
@@ -197,37 +185,33 @@ export async function pageFor(env: Env, o: Overlay, rec: unknown): Promise<Takes
 
 // ---------------------------------------------------------------------------------------------------------------- the acts
 
-/** The signed-in session's first work, and the one place the old Swift files are decided about. OWNERSHIP IS PROVED, NOT INFERRED: the old own-ids file is adopted only when one of its take ids is a take
- * the SERVER lists as this account's live take (`mine`); the account's handle is not proof (24 bits, display only: internal/platform/takes.go:141-142). Adopt = union ALL the old ids and mutes into this
- * account's takes.json through the generation-checked write, then delete the old files. No match (a different account's files, an account with no live take, a file with no ids) = adopt nothing and delete
- * them. A server or network failure decides nothing: the files stay for the next attempt, which makes the same decision from the same evidence (so a failed delete is safe to repeat). */
+/** The signed-in session's first work: the programme's copy is this account's state (empty when unknown) before anything else, then the listener's own takes from the server (`mine`), whose ids are
+ * learned as own. Nothing is carried from the pre-release build: its old files (takes-own.json, takes-muted.json) carry no proof of whose they are and are never read here, so muted voices and the ids of
+ * takes that are no longer live start empty on an upgraded phone. */
 async function refresh(env: Env, o: Overlay): Promise<void> {
   const gen = o.gen;
-  try { await env.device?.mirror(await keptOf(env, o)); } catch { /* the programme keeps its last copy */ }       // the programme's copy is this account's state, empty when unknown, before anything else
+  const live = (): boolean => accountGeneration() === gen && o.gen === gen;
+  const k0 = await keptOf(env, o);
+  if (!live()) return;
+  // never from an account that has been left: if the account changed while the push was out, the copy is emptied again
+  try { await env.device?.mirror(k0); } catch { /* the programme keeps its last copy */ }
+  if (!live()) { try { await env.device?.mirror(emptyKept()); } catch { /* sync's push is the other */ } return; }
   const c = client(env.net);
   let m: MyTake[];
-  try {
-    m = await c.mine();
-    o.mine = m; o.notice = '';
-  } catch (e) {
-    if (e instanceof TakesUnavailable || e instanceof TakesRefused) o.notice = e.message;
+  try { m = await c.mine(); }
+  catch (e) {
+    if (live() && (e instanceof TakesUnavailable || e instanceof TakesRefused)) o.notice = e.message;
     return;                                            // signed out, no server, an error: nothing is decided
   }
-  const dev = env.device;
-  let old: Legacy | null = null;
-  if (dev) { try { old = await dev.legacy(); } catch { old = null; } }
-  const live = new Set(m.map((t) => t.takeID));
-  const adopt = old !== null && old.present && old.ids.some((id) => live.has(id));
-  const r = await mutate(env, o, (k) => {
+  if (!live()) return;
+  o.mine = m; o.notice = '';
+  await mutate(env, o, (k) => {
     let n = k;
     for (const t of m) n = addOwn(n, t.takeID, t.publisher);
-    if (adopt && old) n = { ...n, ids: [...new Set([...n.ids, ...old.ids])], muted: [...new Set([...n.muted, ...old.muted.filter(validHandle)])] };
-    const same = n.handle === k.handle && n.ids.length === k.ids.length && n.muted.length === k.muted.length;
-    return { kept: same ? null : n, out: undefined };
+    return { kept: n.handle === k.handle && n.ids.length === k.ids.length ? null : n, out: undefined };
   }, undefined);
-  if (dev && old && old.present && r.ok && accountGeneration() === gen && o.gen === gen) { try { await dev.dropLegacy(); } catch { /* the same decision is made again */ } }
   const h = (await keptOf(env, o)).handle;
-  if (h !== '') { try { o.myRecord = await c.record(h); } catch { /* the last record stays */ } }
+  if (h !== '' && live()) { try { o.myRecord = await c.record(h); } catch { /* the last record stays */ } }
 }
 
 async function publish(env: Env, o: Overlay): Promise<void> {
@@ -235,6 +219,7 @@ async function publish(env: Env, o: Overlay): Promise<void> {
   if (!dev || o.publishing) return;
   o.publishing = true;                           // before the first await: two presses in the same window are one publish
   const gen = accountGeneration();
+  const same = (): boolean => accountGeneration() === gen && o.gen === gen;       // this publish still belongs to the overlay's account
   let told = false, sent = false;
   try {
     const n = await dev.state();
@@ -243,6 +228,7 @@ async function publish(env: Env, o: Overlay): Promise<void> {
     told = true; await dev.publishing(true);     // the recorder's snapshot moves: the page is asked again and shows "publishing" with nothing to press
     await dev.preview(false);                    // stops the playback
     const audio = await dev.audio();
+    if (!same()) return;                          // a sign-in completing here would upload the old account's audio under the new key
     if (!audio) { o.notice = 'Could not publish: the recording is gone. Your recording is kept; try again.'; return; }
     // The server reads the length from the file's own header and holds the claim to within 2 s of it: claim what the file says.
     const header = mp4Seconds(audio);
@@ -254,6 +240,7 @@ async function publish(env: Env, o: Overlay): Promise<void> {
     try { t = await client(env.net).publish({ audio, sha256: digest, transcript: cut(n.transcript, BOUNDS.maxTranscriptBytes), duration: claimed, respondsTo: responds }, boundary); }
     catch (e) {
       // The recording is kept (the recorder still holds it): nothing is lost when the server is not there yet or refuses.
+      if (!same()) return;                       // and what it says is not the next account's page's business
       if (e instanceof SignedOutError) o.notice = 'Sign in to publish a take.';
       else if (e instanceof TakesUnavailable) o.notice = 'Takes are not available yet. Your recording is kept; publish it again later.';
       else if (e instanceof TakesRefused) o.notice = `${e.message} Your recording is kept.`;
@@ -268,8 +255,10 @@ async function publish(env: Env, o: Overlay): Promise<void> {
     console.log(`takes: published id=${t.takeID}`);
     sent = true;
   } finally {
-    o.publishing = false;
-    if (told) { try { await dev.publishing(false); } catch { /* the next snapshot says it */ } }
+    if (same()) {                                // another account's overlay and recorder are not ours to release
+      o.publishing = false;
+      if (told) { try { await dev.publishing(false); } catch { /* the next snapshot says it */ } }
+    }
   }
   if (sent) await refresh(env, o);
 }

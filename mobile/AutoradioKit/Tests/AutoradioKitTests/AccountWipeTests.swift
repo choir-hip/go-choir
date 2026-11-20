@@ -64,11 +64,14 @@ final class AccountWipeTests: XCTestCase {
         TakeSession.live = s
         let limits = TakeLimits(minSeconds: 0, maxSeconds: 59.5, maxBytes: 512 * 1024)
         await s.start(limits); await s.stop(); XCTAssertEqual(s.state, .review); XCTAssertEqual(s.transcript, Self.marker)
-        let wipe = AccountWipe(); wipe.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), tempDirectory: root.appendingPathComponent("tmp2"))
+        let oldOwn = root.appendingPathComponent("takes-own.json"), oldMuted = root.appendingPathComponent("takes-muted.json")
+        write("takes-own.json", Self.marker); write("takes-muted.json", "[\"\(Self.marker)\"]")
+        let wipe = AccountWipe(); wipe.registerStandard(takeOwn: TakeOwn(), takeMutes: TakeMutes(), takeStore: TakeStore(), legacyTakeFiles: [oldOwn, oldMuted], tempDirectory: root.appendingPathComponent("tmp2"))
         await wipe.run()
         XCTAssertEqual(s.state, .idle); XCTAssertEqual(s.transcript, ""); XCTAssertNil(s.audio); XCTAssertEqual(gate.given, 1)
         XCTAssertEqual(s.snapshot["respondsTitle"] as? String, "", "the story the old account answered is not carried either")
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [], [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldOwn.path)); XCTAssertFalse(FileManager.default.fileExists(atPath: oldMuted.path), "the old Swift files go with the account that is leaving")
         TakeSession.live = nil
     }
 

@@ -91,22 +91,7 @@ final class TakesTests: XCTestCase {
         own.replace(ids: [], handle: ""); mutes.replace([])
         XCTAssertEqual(TakeMutes(file: fm).all, []); XCTAssertFalse(TakeOwn(file: fo).owns(t))
         XCTAssertEqual(TakeFiles.url("takes-copy-own.json")?.lastPathComponent, "takes-copy-own.json")
-        XCTAssertNotEqual(TakeLegacy.own, TakeFiles.url("takes-copy-own.json"), "the programme's copy is not the old file: a push never recreates it")
-    }
-
-    /// The old files are read as the old build wrote them and removed only by `drop`.
-    func testTheOldFilesAreReadAsTheyWereWrittenAndOnlyDropRemovesThem() throws {
-        let d = FileManager.default.temporaryDirectory.appendingPathComponent("old-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); defer { try? FileManager.default.removeItem(at: d) }
-        let own = d.appendingPathComponent("takes-own.json"), muted = d.appendingPathComponent("takes-muted.json")
-        XCTAssertEqual(TakeLegacy.read(own: own, muted: muted)["present"] as? Bool, false)
-        try Data(#"{"handle":"voice-me0001","ids":["take-a","take-b"]}"#.utf8).write(to: own)
-        try Data(#"["voice-9b0e44"]"#.utf8).write(to: muted)
-        let r = TakeLegacy.read(own: own, muted: muted)
-        XCTAssertEqual(r["present"] as? Bool, true); XCTAssertEqual(r["ids"] as? [String], ["take-a", "take-b"]); XCTAssertEqual(r["muted"] as? [String], ["voice-9b0e44"])
-        XCTAssertTrue(FileManager.default.fileExists(atPath: own.path), "reading removes nothing")
-        XCTAssertTrue(TakeLegacy.drop(own: own, muted: muted)); XCTAssertFalse(FileManager.default.fileExists(atPath: own.path)); XCTAssertFalse(FileManager.default.fileExists(atPath: muted.path))
-        XCTAssertTrue(TakeLegacy.drop(own: own, muted: muted), "dropping what is already gone is done"); XCTAssertTrue(TakeLegacy.drop(own: nil, muted: nil))
+        XCTAssertNotEqual(TakeFiles.url("takes-own.json"), TakeFiles.url("takes-copy-own.json"), "the programme's copy is not the old file: a push never recreates it")
     }
 
     func testRespondsToFromTheEntryOnAir() async {

@@ -167,56 +167,33 @@ MIGRATED_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/theme-choice.json 
 ls "$CHK"/Library/Caches/exact/*/agent/*/data/themes/ "$CHK"/Library/Application\ Support/exact/*/data/themes/ 2>/dev/null > "$SHOTS/migrated-themes-dir.txt"
 legacy_clean
 
-# ---- 3a4. TAKES drills. The old Swift files (own ids + handle, two muted voices) are SEEDED by reset_state (SEED_TAKES, TAKES_SEED_IDS) in the drive that is the first signed-in launch to see them. Ownership is
-# PROVED by the server, not inferred (take-session.ts refresh): the files are adopted only if one of their ids is a take `mine` lists as the signed-in account's live take.
-#   drive takes-foreign: ids that cannot be d@e's -> NOTHING is adopted (no muted voice listed, none in the kept file, none in the programme's copy) and the old files are gone.
-#   drive takes-match: only when d@e HAS a live take (its id is read from the kept file the first drive wrote: `mine` put it there) -> the old files are seeded with that id and a dead one: ALL old ids and both
-#   mutes are adopted, one voice is unmuted, the kept file, the programme's copy and the page agree, and the old files are gone. If d@e has no live take the match drill is skipped, said so, and the adopting
-#   branch is covered by take-session.test.ts only.
+# ---- 3a4. TAKES drill. Nothing is carried from the pre-release build (owner's ruling, 2026-11-20): its two files (takes-own.json with a handle and own ids, takes-muted.json with two muted voices) are SEEDED by
+# reset_state (SEED_TAKES, TAKES_SEED_IDS) in the drive that is the first signed-in launch to see them, and the build must neither read, adopt from nor delete them: no muted voice is listed, nothing of them is
+# in the kept file (app:/data/takes.json, which exists only when the server's `mine` gave this account a live take) or in the programme's copy (pushed by shared code, so it exists after the first refresh), and both
+# old files are still there with their contents. The account wipe (the sign-out drill below) is what removes them.
 # NOT covered: Record, Stop, Preview, Publish. The simulator has no microphone input the scripts can drive (the agent's microphone track is unused: testing-and-debugging.md, "Voice flows for agent tests"), and
-# Publish would write a take to d@e. Those are in take-session.test.ts (S1 to S8, U3, B1) against a fake recorder, and on a phone by hand.
+# Publish would write a take to d@e. Those are in take-session.test.ts (S1 to S8, U3, B1) against a fake recorder, and on a phone by hand. The account-change case cannot be driven with one key.
 SEED_TAKES=1; export SEED_TAKES
 TAKES_SEED_IDS='"take-drilla","take-drillb"'; export TAKES_SEED_IDS
 step "clock data"; wait_ 5000
 place radio 1500
 wait_ 9000                                            # the refresh runs apart from the first paint (a task, then the signed-in request)
 for i in 1 2 3; do step "tap radio-scroll drag 0 -1500"; wait_ 300; done
-view real-46-takes-foreign 900
+view real-46-takes-old-files 900
 step logs
-run_drive takesforeign light "" --touch platform
+run_drive takes light "" --touch platform
+unset SEED_TAKES TAKES_SEED_IDS
 CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
 TKS="$CHK/Library/Application Support/Autoradio"
-takes_files() {   # <suffix>: the kept file and the programme's copy, as the drive left them
-  TK_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/takes.json "$CHK"/Library/Application\ Support/exact/*/data/takes.json 2>/dev/null | head -1)
-  [ -n "$TK_FILE" ] && cp "$TK_FILE" "$SHOTS/takes-data-$1.json"
-  cp "$TKS/takes-copy-own.json" "$SHOTS/takes-copy-own-$1.json" 2>/dev/null
-  cp "$TKS/takes-copy-muted.json" "$SHOTS/takes-copy-muted-$1.json" 2>/dev/null
-  ls "$TKS/takes-own.json" "$TKS/takes-muted.json" 2>/dev/null > "$SHOTS/takes-old-files-$1.txt"
-}
-takes_files foreign
-# the tree before the first screenshot of a drive, and between two screenshots
+TK_FILE=$(ls -t "$CHK"/Library/Caches/exact/*/agent/*/data/takes.json "$CHK"/Library/Application\ Support/exact/*/data/takes.json 2>/dev/null | head -1)
+rm -f "$SHOTS/takes-data.json" "$SHOTS/takes-copy-own.json" "$SHOTS/takes-copy-muted.json" "$SHOTS/takes-old-own.json" "$SHOTS/takes-old-muted.json"
+[ -n "$TK_FILE" ] && cp "$TK_FILE" "$SHOTS/takes-data.json"
+cp "$TKS/takes-copy-own.json" "$SHOTS/takes-copy-own.json" 2>/dev/null
+cp "$TKS/takes-copy-muted.json" "$SHOTS/takes-copy-muted.json" 2>/dev/null
+cp "$TKS/takes-own.json" "$SHOTS/takes-old-own.json" 2>/dev/null
+cp "$TKS/takes-muted.json" "$SHOTS/takes-old-muted.json" 2>/dev/null
 tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
-tseg "$SHOTS/drive-takesforeign.txt" real-46-takes-foreign > "$SHOTS/seg-takes-foreign.txt"
-# d@e's live take, if it has one: the kept file the foreign drive wrote holds only what `mine` said (the foreign ids were refused)
-LIVE_ID=$(sed -nE 's/.*"ids":\["([^"]+)".*/\1/p' "$SHOTS/takes-data-foreign.json" 2>/dev/null | head -1)
-if [ -n "$LIVE_ID" ]; then
-  echo "takes: d@e has a live take; the adopting branch is driven"
-  TAKES_SEED_IDS="\"$LIVE_ID\",\"take-drillb\""; export TAKES_SEED_IDS
-  step "clock data"; wait_ 5000
-  place radio 1500
-  wait_ 9000
-  for i in 1 2 3; do step "tap radio-scroll drag 0 -1500"; wait_ 300; done
-  view real-48-takes-adopted 900
-  step "tap takes-unmute-0"; wait_ 3000                 # the first muted voice (voice-drillm1): undo it
-  step tree; shot real-49-takes-unmuted
-  step logs
-  run_drive takesmatch light "" --touch platform
-  takes_files match
-  tseg "$SHOTS/drive-takesmatch.txt" real-48-takes-adopted > "$SHOTS/seg-takes-adopted.txt"; tseg "$SHOTS/drive-takesmatch.txt" real-49-takes-unmuted > "$SHOTS/seg-takes-unmuted.txt"
-else
-  echo "note: d@e has no live take, so the adopting branch of the takes drill is not driven (take-session.test.ts covers it)"
-fi
-unset SEED_TAKES TAKES_SEED_IDS
+tseg "$SHOTS/drive-takes.txt" real-46-takes-old-files > "$SHOTS/seg-takes.txt"
 
 # The stories tapped must be ones the server can resolve (a live front page sometimes holds one that answers 502 "failed to resolve publication": that is the server's, not the app's).
 RESOLVABLE=""
@@ -432,31 +409,16 @@ if [ -n "$THEME_DOC" ]; then
   chk "theme: the Texture's theme is listed" '\[settings-theme-depth-teal-test\]' "$TH"
   bad "theme: no problems reported" '\[settings-theme-problems\]' "$TH"
 fi
-# the takes drills (shared code over the seeded Swift files; Record and Publish are not driven, see 3a4)
-chk "takes (foreign files): the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes-foreign.txt"
-chk "takes (foreign files): the record control is there" '\[takes-record\]' "$SHOTS/seg-takes-foreign.txt"
-bad "takes (foreign files): no seeded muted voice is listed" 'Never play takes by voice-drillm' "$SHOTS/seg-takes-foreign.txt"
-bad "takes (foreign files): nothing of the old files is in the kept file" 'take-drill|voice-drill' "$SHOTS/takes-data-foreign.json"
-bad "takes (foreign files): nothing of the old files is in the programme's copy" 'take-drill|voice-drill' "$SHOTS/takes-copy-own-foreign.json"
-chk "takes (foreign files): the programme's muted copy is empty" '^\[\]$' "$SHOTS/takes-copy-muted-foreign.json"
-if [ -s "$SHOTS/takes-old-files-foreign.txt" ]; then echo "MISSING: takes (foreign files): the old files are deleted"; FAILS="$FAILS [takes old files foreign]"; else echo "ok: takes (foreign files): the old files are deleted"; fi
-if [ -n "$LIVE_ID" ]; then
-  chk "takes (matching files): the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes-adopted.txt"
-  chk "takes (matching files): the record control is there" '\[takes-record\]' "$SHOTS/seg-takes-adopted.txt"
-  chk "takes (matching files): the first seeded muted voice is listed" 'Never play takes by voice-drillm1' "$SHOTS/seg-takes-adopted.txt"
-  chk "takes (matching files): the second seeded muted voice is listed" 'Never play takes by voice-drillm2' "$SHOTS/seg-takes-adopted.txt"
-  chk "takes (matching files): after Undo the other voice is still listed" 'Never play takes by voice-drillm2' "$SHOTS/seg-takes-unmuted.txt"
-  bad "takes (matching files): after Undo the unmuted voice is gone" 'Never play takes by voice-drillm1' "$SHOTS/seg-takes-unmuted.txt"
-  chk "takes (matching files): the kept file has the live id and the dead id (all the old ids)" "\"ids\":\\[[^]]*\"$LIVE_ID\"[^]]*\"take-drillb\"|\"ids\":\\[[^]]*\"take-drillb\"[^]]*\"$LIVE_ID\"" "$SHOTS/takes-data-match.json"
-  chk "takes (matching files): the kept file holds only the voice not unmuted" '"muted":\["voice-drillm2"\]' "$SHOTS/takes-data-match.json"
-  bad "takes (matching files): the unmuted voice is not in the kept file" 'voice-drillm1' "$SHOTS/takes-data-match.json"
-  chk "takes (matching files): the kept file has the account's handle" '"handle":"voice-[0-9a-f]{6}"' "$SHOTS/takes-data-match.json"
-  chk "takes (matching files): the programme's muted copy agrees (one voice)" '^\["voice-drillm2"\]$' "$SHOTS/takes-copy-muted-match.json"
-  chk "takes (matching files): the programme's own-ids copy has the live id" "\"$LIVE_ID\"" "$SHOTS/takes-copy-own-match.json"
-  H_KEPT=$(grep -o '"handle":"[^"]*"' "$SHOTS/takes-data-match.json" 2>/dev/null | head -1); H_COPY=$(grep -o '"handle":"[^"]*"' "$SHOTS/takes-copy-own-match.json" 2>/dev/null | head -1)
-  if [ -n "$H_KEPT" ] && [ "$H_KEPT" = "$H_COPY" ]; then echo "ok: takes (matching files): the programme's handle agrees with the kept file"; else echo "MISSING: takes (matching files): the handle ($H_KEPT vs $H_COPY)"; FAILS="$FAILS [takes handle copy]"; fi
-  if [ -s "$SHOTS/takes-old-files-match.txt" ]; then echo "MISSING: takes (matching files): the old files are deleted"; FAILS="$FAILS [takes old files match]"; else echo "ok: takes (matching files): the old files are deleted"; fi
-fi
+# the takes drill (nothing is carried from the pre-release build; Record and Publish are not driven, see 3a4)
+chk "takes: the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes.txt"
+chk "takes: the record control is there" '\[takes-record\]' "$SHOTS/seg-takes.txt"
+bad "takes: no old muted voice is listed" 'Never play takes by voice-drillm' "$SHOTS/seg-takes.txt"
+bad "takes: nothing of the old files is in the kept file (if there is one)" 'take-drill|voice-drill' "$SHOTS/takes-data.json"
+chk "takes: the programme's copy was pushed by shared code (the file exists)" '"ids"' "$SHOTS/takes-copy-own.json"
+bad "takes: nothing of the old files is in the programme's copy" 'take-drill|voice-drill' "$SHOTS/takes-copy-own.json"
+chk "takes: the programme's muted copy is empty" '^\[\]$' "$SHOTS/takes-copy-muted.json"
+chk "takes: the old own-ids file is still there, unread" 'take-drilla' "$SHOTS/takes-old-own.json"
+chk "takes: the old muted file is still there, unread" 'voice-drillm1' "$SHOTS/takes-old-muted.json"
 # the tour
 chk "settings: About names the app" '\[settings-about-app\]' "$SHOTS/drive-tour.txt"
 # About's Build row is the commit the app was built from (build-info.gen.ts, written at build time) and it is the commit under test; the server row reads /health

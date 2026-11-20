@@ -224,24 +224,23 @@ row and whether that can fail without a sign. It lists the state of the Takes se
 `takes.ts`, `mobile/AutoradioKit/.../TakeSession.swift`, `Choir/Takes.swift`, `AccountWipe.swift`. The account generation (`api.ts accountGeneration`, bumped by `account.ts` before the wipes) is the one
 clock: shared writes are held to it (`writeCurrent`), and the shared overlay is dropped when it moves.
 
-### The rule for the Swift app's old files: ownership is proved, not inferred
+### Nothing is carried from the pre-release build
 
-Before this move the phone kept the listener's own take ids and muted voices in `Application Support/Autoradio/takes-own.json` (`{handle, ids}`) and `takes-muted.json` (`[handle]`). Those files carry no
-proof of whose they are, and the native delete at sign-out is `try?`, so a file can outlive its account. Every guard that inferred ownership from the phone's history (a flag, then a marker file) had a
-window where the history was not what it assumed, and three reviews found three. The rule now: **the old files are adopted only when at least one take id in the old own-ids file is a take the SERVER
-lists as this account's live take** (`GET /api/platform/takes?mine=1`, a successful answer). Then, in one step: all the old ids and muted voices are unioned into this account's `app:/data/takes.json` through
-the generation-checked write, and only after that write the old files are deleted. No match (a different account's files, an account with no live take, a file with no ids) adopts nothing and deletes
-the files. A server, network or sign-in failure decides nothing and leaves the files; the next attempt decides again from the same evidence, so a failed delete is safe to repeat (a second run adopts
-nothing new and loses nothing; it would bring back a mute the listener undid in between, only while the delete keeps failing).
+Before this move the phone kept the listener's own take ids in `Application Support/Autoradio/takes-own.json` (`{handle, ids}`) and muted voices in `takes-muted.json` (`[handle]`). Those files carry no
+proof of whose they are, and the native delete at sign-out is `try?`, so a file can outlive its account. Every guard that inferred ownership from the phone's history (a flag, then a marker file, then a
+proof by take id) was a statement about that history with a window where it was false, and four reviews found the windows one at a time. The owner's ruling (2026-11-20): "I don't need to save stuff from the
+last couple days of testing. The app is very new. We haven't launched it yet. I don't need to save anything." So **this build reads neither file, adopts nothing from them and deletes neither at launch**;
+the account wipe still removes both when an account leaves (`AccountWipe`, store `takes`, `legacyTakeFiles`; `AccountWipeTests`). The new shared store (`app:/data/takes.json`) and the programme's copy start
+empty.
 
-- **Why the handle is not proof.** The handle is `"voice-" +` the first 6 hex digits of `sha256("choir-voice-author:" + userID)` (`internal/types/autoradio_takes.go:35-38`): 24 bits. The server says
-  it is display only and that two publishers can share one (`internal/platform/takes.go:141-142`; `internal/platform/takes_test.go:486`; this page, "The publisher's record"). A take id is `take-` + 16 hex
-  of `sha256(publisher key, audio sha256)` (`internal/platform/takes.go:444`), 64 bits that include the account's key, and `mine` lists only the caller's takes (`ListMyTakes`, `takes.go:590-620`), so an
-  old id found in `mine` was made by this account. The account's real key (`publisher_key`) is never sent to the phone.
-- **What it costs.** `mine` lists live takes only. An account with no live take (never published, or all deleted or yanked) cannot prove ownership: **it loses its old muted voices and own ids at the
-  upgrade**, and mutes them again. An account with at least one live take among its old ids adopts ALL the old ids and mutes, the dead ones included. The next refresh does not prune dead ids (only a
-  delete removes an own id); they only keep a take the list no longer offers out of the candidates, which is harmless.
-- **The programme's copy** is a different pair of files now (`takes-copy-own.json`, `takes-copy-muted.json`), written only by shared code (`takeMirror`), so pushing it never recreates an old file.
+What that means for a listener with a pre-release build: **muted voices start empty** (mute again), and **the own-ids list starts empty and is re-learned from the server**: at the first `refresh` the
+server's list of the account's live takes (`GET /api/platform/takes?mine=1`) is read and their ids and the account's handle are learned. Takes published with a pre-release build that are still live on the
+server are therefore still shown under "my takes"; what is not carried is the ids of takes that are no longer live (deleted or yanked), which only kept those takes out of the programme's candidates and
+which the list no longer offers anyway. Nothing recorded and not published was ever stored across launches.
+
+The handle is not an identity, for the record: it is `"voice-" +` the first 6 hex digits of `sha256("choir-voice-author:" + userID)` (`internal/types/autoradio_takes.go:35-38`), 24 bits, display only, and two
+publishers can share one (`internal/platform/takes.go:141-142`; `takes_test.go:486`). The programme's copy is a different pair of files now (`takes-copy-own.json`, `takes-copy-muted.json`), written only by
+shared code (`takeMirror`), so pushing it never recreates an old file.
 
 ### The table
 
@@ -250,8 +249,8 @@ nothing new and loses nothing; it would bring back a mute the listener undid in 
 | 1 | The overlay: kept-data cache, my takes, my record, notice, "published as", publishing flag, the change queue | shared memory (`app.ts`, one `Overlay`) | the account of its `gen` | `sync`, at the next page or act after the generation moved: dropped whole, the recorder discarded, the programme's copy emptied; the page takes `signedOutTick` | no (memory) | starts empty, reads row 2 | `take-session.test.ts` B2 (wipe, render, mute), "row 1" |
 | 2 | Own ids, handle, muted voices | `app:/data/takes.json` | the account | `account.ts` store `takes` (`wipeKept`); every write is `saveKept` through `writeCurrent` with the overlay's generation (refused after the generation moved, removed if it landed after); a write that returns after the generation moved is not kept or mirrored | as for every moved store: `account.ts` keeps its marker and retries | read again | "row 3" (a mute suspended inside the write; a write landing as the account changes), S4 |
 | 3 | Changes to row 2 made at the same time | the overlay's queue (`mutate`) | the account | dropped with row 1; a queued change whose account moved on is skipped | no | gone | "row 4" |
-| 4 | The programme's copy of the own ids and muted voices | native memory and `takes-copy-own.json`, `takes-copy-muted.json` (`TakeOwn`, `TakeMutes`) | the account (a copy of row 2) | pushed by shared code only: this account's state (empty when unknown) as the FIRST thing a signed-in session does (`refresh`), and the empty state at every account change; the `AccountWipe` store `takes` also removes the files (`try?`) | yes: the unlink; covered by the push at the next signed-in session | reloaded from the files | `take-session.test.ts` "the programme's copy is pushed first thing", B2; `TakesTests` (copy files, not the old ones) |
-| 5 | The Swift app's old files ("legacy") | `Application Support/Autoradio/takes-own.json`, `takes-muted.json` | unknown: nothing in them says whose; decided by proof | `refresh`: adopted and deleted only on a take id the server lists as this account's, deleted unadopted otherwise, left alone when the server cannot say; never deleted by the account wipe | the delete is `try?`: yes, and repeating it is safe (same evidence, same decision) | read again at the next refresh | `take-session.test.ts` "adopted only on proof" (match adopts all; different ids; no live take; no ids; server or network failure; failed delete repeated; failed write deletes nothing; account changing mid-proof; A then B), `TakesTests` (read, drop) |
+| 4 | The programme's copy of the own ids and muted voices | native memory and `takes-copy-own.json`, `takes-copy-muted.json` (`TakeOwn`, `TakeMutes`) | the account (a copy of row 2) | pushed by shared code only: this account's state (empty when unknown) at the start of the first `refresh` of a session, never from an account that has been left (checked before and after the push, and emptied again if it was), and the empty state at every account change; the `AccountWipe` store `takes` also removes the files (`try?`) | yes: the unlink; covered by the next push | reloaded from the files | `take-session.test.ts` "the programme's copy is pushed before the server is asked" (the push precedes `mine`; a push landing after the account changed leaves it empty), B2; `TakesTests` (copy files, not the old ones) |
+| 5 | The pre-release build's two files: own ids and handle, muted voices | `Application Support/Autoradio/takes-own.json`, `takes-muted.json` | unknown: nothing in them says whose | never read, adopted from or deleted at launch; the account wipe removes both (`legacyTakeFiles`) | the unlink is `try?`: yes; but nothing reads them, so they can reach no account | never read | `AccountWipeTests` (removed with the account); `take-session.test.ts` "nothing is carried from the pre-release build" (the device is never asked, nothing adopted, on a failure, on no live take, on a restart); `TakesTests` (the programme's copy is other files) |
 | 6 | The recorder's live take: phase, transcript, the story answered, the preview, the gate hold | native memory (`TakeSession`, `TakeSession.live`) | the account that recorded it | `ChoirApp.signOut` discards it FIRST (before playback is stopped for good); the `AccountWipe` store `takes` discards it on an account change; shared `sync` discards it again | no (a call into memory); the radio is given back | gone (a new session is idle) | `AccountWipeTests` (review, wipe, idle, file gone, radio given back), "row 1" |
 | 7 | The recording and the played take | the temporary folder: `takes/*.m4a`, `take-play-*.m4a` | the account | row 6's discard; the `AccountWipe` store `takes` removes the folder and the played file | yes (`try?`); no session reads a file it did not make, so it is leftover disk only | orphaned until the system clears temporary files; never read | `AccountWipeTests` (files gone) |
 | 8 | "A publish is under way" | native `TakeSession.publishing`, the overlay flag | the account | row 6's discard and `done` clear it; shared clears it in `finally`; nothing reads the native bit as a fact | no | gone | "B1" |
@@ -259,10 +258,11 @@ nothing new and loses nothing; it would bring back a mute the listener undid in 
 | 10 | The public takes by id (the run sheet entry, the audio fetch) | native memory (`TakeStore`) | nobody (the public list) | `AccountWipe` store `takes`, anyway | no | gone | `AccountWipeTests` |
 | 11 | A take on the run sheet (an entry of kind `take`: lead-in, publisher, cites) | the run sheet's own store (`RunSheetStore`) | the account | the run sheet's wipe (`AccountWipe` store `run-sheet`), not changed here | as the run sheet's | the run sheet's | the run sheet's (`AccountWipeTests`) |
 
-What is still not true, said plainly: (a) between a restart and the first signed-in refresh the programme can use whatever copy files were left (row 4); it is one or a few programme requests with the wrong
-own-take and mute filter (no voice is published and no take is lost, but it is cross-account influence). (b) An account with no live take loses its old mutes (above). (c) While a delete of the old files
-keeps failing, a mute the listener undid is brought back by the next refresh. (d) Row 9 and the unlinks of rows 4 and 7 are `try?` and can fail without a sign; none of them can hand data to another account
-through the carry-over any more, because the carry-over proves ownership instead of trusting the files.
+What is still not true, said plainly: (a) between a restart and the first `refresh` the programme can use whatever copy files were left (row 4): the push is the first thing `refresh` does, and `refresh` runs
+when the radio page is on screen and the phone is signed in (`takesLoadTask`), an act, or after a publish; until then it is a few programme requests with the wrong own-take and mute filter (no voice is
+published and no take is lost, but it is cross-account influence). (b) Muted voices and the ids of no-longer-live takes start empty on a phone upgraded from a pre-release build (above). (c) The unlinks of rows 4, 5, 7 and 9 are `try?` and can fail without a sign; none of them can
+hand data to another account through the upgrade, because nothing reads the old files. (e) The signed-in requests of the takes routes are not marked uncacheable by the proxy
+(only the audio is), and the host's cache policy is not read here.
 
 ## Residuals (recorded, no code)
 
