@@ -88,7 +88,7 @@ final class AccountWipeTests: XCTestCase {
         let mailReading = MailReading(); mailReading.request(address: m, text: m)
         let conversation = Conversation(); conversation.begin(id: "q1", question: m)
         let acks = AckHistory(); acks.add(m, page: m)
-        let reader = ReaderStore(limit: 4)
+        let reader = HeldPages(limit: 4); reader.hold(HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
         let kept = KeptTurnStore(root: root.appendingPathComponent("turns")); write("turns/t1/record.json", m)
         write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
         let signals = FileSignals(file: root.appendingPathComponent("signals.jsonl")); signals.record(SignalEvent(kind: "ask", subject: m, detail: m))
@@ -125,7 +125,7 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1")); XCTAssertNil(content.get("mail:1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned); XCTAssertTrue(signals.recent(limit: 10).isEmpty)
-        XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertNil(EditionSetupSession.shared)
+        XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertNil(EditionSetupSession.shared); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
 
         // (c) the next sign-in: the first request of each kind carries nothing of the old account.
         let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""

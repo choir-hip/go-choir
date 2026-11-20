@@ -5,9 +5,9 @@
 // Held in memory for the session (never on disk: nothing here is stored, so nothing here needs a wipe beyond forgetting); keyed on the account generation, so another account never sees a held
 // document and an answer that began under an older generation is never held. A story and a revision never change, so they are held; a document's head changes (an edit, the desk's revision),
 // so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
-import { accountGeneration, authedJSON, getJSON, HTTPError, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
+import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
 import { storyClips } from './clips.ts';
-import { blankDoc, parseAddress, parseBundle, parseRelated, parseRevision, splitRoute, type ReaderDoc } from './reader-parse.ts';
+import { blankDoc, parseAddress, parseBundle, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
 
 export type { ReaderDoc };
@@ -116,9 +116,26 @@ async function ask(address: string, net: Net): Promise<ReaderDoc> {
   return p;
 }
 
+// THE VOICE HOLDS THE PAGE IN FRONT. The one native call this file makes, with the reason only native code can meet: the voice turn (Swift today, Kotlin on Android) answers "what is this page
+// about" and matches what the radio is saying against the page, and it runs in the native engine, which cannot ask this module. So the page in front, once read, is handed over as its blocks with their
+// sentences (`{op: 'pageText'}` on the app module; it holds at most 40 and forgets them at sign-out). Nothing is read back. A host with no native module, a failed call or a stale account is silent.
+type HandOver = (request: Record<string, unknown>) => Promise<unknown>;
+let handOver: HandOver | null | undefined;
+/** Test only: the native hand-over (null: no native module; undefined: the real one). */
+export function setHandOverForTest(f: HandOver | null | undefined): void { handOver = f; }
+function hand(d: ReaderDoc, gen: number): void {
+  const send = handOver === undefined ? (nativeLater() as HandOver | null) : handOver;     // api.ts types the request for the key reads; the module's `later` takes any op
+  if (!send || d.status !== 'ready' || gen !== accountGeneration()) return;
+  const blocks = d.blocks.filter((b) => b.text !== '').map((b) => ({ id: b.id, kind: b.kind, text: b.text, sentences: sentenceTexts(b) }));
+  void Promise.resolve().then(() => send({ op: 'pageText', address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { if (obj(r) && r.ok === true) console.log(`reader: handed to the voice blocks=${blocks.length}`); }, () => undefined);
+}
+
 /** The source behind the reader page. `accState` and `saved` are only there to ask again: a sign-in from the banner, and the editor's save. */
 export async function readerDocShared(address: string, _accState: string, _saved: boolean, net: Net = real): Promise<ReaderDoc> {
-  return ask(address, net);
+  const gen = accountGeneration();
+  const d = await ask(address, net);
+  hand(d, gen);
+  return d;
 }
 
 const ack = (ok: boolean): Ack => ({ ok });

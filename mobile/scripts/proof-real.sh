@@ -456,6 +456,7 @@ chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' 
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
 # the reader is shared code on both platforms: it logs a count line (never a title) each time it reads a story or a document
 chk "reader (shared code): the story was read by reader.ts" 'reader: story blocks=[1-9]' "$OUT"
+chk "reader (shared code): the page in front was handed to the native voice (the app module answered ok)" 'reader: handed to the voice blocks=[1-9]' "$OUT"
 # signed in: the sign-in card never shows on the signed-in drives
 bad "signed in: no sign-in card on the survey" '\[signedout-banner\]' "$SV"
 bad "signed in: no sign-in card on the read drive" '\[signedout-banner\]' "$RD"

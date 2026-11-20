@@ -9,6 +9,7 @@
 //  R8 prefetch: the neighbours that are stories and not held are fetched once each, an ask for one in flight shares the request, the empty address and other pages are skipped, a failure is kept nowhere.
 //  R9 at most 40 held, the least recently used goes first.
 //  R10 reload forgets; restore posts the revision as latest and forgets, the head is already the latest; stop cancels the trajectory (a 409 or 404 is fine) and forgets; each says whether it worked.
+//  R13 the page in front is handed to the native voice (it holds the page text the turn reads): its blocks with sentences, once per ask, only a ready document, nothing when there is no native module, never from another account.
 //  R11 "Hear it": the story's clips come with it; a failing clip route gives none and does not fail the story.   R12 a document the desk is revising says so.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as R from './reader.ts';
@@ -174,5 +175,33 @@ describe('actions', () => {
     const g = fake(); g.net.clips = async () => { throw new Error('down'); };
     const d = await R.loadReader('pub:pub/x', g.net);
     expect([d.status, d.hearIt]).toEqual(['ready', []]);
+  });
+});
+
+describe('the voice holds the page in front', () => {
+  type Sent = { op: string; address: string; title: string; dek: string; kind: string; blocks: { id: string; kind: string; text: string; sentences: string[] }[] };
+  test('R13 a ready document is handed over with its blocks and sentences; others are not', async () => {
+    const sent: Sent[] = [];
+    R.setHandOverForTest(async (r) => { sent.push(r as Sent); return { ok: true }; });
+    const f = fake({ pub: (p) => (p.endsWith('/resolve') ? { publication: { title: 'Harbor', kind: 'story', dek: 'A dek.' }, artifact: { content: 'First sentence here. Second one follows.\n\n```\ncode\n```' }, nav: {} } : {}) });
+    await R.readerDocShared('pub:pub/x', 'in', false, f.net);
+    expect(sent.length).toBe(1);
+    expect(sent[0]).toMatchObject({ op: 'pageText', address: 'pub:pub/x', title: 'Harbor', dek: 'A dek.', kind: 'story' });
+    expect(sent[0].blocks[0]).toMatchObject({ kind: 'p', text: 'First sentence here. Second one follows.', sentences: ['First sentence here.', 'Second one follows.'] });
+    expect(sent[0].blocks.map((b) => b.kind)).toContain('code');
+    await R.readerDocShared('pub:pub/x', 'in', false, f.net);               // held: handed again (the voice may have dropped it)
+    expect(sent.length).toBe(2);
+    await R.readerDocShared('paper:front', 'in', false, f.net); await R.readerDocShared('pub:pub/gone', 'in', false, fake({ pub: () => new Error('down') }).net);
+    expect(sent.length).toBe(2);
+  });
+  test('R13 no native module is fine; a hand-over that fails does not fail the page; a stale account is not handed over', async () => {
+    R.setHandOverForTest(null);
+    expect((await R.readerDocShared('pub:pub/x', 'in', false, fake().net)).status).toBe('ready');
+    R.setHandOverForTest(async () => { throw new Error('native down'); });
+    expect((await R.readerDocShared('pub:pub/y', 'in', false, fake().net)).status).toBe('ready');
+    const sent: unknown[] = []; R.setHandOverForTest(async (r) => { sent.push(r); return {}; });
+    const flip: R.Net = { ...fake().net, pub: async (p) => (p.endsWith('/resolve') ? (nextGeneration(), reply(bundle('Old'))) : reply({})) };
+    await R.readerDocShared('pub:pub/z', 'in', false, flip);
+    expect(sent.length).toBe(0);
   });
 });

@@ -59,7 +59,7 @@ public final class AccountWipe: @unchecked Sendable {
         conversation: Conversation = .shared,
         acks: AckHistory = .shared,
         bar: BarTracker = .shared,
-        reader: ReaderStore = .shared,
+        reader: HeldPages = .shared,
         keptTurns: KeptTurnStore? = nil,
         voice: SpeakerGate = .shared,
         heldRest: HeldRest = .shared,
@@ -86,7 +86,7 @@ public final class AccountWipe: @unchecked Sendable {
         register("playing") { environment.wipePlaying() }
         register("mail-reading") { mailReading.wipe() }
         register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe(); EditionSetupSession.shared?.wipe(); EditionSetupSession.shared = nil }
-        register("reader") { reader.wipe() }
+        register("reader") { reader.wipe() }       // the pages the shared reader handed to the voice
         // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }

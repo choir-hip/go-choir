@@ -367,7 +367,7 @@ public enum NotebookPage {
         }
         guard ed.found else { return .none }
         let address = "texture:" + ed.docID
-        let d = await ReaderStore.shared.doc(address, force: true)
+        let d = await ReaderStore.shared.doc(address)
         guard d.status == "ready" else { return NotebookCache.shared.text.map { .found(address: address, notebook: NotebookText.parse($0)) } ?? .unavailable }
         NotebookCache.shared.set(d.source)
         return .found(address: address, notebook: NotebookText.parse(d.source))
@@ -399,7 +399,7 @@ public enum NotebookPage {
         guard let ed = await lookupEdition(), gen == AccountWipe.generation else { return false }        // the server cannot say: try later, never create on a guess
         if ed.found {
             address = "texture:" + ed.docID
-            let d = await ReaderStore.shared.doc(address, force: true)
+            let d = await ReaderStore.shared.doc(address)
             guard d.status == "ready", gen == AccountWipe.generation else { return false }
             current = d.source
         } else {

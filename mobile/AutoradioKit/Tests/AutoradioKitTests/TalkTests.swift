@@ -123,7 +123,7 @@ final class SavedAnswerTests: XCTestCase {
     override func tearDown() { LocalLanguage.model = nil }
 
     func corpus() -> SavedCorpus {
-        let c = SavedCorpus(readerStore: nil)
+        let c = SavedCorpus(heldPages: nil)
         c.setSource("t") { [SavedCorpus.Document(id: "pub:a", title: "Harbor strike ends after nine days", address: "pub:a",
             text: "Dock workers at the harbor voted on Tuesday to end a nine day strike over pay and shift lengths.\nThe union said talks with the port authority resume Monday.")] }
         return c

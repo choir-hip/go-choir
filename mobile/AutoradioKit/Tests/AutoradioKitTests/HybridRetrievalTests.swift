@@ -135,7 +135,7 @@ final class EmbeddingServiceTests: XCTestCase {
         return EmbeddingService(env)
     }
     func corpus() -> SavedCorpus {
-        let c = SavedCorpus(readerStore: nil)
+        let c = SavedCorpus(heldPages: nil)
         c.setSource("t") { (0..<6).map { SavedCorpus.Document(id: "t\($0)", title: "Title \($0)", address: "pub:\($0)", text: "story text number \($0) about bridges", kind: "story", source: "Autopaper", date: Date(timeIntervalSince1970: 1_800_000_000 + Double($0))) } }
         return c
     }

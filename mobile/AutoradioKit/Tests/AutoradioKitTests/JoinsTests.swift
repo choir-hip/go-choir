@@ -86,7 +86,7 @@ final class JoinLibraryTests: XCTestCase {
         let src = LibraryCorpusSource(docs: { [self.doc("a", "The Keeper", added: 2)] }, text: { _ in self.text([self.sentence, self.sentence + " Again."]) })
         let d = src.documents()
         XCTAssertEqual(d.count, 1); XCTAssertEqual(d[0].title, "The Keeper"); XCTAssertEqual(d[0].address, "doc:a"); XCTAssertTrue(d[0].id.hasPrefix("book:"))
-        let c = SavedCorpus(readerStore: nil); c.setSource("library") { src.documents() }; c.refresh()
+        let c = SavedCorpus(heldPages: nil); c.setSource("library") { src.documents() }; c.refresh()
         let hits = c.retrieve("who climbed the lighthouse stair to trim the lamp").items
         XCTAssertEqual(hits.first?.title, "The Keeper")
         XCTAssertEqual(SavedAnswerPrompt.source(hits[0]), "From your book The Keeper")
@@ -99,7 +99,7 @@ final class JoinLibraryTests: XCTestCase {
         XCTAssertEqual(out.first?.title, "New Book", "the most recent document comes first")
         XCTAssertEqual(out.count, 2, "both books are kept: the budget is thousands of passages, not 200")
         XCTAssertFalse(out[0].parts.isEmpty); XCTAssertTrue(out[0].parts[0].label.hasPrefix("chapter 1"))
-        let c = SavedCorpus(readerStore: nil); c.setSource("library") { out }; c.refresh()
+        let c = SavedCorpus(heldPages: nil); c.setSource("library") { out }; c.refresh()
         XCTAssertGreaterThan(c.retrieval.count, 100, "the retrieval index sees all of it")
     }
     func testJ5_AnUnreadableOrEmptyDocumentIsSkippedAndNothingThrows() {

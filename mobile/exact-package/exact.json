@@ -1597,14 +1597,6 @@
       "answers": "ReaderAck"
     },
     {
-      "send": "readerFollowSet",
-      "options": {
-        "address": "string",
-        "spoken": "string"
-      },
-      "answers": "ReaderFollowInfo"
-    },
-    {
       "source": "settingsComputer",
       "live": true,
       "answers": "SettingsComputer",

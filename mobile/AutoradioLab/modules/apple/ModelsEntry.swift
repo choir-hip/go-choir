@@ -21,6 +21,8 @@ import Security
 // there), absent (the Keychain answered item-not-found) or unreadable (locked before the first unlock, or any other status). Read only: no data is returned, nothing
 // is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
 //
+// The page in front, `{op: "pageText", address, title, dek, kind, blocks}` (later only): the shared reader hands the voice the page it is showing (HeldPages); nothing is read back. It goes when the voice's page text is its own.
+//
 // The themes' one-time carry-over (AutoradioLab/themes.ts `migrate`): `{op: "themeLegacy"}` READS what the Swift app kept for the themes: the choice (UserDefaults) and the user's theme files
 // (Application Support/Autoradio/themes). The reason it is native: those are places shared code cannot see (Exact's `app:/data` is another folder). It only reads and removes nothing, so a reverted
 // build still finds its old copy; a later change removes the old copy when phones have moved, and this op goes with it. At most 64 files of at most 64 KiB are sent; the rest are named in `skipped`
@@ -61,6 +63,12 @@ final class ModelsModule: ExactModule {
                 // nothing shared (the key remains: the marker goes); at a launch (account.ts reconcile) the shared stores of the account being left are wiped regardless of this answer and the marker stays. Idempotent: with the key already gone it only runs the Swift wipe again.
                 reply.send(["done": op == "wipe" || !CredentialReader().keyRemains()])
             }
+            return
+        }
+        if op == "pageText" {
+            // The shared reader hands over the page in front (AutoradioLab/reader.ts `hand`); the voice turn reads it. Only native code can: the voice engine is native. Answers {ok}.
+            AutoradioModule.current?.holdPage(request)
+            reply.send(["ok": AutoradioModule.current != nil])
             return
         }
         reply.send(call(request))

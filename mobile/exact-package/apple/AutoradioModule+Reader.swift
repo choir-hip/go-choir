@@ -1,6 +1,7 @@
 // Lane file: reader. The document itself (a story or a Texture document: blocks, citations, versions, related, "Hear it", stop, restore, reload, prefetch) is read by shared code now
 // (AutoradioLab/reader.ts, reader-parse.ts) and is not here. What stays native, and why:
-//   readerFollow / readerFollowSet   the block and sentence the radio is reading: set by the bar's voice turn, matched against the text the voice holds (until the voice's page text moves)
+//   readerFollow                     the block and sentence the radio is reading: set by the bar's voice turn, matched against the page the shared reader handed over (HeldPages)
+//   holdPage (the `pageText` op)     the page in front, handed over by shared code (reader.ts `hand`): the voice turn reads its text and the follow-along matches against it
 //   readerAim / readerAimSet         what the bar's prompt is aimed at; the voice turn reads it
 //   readerOpenExternal               Platform.open (leaving the app: Safari, mail, phone)
 // View: web-page (WebPageView), the source page in place: a WKWebView, a platform view only native code can draw.
@@ -78,8 +79,18 @@ extension AutoradioModule {
         return v
     }
 
+    /// The shared reader hands over the page in front (AutoradioModule's app-module op `pageText`, ModelsEntry.swift): held for the voice turn's page text, the corpus and the follow-along.
+    /// The reason it is native: the voice engine is native and cannot ask the shared module for a page's text.
+    public func holdPage(_ request: [String: Any]) {
+        guard let p = HeldPage.parse(request) else { return }
+        HeldPages.shared.hold(p)
+        let text = p.lines.joined(separator: " ")
+        if !text.isEmpty { runtime.pageTextReady(address: p.address, text: text) }   // the text may arrive after the page is in front
+        DispatchQueue.main.async { [weak self] in self?.touch(["pageModel"]) }
+    }
+
     func registerReader() {
-        pageSources.register(ReaderPageSource())
+        pageSources.register(HeldPageSource())
         ReaderFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerFollow"]) } }
 
         handle("readerFollow") { [unowned self] _, reply in reply(json(ReaderFollow.shared.info)) }
@@ -100,17 +111,6 @@ extension AutoradioModule {
             switch SourceLink.route(args["url"] as? String ?? "") {
             case .inApp(let u), .external(let u): Platform.open(u); reply(["ok": true])
             case .refused: reply(["ok": false])
-            }
-        }
-        handle("readerFollowSet") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? ""
-            Task { [weak self] in
-                let known = await ReaderStore.shared.doc(address)       // makes sure the document is cached
-                _ = known
-                DispatchQueue.main.async {
-                    guard let self else { return reply([:]) }
-                    reply(self.json(ReaderFollow.shared.set(address: address, spoken: args["spoken"] as? String ?? "")))
-                }
             }
         }
     }

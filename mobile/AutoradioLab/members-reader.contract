@@ -2,7 +2,7 @@
 // Owned by the reader lane. The child components (reader.contract, textures.contract) `inject` these by name; each name is
 // in lane 3's band of the `provide` list in app.contract.
 use readerFollow, readerAim from "@choir/autoradio"
-use readerAimSet, readerOpenExternal, readerFollowSet from "@choir/autoradio"
+use readerAimSet, readerOpenExternal from "@choir/autoradio"
 use ReaderDoc, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@choir/autoradio"
 use TextureList from "./textures-types.contract"
 
@@ -25,7 +25,6 @@ members Autoradio
   // Opening a link outside the app changes no document: it does not refresh the Textures list.
   mutation rext as shape ReaderAck
   mutation raimm as shape ReaderAimInfo
-  mutation rfollowm as shape ReaderFollowInfo
 
   // Open citation cards, keyed "<address>|<anchor>": several can be open, and a card is open for one page only.
   state openCites: string[] = []

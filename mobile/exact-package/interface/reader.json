@@ -159,14 +159,6 @@
     "url": "string"
    },
    "answers": "ReaderAck"
-  },
-  {
-   "send": "readerFollowSet",
-   "options": {
-    "address": "string",
-    "spoken": "string"
-   },
-   "answers": "ReaderFollowInfo"
   }
  ],
  "views": {
