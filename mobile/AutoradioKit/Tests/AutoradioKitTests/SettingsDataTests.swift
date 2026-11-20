@@ -5,6 +5,11 @@ import XCTest
 // and ActivityFeed.swift (V); each test names the failure it covers.
 
 private func freshDefaults() -> UserDefaults { UserDefaults(suiteName: "l7-\(UUID().uuidString)")! }
+/// Invented sample data the tests read: the mobile folder's fixtures (a theme Texture, a changelog).
+private func fixture(_ path: String) -> Data {
+    let mobile = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    return try! Data(contentsOf: mobile.appendingPathComponent("fixtures").appendingPathComponent(path))
+}
 private func tempDir() -> URL {
     let u = FileManager.default.temporaryDirectory.appendingPathComponent("l7-\(UUID().uuidString)")
     try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
@@ -90,7 +95,7 @@ final class ThemeLoaderTests: XCTestCase {
     func testADarkOnlyThemeIsNeverShownLight() throws {                        // F4
         let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let s = ThemeStore(userDir: dir, defaults: freshDefaults())
-        let tt = try TextureTheme.parse(Demo.fixture("texture-theme")!)
+        let tt = try TextureTheme.parse(fixture("texture/theme-ember.json"))
         let id = try s.installFromTexture(tt.themeJSON)
         XCTAssertEqual(id, "ember")
         s.setTheme("ember"); s.setMode("light")
@@ -100,8 +105,8 @@ final class ThemeLoaderTests: XCTestCase {
     func testInstallFromTextureSurvivesARelaunchAndCanBeRemoved() throws {    // F7
         let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let s = ThemeStore(userDir: dir, defaults: freshDefaults())
-        let tt = try TextureTheme.parse(Demo.fixture("texture-theme")!)
-        XCTAssertEqual(tt.docID, "demo-theme"); XCTAssertEqual(tt.revisionID, "demo-theme-r3")
+        let tt = try TextureTheme.parse(fixture("texture/theme-ember.json"))
+        XCTAssertEqual(tt.docID, "sample-theme"); XCTAssertEqual(tt.revisionID, "sample-theme-r3")
         try s.installFromTexture(tt.themeJSON)
         let again = ThemeStore(userDir: dir, defaults: freshDefaults())
         let card = again.cards().first { $0.id == "ember" }
@@ -138,12 +143,6 @@ final class ThemeLoaderTests: XCTestCase {
         XCTAssertThrowsError(try TextureTheme.parse(Data(##"{"error":"nope"}"##.utf8)))
     }
 
-    func testDemoThemeSourceAnswersOnlyTheDemoDocument() async throws {
-        let ok = try await DemoThemeSource().fetch(doc: "demo-theme")
-        XCTAssertEqual(ok.docID, "demo-theme")
-        do { _ = try await DemoThemeSource().fetch(doc: "other"); XCTFail("should refuse") }
-        catch ChoirError.server(let status, _) { XCTAssertEqual(status, 404) }
-    }
 }
 
 final class AccountsTests: XCTestCase {
@@ -182,12 +181,6 @@ final class AccountsTests: XCTestCase {
         await m.wake(); XCTAssertEqual(fake.wakes, 1); XCTAssertEqual(m.view().phase, "idle")
     }
 
-    func testTheDemoComputerUpdatesOnce() async throws {
-        let c = DemoComputerClient()
-        let a = try await c.snapshot(); XCTAssertEqual(a.updateTarget, "demo-build-2")
-        let o = try await c.restartToUpdate(); XCTAssertEqual(o, .started)
-        let b = try await c.snapshot(); XCTAssertEqual(b.updateTarget, ""); XCTAssertEqual(b.epoch, a.epoch + 1)
-    }
 }
 
 final class LearnedTests: XCTestCase {
@@ -196,39 +189,32 @@ final class LearnedTests: XCTestCase {
                  SignalEvent(kind: "close", subject: "pub:b", detail: "", at: 110),
                  SignalEvent(kind: "learned-reset", subject: "settings:learned", detail: "", at: 120),
                  SignalEvent(kind: "less-of-this", subject: "pub:c", detail: "", at: 130)]
-        let seed = [LearnedLine(at: 50, kind: "more", text: "old seed")]
-        let l = SignalsLearned.lines(from: e, seed: seed)
+        let l = SignalsLearned.lines(from: e)
         XCTAssertEqual(l.map(\.text), ["Less of this: pub:c"], "everything before the reset is gone; a close is not a learned act")
-        XCTAssertEqual(SignalsLearned.lines(from: Array(e.prefix(2)), seed: seed).map(\.text), ["More like this: Harbor barrier", "old seed"])
+        XCTAssertEqual(SignalsLearned.lines(from: Array(e.prefix(2))).map(\.text), ["More like this: Harbor barrier"])
     }
 
     func testResetOnlyRecordsAMarker() async {                                  // L2
         let sig = FileSignals(file: nil)
         sig.record(SignalEvent(kind: "more-of-this", subject: "pub:a", detail: "A", at: 1))
-        let p = SignalsLearned(signals: sig, demoSeed: false)
+        let p = SignalsLearned(signals: sig)
         let before = await p.lines(); XCTAssertEqual(before.count, 1)
         await p.reset()
         let after = await p.lines(); XCTAssertEqual(after.count, 0)
         XCTAssertEqual(sig.recent(limit: 10).count, 2, "the events stay; only a marker is added")
     }
 
-    func testDemoLearnedSeedComesFromTheFixture() async {
-        let l = await SignalsLearned(signals: NullSignals(), demoSeed: true).lines()
-        XCTAssertEqual(l.count, 3); XCTAssertTrue(l[0].text.hasPrefix("More like this"))
-        let v = LearnedView(lines: l); XCTAssertEqual(v.count, 3); XCTAssertEqual(v.message, "")
-        XCTAssertFalse(LearnedView(lines: []).message.isEmpty)
-    }
 }
 
 final class ActivityFeedTests: XCTestCase {
-    func testTheDemoChangelogParsesNewestFirstWithGroupsTargetsAndUnseen() throws {
-        let items = try ActivityParse.items(from: Demo.fixture("changelog")!, now: Date(timeIntervalSince1970: 1_800_000_000))
+    func testTheSampleChangelogParsesNewestFirstWithGroupsTargetsAndUnseen() throws {
+        let items = try ActivityParse.items(from: fixture("activity/changelog.json"), now: Date(timeIntervalSince1970: 1_800_000_000))
         XCTAssertEqual(items.count, 5)
         XCTAssertEqual(items.map(\.at), items.map(\.at).sorted(by: >))
-        XCTAssertEqual(items[0].kind, "revision_committed"); XCTAssertEqual(items[0].target, "texture:demo-doc-edition")
+        XCTAssertEqual(items[0].kind, "revision_committed"); XCTAssertEqual(items[0].target, "texture:sample-doc-edition")
         XCTAssertEqual(items[0].label, "Revision saved"); XCTAssertEqual(items[0].group, "desk")
         let used = items.first { $0.kind == "parent_used" }!
-        XCTAssertEqual(used.target, "pub:demo-river-festival"); XCTAssertEqual(used.group, "paper")
+        XCTAssertEqual(used.target, "pub:sample-river-festival"); XCTAssertEqual(used.group, "paper")
         XCTAssertEqual(items.first { $0.kind == "update_finished" }?.group, "computer")
         XCTAssertEqual(items.filter(\.unseen).count, 2, "seq 41 and 40 are major and newer than seen_seq 38")
     }
@@ -268,12 +254,5 @@ final class ActivityFeedTests: XCTestCase {
         await m.refresh()
         let v = m.view()
         XCTAssertEqual(v.status, "failed"); XCTAssertTrue(v.message.contains("no activity feed")); XCTAssertEqual(v.radio.count, 1); XCTAssertFalse(v.blank)
-    }
-
-    func testTheDemoModelFillsTheSections() async {
-        let m = ActivityModel(client: DemoActivityClient())
-        await m.refresh()
-        let v = m.view()
-        XCTAssertEqual(v.status, "ok"); XCTAssertEqual(v.computer.count, 2); XCTAssertEqual(v.desk.count, 2); XCTAssertEqual(v.paper.count, 1); XCTAssertEqual(v.unseen, 2)
     }
 }

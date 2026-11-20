@@ -14,7 +14,7 @@ private final class SampleOutcome: @unchecked Sendable {
     func result() -> (Error?, Int) { lock.lock(); defer { lock.unlock() }; return (error, frames) }
 }
 
-/// Models marked ready for the demo and the simulator driver, which fetch nothing.
+/// Models marked ready for the simulator driver (the virtual engine), which fetch nothing.
 private final class MemoryVoiceReadiness: VoiceReadiness, @unchecked Sendable {
     private let lock = NSLock()
     private var ready = Set<String>()
@@ -27,18 +27,17 @@ final class VoiceController: @unchecked Sendable {
     static var shared: VoiceController?
     unowned let module: AutoradioModule
     let sampler: VoiceSampler
-    private let demo: Bool
 
-    init(module: AutoradioModule, demo: Bool) {
-        self.module = module; self.demo = demo
+    init(module: AutoradioModule) {
+        self.module = module
         let rt = module.runtime!
         let virtual = module.virtualEngine
-        let readiness: VoiceReadiness = (demo || virtual) ? MemoryVoiceReadiness() : Voices.readiness
+        let readiness: VoiceReadiness = virtual ? MemoryVoiceReadiness() : Voices.readiness
         let current = VoiceCatalog.option(matching: rt.configuration.setting(.voice) ?? VoiceCatalog.defaultOption.setting)?.id ?? VoiceCatalog.defaultOption.id
         sampler = VoiceSampler(
             selected: current, readiness: readiness,
             fetch: { model, onBytes in
-                if demo || virtual {                              // no models and no network under the demo or the agent: a short, honest-looking wait
+                if virtual {                              // no models and no network under the agent: a short, honest-looking wait
                     for i in 1...4 { try await Task.sleep(nanoseconds: 300_000_000); onBytes(Int64(i) * 50_000_000) }
                     return
                 }
@@ -46,7 +45,7 @@ final class VoiceController: @unchecked Sendable {
                 try await p.fetch(model, role: "", onBytes: onBytes)
             },
             say: { option in
-                if demo || virtual { try await Task.sleep(nanoseconds: 1_200_000_000); return }
+                if virtual { try await Task.sleep(nanoseconds: 1_200_000_000); return }
                 try await VoiceController.play(option, on: rt)
             },
             halt: { rt.audio.stopVoice() },
@@ -105,7 +104,7 @@ final class VoiceController: @unchecked Sendable {
 
 extension AutoradioModule {
     func registerVoice() {
-        let c = VoiceController(module: self, demo: Demo.isOn)
+        let c = VoiceController(module: self)
         VoiceController.shared = c
         handle("voiceCards") { _, reply in reply(c.view()) }
         handle("voicePick") { args, reply in c.sampler.pick(args["id"] as? String ?? ""); reply(c.view()) }

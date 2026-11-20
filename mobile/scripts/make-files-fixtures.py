@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Generates the Files lane's demo files (all invented, no third-party content) and embeds them as base64 in
-mobile/fixtures/files-demo/tree.json (path -> base64), which the shared files code (AutoradioLab/files.ts) imports through
-the `fixtures` mount. The output is tracked; rerun this script to change a fixture.
+"""Generates the sample files (the Epub tests' input) (all invented, no third-party content) and embeds them as base64 in
+mobile/fixtures/files/sample-tree.json (path -> base64), which AutoradioKit's Epub tests read. The output is tracked; rerun this script to change a fixture.
 
   PNG   a test card, drawn here with PIL (no photograph)
   PDF   three pages of invented council minutes, written by hand (Helvetica, no embedded fonts)
@@ -13,7 +12,7 @@ Needs python3 with PIL, and ffmpeg for the MP4 (the MP4 is skipped, with a note,
 import base64, io, math, os, shutil, struct, subprocess, sys, tempfile, wave, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "..", "fixtures", "files-demo", "tree.json")
+OUT = os.path.join(HERE, "..", "fixtures", "files", "sample-tree.json")
 
 def png():
     from PIL import Image, ImageDraw

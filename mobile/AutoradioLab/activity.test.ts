@@ -1,8 +1,8 @@
-// Activity under bun test: the Swift ActivityFeedTests (V1 to V6), on the demo changelog fixture (invented content).
+// Activity under bun test: the Swift ActivityFeedTests (V1 to V6), on a canned changelog (invented content).
 import { describe, expect, test } from 'bun:test';
 import { items, target, when, activityInfo, view, label, type Item } from './activity.ts';
 import { HTTPError, SignedOutError } from './api.ts';
-import changelog from '../fixtures/demo/changelog.json';
+import changelog from '../fixtures/activity/changelog.json';
 
 const NOW = 1_800_000_000_000;
 const turn: Item = { id: 't1', kind: 'turn', label: 'Answered', detail: '', group: 'radio', ago: '', target: '', title: '', at: 0, unseen: false };
@@ -12,9 +12,9 @@ describe('activity', () => {
     const rows = items(changelog, NOW);
     expect(rows.length).toBe(5);
     expect(rows.map((r) => r.at)).toEqual(rows.map((r) => r.at).sort((a, b) => b - a));
-    expect(rows[0]).toMatchObject({ kind: 'revision_committed', target: 'texture:demo-doc-edition', label: 'Revision saved', group: 'desk' });
+    expect(rows[0]).toMatchObject({ kind: 'revision_committed', target: 'texture:sample-doc-edition', label: 'Revision saved', group: 'desk' });
     const used = rows.find((r) => r.kind === 'parent_used')!;
-    expect(used).toMatchObject({ target: 'pub:demo-river-festival', group: 'paper' });
+    expect(used).toMatchObject({ target: 'pub:sample-river-festival', group: 'paper' });
     expect(rows.find((r) => r.kind === 'update_finished')?.group).toBe('computer');
     expect(rows.filter((r) => r.unseen).length).toBe(2);
   });
@@ -34,18 +34,17 @@ describe('activity', () => {
     expect(when(Date.parse('2026-01-02T03:04:00Z'), NOW)).toBe('2 Jan, 03:04');
   });
   test('V5 a missing route leaves the radio\'s turns visible and says so in one line', async () => {
-    const v = await activityInfo({ now: NOW, demo: false, signedIn: true, radio: [turn], live: [] }, async () => { throw new HTTPError(404, 'HTTP 404'); });
+    const v = await activityInfo({ now: NOW, signedIn: true, radio: [turn], live: [] }, async () => { throw new HTTPError(404, 'HTTP 404'); });
     expect(v.status).toBe('failed'); expect(v.message).toContain('no activity feed'); expect(v.radio.length).toBe(1); expect(v.blank).toBe(false);
-    expect((await activityInfo({ now: NOW, demo: false, signedIn: true, radio: [], live: [] }, async () => { throw new SignedOutError(); })).message).toBe('Not signed in.');
-    expect((await activityInfo({ now: NOW, demo: false, signedIn: true, radio: [], live: [] }, async () => { throw new HTTPError(401, 'x'); })).message).toContain('no longer accepted');
-    expect((await activityInfo({ now: NOW, demo: false, signedIn: true, radio: [], live: [] }, async () => { throw new Error('net'); })).message).toContain('Could not load');
-    expect((await activityInfo({ now: NOW, demo: false, signedIn: false, radio: [], live: [] })).status).toBe('idle');
+    expect((await activityInfo({ now: NOW, signedIn: true, radio: [], live: [] }, async () => { throw new SignedOutError(); })).message).toBe('Not signed in.');
+    expect((await activityInfo({ now: NOW, signedIn: true, radio: [], live: [] }, async () => { throw new HTTPError(401, 'x'); })).message).toContain('no longer accepted');
+    expect((await activityInfo({ now: NOW, signedIn: true, radio: [], live: [] }, async () => { throw new Error('net'); })).message).toContain('Could not load');
+    expect((await activityInfo({ now: NOW, signedIn: false, radio: [], live: [] })).status).toBe('idle');
   });
-  test('the demo fills the sections, asks nothing; the route is /api/changelog?limit=50&minor=1', async () => {
-    const v = await activityInfo({ now: NOW, demo: true, signedIn: false, radio: [], live: [] });
-    expect(v).toMatchObject({ status: 'ok', unseen: 2 }); expect([v.computer.length, v.desk.length, v.paper.length]).toEqual([2, 2, 1]);
+  test('a signed-in page fills the sections from the changelog it is given; the route is /api/changelog?limit=50&minor=1', async () => {
     const asked: string[] = [];
-    await activityInfo({ now: NOW, demo: false, signedIn: true, radio: [], live: [] }, async (p, q) => { asked.push(p + JSON.stringify(q)); return changelog; });
+    const v = await activityInfo({ now: NOW, signedIn: true, radio: [], live: [] }, async (p, q) => { asked.push(p + JSON.stringify(q)); return changelog; });
+    expect(v).toMatchObject({ status: 'ok', unseen: 2 }); expect([v.computer.length, v.desk.length, v.paper.length]).toEqual([2, 2, 1]);
     expect(asked).toEqual(['/api/changelog{"limit":50,"minor":1}']);
     expect(view([], 'loading', '', [], []).blank).toBe(false); expect(view([], 'ok', '', [], []).blank).toBe(true);
   });

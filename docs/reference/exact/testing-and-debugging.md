@@ -199,7 +199,7 @@ abort, which are not needed.
    (`build-and-ship.md`).
 9. **Mac-side wiring** (lane scripts, may have moved): `mobile/scripts/sim-device.sh`
    makes and boots a private simulator; `exact.sh` passes `EXACT_SIM` through its
-   `env -i`; `proof-sim.sh` ends with `PROOF OK` or `PROOF FAILED at <step>` and
+   `env -i`; `proof-real.sh` ends with `PROOF OK` or `PROOF FAILED at <step>` and
    retries a refused launch.
 
 ## Driving and proving the app: what cost us proof runs
@@ -241,7 +241,7 @@ integrator drove `AutoradioLab` on the simulator; these are what went wrong.
    cold build that adds Swift took about 3 minutes.
 10. **A lane's last unproven commit can break the merged build.** Before the
     final proof, re-fetch and merge every lane head, then run the one
-    integrated proof (`scripts/proof-app.sh`). Lane proofs written before the
+    integrated proof (`scripts/proof-real.sh`). Lane proofs written before the
     merge needed an updated assertion or a tapped setting afterwards; the
     integrated proof is the one that counts.
 

@@ -90,9 +90,9 @@ describe('W2 to W5 the stores', () => {
       bytes: (async () => ({ bytes: new Uint8Array(), contentType: '' })) as never,
       toFile: async () => ({ bytes: 3, contentType: '' }),
     };
-    const p = F.fileResolve({ demo: false, address: 'file:/a.txt', title: '' }, storage, net); await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await p;
+    const p = F.fileResolve({ address: 'file:/a.txt', title: '' }, storage, net); await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await p;
     expect(written.has(F.RECENT_FILE)).toBe(false);
-    const list = await F.fileList({ demo: false, path: '/', mode: 'recent', sort: 'name', desc: false, query: '' }, storage, net);
+    const list = await F.fileList({ path: '/', mode: 'recent', sort: 'name', desc: false, query: '' }, storage, net);
     expect(list.rows.length).toBe(0);
   });
   test('W5 files: a download that finishes after the sign-out is removed by the seam', async () => {

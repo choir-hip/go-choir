@@ -49,7 +49,6 @@ component Autoradio
     pmod
     bi
     thl
-    dm
     layer
     ask
     openPage
@@ -109,7 +108,6 @@ component Autoradio
     pickView
     paperReload
     paperFit
-    pickEdition
     // ---- lane 3: texture reader ----
     rdoc
     tlist
@@ -142,7 +140,6 @@ component Autoradio
     reloadDoc
     openLink
     shareDoc
-    demoFollow
     // ---- lane 4 (round 3): launcher search, the page deck ----
     lq
     lnc
@@ -334,7 +331,6 @@ component Autoradio
     themeDoc
     editThemeDoc
     loadThemeDoc
-    loadDemoTheme
     removeTheme
     refreshAccount
     refreshComputer
@@ -342,8 +338,6 @@ component Autoradio
     updateComputer
     resetLearned
     refreshActivity
-    devDetails
-    toggleDevDetails
     // ---- lane autoradio-talk: the conversation and the answer card ----
     cv
     answerRetry
@@ -370,7 +364,6 @@ component Autoradio
     obTopicText
     obTalk
     obTopicsDone
-    obDemoSay
     obEditionRetry
     obContinueAnyway
     obEditDone

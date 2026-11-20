@@ -3,7 +3,7 @@
 //   the owner's changelog   GET /api/changelog?minor=1&limit=50 (signed in): {events:[{inbox_seq, level, changelog:{kind, occurred_at, summary, actor_label,
 //                           subject:{doc_id, route_path}, tape_ref:{doc_id, revision_id}}}], head, seen_seq, unseen_major}
 //   the radio's turns and the "now" lines  what the radio's engine holds (the voice runtime): passed in as arguments by the page, never fetched here
-// Demo mode reads mobile/fixtures/demo/changelog.json. The "seen" cursor (PUT /api/changelog/seen) is not moved by this page.
+// The "seen" cursor (PUT /api/changelog/seen) is not moved by this page.
 //
 // Ways it can fail (tests in activity.test.ts; V1 to V6 are the Swift list):
 //  V1 a summary is never markup or an instruction: rows carry plain text only, cut to 240 characters
@@ -16,7 +16,6 @@
 
 import { authedJSON, HTTPError, SignedOutError } from './api.ts';
 import { parseDate } from './paper-model.ts';
-import demoChangelog from '../fixtures/demo/changelog.json';
 
 export type Item = { id: string; kind: string; label: string; detail: string; group: string; ago: string; target: string; title: string; at: number; unseen: boolean };
 export type View = { status: string; message: string; live: Item[]; computer: Item[]; desk: Item[]; paper: Item[]; radio: Item[]; unseen: number; blank: boolean };
@@ -74,9 +73,8 @@ export function view(events: Item[], status: string, message: string, radio: Ite
     unseen: events.filter((x) => x.unseen).length, blank: events.length === 0 && r.length === 0 && live.length === 0 && status !== 'loading' };
 }
 
-/** The page's source: the changelog (or the demo fixture), with the radio's own rows as given. Never throws; a failure is `failed` and its one line. */
-export async function activityInfo(a: { now: number; demo: boolean; signedIn: boolean; radio: Item[]; live: Item[] }, get: (path: string, q: Record<string, string | number>) => Promise<unknown> = async (p, q) => (await authedJSON(p, { query: q })).body): Promise<View> {
-  if (a.demo) return view(items(demoChangelog, a.now), 'ok', '', a.radio, a.live);
+/** The page's source: the changelog with the radio's own rows as given. Never throws; a failure is `failed` and its one line. */
+export async function activityInfo(a: { now: number; signedIn: boolean; radio: Item[]; live: Item[] }, get: (path: string, q: Record<string, string | number>) => Promise<unknown> = async (p, q) => (await authedJSON(p, { query: q })).body): Promise<View> {
   if (!a.signedIn) return view([], 'idle', '', a.radio, a.live);
   try { return view(items(await get('/api/changelog', { limit: 50, minor: 1 }), a.now), 'ok', '', a.radio, a.live); }
   catch (e) { return view([], 'failed', plain(e), a.radio, a.live); }

@@ -4,10 +4,10 @@
 // A message reads in the theme's body face (th.fontText); the original HTML (cleaned by mail-sanitize.ts: the server sends it as it arrived) is a secondary view in a sandboxed frame with
 // scripts, remote pictures and links off. Replies and new messages are drafts; sending is the listener's own act.
 // testIds: mail-compose, mail-folder-<name>, mail-row-<id>, mail-skeleton, mail-empty, mail-offline, mail-error, mail-retry,
-//   mail-demo-<state>, mail-from, mail-date, mail-to, mail-trust, mail-reply, mail-summarise, mail-read, mail-original-toggle,
+//   mail-from, mail-date, mail-to, mail-trust, mail-reply, mail-summarise, mail-read, mail-original-toggle,
 //   mail-unread, mail-note, mail-body, mail-quoted-toggle, mail-original-frame, mail-saved-note, mail-attachment-<id>, mail-thread-<id>,
 //   mail-field-to, mail-field-subject, mail-field-body, mail-save, mail-draft-status, mail-approval, mail-open-review.
-use Theme, DemoInfo from "@choir/autoradio"
+use Theme from "@choir/autoradio"
 use AccountView from "./account-state-types.contract"
 use MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
 use PageScroll, Card, Btn, ChoiceWord, RowRule, dyn from "./ui.contract"
@@ -76,8 +76,6 @@ component MailboxPage
     mbx: MailBoxView
     mfr: MailBoxView
     msy: MailSyncView
-    dm: DemoInfo
-    devDetails: bool
     openPage: action
     mailTab: action
     mboxName: string
@@ -117,18 +115,6 @@ component MailboxPage
                 MailRowItem(id=r.id, address=r.address, sender=r.sender, subject=r.subject, snippet=r.snippet, stamp=r.stamp, unread=r.unread, attachment=r.hasAttachments, count=r.count)
       if msy.note != ""
         text msy.note testId="mail-saved-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted margin-top=12
-      if dm.on and devDetails
-        text "Demo states" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted margin-top=16
-        row gap=8 flex-wrap="wrap"
-          button press=openPage("mailbox:demo-empty", "Mail") testId="mail-demo-empty" appearance="none"
-            Btn(label="Empty", primary=false, wide=false)
-          button press=openPage("mailbox:demo-loading", "Mail") testId="mail-demo-loading" appearance="none"
-            Btn(label="Slow", primary=false, wide=false)
-          button press=openPage("mailbox:demo-offline", "Mail") testId="mail-demo-offline" appearance="none"
-            Btn(label="Offline", primary=false, wide=false)
-          button press=openPage("mailbox:demo-error", "Mail") testId="mail-demo-error" appearance="none"
-            Btn(label="Error", primary=false, wide=false)
-
 // One line in a message header: a small label and its value.
 component MailHeaderLine
   inject

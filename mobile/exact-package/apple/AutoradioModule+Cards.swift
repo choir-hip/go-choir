@@ -5,7 +5,7 @@
 //
 // The shading reaches lane 2 (Paper layout) two ways: (1) `shadingList` {route, lift, rank} for the layout to read, and
 // (2) the `choirStories` order itself: this file answers `choirStories` with the paper's order shaded by the listener's acts
-// (a demo-mode-visible effect on any front page that lists `sl.rows` in order). Lane 2 should read `shadingList` for lifts and
+// (an effect on any front page that lists `sl.rows` in order). Lane 2 should read `shadingList` for lifts and
 // may keep `sl.rows` order. See "Requests to the spine" in the lane report.
 import Foundation
 
@@ -25,7 +25,7 @@ extension AutoradioModule {
 
     // MARK: facts
 
-    private func entityMap() -> [String: [String]] { Demo.isOn ? StoryTopics.demoMap() : [:] }
+    private func entityMap() -> [String: [String]] { [:] }
 
     private func allFacts() -> [StoryFacts] {
         let map = entityMap()
@@ -79,7 +79,7 @@ extension AutoradioModule {
         pageSources.register(ToldPaperSource(prefs: cs.prefs))
 
         // ---- sources
-        // The front list in the paper's order shaded by what the listener told it (the effect on the front page in demo mode).
+        // The front list in the paper's order shaded by what the listener told it (an effect on the front page).
         handle("choirStories") { [unowned self] _, reply in
             let rows = choir.storyRows()
             let order = shaded().map(\.story.route)
@@ -92,15 +92,15 @@ extension AutoradioModule {
             let s = shaded()
             let stories = s.map(\.story)
             let list = pages.list()
-            let places = Places.rows(topStory: stories.first?.title, extra: Demo.isOn ? Places.demoExtra() : [:])
+            let places = Places.rows(topStory: stories.first?.title, extra: [:])
             let recentPages = RecentPages.addresses(events: signals.recent(limit: 200), excluding: Set(list.map(\.address)))
                 .map { Page(address: $0, kind: PageAddress.kind(of: $0), title: RecentPages.title(for: $0, stories: stories)) }
             let local = LauncherSearch.hits(query: q, open: list, places: places, recent: recentPages, stories: stories)
             // The whole paper: the server's substring search over every published story. The answer lands later and the launcher is
-            // re-read (touch); until then the local hits show with a "Searching the paper" line. Demo mode has no server.
+            // re-read (touch); until then the local hits show with a "Searching the paper" line.
             var searchNote = ""
             var hits = local
-            if !Demo.isOn {
+            do {
                 cs.lock.lock()
                 if cs.corpus == nil {
                     let c = CorpusSearcher { query in try await ChoirEnvironment.shared.client().searchPaper(query) }
@@ -138,7 +138,7 @@ extension AutoradioModule {
     }
 }
 
-/// "What I've told the paper" as a page the reader opens: `texture:what-i-told-the-paper`. DEMO PATH: the acts are local. REAL PATH
+/// "What I've told the paper" as a page the reader opens: `texture:what-i-told-the-paper`. LOCAL PATH: the acts are local. REAL PATH
 /// (named, not built): a private Texture beside the edition, written through the Texture desk; the reader lane's Texture source
 /// would then answer this address and this source is removed.
 struct ToldPaperSource: PageSource {

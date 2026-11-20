@@ -16,7 +16,7 @@
 //  A13 authedToFile: the body goes to the named app file by the host (`exactBodyTo`), the reply is never read, a path outside app:/cache is refused before the key is read,
 //      a refusal is an error with no file, a sign-out in flight removes the file and drops the reply, a host that wrote nothing is an error.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { authedJSON, authedBytes, authedToFile, SignedOutError, HTTPError, bindNative, resetSession, resetSeam, setDemo, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError, HTTPError, bindNative, resetSession, resetSeam, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
 
 const KEY = 'test-key-0001-not-real';
 const KEY2 = 'test-key-0002-not-real';
@@ -155,21 +155,7 @@ describe('signed-in seam', () => {
   });
 });
 
-describe('review 2026-11-19: demo, generation, redirect, one read', () => {
-  test('D1 demo mode: zero fetches and zero native reads, whoever calls', async () => {
-    setDemo(true);
-    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
-    await expect(authedBytes('/api/x')).rejects.toBeInstanceOf(SignedOutError);
-    expect(calls.length).toBe(0); expect(reads.length).toBe(0);
-  });
-  test('D2 a source that says demo=true puts the seam in demo (app.ts answers every source that carries the flag)', async () => {
-    const { answer, DEMO_AT } = await import('./app.ts');
-    expect(Object.keys(DEMO_AT).length).toBeGreaterThan(10);
-    try { await answer('settingsAccount' as never, [true, true, 0] as never, undefined as never, undefined as never, native as never); } catch { /* the page's own business */ }
-    bindNative(native as never);
-    await expect(authedJSON('/api/x')).rejects.toBeInstanceOf(SignedOutError);
-    expect(calls.length).toBe(0);
-  });
+describe('review 2026-11-19: generation, redirect, one read', () => {
   test('N1 a source answered WITHOUT a usable native handle does not unbind the one that works (the signed-out screens of the first real run)', async () => {
     const { adoptNative } = await import('./api.ts');
     resetSeam(); adoptNative(native as never, 'paperFront');

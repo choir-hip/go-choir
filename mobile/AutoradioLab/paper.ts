@@ -8,8 +8,7 @@
 //    or with no saved list status "error" and no stories. A category that cannot be asked falls back to the front list filtered.
 //  - an empty front: status "empty" with the view's own line.
 //  - a story with no title or route is dropped; an unknown view id is a category of that name.
-// Time: the server's `Date` header is "now" (ranking, "Updated 2 h ago"); with none, the newest story's time. Demo mode (the
-// `demo` argument) reads the fixtures and dates the edition by its newest story.
+// Time: the server's `Date` header is "now" (ranking, "Updated 2 h ago"); with none, the newest story's time.
 
 import type { Storage } from './app.contract.d.ts';
 import { composition, compose, stack, type Band } from './paper-layout.ts';
@@ -18,19 +17,15 @@ import {
   type LiveSection, type Section, type Story,
 } from './paper-model.ts';
 import { getJSON, writeCurrent, accountGeneration } from './api.ts';
-import demoFront from './fixtures/demo/front.json';
-import demoBig from './fixtures/demo/front-big.json';
-import demoEven from './fixtures/demo/front-even.json';
-import demoThin from './fixtures/demo/front-thin.json';
 
 export const FRONT_PATH = '/api/platform/publications/front';
 /** The last good front list, kept for an offline start. */
 export const CACHE_FILE = 'app:/data/paper-front.json';
 
-export type PaperArgs = { view: string; edition: string; width: number; tick: number; focus: string; picks: string; demo: boolean };
+export type PaperArgs = { view: string; width: number; tick: number; focus: string; picks: string };
 
 export type PaperFront = {
-  status: string; message: string; edition: string; layout: string; composition: string; dateLine: string; updated: string; sectionId: string;
+  status: string; message: string; layout: string; composition: string; dateLine: string; updated: string; sectionId: string;
   sectionLabel: string; viewId: string; viewLabel: string; mineState: string; mineFrom: string; note: string; count: number;
   sections: Section[]; bands: Band[]; routes: string[]; titles: string[];
 };
@@ -44,10 +39,6 @@ const UNREACHABLE = 'Could not reach choir.news. Pull to try again.';
 // story ask nothing: one ask per list, never one per view change.
 const kept = new Map<string, Promise<Listing>>();
 let lastTick = 0;
-
-function demoBody(edition: string): unknown {
-  return edition === 'big' ? demoBig : edition === 'even' ? demoEven : edition === 'thin' ? demoThin : demoFront;
-}
 
 async function readCache(storage: Storage | undefined): Promise<unknown | null> {
   if (!storage) return null;
@@ -101,7 +92,7 @@ export function pickList(joined: string): string[] { return joined.split('\n').m
 
 /** The paper's front for one view. `stories` is the front list (newest first, as the server sends it). */
 export function composeFront(stories: Story[], o: {
-  view: string; picks: string[]; category: Story[] | null; live: LiveSection[]; width: number; now: number | null; edition: string; status: string; message: string;
+  view: string; picks: string[]; category: Story[] | null; live: LiveSection[]; width: number; now: number | null; status: string; message: string;
 }): PaperFront {
   const newest = (xs: Story[]): number | null => xs.reduce<number | null>((m, s) => (s.updated !== null && (m === null || s.updated > m) ? s.updated : m), null);
   const at = o.now ?? newest(stories) ?? 0;
@@ -127,7 +118,7 @@ export function composeFront(stories: Story[], o: {
   const st = stack(bands);
   const latest = newest(shown);
   return {
-    status: shown.length === 0 && o.status === 'ready' ? 'empty' : o.status, message: shown.length === 0 && o.message === '' ? empty : o.message, edition: o.edition,
+    status: shown.length === 0 && o.status === 'ready' ? 'empty' : o.status, message: shown.length === 0 && o.message === '' ? empty : o.message,
     layout: 'Autopaper default', composition: composition(bands), dateLine: dateLine(at), updated: latest === null ? '' : `Updated ${relative(latest, at)}`,
     sectionId, sectionLabel, viewId, viewLabel, mineState, mineFrom, note, count: shown.length, sections: secs, bands, routes: st.routes, titles: st.titles,
   };
@@ -138,11 +129,6 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
   const width = a.width >= 200 ? a.width : 393;
   if (a.tick !== lastTick) { kept.clear(); lastTick = a.tick; }
   const picks = view === MINE ? pickList(a.picks) : [];
-  if (a.demo) {
-    const body = demoBody(a.edition);
-    const stories = parseList(body);
-    return composeFront(stories, { view, picks, category: null, live: parseLiveSections(body), width, now: null, edition: a.edition, status: 'ready', message: '' });
-  }
   const r = await listing('', storage);
   let category: Story[] | null = null;
   if (isCategory(view)) {
@@ -151,7 +137,7 @@ export async function paperFront(a: PaperArgs, storage?: Storage): Promise<Paper
     const c = await listing(id, storage);
     if (c.status === 'ready') category = c.stories;
   }
-  return composeFront(r.stories, { view, picks, category, live: r.sections, width, now: r.serverTime, edition: a.edition, status: r.status, message: r.message });
+  return composeFront(r.stories, { view, picks, category, live: r.sections, width, now: r.serverTime, status: r.status, message: r.message });
 }
 
 /** Forget the kept lists (tests). */

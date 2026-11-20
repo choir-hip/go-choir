@@ -271,7 +271,6 @@ export class RunSheetStore {
     if (!theirs) return;
     this.adopt(theirs, theirs.sheet_epoch > 0 ? theirs.sheet_epoch : epoch);
   }
-  replaceForDemo(sheet: Sheet): void { this.sheet = sheet; this.pending = []; this.sheetEpoch = 0; void this.save(); this.onChange?.(); }
   /** Replace the local sheet with `theirs` (a GET, or a full `sheet` stream event) and remember its epoch; pending ops are applied again on top. */
   adopt(theirs: Sheet, epoch: number): void {
     let s = theirs;

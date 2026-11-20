@@ -156,10 +156,10 @@ final class TextureDocTests: XCTestCase {
 
     // 14: addresses
     func testAddresses() {
-        XCTAssertEqual(TextureAddress.parse("pub:demo-x/v3").kind, .publication)
-        XCTAssertEqual(TextureAddress.splitRoute("demo-x/v3").bare, "demo-x")
-        XCTAssertEqual(TextureAddress.splitRoute("demo-x/v3").version, 3)
-        XCTAssertEqual(TextureAddress.splitRoute("demo-x/vivid").version, 0)
+        XCTAssertEqual(TextureAddress.parse("pub:sample-x/v3").kind, .publication)
+        XCTAssertEqual(TextureAddress.splitRoute("sample-x/v3").bare, "sample-x")
+        XCTAssertEqual(TextureAddress.splitRoute("sample-x/v3").version, 3)
+        XCTAssertEqual(TextureAddress.splitRoute("sample-x/vivid").version, 0)
         let t = TextureAddress.parse("texture:doc1@rev7")
         XCTAssertEqual(t.doc, "doc1"); XCTAssertEqual(t.rev, "rev7")
         XCTAssertEqual(TextureAddress.parse("texture:@x").kind, .none)

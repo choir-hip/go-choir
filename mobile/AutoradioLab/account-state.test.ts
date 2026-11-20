@@ -2,12 +2,12 @@
 //  X1 no key (the Keychain said item-not-found) is signedOut, with the action and a sentence of what signing in gives; no handle at all (Android, web) is signedOut too.
 //  X2 an unreadable key (locked before the first unlock) is "locked": no sign-in prompt, no wipe; unreadable then readable ends signedIn with signedOut never shown in between.
 //  X3 a key the server refused (401) is "rejected" with "This phone's sign-in is no longer accepted. Sign in again." and the action; a new key (another digest) clears it.
-//  X4 a bridge error is not signed out (nothing is shown that could be wrong).   X5 demo mode is never signed out.
+//  X4 a bridge error is not signed out (nothing is shown that could be wrong).
 //  X6 the words are the app's one list (the page words say "Sign in", not "Sign in again", unless the app knows a key existed).
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { accountState, WORDS } from './account-state.ts';
 import { resetHost, hostMode } from './host.ts';
-import { adoptNative, resetSeam, setDemo, authedJSON } from './api.ts';
+import { adoptNative, resetSeam, authedJSON } from './api.ts';
 import { settleAccount, resetSettled, STAMP_FILE } from './account.ts';
 
 let reply: { state: string; found?: boolean; value?: string; throws?: boolean; throwsKey?: boolean } = { state: 'absent' };
@@ -25,7 +25,7 @@ describe('accountState', () => {
   test('X1 no key: signedOut with the action and a sentence; no handle: noSignIn', async () => {
     const s = await accountState('');
     expect(s).toMatchObject({ state: 'signedOut', action: 'signIn' }); expect(s.message).toBe(WORDS.signedOut); expect(WORDS.signedOut.length).toBeLessThan(60); expect(WORDS.signedOut).not.toContain('again');
-    resetSeam(); expect((await accountState('', '', false, 'none')).state).toBe('noSignIn');                 // no handle at all: no sign-in is possible here (no dead button)
+    resetSeam(); expect((await accountState('', '', 'none')).state).toBe('noSignIn');                 // no handle at all: no sign-in is possible here (no dead button)
   });
   test('X2 locked then readable: locked (no sign-in action), then signedIn; signedOut never appears; nothing is wiped', async () => {
     const seen: string[] = [];
@@ -56,7 +56,6 @@ describe('accountState', () => {
     const r = await accountState('', 'radio:'); expect(r).toMatchObject({ state: 'signedOut', action: 'signIn', message: WORDS.radioSignedOut });
     expect((await accountState('', 'paper:front')).message).toBe(WORDS.signedOut);
   });
-  test('X5 demo mode is never signed out', async () => { setDemo(true); expect((await accountState('')).state).toBe('signedIn'); });
   test('X6 the page words say "again" only when the key was refused', async () => {
     const { words } = await import('./mail-model.ts'); const files = await import('./files.ts'); const { SignedOutError } = await import('./api.ts');
     expect(words(new SignedOutError()).message).toBe('Sign in to read your mail.'); expect(words(new SignedOutError('the key was refused; sign in again', 'refused')).message).toBe('Sign in again to read your mail.');
@@ -88,17 +87,14 @@ describe('round 8 (seat 1 on 43200f9a7)', () => {
   });
   test('N1 no handle on a host with no native package is "noSignIn": no dead button, and it says what is true', async () => {
     resetSeam();
-    const s = await accountState('', 'paper:front', false, 'none');
+    const s = await accountState('', 'paper:front', 'none');
     expect(s).toMatchObject({ state: 'noSignIn', action: '' }); expect(s.message).toBe(WORDS.noSignIn);
   });
   test('U1 a signed-in cold launch never shows the sign-in card: with no handle and no host decision the answer is unknown (nothing rendered); the handle arrives and it is signedIn', async () => {
     resetSeam();
-    expect((await accountState('', 'radio:', false, '')).state).toBe('unknown');
+    expect((await accountState('', 'radio:', '')).state).toBe('unknown');
     reply = { state: 'present' }; adoptNative(handle(), 'late');
-    expect((await accountState('', 'radio:', false, 'native')).state).toBe('signedIn');
-  });
-  test('D1 a demo launch never shows the banner (accountState carries the demo flag)', async () => {
-    resetSeam(); const s = await accountState('', 'radio:', true, ''); expect(s).toMatchObject({ state: 'signedIn', message: '' });
+    expect((await accountState('', 'radio:', 'native')).state).toBe('signedIn');
   });
   test('R1 a later success with the same key clears "rejected"', async () => {
     reply = { state: 'present' };
@@ -123,17 +119,17 @@ describe('round 8b (seat 2)', () => {
   test('H1 a native handle that arrives after the host wait corrects the state with no navigation: noSignIn, then signedIn', async () => {
     resetSeam(); resetHost();
     expect(await hostMode(20, 10)).toBe('none');
-    expect((await accountState('', 'radio:', false, 'none')).state).toBe('noSignIn');
+    expect((await accountState('', 'radio:', 'none')).state).toBe('noSignIn');
     reply = { state: 'present' }; adoptNative(handle(), 'late');
     const m = await hostMode(20, 10);                                       // the contract asks the host fact again on its tick; a decided none re-checks without waiting
     expect(m).toBe('native');
-    expect((await accountState('', 'radio:', false, m)).state).toBe('signedIn');
+    expect((await accountState('', 'radio:', m)).state).toBe('signedIn');
   });
   test('F1 a refusal seen by a page shows the card at once: the 401 is recorded, and the next answer of the card is rejected with the action', async () => {
     reply = { state: 'present' };
     globalThis.fetch = (async () => new Response('no', { status: 401 })) as never;
     await authedJSON('/x').catch(() => undefined);
-    const v = await accountState('after-401', 'mail:', false, 'native');
+    const v = await accountState('after-401', 'mail:', 'native');
     expect(v).toMatchObject({ state: 'rejected', action: 'signIn' });
   });
   test('B1 a bridge that throws while the key is asked says unknown, never sign in', async () => {
@@ -144,10 +140,10 @@ describe('round 8b (seat 2)', () => {
   });
   test('X1b a late handle never shows a sign-in card first: undecided is unknown, and a "none" decision is the only way to noSignIn', async () => {
     resetSeam();
-    expect((await accountState('', 'paper:front', false, '')).state).toBe('unknown');
-    expect((await accountState('', 'paper:front', false, 'native')).state).toBe('unknown');      // native decided but its handle not bound yet: still nothing shown
+    expect((await accountState('', 'paper:front', '')).state).toBe('unknown');
+    expect((await accountState('', 'paper:front', 'native')).state).toBe('unknown');      // native decided but its handle not bound yet: still nothing shown
     reply = { state: 'absent' }; adoptNative(handle(), 'x');
-    expect((await accountState('', 'paper:front', false, 'native')).state).toBe('signedOut');
+    expect((await accountState('', 'paper:front', 'native')).state).toBe('signedOut');
   });
 });
 
@@ -159,19 +155,13 @@ describe('follow-up 2 (seat 2 on d237ff989)', () => {
     adoptNative(lateHandle(30), 'slow');
     expect(await hostMode(20, 400)).toBe('native');                 // the decided-none re-check has its own budget; it was 0 and lost to any real round trip
   });
-  test('D2 a demo launch never reads the key (it cannot say locked first)', async () => {
-    let keystateCalls = 0;
-    adoptNative({ available: true, later: async (r: { op: string }) => { if (r.op === 'keystate') keystateCalls++; return { state: 'unreadable' }; } } as never, 'x');
-    const v = await accountState('', 'radio:', true, 'native');
-    expect(v.state).toBe('signedIn'); expect(keystateCalls).toBe(0);
-  });
   test('Z1 the rejected digest is cleared by a later 200 with the same key, and the card is signedIn', async () => {
     reply = { state: 'present' };
     globalThis.fetch = (async () => new Response('no', { status: 401 })) as never;
     await authedJSON('/x').catch(() => undefined);
-    expect((await accountState('a', 'mail:', false, 'native')).state).toBe('rejected');
+    expect((await accountState('a', 'mail:', 'native')).state).toBe('rejected');
     globalThis.fetch = (async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })) as never;
     await authedJSON('/x');
-    expect((await accountState('b', 'mail:', false, 'native')).state).toBe('signedIn');
+    expect((await accountState('b', 'mail:', 'native')).state).toBe('signedIn');
   });
 });

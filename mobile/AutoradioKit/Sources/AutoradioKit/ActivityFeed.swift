@@ -6,7 +6,7 @@ import Foundation
 //                              subject:{doc_id, route_path}, tape_ref:{doc_id, revision_id}}}], head, seen_seq, unseen_major}
 //   the radio's turns          the lab's kept turns (what the listener asked and how it ended), from the engine
 //   now                        the radio's phase and the computer's state, from what the app already holds
-// Demo mode reads the fixture mobile/fixtures/demo/changelog.json. The changelog "seen" cursor (PUT /api/changelog/seen) is not
+// The changelog "seen" cursor (PUT /api/changelog/seen) is not
 // moved by this page yet.
 //
 // Ways it can fail (written before the code; tests in SettingsDataTests):
@@ -92,14 +92,6 @@ public struct ChoirActivityClient: ActivityClient {
     public func events() async throws -> [ActivityItem] {
         let r = try await ChoirEnvironment.shared.client().send("GET", "/api/changelog", query: ["limit": "50", "minor": "1"], route: "/api/changelog")
         return try ActivityParse.items(from: r.data)
-    }
-}
-
-public struct DemoActivityClient: ActivityClient {
-    public init() {}
-    public func events() async throws -> [ActivityItem] {
-        guard let d = Demo.fixture("changelog") else { throw ChoirError.decode("no demo fixture") }
-        return try ActivityParse.items(from: d)
     }
 }
 

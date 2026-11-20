@@ -123,14 +123,12 @@ public final class AutoradioModule: ExactPackage {
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
         runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState"], now: true) } }
-        // Demo mode first: the Choir environment then talks to the bundled fixtures, signed in as the demo listener.
-        if Demo.isOn { Demo.install() }
         // The listener path: sign-in (Keychain), the front page, the real stages.
-        let appKeys: KeyStore = Demo.isOn ? Demo.keys() : KeychainKeyStore()
-        Demo.clearLeftovers(support: support)   // a phone that was in demo mode: once
+        let appKeys: KeyStore = KeychainKeyStore()
+        Demo.clearLeftovers(support: support)   // a phone that was in demo mode (removed 2026-11-20): once
         #if targetEnvironment(simulator)
         // Real-data proof only (compiled out of device builds): a `proof-key` file in Documents becomes the stored key, then is deleted.
-        if !Demo.isOn, let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             ProofKey.importIfPresent(documents: docs, into: appKeys)
         }
         #endif

@@ -562,55 +562,6 @@ extension NSLock {
 
 // MARK: Backends
 
-/// The demo and the simulator proof: a scripted download and check (fixtures/demo/setup-script.json), with one stall and
-/// one failed check so those screens are proven. No network, no model, no microphone.
-public final class SimulatedSetupBackend: SetupBackend, @unchecked Sendable {
-    public struct Model: Codable, Sendable {
-        public var chunks: Int
-        public var stallAt: Int?
-        public var checkOK: Bool?
-        public var checkNote: String?
-        public var checkMs: Int?
-    }
-    public struct Script: Codable, Sendable {
-        public var tickMs: Int
-        public var stallSeconds: Double?
-        public var profile: DeviceProfile
-        public var models: [String: Model]
-        public var check: SetupCheck
-    }
-    public let script: Script
-    private let lock = NSLock()
-    private var stalledOnce = Set<String>()
-    public init(script: Script) { self.script = script }
-    public static func parse(_ data: Data) -> Script? { try? JSONDecoder().decode(Script.self, from: data) }
-
-    public func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
-        let m = script.models[c.id] ?? Model(chunks: 4)
-        let per = c.bytes / Int64(max(m.chunks, 1))
-        for k in 1...max(m.chunks, 1) {
-            try await Task.sleep(nanoseconds: UInt64(script.tickMs) * 1_000_000)
-            onBytes(per * Int64(k))
-            if let at = m.stallAt, k == at {
-                let first: Bool = lock.locked { stalledOnce.insert(c.id).inserted }
-                if first { while true { try await Task.sleep(nanoseconds: 1_000_000_000) } }     // silent stall until cancelled
-            }
-        }
-        onBytes(c.bytes)
-    }
-
-    public func check(_ c: SetupCandidate) async throws -> SetupCheck {
-        let m = script.models[c.id]
-        try await Task.sleep(nanoseconds: UInt64(m?.checkMs ?? 700) * 1_000_000)
-        var out = script.check
-        if c.isFloor { out.loadMs = 12; out.memoryMB = 0 }
-        if m?.checkOK == false { out.outputOK = false; out.note = m?.checkNote ?? "It did not pass its check on this phone." }
-        else { out.outputOK = true }
-        return out
-    }
-}
-
-
 /// The real downloader. Pinned models (the small language model) go through the one shared ModelStore: HTTP Range resume and a
 /// SHA-256 check against the pinned digest. Library-managed models (FluidAudio's Core ML bundles) are fetched, checksummed and
 /// compiled by the app module's `ModelProvider`, which also runs the on-device check. With no provider installed (a build that

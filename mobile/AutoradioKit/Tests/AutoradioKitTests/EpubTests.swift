@@ -1,11 +1,11 @@
 import XCTest
 @testable import AutoradioKit
 
-// The Epub reader (Kit/Epub.swift) stays with the Reader's shelf (books are not moved yet). Its demo book is the invented one in
-// fixtures/files-demo/tree.json, which the shared Files code also carries.
-private func demoData(_ key: String) -> Data {
+// The Epub reader (Kit/Epub.swift) stays with the Reader's shelf (books are not moved yet). Its sample book is the invented one in
+// fixtures/files/sample-tree.json (made by scripts/make-files-fixtures.py).
+private func sampleData(_ key: String) -> Data {
     let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("fixtures/files-demo/tree.json")
+        .appendingPathComponent("fixtures/files/sample-tree.json")
     let tree = try! JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: String]
     return Data(base64Encoded: tree[key]!, options: .ignoreUnknownCharacters)!
 }
@@ -45,8 +45,8 @@ private func opf(_ spine: String, items: String) -> String {
 
 
 final class EpubTests: XCTestCase {
-    func testDemoBook() throws {
-        let book = try Epub.parse(data: demoData("Books/The Lantern Keeper.epub"))
+    func testSampleBook() throws {
+        let book = try Epub.parse(data: sampleData("Books/The Lantern Keeper.epub"))
         XCTAssertEqual(book.title, "The Lantern Keeper")
         XCTAssertEqual(book.author, "A. Ferris (invented)")
         XCTAssertEqual(book.chapters.map(\.title), ["The lamp on the point", "Three visitors", "What the sea said"], "the nav document is not a chapter")
@@ -66,7 +66,7 @@ final class EpubTests: XCTestCase {
     func testBrokenZips() throws {
         XCTAssertThrowsError(try Epub.parse(data: Data("hello".utf8))) { XCTAssertEqual($0 as? EpubError, .notAZip) }
         XCTAssertThrowsError(try Epub.parse(data: Data(repeating: 0, count: 100)))
-        let good = demoData("Books/The Lantern Keeper.epub")
+        let good = sampleData("Books/The Lantern Keeper.epub")
         XCTAssertThrowsError(try Epub.parse(data: good.prefix(good.count / 2)))
         XCTAssertThrowsError(try Epub.parse(data: good.prefix(200)))
         // Flip a byte inside the container file's data: inflate or the CRC catches it.

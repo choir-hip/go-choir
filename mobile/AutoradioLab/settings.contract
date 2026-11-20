@@ -8,11 +8,11 @@
 //   settings:about                app and server builds
 // testIds: settings-theme-<id>, settings-mode-<light|dark|system>, settings-components, settings-theme-problems,
 //   settings-nav-<screen>, settings-back, settings-theme-doc, settings-theme-load,
-//   settings-theme-demo-texture, settings-theme-status, settings-theme-remove-<id>, settings-signout, settings-account-*,
+//   settings-theme-status, settings-theme-remove-<id>, settings-signout, settings-account-*,
 //   settings-choice-<setting>-<option>, settings-wake, settings-update, settings-computer-*, settings-learned-reset, settings-learned-row,
 //   settings-about-*, settings-voice-components.
 // Every colour, face, radius and shadow is a theme token (th.*, tx.*); a theme's own preview card paints from the card's data.
-use Theme, ThemeList, DemoInfo, ThemeCard, ThemeExtras, SettingsComputer, LearnedInfo, AboutInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
+use Theme, ThemeList, ThemeCard, ThemeExtras, SettingsComputer, LearnedInfo, AboutInfo, ThemeCards, ChoirAuth, VoiceProfile from "@choir/autoradio"
 use SettingsAccount from "./settings-types.contract"
 use AccountView from "./account-state-types.contract"
 use ToolScroll, Card, Btn, SegmentedTrack, SegmentFace, SelectMark, RowRule, PlainList, dyn from "./ui.contract"
@@ -200,8 +200,6 @@ component RootScreen
     tc: ThemeCards
     acctInfo: SettingsAccount
     cmpt: SettingsComputer
-    devDetails: bool
-    toggleDevDetails: action
     voicep: VoiceProfile
     learnVoice: action
     forgetVoice: action
@@ -251,13 +249,6 @@ component RootScreen
       SectionLabel(label="About")
       PlainList(testId="settings-card-about")
         NavRow(address="settings:about", title="About", subtitle="Builds and server", testId="settings-nav-about")
-      SectionLabel(label="Developer")
-      PlainList(testId="settings-card-developer")
-        button press=toggleDevDetails testId="settings-dev-details" appearance="none" width="100%" box-sizing="border-box" padding="14px 0px"
-          column align-items="flex-start" gap=2 width="100%"
-            text (devDetails ? "Demo controls are shown" : "Demo controls are hidden") font-family=th.fontHead font-size="-exact-body" font-weight=600 color=th.fg
-            text "The paper's editions and composition line, mail's demo states and the reader's demo menu (demo mode only)." font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted
-
 // ---------------------------------------------------------------- appearance
 
 component AppearanceScreen
@@ -265,11 +256,9 @@ component AppearanceScreen
     th: Theme
     tx: ThemeExtras
     tc: ThemeCards
-    dm: DemoInfo
     themeDoc: string
     editThemeDoc: action
     loadThemeDoc: action
-    loadDemoTheme: action
   view
     ToolScroll(id="settings")
       ScreenTitle(label="Appearance", back=true)
@@ -290,9 +279,6 @@ component AppearanceScreen
               RowRule(indent=0)
             button press=loadThemeDoc testId="settings-theme-load" appearance="none"
               Btn(label="Add", primary=false, wide=false)
-          if dm.on
-            button press=loadDemoTheme testId="settings-theme-demo-texture" appearance="none"
-              Btn(label="Add the demo theme Texture", primary=false, wide=false)
           if tc.status != ""
             text tc.status testId="settings-theme-status" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.fg
       SectionLabel(label="Type")
@@ -461,5 +447,3 @@ component AboutScreen
           FactRow(label="Server build", value=(about.server == "" ? "-" : about.server), mono=true, testId="settings-about-server")
           Hairline()
           FactRow(label="Server", value=(about.base == "" ? "-" : about.base), mono=true, testId="settings-about-base")
-          Hairline()
-          FactRow(label="Mode", value=(about.demo ? "Demo fixtures" : "Live"), mono=false, testId="settings-about-mode")

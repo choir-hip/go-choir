@@ -573,7 +573,7 @@ animation research.
   `kSecAttrAccessible` class on the Mac. **[unrun]** whether an ad hoc signed app can write the login keychain without a prompt.
 - **Files and the Reader:** the picker is Exact's `input type="file"` (the host opens `NSOpenPanel` on the Mac); PDFKit and ImageIO are
   present on macOS. The Reader's web view is our `WebPageView` (`WKWebView`; `drawsBackground` is false on the Mac).
-- **Proof:** `mobile/scripts/proof-mac.sh` drives the Mac app through `agent macos` and prints what a person must check by ear.
+- **Proof:** The Mac proof script (`proof-mac.sh`) was deleted with demo mode on 2026-11-20; a Mac app proof is to be rewritten on real data when the Mac app starts.
 
 ### Apple privacy manifests (required-reason APIs) at this pin
 

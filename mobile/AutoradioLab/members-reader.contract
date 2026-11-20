@@ -33,7 +33,7 @@ members Autoradio
   state webHost = ""
   state webFor = ""
   state webBusy = false
-  // Experiments, offered in the page menu in demo mode: the side note that text flows around (textflow), and the document
+  // Experiments (no control in the page menu reaches them now): the side note that text flows around (textflow), and the document
   // drawn as one Markdown text with citations as atom pills.
   state sideNotes = false
   state mdMode = false
@@ -90,8 +90,4 @@ members Autoradio
     send rext = readerOpenExternal(url=u)
   action shareDoc
     share(title=rdoc.title, text=rdoc.plain, url=(rdoc.permalink == "" ? "" : `https://choir.news/${rdoc.permalink}`))
-    sheet = ""
-  // Demo only: pretend the radio reads the second sentence of the first paragraph that has one.
-  action demoFollow(address: string, spoken: string)
-    send rfollowm = readerFollowSet(address=address, spoken=spoken)
     sheet = ""

@@ -1,6 +1,6 @@
 # The owner's iPhone was stuck in demo mode (2026-11-20)
 
-Status: repaired in code, not yet seen on the phone. Class: orange.
+Status: demo mode deleted from the product (station D2); the leftover cleanup is the one part kept; not yet seen on the phone. Class: orange.
 
 ## Problem
 
@@ -40,4 +40,26 @@ topics and voice setup. The Keychain is never touched.
   same reason.
 - Demo addresses are recognised by the `demo-` prefix after the scheme; a
   demo address of another shape would stay.
-- A later station deletes demo mode from the product.
+- (done, below) A later station deletes demo mode from the product.
+
+## What was removed (station D2, 2026-11-20)
+
+The owner: "what is demo mode? i think we can get rid of that. i never asked for that."
+
+- Native: `Demo.swift` (the flag, `install`, the key store, the run sheet affordance, `DemoURLProtocol`), `DemoFixtures.generated.swift`,
+  `DemoStretch.swift`, `TakesDemo.swift`, `TextureDemo`, `DemoComputerClient`, `DemoActivityClient`, `DemoThemeSource`, `DemoEditionWriter`,
+  `DemoTakeRecorder` and `DemoTakeTranscriber`, the learned seed, `StoryTopics.demoMap`, `Places.demoExtra`, `ReaderSample` (now a test fixture),
+  `SimulatedSetupBackend` (now a test double), every `Demo.isOn` branch (module, books, cards, onboarding, settings, takes, voice, spine,
+  `CredentialReader`, `ContentSync`, `ModelsEntry`), the `demoInfo` and `onboardingDemoSay` interface names, `AboutInfo.demo` and `Onboarding.demo`.
+  Kept: `DemoLeftovers.swift` (`Demo.clearLeftovers`, once per device) with its tests.
+- Shared code: the demo backends of files, mail, paper, settings and activity, the `demo` argument of every source, `dm` in the contracts, the Developer
+  row and the controls it showed (paper editions and Composition line, mail demo states, the reader's demo menu, the demo theme button, the onboarding
+  demo line, Settings > About "Mode"), `AliveWait`'s demo script.
+- Proofs: `proof-sim`, `proof-lane1` to `9`, `proof-mac`, `proof-default-themes`, `proof-app` and the demo tours (`fixtures/tours`, `fixtures/radio-page`)
+  are deleted; `proof-real.sh` gained the spine, About, Activity and Mail folder checks. The table of what moved and what was lost is in the landing report.
+- Fixtures: `mobile/fixtures/demo` is gone; the data tests still read moved to `fixtures/paper/day-*.json`, `fixtures/activity/changelog.json`,
+  `fixtures/files/sample-tree.json`, `fixtures/texture/story-*.json` and `fixtures/texture/theme-ember.json` (ids renamed from `demo-` to `sample-`).
+- Boundary ceiling: 101 files, 22,036 lines, 104 names, now 98, 19,386, 102.
+
+Remaining error: reader experiments (side notes, Markdown atom pills) stay in the contract with no control that reaches them; the cleanup still cannot tell
+real onboarding files from demo ones when a key is stored.

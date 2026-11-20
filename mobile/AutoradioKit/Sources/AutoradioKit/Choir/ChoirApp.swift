@@ -201,11 +201,6 @@ public final class ChoirApp: @unchecked Sendable {
             RunSheetStore.shared.poster = RouteSheetPoster(baseURL: me.signIn.baseURL)
             Deck.shared.boot()                             // an item the kill left open is closed in the journal first
             RunSheetStore.shared.restore(journal: Deck.shared.journal)       // the pending ops of the last launch; nothing plays
-            if let name = Demo.sheetName, let sheet = Demo.runSheet(name) {          // demo test affordance (Demo.sheetKey): a tour's own run sheet
-                RunSheetStore.shared.replaceForDemo(sheet)
-                Station.shared.holdForDemoSheet = true
-                p.aheadChanged = nil
-            }
             Station.shared.startDJ = { [weak me] in await me?.startRadio() }       // the entry Play uses
         }
         runtime.player.onTransport = { cmd in

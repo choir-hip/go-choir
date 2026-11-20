@@ -248,9 +248,16 @@ final class EditionCompletionTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(t0), 5, "it did not wait for the writer")
     }
 
-    func testTheDemoWriterFailsOnceThenSucceeds() async {
-        var e = LocalEditionWriter.edition(topics: []); e.failFirst = true; e.writingLines = []
-        let w = DemoEditionWriter(edition: e, tickMs: 1)
+    func testAWriterThatFailsOnceThenSucceedsRecoversOnRetry() async {
+        final class FailOnce: EditionWriter, @unchecked Sendable {
+            let lock = NSLock(); var failed = false
+            func write(topics: [String], progress: @escaping @Sendable (String) -> Void) async throws -> Edition {
+                lock.lock(); let first = !failed; failed = true; lock.unlock()
+                if first { throw EditionError.failed("The desk did not answer.") }
+                return LocalEditionWriter.edition(topics: topics)
+            }
+        }
+        let w = FailOnce()
         let a = await EditionCompletion.run(topics: ["Film"], writer: w) { _ in }
         XCTAssertEqual(a, .failed(EditionCompletion.failedLine))
         let b = await EditionCompletion.run(topics: ["Film"], writer: w) { _ in }

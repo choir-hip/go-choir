@@ -39,9 +39,9 @@ import Foundation
     init(module: AutoradioModule) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("takes", isDirectory: true)
         let make: @Sendable () -> Transcriber = { SFSpeechTranscriber(StageParams([:])) }
-        session = TakeSession(recorder: Demo.isOn ? DemoTakeRecorder() : AVTakeRecorder(), transcriber: Demo.isOn ? DemoTakeTranscriber() : FileTranscriber(make: make), gate: TakeGate(module), preview: preview,
+        session = TakeSession(recorder: AVTakeRecorder(), transcriber: FileTranscriber(make: make), gate: TakeGate(module), preview: preview,
                               client: { [weak module] in module == nil ? nil : TakesClient(client: ChoirEnvironment.shared.client()) },
-                              micAllowed: { Demo.isOn || LiveAudio.micPermissionGranted() ? true : await LiveAudio.requestMicPermission() },
+                              micAllowed: { LiveAudio.micPermissionGranted() ? true : await LiveAudio.requestMicPermission() },
                               responds: { TakeResponds.from(entry: RunSheetPlayer.shared.store.onAir()) }, own: .shared, dir: dir)
         preview.onEnd = { [weak self] in self?.session.previewEnded() }
         session.onChange = { [weak self, weak module] in

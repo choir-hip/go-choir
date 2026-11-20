@@ -27,12 +27,11 @@ final class SettingsLane: @unchecked Sendable {
 
 extension AutoradioModule {
     func registerSettings() {
-        let demo = Demo.isOn
-        let computer = ComputerModel(client: demo ? DemoComputerClient() : ChoirComputerClient())
-        let activity = ActivityModel(client: demo ? DemoActivityClient() : ChoirActivityClient())
+        let computer = ComputerModel(client: ChoirComputerClient())
+        let activity = ActivityModel(client: ChoirActivityClient())
         let lane = SettingsLane(computer: computer, activity: activity,
-                                themeSource: demo ? DemoThemeSource() : ChoirThemeSource(),
-                                learned: PreferencesLearned(prefs: { CardsState.shared.prefs }, demoSeed: demo))
+                                themeSource: ChoirThemeSource(),
+                                learned: PreferencesLearned(prefs: { CardsState.shared.prefs }))
         computer.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["settingsComputer", "activityInfo"]) } }
         activity.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["activityInfo"]) } }
         activity.signedIn = { [choir] in choir?.authView().signedIn ?? false }
@@ -137,9 +136,9 @@ extension AutoradioModule {
         // ---- about
         handle("aboutInfo") { [unowned self] _, reply in
             let info = Bundle.main.infoDictionary ?? [:]
-            if lane.server.isEmpty, !demo { Task { [weak self] in await self?.readServerBuild(lane) } }
+            if lane.server.isEmpty { Task { [weak self] in await self?.readServerBuild(lane) } }
             reply(["app": (info["CFBundleShortVersionString"] as? String) ?? "dev", "build": (info["CFBundleVersion"] as? String) ?? "",
-                   "server": demo ? "demo fixtures" : lane.server, "base": choir.signIn.baseURL, "demo": demo, "signedIn": choir.authView().signedIn])
+                   "server": lane.server, "base": choir.signIn.baseURL, "signedIn": choir.authView().signedIn])
         }
     }
 

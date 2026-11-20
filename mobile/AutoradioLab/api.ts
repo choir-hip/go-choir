@@ -117,13 +117,6 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
   return { key: r.value, computerId: typeof r.computerId === 'string' ? r.computerId : '' };
 }
 
-// DEMO MODE (review 2026-11-19, finding 1). In demo mode no signed-in request is ever made and the stored credential is never read: the seam
-// refuses HERE, before any native read or fetch, whatever the caller. app.ts tells the seam the flag from every source that carries it. Demo
-// is chosen at launch (relaunch to change), so once a source has said so the seam stays in demo until the process ends. The native reader
-// also answers "not found" in demo (CredentialReader.swift), for the sources that carry no flag.
-let demoOn = false;
-export function setDemo(on: boolean): void { if (on) demoOn = true; }
-export const isDemo = (): boolean => demoOn;
 
 // ACCOUNT GENERATION (finding 5). Bumped by sign-out before the wipes. A reply that started under an older generation is dropped as signed out,
 // so a request in flight at sign-out can never write the old account's data back into a store the wipe just emptied.
@@ -194,7 +187,6 @@ function scrub(text: string, key: string): string { return key ? text.split(key)
 
 async function send(path: string, opts: Authed, accept: string, extra: Record<string, unknown> = {}): Promise<{ r: Response; key: string }> {
   if (!plainPath(path)) throw new Error('refused: a signed-in path is a plain absolute path on the server');
-  if (demoOn) throw new SignedOutError('demo mode makes no signed-in request');
   const sess = await keptSession();
   if (!sess) throw new SignedOutError('not signed in', await noSessionReason());
   const key = sess.key;
@@ -304,10 +296,10 @@ export async function authedToFile(path: string, dest: string, storage: Storage 
 
 export type KeyState = 'present' | 'absent' | 'unreadable';
 /** The stored sign-in key as THREE answers (review 2026-11-19, auth round 2): `present` (with the SHA-256 of the key), `absent` (the Keychain answered item-not-found) or
- * `unreadable` (locked before the first unlock, any other status, no native module, demo mode, a bridge error). Read only. `unreadable` is never "signed out". */
+ * `unreadable` (locked before the first unlock, any other status, no native module, a bridge error). Read only. `unreadable` is never "signed out". */
 export async function keyState(): Promise<{ state: KeyState; digest: string; error?: boolean }> {
   const none = { state: 'unreadable' as KeyState, digest: '' };
-  if (demoOn || !reader || reader.available === false) return none;
+  if (!reader || reader.available === false) return none;
   try {
     const r = (await reader.later({ op: 'keystate' })) as { state?: unknown; found?: unknown } | null;
     if (r && typeof r.state === 'string') nativeAnswered = true;
@@ -320,8 +312,8 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
 
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
-/** For tests: leave demo mode and the generation as a fresh process has them. */
-export function resetSeam(): void { resetSession(); demoOn = false; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
+/** For tests: the generation and the rest as a fresh process has them. */
+export function resetSeam(): void { resetSession(); generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

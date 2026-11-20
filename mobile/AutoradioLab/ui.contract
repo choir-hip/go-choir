@@ -15,7 +15,7 @@ fn dyn(px: number): string = `${px / 17}rem`
 fn lastPart(address: string): string = address.split("/").filter(p => p != "").slice(0 - 1).join("").split("@").slice(0, 1).join("")
 fn sentence(s: string): string = `${s.slice(0, 1).toUpperCase()}${s.slice(1)}`
 fn plainWords(s: string): string = s.replaceAll("-", " ").replaceAll("_", " ")
-// A title made from the slug of an address: dashes to spaces, sentence case ("demo-grid-storage" is "Demo grid storage").
+// A title made from the slug of an address: dashes to spaces, sentence case ("grid-storage" is "Grid storage").
 fn slugTitle(address: string): string = sentence(plainWords(lastPart(address.includes(":") ? address.slice(address.indexOf(":") + 1) : address)))
 fn rawTitle(t: string, a: string): bool = t == "" or t.startsWith("doc:") or t == a or t.startsWith("/") or t.includes(":/") or t.includes("/pub/") or t.startsWith("pub:") or t.startsWith("texture:") or t.startsWith("file:") or t.startsWith("mail:") or t.startsWith("mailbox:") or t.startsWith("podcast:") or t.startsWith("podcasts:") or (t.includes(" ") == false and (t.includes("-") or t.includes("_")))
 // The title to show: the page's own when it is a real one, else one made from the slug until the real one loads.

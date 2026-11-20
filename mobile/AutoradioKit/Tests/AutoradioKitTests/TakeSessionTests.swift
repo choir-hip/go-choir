@@ -260,16 +260,3 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         XCTAssertEqual(o.source, "voice-3fa2c1"); XCTAssertTrue(o.canWhy); XCTAssertTrue(o.forecast.contains("60 in 100"))
     }
 }
-
-/// The demo routes answer the whole take path from fixtures (the tour's server).
-final class TakesDemoTests: XCTestCase {
-    func testDemoPublishListDelete() throws {
-        let pub = TakesDemo.answer(method: "POST", path: "/api/platform/takes", body: Data("--B\r\nContent-Disposition: form-data; name=\"transcript\"\r\n\r\nhello demo\r\n--B--".utf8))
-        XCTAssertEqual(pub?.0, 201)
-        let id = try XCTUnwrap(((try JSONSerialization.jsonObject(with: try XCTUnwrap(pub).1)) as? [String: Any])?["take_id"] as? String)
-        let mine = try JSONSerialization.jsonObject(with: try XCTUnwrap(TakesDemo.answer(method: "GET", path: "/api/platform/takes?mine", body: Data())).1) as? [String: Any]
-        XCTAssertTrue((mine?["takes"] as? [[String: Any]])?.contains { $0["transcript"] as? String == "hello demo" && $0["state"] as? String == "live" } ?? false)
-        _ = TakesDemo.answer(method: "DELETE", path: "/api/platform/takes/\(id)", body: Data())
-        XCTAssertFalse(String(decoding: try XCTUnwrap(TakesDemo.answer(method: "GET", path: "/api/platform/takes?mine", body: Data())).1, as: UTF8.self).contains(id))
-    }
-}

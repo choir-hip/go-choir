@@ -252,7 +252,7 @@ public extension ContentSync {
     nonisolated(unsafe) static var enabled = false
     nonisolated(unsafe) static var kicked: Task<[SyncReport], Never>?
     static func kick() {
-        guard enabled, !Demo.isOn, ContentStore.shared.usable else { return }
+        guard enabled, ContentStore.shared.usable else { return }
         kicked = Task.detached(priority: .utility) { await ContentSync.shared.syncAll() }
     }
     /// What sign-out does: the store, the index and the kept answers go with the account.

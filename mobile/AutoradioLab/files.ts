@@ -10,7 +10,6 @@
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
 import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
-import demoTree from './fixtures/files-demo/tree.json';
 import * as M from './files-model.ts';
 import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
 
@@ -77,81 +76,6 @@ function choirBackend(net: Net): Backend {
   };
 }
 
-const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-export function fromBase64(s: string): Uint8Array {
-  const clean = s.replace(/[^A-Za-z0-9+/]/g, '');
-  const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
-  let o = 0;
-  for (let i = 0; i < clean.length; i += 4) {
-    const a = B64.indexOf(clean[i]), b = B64.indexOf(clean[i + 1]), c = i + 2 < clean.length ? B64.indexOf(clean[i + 2]) : -1, d = i + 3 < clean.length ? B64.indexOf(clean[i + 3]) : -1;
-    out[o++] = (a << 2) | (b >> 4);
-    if (c >= 0 && o < out.length) out[o++] = ((b & 15) << 4) | (c >> 2);
-    if (d >= 0 && o < out.length) out[o++] = ((c & 3) << 6) | d;
-  }
-  return out;
-}
-
-/** Demo mode: a small tree of invented files held in memory so new folders, deletes and renames can be seen working. Fixed times, relative to the clock
- * it is given, so "Today" and "Yesterday" appear. */
-type Node = { isDir: boolean; data: Uint8Array; modified: number };
-let demoNodes: Map<string, Node> | null = null;
-const DEMO_AGES: Record<string, number> = {
-  'Books/The Lantern Keeper.epub': 20, 'Documents/Council minutes.pdf': 1, 'Documents/Budget 2026.csv': 3, 'Documents/Harbor notes.md': 0, 'Documents/Key list.txt': 40,
-  'Documents/Lamps.swift': 9, 'Documents/Survey readings.dat': 12, 'Pictures/Harbor test card.png': 5, 'Media/Tone 440.wav': 7, 'Media/Pattern.mp4': 8,
-};
-function demoBackend(now: number): Backend {
-  if (!demoNodes) {
-    const nodes = new Map<string, Node>();
-    const day = (n: number) => now - n * 86_400_000;
-    nodes.set('/', { isDir: true, data: new Uint8Array(), modified: day(0) });
-    for (const [k, b64] of Object.entries(demoTree as Record<string, string>)) {
-      const path = '/' + k;
-      for (let d = M.parent(path); d !== '/'; d = M.parent(d)) if (!nodes.has(d)) nodes.set(d, { isDir: true, data: new Uint8Array(), modified: day(2) });
-      nodes.set(path, { isDir: false, data: fromBase64(b64), modified: day(DEMO_AGES[k] ?? 10) });
-    }
-    nodes.set('/Documents/Drafts', { isDir: true, data: new Uint8Array(), modified: day(4) });
-    nodes.set('/Readme.txt', { isDir: false, data: new TextEncoder().encode('Demo files for Autoradio. Everything here is invented.\n'), modified: day(30) });
-    demoNodes = nodes;
-  }
-  const nodes = demoNodes;
-  return {
-    async list(path) {
-      const n = nodes.get(path);
-      if (!n) throw new FilesError('notFound', 'That file is not there any more.');
-      if (!n.isDir) throw new FilesError('notADirectory', 'That is a file, not a folder.');
-      const entries = [...nodes].filter(([k]) => k !== '/' && M.parent(k) === path).map(([k, v]): Entry => ({ name: M.nameOf(k), path: k, isDirectory: v.isDir, size: v.data.length, modified: v.modified }));
-      return { entries, now };
-    },
-    async fetch(path) { const n = nodes.get(path); if (!n || n.isDir) throw new FilesError('notFound', 'That file is not there any more.'); return n.data; },
-    async download(path, dest, storage) {
-      const n = nodes.get(path); if (!n || n.isDir) throw new FilesError('notFound', 'That file is not there any more.');
-      await storage.fs.writeFile(dest, n.data); return n.data.length;
-    },
-    async put(path, bytes) {
-      if (nodes.get(M.parent(path))?.isDir !== true) throw new FilesError('notFound', 'That file is not there any more.');
-      if (nodes.get(path)?.isDir) throw new FilesError('exists', 'Something with that name is already there.');
-      nodes.set(path, { isDir: false, data: bytes, modified: now });
-    },
-    async mkdir(path) {
-      if (nodes.get(M.parent(path))?.isDir !== true) throw new FilesError('notFound', 'That file is not there any more.');
-      if (nodes.has(path)) throw new FilesError('exists', 'Something with that name is already there.');
-      nodes.set(path, { isDir: true, data: new Uint8Array(), modified: now });
-    },
-    async remove(path) {
-      if (path === '/' || !nodes.has(path)) throw new FilesError('notFound', 'That file is not there any more.');
-      for (const k of [...nodes.keys()]) if (k === path || k.startsWith(path + '/')) nodes.delete(k);
-    },
-    async move(from, to) {
-      const n = nodes.get(from);
-      if (!n || from === '/') throw new FilesError('notFound', 'That file is not there any more.');
-      if (n.isDir) throw new FilesError('unsupported', 'Folders cannot be renamed here yet.');
-      if (nodes.has(to)) throw new FilesError('exists', 'Something with that name is already there.');
-      if (nodes.get(M.parent(to))?.isDir !== true) throw new FilesError('notFound', 'That file is not there any more.');
-      nodes.set(to, n); nodes.delete(from);
-    },
-  };
-}
-
 // ---------------------------------------------------------------- state between answers (cleared by forget())
 
 type Recent = { path: string; size: number; modified: number | null; openedAt: number };
@@ -159,7 +83,7 @@ let recents: Recent[] | null = null;
 let lastNow = 0;
 const resolved = new Map<string, Promise<FileResolved>>();
 
-export function forget(): void { recents = null; lastNow = 0; resolved.clear(); demoNodes = null; }
+export function forget(): void { recents = null; lastNow = 0; resolved.clear(); }
 
 /** Sign-out (account.ts): the recent list, every cached file and the pickers' copies, and what this session holds. Never throws. */
 export async function wipeFiles(storage: Storage | undefined): Promise<void> {
@@ -201,8 +125,7 @@ async function renameRecent(storage: Storage | undefined, from: string, to: stri
 
 // ---------------------------------------------------------------- the listing
 
-export type Args = { demo: boolean };
-export type ListArgs = Args & { path: string; mode: string; sort: string; desc: boolean; query: string };
+export type ListArgs = { path: string; mode: string; sort: string; desc: boolean; query: string };
 
 function build(path: string, mode: string, sort: M.SortKey, desc: boolean, query: string, entries: Entry[], now: number, places: Record<string, string> = {}, status?: string, message = ''): FileListing {
   const rows = entries.map((e) => M.rowOf(e, now, places[e.path] ?? ''));
@@ -215,14 +138,14 @@ function build(path: string, mode: string, sort: M.SortKey, desc: boolean, query
   };
 }
 
-const makeBackend = (demo: boolean, net: Net): Backend => (demo ? demoBackend(lastNow || 1_700_000_000_000) : choirBackend(net));
+const makeBackend = (net: Net): Backend => choirBackend(net);
 const noteNow = (n: number | null): number => { if (n !== null) lastNow = n; return lastNow; };
 
 export async function fileList(a: ListArgs, storage?: Storage, net: Net = realNet): Promise<FileListing> {
   const sort = M.sortKey(a.sort);
   const path = M.normalize(a.path) ?? '/';
   const q = a.query.trim();
-  const backend = makeBackend(a.demo, net);
+  const backend = makeBackend(net);
   try {
     if (q !== '') return await search(backend, path, q, sort, a.desc);
     if (a.mode === 'recent') {
@@ -279,7 +202,7 @@ function infoOf(e: Entry, status: string, message = ''): FileInfo {
   };
 }
 
-export type OpenArgs = Args & { address: string };
+export type OpenArgs = { address: string };
 
 /** Open the file a `file:` address names: find it in its folder, bring what its viewer needs, and for a file another page reads, ask the computer to open it. */
 export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNet): Promise<FileInfo> {
@@ -287,7 +210,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
   const parsed = M.fromAddress(a.address);
   if (!a.address.startsWith('file:') || a.address.endsWith('/') || !parsed) return { ...M.emptyInfo(), address: a.address };
   const { path } = parsed;
-  const backend = makeBackend(a.demo, net);
+  const backend = makeBackend(net);
   let entry: Entry | null;
   try {
     entry = await entryAt(backend, path);
@@ -305,7 +228,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
   const out = infoOf(entry, 'ready');
   if (kind === 'other') { await touch(storage, entry, lastNow, gen); return out; }
   if (M.opensElsewhere(kind)) {
-    const r = await resolveEntry(entry, a.demo, storage, net);
+    const r = await resolveEntry(entry, storage, net);
     out.target = r.target; out.status = r.status === 'ready' ? 'ready' : 'error'; out.message = r.message;
     return out;
   }
@@ -372,20 +295,19 @@ export function imageSize(b: Uint8Array): [number, number] {
 
 /** Ask the listener's computer to open the file as a Texture document (decision D4: it reads a PDF's or an e-book's text itself); the answer's `target` is the
  * `texture:` page to open. One ask per file version, shared by every caller; a failure is not kept, so a second open asks again. */
-function resolveEntry(entry: Entry, demo: boolean, storage: Storage | undefined, net: Net): Promise<FileResolved> {
+function resolveEntry(entry: Entry, storage: Storage | undefined, net: Net): Promise<FileResolved> {
   const key = `${entry.path}|${entry.size}|${entry.modified ?? ''}`;
   const held = resolved.get(key);
   if (held) return held;
-  const p = doResolve(entry, demo, storage, net).then((r) => { if (r.status !== 'ready') resolved.delete(key); return r; });
+  const p = doResolve(entry, storage, net).then((r) => { if (r.status !== 'ready') resolved.delete(key); return r; });
   resolved.set(key, p);
   return p;
 }
 
-async function doResolve(entry: Entry, demo: boolean, storage: Storage | undefined, net: Net): Promise<FileResolved> {
+async function doResolve(entry: Entry, storage: Storage | undefined, net: Net): Promise<FileResolved> {
   const gen = accountGeneration();
   const address = M.addressOf(entry.path, false);
   const fail = (message: string): FileResolved => ({ address, target: '', title: entry.name, status: 'error', message: `${entry.name} could not be opened. ${message} Tap the file to try again.` });
-  if (demo) return fail('Demo files open as documents only on a signed-in phone.');
   const kind = M.kindOf(entry.name, false);
   try {
     let text = '';
@@ -404,17 +326,17 @@ async function doResolve(entry: Entry, demo: boolean, storage: Storage | undefin
   }
 }
 
-export type ResolveArgs = Args & { address: string; title: string };
+export type ResolveArgs = { address: string; title: string };
 export async function fileResolve(a: ResolveArgs, storage?: Storage, net: Net = realNet): Promise<FileResolved> {
   const parsed = M.fromAddress(a.address);
   if (!parsed || parsed.isDirectory) return { ...M.emptyResolved(), address: a.address, status: 'error', message: 'That is not a file address.' };
-  const backend = makeBackend(a.demo, net);
+  const backend = makeBackend(net);
   const name = M.nameOf(parsed.path);
   try {
     const entry = await entryAt(backend, parsed.path);
     if (!entry) return { address: a.address, target: '', title: name, status: 'error', message: `${name} could not be opened. That file is not there any more. Tap the file to try again.` };
     if (!M.opensElsewhere(M.kindOf(entry.name, false))) return { address: a.address, target: a.address, title: a.title || name, status: 'ready', message: '' };
-    return await resolveEntry(entry, a.demo, storage, net);
+    return await resolveEntry(entry, storage, net);
   } catch (e) {
     return { address: a.address, target: '', title: name, status: 'error', message: `${name} could not be opened. ${say(e)} Tap the file to try again.` };
   }
@@ -422,50 +344,46 @@ export async function fileResolve(a: ResolveArgs, storage?: Storage, net: Net = 
 
 // ---------------------------------------------------------------- changes (each answers the refreshed listing of the folder it changed)
 
-async function after(demo: boolean, net: Net, storage: Storage | undefined, dir: string, message: string): Promise<FileListing> {
-  const l = await fileList({ demo, path: dir, mode: 'browse', sort: 'name', desc: false, query: '' }, storage, net);
+async function after(net: Net, storage: Storage | undefined, dir: string, message: string): Promise<FileListing> {
+  const l = await fileList({ path: dir, mode: 'browse', sort: 'name', desc: false, query: '' }, storage, net);
   l.message = message;
   return l;
 }
 
-export async function fileMkdir(a: Args & { dir: string; name: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+export async function fileMkdir(a: { dir: string; name: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
   const d = M.normalize(a.dir) ?? '/';
-  if (!M.validName(a.name)) return after(a.demo, net, storage, d, BAD_NAME);
-  try { await makeBackend(a.demo, net).mkdir(M.join(d, a.name)); return after(a.demo, net, storage, d, `Made the folder “${a.name}”.`); }
-  catch (e) { return after(a.demo, net, storage, d, say(e)); }
+  if (!M.validName(a.name)) return after(net, storage, d, BAD_NAME);
+  try { await makeBackend(net).mkdir(M.join(d, a.name)); return after(net, storage, d, `Made the folder “${a.name}”.`); }
+  catch (e) { return after(net, storage, d, say(e)); }
 }
 
-export async function fileDelete(a: Args & { path: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+export async function fileDelete(a: { path: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
   const p = M.normalize(a.path);
-  if (p === null || p === '/') return after(a.demo, net, storage, '/', 'That cannot be deleted.');
+  if (p === null || p === '/') return after(net, storage, '/', 'That cannot be deleted.');
   const d = M.parent(p);
-  try { await makeBackend(a.demo, net).remove(p); await forgetRecent(storage, p, true); return after(a.demo, net, storage, d, `Deleted “${M.nameOf(p)}”.`); }
-  catch (e) { return after(a.demo, net, storage, d, say(e)); }
+  try { await makeBackend(net).remove(p); await forgetRecent(storage, p, true); return after(net, storage, d, `Deleted “${M.nameOf(p)}”.`); }
+  catch (e) { return after(net, storage, d, say(e)); }
 }
 
-export async function fileRename(a: Args & { path: string; name: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+export async function fileRename(a: { path: string; name: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
   const p = M.normalize(a.path);
-  if (p === null || p === '/') return after(a.demo, net, storage, '/', 'That cannot be renamed.');
+  if (p === null || p === '/') return after(net, storage, '/', 'That cannot be renamed.');
   const d = M.parent(p);
-  if (!M.validName(a.name)) return after(a.demo, net, storage, d, BAD_NAME);
+  if (!M.validName(a.name)) return after(net, storage, d, BAD_NAME);
   const dest = M.join(d, a.name);
-  try { await makeBackend(a.demo, net).move(p, dest); await renameRecent(storage, p, dest); return after(a.demo, net, storage, d, `Renamed to “${a.name}”.`); }
-  catch (e) { return after(a.demo, net, storage, d, say(e)); }
+  try { await makeBackend(net).move(p, dest); await renameRecent(storage, p, dest); return after(net, storage, d, `Renamed to “${a.name}”.`); }
+  catch (e) { return after(net, storage, d, say(e)); }
 }
 
 /** Add a copy of a local file into `dir`. `from` is the system picker's copy under app:/tmp/picked (a local file may go to the listener's own computer).
- * In demo mode with nothing picked, a small invented note is added so the flow can be seen; on a real phone an empty `from` uploads nothing and says so. */
-export async function fileUpload(a: Args & { from: string; name: string; dir: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
+ * An empty `from` uploads nothing and says so. */
+export async function fileUpload(a: { from: string; name: string; dir: string }, storage?: Storage, net: Net = realNet): Promise<FileListing> {
   const d = M.normalize(a.dir) ?? '/';
-  let name = a.name, bytes: Uint8Array;
-  if (a.from === '') {
-    if (!a.demo) return after(a.demo, net, storage, d, 'Nothing was chosen to add.');
-    bytes = new TextEncoder().encode('Added from the phone. Invented text.\n');
-    if (name === '') name = 'Added note.txt';
-  } else {
-    try { bytes = new Uint8Array(await storage!.fs.readFile(a.from)); } catch { return after(a.demo, net, storage, d, 'Nothing was chosen to add.'); }
-  }
-  if (!M.validName(name)) return after(a.demo, net, storage, d, BAD_NAME);
-  try { await makeBackend(a.demo, net).put(M.join(d, name), bytes); return after(a.demo, net, storage, d, `Added “${name}”.`); }
-  catch (e) { return after(a.demo, net, storage, d, say(e)); }
+  const name = a.name;
+  if (a.from === '') return after(net, storage, d, 'Nothing was chosen to add.');
+  let bytes: Uint8Array;
+  try { bytes = new Uint8Array(await storage!.fs.readFile(a.from)); } catch { return after(net, storage, d, 'Nothing was chosen to add.'); }
+  if (!M.validName(name)) return after(net, storage, d, BAD_NAME);
+  try { await makeBackend(net).put(M.join(d, name), bytes); return after(net, storage, d, `Added “${name}”.`); }
+  catch (e) { return after(net, storage, d, say(e)); }
 }

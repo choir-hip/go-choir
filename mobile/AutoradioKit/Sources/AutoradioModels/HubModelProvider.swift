@@ -216,7 +216,7 @@ public final class HubModelProvider: ModelProvider, @unchecked Sendable {
 
     typealias Finish = (Bool, Double, String, String, Double?, Double?, Double?) async -> SetupCheck
 
-    // MARK: Sample asks against invented demo pages (the Mac proof prints what each responder says, cold and warm)
+    // MARK: Sample asks against invented pages (the Mac proof prints what each responder says, cold and warm)
 
     public static let samplePages: [(ask: String, title: String, kind: String, text: String)] = [
         ("What is the council actually going to build?", "The harbor council approves a tide barrier", "texture",

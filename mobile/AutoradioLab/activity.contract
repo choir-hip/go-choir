@@ -1,6 +1,6 @@
 // Activity (activity:). Lane 7. What the computer and the desk are doing now and recently: the owner's changelog (revisions, updates,
-// the desk's decisions, the paper using your work), the radio's own turns, and a "now" line for the radio and the computer. Demo mode
-// reads fixtures/demo/changelog.json; live it is GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
+// the desk's decisions, the paper using your work), the radio's own turns, and a "now" line for the radio and the computer. It is
+// GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
 // as a page. testIds: activity-refresh, activity-section-<name>, activity-row-<id>, activity-status, activity-empty.
 use Theme, ThemeExtras, ActivityInfo, ActivityItem from "@choir/autoradio"
 use ToolScroll, Card, Btn, PlainList, dyn from "./ui.contract"

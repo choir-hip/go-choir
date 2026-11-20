@@ -10,11 +10,11 @@
 //          reader-card-source-<anchor>, reader-card-open-<anchor>, reader-source-<n>, reader-sources, reader-related-<address>,
 //          reader-sheet(-layer, -scrim), reader-web(-view; the host, close, read, add and safari are in content.contract), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
-use ReaderFollowInfo, ReaderAimInfo, DemoInfo from "@choir/autoradio"
+use ReaderFollowInfo, ReaderAimInfo from "@choir/autoradio"
 use PageScroll, Card, Layer, Btn, BarClear, RowRule from "./ui.contract"
 use ClipRow from "./clips.contract"   // lane autoradio-joins
 
-// Citations drawn as atom pills in the Markdown experiment (the page menu, demo mode). Atom styles are literals, not tokens.
+// Citations drawn as atom pills in the Markdown experiment (no control reaches it now). Atom styles are literals, not tokens.
 atom citation link="cite:" color="light-dark(#7a0a57, #ff9bd6)" padding-inline="3px"
 
 // A story's content emerging: it fades in and rises a little. Off under Reduce Motion (th.reducedMotion: the animation is "none").
@@ -286,8 +286,6 @@ component MenuSheet
   inject
     th: Theme
     rdoc: ReaderDoc
-    dm: DemoInfo
-    devDetails: bool
     sideNotes: bool
     mdMode: bool
     showSheet: action
@@ -297,7 +295,6 @@ component MenuSheet
     shareDoc: action
     openLink: action
     reloadDoc: action
-    demoFollow: action
     toggleSideNotes: action
     toggleMdMode: action
     queuePlay: action
@@ -339,15 +336,6 @@ component MenuSheet
         row padding="12px 0" align-items="center" width="100%"
           text "Reload" font-family=th.fontAction font-size="-exact-body" font-weight=600 color=th.fg flex=1 text-align="left"
           image "symbol:forward-chevron" color=th.muted
-      if dm.on and devDetails
-        text "Demo" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted margin-top=8
-        for b in rdoc.blocks.filter(b => b.kind == "p" and b.sentences > 1).slice(0, 1) key=b.id
-          button press=demoFollow(address, b.runs.filter(r => r.sent == 1 and r.kind == "t").map(r => r.text).join("")) testId="reader-menu-follow" appearance="none"
-            Btn(label="Read along (second sentence)", primary=false, wide=false)
-        button press=toggleSideNotes testId="reader-menu-sidenotes" appearance="none"
-          Btn(label=(sideNotes ? "Side notes: on (text flows around)" : "Side notes: off"), primary=false, wide=false)
-        button press=toggleMdMode testId="reader-menu-markdown" appearance="none"
-          Btn(label=(mdMode ? "Markdown with atom pills: on" : "Markdown with atom pills: off"), primary=false, wide=false)
 
 // ---------------------------------------------------------------------------------------------------------------------
 component ReaderBody

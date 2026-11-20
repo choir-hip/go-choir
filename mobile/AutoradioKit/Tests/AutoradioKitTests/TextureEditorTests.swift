@@ -89,19 +89,4 @@ final class TextureEditorTests: XCTestCase {
         try await Task.sleep(nanoseconds: 700_000_000)
         XCTAssertEqual(api.inner.posts.map(\.content), ["one\n\nSecond", "one two\n\nSecond"])
     }
-
-    func test7_DemoModeAnswersThePostedRevision() async throws {
-        let env = ChoirEnvironment.shared
-        let saved = (env.session, env.keys)
-        Demo.install(into: env)
-        defer { env.session = saved.0; env.keys = saved.1 }
-        TextureDemo.posted = []
-        let e = TextureEditor(api: RouteTextureAPI()); e.idle = 0.05
-        await e.edit(address: "texture:demo-notes", markdown: "# Harbor notes\n\nEdited in the demo.")
-        await e.flush(address: "texture:demo-notes")
-        XCTAssertEqual(TextureDemo.posted.count, 1); XCTAssertEqual(TextureDemo.posted[0].doc, "demo-notes")
-        XCTAssertEqual(TextureDemo.posted[0].content, "# Harbor notes\n\nEdited in the demo.")
-        XCTAssertNotNil(TextureDemo.posted[0].body?["doc"], "the body_doc goes with the Markdown")
-        XCTAssertTrue(e.info(address: "texture:demo-notes").label.hasPrefix("Saved · version"), e.info(address: "texture:demo-notes").label)
-    }
 }

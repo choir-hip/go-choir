@@ -1,4 +1,4 @@
-// The spine's sources and sends: open pages, the page model, themes, the bar's state, signals and demo mode.
+// The spine's sources and sends: open pages, the page model, themes, the bar's state and signals.
 // Owned by the spine. A lane does not edit this file; it registers its own handlers in AutoradioModule+<Lane>.swift.
 import Foundation
 
@@ -36,11 +36,10 @@ extension AutoradioModule {
                    "scheme": themes.effectiveScheme(), "problems": themes.problems])
         }
         handle("barState") { [unowned self] _, reply in reply(json(BarState.info(player: choir.playerView(), snapshot: runtime.snapshot()))) }
-        handle("demoInfo") { _, reply in reply(["on": Demo.isOn]) }
         handle("signalList") { [unowned self] _, reply in reply(["rows": signals.recent(limit: 30).map { json($0) }]) }
 
         // The radio's buttons start the engine on first use; under the simulator's agent that engine must be the virtual one
-        // (no microphone: demo and proof runs), as `labStart` already does. Start it virtually, then run the original action.
+        // (no microphone: proof runs), as `labStart` already does. Start it virtually, then run the original action.
         // Mail's "Read it to me" speaks through LabRuntime.speakText; from nothing it must start the engine the same way.
         // The acknowledgement names the page in front: title and kind of the page at an address (nil: the front one).
         runtime.frontPageResolver = { [weak self] address in

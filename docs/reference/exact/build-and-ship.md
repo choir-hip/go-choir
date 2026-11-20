@@ -269,7 +269,7 @@ check `mobile/scripts/` on main before relying on one.
 | `scripts/sync-exact-package.sh`, `gen-exact-interface.py` | copy kit sources into the Exact package, write `apple/exact.json` and the interface (per-lane fragments are the plan, design doc section 6) |
 | `scripts/build-xcframeworks.sh` | static xcframeworks for third-party Swift/C++ (FluidAudio, llama.cpp) from pinned tags in `mobile/.deps` |
 | `scripts/make-profile.sh` | obtains a provisioning profile with a stub Xcode project and `-allowProvisioningUpdates` |
-| `scripts/proof-sim.sh` | drives the simulator and prints `PROOF OK` or `PROOF FAILED at <step>`; `NOBUILD=1` skips the build |
+| `scripts/proof-real.sh` | drives the simulator on real data (staging, the drill account) and prints `PROOF OK` or `PROOF FAILED at <step>`; `NOBUILD=1` skips the build |
 
 **Third-party libraries:** static xcframeworks in the app module only
 (`native-modules.md`).

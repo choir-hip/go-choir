@@ -1,9 +1,9 @@
 // The spine's members of the root: the layer in front, the theme, the bar's state. Owned by the spine (round 3: SHELL);
 // a lane does not edit this file (its own members go in members-<lane>.contract). The page stack (open, close, jump, the
 // pager) is in members-stack.contract.
-use openPages, pageModel, theme, themeList, barState, demoInfo from "@choir/autoradio"
+use openPages, pageModel, theme, themeList, barState from "@choir/autoradio"
 use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord from "@choir/autoradio"
-use PageList, PageModel, Theme, ThemeList, BarInfo, DemoInfo from "@choir/autoradio"
+use PageList, PageModel, Theme, ThemeList, BarInfo from "@choir/autoradio"
 use HostCaps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
@@ -20,7 +20,6 @@ members Autoradio
   resource th = theme() as shape Theme else empty()
   resource thl = themeList() as shape ThemeList else empty()
   resource bi = barState() as shape BarInfo else empty()
-  resource dm = demoInfo() as shape DemoInfo else empty()
   mutation pm as shape PageList
   // A second handle, for an action that opens one page and closes another in the same step.
   mutation pc as shape PageList

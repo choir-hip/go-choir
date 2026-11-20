@@ -1,7 +1,7 @@
 import Foundation
 
 // The computer, for Settings (lane 7). The account (GET /auth/whoami) moved to shared code (AutoradioLab/settings.ts).
-// A client behind an interface, with a demo form that reads the bundled fixtures and a live form on the routes the plan names:
+// A client behind an interface, on the routes the plan names:
 //   ComputerClient  GET /api/compute/status, POST /api/compute/recovery {action: wake_current_computer},
 //                   GET /api/computers/{id}/update, GET /api/computers/{id}/lifecycle/status,
 //                   POST /api/computers/{id}/lifecycle/update {idempotency_key}   (the web's UpdateChip and compute monitor)
@@ -69,28 +69,6 @@ public struct ChoirComputerClient: ComputerClient {
         } catch ChoirError.timeout, ChoirError.transport {
             return .started                                                                         // C3: the act does not stop
         }
-    }
-}
-
-/// Demo: a computer that is running, with an update waiting; Restart to update takes about a second and then it is current.
-public final class DemoComputerClient: ComputerClient, @unchecked Sendable {
-    private let lock = NSLock()
-    private var updated = false
-    private var woke = false
-    public init() {}
-    public func snapshot() async throws -> ComputerSnapshot {
-        let o = (Demo.fixture("computer-update")).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-        lock.lock(); let u = updated; lock.unlock()
-        return ComputerSnapshot(id: "demo-computer", state: (o["state"] as? String) ?? "running", epoch: Int((o["realization_epoch"] as? Double) ?? 7) + (u ? 1 : 0),
-                                updateTarget: u ? "" : (((o["update_available"] as? [String: Any])?["target"] as? String) ?? ""))
-    }
-    public func wake() async throws -> String { lock.lock(); woke = true; lock.unlock(); return "Your computer is awake." }
-    public func restartToUpdate() async throws -> UpdateOutcome {
-        lock.lock(); let u = updated; lock.unlock()
-        if u { return .current }
-        try? await Task.sleep(nanoseconds: 900_000_000)
-        lock.lock(); updated = true; lock.unlock()
-        return .started
     }
 }
 

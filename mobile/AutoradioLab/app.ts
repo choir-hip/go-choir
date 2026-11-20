@@ -3,7 +3,7 @@ import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { adoptNative, setDemo } from './api.ts';
+import { adoptNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import * as pages from './pages.ts';
@@ -55,20 +55,20 @@ fs.read app:/data/takes.json
 fs.write app:/data/takes.json`;
 
 const sources: Sources = {
-  settingsAccount: ([signedIn, demo, tick]) => settingsAccount({ signedIn, demo, tick }),
+  settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   texturesList: ([at]) => texturesListShared(at),
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
-  accountState: ([tick, top, demo, host]) => accountState(tick, top, demo, host),
+  accountState: ([tick, top, host]) => accountState(tick, top, host),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
   pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
-  accountSignOut: ([demo], store, storage, native) => accountSignOut({ demo }, storage, store, native as never),
+  accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>
@@ -80,36 +80,28 @@ const sources: Sources = {
   podcastPlayhead: ([id, clip, elapsed, duration], _store, storage) => podcastPlayhead({ id, clip, elapsed, duration }, storage),
   showClips: ([address, tick]) => showClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
-  // Files (files.ts): the listener's computer's files. Positional arguments, demo first.
-  fileList: ([demo, path, mode, sort, desc, query, _acct], _s, storage) => fileList({ demo, path, mode, sort, desc, query }, storage),
-  fileOpen: ([demo, address, _acct], _s, storage) => fileOpen({ demo, address }, storage),
-  fileResolve: ([demo, address, title], _s, storage) => fileResolve({ demo, address, title }, storage),
-  fileMkdir: ([demo, dir, name], _s, storage) => fileMkdir({ demo, dir, name }, storage),
-  fileDelete: ([demo, path], _s, storage) => fileDelete({ demo, path }, storage),
-  fileRename: ([demo, path, name], _s, storage) => fileRename({ demo, path, name }, storage),
-  fileUpload: ([demo, from, name, dir], _s, storage) => fileUpload({ demo, from, name, dir }, storage),
-  paperFront: ([view, edition, width, tick, focus, picks, demo], _store, storage) => paperFront({ view, edition, width, tick, focus, picks, demo }, storage),
+  // Files (files.ts): the listener's computer's files. Positional arguments.
+  fileList: ([path, mode, sort, desc, query, _acct], _s, storage) => fileList({ path, mode, sort, desc, query }, storage),
+  fileOpen: ([address, _acct], _s, storage) => fileOpen({ address }, storage),
+  fileResolve: ([address, title], _s, storage) => fileResolve({ address, title }, storage),
+  fileMkdir: ([dir, name], _s, storage) => fileMkdir({ dir, name }, storage),
+  fileDelete: ([path], _s, storage) => fileDelete({ path }, storage),
+  fileRename: ([path, name], _s, storage) => fileRename({ path, name }, storage),
+  fileUpload: ([from, name, dir], _s, storage) => fileUpload({ from, name, dir }, storage),
+  paperFront: ([view, width, tick, focus, picks], _store, storage) => paperFront({ view, width, tick, focus, picks }, storage),
   // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
-  mailBox: ([address, demo, _acct], _store, storage) => mail.mailBox(address, demo, { storage }),
-  mailFrame: ([address, demo], _store, storage) => mail.mailFrame(address, demo, { storage }),
-  mailSync: ([address, demo], _store, storage) => mail.mailSync(address, demo, { storage }),
-  mailMessage: ([address, demo, original, _acct], _store, storage) => mail.mailMessage(address, demo, original, { storage }),
-  mailCompose: ([address, demo], _store, storage) => mail.mailCompose(address, demo, { storage }),
-  mailSaveDraft: ([address, to, subject, body, demo]) => mail.mailSaveDraft(address, to, subject, body, demo),
-  mailApprovalEmail: ([address, draft, demo]) => mail.mailApprovalEmail(address, draft, demo),
-  mailMarkUnread: ([address, demo]) => mail.mailMarkUnread(address, demo),
+  mailBox: ([address, _acct], _store, storage) => mail.mailBox(address, { storage }),
+  mailFrame: ([address], _store, storage) => mail.mailFrame(address, { storage }),
+  mailSync: ([address], _store, storage) => mail.mailSync(address, { storage }),
+  mailMessage: ([address, original, _acct], _store, storage) => mail.mailMessage(address, original, { storage }),
+  mailCompose: ([address], _store, storage) => mail.mailCompose(address, { storage }),
+  mailSaveDraft: ([address, to, subject, body]) => mail.mailSaveDraft(address, to, subject, body),
+  mailApprovalEmail: ([address, draft]) => mail.mailApprovalEmail(address, draft),
+  mailMarkUnread: ([address]) => mail.mailMarkUnread(address),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
-// Where the demo flag sits in a source's arguments (the sources that carry it). The signed-in seam is told at every answer; once in demo it stays
-// in demo until the process ends (api.ts `setDemo`), and the native reader answers "not found" in demo for the sources that carry no flag.
-export const DEMO_AT: Record<string, number> = {
-  settingsAccount: 1, accountState: 2, accountSignOut: 0, mailBox: 1, mailFrame: 1, mailSync: 1, mailMessage: 1, mailCompose: 1, mailSaveDraft: 4, mailApprovalEmail: 2, mailMarkUnread: 1,
-  fileList: 0, fileOpen: 0, fileResolve: 0, fileMkdir: 0, fileDelete: 0, fileRename: 0, fileUpload: 0, paperFront: 6,
-};
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
-  const at = DEMO_AT[source];
-  if (at !== undefined && (args as unknown[])[at] === true) setDemo(true);
   // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
   if (source !== 'accountSignOut') await settleAccount(storage, store);
   return sources[source](args, store, storage, native);

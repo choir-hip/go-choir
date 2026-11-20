@@ -13,7 +13,7 @@ final class QuickRelaunchTests: XCTestCase {
         var heard = RunSheetEntry(id: "p-old", kind: .opening, placedBy: .phone, title: "Opening", text: "Good morning.", estSeconds: 5)
         heard.state = .heard
         heard.ended = RunSheetEnded(outcome: .finished, at: ISO8601DateFormatter().string(from: now.addingTimeInterval(-300)), lastBlock: 0)
-        s.replaceForDemo(RunSheet(entries: [heard]))
+        s.replaceSheet(RunSheet(entries: [heard]))
         let first = RunSheetEntry(id: "d-first", kind: .story, placedBy: .desk, title: "The harbour", text: "The harbour barrier was approved.", estSeconds: 8)
         s.place(first, at: .end, by: .desk)
         // the relaunch: a new opening is offered, and refused

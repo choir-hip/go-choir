@@ -10,5 +10,4 @@ shape SettingsAccount
   scopes: string
   computerID: string
   message: string
-  demo: bool
   baseURL: string

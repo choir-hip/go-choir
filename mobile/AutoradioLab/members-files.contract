@@ -31,8 +31,8 @@ members Autoradio
   // The banner shows the last change's answer ("Deleted ..."), until the person navigates.
   state fsNoteOn = false
 
-  // `fileList` and the changes are not package names: app.ts answers them (files.ts). Arguments are positional: demo, path, mode, sort, desc, query.
-  resource fsList = fileList(dm.on, fsPath, fsMode, fsSort, fsDesc, fsQuery, acs.state) as shape FileListing else empty()
+  // `fileList` and the changes are not package names: app.ts answers them (files.ts). Arguments are positional: path, mode, sort, desc, query.
+  resource fsList = fileList(fsPath, fsMode, fsSort, fsDesc, fsQuery, acs.state) as shape FileListing else empty()
   mutation fsM as shape FileListing refreshes fsList, fvInfo
   derive fsNote = match fsM { case some(l) => l.message, case none => "" }
 
@@ -75,11 +75,11 @@ members Autoradio
   action fsEditName(v: string)
     fsRenameText = v
   action fsRename
-    send fsM = fileRename(dm.on, fsSel, fsRenameText)
+    send fsM = fileRename(fsSel, fsRenameText)
     fsSel = ""
     fsNoteOn = true
   action fsDelete(path: string)
-    send fsM = fileDelete(dm.on, path)
+    send fsM = fileDelete(path)
     fsSel = ""
     fsNoteOn = true
   action fsNewToggle
@@ -88,25 +88,21 @@ members Autoradio
   action fsEditNew(v: string)
     fsNewName = v
   action fsMakeFolder
-    send fsM = fileMkdir(dm.on, fsPath, fsNewName)
+    send fsM = fileMkdir(fsPath, fsNewName)
     fsNewing = false
     fsNewName = ""
     fsNoteOn = true
-  // Demo mode and the agent have no picker: the module adds an invented note. Otherwise the system file picker opens.
+  // The system file picker opens; what is picked is uploaded by fsPicked.
   action fsUpload
-    if dm.on
-      send fsM = fileUpload(dm.on, "", "", fsPath)
-      fsNoteOn = true
-    else
-      showPicker("files-pick")
+    showPicker("files-pick")
   action fsPicked(ps: Picked[])
     if ps.length > 0
-      send fsM = fileUpload(dm.on, (match ps.at(0) { case some(p) => p.path, case none => "" }), (match ps.at(0) { case some(p) => p.name, case none => "" }), fsPath)
+      send fsM = fileUpload((match ps.at(0) { case some(p) => p.path, case none => "" }), (match ps.at(0) { case some(p) => p.name, case none => "" }), fsPath)
       fsNoteOn = true
 
   // ------------------------------------------------------------------ the open file (file:/path/name.ext)
   // Asked for every page; the module answers an empty "loading" record for any address that is not a file.
-  resource fvInfo = fileOpen(dm.on, pg.top, acs.state) as shape FileInfo else empty()
+  resource fvInfo = fileOpen(pg.top, acs.state) as shape FileInfo else empty()
   // A PDF, e-book, text, Markdown or code file is another page's document: the listener's computer opens it (decision D4) and the deck follows (members-stack openPage).
   mutation fvRes as shape FileResolved then fileResolved
 

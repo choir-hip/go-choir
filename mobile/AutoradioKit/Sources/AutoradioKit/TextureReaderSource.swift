@@ -4,7 +4,6 @@ import Foundation
 //   pub:<route>            GET /api/platform/publications/resolve?route=            (public) and .../related?route=&limit=5
 //   texture:<doc>[@<rev>]  GET /api/texture/documents/{id}, /revisions, /api/texture/revisions/{rev}   (signed in)
 //   textures:              GET /api/texture/documents
-// In demo mode the session answers from fixtures (Demo.swift).
 //
 // WAYS THIS CAN FAIL (written before the code):
 //  1. Not signed in, or the key is refused: the page says so in one sentence; it never shows another account's data.
@@ -307,40 +306,4 @@ public final class ReaderAim: @unchecked Sendable {
     public var info: ReaderAimInfo { lock.lock(); defer { lock.unlock() }; return _info }
     public func set(_ i: ReaderAimInfo) { lock.lock(); _info = i; lock.unlock() }
     public func clear() { set(ReaderAimInfo()) }
-}
-
-// MARK: Demo routes (the reader's fixtures; Demo.swift calls these from its one `case`)
-
-enum TextureDemo {
-    /// The revisions the phone posted in demo mode, in order: (document, Markdown content, body_doc).
-    nonisolated(unsafe) static var posted: [(doc: String, content: String, body: [String: Any]?)] = []
-    private static let postLock = NSLock()
-
-    /// POST /api/texture/documents/{id}/revisions answers the revision it made; any other POST is not ours.
-    static func post(path: String, body: Data) -> Data? {
-        let parts = path.split(separator: "/").map(String.init)
-        guard parts.count == 5, parts[0] == "api", parts[1] == "texture", parts[2] == "documents", parts[4] == "revisions" else { return nil }
-        let o = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
-        postLock.lock(); posted.append((parts[3], o["content"] as? String ?? "", o["body_doc"] as? [String: Any])); let n = posted.count; postLock.unlock()
-        return Data(#"{"revision_id":"demo-posted-\#(n)","version_number":\#(n + 3)}"#.utf8)
-    }
-
-    /// "demo-ev-charging/v2" -> "demo-ev-charging": every version of a demo story is the one fixture.
-    static func bareRoute(_ route: String) -> String { TextureAddress.splitRoute(route).bare }
-
-    static func route(_ path: String) -> Data? {
-        let parts = path.split(separator: "/").map(String.init)      // api texture documents <id> [revisions|restore]
-        guard parts.count >= 3, parts[0] == "api", parts[1] == "texture" else { return nil }
-        func fx(_ n: String) -> Data? { Demo.fixture(n) }
-        switch (parts[2], parts.count) {
-        case ("documents", 4): return fx("texture-doc-" + parts[3])
-        case ("documents", 5):
-            if parts[4] == "revisions" { return fx("texture-revs-" + parts[3]) }
-            return Data("{}".utf8)                                   // restore
-        case ("revisions", 4): return fx("texture-rev-" + parts[3])
-        case ("lifecycle", _): return Data("{}".utf8)                // cancel
-        case ("files", 4): return Data(#"{"doc_id":"demo-notes"}"#.utf8)   // POST /api/texture/files/open: demo opens the notes document
-        default: return nil
-        }
-    }
 }

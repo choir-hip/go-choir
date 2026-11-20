@@ -482,8 +482,6 @@ public struct Edition: Codable, Equatable, Sendable {
     public var intro: String
     public var writingLines: [String]
     public var sections: [Section]
-    /// Demo only: the first write fails, so the recovery card ("I couldn't write your edition just now") is proven.
-    public var failFirst: Bool?
 
     public static func parse(_ data: Data) -> Edition? { try? JSONDecoder().decode(Edition.self, from: data) }
     /// Heading, then its lines, section by section: what a plain page shows.
@@ -506,7 +504,7 @@ public struct LocalEditionWriter: EditionWriter {
     public static func edition(topics: [String]) -> Edition {
         let lines = topics.isEmpty ? ["The whole paper, until I say otherwise."] : topics
         return Edition(title: "My edition", intro: "This is your edition. Change anything by asking.", writingLines: ["Putting your edition together"],
-                       sections: [.init(heading: "What I follow", lines: lines)], failFirst: nil)
+                       sections: [.init(heading: "What I follow", lines: lines)])
     }
     public func write(topics: [String], progress: @escaping @Sendable (String) -> Void) async throws -> Edition {
         progress("Putting your edition together")
@@ -514,34 +512,11 @@ public struct LocalEditionWriter: EditionWriter {
     }
 }
 
-/// Demo and simulator: the edition comes from a fixture after a paced sequence of lifecycle lines; the chosen topics replace its list.
-public final class DemoEditionWriter: EditionWriter, @unchecked Sendable {
-    private let edition: Edition
-    private let tickMs: Int
-    private let lock = NSLock()
-    private var failed = false
-    public init(edition: Edition, tickMs: Int = 800) { self.edition = edition; self.tickMs = tickMs }
-    public func write(topics: [String], progress: @escaping @Sendable (String) -> Void) async throws -> Edition {
-        for l in edition.writingLines {
-            progress(l)
-            try await Task.sleep(nanoseconds: UInt64(tickMs) * 1_000_000)
-        }
-        lock.lock()
-        let shouldFail = edition.failFirst == true && !failed
-        if shouldFail { failed = true }
-        lock.unlock()
-        if shouldFail { throw EditionError.failed("The desk did not answer.") }
-        var e = LocalEditionWriter.edition(topics: topics)
-        e.title = edition.title; e.intro = edition.intro
-        return e
-    }
-}
-
 // MARK: Finishing: a deadline, never a dead end
 //
 // The first phone walk's interview ended with "Good. Writing your edition now." and then nothing, for ever. Cause (HEAD of
 // lane/autoradio-qa): `AutoradioModule+Onboarding.swift:275` was the only caller of `writeEdition()` on the way to the end,
-// inside `demoNext()`, the demo drive. On a phone the end of the interview came from `InterviewDesk.submit` (Interview.swift,
+// inside a drive that no longer exists. On a phone the end of the interview came from `InterviewDesk.submit` (Interview.swift,
 // `finish(limit:)` sets status `.done` and returns the closing line); nothing watched `.done`, so the step never became
 // "writing". Had it been reached, `UnbuiltEditionWriter.write` threw "not connected in this build", with no deadline anywhere.
 // Now Continue calls `EditionCompletion.run`, which always ends: the edition, a failure, or the deadline.

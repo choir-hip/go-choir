@@ -23,8 +23,6 @@ extension AutoradioModule {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let lib = ReaderShelf(root: support.appendingPathComponent("books"))
         ReaderShelf.shared = lib
-        // Demo mode only: a short sample book is put on the shelf through the shelf's own import (never outside demo mode).
-        if Demo.isOn { Task.detached { lib.seedDemo(demo: true) } }
         lib.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["shelfList", "shelfDoc"]) } }
         ShelfFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["shelfFollow", "shelfList"]) } }
         Task { @MainActor in ShelfPlayback.register() }
