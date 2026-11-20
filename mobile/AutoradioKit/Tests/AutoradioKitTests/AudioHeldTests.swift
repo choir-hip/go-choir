@@ -86,9 +86,6 @@ final class AudioHeldTests: XCTestCase {
         p.sessionReady = { _ in "the audio session could not be taken" }
         p.playNow(RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "T", text: "Words.", estSeconds: 5)); await p.settle()
         XCTAssertTrue(p.isWaitingForSession)
-        var b = BarInfo(); b.state = "playing"; b.playing = true
-        let ob = p.overlay(b)
-        XCTAssertEqual(ob.state, "paused"); XCTAssertFalse(ob.playing)
         var r = RadioInfo(); r.playing = true
         let or = p.overlay(r)
         XCTAssertFalse(or.playing); XCTAssertTrue(or.paused)
@@ -141,8 +138,6 @@ final class AudioHeldTests: XCTestCase {
         XCTAssertTrue(p.isWaitingForSession)
         XCTAssertEqual(s.sheet.onAirEntry?.id, "a", "still on air")
         XCTAssertNil(s.sheet.entries.first { $0.id == "a" }?.ended, "no ended op, no heard, no failed")
-        var b = BarInfo(); b.state = "playing"; b.playing = true
-        XCTAssertEqual(p.overlay(b).state, "paused")
         ready = true; p.sessionMayBeBack()
         _ = await poll { e.log.contains("resumeSpoken") }
         XCTAssertTrue(e.log.contains("resumeSpoken"))

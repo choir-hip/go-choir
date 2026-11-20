@@ -120,8 +120,8 @@ public final class AutoradioModule: ExactPackage {
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
         #endif
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
-        HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barState"], now: true) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
+        HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts"], now: true) } }
         // The listener path: sign-in (Keychain), the front page, the real stages.
         let appKeys: KeyStore = KeychainKeyStore()
         Demo.clearLeftovers(support: support)   // a phone that was in demo mode (removed 2026-11-20): once
@@ -133,7 +133,7 @@ public final class AutoradioModule: ExactPackage {
         }
         #endif
         choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barState", "radioView"]) } }
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
         pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
@@ -203,7 +203,7 @@ public final class AutoradioModule: ExactPackage {
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
         if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
         dirty.formUnion(names)
-        if names.contains(where: { $0 == "radioView" || $0 == "queueView" || $0 == "barState" }) { dirty.insert("radioPage") }   // the Autoradio page reads all three
+        if names.contains(where: { $0 == "radioView" || $0 == "queueView" || $0 == "barFacts" }) { dirty.insert("radioPage") }   // the Autoradio page reads all three
         if now {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -229,7 +229,7 @@ public final class AutoradioModule: ExactPackage {
 
     /// The app came back to the foreground. Voice is not touched: it stays as the listener left it (off unless they turned it on). Main thread.
     public func foreground(_ shown: Bool) {
-        if shown { touch(["barState"], now: true) }
+        if shown { touch(["barFacts"], now: true) }
     }
 
     public func later(_ name: String, _ args: [String: Any], preferred: Any?, reply: @escaping ([String: Any]) -> Void) {

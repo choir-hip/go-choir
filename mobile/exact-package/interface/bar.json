@@ -33,24 +33,128 @@
    "micLevel": "number",
    "kind": "string",
    "sources": "string[]"
+  },
+  "BarFacts": {
+   "at": "number",
+   "phase": "string",
+   "transcript": "string",
+   "blockIndex": "number",
+   "blockCount": "number",
+   "blockFraction": "number",
+   "running": "bool",
+   "signedIn": "bool",
+   "playing": "bool",
+   "title": "string",
+   "message": "string",
+   "handsFree": "bool",
+   "holding": "string",
+   "revisedAt": "number",
+   "errorAt": "number",
+   "errorStage": "string",
+   "errorMessage": "string",
+   "onAir": "bool",
+   "waiting": "bool",
+   "remote": "bool",
+   "remotePlaying": "bool",
+   "remoteTitle": "string",
+   "remoteFraction": "number"
   }
  },
  "names": [
+  {
+   "source": "barFacts",
+   "live": true,
+   "answers": "BarFacts",
+   "substitute": {
+    "default": {
+     "at": 0,
+     "phase": "playing",
+     "transcript": "",
+     "blockIndex": 0,
+     "blockCount": 0,
+     "blockFraction": 0,
+     "running": false,
+     "signedIn": false,
+     "playing": false,
+     "title": "",
+     "message": "",
+     "handsFree": false,
+     "holding": "",
+     "revisedAt": 0,
+     "errorAt": 0,
+     "errorStage": "",
+     "errorMessage": "",
+     "onAir": false,
+     "waiting": false,
+     "remote": false,
+     "remotePlaying": false,
+     "remoteTitle": "",
+     "remoteFraction": 0
+    }
+   },
+   "options": {
+    "tick": "number"
+   }
+  },
   {
    "source": "radioView",
    "live": true,
    "answers": "RadioInfo",
    "substitute": {
     "default": {
-     "title": "", "source": "", "position": "", "index": 0, "count": 0, "playing": false, "paused": false,
-     "level": "play", "speed": "1", "speedValue": 1, "speedChoices": ["0.8", "1", "1.25", "1.5"], "mode": "",
-     "micOpen": false, "heard": "", "holding": "", "revised": "", "progress": 0, "blockProgress": 0,
-     "sentenceIndex": 0, "sentences": [], "next": "", "items": [], "micLevel": 0, "kind": "", "sources": []
+     "title": "",
+     "source": "",
+     "position": "",
+     "index": 0,
+     "count": 0,
+     "playing": false,
+     "paused": false,
+     "level": "play",
+     "speed": "1",
+     "speedValue": 1,
+     "speedChoices": [
+      "0.8",
+      "1",
+      "1.25",
+      "1.5"
+     ],
+     "mode": "",
+     "micOpen": false,
+     "heard": "",
+     "holding": "",
+     "revised": "",
+     "progress": 0,
+     "blockProgress": 0,
+     "sentenceIndex": 0,
+     "sentences": [],
+     "next": "",
+     "items": [],
+     "micLevel": 0,
+     "kind": "",
+     "sources": []
     }
    }
   },
-  { "send": "radioJump", "options": { "index": "string" }, "answers": "RadioInfo" },
-  { "send": "radioSpeed", "options": { "speed": "string" }, "answers": "RadioInfo" },
-  { "send": "radioStory", "options": { "move": "string" }, "answers": "RadioInfo" }
+  {
+   "send": "radioJump",
+   "options": {
+    "index": "string"
+   },
+   "answers": "RadioInfo"
+  },
+  {
+   "send": "radioSpeed",
+   "options": {
+    "speed": "string"
+   },
+   "answers": "RadioInfo"
+  },
+  {
+   "send": "radioStory",
+   "options": {
+    "move": "string"
+   },
+   "answers": "RadioInfo"
+  }
  ]
 }

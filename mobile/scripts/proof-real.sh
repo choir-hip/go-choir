@@ -272,6 +272,16 @@ step "tap settings-mode-dark"; view real-65-newsprint-dark 900
 step logs
 run_drive spine light "" --touch platform
 
+# ---- 3f3. BAR drive (reads only: it plays and pauses a real story): the bar's page model is shared code (bar.ts) over the native facts. On a page: the aim line names the page and the deck count; one story plays: the
+# bar says NOW PLAYING with the story's title and a progress rule; play pauses it (PAUSED, same title); play resumes it; the run sheet page (the radio) lists the entry on air.
+step "clock data"; wait_ 6000
+place paper 2500
+step tree
+view real-66-bar-on-page 600
+[ -n "$PLAY1" ] && { to_top; step "tap \"$PLAY1\""; wait_ 5000; view real-67-bar-playing 800; step "tap bar-play"; wait_ 1500; view real-68-bar-paused 800; step "tap bar-play"; wait_ 3000; view real-69-bar-resumed 800; step "tap bar-now"; view real-70-bar-run-sheet 1500; }
+step logs
+run_drive bar light "" --touch platform
+
 # ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
 # Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the wipe marker and the stamp are gone from the app's files.
 step "clock data"; wait_ 5000
@@ -374,6 +384,16 @@ chk "settings: About's server build is a commit" '\[settings-about-server\] "[0-
 chk "settings: Activity page opened" '\[page-title\] "Activity"' "$SHOTS/drive-tour.txt"
 chk "mail: the Sent folder tab" '\[mail-folder-sent\]' "$SHOTS/drive-tour.txt"
 bad "mail: Sent and Quarantine show no error screen" '\[mail-error\]' "$SHOTS/drive-tour.txt"
+# the bar drive (bar.ts over the native facts)
+BR="$SHOTS/drive-bar.txt"
+chk "bar: on a page the line names the page and counts the deck" '\[page-indicator\] "On: [^"]+ · [0-9]+ in the deck"' "$BR"
+if [ -n "$PLAY1" ]; then
+  chk "bar: a story is playing (NOW PLAYING with a title)" 'NOW PLAYING|Now playing, [^.]{3,}' "$BR"
+  chk "bar: the progress rule is drawn" '\[bar-progress\]' "$BR"
+  chk "bar: play pauses it (the bar says PAUSED)" 'PAUSED|Paused, [^.]{3,}' "$BR"
+  chk "bar: the run sheet page shows the entry on air" '\[radio-onair-title\] "[^"]{3,}"' "$BR"
+  bad "bar: no error line held the bar" '\[bar-text\] "(Could not|Something went wrong|The voice stopped)' "$BR"
+fi
 # the spine drive
 SP="$SHOTS/drive-spine.txt"
 chk "bar: the field, the microphone and play" '\[bar-field\]' "$SP"

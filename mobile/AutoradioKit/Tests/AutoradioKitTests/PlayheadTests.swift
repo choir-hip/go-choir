@@ -207,7 +207,7 @@ final class RateAndPositionTests: XCTestCase {
         XCTAssertEqual(info.blockProgress, 0, "the old block's position does not answer for the new one")
         box.value = nil
         XCTAssertEqual(tr.radioInfo(player: player, snapshot: snap, document: doc, route: "r", now: now).blockProgress, 0)
-        XCTAssertEqual(tr.barInfo(player: player, snapshot: snap, now: now).progress, 0.5, accuracy: 1e-9, "block 1 of 2 begun, nothing of it played")
+        XCTAssertEqual(tr.blockFraction(snap, now: now), 0, "block 1 of 2 begun, nothing of it played (the bar adds the block index: bar.test.ts B7)")
     }
     final class PosBox: @unchecked Sendable { var value: RenderPosition? }
 

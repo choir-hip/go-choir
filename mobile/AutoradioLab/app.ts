@@ -17,6 +17,7 @@ import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
 import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
+import { barInfo } from './bar.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -71,6 +72,8 @@ const sources: Sources = {
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([raw]) => conversationInfo(raw),
+  // The bar (bar.ts): the native facts and the conversation's entries in, the bar's state out; the tick (a timed state's end, a sign-out) asks again.
+  barInfo: ([facts, entries, _tick]) => barInfo(facts, entries),
   texturesList: ([at]) => texturesListShared(at),
   // The themes (themes.ts): the system's scheme and Reduce Motion come from `exactViewport()` (the first two arguments); the choice and the user's themes are kept under app:/data.
   theme: ([scheme, reduce], _s, storage) => themes.themeShared(scheme, reduce, storage),

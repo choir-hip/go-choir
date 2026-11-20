@@ -1,0 +1,18 @@
+// The bar's shapes. Declared here and answered by `app.ts` (bar.ts: `barInfo`); they were the Swift package's (interface/spine.json `BarInfo`, source `barState`)
+// before the bar's page model moved to shared code. The native side hands over only the facts (`BarFacts`, interface/bar.json, source `barFacts`).
+
+shape BarInfo
+  state: string
+  text: string
+  playing: bool
+  talking: bool
+  signedIn: bool
+  handsFree: bool
+  progress: number
+  question: string
+  answerText: string
+  answerLabel: string
+  answerState: string
+  answerNote: string
+  canRetry: bool
+  until: number

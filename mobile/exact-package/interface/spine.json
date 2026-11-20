@@ -92,21 +92,6 @@
    "problems": "string[]",
    "locked": "string"
   },
-  "BarInfo": {
-   "state": "string",
-   "text": "string",
-   "playing": "bool",
-   "talking": "bool",
-   "signedIn": "bool",
-   "handsFree": "bool",
-   "progress": "number",
-   "question": "string",
-   "answerText": "string",
-   "answerLabel": "string",
-   "answerState": "string",
-   "answerNote": "string",
-   "canRetry": "bool"
-  },
   "SignalRow": {
    "at": "number",
    "kind": "string",
@@ -147,28 +132,6 @@
      "status": "loading",
      "lines": [],
      "message": ""
-    }
-   }
-  },
-  {
-   "source": "barState",
-   "live": true,
-   "answers": "BarInfo",
-   "substitute": {
-    "default": {
-     "state": "idle",
-     "text": "",
-     "playing": false,
-     "talking": false,
-     "signedIn": false,
-     "handsFree": false,
-     "progress": 0,
-     "question": "",
-     "answerText": "",
-     "answerLabel": "",
-     "answerState": "",
-     "answerNote": "",
-     "canRetry": false
     }
    }
   },

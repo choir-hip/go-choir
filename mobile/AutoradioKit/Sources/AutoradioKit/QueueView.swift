@@ -77,22 +77,6 @@ extension RunSheetPlayer {
         o.count = 1; o.index = 0
         return o
     }
-    public func overlay(_ b: BarInfo) -> BarInfo {
-        if isWaitingForSession, !isRemote, b.state == "playing" {
-            var o = b; o.state = "paused"; o.playing = false
-            return o
-        }
-        if store.onAir() == nil, !isRemote, b.state == "playing" || b.state == "paused" {
-            var o = b
-            o.state = "idle"; o.text = ""; o.playing = false; o.progress = 0
-            return o
-        }
-        guard isRemote, b.state == "idle" || b.state == "playing" || b.state == "paused" else { return b }
-        var o = b
-        let i = info()
-        o.state = i.playing ? "playing" : "paused"; o.text = i.current; o.playing = i.playing; o.progress = i.fraction
-        return o
-    }
 }
 
 /// The page the embedded web view is on right now (the view reports each load). "Read aloud" reads this, not the address the view was

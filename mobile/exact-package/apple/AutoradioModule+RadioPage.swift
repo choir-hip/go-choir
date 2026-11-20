@@ -10,14 +10,15 @@ extension AutoradioModule {
         let tracker = BarTracker.shared
         return onMainThread {
             let player = RunSheetPlayer.shared
-            let bar = player.overlay(tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot()))
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
             let radio = player.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route,
                                                          nextTitle: player.store.ahead(limit: 1).first?.displayTitle ?? ""))
             let q = player.info()
             var i = RadioPageInput(sheet: player.store.sheet)
-            i.barState = bar.state; i.heardWords = bar.text
-            i.playing = radio.playing || bar.state == "playing"
+            // The page dims and says "Listening" while a turn is open: the engine's phase, read here (the bar's own states are bar.ts's).
+            let snap = runtime.snapshot()
+            if ["candidate", "addressed", "capturing", "ended"].contains(snap.phase) { i.barState = "listening"; i.heardWords = snap.transcript.isEmpty ? "Listening…" : snap.transcript }
+            i.playing = radio.playing
             i.sentences = radio.sentences; i.sentenceIndex = radio.sentenceIndex; i.progress = radio.progress
             i.remoteAudio = q.audio; i.elapsedLabel = q.elapsedLabel; i.remainingLabel = q.remainingLabel
             i.wants = player.wantsToPlay; i.message = q.message; i.notice = q.notice; i.writing = q.writing; i.dry = q.dry
@@ -49,7 +50,7 @@ extension AutoradioModule {
                     p.perform(.replay(id: id))
                 default: break
                 }
-                self.touch(["queueView", "radioView", "barState"], now: true)
+                self.touch(["queueView", "radioView", "barFacts"], now: true)
                 reply(self.json(self.radioPageInfo()))
             }
         }

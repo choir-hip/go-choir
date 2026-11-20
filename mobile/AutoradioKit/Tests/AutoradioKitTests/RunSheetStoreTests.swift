@@ -890,9 +890,7 @@ final class RunSheetStoreTests: XCTestCase {
 final class RunSheetOverlayTests: XCTestCase {
     func testNothingOnAirIsNeverShownAsPlayingAndUpNextSaysWhatIsTrue() async {
         let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
-        var bar = BarInfo(); bar.state = "playing"; bar.playing = true; bar.text = "Autoradio"
-        let b = p.overlay(bar)
-        XCTAssertEqual(b.state, "idle"); XCTAssertFalse(b.playing); XCTAssertEqual(b.text, "")
+        // (the bar's own overlay is bar.ts: bar.test.ts B9; this is the radio view's)
         var r = RadioInfo(); r.title = "Autoradio"; r.playing = true
         let ro = p.overlay(r)
         XCTAssertFalse(ro.playing); XCTAssertFalse(ro.paused); XCTAssertEqual(ro.title, "")

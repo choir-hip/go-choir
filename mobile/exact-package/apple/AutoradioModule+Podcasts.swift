@@ -52,7 +52,7 @@ extension AutoradioModule {
                     if !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
                     RunSheetPlayer.shared.playNow(entry)
                 }
-                self.touch(["queueView", "radioView", "barState", "podcastNow"], now: true)
+                self.touch(["queueView", "radioView", "barFacts", "podcastNow"], now: true)
                 reply(self.json(PodDone()))
             }
         }
