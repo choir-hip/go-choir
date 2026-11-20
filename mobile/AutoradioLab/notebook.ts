@@ -289,7 +289,7 @@ export function page(i: { doc: DocLoad | null; learning: Load | null; selected: 
   else if (L.state === 'ready') { o.scoreState = 'ready'; read = L.read; }
   else if (L.state === 'notyet') { o.scoreState = 'notyet'; o.scoreNotice = 'The scorecard is not available yet. Your computer does not have it, so nothing is shown rather than a guess.'; }
   else if (L.state === 'offline') { o.scoreState = 'offline'; o.scoreNotice = 'The scorecard could not be reached. It will show when your computer answers.'; }
-  else if (L.state === 'signedout') { o.scoreState = 'signedout'; o.scoreNotice = L.reason === 'locked' ? WORDS.locked : L.reason === 'refused' ? 'Sign in again to see the scorecard.' : 'Sign in to see the scorecard.'; }
+  else if (L.state === 'signedout') { o.scoreState = 'signedout'; o.scoreNotice = L.reason === 'locked' ? WORDS.locked : L.reason === 'unknown' ? WORDS.unknown : L.reason === 'refused' ? 'Sign in again to see the scorecard.' : 'Sign in to see the scorecard.'; }
   if (read) {
     const c = read.card;
     if (c.settled === 0) o.score = [{ label: 'Forecasts settled', value: '0' }, { label: 'Still open', value: String(c.open) }];

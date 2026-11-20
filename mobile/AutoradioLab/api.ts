@@ -51,7 +51,7 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
 
 /** The listener has no usable session: nothing was kept, or the server refused the key (401). Pages answer their sign-in state. */
 /** Why there is no session: `none` (no key), `locked` (the key exists but cannot be read yet: before the first unlock), `refused` (the server refused the key, a 401). Pages say a different thing for each. */
-export type SignedOutReason = 'none' | 'locked' | 'refused';
+export type SignedOutReason = 'none' | 'locked' | 'refused' | 'unknown';
 export class SignedOutError extends Error {
   reason: SignedOutReason;
   constructor(message = 'not signed in', reason: SignedOutReason = 'none') { super(message); this.name = 'SignedOutError'; this.reason = reason; }
@@ -101,7 +101,8 @@ async function keptItem(account: Account): Promise<string | null> {
 
 /** No session: is the key absent, or only unreadable (locked)? One read-only native question. */
 async function noSessionReason(): Promise<SignedOutReason> {
-  try { const r = (await reader?.later({ op: 'keystate' })) as { state?: unknown } | null | undefined; return r && r.state === 'unreadable' ? 'locked' : 'none'; } catch { return 'none'; }
+  if (!reader) return 'none';                                // no handle at all: the host has no key store; the page says there is nothing signed in (the card says whether signing in exists)
+  try { const r = (await reader?.later({ op: 'keystate' })) as { state?: unknown } | null | undefined; return r && r.state === 'unreadable' ? 'locked' : r && r.state === 'absent' ? 'none' : 'unknown'; } catch { return 'unknown'; }       // a bridge that throws or says nothing: say so, never "sign in"
 }
 
 /** The key and the computer id in ONE native read: a sign-out or a new sign-in between two reads cannot pair an old key with a new computer. */

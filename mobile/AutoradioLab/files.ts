@@ -28,7 +28,7 @@ export class FilesError extends Error {
 }
 export const say = (e: unknown): string => {
   if (e instanceof FilesError) return e.message;
-  if (e instanceof SignedOutError) return e.reason === 'locked' ? WORDS.locked : e.reason === 'refused' ? 'Sign in again to see your files.' : 'Sign in to see your files.';
+  if (e instanceof SignedOutError) return e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : e.reason === 'refused' ? 'Sign in again to see your files.' : 'Sign in to see your files.';
   const status = (e as { status?: number })?.status;
   if (status === 401) return 'Sign in again to see your files.';
   if (status === 403) return 'This device is not allowed to read files.';

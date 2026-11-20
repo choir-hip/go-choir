@@ -10,6 +10,7 @@ use Theme, ChoirAuth, DemoInfo from "@choir/autoradio"
 use PaperFront, PaperBand, PaperItem from "./paper-types.contract"
 use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge, dyn from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
+use AccountView from "./account-state-types.contract"
 
 // The two actions of a story, one form everywhere (a card, a brief, a follow-up): an icon and one short word each on one line, Play in the accent and
 // Queue muted (one accent use per row). The full words are the aria labels.
@@ -185,6 +186,7 @@ component PaperPage
   inject
     th: Theme
     au: ChoirAuth
+    acs: AccountView
     dm: DemoInfo
     devDetails: bool
     signIn: action
@@ -269,7 +271,8 @@ component PaperPage
                 button press=pickEdition("") testId="paper-edition-default" appearance="none"
                   Btn(label="Default", primary=false, wide=false)
           // signed out: the paper reads and plays; talking to your computer needs an account
-          if au.signedIn == false and signInAway == false
+          // the one way in is the account state's: only a phone that can sign in shows it (a locked phone, an unasked one and a host with no sign-in do not)
+          if acs.action == "signIn" and signInAway == false
             // one quiet line, not a card: the accent action, what it is for, and Not now
             row testId="paper-signin-card" align-items="center" gap=10 width="100%" box-sizing="border-box" min-height=44
               button press=signIn testId="paper-signin" appearance="none" flex-shrink=0 aria-label="Sign in to talk to your computer and to make this paper yours"

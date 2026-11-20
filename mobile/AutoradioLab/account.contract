@@ -18,8 +18,13 @@ members Autoradio
   state lockTick = 0
   action bumpLock
     lockTick = lockTick + 1
-  task rereadLocked when acs.state == "locked" key=lockTick
+  // Also re-asked (with the host fact, spine.contract hc) while the answer is open: an unreadable key, a handle not bound yet, a host with no sign-in: a native module that arrives late corrects the state without a page change.
+  task rereadLocked when acs.state == "locked" or acs.state == "unknown" or acs.state == "noSignIn" key=lockTick
     after(3000, bumpLock)
+  // A page that hit a refusal (the server said 401 to this phone's key: api.ts records it) shows its error; the account sentence is asked again at that moment, not at the next tick, so the card
+  // appears when it happens. Any error asks again (the answer is the same when the error was only the network): one keystate read.
+  task noteRefusal when mbx.status == "error" or fsList.status == "error" key=pg.top
+    after(100, bumpLock)
   resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${dm.on}`, pg.top, dm.on, hc.mode) as shape AccountView else empty()
   mutation acct as shape LabState
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.

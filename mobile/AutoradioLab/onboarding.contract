@@ -17,6 +17,7 @@ use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
 use Card, PaperCard, PageScroll, Btn, ListGroup, RowRule, SelectMark, PageHeader, dyn from "./ui.contract"
 use Mark from "./mark.contract"
 use VoiceStep from "./voice.contract"
+use AccountView from "./account-state-types.contract"
 
 keyframes obBreathe
   from opacity=1 scale=1
@@ -32,6 +33,7 @@ component SignInScreen
   inject
     th: Theme
     au: ChoirAuth
+    acs: AccountView
     signIn: action
     cancelSignIn: action
     openApproval: action
@@ -52,7 +54,7 @@ component SignInScreen
               Btn(label="Open the approval page", primary=true, wide=false)
             button press=cancelSignIn testId="signin-cancel" appearance="none"
               Btn(label="Cancel", primary=false, wide=false)
-      if au.status != "pending"
+      if au.status != "pending" and acs.action == "signIn"
         button press=signIn testId="signin" appearance="none"
           Btn(label="Sign in", primary=true, wide=true)
       text au.message testId="signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="center"

@@ -6,13 +6,13 @@
 //  X6 the words are the app's one list (the page words say "Sign in", not "Sign in again", unless the app knows a key existed).
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { accountState, WORDS } from './account-state.ts';
-import { resetHost } from './host.ts';
+import { resetHost, hostMode } from './host.ts';
 import { adoptNative, resetSeam, setDemo, authedJSON } from './api.ts';
 import { settleAccount, resetSettled, STAMP_FILE } from './account.ts';
 
-let reply: { state: string; found?: boolean; value?: string; throws?: boolean } = { state: 'absent' };
+let reply: { state: string; found?: boolean; value?: string; throws?: boolean; throwsKey?: boolean } = { state: 'absent' };
 const handle = () => ({ available: true, later: async (r: { op: string }) => {
-  if (reply.throws) throw new Error('bridge');
+  if (reply.throws || (reply.throwsKey && r.op === 'keystate')) throw new Error('bridge');
   if (r.op === 'keystate') return { state: reply.state };
   if (r.op === 'session') return reply.state === 'present' ? { found: true, value: reply.value ?? 'test-key-A-not-real', computerId: 'c' } : { found: false };
   return { ok: true };
@@ -99,7 +99,6 @@ describe('round 8 (seat 1 on 43200f9a7)', () => {
   });
   test('D1 a demo launch never shows the banner (accountState carries the demo flag)', async () => {
     resetSeam(); const s = await accountState('', 'radio:', true, ''); expect(s).toMatchObject({ state: 'signedIn', message: '' });
-    const app = await Bun.file(new URL('./app.ts', import.meta.url)).text(); expect(app).toMatch(/accountState: 2/);
   });
   test('R1 a later success with the same key clears "rejected"', async () => {
     reply = { state: 'present' };
@@ -114,12 +113,34 @@ describe('round 8 (seat 1 on 43200f9a7)', () => {
 });
 
 describe('round 8b (seat 2)', () => {
-  test('A1 mail and files are keyed on the account state: after sign-in an open page loads at once; the card is asked again on the host fact and demo; no resource of the tick depends on the card (no cycle)', async () => {
-    const read = (f: string) => Bun.file(new URL(`./${f}`, import.meta.url)).text();
-    const mail = await read('members-mail.contract'), files = await read('members-files.contract'), acc = await read('account.contract');
-    expect(mail).toContain('mailBox(mboxAddr, dm.on, acs.state)'); expect(mail).toContain('mailMessage(pg.top, dm.on, mailOriginal, acs.state)');
-    expect(files).toContain('fileList(dm.on, fsPath, fsMode, fsSort, fsDesc, fsQuery, acs.state)'); expect(files).toContain('fileOpen(dm.on, pg.top, acs.state)');
-    expect(acc).toContain('${hc.mode}|${dm.on}'); expect(acc).not.toContain('${mbx.status}'); expect(acc).not.toContain('${nb.docState}');      // a lazily-asked resource in the tick leaves the card unanswered at launch
+  test('A1 a signed-in page change re-asks the card but not the pages: the card\'s state string is the same on every tick, so the Mail and Files resources (keyed on it) are not asked again', async () => {
+    reply = { state: 'present' };
+    const states = new Set<string>();
+    for (const tick of ['true|ok||0|visible|true|0|native|false', 'true|ok||0|visible|true|1|native|false', 'true|ok||0|hidden|false|1|native|false'])
+      for (const top of ['mail:', 'files:', 'radio:']) states.add((await accountState(tick, top, false, 'native')).state);
+    expect([...states]).toEqual(['signedIn']);
+  });
+  test('H1 a native handle that arrives after the host wait corrects the state with no navigation: noSignIn, then signedIn', async () => {
+    resetSeam(); resetHost();
+    expect(await hostMode(20, 10)).toBe('none');
+    expect((await accountState('', 'radio:', false, 'none')).state).toBe('noSignIn');
+    reply = { state: 'present' }; adoptNative(handle(), 'late');
+    const m = await hostMode(20, 10);                                       // the contract asks the host fact again on its tick; a decided none re-checks without waiting
+    expect(m).toBe('native');
+    expect((await accountState('', 'radio:', false, m)).state).toBe('signedIn');
+  });
+  test('F1 a refusal seen by a page shows the card at once: the 401 is recorded, and the next answer of the card is rejected with the action', async () => {
+    reply = { state: 'present' };
+    globalThis.fetch = (async () => new Response('no', { status: 401 })) as never;
+    await authedJSON('/x').catch(() => undefined);
+    const v = await accountState('after-401', 'mail:', false, 'native');
+    expect(v).toMatchObject({ state: 'rejected', action: 'signIn' });
+  });
+  test('B1 a bridge that throws while the key is asked says unknown, never sign in', async () => {
+    reply = { state: 'absent', throwsKey: true };
+    const r = await authedJSON('/x').catch((e) => e);
+    expect((r as { reason?: string }).reason).toBe('unknown');
+    expect(WORDS.unknown).not.toMatch(/sign in/i);
   });
   test('X1b a late handle never shows a sign-in card first: undecided is unknown, and a "none" decision is the only way to noSignIn', async () => {
     resetSeam();

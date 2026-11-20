@@ -4,5 +4,6 @@ export const WORDS = {
   radioSignedOut: 'This is the public paper. Sign in to hear your own programme.',
   noSignIn: 'This is the public paper. Signing in is not available on this device yet.',
   locked: 'Unlock your phone to continue.',
+  unknown: 'Could not check your sign-in just now. Try again in a moment.',
   rejected: "This phone's sign-in is no longer accepted. Sign in again.",
 };

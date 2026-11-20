@@ -273,6 +273,10 @@ bad "iOS: the shared reader twin never fetched" 'console: reader: story blocks='
 bad "signed in: no sign-in card on the survey" '\[signedout-banner\]' "$SV"
 bad "signed in: no sign-in card on the read drive" '\[signedout-banner\]' "$RD"
 bad "signed in: no sign-in card on the tour" '\[signedout-banner\]' "$SHOTS/drive-tour.txt"
+# every Sign in action is the account state's: none of them may show on a signed-in phone (paper, onboarding, banner, settings)
+for D in "$SV" "$RD" "$SHOTS/drive-tour.txt"; do
+  bad "signed in: no Sign in action ($(basename "$D"))" '\[(paper-signin|paper-signin-card|signin|signedout-signin)\]' "$D"
+done
 # the signed-out tour
 chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO1"
 chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO1"
