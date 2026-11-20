@@ -1,6 +1,6 @@
 // The take RECORDER's native side (the voice): the radio's gate, the microphone, the file, the recogniser and the preview player. The Takes section itself is shared code (AutoradioLab/take-session.ts,
 // takes.ts); this file holds what only the app can do: take the microphone from the radio (the one voice), record to a file, read it with the recogniser, hand the shared code one snapshot
-// (the source `takesRecorder`, declared in interface/takes.json) and answer its ops (`takeOp`, called from AutoradioLab/modules/apple/ModelsEntry.swift), and fetch another listener's take for the run sheet.
+// (the source `takesRecorder`, declared in interface/takes.json) and answer its ops (`takeOp`, public: called across the module boundary from AutoradioLab/modules/apple/ModelsEntry.swift), and fetch another listener's take for the run sheet.
 //   ops: takeState | takeStart(minSeconds, maxSeconds, maxBytes) | takeStop | takePreview(mode on|off|toggle) | takeDiscard | takeDone | takeAudio
 //        takeSteerMute(handle): the learning engine's steer queue is native (SteerQueue)
 //        takeMirror(ids, handle, muted): the Swift programme (RadioProgramme.candidates) still filters the takes it offers by the listener's own ids and muted voices; shared code owns them and pushes a copy
@@ -83,7 +83,7 @@ extension AutoradioModule {
     }
 
     /// The shared code's calls on the recorder (take-session.ts `nativeDevice`). Each answers the snapshot, except the ones that answer their own thing.
-    @MainActor func takeOp(_ r: [String: Any]) async -> [String: Any] {
+    @MainActor public func takeOp(_ r: [String: Any]) async -> [String: Any] {
         guard let s = TakesHost.shared?.session else { return (r["op"] as? String) == "takeStart" ? ["ended": "open"] : [:] }
         func num(_ k: String, _ d: Double) -> Double { (r[k] as? NSNumber)?.doubleValue ?? d }
         switch r["op"] as? String ?? "" {
