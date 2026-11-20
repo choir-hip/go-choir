@@ -106,6 +106,11 @@ nice -n 10 $BUN exact.mjs ios                 # build, install on a simulator
 $BUN exact.mjs agent ios tree "tap listen" "clock settle" state
 ```
 
+For AutoradioLab run these through `mobile/scripts/exact.sh` (`exact.sh ios`, `exact.sh agent ios ...`), not a raw
+`bun exact.mjs`. The wrapper checks the Exact pin and runs `scripts/gen-build-info.sh`, which writes
+`build-info.gen.ts` (the commit and time the About page's Build row shows). A raw `bun exact.mjs ios` skips both:
+the app builds with a stale or missing `build-info.gen.ts`, and About's Build row says `unknown`.
+
 Measured (first cold build; Exact checkout at the pinned commit; M1, another
 agent compiling concurrently; compiled under `nice -n 10`):
 

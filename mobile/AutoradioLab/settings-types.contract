@@ -13,5 +13,5 @@ shape SettingsAccount
   baseURL: string
 
 shape AboutBuild
-  commit: string
+  build: string
   server: string
