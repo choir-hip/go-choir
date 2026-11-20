@@ -180,6 +180,8 @@ type briefPlan struct {
 	others        int
 	// from is where the threads came from (briefFrom*); "" when there are none.
 	from string
+	// round is the round of the record the threads came from (0: none).
+	round int
 }
 
 // recordBriefThreads lists the threads one record carries: a Texture Cast's
@@ -234,6 +236,7 @@ func researchBriefThreads(recs []types.CommitmentRecord, conversation string) br
 	}
 	plan.others = withObjective - 1
 	plan.from = briefFromUnread
+	plan.round = recs[chosen].Round
 	plan.labels = labelsOfRecord(recs[chosen])
 	seen := map[string]bool{}
 	for _, th := range recordBriefThreads(recs[chosen]) {
@@ -697,7 +700,7 @@ func renderBriefBlock(b briefBlock) string {
 func briefSubject(from string) string {
 	switch from {
 	case briefFromConversation:
-		return "the objective of an earlier record of this conversation (which this run may already have answered; your own task is in your prompt) and its threads"
+		return "the objective of an earlier record of this conversation (which may already have been answered) and its threads"
 	case briefFromAssignment:
 		return "the objective of your assigned work item and its threads"
 	default:
@@ -842,13 +845,19 @@ func (rt *Runtime) researchBriefOpening(ctx context.Context, rec *types.RunRecor
 		// has none, the conversation's most recent one while its round is open.
 		plan = rt.researchBriefAssignmentPlan(ctx, rec)
 		if len(plan.threads) == 0 {
-			plan = rt.researchBriefEarlierPlan(ctx, rec, inbox, conversation, after)
+			var err error
+			plan, err = rt.researchBriefEarlierPlan(ctx, rec, inbox, conversation, after)
+			if err != nil {
+				// A store failure or the deadline is not "no objective": the
+				// counter must show it.
+				b.res = researchBriefResult{outcome: briefFailed, reason: "the conversation was not readable: " + err.Error(), from: briefFromNone, unread: len(recs)}
+				b.res.text = briefNoBriefText(b.res.reason)
+				return done()
+			}
 		}
 	}
 	if len(plan.threads) == 0 {
-		// skip fills b.res and returns b (through done, which stamps the
-		// elapsed time); the fields set next belong to the same result.
-		b = skip("no objective in the unread records", "the unread records name no objective")
+		skip("no objective in the unread records", "the unread records name no objective")
 		b.res.from, b.res.unread = briefFromNone, len(recs)
 		return b
 	}
@@ -887,12 +896,13 @@ func (rt *Runtime) researchBriefRecords(ctx context.Context, rec *types.RunRecor
 
 // researchBriefEarlierPlan is the plan of the most recent record of this
 // run's conversation, among the records the reader has already read (the last
-// cellRecordsWindowSeqs before its cursor), that carries an objective. A
-// record of another conversation is never used. An unreadable range is no
-// plan: the assignment is tried next.
-func (rt *Runtime) researchBriefEarlierPlan(ctx context.Context, rec *types.RunRecord, inbox, conversation string, after int64) briefPlan {
+// cellRecordsWindowSeqs before its cursor), that carries an objective, while
+// the round of that record is still the conversation's open round. A record
+// of another conversation is never used. A read that fails is an error, not
+// "no objective", so the log line shows a store failure.
+func (rt *Runtime) researchBriefEarlierPlan(ctx context.Context, rec *types.RunRecord, inbox, conversation string, after int64) (briefPlan, error) {
 	if after <= 0 || conversation == "" {
-		return briefPlan{}
+		return briefPlan{}, nil
 	}
 	from := after - cellRecordsWindowSeqs
 	if from < 0 {
@@ -900,7 +910,7 @@ func (rt *Runtime) researchBriefEarlierPlan(ctx context.Context, rec *types.RunR
 	}
 	earlier, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, inbox, from, after)
 	if err != nil {
-		return briefPlan{}
+		return briefPlan{}, err
 	}
 	var mine []types.CommitmentRecord
 	for _, r := range earlier {
@@ -910,20 +920,24 @@ func (rt *Runtime) researchBriefEarlierPlan(ctx context.Context, rec *types.RunR
 	}
 	plan := researchBriefThreads(mine, conversation)
 	if len(plan.threads) == 0 {
-		return briefPlan{}
+		return briefPlan{}, nil
 	}
 	// A Cast whose round is closed was answered: briefing it again would send
-	// the run after a question it has already reported on. ConversationState
-	// folds the round from the conversation's records; an unreadable state is
-	// no plan.
+	// the run after a question it has already reported on. The head is the
+	// conversation's newest round, so the chosen Cast counts only when its own
+	// round is that round and it is open; a Cast of an earlier round, or a
+	// record with no round, is never briefed.
 	head, err := rt.store.ConversationState(ctx, rec.OwnerID, rec.ComputerID, conversation)
-	if err != nil || !head.Open {
-		return briefPlan{}
+	if err != nil {
+		return briefPlan{}, err
+	}
+	if !head.Open || plan.round == 0 || plan.round != head.Round {
+		return briefPlan{}, nil
 	}
 	// "other unread records" would be false here: none of these is unread.
 	plan.others, plan.from = 0, briefFromConversation
 	relabelObjective(&plan)
-	return plan
+	return plan, nil
 }
 
 // researchBriefAssignmentPlan is the plan of the open work items the run is

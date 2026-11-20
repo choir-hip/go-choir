@@ -309,3 +309,30 @@ func TestBriefPrefersTheRunsOpenAssignmentToTheConversationsCast(t *testing.T) {
 		t.Fatalf("queries=%v log=%s", probe.queries, logs.String())
 	}
 }
+
+// Review round 2. A later round that is open must not make an answered Cast
+// look open: the check is on the round of the Cast the plan chose.
+func TestBriefDoesNotBriefAnAnsweredCastBecauseALaterRoundIsOpen(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer, doc := "owner-obj-11", rt.cfg.ComputerID, "doc-obj-11"
+	seedNumberedCast(t, s, owner, computer, doc, "texture:"+doc, "obj11a", "Did the harbor strike end?")
+	readThrough(t, s, owner, computer, doc, 0, 1)
+	closeRoundOfDoc(t, s, owner, computer, doc, "obj11")
+	// Round 2 is open and unread, and names no objective.
+	seedNumberedCast(t, s, owner, computer, doc, "texture:"+doc, "obj11b", "")
+	probe := &briefProbe{result: briefResult(nil, 1)}
+	rt.researchBriefSearch = probe.search
+	logs := briefCaptureLog(t)
+	rec := briefRunRecord(owner, computer, doc, "run-obj-11")
+	b := rt.researchBriefOpening(context.Background(), rec)
+	briefCommitFresh(t, rt, s, rec, b)
+	if len(probe.queries) != 0 || briefFromLine(logs.String()) != "none" {
+		t.Fatalf("queries=%v log=%s: the chosen Cast's round was answered", probe.queries, logs.String())
+	}
+}
+
+func TestBriefTheConversationWordingDoesNotClaimAPromptTask(t *testing.T) {
+	if strings.Contains(briefSubject(briefFromConversation), "your own task is in your prompt") {
+		t.Fatal("the fallback branch has no assignment; it cannot say the prompt names a task")
+	}
+}
