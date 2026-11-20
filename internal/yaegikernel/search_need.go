@@ -25,7 +25,7 @@ const searchEnoughUnread = 15
 
 // allCounts are a cell's SearchAll counts (SearchStats.AllCalls and the rest).
 type allCounts struct {
-	calls, offered, sent, freshOverUnread, untagged int
+	calls, offered, sent, freshOverUnread, untagged, running int
 }
 
 // tagQuestion records that search id was sent for the question with this key.
