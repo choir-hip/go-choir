@@ -20,7 +20,7 @@ const probe = async (probeMs: number): Promise<boolean> => {
 
 /** `waitMs`: how long to wait (real time) for a handle to appear and answer before deciding "none". `nativeSeen`: the Swift package itself has answered (the native open-pages set has a top page), or
  * an app-module op has answered (api.ts): native exists, for good. It is the recovery from a bad window ("none" is re-asked by the contract with this flag) and what keeps native from being downgraded. */
-export function hostMode(waitMs = 4000, probeMs = 1500, nativeSeen = false): Promise<'native' | 'none'> {
+export function hostMode(waitMs = 1500, probeMs = 800, nativeSeen = false): Promise<'native' | 'none'> {
   if (nativeSeen || nativeHasAnswered()) decided = 'native';
   if (decided === 'native') return Promise.resolve('native');
   if (decided === 'none') waitMs = 0;                       // already waited once: a later ask only checks again, it does not wait again

@@ -11,7 +11,7 @@ export type AccountView = { state: string; message: string; action: string };
 const view = (state: string, message: string, action: string): AccountView => ({ state, message, action });
 
 /** `_tick`: changes when something that can change the answer happened (a sign-in or sign-out, a page change, the app returning to the front, a request the server refused). `waitMs`: the host wait. */
-export async function accountState(_tick: string, top = '', demo = false, waitMs = 4000): Promise<AccountView> {
+export async function accountState(_tick: string, top = '', demo = false, waitMs = 1500): Promise<AccountView> {
   if (demo) setDemo(true);
   if (isDemo()) return view('signedIn', '', '');
   if (!hasNativeHandle() && (await hostMode(waitMs, 1500)) === 'none' && !hasNativeHandle()) return view('noSignIn', WORDS.noSignIn, '');   // waited: there is no native package here
