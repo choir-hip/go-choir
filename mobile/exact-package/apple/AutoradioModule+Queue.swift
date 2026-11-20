@@ -22,7 +22,7 @@ extension AutoradioModule {
 
     func registerQueue() {
         onMainThread {
-            RunSheetPlayer.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["queueView", "radioView", "barState"]) } }
+            RunSheetPlayer.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["queueView", "radioView", "barFacts"]) } }
             // The station starts by itself when Autoradio opens (after onboarding), and when the app comes back after it was closed.
             Station.shared.isReady = { OnboardingController.shared?.finished ?? false }
         }
@@ -32,7 +32,7 @@ extension AutoradioModule {
                 guard let self else { timer.invalidate(); return }
                 self.choir.syncQueuePosition()
                 let moving = onMainThread { RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused }
-                if moving { self.touch(["queueView", "radioView", "barState"]) }
+                if moving { self.touch(["queueView", "radioView", "barFacts"]) }
             }
             RunLoop.main.add(t, forMode: .common)
         }
@@ -77,7 +77,7 @@ extension AutoradioModule {
                     }
                     self.signals.record(SignalEvent(kind: "queue", subject: ref, detail: mode))
                 }
-                self.touch(["queueView", "radioView", "barState"], now: true)
+                self.touch(["queueView", "radioView", "barFacts"], now: true)
                 reply(self.json(self.queueInfo()))
             }
         }
@@ -107,7 +107,7 @@ extension AutoradioModule {
                 case "closeWeb": self.barWebURL = ""
                 default: break
                 }
-                self.touch(["queueView", "radioView", "barState"], now: true)
+                self.touch(["queueView", "radioView", "barFacts"], now: true)
                 reply(self.json(self.queueInfo()))
             }
         }

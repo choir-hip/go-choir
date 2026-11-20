@@ -30,7 +30,6 @@ extension AutoradioModule {
                 DispatchQueue.main.async { reply(self?.json(m) ?? [:]) }
             }
         }
-        handle("barState") { [unowned self] _, reply in reply(json(BarState.info(player: choir.playerView(), snapshot: runtime.snapshot()))) }
         handle("signalList") { [unowned self] _, reply in reply(["rows": signals.recent(limit: 30).map { json($0) }]) }
 
         // The radio's buttons start the engine on first use; under the simulator's agent that engine must be the virtual one
@@ -76,7 +75,7 @@ extension AutoradioModule {
                 let on = !HandsFreeSwitch.shared.isOn
                 if on, !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
                 self.runtime.setHandsFree(on)
-                DispatchQueue.main.async { self.touch(["barState"], now: true); reply(self.json(self.runtime.snapshot())) }
+                DispatchQueue.main.async { self.touch(["barFacts"], now: true); reply(self.json(self.runtime.snapshot())) }
             }
         }
 

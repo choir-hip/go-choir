@@ -12,34 +12,25 @@ final class BarStateTests: XCTestCase {
     }
     private let t0 = Date(timeIntervalSince1970: 1000)
 
-    func testPhasesMapToStates() {
+    // (The bar's states, words and windows are bar.ts: bar.test.ts. What is native is what the engine told it, kept raw.)
+    func testEventsAreKeptRawWithTheirTime() {
         let tr = BarTracker()
-        XCTAssertEqual(tr.barInfo(player: player(playing: false, title: ""), snapshot: snap(count: 0), now: t0).state, "idle")
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap(), now: t0).state, "playing")
-        XCTAssertEqual(tr.barInfo(player: player(playing: false), snapshot: snap(paused: true), now: t0).state, "paused")
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap("candidate"), now: t0).state, "listening")
-        let talk = tr.barInfo(player: player(playing: true), snapshot: snap("capturing", text: "what about"), now: t0)
-        XCTAssertEqual(talk.state, "talking"); XCTAssertEqual(talk.text, "what about"); XCTAssertTrue(talk.talking)
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap("ended", text: "hi"), now: t0).state, "heard")
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap("holding"), now: t0).text, "On it…")
         tr.observe(.holdingSaid("Looking at the third paragraph…"), now: t0)
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap("holding"), now: t0).text, "Looking at the third paragraph…")
+        XCTAssertEqual(tr.raw().holding, "Looking at the third paragraph…")
         tr.observe(.phase(from: "playing", to: "candidate"), now: t0)
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap("holding"), now: t0).text, "On it…", "a new turn clears the old line")
-    }
-
-    func testRevisedAndErrorAreTimedAndRestart() {
-        let tr = BarTracker()
+        XCTAssertEqual(tr.raw().holding, "", "a new turn clears the old line")
         tr.observe(.revisionArrived(id: "r", fromBlock: 1, blocks: 2, summary: "s"), now: t0)
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap(), now: t0.addingTimeInterval(5)).state, "revised")
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap(), now: t0.addingTimeInterval(6.5)).state, "playing")
+        XCTAssertEqual(tr.raw().revisedAt, 1000)
         tr.observe(.error(stage: "desk", message: "boom"), now: t0.addingTimeInterval(10))
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap(), now: t0.addingTimeInterval(12)).state, "error")
+        XCTAssertEqual(tr.raw().errorStage, "desk"); XCTAssertEqual(tr.raw().errorMessage, "boom"); XCTAssertEqual(tr.raw().errorAt, 1010)
         tr.observe(.error(stage: "desk", message: "boom"), now: t0.addingTimeInterval(13))
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap(), now: t0.addingTimeInterval(16)).state, "error", "a repeat restarts the window")
-        XCTAssertEqual(tr.barInfo(player: player(playing: true), snapshot: snap(), now: t0.addingTimeInterval(18)).state, "playing")
+        XCTAssertEqual(tr.raw().errorAt, 1013, "a repeat moves the time, so the window restarts")
+        tr.observe(.error(stage: "other", message: "x"), now: t0.addingTimeInterval(20))
+        XCTAssertEqual(tr.raw().errorAt, 1013, "only the engine's own stages are errors for the bar")
+        XCTAssertEqual(tr.expiry(now: t0.addingTimeInterval(5))!, 1.0, accuracy: 0.01)
         XCTAssertNil(tr.expiry(now: t0.addingTimeInterval(30)))
-        XCTAssertEqual(tr.expiry(now: t0.addingTimeInterval(14))!, 3.0, accuracy: 0.01)
+        tr.wipe()
+        XCTAssertEqual(tr.raw().errorAt, 0); XCTAssertEqual(tr.raw().holding, ""); XCTAssertEqual(tr.raw().revisedAt, 0)
     }
 
     func testClockCountsOnlyRunningTime() {

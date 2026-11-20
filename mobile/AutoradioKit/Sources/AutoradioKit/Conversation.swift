@@ -119,12 +119,8 @@ public final class Conversation: @unchecked Sendable {
     public func entry(_ id: String) -> ConversationEntry? { entries().last { $0.id == id } }
     public func clear() { lock.lock(); list = []; current = nil; dismissed = nil; lock.unlock(); onChange?() }
 
-    /// The entry the bar's card shows: the latest that is not cancelled and not dismissed.
-    public func visible() -> ConversationEntry? {
-        lock.lock(); defer { lock.unlock() }
-        guard let e = list.last(where: { $0.status != "cancelled" }), e.id != dismissed else { return nil }
-        return e
-    }
+    /// The id the listener closed the bar's card on ("" none). Which entry the card shows is decided in shared code (bar.ts) from the entries and this.
+    public func dismissedID() -> String { lock.lock(); defer { lock.unlock() }; return dismissed ?? "" }
 
     /// Plain words for an error that ended a turn with nothing spoken.
     public static func plain(_ error: Error) -> String {

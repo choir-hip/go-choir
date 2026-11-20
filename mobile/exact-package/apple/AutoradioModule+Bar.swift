@@ -1,15 +1,15 @@
-// Lane 1 (bar, radio, talk): the bar's state (replacing the spine's pure one with the timed tracker), the radio view that
-// feeds the expanded player, jump and speed. Registered by registerBar(), after registerSpine(), so `barState` here wins.
+// Lane 1 (bar, radio, talk): the bar's FACTS (the bar's own page model is shared code: AutoradioLab/bar.ts), the radio view that
+// feeds the expanded player, jump and speed. Registered by registerBar().
 import Foundation
 
 extension AutoradioModule {
     func registerBar() {
         let tracker = BarTracker.shared
 
-        // Timed states (error 4 s, revised 6 s) end by themselves: ask once more when the window closes.
+        // The radio view's revision line ends by itself: ask once more when the window closes. (The bar's timed states are bar.ts's.)
         func scheduleExpiry() {
             guard let r = tracker.expiry() else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + r + 0.1) { [weak self] in self?.touch(["barState", "radioView"]) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + r + 0.1) { [weak self] in self?.touch(["radioView"]) }
         }
 
         // The engine's events feed the tracker: holding lines, revisions, errors.
@@ -22,7 +22,7 @@ extension AutoradioModule {
                 tracker.observe(te.event)
                 switch te.event {
                 case .holdingSaid, .revisionArrived, .error, .phase, .yielded:
-                    DispatchQueue.main.async { self.touch(["barState", "radioView"]); scheduleExpiry() }
+                    DispatchQueue.main.async { self.touch(["barFacts", "radioView"]); scheduleExpiry() }
                 default: break
                 }
             }
@@ -34,7 +34,7 @@ extension AutoradioModule {
             let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] timer in
                 guard let self else { timer.invalidate(); return }
                 let s = self.runtime.snapshot()
-                if s.running && !s.paused { self.touch(["radioView", "barState"]) }
+                if s.running && !s.paused { self.touch(["radioView", "barFacts"]) }
                 if s.blockIndex != lastBlock { lastBlock = s.blockIndex; self.touch(["queueView"]) }   // lane autoradio-joins: the DJ's coming segments moved on
             }
             RunLoop.main.add(t, forMode: .common)
@@ -53,13 +53,15 @@ extension AutoradioModule {
             }
         }
 
-        handle("barState") { [unowned self] _, reply in
-            let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.barInfo(player: choir.playerView(), snapshot: runtime.snapshot())) }   // remote audio shows as the radio (lane autoradio-queue)
-            scheduleExpiry()
-            reply(json(info))
+        // Native because only native code knows these: the engine's phase and words, its events (stamped with the device's clock), the player and the run sheet player.
+        // It decides nothing: bar.ts makes the state, the words and the timed windows from them. `at` is the clock bar.ts uses (a data source may not read time).
+        handle("barFacts") { [unowned self] _, reply in
+            let facts = MainActor.assumeIsolated { self.barFacts() }
+            reply(json(facts))
         }
 
         handle("radioView") { [unowned self] _, reply in
+            scheduleExpiry()
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
             let info = MainActor.assumeIsolated { RunSheetPlayer.shared.overlay(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "")) }   // lane autoradio-queue
             ReaderFeed.shared.feed(info, route: route)
@@ -72,7 +74,7 @@ extension AutoradioModule {
                 if !runtime.player.document.segments.isEmpty { runtime.player.jumpToSegment(i) }
                 else if runtime.player.document.blocks.indices.contains(i) { runtime.player.start(at: i) }
             }
-            touch(["radioView", "barState"])
+            touch(["radioView", "barFacts"])
             let route = ChoirEnvironment.shared.playing(runtime.player.document.id)?.route ?? ""
             reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" })))
         }
@@ -84,7 +86,7 @@ extension AutoradioModule {
             Task { [weak self] in
                 guard let self else { return }
                 await self.choir.moveStory(move)
-                self.touch(["radioView", "barState"])
+                self.touch(["radioView", "barFacts"])
                 let route = ChoirEnvironment.shared.playing(self.runtime.player.document.id)?.route ?? ""
                 DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route, nextTitle: onMainThread { RunSheetStore.shared.ahead(limit: 1).first?.displayTitle ?? "" }))) }
             }
@@ -104,6 +106,40 @@ extension AutoradioModule {
 
 /// Lane 1 feeds the reader: the sentence the radio is saying, by address, so the reader lights it (ReaderFollow, lane 3).
 /// Only a change is passed on; when nothing plays the follow is cleared.
+/// The bar's facts as the shared bar page model reads them (interface/bar.json `BarFacts`).
+struct BarFacts: Codable {
+    var at = 0.0
+    var phase = "playing", transcript = ""
+    var blockIndex = 0, blockCount = 0
+    var blockFraction = 0.0
+    var running = false, signedIn = false, playing = false
+    var title = "", message = ""
+    var handsFree = false
+    var holding = ""
+    var revisedAt = 0.0, errorAt = 0.0
+    var errorStage = "", errorMessage = ""
+    /// The run sheet player's: something is on air, it is held for the audio session, remote audio is the current item (its play state, title and place).
+    var onAir = false, waiting = false, remote = false, remotePlaying = false
+    var remoteTitle = ""
+    var remoteFraction = 0.0
+}
+
+extension AutoradioModule {
+    @MainActor func barFacts() -> BarFacts {
+        let s = runtime.snapshot(), p = choir.playerView(), raw = BarTracker.shared.raw(), player = RunSheetPlayer.shared, q = player.info()
+        var f = BarFacts()
+        f.at = Date().timeIntervalSince1970
+        f.phase = s.phase; f.transcript = s.transcript
+        f.blockIndex = s.blockIndex; f.blockCount = s.blockCount; f.blockFraction = BarTracker.shared.blockFraction(s)
+        f.running = s.running; f.signedIn = p.signedIn; f.playing = p.playing; f.title = p.title; f.message = p.message
+        f.handsFree = HandsFreeSwitch.shared.isOn
+        f.holding = raw.holding; f.revisedAt = raw.revisedAt; f.errorAt = raw.errorAt; f.errorStage = raw.errorStage; f.errorMessage = raw.errorMessage
+        f.onAir = player.store.onAir() != nil; f.waiting = player.isWaitingForSession
+        f.remote = player.isRemote; f.remotePlaying = q.playing; f.remoteTitle = q.current; f.remoteFraction = q.fraction
+        return f
+    }
+}
+
 final class ReaderFeed: @unchecked Sendable {
     static let shared = ReaderFeed()
     private let lock = NSLock()

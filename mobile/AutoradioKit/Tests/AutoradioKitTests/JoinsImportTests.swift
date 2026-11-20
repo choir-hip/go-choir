@@ -27,12 +27,10 @@ final class JoinBarImportTests: XCTestCase {
         await BarDocumentImport.run(url: url, importer: { _ in throw Boom() }, open: { _ in }, say: { said.append($0) })
         XCTAssertEqual(said, ["My Book.epub was not added. This file could not be read."])
     }
-    func testJ2_TheBarShowsTheSaidLineAsItsLine() {
+    func testJ2_TheBarHandsOverTheSaidLineAsItIs() {
         let tr = BarTracker(); let t0 = Date(timeIntervalSince1970: 1000)
         tr.say("My Book.epub was not added. The file could not be downloaded.", now: t0)
-        var p = ChoirPlayerView(); p.signedIn = true
-        let b = tr.barInfo(player: p, snapshot: LabSnapshot(), now: t0.addingTimeInterval(1))
-        XCTAssertEqual(b.state, "error"); XCTAssertEqual(b.text, "My Book.epub was not added. The file could not be downloaded.")
-        XCTAssertNotEqual(tr.barInfo(player: p, snapshot: LabSnapshot(), now: t0.addingTimeInterval(BarTracker.errorWindow + 1)).state, "error")
+        let r = tr.raw()   // bar.ts shows a line with no stage as it is, for its window (bar.test.ts B4)
+        XCTAssertEqual(r.errorStage, ""); XCTAssertEqual(r.errorMessage, "My Book.epub was not added. The file could not be downloaded."); XCTAssertEqual(r.errorAt, 1000)
     }
 }

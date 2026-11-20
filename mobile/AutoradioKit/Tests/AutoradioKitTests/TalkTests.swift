@@ -63,7 +63,7 @@ final class ConversationTests: XCTestCase {
     func testTheAnswerIsKeptAsItIsSpoken() {
         let c = Conversation()
         c.begin(id: "t1", question: "What changed?")
-        XCTAssertEqual(c.visible()?.status, "asking")
+        XCTAssertEqual(c.entries().last?.status, "asking")
         c.addAnswer(id: "t1", sentence: "The strike ended.")
         c.addAnswer(id: "t1", sentence: "Talks resume Monday.")
         c.finishAnswer(id: "t1", status: "completed")
@@ -75,9 +75,9 @@ final class ConversationTests: XCTestCase {
         let c = Conversation()
         c.begin(id: "t1", question: "What changed?")
         c.fail(id: "t1", note: "I can't reach the paper right now.")
-        var b = BarInfo(); BarTracker.decorate(&b, with: c.visible())
-        XCTAssertEqual(b.answerState, "failed"); XCTAssertTrue(b.canRetry); XCTAssertEqual(b.answerNote, "I can't reach the paper right now.")
-        XCTAssertEqual(b.question, "What changed?")
+        let e = c.entries().last
+        XCTAssertEqual(e?.status, "failed"); XCTAssertEqual(e?.note, "I can't reach the paper right now.")
+        XCTAssertEqual(e?.question, "What changed?")   // the card and its retry flag are bar.ts (bar.test.ts B8)
     }
     func testANewQuestionClosesTheOldOneAndLateSentencesAreIgnored() {
         let c = Conversation()
@@ -86,7 +86,7 @@ final class ConversationTests: XCTestCase {
         c.addAnswer(id: "t2", sentence: "answer two")
         XCTAssertEqual(c.entry("t1")?.status, "cancelled"); XCTAssertEqual(c.entry("t1")?.answer, "")
         XCTAssertEqual(c.entry("t2")?.answer, "answer two")
-        XCTAssertEqual(c.visible()?.id, "t2")
+        XCTAssertEqual(c.entries().last?.id, "t2")
     }
     func testNothingSaysWorkingForever() {
         let c = Conversation()
@@ -98,25 +98,22 @@ final class ConversationTests: XCTestCase {
     func testAThankYouLeavesNoCardAndCancelLeavesNoFailure() {
         let c = Conversation()
         c.begin(id: "t1", question: "thanks"); c.cancelOpen()
-        XCTAssertNil(c.visible())
+        XCTAssertEqual(c.entries().last?.status, "cancelled")   // no card for it: bar.ts
     }
     func testFirstAnswerThenFullAnswerIsOneEntry() {
         let c = Conversation()
         c.begin(id: "t1", question: "q")
         c.setFirst(id: "t1", text: "The strike ended.", source: "From the paper's story on Harbor")
-        var b = BarInfo(); BarTracker.decorate(&b, with: c.visible())
-        XCTAssertEqual(b.answerState, "first"); XCTAssertEqual(b.answerLabel, "From your saved stories")
-        XCTAssertTrue(b.answerText.hasPrefix("From the paper's story on Harbor: "))
+        XCTAssertEqual(c.entries().last?.first, "The strike ended."); XCTAssertEqual(c.entries().last?.firstSource, "From the paper's story on Harbor")
         c.addAnswer(id: "t1", sentence: "Full: talks resume Monday."); c.finishAnswer(id: "t1", status: "completed")
-        b = BarInfo(); BarTracker.decorate(&b, with: c.visible())
-        XCTAssertEqual(b.answerState, "full"); XCTAssertEqual(b.answerLabel, ""); XCTAssertEqual(b.answerText, "Full: talks resume Monday.")
+        XCTAssertEqual(c.entries().last?.answer, "Full: talks resume Monday.")
         XCTAssertEqual(c.entries().count, 1)
     }
     func testDismissHidesTheCardUntilTheNextQuestion() {
         let c = Conversation()
         c.begin(id: "t1", question: "q"); c.addAnswer(id: "t1", sentence: "a"); c.finishAnswer(id: "t1", status: "completed")
-        c.dismiss(); XCTAssertNil(c.visible())
-        c.begin(id: "t2", question: "q2"); XCTAssertEqual(c.visible()?.id, "t2")
+        c.dismiss(); XCTAssertEqual(c.dismissedID(), "t1")
+        c.begin(id: "t2", question: "q2"); XCTAssertEqual(c.dismissedID(), "", "a new question shows its card again")
     }
 }
 
@@ -244,9 +241,9 @@ final class SavedAnswerTests: XCTestCase {
         let (e, _, _) = try engine(desk: "scripted-stream-desk", model: nil, corpus: corpus())
         _ = await e.typedTurn("what is the top story")
         for _ in 0..<100 { let p = await e.phase; if p == .holding || p == .acknowledging { break }; try await Task.sleep(nanoseconds: 50_000_000) }
-        XCTAssertEqual(Conversation.shared.visible()?.status, "asking", "the question is on screen while the answer is awaited")
+        XCTAssertEqual(Conversation.shared.entries().last?.status, "asking", "the question is on screen while the answer is awaited")
         await e.cancelTurn()
-        XCTAssertNil(Conversation.shared.visible())
+        XCTAssertEqual(Conversation.shared.entries().last?.status, "cancelled", "no failure card: a cancelled entry shows none (bar.ts)")
         ScriptedStreamingDesk.hang = false
     }
 
@@ -260,7 +257,7 @@ final class SavedAnswerTests: XCTestCase {
         let es = Conversation.shared.entries()
         XCTAssertEqual(es.count, 2)
         XCTAssertEqual(es[0].status, "cancelled"); XCTAssertEqual(es[1].status, "answered"); XCTAssertEqual(es[1].answer, "Answer.")
-        XCTAssertEqual(Conversation.shared.visible()?.question, "second question about the bank")
+        XCTAssertEqual(es[1].question, "second question about the bank")
     }
 }
 

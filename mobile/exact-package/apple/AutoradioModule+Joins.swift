@@ -17,7 +17,7 @@ extension AutoradioModule {
                 guard ClipStore.shared.clip(id) != nil else { reply(self.json(PodDone(status: "error", message: "That clip is not available any more."))); return }
                 if op == "play", !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
                 if op == "queue" { HearIt.enqueue(id) } else { await HearIt.play(id) }
-                self.touch(["queueView", "radioView", "barState", "podcastNow"], now: true)
+                self.touch(["queueView", "radioView", "barFacts", "podcastNow"], now: true)
                 reply(self.json(PodDone()))
             }
         }

@@ -1,49 +1,17 @@
 import Foundation
 
-// The bar's state machine and the radio view as data (plan section 1). Lane 1 owns this file.
-//   idle | playing | paused | listening | talking | heard | holding | revised | error
-// "typing" is not here: it is the focus of the bar's field, which only the contract knows.
+// The radio view as data, and the native FACTS the bar is made from. The bar's own page model (its state, words, timed windows, progress, answer card and the run
+// sheet overlay) is shared code now: AutoradioLab/bar.ts, from the facts this file keeps (`BarTracker.raw`) and the module hands over (`barFacts`).
+// What stays here, and why: the engine's events (holding line, revision, error) are only seen by native code, so they are kept raw with the device's time; the audio's
+// own position in the block (`clockProgress`) is the player's.
 //
-// Ways this can fail (written before the code):
-//  1. A turn leaves no state behind and the bar sticks on "holding" or "talking": every state but the three timed ones
-//     (error, revised) is a pure function of the engine phase, so a phase back to "playing" always returns the bar.
-//  2. "Revised" or "error" never goes away because nothing asks again: the tracker answers from a clock (`now`), the
-//     module schedules one more read for the moment each window ends (`expiry`).
-//  3. The same error text arrives twice: the window restarts, it does not stack.
-//  4. Nothing is loaded (empty document): never "paused" (a play button with nothing behind it); that is "idle".
-//  5. Paused versus idle: a loaded document that is not playing is "paused"; a document with a block index past its end
-//     (after a revision shortens it) must clamp, not trap.
-//  6. The sentence estimate runs past the block (audio longer than the guess): progress clamps below 1, the last
-//     sentence stays lit until the block changes.
-//  7. Pause/resume must not count paused time: elapsed time accumulates only while running at normal level (not paused,
-//     not yielded to "pause").
-//  8. A block that is a clip (no spoken text) has no sentences: current is its summary, one "sentence".
-//  9. Thousands of blocks: the item list is capped, the current block is always inside the window.
-// 10. The words from a former turn show in a new one: the heard text clears on the phase to "candidate".
-
-public struct BarInfo: Codable, Sendable, Equatable {
-    public var state = "idle"
-    /// What the centre shows for every state but idle (idle shows the aim, which the contract builds from the page).
-    public var text = ""
-    public var playing = false
-    public var talking = false
-    public var signedIn = false
-    /// Hands-free is on (the microphone is open and turns open and close by themselves) or off (nothing is heard). Kept across launches.
-    public var handsFree = false
-    /// 0...1 along the current programme; the hairline rule on the bar's lower edge.
-    public var progress = 0.0
-    /// The conversation card (Conversation.swift): what the reader asked, what came back, and where it came from. Empty `answerState`:
-    /// no card. working (heard, nothing yet) | first (from saved stories, the full answer is on its way) | full | failed.
-    public var question = ""
-    public var answerText = ""
-    /// "From your saved stories: From the paper's story on X" when the answer shown is the phone's first answer; empty for the full one.
-    public var answerLabel = ""
-    public var answerState = ""
-    /// Plain words about a failure or a cut-off answer.
-    public var answerNote = ""
-    public var canRetry = false
-    public init() {}
-}
+// Ways this can fail (the radio view's; the bar's list is in bar.test.ts):
+//  1. Pause/resume must not count paused time: elapsed time accumulates only while running at normal level (not paused, not yielded to "pause").
+//  2. The sentence estimate runs past the block (audio longer than the guess): progress clamps below 1, the last sentence stays lit until the block changes.
+//  3. A block that is a clip (no spoken text) has no sentences: current is its summary, one "sentence".
+//  4. Thousands of blocks: the item list is capped, the current block is always inside the window.
+//  5. A block index past the end (after a revision shortens it) clamps, not traps.
+//  6. The words from a former turn show in a new one: the holding line clears on the phase to "candidate".
 
 public struct RadioItem: Codable, Sendable, Equatable {
     public var i = 0
@@ -108,19 +76,19 @@ public struct BlockClock: Sendable, Equatable {
 
 public final class BarTracker: @unchecked Sendable {
     public static let shared = BarTracker()
-    public static let errorWindow = 4.0, revisedWindow = 6.0, wordsPerSecond = 2.6
+    public static let revisedWindow = 6.0, wordsPerSecond = 2.6
 
     private let lock = NSLock()
     private var holdingLine = ""
     private var revisedAt: Date?
     private var revisedSummary = ""
     private var errorAt: Date?
-    private var errorText = ""
-    private var lastMessage = ""
+    private var errorStage = ""
+    private var errorMessage = ""
     private var clock = BlockClock()
     /// Sign-out: the held words (a message, a revision summary, the holding line) are the account's.
     public func wipe() {
-        lock.lock(); holdingLine = ""; revisedAt = nil; revisedSummary = ""; errorAt = nil; errorText = ""; lastMessage = ""; lock.unlock()
+        lock.lock(); holdingLine = ""; revisedAt = nil; revisedSummary = ""; errorAt = nil; errorStage = ""; errorMessage = ""; lock.unlock()
     }
     public private(set) var speed = 1.0
     private var level = 0.0
@@ -159,26 +127,14 @@ public final class BarTracker: @unchecked Sendable {
         case .phase(_, let to): if to == "candidate" || to == "addressed" { holdingLine = "" }
         case .revisionArrived(_, _, _, let s): revisedAt = now; revisedSummary = s
         case .error(let stage, let m) where ["system1", "desk", "programme", "voice"].contains(stage):
-            errorAt = now; errorText = Self.plain(stage: stage, message: m)
+            errorAt = now; errorStage = stage; errorMessage = m
         default: break
         }
     }
 
     /// A plain line from the app itself (not an engine event): it holds the bar for the error window like any other.
     public func say(_ line: String, now: Date = Date()) {
-        lock.lock(); errorAt = now; errorText = line; lock.unlock()
-    }
-
-    static func plain(stage: String, message m: String) -> String {
-        if m.contains("not signed in") { return "Sign in to talk to your computer." }
-        if m.contains("429") { return "Your computer is busy right now. Try again in a moment." }
-        if m.contains("network") || m.contains("timed out") { return "Could not reach choir.news. Check your connection." }
-        switch stage {
-        case "system1": return "Your computer was slow to understand that; carrying on."
-        case "desk": return "Your computer could not act on that. Try asking again."
-        case "voice": return "The voice stopped. Tap play to carry on."
-        default: return "Something went wrong with the radio."
-        }
+        lock.lock(); errorAt = now; errorStage = ""; errorMessage = line; lock.unlock()
     }
 
     public func setSpeed(_ s: Double) {
@@ -187,63 +143,28 @@ public final class BarTracker: @unchecked Sendable {
         for o in speedObservers { o(v) }
     }
 
-    /// When the bar's timed states next end, so the host can ask once more then (nil: nothing is timed).
+    /// When the radio view's revision line next ends, so the host can ask once more then (nil: nothing is timed). The bar's own timed states are shared code's (bar.ts).
     public func expiry(now: Date = Date()) -> TimeInterval? {
         lock.lock(); defer { lock.unlock() }
-        var out: [TimeInterval] = []
-        if let t = errorAt { let r = Self.errorWindow - now.timeIntervalSince(t); if r > 0 { out.append(r) } }
-        if let t = revisedAt { let r = Self.revisedWindow - now.timeIntervalSince(t); if r > 0 { out.append(r) } }
-        return out.min()
+        guard let t = revisedAt else { return nil }
+        let r = Self.revisedWindow - now.timeIntervalSince(t)
+        return r > 0 ? r : nil
     }
 
     // MARK: Views
 
-    public func barInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, now: Date = Date()) -> BarInfo {
-        var b = baseInfo(player: p, snapshot: s, now: now)
-        Self.decorate(&b, with: Conversation.shared.visible())
-        return b
+    /// What the engine told the bar, as it was told (times in seconds since 1970, 0 for none). bar.ts decides what the bar says.
+    public struct Raw: Sendable {
+        public var holding = "", revisedAt = 0.0, errorAt = 0.0, errorStage = "", errorMessage = ""
     }
-
-    /// The conversation card for the entry on show (nil: none).
-    static func decorate(_ b: inout BarInfo, with e: ConversationEntry?) {
-        guard let e else { return }
-        b.question = e.question
-        let saved = e.firstSource.isEmpty ? e.first : e.firstSource + ": " + e.first
-        switch e.status {
-        case "failed":
-            b.answerState = "failed"; b.answerNote = e.note; b.canRetry = true
-        case "answered", "answering":
-            if !e.answer.isEmpty { b.answerState = "full"; b.answerText = e.answer }
-            else { b.answerState = "first"; b.answerText = saved; b.answerLabel = "From your saved stories" }
-            b.answerNote = e.note; b.canRetry = e.status == "answered" && !e.note.isEmpty
-        default:   // asking
-            if e.first.isEmpty { b.answerState = "working" }
-            else { b.answerState = "first"; b.answerText = saved; b.answerLabel = "From your saved stories" }
-        }
-    }
-
-    func baseInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, now: Date = Date()) -> BarInfo {
+    public func raw() -> Raw {
         lock.lock(); defer { lock.unlock() }
-        var b = BarInfo()
-        b.signedIn = p.signedIn; b.playing = p.playing; b.handsFree = HandsFreeSwitch.shared.isOn
-        if s.blockCount > 0 { b.progress = min(1, (Double(s.blockIndex) + clockProgress(s, doc: nil, now: now)) / Double(s.blockCount)) }
-        // A message from the listener path (sign-in, the programme) is new once; it holds the bar for the error window.
-        if !p.message.isEmpty, p.message != lastMessage, p.message != "Pick a story below." {
-            lastMessage = p.message; errorAt = now; errorText = p.message
-        }
-        if let t = errorAt, now.timeIntervalSince(t) < Self.errorWindow { b.state = "error"; b.text = errorText; return b }
-        switch s.phase {
-        case "candidate": b.state = "listening"; b.text = s.transcript.isEmpty ? "Listening…" : s.transcript; return b
-        case "addressed", "capturing": b.state = "talking"; b.talking = true; b.text = s.transcript.isEmpty ? "Listening…" : s.transcript; return b
-        case "ended": b.state = "heard"; b.text = s.transcript.isEmpty ? "Heard you" : s.transcript; return b
-        case "acknowledging", "holding": b.state = "holding"; b.text = holdingLine.isEmpty ? "On it…" : holdingLine; return b
-        case "revised": b.state = "revised"; b.text = "Revised · Show"; return b
-        default: break
-        }
-        if let t = revisedAt, now.timeIntervalSince(t) < Self.revisedWindow { b.state = "revised"; b.text = "Revised · Show"; return b }
-        if p.playing { b.state = "playing"; b.text = p.title }
-        else if !p.title.isEmpty, s.blockCount > 0, s.running { b.state = "paused"; b.text = p.title }
-        return b
+        return Raw(holding: holdingLine, revisedAt: revisedAt?.timeIntervalSince1970 ?? 0, errorAt: errorAt?.timeIntervalSince1970 ?? 0, errorStage: errorStage, errorMessage: errorMessage)
+    }
+    /// The audio's place in the block now, 0...1 (the audio's own position; an estimate from play time only without one).
+    public func blockFraction(_ s: LabSnapshot, now: Date = Date()) -> Double {
+        lock.lock(); defer { lock.unlock() }
+        return clockProgress(s, doc: nil, now: now)
     }
 
     func clockProgress(_ s: LabSnapshot, doc: ProgrammeDocument?, now: Date) -> Double {
@@ -336,11 +257,4 @@ public final class BarTracker: @unchecked Sendable {
     }
 
     static func speedName(_ s: Double) -> String { PlaybackSpeed.name(s) }
-}
-
-public enum BarState {
-    /// Kept for callers that have no tracker of their own: uses the shared one.
-    public static func info(player p: ChoirPlayerView, snapshot s: LabSnapshot) -> BarInfo {
-        BarTracker.shared.barInfo(player: p, snapshot: s)
-    }
 }
