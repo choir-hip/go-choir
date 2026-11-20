@@ -101,7 +101,7 @@ func (s *Store) ensureCaptureIndexTables(ctx context.Context) error {
 		return fmt.Errorf("create capture projection: %w", err)
 	}
 	s.retrievalState.captureIndexReady.Store(true)
-	return nil
+	return s.ensureCaptureResolutionTable(ctx)
 }
 
 // captureURLKey is the lookup key of a capture URL: the sha256 of the URL

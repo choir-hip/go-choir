@@ -270,6 +270,7 @@ func main() {
 	ogHandler.ConfigureCaptureIndex(store)
 	// Search leads: their own table and readiness, made a little after boot.
 	store.StartSearchLeads(context.Background())
+	ogHandler.ConfigureReadyList(svc)
 	// The captured pages' full-text index, beside the capture projection:
 	// derived from the capture objects and their text blobs, rebuilt by its
 	// catch-up (docs/reference/CAPTURE-FULLTEXT.md).

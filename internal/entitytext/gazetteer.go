@@ -19,13 +19,19 @@ type Gazetteer struct {
 	// ends indexes every key of two or more words by its first and last
 	// word, for Near.
 	ends map[string]map[nearKey]bool
+	// toks indexes every key of two or more words by each of its words (the
+	// token-subset lookup); inits indexes it by its initials (the initials
+	// lookup), with and without its connectors.
+	toks  map[string]map[nearKey]bool
+	inits map[string]map[nearKey]bool
 }
 
 type nearKey struct{ id, key string }
 
 // NewGazetteer returns an empty gazetteer.
 func NewGazetteer() *Gazetteer {
-	return &Gazetteer{root: newTrieNode(), byID: map[string]map[string]bool{}, ends: map[string]map[nearKey]bool{}}
+	return &Gazetteer{root: newTrieNode(), byID: map[string]map[string]bool{}, ends: map[string]map[nearKey]bool{},
+		toks: map[string]map[nearKey]bool{}, inits: map[string]map[nearKey]bool{}}
 }
 
 // Matchable reports whether a name can be a gazetteer key: its key is not
@@ -64,6 +70,13 @@ func (g *Gazetteer) Add(id, name string) bool {
 				g.ends[w] = map[nearKey]bool{}
 			}
 			g.ends[w][nearKey{id, key}] = true
+		}
+		nk := nearKey{id, key}
+		for _, w := range words {
+			addTo(g.toks, w, nk)
+		}
+		for _, in := range initialsOf(words) {
+			addTo(g.inits, in, nk)
 		}
 	}
 	return true
@@ -104,7 +117,211 @@ func (g *Gazetteer) removeKey(id, key string) {
 				delete(g.ends, w)
 			}
 		}
+		nk := nearKey{id, key}
+		for _, w := range words {
+			delFrom(g.toks, w, nk)
+		}
+		for _, in := range initialsOf(words) {
+			delFrom(g.inits, in, nk)
+		}
 	}
+}
+
+func addTo(m map[string]map[nearKey]bool, k string, nk nearKey) {
+	if m[k] == nil {
+		m[k] = map[nearKey]bool{}
+	}
+	m[k][nk] = true
+}
+
+func delFrom(m map[string]map[nearKey]bool, k string, nk nearKey) {
+	delete(m[k], nk)
+	if len(m[k]) == 0 {
+		delete(m, k)
+	}
+}
+
+// initialsOf is the initials of a multi-word key's words: of all of them
+// ("bank of montreal" is bom) and of the words that are not connectors
+// ("bank of montreal" is bm), without repeating. "" and one-letter results
+// are dropped: one initial names nothing.
+func initialsOf(words []string) []string {
+	var all, open []rune
+	for _, w := range words {
+		r := []rune(w)
+		if len(r) == 0 {
+			continue
+		}
+		all = append(all, r[0])
+		if !connectors[w] && !stopwords[w] {
+			open = append(open, r[0])
+		}
+	}
+	var out []string
+	for _, rs := range [][]rune{all, open} {
+		if len(rs) < 2 {
+			continue
+		}
+		in := string(rs)
+		dup := false
+		for _, o := range out {
+			dup = dup || o == in
+		}
+		if !dup {
+			out = append(out, in)
+		}
+	}
+	return out
+}
+
+func sortedIDs(ids map[string]bool) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	for id := range ids {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Subset returns, sorted, the entities with a key of more words than key
+// that holds every word of key, in any place: "Hegseth" is a subset of
+// "Pete Brian Hegseth", and so is "Pete Hegseth". A one-word key that could
+// not match alone (a closed or short word) is a subset of nothing. Near is the
+// stricter reading (an end of the name); Subset also reads the middle.
+func (g *Gazetteer) Subset(key string) []string {
+	words := strings.Fields(key)
+	if len(words) == 0 || (len(words) == 1 && !singleWordMatches(Token{Key: words[0]})) {
+		return nil
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	// Read the rarest word's keys: the others are checked against them.
+	rare := words[0]
+	for _, w := range words {
+		if len(g.toks[w]) < len(g.toks[rare]) {
+			rare = w
+		}
+	}
+	ids := map[string]bool{}
+	for nk := range g.toks[rare] {
+		kw := strings.Fields(nk.key)
+		if len(kw) > len(words) && holdsAll(kw, words) {
+			ids[nk.id] = true
+		}
+	}
+	return sortedIDs(ids)
+}
+
+// Within returns, sorted, the entities with a key that is made of words of
+// key: "Donald Trump" holds the entity named "Trump" (a one-word key only
+// when it could match alone) and the entity named "Donald Trump" itself is
+// not returned (that is Lookup's).
+func (g *Gazetteer) Within(key string) []string {
+	words := strings.Fields(key)
+	if len(words) < 2 {
+		return nil
+	}
+	ids := map[string]bool{}
+	seen := map[string]bool{}
+	for _, w := range words {
+		if !singleWordMatches(Token{Key: w}) || seen[w] {
+			continue
+		}
+		seen[w] = true
+		for _, id := range g.Lookup(w) {
+			ids[id] = true
+		}
+	}
+	// A shorter run of the words that is itself a key ("Donald Trump" inside
+	// "Donald J Trump"): every contiguous run of two or more words but all.
+	for i := 0; i < len(words); i++ {
+		for j := i + 2; j <= len(words); j++ {
+			if i == 0 && j == len(words) {
+				continue
+			}
+			for _, id := range g.Lookup(strings.Join(words[i:j], " ")) {
+				ids[id] = true
+			}
+		}
+	}
+	return sortedIDs(ids)
+}
+
+func holdsAll(long, want []string) bool {
+	have := map[string]bool{}
+	for _, w := range long {
+		have[w] = true
+	}
+	for _, w := range want {
+		if !have[w] {
+			return false
+		}
+	}
+	return true
+}
+
+// Initials returns, sorted, the entities an initialism links to key. A
+// one-word key (a mention written "UAE" or "U.S.") offers every entity whose
+// name has those initials ("United Arab Emirates"); a multi-word key offers
+// the entity named by its initials ("United States" offers "U.S."). Initials
+// are two or more letters, so one letter links nothing.
+func (g *Gazetteer) Initials(key string) []string {
+	words := strings.Fields(key)
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	ids := map[string]bool{}
+	switch {
+	case len(words) == 1 && len([]rune(words[0])) >= 2 && len([]rune(words[0])) <= 6:
+		for nk := range g.inits[words[0]] {
+			ids[nk.id] = true
+		}
+	case len(words) >= 2:
+		for _, in := range initialsOf(words) {
+			if n := g.nodeFor(in); n != nil {
+				for id := range n.ids {
+					ids[id] = true
+				}
+			}
+		}
+	}
+	return sortedIDs(ids)
+}
+
+// nodeFor is the trie node of a one-word key, nil when there is none. The
+// caller holds the read lock.
+func (g *Gazetteer) nodeFor(key string) *trieNode {
+	if n := g.root.next[key]; n != nil && len(n.ids) > 0 {
+		return n
+	}
+	return nil
+}
+
+// KeysWith returns, sorted, the entities with a key of two or more words that
+// holds the word w: how many names share it. Used to tell a name other names
+// are built on ("Washington") from a name only one entity has.
+func (g *Gazetteer) KeysWith(w string) []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	ids := map[string]bool{}
+	for nk := range g.toks[w] {
+		ids[nk.id] = true
+	}
+	return sortedIDs(ids)
+}
+
+// KeysOf returns, sorted, the keys filed under id.
+func (g *Gazetteer) KeysOf(id string) []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	out := make([]string, 0, len(g.byID[id]))
+	for k := range g.byID[id] {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Lookup returns, sorted, the entities filed under exactly key.

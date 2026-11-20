@@ -376,12 +376,12 @@ func TestRetrievalQueryPlans(t *testing.T) {
 	}
 	assertPlanIndex(t, "objects named by the key", explainPlan(t, db, `SELECT canonical_id FROM og_objects WHERE `+where+` ORDER BY updated_at DESC LIMIT 1`, args...), "og_objects_pkey")
 
-	assertPlanIndex(t, "provenance edges", explainPlan(t, db, provenanceEdgesSQL, "to-1"), idxEdgesToKind, "idx_og_edges_to")
-	assertPlanIndex(t, "edges to an id with a kind", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE 1=1 AND to_id = ? AND kind = ? ORDER BY created_at LIMIT ?`, "to-1", "reviews", 50), idxEdgesToKind, "idx_og_edges_to")
+	assertPlanIndex(t, "provenance edges", explainPlan(t, db, provenanceEdgesSQL, "to-1"), idxEdgesToKind, "idx_og_edges_to", idxEdgesToKindCreated)
+	assertPlanIndex(t, "edges to an id with a kind", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE 1=1 AND to_id = ? AND kind = ? ORDER BY created_at LIMIT ?`, "to-1", "reviews", 50), idxEdgesToKind, "idx_og_edges_to", idxEdgesToKindCreated)
 	// Unchanged reads beside the new indexes keep their plans (§4 G3).
 	assertPlanIndex(t, "edges from an id", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE from_id = ? AND tombstone = FALSE ORDER BY created_at`, "from-1"), "idx_og_edges_from")
 	assertPlanIndex(t, "edges from an id with a kind", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE ORDER BY created_at`, "from-1", "reviews"), "idx_og_edges_from")
 	toPlan := explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE 1=1 AND to_id = ? ORDER BY created_at LIMIT ?`, "to-1", 50)
-	assertPlanIndex(t, "edges to an id", toPlan, idxEdgesToKind, "idx_og_edges_to")
+	assertPlanIndex(t, "edges to an id", toPlan, idxEdgesToKind, "idx_og_edges_to", idxEdgesToKindCreated)
 	assertPlanIndex(t, "object by primary key", explainPlan(t, db, `SELECT canonical_id FROM og_objects WHERE canonical_id = ?`, "obj:x"), "og_objects_pkey")
 }

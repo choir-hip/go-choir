@@ -127,6 +127,13 @@ type Service struct {
 	lexicons entityLexicons
 	// growth caches the entity growth read (publication_entity_learning.go).
 	growth growthCache
+	// entityPages caches the public entity read (entity_page.go).
+	entityPages entityPageCache
+	// readyCounts caches entity mention counts for the ready list (capture_ready.go).
+	readyCounts struct {
+		mu sync.Mutex
+		m  map[string]entityCountEntry
+	}
 	// pieces is the derived BM25 index over the published archive
 	// (publication_pieces_index.go).
 	pieces pieceIndex

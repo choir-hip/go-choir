@@ -981,6 +981,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == types.EntityGrowthPath:
 		h.HandlePlatformEntityGrowth(w, r)
 		return
+	case strings.HasPrefix(path, types.EntityPagePrefix):
+		h.HandlePlatformEntityPage(w, r)
+		return
 	case path == "/api/platform/publications/expand":
 		h.HandlePlatformPublicationExpand(w, r)
 		return

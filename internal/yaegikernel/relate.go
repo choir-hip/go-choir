@@ -124,7 +124,7 @@ func ValidateRelate(p RelatePayload) (RelatePayload, error) {
 				return RelatePayload{}, fmt.Errorf("entity %d: wikidata_id %q must be a Wikidata item id (Q<n>)", n, e.WikidataID)
 			}
 		}
-		if !types.EntityRoles[e.Role] {
+		if !types.StoryEntityRole(e.Role) {
 			return RelatePayload{}, fmt.Errorf("entity %d: role %q must be %s or %s (an entity the story is not about is not attached)", n, e.Role, types.EntityRoleCentral, types.EntityRoleIncidental)
 		}
 		if !strings.HasPrefix(e.JudgmentRef, "system1:") || len(e.JudgmentRef) == len("system1:") || len(e.JudgmentRef) > relateStoriesMaxRefLen {
