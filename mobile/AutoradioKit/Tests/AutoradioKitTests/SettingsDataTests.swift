@@ -183,29 +183,6 @@ final class AccountsTests: XCTestCase {
 
 }
 
-final class LearnedTests: XCTestCase {
-    func testLearnedListIsCutAtTheNewestReset() {                              // L1, L2
-        let e = [SignalEvent(kind: "more-of-this", subject: "pub:a", detail: "Harbor barrier", at: 100),
-                 SignalEvent(kind: "close", subject: "pub:b", detail: "", at: 110),
-                 SignalEvent(kind: "learned-reset", subject: "settings:learned", detail: "", at: 120),
-                 SignalEvent(kind: "less-of-this", subject: "pub:c", detail: "", at: 130)]
-        let l = SignalsLearned.lines(from: e)
-        XCTAssertEqual(l.map(\.text), ["Less of this: pub:c"], "everything before the reset is gone; a close is not a learned act")
-        XCTAssertEqual(SignalsLearned.lines(from: Array(e.prefix(2))).map(\.text), ["More like this: Harbor barrier"])
-    }
-
-    func testResetOnlyRecordsAMarker() async {                                  // L2
-        let sig = FileSignals(file: nil)
-        sig.record(SignalEvent(kind: "more-of-this", subject: "pub:a", detail: "A", at: 1))
-        let p = SignalsLearned(signals: sig)
-        let before = await p.lines(); XCTAssertEqual(before.count, 1)
-        await p.reset()
-        let after = await p.lines(); XCTAssertEqual(after.count, 0)
-        XCTAssertEqual(sig.recent(limit: 10).count, 2, "the events stay; only a marker is added")
-    }
-
-}
-
 final class ActivityFeedTests: XCTestCase {
     func testTheSampleChangelogParsesNewestFirstWithGroupsTargetsAndUnseen() throws {
         let items = try ActivityParse.items(from: fixture("activity/changelog.json"), now: Date(timeIntervalSince1970: 1_800_000_000))

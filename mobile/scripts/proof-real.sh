@@ -43,7 +43,7 @@ reset_state() {
 # ids found in a drive's tree dump: ids <file> <prefix>  -> every test id that starts with the prefix (one per line, in order)
 ids() { grep -o "\[$2[^]]*\]" "$1" 2>/dev/null | sed 's/^\[//; s/\]$//' | awk '!seen[$0]++'; }
 
-# ---- 1. new decoders' tests (the whole package runs in proof-app.sh)
+# ---- 1. new decoders' tests (the whole package, the generators and the wiring greps run in scripts/check-all.sh, which needs no simulator; the lead runs it before a landing)
 export EXACT_SIM="${EXACT_SIM:-$("$HERE/sim-device.sh")}"
 [ -n "$EXACT_SIM" ] || fail "simulator" "no simulator"
 echo "simulator $EXACT_SIM"

@@ -469,13 +469,14 @@ mobile/scripts/setup-exact.sh                  # pinned Exact checkout at mobile
 export EXACT_SIM=$(mobile/scripts/sim-device.sh)   # a simulator of your own (see below)
 mobile/scripts/build-lab.sh ios                # sync the kit into the package, build, install on $EXACT_SIM
 mobile/scripts/exact.sh agent ios tree "tap tab-lab" "clock data" tree
+mobile/scripts/check-all.sh                    # every check that needs no simulator or native build: generators, strings, wiring, boundary, the Exact loop, the whole Swift package (through the lock)
 mobile/scripts/proof-real.sh                   # real data on staging as the drill account; last line PROOF OK or PROOF FAILED at <step>; NOBUILD=1 skips the build
 ```
 
 **Why "the app never opened its agent socket" (cause, from Exact's source).** Three things, all of them outside our package:
 
 1. *Two drivers on one simulator.* Exact allows one app per bundle id per simulator and every launch uses `simctl launch --terminate-running-process` (`scripts/agent.mjs:529`, `:569`). Another builder's drive of `news.choir.autoradio.lab` on the same simulator kills our running copy: the driver sees "the app hung up (exit code 0)" (the exit is `Agent.exitAfterLanding`, `Agent.swift:140-146`, which runs when the socket closes: it is the other driver's launch, not a crash) or never gets its socket. Fix: `sim-device.sh` creates and boots a simulator of our own; `exact.sh` passes `EXACT_SIM` through its `env -i`.
-2. *The socket opens late.* The app binds it only after the first frame is applied and, on the simulator, after the scene is foreground-active (`ExactIOS/main.swift:134-141`, `AgentFrontIOS.swift:29-45`, up to 15 s); the driver gives up after 20 s (`agent.mjs:567-579`). A cold first launch on a machine at load 400 (several builders compiling) misses that; the second launch is warm. `proof-sim.sh` retries a refused launch.
+2. *The socket opens late.* The app binds it only after the first frame is applied and, on the simulator, after the scene is foreground-active (`ExactIOS/main.swift:134-141`, `AgentFrontIOS.swift:29-45`, up to 15 s); the driver gives up after 20 s (`agent.mjs:567-579`). A cold first launch on a machine at load 400 (several builders compiling) misses that; the second launch is warm. `proof-real.sh` retries a refused launch.
 3. *A system alert holds the foreground.* The speech recognizer asked for authorization at its first use, which put the iOS permission alert over the app; it stays after the app is killed, and every later launch is then not foreground-active and never opens its socket. `simctl privacy ... grant all` does not cover speech recognition (`simctl privacy` has no speech service). Fix in the kit: while the runtime is virtual (driven by the agent) the transcriber does not ask (`LabEnvironment.promptsAllowed`); restarting the simulator clears a stale alert.
 
 The agent's tree shows `[hidden]` on elements of tabs that are not showing, but they are all in the tree: assertions read text by test id, and the proof orders its checks along the one transcript.
@@ -672,7 +673,7 @@ a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Pr
 ## Integration (lane/ar-app): the nine lanes in one app
 
 `lane/ar-app` is the spine plus lanes 9, 1, 2, 3, 4, 5, 6, 7, 8 merged (`--no-ff`, in that order). One proof drives the whole app:
-`scripts/proof-real.sh` (helpers in `scripts/proof-common.sh`); the demo-mode whole-app and lane proofs it replaced were deleted on 2026-11-20 with demo mode.
+`scripts/proof-real.sh` (helpers in `scripts/proof-common.sh`) for the app and `scripts/check-all.sh` for everything that needs no simulator (the deleted `proof-app.sh` ran both); the demo-mode whole-app and lane proofs it replaced were deleted on 2026-11-20 with demo mode.
 
 Decisions made at the seams:
 - **Generated files** (`BundledThemes.generated.swift`, `exact-package/exact.json`) are never hand-merged: take a side and

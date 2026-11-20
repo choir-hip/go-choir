@@ -47,13 +47,6 @@ public struct SpeedStore: @unchecked Sendable {
 
 // MARK: The list a story came from
 
-/// One story in a list: the paper's article stack, the front list.
-public struct StoryRef: Sendable, Equatable {
-    public var route: String
-    public var title: String
-    public init(route: String, title: String = "") { self.route = route; self.title = title }
-}
-
 public enum StoryCursor {
     /// How long into a story "previous" still means the story before it; later it means the start of this one (the usual player rule).
     public static let restartAfterSeconds = 3.0

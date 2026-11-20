@@ -29,7 +29,7 @@ component PlaceRow
 // A key page as a glyph (owner, 2026-11-17: "make them glyphs, and then we can remove the key pages label"): a line drawing in the accent colour,
 // drawn here as `svg` paths in the app's own line style (round caps, one stroke weight), the same mechanism as the tetramark. Owner, 2026-11-18:
 // "glyphs and text labels for the buttons, not just the glyphs": the page's name sits under the glyph. The button's aria-label is the name and the
-// visible caption is aria-hidden, so VoiceOver says it once. A touch target of 44 by 44 or more; the row width comes from `cols`, which is TrayGrid.columns in the Kit for the count there is (nine make three rows of three).
+// visible caption is aria-hidden, so VoiceOver says it once. A touch target of 44 by 44 or more; the row width comes from `cols` (nine glyphs make three rows of three).
 component KeyGlyph
   inject
     th: Theme
@@ -139,7 +139,7 @@ component Launcher
               text "Nothing found." testId="launcher-nohits" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
           if lnc.hasQuery == false
             row flex-wrap="wrap" gap=0 width="100%" testId="launcher-key-pages"
-              // nine glyphs: a row holds `cols` of them (3), so three even rows; TrayGrid.columns(count:) in the Kit is the same rule
+              // nine glyphs: a row holds `cols` of them (3), so three even rows
               KeyGlyph(slug="radio", name="Autoradio", address="radio:", cols=3)
               KeyGlyph(slug="notebook", name="My notebook", address="notebook:", cols=3)
               KeyGlyph(slug="paper", name="Paper", address="paper:front", cols=3)

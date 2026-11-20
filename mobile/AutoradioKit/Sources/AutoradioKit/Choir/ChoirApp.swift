@@ -489,17 +489,6 @@ public final class ChoirApp: @unchecked Sendable {
         await RunSheetPlayer.shared.settle()
         onChange?()
     }
-    /// Resume (by voice or a button): what is on air plays; with nothing on air, what is next.
-    public func startPlaying() async {
-        await MainActor.run { RunSheetPlayer.shared.sessionMayBeBack() }
-        await ensureOnAir()
-        await RunSheetPlayer.shared.settle()
-        guard await MainActor.run(body: { RunSheetStore.shared.onAir() != nil }) else { onChange?(); return }
-        await ensureEngine()
-        runtime.player.play()
-        onChange?()
-    }
-
     /// Sign-out, in this order: playback stops (the player reports the entry on air as `left`); the run sheet gets three seconds to post its
     /// pending ops with the old key still held, and what is not answered then is dropped, never sent under a later account; then the local key
     /// goes and the account wipe runs (ChoirSignIn.signOut); the revoke follows in the background.

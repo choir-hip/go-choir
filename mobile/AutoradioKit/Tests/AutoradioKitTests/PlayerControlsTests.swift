@@ -65,7 +65,6 @@ final class PlaybackSpeedTests: XCTestCase {
 // MARK: Previous, and the paper stack
 
 final class StoryCursorTests: XCTestCase {
-    let items = ["a", "b", "c"].map { StoryRef(route: $0, title: "T\($0)") }
     func testP8_PreviousRestartsAfterThreeSecondsOrPastTheFirstBlock() {
         XCTAssertFalse(StoryCursor.previousRestartsCurrent(blockIndex: 0, secondsIntoBlock: 0))
         XCTAssertFalse(StoryCursor.previousRestartsCurrent(blockIndex: 0, secondsIntoBlock: 2.9))
