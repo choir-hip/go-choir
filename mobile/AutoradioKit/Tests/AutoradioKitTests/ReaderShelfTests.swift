@@ -51,7 +51,7 @@ private func book(extra: [(String, String)] = [], deflate: Bool = false) -> Data
                     ("OPS/c2.xhtml", chapter("Two", "<blockquote><p>Quoted words here.</p></blockquote><p>The harbour at dawn.</p>"))] + extra, deflate: deflate)
 }
 
-private func makePDF(_ pages: [String]) -> Data {
+func makePDF(_ pages: [String]) -> Data {
     let data = NSMutableData()
     var box = CGRect(x: 0, y: 0, width: 612, height: 792)
     let ctx = CGContext(consumer: CGDataConsumer(data: data)!, mediaBox: &box, nil)!

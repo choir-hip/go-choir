@@ -2076,13 +2076,6 @@
       "answers": "PageList"
     },
     {
-      "send": "demoSet",
-      "options": {
-        "on": "string"
-      },
-      "answers": "PageList"
-    },
-    {
       "source": "takesPage",
       "live": true,
       "answers": "TakesPageInfo",
