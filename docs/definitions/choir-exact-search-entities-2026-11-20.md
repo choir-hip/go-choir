@@ -103,13 +103,13 @@ stations:
     class: orange
     review: one seat
     depends_on: [D1]
-    status: pending
+    status: working
   - id: X1
     name: The Textures place in shared code, landed
     scope: lane/exact-textures-place 70a5d3c77; rerun the real proof at the tip, read the screenshots, one seat, land
     class: orange
     review: one seat
-    status: working
+    status: landed
     state_at_handoff: built, unreviewed
   - id: X2
     name: The remaining page logic out of Swift, smallest first
@@ -117,7 +117,7 @@ stations:
     class: orange
     review: one seat each
     depends_on: [X1]
-    status: pending
+    status: working
   - id: S1
     name: The search gate's follow-ups and its claim
     scope: 'settle C163 from scripts/status-corpus-reuse over two hours after 03:18Z with at least 20 searching runs (restate it for tip 8407f6c33 if needed). Seat 2''s should-fixes on the refuse-while-running rule: a same-terms running search still waits 15 s in reuse; SearchAll does not apply the running rule to its wordings; the refusal''s example call is not valid Go; the two-minute age and run-end escape are untested.'
@@ -149,21 +149,21 @@ stations:
     name: Is the event join rate right
     scope: read 50 recently minted events on the paper against the events that existed when each was minted; say how many should have joined; record in docs/evidence; fix the shortlist or the judgment if the layer mints duplicates. Also whether the 48 captures left unresolved during gateway drains are retried (internal/agentcore/event_layer.go:374).
     class: read-only, then orange
-    status: pending
+    status: working
   - id: E2
     name: The entity layer
     scope: 'design first (Opus for the open design, as the contract allows): what an entity is, who is its custodian desk, how a capture and a story get entity ids, merges, and what reads them; then stations S8 and S11 of the retrieval design (stories carry event and entity ids at publish; entity merges). Jev: one call per batch, every question in it.'
     class: red (export, tape)
     review: two seats
     depends_on: [E1]
-    status: pending
+    status: working
     state_at_handoff: not designed
   - id: W1
     name: Two settings removed (intake.events, dispatch.wide_slots)
     scope: 'switches-land a144865d1: read ~/sw-run.out on choir-runner (actor, actorruntime, store, provideriface, textureowner, agentcore under -race), add Security-Effect trailers backed by review-switches r1, gates, land; settle C167. State the measurement and the rollback trigger for 8 to 12 slots in the commit.'
     class: orange
     review: done (both seats accepted)
-    status: working
+    status: landed
     state_at_handoff: suites running
   - id: W2
     name: The Texture root desk on everywhere
@@ -176,12 +176,12 @@ stations:
     name: The last three settings
     scope: owner_act_mode, intake.event_wakes, vm_guest_reclaim_damon (table in the previous thread's scratch switches/table.md; rebuild it from switches/registry.yaml if gone)
     class: orange to red
-    status: pending
+    status: working
   - id: H1
     name: Host problems recorded and not fixed
     scope: 'the paper''s snapshot writes a full copy of its store inside its image (51 GiB, held 83 minutes; seven times in four days; docs/problems/paper-data-image-grew-40-gib-in-eleven-minutes-2026-11-16.md): stream without the scratch copy or copy changed pages only. The gateway refuses every guest while it drains on a deploy (docs/problems/gateway-refuses-guests-while-it-drains-on-deploy-2026-11-19.md): socket handoff. Both red; design before code.'
     class: red
-    status: pending
+    status: working
   - id: R1
     name: Operations the old thread held in its session
     scope: 'recreate the hourly tick (run scripts/status-hourly from the repo, report model calls and shares, Devin refusals, the search usage block, Node B free disk, every FLAGS and ACTION line). The phone build queue lived in the old session''s scratchpad; a copy with its paths rewritten is at ~/.local/state/choir-buildq (serve.sh, run-one.sh, README.md, device-install.sh): read it, start serve.sh once, and move it into mobile/scripts when convenient. The E1 calibration pilot is paused on Devin quota: settle C148 to C150 as unresolved at their time and run scripts/e1 end. Write the next owner letter with the reporter skill (name every expedite: event layer, query embedder, Exact delta, embedder thread fix (re-landed without a re-review), search usage status, search gate, signed-out work and its follow-up).'
@@ -189,39 +189,40 @@ stations:
     status: pending
 now:
   status: working
-  as_of: 2026-11-20T05:45Z (new thread; lead-docs lane carries this file)
-  slice: W1 lands when whole agentcore ends on choir-runner; then one train of S1 follow-ups, S2, S3 L1 and the gauge; D1 install and landing; X1 after its review fixes
+  as_of: 2026-11-20T06:50Z (lead-docs lane carries this file)
+  slice: the train (S2 brief objective, the search gauge, the entity status script) lands when whole agentcore ends on choir-runner (about 07:50Z); then the embed-worker wake, entity station E2, the demo fix and D2
+  landed_this_thread:
+    - 'W1 7f5ad41e1 (intake.events and dispatch.wide_slots gone): CI 44684974356 ok, deployed 06:18:24Z, the paper logs slots=N/12 and event layer flushes after its refresh. C167 settles after 07:20Z.'
+    - 'X1 de7aeb7f7 (the Textures list is shared Exact code): seat 2 accepted the rework; real-data simulator proof PROOF OK at 99b3c5dfb with screenshots read; CI 44688798576 ok, deployed 06:45:49Z.'
   discovered_this_thread:
-    - 'D1: the owner, 05:26Z, with a screenshot: signed in, the day''s real stories. The demo conjecture held. Installs overnight are allowed.'
-    - 'S: the search gate did NOT lower the gateway''s rate (162 an hour before, 159 after). The per-run figure it was judged by reads terminal-record summaries and loses the longest runs; the gateway meter says about 6 a run (docs/evidence/who-sends-the-web-searches-2026-11-20.md). C163 settled true by its test and wrong in meaning.'
-    - 'S: about 544 research runs a day for about 402 stories; 1,000 searches a day is 1.8 a run. 79% of searches are a story''s first run hunting a second outlet (a story publishes with two distinct outlets); eight heavy runs sent 59% of a window, half of it re-asks. Every listed fix together leaves an estimated 1,100 to 2,800 a day (docs/evidence/what-starts-research-runs-and-what-is-new-2026-11-20.md; the plan is the last section of docs/definitions/corpus-first-search-one-verb-2026-11-19.md, Landings 0 to 4).'
-    - 'E1: hand read done with the paper key (renewed; skills/choir-cli/SKILL.md says where keys live): of the 50 newest minted events 10 should have joined, 25 right, 15 unclear. Causes: same-flush siblings; "the 30 newest events" is three minutes of events; 78% of captures had no vector at flush; failed batches are never retried (docs/evidence/event-join-rate-hand-read-2026-11-20.md).'
-    - 'E2: an entity layer ALREADY runs for stories, behind the research.related_story setting (6,687 entities in corpusd, about 17% non-entities, duplicate ids, no merges); captures have none. Design: docs/design/entity-layer-2026-11-20.md, stations E0 to E8 (its own ids; E0 is the baseline script and hand read).'
-    - 'Main''s Swift design and typography rule tests fail (radio, settings and signedout contracts) and CI does not run them; lane design-rules-fix.'
-    - 'The real proof fails on a 1 s touch deadline when the Mac is loaded by builders'' test runs (load 23); rerun proofs when it is quiet.'
+    - 'D1: the owner, 05:26Z, with a screenshot: signed in, the day''s real stories. Installs overnight are allowed. Seat 2 sent the cleanup back twice: it must not delete anything on "no readable key", must act only on a positive demo trace, and must mark itself done only after it succeeded. Third version building.'
+    - 'S: the search gate did NOT lower the gateway''s rate (162 an hour before, 159 after); about 6 searches a run by the gateway meter. 79% of searches are a story''s first run hunting a second outlet; 1,000 a day is 1.8 a run.'
+    - 'S3 L1: leads cannot be embedded: the embedder does about 37,000 passages a day and leads would be about 190,000 a day, ahead of captures. Leads are stored as text with a lexical index; no vectors. Rework in progress.'
+    - 'E: the embed-worker wake as a full pass per write was sent back (each pass costs 10 to 18 s of counts over 228,000 captures); reworked to hand the worker the written capture ids (4d324a125), in re-review.'
+    - 'E2 (design station E2: ready list, candidates with no model, the public entity read) built at b74f9f431 on the old wake commit; in review; needs a rebase.'
+    - 'W2: the root desk was sent back a fourth time (a digest retried after a deferral is dropped by its own nonce check). Contract rule 7 applied: stop patching. The reading: process-local state (pending set, nonce, full-refresh flag) beside a durable digest is two authorities for one fact. Restructure in progress: a durable watermark, a digest that carries nothing and computes what is pending from the store, so any duplicate or late digest is harmless.'
+    - 'NEW problem: the paper''s dispatcher holds twelve of twelve slots with 82 to 99 agents due and median waits of 250 s, since before 04:56Z (docs/problems/paper-dispatcher-twelve-slots-full-ninety-due-2026-11-20.md). Publishing rate is normal. Half the noroom waits are deadline wake-ups for finished work. Lane dispatch-deadlines: log activation time, then resolve finished deadlines without a slot.'
+    - 'NEW problem: the paper''s snapshot took 82m51s for 51.39 GB against a 90-minute budget; at 2.4 GB a day it stops finishing in about two days (docs/problems/paper-snapshot-will-pass-its-ninety-minute-budget-2026-11-20.md). H1 designs are on main (docs/design/snapshot-without-scratch-copy-2026-11-20.md, docs/design/gateway-handoff-without-a-gap-2026-11-20.md). Lane snapshot-stream builds S1.'
+    - 'Main''s Swift design and typography rule tests fail and CI does not run them; lane design-rules-fix.'
     - 'Review seat 1 is Gemini 4 Hydrogen through agy (owner, 2026-11-20); in print mode it needs --sandbox --dangerously-skip-permissions in a frozen copy.'
   lanes:
-    - 'switches-land 3719aae68 (W1): rebased, trailers backed by review-switches r1; five suites ok, agentcore running'
-    - 'exact-demo-off 1e516665b+ (D1): review answered; a follow-up makes the cleanup run on a phone that already lost the flag'
-    - 'exact-textures-place 50ea5b49a+ (X1): seat 2 sent back; fixes in progress'
+    - 'train (scratch clone, branch trainB on choir-runner): brief-objective 5 commits with trailers backed by review-brief2 r1, r2 and review-brief3 r1 (all ACCEPT), search-gauge, entity-e0 script; importers ok, whole agentcore running'
+    - 'exact-demo-off (D1): third version building; exact-demo-gone (D2): building on it'
     - 'exact-convo-edit, exact-themes (X2), design-rules-fix: building'
-    - 'searchgate-followups 80c92a904 (S1): seat 2 accepts with should-fixes, done on search-reask-hold with Landings 0 and 1'
-    - 'brief-objective (S2): seat 2 accepts; should-fixes in progress. Estimated worth under 100 searches a day'
-    - 'search-leads 74abd31d1 (S3 L1): fixed, platform suite ok; in review'
-    - 'search-gauge b41441260: the gateway meter in the status scripts; lands with the train'
-    - 'root-desk-r3 (W2): both seats sent 62e9ac65c back (two stale actorruntime tests, rollback text, an armed nonce with a discarded digest); rework squashes to one commit'
-    - 'embed-kick: corpusd wakes the embed worker on a capture write, after confirming the cause in production'
-    - 'entity-e0: scripts/status-entities and the 200-attachment hand read'
+    - 'search-reask-hold (S1 follow-ups, Landings 0 and 1): building; search-leads (S3 L1): rework'
+    - 'embed-kick 4d324a125: re-review; entity-e2 b74f9f431: review'
+    - 'root-desk-r3 (W2): restructure; last-switches (W3): building'
+    - 'snapshot-stream (H1 S1), dispatch-deadlines: building'
   conjecture:
     claim: 'the paper''s web searches are mostly a hunt for a second outlet and re-asks of one question; holding re-asks on every verb and telling a run at its start which outlets the corpus already holds removes more than half, and under 1,000 a day needs the second outlet to come from the corpus (events with two outlets) and not from the web'
     test: the gateway's searches a day and searches per run after each landing, with stories a day not lower than the week before
     edge: missing_oracle
     edge_note: the logs carry no outlet per capture, so the size of the second-outlet hold is unknown until Landing 0's fields are deployed
     status: testing
-  believed_state: the phone is signed in and right; nothing from this thread is deployed yet except docs
-  main_uncertainty: whether any set of caller fixes reaches 1.8 searches a run; whether the event layer joins once captures have vectors
+  believed_state: the phone is signed in and right; W1 and X1 are deployed; everything else is on lanes
+  main_uncertainty: whether any set of caller fixes reaches 1.8 searches a run; whether the event layer joins once captures have vectors; whether the build machine (one heavy run at a time) can carry eleven builders before morning
   blocker: none
-  next_action: land W1 when agentcore ends; build and install the demo fix
+  next_action: land the train when agentcore ends; then the embed-worker wake and E2; install the demo fix when its third version passes review
 operating_notes:
   - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review: seat 1 a Sonnet subagent that did not write the change, seat 2 DeepSeek through the agentic-consensus runner (--include omp-deepseek-v41-flash) on a frozen clean copy; orange one seat, red two.'
   - 'Go compiles and tests on the build machines, never the Mac (gate scripts on the Mac need GOFLAGS=-mod=mod). choir-agents has 3.9 GB of memory: one heavy run at a time under flock ~/agentcore.lock, and stop the test Postgres a killed run leaves. choir-runner (10 GB) is the landing machine; whole agentcore under -race took 69 to 83 minutes on the night of 2026-11-19, so use -timeout 150m.'
