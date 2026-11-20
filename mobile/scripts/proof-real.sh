@@ -198,6 +198,25 @@ place mail 900; wait_ 2500
 step logs
 run_drive read light "" --touch platform
 
+# ---- 3b2. READER drive (shared code, reader.ts): one real story read twice. Part one opens it and dumps the page (title, text, citation marks, the Sources list, related); part two opens it again, reads which citation
+# marks part one found, taps the first one (its card opens under the paragraph), then the page menu and its Versions sheet. Nothing is written to the computer. The ids tapped come from part one's own tree, not from a guess.
+READER_STORY=${STORY1:-$STORY2}
+if [ -n "$READER_STORY" ]; then
+  step "clock data"; wait_ 6000
+  place paper 2500; to_top; step "tap \"$READER_STORY\""; view real-r1-reader-story 5000
+  step "tap reader-scroll drag 0 -1500"; view real-r2-reader-sources 1200
+  step logs
+  run_drive reader1 light "" --touch platform
+  CITE1=$(ids "$SHOTS/drive-reader1.txt" "reader-cite-" | sed -n 1p)
+  step "clock data"; wait_ 6000
+  place paper 2500; to_top; step "tap \"$READER_STORY\""; wait_ 5000
+  [ -n "$CITE1" ] && { step "tap \"$CITE1\""; view real-r3-reader-citation-card 1500; }
+  step "tap reader-menu"; view real-r4-reader-menu 1200
+  step "tap reader-menu-versions"; view real-r5-reader-versions 1500
+  step logs
+  run_drive reader2 light "" --touch platform
+fi
+
 # ---- 3c. THEME drive: a theme from a Texture, loaded through Settings (the document "Autoradio theme test" on d@e holds one choir-theme block)
 if [ -n "$THEME_DOC" ]; then
   step "clock data"; wait_ 5000
@@ -365,6 +384,19 @@ chk "reader: body blocks" '\[reader-block-' "$RD"
 if grep -qE '\[reader-related-pub:' "$RD"; then echo "ok: reader: more on this"; else echo "info: reader: neither story had a 'more on this' list (live content, not a defect)"; fi
 chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 [ -n "$DOC1" ] && chk "texture document: opened" '\[reader-block-' "$RD"
+if [ -n "$READER_STORY" ]; then
+  R1="$SHOTS/drive-reader1.txt"; R2="$SHOTS/drive-reader2.txt"
+  chk "reader: the story has a title" '\[page-title\] "[^"]{3,}"' "$R1"
+  bad "reader: no error message" '\[reader-message\] "(Could|Sign in)' "$R1"
+  chk "reader: the text is there (paragraph blocks)" '\[reader-block-b[0-9]+\] "[^"]{20,}"' "$R1"
+  chk "reader: the kicker and the disclosure (a story from the paper)" '\[reader-disclosure\] "Written by AI' "$R1"
+  chk "reader: a citation mark is in the text" '\[reader-cite-' "$R1"
+  chk "reader: the Sources list is there and has a row" '\[reader-source-1\]' "$R1"
+  if grep -qE '\[reader-related-pub:' "$R1"; then echo "ok: reader: related stories listed"; else echo "info: reader: this story had no related list (live content)"; fi
+  [ -n "$CITE1" ] && chk "reader: tapping a citation opens its card" '\[reader-card-[^]]*\]' "$R2"
+  chk "reader: the page menu opens" '\[reader-menu-versions\]' "$R2"
+  chk "reader: the Versions sheet lists a version or says there is one" '\[reader-version-[0-9]+\]|This page has one version' "$R2"
+fi
 if [ -n "${REAL_PROMPT:-}" ]; then
   chk "typed ask: the engine took the typed words as the turn" 'top story on the front page' "$SHOTS/drive-ask.txt"
   bad "typed ask: no sign-in failure" 'Sign in to talk to your computer' "$SHOTS/drive-ask.txt"
@@ -422,8 +454,8 @@ chk "notebook: the page opened" '\[notebook-(page|title)\]' "$SHOTS/drive-tour.t
 chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' "$SHOTS/drive-tour.txt"
 # the first shared answer after a launch must not run over the device's 100 ms turn (the app logs the failure that says so)
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
-# the shared twins are the Android path: on iOS the shared reader must never fetch (it logs "reader: story blocks=" when it does)
-bad "iOS: the shared reader twin never fetched" 'console: reader: story blocks=' "$OUT"
+# the reader is shared code on both platforms: it logs a count line (never a title) each time it reads a story or a document
+chk "reader (shared code): the story was read by reader.ts" 'reader: story blocks=[1-9]' "$OUT"
 # signed in: the sign-in card never shows on the signed-in drives
 bad "signed in: no sign-in card on the survey" '\[signedout-banner\]' "$SV"
 bad "signed in: no sign-in card on the read drive" '\[signedout-banner\]' "$RD"

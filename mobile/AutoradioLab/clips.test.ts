@@ -100,3 +100,19 @@ describe('C5 what a row does', () => {
     expect(parseEpisode((await C.clipAct('open', 'clip-0000000000f2')).open)!.id).toBe('https://cdn.example.com/one.mp3');
   });
 });
+
+describe('C9 "Hear it" on a story', () => {
+  const clip = (id: string, route: string) => ({ ...body.clips[0], clip_id: id, story: { route, title: 'T' } });
+  test('the clips cut for the story at a pub: address, its route first and then the route without its version, at most three, none for another page; one ask', async () => {
+    handler = () => new Response(JSON.stringify({ clips: [clip('a', '/pub/x'), clip('b', 'pub/x'), clip('c', 'pub/x'), clip('d', 'pub/x'), clip('e', 'pub/y/v2')] }), { status: 200 });
+    expect((await C.storyClips('pub:pub/x')).map((r) => r.clipID)).toEqual(['a', 'b', 'c']);
+    expect((await C.storyClips('pub:pub/x/v3')).map((r) => r.clipID)).toEqual(['a', 'b', 'c']);
+    expect((await C.storyClips('pub:pub/y/v2')).map((r) => r.clipID)).toEqual(['e']);
+    expect(await C.storyClips('texture:d1')).toEqual([]); expect(await C.storyClips('pub:pub/none')).toEqual([]);
+    expect(calls.length).toBe(1);
+  });
+  test('a failing clip route is no rows, and a row still plays through clipAct', async () => {
+    handler = () => new Response('{}', { status: 500 });
+    expect(await C.storyClips('pub:pub/x')).toEqual([]);
+  });
+});

@@ -11,7 +11,7 @@ import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
-import { readerDocShared } from './reader.ts';
+import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
@@ -88,7 +88,12 @@ const sources: Sources = {
   schemeSet: ([mode], _s, storage) => themes.schemeSet(mode, storage),
   themeFromTexture: ([doc], _s, storage) => themes.themeFromTexture(doc, storage),
   themeRemove: ([id], _s, storage) => themes.themeRemove(id, storage),
-  readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
+  // The reader (reader.ts): the story or document in front, and what its page does to it.
+  readerDocShared: ([address, acc, saved]) => readerDocShared(address, acc, saved),
+  readerStopShared: ([address]) => readerStop(address),
+  readerRestoreShared: ([address, version]) => readerRestore(address, version),
+  readerReloadShared: ([address]) => readerReload(address),
+  readerPrefetchShared: ([prev, next]) => readerPrefetch(prev, next),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
   accountState: ([tick, top, host]) => accountState(tick, top, host),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),

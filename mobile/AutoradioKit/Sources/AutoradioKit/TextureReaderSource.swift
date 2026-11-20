@@ -83,18 +83,6 @@ public final class ReaderStore: @unchecked Sendable {
     }
     private func finish(_ address: String) { lock.lock(); inflight[address] = nil; lock.unlock() }
 
-    /// Fetch and decode stories ahead of the listener (the neighbours of the card on top). A story already held, a document that is
-    /// not a publication, and an empty address are skipped. A fetch that fails is not kept: the card loads on demand when it is reached.
-    @discardableResult
-    public func prefetch(_ addresses: [String]) -> [Task<Void, Never>] {
-        var seen = Set<String>()
-        return addresses.compactMap { a in
-            guard !a.isEmpty, seen.insert(a).inserted, TextureAddress.parse(a).kind == .publication else { return nil }
-            if let c = cached(a), c.status == "ready" { return nil }
-            return Task { [self] in _ = await doc(a) }
-        }
-    }
-
     /// A page held on this phone (the ContentStore), shown when the network cannot be reached. Set by the app.
     public var offline: (@Sendable (String) -> ReaderDoc?)?
 
@@ -178,30 +166,6 @@ public final class ReaderStore: @unchecked Sendable {
     }
 
     func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? s }
-
-    // MARK: Actions on a document
-
-    /// Restore a version as the latest (the web's "Restore"): POST /api/texture/documents/{id}/restore.
-    public func restore(document address: String, revisionAddress: String) async -> Bool {
-        let a = TextureAddress.parse(address), r = TextureAddress.parse(revisionAddress)
-        guard a.kind == .document else { return false }
-        let client = ChoirEnvironment.shared.client()
-        let rid = r.rev
-        if rid.isEmpty { return true }   // the head is already the latest
-        let body = try? JSONSerialization.data(withJSONObject: ["revision_id": rid, "mode": "restore_as_latest"])
-        let ok = (try? await client.send("POST", "/api/texture/documents/\(enc(a.doc))/restore", body: body,
-                                          route: "/api/texture/documents/{id}/restore")) != nil
-        invalidate(address)
-        return ok
-    }
-
-    /// Stop the desk's revision in flight (the web's "Stop"): POST /api/texture/lifecycle/{traj}/cancel.
-    public func cancelRevision(document address: String) async {
-        guard let d = cached(address), !d.trajectory.isEmpty else { invalidate(address); return }
-        let client = ChoirEnvironment.shared.client()
-        _ = try? await client.send("POST", "/api/texture/lifecycle/\(enc(d.trajectory))/cancel", route: "/api/texture/lifecycle/{id}/cancel", okStatuses: [404, 409])
-        invalidate(address)
-    }
 }
 
 /// `pub:` and `texture:` as pages: the lines are the plain text (the spine's text renderer and other lanes read them).

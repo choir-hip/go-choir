@@ -1,23 +1,27 @@
 // Lane members file (reader): the reader's and the Textures place's resources, states and actions, as if written in the root.
 // Owned by the reader lane. The child components (reader.contract, textures.contract) `inject` these by name; each name is
 // in lane 3's band of the `provide` list in app.contract.
-use readerDoc, readerFollow, readerAim from "@choir/autoradio"
-use readerAimSet, readerStop, readerRestore, readerReload, readerOpenExternal, readerFollowSet from "@choir/autoradio"
+use readerFollow, readerAim from "@choir/autoradio"
+use readerAimSet, readerOpenExternal, readerFollowSet from "@choir/autoradio"
 use ReaderDoc, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@choir/autoradio"
 use TextureList from "./textures-types.contract"
 
 members Autoradio
   // The page in front is a story or a document (readerDoc answers "loading" for any other address).
-  // The Swift reader's document when it answers a story or document (iOS); otherwise (no native package: `noNative`, spine.contract) the shared twin for stories (reader.ts: a `pub:` page read with no native code, Android). The flag keeps the shared source idle on iOS.
-  resource rdocn = readerDoc(address=pg.top) as shape ReaderDoc else empty()
-  resource rdocs = readerDocShared(pg.top, noNative) as shape ReaderDoc else empty()
-  derive rdoc = noNative ? rdocs : rdocn
+  // The story or document in front, read by shared code on both platforms (reader.ts, reader-parse.ts; any other address answers "loading"). It is asked again when the account state changes (a sign-in from
+  // the banner), when the editor saves (the Texture editor says "saved"), after a stop, a restore or a reload (`rack` refreshes it) and every few seconds while the desk is revising it (`rtick`).
+  resource rdoc = readerDocShared(pg.top, acs.state, edInfo.status == "saved", rtick) as shape ReaderDoc else empty()
+  state rtick = 0
+  action rbump
+    rtick = rtick + 1
+  task rrevising when rdoc.revising key=rtick
+    after(5, rbump)
   // The Textures place reloads each time it is the page in front (textures.ts, shared code: both platforms), and again when a document was stopped, restored or reloaded (`rack` refreshes it) and when the account state changes (sign-in from the banner).
   resource tlist = texturesList(pg.top, acs.state) as shape TextureList else empty()
   // The block and sentence the radio is reading (set by the radio); what the bar's prompt is aimed at.
   resource rfollow = readerFollow() as shape ReaderFollowInfo else empty()
   resource raim = readerAim() as shape ReaderAimInfo else empty()
-  mutation rack as shape ReaderAck refreshes tlist
+  mutation rack as shape ReaderAck refreshes tlist, rdoc
   // Opening a link outside the app changes no document: it does not refresh the Textures list.
   mutation rext as shape ReaderAck
   mutation raimm as shape ReaderAimInfo
@@ -63,12 +67,12 @@ members Autoradio
   action clearAim
     send raimm = readerAimSet(address="", blockId="", label="")
   action stopRevision(address: string)
-    send rack = readerStop(address=address)
+    send rack = readerStopShared(address)
   action restoreVersion(address: string, version: string)
-    send rack = readerRestore(address=address, version=version)
+    send rack = readerRestoreShared(address, version)
     sheet = ""
   action reloadDoc(address: string)
-    send rack = readerReload(address=address)
+    send rack = readerReloadShared(address)
     sheet = ""
   // A web page opens in place, over the story and above the bar; anything else (mailto, tel, sms) goes to the system, and
   // the native side refuses what is neither (readerOpenExternal decides with SourceLink.route).

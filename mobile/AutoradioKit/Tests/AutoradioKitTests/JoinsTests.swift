@@ -121,15 +121,6 @@ final class JoinLibraryTests: XCTestCase {
 final class JoinHearItTests: XCTestCase {
     func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
 
-    func testJ3_ThePageOfAStoryHasItsClipsAndNothingElse() {
-        let s = store([clipRow(hex(1), route: "/a"), clipRow(hex(2), route: "/b")])
-        XCTAssertEqual(HearIt.rows(address: "pub:a", store: s).map(\.clipID), [hex(1)])
-        XCTAssertEqual(HearIt.rows(address: "pub:a/v3", store: s).map(\.clipID), [hex(1)], "a version of the story has the story's clips")
-        XCTAssertEqual(HearIt.rows(address: "pub:a", store: s)[0].story, "Story")
-        XCTAssertTrue(HearIt.rows(address: "pub:zzz", store: s).isEmpty)
-        XCTAssertTrue(HearIt.rows(address: "texture:doc1", store: s).isEmpty, "only a published story has clips")
-        XCTAssertTrue(HearIt.rows(address: "doc:abc", store: s).isEmpty)
-    }
     func testJ3_QueueAddsTheClip() async {
         let s = store([clipRow(hex(1))]); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
         HearIt.enqueue(hex(1), store: s, player: q)
