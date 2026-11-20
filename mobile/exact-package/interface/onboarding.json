@@ -22,7 +22,6 @@
    "mic": "string",
    "heard": "string",
    "route": "string",
-   "demoWords": "string",
    "editionStatus": "string",
    "writingLine": "string",
    "editionError": "string",
@@ -36,7 +35,6 @@
    "setupFinished": "bool",
    "setupStarted": "bool",
    "hearingOK": "bool",
-   "demo": "bool",
    "skipped": "bool",
    "editionDone": "bool",
    "level": "number",
@@ -77,7 +75,6 @@
      "mic": "unasked",
      "heard": "",
      "route": "",
-     "demoWords": "",
      "editionStatus": "",
      "writingLine": "",
      "editionError": "",
@@ -91,7 +88,6 @@
      "setupFinished": false,
      "setupStarted": false,
      "hearingOK": false,
-     "demo": false,
      "skipped": false,
      "editionDone": false,
      "level": 0,
@@ -175,10 +171,6 @@
   },
   {
    "send": "onboardingTopicsDone",
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingDemoSay",
    "answers": "Onboarding"
   },
   {

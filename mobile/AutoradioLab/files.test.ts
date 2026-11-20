@@ -7,7 +7,7 @@
 //  F9 search walks folders, bounded.   F10 opening: image, table and audio are brought and described; other kinds are facts only; a file too large is refused before any download; a missing file says so.
 //  F11 a PDF or an e-book is read by the listener's computer (D4) and opens as its texture: page; text, Markdown and code are sent as the web sends them; a failure says why and is asked again next time.
 //  F12 the changes use the right verbs and answer the refreshed listing; a folder is not renamed to nothing.   F13 an upload sends the picked file's bytes to the computer.
-//  F14 recents: newest first, capped at 30, kept on the phone, dropped when the file is gone.   F15 demo mode asks nothing and works on invented files.
+//  F14 recents: newest first, capped at 30, kept on the phone, dropped when the file is gone.
 //  F18 a big file (60 MB) is written to disk by the host with no bytes in JavaScript: the signed-in reply is never read, the file system is never asked to read it back.
 //  F19 the caps are the Swift app's (800 MB video, 300 MB audio, 60 MB images); one byte over is refused before any download.
 //  F20 a failed download leaves no file that a later open takes for whole; a file of the wrong size is fetched again.
@@ -20,7 +20,6 @@ import * as M from './files-model.ts';
 import { SignedOutError, type Reply } from './api.ts';
 import rootListing from '../fixtures/files/root-listing.json';
 import textureOpen from '../fixtures/files/texture-open.json';
-import demoTree from '../fixtures/files-demo/tree.json';
 import { readFileSync } from 'node:fs';
 
 const NOW = Date.parse('2026-11-18T12:00:00Z');
@@ -75,8 +74,8 @@ beforeEach(() => {
   tree = { '/': rootListing, '/Documents': [{ name: 'Council notes.txt', type: 'file', size: 30, modified: '2026-11-18T10:00:00Z' }, { name: 'Sub', type: 'directory', size: 0, modified: '2026-11-01T00:00:00Z' }], '/Documents/Sub': [{ name: 'deep lamp.png', type: 'file', size: 9, modified: '2026-11-01T00:00:00Z' }] };
   blobs = { '/readings.csv': enc('day,mm\nMon,"1,5"\r\nTue,"say ""hi"""\nWed'), '/Notes 2.txt': enc('Two lamps.\n'), '/Harbor.md': enc('# Harbor\n\nA note.\n') };
 });
-const list = (o: Partial<F.ListArgs> = {}) => F.fileList({ demo: false, path: '/', mode: 'browse', sort: 'name', desc: false, query: '', ...o }, storage, net);
-const open = (address: string, demo = false) => F.fileOpen({ demo, address }, storage, net);
+const list = (o: Partial<F.ListArgs> = {}) => F.fileList({ path: '/', mode: 'browse', sort: 'name', desc: false, query: '', ...o }, storage, net);
+const open = (address: string) => F.fileOpen({ address }, storage, net);
 
 describe('F1 to F6 the pure rules', () => {
   test('F1 a path never escapes the root', () => {
@@ -248,35 +247,35 @@ describe('F11 a file that is another page\'s document', () => {
     expect(post.method).toBe('POST'); expect(post.body).toEqual({ source_path: 'Lantern report.pdf', title: 'Lantern report.pdf', initial_content: '' });
     expect(calls.some((c) => c.query)).toBe(false);                 // the phone downloads nothing: the computer reads the PDF
     expect(i).toMatchObject({ status: 'ready', kind: 'pdf', target: 'texture:doc-8f3a1c' });
-    const r = await F.fileResolve({ demo: false, address: 'file:/Lantern report.pdf', title: 'x' }, storage, net);
+    const r = await F.fileResolve({ address: 'file:/Lantern report.pdf', title: 'x' }, storage, net);
     expect(r).toEqual({ address: 'file:/Lantern report.pdf', target: 'texture:doc-8f3a1c', title: 'Lantern report.pdf', status: 'ready', message: '' });
     expect(calls.filter((c) => c.path === '/api/texture/files/open').length).toBe(1);   // one ask per file version
   });
   test('an e-book in a folder is asked with its path, no leading slash', async () => {
     tree['/Documents'].push({ name: 'The Lantern Keeper.epub', type: 'file', size: 5000, modified: '2026-11-01T00:00:00Z' });
-    const r = await F.fileResolve({ demo: false, address: 'file:/Documents/The Lantern Keeper.epub', title: '' }, storage, net);
+    const r = await F.fileResolve({ address: 'file:/Documents/The Lantern Keeper.epub', title: '' }, storage, net);
     expect(r.target).toBe('texture:doc-8f3a1c'); expect(calls.find((c) => c.path === '/api/texture/files/open')!.body).toMatchObject({ source_path: 'Documents/The Lantern Keeper.epub', initial_content: '' });
   });
   test('Markdown is sent as the web sends it: its text, the path without a slash', async () => {
-    const r = await F.fileResolve({ demo: false, address: 'file:/Harbor.md', title: 'Harbor.md' }, storage, net);
+    const r = await F.fileResolve({ address: 'file:/Harbor.md', title: 'Harbor.md' }, storage, net);
     expect(r.target).toBe('texture:doc-8f3a1c');
     expect(calls.find((c) => c.path === '/api/texture/files/open')!.body).toEqual({ source_path: 'Harbor.md', title: 'Harbor.md', initial_content: '# Harbor\n\nA note.\n' });
   });
   test('a failed open says why, opens nothing, and is asked again next time', async () => {
     fail = (c) => (c.path === '/api/texture/files/open' ? Object.assign(new Error('x'), { status: 502 }) : null);
-    const r = await F.fileResolve({ demo: false, address: 'file:/Lantern report.pdf', title: '' }, storage, net);
+    const r = await F.fileResolve({ address: 'file:/Lantern report.pdf', title: '' }, storage, net);
     expect(r).toMatchObject({ target: '', status: 'error' }); expect(r.message).toBe('Lantern report.pdf could not be opened. Could not read your files. Tap the file to try again.');
-    fail = null; const again = await F.fileResolve({ demo: false, address: 'file:/Lantern report.pdf', title: '' }, storage, net); expect(again.status).toBe('ready');
+    fail = null; const again = await F.fileResolve({ address: 'file:/Lantern report.pdf', title: '' }, storage, net); expect(again.status).toBe('ready');
   });
   test('a file that is not there, a text over 1 MB and a binary named .txt each end in a stated error', async () => {
-    expect((await F.fileResolve({ demo: false, address: 'file:/ghost.pdf', title: '' }, storage, net)).message).toBe('ghost.pdf could not be opened. That file is not there any more. Tap the file to try again.');
+    expect((await F.fileResolve({ address: 'file:/ghost.pdf', title: '' }, storage, net)).message).toBe('ghost.pdf could not be opened. That file is not there any more. Tap the file to try again.');
     tree['/'] = [{ name: 'big.txt', type: 'file', size: 2_000_000, modified: '2026-11-18T08:00:00Z' }, { name: 'bin.txt', type: 'file', size: 3, modified: '2026-11-18T08:00:00Z' }];
     blobs['/bin.txt'] = new Uint8Array([0xff, 0xfe, 0xfd]);
-    expect((await F.fileResolve({ demo: false, address: 'file:/big.txt', title: '' }, storage, net)).message).toContain('too large');
-    expect((await F.fileResolve({ demo: false, address: 'file:/bin.txt', title: '' }, storage, net)).message).toContain('not text');
+    expect((await F.fileResolve({ address: 'file:/big.txt', title: '' }, storage, net)).message).toContain('too large');
+    expect((await F.fileResolve({ address: 'file:/bin.txt', title: '' }, storage, net)).message).toContain('not text');
   });
   test('any other file resolves to its own address, so the deck opens it as a file page', async () => {
-    expect(await F.fileResolve({ demo: false, address: 'file:/readings.csv', title: 'T' }, storage, net)).toEqual({ address: 'file:/readings.csv', target: 'file:/readings.csv', title: 'T', status: 'ready', message: '' });
+    expect(await F.fileResolve({ address: 'file:/readings.csv', title: 'T' }, storage, net)).toEqual({ address: 'file:/readings.csv', target: 'file:/readings.csv', title: 'T', status: 'ready', message: '' });
   });
   test('fileOpen of a PDF page answers the same target, and the page can show an error', async () => {
     fail = (c) => (c.path === '/api/texture/files/open' ? new SignedOutError('x') : null);
@@ -286,37 +285,37 @@ describe('F11 a file that is another page\'s document', () => {
 
 describe('F12 to F14 changes, uploads and recents', () => {
   test('F12 each change uses its verb, percent-encodes the path and answers the refreshed folder', async () => {
-    let l = await F.fileMkdir({ demo: false, dir: '/Documents', name: 'New one' }, storage, net);
+    let l = await F.fileMkdir({ dir: '/Documents', name: 'New one' }, storage, net);
     expect(calls.find((c) => c.method === 'POST')).toMatchObject({ path: '/api/files/Documents/New%20one' }); expect(l.message).toBe('Made the folder “New one”.'); expect(l.path).toBe('/Documents');
-    l = await F.fileDelete({ demo: false, path: '/Documents/Council notes.txt' }, storage, net);
+    l = await F.fileDelete({ path: '/Documents/Council notes.txt' }, storage, net);
     expect(calls.find((c) => c.method === 'DELETE')!.path).toBe('/api/files/Documents/Council%20notes.txt'); expect(l.message).toBe('Deleted “Council notes.txt”.');
-    l = await F.fileRename({ demo: false, path: '/Documents/Council notes.txt', name: 'Minutes #2.txt' }, storage, net);
+    l = await F.fileRename({ path: '/Documents/Council notes.txt', name: 'Minutes #2.txt' }, storage, net);
     const mv = calls.find((c) => c.method === 'PATCH')!; expect(mv.body).toEqual({ move_to: '/Documents/Minutes #2.txt' }); expect(l.message).toBe('Renamed to “Minutes #2.txt”.');
   });
   test('bad names and the root are refused with nothing sent', async () => {
     calls = [];
-    expect((await F.fileMkdir({ demo: false, dir: '/', name: 'a/b' }, storage, net)).message).toBe('That name cannot be used. Avoid slashes and empty names.');
-    expect((await F.fileRename({ demo: false, path: '/x.txt', name: '..' }, storage, net)).message).toContain('cannot be used');
-    expect((await F.fileDelete({ demo: false, path: '/' }, storage, net)).message).toBe('That cannot be deleted.');
-    expect((await F.fileRename({ demo: false, path: '/a/../..', name: 'x' }, storage, net)).message).toBe('That cannot be renamed.');
+    expect((await F.fileMkdir({ dir: '/', name: 'a/b' }, storage, net)).message).toBe('That name cannot be used. Avoid slashes and empty names.');
+    expect((await F.fileRename({ path: '/x.txt', name: '..' }, storage, net)).message).toContain('cannot be used');
+    expect((await F.fileDelete({ path: '/' }, storage, net)).message).toBe('That cannot be deleted.');
+    expect((await F.fileRename({ path: '/a/../..', name: 'x' }, storage, net)).message).toBe('That cannot be renamed.');
     expect(calls.filter((c) => c.method !== 'GET').length).toBe(0);
   });
   test('the computer\'s refusals are said in plain words', async () => {
     fail = (c) => (c.method === 'PATCH' ? Object.assign(new Error('x'), { status: 409 }) : null);
-    expect((await F.fileRename({ demo: false, path: '/Notes 2.txt', name: 'Harbor.md' }, storage, net)).message).toBe('Something with that name is already there.');
+    expect((await F.fileRename({ path: '/Notes 2.txt', name: 'Harbor.md' }, storage, net)).message).toBe('Something with that name is already there.');
     fail = (c) => (c.method === 'PATCH' ? Object.assign(new Error('x'), { status: 405 }) : null);
-    expect((await F.fileRename({ demo: false, path: '/Notes 2.txt', name: 'x.md' }, storage, net)).message).toBe('This computer does not allow that here yet.');
+    expect((await F.fileRename({ path: '/Notes 2.txt', name: 'x.md' }, storage, net)).message).toBe('This computer does not allow that here yet.');
   });
   // Owner, 2026-11-18: "there is no rule that local files can't go to server... autoradio is an interface into user's own choir vm".
   test('"autoradio is an interface into user\'s own choir vm": a picked local file is uploaded to the listener\'s computer', async () => {
     files.set('app:/tmp/picked/photo.png', new Uint8Array([1, 2, 3]));
-    const l = await F.fileUpload({ demo: false, from: 'app:/tmp/picked/photo.png', name: 'photo.png', dir: '/Documents' }, storage, net);
+    const l = await F.fileUpload({ from: 'app:/tmp/picked/photo.png', name: 'photo.png', dir: '/Documents' }, storage, net);
     const put = calls.find((c) => c.method === 'PUT')!;
     expect(put.path).toBe('/api/files/Documents/photo.png'); expect(Array.from(put.body as Uint8Array)).toEqual([1, 2, 3]); expect(put.headers).toEqual({ 'content-type': 'image/png' });
     expect(l.message).toBe('Added “photo.png”.');
     calls = [];
-    expect((await F.fileUpload({ demo: false, from: '', name: '', dir: '/' }, storage, net)).message).toBe('Nothing was chosen to add.'); expect(calls.some((c) => c.method === 'PUT')).toBe(false);
-    expect((await F.fileUpload({ demo: false, from: 'app:/tmp/picked/gone', name: 'g.txt', dir: '/' }, storage, net)).message).toBe('Nothing was chosen to add.');
+    expect((await F.fileUpload({ from: '', name: '', dir: '/' }, storage, net)).message).toBe('Nothing was chosen to add.'); expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+    expect((await F.fileUpload({ from: 'app:/tmp/picked/gone', name: 'g.txt', dir: '/' }, storage, net)).message).toBe('Nothing was chosen to add.');
   });
   test('F14 recents: newest first, capped, kept, dropped when the file is gone or deleted', async () => {
     tree['/'] = Array.from({ length: 35 }, (_, i) => ({ name: `f${i}.dat`, type: 'file', size: i, modified: '2026-11-18T08:00:00Z' }));
@@ -324,23 +323,15 @@ describe('F12 to F14 changes, uploads and recents', () => {
     let l = await list({ mode: 'recent' });
     expect(l.mode).toBe('recent'); expect(l.title).toBe('Recent'); expect(l.count).toBe(F.RECENT_LIMIT); expect(l.rows[0].name).toBe('f34.dat'); expect(l.rows[0].place).toBe('Files');
     F.forget(); l = await list({ mode: 'recent' }); expect(l.count).toBe(30);                    // read back from app:/data/recent-files.json
-    await open('file:/ghost.dat'); await F.fileDelete({ demo: false, path: '/f34.dat' }, storage, net);
+    await open('file:/ghost.dat'); await F.fileDelete({ path: '/f34.dat' }, storage, net);
     expect((await list({ mode: 'recent' })).rows[0].name).toBe('f33.dat');
-    await F.fileRename({ demo: false, path: '/f33.dat', name: 'renamed.dat' }, storage, net);
+    await F.fileRename({ path: '/f33.dat', name: 'renamed.dat' }, storage, net);
     expect((await list({ mode: 'recent' })).rows[0].name).toBe('renamed.dat');
     F.forget(); files.clear(); expect((await list({ mode: 'recent' })).message).toBe('Files you open appear here.');
   });
 });
 
-describe('F15 to F17 demo, words and grants', () => {
-  test('F15 demo mode asks nothing, lists invented files and changes them in memory', async () => {
-    const l = await F.fileList({ demo: true, path: '/', mode: 'browse', sort: 'name', desc: false, query: '' }, storage, net);
-    expect(calls.length).toBe(0); expect(l.rows.map((r) => r.name)).toEqual(['Books', 'Documents', 'Media', 'Pictures', 'Readme.txt']);
-    const csv = await open('file:/Documents/Budget 2026.csv', true); expect(csv.rows.length).toBeGreaterThan(1); expect(calls.length).toBe(0);
-    const added = await F.fileUpload({ demo: true, from: '', name: '', dir: '/Documents' }, storage, net); expect(added.message).toBe('Added “Added note.txt”.'); expect(added.rows.some((r) => r.name === 'Added note.txt')).toBe(true);
-    const pdf = await F.fileResolve({ demo: true, address: 'file:/Documents/Council minutes.pdf', title: '' }, storage, net); expect(pdf.target).toBe(''); expect(calls.length).toBe(0);
-    expect(Object.keys(demoTree).length).toBe(10);
-  });
+describe('F16 and F17 words and grants', () => {
   test('F16 nothing the source answers says "Loading"', async () => {
     const all = JSON.stringify([await list(), await list({ path: '/x' }), await list({ mode: 'recent' }), await open('file:/mystery.dat'), await open('file:/ghost'), await open('pub:x')]);
     expect(all).not.toMatch(/loading/i);

@@ -99,11 +99,6 @@ final class RadioPageTests: XCTestCase {
         XCTAssertEqual(RadioPage.make(i).state, "ready", "heard fifteen minutes ago: not a cold start")
     }
 
-    func test05c_TheDemoSheetFixturesAreBundledAndDecode() async throws {
-        for n in ["cold", "day", "answer", "empty"] { XCTAssertNotNil(Demo.runSheet(n), n) }
-        XCTAssertNil(Demo.runSheet("nope"))
-    }
-
     func test05d_TheDayPartIsTheAppsOneFunction() {
         var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!
         func at(_ h: Int) -> Date { c.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: h, minute: 53))! }
@@ -357,40 +352,5 @@ final class RadioPageTests: XCTestCase {
         }
         let def = try XCTUnwrap(((j["names"] as? [[String: Any]])?.first { ($0["source"] as? String) == "radioPage" }?["substitute"] as? [String: Any])?["default"] as? [String: Any])
         XCTAssertEqual(Set(def.keys), Set(shapes["RadioPageInfo"]!.keys), "the substitute default has every field")
-    }
-
-    func test18b_OneBadEntryInTheDemoSheetIsDroppedAndTheRestLoad() throws {
-        let json = #"{"sheet":{"version":3,"entries":[{"id":"a","kind":"story","placed_by":"desk","state":"ahead","title":"A","est_seconds":60,"text":"Words."},{"id":"b","kind":"nonsense","placed_by":"desk","state":"ahead"},{"id":"c","kind":"story","placed_by":"desk","state":"ahead","title":"C","est_seconds":60,"text":"Words."}]},"pending":[]}"#
-        let sheet = try XCTUnwrap(Demo.lossySheet(Data(json.utf8)))
-        XCTAssertEqual(sheet.entries.map(\.id), ["a", "c"])
-    }
-
-    // The demo install path end to end: the fixture the tour installs, through the store, to the state the page draws.
-    func test18_TheDemoSheetFixtureReachesThePageAsUpNextRows() throws {
-        for (name, ahead, more) in [("cold", 6, 1), ("day", 9, 4)] {
-            let sheet = try XCTUnwrap(Demo.runSheet(name), name)
-            let store = RunSheetStore(); store.replaceForDemo(sheet)
-            let p = RadioPage.make(RadioPageInput(sheet: store.sheet))
-            XCTAssertEqual(p.ahead.count, ahead, name); XCTAssertEqual(p.aheadMore, more, name)
-            XCTAssertFalse(p.statusLine.isEmpty, name)
-            XCTAssertFalse(p.greeting.isEmpty, "nothing on air and entries ahead: the greeting")
-            XCTAssertTrue(p.canPlay)
-            if name == "day" { XCTAssertEqual(p.heard.count, 2) }
-            var started = store.sheet; let k = try XCTUnwrap(started.entries.firstIndex { $0.state == .ahead }); started.entries[k].state = .onAir; started.onAir = started.entries[k].id
-            var i = RadioPageInput(sheet: started); i.playing = true
-            let on = RadioPage.make(i)
-            XCTAssertTrue(on.onAir); XCTAssertEqual(on.statusLine, "On air"); XCTAssertEqual(on.ahead.count, ahead - 1)
-        }
-    }
-
-    // the tour's fixtures decode and say what the tour expects of them
-    func test16_TheTourFixturesDecode() throws {
-        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("fixtures/demo")
-        for (name, ahead, heard) in [("runsheet-cold.json", 6, 0), ("runsheet-day.json", 9, 2), ("runsheet-answer.json", 3, 1), ("runsheet-empty.json", 0, 1)] {
-            let d = try Data(contentsOf: dir.appendingPathComponent(name))
-            let saved = try JSONDecoder().decode(RunSheetStore.Saved.self, from: d)
-            let p = RadioPage.make(RadioPageInput(sheet: saved.sheet))
-            XCTAssertEqual(p.ahead.count, ahead, name); XCTAssertEqual(p.heard.count, heard, name)
-        }
     }
 }

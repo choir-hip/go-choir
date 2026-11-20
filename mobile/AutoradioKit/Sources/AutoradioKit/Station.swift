@@ -32,8 +32,6 @@ import AVFoundation
     public var sleep: (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }
     /// Seconds the last launch waited.
     public private(set) var waited: TimeInterval = 0
-    /// Demo mode with a fixture run sheet (`Demo.sheetKey`): the station does not start by itself, so the sheet stays as the fixture made it.
-    public var holdForDemoSheet = false
     public private(set) var started = false
     public private(set) var lastReason: Reason?
 
@@ -44,7 +42,7 @@ import AVFoundation
     @discardableResult
     public func start(reason: Reason) async -> Bool {
         if reason == .foreground, started { return false }
-        guard !holdForDemoSheet, isReady(), !otherAudioPlaying() else { return false }
+        guard isReady(), !otherAudioPlaying() else { return false }
         waited = 0
         if reason == .launch {
             while !launchCondition(), waited < launchDeadline { await sleep(launchPoll); waited += launchPoll }

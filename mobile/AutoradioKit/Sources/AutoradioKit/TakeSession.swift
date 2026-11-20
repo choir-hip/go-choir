@@ -267,29 +267,3 @@ public struct FileTranscriber: TakeTranscribing {
         return frames
     }
 }
-
-// MARK: Demo mode (the simulator tour: fixtures/tours/takes-record-publish.steps)
-
-/// Demo mode records no microphone: it writes a quiet tone as long as the listener held the button, in the real format, and the transcript is
-/// a fixed sentence. The rest of the path (gate, review, upload, publish) is the real one against the demo routes.
-@MainActor public final class DemoTakeRecorder: TakeRecorderEngine {
-    private var url: URL?, began = Date()
-    public init() {}
-    public func start(to url: URL) throws { self.url = url; began = Date() }
-    public func stop() -> Double {
-        let secs = min(max(Date().timeIntervalSince(began), 0), TakeBounds.maxSeconds)
-        guard let url else { return 0 }
-        let settings: [String: Any] = [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: TakeBounds.sampleRate, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: TakeBounds.bitRate]
-        guard let f = try? AVAudioFile(forWriting: url, settings: settings), let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: TakeBounds.sampleRate, channels: 1, interleaved: false),
-              let b = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(secs * TakeBounds.sampleRate)) else { return secs }
-        b.frameLength = b.frameCapacity
-        if let ch = b.floatChannelData { for i in 0..<Int(b.frameLength) { ch[0][i] = 0.02 * Float(sin(2 * Double.pi * 220 * Double(i) / TakeBounds.sampleRate)) } }
-        try? f.write(from: b)
-        return secs
-    }
-    public func cancel() { if let url { try? FileManager.default.removeItem(at: url) }; url = nil }
-}
-public struct DemoTakeTranscriber: TakeTranscribing {
-    public init() {}
-    public func transcribe(file: URL) async -> String { "This is a demo take about the harbor fee vote tonight." }
-}

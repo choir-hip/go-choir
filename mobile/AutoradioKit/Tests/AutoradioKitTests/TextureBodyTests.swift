@@ -5,12 +5,12 @@ import XCTest
 final class TextureBodyTests: XCTestCase {
     static let mobile = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    /// Real Texture bodies: the repo's demo stories (citations) and a hand-built mixed document (table, embed, unknown node, nested lists, code).
+    /// Real Texture bodies: the repo's sample stories (citations) and a hand-built mixed document (table, embed, unknown node, nested lists, code).
     static func fixtures() throws -> [(name: String, body: [String: Any])] {
         var out: [(String, [String: Any])] = []
-        let demo = Self.mobile.appendingPathComponent("fixtures/demo")
-        for f in try FileManager.default.contentsOfDirectory(atPath: demo.path).sorted() where f.hasPrefix("resolve-") {
-            let o = try JSONSerialization.jsonObject(with: Data(contentsOf: demo.appendingPathComponent(f))) as? [String: Any]
+        let dir = Self.mobile.appendingPathComponent("fixtures/texture")
+        for f in try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted() where f.hasPrefix("story-") {
+            let o = try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent(f))) as? [String: Any]
             if let b = (o?["artifact"] as? [String: Any])?["body_doc"] as? [String: Any] { out.append((f, b)) }
         }
         let letter = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.mobile.appendingPathComponent("fixtures/texture/letter-citations-embed.json"))) as! [String: Any]

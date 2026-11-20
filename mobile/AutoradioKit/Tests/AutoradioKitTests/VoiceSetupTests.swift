@@ -5,8 +5,8 @@ import XCTest
 final class VoiceSetupTests: XCTestCase {
     func device(_ gb: Double, disk: Double = 40, wifi: Bool = true) -> DeviceProfile { DeviceProfile(chip: "test", memoryGB: gb, freeDiskGB: disk, onWiFi: wifi) }
 
-    func script(_ models: [String: SimulatedSetupBackend.Model] = [:]) -> SimulatedSetupBackend.Script {
-        SimulatedSetupBackend.Script(tickMs: 5, stallSeconds: nil, profile: device(8), models: models,
+    func script(_ models: [String: ScriptedSetupBackend.Model] = [:]) -> ScriptedSetupBackend.Script {
+        ScriptedSetupBackend.Script(tickMs: 5, stallSeconds: nil, profile: device(8), models: models,
                                      check: SetupCheck(loadMs: 900, speed: 0.08, unit: "x real time", memoryMB: 300, outputOK: true))
     }
 
@@ -35,7 +35,7 @@ final class VoiceSetupTests: XCTestCase {
     }
 
     func testEverythingPassesAndTheRecordHoldsTheNumbers() async {
-        let s = VoiceSetup(backend: SimulatedSetupBackend(script: script()), profile: device(8), stallSeconds: 5, patience: 5)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script()), profile: device(8), stallSeconds: 5, patience: 5)
         await s.run()
         XCTAssertTrue(s.isFinished)
         XCTAssertTrue(s.rows.allSatisfy { $0.state == "ready" && !$0.isFallback }, "\(s.rows)")
@@ -50,8 +50,8 @@ final class VoiceSetupTests: XCTestCase {
 
     func testStallIsReportedAndFallbackOnRequest() async throws {
         // failure 2
-        let m = SimulatedSetupBackend.Model(chunks: 10, stallAt: 3, checkOK: nil, checkNote: nil, checkMs: nil)
-        let s = VoiceSetup(backend: SimulatedSetupBackend(script: script(["parakeet-tdt-0.6b-v2": m])), profile: device(8), stallSeconds: 0.4, patience: 30)
+        let m = ScriptedSetupBackend.Model(chunks: 10, stallAt: 3, checkOK: nil, checkNote: nil, checkMs: nil)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["parakeet-tdt-0.6b-v2": m])), profile: device(8), stallSeconds: 0.4, patience: 30)
         let run = Task { await s.run() }
         var stalled = false
         for _ in 0..<100 {
@@ -70,8 +70,8 @@ final class VoiceSetupTests: XCTestCase {
     }
 
     func testRetryAfterAStallResumesAndPasses() async throws {
-        let m = SimulatedSetupBackend.Model(chunks: 6, stallAt: 2, checkOK: nil, checkNote: nil, checkMs: nil)   // stalls on the first attempt only
-        let s = VoiceSetup(backend: SimulatedSetupBackend(script: script(["parakeet-tdt-0.6b-v2": m])), profile: device(8), stallSeconds: 0.3, patience: 30)
+        let m = ScriptedSetupBackend.Model(chunks: 6, stallAt: 2, checkOK: nil, checkNote: nil, checkMs: nil)   // stalls on the first attempt only
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["parakeet-tdt-0.6b-v2": m])), profile: device(8), stallSeconds: 0.3, patience: 30)
         let run = Task { await s.run() }
         for _ in 0..<100 {
             try await Task.sleep(nanoseconds: 50_000_000)
@@ -85,8 +85,8 @@ final class VoiceSetupTests: XCTestCase {
 
     func testNoAnswerTakesTheFallbackAfterPatience() async {
         // failure 2, 3
-        let m = SimulatedSetupBackend.Model(chunks: 10, stallAt: 2, checkOK: nil, checkNote: nil, checkMs: nil)
-        let s = VoiceSetup(backend: SimulatedSetupBackend(script: script(["kokoro-82m-ane": m])), profile: device(8), stallSeconds: 0.3, patience: 0.4)
+        let m = ScriptedSetupBackend.Model(chunks: 10, stallAt: 2, checkOK: nil, checkNote: nil, checkMs: nil)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["kokoro-82m-ane": m])), profile: device(8), stallSeconds: 0.3, patience: 0.4)
         await s.run()
         XCTAssertEqual(s.choices[.voice], "pocket-tts")
         XCTAssertTrue(s.rows.first { $0.stage == "voice" }!.isFallback)
@@ -94,8 +94,8 @@ final class VoiceSetupTests: XCTestCase {
 
     func testAModelThatFailsItsCheckIsReplacedWithoutAsking() async {
         // failure 4
-        let m = SimulatedSetupBackend.Model(chunks: 3, stallAt: nil, checkOK: false, checkNote: "The voice made audio of the wrong length.", checkMs: nil)
-        let s = VoiceSetup(backend: SimulatedSetupBackend(script: script(["kokoro-82m-ane": m])), profile: device(8), stallSeconds: 5, patience: 5)
+        let m = ScriptedSetupBackend.Model(chunks: 3, stallAt: nil, checkOK: false, checkNote: "The voice made audio of the wrong length.", checkMs: nil)
+        let s = VoiceSetup(backend: ScriptedSetupBackend(script: script(["kokoro-82m-ane": m])), profile: device(8), stallSeconds: 5, patience: 5)
         await s.run()
         let row = s.rows.first { $0.stage == "voice" }!
         XCTAssertEqual(row.state, "ready"); XCTAssertTrue(row.isFallback)
@@ -120,12 +120,51 @@ final class VoiceSetupTests: XCTestCase {
         XCTAssertTrue(s.rows.allSatisfy { $0.state == "ready" }, "\(s.rows)")
         XCTAssertTrue(s.summary.contains { $0.contains("(fallback)") })
     }
+}
 
-    func testScriptFixtureParses() throws {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("fixtures/demo/setup-script.json")
-        let sc = try XCTUnwrap(SimulatedSetupBackend.parse(Data(contentsOf: url)))
-        XCTAssertNotNil(sc.models["parakeet-tdt-0.6b-v2"]?.stallAt, "the demo script has one stall")
-        XCTAssertEqual(sc.models["kokoro-82m-ane"]?.checkOK, false, "and one failed check")
+/// A scripted download and check for the tests, with a stall and a failed check on demand. No network, no model, no microphone.
+final class ScriptedSetupBackend: SetupBackend, @unchecked Sendable {
+    struct Model: Codable, Sendable {
+        var chunks: Int
+        var stallAt: Int?
+        var checkOK: Bool?
+        var checkNote: String?
+        var checkMs: Int?
+    }
+    struct Script: Codable, Sendable {
+        var tickMs: Int
+        var stallSeconds: Double?
+        var profile: DeviceProfile
+        var models: [String: Model]
+        var check: SetupCheck
+    }
+    let script: Script
+    private let lock = NSLock()
+    private var stalledOnce = Set<String>()
+    init(script: Script) { self.script = script }
+    static func parse(_ data: Data) -> Script? { try? JSONDecoder().decode(Script.self, from: data) }
+
+    func download(_ c: SetupCandidate, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
+        let m = script.models[c.id] ?? Model(chunks: 4)
+        let per = c.bytes / Int64(max(m.chunks, 1))
+        for k in 1...max(m.chunks, 1) {
+            try await Task.sleep(nanoseconds: UInt64(script.tickMs) * 1_000_000)
+            onBytes(per * Int64(k))
+            if let at = m.stallAt, k == at {
+                let first: Bool = lock.locked { stalledOnce.insert(c.id).inserted }
+                if first { while true { try await Task.sleep(nanoseconds: 1_000_000_000) } }     // silent stall until cancelled
+            }
+        }
+        onBytes(c.bytes)
+    }
+
+    func check(_ c: SetupCandidate) async throws -> SetupCheck {
+        let m = script.models[c.id]
+        try await Task.sleep(nanoseconds: UInt64(m?.checkMs ?? 700) * 1_000_000)
+        var out = script.check
+        if c.isFloor { out.loadMs = 12; out.memoryMB = 0 }
+        if m?.checkOK == false { out.outputOK = false; out.note = m?.checkNote ?? "It did not pass its check on this phone." }
+        else { out.outputOK = true }
+        return out
     }
 }

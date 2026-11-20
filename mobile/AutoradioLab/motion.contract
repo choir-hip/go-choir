@@ -8,32 +8,22 @@ keyframes waitrise
   from opacity=0 translate="0px 8px"
 
 // The wait for the desk (about 15 s): the hero mark tumbling, real lifecycle lines beneath it, never a spinner and never
-// a percentage. Real use: demo=false, `lines` are the document lifecycle's own sentences so far (the last three show),
+// a percentage. `lines` are the document lifecycle's own sentences so far (the last three show),
 // `step` is how many of the four faces the desk's steps have filled (started, reading, writing, checking), `since` is
-// when the wait began on the root clock (mkT). Demo use: demo=true plays a scripted sequence from `since`, ends on
-// "Revision ready" with the success flip, and holds there.
+// when the wait began.
 component AliveWait
   inject
     th: Theme
-    mkT: number
   props
-    demo: bool
     since: number
     lines: string[]
     step: number
     testId: string
-  derive el = max(0, (mkT - since) / 1000)
-  derive script = ["Reading what you asked", "Looking for sources", "Reading example.com and example.org", "Drafting the revision", "Checking each claim against its source", "Revision ready"]
-  derive at = [0, 2.2, 4.8, 8, 11, 13.6]
-  derive stepAt = [1, 1, 2, 3, 4, 4]
-  derive idx = at.filter(x => x <= el).length - 1
-  derive done = demo and idx >= 5
-  derive shown = demo ? script.slice(max(0, idx - 2), max(0, idx) + 1) : lines.slice(-3)
-  derive stp = demo ? sum(stepAt.slice(max(0, idx), max(0, idx) + 1)) : step
-  derive markSince = done ? since + 13600 : since
+  derive shown = lines.slice(-3)
+  derive stp = step
   view
     column testId=testId align-items="center" gap=16 width="100%" padding-top=8 padding-bottom=8
-      MarkAt(state=(done ? "success" : "thinking"), size=132, since=markSince, level=0, step=stp, still=false, testId=`${testId}-mark`)
+      MarkAt(state="thinking", size=132, since=since, level=0, step=stp, still=false, testId=`${testId}-mark`)
       column align-items="center" gap=6 min-height=84 width="100%"
         for l, i in shown key=l
           row gap=6 align-items="center" justify-content="center"

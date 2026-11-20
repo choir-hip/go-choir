@@ -23,13 +23,12 @@ public protocol LearnedProvider: Sendable {
 /// Derived from the gesture events: more-of-this and less-of-this, cut at the newest reset marker (L1, L2).
 public final class SignalsLearned: LearnedProvider, @unchecked Sendable {
     private let signals: Signals
-    private let demoSeed: Bool
-    public init(signals: Signals, demoSeed: Bool) { self.signals = signals; self.demoSeed = demoSeed }
+    public init(signals: Signals) { self.signals = signals }
 
-    public static func lines(from events: [SignalEvent], seed: [LearnedLine]) -> [LearnedLine] {
+    public static func lines(from events: [SignalEvent]) -> [LearnedLine] {
         let newestFirst = events.sorted { $0.at > $1.at }
         let resetAt = newestFirst.first { $0.kind == "learned-reset" }?.at ?? 0
-        var out = seed.filter { $0.at > resetAt }
+        var out: [LearnedLine] = []
         for e in newestFirst where e.at > resetAt {
             let what = e.detail.isEmpty ? e.subject : e.detail                                  // L3
             switch e.kind {
@@ -41,14 +40,7 @@ public final class SignalsLearned: LearnedProvider, @unchecked Sendable {
         return out.sorted { $0.at > $1.at }
     }
     public func lines() async -> [LearnedLine] {
-        var seed: [LearnedLine] = []
-        if demoSeed, let d = Demo.fixture("learned"), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
-            seed = (o["lines"] as? [[String: Any]] ?? []).compactMap { l in
-                guard let t = l["text"] as? String else { return nil }
-                return LearnedLine(at: l["at"] as? Double ?? 0, kind: l["kind"] as? String ?? "more", text: t)
-            }
-        }
-        return Self.lines(from: signals.recent(limit: 200), seed: seed)
+        Self.lines(from: signals.recent(limit: 200))
     }
     public func reset() async { signals.record(SignalEvent(kind: "learned-reset", subject: "settings:learned", detail: "reset by the listener")) }
 }

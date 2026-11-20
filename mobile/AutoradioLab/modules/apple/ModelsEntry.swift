@@ -22,7 +22,6 @@ import Security
 // is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
 final class ModelsModule: ExactModule {
     static func keyState() -> String {
-        if Demo.isOn { return "unreadable" }
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "news.choir.autoradio.choir", kSecAttrAccount as String: KeyAccount.apiKey, kSecMatchLimit as String: kSecMatchLimitOne]
         switch SecItemCopyMatching(q as CFDictionary, nil) { case errSecSuccess: return "present"; case errSecItemNotFound: return "absent"; default: return "unreadable" }
     }
@@ -31,7 +30,7 @@ final class ModelsModule: ExactModule {
         // The real-data proof only (compiled out of device builds): the `proof-key` file is imported into the Keychain by the package module's init, which can run AFTER the first
         // shared-code read on a fresh install (the first real drive after an install showed Settings, Files and Mail signed out for the whole drive, the answer being kept). Importing
         // here, before any read of the key, removes that race; the file is deleted by the import, so every later call finds none.
-        if !Demo.isOn, let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { ProofKey.importIfPresent(documents: docs, into: KeychainKeyStore()) }
+        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { ProofKey.importIfPresent(documents: docs, into: KeychainKeyStore()) }
         #endif
         if (request["op"] as? String) == "keystate" { return ["state": Self.keyState()] }
         return MailSeal().reply(request) ?? CredentialReader().reply(request)

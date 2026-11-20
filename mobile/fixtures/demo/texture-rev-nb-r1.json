@@ -1,9 +1,0 @@
-{
- "revision_id": "nb-r1",
- "doc_id": "demo-notebook",
- "version_number": 0,
- "author_label": "app:autoradio",
- "author_kind": "appagent",
- "content": "# My notebook\n\n## What you asked for\n- Mornings: world news first, then science.\n- \"Less sport.\" (you said, 17 Nov, during \"Leeds sack manager\")\n- Never play takes by voice-3fa2c1.\n\n## What Autoradio has learned\n- Long policy pieces before 8 am get skipped; short ones are heard. [L1 \u00b7 heard 9 of 11]\n- You hear podcast clips through when the clip quotes a scientist. [L9 \u00b7 heard 4 of 4]\n\n## What Autoradio is trying\n- One longer science piece after the headlines. [T2 \u00b7 heard 1 of 3]\n\n## Recent steering\n- More like this: \"The new Webb image\" (17 Nov 08:12)\n- Less like this: \"Transfer window latest\" (17 Nov 08:20)\n",
- "created_at": "2026-11-17T21:30:00Z"
-}

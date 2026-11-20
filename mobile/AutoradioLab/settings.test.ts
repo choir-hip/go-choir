@@ -16,37 +16,33 @@ beforeEach(() => {
 
 describe('settingsAccount', () => {
   test('A3 signed out: the line, and nothing sent', async () => {
-    const v = await settingsAccount({ signedIn: false, demo: false, tick: 0 });
+    const v = await settingsAccount({ signedIn: false, tick: 0 });
     expect(v.message).toBe('Not signed in.'); expect(v.signedIn).toBe(false); expect(v.status).toBe('idle'); expect(calls.length).toBe(0);
   });
   test('the real shape: handle, key label, scopes joined; the key never appears', async () => {
-    const v = await settingsAccount({ signedIn: true, demo: false, tick: 1 });
+    const v = await settingsAccount({ signedIn: true, tick: 1 });
     expect(calls).toEqual([`${ORIGIN}/auth/whoami`]);
-    expect(v).toEqual({ status: 'ok', signedIn: true, handle: 'quiet-heron-41', keyID: 'key-live-0001', keyLabel: 'Autoradio on this phone', scopes: 'owner:acts, admin', computerID: 'comp-1', message: '', demo: false, baseURL: ORIGIN });
+    expect(v).toEqual({ status: 'ok', signedIn: true, handle: 'quiet-heron-41', keyID: 'key-live-0001', keyLabel: 'Autoradio on this phone', scopes: 'owner:acts, admin', computerID: 'comp-1', message: '', baseURL: ORIGIN });
     expect(JSON.stringify(v)).not.toContain(KEY);
-  });
-  test('A4 demo: the fixture, no request', async () => {
-    const v = await settingsAccount({ signedIn: false, demo: true, tick: 0 });
-    expect(v.handle).toBe('quiet-heron-41'); expect(v.computerID).toBe('demo-computer'); expect(v.demo).toBe(true); expect(calls.length).toBe(0);
   });
   test('A2 a refused key, a missing route, garbage and a dead network each say so', async () => {
     handler = () => new Response('{}', { status: 401 });
-    expect((await settingsAccount({ signedIn: true, demo: false, tick: 0 })).message).toContain('no longer accepted');
+    expect((await settingsAccount({ signedIn: true, tick: 0 })).message).toContain('no longer accepted');
     handler = () => new Response('{"error":"nope"}', { status: 404 });
-    expect((await settingsAccount({ signedIn: true, demo: false, tick: 0 })).message).toContain('cannot say which account');
+    expect((await settingsAccount({ signedIn: true, tick: 0 })).message).toContain('cannot say which account');
     handler = () => new Response('not json', { status: 200 });
-    expect((await settingsAccount({ signedIn: true, demo: false, tick: 0 })).message).toContain('not what was expected');
+    expect((await settingsAccount({ signedIn: true, tick: 0 })).message).toContain('not what was expected');
     globalThis.fetch = (async () => { throw new Error('offline'); }) as never;
-    const v = await settingsAccount({ signedIn: true, demo: false, tick: 0 });
+    const v = await settingsAccount({ signedIn: true, tick: 0 });
     expect(v.message).toBe('Could not reach choir.news.'); expect(v.status).toBe('failed'); expect(v.signedIn).toBe(true);
   });
   test('A6 a bound computer id wins over the kept one', async () => {
     handler = () => new Response(JSON.stringify({ ...live, computer_id: 'computer-bound' }), { status: 200 });
-    expect((await settingsAccount({ signedIn: true, demo: false, tick: 0 })).computerID).toBe('computer-bound');
+    expect((await settingsAccount({ signedIn: true, tick: 0 })).computerID).toBe('computer-bound');
   });
   test('A5 a body with no handle is not a half view', async () => {
     handler = () => new Response('{"key_id":"k"}', { status: 200 });
-    const v = await settingsAccount({ signedIn: true, demo: false, tick: 0 });
+    const v = await settingsAccount({ signedIn: true, tick: 0 });
     expect(v.status).toBe('failed'); expect(v.handle).toBe('');
     expect(parseWhoami(null)).toBeNull(); expect(parseWhoami({ handle: 'a', scopes: [1, 'x'] })?.scopes).toBe('x');
     expect(plainAccountError(new Error('x'))).toBe('Could not reach choir.news.');

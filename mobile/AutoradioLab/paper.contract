@@ -4,9 +4,8 @@
 // river (by section) and opinion. This file only draws a band by its module; sizes and weights of headlines come with the
 // items, faces, colours and depth come from the theme. The page has views (owner QA round 1, 2026-11-15): Front page, My edition, then one per category; `paperView` (state, kept for the session) says which, and
 // the article stack reads the answer's routes, so a story swipes through the list of the view it was opened from.
-// testIds: page-title, paper-section-front, paper-section-mine, paper-section-<id>, paper-mine-from, paper-edit-edition, paper-choose-topics, paper-mine-note, paper-band-<id>, paper-story-<route>, paper-play-<route>, paper-composition,
-// paper-edition-<big|even|thin|default>, paper-status.
-use Theme, ChoirAuth, DemoInfo from "@choir/autoradio"
+// testIds: page-title, paper-section-front, paper-section-mine, paper-section-<id>, paper-mine-from, paper-edit-edition, paper-choose-topics, paper-mine-note, paper-band-<id>, paper-story-<route>, paper-play-<route>, paper-status.
+use Theme, ChoirAuth from "@choir/autoradio"
 use PaperFront, PaperBand, PaperItem from "./paper-types.contract"
 use Card, CardFill, Btn, BarClear, sectionName, SegmentedTrack, SegmentFace, ChoiceWord, Emerge, dyn from "./ui.contract"
 use FirstRunCard from "./onboarding.contract"
@@ -185,15 +184,12 @@ component PaperPage
   inject
     th: Theme
     au: ChoirAuth
-    dm: DemoInfo
-    devDetails: bool
     openPage: action
     pfront: PaperFront
     paperView: string
     paperLoading: bool
     paperReload: action
     paperFit: action
-    pickEdition: action
   props
     address: string
     title: string
@@ -251,19 +247,6 @@ component PaperPage
           // one prompt line at most: the sign-in line first; the edition line once the reader is signed in or has put the sign-in line away
           if pfront.viewId == "front" and au.signedIn
             FirstRunCard()
-          // demo mode, Settings, Developer, "Demo controls": three editions to show how the page changes with the day
-          if dm.on and devDetails
-            column gap=8 width="100%" padding-top=8 box-sizing="border-box"
-              text `Composition: ${pfront.composition}` font-family=th.fontMono font-size="-exact-caption2" color=th.muted testId="paper-composition"
-              row gap=8 width="100%"
-                button press=pickEdition("big") testId="paper-edition-big" appearance="none"
-                  Btn(label="Big news", primary=false, wide=false)
-                button press=pickEdition("even") testId="paper-edition-even" appearance="none"
-                  Btn(label="Even", primary=false, wide=false)
-                button press=pickEdition("thin") testId="paper-edition-thin" appearance="none"
-                  Btn(label="Thin", primary=false, wide=false)
-                button press=pickEdition("") testId="paper-edition-default" appearance="none"
-                  Btn(label="Default", primary=false, wide=false)
           // nothing to read, or it failed: a line of plain words and one action
           if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
             column align-items="center" gap=12 width="100%" box-sizing="border-box" padding="24px 16px"

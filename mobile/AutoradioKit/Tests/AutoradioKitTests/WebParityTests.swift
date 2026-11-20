@@ -6,7 +6,7 @@ import XCTest
 //
 // WAYS THIS CAN FAIL (written before the code):
 //  1. The quote of a checked citation is the check's outcome word ("exact"): the server's checks.citations[].quote is the
-//     outcome, not the words. A demo-shaped check whose quote IS the words must still work.
+//     outcome, not the words. A sample-shaped check whose quote IS the words must still work.
 //  2. A citation's own attrs.ref.quote, or its manifest anchor's ref.quote, is not read when no transclusion or check has it.
 //  3. An embed shows its alt text where the web shows the caption (alt is the fallback only; ReaderBlock has no alt field, it is
 //     a bridge shape declared in exact.json).
@@ -34,7 +34,7 @@ final class WebParityTests: XCTestCase {
                     checks: #"[{"anchor_id":"a1","state":"exact","quote":"exact"}]"#)
         XCTAssertEqual(d.cites.first?.quote, "quoted words")
         XCTAssertEqual(d.cites.first?.check, "exact")
-        // a demo-shaped check whose quote is the words
+        // a sample-shaped check whose quote is the words
         let d2 = doc(#"{"type":"paragraph","content":[{"type":"text","text":"x"},\#(ref("a1"))]}"#, entities: ents, checks: #"[{"anchor_id":"a1","state":"exact","quote":"the words"}]"#)
         XCTAssertEqual(d2.cites.first?.quote, "the words")
     }

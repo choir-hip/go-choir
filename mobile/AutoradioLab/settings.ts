@@ -6,27 +6,25 @@
 //  A1 the key or an email is shown or logged: only handle, key id, key label and scopes are copied; a failure logs nothing.
 //  A2 whoami answers 401, 404, garbage or nothing: the view says which in plain words and the page still renders.
 //  A3 signed out: the view says "Not signed in." and no request is sent.
-//  A4 demo mode: answered from the fixture, no request.
 //  A5 a body with no handle is "not what was expected", never a half-filled view.
 //  A6 an owner-wide key answers `computer_id: ""`: the Keychain's stored computer id fills it (the computer the phone found); a bound id wins.
 // Dropped: the "loading" status and the generation guard (A3 in Swift): a source answers once per ask, so a late answer cannot land.
 
 import { authedJSON, HTTPError, keptComputerId, ORIGIN, SignedOutError } from './api.ts';
-import demoWhoami from './fixtures/demo/whoami.json';
 
 export type SettingsAccount = {
-  status: string; signedIn: boolean; handle: string; keyID: string; keyLabel: string; scopes: string; computerID: string; message: string; demo: boolean; baseURL: string;
+  status: string; signedIn: boolean; handle: string; keyID: string; keyLabel: string; scopes: string; computerID: string; message: string; baseURL: string;
 };
-export type AccountArgs = { signedIn: boolean; demo: boolean; tick: number };
+export type AccountArgs = { signedIn: boolean; tick: number };
 
 export const WHOAMI_PATH = '/auth/whoami';
 
-const empty = (demo: boolean): SettingsAccount => ({ status: 'idle', signedIn: false, handle: '', keyID: '', keyLabel: '', scopes: '', computerID: '', message: '', demo, baseURL: ORIGIN });
+const empty = (): SettingsAccount => ({ status: 'idle', signedIn: false, handle: '', keyID: '', keyLabel: '', scopes: '', computerID: '', message: '', baseURL: ORIGIN });
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** The Account screen's view from a whoami body; null when the body has no handle (A5). */
-export function parseWhoami(body: unknown): Omit<SettingsAccount, 'signedIn' | 'demo' | 'baseURL' | 'message' | 'status'> | null {
+export function parseWhoami(body: unknown): Omit<SettingsAccount, 'signedIn' | 'baseURL' | 'message' | 'status'> | null {
   if (!body || typeof body !== 'object') return null;
   const o = body as Record<string, unknown>;
   const handle = str(o.handle);
@@ -44,11 +42,7 @@ export function plainAccountError(e: unknown): string {
 }
 
 export async function settingsAccount(args: AccountArgs): Promise<SettingsAccount> {
-  const base = empty(args.demo);
-  if (args.demo) {
-    const w = parseWhoami(demoWhoami);
-    return w ? { ...base, ...w, status: 'ok', signedIn: true } : { ...base, status: 'failed', message: "The server's answer was not what was expected." };
-  }
+  const base = empty();
   if (!args.signedIn) return { ...base, message: 'Not signed in.' };
   try {
     const r = await authedJSON(WHOAMI_PATH);

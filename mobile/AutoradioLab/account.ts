@@ -208,19 +208,17 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
 
 /** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
 export async function accountSignOut(
-  a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
+  storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
   opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
 ): Promise<SignOutResult> {
-  const r = await signOutInner(a, storage, store, native, opts);
+  const r = await signOutInner(storage, store, native, opts);
   return { ...r, epoch: wipes };
 }
 
 async function signOutInner(
-  a: { demo: boolean }, storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
+  storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
   opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void } = {},
 ): Promise<Omit<SignOutResult, 'epoch'>> {
-  // Demo mode has no account of its own: the key on the phone (if any) is the real one, and the demo's sign-out must neither end it nor wipe it.
-  if (a.demo) return { done: false, failed: '', message: 'Demo mode has no account to sign out of. Nothing was changed.' };
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };
   const step = opts.crash ?? ((): void => undefined);
   // The marker first: if the app dies after the key is gone and before the wipes are finished, the next launch finishes them (and if the key is still there, it clears it).

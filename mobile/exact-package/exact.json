@@ -278,7 +278,6 @@
       "mic": "string",
       "heard": "string",
       "route": "string",
-      "demoWords": "string",
       "editionStatus": "string",
       "writingLine": "string",
       "editionError": "string",
@@ -292,7 +291,6 @@
       "setupFinished": "bool",
       "setupStarted": "bool",
       "hearingOK": "bool",
-      "demo": "bool",
       "skipped": "bool",
       "editionDone": "bool",
       "level": "number",
@@ -637,7 +635,6 @@
       "build": "string",
       "server": "string",
       "base": "string",
-      "demo": "bool",
       "signedIn": "bool"
     },
     "Page": {
@@ -745,9 +742,6 @@
       "answerState": "string",
       "answerNote": "string",
       "canRetry": "bool"
-    },
-    "DemoInfo": {
-      "on": "bool"
     },
     "SignalRow": {
       "at": "number",
@@ -1303,7 +1297,6 @@
           "mic": "unasked",
           "heard": "",
           "route": "",
-          "demoWords": "",
           "editionStatus": "",
           "writingLine": "",
           "editionError": "",
@@ -1317,7 +1310,6 @@
           "setupFinished": false,
           "setupStarted": false,
           "hearingOK": false,
-          "demo": false,
           "skipped": false,
           "editionDone": false,
           "level": 0,
@@ -1401,10 +1393,6 @@
     },
     {
       "send": "onboardingTopicsDone",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingDemoSay",
       "answers": "Onboarding"
     },
     {
@@ -1798,7 +1786,6 @@
           "build": "",
           "server": "",
           "base": "",
-          "demo": false,
           "signedIn": false
         }
       }
@@ -1966,16 +1953,6 @@
           "answerState": "",
           "answerNote": "",
           "canRetry": false
-        }
-      }
-    },
-    {
-      "source": "demoInfo",
-      "live": true,
-      "answers": "DemoInfo",
-      "substitute": {
-        "default": {
-          "on": false
         }
       }
     },

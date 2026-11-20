@@ -11,7 +11,7 @@
 // testIds: signin, signin-intro, signin-code, signin-open, signin-cancel, signin-message (unchanged);
 //   ob-steps, ob-mark-slot, ob-begin, ob-begin-mobile, ob-skip, ob-row-<stage>, ob-retry-<stage>, ob-fallback-<stage>,
 //   ob-summary, ob-mic-ask, ob-mic-level, ob-heard, ob-mic-next, ob-route, ob-hearing-yes, ob-hearing-no, ob-topics-start,
-//   ob-topics, ob-explainer, edit-edition, edit-edition-done, edit-edition-link, edit-edition-retry, edit-edition-leave, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-demo, ob-demo-say, ob-wait-slot, ob-writing-line,
+//   ob-topics, ob-explainer, edit-edition, edit-edition-done, edit-edition-link, edit-edition-retry, edit-edition-leave, ob-topic-<label>, ob-topic-open-<label>, ob-trow-<row key>, ob-topic-input, ob-topic-add, ob-selection, ob-talk, ob-topics-done, ob-wait-slot, ob-writing-line,
 //   ob-edition-retry, ob-continue-anyway, ob-edition, ob-edition-open, ob-start-radio, firstrun-card, firstrun-open.
 use Theme, ChoirAuth, Onboarding from "@choir/autoradio"
 use Card, PaperCard, PageScroll, Btn, ListGroup, RowRule, SelectMark, PageHeader, dyn from "./ui.contract"
@@ -194,7 +194,6 @@ component TopicPicker
     editObTopic: action
     obAddTopic: action
     obTalk: action
-    obDemoSay: action
   derive talkLabel = ob.talking ? "Stop talking" : "Talk to it"
   derive addLabel = ob.talking ? `Listening. ${ob.voiceHint}` : ob.voiceHint
   view
@@ -216,12 +215,6 @@ component TopicPicker
       button press=obTalk testId="ob-talk" appearance="none" aria-label=talkLabel
         Btn(label=talkLabel, primary=false, wide=true)
       text addLabel font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-      if ob.demo
-        Card(level=1, testId="ob-demo", minHeight=0)
-          column padding=14 gap=8
-            text "Demo: no microphone here" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-            button press=obDemoSay testId="ob-demo-say" appearance="none"
-              Btn(label=`Say: ${ob.demoWords}`, primary=false, wide=true)
       text ob.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
 
 // The edit page: the same topic tree, preselected with the saved picks, without the first-run steps. Changes save as they are made;

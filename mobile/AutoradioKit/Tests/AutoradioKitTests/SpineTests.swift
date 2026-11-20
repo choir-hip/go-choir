@@ -55,13 +55,6 @@ final class SpineTests: XCTestCase {
         XCTAssertFalse(s.problems.isEmpty)
     }
 
-    func testDemoServesFixturesAndRefusesTheRest() {
-        let (ok, _) = DemoURLProtocol.route(path: "/api/platform/publications/front", query: [])
-        XCTAssertEqual(ok, 200)
-        let (no, _) = DemoURLProtocol.route(path: "/api/other", query: [])
-        XCTAssertEqual(no, 404)
-    }
-
     func testPageSourceFallsBackToNotYet() async {
         let r = PageSources(); r.register(NotYetPageSource())
         let m = await r.model(for: "mailbox:inbox")

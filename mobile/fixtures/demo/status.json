@@ -1,9 +1,0 @@
-{
- "computers": [
-  {
-   "kind": "interactive",
-   "computer_id": "demo-computer",
-   "current": true
-  }
- ]
-}

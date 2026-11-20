@@ -1,5 +1,5 @@
 #!/bin/sh
-# Shared helpers for the whole-app proof (sourced by proof-app.sh; the lane proofs keep their own copies).
+# Shared helpers for the real-data proof (sourced by proof-real.sh).
 # Needs HERE (the scripts directory) and SHOTS set by the caller. Provides: fail, SIM, reset_state, step/wait_/shot/view/place/goto,
 # run_drive (a drive that starts from a clean app, retried when the agent socket is refused), must, nomust.
 DD=/Applications/Xcode.app/Contents/Developer
@@ -13,26 +13,7 @@ trap 'rm -rf "$SCRATCH"' EXIT
 fail() { cp "$OUT" "${TMPDIR:-/tmp}/proof-app-last.txt" 2>/dev/null; [ -n "${SHOTS:-}" ] && cp "$OUT" "$SHOTS/drive.txt" 2>/dev/null; echo "PROOF FAILED at $1"; [ -n "${2:-}" ] && echo "$2"; exit 1; }
 SIM() { DEVELOPER_DIR=$DD /usr/bin/xcrun simctl "$@"; }
 
-# A clean app: demo mode, NO theme chosen (so the default pair shows: Chrome Pastel in light, Liquid Metal in dark), the scheme given (default light), no open pages, no first-run flags, default settings.
-reset_state() { # [light|dark] [onboarding]
-  SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1
-  sleep 2
-  SIM spawn "$EXACT_SIM" defaults write $APP AutoradioDemo -bool YES
-  SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeMode "${1:-light}"
-  SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioThemeID >/dev/null 2>&1
-  if [ "${2:-}" = onboarding ]; then SIM spawn "$EXACT_SIM" defaults write $APP AutoradioOpenOnboarding -bool YES
-  else SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioOpenOnboarding >/dev/null 2>&1; fi
-  for k in talkMode swipeLeft swipeRight; do SIM spawn "$EXACT_SIM" defaults delete $APP "AutoradioSetting.$k" >/dev/null 2>&1; done
-  CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
-  if [ -n "$CONT" ]; then
-    S="$CONT/Library/Application Support/Autoradio"
-    rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
-    rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
-    # The app's own preferences (what it wrote itself: theme, mode, talk mode, gestures) outlive a `defaults write` made from outside
-    # (the earlier lanes' runs left Signal in dark there), so the app's own file goes too.
-    rm -f "$CONT/Library/Preferences/$APP.plist"
-  fi
-}
+# reset_state is defined by the caller (proof-real.sh): a clean app, signed in with the key file.
 
 # Steps are collected one per line and handed to the driver as separate arguments (a step may hold spaces).
 step() { printf '%s\n' "$1" >> "$STEPS"; }

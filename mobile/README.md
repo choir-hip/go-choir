@@ -104,7 +104,7 @@ Fixtures: `mobile/fixtures/learning/` (from the server builder, `lane/arl-l1a`).
 - An `id:` or `retry:` line between `event:` and `data:` flushes the pending event early and the data line dispatches it again (a repeated `done` or `error` is harmless).
 - `appendSegment` can see `loop == nil` in the microseconds inside `start(at:)` between clearing the loop and storing the new task; its `start(at: old)` could then skip blocks a just-pressed skip was about to play.
 - A stale open (an older load) is not cancelled: it runs to its first segment or the deadline and may fetch the article for nothing; its result is dropped by the load token.
-- The slow relaunch (round 1 drive): a temporary probe (not committed) timed the path in the simulator on two launches, one fresh and one with kept storage, in demo mode: `refresh` to `loadProgramme` returned in 0.04 s, and the request plus first segment took 0.01 s. So the stretch path itself is not slow, and the more than 9 seconds seen earlier did not reproduce; the Mac's load average was in the tens to the nineties then, which is the only explanation left (not proven). Real latency against a computer is unmeasured until L1 deploys the route; a computer slower than the 8-second deadline leaves the listener on the article for that load.
+- The slow relaunch (round 1 drive): a temporary probe (not committed) timed the path in the simulator on two launches, one fresh and one with kept storage, in the demo mode of the time: `refresh` to `loadProgramme` returned in 0.04 s, and the request plus first segment took 0.01 s. So the stretch path itself is not slow, and the more than 9 seconds seen earlier did not reproduce; the Mac's load average was in the tens to the nineties then, which is the only explanation left (not proven). Real latency against a computer is unmeasured until L1 deploys the route; a computer slower than the 8-second deadline leaves the listener on the article for that load.
 - The deadline covers the request and the first segment, not the article fetch after it. Some tests wait with short sleeps and polling.
 
 ## Player controls: speed to 3x, next and previous story, autoplay, the DJ's candidates (ways it can fail, written before the code)
@@ -460,16 +460,16 @@ Measured on 2026-11-15 on this Mac (load average 100 to 200 at the time, one sim
 | slim after the app ran, siri kept | 106 | 3.50 GB |
 | the same, siri also disabled live | 91 | 2.87 GB |
 
-Proved on a slim simulator: the installed `news.choir.autoradio.lab` launched, its Exact agent socket opened in 2 to 3 s, `tree` returned 45 to 67 nodes, `bar-play` and `bar-mic` claimed the audio session (`PlayAndRecord`, then `VoiceChat`). Not proved: real speech recognition and real text to speech on a slim simulator (the agent runs the virtual engine), `proof-sim.sh`, background audio. Keep `siri` until those are run. If something breaks, `sim-slim.sh <name> --off`, then report which feature failed; `simslim enable <udid> <category>` turns one category back on without a reboot.
+Proved on a slim simulator: the installed `news.choir.autoradio.lab` launched, its Exact agent socket opened in 2 to 3 s, `tree` returned 45 to 67 nodes, `bar-play` and `bar-mic` claimed the audio session (`PlayAndRecord`, then `VoiceChat`). Not proved: real speech recognition and real text to speech on a slim simulator (the agent runs the virtual engine), the old demo-mode proofs (deleted), background audio. Keep `siri` until those are run. If something breaks, `sim-slim.sh <name> --off`, then report which feature failed; `simslim enable <udid> <category>` turns one category back on without a reboot.
 
-## Driving the app and proving it (`scripts/proof-sim.sh`)
+## Driving the app and proving it (`scripts/proof-real.sh`)
 
 ```sh
 mobile/scripts/setup-exact.sh                  # pinned Exact checkout at mobile/.exact-src, Bun 1.4.2 at ~/.bun-1.4.2 (EXACT_REPO=<local clone> to avoid the network)
 export EXACT_SIM=$(mobile/scripts/sim-device.sh)   # a simulator of your own (see below)
 mobile/scripts/build-lab.sh ios                # sync the kit into the package, build, install on $EXACT_SIM
 mobile/scripts/exact.sh agent ios tree "tap tab-lab" "clock data" tree
-mobile/scripts/proof-sim.sh                    # last line PROOF OK or PROOF FAILED at <step>; NOBUILD=1 skips the build
+mobile/scripts/proof-real.sh                   # real data on staging as the drill account; last line PROOF OK or PROOF FAILED at <step>; NOBUILD=1 skips the build
 ```
 
 **Why "the app never opened its agent socket" (cause, from Exact's source).** Three things, all of them outside our package:
@@ -525,7 +525,7 @@ The phone (iPhone 14 Pro Max, `00008120-00114DE80A90C01E`) refused launches earl
 ## The Autoradio app spine (lane/ar-spine)
 
 The plan is `docs/design/autoradio-app-ui-2026-11-10.md` (section 6). The spine is the shared skeleton the nine lanes build
-on: a page host, OpenPages, the bar and the layers, Card/Layer, the theme loader, `PageSource`/`Signals`/`Demo`, a dispatch
+on: a page host, OpenPages, the bar and the layers, Card/Layer, the theme loader, `PageSource`/`Signals`, a dispatch
 table in the module, per-lane interface fragments. Every lane's files exist already as small stubs: **a lane replaces the
 body of its own files and edits no shared file except its own band of the `provide` list in `app.contract`** (and only
 if it adds a name a child component must `inject`).
@@ -553,11 +553,7 @@ if it adds a name a child component must `inject`).
   The `th` record (`Theme`) is what views bind: `th.paper`, `th.fg`, `th.accent`, `th.fontRead` (the body face), `th.fontUi`, `th.radiusCard`,
   `th.shadow1..3`, `th.material1..3`, `th.motionFastMs`, `th.springStiffness`... No component names a colour, a font or a radius.
   `Card(level, testId, minHeight)`, `Layer(testId)`, `Surface(level, radius, bleed)`, `PageScroll(id)` are in `ui.contract`.
-- **Demo mode** (`Demo.swift`, fixtures in `mobile/fixtures/demo/`): signed in as a demo listener, every request answered from fixtures,
-  no network, no microphone. A proof aid for the simulator and the Mac only: on a physical phone it is never on, and a stored `AutoradioDemo`
-  flag there is removed (and the sample book and demo's open pages and signals, once). There is no control in the app for it. On (simulator):
-  `xcrun simctl spawn <udid> defaults write news.choir.autoradio.lab AutoradioDemo -bool YES`.
-  A lane that needs a route adds a fixture file and one `case` in `DemoURLProtocol.route`; `scripts/embed-assets.py` embeds it.
+- **Demo mode is gone** (owner, 2026-11-20: "i never asked for that"). There are no fixtures served to the app, no `AutoradioDemo` flag and no demo session; every proof runs on real data (`scripts/proof-real.sh`) or, for page logic, in bun tests with a canned `fetch`. `Demo.clearLeftovers` (DemoLeftovers.swift) stays once: a phone that was in demo mode loses what demo left on it.
 - `PageSource` (`Pages.swift`): `handles(address)` and `load(address) -> PageModel`; register in your `registerX()` with `pageSources.register(...)`
   (the most recently registered wins). `Signals` (`Signals.swift`): `signals.record(SignalEvent(kind:, subject:, detail:))`.
 
@@ -568,7 +564,7 @@ Existing: `bar-stack`, `bar` (the glass lens), `bar-mark` (opens the launcher), 
 `bar-text` (the now-playing line), `bar-progress`, `page-indicator`, `mark`, `page-deck` (the pan surface), `deck-slot-<address>`, `story-more`, `launcher`,
 `launcher-layer`, `launcher-open-<address>` (bring to the top), `launcher-close-<address>` (remove from the deck), `layer-scrim`, `place-<slug>`, `radio-page` (the Autoradio page, the first deck card), the Takes section (`radio-takes`, `takes-record`, `takes-stop`, `takes-review`, `takes-transcript`, `takes-publish`, `takes-mine-<n>`, `takes-muted-<n>`, `radio-take-mute`; tour `fixtures/tours/takes-record-publish.steps`, wire in `Choir/Takes.swift`), the notebook page (`notebook-page`, `notebook-line-<id>`, `notebook-score-<n>`, `notebook-behind`, `notebook-held-<n>`, `radio-notebook`, `place-notebook`; tour `fixtures/tours/notebook-page.steps`, wire in `Choir/Learning.swift`, model in `Notebook.swift`, fixtures `fixtures/learning/`), `paper-story-<route>`, `reader-cite-<anchor>` (lane 3),
 `settings-theme-<id>`, `settings-mode-<light|dark|system>`, `settings-components`, `page-title` (every page's heading), plus the
-integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ...), unchanged. Keep an id or update `scripts/proof-sim.sh` in the same commit.
+integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ...), unchanged. Keep an id or update `scripts/proof-real.sh` in the same commit.
 
 ### File ownership (from the plan, section 6) and the one shared line
 
@@ -584,7 +580,7 @@ integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ..
 | 8 Onboarding and the edition topics | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `interface/onboarding.json` | its band in `provide` |
 | 9 Motion and the mark | `mark.contract`, `mark.ts` (if a canvas is used), `AutoradioModule+Mark.swift`, `interface/mark.json`, motion tokens in the themes | its band in `provide` |
 | Integrator | engine, `lab.contract`, `components.contract` (Components and Trace pages), audio session, `Kit/*` engine files | none |
-| Spine (done) | `app.contract` view, `spine.contract`, `ui.contract`, `pages.contract`, `AutoradioModule.swift`, `AutoradioModule+Spine.swift`, `Pages.swift`, `Demo.swift`, `scripts/*` | - |
+| Spine (done) | `app.contract` view, `spine.contract`, `ui.contract`, `pages.contract`, `AutoradioModule.swift`, `AutoradioModule+Spine.swift`, `Pages.swift`, `scripts/*` | - |
 
 `Kit/` is `mobile/AutoradioKit/Sources/AutoradioKit/`; file names must be unique there (the sync script flattens them). Changing a
 page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
@@ -624,10 +620,10 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 
 ### Spine decisions a lane must know
 
-- Demo mode is a `defaults` flag (`AutoradioDemo`) honoured on the simulator and the Mac only (never on a phone), signed in with a placeholder key; under the simulator's agent the engine is virtual, and the radio's
+- Under the simulator's agent the engine is virtual, and the radio's
   buttons (`choirPlayPause`, `choirTalkDown`, `choirPlay`) start it virtually (`AutoradioModule+Spine.swift`). Speech recognition is not authorized
   in the proof, so a live turn has no transcript; the proof's turn uses the Lab's stub stages (scripted transcriber) through `inject`.
-- Sign-in is in demo mode skipped; the sign-in screen (`SignInScreen`, lane 8) shows when `au.signedIn == false`.
+- The sign-in screen (`SignInScreen`, lane 8) shows when `au.signedIn == false`.
 - The pile keeps pages in focus order; an older card is covered by the one in front, so a driver switches with the launcher's "Open" chips
   (`launcher-open-<address>`) or the card strip; lane 4 may fan the deck so older cards show.
 - OpenPages persist in `Application Support/Autoradio/open-pages.json`; the proof deletes it for a clean start.
@@ -638,22 +634,19 @@ page kind's address scheme is a spine change (`PageAddress.kind(of:)`).
 
 ### Proof
 
-`mobile/scripts/proof-sim.sh` (build, then drives the app in demo mode on a simulator of its own; `NOBUILD=1` to skip the build; prints the screenshot directory):
-launch in demo mode, the bar visible, open a second page, the pile with two cards, switch through the launcher, close by swipe, pull the bar up for the
-launcher, Settings, theme Newsprint, dark, Depth, light, play on the bar, Components (a talk turn through the injected fixture path with
-the stub stages) and Trace. `mobile/scripts/proof-replay.sh` and `swift test` (30 tests, 7 of them the spine's) still pass.
+`mobile/scripts/proof-real.sh` drives the app on real data (see "Real data" below); the spine's checks (bar, launcher, deck, themes) are its `spine` drive. `mobile/scripts/proof-replay.sh` and `swift test` still pass.
 
 ## Lane 3: the Texture reader and the Textures place
 
 Files: `reader.contract`, `textures.contract`, `members-reader.contract`; Kit `TextureDoc.swift` (model, parser), `Citations.swift`,
-`TextureMarkdown.swift`, `TextureReaderSource.swift` (loader, Textures list, read-along and aim state, demo routes);
-`AutoradioModule+Reader.swift`; `interface/reader.json`; fixtures `resolve-demo-ev-charging`, `related-*`, `texture-*`; proof `scripts/proof-lane3.sh`.
+`TextureMarkdown.swift`, `TextureReaderSource.swift` (loader, Textures list, read-along and aim state);
+`AutoradioModule+Reader.swift`; `interface/reader.json`; sample story bodies `fixtures/texture/story-*.json` (read by TextureBodyTests); proof: the read drive of `scripts/proof-real.sh`.
 
 - `pub:<route>` and `texture:<doc>[@rev]` both become a `ReaderDoc` (flat blocks of runs; no body_doc falls back to Markdown). Citations are tappable
   runs (`reader-cite-<anchor>`), cards open in place (`reader-card-<anchor>`), "Open source" opens a sheet with the quote highlighted in its block; a
   Texture transclusion is a nested card with "Open as page". Sources list, More on this, versions sheet, page menu, revising banner (`agent_revision_pending`).
 - Read along: lane 1 calls `ReaderFollow.shared.set(address:spoken:)`; matched by text. Aim: `ReaderAim.shared` / `raim` resource (long-press a paragraph, or the menu).
-- Demo-mode menu experiments: side notes (textflow) and Markdown with atom pills.
+- Experiments with no control now (the demo menu that offered them is gone): side notes (textflow) and Markdown with atom pills.
 
 ## Files and the viewers (lane 5)
 
@@ -661,12 +654,12 @@ Files is a place, not an app: `file:/` is the listener's computer's files (folde
 size or kind, search under the folder, recent, new folder, add, rename, delete); `file:/path/name.ext` is one file opened as a page, so it
 sits in the pile with everything else. The lane owns `files.contract` (the place and the router), `viewers.contract`,
 `members-files.contract` (prefixes `fs` = the place, `fv` = the viewers), `exact-package/apple/AutoradioModule+Files.swift`,
-`AutoradioLab/files.ts`, `Kit/Epub.swift` and `fixtures/files-demo/tree.json` (made by `scripts/make-files-fixtures.py`: a PNG, a 3-page PDF,
-a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Proof: `scripts/proof-lane5.sh` (`check` builds only the Contract).
+`AutoradioLab/files.ts`, `Kit/Epub.swift` and `fixtures/files/sample-tree.json` (the Epub tests' input, made by `scripts/make-files-fixtures.py`: a PNG, a 3-page PDF,
+a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Proof: the Files steps of `scripts/proof-real.sh`; the page logic is `files.test.ts` with a canned computer.
 
 - Routes (`internal/autoputer/files.go`): `GET /api/files[/{path}]` (an array of `{name, type, size, modified}`), `?disposition=inline` for
   media, `POST` makes a folder, `PUT` writes, `DELETE`, `PATCH {move_to}` renames a regular file and only when the server's move gate allows
-  (folders cannot be moved; the page says so). Demo mode serves an in-memory tree (`DemoFilesBackend`).
+  (folders cannot be moved; the page says so).
 - A file is brought to `app:/cache/files/<hash>/<safe-name>` (the hash is of path, size and time, so a changed file is a new entry), and the
   viewers play from that path. Per-kind size caps refuse before downloading ("too large to open on this phone").
 - Viewers: image (`transformDragFor`: pinch and drag, 1x to 4x, plus Fit, 2x, 4x, Center), video and audio (native controls; the radio is
@@ -679,13 +672,10 @@ a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Pr
 ## Integration (lane/ar-app): the nine lanes in one app
 
 `lane/ar-app` is the spine plus lanes 9, 1, 2, 3, 4, 5, 6, 7, 8 merged (`--no-ff`, in that order). One proof drives the whole app:
-`scripts/proof-app.sh` (helpers in `scripts/proof-common.sh`; the lane proofs keep their own copies). It runs the generators and checks
-(embed-assets, the Exact interface, strings), one `swift test` for the whole package, one build, then tours the app in demo mode in light
-and again in dark. The scheme really switches: the Settings mode control (`settings-mode-dark`) is tapped and the settings line
-"Showing Depth (dark)" is asserted; it is put back to light at the end. Screenshots are named `light-NN-*` / `dark-NN-*`.
+`scripts/proof-real.sh` (helpers in `scripts/proof-common.sh`); the demo-mode whole-app and lane proofs it replaced were deleted on 2026-11-20 with demo mode.
 
 Decisions made at the seams:
-- **Generated files** (`BundledThemes.generated.swift`, `DemoFixtures.generated.swift`, `exact-package/exact.json`) are never hand-merged: take a side and
+- **Generated files** (`BundledThemes.generated.swift`, `exact-package/exact.json`) are never hand-merged: take a side and
   run `python3 scripts/embed-assets.py` / `gen-exact-interface.py`. The build runs both again.
 - **One owner per thing.** Talk mode: Settings (`AppSettings` `talkMode`); the bar and the topics step read the engine's addressing stage that Settings
   applies (the setup no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
@@ -693,21 +683,16 @@ Decisions made at the seams:
 - **Signed out** the paper is the root; sign-in is a code screen over the app that appears when `au.status == "pending"` (the paper's Sign in button).
 - **Bar**: a page-colour backing under the glass (`th.paper`, 0.82), the aim reads `readerAim` (a block of the open document) and `ob.aim` before setup;
   the mic level (`RadioInfo.micLevel`, from the audio bus) reaches `MarkAt(level=)`; lane 1 feeds `ReaderFollow` with the sentence being spoken.
-- **Developer**: Settings, Developer, "Demo controls" (`devDetails`) gates the paper's Composition line and edition chips, mail's demo states and the
-  reader's demo menu (demo mode only).
 - **Proof state.** `defaults write` from `simctl spawn` does not override what the app itself has written (theme, mode, talk mode, gestures live in
-  the app's own preferences file): `proof-common.sh` removes the app's plist, and the light drives set Depth and light with the Settings controls first.
-- **Lane proofs after the merge.** `proof-lane2.sh` (edition chips, "Composition:"), `proof-lane3.sh` (the reader's demo menu: follow, side notes, Markdown),
-  `proof-lane6.sh` (mail demo states) and `proof-lane1.sh` / `proof-sim.sh` (the aim "Ask about this page", now "Make it yours" on the paper before setup) now need
-  `settings-dev-details` tapped, or an updated assertion; `proof-app.sh` is the proof that counts for the merged app.
+  the app's own preferences file): `proof-real.sh` removes the app's plist.
 - **Rough / open.** Files still renders Markdown and EPUB text with its own `text markup="markdown"` (the reader's `ReaderBody` takes the one `rdoc`
   resource, so sharing it is not a small change). The mic level and
-  the reader's read-along are wired (`RadioInfo.micLevel`, `ReaderFeed`) but the demo's engine is virtual, so neither is seen moving in the proof.
+  the reader's read-along are wired (`RadioInfo.micLevel`, `ReaderFeed`) but the simulator's engine is virtual, so neither is seen moving in the proof.
   Engine (round 2, done): playback rate with a real position (`Playhead`), `DeskTurn.interrupted`, and `speakText(address:text:)` (mail's "Read it to me").
 
 ## Real data (lane/ar-app-real): the app signed in to a real computer
 
-`scripts/proof-real.sh` runs the app NOT in demo mode on the simulator, signed in as the test account on staging, and tours every place with real
+`scripts/proof-real.sh` runs the app on the simulator, signed in as the test account on staging, and tours every place with real
 data (paper, two stories in the reader with "More on this", a played story, Textures list and documents, the edition state, Files, Mail, Settings
 account / computer / appearance, a theme loaded from a Texture, the largest document). It asserts real conditions (a title is not empty, no error
 banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a model call on the test computer); it is off by default.
@@ -736,5 +721,4 @@ banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a
 - `aim` (the address of the page in front) goes from the bar to `choirAsk` / `choirTalkDown`, into `LabRuntime.aimAddress`, and from there into the
   Autoradio desk request's `page.address`.
 - `RadioInfo.modeLabel` is gone; nothing in the app describes a hold gesture.
-- With no theme chosen the app shows Chrome Pastel (light) and Liquid Metal (dark); `proof-common.sh` no longer writes a theme.
-- The deck cycle is proved by `proof-app.sh` (drives `deckprobe` and `deckcycle`): the page count is read off the deck label, not assumed.
+- With no theme chosen the app shows Chrome Pastel (light) and Liquid Metal (dark).

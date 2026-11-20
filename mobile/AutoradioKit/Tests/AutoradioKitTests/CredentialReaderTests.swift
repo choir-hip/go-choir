@@ -44,26 +44,17 @@ final class CredentialReaderTests: XCTestCase {
         XCTAssertNil(r.read(KeyAccount.apiKey), "after sign-out nothing is read")
     }
 
-    func testDemoModeNeverReadsTheRealKeychainForSharedCode() {
-        let keys = InMemoryKeyStore([KeyAccount.apiKey: "test-key-0001-not-real", KeyAccount.computerID: "comp-1"])
-        let demo = CredentialReader(store: keys, demo: { true })
-        XCTAssertNil(demo.read(KeyAccount.apiKey))
-        XCTAssertEqual(demo.reply(["op": "get", "account": "api-key"]) as NSDictionary, ["found": false] as NSDictionary)
-        XCTAssertEqual(demo.reply(["op": "session"]) as NSDictionary, ["found": false] as NSDictionary)
-        XCTAssertFalse(demo.keyRemains())
-    }
-
     func testSessionAnswersKeyAndComputerInOneRead() {
         let keys = InMemoryKeyStore([KeyAccount.apiKey: "test-key-0001-not-real", KeyAccount.computerID: "comp-1"])
-        let r = CredentialReader(store: keys, demo: { false })
+        let r = CredentialReader(store: keys)
         XCTAssertEqual(r.reply(["op": "session"]) as NSDictionary, ["found": true, "value": "test-key-0001-not-real", "computerId": "comp-1"] as NSDictionary)
-        XCTAssertEqual(CredentialReader(store: InMemoryKeyStore(), demo: { false }).reply(["op": "session"]) as NSDictionary, ["found": false] as NSDictionary)
+        XCTAssertEqual(CredentialReader(store: InMemoryKeyStore()).reply(["op": "session"]) as NSDictionary, ["found": false] as NSDictionary)
         XCTAssertEqual(r.reply(["op": "nope"]) as NSDictionary, ["found": false] as NSDictionary)
     }
 
     func testKeyRemainsIsTrueWhileTheItemIsStillThere() {
         let keys = InMemoryKeyStore([KeyAccount.apiKey: "test-key-0001-not-real"])
-        let r = CredentialReader(store: keys, demo: { false })
+        let r = CredentialReader(store: keys)
         XCTAssertTrue(r.keyRemains(), "a delete that did nothing leaves the key: sign-out must say not done")
         keys.delete(KeyAccount.apiKey)
         XCTAssertFalse(r.keyRemains())

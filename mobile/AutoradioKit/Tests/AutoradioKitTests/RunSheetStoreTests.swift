@@ -612,11 +612,6 @@ final class RunSheetStoreTests: XCTestCase {
         var snap = LabSnapshot(); snap.running = true; var pv = ChoirPlayerView(); pv.playing = true
         XCTAssertEqual(BarTracker().radioInfo(player: pv, snapshot: snap, document: d, route: "", nextTitle: "Harbour story").kind, "Next: Harbour story")
     }
-    func testDemoStretchNamesNoTimeOfDay() {
-        let t = DemoStretch.segments.compactMap { $0["text"] as? String }.joined(separator: " ").lowercased()
-        for w in ["morning", "afternoon", "good evening", "stretch"] { XCTAssertFalse(t.contains(w), w) }
-    }
-
 
     // 23 write-ahead keeps the sheet fed
     func wired(_ s: RunSheetStore, _ p: RunSheetPlayer, _ feed: FakeFeed) -> RunSheetWriter {
@@ -681,11 +676,6 @@ final class RunSheetStoreTests: XCTestCase {
         p.next(); await p.settle(); await w.settle()                                                 // d-1 goes on air: a natural trigger
         XCTAssertEqual(feed.calls.count, 3)
     }
-    func testDemoExtendAnswersDifferentStoriesEachTime() {
-        let a = DemoStretch.body(cause: "extend"), b = DemoStretch.body(cause: "extend")
-        XCTAssertNotEqual(a.components(separatedBy: "\n").filter { $0.contains("\"title\"") }, b.components(separatedBy: "\n").filter { $0.contains("\"title\"") })
-    }
-
     // 24 honest air reports: every op the phone posts about what happened to an entry is evidence and must be true
     func lastOp(_ s: RunSheetStore, _ kind: RunSheetOpName, file: StaticString = #filePath, line: UInt = #line) -> RunSheetOp? {
         s.pending.last { $0.op == kind }
@@ -895,44 +885,9 @@ final class RunSheetStoreTests: XCTestCase {
     }
 }
 
-// Demo mode: the programme route is answered from DemoStretch, so the desk's opening and entries arrive and no notice is placed.
+// What the bar and the radio page say with nothing on air, and what the desk's notice and writing flags do to them.
 @MainActor
-final class RunSheetDemoTests: XCTestCase {
-    func testDemoDeskWritesEntriesAndSaysNothingAboutItself() async {
-        let env = ChoirEnvironment.shared
-        let saved = (env.session, env.keys)
-        Demo.install(into: env)
-        defer { env.session = saved.0; env.keys = saved.1 }
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
-        let w = RunSheetWriter(store: s) { ProgrammeRouteFeed(source: RouteStretchSource(baseURL: ChoirEnvironment.defaultBaseURL)) }
-        w.open(); await w.settle()
-        let all = s.sheet.entries
-        XCTAssertGreaterThanOrEqual(all.filter { $0.placedBy == .desk }.count, 3, "\(all.map { "\($0.id):\($0.kind)" })")
-        XCTAssertEqual(all.filter { $0.placedBy == .phone }.count, 0, "no notice entry")
-        XCTAssertNil(w.notice)
-    }
-
-    /// The relaunch that hid the desk in the simulator: the sheet keeps what was heard (and the op_ids), and the demo desk wrote the same ids each time.
-    func testDemoDeskStillWritesAfterARelaunchWithTheSameSheet() async {
-        let env = ChoirEnvironment.shared
-        let saved = (env.session, env.keys)
-        Demo.install(into: env)
-        defer { env.session = saved.0; env.keys = saved.1 }
-        let f = FileManager.default.temporaryDirectory.appendingPathComponent("rs-\(UUID().uuidString).json")
-        for launch in 1...3 {
-            let s = RunSheetStore(storage: f); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
-            s.restore()
-            let w = RunSheetWriter(store: s) { ProgrammeRouteFeed(source: RouteStretchSource(baseURL: ChoirEnvironment.defaultBaseURL)) }
-            let o = PhoneOpening.entry(lines: [.init(title: "A", dek: "Dek.")])
-            p.open(o); await p.settle()
-            w.open(); await w.settle()
-            let i = p.info()
-            let page = RadioPage.make(RadioPageInput(sheet: s.sheet))
-            XCTAssertGreaterThanOrEqual(page.ahead.count, launch == 1 ? 3 : 2, "launch \(launch): the desk writes after a relaunch; its opening is dropped when one was heard in the last 30 minutes (one opening per start), the entries after it are admitted")
-            XCTAssertEqual(page.ahead.first?.by, "desk"); XCTAssertEqual(i.notice, ""); XCTAssertFalse(i.writing)
-        }
-    }
-
+final class RunSheetOverlayTests: XCTestCase {
     func testNothingOnAirIsNeverShownAsPlayingAndUpNextSaysWhatIsTrue() async {
         let s = RunSheetStore(); let p = RunSheetPlayer(store: s); p.engine = FakeEngine()
         var bar = BarInfo(); bar.state = "playing"; bar.playing = true; bar.text = "Autoradio"

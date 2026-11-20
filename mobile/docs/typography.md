@@ -29,6 +29,6 @@ One rule for every tappable name of a thing:
 
 - **Navigation with no content behind the word** (the seven key pages: Paper, Textures, Files, Mail, Reader, Podcasts, Settings) is an **Action**: semibold sans in the accent colour.
 - **A tappable title of an object** (a deck row, a search hit, a document, a mail row, a queue item, a source, a now-playing title) stays a **Headline**, and its button carries an action-role affordance: a forward chevron, a "›", an Action word, or a selection mark. The serif alone never says "tap".
-- Named exceptions, in the test with reasons: the paper's story headlines (Play and Queue Actions sit beside them), a book's reading blocks, file tiles, a topic row and the two demo toggles.
+- Named exceptions, in the test with reasons: the paper's story headlines (Play and Queue Actions sit beside them), a book's reading blocks, file tiles, a topic row.
 - A short word inside a button is always an Action. The content row of a document or web page has no word "Close": the X on its line closes it.
 - The ask field shows its placeholder as a Label (sans, muted) and typed words as Reading text: its face is `(ask == "" ? th.fontLabel : th.fontText)`, because a placeholder takes colour only.

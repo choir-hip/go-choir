@@ -13,7 +13,7 @@ def scan(path, comment):
         code = line.split(comment)[0] if comment in line and not re.search(r'"[^"]*' + re.escape(comment), line) else line
         for m in STR.finditer(code):
             t = m.group(1)
-            if re.fullmatch(r"[a-z0-9:_./-]+", t): continue   # a machine value or an id ("loading", "mail-demo-loading"), never drawn
+            if re.fullmatch(r"[a-z0-9:_./-]+", t): continue   # a machine value or an id ("loading"), never drawn
             if BAD.search(t): out.append((path, n, t))
     return out
 found = []

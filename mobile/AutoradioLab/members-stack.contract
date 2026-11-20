@@ -61,7 +61,7 @@ members Autoradio
     // A file asks the listener's computer first (fileResolve, files.ts): a PDF, e-book, text, Markdown or code file answers the texture: page the computer
     // opened for it (decision D4), any other file answers its own address. Either way the Kit's pile then opens the answer (fileResolved).
     if awaiting != ""
-      send fvRes = fileResolve(dm.on, address, title)
+      send fvRes = fileResolve(address, title)
     else
       send pm = pageOpen(address=address, title=title)
       send pms = pagesOpen(address, title)

@@ -1,5 +1,5 @@
 // The Autoradio page's view model and the ops its gestures send, under bun test. Ported from RadioPageTests.swift (the failure list is at the
-// top of radio-model.ts; numbers are the same). The fixtures the tours read (fixtures/demo/runsheet-*.json) are checked for the rows they give.
+// top of radio-model.ts; numbers are the same).
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { make, kindLabel, length, perform, builtOn, hello, dateLine, type PageInput } from './radio-model.ts';
@@ -256,15 +256,5 @@ describe('the gestures', () => {
     const v = s.sheet.version;
     expect(act(s, { kind: 'playNow', id: 'gone' })).toBeUndefined(); expect(act(s, { kind: 'remove', id: 'gone' })).toBeUndefined();
     expect(s.sheet.version).toBe(v);
-  });
-});
-
-describe('the tour fixtures', () => {
-  test('16: they decode and give the rows the tours expect', () => {
-    for (const [name, ahead, heard] of [['runsheet-cold.json', 6, 0], ['runsheet-day.json', 9, 2], ['runsheet-answer.json', 3, 1], ['runsheet-empty.json', 0, 1]] as const) {
-      const saved = JSON.parse(readFileSync(new URL(`../fixtures/demo/${name}`, import.meta.url), 'utf8'));
-      const p = make({ sheet: decodeSheet(saved.sheet), now: NOW });
-      expect([name, p.ahead.length, p.heard.length]).toEqual([name, ahead, heard]);
-    }
   });
 });

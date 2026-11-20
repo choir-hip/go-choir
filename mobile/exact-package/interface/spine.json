@@ -106,9 +106,6 @@
    "answerNote": "string",
    "canRetry": "bool"
   },
-  "DemoInfo": {
-   "on": "bool"
-  },
   "SignalRow": {
    "at": "number",
    "kind": "string",
@@ -249,16 +246,6 @@
      "answerState": "",
      "answerNote": "",
      "canRetry": false
-    }
-   }
-  },
-  {
-   "source": "demoInfo",
-   "live": true,
-   "answers": "DemoInfo",
-   "substitute": {
-    "default": {
-     "on": false
     }
    }
   },

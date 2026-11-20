@@ -9,18 +9,17 @@
 //  F9 ordering: higher weight first, ties by newer then route; input order does not matter; opinion never leads.
 //  F10 My edition: no picks, picks matching nothing, category pick, subtopic whole words, plural/synonym, more picks first (V1 to V3, V5, V8, V9).
 //  F11 a pair that does not fit degrades to a stack narrow and sits side by side wide.  F12 the saved list is written only for the front list.
-//  F13 demo mode reads the fixtures and asks nothing.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { paperFront, forget, composeFront, CACHE_FILE, type PaperArgs, type PaperFront } from './paper.ts';
 import { parseDate, parseList, parseStory, buildMine, sections, parseLiveSections, HOUSE } from './paper-model.ts';
 import { ORIGIN } from './api.ts';
 import { compose, approxMeasurer } from './paper-layout.ts';
 import real from '../fixtures/paper/front-live-2026-11-18.json';
-import demoBig from '../fixtures/demo/front-big.json';
-import demoEven from '../fixtures/demo/front-even.json';
-import demoThin from '../fixtures/demo/front-thin.json';
+import dayBig from '../fixtures/paper/day-big.json';
+import dayEven from '../fixtures/paper/day-even.json';
+import dayThin from '../fixtures/paper/day-thin.json';
 
-const args = (o: Partial<PaperArgs> = {}): PaperArgs => ({ view: 'front', edition: '', width: 393, tick: 0, focus: 'paper', picks: '', demo: false, ...o });
+const args = (o: Partial<PaperArgs> = {}): PaperArgs => ({ view: 'front', width: 393, tick: 0, focus: 'paper', picks: '', ...o });
 const NOW = Date.parse('2026-11-18T13:00:00Z');
 
 type Call = { url: string; init?: RequestInit };
@@ -169,13 +168,13 @@ describe('F8 categories', () => {
   test('V5/V6/V7: a page of one, a friendly empty category, an unknown id, a slug', () => {
     const live = HOUSE;
     const one = composeFront(parseList(body([st('a', 'World one'), st('b', 'The only sports story', { section: 'sports', sections: ['sports'] })])),
-      { view: 'sports', picks: [], category: null, live, width: 393, now: NOW, edition: '', status: 'ready', message: '' });
+      { view: 'sports', picks: [], category: null, live, width: 393, now: NOW, status: 'ready', message: '' });
     expect(one.routes).toEqual(['b']);
-    const none = composeFront(parseList(body([st('a', 'World one')])), { view: 'climate', picks: [], category: null, live, width: 393, now: NOW, edition: '', status: 'ready', message: '' });
+    const none = composeFront(parseList(body([st('a', 'World one')])), { view: 'climate', picks: [], category: null, live, width: 393, now: NOW, status: 'ready', message: '' });
     expect(none.status).toBe('empty'); expect(none.message).toBe('Nothing in Climate yet.');
-    const odd = composeFront(parseList(body([st('a', 'World one')])), { view: 'no_such_section', picks: [], category: null, live, width: 393, now: NOW, edition: '', status: 'ready', message: '' });
+    const odd = composeFront(parseList(body([st('a', 'World one')])), { view: 'no_such_section', picks: [], category: null, live, width: 393, now: NOW, status: 'ready', message: '' });
     expect(odd.viewId).toBe('no_such_section'); expect(odd.viewLabel).toBe('No such section'); expect(odd.count).toBe(0);
-    const slug = composeFront(parseList(body([st('a', 'Tech one', { section: 'tech_ai', sections: ['tech_ai'] })])), { view: 'tech-ai', picks: [], category: null, live, width: 393, now: NOW, edition: '', status: 'ready', message: '' });
+    const slug = composeFront(parseList(body([st('a', 'Tech one', { section: 'tech_ai', sections: ['tech_ai'] })])), { view: 'tech-ai', picks: [], category: null, live, width: 393, now: NOW, status: 'ready', message: '' });
     expect(slug.viewId).toBe('tech_ai'); expect(slug.count).toBe(1);
   });
   test('the switcher does not change with the view', async () => {
@@ -196,7 +195,7 @@ describe('F9 ordering', () => {
     expect((await paperFront(args(), storage)).count).toBe(60);
   });
   test('input order does not matter; each story once; none invented', () => {
-    for (const d of [demoBig, demoEven, demoThin]) {
+    for (const d of [dayBig, dayEven, dayThin]) {
       const s = parseList(d);
       const a = compose(s, 393, NOW), b = compose([...s].reverse(), 393, NOW);
       expect(a).toEqual(b);
@@ -230,19 +229,19 @@ describe('F9 ordering', () => {
 });
 
 describe('F11 compositions', () => {
-  test('the three demo days compose differently from one document', () => {
-    const c = (d: unknown) => composeFront(parseList(d), { view: 'front', picks: [], category: null, live: parseLiveSections(d), width: 393, now: null, edition: '', status: 'ready', message: '' });
-    const big = c(demoBig);
+  test('the three sample days compose differently from one document', () => {
+    const c = (d: unknown) => composeFront(parseList(d), { view: 'front', picks: [], category: null, live: parseLiveSections(d), width: 393, now: null, status: 'ready', message: '' });
+    const big = c(dayBig);
     expect(big.composition.startsWith('lead+cluster+pair(stack)+briefs+river')).toBe(true);
     expect(big.composition.endsWith('opinion')).toBe(true);
-    expect(big.bands[0].items[0].route).toBe('demo-harbor-barrier'); expect(big.bands[0].items[0].size).toBe(34);
+    expect(big.bands[0].items[0].route).toBe('sample-harbor-barrier'); expect(big.bands[0].items[0].size).toBe(34);
     const cluster = big.bands.find((b) => b.module === 'cluster')!;
     expect(cluster.label).toBe('Developing'); expect(cluster.items.length).toBe(4); expect(cluster.items.every((i) => i.indent)).toBe(true);
-    expect(c(demoEven).composition).toBe('colead+pair+briefs+river+opinion');
-    expect(c(demoThin).composition).toBe('pair+river');
+    expect(c(dayEven).composition).toBe('colead+pair+briefs+river+opinion');
+    expect(c(dayThin).composition).toBe('pair+river');
   });
   test('a pair degrades narrow and sits side by side wide', () => {
-    const s = parseList(demoBig);
+    const s = parseList(dayBig);
     const pair = (w: number) => compose(s, w, Date.parse('2026-11-10T07:00:00Z')).find((b) => b.module === 'pair')!;
     expect(pair(393).side).toBe(false); expect(pair(900).side).toBe(true);
   });
@@ -320,15 +319,6 @@ describe('the grants', () => {
     expect(app).toContain(`fs.read ${CACHE_FILE}`);
     expect(app).toContain(`fs.write ${CACHE_FILE}`);
     expect(ORIGIN).toBe('https://choir.news');
-  });
-});
-
-describe('F13 demo mode', () => {
-  test('reads the fixtures, asks nothing, dates the edition by its newest story', async () => {
-    const f = await paperFront(args({ demo: true, edition: 'even' }), storage);
-    expect(calls.length).toBe(0);
-    expect(f.status).toBe('ready'); expect(f.composition).toBe('colead+pair+briefs+river+opinion'); expect(f.edition).toBe('even');
-    expect((await paperFront(args({ demo: true }), storage)).status).toBe('ready');
   });
 });
 

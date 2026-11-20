@@ -1,12 +1,9 @@
 // Lane 8: first run. Voice setup (configuring the voice and audio models), the edition's topics (chips the reader taps, types or
 // says) and the edition. Owned by the onboarding lane. The logic is in the kit (VoiceSetup.swift, EditionSetup.swift, with tests); this
-// file only holds the listener's progress, the demo drive, the platform calls (microphone, route, speech) and the sources
+// file only holds the listener's progress, the platform calls (microphone, route, speech) and the sources
 // and sends the contract binds.
 //
 // What runs where:
-//   demo mode / simulator driver : setup is a scripted download and check (fixtures/demo/setup-script.json); speech is one
-//                                  button that says "add space and chess" through the same `EditionSetupSession.hear` the desk
-//                                  stage calls; the edition is fixtures/demo/edition.json. No microphone, no model, no network.
 //   a phone                      : setup uses the ModelStore downloader and (when the models lane supplies them) the
 //                                  library fetch and on-device checkers; "Talk to it" runs on the engine: programme
 //                                  "edition-setup", desk "edition-setup-desk", open addressing, until the reader stops it.
@@ -30,7 +27,6 @@ final class OnboardingController: @unchecked Sendable {
 
     unowned let module: AutoradioModule
     let support: URL
-    let demo: Bool
     private let lock = NSLock()
     private var progress = OnboardingProgress()
     private var setup: VoiceSetup?
@@ -61,9 +57,9 @@ final class OnboardingController: @unchecked Sendable {
     var topicsFile: URL { support.appendingPathComponent("edition-topics.json") }
     var recordFile: URL { support.appendingPathComponent("voice-setup.json") }
 
-    init(module: AutoradioModule, support: URL, demo: Bool) {
-        self.module = module; self.support = support; self.demo = demo
-        if demo, let d = Demo.fixture("edition"), let e = Edition.parse(d) { writer = DemoEditionWriter(edition: e) } else { writer = LocalEditionWriter() }
+    init(module: AutoradioModule, support: URL) {
+        self.module = module; self.support = support
+        writer = LocalEditionWriter()
         if let d = try? Data(contentsOf: progressFile), let p = try? JSONDecoder().decode(OnboardingProgress.self, from: d) { progress = p }
         // Coming back to the topics step shows what was saved. The microphone never opens by itself (restart rule).
         if progress.topicsStarted == true, !progress.editionDone, !progress.skipped {
@@ -114,18 +110,13 @@ final class OnboardingController: @unchecked Sendable {
         lock.lock()
         if step == "setup", setup?.isStarted == true, setup?.isFinished == false { lock.unlock(); return }
         lock.unlock()
-        let backend: SetupBackend
-        var profile = DeviceProfile.current()
-        var stall = 20.0, patience = 45.0
-        if demo, let d = Demo.fixture("setup-script"), let sc = SimulatedSetupBackend.parse(d) {
-            backend = SimulatedSetupBackend(script: sc); profile = sc.profile; stall = sc.stallSeconds ?? 1.6; patience = 3600
-        } else {
-            // The one shared store, with the whole catalog in it from the start (the first phone walk's "model ... not registered"
-            // came from a store of its own that nothing had registered into).
-            backend = LiveSetupBackend(store: .shared)
-        }
-        // Not in demo: the configurator picks one model per role for THIS phone, the whole pipeline resident together, by measuring it.
-        let configurator: ConfigBackend? = demo ? nil : LiveConfigBackend()
+        // The one shared store, with the whole catalog in it from the start (the first phone walk's "model ... not registered"
+        // came from a store of its own that nothing had registered into).
+        let backend: SetupBackend = LiveSetupBackend(store: .shared)
+        let profile = DeviceProfile.current()
+        let stall = 20.0, patience = 45.0
+        // The configurator picks one model per role for THIS phone, the whole pipeline resident together, by measuring it.
+        let configurator: ConfigBackend? = LiveConfigBackend()
         var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, configBackend: configurator)
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
         if !profile.onWiFi && !mobileOK {
@@ -145,11 +136,9 @@ final class OnboardingController: @unchecked Sendable {
             try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
             try? d.write(to: recordFile, options: .atomic)
         }
-        if !demo {
-            // The listener's configuration: select what passed, where the kit has that stage registered.
-            for (kind, id) in s.choices where module.runtime.registry.stages(kind).contains(where: { $0.id == id }) {
-                module.runtime.setStage(kind, id: id)
-            }
+        // The listener's configuration: select what passed, where the kit has that stage registered.
+        for (kind, id) in s.choices where module.runtime.registry.stages(kind).contains(where: { $0.id == id }) {
+            module.runtime.setStage(kind, id: id)
         }
         // The responder model setup chose is the one the phone talks with (read again at every start).
         if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }), KnownModels.isPinned(r.chosen) { ResponderChoice.current = r.chosen }
@@ -163,19 +152,6 @@ final class OnboardingController: @unchecked Sendable {
     // MARK: Microphone, in context, with one live check; then a hearing check
 
     func askMicrophone() {
-        if demo {
-            set { mic = "checking"; level = 0.15; heard = "" ; message = "" }
-            Task { [weak self] in
-                for l in [0.35, 0.7, 0.5, 0.8] {
-                    try? await Task.sleep(nanoseconds: 220_000_000)
-                    guard let self else { return }
-                    self.set { self.level = l }
-                }
-                guard let self else { return }
-                self.set { self.heard = "Tell me about the harbor."; self.mic = "heard"; self.level = 0.3 }
-            }
-            return
-        }
         set { mic = "checking"; message = "" }
         AVAudioApplication.requestRecordPermission { [weak self] granted in
             guard let self else { return }
@@ -219,9 +195,9 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     func microphoneNext() {
-        let r = demo ? "Playing on the speaker (demo)" : currentRoute()
+        let r = currentRoute()
         set { route = r; step = "hearing"; hearingOK = false; message = "" }
-        if !demo && !module.virtualEngine {
+        if !module.virtualEngine {
             // In the voice that was just set up. The radio's engine is running after the microphone check; if it is not, the phone's
             // own voice says it (the check is about the speaker, and it must not stay silent).
             if module.runtime.snapshot().running, let v = VoiceController.shared {
@@ -245,7 +221,7 @@ final class OnboardingController: @unchecked Sendable {
     func hearing(ok: Bool) {
         if ok { set { hearingOK = true; step = "voice"; progress.setupDone = true; message = "" }; save() }
         else {
-            if !demo { microphoneNext() }
+            microphoneNext()
             set { message = "Try the volume, or another speaker or headphones, then play it again." }
         }
     }
@@ -279,7 +255,6 @@ final class OnboardingController: @unchecked Sendable {
     func toggleTalk() {
         lock.lock(); let on = talking; lock.unlock()
         if on { stopVoice(); return }
-        if demo { set { message = "" }; return }
         if progress.micRefused { set { message = "Talking to the radio needs the microphone. You can allow it in Settings, or tap topics instead." }; return }
         guard let s = session else { return }
         EditionSetupSession.shared = s
@@ -307,13 +282,6 @@ final class OnboardingController: @unchecked Sendable {
             rt.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
             rt.restoreHandsFree()                                                           // back to the stored state
         }
-        changed()
-    }
-
-    /// Demo: the same words the desk stage would hear, through the same `hear`.
-    func demoSay() {
-        guard demo, let s = session else { return }
-        _ = s.hear("add space and chess")
         changed()
     }
 
@@ -455,7 +423,6 @@ final class OnboardingController: @unchecked Sendable {
         d["mic"] = mic; d["level"] = level; d["heard"] = heard; d["route"] = route; d["hearingOK"] = hearingOK
         d["tree"] = tree; d["pickedCount"] = picked.count; d["selectionLine"] = EditionSetupText.selectionLine(picked)
         d["explainer"] = EditionSetupText.explainer; d["voiceHint"] = EditionSetupText.voiceHint; d["talking"] = talking
-        d["demo"] = demo; d["demoWords"] = "add space and chess"
         d["editionStatus"] = editionStatus; d["writingLine"] = writingLine; d["editionError"] = editionError
         d["editionTitle"] = edition?.title ?? "My edition"; d["editionIntro"] = edition?.intro ?? ""
         d["editionLines"] = edition?.lines ?? []; d["editionAddress"] = PageAddress.edition
@@ -481,7 +448,7 @@ struct OnboardingPageSource: PageSource {
 extension AutoradioModule {
     func registerOnboarding() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
-        let c = OnboardingController(module: self, support: support, demo: Demo.isOn)
+        let c = OnboardingController(module: self, support: support)
         OnboardingController.shared = c
         StageRegistry.registerEditionSetupStages(runtime.registry)
         pageSources.register(OnboardingPageSource(controller: c))
@@ -502,25 +469,16 @@ extension AutoradioModule {
         handle("onboardingTopicAdd") { args, reply in c.addTopic(args["text"] as? String ?? ""); reply(c.view()) }
         handle("onboardingTalk") { args, reply in c.toggleTalk(); reply(c.view()) }
         handle("onboardingTopicsDone") { args, reply in c.finishTopics(); reply(c.view()) }
-        handle("onboardingDemoSay") { args, reply in c.demoSay(); reply(c.view()) }
         handle("onboardingEditionRetry") { args, reply in c.writeEdition(); reply(c.view()) }
         handle("onboardingContinueAnyway") { args, reply in c.continueAnyway(); reply(c.view()) }
         handle("onboardingSkip") { args, reply in c.skip(); reply(c.view()) }
         handle("onboardingReset") { args, reply in c.reset(); reply(c.view()) }
 
-        // Fresh install, signed in, not demo: offer the path once as the open page (closing it is a choice that sticks).
+        // Fresh install, signed in: offer the path once as the open page (closing it is a choice that sticks).
         // The computer is asked first (GET /api/texture/edition): a listener who already has an edition (a second phone, a reinstall) is
         // not offered the topics step. No answer (offline, signed out, an older server) offers it as before.
-        if !Demo.isOn {
-            Task { [weak c, pages] in
-                if let ed = await EditionLookup.fetch(), ed.found { c?.markEditionFound() } else if let pages { c?.offerOnce(pages: pages) }
-            }
-        }
-        // The proof (and a developer in demo mode): start the path fresh with the page open. Not a product switch; it only
-        // exists in demo mode, where there is no listener to keep.
-        if Demo.isOn && UserDefaults.standard.bool(forKey: "AutoradioOpenOnboarding") {
-            c.reset()
-            pages.open("onboarding:setup", title: "Make it yours")
+        Task { [weak c, pages] in
+            if let ed = await EditionLookup.fetch(), ed.found { c?.markEditionFound() } else if let pages { c?.offerOnce(pages: pages) }
         }
     }
 }

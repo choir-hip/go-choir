@@ -23,7 +23,7 @@ public struct PlaceInfo: Equatable, Sendable {
 
 public enum Places {
     /// The launcher's places, in the plan's order, each with a one-line "what is new there". `extra` maps a slug to its
-    /// line (demo mode reads `fixtures/demo/places.json`; the other lanes' real lines are theirs to supply and are
+    /// line (the other lanes' real lines are theirs to supply and are
     /// blank until then: mail unread count, new files, new revisions). Paper's line is the top story's title.
     public static func rows(topStory: String?, extra: [String: String]) -> [PlaceInfo] {
         PageAddress.places.map { p in
@@ -36,10 +36,6 @@ public enum Places {
     static func oneLine(_ s: String) -> String {
         let flat = s.split(whereSeparator: { $0.isNewline || $0.isWhitespace }).joined(separator: " ")
         return flat.count > 60 ? String(flat.prefix(59)) + "…" : flat
-    }
-    public static func demoExtra() -> [String: String] {
-        guard let d = Demo.fixture("places"), let o = try? JSONSerialization.jsonObject(with: d) as? [String: String] else { return [:] }
-        return o
     }
 }
 

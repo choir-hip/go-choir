@@ -573,12 +573,3 @@ public struct ChoirThemeSource: ThemeSource {
         return try TextureTheme.parse(r.data)
     }
 }
-
-/// Demo mode: the bundled fixture answers for the one demo document and refuses any other id, as the route would.
-public struct DemoThemeSource: ThemeSource {
-    public init() {}
-    public func fetch(doc: String) async throws -> TextureTheme {
-        guard doc == "demo-theme", let d = Demo.fixture("texture-theme") else { throw ChoirError.server(status: 404, message: "no such theme document") }
-        return try TextureTheme.parse(d)
-    }
-}

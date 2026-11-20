@@ -1,5 +1,5 @@
 #!/bin/sh
-# Real-data proof: the app on a simulator of its own, NOT in demo mode, signed in to the test computer (d@e) on staging.
+# Real-data proof: the app on a simulator of its own, signed in to the test computer (d@e) on staging.
 # Sign-in: the real one is a browser device flow a script cannot approve, so the key file (REAL_KEY_FILE, default the QA key for d@e)
 # is copied with `cp` into the app's Documents as `proof-key`; the simulator build reads it into the Keychain at launch and deletes it
 # (AutoradioKit/ProofKey.swift, compiled only for the simulator). The key is never printed, logged or put on a command line.
@@ -17,12 +17,14 @@ KEYFILE="${REAL_KEY_FILE:-$HOME/.config/choir-qa/keys/d-e.key}"
 [ -r "$KEYFILE" ] || fail "key file" "cannot read the test key file"
 echo "screenshots: $SHOTS"
 
-# A real-mode clean app: demo OFF, no open pages, no first-run flags, the key file placed for the app to take at launch.
+# A clean app: no open pages, no first-run flags, the key file placed for the app to take at launch.
 reset_state() {
   SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1
   sleep 2
-  SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioDemo >/dev/null 2>&1
-  SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioOpenOnboarding >/dev/null 2>&1
+  # A fresh install has NO theme chosen: the default pair shows (Chrome Pastel in light, Liquid Metal in dark; ThemeDefaultsTests pins that in Swift). The older demo proofs
+  # wrote AutoradioThemeID depth into the simulator's defaults, which outlives the plist removal below, so both choices are deleted here.
+  SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioThemeID >/dev/null 2>&1
+  SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioThemeMode >/dev/null 2>&1
   for k in talkMode swipeLeft swipeRight; do SIM spawn "$EXACT_SIM" defaults delete $APP "AutoradioSetting.$k" >/dev/null 2>&1; done
   CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
   [ -n "$CONT" ] || fail "reset" "no app container (is the app installed?)"
@@ -180,8 +182,33 @@ place podcasts 900; view real-31-podcasts 3500
 [ -n "$POD1" ] && { step "tap \"$POD1\""; view real-32-podcast-show 3500; }
 place notebook 900; view real-33-notebook 4000
 place settings 900; step "tap settings-nav-account"; view real-34-settings-account 3500
+step "tap settings-back"; wait_ 500
+step "tap settings-nav-about"; view real-35-settings-about 1500
+step "tap settings-back"; wait_ 500
+step "tap settings-nav-activity"; view real-36-settings-activity 3500
+place mail 900; wait_ 2500
+step "tap mail-folder-sent"; view real-37-mail-sent 3000
+step "tap mail-folder-quarantine"; view real-38-mail-quarantine 3000
 step logs
 run_drive tour light "" --touch platform
+
+# ---- 3f2. SPINE drive (local UI only, nothing is written to the computer): the bar, the launcher and its deck, the default themes and the mode switch.
+# Ported from the demo-mode proofs (proof-sim, proof-lane1, proof-lane4, proof-lane7, proof-default-themes, proof-app), which are deleted with demo mode.
+step "clock data"; wait_ 5000
+view real-60-bar 800
+place paper 2500
+[ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; wait_ 3500; }
+step "tap bar-mark"; wait_ 900; step tree; shot real-61-launcher
+step "tap \"launcher-open-paper:front\""; wait_ 900
+place settings 900; step "tap settings-nav-appearance"; wait_ 600
+# the mode starts at "system" (the simulator may be in dark): choose light, which keeps the default pair (no theme is chosen)
+step "tap settings-mode-light"; view real-62-default-light 900
+step "tap settings-mode-dark"; view real-63-default-dark 1000
+step "tap settings-mode-light"; wait_ 700
+step "tap settings-theme-newsprint"; view real-64-newsprint-light 900
+step "tap settings-mode-dark"; view real-65-newsprint-dark 900
+step logs
+run_drive spine light "" --touch platform
 
 # ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
 # Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the wipe marker and the stamp are gone from the app's files.
@@ -232,8 +259,7 @@ chk() { # name pattern file
 bad() { # name pattern file
   if grep -qE -- "$2" "$3"; then echo "UNWANTED: $1: $(grep -m1 -E -- "$2" "$3" | cut -c1-160)"; FAILS="$FAILS [$1]"; else echo "ok: $1"; fi
 }
-chk "not demo mode: no demo switch on the settings page" '\[settings-nav-account\]' "$SV"
-bad "not demo mode: no demo fixture story" 'harbor council approves a tide barrier' "$SV"
+chk "settings: the account row is there" '\[settings-nav-account\]' "$SV"
 chk "paper: the masthead" '\[page-title\] "AUTOPAPER"' "$SV"
 chk "paper: real stories (route ids)" '\[paper-story-/pub/' "$SV"
 if grep -A3 '\[paper-story-/pub/' "$SV" | grep -qE 'Text#[0-9]+ "[^"]{10,}"'; then echo "ok: paper: a story title is not empty"; else echo "MISSING: paper: a story title is not empty"; FAILS="$FAILS [story title]"; fi
@@ -264,6 +290,22 @@ if [ -n "$THEME_DOC" ]; then
   bad "theme: no problems reported" '\[settings-theme-problems\]' "$TH"
 fi
 # the tour
+chk "settings: About names the app" '\[settings-about-app\]' "$SHOTS/drive-tour.txt"
+chk "settings: Activity page opened" '\[page-title\] "Activity"' "$SHOTS/drive-tour.txt"
+chk "mail: the Sent folder tab" '\[mail-folder-sent\]' "$SHOTS/drive-tour.txt"
+bad "mail: Sent and Quarantine show no error screen" '\[mail-error\]' "$SHOTS/drive-tour.txt"
+# the spine drive
+SP="$SHOTS/drive-spine.txt"
+chk "bar: the field, the microphone and play" '\[bar-field\]' "$SP"
+chk "bar: voice button" '\[bar-mic\]' "$SP"
+chk "bar: play is there" '\[bar-play\]' "$SP"
+chk "launcher: the mark opens the layer" '\[launcher-layer\]' "$SP"
+chk "launcher: the paper is in the deck" '\[launcher-open-paper:front\]' "$SP"
+chk "launcher: places" '\[place-settings\]' "$SP"
+chk "themes: a fresh install shows the default pair, light (Chrome Pastel)" 'Showing Chrome Pastel in light' "$SP"
+chk "themes: the default pair, dark (Liquid Metal)" 'Showing Liquid Metal in dark' "$SP"
+chk "themes: Newsprint light" 'Showing Newsprint in light' "$SP"
+chk "themes: Newsprint dark" 'Showing Newsprint in dark' "$SP"
 [ -n "$FILE1" ] && chk "files: a file opened" '\[(page-title|viewer-[a-z]+|csv-card|image-view)\]' "$SHOTS/drive-tour.txt"
 chk "podcasts: the place opened" '\[(podcasts-[a-z]+|podcast-row-[^]]*)\]' "$SHOTS/drive-tour.txt"
 chk "notebook: the page opened" '\[notebook-(page|title)\]' "$SHOTS/drive-tour.txt"

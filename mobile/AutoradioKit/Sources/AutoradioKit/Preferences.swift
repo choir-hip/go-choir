@@ -6,7 +6,7 @@ import Foundation
 // edit and delete; the weights the ranking uses are derived from that list on every read, never stored apart from
 // it. In the plan the list is a Texture beside the listener's edition, one line per act in plain words:
 //   "More like this: Russia-Ukraine talks (Ukraine, Russia, Abu Dhabi talks) · 11 Nov 00:44".
-// DEMO PATH (built): the acts live in a local file, `what-i-told-the-paper.json` in the app's support directory, and the
+// LOCAL PATH (built): the acts live in a local file, `what-i-told-the-paper.json` in the app's support directory, and the
 // document text is `lines()`. REAL PATH (named, not built): the same lines as the revisions of a private Texture,
 // "What I've told the paper", written through the Texture desk (`PUT` of a revision on the listener's computer, the
 // reader lane's Texture client); the file is then only a cache, and `lines()` is what the revision holds. No route for
@@ -261,17 +261,11 @@ public final class Preferences: @unchecked Sendable {
 // MARK: Entities for a story
 
 /// Where a story's entities come from. The server will send `entities: [{id, label}]` (central only) on front-list stories
-/// (a server gap, plan section 1). Until it does: a fixture map in demo mode (`fixtures/demo/entities.json`, invented),
-/// else a weak derivation from the title (runs of capitalised words after the first word, then long words), and the
+/// (a server gap, plan section 1). Until it does: a weak derivation from the title (runs of capitalised words after the first word, then long words), and the
 /// section as the topic.
 public enum StoryTopics {
     static let stop: Set<String> = ["about", "after", "again", "their", "there", "these", "those", "which", "while", "where", "other",
                                     "could", "would", "should", "being", "before", "during", "within", "without", "against", "among"]
-
-    public static func demoMap() -> [String: [String]] {
-        guard let d = Demo.fixture("entities"), let o = try? JSONSerialization.jsonObject(with: d) as? [String: [String]] else { return [:] }
-        return o
-    }
 
     public static func entities(route: String, title: String, section: String, given: [String] = [], map: [String: [String]] = [:]) -> [String] {
         let g = given.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
