@@ -49,7 +49,8 @@ OWNER_TARGET_PER_DAY = 1000
 OWNER_TARGET_QUOTE = '"we should be able to get our searches underneath 1,000 per day" (owner, 2026-11-19)'
 HISTORY_FILE = os.path.expanduser("~/.local/state/choir-status/search-usage.tsv")
 HISTORY_FIXED = ["utc_hour", "corpus_total", "corpus_vector", "corpus_median_ms", "ext_requests", "cache_served"]
-HISTORY_TAIL = ["day_searches_sent", "day_provider_calls"]
+HISTORY_TAIL = ["day_searches_sent", "day_provider_calls", "runs_searched", "searches_per_run"]   # the last two: gateway basis, the hour
+
 
 
 def run(script, args):
@@ -70,7 +71,7 @@ J="journalctl --no-pager -o cat --utc --since \"$D 00:00:00 UTC\""
 bad='^(Failed|Hint:|No journal files|Specifying boot)'
 if j=$(eval "$J -u go-choir-gateway" 2>&1) && ! printf '%s\n' "$j" | grep -qaE "$bad"; then
   echo "##GW"
-  printf '%s\n' "$j" | grep -aE 'gateway: search (for|failed for) autoputer' | sed -E 's/ urls=\[[^]]*\]//; s/^(.*gateway: search failed for autoputer [^ :]*).*$/\1/'
+  printf '%s\n' "$j" | grep -aE 'gateway: search (for|failed for|request from) autoputer' | sed -E 's/([ (])query="([^"\\]|\\.)*"/\1/; s/ urls=\[[^]]*\]//; s/^(.*gateway: search failed for autoputer [^ :]*).*$/\1/'
 else echo "##GWFAIL"; fi
 if j=$(eval "$J -u go-choir-corpusd" 2>&1) && ! printf '%s\n' "$j" | grep -qaE "$bad"; then
   echo "##CORPUS"
@@ -89,6 +90,8 @@ echo "##END"
 GW_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search for autoputer (\S+) answered (\d+) of (\d+) providers "
                    r"\((\d+) cooling, (\d+) pending\) skipped=\[([^\]]*)\] served=(\w+) results=(\d+) unique=(\d+)(?: seen=\d+)?"
                    r"(?: routing=\S+ escalated=\S+ paid_calls=\d+ today=\[([^\]]*)\])?")
+# the request line is written when a search arrives and carries run= (the answer line above has no run=)
+GWREQ_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search request from autoputer (\S+) \(.*?run=(\S+) desk=")
 GWFAIL_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) gateway: search failed for autoputer (\S+)")
 CORPUS_RE = re.compile(r"^(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d) corpusd retrieval op=(\w+) shape=(\S+) ms=([0-9.]+) rows=\d+"
                        r"(?: vector_state=(\w+))? err=(\S*)$")
@@ -143,9 +146,16 @@ def gw_usage(lines, now):
     W = {"hour": {}, "today": {}}
     for k in W:
         W[k] = {"requests": 0, "failed": 0, "served": {}, "paper": 0, "other": 0, "results": 0, "unique": 0,
-                "calls": {}, "skips": {}, "caps": {}}
+                "calls": {}, "skips": {}, "caps": {}, "runs": {}}
     unparsed = 0
     for ln in lines:
+        q = GWREQ_RE.match(ln)
+        if q:
+            t = ts(q.group(1))
+            if q.group(2) == PAPER_VM and q.group(3) != "-" and day0 <= t <= now:
+                for w in ([W["today"]] + ([W["hour"]] if t > hr else [])):
+                    w["runs"][q.group(3)] = w["runs"].get(q.group(3), 0) + 1
+            continue
         m = GW_RE.match(ln)
         f = None if m else GWFAIL_RE.match(ln)
         if not m and not f:
@@ -269,7 +279,7 @@ def summarize_search(s, now, corpus_report=None):
     if corpus_report and r["gateway"]:
         m = corpus_report.get("m") if isinstance(corpus_report, dict) else None
         if m and m.get("runs"):
-            r["per_run"] = {"runs": m["runs"], "searches": m.get("gateway_web_searches")}
+            r["per_run"] = {"runs": m["runs"], "searches": m.get("gateway_web_searches"), "started": m.get("started", 0)}
     return r
 
 
@@ -291,6 +301,8 @@ def search_totals(r):
             "ext_requests": g["requests"] if g else None,
             "cache_served": (g["served"].get("hit", 0) + g["served"].get("joined", 0)) if g else None,
             "sent": sent,
+            "runs_searched": len(g["runs"]) if g else None,
+            "searches_per_run": (sum(g["runs"].values()) / len(g["runs"])) if g and g["runs"] else None,
             "calls": dict(g["calls"]) if g else None,
             "provider_calls": sum(g["calls"].values()) if g else None,
         }
@@ -369,12 +381,22 @@ def render_search(r, hist_note=None):
             o.append("  corpus searches per external web search, %s: n/a (no web search sent; %d corpus searches)" % (lab, c))
         else:
             o.append("  corpus searches per external web search, %s: %.1f (%d / %d)" % (lab, c / w, c, w))
+    if r["gateway"] is None:
+        o.append("  external web searches per research run (gateway journal, run=): unknown: %s" % r["gateway_unknown"])
+    else:
+        parts = []
+        for k, lab in (("hour", "last hour"), ("today", "today")):
+            n = len(r["gateway"][k]["runs"])
+            tot = sum(r["gateway"][k]["runs"].values())
+            parts.append("%s %s (%d / %d runs)" % (lab, "n/a" if not n else "%.1f" % (tot / n), tot, n))
+        o.append("  external web searches per research run (gateway journal, run=): " + "; ".join(parts))
     pr = r.get("per_run")
     if pr and pr.get("searches") is not None and pr["runs"]:
-        o.append("  external web searches per research run (corpus-reuse section's span): %.1f (%d / %d)" % (
-            pr["searches"] / pr["runs"], pr["searches"], pr["runs"]))
+        o.append("  external web searches per research run (console summary lines, terminal records only; the corpus-reuse span): %.1f (%d / %d runs); "
+                 "the gap to the gateway's count over that span is %d (a growing gap means more is lost from the summary lines)" % (
+                     pr["started"] / pr["runs"], pr["started"], pr["runs"], pr["searches"] - pr["started"]))
     else:
-        o.append("  external web searches per research run: unknown (the corpus-reuse section was not read)")
+        o.append("  external web searches per research run (console summary lines, terminal records only): unknown (the corpus-reuse section was not read)")
     if g is None:
         o.append("  projection: unknown: %s" % r["gateway_unknown"])
     else:
@@ -418,7 +440,9 @@ def history_write(path, r):
     h, d = t["hour"], t["today"]
     row = {"utc_hour": hr, "corpus_total": v(h["corpus_total"]), "corpus_vector": v(h["corpus_vector"]),
            "corpus_median_ms": v(h["corpus_median_ms"]), "ext_requests": v(h["ext_requests"]),
-           "cache_served": v(h["cache_served"]), "day_searches_sent": v(d["sent"]), "day_provider_calls": v(d["provider_calls"])}
+           "cache_served": v(h["cache_served"]), "day_searches_sent": v(d["sent"]), "day_provider_calls": v(d["provider_calls"]),
+           "runs_searched": v(h["runs_searched"]),
+           "searches_per_run": "unknown" if h["runs_searched"] is None else ("n/a" if h["searches_per_run"] is None else "%.1f" % h["searches_per_run"])}
     for pn, n in (h["calls"] or {}).items():
         row["calls_" + pn] = str(n)
     provs = [c for c in hdr if c.startswith("calls_")]
