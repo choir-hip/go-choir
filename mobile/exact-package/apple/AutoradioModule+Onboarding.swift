@@ -1,5 +1,6 @@
-// Lane 8: first run. Voice setup (configuring the voice and audio models), the edition's topics (chips the reader taps, types or
-// says) and the edition. Owned by the onboarding lane. The logic is in the kit (VoiceSetup.swift, EditionSetup.swift, with tests); this
+// Lane 8: first run. Voice setup (configuring the voice and audio models), the edition's topics and the edition. Owned by the onboarding lane. The topics
+// themselves (the tree, tap, type, say, the saved file) are shared code now (AutoradioLab/edition-picks.ts); here the voice at that screen is native
+// (EditionTalk, EditionSetup.swift) and the picks arrive as a pushed copy (EditionPicksMirror). The logic is in the kit (VoiceSetup.swift, EditionSetup.swift, with tests); this
 // file only holds the listener's progress, the platform calls (microphone, route, speech) and the sources
 // and sends the contract binds.
 //
@@ -41,8 +42,7 @@ final class OnboardingController: @unchecked Sendable {
     private var heard = ""
     private var route = ""
     private var hearingOK = false
-    // edition topics
-    private var session: EditionSetupSession?
+    // the voice at the topic screen
     private var talking = false
     /// The edit page is open: Done rewrites the edition without touching the first-run step.
     private var editing = false
@@ -54,32 +54,18 @@ final class OnboardingController: @unchecked Sendable {
     private var writer: EditionWriter
 
     var progressFile: URL { support.appendingPathComponent("onboarding.json") }
-    var topicsFile: URL { support.appendingPathComponent("edition-topics.json") }
     var recordFile: URL { support.appendingPathComponent("voice-setup.json") }
 
     init(module: AutoradioModule, support: URL) {
         self.module = module; self.support = support
         writer = LocalEditionWriter()
         if let d = try? Data(contentsOf: progressFile), let p = try? JSONDecoder().decode(OnboardingProgress.self, from: d) { progress = p }
-        // Coming back to the topics step shows what was saved. The microphone never opens by itself (restart rule).
-        if progress.topicsStarted == true, !progress.editionDone, !progress.skipped {
-            let s = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: topicsFile, liveSections: [])
-            session = s; EditionSetupSession.shared = s
-            step = "topics"
-        } else if progress.editionDone { step = "done" }
+        // Coming back to the topics step shows what was saved (shared code reads it). The microphone never opens by itself (restart rule).
+        if progress.topicsStarted == true, !progress.editionDone, !progress.skipped { step = "topics" }
+        else if progress.editionDone { step = "done" }
         else if progress.skipped { step = "skipped" }
         else if progress.setupDone { step = "ready" }
-        // The saved picks are always there for the edit page, whether or not the first-run step was ever shown.
-        if session == nil {
-            let s = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: topicsFile, liveSections: [])
-            session = s; EditionSetupSession.shared = s
-        }
-        wire(session)
-    }
-
-    private func wire(_ s: EditionSetupSession?) {
-        s?.onChange = { [weak self] in self?.changed() }
-        s?.onFinish = { [weak self] in self?.finishTopics() }
+        EditionTalk.shared.onFinish = { [weak self] in self?.finishTopics() }
     }
 
     func changed() { module.touch(["onboardingState"]) }
@@ -91,13 +77,6 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     private func set(_ f: () -> Void) { lock.lock(); f(); lock.unlock(); changed() }
-
-    /// Section ids from today's paper; merged into the suggestions so a section the house list adds shows up as a chip.
-    private func sections() -> [String] {
-        var seen: [String] = []
-        for r in module.choir.storyRows() where !r.section.isEmpty && !seen.contains(r.section) { seen.append(r.section) }
-        return seen
-    }
 
     // MARK: Voice setup
 
@@ -230,25 +209,8 @@ final class OnboardingController: @unchecked Sendable {
 
     /// The step: chips the reader taps, a field to type their own, and "Talk to it". Nothing here needs the microphone or the network.
     func startTopics() {
-        lock.lock(); let existing = session; lock.unlock()
-        let live = sections()
-        let s = existing ?? EditionSetupSession(suggestions: EditionTopics.suggestions(liveSections: live), file: topicsFile, liveSections: live)
-        s.setLiveSections(live)
-        wire(s)
-        EditionSetupSession.shared = s
-        set { session = s; step = "topics"; progress.topicsStarted = true; progress.skipped = false; message = "" }
+        set { step = "topics"; progress.topicsStarted = true; progress.skipped = false; message = "" }
         save()
-    }
-
-    func toggleTopic(_ label: String) { session?.toggle(label) }
-
-    /// The disclosure control: open or close a category. Not a selection.
-    func expandTopic(_ label: String) { session?.toggleExpanded(label) }
-
-    func addTopic(_ text: String) {
-        guard let s = session else { return }
-        if s.addTyped(text).isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { set { message = "That one is already there." } }
-        else { set { message = "" } }
     }
 
     /// Say it instead of tapping: the engine listens until the reader stops it or taps Continue.
@@ -256,8 +218,6 @@ final class OnboardingController: @unchecked Sendable {
         lock.lock(); let on = talking; lock.unlock()
         if on { stopVoice(); return }
         if progress.micRefused { set { message = "Talking to the radio needs the microphone. You can allow it in Settings, or tap topics instead." }; return }
-        guard let s = session else { return }
-        EditionSetupSession.shared = s
         let rt = module.runtime!
         rt.setStage(.programme, id: EditionSetupProgramme.stageID)
         rt.setStage(.desk, id: EditionSetupDesk.stageID)
@@ -281,13 +241,13 @@ final class OnboardingController: @unchecked Sendable {
             rt.player.pause()
             rt.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
             rt.restoreHandsFree()                                                           // back to the stored state
+            EditionTalk.shared.clear()                                                      // words heard and not yet applied are not applied later
         }
         changed()
     }
 
     /// Continue: the selection is already saved (every change writes it); the edition is written from it.
     func finishTopics() {
-        guard session != nil else { return }
         lock.lock(); let on = step == "topics"; lock.unlock()
         guard on else { return }
         stopVoice()
@@ -298,11 +258,6 @@ final class OnboardingController: @unchecked Sendable {
 
     /// The edit page (`onboarding:edit`) opened: the saved picks are there, preselected, whether or not onboarding ever ran.
     func prepareEdit() {
-        let live = sections()
-        lock.lock(); let s = session; lock.unlock()
-        s?.setLiveSections(live)
-        EditionSetupSession.shared = s
-        wire(s)
         set { editing = true; message = "" }
     }
 
@@ -322,10 +277,9 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     func writeEdition() {
-        guard let s = session else { return }
         lock.lock(); let busy = editionStatus == "writing"; lock.unlock()
         guard !busy else { return }
-        let topics = s.topics
+        let topics = EditionPicksMirror.shared.topics        // shared code's pushed copy of the saved picks
         lock.lock(); let edit = editing; lock.unlock()
         set { if !edit { step = "writing" }; editionStatus = "writing"; writingLine = "Writing your edition…"; editionError = "" }
         let w = writer
@@ -380,11 +334,7 @@ final class OnboardingController: @unchecked Sendable {
     func reset() {
         stopVoice()
         set { progress = OnboardingProgress(); step = "welcome"; setup = nil; edition = nil; editionStatus = ""; mic = "unasked"; message = ""; editing = false }
-        try? FileManager.default.removeItem(at: topicsFile)
-        let fresh = EditionSetupSession(suggestions: EditionTopics.suggestions(), file: topicsFile, liveSections: [])
-        wire(fresh); EditionSetupSession.shared = fresh
-        set { session = fresh }
-        save()
+        save()                                              // (the picks are shared code's: the page's reset also sends editionClear)
     }
 
     // MARK: What the contract sees
@@ -395,11 +345,6 @@ final class OnboardingController: @unchecked Sendable {
             ["stage": r.stage, "name": r.name, "model": r.model, "sizeLabel": r.sizeLabel, "state": r.state, "progress": r.progress, "statusLine": r.statusLine,
              "isFallback": r.isFallback, "canRetry": r.canRetry, "canFallback": r.canFallback, "numbers": r.numbers]
         }
-        let tree: [[String: Any]] = (session?.treeRows() ?? TopicTree.rows(expanded: [], selection: EditionSelection(), own: [])).map {
-            ["key": $0.key, "label": $0.label, "kind": $0.kind, "selected": $0.selected, "partial": $0.partial,
-             "expandable": $0.expandable, "expanded": $0.expanded, "note": $0.note]
-        }
-        let picked = session?.topics ?? []
         var card = "", cardBody = ""
         // the prompt is gone once the edition is made or the reader has skipped it ("Not now": a saved skip), and starting setup again brings it back
         if progress.editionDone || progress.skipped { card = "" }
@@ -417,8 +362,7 @@ final class OnboardingController: @unchecked Sendable {
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
         d["device"] = device
         d["mic"] = mic; d["level"] = level; d["heard"] = heard; d["route"] = route; d["hearingOK"] = hearingOK
-        d["tree"] = tree; d["pickedCount"] = picked.count; d["selectionLine"] = EditionSetupText.selectionLine(picked)
-        d["explainer"] = EditionSetupText.explainer; d["voiceHint"] = EditionSetupText.voiceHint; d["talking"] = talking
+        d["talking"] = talking
         d["editionStatus"] = editionStatus; d["writingLine"] = writingLine; d["editionError"] = editionError
         d["editionTitle"] = edition?.title ?? "My edition"; d["editionIntro"] = edition?.intro ?? ""
         d["editionLines"] = edition?.lines ?? []; d["editionAddress"] = PageAddress.edition
@@ -458,11 +402,8 @@ extension AutoradioModule {
         handle("onboardingMicNext") { args, reply in c.microphoneNext(); reply(c.view()) }
         handle("onboardingHearing") { args, reply in c.hearing(ok: (args["ok"] as? String) == "true"); reply(c.view()) }
         handle("onboardingTopics") { args, reply in c.startTopics(); reply(c.view()) }
-        handle("onboardingTopicToggle") { args, reply in c.toggleTopic(args["label"] as? String ?? ""); reply(c.view()) }
-        handle("onboardingTopicExpand") { args, reply in c.expandTopic(args["label"] as? String ?? ""); reply(c.view()) }
         handle("onboardingEditDone") { args, reply in c.finishEdit(); reply(c.view()) }
         handle("onboardingEditLeave") { args, reply in c.leaveEdit(); reply(c.view()) }
-        handle("onboardingTopicAdd") { args, reply in c.addTopic(args["text"] as? String ?? ""); reply(c.view()) }
         handle("onboardingTalk") { args, reply in c.toggleTalk(); reply(c.view()) }
         handle("onboardingTopicsDone") { args, reply in c.finishTopics(); reply(c.view()) }
         handle("onboardingEditionRetry") { args, reply in c.writeEdition(); reply(c.view()) }

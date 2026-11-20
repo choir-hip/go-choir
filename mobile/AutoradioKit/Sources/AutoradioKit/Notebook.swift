@@ -38,13 +38,16 @@ public enum NotebookText {
     public static let title = "My notebook"
     public static let askedHeading = "What you asked for"
 
+    /// Letters and digits only, lower case: "U.S." and "us" are one topic (the shared code's `key`, edition-model.ts).
+    static func topicKey(_ s: String) -> String { String(s.lowercased().filter { $0.isLetter || $0.isNumber }) }
+
     static func sectionKey(_ heading: String) -> String {
         let h = heading.lowercased()
         if h.contains("asked") || h.contains("edition") { return "asked" }
         if h.contains("learned") { return "learned" }
         if h.contains("trying") { return "trying" }
         if h.contains("steering") { return "steering" }
-        return "other-" + EditionTopics.key(heading)
+        return "other-" + NotebookText.topicKey(heading)
     }
 
     /// The first 8 hex digits of the SHA-256 of the line's trimmed text: the design's `mine:` ref.
@@ -92,12 +95,12 @@ public enum NotebookText {
     /// otherwise (the listener's lines and every other section untouched), the same text back when nothing is missing.
     public static func merging(topics: [String], into md: String?) -> String {
         var wanted: [String] = [], seen = Set<String>()
-        for t in topics { let k = EditionTopics.key(t); if !k.isEmpty, seen.insert(k).inserted { wanted.append(t.trimmingCharacters(in: .whitespacesAndNewlines)) } }
+        for t in topics { let k = NotebookText.topicKey(t); if !k.isEmpty, seen.insert(k).inserted { wanted.append(t.trimmingCharacters(in: .whitespacesAndNewlines)) } }
         guard let md, !md.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return "# \(title)\n\n## \(askedHeading)\n" + wanted.map { "- \($0)\n" }.joined()
         }
-        let have = Set(parse(md).sections.filter { $0.key == "asked" }.flatMap(\.lines).map { EditionTopics.key($0.text) })
-        let add = wanted.filter { !have.contains(EditionTopics.key($0)) }
+        let have = Set(parse(md).sections.filter { $0.key == "asked" }.flatMap(\.lines).map { NotebookText.topicKey($0.text) })
+        let add = wanted.filter { !have.contains(NotebookText.topicKey($0)) }
         guard !add.isEmpty else { return md }
         var lines = md.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         if let h = lines.firstIndex(where: { $0.hasPrefix("## ") && sectionKey(String($0.dropFirst(3))) == "asked" }) {
@@ -125,9 +128,8 @@ public enum EditionText {
         guard !t.isEmpty else { return nil }
         return StretchCandidates.cut("What the listener follows:\n" + t.map { "- \($0)" }.joined(separator: "\n"), bytes: maxBytes)
     }
-    nonisolated(unsafe) static var topicsFile: URL? = TakeFiles.url("edition-topics.json")
     public static func current() -> String? {
-        make(notebook: NotebookCache.shared.text, topics: EditionSetupSession.load(topicsFile)?.topics ?? [])
+        make(notebook: NotebookCache.shared.text, topics: EditionPicksMirror.shared.topics)    // the picks are shared code's; this is its pushed copy (EditionSetup.swift)
     }
 }
 
@@ -340,7 +342,7 @@ public enum NotebookPage {
         guard !refreshRunning else { return }          // one at a time: two would each see "no notebook" and make one
         refreshRunning = true; defer { refreshRunning = false }
         // The topics written on this phone and not yet in the notebook (the marker says when they are): written now, once.
-        let topics = EditionSetupSession.load(EditionText.topicsFile)?.topics ?? []
+        let topics = EditionPicksMirror.shared.topics
         if !topics.isEmpty { await writeTopics(topics) }
         doc = await loadDoc(); onChange?()
         learning = await loadLearning(); onChange?()
@@ -389,7 +391,7 @@ public enum NotebookPage {
 
     private func writeTopicsNow(_ topics: [String], marker: URL?) async -> Bool {
         let marker = marker ?? TakeFiles.url("notebook-topics-written")
-        let key = topics.map { EditionTopics.key($0) }.sorted().joined(separator: ",")
+        let key = topics.map { NotebookText.topicKey($0) }.sorted().joined(separator: ",")
         guard !key.isEmpty else { return true }
         if let marker, (try? String(contentsOf: marker, encoding: .utf8)) == key { return true }
         let client = ChoirEnvironment.shared.client()

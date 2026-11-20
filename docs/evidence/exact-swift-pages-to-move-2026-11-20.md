@@ -17,6 +17,7 @@ Reads `edition-topics.json`, returns topics joined by newlines.
 - Native-only: nothing in principle (a file read), BUT the file is written by Swift topic screens and read by `Notebook.swift:130,343`, the saved corpus (`SavedCorpus` "edition-topics") and `AccountWipe.swift:88`. Moving the read alone removes no Swift.
 - Exact: `picks()` in `edition-model.ts`; grant on `app:/data/edition-topics.json`; the path moves from Application Support to `app:/data`, so the writer must move too.
 - Tests: E7, E9 of `EditionSetupTests` (28), mostly ported in `edition.test.ts`.
+- Done on lane `exact-edition-picks` (2026-11-20): the whole ownership moved, not the read alone (`edition-picks.ts`; rule and state table in `docs/reference/AUTORADIO-EDITION-PICKS.md`). Not run on a phone yet.
 
 ## 2. Conversation info
 Reverses entries, drops cancelled ones, sets `canRetry` on failed / noted-answer rows.

@@ -30,6 +30,7 @@ reset_state() {
   S="$CONT/Library/Application Support/Autoradio"
   rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
   rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
+  rm -f "$CONT"/Library/Application\ Support/exact/*/data/edition-topics.json "$CONT"/Library/Caches/exact/*/agent/*/data/edition-topics.json   # the edition picks' own place now (edition-picks.ts: app:/data)
   rm -rf "$CONT"/Library/Application\ Support/exact/*/data/theme-choice.json "$CONT"/Library/Application\ Support/exact/*/data/themes   # app:/data on a device build
   rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"
@@ -45,6 +46,10 @@ reset_state() {
     SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeID depth; SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeMode dark
     mkdir -p "$S/themes"
     printf '%s' '{"schema_version":3,"id":"drill-user","name":"Drill user","schemes":["light","dark"],"colors":{"paper":{"light":"#FFFFFF","dark":"#101418"},"fg":{"light":"#111111","dark":"#F2F2F2"},"muted":{"light":"#444444","dark":"#C8C8C8"},"accent":{"light":"#0B5CAD","dark":"#7FB8F5"},"onAccent":{"light":"#FFFFFF","dark":"#101418"}}}' > "$S/themes/drill-user.json"
+  fi
+  # The edition-picks drill (SEED_PICKS=1) seeds the OLD Swift file with one topic no account's notebook has. The carry-over (edition-picks.ts runLegacy) must adopt nothing of it and drop the file.
+  if [ -n "${SEED_PICKS:-}" ]; then
+    mkdir -p "$S"; printf '%s' '{"topics":["Zzdrillseed"]}' > "$S/edition-topics.json"
   fi
 }
 legacy_clean() {
@@ -233,6 +238,28 @@ step "tap mail-folder-quarantine"; view real-38-mail-quarantine 3000
 step logs
 run_drive tour light "" --touch platform
 
+# ---- 3f1. EDITION PICKS drive (shared code, edition-picks.ts; local writes only, on the phone: nothing is written to the computer). The old Swift file is SEEDED with a topic no notebook has (the carry-over adopts
+# nothing of it and drops it); then the topic screen is opened from My edition, three picks are made (a category, a subtopic under another, a typed one) and one is taken off. The stored file is copied out and read.
+SEED_PICKS=1; export SEED_PICKS
+step "clock data"; wait_ 8000
+place paper 2500
+step "tap paper-section-mine"; view real-70-edition-mine 1500
+step "tap paper-choose-topics"; view real-71-topics-empty 1500
+step "tap ob-topic-Science"; wait_ 700
+step "tap ob-topic-open-Culture"; wait_ 700; step "tap ob-topic-Film"; wait_ 700
+step "type ob-topic-input Zzdrillchess"; step "tap ob-topic-add"; view real-72-topics-picked 1200
+step "tap ob-topic-Science"; view real-73-topics-one-off 1200
+step "tap edit-edition-done"; wait_ 2500
+place paper 2000
+step "tap paper-section-mine"; view real-74-edition-mine-after 2500
+step logs
+run_drive picks light "" --touch platform
+unset SEED_PICKS
+CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
+PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/edition-topics.json 2>/dev/null | head -1)
+[ -n "$PICKS_FILE" ] && cp "$PICKS_FILE" "$SHOTS/picks-stored.json"
+if [ -n "$CHK" ] && [ -d "$CHK/Library/Application Support" ] && [ ! -e "$CHK/Library/Application Support/Autoradio/edition-topics.json" ]; then echo "ok: edition picks: the old Swift file is gone" > "$SHOTS/picks-legacy.txt"; else echo "UNWANTED: the old Swift file is still there (or the container was not found)" > "$SHOTS/picks-legacy.txt"; fi
+
 # ---- 3f2. SPINE drive (local UI only, nothing is written to the computer): the bar, the launcher and its deck, the default themes and the mode switch.
 # Ported from the demo-mode proofs (proof-sim, proof-lane1, proof-lane4, proof-lane7, proof-default-themes, proof-app), which are deleted with demo mode.
 step "clock data"; wait_ 5000
@@ -317,6 +344,16 @@ chk "themes carry-over: the old choice arrived (Depth, dark)" 'Showing Depth \(d
 chk "themes carry-over: the old user theme is listed" '\[settings-theme-drill-user\]' "$SHOTS/drive-migrate.txt"
 chk "themes carry-over: the kept choice file says theme depth, mode dark, migrated" '"theme":"depth","mode":"dark","migrated":true' "$SHOTS/migrated-theme-choice.json"
 chk "themes carry-over: the user theme file is in the new place" 'drill-user.json' "$SHOTS/migrated-themes-dir.txt"
+# the edition picks (shared code): every check reads a file or a tree and FAILS when it is missing
+[ -s "$SHOTS/picks-stored.json" ] || { echo "MISSING: edition picks: the stored file app:/data/edition-topics.json was not found in the app container"; FAILS="$FAILS [picks file]"; }
+chk "edition picks: the stored file holds the subtopic (Film) and the typed one (Zzdrillchess)" '"Film".*"Zzdrillchess"|"Zzdrillchess".*"Film"' "$SHOTS/picks-stored.json"
+bad "edition picks: the category taken off (Science) is not stored" '"Science"' "$SHOTS/picks-stored.json"
+bad "edition picks: nothing of the seeded old file was adopted (its topic has no line in the account's notebook)" 'Zzdrillseed' "$SHOTS/picks-stored.json"
+chk "edition picks: the old Swift file was dropped" '^ok:' "$SHOTS/picks-legacy.txt"
+chk "edition picks: the topic screen listed the tree" '\[ob-topic-Science\]' "$SHOTS/drive-picks.txt"
+chk "edition picks: three picks made, the screen says it follows 3 topics" 'Your edition follows 3 topics' "$SHOTS/drive-picks.txt"
+chk "edition picks: one taken off, the screen says it follows 2 topics" 'Your edition follows 2 topics' "$SHOTS/drive-picks.txt"
+chk "edition picks: My edition, built from the saved picks, says where it is from" '\[paper-mine-from\]' "$SHOTS/drive-picks.txt"
 chk "textures: documents listed" '\[textures-doc-texture:' "$SV"
 if grep -qE '\[textures-make-edition\]' "$SV"; then echo "info: textures: the make-your-edition card shows (the drill computer has no edition)"; else echo "info: textures: no make-your-edition card (the drill computer has an edition now; that is state, not a defect)"; fi
 bad "textures: no error" '\[textures-message\] "(Could|Sign in)' "$SV"

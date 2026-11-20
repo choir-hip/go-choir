@@ -17,6 +17,7 @@ import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
 import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
+import * as picks from './edition-picks.ts';
 
 // The app's data module: one line per source it answers, each in a module of its own (paper.ts, api.ts).
 // A source this file does not name is the Swift package's (the voice, and the pages not yet moved); a name is
@@ -62,7 +63,9 @@ fs.write app:/data/takes.json
 fs.read app:/data/theme-choice.json
 fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
-fs.write app:/data/themes`;
+fs.write app:/data/themes
+fs.read app:/data/edition-topics.json
+fs.write app:/data/edition-topics.json`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
@@ -111,6 +114,13 @@ const sources: Sources = {
   fileDelete: ([path], _s, storage) => fileDelete({ path }, storage),
   fileRename: ([path, name], _s, storage) => fileRename({ path, name }, storage),
   fileUpload: ([from, name, dir], _s, storage) => fileUpload({ from, name, dir }, storage),
+  // The edition picks (edition-picks.ts): the one reader and writer of app:/data/edition-topics.json. The last argument of each source is the signed-out tick (the page is asked again when the account changes).
+  editionPicks: ([_focus, _signedOut], _s, storage) => picks.picksText(storage),
+  editionTopics: ([_tick, talking, _signedOut], _s, storage) => picks.picksPage(storage, { talking }),
+  editionToggle: ([label], _s, storage) => picks.toggle(storage, label),
+  editionExpand: ([label], _s, storage) => picks.expand(storage, label),
+  editionAdd: ([text], _s, storage) => picks.addTyped(storage, text),
+  editionClear: (_a, _s, storage) => picks.clearPicks(storage),
   paperFront: ([view, width, tick, focus, picks], _store, storage) => paperFront({ view, width, tick, focus, picks }, storage),
   // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
   mailBox: ([address, _acct], _store, storage) => mail.mailBox(address, { storage }),

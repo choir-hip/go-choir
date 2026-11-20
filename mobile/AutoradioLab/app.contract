@@ -80,6 +80,7 @@ component Autoradio
     acs
     hpg
     signedOutTick
+    ep
     hc
     noNative
     refreshRadio
