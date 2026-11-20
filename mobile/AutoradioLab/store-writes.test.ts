@@ -2,7 +2,7 @@
 // generation moved is removed. Failure list, written before the code (a test per store; each suspends the source across the sign-out):
 //  W1 the helper itself: before, after.   W2 paper (front list cache).   W3 notebook (text cache).   W4 files (recent list, memory and file).   W5 files (cache download).
 //  Why the others cannot write after the wipe (no test possible or needed):
-//   takes: `saveKept` is called by take-session.ts (`keep`, `carryOver`), the takesAct send, never by a source; the file is app:/data/takes.json.   podcasts: the feed file goes through `writeCurrent` (W6); `saveLibrary` writes
+//   takes: `saveKept` is called by take-session.ts (`keep`, `carryOver`) from the takesAct send, never by a source; the file is app:/data/takes.json. The in-memory overlay belongs to one account generation (take-session.ts `sync`, tested in B2): after a wipe nothing of the old account is written back, but a write already past that check when the wipe runs is the same window W1 as everywhere else (a publish refuses to keep after the generation moved).   podcasts: the feed file goes through `writeCurrent` (W6); `saveLibrary` writes
 //   `lib`, which `forget()` sets to null (podcast.ts:76) AND goes through `writeCurrent` too (W7), so a write already inside the atomic write when the wipe's rm runs is removed again.
 //   content: every put goes through `put()` in syncAll, which checks `c.live()` (the store's generation, bumped by `wipe`) immediately before the write (content.ts `const put`).
 //   mail: mail-store.ts `write` (tests R3 and R9 in mail.test.ts).   vectors: search.ts persist runs from the live store that sign-out empties first (account.ts wipes `vectors`).

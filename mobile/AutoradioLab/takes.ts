@@ -255,7 +255,7 @@ export function merged(stories: Record<string, unknown>[], takes: Take[]): Recor
 
 // ---------------------------------------------------------------------------------------------------------------- the upload
 
-export type Upload = { audio: Uint8Array; transcript: string; duration: number; respondsTo: Responds | null };
+export type Upload = { audio: Uint8Array; /** The audio's SHA-256 when the caller has it already. */ sha256?: string; transcript: string; duration: number; respondsTo: Responds | null };
 export async function sha256Hex(d: Uint8Array): Promise<string> {
   const h = new Uint8Array(await crypto.subtle.digest('SHA-256', d as unknown as BufferSource));
   return [...h].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -267,7 +267,7 @@ export async function multipart(u: Upload, boundary: string): Promise<{ body: Ui
   const field = (name: string, value: string): void => { parts.push(enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)); };
   field('transcript', u.transcript);
   field('duration_seconds', u.duration.toFixed(2));
-  field('sha256', await sha256Hex(u.audio));
+  field('sha256', u.sha256 ?? (await sha256Hex(u.audio)));
   if (u.respondsTo) field('responds_to', JSON.stringify({ route: u.respondsTo.route, title: u.respondsTo.title }));
   parts.push(enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="take.m4a"\r\nContent-Type: audio/mp4\r\n\r\n`));
   parts.push(u.audio);
@@ -332,7 +332,10 @@ export function client(net: Net): Client {
     },
     async list() { const r = await net('GET', '/api/platform/takes', { query: { limit: BOUNDS.listLimit } }); gone(r.status); return takesOf(r.json); },
     async mine() { const r = await net('GET', '/api/platform/takes', { query: { mine: 1 } }); gone(r.status); return mineOf(r.json); },
-    async remove(id) { await net('DELETE', `/api/platform/takes/${encodeURIComponent(id)}`); }, // 404 and 409: it is already gone
+    async remove(id) {
+      const r = await net('DELETE', `/api/platform/takes/${encodeURIComponent(id)}`);
+      if (!ok(r.status) && r.status !== 404 && r.status !== 409) throw new TakesRefused(`The server refused the delete (HTTP ${r.status}).`);      // 404 and 409: it is already gone
+    },
     async record(publisher) {
       const r = await net('GET', '/api/platform/takes/record', { query: { publisher } });
       if (r.status === 404) return { ...NEW }; // an unknown handle, or no server yet: no outcomes

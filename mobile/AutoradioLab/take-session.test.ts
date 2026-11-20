@@ -19,9 +19,9 @@
 //   U2  a mute, a publish or a delete made before the carry-over has finished cannot lose the old voices (they wait for it)
 //   U3  a take in review is the recorder's: a new session (the shared code restarted) still shows it and can publish it; a failed publish never discards it; a double tap never posts twice
 import { describe, expect, test } from 'bun:test';
-import { act, pageFor, newOverlay, parseNative, IDLE, LIMITS, type Device, type Env, type Native, type Overlay } from './take-session.ts';
-import { client, emptyKept, KEPT_FILE, loadKept, BOUNDS, type Net } from './takes.ts';
-import { SignedOutError } from './api.ts';
+import { act, pageFor, newOverlay, parseNative, IDLE, limits, type Device, type Env, type Native, type Overlay } from './take-session.ts';
+import { client, emptyKept, KEPT_FILE, loadKept, wipeKept, BOUNDS, type Net } from './takes.ts';
+import { SignedOutError, nextGeneration } from './api.ts';
 import publishFx from '../fixtures/takes/publish.json';
 import mineFx from '../fixtures/takes/mine.json';
 import recordFx from '../fixtures/takes/record.json';
@@ -58,12 +58,13 @@ class FakeDevice implements Device {
     this.log.push('stop');
     if (this.seconds < BOUNDS.minSeconds) this.snap = { ...IDLE, ended: 'short' };
     else if (this.file && this.file.length > BOUNDS.maxBytes) this.snap = { ...IDLE, ended: 'large' };
-    else this.snap = { ...this.snap, phase: 'review', transcript: this.words.trim(), seconds: this.seconds, elapsed: this.seconds, bytes: this.file?.length ?? 0, ended: auto ? 'ceiling' : '' };
+    else this.snap = { ...this.snap, phase: 'review', transcript: this.words.trim(), seconds: this.seconds, elapsed: this.seconds, ended: auto ? 'ceiling' : '' };
     return this.snap;
   }
   async preview(on: boolean | null) { this.log.push(`preview:${on}`); this.snap = { ...this.snap, previewing: on === null ? !this.snap.previewing : on }; return this.snap; }
   async discard() { this.log.push('discard'); this.snap = { ...IDLE }; return this.snap; }
   async audio() { this.log.push('audio'); return this.file; }
+  async publishing(on: boolean) { this.log.push(`publishing:${on}`); this.snap = { ...this.snap, publishing: on }; return this.snap; }
   async done() { this.log.push('done'); this.snap = { ...IDLE }; return this.snap; }
   async steerMute(h: string) { this.steered.push(h); }
   async mirror(k: { ids: string[]; handle: string; muted: string[] }) { this.mirrored.push({ ids: [...k.ids], handle: k.handle, muted: [...k.muted] }); }
@@ -111,7 +112,7 @@ describe('S1 every end without a recording says so', () => {
     expect(q.state).toBe('idle'); expect(q.notice).toBe('A take is at least 3 seconds. Nothing was kept.');
   });
   test('nothing recorded, and too large', async () => {
-    const a = setup(); await a.dev.start(LIMITS); a.dev.snap = { ...IDLE, ended: 'empty' };
+    const a = setup(); await a.dev.start(limits()); a.dev.snap = { ...IDLE, ended: 'empty' };
     expect((await pageFor(a.env, a.o, a.dev.snap)).notice).toBe('Nothing was recorded.');
     const b = setup(); b.dev.file = new Uint8Array(BOUNDS.maxBytes + 1);
     await act(b.env, b.o, 'record', ''); expect((await act(b.env, b.o, 'stop', '')).notice).toBe('That take is too large to publish. Record a shorter one.');
@@ -158,7 +159,7 @@ describe('S2 the page follows the recorder', () => {
   test('the native answer is read defensively', () => {
     expect(parseNative(null)).toEqual(IDLE);
     expect(parseNative({ phase: 'bogus', elapsed: 'x', ended: 'what' })).toEqual(IDLE);
-    expect(parseNative({ phase: 'review', transcript: 'hi', elapsed: 4, seconds: 4, bytes: 9, previewing: true, ended: 'ceiling', respondsTitle: 'T', respondsRoute: 'r' }))
+    expect(parseNative({ phase: 'review', transcript: 'hi', elapsed: 4, seconds: 4, previewing: true, ended: 'ceiling', respondsTitle: 'T', respondsRoute: 'r' }))
       .toMatchObject({ phase: 'review', transcript: 'hi', previewing: true, ended: 'ceiling', respondsRoute: 'r' });
   });
 });
@@ -227,7 +228,7 @@ describe('S4 a failure keeps the recording', () => {
     expect(p.notice.startsWith('invalid take: 10 takes in the last 24 hours, the limit is 10')).toBe(true); expect(p.state).toBe('review');
   });
   test('a take over the byte bound is refused before the network', async () => {
-    const h = setup(); h.dev.file = new Uint8Array(BOUNDS.maxBytes + 1); h.dev.snap = { ...IDLE, phase: 'review', transcript: 'x', seconds: 9, bytes: 1 };
+    const h = setup(); h.dev.file = new Uint8Array(BOUNDS.maxBytes + 1); h.dev.snap = { ...IDLE, phase: 'review', transcript: 'x', seconds: 9 };
     const p = await act(h.env, h.o, 'publish', '');
     expect(h.seen).toEqual([]); expect(p.notice).toContain('over 512 KB'); expect(p.state).toBe('review');
   });
@@ -311,7 +312,7 @@ describe('S7 mutes', () => {
 describe('S8 record and discard', () => {
   test('Record sends the bounds the spec sets; Discard drops the take and clears the words; rerecord from review starts again', async () => {
     const h = setup(); await act(h.env, h.o, 'record', '');
-    expect(h.dev.limits).toEqual({ minSeconds: 3, maxSeconds: 60 - BOUNDS.stopEarly, maxBytes: 512 * 1024 }); expect(LIMITS).toEqual(h.dev.limits);
+    expect(h.dev.limits).toEqual({ minSeconds: 3, maxSeconds: 60 - BOUNDS.stopEarly, maxBytes: 512 * 1024 }); expect(limits()).toEqual(h.dev.limits);
     await act(h.env, h.o, 'stop', '');
     await act(h.env, h.o, 'rerecord', ''); expect(h.dev.snap.phase).toBe('recording'); expect(h.dev.log.filter((x) => x === 'start')).toHaveLength(2);
     await act(h.env, h.o, 'stop', '');
@@ -371,9 +372,10 @@ describe('U1 the carry-over from the Swift files', () => {
     expect(h.dev.legacyCalls).toBe(2);        // not carried: asked again
     expect(h.dev.mirrored).toEqual([]);       // and the native copy was not touched
   });
-  test('the old copy is only read: the device has no call that removes it', () => {
-    const d = new FakeDevice();
-    expect(Object.keys(Object.getPrototypeOf(d)).concat(Object.getOwnPropertyNames(Object.getPrototypeOf(d))).filter((k) => /remove|wipe|delete|clear/i.test(k))).toEqual([]);
+  test('nothing found: the old voices are not mirrored back (nothing is written to the native copy)', async () => {
+    const h = setup(); h.dev.legacyAnswer = { found: false, ids: [], handle: '', muted: [] };
+    await act(h.env, h.o, 'refresh', '');
+    expect(h.dev.mirrored).toEqual([]);
   });
 });
 
@@ -412,5 +414,117 @@ describe('U3 a take in review is the recorder\'s', () => {
   test('the client is the shared one: the same wire as takes.ts', async () => {
     const seen: Seen[] = []; const c = client(netOf(happy, seen));
     expect((await c.list()).length).toBe(0); expect(emptyKept().migrated).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------- review 1 (B1, B2, S1 to S4)
+
+describe('B1 while a publish is in flight the recorder is not touched', () => {
+  async function inflight() {
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    const h = setup(async (s) => { if (s.m === 'POST') { await gate; return { status: 201, json: publishFx }; } return { status: 200, json: { takes: [] } }; });
+    await recorded(h);
+    const first = act(h.env, h.o, 'publish', '');
+    await new Promise((r) => setTimeout(r, 5));
+    return { h, release, first };
+  }
+  test('the recorder is told a publish is under way, so the page is asked again and shows it', async () => {
+    const { h, release, first } = await inflight();
+    expect(h.dev.snap.publishing).toBe(true); expect((await pageFor(h.env, h.o, h.dev.snap))).toMatchObject({ state: 'publishing', canDiscard: false, canRecord: false, canStop: false, canPublish: false });
+    release(); await first; expect(h.dev.snap.publishing).toBe(false);
+  });
+  for (const op of ['discard', 'record', 'rerecord', 'stop', 'preview']) {
+    test(`${op} is refused: the take is published, not discarded, and nothing else is cancelled`, async () => {
+      const { h, release, first } = await inflight();
+      const before = h.dev.log.length;
+      const p = await act(h.env, h.o, op, '');
+      expect(h.dev.log.slice(before).filter((x) => ['discard', 'start', 'stop'].includes(x) || x.startsWith('preview'))).toEqual([]);
+      expect(p.state).toBe('publishing');
+      release(); const done = await first;
+      expect(posts(h.seen)).toBe(1); expect(done.justPublished).toBe('Published as voice-me0001.'); expect(h.dev.log.filter((x) => x === 'done')).toHaveLength(1);
+      expect(h.dev.log).not.toContain('discard');
+    });
+  }
+  test('a failed publish clears the flag and the take can be discarded afterwards', async () => {
+    const h = setup(() => ({ status: 500 })); await recorded(h);
+    await act(h.env, h.o, 'publish', ''); expect(h.dev.snap.publishing).toBe(false);
+    expect((await act(h.env, h.o, 'discard', '')).state).toBe('idle');
+  });
+  test('the other acts still run during a send: delete, mute, unmute, refresh', async () => {
+    const { h, release, first } = await inflight();
+    expect((await act(h.env, h.o, 'mute', 'voice-3fa2c1')).muted).toHaveLength(1);
+    expect((await act(h.env, h.o, 'unmute', 'voice-3fa2c1')).muted).toHaveLength(0);
+    release(); await first;
+  });
+});
+
+describe('S4 two publishes started in the same window post once', () => {
+  test('both pass no await before the flag', async () => {
+    const h = setup(); await recorded(h);
+    await Promise.all([act(h.env, h.o, 'publish', ''), act(h.env, h.o, 'publish', '')]);
+    expect(posts(h.seen)).toBe(1); expect(h.dev.log.filter((x) => x === 'done')).toHaveLength(1);
+  });
+  test('a recorder that fails to drop the file after a publish does not make the take publishable twice in this session', async () => {
+    const h = setup(); await recorded(h); h.dev.done = async () => { throw new Error('native gone'); };
+    const p = await act(h.env, h.o, 'publish', '');
+    expect(p.justPublished).toBe('Published as voice-me0001.'); expect(posts(h.seen)).toBe(1);
+  });
+});
+
+describe('B2 a new account does not see or rewrite the old account\'s takes data', () => {
+  test('wipe, render, mute: only the new account\'s voice is kept and mirrored; the old files cannot come back', async () => {
+    const h = setup(() => ({ status: 200, json: { takes: [] } }));
+    await act(h.env, h.o, 'mute', 'voice-OLD');
+    expect((await pageFor(h.env, h.o, IDLE)).muted).toHaveLength(1);
+    // sign-out: the generation moves, the shared file goes (account.ts wipeKept), the old account's native copy may still be there
+    const asked = h.dev.legacyCalls;
+    nextGeneration(); await wipeKept(storage);
+    h.dev.legacyAnswer = { found: true, ids: ['take-OLD'], handle: 'voice-OLDH', muted: ['voice-OLD'] };
+    const page = await pageFor(h.env, h.o, IDLE);
+    expect(page.muted).toEqual([]); expect(page.handle).toBe(''); expect(page.mine).toEqual([]); expect(page.record).toBe('');
+    const p = await act(h.env, h.o, 'mute', 'voice-NEW');
+    expect(p.muted.map((m) => m.handle)).toEqual(['voice-NEW']);
+    const k = await loadKept(storage);
+    expect(k.muted).toEqual(['voice-NEW']); expect(k.ids).toEqual([]); expect(k.handle).toBe('');
+    expect(h.dev.mirrored.at(-1)?.muted).toEqual(['voice-NEW']);
+    expect(h.dev.legacyCalls).toBe(asked);          // the old files were never asked for again
+    // the native copy of the old account is emptied as soon as the change is seen, even if the native wipe had failed
+    expect(h.dev.mirrored.some((m) => m.muted.length === 0 && m.ids.length === 0 && m.handle === '')).toBe(true);
+  });
+  test('the listener\'s takes and record of the old account are dropped too', async () => {
+    const h = setup((s) => (s.p.endsWith('/record') ? { status: 200, json: recordFx } : { status: 200, json: s.q?.mine ? mineFx : { takes: [] } }));
+    const p = await act(h.env, h.o, 'refresh', ''); expect(p.mine).toHaveLength(1); expect(p.record).not.toBe('');
+    nextGeneration(); await wipeKept(storage);
+    const q = await pageFor(h.env, h.o, IDLE);
+    expect(q.mine).toEqual([]); expect(q.record).toBe(''); expect(q.handle).toBe(''); expect(q.notice).toBe('');
+  });
+  test('a notice and a "published as" line of the old account are dropped', async () => {
+    const h = setup(); await recorded(h); await act(h.env, h.o, 'publish', '');
+    expect((await pageFor(h.env, h.o, IDLE)).justPublished).not.toBe('');
+    nextGeneration(); expect((await pageFor(h.env, h.o, IDLE)).justPublished).toBe('');
+  });
+});
+
+describe('S1 and S3 delete and refresh', () => {
+  test('a delete the server refused says so and keeps the row and the own id', async () => {
+    for (const status of [500, 403, 429]) {
+      const h = setup((s) => (s.m === 'DELETE' ? { status } : { status: 200, json: s.q?.mine ? mineFx : { takes: [] } }));
+      await act(h.env, h.o, 'refresh', '');
+      const p = await act(h.env, h.o, 'delete', 'take-00000000000000a5');
+      expect(p.notice).toContain(`Could not delete: The server refused the delete (HTTP ${status}).`); expect(p.mine).toHaveLength(1); expect((await loadKept(storage)).ids).toContain('take-00000000000000a5');
+    }
+  });
+  test('404 and 409 are "already gone": the row goes', async () => {
+    for (const status of [404, 409]) {
+      const h = setup((s) => (s.m === 'DELETE' ? { status } : { status: 200, json: s.q?.mine ? mineFx : { takes: [] } }));
+      await act(h.env, h.o, 'refresh', '');
+      expect((await act(h.env, h.o, 'delete', 'take-00000000000000a5')).mine).toEqual([]);
+    }
+  });
+  test('a refresh that works clears an old "not available yet"', async () => {
+    let up = false;
+    const h = setup((s) => (up ? (s.m === 'POST' ? { status: 201, json: publishFx } : { status: 200, json: { takes: [] } }) : { status: 404 }));
+    await recorded(h); expect((await act(h.env, h.o, 'publish', '')).notice).toContain('not available yet');
+    up = true; expect((await act(h.env, h.o, 'refresh', '')).notice).toBe('');
   });
 });

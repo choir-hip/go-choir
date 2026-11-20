@@ -127,8 +127,9 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         var o = s.snapshot
         XCTAssertEqual(o["phase"] as? String, "recording"); XCTAssertEqual(o["elapsed"] as? Double, 12)
         await s.stop(); o = s.snapshot
-        XCTAssertEqual(o["phase"] as? String, "review"); XCTAssertEqual(o["transcript"] as? String, "A neighbour speaking."); XCTAssertEqual(o["bytes"] as? Int, 4000)
-        for k in ["phase", "elapsed", "seconds", "bytes", "transcript", "previewing", "ended", "detail", "respondsTitle", "respondsRoute"] { XCTAssertNotNil(o[k], k) }
+        XCTAssertEqual(o["phase"] as? String, "review"); XCTAssertEqual(o["transcript"] as? String, "A neighbour speaking."); XCTAssertEqual(o["publishing"] as? Bool, false)
+        s.setPublishing(true); XCTAssertEqual(s.snapshot["publishing"] as? Bool, true); s.done(); XCTAssertEqual(s.snapshot["publishing"] as? Bool, false, "done and discard clear it")
+        for k in ["phase", "elapsed", "seconds", "transcript", "previewing", "publishing", "ended", "detail", "respondsTitle", "respondsRoute"] { XCTAssertNotNil(o[k], k) }
     }
 }
 

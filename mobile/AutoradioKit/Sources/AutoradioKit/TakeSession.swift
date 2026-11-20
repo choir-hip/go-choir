@@ -51,6 +51,8 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
     public private(set) var bytes = 0
     public private(set) var respondsTo: TakeResponds?
     public private(set) var previewing = false
+    /// Shared code is sending the take. Only so the snapshot moves and the page is asked again; shared code clears it, and nothing here reads it as a fact.
+    public private(set) var publishing = false
     /// mic | gate | open | short | empty | large | ceiling, or "" (see the header). Cleared by the next start, a discard and done.
     public private(set) var ended = ""
     public private(set) var detail = ""
@@ -77,7 +79,7 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
 
     /// The snapshot the shared code reads (take-session.ts `Native`).
     public var snapshot: [String: Any] {
-        ["phase": state.rawValue, "elapsed": elapsed, "seconds": duration, "bytes": bytes, "transcript": transcript, "previewing": previewing, "ended": ended, "detail": detail,
+        ["phase": state.rawValue, "elapsed": elapsed, "seconds": duration, "transcript": transcript, "previewing": previewing, "publishing": publishing, "ended": ended, "detail": detail,
          "respondsTitle": respondsTo?.title ?? "", "respondsRoute": respondsTo?.route ?? ""]
     }
     /// The recording's bytes, for the shared code to upload (the file stays here: the preview plays it).
@@ -153,12 +155,13 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
         if on { guard state == .review, let f = file else { return }; preview.play(f); previewing = true } else { preview.stop(); previewing = false }
         changed()
     }
+    public func setPublishing(_ on: Bool) { guard on != publishing else { return }; publishing = on; changed() }
     /// The preview reached its end.
     public func previewEnded() { previewing = false; changed() }
 
     public func discard() {
         if state == .recording { recorder.cancel() }
-        dropFile(); transcript = ""; duration = 0; bytes = 0; startedAt = nil; ended = ""; detail = ""
+        dropFile(); transcript = ""; duration = 0; bytes = 0; startedAt = nil; ended = ""; detail = ""; publishing = false
         if state != .idle || holding { endHold(); state = .idle }
         changed()
     }

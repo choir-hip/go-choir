@@ -755,13 +755,13 @@
       "phase": "string",
       "elapsed": "number",
       "seconds": "number",
-      "bytes": "number",
       "transcript": "string",
       "previewing": "bool",
       "ended": "string",
       "detail": "string",
       "respondsTitle": "string",
-      "respondsRoute": "string"
+      "respondsRoute": "string",
+      "publishing": "bool"
     },
     "ConversationEntry": {
       "id": "string",
@@ -1860,13 +1860,13 @@
           "phase": "idle",
           "elapsed": 0,
           "seconds": 0,
-          "bytes": 0,
           "transcript": "",
           "previewing": false,
           "ended": "",
           "detail": "",
           "respondsTitle": "",
-          "respondsRoute": ""
+          "respondsRoute": "",
+          "publishing": false
         }
       }
     },

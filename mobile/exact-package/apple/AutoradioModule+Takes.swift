@@ -1,7 +1,7 @@
 // The take RECORDER's native side (the voice): the radio's gate, the microphone, the file, the recogniser and the preview player. The Takes section itself is shared code (AutoradioLab/take-session.ts,
 // takes.ts); this file holds what only the app can do: take the microphone from the radio (the one voice), record to a file, read it with the recogniser, hand the shared code one snapshot
 // (the source `takesRecorder`, declared in interface/takes.json) and answer its ops (`takeOp`, public: called across the module boundary from AutoradioLab/modules/apple/ModelsEntry.swift), and fetch another listener's take for the run sheet.
-//   ops: takeState | takeStart(minSeconds, maxSeconds, maxBytes) | takeStop | takePreview(mode on|off|toggle) | takeDiscard | takeDone | takeAudio
+//   ops: takeState | takeStart(minSeconds, maxSeconds, maxBytes) | takeStop | takePreview(mode on|off|toggle) | takePublishing(on) | takeDiscard | takeDone | takeAudio
 //        takeSteerMute(handle): the learning engine's steer queue is native (SteerQueue)
 //        takeMirror(ids, handle, muted): the Swift programme (RadioProgramme.candidates) still filters the takes it offers by the listener's own ids and muted voices; shared code owns them and pushes a copy
 //        takeLegacy: READS the old Swift files (takes-own.json, takes-muted.json) for the one-time carry-over; removes nothing
@@ -95,11 +95,11 @@ extension AutoradioModule {
             case "off": s.setPreview(false)
             default: s.togglePreview()
             }
+        case "takePublishing": s.setPublishing((r["on"] as? Bool) ?? false)
         case "takeDiscard": s.discard()
         case "takeDone": s.done()
         case "takeAudio":
-            guard let d = s.audio else { return [:] }
-            return ["b64": d.base64EncodedString()]
+            return s.audio.map { ["b64": $0.base64EncodedString() as Any] } ?? [:]
         case "takeSteerMute":
             if let h = r["handle"] as? String, !h.isEmpty { SteerQueue.shared.enqueue(.mute(handle: h)); await SteerQueue.shared.flush() }
             return [:]

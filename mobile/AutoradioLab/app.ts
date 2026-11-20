@@ -65,7 +65,8 @@ fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
 fs.write app:/data/themes`;
 
-const takes = newTakes();
+let takesOverlay: ReturnType<typeof newTakes> | undefined;
+const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
 const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // The About page's build rows (about.ts): the app's baked-in commit and the server's, from /health.
@@ -85,8 +86,8 @@ const sources: Sources = {
   themeFromTexture: ([doc], _s, storage) => themes.themeFromTexture(doc, storage),
   themeRemove: ([id], _s, storage) => themes.themeRemove(id, storage),
   // The Takes section (take-session.ts): the recorder's snapshot (the native source takesRecorder: the voice) in, the page out; a press is takesAct. One overlay (the shared half of the session) per process.
-  takesPage: ([rec], _s, storage) => takesPageFor(takesEnv(storage), takes, rec),
-  takesAct: ([op, arg], _s, storage) => takesAct(takesEnv(storage), takes, op, arg),
+  takesPage: ([rec, _tick], _s, storage) => takesPageFor(takesEnv(storage), takes(), rec),
+  takesAct: ([op, arg], _s, storage) => takesAct(takesEnv(storage), takes(), op, arg),
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
   accountState: ([tick, top, host]) => accountState(tick, top, host),
