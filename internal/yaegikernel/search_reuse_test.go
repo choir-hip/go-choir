@@ -201,21 +201,32 @@ func TestSearchTimeSensitiveQueriesReuseForTenMinutes(t *testing.T) {
 	}
 }
 
-func TestSearchStartWaitsOnARunningMatch(t *testing.T) {
+// A running match is answered at once by the running rule (no 15 s wait in
+// the reuse path); once it is done the same terms are answered by reuse.
+func TestSearchStartOfARunningMatchIsRefusedAtOnceThenReused(t *testing.T) {
 	f := newResearchFixture(t)
 	f.runningFor = map[string]bool{"harbor strike": true}
 	cell, _ := searchCell(t, f)
 	cell(`choir.SearchStart("harbor strike")`)
-	go func() {
-		time.Sleep(200 * time.Millisecond)
-		f.scope.searches.apply(providerFrame("s1", "keenable", true, "https://a.example/1", "https://a.example/2"))
-		f.scope.searches.apply(SearchFrame{ID: "s1", Kind: SearchFrameDone})
-	}()
-	out := cell(`b, _ := choir.SearchStart("strike harbor")
+	t0 := time.Now()
+	out := cell(`b, err := choir.SearchStart("strike harbor")
+fmt.Println(err, b.ID == "", b.Refused != "")`)
+	if d := time.Since(t0); d > 3*time.Second {
+		t.Fatalf("a same-terms running search held the cell %v; the running rule must answer at once", d)
+	}
+	if !strings.Contains(out.Stdout, "<nil> true true") || f.searchCalls.Load() != 1 {
+		t.Fatalf("a running match is refused, not sent (calls %d): %s", f.searchCalls.Load(), out.Stdout)
+	}
+	if st := out.SearchStats; st == nil || st.NotSent["search_running"] != 1 {
+		t.Fatalf("stats = %+v, want 1 search_running", st)
+	}
+	f.scope.searches.apply(providerFrame("s1", "keenable", true, "https://a.example/1", "https://a.example/2"))
+	f.scope.searches.apply(SearchFrame{ID: "s1", Kind: SearchFrameDone})
+	out = cell(`b, _ := choir.SearchStart("strike harbor")
 r, _ := choir.Searches.Get(b.ID)
 fmt.Println(b.ID, r.Done, len(r.Results))`)
 	if strings.TrimSpace(out.Stdout) != "s1 true 2" || f.searchCalls.Load() != 1 {
-		t.Fatalf("a running match must be waited on, then answered from (calls %d): %s", f.searchCalls.Load(), out.Stdout)
+		t.Fatalf("a finished match is reused (calls %d): %s", f.searchCalls.Load(), out.Stdout)
 	}
 }
 

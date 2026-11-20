@@ -494,23 +494,26 @@ func (s *ChoirScope) startSearch(query string, override, gated bool) (SearchStub
 	}
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
-	// fresh sends the search although this run holds one with the same terms.
+	// The running rule answers first, before reuse: a same-terms search that is
+	// still running is refused at once, not waited on for up to 15 s. SearchAll
+	// (gated false) applies it to each wording too.
 	if !override {
+		if id := s.searches.runningSearch(); id != "" {
+			s.noteNotSent("search_running")
+			why := runningRefusal(id)
+			s.statsMu.Lock()
+			if !s.reuseQuiet {
+				s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
+			}
+			s.statsMu.Unlock()
+			return SearchStub{Query: query, Refused: why}, nil
+		}
+		// fresh sends the search although this run holds one with the same terms.
 		if stub, ok := s.reuseSearch(query); ok {
 			return stub, nil
 		}
 	}
 	over := false
-	if gated && !override {
-		if id := s.searches.runningSearch(); id != "" {
-			s.noteNotSent("search_running")
-			why := runningRefusal(id)
-			s.statsMu.Lock()
-			s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
-			s.statsMu.Unlock()
-			return SearchStub{Query: query, Refused: why}, nil
-		}
-	}
 	if gated {
 		held, refuse := s.refuseForUnread("", override)
 		if refuse {

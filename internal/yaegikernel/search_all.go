@@ -187,6 +187,12 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 			continue
 		}
 		stub, err := s.startSearch(w.Wording, false, false)
+		if stub.Refused != "" {
+			// Another search of the run is running: this wording is not sent (the
+			// running rule, applied per wording). It is not a failure.
+			notSent(stub.Refused, "")
+			continue
+		}
 		if err != nil {
 			failures, empties = failures+1, 0
 			failReason = err.Error()
