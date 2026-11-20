@@ -97,3 +97,25 @@ quota_limited and error. So the 1,000 a day target is in practice a
 target on Keenable, and a Keenable outage would leave the paper with no
 web search. Not read: why ChatGPT search fails authentication (a
 credential question, the owner's) and why SearXNG returns nothing.
+
+## Update, 2026-11-19 (fix 4 built on lane/brief-objective)
+
+Read from the paper's console, 17:41Z to 19:18Z (77 brief lines): 51 skipped
+(66%), 22 delivered, 4 failed. No conversation had both a skipped brief and a
+delivered one, and the delivered ones were first runs of a conversation. A
+research agent's cursor on its own inbox moves when a run reads, so a later
+run of the same agent starts with the Cast already read and nothing unread.
+That is the likely shape of the skips (the console carries no origin line and
+the saved extract has no wake lines, so the count of later runs among the 51 is
+not seen). The fix takes the objective from the conversation's most recent
+earlier record, else from the open work item the run is assigned, and the brief
+line says which (`objective_from=`).
+
+The 8 s cuts: the brief's own searches took a median 5.6 s and a ninth decile
+8.0 s (110 lines, `caller=brief`) against 1.5 s and 5.2 s for a desk's own
+(224 lines). The five searches run at the same time; after the embed fix the
+live console still showed groups of five at 4 s to 8 s (21:22Z, 21:25Z) and one
+group at 1.5 s to 2 s (21:25Z). The deadline is not the defect; the work is.
+The brief now searches the objective and two more threads, not five.
+Measured on a deployed day: `slowest_ms` and the share of `the 8s deadline
+passed` among briefs.
