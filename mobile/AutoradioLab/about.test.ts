@@ -60,7 +60,7 @@ describe('aboutBuild', () => {
     expect(v.build).toBe(appCommitLine(BUILD_INFO));
     expect(Object.keys(v).sort()).toEqual(['build', 'server']); // the one Build row; no separate Commit
   });
-  test('B3 a refused, garbled or dead /health says not reported and keeps the commit', async () => {
+  test('B3 a refused, garbled or dead /health says not reported and keeps the build', async () => {
     handler = () => new Response('{}', { status: 503 });
     expect((await aboutBuild({ tick: 0 })).server).toBe('not reported');
     handler = () => new Response('<html>', { status: 200 });
