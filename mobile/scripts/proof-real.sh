@@ -30,6 +30,8 @@ reset_state() {
   S="$CONT/Library/Application Support/Autoradio"
   rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
   rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
+  # The takes' data: the shared file (app:/data/takes.json, take-session.ts) and the Swift programme's copies (takes-own.json, takes-muted.json). Every drive starts without them; the takes drive seeds the old two below.
+  rm -f "$S/takes-own.json" "$S/takes-muted.json" "$CONT"/Library/Application\ Support/exact/*/data/takes.json "$CONT"/Library/Caches/exact/*/agent/*/data/takes.json
   rm -rf "$CONT"/Library/Application\ Support/exact/*/data/theme-choice.json "$CONT"/Library/Application\ Support/exact/*/data/themes   # app:/data on a device build
   rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"
@@ -41,6 +43,13 @@ reset_state() {
   fi
   # The carry-over drill (SEED_LEGACY=1) seeds what an old build left, in THIS simulator's app container only: two preference keys (AutoradioThemeID=depth, AutoradioThemeMode=dark)
   # and one file, Application Support/Autoradio/themes/drill-user.json (a valid theme with the id drill-user). Nothing else; legacy_clean removes all three.
+  # The takes drill (SEED_TAKES=1) seeds what an old build kept for the takes, in THIS simulator's app container only: Application Support/Autoradio/takes-own.json (a handle and two own ids) and
+  # takes-muted.json (two muted voices). Shared code must carry them into app:/data/takes.json (take-session.ts carryOver) and leave these two files in place.
+  if [ -n "${SEED_TAKES:-}" ]; then
+    mkdir -p "$S"
+    printf '%s' '{"handle":"voice-drill0001","ids":["take-drilla","take-drillb"]}' > "$S/takes-own.json"
+    printf '%s' '["voice-drillm1","voice-drillm2"]' > "$S/takes-muted.json"
+  fi
   if [ -n "${SEED_LEGACY:-}" ]; then
     SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeID depth; SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeMode dark
     mkdir -p "$S/themes"
@@ -158,6 +167,39 @@ MIGRATED_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/theme-choice.json 
 ls "$CHK"/Library/Caches/exact/*/agent/*/data/themes/ "$CHK"/Library/Application\ Support/exact/*/data/themes/ 2>/dev/null > "$SHOTS/migrated-themes-dir.txt"
 legacy_clean
 
+# ---- 3a4. TAKES drill: an old build's own ids, handle and two muted voices are SEEDED (reset_state, SEED_TAKES), the app launches, the Takes section (on the Autoradio page, shared code: take-session.ts)
+# lists the two muted voices and offers Record, one voice is unmuted, and the kept file app:/data/takes.json says migrated with the carried values minus the unmuted one, the Swift programme's copies agreeing.
+# NOT covered: Record, Stop, Preview, Publish. The simulator has no microphone input the scripts can drive (nothing here feeds audio, and the agent's microphone track is unused: testing-and-debugging.md,
+# "Voice flows for agent tests"), and Publish would write a take to d@e. Those are in take-session.test.ts (S1 to S8, U3) against a fake recorder, and on a phone by hand.
+SEED_TAKES=1; export SEED_TAKES
+step "clock data"; wait_ 5000
+place radio 1500
+wait_ 9000                                            # the carry-over and the refresh run apart from the first paint (a task, then the signed-in request)
+for i in 1 2 3; do step "tap radio-scroll drag 0 -1500"; wait_ 300; done
+view real-46-takes 900
+step "tap takes-unmute-0"; wait_ 3000                 # the first muted voice (voice-drillm1): undo it
+step tree; shot real-47-takes-unmuted
+step logs
+run_drive takes light "" --touch platform
+unset SEED_TAKES
+CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
+TK_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/takes.json "$CHK"/Library/Application\ Support/exact/*/data/takes.json 2>/dev/null | head -1)
+[ -n "$TK_FILE" ] && cp "$TK_FILE" "$SHOTS/takes-data.json"
+cp "$CHK/Library/Application Support/Autoradio/takes-own.json" "$SHOTS/takes-own-mirror.json" 2>/dev/null
+cp "$CHK/Library/Application Support/Autoradio/takes-muted.json" "$SHOTS/takes-muted-mirror.json" 2>/dev/null
+# the tree before the first screenshot, and the tree between the first and the second
+tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
+tseg "$SHOTS/drive-takes.txt" real-46-takes > "$SHOTS/seg-takes.txt"; tseg "$SHOTS/drive-takes.txt" real-47-takes-unmuted > "$SHOTS/seg-takes-unmuted.txt"
+
+# The stories tapped must be ones the server can resolve (a live front page sometimes holds one that answers 502 "failed to resolve publication": that is the server's, not the app's).
+RESOLVABLE=""
+# (Only cards at the first card's depth: a card nested deeper sits in a smaller band, and a tap on one of those sometimes does not press, which is a script risk, not an app one.)
+FIRST_INDENT=$(grep -m1 '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" | sed -E 's/^( *).*/\1/' | awk '{ print length($0) }')
+SHALLOW=$(awk -v n="$FIRST_INDENT" '/\[paper-story-\/pub\// { match($0, /^ */); if (RLENGTH == n) { match($0, /\[paper-story-[^]]*\]/); id = substr($0, RSTART + 1, RLENGTH - 2); if (!seen[id]++) print id } }' "$SHOTS/drive-survey.txt")
+for id in $(echo "$SHALLOW" | head -8); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://choir.news/api/platform/publications/resolve?route=${id#paper-story-}")
+  [ "$code" = 200 ] && RESOLVABLE="$RESOLVABLE $id"
+done
 # Fail loudly rather than quietly tour nothing: no story card at all means the paper page did not draw, which the tour must not pass over.
 grep -q '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" || fail "survey" "no paper-story- line in the survey tree: the paper page showed no story card"
 # (Stories and the play button are NOT taken from the survey: it is minutes old by the time they are tapped. Each drive that taps paper content picks it fresh: fresh_paper.)
@@ -363,6 +405,23 @@ if [ -n "$THEME_DOC" ]; then
   chk "theme: the Texture's theme is listed" '\[settings-theme-depth-teal-test\]' "$TH"
   bad "theme: no problems reported" '\[settings-theme-problems\]' "$TH"
 fi
+# the takes drill (shared code over the seeded Swift files; Record and Publish are not driven, see 3a4)
+chk "takes: the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes.txt"
+chk "takes: the record control is there" '\[takes-record\]' "$SHOTS/seg-takes.txt"
+chk "takes carry-over: the first seeded muted voice is listed" 'Never play takes by voice-drillm1' "$SHOTS/seg-takes.txt"
+chk "takes carry-over: the second seeded muted voice is listed" 'Never play takes by voice-drillm2' "$SHOTS/seg-takes.txt"
+chk "takes: each muted voice has its Undo" '\[takes-unmute-1\]' "$SHOTS/seg-takes.txt"
+chk "takes: after Undo the other voice is still listed" 'Never play takes by voice-drillm2' "$SHOTS/seg-takes-unmuted.txt"
+bad "takes: after Undo the unmuted voice is gone" 'Never play takes by voice-drillm1' "$SHOTS/seg-takes-unmuted.txt"
+chk "takes carry-over: the kept file is marked migrated" '"migrated":true' "$SHOTS/takes-data.json"
+chk "takes carry-over: both own ids are in the kept file" '"ids":\[[^]]*"take-drilla"[^]]*"take-drillb"' "$SHOTS/takes-data.json"
+chk "takes carry-over: the kept file has a handle (the seeded one, or the computer's own if it has takes)" '"handle":"[^"]+"' "$SHOTS/takes-data.json"
+chk "takes: the kept file holds only the voice not unmuted" '"muted":\["voice-drillm2"\]' "$SHOTS/takes-data.json"
+bad "takes: the unmuted voice is not in the kept file" 'voice-drillm1' "$SHOTS/takes-data.json"
+chk "takes mirror: the programme's muted copy agrees (one voice)" '^\["voice-drillm2"\]$' "$SHOTS/takes-muted-mirror.json"
+chk "takes mirror: the programme's own-ids copy has both ids" '"ids":\[[^]]*"take-drilla"[^]]*"take-drillb"' "$SHOTS/takes-own-mirror.json"
+H_KEPT=$(grep -o '"handle":"[^"]*"' "$SHOTS/takes-data.json" 2>/dev/null | head -1); H_MIRROR=$(grep -o '"handle":"[^"]*"' "$SHOTS/takes-own-mirror.json" 2>/dev/null | head -1)
+if [ -n "$H_KEPT" ] && [ "$H_KEPT" = "$H_MIRROR" ]; then echo "ok: takes mirror: the programme's handle agrees with the kept file"; else echo "MISSING: takes mirror: the handle ($H_KEPT vs $H_MIRROR)"; FAILS="$FAILS [takes handle mirror]"; fi
 # the tour
 chk "settings: About names the app" '\[settings-about-app\]' "$SHOTS/drive-tour.txt"
 # About's Build row is the commit the app was built from (build-info.gen.ts, written at build time) and it is the commit under test; the server row reads /health
