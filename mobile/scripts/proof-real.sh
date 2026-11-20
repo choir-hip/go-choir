@@ -3,7 +3,7 @@
 # Sign-in: the real one is a browser device flow a script cannot approve, so the key file (REAL_KEY_FILE, default the QA key for d@e)
 # is copied with `cp` into the app's Documents as `proof-key`; the simulator build reads it into the Keychain at launch and deletes it
 # (AutoradioKit/ProofKey.swift, compiled only for the simulator). The key is never printed, logged or put on a command line.
-# Reads only: the tour taps nothing that writes or spends (no prompts, no mail). Set REAL_PROMPT=1 for the one optional
+# Reads only on the computer: the tour taps nothing that writes or spends (no prompts, no mail). The one local write is the theme choice on the phone (the Appearance tap; reset_state clears it). Set REAL_PROMPT=1 for the one optional
 # prompt-bar question at the end (a model call on d@e).
 # Assertions are on real conditions (a title is not empty, there is no error banner), never on fixture text.
 # Last line: PROOF OK, or PROOF FAILED at <step>. Screenshots: $PROOF_SHOTS.
@@ -21,16 +21,17 @@ echo "screenshots: $SHOTS"
 reset_state() {
   SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1
   sleep 2
-  # A fresh install has NO theme chosen: the default pair shows (Chrome Pastel in light, Liquid Metal in dark; ThemeDefaultsTests pins that in Swift). The older demo proofs
-  # wrote AutoradioThemeID depth into the simulator's defaults, which outlives the plist removal below, so both choices are deleted here.
-  SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioThemeID >/dev/null 2>&1
-  SIM spawn "$EXACT_SIM" defaults delete $APP AutoradioThemeMode >/dev/null 2>&1
+  # A fresh install has NO theme chosen: the default pair shows (Chrome Pastel in light, Liquid Metal in dark; themes.test.ts pins that). The simulator's preferences daemon keeps the OLD keys
+  # after the plist removal below, and the one-time carry-over (themes.ts) reads them as the person's choice: both are deleted here (the carry-over drill seeds them again on purpose).
+  for k in AutoradioThemeID AutoradioThemeMode; do SIM spawn "$EXACT_SIM" defaults delete $APP $k >/dev/null 2>&1; done
   for k in talkMode swipeLeft swipeRight; do SIM spawn "$EXACT_SIM" defaults delete $APP "AutoradioSetting.$k" >/dev/null 2>&1; done
   CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
   [ -n "$CONT" ] || fail "reset" "no app container (is the app installed?)"
   S="$CONT/Library/Application Support/Autoradio"
   rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
   rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
+  rm -rf "$CONT"/Library/Application\ Support/exact/*/data/theme-choice.json "$CONT"/Library/Application\ Support/exact/*/data/themes   # app:/data on a device build
+  rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"
   mkdir -p "$CONT/Documents"
   if [ -n "${NOKEY:-}" ]; then rm -f "$CONT/Documents/proof-key"      # a launch with no key at all (the sign-out drill before it emptied the Keychain)
@@ -38,6 +39,17 @@ reset_state() {
     cp "$KEYFILE" "$CONT/Documents/proof-key" || fail "reset" "could not place the key file"
     chmod 600 "$CONT/Documents/proof-key"
   fi
+  # The carry-over drill (SEED_LEGACY=1) seeds what an old build left, in THIS simulator's app container only: two preference keys (AutoradioThemeID=depth, AutoradioThemeMode=dark)
+  # and one file, Application Support/Autoradio/themes/drill-user.json (a valid theme with the id drill-user). Nothing else; legacy_clean removes all three.
+  if [ -n "${SEED_LEGACY:-}" ]; then
+    SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeID depth; SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeMode dark
+    mkdir -p "$S/themes"
+    printf '%s' '{"schema_version":3,"id":"drill-user","name":"Drill user","schemes":["light","dark"],"colors":{"paper":{"light":"#FFFFFF","dark":"#101418"},"fg":{"light":"#111111","dark":"#F2F2F2"},"muted":{"light":"#444444","dark":"#C8C8C8"},"accent":{"light":"#0B5CAD","dark":"#7FB8F5"},"onAccent":{"light":"#FFFFFF","dark":"#101418"}}}' > "$S/themes/drill-user.json"
+  fi
+}
+legacy_clean() {
+  for k in AutoradioThemeMode AutoradioThemeID; do SIM spawn "$EXACT_SIM" defaults delete $APP $k >/dev/null 2>&1; done
+  CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null); [ -n "$CONT" ] && rm -rf "$CONT/Library/Application Support/Autoradio/themes"
 }
 
 # ids found in a drive's tree dump: ids <file> <prefix>  -> every test id that starts with the prefix (one per line, in order)
@@ -82,6 +94,9 @@ step "tap settings-back"; wait_ 500
 step "tap settings-nav-computer"; view real-06-settings-computer 3500
 step "tap settings-back"; wait_ 500
 step "tap settings-nav-appearance"; view real-07-settings-appearance 900
+# the themes are shared code (themes.ts): a tap on a non-default theme repaints the app, then the Default entry gives the pair back
+step "tap settings-theme-lantern"; view real-07b-appearance-lantern 900
+step "tap settings-theme-default"; wait_ 500
 place textures 900; view real-08-textures-list 3500
 place files 900; view real-09-files-root 3500
 place mail 900; view real-10-mail-inbox 3500
@@ -89,6 +104,31 @@ place podcasts 900; view real-10b-podcasts 3500
 place notebook 900; view real-10c-notebook 4000
 step logs
 run_drive survey light "" --touch platform
+
+# ---- 3a2. SYSTEM DARK drive: the simulator's appearance is dark and the app has no choice and no mode (reset_state clears both), so the default pair follows the SYSTEM's scheme,
+# read from exactViewport().prefersColorScheme in shared code (themes.ts). The appearance goes back to light when the drive ends or the script stops.
+trap 'SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; rm -rf "$SCRATCH"' EXIT
+SIM ui "$EXACT_SIM" appearance dark >/dev/null 2>&1; sleep 2
+step "clock data"; wait_ 4000
+place settings 900; view real-07c-system-dark 900
+run_drive sysdark light "" --touch platform
+SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1
+
+# ---- 3a3. CARRY-OVER drill: an old build's choice (theme depth, mode dark) and one old user theme file are SEEDED (reset_state, SEED_LEGACY), the app launches, and the themes arrive in the new place:
+# Depth in dark is shown, the user theme is listed, and the kept choice file holds them. The old keys and file are removed again afterwards.
+trap 'SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; legacy_clean; rm -rf "$SCRATCH"' EXIT
+SEED_LEGACY=1; export SEED_LEGACY
+step "clock data"; wait_ 5000
+place settings 900; view real-07d-carried-over 900
+wait_ 8000; view real-07e-carried-over-later 600     # the carry-over runs apart from the first paint: the later view is the one that must show it
+step logs
+run_drive migrate light "" --touch platform
+unset SEED_LEGACY
+CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
+MIGRATED_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CHK"/Library/Application\ Support/exact/*/data/theme-choice.json 2>/dev/null | head -1)
+[ -n "$MIGRATED_FILE" ] && cp "$MIGRATED_FILE" "$SHOTS/migrated-theme-choice.json"
+ls "$CHK"/Library/Caches/exact/*/agent/*/data/themes/ "$CHK"/Library/Application\ Support/exact/*/data/themes/ 2>/dev/null > "$SHOTS/migrated-themes-dir.txt"
+legacy_clean
 
 # The stories tapped must be ones the server can resolve (a live front page sometimes holds one that answers 502 "failed to resolve publication": that is the server's, not the app's).
 RESOLVABLE=""
@@ -268,6 +308,15 @@ bad "paper: no error banner" '\[paper-status\] "(Could not|Offline)' "$SV"
 bad "paper: no sign-in card" '\[paper-signin-card\]' "$SV"
 chk "settings: the account shows a handle" '\[settings-account-handle\][^"]*"writer-' "$SV"
 bad "settings: account has no failure message" '\[settings-account-message\] "(This|Could|The server)' "$SV"
+for T in default chrome-pastel depth lantern liquid-metal newsprint signal; do chk "themes (shared code): $T is listed" "\\[settings-theme-$T\\]" "$SV"; done
+chk "themes (shared code): a non-default theme is applied by a tap (Lantern, light)" '\[settings-current\] "Showing Lantern in light' "$SV"
+bad "themes (shared code): no theme problems on the survey" '\[settings-theme-problems\]' "$SV"
+chk "themes (shared code): the system is dark, no choice: the dark default (Liquid Metal) shows" 'Showing Liquid Metal (\(dark\)| in dark)' "$SHOTS/drive-sysdark.txt"
+bad "themes (shared code): the system is dark: the light default does not show" 'Showing Chrome Pastel' "$SHOTS/drive-sysdark.txt"
+chk "themes carry-over: the old choice arrived (Depth, dark)" 'Showing Depth \(dark\)' "$SHOTS/drive-migrate.txt"
+chk "themes carry-over: the old user theme is listed" '\[settings-theme-drill-user\]' "$SHOTS/drive-migrate.txt"
+chk "themes carry-over: the kept choice file says theme depth, mode dark, migrated" '"theme":"depth","mode":"dark","migrated":true' "$SHOTS/migrated-theme-choice.json"
+chk "themes carry-over: the user theme file is in the new place" 'drill-user.json' "$SHOTS/migrated-themes-dir.txt"
 chk "textures: documents listed" '\[textures-doc-texture:' "$SV"
 if grep -qE '\[textures-make-edition\]' "$SV"; then echo "info: textures: the make-your-edition card shows (the drill computer has no edition)"; else echo "info: textures: no make-your-edition card (the drill computer has an edition now; that is state, not a defect)"; fi
 bad "textures: no error" '\[textures-message\] "(Could|Sign in)' "$SV"
