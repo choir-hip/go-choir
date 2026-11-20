@@ -21,7 +21,7 @@ members Autoradio
     lockTick = lockTick + 1
   task rereadLocked when acs.state == "locked" key=lockTick
     after(3000, bumpLock)
-  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${dm.on}|${nb.docState}|${acctInfo.status}`, pg.top, dm.on) as shape AccountView else empty()
+  resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${dm.on}|${nb.docState}|${acctInfo.status}`, pg.top, dm.on, hc.mode) as shape AccountView else empty()
   mutation acct as shape LabState
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult

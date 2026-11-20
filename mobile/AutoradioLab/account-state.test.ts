@@ -25,7 +25,7 @@ describe('accountState', () => {
   test('X1 no key: signedOut with the action and a sentence; no handle: noSignIn', async () => {
     const s = await accountState('');
     expect(s).toMatchObject({ state: 'signedOut', action: 'signIn' }); expect(s.message).toBe(WORDS.signedOut); expect(WORDS.signedOut).toContain('mail'); expect(WORDS.signedOut).not.toContain('again');
-    resetSeam(); expect((await accountState('', '', false, 20)).state).toBe('noSignIn');                 // no handle at all: no sign-in is possible here (no dead button)
+    resetSeam(); expect((await accountState('', '', false, 'none')).state).toBe('noSignIn');                 // no handle at all: no sign-in is possible here (no dead button)
   });
   test('X2 locked then readable: locked (no sign-in action), then signedIn; signedOut never appears; nothing is wiped', async () => {
     const seen: string[] = [];
@@ -88,17 +88,17 @@ describe('round 8 (seat 1 on 43200f9a7)', () => {
   });
   test('N1 no handle on a host with no native package is "noSignIn": no dead button, and it says what is true', async () => {
     resetSeam();
-    const s = await accountState('', 'paper:front', false, 20);
+    const s = await accountState('', 'paper:front', false, 'none');
     expect(s).toMatchObject({ state: 'noSignIn', action: '' }); expect(s.message).toBe(WORDS.noSignIn);
   });
-  test('U1 a signed-in cold launch never shows the sign-in banner: with no handle yet nothing is shown until the host wait ends', async () => {
+  test('U1 a signed-in cold launch never shows the sign-in card: with no handle and no host decision the answer is unknown (nothing rendered); the handle arrives and it is signedIn', async () => {
     resetSeam();
-    const p = accountState('', 'radio:', false, 400);                        // no handle yet; one arrives within the wait
-    setTimeout(() => { reply = { state: 'present' }; adoptNative(handle(), 'late'); }, 40);
-    expect((await p).state).toBe('signedIn');
+    expect((await accountState('', 'radio:', false, '')).state).toBe('unknown');
+    reply = { state: 'present' }; adoptNative(handle(), 'late');
+    expect((await accountState('', 'radio:', false, 'native')).state).toBe('signedIn');
   });
   test('D1 a demo launch never shows the banner (accountState carries the demo flag)', async () => {
-    resetSeam(); const s = await accountState('', 'radio:', true, 20); expect(s).toMatchObject({ state: 'signedIn', message: '' });
+    resetSeam(); const s = await accountState('', 'radio:', true, ''); expect(s).toMatchObject({ state: 'signedIn', message: '' });
     const app = await Bun.file(new URL('./app.ts', import.meta.url)).text(); expect(app).toMatch(/accountState: 2/);
   });
   test('R1 a later success with the same key clears "rejected"', async () => {
@@ -121,12 +121,11 @@ describe('round 8b (seat 2)', () => {
     expect(files).toContain('fileList(dm.on, fsPath, fsMode, fsSort, fsDesc, fsQuery, acs.state)'); expect(files).toContain('fileOpen(dm.on, pg.top, acs.state)');
     expect(acc).toContain('${hc.mode}|${dm.on}'); expect(acc).not.toContain('${mbx.status}');
   });
-  test('X1b a late handle never shows a sign-in card first: nothing is said until native has answered', async () => {
-    resetSeam(); resetHost();
-    const states: string[] = [];
-    const p = accountState('', 'paper:front', false, 300).then((s) => states.push(s.state));
-    expect(states).toEqual([]);                                                                  // unresolved while it waits: the contract renders nothing
-    setTimeout(() => { reply = { state: 'present' }; adoptNative(handle(), 'late'); }, 40); await p;
-    expect(states).toEqual(['signedIn']);
+  test('X1b a late handle never shows a sign-in card first: undecided is unknown, and a "none" decision is the only way to noSignIn', async () => {
+    resetSeam();
+    expect((await accountState('', 'paper:front', false, '')).state).toBe('unknown');
+    expect((await accountState('', 'paper:front', false, 'native')).state).toBe('unknown');      // native decided but its handle not bound yet: still nothing shown
+    reply = { state: 'absent' }; adoptNative(handle(), 'x');
+    expect((await accountState('', 'paper:front', false, 'native')).state).toBe('signedOut');
   });
 });
