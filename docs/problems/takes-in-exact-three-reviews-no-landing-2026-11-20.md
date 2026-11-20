@@ -85,3 +85,47 @@ adopted only when at least one id in the old own file is in the signed-in
 account's own list from the server. The cost is the same as stated above
 and a little wider: an account with no live take (never published, or all
 deleted or withdrawn) does not carry its old mutes.
+
+## The changed approach was sent back too; the lane is stopped for the owner (2026-11-20T20:18Z)
+
+Lane `exact-takes`, last commit `c534f89c0`. Nothing of it is on main. Claim
+C180 (this review accepts, p 0.5) settled false. Review in the session
+scratchpad, `review-takes/r4`.
+
+What the fourth review verified sound: the ownership proof for the ids
+(the server's list holds only the caller's live takes; an id cannot be
+another account's), the generation guards around the write and delete, the
+order of the one-step adoption, the live take discarded at sign-out, and
+the Swift, which it compiled and tested. The queue's proof run passed at
+`c534f89c0` (20:12Z), driving only the refusing branch: d@e has no live
+take, so the adopting branch has never run on a simulator.
+
+The blocking finding: the proof is for the own-ids file and the adoption
+takes the muted-voices file with it. They are two files with two silent
+deletes. If account A's muted file outlives A's sign-out on the old build
+and account B then publishes on the old build, the upgrade proves B owns
+the ids file and hands B the mutes that were A's. The reviewer reproduced
+the adoption. The reverse also holds: a current account whose old ids file
+is someone else's loses its own mutes.
+
+Belief. The muted-voices file has no owner written in it and the format
+cannot carry one. No rule adopts it safely. Two choices remain, and they
+are the owner's because one of them loses a listener's own settings:
+
+1. Carry the old ids on proof and carry no old mutes. Every upgrading
+   listener mutes again. No leak. (The reviewer's fix, and the lead's
+   recommendation: the mute list is short and the listener can see it is
+   empty.)
+2. Carry the mutes with the proven ids and accept the residual: after an
+   old-build sign-out whose delete failed, followed by a second account
+   publishing on the old build, that second account inherits the first's
+   mutes.
+
+Five should-fixes stand either way (a previous account's publish can
+unblock the next account's recorder and write its notice; the programme
+copy pushed without a generation check; stale comments describing the
+removed marker; test gaps; the proof script's check passes when the kept
+file is missing).
+
+Default taken: nothing lands; the lane is kept; no fifth round without the
+owner's choice.
