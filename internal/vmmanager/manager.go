@@ -421,12 +421,6 @@ type ManagerConfig struct {
 	// build allows it.
 	DataDiscardOnly []string
 
-	// GuestReclaimOnly turns on the guest's DAMON_RECLAIM for the computers
-	// it names (VM_GUEST_RECLAIM_ONLY; guest_reclaim.go); empty: off.
-	// GuestReclaimMinAgeS overrides its 300 s coldness floor.
-	GuestReclaimOnly    []string
-	GuestReclaimMinAgeS int
-
 	// CapsuleTunnelEnforceOnly runs the capsule egress tunnel-identity check
 	// in enforce on the computers it names (VM_CAPSULE_TUNNEL_ENFORCE_ONLY;
 	// capsule_tunnel_identity.go); everyone else keeps the image's observe.
@@ -2160,7 +2154,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if cfg.MaintenanceHold {
 			runtimeArgs = append(runtimeArgs, "choir.runtime_maintenance_hold=1")
 		}
-		runtimeArgs = append(runtimeArgs, m.guestReclaimKernelParams(cfg)...)
 		runtimeArgs = append(runtimeArgs, m.capsuleTunnelIdentityKernelParams(cfg)...)
 		runtimeArgs = append(runtimeArgs, m.checkpointCadenceKernelParams(cfg)...)
 		runtimeArgs = append(runtimeArgs, m.guestDNSKernelParams(cfg, hostIP)...)
@@ -2186,9 +2179,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.proxy_url=http://%s:8082", hostIP),
 		}
 		for _, arg := range append(legacyRuntimeArgs, guestIdentityKernelParams(cfg)...) {
-			bootArgs += " " + arg
-		}
-		for _, arg := range m.guestReclaimKernelParams(cfg) {
 			bootArgs += " " + arg
 		}
 		for _, arg := range m.capsuleTunnelIdentityKernelParams(cfg) {

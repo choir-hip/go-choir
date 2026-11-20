@@ -161,34 +161,6 @@
    "probe": "scripts/res10_balloon_stats_probe.sh"
   },
   {
-   "id": "vm_guest_reclaim_damon",
-   "kind": "host_selector",
-   "life": "release",
-   "owner": "density",
-   "class": "orange",
-   "surface": "memory",
-   "introduced": "2026-10-28",
-   "nix": [
-    "VM_GUEST_RECLAIM_ONLY"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "ids:2",
-   "nix_value": "computer-9648031f92e131adc1fb65ec455c5903,computer-71afbf1461dffabcce8eeebe558d03bd",
-   "promote": [
-    {
-     "metric": "host_rss_vs_control",
-     "bound": "no worse than control (reading not yet taken)"
-    }
-   ],
-   "retire": "delete the selector or the DAMON boot args, per the control reading",
-   "blocked_by": "a control host-RSS reading (audit: LEAVE until it exists)",
-   "note": "9648031f and 71afbf14 only; D6 never names them (D6-M20)."
-  },
-  {
    "id": "vm_capsule_tunnel_identity",
    "kind": "host_selector",
    "life": "release",

@@ -102,7 +102,7 @@ type retentionManifestLine struct {
 
 // selectorEnvKeyRE matches every per-computer selector in vmctl's
 // environment (review round 2, R2-4): the staged-feature lists
-// VM_*_ONLY (VM_GUEST_RECLAIM_ONLY, VM_CAPSULE_TUNNEL_ENFORCE_ONLY,
+// VM_*_ONLY (VM_CAPSULE_TUNNEL_ENFORCE_ONLY,
 // VM_BALLOON_STATS_ONLY, VM_DATA_DISCARD_ONLY,
 // VM_FIRECRACKER_NEXT_ONLY, VM_SNAPSHOT_DIFF_ONLY, VM_SNAPSHOT_VAULT_ONLY),
 // VMCTL_JAILER_ONLY, and the CHOIR_*_COMPUTERS and CHOIR_*_ONLY allowlists

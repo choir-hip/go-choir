@@ -140,7 +140,6 @@ func LoadConfigFromEnv() ManagerConfig {
 		log.Printf("vmmanager: VM_DATA_DISCARD is on but the Firecracker binary does not report 1.17.0 or newer; data drive discard stays off for the pinned build")
 	}
 	cfg.DataDiscardOnly = parseComputerSelector(os.Getenv("VM_DATA_DISCARD_ONLY"))
-	loadGuestReclaimFromEnv(&cfg)
 	cfg.CapsuleTunnelEnforceOnly = parseComputerSelector(os.Getenv("VM_CAPSULE_TUNNEL_ENFORCE_ONLY"))
 	loadCheckpointCadenceFromEnv(&cfg)
 	cfg.BalloonStatsOnly = parseComputerSelector(os.Getenv("VM_BALLOON_STATS_ONLY"))

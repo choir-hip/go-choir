@@ -1668,19 +1668,6 @@ in
         # launch-config hash); unnamed computers keep their exact config.
         # Read: GET localhost:8083/internal/vmctl/memory/balloon (host only),
         # or scripts/res10_balloon_stats_probe.sh. Rollback: delete the line.
-        # RES-06 guest memory return (internal/vmmanager/guest_reclaim.go,
-        # FP8 station): DAMON_RECLAIM boot arguments for the computers this
-        # selector names, so cold guest page cache is freed and free page
-        # reporting returns it to the host. Staged: one disposable test
-        # computer first (FP8 proof step 8 compares its host RSS with a
-        # control), then class:test, then the paper. A named computer cold
-        # boots once (boot arguments are in the launch-config hash).
-        # The first test computer (9648031f) has not woken since: host
-        # admission refuses its start. The second (71afbf14) is the test
-        # computer FP0's monitor keeps awake, so its host RSS can be read
-        # against its own pre-DAMON readings at similar guest usage.
-        # Rollback: delete this line and redeploy.
-        "VM_GUEST_RECLAIM_ONLY=computer-9648031f92e131adc1fb65ec455c5903,computer-71afbf1461dffabcce8eeebe558d03bd"
         # SEC-06 capsule egress tunnel identity
         # (internal/vmmanager/capsule_tunnel_identity.go): every computer runs
         # the check in observe (the guest image's
@@ -1853,9 +1840,8 @@ in
         # its staging proof (§10): observe (every act a dry run) on the idle
         # trigger, for d@e and one test computer (fp0-jobpark-1024b); never the
         # paper, the owner's computers or b@c. The code default is off.
-        # D6-M20: the two DAMON-selected computers (VM_GUEST_RECLAIM_ONLY,
-        # 9648031f and 71afbf14) are never named here, so an act never blurs
-        # which mechanism a reading measures.
+        # (DAMON_RECLAIM boot arguments, once staged on two test computers,
+        # are gone: measured negative, deleted 2026-11-20.)
         # Rollback: VMCTL_GUEST_CACHE_RETURN=off.
         # Step 2 (§10, 2026-10-26): active for the same two, after step 1's
         # observe read on d@e (scope the daemon's cgroup, swappiness_key
