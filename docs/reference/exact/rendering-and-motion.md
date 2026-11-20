@@ -145,6 +145,7 @@ Rules:
   presses; a nested text input keeps its own drags (`contract-grammar.md:1864-1868`).
 - Reduced motion is manual: read `exactViewport().prefersReducedMotion` and
   gate (`motion.md:6-24, 53-54`).
+- **Used by the themes (2026-11-20, `mobile/AutoradioLab/themes.ts`, **verified** by `themes.test.contract` on the web host):** `exactViewport()` also gives `prefersColorScheme` (`"light"` or `"dark"`; whether it follows `setScheme` once the person has chosen a mode is NOT verified: the web test driver cannot open Settings, and the themes do not depend on it, an explicit mode uses the stored mode and only System reads this fact) and `prefersReducedMotion`; declare them in the viewport shape (`bool` for the motion one, `string` for the scheme) and pass them to a TypeScript source as arguments, so the source is asked again when either changes. The test driver flips them with `prefer prefers-color-scheme dark` and `prefer prefers-reduced-motion reduce`. On an iPhone simulator with the appearance dark and no choice the dark default shows (`proof-real.sh`, 2026-11-20); not seen on a phone. A JSON file outside the app folder is imported through a symlink named in `app.json` `typescript.sources` (`"themes": "../themes"`); without that entry `contract build` fails with "source links are not captured".
 - `backdrop-filter` does not animate (`contract-for-humans.md:1036`).
 - Under the test driver the clock is virtual; transitions end on `clock settle`
   and real-time animation needs `clock +N real` (`testing-and-debugging.md`).
