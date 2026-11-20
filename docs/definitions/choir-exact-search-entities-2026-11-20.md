@@ -215,7 +215,7 @@ now:
   conjecture:
     claim: 'the paper''s web searches are mostly a hunt for a second outlet and re-asks of one question; holding re-asks on every verb and telling a run at its start which outlets the corpus already holds removes more than half, and under 1,000 a day needs the second outlet to come from the corpus (events with two outlets) and not from the web'
     test: the gateway's searches a day and searches per run after each landing, with stories a day not lower than the week before
-    edge: missing_measurement
+    edge: missing_oracle
     edge_note: the logs carry no outlet per capture, so the size of the second-outlet hold is unknown until Landing 0's fields are deployed
     status: testing
   believed_state: the phone is signed in and right; nothing from this thread is deployed yet except docs
