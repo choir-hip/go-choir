@@ -538,6 +538,9 @@ def cs(ts, run, caller):
     return (f'{PRE}{ts} corpus search computer=c captures_ms=5 captures=1 note="n" query="SECRET-Q" capture_ids= run={run} '
             f'desk=research conv=v published=1 events=1 capped=false{c}\n')
 def rb(ts, run, ms, caps, tok, outcome, reason, frm='unread'):
+    if frm is None:  # a line from before objective_from and unread existed
+        return (f'{PRE}{ts} research brief run={run} desk=research ms={ms} threads=1 queries=2 stories=3 captures={caps} passages=4 '
+                f'newest_held=2026-11-18 bytes=10 tokens_est={tok} dropped=0 outcome={outcome} reason={reason}\n')
     return (f'{PRE}{ts} research brief run={run} desk=research ms={ms} threads=1 queries=2 stories=3 captures={caps} passages=4 '
             f'newest_held=2026-11-18 bytes=10 tokens_est={tok} dropped=0 objective_from={frm} unread=1 outcome={outcome} reason={reason}\n')
 L = [PRE + "2026/11/18 20:30:00 other\n", PRE + "2026/11/18 22:10:00 other\n", sr("2026/11/18 21:30:00", "c-1", 3), sr("2026/11/18 21:31:00", "c-2", 2), sr("2026/11/18 21:32:00", "c-3", 0),
@@ -545,14 +548,15 @@ L = [PRE + "2026/11/18 20:30:00 other\n", PRE + "2026/11/18 22:10:00 other\n", s
      cs("2026/11/18 21:04:00", "c-2", "brief"),   # brief only: c-2 searched the web with no cell corpus search
      rb("2026/11/18 21:01:00", "c-1", 100, 4, 1000, "delivered", '"SECRET-REASON with spaces"'),
      rb("2026/11/18 21:04:00", "c-2", 300, 0, 0, "empty", "SECRET-WORD"),
-     rb("2026/11/18 21:05:00", "c-3", 200, 2, 2000, "failed", '"x"', "none")]
+     rb("2026/11/18 21:05:00", "c-3", 200, 2, 2000, "failed", '"x"', "none"),
+     rb("2026/11/18 21:06:00", "c-4", 200, 2, 1000, "delivered", "SECRET-OLD", None)]
 open(root + "/cr_c.log", "w").write("".join(L))
 PY
 runcorpus --fixture "$root/cr_c.log"
 check "R12 research corpus searches 4: cell 2 (one without the field), brief 2" 'grep -q "research *4 (cell 2, brief 2)" "$root/out"'
 check "R12 per run uses cell searches only: c-1 has 2, c-2 0, c-3 0 (median 0); c-2 is a web search without a cell search: 1 of 3" 'grep -q "corpus searches median 0," "$root/out" && grep -q "no corpus search at all: 1 of 3" "$root/out"'
-check "R13 briefs: 3 (delivered 1, empty 1, failed 1), median ms 200, captures 2, tokens_est 1000; no free text" 'grep -q "research briefs: 3 (delivered 1, empty 1, failed 1); median ms 200, captures 2, tokens_est 1000" "$root/out" && ! grep -q SECRET "$root/out"'
-check "R13 the brief section counts where the objective came from (unread 2, none 1)" 'grep -q "objective from: none 1, unread 2" "$root/out"'
+check "R13 briefs: 4 (one old-format line with no objective_from; delivered 2, empty 1, failed 1), median ms 200, captures 2, tokens_est 1000; no free text" 'grep -q "research briefs: 4 (delivered 2, empty 1, failed 1); median ms 200, captures 2, tokens_est 1000" "$root/out" && ! grep -q SECRET "$root/out"'
+check "R13 the brief section counts where the objective came from (unread 2, none 1); the old-format line counts nowhere" 'grep -q "objective from: none 1, unread 2" "$root/out"'
 runcorpus --fixture "$root/cr_a.log"
 check "R13 no brief lines: no brief section" '! grep -q "research briefs" "$root/out"'
 runcorpus --fixture "$root/cr_c.log" --append "$root/c.tsv"
