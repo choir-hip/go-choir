@@ -1,6 +1,6 @@
 {
-  "doc_id": "sample-theme",
-  "revision_id": "sample-theme-r3",
+  "doc_id": "demo-theme",
+  "revision_id": "demo-theme-r3",
   "theme": {
     "schema_version": 3,
     "id": "ember",

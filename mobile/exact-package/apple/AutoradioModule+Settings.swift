@@ -1,27 +1,22 @@
-// Lane file: settings, themes, accounts and Activity (lane 7). Sources and sends are declared in interface/settings.json.
-//   themeCards / themeExtras      the themes as preview cards, and the type scale and mark tokens of the one in force
-//   (settingsAccount is answered by app.ts: settings.ts)
+// Lane file: settings, accounts and Activity (lane 7). Sources and sends are declared in interface/settings.json.
+//   (the themes and settingsAccount are answered by app.ts: themes.ts, settings.ts)
 //   settingsComputer              status, Wake, Restart to update
 //   learnedInfo                   "What the paper has learned" (derived from the gesture events; lane 4 may supply its own)
 //   activityInfo                  Activity: now, the computer, the desk, the paper, the radio's turns
 //   aboutInfo                     the app and server builds
-// The spine's themeSet and schemeSet are wrapped (not replaced) so the cards and the scale repaint with them.
 import Foundation
 
 /// The lane's state, held here because an extension cannot add stored properties to the module.
 final class SettingsLane: @unchecked Sendable {
     let computer: ComputerModel
     let activity: ActivityModel
-    let themeSource: ThemeSource
     let learned: LearnedProvider
     private let lock = NSLock()
-    private var _themeStatus = ""
     private var _server = ""
-    var themeStatus: String { get { lock.lock(); defer { lock.unlock() }; return _themeStatus } set { lock.lock(); _themeStatus = newValue; lock.unlock() } }
     var server: String { get { lock.lock(); defer { lock.unlock() }; return _server } set { lock.lock(); _server = newValue; lock.unlock() } }
 
-    init(computer: ComputerModel, activity: ActivityModel, themeSource: ThemeSource, learned: LearnedProvider) {
-        self.computer = computer; self.activity = activity; self.themeSource = themeSource; self.learned = learned
+    init(computer: ComputerModel, activity: ActivityModel, learned: LearnedProvider) {
+        self.computer = computer; self.activity = activity; self.learned = learned
     }
 }
 
@@ -30,7 +25,6 @@ extension AutoradioModule {
         let computer = ComputerModel(client: ChoirComputerClient())
         let activity = ActivityModel(client: ChoirActivityClient())
         let lane = SettingsLane(computer: computer, activity: activity,
-                                themeSource: ChoirThemeSource(),
                                 learned: PreferencesLearned(prefs: { CardsState.shared.prefs }))
         computer.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["settingsComputer", "activityInfo"]) } }
         activity.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["activityInfo"]) } }
@@ -60,50 +54,7 @@ extension AutoradioModule {
             return out
         }
 
-        // Reduce Motion is the system's: the theme's reduced values apply while it is on.
-        themes.reduceMotion = {
-            Platform.reduceMotion()
-        }
-        NotificationCenter.default.addObserver(forName: Platform.reduceMotionChanged, object: nil, queue: .main) { [weak self] _ in
-            self?.touch(["theme", "themeExtras", "themeCards"])
-        }
-
-        // ---- themes
-        func cards(_ status: String = lane.themeStatus) -> [String: Any] {
-            ["rows": themes.cards().map { json($0) }, "mode": themes.schemeMode, "scheme": themes.effectiveScheme(),
-             "themeID": themes.themeID, "problems": themes.problems, "status": status]
-        }
-        handle("themeCards") { _, reply in reply(cards()) }
-        handle("themeExtras") { [unowned self] _, reply in reply(json(themes.extras())) }
-        for name in ["themeSet", "schemeSet"] {
-            if let original = handlers[name] {
-                handle(name) { [weak self] args, reply in original(args, reply); self?.touch(["themeCards", "themeExtras"]) }
-            }
-        }
         func ack(_ ok: Bool, _ message: String = "") -> [String: Any] { ["ok": ok, "message": message] }
-        handle("themeFromTexture") { [unowned self] args, reply in
-            let doc = (args["doc"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !doc.isEmpty else { lane.themeStatus = "Enter the id of a theme Texture."; touch(["themeCards"]); return reply(ack(false, lane.themeStatus)) }
-            Task { [weak self] in
-                guard let self else { return }
-                var okay = false
-                do {
-                    let t = try await lane.themeSource.fetch(doc: doc)
-                    let id = try themes.installFromTexture(t.themeJSON)
-                    let name = themes.list().first { $0.id == id }?.name ?? id
-                    lane.themeStatus = "Added \(name) from the Texture" + (t.ignored.isEmpty ? "." : " (the phone ignored: \(t.ignored.joined(separator: ", "))).")
-                    okay = true
-                } catch ChoirError.server(let status, let message) {
-                    lane.themeStatus = status == 404 ? "No theme Texture with that id." : status == 422 ? "That Texture is not a usable theme: \(message.prefix(120))" : "The server refused (\(status))."
-                } catch ChoirError.unauthorized {
-                    lane.themeStatus = "This phone's sign-in is no longer accepted."
-                } catch { lane.themeStatus = "\(error)".prefix(160).description }
-                DispatchQueue.main.async { self.touch(["themeCards", "themeList"]); reply(ack(okay, lane.themeStatus)) }
-            }
-        }
-        handle("themeRemove") { [unowned self] args, reply in
-            themes.remove(args["id"] as? String ?? ""); lane.themeStatus = ""; touch(["themeCards", "themeList", "theme", "themeExtras"]); reply(ack(true))
-        }
 
         // ---- computer
         handle("settingsComputer") { [unowned self] _, reply in

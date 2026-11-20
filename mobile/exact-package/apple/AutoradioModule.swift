@@ -90,7 +90,6 @@ public final class AutoradioModule: ExactPackage {
     /// The spine's shared kit objects: every lane reads these and none replaces them.
     var pages: OpenPages!
     var signals: Signals!
-    var themes: ThemeStore!
     let pageSources = PageSources()
     /// name -> handler. Looked up first in `later`; the integrator's switch below answers the rest.
     var handlers: [String: AutoradioHandler] = [:]
@@ -167,7 +166,6 @@ public final class AutoradioModule: ExactPackage {
         }
         SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
-        themes = ThemeStore(userDir: support.appendingPathComponent("themes"), systemScheme: { Self.systemScheme() })
         pageSources.register(NotYetPageSource())
         pageSources.register(PublicationTextSource())
         // Registration: the spine, then one line per lane (each defined in that lane's own file).
@@ -193,9 +191,6 @@ public final class AutoradioModule: ExactPackage {
         registerJoins()         // lane autoradio-joins
         Task { [choir] in await choir?.refresh() }
     }
-
-    /// The system's appearance, read from the first window (main thread).
-    static func systemScheme() -> String { Platform.systemScheme() }
 
     /// Register a handler for a source or send name.
     func handle(_ name: String, _ h: @escaping AutoradioHandler) { handlers[name] = h }

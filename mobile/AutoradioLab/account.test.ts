@@ -88,6 +88,9 @@ describe('the wipes', () => {
     const failed = await wipeAll(undefined, undefined, [{ name: 'x', run: async () => { ran.push('x'); } }, { name: 'y', run: async () => { throw new Error('no'); } }]);
     expect(ran).toEqual(['x']); expect(failed).toEqual(['y']);
   });
+  // The phone's own settings, not the account's: the theme choice and the themes the person installed (themes.ts). The Swift app kept them in UserDefaults and Application Support/themes, which no
+  // sign-out ever touched; a sign-out leaves the phone looking the way its owner set it. (Colours and a name; nothing of the account.)
+  const PHONE_KEPT = new Set(['app:/data/theme-choice.json', 'app:/data/themes']);
   const allPaths = (): string[] => {
     const dir = new URL('.', import.meta.url).pathname;
     const files = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.d.ts') && f !== 'app.ts');
@@ -105,11 +108,17 @@ describe('the wipes', () => {
     const covered = (p: string) => wipedPaths().some((w) => p === w || p.startsWith(w + '/') || p.startsWith(w + '-'));
     // `app:/data`, `app:/cache` and `app:/tmp` themselves are the roots (a `directories` default), and `app:/data/exports`, `app:/cache/mail-*.html` are named below
     const roots = ['app:/data', 'app:/cache', 'app:/tmp'];
-    const unknown = found.filter((p) => !roots.includes(p) && !covered(p) && p !== 'app:/cache/mail-' && !p.startsWith('app:/cache/mail-'));
+    const unknown = found.filter((p) => !roots.includes(p) && !covered(p) && !PHONE_KEPT.has(p) && p !== 'app:/cache/mail-' && !p.startsWith('app:/cache/mail-'));
     expect(unknown).toEqual([]);
   });
+  test('S19 the phone\'s theme (the choice and the themes under app:/data/themes, a Texture\'s included) survives a sign-out wipe: parity with the Swift AccountWipe, which never touched the UserDefaults choice or Application Support/Autoradio/themes', async () => {
+    const m = memFs(['app:/data/theme-choice.json', 'app:/data/themes/texture-ember.json', 'app:/data/themes/mine.json', 'app:/data/recent-files.json']);
+    const failed = await wipeAll(m.storage, undefined, WIPES);
+    expect(failed).toEqual([]);
+    expect([...m.files.keys()].sort()).toEqual(['app:/data/theme-choice.json', 'app:/data/themes/mine.json', 'app:/data/themes/texture-ember.json']);
+  });
   test('S8 the real wipes leave an in-memory file system empty (seeded at every path the modules name, mail files and the stamp included)', async () => {
-    const seed = [...allPaths().filter((p) => p.split('/').length > 2 && p !== PENDING_FILE).flatMap((p) => (p.endsWith('/') ? [] : [p, `${p}/child.bin`])), 'app:/data/mail/msg-1.bin', 'app:/cache/mail-1.html', STAMP_FILE];
+    const seed = [...allPaths().filter((p) => p.split('/').length > 2 && p !== PENDING_FILE && !PHONE_KEPT.has(p)).flatMap((p) => (p.endsWith('/') ? [] : [p, `${p}/child.bin`])), 'app:/data/mail/msg-1.bin', 'app:/cache/mail-1.html', STAMP_FILE];
     const m = memFs(seed);
     const failed = await wipeAll(m.storage, undefined, WIPES);
     expect(failed).toEqual([]);
@@ -402,7 +411,7 @@ describe('S17 the grants and the wipes name the same paths, exactly, in both dir
   // Not granted on purpose: app:/tmp/picked is read only (a picked file is the system's copy); the vector store and the content database are not wired to a page yet (their wipes exist for when they are).
   const WIPED_NOT_GRANTED = new Set(['app:/tmp/picked', 'app:/data/vectors', 'app:/data/content.db']);
   // Granted but not a wipe path of its own: `app:/data/exports` holds files the listener asked to export (not account data); `app:/cache` is the root the mail originals sit under (mail-*.html is removed by wipeMail).
-  const GRANTED_NOT_WIPED = new Set(['app:/data/exports', 'app:/cache']);
+  const GRANTED_NOT_WIPED = new Set(['app:/data/exports', 'app:/cache', 'app:/data/theme-choice.json', 'app:/data/themes']);   // the last two: the phone's theme (themes.ts), kept through a sign-out
   test('every wiped path is granted for read and write (a denied path fails silently), but the named exceptions', () => {
     const { read, write } = grantsOf();
     expect(wipedPaths().filter((p) => !WIPED_NOT_GRANTED.has(p)).filter((p) => !(read.has(p) && write.has(p)))).toEqual([]);

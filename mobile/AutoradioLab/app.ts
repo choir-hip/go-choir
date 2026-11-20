@@ -13,6 +13,7 @@ import { accountState } from './account-state.ts';
 import { readerDocShared } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
+import * as themes from './themes.ts';
 import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
 
@@ -56,7 +57,11 @@ fs.write app:/data/demo-leftovers-cleared
 fs.read app:/data/notebook-cache.md
 fs.write app:/data/notebook-cache.md
 fs.read app:/data/takes.json
-fs.write app:/data/takes.json`;
+fs.write app:/data/takes.json
+fs.read app:/data/theme-choice.json
+fs.write app:/data/theme-choice.json
+fs.read app:/data/themes
+fs.write app:/data/themes`;
 
 const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
@@ -64,6 +69,16 @@ const sources: Sources = {
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([raw]) => conversationInfo(raw),
   texturesList: ([at]) => texturesListShared(at),
+  // The themes (themes.ts): the system's scheme and Reduce Motion come from `exactViewport()` (the first two arguments); the choice and the user's themes are kept under app:/data.
+  theme: ([scheme, reduce], _s, storage) => themes.themeShared(scheme, reduce, storage),
+  themeList: ([scheme, reduce], _s, storage) => themes.themeListShared(scheme, reduce, storage),
+  themeExtras: ([scheme, reduce], _s, storage) => themes.themeExtrasShared(scheme, reduce, storage),
+  themeCards: ([scheme, reduce], _s, storage) => themes.themeCardsShared(scheme, reduce, storage),
+  themeMigrate: ([host], _s, storage) => themes.themeMigrate(host, storage),
+  themeSet: ([id], _s, storage) => themes.themeSet(id, storage),
+  schemeSet: ([mode], _s, storage) => themes.schemeSet(mode, storage),
+  themeFromTexture: ([doc], _s, storage) => themes.themeFromTexture(doc, storage),
+  themeRemove: ([id], _s, storage) => themes.themeRemove(id, storage),
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
   accountState: ([tick, top, host]) => accountState(tick, top, host),

@@ -22,37 +22,11 @@ enum Platform {
         }
     }
 
-    /// The system's appearance: "dark" or "light" (main thread; other threads hop to it).
-    static func systemScheme() -> String {
-        let read: () -> String = {
-            #if os(iOS)
-            let style = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.windows.first?.traitCollection.userInterfaceStyle
-            return style == .dark ? "dark" : "light"
-            #else
-            return NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? "dark" : "light"
-            #endif
-        }
-        return Thread.isMainThread ? read() : DispatchQueue.main.sync(execute: read)
-    }
-
-    /// The system's Reduce Motion setting, and the notice that it changed.
-    static func reduceMotion() -> Bool {
-        let read: () -> Bool = {
-            #if os(iOS)
-            UIAccessibility.isReduceMotionEnabled
-            #else
-            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            #endif
-        }
-        return Thread.isMainThread ? read() : DispatchQueue.main.sync(execute: read)
-    }
     #if os(iOS)
-    static let reduceMotionChanged = UIAccessibility.reduceMotionStatusDidChangeNotification
     static let becameActive = UIApplication.willEnterForegroundNotification
     static let willResign = UIApplication.willResignActiveNotification
     static let wentToBackground = UIApplication.didEnterBackgroundNotification
     #else
-    static let reduceMotionChanged = NSWorkspace.accessibilityDisplayOptionsDidChangeNotification
     static let becameActive = NSApplication.willBecomeActiveNotification
     static let willResign = NSApplication.willResignActiveNotification
     static let wentToBackground = NSApplication.didResignActiveNotification

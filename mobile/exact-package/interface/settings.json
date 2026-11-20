@@ -108,48 +108,6 @@
  },
  "names": [
   {
-   "source": "themeCards",
-   "live": true,
-   "answers": "ThemeCards",
-   "substitute": {
-    "default": {
-     "rows": [],
-     "mode": "system",
-     "scheme": "light",
-     "themeID": "",
-     "problems": [],
-     "status": ""
-    }
-   }
-  },
-  {
-   "source": "themeExtras",
-   "live": true,
-   "answers": "ThemeExtras",
-   "substitute": {
-    "default": {
-     "sizeNameplate": 36,
-     "sizeHeadline": 28,
-     "sizeH2": 19,
-     "sizeBody": 18,
-     "sizeLabel": 15,
-     "sizeMeta": 13,
-     "lineBody": 1.6,
-     "lineHeadline": 1.12,
-     "weightHeadline": 700,
-     "weightUi": 600,
-     "flipStiffness": 300,
-     "flipDamping": 22,
-     "markTumbleAS": 3.3,
-     "markTumbleBS": 5.9,
-     "markStatic": false,
-     "pressTint": false,
-     "reduceMotion": false,
-     "contrast": "AA"
-    }
-   }
-  },
-  {
    "source": "settingsComputer",
    "live": true,
    "answers": "SettingsComputer",
@@ -209,20 +167,6 @@
      "signedIn": false
     }
    }
-  },
-  {
-   "send": "themeFromTexture",
-   "options": {
-    "doc": "string"
-   },
-   "answers": "SettingsAck"
-  },
-  {
-   "send": "themeRemove",
-   "options": {
-    "id": "string"
-   },
-   "answers": "SettingsAck"
   },
   {
    "send": "computerRefresh",
