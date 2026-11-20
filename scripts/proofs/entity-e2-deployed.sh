@@ -38,7 +38,7 @@ code, body = sys.argv[1], sys.argv[2]
 if code == "404":
     print("404: a person without a page by the owner-question-1 default (try another entity)"); sys.exit(0)
 p = json.loads(body)
-print(f"name={p['name']!r} type={p['type']} mentions={p['mentions']} central={p['central_mentions']} listed={len(p['story_list'])} co={[c['name'] for c in p['co_entities']]}")
+print(f"name={p['name']!r} type={p['type']} stories={p['stories']} central={p['central_stories']} listed={len(p['story_list'])} co={[c['name'] for c in p['co_entities']]}")
 sys.exit(0 if p["story_list"] and p["story_list"][0].get("role") else 1)
 PY
 # Stranger bounds: more than 50 stories, and a malformed id.
