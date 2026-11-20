@@ -120,7 +120,8 @@ HEADER = ["hour", "runs", "started", "from_held", "not_sent", "pages_returned", 
 
 
 KNOWN_SR = {"started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read", "search_all_calls",
-            "wordings_offered", "wordings_sent", "unread_notes", "fresh_over_unread", "untagged"}
+            "wordings_offered", "wordings_sent", "unread_notes", "fresh_over_unread", "untagged",
+            "wordings_running", "searches_judged", "searches_mostly_seen", "outlets_held_max", "outlets_held_last", "resumed_segment"}
 
 
 def stamp_epoch(s):
@@ -170,7 +171,13 @@ def parse_console(text):
                        "read": kv.get("pages_read", 0), "has_new": has_new,
                        "all_calls": kv.get("search_all_calls", 0), "offered": kv.get("wordings_offered", 0),
                        "sent": kv.get("wordings_sent", 0), "unread": kv.get("unread_notes", 0), "over": kv.get("fresh_over_unread", 0),
-                       "untagged": kv.get("untagged", 0), "extra": {k: v for k, v in kv.items() if k not in KNOWN_SR}})
+                       "untagged": kv.get("untagged", 0),
+                       # the measurement fields (Landing 0 of the one-verb note); absent on older lines
+                       "has_l0": "searches_judged" in kv, "judged": kv.get("searches_judged", 0), "mostly": kv.get("searches_mostly_seen", 0),
+                       "outmax": kv.get("outlets_held_max", 0), "outlast": kv.get("outlets_held_last", 0),
+                       "running": kv.get("wordings_running", 0), "resumed": kv.get("resumed_segment", 0),
+                       "declined": {k[len("reuse_declined_"):]: v for k, v in kv.items() if k.startswith("reuse_declined_")},
+                       "extra": {k: v for k, v in kv.items() if k not in KNOWN_SR and not k.startswith("reuse_declined_")}})
             continue
         m = CS_RE.search(ln)
         if m:
@@ -296,6 +303,16 @@ def metrics(sr, cs_all, rd_all, gw, rb_all=(), ef_all=(), gw_ans=()):
     for e in sr:
         for k, v in e["extra"].items():
             r["extra_fields"][k] = r["extra_fields"].get(k, 0) + v
+    l0 = [e for e in sr if e["has_l0"]]
+    r["l0"] = None
+    if l0:
+        r["l0"] = {"lines": len(l0), "judged": sum(e["judged"] for e in l0), "mostly": sum(e["mostly"] for e in l0),
+                   "running": sum(e["running"] for e in l0), "resumed": sum(1 for e in l0 if e["resumed"]),
+                   "outlets_median": med([e["outlast"] for e in l0]), "outlets_max": max(e["outmax"] for e in l0),
+                   "declined": {}}
+        for e in l0:
+            for k, v in e["declined"].items():
+                r["l0"]["declined"][k] = r["l0"]["declined"].get(k, 0) + v
     r["new_fields"] = None
     if nw:
         r["new_fields"] = {"lines": len(nw)}
@@ -484,6 +501,12 @@ def render(r):
         if nf:
             o.append("  (%d lines carry the wording fields) search_all_calls %d, wordings_offered %d, wordings_sent %d (%s), unread_notes %d, fresh_over_unread %d, untagged %d"
                      % (nf["lines"], nf["all_calls"], nf["offered"], nf["sent"], pct(nf["sent"], nf["offered"]), nf["unread"], nf["over"], nf["untagged"]))
+    l0 = m.get("l0")
+    if l0:
+        dec = ", ".join("%s=%d" % kv for kv in sorted(l0["declined"].items())) or "none"
+        o.append("  (%d lines carry the measurement fields) searches judged %d, mostly seen (75%% or more already held) %d (%s); outlets held at the last send: median %s, largest %d; wordings refused as running %d; runs resumed after a restart (counts are one segment) %d"
+                 % (l0["lines"], l0["judged"], l0["mostly"], pct(l0["mostly"], l0["judged"]), l0["outlets_median"], l0["outlets_max"], l0["running"], l0["resumed"]))
+        o.append("  reuse declined a prior identical search, by reason: " + dec)
     if m["extra_fields"]:
         o.append("  other numeric fields on the summary lines (sums): " + ", ".join("%s=%d" % kv for kv in sorted(m["extra_fields"].items())))
     o.append("corpus searches by desk:")
