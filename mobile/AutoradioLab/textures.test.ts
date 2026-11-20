@@ -1,43 +1,44 @@
 // The Textures place's data module under bun test (textures.ts). Ported from the Swift tests this replaces (TextureDocTests.testTextureList, RealShapeTests.testTextureListRealShape and
 // testTheServersEditionIsPinnedFirst, and the sign-in wording of TextureList.load), then the states and the words:
-//  L1 the edition is pinned first, archived documents and documents with no id are hidden, an empty title is "Untitled", the meta line is "Being revised · 3 versions · date".
-//  L2 an empty list is ready with no edition.   L3 the real shape of the server's list (fractional seconds, extra fields).
+//  L1 the edition is pinned first, documents with no id are hidden, an empty title is "Untitled", the meta line is "3 versions · date". Only the fields the route sends are read.
+//  L2 an empty list is ready with no edition; a body that is not a list is an error, not an empty list.   L3 the real shape of the server's list (fractional seconds, extra fields).
 //  L4 the server's own answer to "which document is my edition" is pinned first; an edition older than the page is still shown; not found or none changes nothing.
 //  L5 the dates are UTC "MMM d, yyyy" and "" when unreadable.
 //  L6 load: two requests (the list, the edition); a missing edition answer does not fail the list.
 //  L7 the words: no key, locked, refused, unknown, any other failure; never "Loading", and "Sign in" only when signing in is the answer.
-//  L8 the source: any page but the Textures place answers the last list; another account never sees it.
+//  L8 the source: any page but the Textures place answers the last list; another account (a new account generation) never sees it.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as T from './textures.ts';
-import { SignedOutError, HTTPError, resetSeam, type Reply } from './api.ts';
+import { SignedOutError, HTTPError, resetSeam, nextGeneration, type Reply } from './api.ts';
 import { WORDS } from './words.ts';
 
 const reply = (body: unknown): Reply => ({ body, serverTime: 0, raw: '' });
-beforeEach(() => { resetSeam(); T.resetTextures(); });
+beforeEach(() => { resetSeam(); T.resetTexturesForTest(); });
 
 describe('parse (the Swift list tests)', () => {
-  test('L1 the edition is pinned first; archived and id-less documents are hidden; Untitled; the meta line', () => {
+  test('L1 the edition is pinned first; id-less documents are hidden; Untitled; the meta line', () => {
     const l = T.parseList({ documents: [
       { doc_id: 'a', title: 'Meeting notes', updated_at: '2026-11-09T10:00:00Z', revision_count: 3 },
       { doc_id: 'b', title: 'My edition', updated_at: '2026-11-08T10:00:00Z', revision_count: 1 },
-      { doc_id: 'c', title: 'Old', archived_at: '2026-01-01T00:00:00Z' },
       { title: 'no id' },
-      { doc_id: 'd', title: '', agent_revision_pending: true },
+      { doc_id: 'd', title: '' },
     ] });
     expect(l.rows.map((r) => r.address)).toEqual(['texture:b', 'texture:a', 'texture:d']);
     expect(l.hasEdition).toBe(true);
     expect(l.rows[1].meta).toBe('3 versions · Nov 9, 2026');
-    expect(l.rows[2].title).toBe('Untitled'); expect(l.rows[2].revising).toBe(true); expect(l.rows[2].meta).toBe('Being revised');
+    expect(l.rows[2].title).toBe('Untitled'); expect(l.rows[2].meta).toBe('');
     expect(T.parseList({ documents: [{ doc_id: 'x', title: 'One', revision_count: 1, updated_at: '2026-11-09T10:00:00Z' }] }).rows[0].meta).toBe('1 version · Nov 9, 2026');
-  });
-  test('L1b a document whose metadata names the edition role is the edition', () => {
-    const l = T.parseList({ documents: [{ doc_id: 'a', title: 'Notes' }, { doc_id: 'e', title: 'Morning paper', metadata: { role: 'edition' } }] });
-    expect(l.rows.map((r) => r.address)).toEqual(['texture:e', 'texture:a']);
   });
   test('L2 an empty list is ready with no edition', () => {
     const l = T.parseList({ documents: [] });
     expect(l.hasEdition).toBe(false); expect(l.status).toBe('ready'); expect(l.rows).toEqual([]);
-    expect(T.parseList(null).status).toBe('ready'); expect(T.parseList({}).rows).toEqual([]);
+  });
+  test('L2b a 200 that is not a list (null, [], an object without documents, a string) is an error, not an empty ready list', async () => {
+    for (const body of [null, [], {}, { documents: null }, 'ok']) {
+      expect(() => T.parseList(body)).toThrow();
+      const l = await T.loadTextures({ json: async (p) => reply(p.endsWith('/edition') ? { found: false } : body) });
+      expect(l.status).toBe('error'); expect(l.message).toMatch(/^Could not load your documents\./); expect(l.rows).toEqual([]);
+    }
   });
   test('L3 the real shape: fractional seconds, extra fields, one row, five versions', () => {
     const l = T.parseList({ documents: [{ doc_id: 'd1', owner_id: 'o', title: 'Harbor notes', computer_id: 'computer-x', trajectory_id: 't', current_revision_id: 'r4', current_version_number: 4,
@@ -102,7 +103,8 @@ describe('the source', () => {
     const first = await T.texturesListShared('textures:', net);
     expect(first.rows.length).toBe(1); expect(n).toBe(2);
     expect((await T.texturesListShared('radio:', net)).rows.length).toBe(1); expect(n).toBe(2);       // the last list, no request
-    T.resetTextures();
-    expect((await T.texturesListShared('radio:', net)).rows).toEqual([]);                          // a reset (another account) never shows the last one
+    nextGeneration();                                                                              // another account: the last list is not served, and is dropped
+    expect((await T.texturesListShared('radio:', net)).rows).toEqual([]);
+    expect(n).toBe(2);
   });
 });

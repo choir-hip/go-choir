@@ -22,12 +22,7 @@ component TextureRowView
           if pinned
             text "YOUR EDITION" font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing="0.08em" color=th.muted
           text r.title font-family=th.fontHead font-size="-exact-title3" font-weight=600 line-height=1.2 color=th.fg text-align="left"
-          row align-items="center" gap=8
-            if r.revising
-              // A still glyph, not a spinner: a looping indeterminate progress on this page kept a sideways swipe from reaching the deck
-              // (the deck did not cycle past Textures while a document was being revised).
-              image "symbol:sparkles" color=th.accent aria-label="Being revised"
-            text r.meta font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left"
+          text r.meta font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left"
 
 component TexturesPage
   inject

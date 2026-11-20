@@ -348,7 +348,7 @@ Still Swift, and why (the substituted sources of the Android log):
 - Voice and audio, owed in Kotlin: `voiceProfile`, the mic, speech, on-device models, `barState`'s voice fields, `radioPage`/`radioView`, `queueView`/`queueAdd` (the run sheet player), `podcastNow`, the deck's
   audio names. Not stubbed: they answer NotSupported and the pages that need them draw their idle state.
 - Plain server reads not yet moved (cheapest next): `takesPage` (takes.ts has `page`, but the Swift owns the kept ids and the audio), `shelfList/Doc/Chapter/Find/Follow` (the books/Reader shelf: Swift `ReaderShelf`),
-  `texturesList` (the Textures place), `textureEditInfo`, `editionPicks`, `conversationInfo`, `themeList`/`theme` (themes are Swift data; the default theme is substituted), `signalList`.
+  `textureEditInfo`, `editionPicks`, `conversationInfo`, `themeList`/`theme` (themes are Swift data; the default theme is substituted), `signalList`.
 - The Swift `OpenPages` is NOT removed: Swift-initiated opens (the bar's ask-about-this-page, the voice) go through it. Removing it needs those to tell shared code through a one-way call that Android may lack.
 - Contracts that relied on `sf/...` symbols (drawn only on Apple) and `-exact-exit-animation` (refused on Android) have not been audited.
 
