@@ -120,49 +120,86 @@ needs already exist in `internal/server`.
 
 The order puts the two-writer safety before any overlap can happen.
 
-### G1. The spend files are safe for two writers (red)
+### G1. The spend files are safe for two writers (red; delivered, 418a9bf0c and its follow-up)
 
-Scope, small enough for one builder in about an hour:
+What was built (`internal/gateway/paid_budget.go`, `anthropic_relay.go`,
+`spend_file_lock.go`, `cmd/gateway/main.go`):
 
-- `internal/gateway/paid_budget.go`: `Record` adds the call to an unsaved
-  delta as well as to memory. `saveLocked` (`:221`) takes an exclusive
-  `flock` on `paid-spend.json.lock`, reads the file, rolls the day if
-  needed, adds the delta, writes a temp file with a unique name
-  (`os.CreateTemp` in the same directory), renames it, sets the in-memory
-  record to the merged one, clears the delta, and unlocks. `Refusal` then
-  sees the other process's spend after each save.
-- `internal/gateway/anthropic_relay.go`: the same for `saveSpendLocked`
-  (`:296`), per computer.
-- No new setting. A lock that cannot be taken in 5 s logs and keeps the
-  delta for the next save (a deadline, not a switch).
+- Each ledger (the paid ledger and the relay's per-computer day spend) keeps
+  an unsaved delta by UTC day next to its in-memory record. `Record` and
+  `charge` add to both under the ledger's mutex and kick a flusher
+  goroutine; a guest's call never waits for the file lock or the disk.
+- The flusher (`spendSaver`) saves: it takes an exclusive `flock` on
+  `<file>.lock` (5 s deadline, then the delta is kept and the save retried
+  each second), reads the file, copies the delta under the mutex, adds the
+  copy to the day each call was made on (a finished day's calls land in
+  `prev`; a day the file has not reached rolls it first), writes a uniquely
+  named, fsynced temp file and renames it, then takes the merged record into
+  memory under the mutex, subtracting the saved copy so calls made during
+  the save are neither lost nor doubled. The file format is unchanged.
+- A file that is absent is empty (memory is written whole). A file that is
+  present but cannot be read is never moved or written over; the save errors
+  and keeps the delta. A file that is read but corrupt (truncated, empty,
+  wrong type, no day) is set aside under the lock to
+  `<file>.bad-<UTC time>` (mode 0600, bytes kept, never deleted by code),
+  at load and at save, logged loudly and counted in the status; the ledger
+  continues from its own memory and writes a fresh file. Two processes that
+  see the same bad file: the lock makes one mover; the second finds the fresh
+  file and merges into it. The loss is one visible event (the spend only the
+  old file held), not every restart.
+- The day rolls forward only (`day > recorded day`); a file or clock behind
+  never moves today's spend into `prev`. The relay keeps its own memory when
+  its clock is behind the file and counts the charges it drops (a finished
+  day: nothing reads one) in the status and the log.
+- `Refusal` and the relay's cap read memory, which holds this process's own
+  spend plus what the last merge brought in. A process therefore sees the
+  other's spend when its own next save lands (right after each of its own
+  calls). Worst case over an owner-set cap during the overlap: the calls the
+  draining process finishes after the new one's last save; for the relay up
+  to 8 admitted calls per computer instead of 4. Accounting is exact; only
+  admission overlaps.
+- `GET /provider/v1/spend` carries `paid_spend.persistence` and
+  `relay_persistence` (unsaved calls, last error and time, last save, error
+  lines logged, bad files moved and the last name, dropped charges), and the
+  hourly summary line adds the same when something is wrong.
+- `cmd/gateway` flushes both files in a shutdown hook after the server has
+  drained. A crash loses the calls not yet saved: those made during one
+  healthy save (milliseconds); while saves fail, every call since the last
+  good save (the status counts them). `writeSpendFile` fsyncs the file, not
+  the directory, so a power loss can revert the last rename.
+- Rules for operators: do not delete `<file>.lock` while the gateway runs
+  (exclusion depends on its inode); do not restore a spend file from a
+  backup while the gateway runs (the process keeps its memory and would not
+  rewrite it); to repair, write at least the totals `persistence` and the
+  hourly line show plus what the old file held.
+
+Failure list the tests answer (`internal/gateway/spend_two_writers_test.go`):
+two ledgers on one file sum their calls, per computer for the relay; the
+other process's day turn; a killed writer's temp and lock files; a late
+starter loads the merged total; `Refusal` and the relay cap see the merged
+total; a held lock keeps the delta and loses nothing; a bad file of each kind
+is moved aside at load and at save, once for two processes, and a restart
+moves nothing; an unreadable file is not moved; the day never rolls backwards
+(`b.Snapshot()` and `b.Refusal()` after the other writer turned the day);
+calls during a save are not lost or doubled; goroutines writing two ledgers
+at once keep every call; the lock wait is never on the call path; an
+unopenable lock file is surfaced; dropped relay charges are counted.
 
 Protected surfaces: the owner's spending caps (paid budget, relay daily
 tokens), gateway and provider calls.
 
-Failure list:
-
-1. Two `PaidSpend` values on one file record calls in turn: the file's day
-   total is the sum of both.
-2. The same for the relay, per computer.
-3. One process saves after the UTC day turned and the other has not rolled:
-   no call is counted on the wrong day.
-4. A temp file left by a killed writer does not block or corrupt the next
-   save.
-5. A process that starts after another has saved loads the merged total.
-6. `Refusal` refuses once the merged total passes the budget, though this
-   process alone is under it.
-
 Deployed proof on d@e: there is no overlap before G4, so G1's deployed
-proof is that nothing regressed: after the deploy, the paid spend file's
-`calls` for the day keep rising with d@e's calls (d@e makes a priced call;
-the file's count rises by one within a minute). The two-writer property is
-proven in G4's drill, where both processes write.
+proof is that nothing regressed: read `paid_spend.providers.<p>.calls` and
+`paid_spend.persistence` from `GET /provider/v1/spend`, make one priced d@e
+call, and within a minute `calls` is one higher, `unsaved_calls` is 0,
+`last_error` is absent and the journal has no `spend file not saved` or
+`SPEND FILE CORRUPT` line. The two-writer property is proven in G4's drill.
 
-Rollback: revert G1. The file format is unchanged.
+Rollback: revert G1. The file format is unchanged; a leftover `.lock` or
+`.bad-*` file is harmless.
 
 A crash in the middle: `flock` is released by the kernel when the process
-dies. The rename is atomic, so the file is the old total or the new one.
-The unsaved delta of the dead process is lost, as a crash loses it today.
+dies; the rename is atomic, so the file is the old total or the new one.
 
 Claim for the ledger: "In G4's first deploy with a call draining on the old
 instance, the paid spend file's day `calls` after the drain equals the
