@@ -218,7 +218,8 @@ now:
     - 'entity-e2 72532469b: accepted with should-fixes, done; next train'
     - 'last-switches (W3): DAMON and event-wakes in review; owner_act_mode held'
     - 'root-desk-r3 7a6d66dc4 (W2): STOPPED for the owner after a sixth send-back by both seats; docs/problems/texture-root-desk-six-reviews-no-landing-2026-11-20.md says why (a wall-clock time is the wrong cursor; the store needs a commit sequence) and what is asked'
-    - 'snapshot-stream (H1 S1), dispatch-deadlines, search-reask-hold: building'
+    - 'snapshot-stream 0873aa1fc (H1 S1): STOPPED for the owner after a third send-back by both seats; the budget problem record says why and recommends raising the 90-minute budget as the interim relief'
+    - 'dispatch-deadlines, search-reask-hold (third review): building or in review'
     - 'exact-demo-gone (D2), exact-themes, exact-convo-edit, design-rules-fix: mobile, through the Mac queue'
   conjecture:
     claim: 'the paper''s web searches are mostly a hunt for a second outlet and re-asks of one question; holding re-asks on every verb and telling a run at its start which outlets the corpus already holds removes more than half, and under 1,000 a day needs the second outlet to come from the corpus (events with two outlets) and not from the web'
