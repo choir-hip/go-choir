@@ -138,7 +138,7 @@ paper (critical_protected) while it works. Recorded 2026-11-01 (§12): yes.
 | Free page hinting | never sent (developer preview, documented corruption race) | nowhere | n/a |
 | Balloon inflation (`PATCH /balloon`) | **none**: `fcapi.go` has `Balloon` and `BalloonStatistics` (GET) only | nowhere | n/a |
 | virtio-mem hotplug and unplug | `memory_hotplug.go`, `unplugBeforeSnapshot` | `VM_MEMORY_HOTPLUG=off` | deleted 2026-10-26 (`6013d77d3`); moved only the hotplug region |
-| DAMON_RECLAIM boot arguments | `guest_reclaim.go` (`VM_GUEST_RECLAIM_ONLY`) | two test computers | negative or unread (§2) |
+| DAMON_RECLAIM boot arguments | deleted 2026-11-20 (`guest_reclaim.go`, `VM_GUEST_RECLAIM_ONLY`; measured negative, owner ruled delete) | none | negative (§2); the two test computers cold boot once without the arguments |
 | `memory.reclaim` on a capsule cgroup at teardown | `internal/capsule/teardown_reclaim.go`; raw write `job_memory.go` `writeCgroupFile` (unexported) | every guest (`CHOIR_CAPSULE_TEARDOWN_RECLAIM`, default on) | D3 drill; part of outcome C's burst end |
 | Guest memory reader | `internal/guestmem` (meminfo incl. `Active(file)`, `Inactive(file)`, `Shmem`, `Dirty`; memory by cgroup; page cache by file tree) | every guest, read only | SDC RES-07 |
 | Guest memory-return report | `internal/server/debug_memreturn.go` on `procmem`: DAMON, reporting order, balloon features, buddyinfo, vmstat | every guest | bunch 87, 102 |
@@ -164,7 +164,7 @@ implementation; `MemoryController.SetBalloonTargetMiB` in
   and cache free). Whether reclaimed cache alone forms reportable 2 MiB
   blocks at the same ratio is S2's first measured question (§10 step 2);
   a large `freed_not_returned` share is S6's trigger.
-- **DAMON** is built and selected on two test computers; its one reading
+- **DAMON** (superseded 2026-11-20: the boot arguments and `VM_GUEST_RECLAIM_ONLY` are deleted, measured negative, no reading will be taken) was built and selected on two test computers; its one reading
   showed cache 1,055 to 1,024 MiB in 16 idle minutes and host RSS flat.
   Whether it ran is unknown; its DAMON-on reading is owed.
 
@@ -567,7 +567,7 @@ before and after.
 ### 5.5 The paper and always-busy computers
 
 Excluded from S2 to S4 by class. S5 is gated:
-1. **The DAMON reading** (owed since 10-22) picks the shape. DAMON frees
+1. **The DAMON reading** (owed since 10-22; superseded 2026-11-20, DAMON deleted unread) picked the shape. DAMON frees
    cold cache with refaults flat: the paper joins `VM_GUEST_RECLAIM_ONLY`,
    taking effect at its next planned, marker-backed refresh (boot args are
    in the launch-config hash). DAMON does not: the paper gets `busy_cold`
@@ -878,7 +878,7 @@ list, or `off`.
 
 ### S5: always-busy computers (red, tier 2)
 
-Gates: the DAMON reading (R5) and a recorded owner decision (§12). The
+Gates: the DAMON reading (R5; superseded 2026-11-20, DAMON deleted) and a recorded owner decision (§12). The
 owner decision is recorded (2026-11-01). R5 was never taken; the branch
 built is the one section 5.5 names for "DAMON does not": `busy_cold`
 through the route, the pressure trigger, and (revision 5, on the owner's
@@ -1064,7 +1064,7 @@ D7 (the density bench) records D6's numbers with the rest.
   /var/lib/go-choir/vm-state/<vm>/data.img` for d@e.
 - **R4. Restored-guest discard:** on a computer woken from a snapshot,
   `RssAnon` and `RssFile` before and after an act.
-- **R5. The DAMON-on reading** owed since 10-22 (S5's gate).
+- **R5. The DAMON-on reading** owed since 10-22 (S5's gate). Superseded 2026-11-20: DAMON is deleted.
 - **R6. Firecracker balloon features, at each pinned tag:** the feature
   bits the device offers (source read): no `VIRTIO_BALLOON_F_PAGE_POISON`.
   Done for v1.17.0 on 2026-10-26 (§5.1 pin 3); repeat at every bump.

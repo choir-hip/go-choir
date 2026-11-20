@@ -1,80 +1,68 @@
 package vmmanager
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 )
 
-// RES-06, P4 of the FP8 station: proactive reclaim of cold guest page cache
-// through the guest kernel's built-in DAMON_RECLAIM, turned on per computer
-// by boot arguments. Failure modes guarded:
-//  1. reaching a computer nobody selected (an empty list selects none, and
-//     an unselected launch's boot args are byte-identical to today's);
-//  2. reclaiming hot pages (min_age is a floor; nothing younger is reclaimed);
-//  3. DAMON deactivating exactly when the guest is full of cache (the
-//     default low watermark, 20% free, would turn it off; ours is 0.5%);
-//  4. paging out anonymous memory in a guest without swap (skip_anon);
-//  5. a malformed age making a boot argument the kernel rejects.
-
-func TestGuestReclaimBootArgsPerComputer(t *testing.T) {
+// Failure list (W3): the DAMON_RECLAIM boot arguments, VM_GUEST_RECLAIM_ONLY
+// and its min-age variable are gone. The experiment measured negative (ledger
+// 2026-10-22: no host memory returned in the idle window) and the owner ruled
+// it deleted; the active mechanism is the cache return in internal/vmctl.
+//  1. A host that still carries the old variables (selecting every computer)
+//     must launch a guest whose boot arguments hold no damon_reclaim
+//     parameter, for a formerly selected computer and an unselected one, on
+//     the microvm branch real hosts take (StoreDiskPath and kernel params set)
+//     and on the legacy branch.
+//  2. The variables change nothing else: with them set, every computer's boot
+//     arguments are byte-identical to those with them unset, which pins that
+//     only the two formerly named computers' launch hashes moved (they lose
+//     the six arguments); the golden launch hash (TestLaunchConfigGolden) pins
+//     the rest.
+//  3. The arguments are not empty: the guest still gets its network and
+//     service URLs.
+func TestNoDamonBootArgsWhateverTheEnvironment(t *testing.T) {
+	build := func(t *testing.T, withOldEnv bool) *Manager {
+		if withOldEnv {
+			t.Setenv("VM_GUEST_RECLAIM_ONLY", "*")
+			t.Setenv("VM_GUEST_RECLAIM_MIN_AGE_S", "120")
+		}
+		cfg := LoadConfigFromEnv()
+		cfg.StateDir = t.TempDir()
+		cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
+		cfg.RootfsPath = "/opt/go-choir/guest/rootfs.ext4"
+		return NewManager(cfg)
+	}
 	selected := balloonTestVMConfig()
 	selected.WarmnessClass = "test"
 	other := balloonTestVMConfig()
 	other.VMID = "vm-other"
-
-	base := balloonTestManager(t, nil)
-	want := bootArgsOf(t, base.buildFirecrackerConfig(other, 9001))
-	if strings.Contains(want, "damon_reclaim") {
-		t.Fatalf("default boot args carry damon_reclaim: %s", want)
-	}
-
-	mgr := balloonTestManager(t, func(c *ManagerConfig) { c.GuestReclaimOnly = []string{"class:test"} })
-	if got := bootArgsOf(t, mgr.buildFirecrackerConfig(other, 9001)); got != want {
-		t.Fatalf("an unselected computer's boot args changed:\n got %s\nwant %s", got, want)
-	}
-	args := bootArgsOf(t, mgr.buildFirecrackerConfig(selected, 9001))
-	for _, p := range []string{
-		"damon_reclaim.min_age=300000000",
-		"damon_reclaim.wmarks_high=950",
-		"damon_reclaim.wmarks_mid=900",
-		"damon_reclaim.wmarks_low=5",
-		"damon_reclaim.skip_anon=Y",
-		"damon_reclaim.enabled=Y",
+	for name, branch := range map[string]func(VMConfig) VMConfig{
+		"microvm": func(c VMConfig) VMConfig {
+			c.StoreDiskPath = "/var/lib/go-choir/store.img"
+			c.KernelParams = "root=fstab init=/nix/store/x-init regInfo=/nix/store/x-reg"
+			return c
+		},
+		"legacy": func(c VMConfig) VMConfig { return c },
 	} {
-		if !strings.Contains(" "+args+" ", " "+p+" ") {
-			t.Fatalf("selected boot args lack %s: %s", p, args)
-		}
-	}
-	if !strings.HasSuffix(args, " damon_reclaim.enabled=Y") {
-		t.Fatalf("enabled must come last, after its parameters: %s", args)
-	}
-
-	aged := balloonTestManager(t, func(c *ManagerConfig) {
-		c.GuestReclaimOnly = []string{"*"}
-		c.GuestReclaimMinAgeS = 90
-	})
-	if a := bootArgsOf(t, aged.buildFirecrackerConfig(other, 9001)); !strings.Contains(a, "damon_reclaim.min_age=90000000 ") {
-		t.Fatalf("min age override missing: %s", a)
-	}
-}
-
-func TestGuestReclaimConfigFromEnv(t *testing.T) {
-	t.Setenv("VM_GUEST_RECLAIM_ONLY", "")
-	t.Setenv("VM_GUEST_RECLAIM_MIN_AGE_S", "")
-	if cfg := LoadConfigFromEnv(); len(cfg.GuestReclaimOnly) != 0 || cfg.GuestReclaimMinAgeS != 0 {
-		t.Fatalf("default must be off: %v %d", cfg.GuestReclaimOnly, cfg.GuestReclaimMinAgeS)
-	}
-	t.Setenv("VM_GUEST_RECLAIM_ONLY", "computer-1,class:test")
-	t.Setenv("VM_GUEST_RECLAIM_MIN_AGE_S", "120")
-	cfg := LoadConfigFromEnv()
-	if !reflect.DeepEqual(cfg.GuestReclaimOnly, []string{"computer-1", "class:test"}) || cfg.GuestReclaimMinAgeS != 120 {
-		t.Fatalf("env = %v %d", cfg.GuestReclaimOnly, cfg.GuestReclaimMinAgeS)
-	}
-	for _, bad := range []string{"-5", "0", "x", "100000"} {
-		t.Setenv("VM_GUEST_RECLAIM_MIN_AGE_S", bad)
-		if got := LoadConfigFromEnv().GuestReclaimMinAgeS; got != 0 {
-			t.Fatalf("min age %q accepted as %d; want the default", bad, got)
-		}
+		t.Run(name, func(t *testing.T) {
+			clean := build(t, false)
+			old := build(t, true)
+			for _, vm := range []VMConfig{branch(selected), branch(other)} {
+				want := bootArgsOf(t, clean.buildFirecrackerConfig(vm, 9001))
+				got := bootArgsOf(t, old.buildFirecrackerConfig(vm, 9001))
+				if strings.Contains(got, "damon_reclaim") {
+					t.Fatalf("boot args carry damon_reclaim: %s", got)
+				}
+				if got != want {
+					t.Fatalf("the retired variables changed %s's boot args:\n got %s\nwant %s", vm.VMID, got, want)
+				}
+				for _, p := range []string{"ip=", "choir.gateway_url="} {
+					if !strings.Contains(got, p) {
+						t.Fatalf("boot args lack %s: %s", p, got)
+					}
+				}
+			}
+		})
 	}
 }

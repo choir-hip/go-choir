@@ -194,7 +194,7 @@ step_7() {
 step_8() {
 	local pid
 	fp8_target
-	manual "owed first: free page reporting reads (LR report steps 3 to 5) on a test computer without reclaim; then VM_GUEST_RECLAIM_ONLY=<second test computer id> (nix + deploy) and a cold boot of it"
+	manual "owed first: free page reporting reads (LR report steps 3 to 5) on a test computer without reclaim; then (retired 2026-11-20: VM_GUEST_RECLAIM_ONLY and the DAMON boot arguments are deleted, so the six-argument check below cannot pass)"
 	node_b_sh "grep -o 'damon_reclaim\\.[a-z_]*=[^ \"]*' $VMSTATE/$T_VM/fc-config.json | sort -u"
 	if [ "$PROOF_DRY" != 1 ]; then
 		[ "$(node_b_q "grep -o 'damon_reclaim\\.[a-z_]*=' $VMSTATE/$T_VM/fc-config.json | sort -u | wc -l | tr -d ' '")" -ge 6 ] && pass "six damon_reclaim.* boot args" || fail "fewer than six damon_reclaim.* boot args"
