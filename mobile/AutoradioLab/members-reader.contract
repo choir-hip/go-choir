@@ -1,9 +1,10 @@
 // Lane members file (reader): the reader's and the Textures place's resources, states and actions, as if written in the root.
 // Owned by the reader lane. The child components (reader.contract, textures.contract) `inject` these by name; each name is
 // in lane 3's band of the `provide` list in app.contract.
-use readerDoc, texturesList, readerFollow, readerAim from "@choir/autoradio"
+use readerDoc, readerFollow, readerAim from "@choir/autoradio"
 use readerAimSet, readerStop, readerRestore, readerReload, readerOpenExternal, readerFollowSet from "@choir/autoradio"
-use ReaderDoc, TextureList, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@choir/autoradio"
+use ReaderDoc, ReaderFollowInfo, ReaderAimInfo, ReaderAck from "@choir/autoradio"
+use TextureList from "./textures-types.contract"
 
 members Autoradio
   // The page in front is a story or a document (readerDoc answers "loading" for any other address).
@@ -11,12 +12,12 @@ members Autoradio
   resource rdocn = readerDoc(address=pg.top) as shape ReaderDoc else empty()
   resource rdocs = readerDocShared(pg.top, noNative) as shape ReaderDoc else empty()
   derive rdoc = noNative ? rdocs : rdocn
-  // The Textures place reloads each time it is the page in front.
-  resource tlist = texturesList(at=pg.top) as shape TextureList else empty()
+  // The Textures place reloads each time it is the page in front (textures.ts, shared code: both platforms), and again when a document was stopped, restored or reloaded (`rack` refreshes it: the revising marks change).
+  resource tlist = texturesList(pg.top) as shape TextureList else empty()
   // The block and sentence the radio is reading (set by the radio); what the bar's prompt is aimed at.
   resource rfollow = readerFollow() as shape ReaderFollowInfo else empty()
   resource raim = readerAim() as shape ReaderAimInfo else empty()
-  mutation rack as shape ReaderAck
+  mutation rack as shape ReaderAck refreshes tlist
   mutation raimm as shape ReaderAimInfo
   mutation rfollowm as shape ReaderFollowInfo
 

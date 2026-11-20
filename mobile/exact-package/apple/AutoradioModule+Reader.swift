@@ -1,6 +1,5 @@
 // Lane file: reader. Owned by the reader lane (mobile/README.md, "File ownership"). The reader's sources and sends:
 //   readerDoc(address)    the document at a pub: or texture: address, as blocks of runs, citations, sources, versions
-//   texturesList(at)      the listener's documents (reloaded each time the Textures page is the page in front)
 //   readerFollow          the block and sentence the radio is reading (set by lane 1 through ReaderFollow.shared.set)
 //   readerAim             what the bar's prompt is aimed at: a document or one block of it
 // View: web-page (WebPageView), the source page in place. Sends: readerOpenExternal, readerAimSet, readerStop (stop the desk's revision), readerRestore (a version as latest), readerReload, readerPrefetch, readerFollowSet.
@@ -81,8 +80,6 @@ extension AutoradioModule {
     func registerReader() {
         pageSources.register(ReaderPageSource())
         ReaderFollow.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["readerFollow"]) } }
-        // Only ever read and written on the main thread: Exact runs every handler there, and the write below hops to it.
-        var lastList = TextureList()
 
         handle("readerDoc") { [unowned self] args, reply in
             let address = args["address"] as? String ?? ""
@@ -108,13 +105,6 @@ extension AutoradioModule {
                 }
             }
         }
-        handle("texturesList") { [unowned self] args, reply in
-            guard (args["at"] as? String ?? "") == "textures:" else { return reply(json(lastList)) }
-            Task { [weak self] in
-                let l = await TextureList.load()
-                DispatchQueue.main.async { lastList = l; reply(self?.json(l) ?? [:]) }
-            }
-        }
         handle("readerFollow") { [unowned self] _, reply in reply(json(ReaderFollow.shared.info)) }
         handle("readerAim") { [unowned self] _, reply in reply(json(ReaderAim.shared.info)) }
 
@@ -131,14 +121,14 @@ extension AutoradioModule {
             let address = args["address"] as? String ?? ""
             Task { [weak self] in
                 await ReaderStore.shared.cancelRevision(document: address)
-                DispatchQueue.main.async { self?.touch(["readerDoc", "texturesList"]); reply(["ok": true]) }
+                DispatchQueue.main.async { self?.touch(["readerDoc"]); reply(["ok": true]) }
             }
         }
         handle("readerRestore") { [unowned self] args, reply in
             let address = args["address"] as? String ?? "", version = args["version"] as? String ?? ""
             Task { [weak self] in
                 let ok = await ReaderStore.shared.restore(document: address, revisionAddress: version)
-                DispatchQueue.main.async { self?.touch(["readerDoc", "texturesList"]); reply(["ok": ok]) }
+                DispatchQueue.main.async { self?.touch(["readerDoc"]); reply(["ok": ok]) }
             }
         }
         // The stack's neighbours: the card above and below the one on top are fetched and decoded now, so a swipe finds them held.

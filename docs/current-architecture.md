@@ -115,6 +115,8 @@ report). Everything below is **built** unless marked; none of it has been heard 
 
 **Signed out (2026-11-20, built in shared Exact code, proven on the simulator drive of the queue's `real` mode, not yet seen by the owner on the phone).** A phone with no key says so: a row above the bar with one Sign in action (the browser device flow), on every page. A key that cannot be read before first unlock says "Unlock your phone to continue"; a key the server refused says to sign in again. The paper reads signed out, and the radio reads the public front page aloud (the programme stays private); on a host with no native package the radio lists the stories and opens them. The native Swift pages still word a locked phone as "sign in" (listed in the problem record).
 
+**The Textures place's list is shared Exact code (2026-11-20, built; proven on the simulator drive).** `textures.ts` lists the listener's documents with the edition pinned first on both platforms; the Swift list is deleted. Opening a document is still the Swift reader.
+
 **What plays next, in the order skip and end-of-item consult.**
 1. `PlayQueue` (`PlayQueue.swift`): the explicit queue of stories, pages, documents, audio and clips; the DJ's ops and the reader's taps edit it. Its own comment says it is "the only thing that decides what plays next"; the code does not bear that out.
 2. The player's text queue (`LiveAudio.swift` `dequeue()`): texts queued behind the current one (mail's "Read it to me").
