@@ -1,0 +1,8 @@
+// The shape of the editor's state. Declared here and answered by `app.ts` (texture-edit.ts: `textureEditInfo`, `textureEdit`, `textureFlush`); it was the Swift package's (interface/textedit.json)
+// before the editor moved to shared code. status: idle | dirty | saving | saved | offline | failed. label is the words the page shows.
+
+shape TextureEditInfo
+  status: string
+  label: string
+  address: string
+  editable: bool

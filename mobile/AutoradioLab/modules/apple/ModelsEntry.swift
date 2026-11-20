@@ -48,6 +48,13 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        if op == "textureSaved" {       // shared code saved a Texture document (texture-edit.ts): the Swift reader and content store catch up (AutoradioModule+TextureEdit.swift)
+            Task { @MainActor in
+                AutoradioModule.current?.textureSaved(doc: request["doc"] as? String ?? "", title: request["title"] as? String ?? "", text: request["text"] as? String ?? "", version: (request["version"] as? NSNumber)?.intValue ?? 0)
+                reply.send(["ok": true])
+            }
+            return
+        }
         reply.send(call(request))
     }
 }

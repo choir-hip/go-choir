@@ -51,7 +51,6 @@ public final class AccountWipe: @unchecked Sendable {
         runSheet: RunSheetStore = .shared,
         openingCache: OpeningCache? = nil,
         clips: ClipLocator = .shared,
-        texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
         content: ContentStore = .shared,
         corpus: SavedCorpus = .shared,
@@ -82,7 +81,7 @@ public final class AccountWipe: @unchecked Sendable {
         if let openingCache { register("opening") { openingCache.wipe() } }
         register("clips") { clips.wipe() }
         // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).
-        register("texture") { await MainActor.run { texture.wipe() } }
+        register("texture") { if let d = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) { try? FileManager.default.removeItem(at: d.appendingPathComponent("Autoradio/texture-pending.json")) } }       // the editor is shared code now (texture-edit.ts wipes its own file); this removes the file an earlier build kept
         register("playing") { environment.wipePlaying() }
         register("mail-reading") { mailReading.wipe() }
         register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe(); EditionSetupSession.shared?.wipe(); EditionSetupSession.shared = nil }

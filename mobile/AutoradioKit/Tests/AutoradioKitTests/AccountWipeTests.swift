@@ -5,7 +5,7 @@ import XCTest
 // Failure list (written before the code):
 //  1  after sign-out no file under the stores' folders holds the marker
 //  2  after sign-out every in-memory store answers empty
-//  3  after the next sign-in the first turn, programme, steer flush, sheet post, podcast sync and texture retry carry no marker
+//  3  after the next sign-in the first turn, programme, steer flush, sheet post and podcast sync carry no marker
 //  4  pending run sheet ops are dropped at sign-out, never posted under the next key
 //  5  the revoke is sent in the background with the old key, after the local key is gone
 @MainActor
@@ -23,15 +23,6 @@ final class AccountWipeTests: XCTestCase {
         let lock = NSLock(); private(set) var posted: [[RunSheetOp]] = []
         var outcome: RunSheetPostOutcome = .notYet
         func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome { lock.lock(); posted.append(ops); lock.unlock(); return outcome }
-    }
-    final class FakeAPI: TextureAPI {
-        var posts: [String] = []
-        var failure: Error? = URLError(.notConnectedToInternet)
-        func head(docId: String) async throws -> TextureHead { TextureHead(content: "base", body: nil, revisionId: "r1", version: 1) }
-        func post(docId: String, content: String, body: [String: Any], parent: String) async throws -> (revisionId: String, version: Int) {
-            if let failure { throw failure }
-            posts.append(content); return ("r2", 2)
-        }
     }
     final class Recorder: @unchecked Sendable {
         let lock = NSLock(); private var _v: [String] = []
@@ -76,10 +67,6 @@ final class AccountWipeTests: XCTestCase {
         let opening = OpeningCache(dir: root.appendingPathComponent("opening"))
         opening.put(.opening, entry: .paperStory(route: m, title: m), titles: [m], audio: [PreparedAudio(text: m, samples: [0.1, 0.2], rate: 24000)], voice: "v")
         let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
-        let api = FakeAPI()
-        let texture = TextureEditor(api: api, storage: root.appendingPathComponent("texture-pending.json")); texture.retryAfter = 3600
-        await texture.edit(address: "texture:d1", markdown: m); await texture.flush(address: "texture:d1")
-        XCTAssertEqual(texture.pending["d1"], m)
         let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
         let content = ContentStore(root: root.appendingPathComponent("content"))
         content.put(StoredItem(id: "mail:1", kind: .mail, title: m, text: m, address: "mail:1")); content.flush()
@@ -107,7 +94,7 @@ final class AccountWipeTests: XCTestCase {
         }
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, topicsFile: topics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
                               takeOwn: own, takeMutes: mutes, takeStore: takes, tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
-                              texture: texture, environment: env, content: content, corpus: SavedCorpus(),
+                              environment: env, content: content, corpus: SavedCorpus(),
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice)
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
 
@@ -122,7 +109,7 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertTrue(steer.taps.isEmpty); XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty); XCTAssertNil(takes.take(m))
         XCTAssertTrue(sheet.sheet.entries.isEmpty); XCTAssertTrue(sheet.pending.isEmpty); XCTAssertNil(sheet.poster, "the poster is rebuilt at the next sign-in")
         XCTAssertNil(opening.opening(voice: "v"))
-        XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1")); XCTAssertNil(content.get("mail:1"))
+        XCTAssertNil(env.playing("p1")); XCTAssertNil(content.get("mail:1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned); XCTAssertTrue(signals.recent(limit: 10).isEmpty)
         XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertNil(EditionSetupSession.shared)
@@ -137,7 +124,6 @@ final class AccountWipeTests: XCTestCase {
         let newPoster = OfflinePoster(); newPoster.outcome = .answered([]); sheet.poster = newPoster
         sheet.flush(); await sheet.flushTask?.value
         XCTAssertTrue(newPoster.posted.isEmpty, "sheet ops: the old account's pending ops were dropped, not posted under the new key")
-        await texture.retryPending(); XCTAssertTrue(api.posts.isEmpty, "texture retry")
         XCTAssertEqual(poster.posted.count, 1, "the old poster was not used again after the first post")
     }
 }

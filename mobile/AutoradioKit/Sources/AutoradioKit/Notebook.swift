@@ -6,7 +6,7 @@ import CryptoKit
 // sent (`edition_text`), and builds the page: the lines, the scorecard, the rows behind a line, and the plain list of what is held about the listener.
 //
 // ASSUMED wire (the notebook writer is not built on the server yet): the document is found by `GET /api/texture/edition` (title "My notebook", "My
-// edition" adopted; the route exists) and read and edited through the ordinary Texture routes (the reader and TextureEditor). The line grammar is
+// edition" adopted; the route exists) and read and edited through the ordinary Texture routes (the reader and TextureSave). The line grammar is
 // the design's 2.2: `- <text> [L<n> · heard <h> of <m>]` (lesson), `[T<n> ...]` (trying), the listener's own lines untagged.
 
 // MARK: Lines
@@ -409,9 +409,7 @@ public enum NotebookPage {
         let merged = NotebookText.merging(topics: topics, into: current)
         guard gen == AccountWipe.generation else { return false }
         if merged != current {
-            await TextureEditor.shared.edit(address: address, markdown: merged)
-            await TextureEditor.shared.flush(address: address)
-            guard TextureEditor.shared.info(address: address).status == "saved" else { return false }
+            guard await TextureSave.post(address: address, markdown: merged) else { return false }
         }
         guard gen == AccountWipe.generation else { return false }
         notebookCache.set(merged)

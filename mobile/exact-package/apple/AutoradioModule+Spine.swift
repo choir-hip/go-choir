@@ -128,13 +128,12 @@ extension AutoradioModule {
 
         // Sends. Every one answers the open-page list, the shape the page host reads.
         handle("pageOpen") { [unowned self] args, reply in
-            Task { @MainActor in await TextureEditor.shared.flushAll() }      // leaving a page posts what was typed on it
             // A `file:` address reaches here only after the contract asked the listener's computer (fileResolve, AutoradioLab/files.ts): a PDF, e-book, text,
             // Markdown or code file arrives as its `texture:` address.
             pages.open(args["address"] as? String ?? "", title: args["title"] as? String); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList())
         }
-        handle("pageClose") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.close(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
-        handle("pageFocus") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.focus(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
+        handle("pageClose") { [unowned self] args, reply in pages.close(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
+        handle("pageFocus") { [unowned self] args, reply in pages.focus(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
         handle("pagePin") { [unowned self] args, reply in pages.togglePin(args["address"] as? String ?? ""); touch(["openPages"]); reply(pageList()) }
         handle("pageReopen") { [unowned self] _, reply in pages.reopenLastClosed(); touch(["openPages"]); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
         handle("themeSet") { [unowned self] args, reply in

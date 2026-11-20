@@ -804,12 +804,6 @@
       "line": "string",
       "credit": "string"
     },
-    "TextureEditInfo": {
-      "status": "string",
-      "label": "string",
-      "address": "string",
-      "editable": "bool"
-    },
     "VoiceCard": {
       "id": "string",
       "name": "string",
@@ -2097,37 +2091,6 @@
     {
       "send": "voiceForget",
       "answers": "SettingsAck"
-    },
-    {
-      "source": "textureEditInfo",
-      "live": true,
-      "answers": "TextureEditInfo",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "idle",
-          "label": "",
-          "address": "",
-          "editable": false
-        }
-      }
-    },
-    {
-      "send": "textureEdit",
-      "options": {
-        "address": "string",
-        "markdown": "string"
-      },
-      "answers": "TextureEditInfo"
-    },
-    {
-      "send": "textureFlush",
-      "options": {
-        "address": "string"
-      },
-      "answers": "TextureEditInfo"
     },
     {
       "source": "voiceCards",

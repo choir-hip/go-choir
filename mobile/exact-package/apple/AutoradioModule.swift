@@ -187,7 +187,6 @@ public final class AutoradioModule: ExactPackage {
         registerNotebook()       // my notebook (station L6)
         registerBooks()   // lane autoradio-reader
         registerTalk()
-        registerTextureEdit()   // your own Texture documents in rich text
         registerPodcasts()      // lane autoradio-podcasts
         registerJoins()         // lane autoradio-joins
         Task { [choir] in await choir?.refresh() }

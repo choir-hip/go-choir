@@ -11,6 +11,7 @@ import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
 import { readerDocShared } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
+import * as textureEdit from './texture-edit.ts';
 import { texturesListShared } from './textures.ts';
 import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
@@ -53,13 +54,22 @@ fs.write app:/data/open-pages-shared.json
 fs.read app:/data/notebook-cache.md
 fs.write app:/data/notebook-cache.md
 fs.read app:/data/takes.json
-fs.write app:/data/takes.json`;
+fs.write app:/data/takes.json
+fs.read app:/data/texture-pending.json
+fs.write app:/data/texture-pending.json`;
+
+const editDeps = (demo: boolean, storage: unknown, native: unknown): textureEdit.Deps => ({ demo, storage: storage as never, native: nativeOps(native) });
+const nativeOps = (native: unknown): textureEdit.Deps['native'] => { const n = native as { later?: (r: Record<string, unknown>) => Promise<unknown> } | null | undefined; return n && n.later ? (r) => n.later!(r) : undefined; };
 
 const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([raw]) => conversationInfo(raw),
+  // Editing your own Texture document (texture-edit.ts). The one native call after a save is `{op: 'textureSaved'}` (the Swift reader and content store catch up).
+  textureEditInfo: ([address, demo, visibility], _s, storage, native) => textureEdit.textureEditInfo(address, editDeps(demo, storage, native), visibility === 'hidden'),
+  textureEdit: ([address, markdown, demo], _s, storage, native) => textureEdit.textureEdit(address, markdown, editDeps(demo, storage, native)),
+  textureFlush: ([address, demo], _s, storage, native) => textureEdit.textureFlush(address, editDeps(demo, storage, native)),
   texturesList: ([at]) => texturesListShared(at),
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
