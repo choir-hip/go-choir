@@ -58,14 +58,13 @@ final class ProvenanceTests: XCTestCase {
         let s3 = RunSheetStore(storage: f); s3.restore()
         XCTAssertEqual(s3.entry("d-s.s1")?.state, .heard)
         XCTAssertEqual(s3.entry("d-s.s1")?.cites?.first?.ref, "pub:harbour-barrier@v2")
-        let page = RadioPage.make(RadioPageInput(sheet: s3.sheet))
-        XCTAssertEqual(page.heard.first?.builtOn.map(\.title), ["The harbour barrier"], "the page reads the provenance back from the heard record")
+        XCTAssertEqual(RadioPage.builtOn(s3.sheet.heard().first!).map(\.title), ["The harbour barrier"], "the page reads the provenance back from the heard record")
         // the page: tappable rows for every cite, whatever its role, and the title opens the story
         var onAir = s3.entry("d-s.s3")!; onAir.state = .onAir
-        let rows = RadioPage.make(RadioPageInput(sheet: RunSheet(entries: [onAir]))).builtOn
+        let rows = RadioPage.builtOn(onAir)
         XCTAssertEqual(rows.map(\.address), ["pub:a", "pub:b", "pub:c"]); XCTAssertEqual(rows.map(\.role), ["", "quoted", "mentioned"]); XCTAssertEqual(rows.map(\.title), ["Story A", "Story B", "Story C"])
         var one = s3.entry("d-s.s1")!; one.state = .onAir
-        XCTAssertEqual(RadioPage.make(RadioPageInput(sheet: RunSheet(entries: [one]))).openAddress, "pub:harbour-barrier", "a desk story's title opens its story")
+        XCTAssertEqual(RadioPage.openAddress(one), "pub:harbour-barrier", "a desk story's title opens its story")
         // and a replay from Heard keeps it
         let p = RunSheetPlayer(store: s3); p.engine = FakeEngine()
         p.perform(.replay(id: "d-s.s1"))

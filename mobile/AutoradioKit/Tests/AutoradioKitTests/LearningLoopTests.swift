@@ -52,7 +52,7 @@ final class LearningLoopTests: XCTestCase {
         e.forecast = RunSheetForecast(claimId: "c9"); e.state = .onAir
         let back = try JSONDecoder().decode(RunSheetEntry.self, from: JSONEncoder().encode(e))
         XCTAssertEqual(back.forecast?.claimId, "c9"); XCTAssertNil(back.forecast?.pHeard)
-        XCTAssertEqual(RadioPage.make(RadioPageInput(sheet: RunSheet(entries: [e]))).forecast, "", "no number, no sentence")
+        // (no number, no sentence: radio.test.ts 8)
     }
 
     // F2

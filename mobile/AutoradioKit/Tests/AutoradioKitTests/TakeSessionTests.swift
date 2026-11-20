@@ -249,14 +249,5 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         _ = await poll { s.sheet.entries.first { $0.id == "d-t1" }?.ended != nil }
         XCTAssertEqual(s.sheet.entries.first { $0.id == "d-t1" }?.ended?.outcome, .failed)
     }
-    func testThePageShowsThePublisherTheTranscriptAndAMuteHandle() {
-        var sheet = RunSheet(); var e = entry(); e.state = .onAir
-        sheet.entries = [e]; sheet.onAir = e.id
-        var i = RadioPageInput(sheet: sheet)
-        let t = Take(takeID: "take-00000000000000a1", publisher: "voice-3fa2c1", publishedAt: nil, duration: 14, transcript: "Words.", respondsTo: nil, record: TakeRecordSummary(), audioPath: "", state: "live")
-        i.takeLookup = { $0 == t.takeID ? t : nil }
-        let o = RadioPage.make(i)
-        XCTAssertEqual(o.kindLabel, "Take"); XCTAssertEqual(o.takePublisher, "voice-3fa2c1"); XCTAssertEqual(o.takeTranscript, "Words."); XCTAssertEqual(o.takeRecord, "new: no outcomes yet")
-        XCTAssertEqual(o.source, "voice-3fa2c1"); XCTAssertTrue(o.canWhy); XCTAssertTrue(o.forecast.contains("60 in 100"))
-    }
+    // (the page of a take on air: radio-page.test.ts R8)
 }

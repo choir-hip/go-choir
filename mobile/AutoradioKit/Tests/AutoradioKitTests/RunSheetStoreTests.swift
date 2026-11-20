@@ -445,9 +445,7 @@ final class RunSheetStoreTests: XCTestCase {
         let (p, s, _) = make()
         _ = await opened(["d-1", "d-2", "d-3", "d-4", "d-5"], p, s)
         let i = p.info()
-        let page = RadioPage.make(RadioPageInput(sheet: s.sheet))
-        XCTAssertEqual(page.ahead.map(\.id), ["d-1", "d-2", "d-3", "d-4", "d-5"], "the page lists every entry ahead, in order")
-        XCTAssertTrue(page.ahead.allSatisfy { $0.by == "desk" })
+        XCTAssertEqual(s.sheet.ahead().map(\.id), ["d-1", "d-2", "d-3", "d-4", "d-5"], "every entry ahead, in order (the page's rows are radio.test.ts 7)")
         XCTAssertEqual(i.current, "Opening")
     }
 
@@ -583,7 +581,7 @@ final class RunSheetStoreTests: XCTestCase {
         deskPlace(s, story("d-a"))
         var t = story("d-t", text: "And now.", kind: .transition); t.title = ""; t.between = RunSheetBetween(after: "d-a", before: "d-b")
         deskPlace(s, t); deskPlace(s, story("d-b"))
-        XCTAssertEqual(RadioPage.make(RadioPageInput(sheet: s.sheet)).ahead.map(\.id), ["d-a", "d-b"], "a transition is not listed")
+        XCTAssertEqual(s.sheet.ahead().filter { $0.kind != .transition }.map(\.id), ["d-a", "d-b"], "a transition is not listed (radio.test.ts 6)")
         p.next(); await p.settle()                                   // d-a on air
         p.documentEnded(id: "rs:d-a", anyPlayed: true); await p.settle()
         XCTAssertEqual(s.onAir()?.id, "d-t", "heard to its end: the transition plays")
@@ -898,6 +896,6 @@ final class RunSheetOverlayTests: XCTestCase {
         XCTAssertTrue(p.info().writing)
         p.deskWriting = false; p.deskNotice = "The desk can't be reached right now."
         XCTAssertEqual(p.info().notice, "The desk can't be reached right now.")
-        XCTAssertTrue(RadioPage.make(RadioPageInput(sheet: s.sheet)).ahead.isEmpty)
+        XCTAssertTrue(s.sheet.ahead().isEmpty)
     }
 }

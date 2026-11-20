@@ -202,8 +202,8 @@ public final class AutoradioModule: ExactPackage {
         // `dirty` is only touched on the main thread: a background caller (found by a real-data run: readServerBuild called this from a
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
         if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
-        dirty.formUnion(names)
-        if names.contains(where: { $0 == "radioView" || $0 == "queueView" || $0 == "barFacts" }) { dirty.insert("radioPage") }   // the Autoradio page reads all three
+        dirty.formUnion(names.map { $0 == "radioPage" ? "radioPageFacts" : $0 })   // (the takes lane still names the page by its old source)
+        if names.contains(where: { $0 == "radioView" || $0 == "queueView" || $0 == "barFacts" }) { dirty.insert("radioPageFacts") }   // the Autoradio page reads all three
         if now {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }

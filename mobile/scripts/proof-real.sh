@@ -392,6 +392,10 @@ if [ -n "$PLAY1" ]; then
   chk "bar: the progress rule is drawn" '\[bar-progress\]' "$BR"
   chk "bar: play pauses it (the bar says PAUSED)" 'PAUSED|Paused, [^.]{3,}' "$BR"
   chk "bar: the run sheet page shows the entry on air" '\[radio-onair-title\] "[^"]{3,}"' "$BR"
+  # the run sheet page (radio-page.ts over the native facts): the date line, the status line while a story plays
+  chk "radio page: a date line is drawn (Mon 5 Jan form)" '\[radio-date\] "(Mon|Tue|Wed|Thu|Fri|Sat|Sun) [0-9]{1,2} [A-Z][a-z]{2}"' "$BR"
+  chk "radio page: the status line says On air or Paused" '\[radio-status\] "(On air|Paused)"' "$BR"
+  bad "radio page: the status line is not an error" '\[radio-status\] "Can.t speak' "$BR"
   bad "bar: no error line held the bar" '\[bar-text\] "(Could not|Something went wrong|The voice stopped)' "$BR"
 fi
 # the spine drive

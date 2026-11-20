@@ -1,11 +1,16 @@
 // Lane members file (the Autoradio page): the run sheet made readable, and the gestures on it. Owned by lane autoradio-page.
 // Source and send are declared in exact-package/interface/radio.json. The page (radio.contract) only reads `rp` and sends these.
-use radioPage, radioPageAct from "@choir/autoradio"
-use RadioPageInfo from "@choir/autoradio"
+use radioPageFacts, radioPageAct from "@choir/autoradio"
+use RadioPageFacts, SettingsAck from "@choir/autoradio"
+use RadioPageInfo from "./radio-types.contract"
 
 members Autoradio
-  resource rp = radioPage() as shape RadioPageInfo else empty()
-  mutation rpm as shape RadioPageInfo
+  // The page is shared code (radio-page.ts): the native facts (the run sheet as the store holds it, the player, the desk's flags), the bar's facts (a turn open is the bar's state) and the
+  // conversation's entries. The facts carry the clock; while the radio plays they are read again (the native side touches them).
+  resource rpfacts = radioPageFacts() as shape RadioPageFacts else empty()
+  resource rp = radioPage(rpfacts, bf, cvraw) as shape RadioPageInfo else empty()
+  // The gestures stay native until the queue and its posted ops move: the native side carries them out and the page is read again.
+  mutation rpm as shape SettingsAck refreshes rpfacts, rp
 
   // "All of it" opens Up next to the whole run sheet ahead, in place.
   state radioAll = false

@@ -1,0 +1,67 @@
+// The Autoradio page's shapes. Declared here and answered by `app.ts` (radio-page.ts: `radioPage`); they were the Swift package's (interface/radio.json) before the page moved to shared
+// code. The native side hands over only the facts (`RadioPageFacts`, interface/radio.json, source `radioPageFacts`).
+
+shape RadioBuiltOn
+  n: number
+  title: string
+  address: string
+  role: string
+  note: string
+
+shape RadioPageRow
+  n: number
+  id: string
+  kind: string
+  title: string
+  length: string
+  by: string
+  byWord: string
+  note: string
+  builtOn: RadioBuiltOn[]
+
+shape RadioHeardRow
+  n: number
+  id: string
+  kind: string
+  title: string
+  outcome: string
+  builtOn: RadioBuiltOn[]
+  publisher: string
+
+shape RadioPageInfo
+  state: string
+  statusLine: string
+  dim: bool
+  playing: bool
+  dateLine: string
+  onAir: bool
+  kindLabel: string
+  title: string
+  source: string
+  published: string
+  sentence: string
+  sentenceNumber: number
+  sentenceCount: number
+  elapsed: string
+  remaining: string
+  fraction: number
+  thenBack: string
+  openAddress: string
+  why: string
+  forecast: string
+  canWhy: bool
+  cannotSpeak: string
+  action: string
+  heardWords: string
+  greeting: string
+  ahead: RadioPageRow[]
+  aheadMore: number
+  writing: bool
+  emptyNote: string
+  notice: string
+  heard: RadioHeardRow[]
+  builtOn: RadioBuiltOn[]
+  canPlay: bool
+  takePublisher: string
+  takeTranscript: string
+  takeRecord: string
