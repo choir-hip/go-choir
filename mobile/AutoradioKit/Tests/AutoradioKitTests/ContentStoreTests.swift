@@ -149,16 +149,6 @@ final class ContentSyncTests: XCTestCase {
         XCTAssertEqual(calls.value, ["/b", "/bad", "/a"]); XCTAssertEqual(rep.first { $0.kind == .story }?.failed, 1)
         calls.value = []; await sync(s, f).syncAll(); XCTAssertEqual(calls.value, ["/bad"], "held stories are not asked again")
     }
-    func testFilesTakeOnlySmallTextAndFollowSizeAndModified() async {
-        let s = store(); let reads = Box<[String]>([]); var f = ContentSync.Fetchers()
-        let when = Date(timeIntervalSince1970: 100)
-        f.fileList = { p in p == "/" ? [FileEntry(name: "notes.md", path: "/notes.md", isDirectory: false, size: 10, modified: when), FileEntry(name: "pic.png", path: "/pic.png", isDirectory: false, size: 10, modified: when),
-                                         FileEntry(name: "huge.txt", path: "/huge.txt", isDirectory: false, size: 9_000_000, modified: when), FileEntry(name: "sub", path: "/sub", isDirectory: true, size: 0, modified: nil)]
-                                      : [FileEntry(name: "deep.txt", path: "/sub/deep.txt", isDirectory: false, size: 5, modified: when)] }
-        f.fileText = { reads.value.append($0); return "text of \($0)" }
-        await sync(s, f).syncAll()
-        XCTAssertEqual(Set(reads.value), ["/notes.md", "/sub/deep.txt"]); await sync(s, f).syncAll(); XCTAssertEqual(reads.value.count, 2)
-    }
     func testTranscriptsAreLimitedToRecentEpisodesAndTheRunSheetHistoryIsKept() async {
         let s = store(); var f = ContentSync.Fetchers(); let asked = Box<[String]>([]); let now = clock.now
         f.transcriptTargets = { (0..<30).map { (feed: "https://example.com/f.xml", id: "e\($0)", title: "Show: E\($0)", date: now.addingTimeInterval(Double($0 == 29 ? -30 * 86400 : -3600 * Double($0)))) } }

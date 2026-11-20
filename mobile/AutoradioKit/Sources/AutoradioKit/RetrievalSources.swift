@@ -34,12 +34,6 @@ public enum RetrievalSources {
         return (docs, onAir)
     }
 
-    /// A folder's file names (never their contents): searchable by name, openable by path.
-    public static func fileNames(_ entries: [FileEntry]) -> [SavedCorpus.Document] {
-        entries.filter { !$0.isDirectory }.map { e in
-            SavedCorpus.Document(id: "file:" + e.path, title: e.name, address: "file:" + e.path, text: e.path, kind: "file", source: "Files", date: e.modified)
-        }
-    }
     /// The reader's chosen edition topics, as one small note.
     public static func editionTopics(_ topics: [String]) -> [SavedCorpus.Document] {
         topics.isEmpty ? [] : [SavedCorpus.Document(id: "edition-topics", title: "My edition topics", address: "paper:mine", text: "The reader follows these topics: " + topics.joined(separator: ", "),

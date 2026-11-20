@@ -181,9 +181,7 @@ final class RetrievalMoreSourcesTests: XCTestCase {
         XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: ["Autopaper", "Autopaper"]), "I have nothing on that in the paper.")
         XCTAssertEqual(SavedAnswerPrompt.nothingLine(searched: []), "I have nothing saved on this phone to search yet.")
     }
-    func testFilesPagesTopicsAndRunSheetBecomeDocuments() {
-        let files = RetrievalSources.fileNames([FileEntry(name: "budget-notes.md", path: "/docs/budget-notes.md", isDirectory: false, size: 1, modified: nil), FileEntry(name: "docs", path: "/docs", isDirectory: true, size: 0, modified: nil)])
-        XCTAssertEqual(files.map(\.title), ["budget-notes.md"])
+    func testPagesTopicsAndRunSheetBecomeDocuments() {
         XCTAssertEqual(RetrievalSources.editionTopics(["Science", "Senate"]).first?.text.contains("Senate"), true); XCTAssertTrue(RetrievalSources.editionTopics([]).isEmpty)
         let pages = RetrievalSources.openPages([Page(address: "pub:/p/x", kind: "story", title: "Open story")])
         XCTAssertEqual(pages.first?.address, "pub:/p/x")
@@ -196,9 +194,10 @@ final class RetrievalMoreSourcesTests: XCTestCase {
     }
     func testHeldGroupsAreSearchedReplacedAndBounded() {
         let c = SavedCorpus(readerStore: nil)
-        c.hold(group: "files:/", RetrievalSources.fileNames([FileEntry(name: "zeppelin-plans.md", path: "/z.md", isDirectory: false, size: 1, modified: nil)]))
-        XCTAssertEqual(c.retrieve("zeppelin plans").items.first?.address, "file:/z.md")
-        c.hold(group: "files:/", [])
+        let zep = SavedCorpus.Document(id: "z:1", title: "zeppelin-plans", address: "texture:z", text: "Zeppelin plans.", kind: "document", source: "Texture", date: nil)
+        c.hold(group: "g", [zep])
+        XCTAssertEqual(c.retrieve("zeppelin plans").items.first?.address, "texture:z")
+        c.hold(group: "g", [])
         XCTAssertTrue(c.retrieve("zeppelin plans").isEmpty, "a replaced group drops its old documents")
         c.hold(group: "texture", adding: SavedCorpus.Document(id: "texturedoc:1", title: "Garden notes", address: "texture:1", text: "Tomatoes and basil.", kind: "document", source: "Texture", date: Date()))
         XCTAssertEqual(c.retrieve("tomatoes basil").items.first?.address, "texture:1")
