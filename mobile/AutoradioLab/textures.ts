@@ -5,7 +5,7 @@
 import { authedJSON, accountGeneration, SignedOutError, HTTPError, type Reply } from './api.ts';
 import { WORDS } from './words.ts';
 
-export type TextureRow = { address: string; title: string; updated: string; meta: string; edition: boolean; revising: boolean };
+export type TextureRow = { address: string; title: string; updated: string; meta: string; edition: boolean };
 export type TextureList = { status: string; message: string; rows: TextureRow[]; hasEdition: boolean };
 export type EditionAnswer = { found: boolean; docID: string; updatedAt: string };
 export type Net = { json(path: string, opts?: { query?: Record<string, string | number> }): Promise<Reply> };
@@ -26,23 +26,23 @@ export function shortDate(iso: string): string {
 const list = (status: string, message = '', rows: TextureRow[] = [], hasEdition = false): TextureList => ({ status, message, rows, hasEdition });
 const intOf = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : 0);
 
-/** The list from GET /api/texture/documents (newest first). The edition is pinned first. A document is the listener's edition when its metadata names that role or its title starts
- * "My edition" (the server has no marker for it in this list). Archived documents and documents with no id are hidden. */
+/** The list from GET /api/texture/documents (newest first). The route sends doc_id, title, created_at, updated_at, revision_count (internal/textureowner/texture.go textureDocumentResponse);
+ * nothing else is read. A document is the listener's edition when its title starts "My edition" (the server has no marker for it in this list; the edition answer is applied after).
+ * Documents with no id are hidden. A body that is not an object with a `documents` array is not a list: it throws, and the load says it could not load. */
 export function parseList(o: unknown): TextureList {
-  const docs = obj(o) && Array.isArray(o.documents) ? o.documents : [];
+  if (!obj(o) || !Array.isArray(o.documents)) throw new Error('the computer sent a list that is not a list');
+  const docs = o.documents;
   const rows: TextureRow[] = [];
   for (const d of docs) {
     if (!obj(d)) continue;
     const id = str(d.doc_id);
     if (id === '') continue;
-    if (d.archived_at !== undefined && d.archived_at !== null) continue;
     const title = str(d.title).trim();
-    const edition = (obj(d.metadata) && d.metadata.role === 'edition') || title.toLowerCase().startsWith('my edition');
+    const edition = title.toLowerCase().startsWith('my edition');
     const n = intOf(d.revision_count);
     const when = shortDate(str(d.updated_at));
-    const pending = d.agent_revision_pending === true;
-    const meta = [pending ? 'Being revised' : '', n > 0 ? `${n} version${n === 1 ? '' : 's'}` : '', when].filter((s) => s !== '').join(' · ');
-    rows.push({ address: `texture:${id}`, title: title === '' ? 'Untitled' : title, updated: when, meta, edition, revising: pending });
+    const meta = [n > 0 ? `${n} version${n === 1 ? '' : 's'}` : '', when].filter((s) => s !== '').join(' · ');
+    rows.push({ address: `texture:${id}`, title: title === '' ? 'Untitled' : title, updated: when, meta, edition });
   }
   const ed = rows.filter((r) => r.edition), rest = rows.filter((r) => !r.edition);
   return list('ready', '', [...ed, ...rest], ed.length > 0);
@@ -63,7 +63,7 @@ export function applyEdition(l: TextureList, ed: EditionAnswer | null): TextureL
   const rows = l.rows.slice();
   const i = rows.findIndex((r) => r.address === address);
   if (i >= 0) { const [r] = rows.splice(i, 1); rows.unshift({ ...r, edition: true }); }
-  else { const when = shortDate(ed.updatedAt); rows.unshift({ address, title: 'My edition', updated: when, meta: when, edition: true, revising: false }); }
+  else { const when = shortDate(ed.updatedAt); rows.unshift({ address, title: 'My edition', updated: when, meta: when, edition: true }); }
   return { ...l, rows, hasEdition: true };
 }
 
@@ -88,13 +88,16 @@ export async function loadTextures(net: Net): Promise<TextureList> {
 }
 
 const real: Net = { json: (path, opts) => authedJSON(path, opts) };
-// The last list, kept in memory for the pages that are not the Textures place (the list stays while the place is behind another page); another account never sees it.
+// The last list, kept in memory for the pages that are not the Textures place (the list stays while the place is behind another page); another account never sees it, and it is dropped
+// (not just hidden) the first time anything asks under a new account generation.
 let last: { gen: number; list: TextureList } | null = null;
-export function resetTextures(): void { last = null; }
+/** Test only: forget the last list. */
+export function resetTexturesForTest(): void { last = null; }
 
-/** The source: `at` is the page in front, the contract asks it again after a stop, a restore or a reload (the revising marks change). Only the Textures place asks the computer. */
+/** The source: `at` is the page in front, the contract asks it again after a stop, a restore or a reload (a document's versions change). Only the Textures place asks the computer. */
 export async function texturesListShared(at: string, net: Net = real): Promise<TextureList> {
-  if (at !== 'textures:') return last && last.gen === accountGeneration() ? last.list : list('loading');
+  if (last && last.gen !== accountGeneration()) last = null;
+  if (at !== 'textures:') return last ? last.list : list('loading');
   const gen = accountGeneration();
   const l = await loadTextures(net);
   if (gen === accountGeneration()) last = { gen, list: l };

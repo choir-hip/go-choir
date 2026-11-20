@@ -333,7 +333,6 @@ enum TextureDemo {
         guard parts.count >= 3, parts[0] == "api", parts[1] == "texture" else { return nil }
         func fx(_ n: String) -> Data? { Demo.fixture(n) }
         switch (parts[2], parts.count) {
-        case ("documents", 3): return fx("texture-documents")
         case ("documents", 4): return fx("texture-doc-" + parts[3])
         case ("documents", 5):
             if parts[4] == "revisions" { return fx("texture-revs-" + parts[3]) }

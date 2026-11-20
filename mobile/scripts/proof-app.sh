@@ -313,7 +313,8 @@ must "mail: inbox" '[mail-row-m6]'
 must "mail: a message" '[mail-body]'
 # "Read it to me" really speaks now (engine speakText): the radio is no longer idle or paused on the message screen
 if grep -qF 'Now playing,' "$SHOTS/drive-mailread.txt" 2>/dev/null; then echo "ok: mail: Read it to me shows in now-playing"; else echo "MISSING: mail: Read it to me did not show in now-playing"; FAILS="$FAILS [mail read aloud]"; fi
-must "textures: list" '[textures-doc-texture:demo-notes]'
+# Demo mode is being removed (goal station D2); the Textures list is shared code with no demo path now. The real-data check is proof-real.sh "textures: documents listed".
+# must "textures: list" '[textures-doc-texture:demo-notes]'
 must "textures: a document" '[page-title] "Charging pilot: working notes"'
 must "settings: modes" '[settings-mode-dark]'
 must "voice: welcome" '[ob-begin]'

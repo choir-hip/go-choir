@@ -146,7 +146,7 @@ members Autoradio
     send qm = queueAdd(mode="add", kind="page", ref=u, title=h, local="")
   action ctlSafari(u: string)
     ctlOpen = false
-    send rack = readerOpenExternal(url=u)
+    send rext = readerOpenExternal(url=u)
   action ctlCloseWeb
     ctlOpen = false
     webUrl = ""

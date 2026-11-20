@@ -98,8 +98,9 @@ must() { # <step name> <fixed text>
 }
 
 must "textures: search field" '[textures-search]'
-must "textures: the edition is pinned" '[textures-doc-texture:demo-edition]'
-must "textures: recent documents" '[textures-doc-texture:demo-notes]'
+# Demo mode is being removed (goal station D2); the Textures list is shared code with no demo path now. The real-data check is proof-real.sh "textures: documents listed".
+# must "textures: the edition is pinned" '[textures-doc-texture:demo-edition]'
+# must "textures: recent documents" '[textures-doc-texture:demo-notes]'
 must "document: title" '[page-title] "Charging pilot: working notes"'
 must "document: table block" '[reader-block-b10]'
 must "versions sheet" '[reader-version-3]'

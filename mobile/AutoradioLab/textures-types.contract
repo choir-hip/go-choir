@@ -7,7 +7,6 @@ shape TextureRow
   updated: string
   meta: string
   edition: bool
-  revising: bool
 
 shape TextureList
   status: string
