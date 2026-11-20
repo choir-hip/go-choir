@@ -100,7 +100,6 @@
   },
   "AboutInfo": {
    "app": "string",
-   "build": "string",
    "base": "string",
    "signedIn": "bool"
   }
@@ -160,7 +159,6 @@
    "substitute": {
     "default": {
      "app": "",
-     "build": "",
      "base": "",
      "signedIn": false
     }

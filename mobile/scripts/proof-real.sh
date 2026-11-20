@@ -342,10 +342,10 @@ if [ -n "$THEME_DOC" ]; then
 fi
 # the tour
 chk "settings: About names the app" '\[settings-about-app\]' "$SHOTS/drive-tour.txt"
-# About names the commit the app was built from (build-info.gen.ts, written at build time) and it is the commit under test; the server row reads /health
+# About's Build row is the commit the app was built from (build-info.gen.ts, written at build time) and it is the commit under test; the server row reads /health
 BUILT9="$(git -C "$(dirname "$0")" rev-parse HEAD 2>/dev/null | cut -c1-9)"
-bad "settings: About's commit is not unknown" '\[settings-about-commit\] "unknown"' "$SHOTS/drive-tour.txt"
-if [ -n "$BUILT9" ]; then chk "settings: About's commit is the built commit $BUILT9" "\\[settings-about-commit\\] \"$BUILT9" "$SHOTS/drive-tour.txt"; else echo "info: no git here, About's commit not compared"; fi
+bad "settings: About's Build is not unknown" '\[settings-about-build\] "unknown"' "$SHOTS/drive-tour.txt"
+if [ -n "$BUILT9" ]; then chk "settings: About's Build is the built commit $BUILT9" "\\[settings-about-build\\] \"$BUILT9" "$SHOTS/drive-tour.txt"; else echo "info: no git here, About's Build not compared"; fi
 bad "settings: About's server build was read" '\[settings-about-server\] "not reported"' "$SHOTS/drive-tour.txt"
 chk "settings: About's server build is a commit" '\[settings-about-server\] "[0-9a-f]{9}' "$SHOTS/drive-tour.txt"
 chk "settings: Activity page opened" '\[page-title\] "Activity"' "$SHOTS/drive-tour.txt"

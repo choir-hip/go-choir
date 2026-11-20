@@ -1,4 +1,4 @@
-// The About page's build rows: the commit this app was built from (baked in by scripts/gen-build-info.sh into build-info.gen.ts)
+// The About page's Build row (the commit this app was built from, baked in by scripts/gen-build-info.sh into build-info.gen.ts)
 // and the commit the server reports (GET /health, public, no key). Replaces the Swift `readServerBuild`, which looked for a
 // top-level `commit` in /health; the route nests it as `build.commit` (and `platform.deployed_commit`), so it always read a dash.
 // Failure list: about.test.ts (B1 to B4).
@@ -7,7 +7,7 @@ import { getJSON } from './api.ts';
 import { BUILD_INFO } from './build-info.gen.ts';
 
 export type BuildInfo = { commit: string; dirty: boolean; committed: string };
-export type AboutBuild = { commit: string; server: string };
+export type AboutBuild = { build: string; server: string };
 
 const SHORT = 9;
 const HEX = /^[0-9a-f]{7,64}$/;
@@ -36,11 +36,11 @@ export function serverCommitLine(body: unknown): string {
 }
 
 export async function aboutBuild(_args: { tick: number }): Promise<AboutBuild> {
-  const commit = appCommitLine(BUILD_INFO);
+  const build = appCommitLine(BUILD_INFO);
   try {
     const r = await getJSON('/health');
-    return { commit, server: serverCommitLine(r.body) || 'not reported' };
+    return { build, server: serverCommitLine(r.body) || 'not reported' };
   } catch {
-    return { commit, server: 'not reported' };
+    return { build, server: 'not reported' };
   }
 }

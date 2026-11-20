@@ -57,7 +57,8 @@ describe('aboutBuild', () => {
     expect(calls.map((c) => c.url)).toEqual([`${ORIGIN}/health`]);
     expect(JSON.stringify(calls[0].headers)).not.toContain('uthorization');
     expect(v.server).toBe('0eef16ec7 · 2026-11-20 13:38 UTC');
-    expect(v.commit).toBe(appCommitLine(BUILD_INFO));
+    expect(v.build).toBe(appCommitLine(BUILD_INFO));
+    expect(Object.keys(v).sort()).toEqual(['build', 'server']); // the one Build row; no separate Commit
   });
   test('B3 a refused, garbled or dead /health says not reported and keeps the commit', async () => {
     handler = () => new Response('{}', { status: 503 });
@@ -68,6 +69,6 @@ describe('aboutBuild', () => {
     expect((await aboutBuild({ tick: 0 })).server).toBe('not reported');
     globalThis.fetch = (async () => { throw new Error('offline'); }) as never;
     const v = await aboutBuild({ tick: 0 });
-    expect(v.server).toBe('not reported'); expect(v.commit).not.toBe('');
+    expect(v.server).toBe('not reported'); expect(v.build).not.toBe('');
   });
 });
