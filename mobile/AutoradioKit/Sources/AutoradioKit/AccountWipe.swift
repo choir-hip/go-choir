@@ -74,6 +74,7 @@ public final class AccountWipe: @unchecked Sendable {
         }
         register("steer") { steer.wipe() }
         register("takes") {
+            await MainActor.run { TakeSession.live?.discard() }      // the account CHANGED path has no signOut() above it
             takeOwn.wipe(); takeMutes.wipe(); takeStore.wipe()
             Self.removeTakeScratch(in: tempDirectory)
         }

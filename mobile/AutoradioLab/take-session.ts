@@ -49,7 +49,8 @@ export function parseNative(v: unknown): Native {
   };
 }
 
-export type Legacy = { found: boolean; ids: string[]; handle: string; muted: string[] };
+/** `carried`: the native marker says this phone's upgrade carry-over was done once (by whichever account): the old files are never read for another one. */
+export type Legacy = { found: boolean; ids: string[]; handle: string; muted: string[]; carried?: boolean };
 export type Device = {
   state(): Promise<Native>;
   start(l: ReturnType<typeof limits>): Promise<Native>;
@@ -65,6 +66,8 @@ export type Device = {
   steerMute(handle: string): Promise<void>;
   mirror(k: { ids: string[]; handle: string; muted: string[] }): Promise<void>;
   legacy(): Promise<Legacy | null>;
+  /** The carry-over has been written: leave a durable marker native-side (not removed by the account wipe). True when it is there. */
+  carried(): Promise<boolean>;
 };
 
 /** The device over the app module's `later`, or null when there is no module (Android today, the web). */
@@ -93,8 +96,9 @@ export function nativeDevice(): Device | null {
     async mirror(k) { await later({ op: 'takeMirror', ids: k.ids, handle: k.handle, muted: k.muted }); },
     async legacy() {
       const r = (await later({ op: 'takeLegacy' })) as Record<string, unknown> | null;
-      return r && typeof r.found === 'boolean' ? { found: r.found, ids: strs(r.ids), handle: str(r.handle), muted: strs(r.muted) } : null;
+      return r && typeof r.found === 'boolean' ? { found: r.found, ids: strs(r.ids), handle: str(r.handle), muted: strs(r.muted), carried: r.carried === true } : null;
     },
+    async carried() { const r = (await later({ op: 'takeCarried' })) as { ok?: unknown } | null; return r?.ok === true; },
   };
 }
 
@@ -105,46 +109,79 @@ export type Overlay = {
   notice: string;
   published: string; mine: MyTake[]; myRecord: Record_ | null; publishing: boolean;
   kept: Kept | null; carried: boolean;
+  /** Every change of the kept data is queued here (mutate): two at the same time are applied one after the other, each to the data the one before left. */
+  queue: Promise<unknown>;
   /** The account generation this overlay belongs to (api.ts accountGeneration); null until first used. */
   gen: number | null;
 };
-export const newOverlay = (): Overlay => ({ notice: '', published: '', mine: [], myRecord: null, publishing: false, kept: null, carried: false, gen: null });
+export const newOverlay = (): Overlay => ({ notice: '', published: '', mine: [], myRecord: null, publishing: false, kept: null, carried: false, queue: Promise.resolve(), gen: null });
 export type Env = { device: Device | null; storage: Storage | undefined; net: Net };
 export const liveEnv = (storage: Storage | undefined): Env => ({ device: nativeDevice(), storage, net: seamNet });
 
 /** Everything this module holds in memory belongs to ONE account. When the generation moved (a sign-out, an account change: account.ts bumps it before the wipes) the overlay is dropped whole, no
  * carry-over is run for the rest of the process (the old files cannot be adopted by the next account), and the native programme's copy is emptied at once, even if the native wipe had failed. */
-async function sync(env: Env, o: Overlay): Promise<void> {
+async function sync(env: Env, o: Overlay): Promise<boolean> {
   const g = accountGeneration();
-  if (o.gen === g) return;
+  if (o.gen === g) return false;
   const had = o.gen !== null;
   Object.assign(o, newOverlay(), { gen: g, carried: had });
-  if (had) { try { await env.device?.mirror(emptyKept()); } catch { /* the native wipe is the other path */ } }
+  if (had) {
+    try { await env.device?.discard(); } catch { /* the sign-out path discards it natively before the sign-out; this is the second path */ }
+    try { await env.device?.mirror(emptyKept()); } catch { /* the native wipe is the other path */ }
+  }
+  return had;
 }
 async function keptOf(env: Env, o: Overlay): Promise<Kept> { return (o.kept ??= await loadKept(env.storage)); }
-/** Keep it and give the native programme its copy. The mirror follows the file: a copy is never pushed that was not written. */
-async function keep(env: Env, o: Overlay, k: Kept): Promise<void> {
+/** Keep it (the write is held to the generation `gen` the data belongs to) and give the native programme its copy. The mirror follows the file: a copy is never pushed that was not written. */
+async function keep(env: Env, o: Overlay, k: Kept, gen: number, mirror = true): Promise<boolean> {
+  if (!(await saveKept(env.storage, k, gen))) return false;
   o.kept = k;
-  if (await saveKept(env.storage, k)) { try { await env.device?.mirror(k); } catch { /* the programme keeps its last copy */ } }
+  if (mirror) { try { await env.device?.mirror(k); } catch { /* the programme keeps its last copy */ } }
+  return true;
+}
+/** The ONE way the kept data changes: `f` is applied to the data as the change before it left it (changes are queued, so none is lost), and nothing is written for an account that is no longer
+ * the overlay's. `kept: null` means no change. */
+async function mutate<T>(env: Env, o: Overlay, f: (k: Kept) => { kept: Kept | null; out: T }, skipped: T, mirror = true): Promise<{ out: T; ok: boolean }> {
+  const gen = o.gen;
+  const run = async (): Promise<{ out: T; ok: boolean }> => {
+    if (gen === null || o.gen !== gen || accountGeneration() !== gen) return { out: skipped, ok: false };
+    const r = f(await keptOf(env, o));
+    if (r.kept === null) return { out: r.out, ok: true };
+    return { out: r.out, ok: await keep(env, o, r.kept, gen, mirror) };
+  };
+  const p = o.queue.then(run, run);
+  o.queue = p.catch(() => undefined);
+  return p;
 }
 
-/** The one-time carry-over of the Swift app's own ids, handle and muted voices (Application Support/Autoradio/takes-own.json, takes-muted.json) into app:/data/takes.json. The old files are READ and
- * never removed (a reverted build still finds them, and the mirror keeps them current). Marked `migrated` in the file only when the write succeeded; no answer from native is tried again at the
- * next call. What is already in the new file wins (a handle) or is added to (ids, mutes). Delete this, `takeLegacy` and the field once phones have moved. */
+/** The one-time carry-over of the Swift app's own ids, handle and muted voices (Application Support/Autoradio/takes-own.json, takes-muted.json) into app:/data/takes.json. It is a PHONE's upgrade,
+ * not an account's: a durable native marker (`takeCarried`, beside the old files, not removed by the account wipe) says it was done, and with it no account ever reads the old files again, whatever a
+ * failed unlink or a restart left there. The old files are READ and never removed (a reverted build still finds them). The marker is written only after the shared write succeeded, and made good at
+ * the next process when it is missing. What is already in the new file wins (a handle) or is added to (ids, mutes). In every case the programme's copy is then made equal to the shared data.
+ * Delete this, `takeLegacy`, `takeCarried` and the field once phones have moved. */
 export async function carryOver(env: Env, o: Overlay): Promise<void> {
-  if (o.carried || !env.device || !env.storage) return;
+  const dev = env.device;
+  if (o.carried || !dev || !env.storage) return;
   const k = await keptOf(env, o);
-  if (k.migrated) { o.carried = true; return; }
+  if (k.migrated) {
+    try { await dev.carried(); } catch { /* tried again at the next process */ }
+    try { await dev.mirror(k); } catch { /* the programme keeps its last copy */ }
+    o.carried = true; return;
+  }
   let l: Legacy | null = null;
-  try { l = await env.device.legacy(); } catch { l = null; }
+  try { l = await dev.legacy(); } catch { l = null; }
   if (!l) return;
-  const next: Kept = {
-    ids: [...new Set([...k.ids, ...l.ids])], handle: k.handle !== '' ? k.handle : validHandle(l.handle) ? l.handle : '',
-    muted: [...new Set([...k.muted, ...l.muted.filter(validHandle)])], migrated: true,
-  };
-  if (!(await saveKept(env.storage, next))) { o.kept = null; return; }
-  o.kept = next; o.carried = true;
-  if (l.found) { try { await env.device.mirror(next); } catch { /* the programme keeps its last copy */ } }
+  if (l.carried) {          // done once on this phone: this account starts from nothing, and the programme's copy is made to say so
+    try { await dev.mirror(k); } catch { /* the programme keeps its last copy */ }
+    o.carried = true; return;
+  }
+  const old = l;
+  const r = await mutate(env, o, (cur) => (cur.migrated ? { kept: null, out: true } : {
+    kept: { ids: [...new Set([...cur.ids, ...old.ids])], handle: cur.handle !== '' ? cur.handle : validHandle(old.handle) ? old.handle : '',
+      muted: [...new Set([...cur.muted, ...old.muted.filter(validHandle)])], migrated: true }, out: true }), false, old.found);
+  if (!r.ok) return;
+  o.carried = true;
+  try { await dev.carried(); } catch { /* made good at the next process */ }
 }
 
 // ---------------------------------------------------------------------------------------------------------------- words
@@ -178,9 +215,11 @@ function recorderOf(n: Native, o: Overlay): Recorder {
 
 /** The page for a recorder snapshot (the native source `takesRecorder`). */
 export async function pageFor(env: Env, o: Overlay, rec: unknown): Promise<TakesPageInfo> {
-  await sync(env, o);
+  const reset = await sync(env, o);
   const kept = await keptOf(env, o);
-  return page(recorderOf(parseNative(rec), o), { mine: o.mine, kept, myRecord: o.myRecord, justPublished: o.published });
+  // the snapshot the page was asked with may predate the discard of the old account's take: read it again
+  const snap = reset && env.device ? await env.device.state() : rec;
+  return page(recorderOf(parseNative(snap), o), { mine: o.mine, kept, myRecord: o.myRecord, justPublished: o.published });
 }
 
 // ---------------------------------------------------------------------------------------------------------------- the acts
@@ -191,12 +230,14 @@ async function refresh(env: Env, o: Overlay): Promise<void> {
   try {
     const m = await c.mine();
     o.mine = m; o.notice = '';
-    let k = await keptOf(env, o), changed = false;
-    for (const t of m) { const next = addOwn(k, t.takeID, t.publisher); if (next.handle !== k.handle || next.ids.length !== k.ids.length) { k = next; changed = true; } }
-    if (changed) await keep(env, o, k);
+    await mutate(env, o, (k) => {
+      let n = k;
+      for (const t of m) n = addOwn(n, t.takeID, t.publisher);
+      return { kept: n.handle !== k.handle || n.ids.length !== k.ids.length ? n : null, out: undefined };
+    }, undefined);
   } catch (e) {
     if (e instanceof SignedOutError) return;
-    if (e instanceof TakesUnavailable) { o.notice = e.message; return; }
+    if (e instanceof TakesUnavailable || e instanceof TakesRefused) { o.notice = e.message; return; }
   }
   const h = (await keptOf(env, o)).handle;
   if (h !== '') { try { o.myRecord = await c.record(h); } catch { /* the last record stays */ } }
@@ -235,7 +276,7 @@ async function publish(env: Env, o: Overlay): Promise<void> {
       return;
     }
     if (accountGeneration() !== gen) return;     // another account is in: nothing of this publish is kept here
-    await keep(env, o, addOwn(await keptOf(env, o), t.takeID, t.publisher));
+    await mutate(env, o, (k) => ({ kept: addOwn(k, t.takeID, t.publisher), out: undefined }), undefined);
     o.published = t.publisher;
     try { await dev.done(); } catch { try { await dev.discard(); } catch { /* the recorder keeps the file; the server derives the id from the audio, so a second publish is the same take */ } }
     console.log(`takes: published id=${t.takeID}`);
@@ -251,7 +292,7 @@ async function del(env: Env, o: Overlay, id: string): Promise<void> {
   await carryOver(env, o);
   try {
     await client(env.net).remove(id);
-    await keep(env, o, removeOwn(await keptOf(env, o), id));
+    await mutate(env, o, (k) => ({ kept: removeOwn(k, id), out: undefined }), undefined);
     o.mine = o.mine.filter((t) => t.takeID !== id); o.notice = '';
   } catch (e) { o.notice = e instanceof SignedOutError ? 'Sign in to delete a take.' : `Could not delete: ${why(e)}.`; }
 }
@@ -276,17 +317,13 @@ export async function act(env: Env, o: Overlay, op: string, arg: string): Promis
     case 'delete': await del(env, o, arg); break;
     case 'mute': {
       await carryOver(env, o);
-      const r = muteIn(await keptOf(env, o), arg);
-      if (r.added) {
-        await keep(env, o, r.kept);
-        try { await dev?.steerMute(arg); } catch { /* the steer queue keeps what it has */ }
-      }
+      const r = await mutate(env, o, (k) => { const x = muteIn(k, arg); return { kept: x.added ? x.kept : null, out: x.added }; }, false);
+      if (r.out) { try { await dev?.steerMute(arg); } catch { /* the steer queue keeps what it has */ } }
       break;
     }
     case 'unmute': {
       await carryOver(env, o);
-      const r = unmuteIn(await keptOf(env, o), arg);
-      if (r.had) await keep(env, o, r.kept);
+      await mutate(env, o, (k) => { const x = unmuteIn(k, arg); return { kept: x.had ? x.kept : null, out: x.had }; }, false);
       break;
     }
     case 'refresh': await refresh(env, o); break;

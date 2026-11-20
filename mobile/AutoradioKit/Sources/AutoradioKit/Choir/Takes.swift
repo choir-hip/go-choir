@@ -1,12 +1,8 @@
 import Foundation
 
-// Takes, what the Swift PROGRAMME still needs. The takes page (record, review, publish, delete, mute, the listener's own takes and record) and the wire for them are shared code now
-// (AutoradioLab/takes.ts, take-session.ts). What stays here, with the reason: the programme request (RadioProgramme.candidates, native: it builds the request the run sheet feeds from) lists the
-// public takes (`TakesClient.list`), filters them by the listener's own ids and muted voices (`TakeOwn`, `TakeMutes`: now READ-ONLY copies that shared code pushes after every change, `replace`),
-// and holds them by id (`TakeStore`) for the run sheet entry and the audio fetch (`TakesClient.audio`). They go when the programme request moves.
-//
-// THE WIRE (docs/reference/AUTORADIO-TAKES.md): GET /api/platform/takes?limit=50 `{generated_at, takes:[...]}`; GET /api/platform/takes/{id}/audio audio/mp4 (404 once deleted or yanked).
-// A 404 on the takes routes means the server is not deployed yet: `TakesUnavailable`.
+// Takes, what the Swift PROGRAMME still needs (the page and the wire for publishing are shared code: AutoradioLab/takes.ts, take-session.ts; the state table is in docs/reference/AUTORADIO-TAKES.md).
+// The programme request (RadioProgramme.candidates) lists the public takes (`list`), filters them by the listener's own ids and muted voices (`TakeOwn`, `TakeMutes`: READ-ONLY copies that shared
+// code pushes with `replace`), and holds them by id (`TakeStore`) for the run sheet and the audio fetch (`audio`). They go when the programme request moves. A 404 is `TakesUnavailable`.
 
 /// The server does not have the takes routes yet (404).
 public struct TakesUnavailable: Error, CustomStringConvertible, Equatable, Sendable {
@@ -148,9 +144,7 @@ enum TakeFiles {
     }
 }
 
-/// The listener's own takes (ids and the handle the platform gave them), so the public list never offers their own voice back to them. A READ-ONLY copy: shared code owns the data
-/// (app:/data/takes.json) and pushes it with `replace` after every change (take-session.ts `keep`); the file is also what `takeLegacy` reads once on an upgraded phone, so it is never removed here
-/// except at sign-out.
+/// The listener's own takes (ids and handle), so the public list never offers their own voice back. A READ-ONLY copy of shared code's data, pushed with `replace`; also the old file `TakeLegacy` reads once.
 public final class TakeOwn: @unchecked Sendable {
     public static let shared = TakeOwn(file: TakeFiles.url("takes-own.json"))
     private let lock = NSLock()
@@ -180,6 +174,20 @@ public final class TakeOwn: @unchecked Sendable {
         guard let file else { return }
         lock.lock(); let o: [String: Any] = ["ids": Array(ids).sorted(), "handle": _handle]; lock.unlock()
         if let d = try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys]) { try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true); try? d.write(to: file, options: .atomic) }
+    }
+}
+
+/// The carry-over's two native calls (take-session.ts carryOver; docs/reference/AUTORADIO-TAKES.md, "The phone's own state"). The marker is durable and the account wipe leaves it.
+public enum TakeLegacy {
+    public static let marker = TakeFiles.url("takes-carried")
+    public static func read(own: TakeOwn = .shared, mutes: TakeMutes = .shared, marker: URL? = TakeLegacy.marker) -> [String: Any] {
+        let done = marker.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+        let ids = done ? [] : own.allIDs, handle = done ? "" : own.handle, muted = done ? [] : mutes.all
+        return ["found": !ids.isEmpty || !handle.isEmpty || !muted.isEmpty, "carried": done, "ids": ids, "handle": handle, "muted": muted]
+    }
+    public static func markCarried(marker: URL? = TakeLegacy.marker) -> Bool {
+        guard let m = marker else { return false }; try? FileManager.default.createDirectory(at: m.deletingLastPathComponent(), withIntermediateDirectories: true)
+        return (try? Data("1".utf8).write(to: m, options: .atomic)) != nil
     }
 }
 

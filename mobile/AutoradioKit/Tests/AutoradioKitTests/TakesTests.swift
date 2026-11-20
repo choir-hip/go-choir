@@ -101,6 +101,22 @@ final class TakesTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: d.appendingPathComponent("takes-own.json").path), "reading removes nothing")
     }
 
+    /// Row 2 of the takes state table: the carry-over is a phone's upgrade. With the marker there, the old files are never handed out again, whatever they still hold.
+    func testTheCarryOverMarkerIsDurableAndHidesTheOldFilesFromAnyLaterAccount() throws {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("legacy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); defer { try? FileManager.default.removeItem(at: d) }
+        let own = TakeOwn(file: d.appendingPathComponent("o.json")), mutes = TakeMutes(file: d.appendingPathComponent("m.json")), marker = d.appendingPathComponent("takes-carried")
+        own.replace(ids: ["take-a"], handle: "voice-A"); mutes.replace(["voice-Am"])
+        var r = TakeLegacy.read(own: own, mutes: mutes, marker: marker)
+        XCTAssertEqual(r["found"] as? Bool, true); XCTAssertEqual(r["carried"] as? Bool, false); XCTAssertEqual(r["ids"] as? [String], ["take-a"]); XCTAssertEqual(r["handle"] as? String, "voice-A")
+        XCTAssertTrue(TakeLegacy.markCarried(marker: marker)); XCTAssertTrue(TakeLegacy.markCarried(marker: marker), "idempotent")
+        r = TakeLegacy.read(own: own, mutes: mutes, marker: marker)       // the files are still full (a failed unlink): the answer is empty and says carried
+        XCTAssertEqual(r["found"] as? Bool, false); XCTAssertEqual(r["carried"] as? Bool, true); XCTAssertEqual(r["ids"] as? [String], []); XCTAssertEqual(r["muted"] as? [String], [])
+        own.wipe(); mutes.wipe()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path), "the account wipe of the two stores does not touch the marker")
+        XCTAssertEqual(TakeLegacy.read(own: own, mutes: mutes, marker: nil)["carried"] as? Bool, false); XCTAssertFalse(TakeLegacy.markCarried(marker: nil))
+    }
+
     func testRespondsToFromTheEntryOnAir() async {
         await MainActor.run {
             var story = RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "Harbor fees rise", text: "x", estSeconds: 3)

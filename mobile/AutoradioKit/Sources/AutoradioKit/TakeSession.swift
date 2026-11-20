@@ -57,6 +57,8 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
     public private(set) var ended = ""
     public private(set) var detail = ""
     public var onChange: (() -> Void)?
+    /// The one session of the app (TakesHost sets it): sign-out and an account change discard its take before anything else (ChoirApp.signOut, AccountWipe), so a take is never shown to, or published by, the next account.
+    nonisolated(unsafe) public static weak var live: TakeSession?
 
     let recorder: TakeRecorderEngine, transcriber: TakeTranscribing, gate: TakeRadioGate, preview: TakePreviewing
     let micAllowed: () async -> Bool
@@ -161,7 +163,7 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
 
     public func discard() {
         if state == .recording { recorder.cancel() }
-        dropFile(); transcript = ""; duration = 0; bytes = 0; startedAt = nil; ended = ""; detail = ""; publishing = false
+        dropFile(); transcript = ""; duration = 0; bytes = 0; startedAt = nil; ended = ""; detail = ""; publishing = false; respondsTo = nil
         if state != .idle || holding { endHold(); state = .idle }
         changed()
     }

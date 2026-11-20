@@ -26,7 +26,7 @@
 //   T9  the page: the control offered matches the recorder's state; Publish only with a transcript; the sentence and the rights line on the review
 
 import type { Storage } from './app.contract.d.ts';
-import { authedBytes, authedJSON, HTTPError } from './api.ts';
+import { accountGeneration, authedBytes, authedJSON, HTTPError, writeCurrent } from './api.ts';
 
 export const BOUNDS = {
   minSeconds: 3, maxSeconds: 60,
@@ -210,10 +210,10 @@ export async function loadKept(storage: Storage | undefined): Promise<Kept> {
       muted: Array.isArray(o.muted) ? o.muted.filter((x: unknown): x is string => typeof x === 'string' && validHandle(x)) : [], migrated: o.migrated === true };
   } catch { return emptyKept(); }
 }
-/** True when the file was written (a full disk loses only a convenience, but the carry-over must know). */
-export async function saveKept(storage: Storage | undefined, k: Kept): Promise<boolean> {
-  if (!storage) return false;
-  try { await storage.fs.atomicWriteFile(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: [...k.ids].sort(), handle: k.handle, muted: k.muted, migrated: k.migrated }))); return true; } catch { return false; }
+/** True when the file is there. The write is held to the account generation like every moved store's (api.ts writeCurrent): `gen` is the generation the DATA belongs to (the overlay's), so a write
+ * begun for an account that has since been wiped is refused, and one that lands after the generation moved is removed again. */
+export async function saveKept(storage: Storage | undefined, k: Kept, gen: number = accountGeneration()): Promise<boolean> {
+  return writeCurrent(gen, storage, KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: [...k.ids].sort(), handle: k.handle, muted: k.muted, migrated: k.migrated })));
 }
 /** Sign-out: the ids, the handle and the muted voices are the account's. */
 export async function wipeKept(storage: Storage | undefined): Promise<void> { if (!storage) return; try { await storage.fs.rm(KEPT_FILE); } catch { /* absent */ } }
@@ -331,7 +331,11 @@ export function client(net: Net): Client {
       return t;
     },
     async list() { const r = await net('GET', '/api/platform/takes', { query: { limit: BOUNDS.listLimit } }); gone(r.status); return takesOf(r.json); },
-    async mine() { const r = await net('GET', '/api/platform/takes', { query: { mine: 1 } }); gone(r.status); return mineOf(r.json); },
+    async mine() {
+      const r = await net('GET', '/api/platform/takes', { query: { mine: 1 } }); gone(r.status);
+      if (!ok(r.status)) throw new TakesRefused(`The server could not list your takes (HTTP ${r.status}).`);
+      return mineOf(r.json);
+    },
     async remove(id) {
       const r = await net('DELETE', `/api/platform/takes/${encodeURIComponent(id)}`);
       if (!ok(r.status) && r.status !== 404 && r.status !== 409) throw new TakesRefused(`The server refused the delete (HTTP ${r.status}).`);      // 404 and 409: it is already gone

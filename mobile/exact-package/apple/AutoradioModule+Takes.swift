@@ -1,15 +1,12 @@
-// The take RECORDER's native side (the voice): the radio's gate, the microphone, the file, the recogniser and the preview player. The Takes section itself is shared code (AutoradioLab/take-session.ts,
-// takes.ts); this file holds what only the app can do: take the microphone from the radio (the one voice), record to a file, read it with the recogniser, hand the shared code one snapshot
-// (the source `takesRecorder`, declared in interface/takes.json) and answer its ops (`takeOp`, public: called across the module boundary from AutoradioLab/modules/apple/ModelsEntry.swift), and fetch another listener's take for the run sheet.
-//   ops: takeState | takeStart(minSeconds, maxSeconds, maxBytes) | takeStop | takePreview(mode on|off|toggle) | takePublishing(on) | takeDiscard | takeDone | takeAudio
-//        takeSteerMute(handle): the learning engine's steer queue is native (SteerQueue)
-//        takeMirror(ids, handle, muted): the Swift programme (RadioProgramme.candidates) still filters the takes it offers by the listener's own ids and muted voices; shared code owns them and pushes a copy
-//        takeLegacy: READS the old Swift files (takes-own.json, takes-muted.json) for the one-time carry-over; removes nothing
+// The take RECORDER's native side (the voice): the radio's gate, the microphone, the file, the recogniser, the preview. The Takes section is shared code (AutoradioLab/take-session.ts); this file hands it
+// one snapshot (source `takesRecorder`, interface/takes.json) and answers its ops (`takeOp`, public: ModelsEntry.swift calls it) and fetches another listener's take for the run sheet.
+//   ops: takeState | takeStart(min/maxSeconds, maxBytes) | takeStop | takePreview(mode) | takePublishing(on) | takeDiscard | takeDone | takeAudio | takeSteerMute (the steer queue is native)
+//        takeMirror (the Swift programme still filters takes by the listener's own ids and muted voices; shared code owns them and pushes a copy) | takeLegacy, takeCarried (the old files are only
+//        READ, once per PHONE; the marker is durable: docs/reference/AUTORADIO-TAKES.md, "The phone's own state")
 import AVFoundation
 import Foundation
 
-/// The radio gives the microphone to a take: the radio is paused (the same pause a turn makes), hands-free is off for the while, and the
-/// session is the capture one. When the take is over everything goes back as it was; a listener's own pause stays a pause.
+/// The radio gives the microphone to a take: paused (as a turn does), hands-free off, the capture session; when the take is over everything goes back (a listener's own pause stays a pause).
 @MainActor final class TakeGate: TakeRadioGate {
     unowned let module: AutoradioModule
     private var handsFree = false
@@ -45,6 +42,7 @@ import Foundation
         session = TakeSession(recorder: AVTakeRecorder(), transcriber: FileTranscriber(make: make), gate: TakeGate(module), preview: preview,
                               micAllowed: { LiveAudio.micPermissionGranted() ? true : await LiveAudio.requestMicPermission() },
                               responds: { TakeResponds.from(entry: RunSheetPlayer.shared.store.onAir()) }, dir: dir)
+        TakeSession.live = session
         preview.onEnd = { [weak self] in self?.session.previewEnded() }
         session.onChange = { [weak self, weak module] in
             module?.touch(["takesRecorder", "radioPage"], now: true)
@@ -89,27 +87,17 @@ extension AutoradioModule {
         switch r["op"] as? String ?? "" {
         case "takeStart": await s.start(TakeLimits(minSeconds: num("minSeconds", 3), maxSeconds: num("maxSeconds", 59.5), maxBytes: Int(num("maxBytes", 512 * 1024))))
         case "takeStop": await s.stop()
-        case "takePreview":
-            switch r["mode"] as? String ?? "toggle" {
-            case "on": s.setPreview(true)
-            case "off": s.setPreview(false)
-            default: s.togglePreview()
-            }
+        case "takePreview": if let m = r["mode"] as? String, m != "toggle" { s.setPreview(m == "on") } else { s.togglePreview() }
         case "takePublishing": s.setPublishing((r["on"] as? Bool) ?? false)
         case "takeDiscard": s.discard()
         case "takeDone": s.done()
-        case "takeAudio":
-            return s.audio.map { ["b64": $0.base64EncodedString() as Any] } ?? [:]
+        case "takeAudio": return s.audio.map { ["b64": $0.base64EncodedString() as Any] } ?? [:]
         case "takeSteerMute":
-            if let h = r["handle"] as? String, !h.isEmpty { SteerQueue.shared.enqueue(.mute(handle: h)); await SteerQueue.shared.flush() }
-            return [:]
+            if let h = r["handle"] as? String, !h.isEmpty { SteerQueue.shared.enqueue(.mute(handle: h)); await SteerQueue.shared.flush() }; return [:]
         case "takeMirror":
-            TakeOwn.shared.replace(ids: r["ids"] as? [String] ?? [], handle: r["handle"] as? String ?? "")
-            TakeMutes.shared.replace(r["muted"] as? [String] ?? [])
-            return [:]
-        case "takeLegacy":
-            let ids = TakeOwn.shared.allIDs, handle = TakeOwn.shared.handle, muted = TakeMutes.shared.all
-            return ["found": !ids.isEmpty || !handle.isEmpty || !muted.isEmpty, "ids": ids, "handle": handle, "muted": muted]
+            TakeOwn.shared.replace(ids: r["ids"] as? [String] ?? [], handle: r["handle"] as? String ?? ""); TakeMutes.shared.replace(r["muted"] as? [String] ?? []); return [:]
+        case "takeCarried": return ["ok": TakeLegacy.markCarried()]
+        case "takeLegacy": return TakeLegacy.read()
         default: break
         }
         return s.snapshot

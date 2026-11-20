@@ -68,7 +68,9 @@ class FakeDevice implements Device {
   async done() { this.log.push('done'); this.snap = { ...IDLE }; return this.snap; }
   async steerMute(h: string) { this.steered.push(h); }
   async mirror(k: { ids: string[]; handle: string; muted: string[] }) { this.mirrored.push({ ids: [...k.ids], handle: k.handle, muted: [...k.muted] }); }
-  async legacy() { this.legacyCalls++; return this.legacyAnswer; }
+  marker = false;
+  async carried() { this.log.push('carried'); this.marker = true; return true; }
+  async legacy() { this.legacyCalls++; return this.marker ? { found: false, ids: [], handle: '', muted: [], carried: true } : this.legacyAnswer; }
 }
 
 const files = new Map<string, Uint8Array>();
@@ -464,10 +466,17 @@ describe('S4 two publishes started in the same window post once', () => {
     await Promise.all([act(h.env, h.o, 'publish', ''), act(h.env, h.o, 'publish', '')]);
     expect(posts(h.seen)).toBe(1); expect(h.dev.log.filter((x) => x === 'done')).toHaveLength(1);
   });
-  test('a recorder that fails to drop the file after a publish does not make the take publishable twice in this session', async () => {
+  test('a failed done falls back to discard, and the publish still counts', async () => {
     const h = setup(); await recorded(h); h.dev.done = async () => { throw new Error('native gone'); };
     const p = await act(h.env, h.o, 'publish', '');
-    expect(p.justPublished).toBe('Published as voice-me0001.'); expect(posts(h.seen)).toBe(1);
+    expect(p.justPublished).toBe('Published as voice-me0001.'); expect(posts(h.seen)).toBe(1); expect(h.dev.log).toContain('discard');
+  });
+  test('when both done and discard fail the take stays in review, and publishing it again sends the very same body (the server derives the id from the audio)', async () => {
+    const h = setup(); await recorded(h); h.dev.done = async () => { throw new Error('native gone'); }; h.dev.discard = async () => { throw new Error('native gone'); };
+    await act(h.env, h.o, 'publish', ''); await act(h.env, h.o, 'publish', '');
+    expect(posts(h.seen)).toBe(2);
+    const bodies = h.seen.filter((x) => x.m === 'POST').map((x) => text(x.body));
+    expect(bodies[0]).toBe(bodies[1]);
   });
 });
 
@@ -526,5 +535,97 @@ describe('S1 and S3 delete and refresh', () => {
     const h = setup((s) => (up ? (s.m === 'POST' ? { status: 201, json: publishFx } : { status: 200, json: { takes: [] } }) : { status: 404 }));
     await recorded(h); expect((await act(h.env, h.o, 'publish', '')).notice).toContain('not available yet');
     up = true; expect((await act(h.env, h.o, 'refresh', '')).notice).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------- review 2: one table, one row at a time (docs/reference/AUTORADIO-TAKES.md, "The phone's own state")
+
+describe('row 1 the recorder\'s live take belongs to the account that made it', () => {
+  test('a take in review is not shown to the next account: the change of account discards it', async () => {
+    const h = setup(); await recorded(h);
+    expect((await pageFor(h.env, h.o, h.dev.snap)).state).toBe('review');
+    nextGeneration();
+    const p = await pageFor(h.env, h.o, await h.dev.state());
+    expect(h.dev.log).toContain('discard'); expect(h.dev.snap.phase).toBe('idle'); expect(p).toMatchObject({ state: 'idle', transcript: '', canPublish: false });
+  });
+});
+
+describe('row 2 the carry-over is a one-time phone upgrade, never a second account\'s', () => {
+  const old = { found: true, ids: ['take-A'], handle: 'voice-A', muted: ['voice-Am'] };
+  test('after A adopted, a wipe whose native unlink failed, a restart and B: nothing of A is adopted', async () => {
+    const h = setup(); h.dev.legacyAnswer = old;
+    await act(h.env, h.o, 'refresh', ''); expect(h.dev.marker).toBe(true);
+    // sign-out: the shared file goes; the native unlink failed (the legacy answer still has A's data); the process restarts (a new overlay); B signs in
+    nextGeneration(); await wipeKept(storage);
+    h.dev.mirrored.length = 0;
+    const fresh = newOverlay();
+    const p = await act(h.env, fresh, 'refresh', '');
+    expect(p.muted).toEqual([]); expect(p.handle).toBe('');
+    const k = await loadKept(storage); expect(k.ids).toEqual([]); expect(k.muted).toEqual([]); expect(k.handle).toBe('');
+    expect(h.dev.mirrored.at(-1)).toEqual({ ids: [], handle: '', muted: [] });      // the programme's stale copy of A is overwritten by B's state
+  });
+  test('the marker is written after the shared write, and a missing marker is made good on the next process', async () => {
+    const h = setup(); h.dev.legacyAnswer = old;
+    h.dev.carried = async () => false as never;                 // the native write failed this time
+    await act(h.env, h.o, 'refresh', '');
+    expect((await loadKept(storage)).migrated).toBe(true); expect(h.dev.marker).toBe(false);
+    const g = { ...h.env }; h.dev.carried = FakeDevice.prototype.carried;
+    await act(g, newOverlay(), 'refresh', '');
+    expect(h.dev.marker).toBe(true);
+  });
+  test('a failed write leaves no marker', async () => {
+    const h = setup(); h.dev.legacyAnswer = old;
+    const bad = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => { throw new Error('disk full'); }, rm: async () => {} } } as never;
+    await act({ ...h.env, storage: bad }, h.o, 'refresh', '');
+    expect(h.dev.marker).toBe(false);
+  });
+});
+
+describe('row 3 every write of the kept file is held to the account generation', () => {
+  test('a mute suspended inside the write while the account changes leaves no file behind', async () => {
+    files.clear();
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    let hold = false;
+    const slow = { fs: { readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; },
+      atomicWriteFile: async (p: string, d: Uint8Array) => { if (hold) await gate; files.set(p, d); }, rm: async (p: string) => { files.delete(p); } } } as never;
+    const h = setup(); const env = { ...h.env, storage: slow };
+    await act(env, h.o, 'refresh', '');
+    hold = true;
+    const mute = act(env, h.o, 'mute', 'voice-OLD');
+    await new Promise((r) => setTimeout(r, 5));
+    nextGeneration(); await wipeKept(slow);
+    release(); await mute;
+    expect(files.has(KEPT_FILE)).toBe(false);
+    expect((await pageFor(env, newOverlay(), IDLE)).muted).toEqual([]);
+    expect(h.dev.mirrored.at(-1)?.muted ?? []).toEqual([]);          // and the programme was not given the old account's voice
+  });
+});
+
+describe('row 4 two changes to the kept data at the same time are both kept', () => {
+  test('two mutes from a fresh overlay', async () => {
+    const h = setup();
+    await Promise.all([act(h.env, h.o, 'mute', 'voice-1'), act(h.env, h.o, 'mute', 'voice-2')]);
+    expect((await loadKept(storage)).muted.sort()).toEqual(['voice-1', 'voice-2']); expect(h.dev.mirrored.at(-1)?.muted.sort()).toEqual(['voice-1', 'voice-2']);
+  });
+  test('a publish and a mute and an unmute in the same window: the final file has the own id and the right mutes', async () => {
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    const h = setup(async (s) => { if (s.m === 'POST') { await gate; return { status: 201, json: publishFx }; } return { status: 200, json: { takes: [] } }; });
+    await act(h.env, h.o, 'mute', 'voice-keep'); await act(h.env, h.o, 'mute', 'voice-drop');
+    await recorded(h);
+    const pub = act(h.env, h.o, 'publish', '');
+    await new Promise((r) => setTimeout(r, 5));
+    await Promise.all([act(h.env, h.o, 'unmute', 'voice-drop'), act(h.env, h.o, 'mute', 'voice-new')]);
+    release(); await pub;
+    const k = await loadKept(storage);
+    expect(k.ids).toContain('take-00000000000000b6'); expect(k.muted.sort()).toEqual(['voice-keep', 'voice-new']);
+    expect(h.dev.mirrored.at(-1)).toMatchObject({ muted: expect.arrayContaining(['voice-keep', 'voice-new']) });
+  });
+});
+
+describe('row 5 a server error listing my takes is said', () => {
+  test('a 500 from mine shows a notice instead of "no takes"', async () => {
+    const h = setup((s) => (s.q?.mine ? { status: 500 } : { status: 200, json: { takes: [] } }));
+    const p = await act(h.env, h.o, 'refresh', '');
+    expect(p.notice).toBe('The server could not list your takes (HTTP 500).');
   });
 });
