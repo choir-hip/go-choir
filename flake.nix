@@ -228,7 +228,7 @@
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
-        vendorHash = "sha256-GUtpQuLMO5kW9aC0la3dgoZY1llOTD3yM2fV8zUg7QU=";
+        vendorHash = "sha256-13m8lw0Oj0gGecosk+rIOR4Cu+Uv+lq675txXyo5iEE=";
         nativeBuildInputs = [ pkgs.pkg-config ];
         ldflags = [
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=${goModuleVersion}"

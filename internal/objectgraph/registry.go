@@ -361,6 +361,10 @@ func DefaultRegistry() *Registry {
 		// incidental); the export of story.entities, read by the
 		// related-stories walk (central only).
 		{Kind: "mentions_entity", Owner: OwnerCorpusd},
+		// A public capture to its event projection (entity layer design,
+		// section 2). The ready list reads it from station E2; station E5
+		// writes it.
+		{Kind: "in_event", Owner: OwnerCorpusd},
 		// computer: engineering records (frozen V1 spelling) and the
 		// commitment record's delivery packet.
 		{Kind: "co_super_assignment_trajectory", Owner: OwnerVMStore},
