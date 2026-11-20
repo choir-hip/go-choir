@@ -264,8 +264,6 @@ component PaperPage
                   Btn(label="Thin", primary=false, wide=false)
                 button press=pickEdition("") testId="paper-edition-default" appearance="none"
                   Btn(label="Default", primary=false, wide=false)
-          if au.signedIn == false and au.message != ""
-            text au.message testId="paper-signin-message" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
           // nothing to read, or it failed: a line of plain words and one action
           if pfront.status == "offline" or pfront.status == "error" or pfront.status == "empty"
             column align-items="center" gap=12 width="100%" box-sizing="border-box" padding="24px 16px"

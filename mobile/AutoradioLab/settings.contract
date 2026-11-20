@@ -374,10 +374,10 @@ component AccountScreen
         if acs.action == "signIn"
           button press=signIn testId="settings-signin" appearance="none"
             ActionButton(label="Sign in", testId="settings-signin-box", primary=true, danger=false)
-        // one action: a refused phone signs in again (a new key replaces the old); Sign out is for a phone the server still accepts
-        if au.signedIn and acs.state != "rejected"
+        // one Sign in and one Sign out, worded so they do not contradict: a refused phone signs in again, or clears its stored key (sign-out is local first: it removes the key and this phone's data)
+        if au.signedIn
           button press=signOut testId="settings-signout" appearance="none"
-            ActionButton(label="Sign out", testId="settings-signout-box", primary=false, danger=true)
+            ActionButton(label=(acs.state == "rejected" ? "Clear this phone" : "Sign out"), testId="settings-signout-box", primary=false, danger=true)
 
 // ---------------------------------------------------------------- voice and models
 
