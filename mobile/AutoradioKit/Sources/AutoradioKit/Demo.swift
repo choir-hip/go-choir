@@ -32,31 +32,31 @@ public enum Demo {
         return defaults.bool(forKey: defaultsKey) || env["AUTORADIO_DEMO"] == "1"
     }
     static let clearedKey = "AutoradioDemoLeftoversCleared"          // recorded once `clearLeftovers` has run on this device
-
     /// Native because the platform forces it: this removes on-disk state the native code wrote (the shelf, the stores' files).
-    /// Conservative: the sample book and `demo-` addresses go always; onboarding, edition topics and voice setup carry no mark of
-    /// origin, so they go only when no real key is stored; `recent-files.json` stays. The Keychain is never touched.
-    /// Once per device (demo not allowed), whatever the stored flag was; never on the simulator or the Mac.
-    public static func clearLeftovers(support: URL, hasRealKey: Bool, allowed: Bool = allowedHere, defaults: UserDefaults = .standard) {
-        guard !allowed, !defaults.bool(forKey: clearedKey) else { return }; defaults.set(true, forKey: clearedKey)
-        ReaderShelf(root: support.appendingPathComponent("books")).remove(id: ReaderSample.id)
-        if !hasRealKey { AccountWipe.removeFiles(["onboarding.json", "edition-topics.json", "voice-setup.json"].map { support.appendingPathComponent($0) }) }
+    /// Needs a positive demo trace: the sample book only if the shelf lists it, pages and signals only for the fixture addresses
+    /// demo produced; onboarding, topics and voice setup are never touched. Once per device, whatever the flag was; marked after the removals.
+    public static func clearLeftovers(support: URL, allowed: Bool = allowedHere, defaults: UserDefaults = .standard) {
+        guard !allowed, !defaults.bool(forKey: clearedKey) else { return }
+        var ok = true
+        let shelf = ReaderShelf(root: support.appendingPathComponent("books"))
+        if shelf.doc(ReaderSample.id) != nil { shelf.remove(id: ReaderSample.id); ok = shelf.doc(ReaderSample.id) == nil }
         let file = support.appendingPathComponent("open-pages.json")
-        if let d = try? Data(contentsOf: file), var o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
-            o["pages"] = ((o["pages"] as? [[String: Any]]) ?? []).filter { !isDemoAddress($0["address"] as? String ?? "") }
-            o["recency"] = ((o["recency"] as? [String]) ?? []).filter { !isDemoAddress($0) }
-            try? JSONSerialization.data(withJSONObject: o).write(to: file, options: .atomic)
+        if let d = try? Data(contentsOf: file), var o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+           let pages = o["pages"] as? [[String: Any]], let recency = o["recency"] as? [String] {
+            let p = pages.filter { !isDemoAddress($0["address"] as? String ?? "") }, r = recency.filter { !isDemoAddress($0) }
+            o["pages"] = p; o["recency"] = r
+            if p.count != pages.count || r.count != recency.count { ok = (try? JSONSerialization.data(withJSONObject: o).write(to: file, options: .atomic)) != nil && ok }
         }
         let log = support.appendingPathComponent("signals.jsonl")
-        if let text = try? String(contentsOf: log, encoding: .utf8) {
-            let keep = text.split(separator: "\n").filter { (try? JSONDecoder().decode(SignalEvent.self, from: Data($0.utf8))).map { !isDemoAddress($0.subject) } ?? true }
-            try? (keep.map { $0 + "\n" }.joined()).write(to: log, atomically: true, encoding: .utf8)
+        if let all = (try? String(contentsOf: log, encoding: .utf8))?.split(separator: "\n") {
+            let keep = all.filter { (try? JSONDecoder().decode(SignalEvent.self, from: Data($0.utf8))).map { !isDemoAddress($0.subject) } ?? true }
+            if keep.count != all.count { ok = (try? keep.map { $0 + "\n" }.joined().write(to: log, atomically: true, encoding: .utf8)) != nil && ok }
         }
+        if ok { defaults.set(true, forKey: clearedKey) }
     }
-
-    /// `pub:demo-x`, `pub:/demo-x`, `pub:/demo-x#b2`: what follows the scheme starts with `demo-`.
+    /// Exactly what demo mode opens and records: `pub:` plus a fixture story id (`pub:demo-x`, `pub:/demo-x`, `pub:/demo-x#b2`).
     static func isDemoAddress(_ a: String) -> Bool {
-        a.firstIndex(of: ":").map { a[a.index(after: $0)...].drop { $0 == "/" }.lowercased().hasPrefix("demo-") } ?? false
+        a.hasPrefix("pub:") && DemoFixtureData.files["resolve-" + (a.dropFirst(4).drop { $0 == "/" }.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")] != nil
     }
 
     /// A key store already signed in as the demo listener (the key is a placeholder; nothing leaves the phone).

@@ -127,7 +127,7 @@ public final class AutoradioModule: ExactPackage {
         if Demo.isOn { Demo.install() }
         // The listener path: sign-in (Keychain), the front page, the real stages.
         let appKeys: KeyStore = Demo.isOn ? Demo.keys() : KeychainKeyStore()
-        Demo.clearLeftovers(support: support, hasRealKey: appKeys.get(KeyAccount.apiKey) != nil)   // a phone that was in demo mode: once
+        Demo.clearLeftovers(support: support)   // a phone that was in demo mode: once
         #if targetEnvironment(simulator)
         // Real-data proof only (compiled out of device builds): a `proof-key` file in Documents becomes the stored key, then is deleted.
         if !Demo.isOn, let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {

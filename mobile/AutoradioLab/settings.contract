@@ -200,7 +200,6 @@ component RootScreen
     tc: ThemeCards
     acctInfo: SettingsAccount
     cmpt: SettingsComputer
-    dm: DemoInfo
     devDetails: bool
     toggleDevDetails: action
     voicep: VoiceProfile

@@ -555,7 +555,7 @@ if it adds a name a child component must `inject`).
   `Card(level, testId, minHeight)`, `Layer(testId)`, `Surface(level, radius, bleed)`, `PageScroll(id)` are in `ui.contract`.
 - **Demo mode** (`Demo.swift`, fixtures in `mobile/fixtures/demo/`): signed in as a demo listener, every request answered from fixtures,
   no network, no microphone. A proof aid for the simulator and the Mac only: on a physical phone it is never on, and a stored `AutoradioDemo`
-  flag there is removed (with what demo left behind, once). There is no control in the app for it. On (simulator):
+  flag there is removed (and the sample book and demo's open pages and signals, once). There is no control in the app for it. On (simulator):
   `xcrun simctl spawn <udid> defaults write news.choir.autoradio.lab AutoradioDemo -bool YES`.
   A lane that needs a route adds a fixture file and one `case` in `DemoURLProtocol.route`; `scripts/embed-assets.py` embeds it.
 - `PageSource` (`Pages.swift`): `handles(address)` and `load(address) -> PageModel`; register in your `registerX()` with `pageSources.register(...)`
