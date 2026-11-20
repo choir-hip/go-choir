@@ -174,7 +174,8 @@ component FilesPlace
               image "symbol:forward-chevron" width=10 height=10 color=th.muted flex-shrink=0
             button press=fsBrowse(c.path) testId=`files-crumb-${c.path}` appearance="none" padding="6px 6px" flex-shrink=0
               text c.name font-family=(i == fsList.crumbs.length - 1 ? th.fontLabel : th.fontAction) font-size="-exact-subheadline" font-weight=(i == fsList.crumbs.length - 1 ? 400 : 600) color=(i == fsList.crumbs.length - 1 ? th.fg : th.accent)
-        if fsNewing
+        // the new-folder form closes when the phone stops being signed in (the account state, not the toggle, decides)
+        if fsNewing and acs.state == "signedIn"
           row gap=8 align-items="center"
             column flex=1 min-width=0
               input value=fsNewName input=fsEditNew submit=fsMakeFolder placeholder="Folder name" aria-label="Folder name" testId="files-new-input"

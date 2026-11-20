@@ -72,8 +72,8 @@ type Account = (typeof KEYCHAIN_ACCOUNTS)[number];
 
 /** The data module's one native module, as far as this file uses it. */
 export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string }): Promise<unknown> };
+/** app.ts hands over the module's native handle at every answer (adoptNative). */
 let reader: NativeReader | undefined;
-/** app.ts hands over the module's native handle at every answer. */
 /** True once ANY app-module op has answered (a key read, a key state): the native module is there, and the host decision (host.ts) can no longer say "no native". */
 let nativeAnswered = false;
 export const nativeHasAnswered = (): boolean => nativeAnswered;

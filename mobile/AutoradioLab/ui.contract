@@ -342,19 +342,23 @@ component EmptyState
 // The room a scrolling page leaves at its end so nothing important sits under the bar: the bar's 56, its 8 above the home
 // indicator, the indicator, and a gap. The one place the number is written; every scroll body ends with it.
 component BarClear
+  inject
+    bannerOn: bool
   view
-    box width="100%" height="calc(env(safe-area-inset-bottom) + 150px)"
+    // the signed-out card stands above the bar while it shows (about 64): the end of a scroll clears it too
+    box width="100%" height=(bannerOn ? "calc(env(safe-area-inset-bottom) + 214px)" : "calc(env(safe-area-inset-bottom) + 150px)")
 
 // For tool pages (Activity, Settings): the scroll frame ends above the bar instead of running under it, so every control
 // stays tappable by a driver that scrolls an element to the frame's bottom edge.
 component ToolScroll
   inject
     th: Theme
+    bannerOn: bool
   props
     id: string
   slot
   view
-    scroll id=id overflow-x="hidden" flex=1 min-height=0 width="100%" margin-bottom="calc(env(safe-area-inset-bottom) + 140px)"
+    scroll id=id overflow-x="hidden" flex=1 min-height=0 width="100%" margin-bottom=(bannerOn ? "calc(env(safe-area-inset-bottom) + 204px)" : "calc(env(safe-area-inset-bottom) + 140px)")
       column width="100%" box-sizing="border-box" min-width=0 padding-top="calc(env(safe-area-inset-top) + 12px)" padding-left=20 padding-right=20 padding-bottom=24 gap=12
         font-family=th.fontText color=th.fg
         children

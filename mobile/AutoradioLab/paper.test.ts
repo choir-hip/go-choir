@@ -333,9 +333,9 @@ describe('F13 demo mode', () => {
 });
 
 describe('the paper masthead date is the reader\'s local date', () => {
-  test('11:30 pm local on 19 Nov reads Thu 19 Nov whatever the zone (it was UTC: Fri 20 in the evening in the Americas)', async () => {
-    const { dateLine } = await import('./paper-model.ts');
-    expect(dateLine(new Date(2026, 10, 19, 23, 30).getTime())).toBe('Thu 19 Nov');
-    expect(dateLine(new Date(2026, 10, 20, 0, 10).getTime())).toBe('Fri 20 Nov');
+  test('02:38 UTC on 20 Nov is Thu 19 Nov in New York (the date was UTC: Fri 20 in the evening in the Americas)', () => {
+    // a child process with its own zone: the zone of this process is shared with every other test file
+    const r = Bun.spawnSync(['bun', '-e', "import('./paper-model.ts').then((m) => console.log(m.dateLine(Date.UTC(2026, 10, 20, 2, 38))))"], { cwd: import.meta.dir, env: { ...process.env, TZ: 'America/New_York' } });
+    expect(r.stdout.toString().trim()).toBe('Thu 19 Nov');
   });
 });

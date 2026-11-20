@@ -208,7 +208,9 @@ step "clock data"; wait_ 6000
 wait_ 6000; wait_ 6000; wait_ 6000
 view real-50-so-first-screen 2500
 place paper 2500; view real-51-so-paper 3500
-[ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-52-so-story 4000; }
+# the end of the page clears the card: the last row is readable above it (read the screenshot)
+for i in 1 2 3 4 5 6; do step "tap paper-scroll drag 0 -1500"; wait_ 300; done; view real-51b-so-paper-end 900; for i in 1 2 3 4 5 6; do step "tap paper-scroll drag 0 1500"; wait_ 300; done
+[ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-52-so-story 4000; step "tap reader-menu"; wait_ 900; place radio 1500; view real-52b-so-after-sheet 2500; }
 place radio 1500; view real-53-so-radio 2500
 step "tap radio-play-public"; wait_ 6000; step tree; shot real-53b-so-playing
 place settings 900; step "tap settings-nav-account"; view real-54-so-account 3000
@@ -277,7 +279,12 @@ bad "signed in: no sign-in card on the tour" '\[signedout-banner\]' "$SHOTS/driv
 for D in "$SV" "$RD" "$SHOTS/drive-tour.txt"; do
   bad "signed in: no Sign in action ($(basename "$D"))" '\[(paper-signin|paper-signin-card|signin|signedout-signin)\]' "$D"
 done
+# a momentary empty account state must not hide the write controls unnoticed: signed in, they ARE there
+chk "signed in: Mail has New message" '\[mail-compose\]' "$SV"
+chk "signed in: Files has Add a file" '\[files-upload\]' "$SV"
 # the signed-out tour
+# the first-run page signed out is its own step: a signed-out first launch opens on it, and the card must stand on it
+chk "signed out: the first-run page is the first screen" 'Make it yours' "$SO1"
 chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO1"
 chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO1"
 chk "signed out: the radio says what it is" 'This is the public paper. Sign in to hear your own programme.' "$SO"
@@ -287,6 +294,13 @@ chk "signed out: the radio offers the public paper" '\[radio-play-public\]' "$SO
 # public playback was STARTED: the now-playing line names one of the public stories listed on the radio page
 T0=$(grep -m1 -A1 '\[radio-public-play-0\]' "$SO" | grep -o 'Text#[0-9]* "[^"]*"' | head -1 | sed -E 's/^Text#[0-9]+ "//; s/"$//' | cut -c1-24)
 if [ -n "$T0" ] && grep -E 'NOW PLAYING|Now playing,' "$SO" | grep -qF "$T0"; then echo "ok: signed out: public playback started (now playing: a public story)"; else echo "MISSING: signed out: public playback started (title '$T0')"; FAILS="$FAILS [public playback]"; fi
+# the tree a screenshot was taken of: the lines between the previous screenshot line and this one
+seg() { awk -v m="$1" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$SO"; }
+seg real-51b-so-paper-end > "$SHOTS/seg-paper-end.txt"; seg real-52b-so-after-sheet > "$SHOTS/seg-after-sheet.txt"
+chk "signed out: the end of the paper shows its last line (the count)" 'stories . pull down to refresh' "$SHOTS/seg-paper-end.txt"
+chk "signed out: the card is there at the end of the paper" '\[signedout-banner\]' "$SHOTS/seg-paper-end.txt"
+# the reader's menu sheet left open must not hide the card on the next page
+if [ -n "$STORY1" ]; then chk "signed out: after a reader sheet the next page still has the card" '\[signedout-banner\]' "$SHOTS/seg-after-sheet.txt"; fi
 # the card is the first child of the bar's own column, before the bar (so it sits whole above the bar at any bar height, the now-playing strip included). The tree dump carries no frames, so this is
 # the structure, not a measured bottom edge; the screenshots are where the placement is read.
 PLACED=$(awk '/\[bar-stack\]/{st=1;bar=0;next} /\[bar\]/{bar=1} /\[signedout-banner\]/{if(st&&!bar)ok++;else bad++} END{print (ok+0)","(bad+0)}' "$SO")
