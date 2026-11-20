@@ -367,7 +367,8 @@ func (s *Service) computeEntityPage(ctx context.Context, entityID string, limit 
 // entityMentionsNewest is the entity's live mention edges from publications,
 // newest first. A capture's link to the entity (station E3) is not a story's
 // mention and must not fill the window the page reads (it uses
-// idx_og_edges_to_kind_created).
+// idx_og_edges_to_kind_created). A publication is told by a prefix test, not a
+// range: the paper's collation sorts ':' after ';', which made the range empty.
 func (s *Service) entityMentionsNewest(ctx context.Context, canonical string, limit int, centralOnly bool) ([]objectgraph.Edge, error) {
 	roleCond := ""
 	if centralOnly {
@@ -376,7 +377,7 @@ func (s *Service) entityMentionsNewest(ctx context.Context, canonical string, li
 	}
 	rows, err := s.store.corpus().QueryContext(ctx, `SELECT edge_id, from_id, metadata, created_at FROM og_edges
 		WHERE to_id = ? AND kind = ? AND NOT tombstone
-			AND from_id >= 'obj:choir.publication:' AND from_id < 'obj:choir.publication;'`+roleCond+`
+			AND starts_with(from_id, 'obj:choir.publication:')`+roleCond+`
 		ORDER BY created_at DESC, edge_id LIMIT ?`, canonical, string(edgeMentionsEntity), limit)
 	if err != nil {
 		return nil, fmt.Errorf("entity page: mentions of %s: %w", canonical, err)
