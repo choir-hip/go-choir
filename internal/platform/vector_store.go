@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -111,7 +112,16 @@ type vectorState struct {
 	unsupported atomic.Value
 	kick        chan struct{}
 	kickOnce    sync.Once
-	started     sync.Once
+	// pending holds the ids of captures written since the worker last looked,
+	// and wake tells an idle worker there are some (NoteCapturesWritten). In
+	// memory only: a restart forgets them and the full pass finds them.
+	pendMu   sync.Mutex
+	pending  map[string]uint64 // id -> sequence of its latest naming
+	pendSeq  uint64
+	stepLog  stepSummary
+	wake     chan struct{}
+	wakeOnce sync.Once
+	started  sync.Once
 	// remaining is the last pass's count of rows still without a vector.
 	remaining atomic.Int64
 	importMu  sync.Mutex
@@ -173,6 +183,107 @@ func (s *Store) embedder() embedder.Embedder {
 	s.vec.mu.RLock()
 	defer s.vec.mu.RUnlock()
 	return s.vec.embedder
+}
+
+// vectorPendingMax is the most capture ids the write path holds for the worker.
+// It bounds memory, not work: when the set is full the OLDEST id is dropped
+// (the event flush wants the newest captures) and the full pass finds the
+// dropped capture, as it did before ids were handed over.
+var vectorPendingMax = 5000
+
+// vectorStepLogEvery is how often the id steps' summary line is written.
+var vectorStepLogEvery = time.Minute
+
+// stepSummary folds the id steps into one log line per vectorStepLogEvery
+// (steps, ids named, embedded, skipped, refused, ms), so a steady stream of
+// captures does not write a line a step. A failing step logs at once.
+type stepSummary struct {
+	mu                                    sync.Mutex
+	since                                 time.Time
+	steps, named, embedded, skipped, refd int
+	took                                  time.Duration
+}
+
+func (l *stepSummary) add(named, embedded, skipped, refused int, took time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	if l.since.IsZero() {
+		l.since = now
+	}
+	l.steps++
+	l.named += named
+	l.embedded += embedded
+	l.skipped += skipped
+	l.refd += refused
+	l.took += took
+	if now.Sub(l.since) < vectorStepLogEvery {
+		return
+	}
+	log.Printf("corpusd vectors ids steps=%d named=%d embedded=%d skipped=%d refused=%d ms=%.0f over=%s",
+		l.steps, l.named, l.embedded, l.skipped, l.refd, float64(l.took.Microseconds())/1000, now.Sub(l.since).Round(time.Second))
+	l.since, l.steps, l.named, l.embedded, l.skipped, l.refd, l.took = now, 0, 0, 0, 0, 0, 0
+}
+
+// vectorWholeTableQueries counts the statements that read the whole capture
+// projection or the whole vector table (the counts and the gap walk of a full
+// pass). A wake by ids must not issue one; a test reads the counter.
+var vectorWholeTableQueries atomic.Int64
+
+func (v *vectorState) wakeChan() chan struct{} {
+	v.wakeOnce.Do(func() { v.wake = make(chan struct{}, 1) })
+	return v.wake
+}
+
+// NoteCapturesWritten hands the worker the ids of captures just written and
+// wakes it if it is idle. It never blocks and starts nothing: ids accumulate
+// in a set (a repeat is one) while the worker is busy or backing off, and one
+// wake is held. A wake is not a call to the embedder.
+func (s *Store) NoteCapturesWritten(ids ...string) {
+	if s == nil || len(ids) == 0 {
+		return
+	}
+	s.vec.pendMu.Lock()
+	if s.vec.pending == nil {
+		s.vec.pending = map[string]uint64{}
+	}
+	for _, id := range ids {
+		if _, held := s.vec.pending[id]; !held && len(s.vec.pending) >= vectorPendingMax {
+			oldest, oldestSeq := "", uint64(0)
+			for k, q := range s.vec.pending {
+				if oldest == "" || q < oldestSeq {
+					oldest, oldestSeq = k, q
+				}
+			}
+			delete(s.vec.pending, oldest)
+		}
+		s.vec.pendSeq++
+		s.vec.pending[id] = s.vec.pendSeq
+	}
+	s.vec.pendMu.Unlock()
+	select {
+	case s.vec.wakeChan() <- struct{}{}:
+	default:
+	}
+}
+
+// takePendingCaptures empties the set and returns its ids, sorted.
+func (s *Store) takePendingCaptures() []string {
+	s.vec.pendMu.Lock()
+	ids := make([]string, 0, len(s.vec.pending))
+	for id := range s.vec.pending {
+		ids = append(ids, id)
+	}
+	s.vec.pending = nil
+	s.vec.pendMu.Unlock()
+	sort.Strings(ids)
+	return ids
+}
+
+func (s *Store) pendingCaptureCount() int {
+	s.vec.pendMu.Lock()
+	defer s.vec.pendMu.Unlock()
+	return len(s.vec.pending)
 }
 
 // KickVectors asks the worker for a pass now (non-blocking).
@@ -371,6 +482,7 @@ func (s *Store) ensureVectorIndex(ctx context.Context, table, index, which strin
 // vectorRefusedCounts is how many story passages and capture leads of the
 // current model are recorded as refused by the embedder.
 func (s *Store) vectorRefusedCounts(ctx context.Context, model string) (stories, captures int64, err error) {
+	vectorWholeTableQueries.Add(1)
 	if err = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM vec_story_passages WHERE model = ? AND refused <> ''`, model).Scan(&stories); err != nil {
 		return
 	}

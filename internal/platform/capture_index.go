@@ -187,7 +187,7 @@ func projectCapture(obj objectgraph.Object) (captureProjection, bool) {
 // rows can exist), which saves the deletes. It never fails the caller: an
 // error is counted, logged, and left to the reconciler, woken now.
 func (s *Store) indexCaptures(ctx context.Context, fresh bool, objs ...objectgraph.Object) {
-	if s == nil || !s.retrievalState.captureIndexReady.Load() {
+	if s == nil {
 		return
 	}
 	var captures []objectgraph.Object
@@ -197,6 +197,25 @@ func (s *Store) indexCaptures(ctx context.Context, fresh bool, objs ...objectgra
 		}
 	}
 	if len(captures) == 0 {
+		return
+	}
+	// Every capture write path ends here (a put, a create, a batch: the
+	// capture route, a source poll and a research read all arrive through
+	// them), so this is where the embed worker is told. The hand-off is
+	// deferred, so it runs whether or not the projection below is written:
+	// the worker's eligibility check reads the object graph, not the
+	// projection. A wake is not a call: the ids join a set, one wake is held,
+	// and a worker that is idle embeds exactly these captures that lack a
+	// vector, without a full pass. While a pass is doing work the step does
+	// not interleave: the next pass covers them
+	// (docs/design/entity-layer-2026-11-20.md, 4.1; in production a capture
+	// waited a median 115 s for its vector, 2026-11-20).
+	ids := make([]string, len(captures))
+	for i, c := range captures {
+		ids[i] = c.CanonicalID
+	}
+	defer s.NoteCapturesWritten(ids...)
+	if !s.retrievalState.captureIndexReady.Load() {
 		return
 	}
 	// The pages' text is indexed beside the projection; its failure is its

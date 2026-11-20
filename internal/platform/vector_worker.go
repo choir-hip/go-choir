@@ -436,6 +436,7 @@ func (s *Store) storyVersionsWithVectors(ctx context.Context, model string) (map
 // recording a refusal counts as held). The two are exact: a capture that can
 // never be eligible is in neither.
 func (s *Store) captureCounts(ctx context.Context, model string) (want, have int64, err error) {
+	vectorWholeTableQueries.Add(1)
 	if err = s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index v WHERE `+vecCaptureEligibleSQL).Scan(&want); err != nil {
 		return
 	}
@@ -446,6 +447,7 @@ func (s *Store) captureCounts(ctx context.Context, model string) (want, have int
 // captureGapCount counts eligible projected captures without a row of the
 // model.
 func (s *Store) captureGapCount(ctx context.Context, model string) (int64, error) {
+	vectorWholeTableQueries.Add(1)
 	var n int64
 	err := s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM proj_capture_index v
 		WHERE `+vecCaptureEligibleSQL+` AND NOT EXISTS (SELECT 1 FROM vec_captures x WHERE x.capture_id = v.capture_id AND x.model = ?)`, model).Scan(&n)
@@ -465,6 +467,7 @@ var captureGapBatchHook func()
 // captureGapBatch is the next batch of eligible projected captures without a
 // row of the model, newest first, after the keyset cursor (eff, id).
 func (s *Store) captureGapBatch(ctx context.Context, model string, afterEff *time.Time, afterID string, n int) ([]captureGapRow, error) {
+	vectorWholeTableQueries.Add(1)
 	if captureGapBatchHook != nil {
 		captureGapBatchHook()
 	}
@@ -612,6 +615,10 @@ func (s *Service) runVectorPass(ctx context.Context, checkEvery, idleInterval ti
 		}
 		log.Printf("corpusd vectors inbox: %v", ierr)
 	}
+	// The pass derives the gap itself and so covers every capture the write
+	// path named so far: the set is emptied, and a capture written from here
+	// on is named again.
+	s.store.takePendingCaptures()
 	model := embedder.ModelHash
 	started := time.Now()
 	lastLog := started
@@ -1218,6 +1225,88 @@ func (s *Store) sweepVectors(ctx context.Context) (n int, err error) {
 	return removed, nil
 }
 
+// runCaptureIDStep embeds the captures the write path named since the last
+// look: those that are eligible and have no vector of the model. It reads no
+// count and walks no gap (a full pass does that on its own interval), takes
+// the ids in one set whatever their number, and returns when they are done.
+// A capture it cannot embed now (a transport failure of one input) is left
+// for the full pass. An embedder that cannot answer returns an error wrapping
+// errEmbedderDown; the caller leaves the retry to the full pass and its
+// back-off.
+func (s *Service) runCaptureIDStep(ctx context.Context) (embedded int, err error) {
+	defer func() {
+		if err != nil && ctx.Err() == nil {
+			log.Printf("corpusd vectors ids step err=%v (the full pass takes the retry)", err)
+		}
+	}()
+	if s == nil || s.store == nil || !s.store.VectorsReady() || s.store.embedder() == nil {
+		return 0, nil
+	}
+	ids := s.store.takePendingCaptures()
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	started := time.Now()
+	have, err := s.store.captureIDsWithVector(ctx, ids, embedder.ModelHash)
+	if err != nil {
+		return 0, err
+	}
+	var rows []captureGapRow
+	for _, id := range ids {
+		if !have[id] {
+			rows = append(rows, captureGapRow{ID: id})
+		}
+	}
+	skipped, refused := 0, 0
+	for start := 0; start < len(rows); start += vectorBatch {
+		if err := ctx.Err(); err != nil {
+			return embedded, err
+		}
+		n, sk, nref, err := s.embedCaptureBatch(ctx, rows[start:min(start+vectorBatch, len(rows))])
+		embedded += n
+		skipped += sk
+		refused += nref
+		if err != nil {
+			return embedded, err
+		}
+	}
+	s.store.vec.stepLog.add(len(ids), embedded, skipped, refused, time.Since(started))
+	return embedded, nil
+}
+
+// captureIDsWithVector returns which of ids have a row of the model, by
+// primary key.
+func (s *Store) captureIDsWithVector(ctx context.Context, ids []string, model string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for start := 0; start < len(ids); start += 500 {
+		chunk := ids[start:min(start+500, len(ids))]
+		args := []any{model}
+		ph := make([]string, len(chunk))
+		for i, id := range chunk {
+			ph[i] = "?"
+			args = append(args, id)
+		}
+		rows, err := s.corpus().QueryContext(ctx, `SELECT capture_id FROM vec_captures WHERE model = ? AND capture_id IN (`+strings.Join(ph, ",")+`)`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			out[id] = true
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // ---- the loop ----
 
 // StartVectorWorker runs passes in the background: one a little after boot,
@@ -1252,6 +1341,7 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 					return
 				}
 				wait := idle
+				backingOff := false
 				switch {
 				case errors.Is(err, errEmbedderDown):
 					if !down {
@@ -1259,10 +1349,12 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 						down = true
 					}
 					wait = backoff
+					backingOff = true
 					backoff = min(2*backoff, backoffMax)
 				case err != nil:
 					log.Printf("corpusd vectors pass err=%v (retry in %s)", err, backoff)
 					wait = backoff
+					backingOff = true
 					backoff = min(2*backoff, backoffMax)
 				default:
 					if down {
@@ -1275,11 +1367,33 @@ func (s *Service) StartVectorWorker(ctx context.Context) {
 					}
 				}
 				if wait > 0 {
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(wait):
-					case <-s.store.vec.kickChan():
+					timer := time.NewTimer(wait)
+				waiting:
+					for {
+						select {
+						case <-ctx.Done():
+							timer.Stop()
+							return
+						case <-timer.C:
+							break waiting
+						case <-s.store.vec.kickChan():
+							timer.Stop()
+							break waiting
+						case <-s.store.vec.wakeChan():
+							// Captures were written. While backing off the ids
+							// wait in their set (the full pass at the back-off's
+							// end covers them) and the wake changes nothing.
+							if backingOff {
+								continue
+							}
+							if _, err := s.runCaptureIDStep(ctx); err != nil && ctx.Err() == nil {
+								// Hand the retry to a full pass, which tells an
+								// embedder that is down from a failure of one
+								// input and owns the back-off.
+								timer.Stop()
+								break waiting
+							}
+						}
 					}
 				}
 			}
