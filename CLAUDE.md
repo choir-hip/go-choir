@@ -116,10 +116,14 @@ A commit subject ends with its class and rollback, for example
   the id is removed from the panel, not re-pointed, and it comes back only
   through the official `agy` CLI, interactively, never an OAuth bridge
   another tool drives. Devin, Opus, Sol and Luna do not run code review.
-- Seat 1 is a Claude Sonnet subagent (owner, 2026-11-18: "for the second
-  review seat, use Sonnet subagents"), given the code and not the author's
-  conclusion, and never the agent that wrote the change. Tier 2 is seat 1
-  and seat 2 together. Re-review after a blocking finding and tier 1 use
+- Seat 1 is Gemini 4 Hydrogen (high) through the official `agy` CLI in
+  print mode (owner, 2026-11-20: "we can now use, instead of sonnet for
+  review, agy gemini 4 hydrogen. if it hits rate limit return to sonnet"):
+  `agy --model gemini-4-hydrogen-high --mode plan -p="<prompt>"`, run in a
+  frozen copy, never through OMP or any OAuth bridge. On a rate limit seat
+  1 is a Claude Sonnet subagent (owner, 2026-11-18). Either way the seat is
+  given the code and not the author's conclusion, and is never the agent
+  that wrote the change. Tier 2 is seat 1 and seat 2 together. Re-review after a blocking finding and tier 1 use
   seat 2.
 - Guest-security paths need the `Security-Effect` and
   `Security-Effect-Reviewed-By` trailers (`scripts/check-guest-security-epoch`).
