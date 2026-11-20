@@ -83,3 +83,17 @@ web search was not tested (48% of the day's returned URLs had been seen that
 day, which is only suggestive). The "10 of 67 runs searched the web with no
 corpus search" figure from `scripts/status-corpus-reuse` mostly measures
 console rotation: one real case in eight examined.
+
+## Update 2026-11-20: one provider carries every search
+
+The hourly status now counts each provider (`scripts/status-hourly`, search
+usage block). In the hour to 02:12Z, 169 of 171 sent searches went to
+Keenable. The others did not answer: Brave quota_limited on every request;
+ChatGPT search auth_error on every request (4,633 since the first one the
+journal holds, 2026-11-18T16:50Z; the gateway resolves the provider at
+start and logs no reason for the refusal); SearXNG success_empty on every
+request; Tavily out of quota; Parallel and Serper one call each, then
+quota_limited and error. So the 1,000 a day target is in practice a
+target on Keenable, and a Keenable outage would leave the paper with no
+web search. Not read: why ChatGPT search fails authentication (a
+credential question, the owner's) and why SearXNG returns nothing.
