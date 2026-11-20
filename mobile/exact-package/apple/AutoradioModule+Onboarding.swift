@@ -247,11 +247,11 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     /// Continue: the selection is already saved (every change writes it); the edition is written from it.
-    func finishTopics() {
+    func finishTopics(topics: [String]? = nil) {
         lock.lock(); let on = step == "topics"; lock.unlock()
         guard on else { return }
         stopVoice()
-        writeEdition()
+        writeEdition(topics: topics)
     }
 
     // MARK: The edition
@@ -262,10 +262,10 @@ final class OnboardingController: @unchecked Sendable {
     }
 
     /// Done on the edit page: the same completion path as onboarding's Continue (deadline, progress, Retry).
-    func finishEdit() {
+    func finishEdit(topics: [String]? = nil) {
         stopVoice()
         set { editing = true }  // also when the page's load never ran
-        writeEdition()
+        writeEdition(topics: topics)
     }
 
     /// Leave the edit page without rewriting (after a failure): the picks stay saved, the edition stays as it was.
@@ -276,10 +276,15 @@ final class OnboardingController: @unchecked Sendable {
         module.touch(["openPages"])
     }
 
-    func writeEdition() {
+    /// The picks the edition is written from: the page's own list on the send (`topics`, from the shared code's page), else the pushed copy when shared code has pushed one.
+    /// Neither: nil, and nothing is written. An empty list that nobody chose is never the listener's choice.
+    private func picksFor(_ topics: [String]?) -> [String]? { topics ?? (EditionPicksMirror.shared.known ? EditionPicksMirror.shared.topics : nil) }
+
+    func writeEdition(topics given: [String]? = nil) {
         lock.lock(); let busy = editionStatus == "writing"; lock.unlock()
         guard !busy else { return }
-        let topics = EditionPicksMirror.shared.topics        // shared code's pushed copy of the saved picks
+        guard let topics = picksFor(given) else { set { message = "Your topics are not loaded yet. Try again in a moment." }; return }
+        let gen = AccountWipe.generation                       // the notebook write below is refused if the account moves on before it
         lock.lock(); let edit = editing; lock.unlock()
         set { if !edit { step = "writing" }; editionStatus = "writing"; writingLine = "Writing your edition…"; editionError = "" }
         let w = writer
@@ -287,11 +292,12 @@ final class OnboardingController: @unchecked Sendable {
             guard let self else { return }
             // Always ends: the edition, a failure, or the deadline (EditionCompletion). The topics were saved before this ran.
             let outcome = await EditionCompletion.run(topics: topics, writer: w) { line in self.set { self.writingLine = line } }
+            guard gen == AccountWipe.generation else { return }         // another account now: nothing of this edition is theirs
             switch outcome {
             case .written(let e):
                 self.editionReady(e)
                 // The topics also become the first lines of the notebook; the local file stays as the cache. A failure here is quiet: the page retries.
-                Task { @MainActor in await NotebookStore.shared.writeTopics(topics) }
+                Task { @MainActor in await NotebookStore.shared.writeTopics(topics, generation: gen) }
             case .failed(let m): self.set { self.editionStatus = "failed"; self.editionError = m }
             case .timedOut: self.set { self.editionStatus = "failed"; self.editionError = EditionCompletion.timedOutLine }
             }
@@ -325,16 +331,18 @@ final class OnboardingController: @unchecked Sendable {
         save()
     }
 
+    /// Sign-out: the controller's memory (progress, step, edition, status) is the account's; nothing of it reaches the next account.
+    func wipeAccount() {
+        stopVoice()
+        set { progress = OnboardingProgress(); step = "welcome"; setup = nil; edition = nil; editionStatus = ""; writingLine = ""; editionError = ""; mic = "unasked"; level = 0; heard = ""
+              route = ""; hearingOK = false; askMobile = false; message = ""; editing = false; talking = false }
+        try? FileManager.default.removeItem(at: progressFile)
+    }
+
     func skip() {
         stopVoice()
         set { progress.skipped = true; step = "skipped" }
         save()
-    }
-
-    func reset() {
-        stopVoice()
-        set { progress = OnboardingProgress(); step = "welcome"; setup = nil; edition = nil; editionStatus = ""; mic = "unasked"; message = ""; editing = false }
-        save()                                              // (the picks are shared code's: the page's reset also sends editionClear)
     }
 
     // MARK: What the contract sees
@@ -386,12 +394,19 @@ struct OnboardingPageSource: PageSource {
 }
 
 extension AutoradioModule {
+    /// The picks the page sent (one per line); nil when the send carried none (a native caller).
+    static func topicsArg(_ args: [String: Any]) -> [String]? {
+        guard let s = args["topics"] as? String else { return nil }
+        return s.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
     func registerOnboarding() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let c = OnboardingController(module: self, support: support)
         OnboardingController.shared = c
         StageRegistry.registerEditionSetupStages(runtime.registry)
         pageSources.register(OnboardingPageSource(controller: c))
+        choir.accountWipe.register("onboarding") { [weak c] in c?.wipeAccount() }
 
         handle("onboardingState") { args, reply in reply(c.view()) }
         // Sends answer the same shape the page reads.
@@ -402,14 +417,13 @@ extension AutoradioModule {
         handle("onboardingMicNext") { args, reply in c.microphoneNext(); reply(c.view()) }
         handle("onboardingHearing") { args, reply in c.hearing(ok: (args["ok"] as? String) == "true"); reply(c.view()) }
         handle("onboardingTopics") { args, reply in c.startTopics(); reply(c.view()) }
-        handle("onboardingEditDone") { args, reply in c.finishEdit(); reply(c.view()) }
+        handle("onboardingEditDone") { args, reply in c.finishEdit(topics: AutoradioModule.topicsArg(args)); reply(c.view()) }
         handle("onboardingEditLeave") { args, reply in c.leaveEdit(); reply(c.view()) }
         handle("onboardingTalk") { args, reply in c.toggleTalk(); reply(c.view()) }
-        handle("onboardingTopicsDone") { args, reply in c.finishTopics(); reply(c.view()) }
-        handle("onboardingEditionRetry") { args, reply in c.writeEdition(); reply(c.view()) }
+        handle("onboardingTopicsDone") { args, reply in c.finishTopics(topics: AutoradioModule.topicsArg(args)); reply(c.view()) }
+        handle("onboardingEditionRetry") { args, reply in c.writeEdition(topics: AutoradioModule.topicsArg(args)); reply(c.view()) }
         handle("onboardingContinueAnyway") { args, reply in c.continueAnyway(); reply(c.view()) }
         handle("onboardingSkip") { args, reply in c.skip(); reply(c.view()) }
-        handle("onboardingReset") { args, reply in c.reset(); reply(c.view()) }
 
         // Fresh install, signed in: offer the path once as the open page (closing it is a choice that sticks).
         // The computer is asked first (GET /api/texture/edition): a listener who already has an edition (a second phone, a reinstall) is

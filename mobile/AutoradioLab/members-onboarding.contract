@@ -3,7 +3,7 @@
 // it as one resource, `ob`; every button is a send that answers the same shape.
 use onboardingState, onboardingBegin, onboardingRetry, onboardingFallback, onboardingMic, onboardingMicNext, onboardingHearing from "@choir/autoradio"
 use onboardingTopics, onboardingTalk, onboardingTopicsDone from "@choir/autoradio"
-use onboardingEditionRetry, onboardingEditDone, onboardingEditLeave, onboardingContinueAnyway, onboardingSkip, onboardingReset from "@choir/autoradio"
+use onboardingEditionRetry, onboardingEditDone, onboardingEditLeave, onboardingContinueAnyway, onboardingSkip from "@choir/autoradio"
 use pageOpen, pageClose, choirStartRadio from "@choir/autoradio"
 use Onboarding from "@choir/autoradio"
 use EditionPage from "./edition-types.contract"
@@ -12,13 +12,14 @@ members Autoradio
   resource ob = onboardingState() as shape Onboarding else empty()
   mutation obm as shape Onboarding
   // The edition picks and the topic tree are shared code (edition-picks.ts), the one reader and writer of the saved topics. Every pick send repaints the tree and the paper's picks.
-  // While the voice listens at this screen the page asks again twice a second: that ask takes the words the voice heard, applies them and answers the voice (edition-picks.ts drainHeard).
+  // While the voice listens at this screen (and the page is on top) the page asks again twice a second: that ask takes the words the voice heard, applies them and answers the voice (edition-picks.ts drainHeard).
+  // It also asks again while the old picks are being looked for (`ep.carrying`); the paper's picks are asked with the same tick.
   state epTick = 0
   resource ep = editionTopics(epTick, ob.talking, signedOutTick) as shape EditionPage else empty()
   mutation epm as shape EditionPage refreshes ep, epicks
   action epBump
     epTick = epTick + 1
-  task epPoll when ob.talking key=epTick
+  task epPoll when (ob.talking and pg.top.startsWith("onboarding:")) or ep.carrying key=epTick
     after(500, epBump)
   // What the reader has typed in the "Add your own topic" field.
   state obTopicText = ""
@@ -53,11 +54,11 @@ members Autoradio
   action obTalk
     send obm = onboardingTalk()
   action obTopicsDone
-    send obm = onboardingTopicsDone()
+    send obm = onboardingTopicsDone(topics=ep.picks)
   action obEditionRetry
-    send obm = onboardingEditionRetry()
+    send obm = onboardingEditionRetry(topics=ep.picks)
   action obEditDone
-    send obm = onboardingEditDone()
+    send obm = onboardingEditDone(topics=ep.picks)
   action obEditLeave
     send obm = onboardingEditLeave()
   action obContinueAnyway
@@ -66,9 +67,6 @@ members Autoradio
     send obm = onboardingSkip()
     send pm = pageClose(address="onboarding:setup")
     send pms = pagesClose("onboarding:setup")
-  action obReset
-    send obm = onboardingReset()
-    send epm = editionClear()
   // The edition is a Texture page: open it (the reader draws it).
   action obOpenEdition
     send pm = pageOpen(address="onboarding:edit", title="My edition")

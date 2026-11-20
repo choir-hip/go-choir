@@ -27,15 +27,19 @@ const DUPLICATE = 'That one is already there.';
 /** The phone's native half (the app module), or null where there is none. */
 export interface Device {
   /** The old Swift file: `found` and its text; null when native did not answer. */
-  legacy(): Promise<{ found: boolean; text: string } | null>;
+  legacy(): Promise<{ found: boolean; text: string; unreadable?: boolean } | null>;
   /** Delete the old file. True when native looked again and it is gone. */
   dropLegacy(): Promise<boolean>;
   mirror(topics: string[]): Promise<void>;
+  /** The wipe: the native copy is emptied AND forgotten (an empty copy that was never pushed is not the listener's choice). */
+  forget(): Promise<void>;
   /** The words the voice heard at the setup screen since the last call, in order. */
   heard(): Promise<{ id: string; words: string }[]>;
   said(id: string, line: string, finish: boolean): Promise<void>;
 }
-export type Env = { device: Device | null; get: Get; live: () => Promise<string[]>; mirrorDeadlineMs?: number };
+export type Env = { device: Device | null; get: Get; live: () => Promise<string[]>; mirrorDeadlineMs?: number; legacyWaitMs?: number };
+/** How long the first page waits for the carry-over's proof before it says it is still looking (the proof goes on and the page is asked again). */
+export const LEGACY_WAIT_MS = 3000;
 
 export function nativeDevice(): Device | null {
   const raw = nativeLater();
@@ -43,9 +47,10 @@ export function nativeDevice(): Device | null {
   const later = raw as unknown as (r: Record<string, unknown>) => Promise<unknown>;
   const o = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
   return {
-    async legacy() { const r = o(await later({ op: 'editionLegacy' })); return typeof r.found === 'boolean' ? { found: r.found, text: typeof r.text === 'string' ? r.text : '' } : null; },
+    async legacy() { const r = o(await later({ op: 'editionLegacy' })); return typeof r.found === 'boolean' ? { found: r.found, text: typeof r.text === 'string' ? r.text : '', unreadable: r.unreadable === true } : null; },
     async dropLegacy() { return o(await later({ op: 'editionLegacyDrop' })).gone === true; },
     async mirror(topics) { await later({ op: 'editionMirror', topics }); },
+    async forget() { await later({ op: 'editionMirrorReset' }); },
     async heard() {
       const items = o(await later({ op: 'editionHeard' })).items;
       return (Array.isArray(items) ? items : []).map(o).filter((i) => typeof i.id === 'string' && typeof i.words === 'string').map((i) => ({ id: i.id as string, words: i.words as string }));
@@ -74,7 +79,8 @@ export function parseStored(text: string | undefined): string[] {
 
 type Mem = {
   gen: number; sel: Selection; own: string[]; expanded: Set<string>; live: string[];
-  stored: boolean; loaded: Promise<void> | null; rev: number; message: string; mirrored: boolean; legacy: Promise<void> | null;
+  stored: boolean; existedAtOpen: boolean; loaded: Promise<void> | null; rev: number; message: string; mirrored: boolean; legacy: Promise<void> | null;
+  carrying: boolean; kept: boolean;
 };
 let mem: Mem | null = null;
 let lastLegacy: Promise<void> = Promise.resolve();
@@ -89,7 +95,7 @@ export const legacyDone = (): Promise<void> => lastLegacy;
 /** The memory of the CURRENT account generation; a moved generation is a new, empty one (it reads the file again). */
 function memFor(): Mem {
   const gen = accountGeneration();
-  if (!mem || mem.gen !== gen) mem = { gen, sel: new Selection(), own: [], expanded: new Set(), live: [], stored: false, loaded: null, rev: 0, message: '', mirrored: false, legacy: null };
+  if (!mem || mem.gen !== gen) mem = { gen, sel: new Selection(), own: [], expanded: new Set(), live: [], stored: false, existedAtOpen: false, loaded: null, rev: 0, message: '', mirrored: false, legacy: null, carrying: false, kept: false };
   return mem;
 }
 
@@ -100,6 +106,7 @@ async function ensure(storage: Storage | undefined, m: Mem): Promise<void> {
       let t: string | undefined;
       try { t = new TextDecoder().decode(await storage.fs.readFile(PICKS_FILE)); m.stored = true; }
       catch { try { await storage.fs.stat(PICKS_FILE); m.stored = true; } catch { m.stored = false; } }       // unreadable but there still counts as stored: it is never overwritten by a carry-over
+      m.existedAtOpen = m.stored;                                                                                    // the carry-over is decided by this, not by what the listener does later
       m.sel = new Selection(parseStored(t));
       m.own = m.sel.topics.filter((x) => !suggestions().some((s) => key(s) === key(x)));
     })();
@@ -129,11 +136,11 @@ async function mutate<R>(storage: Storage | undefined, env: Env, change: (m: Mem
 }
 
 /** Give the native side its copy, in order, each push bounded by a deadline so a native call that never answers stops nothing. A push for an account that moved on is not sent. */
-function pushMirror(env: Env, gen: number, topics: string[], force = false): Promise<void> {
+function pushMirror(env: Env, gen: number, topics: string[] | null, force = false): Promise<void> {
   const dev = env.device; if (!dev) return Promise.resolve();
   const p = mirrorTail.then(async () => {
     if (!force && gen !== accountGeneration()) return;
-    await Promise.race([dev.mirror(topics).catch(() => undefined), delay(env.mirrorDeadlineMs ?? MIRROR_DEADLINE_MS, undefined)]);
+    await Promise.race([(topics === null ? dev.forget() : dev.mirror(topics)).catch(() => undefined), delay(env.mirrorDeadlineMs ?? MIRROR_DEADLINE_MS, undefined)]);
   });
   mirrorTail = p.catch(() => undefined);
   return p.catch(() => undefined);
@@ -141,7 +148,7 @@ function pushMirror(env: Env, gen: number, topics: string[], force = false): Pro
 
 // ---- the page
 
-export type PicksPage = { tree: TopicRow[]; pickedCount: number; selectionLine: string; explainer: string; voiceHint: string; message: string; picks: string; rev: number };
+export type PicksPage = { tree: TopicRow[]; pickedCount: number; selectionLine: string; explainer: string; voiceHint: string; message: string; picks: string; rev: number; carrying: boolean; carryNote: string };
 
 function noteOwn(m: Mem, t: string): void {
   const among = suggestions(m.live);
@@ -151,13 +158,15 @@ function build(m: Mem): PicksPage {
   const topics = m.sel.topics;
   return {
     tree: treeRows({ liveSections: m.live, expanded: m.expanded, selection: m.sel, own: m.own }), pickedCount: topics.length, selectionLine: selectionLine(topics), explainer: EXPLAINER,
-    voiceHint: VOICE_HINT, message: m.message, picks: topics.join('\n'), rev: m.rev,
+    voiceHint: VOICE_HINT, message: m.message, picks: topics.join('\n'), rev: m.rev, carrying: m.carrying,
+    carryNote: m.carrying ? 'Looking for the topics you chose before…' : m.kept ? 'Your earlier topics could not be checked yet. They are tried again when the app next starts.' : '',
   };
 }
 async function opened(storage: Storage | undefined, env: Env): Promise<Mem> {
   const m = memFor(); await ensure(storage, m);
   if (!m.mirrored) { m.mirrored = true; await pushMirror(env, m.gen, [...m.sel.topics]); }
-  if (!m.legacy) { m.legacy = runLegacy(storage, env, m).catch(() => undefined); lastLegacy = m.legacy; }
+  if (!m.legacy) { m.carrying = true; m.legacy = runLegacy(storage, env, m).catch(() => { m.kept = true; }).finally(() => { m.carrying = false; m.rev += 1; }); lastLegacy = m.legacy; }
+  await Promise.race([m.legacy, delay(env.legacyWaitMs ?? LEGACY_WAIT_MS, undefined)]);      // the first page is not built before the proof has answered, unless it is slow
   return m;
 }
 
@@ -228,39 +237,50 @@ export async function wipePicks(storage: Storage | undefined, env: Env = liveEnv
     let there = true; try { await fs.stat(PICKS_FILE); } catch { there = false; }
     if (there) { try { await fs.atomicWriteFile(PICKS_FILE, new TextEncoder().encode('{"topics":[]}')); } catch { failed = true; } }
   }
-  await pushMirror(env, 0, [], true);          // the native wipe is the other path
+  await pushMirror(env, 0, null, true);          // the native wipe is the other path
   if (failed) throw new Error('the edition picks could not be cleared');
 }
 
 // ---- the old Swift file: adopted by proof
 
-/** The topics the signed-in account's own notebook lists under "What you asked for", as keys; null when the server cannot say. An account with no notebook is the empty set. */
-async function askedKeys(get: Get): Promise<Set<string> | null> {
+/** The topics the signed-in account's own notebook lists under "What you asked for": key -> the notebook's own line (the first one with that key). Null when the server cannot say; an
+ * account with no notebook is the empty map. */
+async function askedLines(get: Get): Promise<Map<string, string> | null> {
   const ed = await lookupEdition(get);
   if (ed === null) return null;
-  if (!ed.found) return new Set();
+  if (!ed.found) return new Map();
   let source: string | null = null;
   try { source = await textureSource(ed.docID, get); } catch { source = null; }
   if (source === null) return null;
-  return new Set(parse(source).sections.filter((s) => s.key === 'asked').flatMap((s) => s.lines).map((l) => key(l.text)).filter((k) => k !== ''));
+  const out = new Map<string, string>();
+  for (const l of parse(source).sections.filter((x) => x.key === 'asked').flatMap((x) => x.lines)) {
+    const t = tidy(l.text); const k = t === undefined ? '' : key(t);
+    if (t !== undefined && k !== '' && !out.has(k)) out.set(k, t);
+  }
+  return out;
 }
 
-/** The old file says nothing about whose it is, and the native delete at sign-out can fail without a sign. So no guard here infers ownership from the phone's history. A topic of the
- * old file is adopted only when the signed-in account's own notebook already lists it (a topic that account itself wrote: nothing of another account can arrive), and only while no picks
- * are stored yet. Then the old file is dropped, whatever was decided. The server unable to say decides nothing and keeps the file; the same evidence decides again next time. */
+/** The old file says nothing about whose it is, and the native delete at sign-out can fail without a sign. So no guard here infers ownership from the phone's history. The table of
+ * cells (docs/reference/AUTORADIO-EDITION-PICKS.md, tests c0 to c13) is decided by FACTS read now: the old file (absent / unreadable / no topics / topics), whether the picks file existed
+ * when this generation was first read (`existedAtOpen`), and what the signed-in account's own notebook answers. What is adopted is the NOTEBOOK'S line for each topic of the old file whose
+ * key it has, never the old file's string (an old "C++" is not B's "C"). A proof that cannot be asked keeps the file; the same evidence decides at the next launch. */
 async function runLegacy(storage: Storage | undefined, env: Env, m: Mem): Promise<void> {
   const dev = env.device; if (!dev) return;
   const old = await dev.legacy().catch(() => null);
   if (!old || !old.found || m.gen !== accountGeneration()) return;
+  if (old.unreadable) { m.kept = true; return; }
   const topics = parseStored(old.text);
-  if (topics.length > 0 && !m.stored) {
-    const asked = await askedKeys(env.get).catch(() => null);
-    if (asked === null || m.gen !== accountGeneration()) return;
-    const adopt = topics.filter((t) => asked.has(key(t)));
-    if (adopt.length > 0) {
-      const r = await mutate(storage, env, (x) => { if (x.stored) return false; x.sel = new Selection(adopt); x.own = x.sel.topics.filter((t) => !suggestions(x.live).some((s) => key(s) === key(t))); return true; });
+  if (topics.length > 0 && !m.existedAtOpen) {
+    const asked = await askedLines(env.get).catch(() => null);
+    if (asked === null) { m.kept = true; return; }
+    if (m.gen !== accountGeneration()) return;
+    const matched: string[] = [];
+    for (const t of topics) { const line = asked.get(key(t)); if (line !== undefined && !matched.includes(line)) matched.push(line); }
+    if (matched.length > 0) {
+      // merged into what the listener has now (they may have changed picks while this ran; an invisible old topic cannot have been taken off)
+      const r = await mutate(storage, env, (x) => { x.sel = new Selection([...x.sel.topics, ...matched]); x.own = x.sel.topics.filter((t) => !suggestions(x.live).some((s) => key(s) === key(t))); });
       if (!r) return;
-      if (r.value && !r.wrote) return;           // adopted but not written: nothing is decided, the file stays
+      if (!r.wrote) { m.kept = true; return; }               // adopted but not written: nothing is decided, the file stays
     }
   }
   if (m.gen === accountGeneration()) await dev.dropLegacy().catch(() => false);

@@ -342,8 +342,9 @@ public enum NotebookPage {
         guard !refreshRunning else { return }          // one at a time: two would each see "no notebook" and make one
         refreshRunning = true; defer { refreshRunning = false }
         // The topics written on this phone and not yet in the notebook (the marker says when they are): written now, once.
+        let gen = AccountWipe.generation                       // bound WITH the topics: a sign-out after this line refuses the write
         let topics = EditionPicksMirror.shared.topics
-        if !topics.isEmpty { await writeTopics(topics) }
+        if EditionPicksMirror.shared.known, !topics.isEmpty { await writeTopics(topics, generation: gen) }
         doc = await loadDoc(); onChange?()
         learning = await loadLearning(); onChange?()
         await SteerQueue.shared.flush()
@@ -380,16 +381,17 @@ public enum NotebookPage {
     /// Writes the listener's topics as lines of "What you asked for", once: through the ordinary owner revision route (an edit by the listener), creating
     /// the document first when there is none. The local topics file stays as a cache. True when the notebook holds them afterwards.
     @discardableResult
-    public func writeTopics(_ topics: [String], marker: URL? = nil) async -> Bool {
+    public func writeTopics(_ topics: [String], marker: URL? = nil, generation: Int? = nil) async -> Bool {
+        if let g = generation, g != AccountWipe.generation { return false }        // the account moved on between reading the topics and now: they are not this account's to write
         if let w = writing { return await w.value }      // one in flight: a second would also find nothing and make a second document
-        let t = Task { @MainActor in await self.writeTopicsNow(topics, marker: marker) }
+        let t = Task { @MainActor in await self.writeTopicsNow(topics, marker: marker, generation: generation) }
         writing = t
         let r = await t.value
         writing = nil
         return r
     }
 
-    private func writeTopicsNow(_ topics: [String], marker: URL?) async -> Bool {
+    private func writeTopicsNow(_ topics: [String], marker: URL?, generation: Int?) async -> Bool {
         let marker = marker ?? TakeFiles.url("notebook-topics-written")
         let key = topics.map { NotebookText.topicKey($0) }.sorted().joined(separator: ",")
         guard !key.isEmpty else { return true }
@@ -397,7 +399,8 @@ public enum NotebookPage {
         let client = ChoirEnvironment.shared.client()
         guard client.hasKey else { return false }
         var address = "", current: String?
-        let gen = AccountWipe.generation          // every write below is dropped if the account was wiped meanwhile
+        let gen = generation ?? AccountWipe.generation          // every write below is dropped if the account was wiped meanwhile (the generation the topics were read under, when given)
+        guard gen == AccountWipe.generation else { return false }
         guard let ed = await lookupEdition(), gen == AccountWipe.generation else { return false }        // the server cannot say: try later, never create on a guess
         if ed.found {
             address = "texture:" + ed.docID

@@ -49,7 +49,8 @@ reset_state() {
   fi
   # The edition-picks drill (SEED_PICKS=1) seeds the OLD Swift file with one topic no account's notebook has. The carry-over (edition-picks.ts runLegacy) must adopt nothing of it and drop the file.
   if [ -n "${SEED_PICKS:-}" ]; then
-    mkdir -p "$S"; printf '%s' '{"topics":["Zzdrillseed"]}' > "$S/edition-topics.json"
+    mkdir -p "$S"
+    if [ -n "${PICKS_SEED_JSON:-}" ]; then printf '%s' "$PICKS_SEED_JSON" > "$S/edition-topics.json"; else printf '%s' '{"topics":["Zzdrillseed"]}' > "$S/edition-topics.json"; fi
   fi
 }
 legacy_clean() {
@@ -240,6 +241,36 @@ run_drive tour light "" --touch platform
 
 # ---- 3f1. EDITION PICKS drive (shared code, edition-picks.ts; local writes only, on the phone: nothing is written to the computer). The old Swift file is SEEDED with a topic no notebook has (the carry-over adopts
 # nothing of it and drops it); then the topic screen is opened from My edition, three picks are made (a category, a subtopic under another, a typed one) and one is taken off. The stored file is copied out and read.
+# The positive half: the first line d@e's own notebook lists under "What you asked for", read with the QA key (the key goes into a header FILE in the scratch folder, never on a command line or into output),
+# is seeded in the old file in a different case and with punctuation, beside the topic no notebook has. The carry-over must store the NOTEBOOK's own line, not the seeded variant. If d@e's notebook has
+# no such line, or the read fails, the script says so and drives only the refusing half.
+nb_topic() {
+  H="$SCRATCH/nb-hdr"; ( umask 077; printf 'Authorization: Bearer %s\n' "$(tr -d '\n' < "$KEYFILE")" > "$H" )
+  CID=$(curl -s --max-time 20 -H @"$H" https://choir.news/api/compute/status | jq -r '[.computers[]? | select((.kind // "interactive") == "interactive")] | (map(select(.current == true)) + .)[0].computer_id // empty' 2>/dev/null)
+  [ -n "$CID" ] && printf 'X-Choir-Computer: %s\n' "$CID" >> "$H"
+  ED=$(curl -s --max-time 20 -H @"$H" https://choir.news/api/texture/edition | jq -r 'select(.found == true) | .doc_id // empty' 2>/dev/null)
+  [ -n "$ED" ] || return 0
+  REV=$(curl -s --max-time 20 -H @"$H" "https://choir.news/api/texture/documents/$ED" | jq -r '(.document // .) | .current_revision_id // empty' 2>/dev/null)
+  [ -n "$REV" ] || return 0
+  curl -s --max-time 20 -H @"$H" "https://choir.news/api/texture/revisions/$REV" | jq -r '(.revision // .) | .content // empty' 2>/dev/null \
+    | /usr/bin/python3 -I -c 'import sys
+inside = False
+for l in sys.stdin.read().splitlines():
+    t = l.strip()
+    if t.startswith("## "): inside = "asked" in t.lower() or "edition" in t.lower(); continue
+    if inside and (t.startswith("- ") or t.startswith("* ")):
+        x = " ".join(t[2:].split())
+        if x: print(x[0].upper() + x[1:]); break'
+  rm -f "$H"
+}
+NB_TOPIC=$(nb_topic)
+if [ -n "$NB_TOPIC" ]; then
+  NB_SEED=$(printf '%s' "$NB_TOPIC" | tr '[:lower:]' '[:upper:]')"!!"
+  PICKS_SEED_JSON=$(jq -cn --arg a "$NB_SEED" '{topics:[$a,"Zzdrillseed"]}'); export PICKS_SEED_JSON
+  PICKS_START=1; echo "note: edition picks: d@e's notebook lists a topic; the old file is seeded with it as a variant, and the carry-over must store the notebook's own line"
+else
+  PICKS_START=0; echo "note: edition picks: d@e's notebook has no readable \"What you asked for\" line (or could not be read): the positive adoption is NOT driven in this run"
+fi
 SEED_PICKS=1; export SEED_PICKS
 step "clock data"; wait_ 8000
 place paper 2500
@@ -254,7 +285,7 @@ place paper 2000
 step "tap paper-section-mine"; view real-74-edition-mine-after 2500
 step logs
 run_drive picks light "" --touch platform
-unset SEED_PICKS
+unset SEED_PICKS PICKS_SEED_JSON
 CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
 PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/edition-topics.json 2>/dev/null | head -1)
 [ -n "$PICKS_FILE" ] && cp "$PICKS_FILE" "$SHOTS/picks-stored.json"
@@ -348,11 +379,15 @@ chk "themes carry-over: the user theme file is in the new place" 'drill-user.jso
 [ -s "$SHOTS/picks-stored.json" ] || { echo "MISSING: edition picks: the stored file app:/data/edition-topics.json was not found in the app container"; FAILS="$FAILS [picks file]"; }
 chk "edition picks: the stored file holds the subtopic (Film) and the typed one (Zzdrillchess)" '"Film".*"Zzdrillchess"|"Zzdrillchess".*"Film"' "$SHOTS/picks-stored.json"
 bad "edition picks: the category taken off (Science) is not stored" '"Science"' "$SHOTS/picks-stored.json"
+if [ "$PICKS_START" = 1 ]; then
+  chk "edition picks: the notebook's own line was adopted (not the seeded variant)" "\"$NB_TOPIC\"" "$SHOTS/picks-stored.json"
+  [ "$NB_SEED" = "$NB_TOPIC" ] || bad "edition picks: the seeded variant was not stored" "\"$NB_SEED\"" "$SHOTS/picks-stored.json"
+fi
 bad "edition picks: nothing of the seeded old file was adopted (its topic has no line in the account's notebook)" 'Zzdrillseed' "$SHOTS/picks-stored.json"
 chk "edition picks: the old Swift file was dropped" '^ok:' "$SHOTS/picks-legacy.txt"
 chk "edition picks: the topic screen listed the tree" '\[ob-topic-Science\]' "$SHOTS/drive-picks.txt"
-chk "edition picks: three picks made, the screen says it follows 3 topics" 'Your edition follows 3 topics' "$SHOTS/drive-picks.txt"
-chk "edition picks: one taken off, the screen says it follows 2 topics" 'Your edition follows 2 topics' "$SHOTS/drive-picks.txt"
+chk "edition picks: three picks made, the screen says it follows $((PICKS_START + 3)) topics" "Your edition follows $((PICKS_START + 3)) topics" "$SHOTS/drive-picks.txt"
+chk "edition picks: one taken off, the screen says it follows $((PICKS_START + 2)) topics" "Your edition follows $((PICKS_START + 2)) topics" "$SHOTS/drive-picks.txt"
 chk "edition picks: My edition, built from the saved picks, says where it is from" '\[paper-mine-from\]' "$SHOTS/drive-picks.txt"
 chk "textures: documents listed" '\[textures-doc-texture:' "$SV"
 if grep -qE '\[textures-make-edition\]' "$SV"; then echo "info: textures: the make-your-edition card shows (the drill computer has no edition)"; else echo "info: textures: no make-your-edition card (the drill computer has an edition now; that is state, not a defect)"; fi

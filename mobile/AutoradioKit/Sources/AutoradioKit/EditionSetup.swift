@@ -1,8 +1,8 @@
 import Foundation
 
-// The edition picks, native side, and the edition writer. The topics themselves (the tree, the picks, the saved file, the spoken edits) are shared Exact code
-// now (AutoradioLab/edition-picks.ts, edition-model.ts); what stays here is the local edition writer and its deadline, which the onboarding controller
-// still runs, and the three native pieces below.
+// The edition writer and the native side of the edition picks. The topics themselves (tree, picks, saved file, spoken edits) are shared Exact code (AutoradioLab/edition-picks.ts).
+// THE EDITION WRITER STAYS NATIVE for one reason: it is the onboarding controller's step machine (AutoradioModule+Onboarding.swift), which moves with the onboarding page; it needs no voice.
+// It writes from the picks the page's send carries, never from the pushed copy alone. No TS twin is kept (a second copy would drift).
 
 // MARK: The edition: written from the choices
 
@@ -13,7 +13,6 @@ public struct Edition: Codable, Equatable, Sendable {
     public var writingLines: [String]
     public var sections: [Section]
 
-    public static func parse(_ data: Data) -> Edition? { try? JSONDecoder().decode(Edition.self, from: data) }
     /// Heading, then its lines, section by section: what a plain page shows.
     public var lines: [String] { sections.flatMap { [$0.heading] + $0.lines } }
 }
@@ -42,18 +41,7 @@ public struct LocalEditionWriter: EditionWriter {
     }
 }
 
-// MARK: Finishing: a deadline, never a dead end
-//
-// The first phone walk's interview ended with "Good. Writing your edition now." and then nothing, for ever. Cause (HEAD of
-// lane/autoradio-qa): `AutoradioModule+Onboarding.swift:275` was the only caller of `writeEdition()` on the way to the end,
-// inside a drive that no longer exists. On a phone the end of the interview came from `InterviewDesk.submit` (Interview.swift,
-// `finish(limit:)` sets status `.done` and returns the closing line); nothing watched `.done`, so the step never became
-// "writing". Had it been reached, `UnbuiltEditionWriter.write` threw "not connected in this build", with no deadline anywhere.
-// Now Continue calls `EditionCompletion.run`, which always ends: the edition, a failure, or the deadline.
-//
-//  C1 The writer returns: `.written`.        C2 The writer throws: `.failed(plain words)`.
-//  C3 The writer never returns: `.timedOut` at the deadline, and the writer's task is cancelled.
-//  C4 Whatever happens, the reader's topics are untouched (they are saved before this runs).
+// MARK: Finishing: a deadline, never a dead end (`EditionCompletion.run` always ends: the edition, a failure, or the deadline; the topics are untouched)
 
 public enum EditionOutcome: Equatable, Sendable {
     case written(Edition)
@@ -90,31 +78,30 @@ public enum EditionCompletion {
 
 // MARK: The native side of the edition picks
 
-// The native side of the edition picks. The picks themselves (the saved file, the tree, tap, type, say) are shared Exact code: AutoradioLab/edition-picks.ts is the ONE reader and
-// writer of `app:/data/edition-topics.json`. Nothing here stores a pick. What native code still needs and why:
-//  - `EditionPicksMirror`: the voice's native code reads the picks (the DJ's request text, the on-device retrieval corpus, the edition writer's input). It is a COPY in memory, pushed by
-//    shared code after the file is written and emptied at a wipe; there is no file, so nothing of it can outlive an account or a process. Empty until shared code's first push after a launch.
-//  - `EditionTalk`: the voice hears the words at the setup screen ("add space and chess"); Exact has no call from native code into shared code, so the words wait in a mailbox, shared
-//    code takes them on the screen's own timer, applies them and answers the one line to say back. The desk waits for that answer under a deadline.
-//  - `EditionPicksLegacy`: the old build's file lives in Application Support, which shared code cannot see. Read and deleted on shared code's word (docs/reference/AUTORADIO-EDITION-PICKS.md).
+// Nothing here stores a pick (docs/reference/AUTORADIO-EDITION-PICKS.md). What native code needs, and why:
+//  - EditionPicksMirror: the voice's native code (DJ request, on-device retrieval) reads the picks; an in-memory COPY pushed by shared code, no file.
+//  - EditionTalk: the voice hears words at the setup screen; Exact has no call from native into shared code, so they wait in a mailbox that shared code takes on the screen's timer and answers.
+//  - EditionPicksLegacy: the old build's file is in Application Support, which shared code cannot see; read and deleted on shared code's word.
 
-/// The listener's picks as the native side sees them: a copy, in memory only.
 public final class EditionPicksMirror: @unchecked Sendable {
     public static let shared = EditionPicksMirror()
     private let lock = NSLock()
     private var list: [String] = []
+    private var pushed = false
     public var topics: [String] { lock.lock(); defer { lock.unlock() }; return list }
-    public func set(_ t: [String]) { lock.lock(); list = t; lock.unlock() }
+    /// True once shared code has pushed a copy since the launch or the last wipe: an empty copy never pushed is "not known", not "the listener chose nothing" (nothing writes it as a choice).
+    public var known: Bool { lock.lock(); defer { lock.unlock() }; return pushed }
+    public func set(_ t: [String]) { lock.lock(); list = t; pushed = true; lock.unlock() }
+    public func reset() { lock.lock(); list = []; pushed = false; lock.unlock() }
 }
 
-/// The old build's file `Application Support/Autoradio/edition-topics.json`: nothing writes it any more.
 public enum EditionPicksLegacy {
     static var file: URL? { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Autoradio").appendingPathComponent("edition-topics.json") }
     static func read() -> [String: Any] {
         guard let f = file, FileManager.default.fileExists(atPath: f.path) else { return ["found": false, "text": ""] }
-        return ["found": true, "text": (try? String(contentsOf: f, encoding: .utf8)) ?? ""]
+        guard let t = try? String(contentsOf: f, encoding: .utf8) else { return ["found": true, "text": "", "unreadable": true] }     // unreadable is not empty: shared code keeps it
+        return ["found": true, "text": t]
     }
-    /// Deletes it and looks again: true only when it is gone (the delete can fail without a sign).
     @discardableResult static func drop() -> Bool {
         guard let f = file else { return true }
         try? FileManager.default.removeItem(at: f)
@@ -122,14 +109,12 @@ public enum EditionPicksLegacy {
     }
 }
 
-/// Words heard at the setup screen, waiting for shared code, and the answer going back.
 public final class EditionTalk: @unchecked Sendable {
     public static let shared = EditionTalk()
     public typealias Answer = (line: String, finish: Bool)
     private let lock = NSLock()
     private var pending: [(id: String, words: String)] = []
     private var waiting: [String: CheckedContinuation<Answer?, Never>] = [:]
-    /// Called when the reader says "continue" or "done".
     public var onFinish: (@Sendable () -> Void)?
 
     /// The line to say back (nil when shared code did not answer in time or had nothing to say).
@@ -147,26 +132,24 @@ public final class EditionTalk: @unchecked Sendable {
         lock.lock(); let c = waiting.removeValue(forKey: id); lock.unlock()
         c?.resume(returning: a)
     }
-    /// Shared code takes what was heard, in order.
     func take() -> [[String: String]] {
         lock.lock(); defer { lock.unlock() }
         let out = pending.map { ["id": $0.id, "words": $0.words] }; pending = []
         return out
     }
     func said(_ id: String, line: String, finish: Bool) { resolve(id, (line.isEmpty && !finish) ? nil : (line, finish)) }
-    /// Sign-out and the end of talking: nothing heard before it is applied or answered later.
     public func clear() {
         lock.lock(); pending = []; let all = waiting; waiting = [:]; lock.unlock()
         for (_, c) in all { c.resume(returning: nil) }
     }
 }
 
-/// The ops of the app module's `editionOp` (modules/apple/ModelsEntry.swift): the one native call surface of the edition picks.
 public enum EditionNative {
     public static func op(_ r: [String: Any]) -> [String: Any] {
         switch r["op"] as? String ?? "" {
         case "editionLegacy": return EditionPicksLegacy.read()
         case "editionLegacyDrop": return ["gone": EditionPicksLegacy.drop()]
+        case "editionMirrorReset": EditionPicksMirror.shared.reset(); return [:]
         case "editionMirror": EditionPicksMirror.shared.set((r["topics"] as? [String]) ?? []); return [:]
         case "editionHeard": return ["items": EditionTalk.shared.take()]
         case "editionSaid": EditionTalk.shared.said(r["id"] as? String ?? "", line: r["line"] as? String ?? "", finish: (r["finish"] as? Bool) ?? false); return [:]

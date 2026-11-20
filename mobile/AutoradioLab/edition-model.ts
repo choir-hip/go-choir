@@ -5,7 +5,7 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 const CONTROL = /\p{Cc}/u;
 // Edition setup: the reader picks the topics of their edition on a screen of chips, or says them. Ported from EditionSetup.swift (the logic;
 // the screen is onboarding's). Pure data: the selection, the topic tree, how a spoken sentence becomes edits, what is said back, and how finishing
-// always ends. Saving is edition-picks.ts's; nothing here needs the network (E6).
+// always ends. Saving is edition-picks.ts's; nothing here needs the network (E6). The edition writer (the local edition and its deadline) stays native: see EditionSetup.swift.
 //
 // WAYS THIS CAN FAIL (each has a test in edition.test.ts):
 //  E1 The same topic twice: by tap, by typing, by speech, in another case, with a plural, or as a synonym ("tech"): one entry.
@@ -21,7 +21,6 @@ const CONTROL = /\p{Cc}/u;
 //  T3 Picking a category does not pick its subtopics, and picking a subtopic does not pick its category; a category with only some
 //     subtopics picked is "partial". Picking changes no row, only expanding does.
 //  E9 Chips of the reader's own topics stay on screen after they are deselected until the step is left, so a mis-tap is undone.
-//  C1 to C4 finishing always ends: the edition, a failure, or the deadline; the reader's topics are untouched.
 
 export const MAX_TOPIC_LENGTH = 60;
 
@@ -278,33 +277,3 @@ export function treeRows(o: { liveSections?: string[]; expanded: Set<string>; se
   }
   return out;
 }
-
-// ---- the edition, written from the choices ----
-
-export type Edition = { title: string; intro: string; writingLines: string[]; sections: { heading: string; lines: string[] }[]; failFirst?: boolean };
-export const editionLines = (e: Edition): string[] => e.sections.flatMap((s) => [s.heading, ...s.lines]);
-/** The edition on this phone, from the choices alone: deterministic, no network (E6). The computer's desk is not asked. */
-export function localEdition(topics: string[]): Edition {
-  return { title: 'My edition', intro: 'This is your edition. Change anything by asking.', writingLines: ['Putting your edition together'], sections: [{ heading: 'What I follow', lines: topics.length === 0 ? ['The whole paper, until I say otherwise.'] : topics }] };
-}
-export type Writer = (topics: string[], progress: (line: string) => void, signal: AbortSignal) => Promise<Edition>;
-export const localWriter: Writer = async (topics, progress) => { progress('Putting your edition together'); return localEdition(topics); };
-
-export type Outcome = { kind: 'written'; edition: Edition } | { kind: 'failed'; line: string } | { kind: 'timedOut' };
-export const DEADLINE_SECONDS = 20;
-export const FAILED_LINE = "I couldn't write your edition just now. Your topics are saved.";
-export const TIMED_OUT_LINE = 'Writing your edition is taking too long. Your topics are saved.';
-
-/** Finishing always ends: the edition, a failure, or the deadline (the writer's signal is aborted). */
-export async function complete(topics: string[], writer: Writer, progress: (line: string) => void = () => undefined, deadlineSeconds = DEADLINE_SECONDS): Promise<Outcome> {
-  const ac = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<Outcome>((res) => { timer = setTimeout(() => res({ kind: 'timedOut' }), Math.max(deadlineSeconds, 0) * 1000); });
-  const run = writer(topics, progress, ac.signal).then<Outcome, Outcome>((edition) => ({ kind: 'written', edition }), (e) => (ac.signal.aborted ? { kind: 'timedOut' } : { kind: 'failed', line: FAILED_LINE }));
-  const first = await Promise.race([run, timeout]);
-  if (timer) clearTimeout(timer);
-  ac.abort();
-  return first;
-}
-/** The general edition: what "Continue anyway" writes. It needs nothing from the network and cannot fail. */
-export const generalEdition = (): Edition => localEdition([]);

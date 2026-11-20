@@ -12,7 +12,7 @@ members Autoradio
   state paperTick = 0
   derive paperFocus = pg.top.startsWith("paper:") ? "paper" : (pg.top.startsWith("pub:") ? "article" : "away")
   // The reader's saved picks (a topic per line), shared code (edition-picks.ts); asked again when the reader comes back to the paper and when the account changes.
-  resource epicks = editionPicks(paperFocus, signedOutTick) as shape EditionPicks else empty()
+  resource epicks = editionPicks(paperFocus, signedOutTick, epTick) as shape EditionPicks else empty()
   // Arguments are positional (named ones belong to a package's sources): view, width, tick, focus, picks.
   // `paperFront` is not a package name: it is answered by app.ts (paper.ts). The page reads the list from the server, keeps the last good one for an offline start,
   // and composes the bands for the width the page reports.

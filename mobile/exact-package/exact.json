@@ -1348,15 +1348,24 @@
     },
     {
       "send": "onboardingTopicsDone",
-      "answers": "Onboarding"
+      "answers": "Onboarding",
+      "options": {
+        "topics": "string"
+      }
     },
     {
       "send": "onboardingEditionRetry",
-      "answers": "Onboarding"
+      "answers": "Onboarding",
+      "options": {
+        "topics": "string"
+      }
     },
     {
       "send": "onboardingEditDone",
-      "answers": "Onboarding"
+      "answers": "Onboarding",
+      "options": {
+        "topics": "string"
+      }
     },
     {
       "send": "onboardingEditLeave",
@@ -1368,10 +1377,6 @@
     },
     {
       "send": "onboardingSkip",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingReset",
       "answers": "Onboarding"
     },
     {

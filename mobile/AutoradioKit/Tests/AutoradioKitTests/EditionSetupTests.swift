@@ -4,56 +4,74 @@ import XCTest
 // The topics, the tree, the saved file and the spoken edits are shared code now (AutoradioLab/edition.test.ts, edition-picks.test.ts). What is tested here is what stayed native:
 // the voice desk's mailbox (the words wait for shared code, its answer is the line said back), the pushed copy of the picks, the old file's read and drop, and the edition writer.
 final class EditionSetupTests: XCTestCase {
+    /// Shared code, on its own timer: takes what was heard and answers each once.
+    func sharedCode(line: String, finish: Bool) -> Task<Void, Never> {
+        Task {
+            for _ in 0..<200 {
+                if let i = (EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]] ?? []).first {
+                    _ = EditionNative.op(["op": "editionSaid", "id": i["id"] ?? "", "line": line, "finish": finish]); return
+                }
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+        }
+    }
+    func say(_ words: String) async throws -> [String] {
+        var lines: [String] = []
+        for try await r in EditionSetupDesk(StageParams()).submit(DeskTurn(turnID: "t", programmeID: "p", blockIndex: 0, listenerWords: words)) { lines += r.blocks.compactMap(\.spokenText) }
+        return lines
+    }
+
     func testTheDeskPutsTheWordsInTheMailboxAndSaysWhatSharedCodeAnswers() async throws {
         let talk = EditionTalk.shared; talk.clear(); defer { talk.clear() }
         let doc = try await EditionSetupProgramme(StageParams()).load()
         XCTAssertEqual(doc.blocks.compactMap(\.spokenText), ["Tap the topics you want, or tell me. Say, add space and chess."])
-        // shared code, on its own timer: takes what was heard, answers each once
-        let sharedCode = Task {
-            for _ in 0..<200 {
-                let items = EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]] ?? []
-                if let i = items.first { XCTAssertEqual(i["words"], "add space and chess"); _ = EditionNative.op(["op": "editionSaid", "id": i["id"] ?? "", "line": "Added Space and Chess.", "finish": false]); return }
-                try? await Task.sleep(nanoseconds: 10_000_000)
-            }
-        }
-        var got: [Revision] = []
-        for try await r in EditionSetupDesk(StageParams()).submit(DeskTurn(turnID: "t1", programmeID: "p", blockIndex: 0, listenerWords: "add space and chess")) { got.append(r) }
-        await sharedCode.value
-        XCTAssertEqual(got.first?.blocks.compactMap(\.spokenText), ["Added Space and Chess."])
+        let t = sharedCode(line: "Added Space and Chess.", finish: false)
+        let lines = try await say("add space and chess"); await t.value
+        XCTAssertEqual(lines, ["Added Space and Chess."])
     }
 
-    func testAnswerThatNeverComesIsNoSpeechAndTheDeskStillEnds() async {
-        let talk = EditionTalk.shared; talk.clear(); defer { talk.clear() }
-        let a = await talk.say("add chess", deadline: 0.05)
-        XCTAssertNil(a)
-        XCTAssertEqual((EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]])?.count, 1, "the words stay for shared code to take or for clear() to drop")
-        talk.clear()
-        XCTAssertEqual((EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]])?.count, 0)
-    }
-
-    func testFinishByVoiceCallsBack() async throws {
+    func testFinishByVoiceCallsBackAndAnUnansweredTurnIsSilentButEnds() async throws {
         let talk = EditionTalk.shared; talk.clear(); defer { talk.clear(); talk.onFinish = nil }
-        let done = expectation(description: "finish")
-        talk.onFinish = { done.fulfill() }
-        let sharedCode = Task {
-            for _ in 0..<200 {
-                let items = EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]] ?? []
-                if let i = items.first { _ = EditionNative.op(["op": "editionSaid", "id": i["id"] ?? "", "line": "Okay.", "finish": true]); return }
-                try? await Task.sleep(nanoseconds: 10_000_000)
-            }
-        }
-        var lines: [String] = []
-        for try await r in EditionSetupDesk(StageParams()).submit(DeskTurn(turnID: "t2", programmeID: "p", blockIndex: 0, listenerWords: "done")) { lines += r.blocks.compactMap(\.spokenText) }
-        await sharedCode.value
+        let done = expectation(description: "finish"); talk.onFinish = { done.fulfill() }
+        let t = sharedCode(line: "Okay.", finish: true)
+        let lines = try await say("done"); await t.value
         await fulfillment(of: [done], timeout: 2)
         XCTAssertEqual(lines, ["Okay."])
+        let none = await talk.say("add chess", deadline: 0.05)
+        XCTAssertNil(none); talk.clear()
+        XCTAssertEqual((EditionNative.op(["op": "editionHeard"])["items"] as? [[String: String]])?.count, 0, "clear() drops what was never taken")
     }
 
-    func testTheMirrorIsACopyInMemoryThatTheWipeEmpties() {
+    func testTheMirrorIsACopyInMemoryThatTheWipeEmptiesAndForgets() {
+        EditionPicksMirror.shared.reset(); defer { EditionPicksMirror.shared.reset() }
+        XCTAssertFalse(EditionPicksMirror.shared.known, "nothing pushed yet: an empty copy is not the listener's choice")
         _ = EditionNative.op(["op": "editionMirror", "topics": ["Space", "Chess"]])
-        XCTAssertEqual(EditionPicksMirror.shared.topics, ["Space", "Chess"])
+        XCTAssertEqual(EditionPicksMirror.shared.topics, ["Space", "Chess"]); XCTAssertTrue(EditionPicksMirror.shared.known)
         _ = EditionNative.op(["op": "editionMirror", "topics": [String]()])
-        XCTAssertEqual(EditionPicksMirror.shared.topics, [])
+        XCTAssertEqual(EditionPicksMirror.shared.topics, []); XCTAssertTrue(EditionPicksMirror.shared.known, "pushed empty IS the listener's choice")
+        _ = EditionNative.op(["op": "editionMirrorReset"])
+        XCTAssertFalse(EditionPicksMirror.shared.known); XCTAssertEqual(EditionPicksMirror.shared.topics, [])
+    }
+
+    func testAnOldFileThatCannotBeReadIsSaidSoAndNotCalledEmpty() throws {
+        guard let f = EditionPicksLegacy.file else { return XCTFail("no Application Support") }
+        let had = try? Data(contentsOf: f); defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: f.path); if let had { try? had.write(to: f) } else { try? FileManager.default.removeItem(at: f) } }
+        try FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{\"topics\":[\"Space\"]}".utf8).write(to: f)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: f.path)
+        let r = EditionNative.op(["op": "editionLegacy"])
+        XCTAssertEqual(r["found"] as? Bool, true); XCTAssertEqual(r["unreadable"] as? Bool, true)
+    }
+
+    @MainActor func testTheNotebookWriteRefusesTopicsReadUnderAnEarlierAccount() async {
+        let store = NotebookStore(); var asked = 0
+        store.lookupEdition = { asked += 1; return nil }
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("topics-marker-\(UUID().uuidString)")
+        let stale = AccountWipe.generation
+        _ = AccountWipe.bumpGeneration()                      // the account changed after the topics were read
+        let wrote = await store.writeTopics(["Space"], marker: marker, generation: stale)
+        XCTAssertFalse(wrote); XCTAssertEqual(asked, 0, "the server is not even asked")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
     }
 
     func testTheOldFileIsReadAndDroppedOnlyWhenAsked() throws {

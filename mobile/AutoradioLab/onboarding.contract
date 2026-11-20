@@ -217,6 +217,8 @@ component TopicPicker
       button press=obTalk testId="ob-talk" appearance="none" aria-label=talkLabel
         Btn(label=talkLabel, primary=false, wide=true)
       text addLabel font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
+      if ep.carryNote != ""
+        text ep.carryNote testId="ob-carry-note" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
       text ep.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
       text ob.message font-family=th.fontLabel font-size="-exact-footnote" color=th.danger
 

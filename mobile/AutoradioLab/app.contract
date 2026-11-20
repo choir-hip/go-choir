@@ -80,7 +80,6 @@ component Autoradio
     acs
     hpg
     signedOutTick
-    ep
     hc
     noNative
     refreshRadio
@@ -350,6 +349,7 @@ component Autoradio
     forgetVoice
     // ---- lane 8: onboarding and the edition topics ----
     ob
+    ep
     obBegin
     obBeginMobile
     obRetry
@@ -371,7 +371,6 @@ component Autoradio
     obEditDone
     obEditLeave
     obSkip
-    obReset
     obOpenEdition
     obFinish
     // ---- the voice cards ----

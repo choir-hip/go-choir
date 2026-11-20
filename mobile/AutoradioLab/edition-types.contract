@@ -23,3 +23,5 @@ shape EditionPage
   message: string
   picks: string
   rev: number
+  carrying: bool
+  carryNote: string

@@ -115,12 +115,11 @@ const sources: Sources = {
   fileRename: ([path, name], _s, storage) => fileRename({ path, name }, storage),
   fileUpload: ([from, name, dir], _s, storage) => fileUpload({ from, name, dir }, storage),
   // The edition picks (edition-picks.ts): the one reader and writer of app:/data/edition-topics.json. The last argument of each source is the signed-out tick (the page is asked again when the account changes).
-  editionPicks: ([_focus, _signedOut], _s, storage) => picks.picksText(storage),
+  editionPicks: ([_focus, _signedOut, _tick], _s, storage) => picks.picksText(storage),
   editionTopics: ([_tick, talking, _signedOut], _s, storage) => picks.picksPage(storage, { talking }),
   editionToggle: ([label], _s, storage) => picks.toggle(storage, label),
   editionExpand: ([label], _s, storage) => picks.expand(storage, label),
   editionAdd: ([text], _s, storage) => picks.addTyped(storage, text),
-  editionClear: (_a, _s, storage) => picks.clearPicks(storage),
   paperFront: ([view, width, tick, focus, picks], _store, storage) => paperFront({ view, width, tick, focus, picks }, storage),
   // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
   mailBox: ([address, _acct], _store, storage) => mail.mailBox(address, { storage }),

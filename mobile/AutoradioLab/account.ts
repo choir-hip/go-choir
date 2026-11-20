@@ -32,7 +32,7 @@ import { wipePages, PAGES_FILE } from './pages.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
 import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
-import { wipePicks, PICKS_FILE } from './edition-picks.ts';
+import { wipePicks, parseStored, PICKS_FILE } from './edition-picks.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
  * launch (`settleAccount`) finishes the wipe before any source answers. (Review 2026-11-19, finding 2.) */
@@ -149,10 +149,14 @@ async function stampFact(storage: Storage, digest: string): Promise<StampFact> {
 }
 
 /** Most wipes swallow "absent", so a wipe that did nothing looks like one that worked. After the wipes, every path they cover is looked at: a survivor is a failure. */
-async function leftovers(storage: Storage | undefined): Promise<string[]> {
+export async function leftovers(storage: Storage | undefined): Promise<string[]> {
   if (!storage) return [];
   const out: string[] = [];
-  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
+  for (const p of wipedPaths()) {
+    if (p === STAMP_FILE || p === PENDING_FILE || !(await exists(storage, p))) continue;
+    if (p === PICKS_FILE && parseStored((await readText(storage, p)) ?? '').length === 0) continue;       // rm failed and the file was emptied (wipePicks): cleared, not left over
+    out.push(p.slice(p.lastIndexOf('/') + 1) || p);
+  }
   return out;
 }
 
