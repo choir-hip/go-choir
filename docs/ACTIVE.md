@@ -23,6 +23,14 @@ built, the search gate is deployed and the paper is still over 1,000 web
 searches a day, the signed-out phone work is deployed, and the owner's phone
 had been in demo mode, which the owner wants removed.
 
+State at 2026-11-20T14:05Z, after the overnight run: demo mode is deleted and
+the phone carries `20af586d3`; the brief objective, search leads, the
+embed-worker wake, gateway G1, entity station E2 and the re-ask holds are
+deployed. Stopped for the owner: the Texture root desk, the snapshot stream
+and the Exact Texture editor (each has a problem record); `owner_act_mode` is
+held. The letter is
+[`reports/overnight-exact-search-entities-2026-11-20.md`](reports/overnight-exact-search-entities-2026-11-20.md).
+
 ## Superseded: the night of 2026-11-19: Exact, vectors and learning, three tracks at once
 
 Owner, 2026-11-19: "we need to do the full exact rewrite. make a throughline

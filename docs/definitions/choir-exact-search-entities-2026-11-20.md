@@ -189,8 +189,8 @@ stations:
     status: pending
 now:
   status: working
-  as_of: 2026-11-20T11:30Z (lead-docs lane carries this file)
-  slice: the third train (entity station E2 with its follow-up, the DAMON and event-wakes removals) lands when the store suite's rerun ends on choir-runner (about 11:55Z); the fourth (the re-ask holds, accepted on a third review) follows it; mobile lanes go one at a time through the Mac queue
+  as_of: 2026-11-20T14:05Z (lead-docs lane carries this file)
+  slice: four trains and the phone cleanups are deployed; the themes are in a last bounded fix; the owner letter is published; C176 (the re-ask holds on the paper) settles after 16:30Z
   landed_this_thread:
     - 'W1 7f5ad41e1 (intake.events and dispatch.wide_slots gone): CI 44684974356 ok, deployed 06:18:24Z, the paper logs slots=N/12 and event layer flushes after its refresh. C167 settles after 07:20Z.'
     - 'X1 de7aeb7f7 (the Textures list is shared Exact code): seat 2 accepted the rework; real-data simulator proof PROOF OK at 99b3c5dfb with screenshots read; CI 44688798576 ok, deployed 06:45:49Z.'
@@ -202,6 +202,12 @@ now:
     - 'D2 a7e0e6535 (demo mode deleted from the product; 7,450 lines removed; the leftover cleanup kept): accepted; real proof PROOF OK; CI 44723094577 ok, deployed 11:05:03Z; on the owner''s iPhone at f1aa4df9d since 11:25:55Z. The build queue''s `proof` mode is retired; `real` is the only proof.'
     - 'H1 gateway G1 f1aa4df9d and its follow-up f883ea88d (the two spend files merged under a file lock by an asynchronous flusher; a corrupt file set aside): red, both seats accepted each; CI 44725241858 ok, deployed 11:16:41Z; the paid counts rose across the restart with no save-failure line. C175 settles after 12:17Z.'
     - 'C171 settled false as worded: 0 of 16 briefs skipped for want of an objective (66% before), but every one took its objective from the unread record, a source the claim did not name.'
+    - 'Train D dc584af3b (entity station E2 with its follow-up; the DAMON and event-wakes settings deleted): CI 44731379068 FAILED (the edge kind in_event unregistered, the Go vendor hash stale); repaired by e33d9df5f, CI 44735823978 ok, deployed 12:43:17Z. Record: docs/problems/train-landed-red-objectgraph-registry-and-vendor-hash-2026-11-20.md. C173 and C174 settled false.'
+    - 'The entity read listed no stories in production (a text range that matches nothing under the database''s en_US.UTF-8 collation; tests ran under C). Fixed by 0eef16ec7, deployed 13:38:45Z; scripts/proofs/entity-e2-deployed.sh exits 0 (14 entities of front stories list their stories). The review found no other broken range; og_edges is the one graph id table not declared COLLATE "C".'
+    - 'The wider demo cleanup bf478ee52: accepted, CI 44738989977 ok; on the owner''s iPhone at 20af586d3 since 13:18:34Z.'
+    - 'Train E 20af586d3 (the re-ask holds, four commits; desk protocol lock 18.9.0, the lead''s commit, not reviewed by a seat): CI 44741404137 ok, deployed 13:24:44Z. C176 settles after 16:30Z.'
+    - 'C170 settled false narrowly (unembedded at flush fell from 78% to about 12%, bar 10%); C172 true; C175 true by a narrower reading.'
+    - 'The owner letter: docs/reports/overnight-exact-search-entities-2026-11-20.md.'
   discovered_this_thread:
     - 'D1: the owner, 05:26Z, with a screenshot: signed in, the day''s real stories. Installs overnight are allowed. Seat 2 sent the cleanup back twice: it must not delete anything on "no readable key", must act only on a positive demo trace, and must mark itself done only after it succeeded. Third version building.'
     - 'S: the search gate did NOT lower the gateway''s rate (162 an hour before, 159 after); about 6 searches a run by the gateway meter. 79% of searches are a story''s first run hunting a second outlet; 1,000 a day is 1.8 a run.'
@@ -223,26 +229,27 @@ now:
     - 'Main''s Swift design and typography rule tests fail and CI does not run them; lane design-rules-fix.'
     - 'Review seat 1 is Gemini 4 Hydrogen through agy (owner, 2026-11-20); in print mode it needs --sandbox --dangerously-skip-permissions in a frozen copy.'
   lanes:
-    - 'train D (scratch clone train3): entity-e2 with its follow-up (accepted three times), last-switches (DAMON and event-wakes, accepted on re-review; nix eval of both systems ok); agentcore ok 3805 s; store rerun running'
-    - 'train E (on top of D): search-reask-hold, four commits, accepted on the third review; suites queued'
     - 'root-desk-r3 7a6d66dc4 (W2): STOPPED for the owner; docs/problems/texture-root-desk-six-reviews-no-landing-2026-11-20.md'
     - 'snapshot-stream 0873aa1fc (H1 S1): STOPPED for the owner; the budget problem record recommends raising the 90-minute budget as the interim relief'
+    - 'exact-convo-edit 4b58dba83 (X2 conversation rows and the Texture editor): STOPPED for the owner after a third send-back; docs/problems/texture-editor-in-exact-three-reviews-no-landing-2026-11-20.md; the two conversation-row commits drew no blocking finding and could land alone'
     - 'owner-act-enforce ba32aa571 (W3 third setting): HELD for the owner'
-    - 'dispatch-deadlines: building; exact-themes, exact-convo-edit: last review round; exact-demo-leftovers b40917da2 (the wider cleanup): in review'
+    - 'exact-themes 7945b568d: the carry-over finding is fixed; sent back for a broken mobile check script and two should-fixes; one bounded fix in progress'
+    - 'dispatch-deadlines 04a06df51: internal/actor fails its suite on the build machine (600 s timeout); not landed; no round since 11:29Z'
+    - 'landed lanes not removed (lane rm refuses without --force because the landed commits were rebased): exact-demo-leftovers, entity-e2-ids, search-reask-hold, last-switches, embed-kick'
   conjecture:
     claim: 'the paper''s web searches are mostly a hunt for a second outlet and re-asks of one question; holding re-asks on every verb and telling a run at its start which outlets the corpus already holds removes more than half, and under 1,000 a day needs the second outlet to come from the corpus (events with two outlets) and not from the web'
     test: the gateway's searches a day and searches per run after each landing, with stories a day not lower than the week before
     edge: missing_oracle
     edge_note: the logs carry no outlet per capture, so the size of the second-outlet hold is unknown until Landing 0's fields are deployed
     status: testing
-  believed_state: W1, X1, S2, D1, D2, the wake, search leads, the design rules and gateway G1 are deployed; D1 and D2 are on the phone; two stations are stopped for the owner
+  believed_state: W1, X1, S2, D1, D2, the wake, search leads, the design rules, gateway G1, entity station E2 with its collation fix, two more settings removed and the re-ask holds are deployed; the phone carries 20af586d3; three pieces are stopped for the owner and one is held
   main_uncertainty: whether any set of caller fixes reaches 1.8 searches a run; whether the event layer joins once captures have vectors; whether the build machine (one heavy run at a time) can carry eleven builders before morning
   blocker: none
-  next_action: land train D when the store rerun ends, then train E; settle C170, C172 and C175 after 12:10Z; write the owner letter
+  next_action: settle C176 after 16:30Z from the paper's run lines and the gateway's search counts; land the themes if the bounded fix is accepted; the owner's four decisions (snapshot budget, root desk, editor, owner acts)
 operating_notes:
   - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review: seat 1 a Sonnet subagent that did not write the change, seat 2 DeepSeek through the agentic-consensus runner (--include omp-deepseek-v41-flash) on a frozen clean copy; orange one seat, red two.'
   - 'Go compiles and tests on the build machines, never the Mac (gate scripts on the Mac need GOFLAGS=-mod=mod). choir-agents has 3.9 GB of memory: one heavy run at a time under flock ~/agentcore.lock, and stop the test Postgres a killed run leaves. choir-runner (10 GB) is the landing machine; whole agentcore under -race took 69 to 83 minutes on the night of 2026-11-19, so use -timeout 150m.'
-  - 'A builder''s report is a claim. Before a landing, see the suite''s ok line yourself, look at the proof''s screenshots yourself, and enter the calibration claim in docs/calibration/claude-ledger.md (next free id C168; C165 is used on lane/root-desk-on).'
+  - 'A builder''s report is a claim. Before a landing, see the suite''s ok line yourself, look at the proof''s screenshots yourself, and enter the calibration claim in docs/calibration/claude-ledger.md (next free id C177).'
   - 'State times only after date -u. The ledger and reports are in UTC; the owner is UTC-5.'
 receipts:
   - 'previous goal: docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md (superseded by this file; its station statuses were never updated and are not to be trusted)'
