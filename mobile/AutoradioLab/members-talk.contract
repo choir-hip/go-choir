@@ -1,11 +1,14 @@
 // Lane members file (talk): the conversation page's resource and the answer card's actions. Owned by the talk lane
 // (autoradio-talk). Shapes and source names: exact-package/interface/talk.json; module: exact-package/apple/AutoradioModule+Talk.swift.
 // Every name a child component injects is in the talk band of `provide` in app.contract.
-use conversationInfo, answerAction, voiceProfile, voiceLearn, voiceForget from "@choir/autoradio"
-use ConversationInfo, VoiceProfile, SettingsAck from "@choir/autoradio"
+use conversationEntries, answerAction, voiceProfile, voiceLearn, voiceForget from "@choir/autoradio"
+use ConversationEntries, VoiceProfile, SettingsAck from "@choir/autoradio"
+use ConversationInfo from "./conversation-types.contract"
 
 members Autoradio
-  resource cv = conversationInfo() as shape ConversationInfo else empty()
+  // The entries are the voice turn engine's (native, read whole); the page's rows are shared code (conversation.ts), asked again whenever the entries change.
+  resource cvraw = conversationEntries() as shape ConversationEntries else empty()
+  resource cv = conversationInfo(cvraw) as shape ConversationInfo else empty()
   resource voicep = voiceProfile() as shape VoiceProfile else empty()
   mutation tk as shape SettingsAck
   // The answer card's buttons (bar.contract): ask the same words again, hide the card, stop the turn.

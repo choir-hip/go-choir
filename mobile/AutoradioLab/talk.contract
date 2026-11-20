@@ -2,7 +2,8 @@
 // back: the answer the phone gave first from the reader's saved stories (marked as such), the full answer from the computer, or a plain
 // failure with a way to ask again. One entry per question; the bar's answer card opens this page. testIds: conversation-row-<id>,
 // conversation-retry-<id>, conversation-empty.
-use Theme, ThemeExtras, ConversationInfo, ConversationRow from "@choir/autoradio"
+use Theme, ThemeExtras from "@choir/autoradio"
+use ConversationInfo, ConversationRow from "./conversation-types.contract"
 use ToolScroll, Card, Btn, dyn from "./ui.contract"
 use ScreenTitle, SectionLabel, Hairline from "./settings.contract"
 

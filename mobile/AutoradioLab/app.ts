@@ -10,6 +10,7 @@ import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
 import { readerDocShared } from './reader.ts';
+import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
 import { notebookPage, page as notebookIdlePage } from './notebook.ts';
 import * as mail from './mail.ts';
@@ -58,6 +59,7 @@ const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
+  conversationInfo: ([raw]) => conversationInfo(raw),
   texturesList: ([at]) => texturesListShared(at),
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
   notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
