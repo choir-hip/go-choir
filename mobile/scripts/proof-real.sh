@@ -276,7 +276,7 @@ bad "signed in: no sign-in card on the tour" '\[signedout-banner\]' "$SHOTS/driv
 # the signed-out tour
 chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO1"
 chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO1"
-chk "signed out: the radio says what it is" 'This is the public paper. Sign in to hear your own programme.' "$SO1"
+chk "signed out: the radio says what it is" 'This is the public paper. Sign in to hear your own programme.' "$SO"
 chk "signed out: the paper lists public stories" '\[paper-story-/pub/' "$SO"
 [ -n "$STORY1" ] && chk "signed out: a story reads" '\[reader-block-' "$SO"
 chk "signed out: the radio offers the public paper" '\[radio-play-public\]' "$SO"
