@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -113,6 +115,13 @@ type AnthropicRelay struct {
 	spent     map[string]int64
 	spentDay  string
 	spendFile string
+	// spentDelta is what this process charged on spentDay since its last
+	// save that landed; a save adds it to the file under a lock, so a second
+	// gateway process never has its charges overwritten.
+	spentDelta map[string]int64
+	// unsavedCharges counts the charges in spentDelta, for the status.
+	unsavedCharges int64
+	saver          spendSaver
 }
 
 // relaySpendRecord is the spend file.
@@ -258,20 +267,50 @@ func (r *AnthropicRelay) spentToday(identity string) int64 {
 	return r.spent[identity]
 }
 
-// charge adds a call's tokens to identity's day, and keeps the day in the
-// spend file when one is set.
+// charge adds a call's tokens to identity's day, and hands the day to the
+// flusher when a spend file is set. It never waits for the file.
 func (r *AnthropicRelay) charge(identity string, u relayUsage) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if day := r.relayDay(); r.spentDay != day || r.spent == nil {
+		// A finished day's unsaved charges are dropped: nothing reads a
+		// finished day (loadSpend and spentToday use the current day only).
 		r.spent, r.spentDay = map[string]int64{}, day
+		r.spentDelta, r.unsavedCharges = nil, 0
 	}
-	r.spent[identity] += u.InputTokens + u.OutputTokens + u.CacheCreationTokens
-	if r.spendFile != "" {
-		if err := r.saveSpendLocked(); err != nil {
-			log.Printf("gateway: anthropic relay: could not keep the day's spend: %v", err)
+	n := u.InputTokens + u.OutputTokens + u.CacheCreationTokens
+	r.spent[identity] += n
+	save := r.spendFile != ""
+	if save {
+		if r.spentDelta == nil {
+			r.spentDelta = map[string]int64{}
 		}
+		r.spentDelta[identity] += n
+		r.unsavedCharges++
 	}
+	r.mu.Unlock()
+	if save {
+		r.saver.kickSave(r.saveSpendOnce)
+	}
+}
+
+// Flush saves now and returns the error, if any: the gateway's last save
+// after its server has drained, and the tests' way to read the file.
+func (r *AnthropicRelay) Flush() error {
+	if r == nil || r.spendFile == "" {
+		return nil
+	}
+	return r.saver.run(r.saveSpendOnce)
+}
+
+// Persistence is the save status shown on /provider/v1/spend.
+func (r *AnthropicRelay) Persistence() SpendPersistence {
+	if r == nil {
+		return SpendPersistence{}
+	}
+	r.mu.Lock()
+	n := r.unsavedCharges
+	r.mu.Unlock()
+	return r.saver.status(n)
 }
 
 // loadSpend reads the spend file; another day's record, or none, starts the
@@ -293,16 +332,106 @@ func (r *AnthropicRelay) loadSpend() {
 	}
 }
 
-func (r *AnthropicRelay) saveSpendLocked() error {
-	raw, err := json.Marshal(relaySpendRecord{Day: r.spentDay, Spent: r.spent})
+// readRelaySpendFile reads the spend file: absent is (zero, false, nil); a
+// file that is present but unreadable, unparseable or without a day is an
+// error and is never written over.
+func readRelaySpendFile(path string) (rec relaySpendRecord, exists bool, err error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return relaySpendRecord{}, false, nil
+	}
+	if err != nil {
+		return relaySpendRecord{}, true, fmt.Errorf("%w: %v", errSpendFileBad, err)
+	}
+	if err := json.Unmarshal(raw, &rec); err != nil || rec.Day == "" {
+		return relaySpendRecord{}, true, fmt.Errorf("%w: %s holds no usable day record", errSpendFileBad, path)
+	}
+	return rec, true, nil
+}
+
+// saveSpendOnce adds this process's unsaved charges to the file and takes the
+// merged day back, on the flusher and outside r.mu except for two short
+// copies (see PaidSpend.saveOnce for the failure rules, which are the same:
+// a bad file is never written over, a failure keeps the delta, and the cap
+// counts memory, which holds this process's own charges either way).
+//
+// Charges for a day older than the file's are dropped here with the file's
+// later day left alone: only the current day is ever read.
+func (r *AnthropicRelay) saveSpendOnce() error {
+	r.mu.Lock()
+	empty := len(r.spentDelta) == 0
+	r.mu.Unlock()
+	if empty {
+		return nil
+	}
+	unlock, err := lockSpendFile(r.spendFile)
 	if err != nil {
 		return err
 	}
-	tmp := r.spendFile + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+	defer unlock()
+	rec, exists, err := readRelaySpendFile(r.spendFile)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, r.spendFile)
+	r.mu.Lock()
+	day := r.spentDay
+	snap := make(map[string]int64, len(r.spentDelta))
+	for id, n := range r.spentDelta {
+		snap[id] = n
+	}
+	snapN := r.unsavedCharges
+	if exists && rec.Day > day {
+		// This process's clock is behind the file: its day is finished from
+		// the file's view. Keep memory; drop the delta; leave the file.
+		r.spentDelta, r.unsavedCharges = nil, 0
+		r.mu.Unlock()
+		return nil
+	}
+	merged := map[string]int64{}
+	if exists && rec.Day == day {
+		for id, n := range rec.Spent {
+			if n > 0 {
+				merged[id] = n
+			}
+		}
+		for id, n := range snap {
+			merged[id] += n
+		}
+	} else { // absent, or an older day: memory is this process's whole day
+		for id, n := range r.spent {
+			merged[id] = n
+		}
+	}
+	r.mu.Unlock()
+	raw, err := json.Marshal(relaySpendRecord{Day: day, Spent: merged})
+	if err != nil {
+		return err
+	}
+	if err := writeSpendFile(r.spendFile, raw); err != nil {
+		return err
+	}
+	if h := spendSaveWindowHook.Load(); h != nil {
+		(*h)()
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.spentDay != day { // the day turned during the save: nothing to fold
+		return nil
+	}
+	for id, n := range snap {
+		if r.spentDelta[id] -= n; r.spentDelta[id] <= 0 {
+			delete(r.spentDelta, id)
+		}
+	}
+	r.unsavedCharges -= snapN
+	for id, n := range r.spentDelta { // charges made during the save
+		merged[id] += n
+	}
+	if len(r.spentDelta) == 0 {
+		r.spentDelta = nil
+	}
+	r.spent = merged
+	return nil
 }
 
 // budgetSpent reports whether identity has used its day's cap.

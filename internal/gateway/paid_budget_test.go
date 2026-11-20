@@ -79,6 +79,9 @@ func TestPaidSpendPersistsAcrossRestart(t *testing.T) {
 	clk := &spendClock{time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC)}
 	s := newTestSpend(t, path, clk)
 	s.Record("river", "vm-a", riverModel, provider.Usage{InputTokens: 10_000_000})
+	if err := s.Flush(); err != nil {
+		t.Fatal(err)
+	}
 	s2 := newTestSpend(t, path, clk)
 	if s2.Refusal("river", riverModel) == nil {
 		t.Fatal("restart forgot the day's spend")

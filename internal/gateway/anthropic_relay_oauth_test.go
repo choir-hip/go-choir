@@ -261,6 +261,9 @@ func TestAnthropicRelaySpendSurvivesARestart(t *testing.T) {
 	if !r.budgetSpent("vm-a") {
 		t.Fatal("110 of 100 is not spent")
 	}
+	if err := r.Flush(); err != nil { // the save runs on a flusher; a restart reads the file
+		t.Fatal(err)
+	}
 	again := newAnthropicRelayFromGetenv(get)
 	if got := again.spentToday("vm-a"); got != 110 || !again.budgetSpent("vm-a") {
 		t.Fatalf("after a restart the day's spend is %d", got)
