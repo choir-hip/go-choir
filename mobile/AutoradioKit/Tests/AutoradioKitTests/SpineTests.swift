@@ -36,25 +36,6 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(PageAddress.kind(of: "radio:"), "radio"); XCTAssertEqual(PageAddress.defaultTitle("radio:"), "Autoradio")
     }
 
-    func testThemesLoadAndResolveBothSchemes() {
-        let s = ThemeStore(userDir: nil, defaults: UserDefaults(suiteName: "spine-test-\(UUID().uuidString)")!)
-        XCTAssertEqual(s.problems, [])
-        XCTAssertEqual(s.list().map(\.id).sorted(), ["chrome-pastel", "depth", "lantern", "liquid-metal", "newsprint", "signal"])
-        s.setMode("dark"); s.setTheme("newsprint")
-        let t = s.current()
-        XCTAssertEqual(t.scheme, "dark"); XCTAssertEqual(t.paper, "#0E0E0E"); XCTAssertEqual(t.material2, "solid")
-        s.setMode("light"); s.setTheme("depth")
-        XCTAssertEqual(s.current().material2, "glass")
-        XCTAssertEqual(s.current().paper, "#FFF7FE")
-    }
-
-    func testContrastGateRejectsAThemeWithUnreadableText() {
-        let bad = ##"{"schema_version":3,"id":"bad","name":"Bad","colors":{"paper":"#FFFFFF","fg":"#EEEEEE","muted":"#EEEEEE","accent":"#0000FF","onAccent":"#FFFFFF"}}"##
-        let s = ThemeStore(bundled: ["bad": bad], userDir: nil, defaults: UserDefaults(suiteName: "spine-test-\(UUID().uuidString)")!)
-        XCTAssertTrue(s.list().isEmpty)
-        XCTAssertFalse(s.problems.isEmpty)
-    }
-
     func testPageSourceFallsBackToNotYet() async {
         let r = PageSources(); r.register(NotYetPageSource())
         let m = await r.model(for: "mailbox:inbox")

@@ -1,16 +1,17 @@
 // Lane members file (settings): this lane's states, derives, resources, mutations and actions, as if written in the root.
-// Owned by the settings lane (lane 7). Shapes and source names are in exact-package/interface/settings.json; the module is
+// Owned by the settings lane (lane 7). Shapes are in exact-package/interface/settings.json; the theme sources are answered by app.ts (themes.ts); the module is
 // exact-package/apple/AutoradioModule+Settings.swift. Every name a child component injects is in the lane 7 band of `provide`.
-use themeCards, themeExtras, settingsComputer, learnedInfo, activityInfo, aboutInfo from "@choir/autoradio"
-use themeFromTexture, themeRemove, computerRefresh, computerWake, computerUpdate from "@choir/autoradio"
+use settingsComputer, learnedInfo, activityInfo, aboutInfo from "@choir/autoradio"
+use computerRefresh, computerWake, computerUpdate from "@choir/autoradio"
 use learnedReset, activityRefresh from "@choir/autoradio"
 use ThemeCards, ThemeExtras, SettingsAck, SettingsComputer, LearnedInfo, ActivityInfo, AboutInfo from "@choir/autoradio"
 
 use SettingsAccount from "./settings-types.contract"
 
 members Autoradio
-  resource tc = themeCards() as shape ThemeCards else empty()
-  resource tx = themeExtras() as shape ThemeExtras else empty()
+  // Themes: themes.ts (shared code); the same two host facts as the theme itself (spine.contract).
+  resource tc = themeCards(vp.prefersColorScheme, vp.prefersReducedMotion) as shape ThemeCards else empty(mode="system", themeID="chrome-pastel", scheme="light")
+  resource tx = themeExtras(vp.prefersColorScheme, vp.prefersReducedMotion) as shape ThemeExtras else empty(sizeNameplate=36, sizeHeadline=28, sizeH2=19, sizeBody=18, sizeLabel=15, sizeMeta=13, lineBody=1.6, lineHeadline=1.12, weightHeadline=700, weightUi=600, flipStiffness=300, flipDamping=22, markTumbleAS=3.3, markTumbleBS=5.9, markStatic=false, pressTint=false, reduceMotion=false, contrast="AA")
   // The account is answered by app.ts (settings.ts): signed in (the Swift sign-in) and a tick the Refresh button moves.
   state acctTick = 0
   resource acctInfo = settingsAccount(au.signedIn, acctTick) as shape SettingsAccount else empty()
@@ -25,9 +26,9 @@ members Autoradio
   action editThemeDoc(v: string)
     themeDoc = v
   action loadThemeDoc
-    send sm = themeFromTexture(doc=themeDoc)
+    send thm = themeFromTexture(themeDoc)
   action removeTheme(id: string)
-    send sm = themeRemove(id=id)
+    send thm = themeRemove(id)
 
   action refreshAccount
     acctTick = acctTick + 1

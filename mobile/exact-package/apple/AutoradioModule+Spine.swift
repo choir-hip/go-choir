@@ -30,11 +30,6 @@ extension AutoradioModule {
                 DispatchQueue.main.async { reply(self?.json(m) ?? [:]) }
             }
         }
-        handle("theme") { [unowned self] _, reply in reply(json(themes.current())) }
-        handle("themeList") { [unowned self] _, reply in
-            reply(["rows": themes.list().map { json($0) }, "mode": themes.schemeMode, "themeID": themes.themeID,
-                   "scheme": themes.effectiveScheme(), "problems": themes.problems])
-        }
         handle("barState") { [unowned self] _, reply in reply(json(BarState.info(player: choir.playerView(), snapshot: runtime.snapshot()))) }
         handle("signalList") { [unowned self] _, reply in reply(["rows": signals.recent(limit: 30).map { json($0) }]) }
 
@@ -137,12 +132,6 @@ extension AutoradioModule {
         handle("pageFocus") { [unowned self] args, reply in Task { @MainActor in await TextureEditor.shared.flushAll() }; pages.focus(args["address"] as? String ?? ""); touch(["openPages"], now: true); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
         handle("pagePin") { [unowned self] args, reply in pages.togglePin(args["address"] as? String ?? ""); touch(["openPages"]); reply(pageList()) }
         handle("pageReopen") { [unowned self] _, reply in pages.reopenLastClosed(); touch(["openPages"]); runtime.warmResponder(address: pages.list().first?.address); reply(pageList()) }
-        handle("themeSet") { [unowned self] args, reply in
-            themes.setTheme(args["id"] as? String ?? ""); touch(["theme", "themeList"]); reply(pageList())
-        }
-        handle("schemeSet") { [unowned self] args, reply in
-            themes.setMode(args["mode"] as? String ?? ""); touch(["theme", "themeList"]); reply(pageList())
-        }
         handle("signalRecord") { [unowned self] args, reply in
             signals.record(SignalEvent(kind: args["kind"] as? String ?? "", subject: args["subject"] as? String ?? "", detail: args["detail"] as? String ?? ""))
             touch(["signalList"]); reply(pageList())

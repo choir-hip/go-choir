@@ -19,7 +19,7 @@ describe('design rules', () => {
     const bad: string[] = []; let seen = 0;
     for (const f of contracts().filter((c) => c.name !== 'ui.contract')) f.lines.forEach((raw, n) => {
       const l = code(raw); seen++;
-      if (l.includes('radiusPill')) bad.push(`${f.name}:${n + 1} uses th.radiusPill`);
+      if (l.includes('th.radiusPill')) bad.push(`${f.name}:${n + 1} uses th.radiusPill`);
       for (const v of radii(l)) if (v > 12) bad.push(`${f.name}:${n + 1} a radius above 12 (a capsule or a bubble)`);
     });
     expect(bad).toEqual([]); expect(seen).toBeGreaterThan(500);

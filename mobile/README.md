@@ -542,15 +542,15 @@ if it adds a name a child component must `inject`).
   resources and actions live in its `members-<lane>.contract`) and reads its page model with the `pmod` resource (the kit's
   `PageSource`: address to `PageModel`). Open a page with the `openPage(address, title)` action.
 - **Dispatch table** (module): `handle("sourceOrSend") { args, reply in ... }` in your `AutoradioModule+<Lane>.swift`
-  (`registerX()` is called once by the module). Reach `pages`, `signals`, `themes`, `pageSources`, `runtime`, `choir`
+  (`registerX()` is called once by the module). Reach `pages`, `signals`, `pageSources`, `runtime`, `choir`
   through `self`; `touch(["name"])` refreshes a live source.
 - **Interface**: your source and send names and shapes go in `exact-package/interface/<lane>.json`
   (`{"shapes": {...}, "names": [{"source": ..., "live": true, "answers": "Shape", "options": {...}, "substitute": {"default": {...}}} | {"send": ..., "answers": "Shape"}]}`).
   `scripts/gen-exact-interface.py` merges the fragments and refuses a duplicate shape or name.
 - **Strings**: `AutoradioLab/strings/en.json`, keys prefixed per lane (`paper.*`, `reader.*`, ...); `scripts/check-strings.py` fails on a
   duplicate or an unprefixed key.
-- **Themes** are data (plan section 5, schema v3): `mobile/themes/*.json`, embedded by `scripts/embed-assets.py` (run by
-  `sync-exact-package.sh`), plus any `*.json` dropped in the app's `Application Support/Autoradio/themes` (read at run time; `ThemeStore.reload()`).
+- **Themes** are data (plan section 5, schema v3) and shared code (`AutoradioLab/themes.ts`): `mobile/themes/*.json`, imported by `themes-bundled.ts` (a new file needs one line there; `themes.test.ts` checks),
+  plus any `*.json` dropped in `app:/data/themes` (read once at launch). The choice is `app:/data/theme-choice.json`; the system scheme and Reduce Motion are `exactViewport()` facts.
   The `th` record (`Theme`) is what views bind: `th.paper`, `th.fg`, `th.accent`, `th.fontRead` (the body face), `th.fontUi`, `th.radiusCard`,
   `th.shadow1..3`, `th.material1..3`, `th.motionFastMs`, `th.springStiffness`... No component names a colour, a font or a radius.
   `Card(level, testId, minHeight)`, `Layer(testId)`, `Surface(level, radius, bleed)`, `PageScroll(id)` are in `ui.contract`.
@@ -577,7 +577,7 @@ integrator's (`signin`, `lab-talk`, `inject`, `stage-<kind>-<id>`, `trace-*`, ..
 | 4 Cards, launcher, signals | `cards.contract`, `launcher.contract`, `members-cards.contract`, `AutoradioModule+Cards.swift`, `Kit/OpenPagesUI.swift`, `Kit/Signals.swift`, `Kit/Preferences.swift`, `interface/cards.json` | its band in `provide` |
 | 5 Files and viewers | `files.contract`, `viewers.contract`, `members-files.contract`, `AutoradioLab/files.ts` and `files-model.ts` (shared code; Swift's Files service is gone), `Kit/Epub.swift`, package views `PDFPage.swift`, `QuickLookPage.swift` | its band in `provide` |
 | 6 Mail | `mail.contract`, `members-mail.contract`, `AutoradioModule+Mail.swift`, `Kit/ChoirMail.swift`, package view `MailOriginal.swift`, `interface/mail.json` | its band in `provide` |
-| 7 Settings, themes, accounts | `settings.contract`, `activity.contract`, `members-settings.contract`, `AutoradioModule+Settings.swift`, `Kit/ThemeLoader.swift`, `mobile/themes/*.json`, `Kit/Accounts.swift`, `interface/settings.json` | its band in `provide` |
+| 7 Settings, themes, accounts | `settings.contract`, `activity.contract`, `members-settings.contract`, `AutoradioModule+Settings.swift`, `AutoradioLab/themes.ts`, `mobile/themes/*.json`, `Kit/Accounts.swift`, `interface/settings.json` | its band in `provide` |
 | 8 Onboarding and the edition topics | `onboarding.contract`, `members-onboarding.contract`, `AutoradioModule+Onboarding.swift`, `interface/onboarding.json` | its band in `provide` |
 | 9 Motion and the mark | `mark.contract`, `mark.ts` (if a canvas is used), `AutoradioModule+Mark.swift`, `interface/mark.json`, motion tokens in the themes | its band in `provide` |
 | Integrator | engine, `lab.contract`, `components.contract` (Components and Trace pages), audio session, `Kit/*` engine files | none |
@@ -676,8 +676,8 @@ a 3-chapter EPUB, a WAV, an MP4, CSV, Markdown, text and code, all invented). Pr
 `scripts/proof-real.sh` (helpers in `scripts/proof-common.sh`) for the app and `scripts/check-all.sh` for everything that needs no simulator (the deleted `proof-app.sh` ran both); the demo-mode whole-app and lane proofs it replaced were deleted on 2026-11-20 with demo mode.
 
 Decisions made at the seams:
-- **Generated files** (`BundledThemes.generated.swift`, `exact-package/exact.json`) are never hand-merged: take a side and
-  run `python3 scripts/embed-assets.py` / `gen-exact-interface.py`. The build runs both again.
+- **Generated files** (`exact-package/exact.json`) are never hand-merged: take a side and
+  run `gen-exact-interface.py`. The build runs it again.
 - **One owner per thing.** Talk mode: Settings (`AppSettings` `talkMode`); the bar and the topics step read the engine's addressing stage that Settings
   applies (the setup no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
   (`syncGestureMeanings`), and lane 4's own buttons write back to Settings. "What the paper has learned": `PreferencesLearned`, over lane 4's acts.
@@ -717,7 +717,7 @@ banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a
 
 - The lens is theme data: a theme's `lens` is `{ "style": "A", "wash": 0 }` (A native glass, B no material with a wash of the page colour,
   C ultra-thin; wash 0 to 1). Absent, it is A and 0. `Theme.lensStyle` / `Theme.lensWash` reach the bar as `th.lensStyle` / `th.lensWash`;
-  there is no in-app switch (the launcher's Developer lens rows are gone). Failure list F11 in `ThemeLoader.swift`, tests in `AimAndLensTests.swift`.
+  there is no in-app switch (the launcher's Developer lens rows are gone). Failure list F11 in `AutoradioLab/themes.ts`, tests in `themes.test.ts` (L1-L3).
 - Cancel while listening calls `choirTalkCancel` (the engine drops the audio and the words, nothing is sent); Send is the microphone again.
 - `aim` (the address of the page in front) goes from the bar to `choirAsk` / `choirTalkDown`, into `LabRuntime.aimAddress`, and from there into the
   Autoradio desk request's `page.address`.

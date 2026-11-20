@@ -34,5 +34,5 @@
     }
   },
   "audio_session": "playback",
-  "typescript": { "sources": { "fixtures": "../fixtures", "layouts": "../layouts" } }
+  "typescript": { "sources": { "fixtures": "../fixtures", "layouts": "../layouts", "themes": "../themes" } }
 }

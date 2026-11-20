@@ -1,10 +1,11 @@
 // The spine's members of the root: the layer in front, the theme, the bar's state. Owned by the spine (round 3: SHELL);
 // a lane does not edit this file (its own members go in members-<lane>.contract). The page stack (open, close, jump, the
 // pager) is in members-stack.contract.
-use openPages, pageModel, theme, themeList, barState from "@choir/autoradio"
-use pageOpen, pageClose, pageFocus, pagePin, pageReopen, themeSet, schemeSet, signalRecord from "@choir/autoradio"
-use PageList, PageModel, Theme, ThemeList, BarInfo from "@choir/autoradio"
+use openPages, pageModel, barState from "@choir/autoradio"
+use pageOpen, pageClose, pageFocus, pagePin, pageReopen, signalRecord from "@choir/autoradio"
+use PageList, PageModel, Theme, ThemeList, BarInfo, SettingsAck from "@choir/autoradio"
 use HostCaps from "./host-types.contract"
+use ThemeRev from "./themes-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 members Autoradio
@@ -17,8 +18,20 @@ members Autoradio
   resource pgs = pagesView(signedOutTick) as shape PageList else empty()
   derive pg = noNative ? pgs : pgn
   resource pmod = pageModel(address=pg.top) as shape PageModel else empty()
-  resource th = theme() as shape Theme else empty()
-  resource thl = themeList() as shape ThemeList else empty()
+  // The themes are shared code (themes.ts, both platforms). The system's scheme and Reduce Motion are Exact's own facts (`vp`, members-stack.contract); the first frame shows the whole bundled light default (every field; themes.test.ts P1 keeps it in step) until the answer lands.
+  // The one-time carry-over of the old choice and themes (themes.ts migrate) runs apart from the first paint: a task sends it at launch and again when the host fact is decided (the native handle may bind
+  // late; at most three tries), and its reply REFRESHES the four theme resources (a revision passed as a resource's argument was not asked again: simulator drive, 2026-11-20).
+  state migTries = 0
+  mutation mig as shape ThemeRev refreshes th, thl, tc, tx
+  action migGo
+    migTries = migTries + 1
+    send mig = themeMigrate(hc.mode)
+  task themeMigrateTask when migTries < 3 key=hc.mode
+    after(10, migGo)
+  resource th = theme(vp.prefersColorScheme, vp.prefersReducedMotion) as shape Theme else empty(id="chrome-pastel", name="Chrome Pastel", scheme="light", schemes="light", paper="#F7FBFE", paper2="#EAF4FA", fg="#16232E", muted="#41596B", accent="#1F6E8C", accent2="#2F6F8F", success="#146B4A", danger="#9C2440", onAccent="#FFFFFF", rule="rgba(31,110,140,.18)", scrim="rgba(22,35,46,.84)", onScrim="#FFFFFF", fontRead="system-ui", fontUi="system-ui", fontMono="ui-monospace", fontHead="ui-serif", fontText="ui-serif", fontLabel="system-ui", fontAction="system-ui", scale="editorial", radiusCard=12, radiusControl=6, radiusPill=6, radiusRules=0, shadow1="0 8px 20px rgba(18,52,74,.14), inset 0 1px 0 rgba(255,255,255,.9)", shadow2="0 14px 34px rgba(18,52,74,.16)", shadow3="0 24px 64px rgba(18,52,74,.22), inset 0 0 0 1px rgba(255,255,255,.55)", edge1="inset 0 1px 0 rgba(255,255,255,.9)", edge2="inset 0 0 0 1px rgba(255,255,255,.55)", edge3="inset 0 0 0 1px rgba(255,255,255,.55)", material1="solid", material2="glass", material3="glass", press1=0.98, behindScale3=0.96, behindDim3=0.08, barBacking=0.94, layerBacking=0.86, lensStyle="A", lensWash=0, motionFastMs=120, motionEnterMs=340, motionSheetMs=260, staggerMs=40, springStiffness=240, springDamping=26, springMass=1, reducedMotion=false, markDriftS=60, markListenScale=1.15, markTumble="3.3s,5.9s")
+  resource thl = themeList(vp.prefersColorScheme, vp.prefersReducedMotion) as shape ThemeList else empty(mode="system", themeID="chrome-pastel", scheme="light", locked="")
+  // Every theme send (choose, mode, add from a Texture, remove) repaints the theme, the list, the cards and the scale.
+  mutation thm as shape SettingsAck refreshes th, thl, tc, tx
   resource bi = barState() as shape BarInfo else empty()
   mutation pm as shape PageList
   // A second handle, for an action that opens one page and closes another in the same step.
@@ -49,10 +62,12 @@ members Autoradio
     send pms = pagesReopen()
 
   action setTheme(id: string)
-    send pm = themeSet(id=id)
+    send thm = themeSet(id)
   action setMode(mode: string)
-    send pm = schemeSet(mode=mode)
-    setScheme(mode)
+    send thm = schemeSet(mode)
+    // The system's scheme follows the mode the store ACCEPTED: a theme that has one scheme refuses the other (thl.locked), and then the system's scheme is left alone.
+    if thl.locked == "" or thl.locked == mode
+      setScheme(mode)
   action record(kind: string, subject: string, detail: string)
     send pm = signalRecord(kind=kind, subject=subject, detail=detail)
 

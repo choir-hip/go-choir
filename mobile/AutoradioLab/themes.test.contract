@@ -1,0 +1,25 @@
+// The themes on the real plan and the web host: themes.ts answers the theme, the list, the cards and the scale from the bundled files, with the system's colour scheme and
+// Reduce Motion read from Exact's own viewport facts (no native package). The resolution, the gate, the choice kept under app:/data and the migration are proven by themes.test.ts (bun test).
+test "the default pair follows the system scheme, from shared code"
+  clock data
+  expect state th.id == "chrome-pastel"
+  expect state th.scheme == "light"
+  expect state thl.rows.length == 6
+  expect state tc.rows.length == 7
+  expect state tc.rows.0 .id == "default"
+  expect state tc.rows.0 .current == true
+  expect state tx.sizeBody == 18
+  prefer prefers-color-scheme dark
+  clock data
+  expect state th.id == "liquid-metal"
+  expect state th.scheme == "dark"
+  expect state tc.scheme == "dark"
+
+test "Reduce Motion is the system's: the theme's reduced values apply"
+  clock data
+  expect state th.reducedMotion == false
+  prefer prefers-reduced-motion reduce
+  clock data
+  expect state th.reducedMotion == true
+  expect state th.motionEnterMs == 0
+  expect state tx.markStatic == true

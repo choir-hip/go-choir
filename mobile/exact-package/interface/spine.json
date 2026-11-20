@@ -89,7 +89,8 @@
    "mode": "string",
    "themeID": "string",
    "scheme": "string",
-   "problems": "string[]"
+   "problems": "string[]",
+   "locked": "string"
   },
   "BarInfo": {
    "state": "string",
@@ -146,84 +147,6 @@
      "status": "loading",
      "lines": [],
      "message": ""
-    }
-   }
-  },
-  {
-   "source": "theme",
-   "live": true,
-   "answers": "Theme",
-   "substitute": {
-    "default": {
-     "id": "",
-     "name": "",
-     "scheme": "light",
-     "schemes": "light,dark",
-     "paper": "#FFFFFF",
-     "paper2": "#FFFFFF",
-     "fg": "#000000",
-     "muted": "#555555",
-     "accent": "#0066CC",
-     "accent2": "#004499",
-     "success": "#0C6644",
-     "danger": "#A3142F",
-     "onAccent": "#FFFFFF",
-     "rule": "#999999",
-     "scrim": "rgba(0,0,0,.7)",
-     "onScrim": "#FFFFFF",
-     "fontRead": "ui-serif",
-     "fontUi": "system-ui",
-     "fontMono": "ui-monospace",
-     "fontHead": "ui-serif",
-     "fontText": "ui-serif",
-     "fontLabel": "system-ui",
-     "fontAction": "system-ui",
-     "scale": "editorial",
-     "radiusCard": 12,
-     "radiusControl": 6,
-     "radiusPill": 6,
-     "radiusRules": 0,
-     "shadow1": "none",
-     "shadow2": "none",
-     "shadow3": "none",
-     "edge1": "none",
-     "edge2": "none",
-     "edge3": "none",
-     "material1": "solid",
-     "material2": "solid",
-     "material3": "solid",
-     "press1": 1,
-     "behindScale3": 1,
-     "behindDim3": 0,
-     "barBacking": 0.94,
-     "layerBacking": 0.86,
-     "lensStyle": "A",
-     "lensWash": 0,
-     "motionFastMs": 120,
-     "motionEnterMs": 320,
-     "motionSheetMs": 260,
-     "staggerMs": 40,
-     "springStiffness": 240,
-     "springDamping": 26,
-     "springMass": 1,
-     "reducedMotion": false,
-     "markDriftS": 60,
-     "markListenScale": 1.15,
-     "markTumble": "3.3s,5.9s"
-    }
-   }
-  },
-  {
-   "source": "themeList",
-   "live": true,
-   "answers": "ThemeList",
-   "substitute": {
-    "default": {
-     "rows": [],
-     "mode": "system",
-     "themeID": "",
-     "scheme": "light",
-     "problems": []
     }
    }
   },
@@ -290,20 +213,6 @@
   },
   {
    "send": "pageReopen",
-   "answers": "PageList"
-  },
-  {
-   "send": "themeSet",
-   "options": {
-    "id": "string"
-   },
-   "answers": "PageList"
-  },
-  {
-   "send": "schemeSet",
-   "options": {
-    "mode": "string"
-   },
    "answers": "PageList"
   },
   {
