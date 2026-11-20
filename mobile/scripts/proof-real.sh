@@ -267,6 +267,10 @@ chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' 
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
 # the shared twins are the Android path: on iOS the shared reader must never fetch (it logs "reader: story blocks=" when it does)
 bad "iOS: the shared reader twin never fetched" 'console: reader: story blocks=' "$OUT"
+# signed in: the sign-in card never shows on the signed-in drives
+bad "signed in: no sign-in card on the survey" '\[signedout-banner\]' "$SV"
+bad "signed in: no sign-in card on the read drive" '\[signedout-banner\]' "$RD"
+bad "signed in: no sign-in card on the tour" '\[signedout-banner\]' "$SHOTS/drive-tour.txt"
 # the signed-out tour
 chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO1"
 chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO1"

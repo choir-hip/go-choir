@@ -112,3 +112,21 @@ describe('round 8 (seat 1 on 43200f9a7)', () => {
     expect(WORDS.radioSignedOut).toBe('This is the public paper. Sign in to hear your own programme.'); expect(WORDS.signedOut).not.toMatch(/your paper/);
   });
 });
+
+describe('round 8b (seat 2)', () => {
+  test('A1 mail and files are keyed on the account state: after sign-in an open page loads at once; the card is asked again on the host fact and demo; no resource of the tick depends on the card (no cycle)', async () => {
+    const read = (f: string) => Bun.file(new URL(`./${f}`, import.meta.url)).text();
+    const mail = await read('members-mail.contract'), files = await read('members-files.contract'), acc = await read('account.contract');
+    expect(mail).toContain('mailBox(mboxAddr, dm.on, acs.state)'); expect(mail).toContain('mailMessage(pg.top, dm.on, mailOriginal, acs.state)');
+    expect(files).toContain('fileList(dm.on, fsPath, fsMode, fsSort, fsDesc, fsQuery, acs.state)'); expect(files).toContain('fileOpen(dm.on, pg.top, acs.state)');
+    expect(acc).toContain('${hc.mode}|${dm.on}'); expect(acc).not.toContain('${mbx.status}');
+  });
+  test('X1b a late handle never shows a sign-in card first: nothing is said until native has answered', async () => {
+    resetSeam(); resetHost();
+    const states: string[] = [];
+    const p = accountState('', 'paper:front', false, 300).then((s) => states.push(s.state));
+    expect(states).toEqual([]);                                                                  // unresolved while it waits: the contract renders nothing
+    setTimeout(() => { reply = { state: 'present' }; adoptNative(handle(), 'late'); }, 40); await p;
+    expect(states).toEqual(['signedIn']);
+  });
+});

@@ -79,8 +79,8 @@ const sources: Sources = {
   showClips: ([address, tick]) => showClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
   // Files (files.ts): the listener's computer's files. Positional arguments, demo first.
-  fileList: ([demo, path, mode, sort, desc, query], _s, storage) => fileList({ demo, path, mode, sort, desc, query }, storage),
-  fileOpen: ([demo, address], _s, storage) => fileOpen({ demo, address }, storage),
+  fileList: ([demo, path, mode, sort, desc, query, _acct], _s, storage) => fileList({ demo, path, mode, sort, desc, query }, storage),
+  fileOpen: ([demo, address, _acct], _s, storage) => fileOpen({ demo, address }, storage),
   fileResolve: ([demo, address, title], _s, storage) => fileResolve({ demo, address, title }, storage),
   fileMkdir: ([demo, dir, name], _s, storage) => fileMkdir({ demo, dir, name }, storage),
   fileDelete: ([demo, path], _s, storage) => fileDelete({ demo, path }, storage),
@@ -88,10 +88,10 @@ const sources: Sources = {
   fileUpload: ([demo, from, name, dir], _s, storage) => fileUpload({ demo, from, name, dir }, storage),
   paperFront: ([view, edition, width, tick, focus, picks, demo], _store, storage) => paperFront({ view, edition, width, tick, focus, picks, demo }, storage),
   // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
-  mailBox: ([address, demo], _store, storage) => mail.mailBox(address, demo, { storage }),
+  mailBox: ([address, demo, _acct], _store, storage) => mail.mailBox(address, demo, { storage }),
   mailFrame: ([address, demo], _store, storage) => mail.mailFrame(address, demo, { storage }),
   mailSync: ([address, demo], _store, storage) => mail.mailSync(address, demo, { storage }),
-  mailMessage: ([address, demo, original], _store, storage) => mail.mailMessage(address, demo, original, { storage }),
+  mailMessage: ([address, demo, original, _acct], _store, storage) => mail.mailMessage(address, demo, original, { storage }),
   mailCompose: ([address, demo], _store, storage) => mail.mailCompose(address, demo, { storage }),
   mailSaveDraft: ([address, to, subject, body, demo]) => mail.mailSaveDraft(address, to, subject, body, demo),
   mailApprovalEmail: ([address, draft, demo]) => mail.mailApprovalEmail(address, draft, demo),
