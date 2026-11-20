@@ -130,17 +130,21 @@ component RadioPage
               // play and the queue are the native player's: a host with no native package lists the stories and opens them (the reader), it has nothing to play them with
               if noNative == false
                 button press=playPublic(pfront.routes.slice(0, 1).join(""), pfront.titles.slice(0, 1).join(""), pfront.routes.slice(1, 2).join(""), pfront.titles.slice(1, 2).join("")) testId="radio-play-public" appearance="none" align-self="flex-start" aria-label="Play the public paper"
-                  Btn(label="Play the public paper", primary=true, wide=false)
+                  Btn(label="Play the public paper", primary=false, wide=false)
               for t, i in pfront.titles.slice(0, 6) key=i
                 row gap=10 width="100%" align-items="center" testId=`radio-public-row-${i}`
                   if noNative
                     button press=openPage(`pub:${pfront.routes.slice(i, i + 1).join("")}`, t) testId=`radio-public-open-${i}` appearance="none" flex=1 min-width=0 aria-label=`Open ${t}`
-                      text t font-family=th.fontHead font-size="-exact-body" color=th.fg line-clamp=2 text-align="left"
+                      row gap=8 width="100%" align-items="center"
+                        text t font-family=th.fontHead font-size="-exact-body" color=th.fg line-clamp=2 text-align="left" flex=1 min-width=0
+                        image "symbol:forward-chevron" color=th.muted flex-shrink=0
                   else
                     button press=playStory(pfront.routes.slice(i, i + 1).join(""), t) testId=`radio-public-play-${i}` appearance="none" flex=1 min-width=0 aria-label=`Play ${t}`
-                      text t font-family=th.fontHead font-size="-exact-body" color=th.fg line-clamp=2 text-align="left"
+                      row gap=8 width="100%" align-items="center"
+                        text t font-family=th.fontHead font-size="-exact-body" color=th.fg line-clamp=2 text-align="left" flex=1 min-width=0
+                        text "Play" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent flex-shrink=0
                     button press=queueLater("story", pfront.routes.slice(i, i + 1).join(""), t) testId=`radio-public-queue-${i}` appearance="none" flex-shrink=0 aria-label=`Add ${t} to the queue`
-                      text "Add" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
+                      text "Add" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.muted
           // on air: the largest thing on the page; it dims while the listener speaks
           column gap=14 width="100%" testId="radio-onair" opacity=(rp.dim ? 0.4 : 1) transition=(th.reducedMotion ? "none" : `opacity ${th.motionFastMs}ms ease`)
             if rp.onAir
