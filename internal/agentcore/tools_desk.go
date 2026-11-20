@@ -701,7 +701,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 									"schema": types.SearchServedSchema, "role": cellExec.Role, "providers": done.providers,
 								})
 							}
-						})
+						}, rt.searchLeadObserver(cellExec.OwnerID, cellExec.ComputerID, cellExec.ChannelID))
 						if err == nil {
 							// An async search bypasses deskEgress; its read taints here.
 							rt.noteEgressRead(egrCtx, cellExec, action, payload, out)

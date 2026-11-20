@@ -202,6 +202,8 @@ func (s *Store) indexCaptures(ctx context.Context, fresh bool, objs ...objectgra
 	// The pages' text is indexed beside the projection; its failure is its
 	// own (logged with ids, repaired by the catch-up).
 	defer s.indexCaptureText(ctx, captures)
+	// A lead for the page's URL learns it was captured (search_leads.go).
+	defer s.markSearchLeadsCaptured(ctx, captures)
 	done := s.retrievalTimer(retrievalCaptureIndexWrite)
 	err := s.writeCaptureProjections(ctx, fresh, captures)
 	if err != nil {

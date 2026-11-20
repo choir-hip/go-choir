@@ -37,14 +37,39 @@ import (
 
 var corpusLogMu sync.Mutex
 
-func captureReadLog(t *testing.T) *bytes.Buffer {
+func captureReadLog(t *testing.T) *syncLogBuffer {
 	t.Helper()
 	corpusLogMu.Lock()
-	var buf bytes.Buffer
+	buf := &syncLogBuffer{}
 	prev := log.Writer()
-	log.SetOutput(&buf)
+	log.SetOutput(buf)
 	t.Cleanup(func() { log.SetOutput(prev); corpusLogMu.Unlock() })
-	return &buf
+	return buf
+}
+
+// syncLogBuffer is a log sink a test may read while a background call (a lead
+// write or mark, search_leads.go) is still writing to it.
+type syncLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *syncLogBuffer) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf.Reset()
 }
 
 func TestCorpusSearchLineCarriesRunDeskAndCounts(t *testing.T) {

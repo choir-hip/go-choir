@@ -18,6 +18,8 @@ type Store struct {
 	db *sql.DB
 	// vec is the vector index's state (vector_store.go).
 	vec vectorState
+	// leads is the search leads table's readiness (search_leads.go).
+	leads searchLeadState
 	// corpusDB serves Store B (world-wire/corpus) tables: og_*, platform
 	// texture mirrors, and the publication/provenance/artifact domain. It is
 	// the same pool as db until the authority split deploys a separate

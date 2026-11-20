@@ -104,11 +104,15 @@ func newReadTool(deps Dependencies) toolregistry.Tool {
 		}}
 }
 
-func readPage(ctx context.Context, deps Dependencies, ownerID, computerID, target string) (ReadResult, error) {
+func readPage(ctx context.Context, deps Dependencies, ownerID, computerID, target string) (res ReadResult, err error) {
 	parsed, err := url.Parse(target)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return ReadResult{}, fmt.Errorf("read: %q is not an http(s) URL", target)
 	}
+	// A run tried this URL, whether or not the page read: the search lead for
+	// it, if any, is marked (with the capture when there is one), off this
+	// path and never failing it.
+	defer func() { markLeadTried(deps, ownerID, computerID, res.CaptureID, target, res.URL) }()
 	client := deps.HTTP
 	if client == nil {
 		client = sourcefetch.Client(30 * time.Second)
