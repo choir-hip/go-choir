@@ -1,7 +1,7 @@
 # Exact: project layout, build, signing, install, pinning
 
 Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against `de212e671` on
-2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**
+2026-11-18, pin moved to `f53347503` on 2026-11-20 (read, not built) (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**
 (simulator, 2026-11-10, M1 Mac with another agent building at the same time),
 **[src]**, **[doc]**, **[unrun]**. The runnable example is
 [`mobile/exact-spike/`](../../../mobile/exact-spike/README.md).
@@ -41,7 +41,7 @@ exactly**, Xcode 27.1 or later, and Hermes bundles.
 
 ```sh
 git clone --depth 1 https://github.com/expo/exact exact-checkout
-cd exact-checkout && git fetch --depth 1 origin de212e671a69f4fea18bed67d5b73b259ddf3061 && git checkout FETCH_HEAD   # our pin: mobile/exact.pin
+cd exact-checkout && git fetch --depth 1 origin f5334750386192245ee76add13a67ab51fb4e2fd && git checkout FETCH_HEAD   # our pin: mobile/exact.pin
 
 # Bun 1.4.2 beside any other Bun. 1.3.14 is refused:
 #   "error: Bun 1.3.14 is older than 1.4.2 or unavailable; set BUN=~/.bun-1.4.2/bin/bun"
@@ -353,15 +353,57 @@ any machine.
 
 ## Versioning and upgrading
 
-- Exact has no releases or CLI package. Pin the commit in
-  `mobile/EXACT_PIN` (to be created) and in this page.
-- `bun exact.mjs update` rewrites the app's `exact.mjs` and keeps its custom
-  verbs [doc: schema "commands"]. The README logs breaking changes as dated
-  "Upgrade note" lines (for example the 2026-10-16 Snapback mutation note).
-- Every upgrade: re-read `README.md` upgrade notes, rebuild the spike app, run
-  the driver script, compare the plist keys, then move the pin.
-- Expect daily churn: the commit we read (2026-11-10) was newer than the one in
-  the handoff (2026-11-09 `94b8671`).
+- Exact has no releases or CLI package. The pin is the one line in `mobile/exact.pin` (a full 40-character sha; `setup-exact.sh`,
+  `check-exact-pin.sh`, `build-lab.sh` and `exact.sh` all read it). Pinned now: `f5334750386192245ee76add13a67ab51fb4e2fd`
+  (2026-11-20, moved from `de212e671` by reading only; the first build at it is the lead's, see [EXACT.md](../EXACT.md) "Pin move, 2026-11-20").
+- `bun exact.mjs update` rewrites the app's `exact.mjs` and would replace our launcher: do not run it. Exact's own upgrade route
+  (`docs/start-here.md#upgrading-an-inherited-app`) is `update`, `contract migrate app.contract` (rewrites retired spellings in place),
+  `lock` (the Swift package lock, only when `swiftPackages` is declared) and `contract build app.contract --json --errors-only`. There is no
+  changelog: what changed is in `git log`, `QUEUE.md` and the docs' own diffs.
+- The owner wants the pin moved routinely ("we're going to be writing the latest versions of Exact for some time", 2026-11-20). Move it often
+  and in small steps: every day the pin lags adds commits to read and breakage to meet at once (762 commits at the 2026-11-20 move).
+
+### Moving the pin
+
+Reading first (no Exact checkout of your own; the lead's `mobile/.exact-src` in the build tree is the one object store, and the
+Mac build queue uses it, so **do not check out, reset or build in it while reading**):
+
+1. `git -C <build tree>/mobile/.exact-src fetch -q origin` (changes refs, not files). `NEW=$(git -C ... rev-parse origin/HEAD)`.
+   Note `OLD=$(cat mobile/exact.pin)`. Use `git -C ... show $NEW:<path>`, `diff $OLD $NEW -- <path>`, `log $OLD..$NEW -- <path>`; in `zsh`
+   write `${NEW}:path`, because `$NEW:h` is a modifier.
+2. Read, in this order: `package.json`, `rust-toolchain.toml`, `scripts/app.schema.json` (our `app.json` keys),
+   `host/apple/modules/ExactPackage.swift` and `ExactNativeModule.swift` (our package and app module), `host/apple/compose.mjs` and
+   `build.mjs` (how a package is built and linked), `contract/syntax/src/migrate.rs` and `git diff $OLD $NEW -- docs/contract-grammar.md` (grammar),
+   `git log --format='%h %s' $OLD..$NEW -- contract/types contract/lower contract/syntax` (new refusals: new diagnostic ids are
+   `git grep -h -o -E '"(syntax|type|lower|bake)-[a-z0-9-]+"'` at each end, `comm -13`), and the files our patches edit. Grep our contracts for
+   every construct a new refusal names (`grep` over `mobile/AutoradioLab/*.contract`).
+3. A patch is checked with no checkout: `GIT_INDEX_FILE=<scratch>/idx git -C <.exact-src> read-tree $NEW` then
+   `GIT_INDEX_FILE=<scratch>/idx git -C <.exact-src> apply --cached --check <patch>` (reads the tree into a scratch index file; touches no
+   working file). Remove the scratch index.
+4. In a lane (`lane new exact-pin-<date> --base origin/main`): write `$NEW` into `mobile/exact.pin`, make each adaptation, refresh or drop
+   patches, update this page, [EXACT.md](../EXACT.md) and [gaps.md](gaps.md) in the same change, `bun test` in `mobile/AutoradioLab`, push
+   `lane/exact-<name>` (the queue refuses any other ref name).
+
+Running it (the lead; one native build at a time, under `~/.cache/autoradio-mac-build.lock`). **The queue does not move the pin**:
+`~/.local/state/choir-buildq/run-one.sh` checks out the lane's ref in the build tree and runs `build-lab.sh ios`, whose first step is
+`check-exact-pin.sh`; it stops with "the Exact checkout is not at the pin" until `setup-exact.sh` has moved `mobile/.exact-src`. And after the
+move every queued ref still on the old `exact.pin` fails that check, so rebase them first.
+
+```sh
+Q=$HOME/.local/state/choir-buildq; B=/Users/wiz/Dev/go-choir/.lane/trees/qa-mac
+ls $Q/*.req $Q/*.running 2>/dev/null          # nothing queued or running; else wait, or touch $Q/STOP and let it drain
+cd /Users/wiz/Dev/go-choir && git fetch -q origin && cd $B && git status --short   # clean
+git checkout -q --detach origin/lane/exact-pin-upstream
+/usr/bin/lockf -k -t 7200 $HOME/.cache/autoradio-mac-build.lock sh mobile/scripts/setup-exact.sh   # moves .exact-src, reapplies patches, bun install, Hermes
+mobile/scripts/check-exact-pin.sh && echo pin-ok
+```
+
+Expected from `setup-exact.sh` (**[unrun]**): `patched: 0001-markdown-editor-hides-all-syntax.patch`; `bun install` lines;
+possibly `hermes: installing the pinned bundles (online, once per pin)`; last line `exact f533475, bun 1.4.2`. Then
+`mobile/scripts/exact.sh contract build app.contract --json --errors-only` (about a minute), `exact.sh test web`, then a queue request
+(`printf 'origin/lane/exact-pin-upstream\nbuild\n' > $Q/exact-pin.req`, then `real`) for the iOS build and `proof-real.sh`. Rollback:
+put the old sha back in `mobile/exact.pin` (revert the commit), rerun `setup-exact.sh` (it takes the patches off, checks the old pin out and
+reapplies them), and expect a rebuild of Exact's Rust host for the old sources.
 
 ## Open questions
 

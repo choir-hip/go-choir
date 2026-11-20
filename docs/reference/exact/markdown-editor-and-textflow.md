@@ -557,6 +557,14 @@ the editor work, with `exact.pin`, the patch check, `contract build`, `bun test`
 `mobile/AutoradioLab`, a device build, and the simulator proof as the checklist
 [inferred].
 
+### 4.5 Outcome, 2026-11-20
+
+The owner asked for the move ("we should be on the latest before we write all this exact code"), so it was prepared as its own change
+(`mobile/exact.pin` is now `f53347503`; [EXACT.md](../EXACT.md) "Pin move, 2026-11-20"). Against section 4.2 and 4.4: patch 0001 applies
+(`git apply --cached --check` against a scratch index read from the new pin passed; its three upstream files are byte-identical);
+`ExactPackage` is unchanged for what we use; the grammar diff's removed lines (265-line diff) name nothing we write; upstream still dims Markdown syntax
+on iOS and offers no prop to hide it, so the patch stays. The build and the first launch remain the real tests and are unrun.
+
 ## 5. Recommendation
 
 1. Keep the pin; do not move it for the editor.

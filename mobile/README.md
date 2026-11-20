@@ -384,7 +384,7 @@ All Xcode/Swift commands run outside the Nix shell through `mobile/scripts/xe.sh
 
 `AutoradioLab/` is an Exact app (Contract screens: Player, Lab, Trace; no SwiftUI, no UIKit views of ours). AutoradioKit is attached as the Exact package `@choir/autoradio` (`exact-package/`): `scripts/sync-exact-package.sh` copies the kit sources in and writes `exact-package/apple/exact.json`; `scripts/gen-exact-interface.py` writes the interface.
 
-Pinned Exact: `expo/exact` at `de212e671a69f4fea18bed67d5b73b259ddf3061` (moved from 76cd50f9e on 2026-11-17), checked out at `mobile/.exact-src` (gitignored), Bun 1.4.2 at `~/.bun-1.4.2`. Commands: `mobile/scripts/exact.sh ios` (simulator), `mobile/scripts/exact.sh ios --device --phone 00008120-00114DE80A90C01E`.
+Pinned Exact: `expo/exact` at `f5334750386192245ee76add13a67ab51fb4e2fd` (moved from de212e671 on 2026-11-20, by reading; the first build at it is the lead's: `docs/reference/exact/build-and-ship.md`, "Moving the pin"), checked out at `mobile/.exact-src` (gitignored), Bun 1.4.2 at `~/.bun-1.4.2`. Commands: `mobile/scripts/exact.sh ios` (simulator), `mobile/scripts/exact.sh ios --device --phone 00008120-00114DE80A90C01E`.
 
 Signing: the free provisioning team is `QSGU6VRJL6` ("Yusef Nathanson (Personal Team)"); `N9HKM55LWY` is only the certificate's person id. Exact needs an installed profile for `news.choir.autoradio.lab`; `scripts/make-profile.sh` obtains one with a stub Xcode project and `-allowProvisioningUpdates`.
 
