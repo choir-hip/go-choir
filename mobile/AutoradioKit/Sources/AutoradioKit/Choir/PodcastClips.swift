@@ -201,16 +201,6 @@ public enum PodcastKey {
     }
 }
 
-/// A shared transcript as the content syncer reads it (kept until the content store moves; see ContentSync).
-public struct PodcastTranscript: Equatable, Sendable {
-    public struct Block: Equatable, Sendable { public var start: Double; public var end: Double; public var text: String
-        public init(start: Double, end: Double, text: String) { self.start = start; self.end = end; self.text = text } }
-    public var durationSeconds: Double?
-    public var source: String
-    public var blocks: [Block]
-    public init(durationSeconds: Double?, source: String, blocks: [Block]) { self.durationSeconds = durationSeconds; self.source = source; self.blocks = blocks }
-}
-
 public enum PodcastClips {
     public static let path = "/api/platform/podcast-clips"
 

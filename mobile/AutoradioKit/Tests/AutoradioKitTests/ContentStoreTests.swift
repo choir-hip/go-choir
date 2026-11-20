@@ -149,15 +149,12 @@ final class ContentSyncTests: XCTestCase {
         XCTAssertEqual(calls.value, ["/b", "/bad", "/a"]); XCTAssertEqual(rep.first { $0.kind == .story }?.failed, 1)
         calls.value = []; await sync(s, f).syncAll(); XCTAssertEqual(calls.value, ["/bad"], "held stories are not asked again")
     }
-    func testTranscriptsAreLimitedToRecentEpisodesAndTheRunSheetHistoryIsKept() async {
-        let s = store(); var f = ContentSync.Fetchers(); let asked = Box<[String]>([]); let now = clock.now
-        f.transcriptTargets = { (0..<30).map { (feed: "https://example.com/f.xml", id: "e\($0)", title: "Show: E\($0)", date: now.addingTimeInterval(Double($0 == 29 ? -30 * 86400 : -3600 * Double($0)))) } }
-        f.transcript = { _, id in asked.value.append(id); return PodcastTranscript(durationSeconds: 60, source: "x", blocks: [.init(start: 0, end: 5, text: "We talked about \(id).")]) }
+    func testTheRunSheetHistoryKeepsOnlyWhatWasHeard() async {
+        let s = store(); var f = ContentSync.Fetchers()
         var sheet = RunSheet()
         sheet.entries = [RunSheetEntry(id: "h1", kind: .story, placedBy: .listener, state: .heard, title: "Heard story", text: "Words."), RunSheetEntry(id: "a1", kind: .story, placedBy: .listener, state: .ahead, title: "Later", text: "x")]
         f.runSheet = { sheet }
         await sync(s, f).syncAll()
-        XCTAssertEqual(asked.value.count, ContentSync.transcriptsPerRun); XCTAssertFalse(asked.value.contains("e29"))
         XCTAssertEqual(s.ids(.runsheet), ["run:h1"], "only what was heard, with its outcome"); XCTAssertEqual(s.get("run:h1")?.meta["outcome"], "heard")
     }
     func testTwoRunsAtOnceAreOneRun() async {
