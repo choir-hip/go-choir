@@ -343,7 +343,7 @@ component AccountScreen
       ScreenTitle(label="Account and devices", back=true)
       PlainList(testId="settings-card-account")
         column width="100%" box-sizing="border-box" padding="6px 0"
-          FactRow(label="Signed in", value=(au.signedIn ? "Yes" : (acs.state == "locked" or acs.state == "unknown" ? "Not known" : "No")), mono=false, testId="settings-account-signed")
+          FactRow(label="Signed in", value=(acs.state == "rejected" ? "No" : au.signedIn ? "Yes" : (acs.state == "locked" or acs.state == "unknown" ? "Not known" : "No")), mono=false, testId="settings-account-signed")
           Hairline()
           FactRow(label="You are", value=(acctInfo.handle == "" ? "Not shown yet" : acctInfo.handle), mono=false, testId="settings-account-handle")
           Hairline()
@@ -356,7 +356,8 @@ component AccountScreen
           FactRow(label="Computer", value=(acctInfo.computerID == "" ? "-" : acctInfo.computerID), mono=true, testId="settings-account-computer")
           Hairline()
           FactRow(label="Server", value=(acctInfo.baseURL == "" ? "-" : acctInfo.baseURL), mono=true, testId="settings-account-server")
-      if acctInfo.message != "" and acs.state != "locked" and acs.state != "unknown"
+      // one sentence from the account state (acs); the account's own failure line stays quiet when the state already says it
+      if acctInfo.message != "" and acs.state != "locked" and acs.state != "unknown" and acs.state != "rejected"
         text acctInfo.message testId="settings-account-message" font-family=th.fontLabel font-size=dyn(tx.sizeLabel) color=th.muted
       if acctInfo.status == "loading"
         SkeletonLine(testId="settings-account-skeleton")
@@ -373,7 +374,8 @@ component AccountScreen
         if acs.action == "signIn"
           button press=signIn testId="settings-signin" appearance="none"
             ActionButton(label="Sign in", testId="settings-signin-box", primary=true, danger=false)
-        if au.signedIn
+        // one action: a refused phone signs in again (a new key replaces the old); Sign out is for a phone the server still accepts
+        if au.signedIn and acs.state != "rejected"
           button press=signOut testId="settings-signout" appearance="none"
             ActionButton(label="Sign out", testId="settings-signout-box", primary=false, danger=true)
 

@@ -150,3 +150,28 @@ describe('round 8b (seat 2)', () => {
     expect((await accountState('', 'paper:front', false, 'native')).state).toBe('signedOut');
   });
 });
+
+describe('follow-up 2 (seat 2 on d237ff989)', () => {
+  const lateHandle = (ms: number) => ({ available: true, later: async (r: { op: string }) => { await new Promise((res) => setTimeout(res, ms)); return r.op === 'keystate' ? { state: 'present' } : { ok: true }; } }) as never;
+  test('H2 a bridge that answers on a macrotask (a real round trip) still wins the re-probe after "none" was decided', async () => {
+    resetSeam(); resetHost();
+    expect(await hostMode(20, 10)).toBe('none');
+    adoptNative(lateHandle(30), 'slow');
+    expect(await hostMode(20, 400)).toBe('native');                 // the decided-none re-check has its own budget; it was 0 and lost to any real round trip
+  });
+  test('D2 a demo launch never reads the key (it cannot say locked first)', async () => {
+    let keystateCalls = 0;
+    adoptNative({ available: true, later: async (r: { op: string }) => { if (r.op === 'keystate') keystateCalls++; return { state: 'unreadable' }; } } as never, 'x');
+    const v = await accountState('', 'radio:', true, 'native');
+    expect(v.state).toBe('signedIn'); expect(keystateCalls).toBe(0);
+  });
+  test('Z1 the rejected digest is cleared by a later 200 with the same key, and the card is signedIn', async () => {
+    reply = { state: 'present' };
+    globalThis.fetch = (async () => new Response('no', { status: 401 })) as never;
+    await authedJSON('/x').catch(() => undefined);
+    expect((await accountState('a', 'mail:', false, 'native')).state).toBe('rejected');
+    globalThis.fetch = (async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })) as never;
+    await authedJSON('/x');
+    expect((await accountState('b', 'mail:', false, 'native')).state).toBe('signedIn');
+  });
+});

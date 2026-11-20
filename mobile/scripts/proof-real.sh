@@ -208,6 +208,8 @@ step "clock data"; wait_ 6000
 wait_ 6000; wait_ 6000; wait_ 6000
 view real-50-so-first-screen 2500
 place paper 2500; view real-51-so-paper 3500
+# the end of the page clears the card: the last row is readable above it (read the screenshot)
+for i in 1 2 3 4 5 6; do step "tap paper-scroll drag 0 -1500"; wait_ 300; done; view real-51b-so-paper-end 900; for i in 1 2 3 4 5 6; do step "tap paper-scroll drag 0 1500"; wait_ 300; done
 [ -n "$STORY1" ] && { to_top; step "tap \"$STORY1\""; view real-52-so-story 4000; }
 place radio 1500; view real-53-so-radio 2500
 step "tap radio-play-public"; wait_ 6000; step tree; shot real-53b-so-playing
@@ -277,7 +279,12 @@ bad "signed in: no sign-in card on the tour" '\[signedout-banner\]' "$SHOTS/driv
 for D in "$SV" "$RD" "$SHOTS/drive-tour.txt"; do
   bad "signed in: no Sign in action ($(basename "$D"))" '\[(paper-signin|paper-signin-card|signin|signedout-signin)\]' "$D"
 done
+# a momentary empty account state must not hide the write controls unnoticed: signed in, they ARE there
+chk "signed in: Mail has New message" '\[mail-compose\]' "$SV"
+chk "signed in: Files has Add a file" '\[files-upload\]' "$SV"
 # the signed-out tour
+# the first-run page signed out is its own step: a signed-out first launch opens on it, and the card must stand on it
+chk "signed out: the first-run page is the first screen" 'Make it yours' "$SO1"
 chk "signed out: the first screen has the banner" '\[signedout-banner\]' "$SO1"
 chk "signed out: the first screen has the one way in" '\[signedout-signin\]' "$SO1"
 chk "signed out: the radio says what it is" 'This is the public paper. Sign in to hear your own programme.' "$SO"

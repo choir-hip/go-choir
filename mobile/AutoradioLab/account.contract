@@ -19,15 +19,25 @@ members Autoradio
   action bumpLock
     lockTick = lockTick + 1
   // Also re-asked (with the host fact, spine.contract hc) while the answer is open: an unreadable key, a handle not bound yet, a host with no sign-in: a native module that arrives late corrects the state without a page change.
-  task rereadLocked when acs.state == "locked" or acs.state == "unknown" or acs.state == "noSignIn" key=lockTick
+  task rereadLocked when acs.state == "locked" or acs.state == "unknown" or acs.state == "rejected" key=lockTick
     after(3000, bumpLock)
+  // A host with no native package: a module may still load late, so the re-probe runs a few times (15 s) and then stops; the decision is then final for this launch.
+  state lateTicks = 0
+  action bumpLate
+    lateTicks = lateTicks + 1
+    lockTick = lockTick + 1
+  task rereadLate when acs.state == "noSignIn" and lateTicks < 5 key=lateTicks
+    after(3000, bumpLate)
   // A page that hit a refusal (the server said 401 to this phone's key: api.ts records it) shows its error; the account sentence is asked again at that moment, not at the next tick, so the card
   // appears when it happens. Any error asks again (the answer is the same when the error was only the network): one keystate read.
-  task noteRefusal when mbx.status == "error" or fsList.status == "error" key=pg.top
+  task noteRefusal when mbx.status == "error" or fsList.status == "error" or acctInfo.status == "failed" or nb.docState == "offline" key=pg.top
+    after(100, bumpLock)
+  // And the other way: a page that works again clears a stale "rejected" at once (api.ts clears the digest on any 200), not at the next 3 s read.
+  task noteRecovery when acs.state == "rejected" and (mbx.status == "ready" or fsList.status == "ready" or acctInfo.status == "ok") key=pg.top
     after(100, bumpLock)
   // The card is the first thing in the bar's own column (bar.contract), so it sits whole above the bar at every bar height (the "On:" line, the now-playing strip, the answer card). Not over the code screen, a
   // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
-  derive bannerOn = acs.message != "" and au.status != "pending" and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == ""
+  derive bannerOn = acs.message != "" and au.status != "pending" and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and sheet == ""
   resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${dm.on}`, pg.top, dm.on, hc.mode) as shape AccountView else empty()
   mutation acct as shape LabState
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.

@@ -244,6 +244,7 @@ component MailMessage
 // A reply, a new message, or an existing draft. A draft is a document on the computer; sending it is the listener's own act.
 component MailCompose
   inject
+    acs: AccountView
     th: Theme
     mcmp: MailComposeView
     mailCurTo: string
@@ -268,7 +269,8 @@ component MailCompose
       // Save sits beside the title, so it is never under the keyboard or the bar.
       row align-items="flex-start" gap=12
         text title role="heading" aria-level=1 font-family=th.fontHead font-size="-exact-title1" font-weight=700 line-height=1.2 testId="page-title" flex=1 min-width=0
-        if mailDraftStatus != "approval"
+        // saving and asking for an approval need the owner's computer: they close when the phone stops being signed in
+        if mailDraftStatus != "approval" and acs.state == "signedIn"
           button press=saveMailDraft testId="mail-save" appearance="none"
             Btn(label=(mailDraftStatus == "saved" ? "Save again" : "Save draft"), primary=false, wide=false)
       if mcmp.status == "error" and mailDraftId == ""
@@ -282,8 +284,9 @@ component MailCompose
             column gap=8 padding=12
               text mailDraftNote testId="mail-draft-status" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg
               text "Sending is your decision. Ask for an approval link by email, read the draft in your browser and send it from there." font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
-              button press=approveMail testId="mail-approval" appearance="none"
-                Btn(label="Email me the approval link", primary=false, wide=false)
+              if acs.state == "signedIn"
+                button press=approveMail testId="mail-approval" appearance="none"
+                  Btn(label="Email me the approval link", primary=false, wide=false)
         if mailDraftStatus == "approval"
           Card(level=1, testId="mail-approval-card", minHeight=0)
             column gap=8 padding=12

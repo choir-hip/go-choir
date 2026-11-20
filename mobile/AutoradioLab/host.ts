@@ -23,7 +23,7 @@ const probe = async (probeMs: number): Promise<boolean> => {
 export function hostMode(waitMs = 1500, probeMs = 800, nativeSeen = false): Promise<'native' | 'none'> {
   if (nativeSeen || nativeHasAnswered()) decided = 'native';
   if (decided === 'native') return Promise.resolve('native');
-  if (decided === 'none') waitMs = 0;                       // already waited once: a later ask only checks again, it does not wait again
+  if (decided === 'none') waitMs = Math.max(probeMs, 400);   // already waited once: a later ask re-probes with a short budget of its own (0 lost the race to any real bridge round trip)
   if (!inflight) {
     inflight = (async () => {
       let stop = false;

@@ -1,6 +1,6 @@
 // Signed out (or locked, or refused) is a clear state with one way in, on every page (owner, 2026-11-20: "im logged out but no obvious way to sign in"). A slim card above the bar says what is true
 // (the sentence is account-state.ts, the app's one list) and, when signing in is the answer, the one plain action: the existing browser device flow (`signIn`). A locked phone gets the sentence
-// and no action. "Not now" on the paper's own line may hide that line; it never hides this.
+// and no action. The paper has no sign-in line of its own any more; this card is the one way in.
 use Theme from "@choir/autoradio"
 use AccountView from "./account-state-types.contract"
 use Btn from "./ui.contract"
