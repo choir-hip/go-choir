@@ -93,3 +93,29 @@ What the owner is asked:
    gives way, the snapshot or the budget?
 
 Default taken while the owner sleeps: nothing lands; the lane is kept.
+
+## A capture in flight took Node B to 70 GiB free (2026-11-20T17:35Z)
+
+Read-only observation at the 17:31Z hourly tick; nothing was changed.
+
+- Node B free space fell from 118 GiB (16:31Z) to 70 GiB (17:32Z). The whole
+  fall is the paper's data image: 105,224 MiB allocated of a 128 GiB sparse
+  file, +44.8 GiB on the day's ledger. Two `du` readings two minutes apart
+  were equal, so the growth has stopped.
+- The paper booted at 16:39Z (deploy of `bfc1492c6`). Its console shows
+  `internal/snapshot.copyPages` holding the store from about 16:55Z and
+  "checkpoint after snapshot capture" at 17:01:13Z, then "a store snapshot
+  is streaming" at 17:27Z. So this is the scratch copy of a capture now
+  uploading. The newest finished root is still the one of 01:25Z.
+- The hourly forecast now reads ERROR: 1.3 days to the 60 GiB floor. That
+  line is drawn from daily minima, and this minimum is the scratch copy.
+
+Belief. The space comes back when the capture ends, as it did after the
+01:25Z capture (free returned to 114 to 118 GiB by the morning). Not yet
+seen for this capture. The worst case inside the image's 128 GiB size is
+another 23 GiB, which would leave about 47 GiB free on the host.
+
+Remaining error. Whether this capture finishes inside its 90 minutes is not
+known; it started about 16:55Z, so the answer is due near 18:25Z. If it
+aborts, the paper has gone a day without a restore point and the wall this
+record predicts has arrived a day early.
