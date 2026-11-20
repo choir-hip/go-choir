@@ -1,7 +1,7 @@
 # Exact: gaps the Autoradio lab will hit, and the cheapest fix
 
 Part of [EXACT.md](../EXACT.md). Written against `76cd50f9e`, corrected against `de212e671` on
-2026-11-18 (`file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**,
+2026-11-18, re-read against `f53347503` on 2026-11-20 (the row's last sentence says what changed; `file:line` marks are at `76cd50f9e` unless marked). Marks: **[run]**,
 **[src]**, **[doc]**, **[seen]** (observed by our app builders on the simulator, 2026-11-11, not read
 in source), **[unrun]**. "Upstream" links: none searched yet; no
 Exact issue or PR numbers are known to us. `issues/` in the Exact repo holds
@@ -9,9 +9,9 @@ their tracker as files [src].
 
 | # | Gap | Evidence | Cheapest fix |
 |---|---|---|---|
-| 1 | The app module cannot take audio claims; only packages can | `ExactExtensions.swift:374`, `AudioSession.swift:42` (`package` scope) [src] | Write the audio *session* code as a package (works, [run]); the logic around it is `app.ts`. Avoid an upstream patch. |
+| 1 | The app module cannot take audio claims; only packages can | `ExactExtensions.swift:374`, `AudioSession.swift:42` (`package` scope) [src]; at `f53347503` the scope is unchanged (two members of `AudioSession` gained `package`, still not `public`) | Write the audio *session* code as a package (works, [run]); the logic around it is `app.ts`. Avoid an upstream patch. |
 | 2 | No claim for "mic open, hi-fi output, no processing" by name; every capture claim is `.playAndRecord` | `AudioSession.swift:238-262` [src] | Use mode `default`/`measurement` with `allowBluetoothA2DP` and no HFP; measure on a phone. If it fails, upstream: a claim kind with `.playAndRecord` + `bluetoothHighQualityRecording`. |
-| 3 | An empty options list silently means `defaultToSpeaker + allowBluetoothHFP` | `NativeHatches.swift:239-243` [src] | Always pass explicit options. Document in AutoradioKit's session-owner adapter. |
+| 3 | An empty options list silently means `defaultToSpeaker + allowBluetoothHFP` | `NativeHatches.swift:239-243` [src]; at `f53347503` that file is `host/apple/Sources/ExactNativeViews/NativeHatches.swift` (moved, not re-read) | Always pass explicit options. Document in AutoradioKit's session-owner adapter. |
 | 4 | Mode switch = release all, re-claim; session briefly falls to `ambient` and may deactivate | `AudioSession.swift:263-285` [src] | Hold an Exact-side hold across the switch (a muted `audio` element or the speech-playback claim) if the gap is audible; measure first. |
 | 5 | No category-change log | [src] | Log in our adapter on every claim, release and event; keep a ring buffer for the lab's trace. |
 | 6 | Now Playing and remote commands only for `audio`/`video` elements with `metadata=` | `NowPlaying.swift:1-11` [src] | Play the programme in a Contract `audio` element, or add `MPNowPlayingInfoCenter` ourselves; test for command-center collisions. |
@@ -27,7 +27,7 @@ their tracker as files [src].
 | 16 | Feedback notes may leave the machine (workers.dev) | build output [run] | `EXACT_FEEDBACK=0` everywhere. |
 | 17 | Custom timeline performance unknown | `ui-model.md` [unrun] | Prototype: SVG first, then a package `UIView` drawn with Core Graphics. |
 | 18 | Texture rendering | `text markup="markdown"` reader exists; links and taps through atom pills and `atompress`; no documented footnote tap; fixed heading scale [src] | Evaluate `markdown` and `Text` runs with links before writing a renderer; citations as atoms is the candidate (`capabilities.md` section 5). |
-| 19 | A package cannot depend on a SwiftPM library or import a third-party module | `host/apple/build.mjs` `swiftModuleArgs` [src]; proven by the models lane | Settled for Apple: copy the kit into the package by script; third-party code as static xcframeworks in the app module (`native-modules.md`). This is the cost of putting logic in Swift: it is copied, not shared, and Android gets none of it. |
+| 19 | A package cannot depend on a SwiftPM library or import a third-party module | `host/apple/build.mjs` `swiftModuleArgs` [src]; proven by the models lane | Settled for Apple: copy the kit into the package by script; third-party code as static xcframeworks in the app module (`native-modules.md`). This is the cost of putting logic in Swift: it is copied, not shared, and Android gets none of it. **At `f53347503` [src]:** upstream now takes SwiftPM products: `swiftPackages: [{url, exactVersion, products}]` in a package's `apple/exact.json` or `app.json` `host.ios`/`host.macos`, locked by a committed `Package.resolved` (`bun exact.mjs lock`), built into one shared dynamic library (`host/apple/compose.mjs` `swiftPackageGraph`; commit `7209c04ad`; `scripts/app.schema.json` `$defs.swiftPackages`). That would replace our xcframework copies of FluidAudio and llama.cpp; not adopted until a build passes at the new pin, and unproven for these two libraries. |
 | 20 | Wake word, speaker verification, on-device models need continuous background audio | [unrun] | Package-owned engine with a `background:true` claim; verify the screen-locked behaviour on the phone first (the spike's step 4). |
 | 21 | No `preserve-3d`, no `matrix`/`skew`, 3D axis/z/perspective do not animate | `SpaceTransform.swift:1-5`, `property.rs` [src] | Package `CATransformLayer` view or pure-Contract projection (`rendering-and-motion.md`). |
 | 22 | `mix-blend-mode`, animated backdrop blur, particles, Lottie/Rive unavailable | `SvgIsland.swift:283`, `contract-for-humans.md:1036` [src, doc] | See the cannot-do table in `rendering-and-motion.md`. |

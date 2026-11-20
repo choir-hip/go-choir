@@ -1,14 +1,16 @@
 # EXACT: the reference for building Autoradio's app on Exact
 
-Pinned: `expo/exact` at commit `de212e671a69f4fea18bed67d5b73b259ddf3061`
-(upstream `main`, 2026-11-16 17:10 -0800; `mobile/exact.pin`), moved on 2026-11-17
-from `76cd50f9e863129b3fc75db1673d6ad4bbf79258` (2026-11-10), 3018 commits.
+Pinned: `expo/exact` at commit `f5334750386192245ee76add13a67ab51fb4e2fd`
+(upstream `main`, 2026-11-20 10:40 -0800; `mobile/exact.pin`), moved on 2026-11-20 from
+`de212e671a69f4fea18bed67d5b73b259ddf3061` (2026-11-16), 762 commits (before that on 2026-11-17 from
+`76cd50f9e863129b3fc75db1673d6ad4bbf79258`, 2026-11-10, 3018 commits). **The 2026-11-20 move is read, not built**: the section "Pin move,
+2026-11-20" says what was read and what is unrun; until the lead's build passes, treat the pin line as a proposal.
 Observed with Xcode 27.1, iOS 27 simulator, on an M1 Mac. The subpages and the
 examples below were written and their `file:line` read at the old pin, then
 **corrected on 2026-11-18 against the checkout at `de212e671`**: a `file:line`
-in these pages is at `76cd50f9e` unless it says `de212e671`; many lines have
-moved, so find the sentence, not the number. The section "Pin move, 2026-11-17"
-says what was re-read at the new pin. `94b8671` is stale. Exact is pre-1.0 with
+in these pages is at `76cd50f9e` unless it says `de212e671` (or `f53347503`, the pin of 2026-11-20); many lines have
+moved, so find the sentence, not the number. The sections "Pin move, 2026-11-17" and "Pin move, 2026-11-20"
+say what was re-read at each new pin. `94b8671` is stale. Exact is pre-1.0 with
 "no API stability, no backwards compatibility, no migration guide, by design"
 (Exact `README.md`). Pin a commit and move the pin on purpose. We carry no fork:
 local changes to the pinned source are patch files in `mobile/exact-patches/`
@@ -242,6 +244,68 @@ What was done (read, not built: **[src]** unless marked; the first builds at the
   declaration on `ios`/`mac`. None is used by us yet.
 - **How we build for macOS** (`mobile/scripts/build-lab.sh mac --run`) and what the app does not support there: see "Building for
   the Mac" below.
+
+## Pin move, 2026-11-20 (de212e671 to f53347503)
+
+Owner, 2026-11-20: "We're going to be writing the latest versions of Exact for some time. We definitely should be on the latest before we
+write all this exact code." **Read, not built** (no Exact checkout other than the lead's, which stays at the old pin until the lead moves it;
+every mark is **[src]** read in upstream source with `git show`/`git diff` against it, or **[unrun]**). Upstream `main` was at
+`fb72ddc3a`, then `55492cd8a`, then `f53347503` while this was read (it moves several times a day; the last step is 11 files of Mac
+drag-out, none ours). 762 commits, 3,699 files. Exact still has no changelog or migration guide; its only upgrade route is
+`docs/start-here.md#upgrading-an-inherited-app` (`exact update`, `contract migrate`, `lock`, `contract build --json --errors-only`).
+The procedure to move the pin, with each command's expected result, is in [build-and-ship.md](exact/build-and-ship.md#moving-the-pin).
+
+**Nothing we use was removed or renamed, as far as the sources say; no adaptation was found necessary. That is a reading, and Exact's
+compiler is the check.** What was compared, with what we use:
+
+- **Contract grammar [src].** Additive or relaxing in every place we write: a child component may own `resource`, `mutation` and `task`
+  at bounded uses (`contract-grammar.md`, the component section); `expect state` takes `!=` and `state <path>` operands (our `expect state
+  pfront.sections.0 .id == "world"` still parses: `state_path` in `contract/syntax/src/parser/state_step.rs:7` is the old walker); new test steps
+  `expect layout|sample|screenshot|drag`, `presence`, `drop stream`, `stored`. New refusals checked against our files by grep, none hit: the
+  geometry fence `bake-geometry-feedback` (`contract/cli/src/fence.rs:1`) reads only `exactGeometry`/`exactNativeChain`/`exactSafeAreaUnsettled`
+  (`runner/src/native_geometry.rs:52`), we call none (we call `exactViewport` and `exactPage`); `lower-host-name-declared` (an app declaring a
+  `--exact-*` property: none); `syntax-resource-clause-order` (ours are `... as shape X else empty()`, in order); `lower-css-shorthand` now looks
+  through derives (`contract/lower/src/shorthands.rs`): our computed `padding`/`border-radius` are literal arms or numbers; `lower-attr-pair`
+  and `lower-draggable-*` (`draggable`, `dataTransfer`: none). Retired spellings `contract migrate` rewrites (`-exact-press-*`,
+  `syntax-list-type`, `-method-form`, `-view-keyword`, `-else-keyword`) are the 2026-11-17 list, unchanged (`contract/syntax/src/migrate.rs`
+  differs by one line), and we write none. Warnings only: `lower-tablist-conditional`, `lower-alert-font`; `lower-replace-root` is gone.
+- **Safe area and keyboard (LLP 1123, about 40 commits) [src; the one place a visual change is plausible, [unrun]].** The kernel now lays out
+  keyboard regions, bars in slots, reservations and "a box that ignores the safe area". `env(safe-area-inset-*)` is still the document's insets
+  (`contract-for-agents.md` "Dimension rows": 0 under `viewport-fit="auto"`, the device's under `cover`), and the new
+  `var(--exact-safe-area-inset-*)` is the box's own. We use `viewport-fit="cover"` and `interactive-widget="resizes-content"` on the root
+  (`AutoradioLab/app.contract:453`) and `env(safe-area-inset-top|bottom)` in about fifteen places (bars, the reader, paper, queue); `keyboardHeight`
+  and `resizes-content` are documented as before (`contract-for-agents.md` "keyboardHeight"). **Look at the prompt bar over the keyboard and the
+  top and bottom bands in the first screenshots.**
+- **TypeScript [src].** The generated `app.contract.d.ts` keeps `Answer`/`Sources`/`Store`/`Storage` (`contract/cli/src/typescript.rs:183`); it adds
+  the global `exactHost()` (an answer that reads it is not baked) and `RequestInit` options. `grants` is still a constant read from syntax (a
+  template of a top-level const is fine; imported app-local constants are now allowed too), our `fs.read app:/...`, `net.fetch` and
+  `device.*` lines are the same grammar. Our launcher `AutoradioLab/exact.mjs` calls `ensureBun("1.4.2")` and `run({ dir, name, exact2, args })`:
+  both signatures are unchanged (`scripts/bun.mjs:4`, `scripts/app-cli.mjs:265`). `bun exact.mjs update` would overwrite our launcher: do not run it.
+- **Package seam [src].** `host/apple/modules/ExactPackage.swift`: the `ExactPackage` protocol (`init(context:)`, `later`, `call` required) and
+  `ExactPackageContext`, `audioSession.claim(mode:options:background:events:)`, `ExactSubscription`, `ExactPackageView`, `ExactPackageEvents` are
+  unchanged; the diff adds screen geometry, track picture observers, `ExactVideoSource.configure(stopped:)` (old form kept), `ExactTransfers`
+  `form` parts. `ExactModule` (our `ModelsModule`: `call`, `later(_:reply:)`, `let exactModule`) is unchanged; upstream moved `ExactTabs` to
+  `ExactNativeTabs.swift` and `NativeHatches.swift` to `ExactNativeViews/` (gaps 1 and 3 cite the old place). The adapter that makes a package
+  (`packageAdapter` in `host/apple/compose.mjs`) still calls `ClassName(context:)` and the package module is still `ExactPkg_<name>`. Our
+  `apple/exact.json` keys (`kind`, `implements`, `platform`, `targets`, `views`, `sources.swift`, `class`) and the interface keys
+  (`shapes`, `views`, `names`, `substitute`) are read by `contract/cli/src/declaration.rs`, whose only changes are shape field order for
+  `@exact/model-viewer` and a stricter grant-selector check on `substitute` (none of ours). Apple modules now build `-O` through
+  `swiftOptimization()` (`host/apple/toolchain.mjs`), as before.
+- **Build [src].** `rust-toolchain.toml` is unchanged (`1.99.1`, `wasm32-unknown-unknown`); Bun is still exactly 1.4.2; Xcode 27.1 or later;
+  the only root `package.json` change is `playwright-core` 1.64.1 to 1.65.1 (`bun.lock` names all 65 workspaces: the failure
+  expo/exact#892 fixed). The Hermes bundle receipt changed (`vendor/ibex/crates/hermes-lean-sys/build_support.rs`, `receipt_schema.rs`), so
+  `setup-exact.sh`'s `--check` will likely fail once and install the new bundles online. **New:** the Apple host is composed "by use"
+  (`567d7a64a`, `734742f72`, `host/apple/Package.swift`, `app.json` `link`): a production build links only what the plan and grants use;
+  **development links every capability except `media_picker`, `auth_session`, `numerals` and `tips`** (`scripts/app.schema.json`, property `link`), so
+  our dev builds need no `link` entry; a distribution build might (we use `text markup="markdown"`, `input type="file"`, `audio` claims and a package view, which the plan selects by use; which capability names a distribution build needs is **[unrun]**). **[unrun]**
+  whether the roster a package reports in the build's probe still matches our interface (`checkModuleRoster`).
+- **Patch 0001 [run, 2026-11-20].** Applies unchanged (`git apply --cached --check` against a scratch index read from `f53347503` passed; the three
+  files it depends on are byte-identical to the old pin). Upstream still dims syntax on iOS and offers no prop to hide it. See
+  `mobile/exact-patches/README.md`.
+- **Workarounds this makes unnecessary (see [gaps](exact/gaps.md)):** gap 19 (no SwiftPM libraries in a package): `swiftPackages` in a package's
+  `apple/exact.json` or `app.json` `host.ios` now declares products, locked by a `Package.resolved` the app commits (`bun exact.mjs lock`), built
+  into one dynamic library the app and every package share (`7209c04ad`). We do **not** adopt it in this move: FluidAudio and llama.cpp stay xcframeworks
+  until a build passes at the new pin. Nothing else we carry is removed.
 
 ## What Exact is, in three paragraphs
 

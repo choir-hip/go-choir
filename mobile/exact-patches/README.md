@@ -1,6 +1,6 @@
 # Local patches to Exact's iOS host
 
-`mobile/.exact-src` is a gitignored checkout of `expo/exact` at the pin in `scripts/setup-exact.sh`. We carry **no fork**. Anything we change in it
+`mobile/.exact-src` is a gitignored checkout of `expo/exact` at the pin in `mobile/exact.pin`. We carry **no fork**. Anything we change in it
 is a patch here, applied in file-name order by `scripts/setup-exact.sh` after it checks out the pin (a patch that is already applied is skipped;
 one that does not apply stops the script, so a pin move cannot silently lose it). Each patch says what it changes and why, below and in
 `docs/reference/exact/capabilities.md`; the aim is to upstream it or drop it.
@@ -18,4 +18,11 @@ destinations. The styler already computes every hidden range (`Styled.hidden`, r
 Not changed: Return in a list and an empty item ending it (the crate's editing already does that), fenced-code lines and `---` (hidden/drawn as
 the styler says), ordered numbers (shown as the number). Verified by `git apply --check` on the pin and by the Kit tests of the pure rules; **not
 compiled or run** by the lane that wrote it: the first Exact build is the check.
-Drop it when upstream's `host/apple/Sources/ExactMarkdown` hides all syntax (upstream `main` did not at 2026-11-16, 3018 commits past the old pin 76cd50f9e, at the new pin de212e671 on 2026-11-17).
+Drop it when upstream's `host/apple/Sources/ExactMarkdown` hides all syntax. At `f53347503` (upstream `main`, 2026-11-20, 762 commits past
+`de212e671`) it still does not: `docs/contract-grammar.md` (Markdown section) says macOS and iOS show "the syntax dimmed and each link's
+`](destination)` hidden", and there is no prop that asks for more. **Carried across the 2026-11-20 pin move** [src]: the two files this
+patch edits, `MarkupEditor.swift` and `MarkupHidden.swift`, are byte-identical between `de212e671` and `f53347503`
+(`git diff de212e671 f53347503 -- host/apple/Sources/ExactMarkdown/MarkupEditor.swift ...` is empty), and so is `host/apple/src/markup.rs`
+(`exact_markup_style`, whose `u32::MAX` selection the patch relies on), so every hunk's context matches. `git apply --cached --check` of this patch against a scratch index
+read from `f53347503` (`GIT_INDEX_FILE=<scratch> git read-tree f53347503`, no working files touched) **passed on 2026-11-20** [run]; `MarkupSyntaxHiding.swift` is a new file that upstream's `Sources/ExactMarkdown` directory target (path-based, no file list)
+compiles. Still **not compiled or run** by us.
