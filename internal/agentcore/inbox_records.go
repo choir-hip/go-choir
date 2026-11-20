@@ -1095,6 +1095,19 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 	} else if !unread {
 		return nil, nil
 	}
+	if !isApp && deskmanifest.SpawnsResearch(profile) {
+		// A management reply with no objective, to a record the desk wrote
+		// and has since run past, is not work (staleReplyJudge); a record
+		// that is, or a reply to an Ask the desk still waits on, wakes it.
+		quiet, err := rt.unreadAllStaleManagementReplies(ctx, ownerID, computerID, deskAgentID)
+		if err != nil {
+			return nil, fmt.Errorf("records inbox: unread records of %s: %w", deskAgentID, err)
+		}
+		if quiet > 0 {
+			log.Printf("runtime: records inbox: wake declined desk=%s kind=reply reason=management_reply_no_objective count=%d (the records stay unread for the desk's next run)", deskAgentID, quiet)
+			return nil, nil
+		}
+	}
 	metadata := map[string]any{
 		runMetadataAgentProfile: profile,
 		runMetadataAgentRole:    profile,
@@ -1119,6 +1132,134 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 		return nil, fmt.Errorf("records inbox: dispatch run %s: %w", rec.RunID, err)
 	}
 	return rec, nil
+}
+
+// staleReplyJudge decides, for one research desk, whether an unread record is
+// a management reply that does not wake it. The reply must have the quiet
+// shape (store.IsQuietManagementReply: no objective, no typed body) and every
+// record it relates to must be one the desk is not waiting on. The desk waits
+// on a related record exactly when the desk wrote it (its sender inbox is the
+// desk) and it was committed after the last record the desk has read, that is
+// after the desk's last turn began reading: the desk Asked or Escalated, ended
+// its turn, and has not run since. A related record the desk wrote before a
+// record it has since read was passed by a later run (on 2026-11-20 the
+// replies related to the desk's own escalations of 2026-10-26 and 2026-11-08);
+// one the judge cannot find or read is not judged: the reply wakes.
+type staleReplyJudge struct {
+	rt                  *Runtime
+	ownerID, computerID string
+	desk                string
+	cursor              int64
+	loaded, haveRead    bool
+	lastRead            time.Time
+	conversationRecords map[string][]types.CommitmentRecord
+}
+
+func (rt *Runtime) newStaleReplyJudge(ownerID, computerID, desk string, cursor int64) *staleReplyJudge {
+	return &staleReplyJudge{rt: rt, ownerID: ownerID, computerID: computerID, desk: desk, cursor: cursor,
+		conversationRecords: map[string][]types.CommitmentRecord{}}
+}
+
+// lastReadAt is when the newest record the desk has read was committed.
+func (j *staleReplyJudge) lastReadAt(ctx context.Context) (time.Time, bool, error) {
+	if j.loaded {
+		return j.lastRead, j.haveRead, nil
+	}
+	j.loaded = true
+	if j.cursor <= 0 {
+		return time.Time{}, false, nil
+	}
+	recs, err := j.rt.store.ListInboxRecords(ctx, j.ownerID, j.computerID, j.desk, j.cursor-1, j.cursor)
+	if err != nil {
+		j.loaded = false
+		return time.Time{}, false, err
+	}
+	for _, r := range recs {
+		if at, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt); perr == nil && r.InboxSeq == j.cursor {
+			j.lastRead, j.haveRead = at, true
+		}
+	}
+	return j.lastRead, j.haveRead, nil
+}
+
+// quiet reports whether rec is a management reply that does not wake the desk.
+func (j *staleReplyJudge) quiet(ctx context.Context, rec types.CommitmentRecord) bool {
+	if !store.IsQuietManagementReply(rec) || rec.Inbox != j.desk {
+		return false
+	}
+	lastRead, haveRead, err := j.lastReadAt(ctx)
+	if err != nil {
+		log.Printf("runtime: records inbox: stale reply judge for %s: last read: %v", j.desk, err)
+		return false
+	}
+	convo, ok := j.conversationRecords[rec.ConversationID]
+	if !ok {
+		convo, err = j.rt.store.ConversationRecords(ctx, j.ownerID, j.computerID, rec.ConversationID)
+		if err != nil {
+			log.Printf("runtime: records inbox: stale reply judge for %s: conversation %s: %v", j.desk, rec.ConversationID, err)
+			return false
+		}
+		j.conversationRecords[rec.ConversationID] = convo
+	}
+	for _, id := range rec.RelatedIDs {
+		var target *types.CommitmentRecord
+		for i := range convo {
+			if convo[i].RecordID == id {
+				target = &convo[i]
+				break
+			}
+		}
+		if target == nil {
+			return false
+		}
+		if strings.TrimSpace(target.SenderInbox) != j.desk {
+			continue
+		}
+		at, perr := time.Parse(time.RFC3339Nano, target.Provenance.CommittedAt)
+		if perr != nil {
+			return false
+		}
+		if !haveRead || at.After(lastRead) {
+			return false // the desk wrote it and has not read since: it waits
+		}
+	}
+	return true
+}
+
+// unreadAllStaleManagementReplies returns how many records a desk has past its
+// cursor when every one of them is a management reply the judge calls quiet,
+// and 0 when there are none or any other record is among them. It reads, and
+// moves no cursor: the desk's next run reads the replies through
+// choir.Records like any unread record.
+func (rt *Runtime) unreadAllStaleManagementReplies(ctx context.Context, ownerID, computerID, deskAgentID string) (int, error) {
+	cursor, err := rt.store.ReaderCursor(ctx, ownerID, computerID, deskAgentID, deskAgentID)
+	if err != nil {
+		return 0, err
+	}
+	head, err := rt.store.InboxHead(ctx, ownerID, computerID, deskAgentID)
+	if err != nil {
+		return 0, err
+	}
+	judge := rt.newStaleReplyJudge(ownerID, computerID, deskAgentID, cursor)
+	count := 0
+	for after := cursor; after < head; {
+		through := head
+		if through > after+cellRecordsWindowSeqs {
+			through = after + cellRecordsWindowSeqs
+		}
+		recs, err := rt.store.ListInboxRecords(ctx, ownerID, computerID, deskAgentID, after, through)
+		if err != nil {
+			return 0, err
+		}
+		for _, r := range recs {
+			if !judge.quiet(ctx, r) {
+				return 0, nil
+			}
+			count++
+		}
+		after = through
+	}
+	return count, nil
 }
 
 // InboxUnread reports whether a records desk has unread records, for the
@@ -1301,10 +1442,12 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	late := false
+	judge := rt.newStaleReplyJudge(rec.OwnerID, rec.ComputerID, rec.AgentID, cursor)
 	for _, r := range unread {
 		// One wake predicate (R2-3): a record that did not wake its reader
-		// on commit (a clean task Report) does not start a turn here either.
-		if !store.RecordWakesReader(r) {
+		// on commit (a clean task Report) does not start a turn here either,
+		// nor does a management reply WakeRecordsInbox would decline.
+		if !store.RecordWakesReader(r) || judge.quiet(ctx, r) {
 			continue
 		}
 		if committed, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt); perr == nil && committed.After(rec.CreatedAt) {
@@ -1653,8 +1796,9 @@ func (rt *Runtime) roundsOpenedAfterRunBegan(ctx context.Context, rec *types.Run
 		return nil
 	}
 	var held map[roundKey]bool
+	judge := rt.newStaleReplyJudge(rec.OwnerID, rec.ComputerID, inbox, cursor)
 	for _, r := range unread {
-		if !store.RecordWakesReader(r) {
+		if !store.RecordWakesReader(r) || judge.quiet(ctx, r) {
 			continue
 		}
 		committed, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt)

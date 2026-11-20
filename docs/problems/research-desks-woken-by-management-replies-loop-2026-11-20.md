@@ -136,3 +136,42 @@ Not done here (this record writes no code):
    gate's own message calls "a defect to fix at its labels".
 4. Re-read: after 20:54Z no skipped brief appeared in the console (20:30:28Z to
    20:54:39Z); count the next wave when it comes.
+
+## What the replies relate to (read 2026-11-20 21:50Z to 22:20Z)
+
+Inbox records of 12 research desks (`GET /api/inboxes/research:<doc>/records`)
+and the run records of the escalations' authors, read only. Every management
+reply of the waves at 14:43Z and 19:33Z that carried related ids was read: 38
+related ids on 11 desks, all alike.
+
+| What the reply's related id is | Count |
+| --- | --- |
+| a `choir.Escalate` directive (`...:escalate:tray-N:packet`) written by a research run of the same desk | 38 of 38 |
+| an Ask, or a record written by the system | 0 |
+| written 1 to 25 days before the reply (2026-10-26 to 2026-11-19) | 38 of 38 |
+| a record the desk had run past: a later record had been read before the reply, so the desk was not waiting | 38 of 38 |
+
+Management answered the same open escalations three times today (06:44Z,
+14:43Z, 19:33Z), from three of its own turns. The earlier note that no desk cell
+calls `choir.Escalate` was true of the window read, not of the desks' history.
+
+## Fix (lane/reply-wake-fix, orange, rollback revert)
+
+A research desk is not woken for a management reply that has the quiet shape
+(`store.IsQuietManagementReply`: an agent Reply from the management inbox to a
+research inbox, not final, related ids, no Cast, directive, precommit, report
+body or other typed body) when every record it relates to is either not one the
+desk wrote, or one the desk wrote and has read past. "Read past" is: the
+record was committed before the newest record at the desk's cursor, so a run
+has read after it. A reply to an Ask or Escalate the desk wrote and has not
+read past (it ended its turn waiting) wakes it; so does a reply whose related
+record cannot be found or read. The judge is `staleReplyJudge`
+(`internal/agentcore/inbox_records.go`), used by `WakeRecordsInbox` and by the
+two post-turn re-checks, so the round-hold logic still has a loop coming for
+every record it holds a round for. The store still mints the wake row.
+`WakeRecordsInbox` logs `records inbox: wake declined desk=<desk> kind=reply
+reason=management_reply_no_objective count=<n>`. The cursor does not move: the
+reply stays unread, and the desk reads it in its next run. Not changed: the
+disclosure gate, the desks' saved notes, the finish rule. Residual: a desk that
+Asked, was woken by an unrelated record and ran, and is then answered, is not
+woken by the answer (it has run past its Ask).

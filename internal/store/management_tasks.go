@@ -50,6 +50,33 @@ const (
 	storyLibraryRefusalList = 20
 )
 
+// IsQuietManagementReply reports the shape of a management reply to a research
+// desk that carries nothing a research run could start from: an agent's Reply
+// (a report record with related ids and no report body) sent from the
+// management inbox to a research inbox, not final, with no Cast, directive,
+// precommit question or any other typed body. It names no objective, so the
+// research desk's corpus brief would skip it ("no objective in the unread
+// records"). The shape alone does not decide a wake: a reply to an Ask the
+// desk made and ended its turn on must wake it, so the runtime judges the
+// related record too (agentcore.staleReplyJudge). A system record (a rebase
+// notice, an owner act, an op-ed wake) and any record with an objective never
+// have this shape.
+func IsQuietManagementReply(rec types.CommitmentRecord) bool {
+	if rec.EmitterKind == types.CommitmentEmitterSystem || rec.Final {
+		return false
+	}
+	if !deskmanifest.IsResearchInbox(rec.Inbox) || !deskmanifest.IsAdmitterInbox(rec.SenderInbox) {
+		return false
+	}
+	if rec.RecordKind() != types.CommitmentKindReport || len(rec.RelatedIDs) == 0 {
+		return false
+	}
+	return rec.Report == nil && rec.Directive == nil && rec.Cast == nil && rec.Precommit == nil &&
+		rec.Resolve == nil && rec.Disagreement == nil && rec.Support == nil && rec.Captures == nil &&
+		rec.Disposition == nil && rec.TaskOutcome == nil && rec.Job == nil && rec.Calibration == nil &&
+		rec.Changelog == nil && rec.Oped == nil
+}
+
 // RecordWakesReader is the one wake predicate (R2-3): whether a record wakes
 // its recipient. The store mints a wake row exactly when it holds, and the
 // runtime's post-turn re-check asks it of each late record, so a record that
