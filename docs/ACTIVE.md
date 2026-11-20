@@ -11,7 +11,19 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Live goal from 2026-11-20: Exact, search and entities
+## Live goal from 2026-11-20 (evening): the Exact cutover and the ontology
+
+The owner, 2026-11-20: "we need to be aggressive with the cutover from Swift
+to exact, and aggressive with the ontology work for search events and
+entities". Goal:
+[`definitions/choir-exact-cutover-and-ontology-2026-11-20.md`](definitions/choir-exact-cutover-and-ontology-2026-11-20.md).
+It supersedes the goal below. Two tracks: every page outside voice moves to
+shared Exact code with nothing carried over from the Swift build; and the
+semantic layer (events, entities, claims, outlets) is designed once and built
+as one identity space that agents query from their cells, so a happening has
+one story and the web is searched only for what is new.
+
+## Superseded goal of 2026-11-20: Exact, search and entities
 
 The owner, 2026-11-20: "we should make sure the /goal file is correct, then i
 will start a new thread". Goal:
