@@ -706,8 +706,8 @@ check "R17 the measurement fields are summed over the lines that carry them (2 o
 check "R17 the reuse decline reasons are summed by token and the outlets are shown" 'grep -q "reuse declined a prior identical search, by reason: earlier_run=1, out_of_window=2" "$root/out" && grep -q "largest 7" "$root/out"'
 check "R17 the new fields are not listed as unknown numeric fields, and the older lines still count" '! grep -q "other numeric fields" "$root/out" && grep -q "summary lines): 3" "$root/out"'
 runcorpus --fixture "$root/cr_e.log"
-check "R16 6 searches refused by the need test, 4 sent: 60.0% of attempts" 'grep -q "refused by the need test (holds_unread, every verb) 6; web searches sent 4; refused share of attempts 60.0%" "$root/out"'
-check "R16 fresh_over_unread is read, summed and printed" 'grep -q "fresh_over_unread 1, untagged 0" "$root/out"'
+check "R16 6 searches refused by the need test, 4 sent: 60.0% of attempts" 'grep -q "refused by the need test (holds_unread, read_first, held_first, site_held; every verb) 6; web searches sent 4; refused share of attempts 60.0%" "$root/out"'
+check "R16 fresh_over_unread is read, summed and printed" 'grep -q "fresh_over_unread+fresh_sent 1, untagged 0" "$root/out"'
 # R10
 mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 * h' 3
 env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/missing.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
@@ -988,6 +988,75 @@ env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc3.log" --since 2026-11
 check "C8 the gate's failing open and its release are counted: 2 skipped in the window, 1 released" 'python3 -c "import json,sys; t=json.load(open(sys.argv[1]))[\"summary\"]; assert (t[\"research_gate_skipped\"],t[\"research_gate_released\"])==(2,1), t" "$root/out"'
 env -u BASH_ENV python3 "$storychoice" --fixture "$root/sc3.log" --since 2026-11-20T21:00Z --until 2026-11-20T23:00Z >"$root/out" 2>&1
 check "C8 the text table prints them" 'grep -q "research gate: 2 skipped (a store read failed, research went unchecked), 1 released" "$root/out"'
+
+
+# status-search-reads (the deployed proof of the read-first rule). Failure list,
+# written before the code:
+#  W1  runs, searches or the mean per run are wrong, or a desk other than research is counted
+#  W2  the 1/2/3/4+ distribution or the 7-or-more tail is wrong
+#  W3  a later search sent with a read since the previous one is counted as zero-read, or one with none is not
+#  W4  refusals by reason (read_first, held_first, site_held, holds_unread) are not summed from the run lines
+#  W5  fresh_sent is not summed, or pages returned and read are not
+#  W6  a search before --since is counted
+searchreads="$here/status-search-reads"
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+G = lambda ts, run, desk="research", vm=VM: f"{ts} gateway: search request from autoputer {vm} ( max_results=40 run={run} desk={desk} conv=c-{run})\n"
+R = lambda ts, run: f"[ 1.0] runtime[1]: {ts} corpus read run={run} desk=research conv=c capture=obj:x held=false via=read\n"
+S = lambda ts, run, extra: f"[ 1.0] runtime[1]: {ts} runtime: search run={run} desk=research {extra}\n"
+out = ["##READS\n", R("2026/11/21 04:59:00", "other"), R("2026/11/21 05:00:30", "r1"),
+       "##SUM\n",
+       S("2026/11/21 05:05:00", "r1", "started=3 from_held=0 not_sent=3 (read_first=2 held_first=1) children=2 started_research=1 started_research_web=2 search_all_calls=1 wordings_offered=1 wordings_sent=1 fresh_sent=1 untagged=0 wordings_running=0 pages_returned=100 pages_new=90 pages_read=12"),
+       S("2026/11/21 05:06:30", "r4", "started=1 from_held=0 not_sent=0 fresh_sent=0 pages_returned=10 pages_new=10 pages_read=2").replace("desk=research ", "desk=research_web "),
+       S("2026/11/21 05:06:00", "r2", "started=1 from_held=0 not_sent=1 (holds_unread=1 site_held=2) fresh_sent=0 pages_returned=40 pages_new=40 pages_read=8"),
+       "##FRESH\n",
+       f"[ 1.0] runtime[1]: 2026/11/21 05:07:00 runtime: search fresh run=r1 why_len=39 why_hash=aaaa1111\n",
+       f"[ 1.0] runtime[1]: 2026/11/21 05:08:00 runtime: search fresh run=r2 why_len=39 why_hash=aaaa1111\n",
+       f"[ 1.0] runtime[1]: 2026/11/21 05:09:00 runtime: search fresh run=r2 why_len=31 why_hash=bbbb2222\n",
+       "##LOST\n",
+       f"[ 1.0] runtime[1]: 2026/11/21 05:06:00 runtime: search gate state lost at resume run=r2\n",
+       f"[ 1.0] runtime[1]: 2026/11/21 05:06:10 runtime: search gate state lost at resume run=r2\n",
+       "##GW\n",
+       G("2026/11/21 04:00:00", "early"),
+       G("2026/11/21 05:05:00", "r4", "research_web"),
+       G("2026/11/21 05:05:10", "r1", vm="vm-another-computer"), G("2026/11/21 05:05:20", "-"),
+       G("2026/11/21 05:00:00", "r1"), G("2026/11/21 05:01:00", "r1"), G("2026/11/21 05:02:00", "r1"),
+       G("2026/11/21 05:03:00", "r2"),
+       G("2026/11/21 05:04:00", "r2", "management")]
+for i in range(7):
+    out.append(G("2026/11/21 05:%02d:00" % (10 + i), "r3"))
+open(root + "/sr.txt", "w").write("".join(out))
+PY
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
+check "W1 4 runs, 12 searches (research_web counted; the management line, the 04:00 search, another computer and run=- are out), mean 3.0" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"runs\"],d[\"searches\"],d[\"mean_per_run\"])==(4,12,3.0), d" "$root/out"'
+check "W2 runs by searches 1:1 2:0 3:1 4+:1; one run of 7 with 7 searches" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"runs_by_searches\"]=={\"1\":2,\"2\":0,\"3\":1,\"4+\":1} and (d[\"runs_7plus\"],d[\"searches_from_7plus\"])==(1,7), d" "$root/out"'
+check "W3 8 later searches in the console span, 7 with no successful read since the previous one (r1 read once, between its first two)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"])==(8,7), d" "$root/out"'
+check "W4 refusals by reason are summed from the run lines" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"refusals\"]=={\"read_first\":2,\"held_first\":1,\"holds_unread\":1,\"site_held\":2} and d[\"refused\"]==6, d" "$root/out"'
+check "W5 fresh_sent 1; pages returned 150, read 22 (the research_web run line counts)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"search_fresh\"],d[\"pages_returned\"],d[\"pages_read\"])==(1,150,22), d" "$root/out"'
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
+check "W10 searches by desk come from the gateway lines (research 11, research_web 1), children and started by desk from the run lines" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"searches_by_desk\"]=={\"research\":11,\"research_web\":1} and d[\"children\"]==2 and d[\"started_by_desk\"]=={\"research\":1,\"research_web\":2}, d" "$root/out"'
+check "W7 SearchFresh reasons are counted by distinct hash (never text): 3 sends, 2 distinct, the repeated one first, with its length; a resumed run with lost gate state counts once" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"fresh_reasons\"][0]==[\"aaaa1111\",39,2] and len(d[\"fresh_reasons\"])==2 and d[\"gate_state_lost_runs\"]==1, d" "$root/out"'
+printf '##READS\n##SUM\n##FRESH\n##GW\n2026/11/21 05:00:00 gateway: search request from autoputer vm-x ( max_results=40 run=r1 desk=research conv=c)\n2026/11/21 05:01:00 gateway: search request from autoputer vm-x ( max_results=40 run=r1 desk=research conv=c)\n' >"$root/sr_empty.txt"
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr_empty.txt" --since 2026-11-21T05:00Z >"$root/out" 2>&1
+check "W8 an empty console window says so instead of printing zeros" 'grep -q "console window empty" "$root/out" && ! grep -q "no SUCCESSFUL read since the run" "$root/out"'
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T04:00Z >"$root/out" 2>&1
+check "W6 the text report prints the runs line and the SearchFresh count" 'grep -q "^runs 5  searches 13  mean per run 2.6" "$root/out" && grep -q "SearchFresh sends (ended runs): 1" "$root/out"'
+
+# W9 the console span starts at the console's first line, not at its first read, and a
+# read in the same second as a search counts (seat 2 of the read-first change, 2026-11-21).
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+G = lambda ts: f"{ts} gateway: search request from autoputer {VM} ( max_results=40 run=rx desk=research conv=c-rx)\n"
+out = ["##READS\n", f"[ 1.0] runtime[1]: 2026/11/21 05:10:00 corpus read run=rx desk=research conv=c capture=obj:x held=false via=read\n",
+       "##SUM\n##FRESH\n##GW\n", G("2026/11/21 05:09:00"), G("2026/11/21 05:10:00"), G("2026/11/21 05:12:00"), G("2026/11/21 05:14:00")]
+open(root + "/sr9.txt", "w").write("".join(out))
+PY
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr9.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
+check "W9 the run's first search precedes the first read: only the gaps that start in the console count (2), the same-second read counts, one gap has none (1)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_no_successful_read\"],d[\"console_span_runs\"])==(2,1,1), d" "$root/out"'
 
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -201,7 +201,7 @@ func TestDeskSearchesKeepTheirOwnIDs(t *testing.T) {
 		client.done(t, second, 2)
 	}()
 	out := evalDeskCell(t, tool, ctx, `x, _ := choir.SearchStart("alpha")
-y, _ := choir.SearchStart("beta", true) // fresh: a second search while the first runs is otherwise refused
+y, _ := choir.SearchFresh("beta", "a second wording asked while the first runs") // a second search while the first runs is otherwise refused
 for _, id := range []string{x.ID, y.ID} {
 	c, err := choir.SearchWait(id, 5000)
 	r, _ := choir.Searches.Get(id)
@@ -286,7 +286,7 @@ fmt.Println(r)`)
 	if out.Error != "" {
 		t.Fatalf("cell error: %s", out.Error)
 	}
-	if !strings.Contains(out.Stdout, `2 "w2 beta": not sent (this question already holds 20 pages new to this run that you have not tried to read)`) {
+	if !strings.Contains(out.Stdout, `2 "w2 beta": not sent (the top pages of this run's earlier searches are not read yet`) {
 		t.Fatalf("the second wording was sent: the first search was not tagged with its question, so the start frame did not reach the store before the answer:\n%s", out.Stdout)
 	}
 }

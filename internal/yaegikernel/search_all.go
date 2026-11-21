@@ -169,24 +169,10 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 			notSent("no word of two or more letters or digits", "refused")
 			continue
 		}
-		// Alternative wordings are fallbacks, not multipliers: a question that
-		// already holds enough pages the run has not tried to read is read before it
-		// is searched again.
-		// A question with no terms (an empty key) is judged by the run-wide count.
-		if held, refuse := s.refuseForUnread(qk, false); refuse {
-			n := len(held)
-			stopWhy, stopStat = fmt.Sprintf("this question already holds %d pages new to this run that you have not tried to read", n), "holds_unread"
-			if qk == "" {
-				// The count is the run's, not a question's: say what the plain verbs say.
-				stopWhy = unreadRefusal(n)
-			}
-			// The pages Next sends the run to read are in Results.
-			addPages(held, false)
-			res.Next = "Read the ones that matter (the Results of this value; choir.Searches.Summary(id)), then search again for what is still missing, naming it. A page that will not load counts once you have tried it. A wording left out can be sent now with fresh: choir.Search(wording, true)."
-			notSent(stopWhy, stopStat)
-			continue
-		}
-		stub, err := s.startSearch(w.Wording, false, false, qk)
+		// The need test (search_need.go) is startSearch's, run-wide, as for every verb:
+		// a wording is not sent while the run holds pages it has not read, whatever
+		// question they were returned for.
+		stub, err := s.startSearch(w.Wording, searchOpts{verb: "search_all", qk: qk})
 		if stub.Refused != "" {
 			if stub.Running {
 				// Another search of the run is running: this wording is not sent (the
@@ -199,9 +185,30 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 				s.allStat.running++
 				s.statsMu.Unlock()
 				if res.Next == "" {
-					res.Next = fmt.Sprintf("No further wording was sent: a search of this run is still running (%s). Wait for it with choir.SearchWait(%q, 15000), read what it returned, then call SearchAll again for what is still missing. A wording can be sent now with fresh: choir.Search(wording, true).", stub.ID, stub.ID)
+					res.Next = fmt.Sprintf("No further wording was sent: a search of this run is still running (%s). Wait for it with choir.SearchWait(%q, 15000), read what it returned, then call SearchAll again for what is still missing. A wording can be sent now with choir.SearchFresh(wording, why).", stub.ID, stub.ID)
 				}
 				notSent(fmt.Sprintf("a search of this run is still running (%s)", stub.ID), "")
+				continue
+			}
+			switch stub.Reason {
+			case reasonReadFirst, reasonHeldFirst, reasonSiteHeld:
+				// The run holds pages it has not read: they are in Results, and
+				// every wording left meets the same refusal, so they are named,
+				// not tried (one count: startSearch's).
+				addPages(stub.Unread, false)
+				stopWhy = stub.Refused
+				if stub.Reason == reasonSiteHeld {
+					// The text names one outlet; the wordings left may name another,
+					// and they are held by the run's untried pages whatever they ask
+					// for: say that, not the first wording's outlet.
+					if need := s.searches.readNeed(); len(need.pages) > 0 {
+						stopWhy = readFirstRefusal(need)
+					}
+				}
+				if res.Next == "" {
+					res.Next = "Read the pages in the Results of this value (choir.ReadAll on their URLs), then call SearchAll again for what is still missing, naming it. A page that will not load counts once you have tried it. If they cannot bear on what you lack, say why: choir.SearchFresh(wording, why)."
+				}
+				notSent(stub.Refused, "")
 				continue
 			}
 			if len(stub.Unread) > 0 {
@@ -215,7 +222,7 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 				s.allStat.offered--
 				s.statsMu.Unlock()
 				if res.Next == "" {
-					res.Next = "The web has shown you what it has for this question: its latest search returned mostly pages you already held, and you hold pages for it that you have not tried to read (the Results of this value; choir.Searches.Summary(id)). Read what you hold or conclude not found. The hold ends once you have tried every page you hold for it (a page that will not load counts once tried: if all of them fail, nothing readable is held and the next wording is sent). A wording left out can be sent now with fresh: choir.Search(wording, true)."
+					res.Next = "The web has shown you what it has for this question: its latest search returned mostly pages you already held, and you hold pages for it that you have not tried to read (the Results of this value; choir.Searches.Summary(id)). Read what you hold or conclude not found. The hold ends once you have tried every page you hold for it (a page that will not load counts once tried: if all of them fail, nothing readable is held and the next wording is sent). A wording left out can be sent now with choir.SearchFresh(wording, why)."
 				}
 				notSent("the web has shown you what it has for this question (see the line below the wordings)", "")
 				continue
@@ -250,8 +257,8 @@ func (s *ChoirScope) SearchAll(question string, wordings []string) (SearchAllRes
 				w.Returned = len(got.Results)
 			}
 			w.SearchID = stub.ID
-			notSent(fmt.Sprintf("%s; its %d pages are in the list, marked held; send it alone with fresh",
-				strings.TrimSuffix(strings.Replace(stub.Reused, " (same question); send it anyway with fresh", "", 1), ""), w.Returned), "")
+			notSent(fmt.Sprintf("%s; its %d pages are in the list, marked held; send it alone with choir.SearchFresh",
+				strings.TrimSuffix(strings.Replace(stub.Reused, " (same question); send it anyway with choir.SearchFresh(query, why)", "", 1), ""), w.Returned), "")
 			continue
 		}
 		if _, err := s.SearchWait(stub.ID, searchWaitMs); err != nil {

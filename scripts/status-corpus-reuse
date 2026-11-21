@@ -120,7 +120,7 @@ HEADER = ["hour", "runs", "started", "from_held", "not_sent", "pages_returned", 
 
 
 KNOWN_SR = {"started", "from_held", "not_sent", "pages_returned", "pages_new", "pages_read", "search_all_calls",
-            "wordings_offered", "wordings_sent", "unread_notes", "fresh_over_unread", "untagged",
+            "wordings_offered", "wordings_sent", "unread_notes", "fresh_over_unread", "fresh_sent", "untagged",
             "wordings_running", "searches_judged", "searches_mostly_seen", "outlets_held_max", "outlets_held_last", "resumed_segment"}
 
 
@@ -170,7 +170,7 @@ def parse_console(text):
                        "returned": kv.get("pages_returned", 0), "new": kv.get("pages_new", 0),
                        "read": kv.get("pages_read", 0), "has_new": has_new,
                        "all_calls": kv.get("search_all_calls", 0), "offered": kv.get("wordings_offered", 0),
-                       "sent": kv.get("wordings_sent", 0), "unread": kv.get("unread_notes", 0), "over": kv.get("fresh_over_unread", 0),
+                       "sent": kv.get("wordings_sent", 0), "unread": kv.get("unread_notes", 0), "over": kv.get("fresh_over_unread", 0) + kv.get("fresh_sent", 0),
                        "untagged": kv.get("untagged", 0),
                        # the measurement fields (Landing 0 of the one-verb note); absent on older lines
                        "has_l0": "searches_judged" in kv, "judged": kv.get("searches_judged", 0), "mostly": kv.get("searches_mostly_seen", 0),
@@ -492,14 +492,16 @@ def render(r):
         o.append("  from_held %d" % m["from_held"])
         reasons = ", ".join("%s=%d" % kv for kv in sorted(m["not_sent_reasons"].items()))
         o.append("  not_sent %d%s" % (m["not_sent"], " (%s)" % reasons if reasons else ""))
-        hu = m["not_sent_reasons"].get("holds_unread", 0)
-        o.append("  refused by the need test (holds_unread, every verb) %d; web searches sent %d; refused share of attempts %s"
+        # holds_unread is the old line at 15 unread pages; read_first, held_first and
+        # site_held are the read-first rule of 2026-11-21 (internal/yaegikernel/search_need.go).
+        hu = sum(m["not_sent_reasons"].get(k, 0) for k in ("holds_unread", "read_first", "held_first", "site_held"))
+        o.append("  refused by the need test (holds_unread, read_first, held_first, site_held; every verb) %d; web searches sent %d; refused share of attempts %s"
                  % (hu, m["started"], pct(hu, hu + m["started"])))
         o.append("  pages_returned %d, pages_new %d, pages_read %d; pages_read / pages_returned %s"
                  % (m["returned"], m["new"], m["read"], pct(m["read"], m["returned"])))
         nf = m["new_fields"]
         if nf:
-            o.append("  (%d lines carry the wording fields) search_all_calls %d, wordings_offered %d, wordings_sent %d (%s), unread_notes %d, fresh_over_unread %d, untagged %d"
+            o.append("  (%d lines carry the wording fields) search_all_calls %d, wordings_offered %d, wordings_sent %d (%s), unread_notes %d, fresh_over_unread+fresh_sent %d, untagged %d"
                      % (nf["lines"], nf["all_calls"], nf["offered"], nf["sent"], pct(nf["sent"], nf["offered"]), nf["unread"], nf["over"], nf["untagged"]))
     l0 = m.get("l0")
     if l0:

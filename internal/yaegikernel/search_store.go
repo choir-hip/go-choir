@@ -78,6 +78,9 @@ type SearchHit struct {
 	// Read: this run captured it with choir.Read.
 	Held bool `json:"held,omitempty"`
 	Read bool `json:"read,omitempty"`
+	// CaptureID is set on a page the paper already held for the run (the corpus
+	// brief): read it with choir.ReadCapture(CaptureID, 0, 0), not a web fetch.
+	CaptureID string `json:"capture_id,omitempty"`
 }
 
 // Search is a copy of one search as the worker holds it now.
@@ -169,12 +172,19 @@ type SearchStub struct {
 	// still running; ID is then that search's id, which SearchWait takes.
 	Running bool        `json:"running,omitempty"`
 	Unread  []SearchHit `json:"unread,omitempty"`
+	// Reason is the fixed token the refusal is counted by (read_first,
+	// held_first, site_held, mostly_seen, search_running, ...); empty when sent.
+	Reason string `json:"reason,omitempty"`
 }
 
 func (s SearchStub) String() string {
 	if s.Refused != "" {
 		var b strings.Builder
 		fmt.Fprintf(&b, "not sent: %s\n", s.Refused)
+		if s.Reason == reasonReadFirst || s.Reason == reasonHeldFirst || s.Reason == reasonSiteHeld {
+			// The refusal names the pages itself, before its last line.
+			return b.String()
+		}
 		writeHostGroups(&b, groupByHost(s.Unread), func(n int) string {
 			return fmt.Sprintf("... %d more hosts; they are in the Unread of this value\n", n)
 		})
@@ -193,6 +203,24 @@ func (s SearchStub) String() string {
 // SearchStartPayload is the ActionSearchStart request.
 type SearchStartPayload struct {
 	Query string `json:"query"`
+	// The need state, reported with each search the guest sends so the host can
+	// write what the run held and had read when it asked (search.decision):
+	// the verb; searches earlier in the run; pages returned and tried (new to
+	// the run); pages read and outlets read; the brief's held pages and how
+	// many of them were tried; and, for SearchFresh, the reason given.
+	Verb      string `json:"verb,omitempty"`
+	Earlier   int    `json:"earlier,omitempty"`
+	Returned  int    `json:"returned,omitempty"`
+	Tried     int    `json:"tried,omitempty"`
+	Read      int    `json:"read,omitempty"`
+	Outlets   int    `json:"outlets,omitempty"`
+	HeldBrief int    `json:"held_brief,omitempty"`
+	HeldTried int    `json:"held_tried,omitempty"`
+	FreshWhy  string `json:"fresh_why,omitempty"`
+	// Probe asks for the research tree as it stands now and starts nothing: the
+	// guest sends one before it refuses a search, so a page a sibling session
+	// tried since the cell began is not demanded again.
+	Probe bool `json:"probe,omitempty"`
 }
 
 // SearchStartResult is the host's answer to ActionSearchStart.
@@ -201,6 +229,8 @@ type SearchStartResult struct {
 	Query     string   `json:"query"`
 	Providers []string `json:"providers"`
 	Cooling   []string `json:"cooling,omitempty"`
+	// Tree answers a Probe: the research tree's tried pages and window now.
+	Tree *TreeState `json:"tree,omitempty"`
 }
 
 // searchWaitMax bounds one choir.SearchWait; the gateway ends a search well
@@ -238,6 +268,13 @@ type SearchStore struct {
 	counted map[string][2]int
 	// judged is the searches whose share of already-held pages was counted.
 	judged map[string]bool
+	// heldRun is, per run, the pages the paper held for it when it began: search
+	// zero (seedHeld).
+	heldRun map[string][]HeldPage
+	// tree and treeTried are the host's view of the research tree this cell
+	// belongs to (setTree).
+	tree      TreeState
+	treeTried map[string]bool
 }
 
 func newSearchStore() *SearchStore {
@@ -480,7 +517,8 @@ func copySearch(s *Search) Search {
 }
 
 // searchHitKey is the URL two providers' hits share when they point at the
-// same page: no fragment, a lower-case host, no trailing slash.
+// same page: no fragment, a lower-case host without www., https for http, no
+// trailing slash.
 func searchHitKey(raw string) string {
 	raw = strings.TrimSpace(raw)
 	u, err := url.Parse(raw)
@@ -488,26 +526,51 @@ func searchHitKey(raw string) string {
 		return strings.TrimSuffix(raw, "/")
 	}
 	u.Fragment = ""
-	u.Host = strings.ToLower(u.Host)
+	// One page whatever the scheme or a leading www.: http and https, www. and
+	// the bare host are the same page for the read-first rule.
+	if u.Scheme == "http" {
+		u.Scheme = "https"
+	}
+	u.Host = strings.TrimPrefix(strings.ToLower(u.Host), "www.")
 	return strings.TrimSuffix(u.String(), "/")
 }
 
 // SearchStart asks the host to start a search on every eligible provider
 // and returns as soon as the host has named them; it never waits for an
 // answer. Each provider's answer lands in choir.Searches as it arrives.
-// Every web search passes the need test (refuseForUnread): when the run
-// holds searchEnoughUnread or more pages it has not tried to read, the search
-// is not sent and the stub says why and carries those pages; fresh sends it.
+// Every web search passes the need test (search_need.go): it is not sent while
+// the run has untried pages from the top of its earlier searches or from the
+// pages the paper held for it; the stub says which and carries them. A second
+// argument true is refused: the one way past is SearchFresh with a reason.
 func (s *ChoirScope) SearchStart(query string, fresh ...bool) (SearchStub, error) {
-	return s.startSearch(query, len(fresh) > 0 && fresh[0], true, "")
+	if len(fresh) > 0 && fresh[0] {
+		return s.freshArgRefused(query), nil
+	}
+	return s.startSearch(query, searchOpts{verb: "search_start"})
 }
 
-// startSearch is the one path a web search takes to the host. gated is false
-// only for SearchAll, which has judged the wording against its own question.
-// One search at a time passes the need test and starts (sendMu): the next is
-// judged only when none of the run's searches is still running (it is refused
-// at once otherwise, never waited for: a cell cannot time out on it).
-func (s *ChoirScope) startSearch(query string, override, gated bool, qk string) (SearchStub, error) {
+// freshArgRefused answers the old fresh argument: it is not a way past, and
+// the stub says what is.
+func (s *ChoirScope) freshArgRefused(query string) SearchStub {
+	s.noteNotSent("fresh_arg")
+	why := fmt.Sprintf("the second argument true is no longer a way past the need test: choir.SearchFresh(query, why) sends a search with a reason of at least %d characters, which is recorded", freshWhyMin)
+	return SearchStub{Query: strings.TrimSpace(query), Refused: why, Reason: "fresh_arg"}
+}
+
+// searchOpts says how a search reaches startSearch: the verb (for the host's
+// record), SearchAll's question key, and SearchFresh's reason.
+type searchOpts struct {
+	verb     string
+	qk       string
+	freshWhy string
+	fresh    bool
+}
+
+// startSearch is the one path a web search takes to the host. One search at a
+// time passes the need test and starts (sendMu): the next is judged only when
+// none of the run's searches is still running (it is refused at once
+// otherwise, never waited for: a cell cannot time out on it).
+func (s *ChoirScope) startSearch(query string, o searchOpts) (SearchStub, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return SearchStub{}, fmt.Errorf("choir: SearchStart needs a query")
@@ -516,13 +579,27 @@ func (s *ChoirScope) startSearch(query string, override, gated bool, qk string) 
 		s.noteNotSent("refused")
 		return SearchStub{}, fmt.Errorf("choir: SearchStart refused: %q has no word of two or more letters or digits, so it is not a question; send the words of the question", query)
 	}
+	override := o.fresh
+	if override && len([]rune(strings.TrimSpace(o.freshWhy))) < freshWhyMin {
+		s.noteNotSent("fresh_why")
+		return SearchStub{Query: query, Refused: fmt.Sprintf("SearchFresh needs the reason as its second argument, at least %d characters: why the pages you hold cannot answer what you lack. It is recorded", freshWhyMin), Reason: "fresh_why"}, nil
+	}
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
+	refuse := func(reason, why string, pages []SearchHit) (SearchStub, error) {
+		s.noteNotSent(reason)
+		s.statsMu.Lock()
+		if !s.reuseQuiet {
+			s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
+		}
+		s.statsMu.Unlock()
+		return SearchStub{Query: query, Refused: why, Unread: pages, Reason: reason}, nil
+	}
 	// A finished search with the same terms answers first, whatever else
 	// runs: it costs nothing and never sends. Then the running rule: a search
 	// of this run still running is refused at once, not waited on for up to
 	// 15 s, and a same-terms match still running is such a search. SearchAll
-	// (gated false) applies both to each wording too.
+	// applies both to each wording too.
 	if !override {
 		if stub, ok := s.reuseSearch(query); ok {
 			return stub, nil
@@ -536,46 +613,63 @@ func (s *ChoirScope) startSearch(query string, override, gated bool, qk string) 
 			}
 			s.statsMu.Unlock()
 			// ID is the running search's, so SearchWait(stub.ID, ...) works.
-			return SearchStub{ID: id, Query: query, Refused: why, Running: true}, nil
+			return SearchStub{ID: id, Query: query, Refused: why, Running: true, Reason: "search_running"}, nil
 		}
-		// The web has shown what it has for this question: the same need test for
-		// every verb, SearchAll's wordings included (search_hold.go).
-		if pages, held := s.searches.mostlySeen(query, qk, s.searches.nowTime()); held {
-			s.noteNotSent("mostly_seen")
-			why := mostlySeenRefusal(len(pages))
-			s.statsMu.Lock()
-			if !s.reuseQuiet {
-				s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
+		// The host is asked for the live research tree once, when the guest
+		// would refuse for pages: a sibling may have tried them since this cell
+		// began (search_need.go refreshTree).
+		refreshed := false
+		refresh := func() bool {
+			if refreshed {
+				return false
 			}
-			s.statsMu.Unlock()
-			return SearchStub{Query: query, Refused: why, Unread: pages}, nil
+			refreshed = true
+			return s.refreshTree()
+		}
+		// A hunt for an outlet the run already holds untried pages of.
+		for _, host := range searchquery.SiteRestrictions(query) {
+			pages := s.searches.untriedOfOutlet(siteMatcher(host))
+			if len(pages) > 0 && refresh() {
+				pages = s.searches.untriedOfOutlet(siteMatcher(host))
+			}
+			if len(pages) > 0 {
+				return refuse(reasonSiteHeld, siteHeldRefusal(host, pages), pages)
+			}
+		}
+		// The web has shown what it has for this question (search_hold.go).
+		if pages, held := s.searches.mostlySeen(query, o.qk, s.searches.nowTime()); held {
+			return refuse("mostly_seen", mostlySeenRefusal(len(pages)), pages)
+		}
+		// Read what the run holds first: the paper's held pages, then the top
+		// pages of every earlier search.
+		need := s.searches.readNeed()
+		if len(need.pages) > 0 && refresh() {
+			need = s.searches.readNeed()
+		}
+		if len(need.pages) > 0 {
+			reason := reasonReadFirst
+			if need.held {
+				reason = reasonHeldFirst
+			}
+			return refuse(reason, readFirstRefusal(need), need.pages)
 		}
 	} else {
 		s.noteFreshOverMatch(query)
 	}
-	over := false
-	if gated {
-		held, refuse := s.refuseForUnread("", override)
-		if refuse {
-			s.noteNotSent("holds_unread")
-			why := unreadRefusal(len(held))
-			// A cell that calls SearchStart as a bare statement still sees it.
-			s.statsMu.Lock()
-			s.notes = append(s.notes, fmt.Sprintf("not sent: %s: %s", cutRunes(query, 70), why))
-			s.statsMu.Unlock()
-			return SearchStub{Query: query, Refused: why, Unread: held}, nil
-		}
-		over = override && len(held) >= searchEnoughUnread
-	}
 	outlets := s.searches.outletsHeld() // before the send: what the run held when it asked
+	ns := s.searches.needState()
 	var out SearchStartResult
-	if err := s.call(ActionSearchStart, SearchStartPayload{Query: query}, &out); err != nil {
+	payload := SearchStartPayload{Query: query, Verb: o.verb, Earlier: ns.earlier, Returned: ns.returned, Tried: ns.tried, Read: ns.read, Outlets: ns.outlets, HeldBrief: ns.heldBrief, HeldTried: ns.heldTried}
+	if override {
+		payload.FreshWhy = strings.TrimSpace(o.freshWhy)
+	}
+	if err := s.call(ActionSearchStart, payload, &out); err != nil {
 		return SearchStub{}, err
 	}
 	s.noteOutlets(outlets)
-	if over {
+	if override {
 		s.statsMu.Lock()
-		s.allStat.freshOverUnread++
+		s.allStat.freshSent++
 		s.statsMu.Unlock()
 	}
 	// The next search is judged against this one: wait for its start frame.

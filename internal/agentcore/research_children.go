@@ -293,6 +293,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	if err != nil {
 		return yaegikernel.ResearchChildResult{Objective: spec.Objective, Role: role, Model: spec.Model, Error: err.Error()}
 	}
+	rt.noteRunChild(parent.RunID)
 	result := rt.runResearchChildWork(ctx, parent, lineage, spec, role, childKey)
 	return rt.closeChildCast(ctx, cast, result, childKey)
 }

@@ -26,6 +26,7 @@ func TestReuseDeclineReasonsAreFixedTokens(t *testing.T) {
 	if st := out.SearchStats; st != nil && len(st.ReuseDeclined) != 0 {
 		t.Fatalf("a first ask is no decline: %+v", st.ReuseDeclined)
 	}
+	cell(readEverything)
 	// A search that returned nothing.
 	cell(`choir.SearchStart("empty query")`)
 	out = cell(`choir.SearchStart("empty query")`)
@@ -45,7 +46,7 @@ func TestReuseDeclineReasonsAreFixedTokens(t *testing.T) {
 		t.Fatalf("stats = %+v, want earlier_run=1", st)
 	}
 	// fresh over a usable match is counted as fresh, and is no decline of reuse.
-	out = cell(`choir.SearchStart("harbor strike", true)`)
+	out = cell(`choir.SearchFresh("harbor strike", "the earlier answer is out of date")`)
 	if st := out.SearchStats; st == nil || st.ReuseDeclined["fresh"] != 1 {
 		t.Fatalf("stats = %+v, want fresh=1", st)
 	}
@@ -91,6 +92,7 @@ func TestOutletsHeldAreCountedAtTheSend(t *testing.T) {
 	if st := out.SearchStats; st == nil || st.OutletsLast != 0 {
 		t.Fatalf("first send: %+v", st)
 	}
+	cell(readEverything)
 	out = cell(`choir.SearchStart("two")`)
 	// reuters.com, bbc.co.uk, example.org: three outlets.
 	if st := out.SearchStats; st == nil || st.OutletsLast != 3 || st.OutletsMax != 3 {
@@ -107,6 +109,11 @@ func TestOutletOfIsTheRegistrableDomain(t *testing.T) {
 		"https://1.2.3.4/x":             "1.2.3.4",
 		"https://data.gov.uk/x":         "data.gov.uk",
 		"https://www.mod.gov.ua/news":   "mod.gov.ua",
+		"https://www.theguardian.co.uk": "theguardian.co.uk",
+		"https://www.abc.net.au/x":      "abc.net.au",
+		"https://x.asahi.co.jp/x":       "asahi.co.jp",
+		"https://news.example.com.au/x": "example.com.au",
+		"https://www.reuters.com.":      "reuters.com",
 	} {
 		if got := outletOf(in); got != want {
 			t.Errorf("outletOf(%q) = %q, want %q", in, got, want)

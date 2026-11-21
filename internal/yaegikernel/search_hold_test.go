@@ -66,8 +66,8 @@ fmt.Println(s.ID, len(s.Results), s.Reused != "", s.ReusedFrom, s.Query)`)
 	if strings.TrimSpace(out.Stdout) != "s1 5 true s1 Kharkiv missile attack" || f.searchCalls.Load() != 1 {
 		t.Fatalf("Search must return s1 marked Reused (calls %d): %s", f.searchCalls.Load(), out.Stdout)
 	}
-	// fresh sends it.
-	cell(`choir.SearchStart("Kharkiv missile attack 20 November 2026", true)`)
+	// SearchFresh sends it, over the five untried pages of s1.
+	cell(`choir.SearchFresh("Kharkiv missile attack 20 November 2026", "the first search was cut short by the provider")`)
 	if f.searchCalls.Load() != 2 {
 		t.Fatalf("fresh must send (calls %d)", f.searchCalls.Load())
 	}
@@ -87,6 +87,7 @@ func TestAChangedSiteRestrictionQuoteOrDateIsSent(t *testing.T) {
 		fixedNow(f)
 		cell, _ := searchCell(t, f)
 		cell(`choir.SearchStart("Kharkiv missile attack")`)
+		cell(readEverything)
 		out := cell(fmt.Sprintf(`b, _ := choir.SearchStart(%q)
 fmt.Println(b.Reused == "", b.Refused == "")`, q))
 		if strings.TrimSpace(out.Stdout) != "true true" || f.searchCalls.Load() != 2 {
@@ -101,7 +102,9 @@ fmt.Println(b.Reused == "", b.Refused == "")`, q))
 	fixedNow(f)
 	cell, _ := searchCell(t, f)
 	cell(`choir.SearchStart("Kharkiv missile attack")`)
+	cell(readEverything)
 	cell(`choir.SearchStart("site:reuters.com Kharkiv missile attack")`)
+	cell(readEverything)
 	cell(`choir.SearchStart("site:apnews.com Kharkiv missile attack")`)
 	cell(`choir.SearchStart("Kharkiv missile attack site:reuters.com")`) // the same restriction again: reused
 	if f.searchCalls.Load() != 3 {
@@ -114,9 +117,11 @@ func TestANearRepeatWordingOfSearchAllIsAnsweredFromHeld(t *testing.T) {
 	fixedNow(f)
 	f.urlsFor = map[string][]string{"Kharkiv missile attack": pagesN("k", 1, 5)}
 	cell, _ := searchCell(t, f)
-	out := cell(`r, _ := choir.SearchAll("Kharkiv strike", []string{"Kharkiv missile attack", "Kharkiv missile attack 20 November 2026", "site:bbc.com Kharkiv missile attack"})
+	out := cell(`r, _ := choir.SearchAll("Kharkiv strike", []string{"Kharkiv missile attack"})
+` + readEverything + `
+r, _ = choir.SearchAll("Kharkiv strike", []string{"Kharkiv missile attack 20 November 2026", "site:bbc.com Kharkiv missile attack"})
 fmt.Println(r)`)
-	if f.searchCalls.Load() != 2 || !strings.Contains(out.Stdout, `2 "Kharkiv missile attack 20 November 2026": not sent (answered from your search s1`) || !strings.Contains(out.Stdout, `3 "site:bbc.com Kharkiv missile attack": sent s2`) {
+	if f.searchCalls.Load() != 2 || !strings.Contains(out.Stdout, `1 "Kharkiv missile attack 20 November 2026": not sent (answered from your search s1`) || !strings.Contains(out.Stdout, `2 "site:bbc.com Kharkiv missile attack": sent s2`) {
 		t.Fatalf("a dated wording is answered from s1, the bbc-restricted one is sent (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
 }
@@ -136,6 +141,7 @@ func TestDifferentQuestionsAreNotMerged(t *testing.T) {
 		f.urlsFor = map[string][]string{p[0]: pagesN("x", 1, 5), p[1]: pagesN("y", 1, 5)}
 		cell, _ := searchCell(t, f)
 		cell(fmt.Sprintf(`choir.SearchStart(%q)`, p[0]))
+		cell(readEverything)
 		cell(fmt.Sprintf(`choir.SearchStart(%q)`, p[1]))
 		if f.searchCalls.Load() != 2 {
 			t.Errorf("%q and %q are different questions: both must be sent (calls %d)", p[0], p[1], f.searchCalls.Load())
@@ -160,6 +166,7 @@ func TestAWordingAfterAMostlySeenSearchIsHeldWithThePagesItHolds(t *testing.T) {
 	f.urlsFor = map[string][]string{ws[0]: pages, ws[1]: pages, ws[2]: pagesN("z", 1, 10)}
 	cell, _ := searchCell(t, f)
 	cell(fmt.Sprintf(`choir.SearchStart(%q)`, ws[0])) // 10 new pages
+	cell(readTop(5, "h"))
 	out := cell(fmt.Sprintf(`s, _ := choir.SearchStart(%q)
 fmt.Println(s.Refused == "")`, ws[1])) // judged by s1: all new, so it is sent
 	if f.searchCalls.Load() != 2 || strings.TrimSpace(out.Stdout) != "true" {
@@ -172,7 +179,7 @@ fmt.Println(s.Refused)`, ws[2]))
 	if f.searchCalls.Load() != 2 {
 		t.Fatalf("the third wording must be held (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
-	for _, want := range []string{"<nil> true 10", "the web has shown you what it has for this question", "what you hold or conclude not found", "fresh"} {
+	for _, want := range []string{"<nil> true 5", "the web has shown you what it has for this question", "what you hold or conclude not found", "SearchFresh"} {
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("refusal lacks %q:\n%s", want, out.Stdout)
 		}
@@ -183,13 +190,13 @@ fmt.Println(s.Refused)`, ws[2]))
 	// The waiting verb hands back the pages and Refused.
 	out = cell(fmt.Sprintf(`s, _ := choir.Search(%q)
 fmt.Println(len(s.Results), s.Refused != "", s.Done)`, ws[2]))
-	if strings.TrimSpace(out.Stdout) != "10 true true" || f.searchCalls.Load() != 2 {
+	if strings.TrimSpace(out.Stdout) != "5 true true" || f.searchCalls.Load() != 2 {
 		t.Fatalf("Search holds too (calls %d): %s", f.searchCalls.Load(), out.Stdout)
 	}
 	// fresh is the run's statement that it wants the search.
-	cell(fmt.Sprintf(`choir.SearchStart(%q, true)`, ws[2]))
+	cell(fmt.Sprintf(`choir.SearchFresh(%q, "the held pages are about another strike")`, ws[2]))
 	if f.searchCalls.Load() != 3 {
-		t.Fatalf("fresh must send (calls %d)", f.searchCalls.Load())
+		t.Fatalf("SearchFresh must send (calls %d)", f.searchCalls.Load())
 	}
 }
 
@@ -200,6 +207,7 @@ func TestSearchAllHoldsTheQuestionAfterAMostlySeenSearch(t *testing.T) {
 	f.urlsFor = map[string][]string{ws[0]: pages, ws[1]: pages, ws[2]: pagesN("z", 1, 10), ws[3]: pagesN("y", 1, 10)}
 	cell, _ := searchCell(t, f)
 	cell(fmt.Sprintf(`choir.Search(%q)
+`+readTopF(5, "h")+`
 choir.Search(%q)`, ws[0], ws[1])) // the second returns the same 10 pages: 0 new
 	out := cell(fmt.Sprintf(`r, err := choir.SearchAll("harbor strike", []string{%q, %q})
 fmt.Println(err)
@@ -226,6 +234,7 @@ func TestTenDistinctQuestionsAreAllSentWhateverTheyReturn(t *testing.T) {
 		f.urlsFor[q] = shared
 	}
 	cell, _ := searchCell(t, f)
+	cell(readTop(10, "s")) // the run has read the pages every question returns
 	for _, q := range topics {
 		out := cell(fmt.Sprintf(`s, _ := choir.Search(%q)
 fmt.Println(s.Refused == "", len(s.Results))`, q))
@@ -244,7 +253,9 @@ func TestAFewPagesAreNotEvidenceThatTheWebHasShownItsAll(t *testing.T) {
 	f.urlsFor = map[string][]string{ws[0]: pagesN("h", 1, 4), ws[1]: pagesN("h", 1, 4), ws[2]: pagesN("z", 1, 4)}
 	cell, _ := searchCell(t, f)
 	cell(fmt.Sprintf(`choir.Search(%q)`, ws[0]))
+	cell(readEverything)
 	cell(fmt.Sprintf(`choir.Search(%q)`, ws[1]))
+	cell(readEverything)
 	cell(fmt.Sprintf(`choir.Search(%q)`, ws[2]))
 	if f.searchCalls.Load() != 3 {
 		t.Fatalf("4 pages are too few to judge (calls %d)", f.searchCalls.Load())
@@ -258,7 +269,8 @@ func TestTheHoldLiftsWhenTheRunHasReadWhatItHolds(t *testing.T) {
 	f.urlsFor = map[string][]string{ws[0]: pages, ws[1]: pages, ws[2]: pagesN("z", 1, 10)}
 	cell, _ := searchCell(t, f)
 	cell(fmt.Sprintf(`choir.Search(%q)
-choir.Search(%q, true)`, ws[0], ws[1]))
+`+readTopF(5, "h")+`
+choir.Search(%q)`, ws[0], ws[1]))
 	cell(`for _, u := range choir.Searches.List()[0].Results { choir.Read(u.URL) }`)
 	cell(fmt.Sprintf(`choir.Search(%q)`, ws[2]))
 	if f.searchCalls.Load() != 3 {
@@ -281,7 +293,8 @@ func TestDeadReadsKeepTheHoldWhileUntriedPagesRemainAndReleaseItWhenAllFailed(t 
 		f.urlsFor = map[string][]string{ws[0]: pages, ws[1]: pages, ws[2]: pagesN("z", 1, 10)}
 		cell, _ := searchCell(t, f)
 		cell(fmt.Sprintf(`choir.Search(%q)
-choir.Search(%q, true)`, ws[0], ws[1]))
+`+readTopF(5, "h")+`
+choir.Search(%q)`, ws[0], ws[1]))
 		return f, cell, ws
 	}
 	// 5 of 10 fail and are tried; 5 are untried: held.
@@ -316,7 +329,8 @@ func TestMostlySeenNeverHoldsASearchForAnOutletTheRunLacks(t *testing.T) {
 	f.urlsFor = map[string][]string{lw(0): pages, lw(1): pages}
 	cell, _ := searchCell(t, f)
 	cell(fmt.Sprintf(`choir.Search(%q)
-choir.Search(%q, true)`, lw(0), lw(1))) // the question is now mostly seen
+`+readTopF(5, "h")+`
+choir.Search(%q)`, lw(0), lw(1))) // the question is now mostly seen
 	// A restriction to an outlet the run already holds may be held.
 	out := cell(fmt.Sprintf(`s, _ := choir.Search("site:h.example " + %q)
 fmt.Println(s.Refused != "")`, lw(2)))
@@ -358,6 +372,7 @@ func TestInterleavedRunsKeepTheirOwnSearches(t *testing.T) {
 	hooks.Begin(SessionFrame{RunID: "run-A"})
 	out := cell(`s, _ := choir.SearchStart("harbor strike")
 fmt.Println(s.ID, s.Reused != "")`)
+	cell(readTop(5, "h"))
 	if strings.TrimSpace(out.Stdout) != "s1 true" || f.searchCalls.Load() != 2 {
 		t.Fatalf("run A's own search must answer run A after run B's cell (calls %d): %s", f.searchCalls.Load(), out.Stdout)
 	}
@@ -369,11 +384,10 @@ fmt.Println(s.Reused != "")`)
 	}
 }
 
-// With a normal 40-page free search, the run-wide unread gate (15 or more pages
-// the run has not tried to read) refuses the second-outlet search first: the run
-// must read, or pass fresh. This is the pre-existing read-first rule, not the
-// near key: what the run must do is shown here.
-func TestASecondOutletSearchAfterA40PageResultNeedsReadingOrFresh(t *testing.T) {
+// With a normal 40-page free search, the read-first rule refuses the
+// second-outlet search until the top five pages are tried: the run reads, or
+// says why with SearchFresh.
+func TestASecondOutletSearchAfterA40PageResultNeedsReadingOrSearchFresh(t *testing.T) {
 	f := newResearchFixture(t)
 	fixedNow(f)
 	f.urlsFor = map[string][]string{"Kharkiv missile attack": pagesN("k", 1, 40)}
@@ -381,17 +395,17 @@ func TestASecondOutletSearchAfterA40PageResultNeedsReadingOrFresh(t *testing.T) 
 	cell(`choir.SearchStart("Kharkiv missile attack")`)
 	out := cell(`s, _ := choir.SearchStart("site:apnews.com Kharkiv missile attack")
 fmt.Println(s.Refused != "", len(s.Unread))`)
-	if f.searchCalls.Load() != 1 || strings.TrimSpace(out.Stdout) != "true 40" {
-		t.Fatalf("40 unread pages hold the next search (calls %d): %s", f.searchCalls.Load(), out.Stdout)
+	if f.searchCalls.Load() != 1 || strings.TrimSpace(out.Stdout) != "true 5" {
+		t.Fatalf("5 untried pages hold the next search (calls %d): %s", f.searchCalls.Load(), out.Stdout)
 	}
-	cell(`for i := 1; i <= 26; i++ { choir.Read(fmt.Sprintf("https://k.example/p%d", i)) }`)
+	cell(readTop(5, "k"))
 	cell(`choir.SearchStart("site:apnews.com Kharkiv missile attack")`)
 	if f.searchCalls.Load() != 2 {
-		t.Fatalf("after reading all but 14, the second-outlet search is sent (calls %d)", f.searchCalls.Load())
+		t.Fatalf("after reading the top five, the second-outlet search is sent (calls %d)", f.searchCalls.Load())
 	}
-	cell(`choir.SearchStart("site:bbc.com Kharkiv missile attack", true)`)
+	cell(`choir.SearchFresh("site:bbc.com Kharkiv missile attack", "the apnews results were off topic")`)
 	if f.searchCalls.Load() != 3 {
-		t.Fatalf("fresh sends (calls %d)", f.searchCalls.Load())
+		t.Fatalf("SearchFresh sends (calls %d)", f.searchCalls.Load())
 	}
 }
 
@@ -404,7 +418,8 @@ func TestSearchAllSendsASiteWordingToAnUnheldOutletAfterAHeldWording(t *testing.
 	f.urlsFor = map[string][]string{lw(0): pages, lw(1): pages}
 	cell, _ := searchCell(t, f)
 	cell(fmt.Sprintf(`choir.Search(%q)
-choir.Search(%q, true)`, lw(0), lw(1))) // the question is mostly seen
+`+readTopF(5, "h")+`
+choir.Search(%q)`, lw(0), lw(1))) // the question is mostly seen
 	out := cell(fmt.Sprintf(`r, err := choir.SearchAll("harbor strike", []string{%q, %q, "site:z.example " + %q})
 fmt.Println(err)
 fmt.Println(r)

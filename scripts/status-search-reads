@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""status-search-reads: how many web searches a research run sends and whether it
+read what it held before it searched again (the deployed proof of the read-first
+rule, docs/design/semantic-layer-2026-11-20.md section 4).
+It also says where searches come from: by desk (research, research_web) from the
+gateway, and the children and searches by desk of the ended runs' summary lines.
+
+Read only against Node B (one ssh, `sudo -n` reads; nothing is written there).
+Counts and ids only; a SearchFresh reason is shown as a hash and a length (the text,
+which can carry a query, stays on the tape rows): the gateway's query text is cut on the host and never printed or
+stored.
+
+  status-search-reads [--since T] [--until T] [--node HOST] [--json] [--fixture FILE]
+
+T is YYYY-MM-DDTHH:MMZ (UTC); default: the start of today (UTC). The window is
+[since, until).
+
+Sources:
+  gateway journal   `gateway: search request from autoputer <vm> (... run= desk=research ...)`
+                    one line per web search sent: runs, searches, mean, the 1/2/3/4+
+                    distribution, the 7-or-more tail.
+  paper console     `corpus read run=` (one per page read by a run) and
+                    `runtime: search run= desk=research started= ... not_sent=N (reason=n ...)
+                    pages_returned= pages_read= fresh_sent=` (one per ended run).
+                    The console keeps about 2.5 hours, so the two reads figures cover
+                    only the runs whose first search falls inside the console's span.
+
+Printed: runs, searches, mean per run, the 1/2/3/4+ distribution, searches from
+runs of 7+; later searches (second and later of a run, console span) sent with
+zero reads since the run's previous search; pages returned and read and
+refusals by reason (ended runs, console span); SearchFresh sends.
+"No successful read since the previous search" compares the paper console's
+clock (corpus read lines) with the gateway's (search request lines): the two
+may differ by a few seconds, so a read within seconds of a search can fall on
+either side; the figure is a count, not a gate.
+Exit 0, or 2 when the fetch failed. --fixture FILE reads the five sections
+(##READS, ##SUM, ##FRESH, ##LOST, ##GW) that fetch() builds, with no network.
+"""
+import argparse
+import calendar
+import json
+import re
+import subprocess
+import sys
+import time
+
+PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
+NODE = "node-b"
+STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
+# desk=research and desk=research_web (a choir.Research child's searches carry the latter)
+GW_RE = re.compile("^" + STAMP + r" gateway: search request from autoputer (\S+) \(.*?run=(\S+) desk=(research(?:_web)?) ")
+FRESH_RE = re.compile(STAMP + r" runtime: search fresh run=(\S+) why_len=(\d+) why_hash=([0-9a-f]+)")
+LOST_RE = re.compile(STAMP + r" runtime: search gate state lost at resume run=(\S+)")
+READ_RE = re.compile(STAMP + r" corpus read run=(\S+) ")
+SUM_RE = re.compile(STAMP + r" runtime: search run=(\S+) desk=research(?:_web)? (.*)$")
+KV_RE = re.compile(r"(\w+)=(\d+)")
+REASONS_RE = re.compile(r"not_sent=\d+ \(([^)]*)\)")
+
+
+def epoch(s):
+    return calendar.timegm(time.strptime(s, "%Y/%m/%d %H:%M:%S"))
+
+
+def arg_time(s):
+    return calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%MZ"))
+
+
+def compute(text, since, until):
+    sec = ""
+    gw, reads, sums = [], {}, []
+    by_desk = {}
+    fresh_texts = {}  # (hash, length) of a SearchFresh reason -> sends
+    lost_runs = set()
+    console_first = None  # the console's earliest line of any section: where its span starts
+
+    def seen(t):
+        nonlocal console_first
+        if console_first is None or t < console_first:
+            console_first = t
+    for ln in text.splitlines():
+        if ln.startswith("##"):
+            sec = ln
+            continue
+        if sec == "##GW":
+            m = GW_RE.search(ln)
+            # only the paper's own computer (other computers' searches are not the
+            # paper's), and a search with no run (run=-) belongs to no run
+            if m and m.group(2) == PAPER_VM and m.group(3) != "-":
+                t = epoch(m.group(1))
+                if t >= since and t < until:
+                    gw.append((t, m.group(3)))
+                    by_desk[m.group(4)] = by_desk.get(m.group(4), 0) + 1
+        elif sec == "##READS":
+            m = READ_RE.search(ln)
+            if m:
+                t = epoch(m.group(1))
+                seen(t)
+                reads.setdefault(m.group(2), []).append(t)
+        elif sec == "##FRESH":
+            m = FRESH_RE.search(ln)
+            if m:
+                t = epoch(m.group(1))
+                seen(t)
+                if t >= since and t < until:
+                    key = (m.group(4), int(m.group(3)))
+                    fresh_texts[key] = fresh_texts.get(key, 0) + 1
+        elif sec == "##LOST":
+            m = LOST_RE.search(ln)
+            if m and since <= epoch(m.group(1)) < until:
+                lost_runs.add(m.group(2))
+        elif sec == "##SUM":
+            m = SUM_RE.search(ln)
+            if m:
+                t = epoch(m.group(1))
+                seen(t)
+                if t >= since and t < until:
+                    sums.append(m.group(3))
+    gw.sort()
+    by_run = {}
+    for t, r in gw:
+        by_run.setdefault(r, []).append(t)
+    n = len(gw)
+    runs = len(by_run)
+    dist = {"1": 0, "2": 0, "3": 0, "4+": 0}
+    tail_runs = tail_searches = 0
+    for ts in by_run.values():
+        k = len(ts)
+        dist[str(k) if k < 4 else "4+"] += 1
+        if k >= 7:
+            tail_runs += 1
+            tail_searches += k
+    # reads: a gap between two searches of a run is judged when the earlier search is
+    # at or after the console's first line (its reads are then all in the console). A
+    # read in the same second as either search counts: the console and the gateway
+    # clocks are read to the second.
+    later = zero = 0
+    win_runs = 0
+    for r, ts in by_run.items():
+        if console_first is None:
+            break
+        counted = False
+        for i in range(1, len(ts)):
+            if ts[i - 1] < console_first:
+                continue
+            counted = True
+            later += 1
+            if not any(ts[i - 1] <= rt <= ts[i] for rt in reads.get(r, [])):
+                zero += 1
+        win_runs += counted
+    tot = {"returned": 0, "read": 0, "started": 0, "fresh": 0, "children": 0}
+    started_by_desk = {}
+    refusals = {}
+    for body in sums:
+        kv = dict(KV_RE.findall(body))
+        tot["returned"] += int(kv.get("pages_returned", 0))
+        tot["read"] += int(kv.get("pages_read", 0))
+        tot["started"] += int(kv.get("started", 0))
+        tot["fresh"] += int(kv.get("fresh_sent", 0))
+        tot["children"] += int(kv.get("children", 0))
+        for k, v in kv.items():
+            if k.startswith("started_"):
+                started_by_desk[k[len("started_"):]] = started_by_desk.get(k[len("started_"):], 0) + int(v)
+        m = REASONS_RE.search(body)
+        if m:
+            for k, v in re.findall(r"([a-z_]+)=(\d+)", m.group(1)):
+                refusals[k] = refusals.get(k, 0) + int(v)
+    return {
+        "since": time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(since)),
+        "runs": runs, "searches": n, "mean_per_run": round(n / runs, 2) if runs else None,
+        "runs_by_searches": dist, "runs_7plus": tail_runs, "searches_from_7plus": tail_searches,
+        "console_empty": console_first is None,
+        "console_span_runs": win_runs, "later_searches": later, "later_no_successful_read": zero,
+        "fresh_reasons": sorted(([h, ln, n] for (h, ln), n in fresh_texts.items()), key=lambda r: (-r[2], r[0])),
+        "gate_state_lost_runs": len(lost_runs),
+        "ended_runs": len(sums), "ended_runs_started": tot["started"],
+        "pages_returned": tot["returned"], "pages_read": tot["read"],
+        "searches_by_desk": by_desk, "children": tot["children"], "started_by_desk": started_by_desk,
+        "refusals": refusals, "refused": sum(refusals.values()), "search_fresh": tot["fresh"],
+    }
+
+
+def render(r):
+    o = ["status-search-reads since %s" % r["since"]]
+    o.append("runs %d  searches %d  mean per run %s" % (r["runs"], r["searches"], r["mean_per_run"]))
+    d = r["runs_by_searches"]
+    o.append("runs sending 1 / 2 / 3 / 4+ searches: %d / %d / %d / %d" % (d["1"], d["2"], d["3"], d["4+"]))
+    o.append("runs sending 7+: %d, %d searches (%s of all)" % (
+        r["runs_7plus"], r["searches_from_7plus"],
+        "%.0f%%" % (100.0 * r["searches_from_7plus"] / r["searches"]) if r["searches"] else "n/a"))
+    if r["console_empty"]:
+        o.append("console window empty: the guest console holds no read line, so the read figures (later searches with no successful read, pages read) are unavailable, not zero")
+    else:
+        o.append("console span: %d runs; later searches %d, sent with no SUCCESSFUL read since the run's previous search: %d (the corpus read line is written only when a read succeeds; a failed attempt is not counted)" % (
+            r["console_span_runs"], r["later_searches"], r["later_no_successful_read"]))
+    o.append("ended runs %d (console span): searches started %d, pages returned %d, pages read %d" % (
+        r["ended_runs"], r["ended_runs_started"], r["pages_returned"], r["pages_read"]))
+    o.append("searches by desk (gateway): %s" % (" ".join("%s=%d" % kv for kv in sorted(r["searches_by_desk"].items())) or "-"))
+    o.append("ended runs' children %d; searches started by desk (run lines): %s" % (
+        r["children"], " ".join("%s=%d" % kv for kv in sorted(r["started_by_desk"].items())) or "-"))
+    o.append("refusals %d by reason: %s" % (r["refused"], " ".join("%s=%d" % kv for kv in sorted(r["refusals"].items())) or "-"))
+    o.append("SearchFresh sends (ended runs): %d" % r["search_fresh"])
+    reasons = r["fresh_reasons"]
+    o.append("SearchFresh reasons by distinct hash (console, %d sends, %d distinct; the text is on the tape rows, never here)%s" % (
+        sum(n for _, _, n in reasons), len(reasons), ":" if reasons else ": none"))
+    for h, ln, n in reasons[:10]:
+        o.append("  %4d  hash %s  %d characters" % (n, h, ln))
+    o.append("runs resumed after a planned restart with the gate's state lost (its first segment's reads and pages are not in it): %d" % r["gate_state_lost_runs"])
+    return "\n".join(o)
+
+
+# One read-only pass over the console files and the gateway journal, through pipes
+# only: nothing is written on Node B. Each kept line leaves with a one-letter tag
+# (R read, S run summary, F SearchFresh reason hash, L gate state lost at a resume, G gateway request) that fetch()
+# turns into the sections compute() reads.
+REMOTE = r"""
+dir=/var/lib/go-choir/vm-state/@VM@
+sudo -n true 2>/dev/null || echo "##NOSUDO"
+sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
+  awk '/ corpus read run=/ {print "R|" $0; next}
+       / runtime: search run=/ {print "S|" $0; next}
+       / runtime: search fresh run=/ {print "F|" $0; next}
+       / runtime: search gate state lost at resume run=/ {print "L|" $0; next}'
+sudo -n journalctl --no-pager -o cat --utc --since "@DAY@ 00:00:00 UTC" -u go-choir-gateway 2>/dev/null |
+  grep -a 'gateway: search request from autoputer' | sed -E 's/query="([^"\\]|\\.)*"//; s/^/G|/'
+echo "##END"
+""".replace("@VM@", PAPER_VM)
+
+
+def fetch(node, since):
+    day = time.strftime("%Y-%m-%d", time.gmtime(since))
+    p = subprocess.run(["ssh", "-C", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", node, REMOTE.replace("@DAY@", day)],
+                       capture_output=True, text=True, timeout=300)
+    if "##END" not in p.stdout:
+        raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
+    if "##NOSUDO" in p.stdout:
+        raise RuntimeError("sudo -n is not allowed on %s" % node)
+    secs = {"R": [], "S": [], "F": [], "L": [], "G": []}
+    for ln in p.stdout.splitlines():
+        if len(ln) > 2 and ln[1] == "|" and ln[0] in secs:
+            secs[ln[0]].append(ln[2:])
+    return "\n".join(["##READS"] + secs["R"] + ["##SUM"] + secs["S"] + ["##FRESH"] + secs["F"] + ["##LOST"] + secs["L"] + ["##GW"] + secs["G"])
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="status-search-reads")
+    ap.add_argument("--since")
+    ap.add_argument("--until")
+    ap.add_argument("--node", default=NODE)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--fixture")
+    a = ap.parse_args(argv)
+    try:
+        now = time.time()
+        since = arg_time(a.since) if a.since else now - now % 86400
+        until = arg_time(a.until) if a.until else 1 << 62
+        if a.fixture:
+            with open(a.fixture) as f:
+                text = f.read()
+        else:
+            text = fetch(a.node, since)
+        r = compute(text, since, until)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as e:
+        print("status-search-reads: unavailable: %s" % e, file=sys.stderr)
+        return 2
+    print(json.dumps(r, sort_keys=True) if a.json else render(r))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

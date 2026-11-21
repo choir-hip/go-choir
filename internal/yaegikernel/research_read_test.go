@@ -46,6 +46,18 @@ type researchFixture struct {
 	hostErr    map[string]string
 	runningFor map[string]bool
 	searchMu   sync.Mutex
+	// payloads are the search_start payloads the host was sent, in order (the
+	// need state the guest reports: search_read_first_test.go).
+	payloads []SearchStartPayload
+	// captureErr makes ReadCapture of a capture id fail (a deleted capture, a
+	// refused read); captureReads counts ReadCapture calls.
+	captureErr   map[string]string
+	captureReads atomic.Int32
+	// liveTree is what the host answers a tree probe with (a search_start with
+	// Probe set): the research tree as it stands now, which a sibling may have
+	// moved since the cell began. probes counts them; a probe is not a search.
+	liveTree *TreeState
+	probes   atomic.Int32
 }
 
 func newResearchFixture(t *testing.T) *researchFixture {
@@ -67,7 +79,15 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				if err := json.Unmarshal(payload, &in); err != nil {
 					return nil, err
 				}
+				if in.Probe {
+					f.probes.Add(1)
+					tree, _ := json.Marshal(SearchStartResult{Tree: f.liveTree})
+					return tree, nil
+				}
 				f.searchCalls.Add(1)
+				f.searchMu.Lock()
+				f.payloads = append(f.payloads, in)
+				f.searchMu.Unlock()
 				if msg, bad := f.hostErr[in.Query]; bad {
 					return nil, fmt.Errorf("%s", msg)
 				}
@@ -102,7 +122,11 @@ func newResearchFixture(t *testing.T) *researchFixture {
 				if err := json.Unmarshal(payload, &in); err != nil {
 					return nil, err
 				}
-				return json.RawMessage(fmt.Sprintf(`{"capture_id":%q,"url":%q,"title":"t","blocks":[{"id":"b0","kind":"paragraph","text":"text"}]}`, in.CaptureID, strings.TrimPrefix(in.CaptureID, "cap:"))), nil
+				f.captureReads.Add(1)
+				if msg, bad := f.captureErr[in.CaptureID]; bad {
+					return nil, fmt.Errorf("%s", msg)
+				}
+				return json.RawMessage(fmt.Sprintf(`{"capture_id":%q,"url":%q,"title":"t","blocks":[{"id":"b0","kind":"paragraph","text":"%s"}]}`, in.CaptureID, strings.TrimPrefix(in.CaptureID, "cap:"), strings.Repeat("The ministry said the cabinet changes took effect today. ", 3))), nil
 			case ActionRead:
 				var in ReadPayload
 				if err := json.Unmarshal(payload, &in); err != nil {
@@ -289,17 +313,24 @@ func TestOverlayWorkedCellSearchesReadsAndSendsTheInterimInOneCell(t *testing.T)
 	cell, hooks := f.session(t)
 	hooks.Begin(SessionFrame{RunID: "run-1"})
 	out := cell(workedCell(t))
-	if !strings.Contains(out.Stdout, "interim packet: 4 sources") {
+	if !strings.Contains(out.Stdout, "interim packet: 5 sources") {
 		t.Fatalf("the worked cell did not send its interim packet:\n%s", out.Stdout)
 	}
-	if strings.Count(out.Stdout, "ok https://") != 4 {
+	if strings.Count(out.Stdout, "ok https://") != 5 {
 		t.Errorf("the cell must print a line for every page it read:\n%s", out.Stdout)
 	}
 	if strings.Contains(out.Stdout, "<error") || strings.Contains(out.Stdout, "refused") {
 		t.Errorf("the packet was refused:\n%s", out.Stdout)
 	}
-	if got := f.reads.Load(); got != 4 {
-		t.Errorf("the cell read %d pages, want 4: one per host of 4 hosts", got)
+	if got := f.reads.Load(); got != 5 {
+		t.Errorf("the cell read %d pages, want 5: the top five as listed", got)
+	}
+	// One wording, one search; the stop test says to report, not to search again.
+	if got := f.searchCalls.Load(); got != 1 {
+		t.Errorf("the worked cell sent %d searches, want 1", got)
+	}
+	if !strings.Contains(out.Stdout, "if two of these outlets support the claim, report now and do not search again") {
+		t.Errorf("the worked cell did not print its stop test:\n%s", out.Stdout)
 	}
 	for _, l := range out.Searches {
 		if strings.Contains(l, "interim packet") {

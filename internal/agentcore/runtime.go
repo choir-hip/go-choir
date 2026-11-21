@@ -141,6 +141,17 @@ type Runtime struct {
 	// runSearch holds each running run's search counts until its summary
 	// line is logged (search_run_summary.go).
 	runSearch sync.Map
+	// briefHeld holds each running research run's search zero: the pages its
+	// corpus brief delivered (run id -> []yaegikernel.HeldPage), handed to the
+	// run's cells so it reads them before it searches the web
+	// (search_decision.go). Forgotten when the run ends.
+	briefHeld sync.Map
+	// treeRead holds each running research tree's reading (run id -> *treeRead,
+	// search_decision.go).
+	treeRead sync.Map
+	// treeClosed remembers the runs whose tree was closed (run id -> time), so a
+	// late cell does not reopen one (search_decision.go).
+	treeClosed sync.Map
 	// calibrationRunReads holds each running run's calibration read state
 	// (run id -> *calibrationRunReads, calibration_reads.go).
 	calibrationRunReads sync.Map
@@ -773,6 +784,8 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		s.SetRunTerminalObserver(func(runID string) {
 			rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded)
 			rt.logRunSearchSummary(runID)
+			rt.briefHeld.Delete(runID)
+			rt.closeTree(runID)
 			rt.forgetStoriesShown(runID)
 		})
 		// A closed round with a scorable desk-to-desk Cast is judged

@@ -665,10 +665,17 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					if err := yaegikernel.ValidatePayload(action, payload); err != nil {
 						return nil, fmt.Errorf("refused: %w", err)
 					}
+					// A probe of the research tree starts no search and is no row: the
+					// guest asks before it refuses, to see what a sibling tried since
+					// the cell began (search_decision.go).
+					if action == yaegikernel.ActionSearchStart && searchProbeOf(payload) {
+						return rt.searchProbe(cellExec.RunID)
+					}
 					started := time.Now().UTC()
 					requestID, pid := yaegikernel.EgressFrameFromContext(egrCtx)
 					var out json.RawMessage
 					var err error
+					var decision map[string]any
 					if action == yaegikernel.ActionSearchStart {
 						// An async search never reaches deskEgress, so its query is
 						// gated here, as an egress call is.
@@ -681,6 +688,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 						// stamp what it writes without world_untrusted (review
 						// r1, S1).
 						rt.taintRun(cellExec.RunID, worldReadLabels)
+						// What the run held and had read when it asked is taken from the
+						// payload before the stream opens, so a search cannot count its own
+						// results as held; it rides the search_start row (search_decision.go).
+						decision = searchDecisionOf(payload)
+						logSearchFresh(cellExec.RunID, decision)
 						// An async search belongs to this desk session: its
 						// stream outlives the cell and ends with the session.
 						out, err = workers.startSearch(search.WithAttribution(egrCtx, search.Attribution{RunID: cellExec.RunID, Desk: deskRole, Conversation: cellExec.ChannelID}), sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {
@@ -688,6 +700,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 								"verb": "search_done", "search_id": done.id, "desk_session": workers.sessionLabel(sessionKey), "worker_pid": pid,
 								"run_id": cellExec.RunID, "started_at": done.started.UTC(), "finished_at": time.Now().UTC(),
 								"answered": done.answered, "arrived": done.arrived, "total": done.total,
+								"pages_returned": done.pagesReturned(),
 							}
 							if len(done.pending) > 0 {
 								ev["pending"] = done.pending
@@ -707,6 +720,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 							rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
 						}
 					} else {
+						// A read is an attempt for the whole research tree, recorded
+						// before it is served (search_decision.go).
+						rt.noteTreeRead(cellExec.RunID, action, payload)
 						out, err = rt.deskEgress(egrCtx, deskRole, cellExec, action, payload)
 					}
 					ev := map[string]any{
@@ -717,6 +733,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					}
 					if err != nil {
 						ev["error"] = err.Error()
+					}
+					if decision != nil {
+						ev["decision"] = decision
 					}
 					// The row rides the cell's desk.cell event (journal cut
 					// R4); a row with no open cell is appended on its own.
@@ -790,8 +809,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// their labels: the values they defined are still defined.
 			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
+			rt.openTree(execCtx.RunID)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
-				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration,
+				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration, Held: rt.briefHeldForSession(execCtx), Tree: rt.treeStateFor(execCtx.RunID),
 				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining, updatesTooLarge)})
 			// The host consumes only the updates the cell was shown whole.
 			// A cell that failed consumes nothing.

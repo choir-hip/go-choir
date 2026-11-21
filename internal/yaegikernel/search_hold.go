@@ -125,10 +125,7 @@ func (st *SearchStore) mostlySeen(query, qk string, now time.Time) (pages []Sear
 			return nil, false
 		}
 	}
-	var tried map[string]bool
-	if st.triedKeys != nil {
-		tried = st.triedKeys()
-	}
+	tried := st.triedAll()
 	read := st.readSet()
 	var group []int
 	var anchor []string
@@ -173,5 +170,5 @@ func (st *SearchStore) mostlySeen(query, qk string, now time.Time) (pages []Sear
 // for the question: why, what the run holds, what to do instead, and what
 // releases the hold.
 func mostlySeenRefusal(n int) string {
-	return fmt.Sprintf("the web has shown you what it has for this question: its latest search returned mostly pages you already held, and you hold %d pages for it that you have not tried to read. Read what you hold or conclude not found; do not ask the web again for the same thing. The hold ends once you have tried every page you hold for it (a page that will not load counts once tried: if all of them fail, nothing readable is held and the next wording is sent). To send a search for something those pages cannot hold, pass fresh: choir.Search(query, true)", n)
+	return fmt.Sprintf("the web has shown you what it has for this question: its latest search returned mostly pages you already held, and you hold %d pages for it that you have not tried to read. Read what you hold or conclude not found; do not ask the web again for the same thing. The hold ends once you have tried every page you hold for it (a page that will not load counts once tried: if all of them fail, nothing readable is held and the next wording is sent). To send a search for something those pages cannot hold, say why: choir.SearchFresh(query, why)", n)
 }

@@ -512,6 +512,116 @@ published not more than 10% lower. p 0.20. C-B3: after B, under 10% of later
 searches are sent with no page read since the previous one (from 44%). p 0.70.
 Settle each by its deploy plus 2 days.
 
+### 4.6 As built, 2026-11-21: where the code differs from 4.2 to 4.5
+
+Built in lane `search-read-first`; the code wins where it differs.
+
+- **Rule 1 has no "or an outlet new to the story".** The guest does not know the
+  story's outlets, so the alternative cannot be tested there. The rule is only:
+  the top 5 pages new to the run of every earlier search are tried (fewer when
+  fewer came back). It is stricter than 4.2, in the direction of the owner's
+  ruling ("reading much more and searching less").
+- **No new event kinds, and no standalone decision event.** `search.decision`
+  and `search.result` are not new `EventKind`s (each would need rows in the
+  storage, durability and sealer tables, which is its own red change), and a
+  standalone event before every stream would undo the journal cut R4 (one
+  durable record per cell; the test `TestDeskCellAndEgressRecordRunEvents`
+  holds it). The decision is `decision` on the `search_start` row of the cell's
+  `desk.cell` event, taken from the guest's payload before `client.Stream` opens
+  (`agentcore/search_decision.go`, `searchDecisionOf`, called in the egress
+  handler of `tools_desk.go` before `startSearch`); the result is the existing
+  standalone `search_done` event with `pages_returned`. The decision is the
+  counts at the moment of the send, so it cannot count its own results; it is
+  not written before the stream in time (a crash between the stream and the end
+  of the cell loses it with the row). "Pages new to the corpus" and "outlets new
+  to the story" are not recorded: the leads are written after the stream ends
+  and the guest does not know the story's outlets.
+- **The need state is the guest's own report**, in `SearchStartPayload`
+  (`verb`, `earlier`, `returned`, `tried`, `read`, `outlets`, `held_brief`,
+  `held_tried`, `fresh_why`). It is a record, not a gate: the gate is the guest's
+  refusal.
+- **`SearchAll` sends one wording per call as a consequence, not a special case**:
+  after the first wording is sent its top pages are untried, so the next wording
+  of the same call is refused (`read_first`, one count for the call).
+- **Search zero** is the brief's captures in the brief's own order (top 5), handed
+  to the run's cells in `SessionFrame.Held` from the brief result
+  (`researchBriefResult.held`), kept per run in `Runtime.briefHeld` and
+  forgotten when the run ends.
+- **`SearchFresh(query, why)`** needs a reason of at least 20 characters and
+  overrides every refusal, including the running rule. `Search(q, true)` and
+  `SearchStart(q, true)` keep their signature so an old cell gets the message
+  instead of a compile error. The refusal reasons counted on the run line are
+  `read_first`, `held_first`, `site_held`, `fresh_arg`, `fresh_why`; `fresh_sent`
+  replaces `fresh_over_unread`. `refuseForUnread`, `searchEnoughUnread` and
+  `unreadRefusal` are deleted; `mostly_seen` is kept (it holds a wording once the
+  web has shown what it has).
+- **The 7-or-more tail.** The rule makes a run's 7th search cost the reading of
+  the top 5 pages of each of the six of its own before it (30 pages), and the stop rule in
+  the prompt says to report once a second independent outlet is read. Nothing
+  forces a stop, by design (no quota): a run that reads and still lacks something
+  sends the search, and one that disagrees with the held pages says so in a
+  recorded `SearchFresh` reason. If the tail persists with reasons, the prompt's
+  stop test is not enough (section 7); `scripts/status-search-reads` prints the
+  tail (runs with 7 or more, their share of searches) and the `SearchFresh`
+  count.
+- **Follow-ups after review (2026-11-21).** A brief page is listed in the refusal
+  with its capture id (`SearchHit.CaptureID`) and `choir.ReadCapture(id)` clears it with
+  no web fetch; every read is an attempt recorded BEFORE the call (`Read`,
+  `ReadAll`, `ReadCapture` of a held page), so a hung read or a deleted capture
+  releases the page. A `site:` hunt looks only at the same top-5 window as the
+  rest of the rule; a term naming a subdomain matches that host and its
+  subdomains, a term naming a registrable domain matches its hosts, and a page of
+  an aggregator host (a short list in `search_need.go`; none existed before)
+  never counts as the outlet. The refusal lists the pages, then the exception
+  ("Only if none of these pages can bear on what you lack: SearchFresh"). A
+  `SearchFresh` send writes `runtime: search fresh run= why=` on the console so
+  the proof script counts reasons by distinct text. `choirFunctionDocs` Args keep
+  `fresh` because the signature keeps the variadic argument (it is refused with a
+  pointer, and the surface test requires docs to equal the source).
+- **The research tree shares what has been tried, not what has been returned
+  (seat 2 H1, then the lead, 2026-11-21).** Each `choir.Research` child is a
+  session with its own guest store, but it shares the root's run id. The host
+  (`agentcore/search_decision.go`, `treeRead`) sees every read of the tree before
+  it is served (`Read`, `ReadAll`, `ReadCapture` of a held page by id) and hands
+  each cell's frame `SessionFrame.Tree`: the pages any session tried. The guest
+  merges them into its tried set, so a page anyone read or attempted is never
+  demanded of anyone again (parent plus four children no longer read the same
+  five pages five times). When the guest would refuse a search for untried
+  pages it first asks the host once (a `search_start` with `probe`: it starts no
+  search and writes no row) and judges again against the tree as it stands now,
+  so a sibling's read during the cell releases it and the refusal names the
+  current untried pages. A session's window is its OWN: its own searches' first
+  five new pages, and, for the root session only, the brief's pages. No sibling's
+  or parent's search pages are demanded of a child (the first version put every
+  session's top five into every gate: fan-out children have different objectives,
+  so a child was held by five pages that did not bear on its question, and the
+  escape, `SearchFresh`, whose condition is then true by construction, would have
+  become the normal path of the `research_web` children, which are the volume). A
+  page a sibling returned that this session's own search returns again is in its
+  window like any of its results; once anyone tries it, it clears for all. The
+  brief's pages are the root's: its text is delivered to the root run, a child is
+  handed an objective and nothing of the brief, so a child's frame carries no
+  `Held` (the host gives `Held` to a session with a `RunRecord`, the root's, and
+  not to a child's). Consequence, stated plainly: parent plus four children with
+  nothing read may each send their FIRST search (five first searches); the
+  saving is that no branch sends a second search without reading what its own
+  first returned. The run summary line is per root run and now carries
+  `children=` and `started_<desk>=` (research, research_web) so the deployed
+  reading shows where a run's searches come from; the proof script prints
+  searches by desk. A page is one page whatever its scheme or `www.`. The probe's
+  answer is bounded as the frame is (the most recent 2,000 tried pages).
+- **A planned restart loosens the gate (residual, stated).** The tree's tried set
+  and the brief's pages are in memory (`treeRead`, `briefHeld`), not rebuilt from
+  the journal: a run a planned restart resumes once begins with an empty gate, so
+  it can send a search its first segment's reads and pages would have held. It
+  only loosens, and the host logs `search gate state lost at resume run=` when a
+  tree opens for a run that began before the boot; the proof script counts those
+  runs. A closed run's tree is not reopened by a late cell.
+- **The decision's `earlier_pages_new`** (renamed from `pages_returned`, which
+  meant the earlier searches' new pages) is not `search_done`'s `pages_returned`
+  (this search's own results).
+- **Deployed proof:** `scripts/status-search-reads --since T`.
+
 ---
 
 ## 5. After A and B: over-merges and the clustering measure
