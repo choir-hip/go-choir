@@ -59,6 +59,8 @@ export type RuntimeDeps = {
 };
 
 const SPEAKS = new Set<Entry['kind']>(['opening', 'transition', 'story', 'answer', 'result']);
+/** What the voice names a spoken entry (its segment): the entry's kind for the ones it distinguishes, a story for the rest. */
+const segmentOf = (k: Entry['kind']): string => (k === 'opening' || k === 'transition' || k === 'answer' || k === 'result' || k === 'mail' ? k : 'story');
 
 export class RadioRuntime {
   readonly store: RunSheetStore;
@@ -230,7 +232,7 @@ export class RadioRuntime {
     const gen = this.director.generation, epoch = this.epoch;
     const p = planEntry(e, this.director.provided.get(e.id), audioSpec(e));
     let item: DeckItem | undefined, why = '';
-    const speech = (id: string, title: string, document: string, paragraphs: string[]) => deckItem({ id, kind: 'speech', title, document, paragraphs: paragraphs.join('\n\n'), requiresPreviousHeard: e.kind === 'transition' });
+    const speech = (id: string, title: string, document: string, paragraphs: string[]) => deckItem({ id, kind: 'speech', title, document, paragraphs: paragraphs.join('\n\n'), requiresPreviousHeard: e.kind === 'transition', segment: segmentOf(e.kind) });
     try {
       switch (p.kind) {
         case 'speak': item = speech(e.id, e.title, p.document, p.paragraphs); break;
@@ -259,7 +261,7 @@ export class RadioRuntime {
     for (const e of this.store.ahead()) {
       if (out.length >= DECK_HELD_MAX) break;
       let it: DeckItem | undefined;
-      if (SPEAKS.has(e.kind) && e.text) it = deckItem({ id: e.id, kind: 'speech', title: e.title, document: 'rs:' + e.id, paragraphs: e.text, requiresPreviousHeard: e.kind === 'transition' });
+      if (SPEAKS.has(e.kind) && e.text) it = deckItem({ id: e.id, kind: 'speech', title: e.title, document: 'rs:' + e.id, paragraphs: e.text, requiresPreviousHeard: e.kind === 'transition', segment: segmentOf(e.kind) });
       else if ((e.kind === 'episode' || e.kind === 'clip') && !e.text && !e.source?.ref.startsWith('file:')) {
         const s = audioSpec(e);
         if (s) it = deckItem({ id: e.id, kind: 'audio', title: s.title, show: s.show, url: s.url, start: s.start ?? 0, end: s.end ?? 0 });

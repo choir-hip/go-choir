@@ -22,6 +22,8 @@ import Foundation
 @MainActor public protocol PlaybackEngine: AnyObject {
     /// Speak `text` as the document `documentID` (a single segment named for `entry`), replacing what is playing. False: nothing started.
     func speak(documentID: String, entry: RunSheetEntry, paragraphs: [String]) async -> Bool
+    /// The same, named by what it is and not by a run sheet entry (the deck's item): `kind` is the segment (opening, transition, answer, result, mail; "" a story).
+    func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool
     /// Load a paper story in full and play it. Its document id; nil when it could not be loaded.
     func playStory(route: String, title: String) async -> String?
     /// The spoken entry from the block that did not play (the engine was lost mid-entry and is back).
@@ -62,6 +64,14 @@ import Foundation
     func rendering() -> Bool
 }
 extension PlaybackEngine {
+    /// An engine that knows only the entry form is handed one built from the item's own fields.
+    public func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool {
+        let k: RunSheetKind = ["opening": .opening, "transition": .transition, "answer": .answer, "result": .result, "mail": .mail][kind] ?? .story
+        let text = paragraphs.joined(separator: "\n\n")
+        var e = RunSheetEntry(id: entryID, kind: k, placedBy: .phone, title: title, text: text)
+        e.estSeconds = RunSheetEntry.estimateSeconds(words: text)
+        return await speak(documentID: documentID, entry: e, paragraphs: paragraphs)
+    }
     public func pauseSpoken() {}
     public func rendering() -> Bool { false }
     public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { nil }

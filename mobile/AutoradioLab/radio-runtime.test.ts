@@ -97,7 +97,7 @@ describe('what the deck is handed', () => {
     rt.director.open({ ...story('p-open'), kind: 'opening', placed_by: 'phone', title: 'Opening' });
     await idle();
     expect(playedIds()).toEqual(['p-open']);
-    expect(deck.played[0]).toMatchObject({ kind: 'speech', document: 'rs:p-open', paragraphs: 'Words of p-open.' });
+    expect(deck.played[0]).toMatchObject({ kind: 'speech', document: 'rs:p-open', paragraphs: 'Words of p-open.', segment: 'opening' });
     rt.play(story('l-1', { placed_by: 'listener' }));
     await idle();
     expect(rt.store.entry('p-open')?.ended?.outcome).toBe('cut');

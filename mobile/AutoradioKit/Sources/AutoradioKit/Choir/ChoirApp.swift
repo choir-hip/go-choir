@@ -325,9 +325,14 @@ public final class ChoirApp: @unchecked Sendable {
         default: kind = "story"
         }
         let cites = (entry.cites ?? []).map { ProgrammeCite(ref: $0.ref, role: $0.role.rawValue, label: $0.label) }
-        let incoming = IncomingSegment(stretchID: "rs", segmentID: entry.id, kind: kind, title: entry.title, text: paragraphs.joined(separator: "\n\n"), cites: cites, blockCount: nil)
+        return await speakSegment(documentID: documentID, entryID: entry.id, title: entry.title, kind: kind, cites: cites, paragraphs: paragraphs)
+    }
+
+    /// Speak words as a document of one segment, from the start. The segment is named by what it is, not by a run sheet entry (the deck's item).
+    func speakSegment(documentID: String, entryID: String, title: String, kind: String, cites: [ProgrammeCite] = [], paragraphs: [String]) async -> Bool {
+        let incoming = IncomingSegment(stretchID: "rs", segmentID: entryID, kind: kind.isEmpty ? "story" : kind, title: title, text: paragraphs.joined(separator: "\n\n"), cites: cites, blockCount: nil)
         guard let prepared = SegmentPrep.prepare(incoming) else { return false }
-        var doc = ProgrammeDocument(id: documentID, title: entry.title.isEmpty ? "Autoradio" : entry.title, blocks: [])
+        var doc = ProgrammeDocument(id: documentID, title: title.isEmpty ? "Autoradio" : title, blocks: [])
         doc.append(prepared)
         runtime.player.setDocument(doc)
         runtime.player.begin(at: 0)

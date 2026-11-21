@@ -42,6 +42,8 @@ public struct DeckItem: Equatable, Sendable {
     public var block = 0
     public var seconds = 0.0
     public var requiresPreviousHeard = false
+    /// What a speech item is for the voice's segment naming: opening, transition, answer, result, mail; "" is a story.
+    public var segment = ""
     public init(id: String, kind: String) { self.id = id; self.kind = kind }
     var paragraphList: [String] { paragraphs.components(separatedBy: "\n\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } }
     var documentID: String { document.isEmpty ? "deck:" + id : document }
@@ -463,9 +465,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
         if item.kind == "audio", let url = URL(string: item.url) {
             ok = await engine.playRemote(url: url, title: item.title, show: item.show, start: item.seconds > 0 ? item.seconds : (item.start > 0 ? item.start : nil), end: item.end > 0 ? item.end : nil)
         } else if item.kind == "speech" {
-            var e = RunSheetEntry(id: item.id, kind: .story, placedBy: .phone, title: item.title, text: item.paragraphs)
-            e.estSeconds = RunSheetEntry.estimateSeconds(words: item.paragraphs)
-            ok = await engine.speak(documentID: item.documentID, entry: e, paragraphs: item.paragraphList)
+            ok = await engine.speak(documentID: item.documentID, entryID: item.id, title: item.title, kind: item.segment, paragraphs: item.paragraphList)
         }
         guard my == generation, current?.id == item.id else { if ok, current == nil { stopEngine() }; return ok }       // wiped while it started: no sound for the next account
         if !ok {

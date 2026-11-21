@@ -71,7 +71,7 @@ export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
 type Account = (typeof KEYCHAIN_ACCOUNTS)[number];
 
 /** The data module's one native module, as far as this file uses it. */
-export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string }): Promise<unknown> };
+export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }): Promise<unknown> };
 /** app.ts hands over the module's native handle at every answer (adoptNative). */
 let reader: NativeReader | undefined;
 /** True once ANY app-module op has answered (a key read, a key state): the native module is there, and the host decision (host.ts) can no longer say "no native". */
@@ -89,7 +89,7 @@ export function adoptNative(native: NativeReader | null | undefined, source = ''
 }
 
 /** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
-export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string }) => Promise<unknown>) | null {
+export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }) => Promise<unknown>) | null {
   return reader && reader.available !== false ? (r) => reader!.later(r) : null;
 }
 

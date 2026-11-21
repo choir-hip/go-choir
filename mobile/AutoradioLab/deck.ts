@@ -17,6 +17,8 @@ export type DeckItem = {
   block: number;
   seconds: number;
   requiresPreviousHeard: boolean;
+  /** What a speech item is, for the voice's segment naming: opening, transition, answer, result, mail or story ("" is story). */
+  segment: string;
 };
 
 export type DeckWhy = 'playing' | 'paused_listener' | 'paused_system' | 'held_session' | 'held_engine' | 'stopped' | 'empty';
@@ -82,7 +84,7 @@ export type DeckPort = {
 };
 
 export const EMPTY_ITEM: DeckItem = {
-  id: '', kind: 'speech', title: '', show: '', document: '', paragraphs: '', url: '', start: 0, end: 0, block: 0, seconds: 0, requiresPreviousHeard: false,
+  id: '', kind: 'speech', title: '', show: '', document: '', paragraphs: '', url: '', start: 0, end: 0, block: 0, seconds: 0, requiresPreviousHeard: false, segment: '',
 };
 
 /** A DeckItem with every field present, so what crosses the interface never carries a missing one. */

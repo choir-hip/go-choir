@@ -15,6 +15,11 @@ import Foundation
         return await app.speakEntry(documentID: documentID, entry: entry, paragraphs: paragraphs)
     }
 
+    public func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool {
+        remote.stop()
+        return await app.speakSegment(documentID: documentID, entryID: entryID, title: title, kind: kind, paragraphs: paragraphs)
+    }
+
     public func playStory(route: String, title: String) async -> String? {
         remote.stop()
         return await app.playPaperStory(route: route)
