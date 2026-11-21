@@ -6,6 +6,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/search"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 // searchLeadBatch collects the results of every provider arrival of one search
@@ -60,4 +61,19 @@ func (rt *Runtime) searchLeadObserver(ownerID, computerID, conversationID string
 			return err
 		})
 	}
+}
+
+// leadConversationOf is the conversation a desk's search leads are filed
+// under: its own channel, or, for a research child (which runs with none), the
+// story its research tree serves. Without it a child's searches, which are the
+// web searches, carried no story and no run could find what a story's research
+// had read.
+func leadConversationOf(ctx context.Context, exec toolregistry.ExecutionContext) string {
+	if c := strings.TrimSpace(exec.ChannelID); c != "" {
+		return c
+	}
+	if lineage, ok := ctx.Value(researchLineageKey{}).(researchLineage); ok {
+		return lineage.channelID
+	}
+	return ""
 }

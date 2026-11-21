@@ -149,6 +149,16 @@ func (s *Store) storyTrajectoryKind(ctx context.Context, ownerID, computerID, tr
 	return trajectory.Kind, nil
 }
 
+// StoryPointOf is a story document's main point and the document it succeeds,
+// read from its trajectory ("" for each when it has none or cannot be read).
+func (s *Store) StoryPointOf(ctx context.Context, ownerID, computerID, docID string) (mainPoint, succeeds string) {
+	doc, err := s.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	if err != nil {
+		return "", ""
+	}
+	return s.storyPointOf(ctx, ownerID, computerID, doc.TrajectoryID)
+}
+
 // storyPointOf is a story trajectory's main point and the document it
 // succeeds ("" for each when the story was opened without them, or the
 // trajectory cannot be read).

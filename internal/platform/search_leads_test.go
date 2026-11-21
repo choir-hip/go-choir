@@ -579,3 +579,52 @@ func TestSearchLeadConversationsByCaptureAreScopedAndConversationsOnly(t *testin
 		t.Fatalf("route answer: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// A story's later research starts from what its earlier runs read: the pages
+// read from leads that the story's conversation's searches returned.
+func TestSearchLeadPagesOfConversationAreReadPagesOfThatConversationOnly(t *testing.T) {
+	f := leadFixture(t)
+	ctx := context.Background()
+	a, b, c := "https://example.com/read-a", "https://example.com/unread-b", "https://example.com/read-c"
+	if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c1", "q", "doc-one", SearchLeadHit{URL: a, Title: "A"}, SearchLeadHit{URL: b, Title: "B"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c1", "q", "doc-two", SearchLeadHit{URL: c, Title: "C"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c2", "q", "doc-one", SearchLeadHit{URL: a, Title: "A elsewhere"})); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []struct{ computer, url, capture string }{{"c1", a, "cap-a"}, {"c1", c, "cap-c"}, {"c2", a, "cap-a2"}} {
+		if _, err := f.store.MarkSearchLeadsTried(ctx, "o1", m.computer, []string{m.url}, m.capture); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := f.store.SearchLeadPagesOfConversation(ctx, "o1", "c1", "doc-one", 10)
+	if err != nil || len(got) != 1 || got[0].CaptureID != "cap-a" || got[0].URL != a || got[0].Title != "A" {
+		t.Fatalf("pages = %+v, %v; want only the read lead of doc-one on this computer", got, err)
+	}
+	if got, _ := f.store.SearchLeadPagesOfConversation(ctx, "o1", "c1", "", 10); len(got) != 0 {
+		t.Fatalf("an empty conversation listed %+v", got)
+	}
+	og := f.og
+	h := NewObjectGraphHandler(objectgraph.NewService(objectgraph.Config{Durable: og}), og)
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": {Found: true, UserID: "o1", ComputerID: "c1"}}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureCaptureIndex(f.store)
+	post := func(computer string) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(map[string]any{"owner_id": "o1", "computer_id": computer, "conversation_id": "doc-one"})
+		r := httptest.NewRequest(http.MethodPost, "/internal/platform/search-leads/by-conversation", bytes.NewReader(raw))
+		r.RemoteAddr = "10.200.1.2:40000"
+		rec := httptest.NewRecorder()
+		hostauth.Middleware(http.HandlerFunc(h.HandleSearchLeadsByConversation)).ServeHTTP(rec, r)
+		return rec
+	}
+	if rec := post("c2"); rec.Code != http.StatusForbidden {
+		t.Fatalf("a bound guest read another computer's pages: %d", rec.Code)
+	}
+	if rec := post("c1"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "cap-a") || strings.Contains(rec.Body.String(), "snippet") {
+		t.Fatalf("route answer: %d %s", rec.Code, rec.Body)
+	}
+}

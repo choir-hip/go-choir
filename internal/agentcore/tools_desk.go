@@ -701,7 +701,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 									"schema": types.SearchServedSchema, "role": cellExec.Role, "providers": done.providers,
 								})
 							}
-						}, rt.searchLeadObserver(cellExec.OwnerID, cellExec.ComputerID, cellExec.ChannelID))
+						}, rt.searchLeadObserver(cellExec.OwnerID, cellExec.ComputerID, leadConversationOf(egrCtx, cellExec)))
 						if err == nil {
 							// An async search bypasses deskEgress; its read taints here.
 							rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
@@ -1438,6 +1438,17 @@ func cellHostDeadlineError(deskRole string, deadline, elapsed time.Duration) str
 // network/content actions go to researchDeps.HostEgress — one deps surface,
 // never an open socket.
 func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+	// A story Texture's attempt to read a capture is the read a research Cast
+	// after a feed is owed (story_research_context.go). It counts before the
+	// gate and the read: a capture the gate refuses, or that is gone, is not
+	// owed again. The story is derived exactly as the refusal derives it, from
+	// the desk's agent id, never from the channel.
+	if action == yaegikernel.ActionReadCapture && deskmanifest.IsDocumentCustodian(deskRole) {
+		var p yaegikernel.ReadCapturePayload
+		if json.Unmarshal(payload, &p) == nil {
+			rt.noteStoryCaptureRead(cellExec.OwnerID, cellExec.ComputerID, storyDocOfDeskAgent(deskAgentForCursor(cellExec)), p.CaptureID)
+		}
+	}
 	// A call that carries what the run composed to a destination is the
 	// egress sink of the disclosure path (disclosure_gate.go).
 	if err := rt.gateEgressCall(egrCtx, deskRole, cellExec, action, payload); err != nil {

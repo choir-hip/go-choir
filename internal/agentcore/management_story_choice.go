@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -109,19 +110,34 @@ func (rt *Runtime) logManagementStoryChoice(runID, profile string, rec types.Inb
 	}
 }
 
-// storyResearchLine is the one line a story's request for research leaves:
-// the story, and which round of its research this is. A story's first round
-// follows its open (or, with a succeeds ref, its successor's open); a later
-// round follows a feed or an owner's turn. scripts/status-story-choice counts
-// research runs started by cause from these lines and the choice lines.
-func storyResearchLine(runID, story string, round int) string {
-	return fmt.Sprintf("story research cast run=%s story=%s round=%d", runID, story, round)
+// storyResearchLine is the one line each Cast a story's Texture sends to its
+// research desk leaves: the story, the round, whether the Cast opened the round
+// (each Cast wakes the research reader; an opened round is the start of a
+// run) and its cause, decided here at the source: "open" (the story's first
+// round), "successor" (its first round, the story naming a succeeds ref),
+// "feed" (a later round, which follows a feed or an owner's turn) or "continue"
+// (a Cast inside a round already open). The status script counts these.
+func storyResearchLine(runID, story string, round int, opened bool, cause string) string {
+	return fmt.Sprintf("story research cast run=%s story=%s round=%d opened=%t cause=%s", runID, story, round, opened, cause)
 }
 
-// logStoryResearchCast logs a Texture's Cast that opened a research round.
-func (rt *Runtime) logStoryResearchCast(runID, profile string, rec types.InboxRecordReceipt) {
-	if strings.TrimSpace(profile) != deskmanifest.DocumentCustodianName() || !rec.OpenedRound || !deskmanifest.IsResearchInbox(rec.Inbox) {
+// logStoryResearchCast logs a Texture's Cast to its research desk.
+func (rt *Runtime) logStoryResearchCast(ctx context.Context, ownerID, computerID, runID, profile string, rec types.InboxRecordReceipt) {
+	if strings.TrimSpace(profile) != deskmanifest.DocumentCustodianName() || !deskmanifest.IsResearchInbox(rec.Inbox) {
 		return
 	}
-	log.Print(storyResearchLine(runID, strings.TrimPrefix(rec.Inbox, deskmanifest.ResearcherName()+":"), rec.Round))
+	doc := strings.TrimPrefix(rec.Inbox, deskmanifest.ResearcherName()+":")
+	cause := "continue"
+	switch {
+	case rec.OpenedRound && rec.Round <= 1:
+		cause = "open"
+		if rt != nil && rt.store != nil {
+			if _, succeeds := rt.store.StoryPointOf(ctx, ownerID, computerID, doc); succeeds != "" {
+				cause = "successor"
+			}
+		}
+	case rec.OpenedRound:
+		cause = "feed"
+	}
+	log.Print(storyResearchLine(runID, doc, rec.Round, rec.OpenedRound, cause))
 }

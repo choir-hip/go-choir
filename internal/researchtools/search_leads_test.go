@@ -16,6 +16,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -198,5 +199,57 @@ func TestSinkReadsLeadConversationsAsOnePost(t *testing.T) {
 	}
 	if _, err := NewCorpusdCaptureSink("").SearchLeadConversations(context.Background(), "o", "c", nil); err == nil {
 		t.Fatal("no corpusd URL, no error")
+	}
+}
+
+func TestSinkReadsLeadPagesOfAConversationAsOnePost(t *testing.T) {
+	var posts int
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		if r.URL.Path != "/internal/platform/search-leads/by-conversation" || r.Method != http.MethodPost {
+			t.Errorf("%s %s", r.Method, r.URL.Path)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"pages":[{"capture_id":"cap-1","url":"https://a","title":"A"}]}`)
+	}))
+	defer srv.Close()
+	var _ SearchLeadPageReader = NewCorpusdCaptureSink(srv.URL)
+	got, err := NewCorpusdCaptureSink(srv.URL).SearchLeadPages(context.Background(), "o", "c", "doc-1", 50)
+	if err != nil || posts != 1 || len(got) != 1 || got[0].CaptureID != "cap-1" || body["conversation_id"] != "doc-1" {
+		t.Fatalf("got=%v err=%v posts=%d body=%v", got, err, posts, body)
+	}
+	if _, err := NewCorpusdCaptureSink("").SearchLeadPages(context.Background(), "o", "c", "d", 1); err == nil {
+		t.Fatal("no corpusd URL, no error")
+	}
+}
+
+// A task of more arrivals than the route takes in one request costs one request
+// for each further leadCapturesPerRequest, and loses no lead (the route answers
+// a 400 over its cap).
+func TestSinkChunksLeadConversationReadsAtTheRoutesCap(t *testing.T) {
+	var sizes []int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			IDs []string `json:"capture_ids"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		sizes = append(sizes, len(body.IDs))
+		out := map[string][]string{}
+		for _, id := range body.IDs {
+			if id == "cap-0" || id == "cap-1200" {
+				out[id] = []string{"doc-" + id}
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"conversations": out})
+	}))
+	defer srv.Close()
+	var ids []string
+	for i := 0; i <= 1200; i++ {
+		ids = append(ids, fmt.Sprintf("cap-%d", i))
+	}
+	got, err := NewCorpusdCaptureSink(srv.URL).SearchLeadConversations(context.Background(), "o", "c", ids)
+	if err != nil || len(sizes) != 3 || sizes[0] != 500 || sizes[1] != 500 || sizes[2] != 201 || len(got) != 2 || got["cap-1200"][0] != "doc-cap-1200" {
+		t.Fatalf("sizes=%v got=%v err=%v", sizes, got, err)
 	}
 }

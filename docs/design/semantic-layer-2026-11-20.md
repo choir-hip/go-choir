@@ -258,6 +258,41 @@ console's lines and the second reader's labels.
   older overlay text (the bound is on the overlay body; this section added
   about 1,000).
 
+**Second commit, 2026-11-21: the research trajectory (owner: "every capture
+doesnt need to be its own trajectory ... we should be sending captures to
+existing trajectories, and clustering overlapping captures in the same
+trajectory").** What the code kept: a story has one research agent inbox
+(`research:<doc>`) and one conversation with its Texture, but every Texture Cast
+to research opens a new round and wakes a NEW run with a fresh session and a
+fresh corpus brief built from the Cast's objective alone
+(`agentcore/research_brief.go:795`, `runtime.go` `executeWithToolLoop`). A page an
+earlier run read survived only as a capture in corpusd and as a search lead
+marked tried with its capture. Nothing carried it into the next run, and a fed
+capture reached the story as a record that nothing required be read. Built,
+host-side, no model call (`agentcore/story_research_context.go`):
+
+- A research run on a story gets a section beside the brief: the pages its
+  earlier runs read (leads of its conversation, new route
+  `POST /internal/platform/search-leads/by-conversation`), the captures it holds
+  (opened with or fed), the outlets those hold, the captures fed since its last
+  research round, and, through the `succeeds` ref, the same for its predecessor
+  with its main point. `storyPages` returns the pages in the shape of the
+  read-first lane's `HeldPage` (same fields); adopting that lane is one call,
+  `rt.noteBriefHeld(runID, pages)`, once it is on main. I did not edit its files.
+- A research Cast from a story's Texture is refused while captures fed since its
+  last research Cast are unread by it (`requireFedCapturesRead`, called from
+  `inbox_records.go` where the route is resolved), naming the captures to read;
+  a read counts when asked, refused or not, so no deadlock. A story with no
+  earlier research is never refused. Counted by `story research refused`.
+- Where the design did not foresee: the web searches are run by research
+  children, which have `ChannelID == ""` (`research_children.go` `runResearchChildWork`),
+  so their search leads carried no story; the lineage now carries the story's
+  channel and `leadConversationOf` files the leads under it. Leads written
+  before this change have no story, so the by-conversation read finds only the
+  pages read after deploy. The Texture-read marks are in memory, so a restart
+  asks one re-read, never a missed one. No schema change, no Texture canonical
+  record.
+
 **Claim C-A2.** Research rounds per capture fall: `story research cast` lines
 per decision on the paper, first full UTC day after A against the 0.68 research
 briefs per decision seen on 2026-11-21 05Z to 07Z (77 runs, 114 decisions).

@@ -463,6 +463,9 @@ func requireJudgment(offer *openingOffer, packet string) error {
 			}
 		}
 	}
+	if offer != nil && len(offer.Leased) > 0 && len(nonEmpty(p.Captures)) == 0 {
+		return fmt.Errorf("a Cast to %s names the captures it opens with, in the spec's captures (the captures you lease are %s) (nothing was sent)", types.StoryOpenInbox(), leased)
+	}
 	answers := map[string]string{}
 	var nexts []string
 	for _, e := range p.Entries {
@@ -475,6 +478,9 @@ func requireJudgment(offer *openingOffer, packet string) error {
 		}
 		if strings.TrimSpace(e.Why) == "" {
 			return fmt.Errorf("judgment for %s needs a why: say in a sentence how its main point differs (nothing was sent)", strings.TrimSpace(e.Story))
+		}
+		if _, dup := answers[doc]; dup {
+			return fmt.Errorf("judgment answers %s twice; answer each candidate once (nothing was sent)", strings.TrimSpace(e.Story))
 		}
 		answers[doc] = ans
 		if ans == "next" {
@@ -492,6 +498,15 @@ func requireJudgment(offer *openingOffer, packet string) error {
 		return fmt.Errorf("you answered next for %s: name it in the spec as \"succeeds\": %q (nothing was sent)", nexts[0], deskmanifest.DocumentInbox(nexts[0]))
 	case succeeds != "" && succeeds != nexts[0]:
 		return fmt.Errorf("succeeds %s is not the story you answered next for (%s) (nothing was sent)", p.Succeeds, nexts[0])
+	}
+	if succeeds != "" {
+		offered := false
+		for _, doc := range offer.offeredFor(p.Captures) {
+			offered = offered || doc == succeeds
+		}
+		if !offered {
+			return fmt.Errorf("succeeds %s is not a candidate story offered for your captures; a story succeeds only one you were handed (nothing was sent)", p.Succeeds)
+		}
 	}
 	var missing []string
 	for _, doc := range offer.offeredFor(p.Captures) {
@@ -602,4 +617,14 @@ func (rt *Runtime) detailOfDecision(runID string, in stagedDecision) choiceDetai
 type stagedDecision struct {
 	captures []string
 	packet   string
+}
+
+func nonEmpty(ids []string) []string {
+	var out []string
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
 }
