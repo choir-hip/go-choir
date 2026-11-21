@@ -40,7 +40,7 @@ public final class AccountWipe: @unchecked Sendable {
     func registerStandard(
         turnHistory: TurnHistory = .shared,
         notebookCache: NotebookCache = .shared,
-        topicsFile: URL? = EditionText.topicsFile,
+        legacyTopicsFile: URL? = TakeFiles.url("edition-topics.json"),
         topicsMarker: URL? = TakeFiles.url("notebook-topics-written"),
         notebook: NotebookStore = .shared,
         steer: SteerQueue = SteerQueue.shared,
@@ -69,7 +69,7 @@ public final class AccountWipe: @unchecked Sendable {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
             notebookCache.wipe()
-            if let f = topicsFile { try? FileManager.default.removeItem(at: f) }
+            if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file: nothing writes or reads it now; this wipe is the only thing that removes it
             if let f = topicsMarker { try? FileManager.default.removeItem(at: f) }
             await MainActor.run { notebook.wipe() }
         }
@@ -88,7 +88,9 @@ public final class AccountWipe: @unchecked Sendable {
         register("texture") { await MainActor.run { texture.wipe() } }
         register("playing") { environment.wipePlaying() }
         register("mail-reading") { mailReading.wipe() }
-        register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe(); EditionSetupSession.shared?.wipe(); EditionSetupSession.shared = nil }
+        register("spoken-words") { conversation.clear(); acks.clear(); bar.wipe() }
+        // The native copy of the edition picks and the words waiting for shared code (the file itself is shared code's, wiped by account.ts).
+        register("edition-picks") { EditionPicksMirror.shared.reset(); EditionTalk.shared.clear() }
         register("reader") { reader.wipe() }
         // The enrolled voice is app-private (Application Support/MikeVoice, not a system setting) and the listener's own: it goes at sign-out.
         register("voice-profile") { voice.forget() }

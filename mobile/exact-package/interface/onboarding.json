@@ -41,23 +41,8 @@
    "rows": "SetupRowView[]",
    "summary": "string[]",
    "editionLines": "string[]",
-   "selectionLine": "string",
-   "explainer": "string",
-   "voiceHint": "string",
    "talking": "bool",
-   "pickedCount": "number",
-   "tree": "TopicRowView[]",
    "editing": "bool"
-  },
-  "TopicRowView": {
-   "key": "string",
-   "label": "string",
-   "kind": "string",
-   "selected": "bool",
-   "partial": "bool",
-   "expandable": "bool",
-   "expanded": "bool",
-   "note": "string"
   }
  },
  "names": [
@@ -94,12 +79,7 @@
      "rows": [],
      "summary": [],
      "editionLines": [],
-     "selectionLine": "",
-     "explainer": "",
-     "voiceHint": "",
      "talking": false,
-     "pickedCount": 0,
-     "tree": [],
      "editing": false
     }
    }
@@ -145,41 +125,29 @@
    "answers": "Onboarding"
   },
   {
-   "send": "onboardingTopicToggle",
-   "options": {
-    "label": "string"
-   },
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingTopicExpand",
-   "options": {
-    "label": "string"
-   },
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingTopicAdd",
-   "options": {
-    "text": "string"
-   },
-   "answers": "Onboarding"
-  },
-  {
    "send": "onboardingTalk",
    "answers": "Onboarding"
   },
   {
    "send": "onboardingTopicsDone",
-   "answers": "Onboarding"
+   "answers": "Onboarding",
+   "options": {
+    "topics": "string"
+   }
   },
   {
    "send": "onboardingEditionRetry",
-   "answers": "Onboarding"
+   "answers": "Onboarding",
+   "options": {
+    "topics": "string"
+   }
   },
   {
    "send": "onboardingEditDone",
-   "answers": "Onboarding"
+   "answers": "Onboarding",
+   "options": {
+    "topics": "string"
+   }
   },
   {
    "send": "onboardingEditLeave",
@@ -191,10 +159,6 @@
   },
   {
    "send": "onboardingSkip",
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingReset",
    "answers": "Onboarding"
   }
  ]
