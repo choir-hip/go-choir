@@ -57,6 +57,10 @@ final class FakeEngine: PlaybackEngine {
 @MainActor
 final class DeckTests: XCTestCase {
     func tmp() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("deck-\(UUID().uuidString).json") }
+    func makeDeck(_ journal: DeckJournal? = nil) -> (Deck, FakeEngine) {
+        let d = Deck(journal: journal ?? DeckJournal()); let e = FakeEngine(); d.engine = e; d.retryDelays = [0.01]
+        return (d, e)
+    }
 
     func speech(_ id: String, requires: Bool = false) -> DeckItem {
         var i = DeckItem(id: id, kind: "speech"); i.paragraphs = "One.\n\nTwo."; i.requiresPreviousHeard = requires; return i
