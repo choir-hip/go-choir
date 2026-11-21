@@ -200,10 +200,17 @@ export function nativeInert(): ((request: { op: string; account?: Account; b64?:
 /** Remove a file or a folder and everything under it, children first: a host that refuses to remove a non-empty folder (`ENOTEMPTY`) must not keep a Clear from finishing. (Exact's Apple and Unix host removes a folder
  * with its contents itself, `app_fs_unix.rs:236-260`; the other hosts are not verified, so every folder wipe goes through this.) A missing path is fine; any other failure throws. */
 export async function rmTree(storage: Storage, path: string): Promise<void> {
-  let names: string[] = [];
-  try { names = await storage.fs.readdir(path); } catch { names = []; }                  // a file, or nothing there
-  for (const n of names) await rmTree(storage, `${path}/${n}`);
-  try { await storage.fs.rm(path); } catch (e) { if ((e as { code?: unknown } | null)?.code !== 'ENOENT') throw e; }
+  // A child that appears while the folder is being removed (a late write) makes the folder refuse (ENOTEMPTY): the tree is walked again, a few times, before the failure counts.
+  for (let attempt = 0; ; attempt++) {
+    let names: string[] = [];
+    try { names = await storage.fs.readdir(path); } catch { names = []; }                // a file, or nothing there
+    for (const n of names) await rmTree(storage, `${path}/${n}`);
+    try { await storage.fs.rm(path); return; } catch (e) {
+      const code = (e as { code?: unknown } | null)?.code;
+      if (code === 'ENOENT') return;
+      if (code !== 'ENOTEMPTY' || attempt >= 3) throw e;
+    }
+  }
 }
 /** Wait (up to `ms`) for every write that a closed world started to finish. True when none is left. */
 export async function drainClosed(ms: number): Promise<boolean> {

@@ -364,6 +364,7 @@ export class ThemeStore {
   private sourceProblems = new Map<string, string>(); // source name -> reason (F5)
   private chosenID: string | null = null;            // null: no choice made, the default for the scheme shows
   private mode = 'system';                           // light | dark | system
+  private chosenOrigin = '';                         // 'texture' when the chosen theme is one from a Texture (recorded in the choice file: the Clear decides by it, not by a directory listing)
   /** True for the copy a page is shown (device themes plus the current world's Texture themes): only it may hold a theme from a Texture. */
   private viewOnly = false;
 
@@ -376,9 +377,9 @@ export class ThemeStore {
   noteProblem(source: string, reason: string): void { this.sourceProblems.set(source, reason); }
 
   /** The choice as it is kept: the chosen id (null: the default pair) and the mode. */
-  get choice(): { theme: string | null; mode: string } { return { theme: this.chosenID, mode: this.mode }; }
+  get choice(): { theme: string | null; mode: string; origin?: string } { return this.chosenOrigin === 'texture' && this.chosenID !== null ? { theme: this.chosenID, mode: this.mode, origin: 'texture' } : { theme: this.chosenID, mode: this.mode }; }
   /** Restore a kept choice. An unknown id shows the default (it is kept, as the Swift did: the theme may load later); an unknown mode is "system". */
-  restore(theme: unknown, mode: unknown): void { this.chosenID = typeof theme === 'string' && theme !== '' ? theme : null; this.mode = typeof mode === 'string' && MODES.includes(mode) ? mode : 'system'; }
+  restore(theme: unknown, mode: unknown, origin?: unknown): void { this.chosenID = typeof theme === 'string' && theme !== '' ? theme : null; this.chosenOrigin = origin === 'texture' && this.chosenID !== null ? 'texture' : ''; this.mode = typeof mode === 'string' && MODES.includes(mode) ? mode : 'system'; }
 
   /** Validate and add. Returns the id, or null (the reason is recorded against `source`). `raw` is a document or its JSON text. */
   add(raw: unknown, source: string, origin: string): string | null {
@@ -425,12 +426,12 @@ export class ThemeStore {
     return t;
   }
   /** The choice, as the person made it (null: the default pair). A Texture theme may be chosen without the device store holding it. */
-  choose(id: string | null): void { this.chosenID = id; }
+  choose(id: string | null, origin = ''): void { this.chosenID = id; this.chosenOrigin = id !== null && origin === 'texture' ? 'texture' : ''; }
   /** The same store without what came from a Texture document (a copy: the real store keeps them for when the boundary is open again). */
   withoutTexture(): ThemeStore {
     const t = new ThemeStore();
     for (const id of this.order) { const o = this.origins.get(id); const d = this.docs.get(id); if (d && o && o !== 'bundled' && o !== 'texture') t.put(d, o); }
-    t.chosenID = this.chosenID; t.mode = this.mode;
+    t.chosenID = this.chosenID; t.mode = this.mode; t.chosenOrigin = this.chosenOrigin;
     return t;
   }
   originOf(id: string): string | undefined { return this.origins.get(id); }
@@ -459,7 +460,7 @@ export class ThemeStore {
   /** A theme id, or `DEFAULT_CHOICE` to clear the choice and show the default pair. An unknown id changes nothing. True when the choice changed. */
   setTheme(id: string): boolean {
     if (id === DEFAULT_CHOICE) { const was = this.chosenID !== null; this.chosenID = null; return was; }
-    if (this.docs.has(id)) { const was = this.chosenID !== id; this.chosenID = id; return was; }
+    if (this.docs.has(id)) { const was = this.chosenID !== id; this.chosenID = id; this.chosenOrigin = ''; return was; }
     return false;
   }
   /** light, dark or system; the other scheme of a locked theme is refused. True when the mode changed. */
@@ -521,11 +522,10 @@ const realNet: Seam = { net: (path, query, world) => authedJSON(path, { query, w
 
 let loading: Promise<ThemeStore> | null = null;
 let current: ThemeStore | null = null;
-let status = '';
 let saving: Promise<unknown> = Promise.resolve();
 let dirty = false;      // a save that did not land: the next tap on the same theme tries again
 /** Forget everything held (the tests; an account change does NOT call this: the theme is the phone's, not the account's). */
-export function resetThemes(): void { TX.reset(); loading = null; current = null; status = ''; saving = Promise.resolve(); migrated = false; dirty = false; hadChoiceFile = false; choiceTouched = false; migrating = null; migrateTries = 0; rev = 0; }
+export function resetThemes(): void { TX.reset(); loading = null; current = null; saving = Promise.resolve(); migrated = false; dirty = false; hadChoiceFile = false; choiceTouched = false; migrating = null; migrateTries = 0; rev = 0; }
 
 async function readJSON(storage: Storage | undefined, path: string): Promise<unknown | undefined> {
   if (!storage) return undefined;
@@ -564,7 +564,7 @@ async function migrate(storage: Storage | undefined, s: ThemeStore, fresh: () =>
     if (files.length > 0) await ensureDir(storage);
     for (const [name, body] of files) {
       // A Texture theme carries an account's document, so it is account data and not the phone's: it is never carried over (nothing is carried from the pre-release build); install it again from the Texture.
-      if (name.startsWith('texture-')) { s.noteProblem(name, 'not carried over: a theme from a Texture belongs to an account. Add it again from the Texture'); continue; }
+      if (name.startsWith('texture-')) { s.noteProblem('a theme from a Texture', 'not carried over: it belongs to an account. Add it again from the Texture'); continue; }
       // A file already in the new place is the newer one (a theme installed by this build, or an earlier try of this carry-over): it is kept, never written over.
       let there = true; try { await storage.fs.readFile(`${THEMES_DIR}/${name}`); } catch { there = false; }
       if (!there) { await storage.fs.atomicWriteFile(`${THEMES_DIR}/${name}`, new TextEncoder().encode(body)); s.add(body, name, 'file'); }
@@ -615,7 +615,7 @@ export function themeStore(bound: Storage | undefined): Promise<ThemeStore> {
         try { s.add(new TextDecoder().decode(await storage!.fs.readFile(`${THEMES_DIR}/${n}`)), n, 'file'); }
         catch { /* a file that cannot be read is skipped */ }
       }
-      s.restore(choice?.theme, choice?.mode);
+      s.restore(choice?.theme, choice?.mode, choice?.origin);
       migrated = choice?.migrated === true; hadChoiceFile = choice !== null;      // the carry-over is NOT done here: the first paint does not wait for the native handle (themeMigrate)
       current = s;
       return s;
@@ -626,7 +626,7 @@ export function themeStore(bound: Storage | undefined): Promise<ThemeStore> {
 
 /** THE TEXTURE STORE: themes installed from a Texture document carry an account's document (its name and colours), so they are account data: their own folder, bound storage, state in the WORLD. The list a page
  * shows is the device store plus the current world's Texture themes; none is shown while the boundary is owed; the Clear removes the folder and drops the choice if it named one. */
-const TX = scoped(() => ({ loading: null as Promise<Map<string, string>> | null }));
+const TX = scoped(() => ({ loading: null as Promise<Map<string, string>> | null, status: '' }));      // `status` is the line "Added <theme> from the Texture": it names an account's document, so it is the world's
 async function textureEntries(storage: Storage | undefined): Promise<Map<string, string>> {
   const w = currentWorld();
   if (w.owed || !storage) return new Map();
@@ -655,15 +655,15 @@ export async function wipeTextureThemes(storage: Storage | undefined): Promise<v
   TX.reset();
   if (!storage) return;
   const raw = unbound(storage);
-  let ids: string[] = [];
-  try { ids = (await raw.fs.readdir(TEXTURE_DIR)).filter((n) => n.startsWith('texture-') && n.endsWith('.json')).map((n) => n.slice(8, -5)); } catch { /* none */ }
-  if (current && ids.includes(current.choice.theme ?? '')) { current.choose(null); dirty = true; }
-  else {
-    const kept = await readJSON(raw, CHOICE_FILE);
-    if (isObj(kept) && typeof kept.theme === 'string' && ids.includes(kept.theme) && !current) await raw.fs.atomicWriteFile(CHOICE_FILE, enc({ ...kept, theme: null }));
-  }
   await rmTree(raw, TEXTURE_DIR);
-  if (dirty && current) await saveChoice(raw, current);
+  if (current && current.choice.origin === 'texture') current.choose(null);
+  // The choice is decided by the origin it recorded, not by what the folder listed (the file may be gone already); a choice that still names a Texture theme afterwards fails the Clear.
+  const kept = await readJSON(raw, CHOICE_FILE);
+  if (isObj(kept) && kept.origin === 'texture') {
+    await raw.fs.atomicWriteFile(CHOICE_FILE, enc({ ...kept, theme: null, origin: undefined }));
+    const again = await readJSON(raw, CHOICE_FILE);
+    if (isObj(again) && again.origin === 'texture') throw new Error('the choice still names a Texture theme');
+  }
 }
 
 /** Writes run one after another; each writes the choice as it is WHEN IT RUNS, so the last choice wins the file. */
@@ -685,13 +685,13 @@ export async function themeListShared(scheme: string, reduce: boolean, storage: 
 }
 export async function themeCardsShared(scheme: string, reduce: boolean, storage: Storage | undefined): Promise<ThemeCards> {
   const s = await shownStore(storage), h = hostOf(scheme, reduce);
-  return { rows: s.cards(h), mode: s.schemeMode, scheme: s.effectiveScheme(h), themeID: s.themeID(h), problems: s.problems, status };
+  return { rows: s.cards(h), mode: s.schemeMode, scheme: s.effectiveScheme(h), themeID: s.themeID(h), problems: s.problems, status: TX().status };
 }
 
 export async function themeSet(id: string, storage: Storage | undefined): Promise<Ack> {
   const dev = await themeStore(storage); const view = await shownStore(storage);
   if (dev.setTheme(id)) { dirty = true; choiceTouched = true; }                        // a device theme, or the Default entry
-  else if (view.has(id) && dev.choice.theme !== id) { dev.choose(id); dirty = true; choiceTouched = true; }      // a Texture theme of the current world
+  else if (view.has(id) && dev.choice.theme !== id) { dev.choose(id, 'texture'); dirty = true; choiceTouched = true; }      // a Texture theme of the current world
   if (dirty) await saveChoice(storage, dev);
   return { ok: true, message: '' };
 }
@@ -706,12 +706,12 @@ export async function themeRemove(id: string, storage: Storage | undefined): Pro
   const w = currentWorld();
   const dev = await themeStore(storage);
   const tx = await textureEntries(storage);
+  if (w.closed || w.owed || currentWorld() !== w) return { ok: true, message: '' };      // the boundary moved while this waited: a Remove of the old account's does nothing, device theme or Texture theme
   if (tx.has(fileName(id))) {
-    if (w.closed || w.owed || currentWorld() !== w) return { ok: true, message: '' };
     try { await bindStorage(unbound(storage) as Storage, w).fs.rm(`${TEXTURE_DIR}/${fileName(id)}`); } catch { /* not there */ }
     tx.delete(fileName(id));
     if (dev.choice.theme === id) { dev.choose(null); await saveChoice(storage, dev); }
-    status = '';
+    TX().status = '';
     return { ok: true, message: '' };
   }
   const was = dev.choice.theme;
@@ -720,13 +720,14 @@ export async function themeRemove(id: string, storage: Storage | undefined): Pro
     if (raw) { try { await raw.fs.rm(`${THEMES_DIR}/${id}.json`); } catch { /* not there */ } }
     if (was === id) await saveChoice(storage, dev);
   }
-  status = '';
+  TX().status = '';
   return { ok: true, message: '' };
 }
 
 /** Install a theme from a Texture (a theme document with one choir-theme block). Gated: the request and the write belong to the world this began in. */
 export async function themeFromTexture(docId: string, storage: Storage | undefined, seam: Seam = realNet): Promise<Ack> {
-  const say = (ok: boolean, message: string): Ack => { status = message; return { ok, message }; };
+  const tx = TX();                                                           // the world this began in: its status line, its store
+  const say = (ok: boolean, message: string): Ack => { tx.status = message; return { ok, message }; };
   const doc = docId.trim();
   if (doc === '') return say(false, 'Enter the id of a theme Texture.');
   const w = currentWorld();                                                // the document id, the request and the write belong to the world this began in

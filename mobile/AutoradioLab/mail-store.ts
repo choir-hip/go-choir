@@ -154,7 +154,7 @@ export async function originalsLeft(storage: Storage | undefined): Promise<strin
   if (!fs) return [];
   let names: string[];
   try { names = await fs.readdir(CACHE); } catch (e) { return (e as { code?: unknown } | null)?.code === 'ENOENT' ? [] : [CACHE]; }
-  return names.filter((n) => n.startsWith('mail-') && n.endsWith('.html'));
+  return names.filter((n) => n.startsWith('mail-') && n.endsWith('.html')).map(() => 'mail copies');      // counted, never named: a message id is the account's
 }
 
 /** Remove every file of the copy, every "Show original" document, and the key. Counts only. */

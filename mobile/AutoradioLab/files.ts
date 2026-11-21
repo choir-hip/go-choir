@@ -188,6 +188,10 @@ async function search(backend: Backend, path: string, query: string, sort: M.Sor
 // ---------------------------------------------------------------- opening
 
 const cacheKey = (e: Entry): string => M.hash(`${e.path}|${e.size}|${e.modified ?? ''}`);
+/** Where an entry's downloaded copy goes. The path NAMES THE ACCOUNT (the first 16 hex of the world's key digest): a download is written by the host and may land after the Clear that removed the cache, and the next
+ * account's check for "the file is there with the right size" must not find it. (The other account-derived paths are written through storage, which refuses or drains a closed world's writes; a download is the one
+ * that bypasses it.) */
+export const cacheDest = (e: Entry): string => `${CACHE_DIR}/${(currentWorld().digest ?? '').slice(0, 16) || 'nokey'}/${cacheKey(e)}/${M.cacheName(e.name)}`;
 
 async function entryAt(backend: Backend, path: string): Promise<Entry | null> {
   const r = await backend.list(M.parent(path));
@@ -236,7 +240,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
   const cap = M.maxBytes(kind);
   if (entry.size > cap) { out.status = 'toolarge'; out.message = `It is ${M.sizeLabel(entry.size)}, too large to open on this phone.`; return out; }
   try {
-    const name = M.cacheName(entry.name), key = cacheKey(entry), dest = `${CACHE_DIR}/${key}/${name}`;
+    const dest = cacheDest(entry), dir = dest.slice(0, dest.lastIndexOf('/'));
     let bytes: Uint8Array | null = null;
     let have = false;
     // Whole means the size the listing named: the host stages a download beside the file and puts it in place only when complete, so a file of another
@@ -245,7 +249,7 @@ export async function fileOpen(a: OpenArgs, storage?: Storage, net: Net = realNe
     if (!have) {
       if (storage) {
         // The host writes the body to the file; nothing enters JavaScript (a video of 800 MB costs the same as a note).
-        await storage.fs.mkdir(`${CACHE_DIR}/${key}`).catch(() => {});
+        await storage.fs.mkdir(dir).catch(() => {});
         try {
           const written = await backend.download(path, dest, storage);
           if (written > cap) throw new FilesError('tooLarge', `It is ${M.sizeLabel(written)}, too large to open on this phone.`);

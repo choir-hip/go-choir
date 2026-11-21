@@ -144,3 +144,12 @@ A Clear no longer waits for a download longer than its deadline (late bytes are 
 cache folder). An Adopt stamps the new world with the digest of the key it wrote. `tsc` (Exact's, with a throwaway
 config over the non-test sources) reports 0 errors touching `world` and 9 unrelated ones (node types in tooling files and
 one comparison in `deck-ops.ts`); it is not in the gates.
+
+Seventh round (seat 1 on a7a46fb10): the Texture-theme status line ("Added <theme>") is the world's; the files cache path
+names the account (`<digest16>/<hash>/<name>`, `cacheDest` in `files.ts`) because a download is written by the host and
+may land after the Clear; a Remove that resumes after the boundary moved does nothing; the Clear decides the theme choice
+by its recorded origin and fails if it cannot clear it; `rmTree` retries a folder that refused because a child appeared;
+a leftover mail original is counted as "mail copies", never named. Remaining, stated: for the first frame after an
+account change the theme sources can still answer with the previous account's colours before the new answer (the contract
+re-asks them with `acctTick`); a download that lands after the Clear stays under the old account's digest folder until the
+next Clear removes the whole cache.

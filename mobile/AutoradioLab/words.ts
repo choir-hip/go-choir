@@ -7,7 +7,7 @@ export const WORDS = {
   unknown: 'Could not check your sign-in just now. Try again in a moment.',
   rejected: "This phone's sign-in is no longer accepted. Clear this phone to sign in again.",
   clearing: "Clearing the previous account's data from this phone.",
-  adopt: 'This phone could not record the account.',
+  adopt: 'This phone could not record the account. If this stays, close and reopen the app.',
   // After five tries a refusing state names what failed and the one way out that always exists (a reinstall removes the app's container; the Keychain survives it, so the phone comes back with empty stores and the same account).
   stuck: 'If this does not clear, close and reopen the app. If it still does not, delete and reinstall it. Nothing on your computer is affected.',
 };
