@@ -46,6 +46,9 @@ type researchFixture struct {
 	hostErr    map[string]string
 	runningFor map[string]bool
 	searchMu   sync.Mutex
+	// payloads are the search_start payloads the host was sent, in order (the
+	// need state the guest reports: search_read_first_test.go).
+	payloads []SearchStartPayload
 }
 
 func newResearchFixture(t *testing.T) *researchFixture {
@@ -68,6 +71,9 @@ func newResearchFixture(t *testing.T) *researchFixture {
 					return nil, err
 				}
 				f.searchCalls.Add(1)
+				f.searchMu.Lock()
+				f.payloads = append(f.payloads, in)
+				f.searchMu.Unlock()
 				if msg, bad := f.hostErr[in.Query]; bad {
 					return nil, fmt.Errorf("%s", msg)
 				}

@@ -50,21 +50,22 @@ func TestPagesAreMarkedNewHeldAndRead(t *testing.T) {
 	}
 	cell, _ := searchCell(t, f)
 	out := cell(`a, _ := choir.SearchStart("first")
+for _, u := range []string{"https://a.example/1", "https://a.example/2", "https://a.example/3"} { choir.Read(u) }
 b, _ := choir.SearchStart("second")
+choir.Read("https://a.example/4")
 c, _ := choir.SearchStart("third")
-choir.Read("https://a.example/2")
 s, _ := choir.Searches.Get(b.ID)
 fmt.Println(s.NewPages, s.HeldPages, s.ReadPages)
 for _, h := range s.Results { fmt.Println(h.URL, h.Held, h.Read) }
 fmt.Println(choir.Searches.Summary(c.ID))`)
 	for _, want := range []string{
-		"1 2 1\n",
+		"1 2 3\n",
 		"https://a.example/2/ true true\n",
-		"https://A.example/3#top true false\n",
-		"https://a.example/4 false false\n",
+		"https://A.example/3#top true true\n",
+		"https://a.example/4 false true\n",
 		`s3 "third": 2 results on 1 hosts, 1/1 providers answered; 0 of 2 pages new`,
-		"https://a.example/1 [held]",
-		"https://a.example/4 [held]",
+		"https://a.example/1 [held, read]",
+		"https://a.example/4 [held, read]",
 	} {
 		if !strings.Contains(out.Stdout, want) {
 			t.Fatalf("stdout lacks %q:\n%s", want, out.Stdout)
@@ -83,8 +84,8 @@ fmt.Println(choir.Searches.Summary(c.ID))`)
 			t.Fatalf("count lines lack %q:\n%s", want, lines)
 		}
 	}
-	if st := out.SearchStats; st == nil || st.Started != 3 || st.PagesReturned != 8 || st.PagesNew != 4 || st.PagesRead != 1 {
-		t.Fatalf("stats = %+v, want 3 started, 8 returned, 4 new, 1 read", st)
+	if st := out.SearchStats; st == nil || st.Started != 3 || st.PagesReturned != 8 || st.PagesNew != 4 || st.PagesRead != 4 {
+		t.Fatalf("stats = %+v, want 3 started, 8 returned, 4 new, 4 read", st)
 	}
 }
 
@@ -92,6 +93,7 @@ func TestSearchStartAnswersTheSameTermsFromHeldResults(t *testing.T) {
 	f := newResearchFixture(t)
 	cell, _ := searchCell(t, f)
 	out := cell(`a, _ := choir.SearchStart("Harbor strike Mauritius")
+` + readEverything + `
 b, _ := choir.SearchStart("MAURITIUS strike, the harbor")
 c, _ := choir.SearchStart("harbor strike mauritius union")
 fmt.Println(a.ID, b.ID, c.ID)
@@ -99,7 +101,7 @@ fmt.Println(b)`)
 	if !strings.Contains(out.Stdout, "s1 s1 s2\n") {
 		t.Fatalf("ids: the reworded query must come back as s1, the one with another word as s2:\n%s", out.Stdout)
 	}
-	if !strings.Contains(out.Stdout, "s1 not sent: answered from your search s1, under a minute ago (same question); send it anyway with fresh") {
+	if !strings.Contains(out.Stdout, "s1 not sent: answered from your search s1, under a minute ago (same question); send it anyway with choir.SearchFresh(query, why)") {
 		t.Fatalf("the stub does not say it was answered from s1:\n%s", out.Stdout)
 	}
 	if got := f.searchCalls.Load(); got != 2 {
@@ -119,6 +121,7 @@ func TestSearchReuseHoldsThirtyMinutesAndOneRun(t *testing.T) {
 	f.scope.searches.now = func() time.Time { return clk }
 	cell, hooks := searchCell(t, f)
 	cell(`choir.SearchStart("harbor strike")`)
+	cell(readEverything)
 
 	clk = clk.Add(29 * time.Minute)
 	out := cell(`b, _ := choir.SearchStart("strike harbor"); fmt.Println(b)`)
@@ -170,15 +173,15 @@ fmt.Println(s.ID, err)`)
 	}
 }
 
-func TestSearchStartFreshSendsAnyway(t *testing.T) {
+func TestSearchFreshSendsAMatchAnyway(t *testing.T) {
 	f := newResearchFixture(t)
 	cell, _ := searchCell(t, f)
 	out := cell(`a, _ := choir.SearchStart("harbor strike")
-b, _ := choir.SearchStart("strike harbor", true)
-c, _ := choir.Search("harbor strike", true)
+b, _ := choir.SearchStart("strike harbor")
+c, _ := choir.SearchFresh("harbor strike", "the first answer is too old for this question")
 d, _ := choir.Search("harbor strike")
 fmt.Println(a.ID, b.ID, c.ID, d.ID)`)
-	if !strings.Contains(out.Stdout, "s1 s2 s3 s3\n") || f.searchCalls.Load() != 3 {
+	if !strings.Contains(out.Stdout, "s1 s1 s2 s2\n") || f.searchCalls.Load() != 2 {
 		t.Fatalf("fresh must send (calls %d):\n%s", f.searchCalls.Load(), out.Stdout)
 	}
 }
@@ -189,6 +192,7 @@ func TestSearchTimeSensitiveQueriesReuseForTenMinutes(t *testing.T) {
 	f.scope.searches.now = func() time.Time { return clk }
 	cell, _ := searchCell(t, f)
 	cell(`choir.SearchStart("breaking harbor strike")`)
+	cell(readEverything)
 	clk = clk.Add(9 * time.Minute)
 	out := cell(`b, _ := choir.SearchStart("strike harbor breaking"); fmt.Println(b.ID)`)
 	if strings.TrimSpace(out.Stdout) != "s1" {

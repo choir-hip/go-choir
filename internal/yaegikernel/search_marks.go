@@ -117,9 +117,9 @@ type SearchStats struct {
 	AllCalls   int `json:"all_calls,omitempty"`
 	AllOffered int `json:"all_offered,omitempty"`
 	AllSent    int `json:"all_sent,omitempty"`
-	// FreshOverUnread counts searches sent with fresh although the run held
-	// 15 or more unread pages: the override, used.
-	FreshOverUnread int `json:"fresh_over_unread,omitempty"`
+	// FreshSent counts searches sent with choir.SearchFresh: over the need
+	// test, with a recorded reason.
+	FreshSent int `json:"fresh_sent,omitempty"`
 	// Untagged counts searches SearchAll sent that its gate could not tag.
 	Untagged int `json:"untagged,omitempty"`
 	// AllRunning counts wordings SearchAll did not send because another search
@@ -146,7 +146,7 @@ type SearchStats struct {
 // IsZero reports whether nothing was counted.
 func (a SearchStats) IsZero() bool {
 	return a.Started == 0 && a.FromHeld == 0 && len(a.NotSent) == 0 && a.PagesReturned == 0 && a.PagesNew == 0 && a.PagesRead == 0 &&
-		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.FreshOverUnread == 0 && a.Untagged == 0 && a.AllRunning == 0 &&
+		a.AllCalls == 0 && a.AllOffered == 0 && a.AllSent == 0 && a.FreshSent == 0 && a.Untagged == 0 && a.AllRunning == 0 &&
 		len(a.ReuseDeclined) == 0 && a.SeenJudged == 0 && a.SeenMostly == 0 && a.OutletsMax == 0 && a.OutletsLast == 0 && a.OutletsSends == 0
 }
 
@@ -160,7 +160,7 @@ func (a *SearchStats) Add(o SearchStats) {
 	a.AllCalls += o.AllCalls
 	a.AllOffered += o.AllOffered
 	a.AllSent += o.AllSent
-	a.FreshOverUnread += o.FreshOverUnread
+	a.FreshSent += o.FreshSent
 	a.Untagged += o.Untagged
 	a.AllRunning += o.AllRunning
 	a.SeenJudged += o.SeenJudged
@@ -225,7 +225,7 @@ func (s *ChoirScope) takeSearchStats() *SearchStats {
 	s.statsMu.Lock()
 	out.FromHeld, s.heldStat = s.heldStat, 0
 	out.NotSent, s.notSentStat = s.notSentStat, nil
-	out.AllCalls, out.AllOffered, out.AllSent, out.FreshOverUnread = s.allStat.calls, s.allStat.offered, s.allStat.sent, s.allStat.freshOverUnread
+	out.AllCalls, out.AllOffered, out.AllSent, out.FreshSent = s.allStat.calls, s.allStat.offered, s.allStat.sent, s.allStat.freshSent
 	out.Untagged, out.AllRunning = s.allStat.untagged, s.allStat.running
 	out.ReuseDeclined, s.declineStat = s.declineStat, nil
 	out.OutletsMax, out.OutletsLast, out.OutletsSends = s.outletsMax, s.outletsLast, s.outletsSends
@@ -355,7 +355,7 @@ func (st *SearchStore) reuseVerdict(query string) (c Search, age time.Duration, 
 // running is not answered from here: startSearch's running rule refuses it at
 // once (or, once it has run two minutes and is no longer waited for, the
 // search is sent). One that failed or came back empty is not reused. The
-// answer names the search, its age and "fresh", the argument that sends the
+// answer names the search, its age and SearchFresh, the verb that sends the
 // search anyway.
 func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
 	if s == nil || s.searches == nil {
@@ -366,11 +366,11 @@ func (s *ChoirScope) reuseSearch(query string) (SearchStub, bool) {
 		s.noteDeclined(reason)
 		return SearchStub{}, false
 	}
-	why := fmt.Sprintf("answered from your search %s, %s (same question); send it anyway with fresh", c.ID, agoText(age))
+	why := fmt.Sprintf("answered from your search %s, %s (same question); send it anyway with choir.SearchFresh(query, why)", c.ID, agoText(age))
 	s.statsMu.Lock()
 	s.heldStat++
 	if !s.reuseQuiet {
-		s.notes = append(s.notes, fmt.Sprintf("not sent: %s: answered from your search %s, %s; read it with choir.Searches.Summary(%q), or send it anyway with fresh: choir.SearchStart(query, true)", cutRunes(query, 70), c.ID, agoText(age), c.ID))
+		s.notes = append(s.notes, fmt.Sprintf("not sent: %s: answered from your search %s, %s; read it with choir.Searches.Summary(%q), or send it anyway with choir.SearchFresh(query, why)", cutRunes(query, 70), c.ID, agoText(age), c.ID))
 	}
 	s.statsMu.Unlock()
 	return SearchStub{ID: c.ID, Query: query, Providers: len(c.Providers), Cooling: c.Cooling, Reused: why}, true

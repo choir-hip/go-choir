@@ -256,6 +256,8 @@ func (s *ChoirScope) BindCell() CellHooks {
 			if s.ledger.beginRun(frame.RunID) {
 				s.searches.markRunStart(frame.RunID)
 			}
+			// The pages the paper held for the run are its search zero.
+			s.searches.seedHeld(frame.RunID, frame.Held)
 			s.tray.Store(&Tray{})
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
@@ -461,6 +463,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ReadAll":          func() reflect.Value { return reflect.ValueOf(s.ReadAll) },
 		"Search":           func() reflect.Value { return reflect.ValueOf(s.Search) },
 		"SearchAll":        func() reflect.Value { return reflect.ValueOf(s.SearchAll) },
+		"SearchFresh":      func() reflect.Value { return reflect.ValueOf(s.SearchFresh) },
 		"Cut":              func() reflect.Value { return reflect.ValueOf(s.Cut) },
 		"Captures":         func() reflect.Value { return reflect.ValueOf(s.Captures) },
 		"PollSource":       func() reflect.Value { return reflect.ValueOf(s.PollSource) },

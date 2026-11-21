@@ -86,7 +86,8 @@ func TestSearchAllStopsAfterTwoEmptyWordingsInARow(t *testing.T) {
 	f := newResearchFixture(t)
 	f.urlsFor = map[string][]string{"alpha one": pagesN("a", 1, 10), "beta two": {}, "gamma three": {}, "delta four": pagesN("d", 1, 10)}
 	cell, _ := searchCell(t, f)
-	out := cell(`r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three", "delta four"})
+	out := cell(readTop(10, "a") + `
+r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three", "delta four"})
 fmt.Println(r)`)
 	if f.searchCalls.Load() != 3 {
 		t.Fatalf("host asked to start %d searches, want 3:\n%s", f.searchCalls.Load(), out.Stdout)
@@ -103,7 +104,8 @@ func TestSearchAllNamesAFailureAndDoesNotCountItAsEmpty(t *testing.T) {
 	f.urlsFor = map[string][]string{"alpha one": pagesN("a", 1, 10), "gamma three": {}, "delta four": pagesN("d", 1, 10)}
 	f.failFor = map[string]string{"beta two": "provider timed out"}
 	cell, _ := searchCell(t, f)
-	out := cell(`r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three", "delta four"})
+	out := cell(readTop(10, "a") + readTop(10, "d") + `
+r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three", "delta four"})
 fmt.Println(r)`)
 	if f.searchCalls.Load() != 4 {
 		t.Fatalf("host asked to start %d searches, want all 4:\n%s", f.searchCalls.Load(), out.Stdout)
@@ -157,7 +159,8 @@ func TestSearchAllKeepsGoingWhileWordingsStillFindPages(t *testing.T) {
 		"gamma three": append(append([]string{}, first[:7]...), pagesN("c", 1, 3)...), // 70% held
 	}
 	cell, _ := searchCell(t, f)
-	out := cell(`r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three"})
+	out := cell(readTop(10, "h") + readTop(4, "b") + readTop(3, "c") + `
+r, _ := choir.SearchAll("q", []string{"alpha one", "beta two", "gamma three"})
 fmt.Println(r)`)
 	if f.searchCalls.Load() != 3 {
 		t.Fatalf("host asked to start %d searches, want all 3:\n%s", f.searchCalls.Load(), out.Stdout)
@@ -171,6 +174,7 @@ func TestSearchAllNamesWhyAWordingWasNotSentAndMergesHeldPages(t *testing.T) {
 	f := newResearchFixture(t)
 	cell, _ := searchCell(t, f)
 	out := cell(`choir.SearchStart("harbor strike")
+for i, h := range []string{"a", "b", "a", "c", "d"} { choir.Read(fmt.Sprintf("https://%s.example/harbor-strike/%d", h, i)) }
 r, _ := choir.SearchAll("q", []string{"x", "strike harbor", "harbor strike mauritius", ""})
 fmt.Println(r)
 held := 0
@@ -178,7 +182,7 @@ for _, h := range r.Results { if h.Held { held++ } }
 fmt.Println("merged", len(r.Results), "held", held)`)
 	for _, want := range []string{
 		`1 "x": not sent (no word of two or more letters or digits)`,
-		`2 "strike harbor": not sent (answered from your search s1, under a minute ago; its 5 pages are in the list, marked held; send it alone with fresh)`,
+		`2 "strike harbor": not sent (answered from your search s1, under a minute ago; its 5 pages are in the list, marked held; send it alone with choir.SearchFresh)`,
 		`3 "harbor strike mauritius": sent s2`,
 		`4 "": not sent (empty)`,
 		"merged 10 held 5",
@@ -197,6 +201,7 @@ func TestSearchAllMarksPagesAlreadyHeldBeforeTheCall(t *testing.T) {
 	f.urlsFor = map[string][]string{"seed words": pagesN("h", 1, 3), "alpha one": append(pagesN("h", 2, 3), pagesN("n", 1, 2)...)}
 	cell, _ := searchCell(t, f)
 	out := cell(`choir.SearchStart("seed words")
+` + readTop(3, "h") + `
 r, _ := choir.SearchAll("q", []string{"alpha one"})
 for _, h := range r.Results { fmt.Println(h.URL, h.Held) }`)
 	for _, want := range []string{"https://h.example/p2 true", "https://h.example/p3 true", "https://n.example/p1 false", "https://n.example/p2 false"} {
@@ -214,9 +219,10 @@ func TestSearchAllFirstWordingHeldThenAWordingSentWithFresh(t *testing.T) {
 	f.urlsFor = map[string][]string{"seed words": seed, "alpha one": append(append([]string{}, seed[:9]...), "https://h.example/p11"), "dockers mauritius": pagesN("d", 1, 10)}
 	cell, _ := searchCell(t, f)
 	out := cell(`choir.SearchStart("seed words")
+` + readTop(10, "h") + `
 r, _ := choir.SearchAll("q", []string{"alpha one", "dockers mauritius"})
 fmt.Println(r)
-d, _ := choir.Search("dockers mauritius", true)
+d, _ := choir.SearchFresh("dockers mauritius", "the first wording found only pages already held")
 fmt.Println("alone:", d.ID, len(d.Results), d.NewPages)`)
 	for _, want := range []string{
 		`1 "alpha one": sent s2 (1 new in first 10, 1 of 10 pages new)`,
