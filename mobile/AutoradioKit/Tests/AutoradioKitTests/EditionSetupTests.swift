@@ -102,11 +102,20 @@ final class EditionCompletionTests: XCTestCase {
         XCTAssertTrue(EditionCompletion.failedLine.contains("topics are saved"))
     }
 
-    func testAWriterThatNeverReturnsTimesOutAtTheDeadline() async {
-        let t0 = Date()
-        let o = await EditionCompletion.run(topics: [], writer: Never(), deadline: 0.3) { _ in }
+    func testAWriterThatNeverReturnsTimesOutAtTheDeadlineAndIsCancelled() async {
+        final class Watching: EditionWriter, @unchecked Sendable {
+            let lock = NSLock(); private var cancelledFlag = false
+            var cancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelledFlag }
+            func write(topics: [String], progress: @escaping @Sendable (String) -> Void) async throws -> Edition {
+                do { try await Task.sleep(nanoseconds: 60_000_000_000) } catch { lock.lock(); cancelledFlag = true; lock.unlock(); throw error }
+                return LocalEditionWriter.edition(topics: [])
+            }
+        }
+        let w = Watching(), t0 = Date()
+        let o = await EditionCompletion.run(topics: [], writer: w, deadline: 0.3) { _ in }
         XCTAssertEqual(o, .timedOut)
         XCTAssertLessThan(Date().timeIntervalSince(t0), 5, "it did not wait for the writer")
+        XCTAssertTrue(w.cancelled, "the writer's task was cancelled at the deadline")
     }
 
     func testAWriterThatFailsOnceThenSucceedsRecoversOnRetry() async {

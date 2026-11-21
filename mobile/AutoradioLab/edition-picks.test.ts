@@ -19,7 +19,7 @@ import { accountGeneration, nextGeneration, resetSeam, bindNative } from './api.
 import { nativeDevice } from './edition-picks.ts';
 import { WIPES, wipedPaths, wipeAll } from './account.ts';
 import {
-  PICKS_FILE, picksPage, picksText, toggle, expand, addTyped, clearPicks, hear, drainHeard, wipePicks, forgetPicks, parseStored, type Device, type Env,
+  PICKS_FILE, picksPage, picksText, toggle, expand, addTyped, hear, drainHeard, wipePicks, forgetPicks, parseStored, type Device, type Env,
 } from './edition-picks.ts';
 import { readFileSync } from 'node:fs';
 
@@ -28,17 +28,25 @@ const files = new Map<string, Uint8Array>();
 let gate: Promise<void> | null = null;
 let failWrites = false;
 let failRm = false;
+let failRmOnce = false;
+let failReads = false;
+let enteredResolve: (() => void) | null = null;
 const storage = {
   fs: {
-    atomicWriteFile: async (p: string, d: Uint8Array) => { if (gate) await gate; if (failWrites) throw new Error('disk full'); files.set(p, d); },
+    atomicWriteFile: async (p: string, d: Uint8Array) => { enteredResolve?.(); if (gate) await gate; if (failWrites) throw new Error('disk full'); files.set(p, d); },
     writeFile: async (p: string, d: Uint8Array) => { files.set(p, d); },
-    readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return b; },
-    rm: async (p: string) => { if (failRm) throw new Error('busy'); files.delete(p); },
+    readFile: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); if (failReads) throw new Error('EACCES'); return b; },
+    rm: async (p: string) => { if (failRm) throw new Error('busy'); if (failRmOnce) { failRmOnce = false; throw new Error('busy'); } files.delete(p); },
     stat: async (p: string) => { const b = files.get(p); if (!b) throw new Error('ENOENT'); return { size: b.length }; },
     mkdir: async () => undefined,
   },
 } as never;
-const hold = (): (() => void) => { let r: () => void = () => undefined; gate = new Promise<void>((res) => { r = res; }); return r; };
+/** Hold every write: the returned function releases them, and `.entered` resolves when a write is IN FLIGHT (no timer: the test waits for the fact, not for 20 ms). */
+const hold = (): (() => void) & { entered: Promise<void> } => {
+  let r: () => void = () => undefined; gate = new Promise<void>((res) => { r = res; });
+  const entered = new Promise<void>((res) => { enteredResolve = res; });
+  return Object.assign(() => r(), { entered });
+};
 const text = (p: string): string | undefined => { const b = files.get(p); return b ? new TextDecoder().decode(b) : undefined; };
 const stored = (): string[] | undefined => { const t = text(PICKS_FILE); return t === undefined ? undefined : (JSON.parse(t) as { topics: string[] }).topics; };
 const put = (p: string, t: string): void => { files.set(p, new TextEncoder().encode(t)); };
@@ -57,7 +65,7 @@ let live: string[];
 const env = (device_: Device | null = device()): Env => ({ device: device_, live: async () => live });
 const E = (): Env => env();
 
-beforeEach(() => { files.clear(); gate = null; failWrites = false; failRm = false; resetSeam(); bindNative(undefined); forgetPicks(); phone = fresh(); live = []; });
+beforeEach(() => { files.clear(); gate = null; failWrites = false; failRm = false; failRmOnce = false; failReads = false; enteredResolve = null; resetSeam(); bindNative(undefined); forgetPicks(); phone = fresh(); live = []; });
 
 describe('P1 reading', () => {
   test('no file, an empty one, a corrupt one or the wrong shape: no picks, never a throw (E7)', async () => {
@@ -79,13 +87,25 @@ describe('P1 reading', () => {
   });
 });
 
+describe('P1b a read that fails closed', () => {
+  test('a file that is there but cannot be read is NOT "no picks": nothing is loaded, nothing is written over it, and the next ask retries', async () => {
+    put(PICKS_FILE, '{"topics":["Space","Chess"]}'); failReads = true;
+    await expect(picksPage(storage, {}, E())).rejects.toThrow();
+    expect(await hear(storage, 'done', E())).toBeUndefined();             // the voice's "done" changes nothing, so it must not write
+    await expect(toggle(storage, 'Film', E())).rejects.toThrow();
+    expect(stored()).toEqual(['Space', 'Chess']);
+    failReads = false;
+    const page = await picksPage(storage, {}, E());
+    expect(page.loaded).toBe(true); expect(page.picks).toBe('Space\nChess');
+  });
+});
+
 describe('P2 writing', () => {
   test('every change is stored after it is made, in the order chosen, one per line for the paper', async () => {
     await toggle(storage, 'Space', E()); expect(stored()).toEqual(['Space']);
     await addTyped(storage, 'Chess, Film', E()); expect(stored()).toEqual(['Space', 'Chess', 'Film']);
     await toggle(storage, 'space', E()); expect(stored()).toEqual(['Chess', 'Film']);
     expect((await picksText(storage, E())).picks).toBe('Chess\nFilm');
-    await clearPicks(storage, E()); expect(stored()).toEqual([]); expect((await picksText(storage, E())).picks).toBe('');
   });
   test('E6: a failed write loses nothing in memory, and the next good write stores all of it', async () => {
     failWrites = true;
@@ -105,7 +125,7 @@ describe('P3 concurrent writers', () => {
       toggle(storage, 'Space', E()),                         // the same topic again: off
       addTyped(storage, 'Sourdough', E()), hear(storage, 'drop film', E()),
     ];
-    await new Promise((r) => setTimeout(r, 20)); release();
+    await release.entered; release();
     await Promise.all(calls);
     expect(stored()).toEqual(['Chess', 'Music', 'Science', 'Sourdough']);
     expect((await picksText(storage, E())).picks).toBe('Chess\nMusic\nScience\nSourdough');
@@ -132,9 +152,9 @@ describe('P4 accounts', () => {
   test('b: a write held in flight when the account changes lands nowhere; the next account reads nothing', async () => {
     const release = hold();
     const p = toggle(storage, 'Space', E());
-    await new Promise((r) => setTimeout(r, 20));
+    await release.entered;
     nextGeneration(); await wipePicks(storage, E()).catch(() => undefined);
-    release(); await p; await new Promise((r) => setTimeout(r, 20));
+    release(); await p;
     expect(files.has(PICKS_FILE)).toBe(false);
     expect((await picksText(storage, E())).picks).toBe('');
   });
@@ -142,14 +162,14 @@ describe('P4 accounts', () => {
     const release = hold();
     const first = toggle(storage, 'Space', E());               // A: held in the write
     const second = toggle(storage, 'Chess', E());              // A: queued behind it
-    await new Promise((r) => setTimeout(r, 20));
+    await release.entered;
     nextGeneration(); await wipePicks(storage, E()).catch(() => undefined);
-    release(); await Promise.all([first, second]); await new Promise((r) => setTimeout(r, 20));
+    release(); await Promise.all([first, second]);
     expect(files.has(PICKS_FILE)).toBe(false);
     await toggle(storage, 'Film', E());                        // B's own first tap
     expect(stored()).toEqual(['Film']);
   });
-  test('d: a wipe whose rm fails empties the file and still names itself failed (a file that remains is never "cleared")', async () => {
+  test('d: a wipe whose rm fails empties the file (so the next account reads nothing) and still names itself failed; when it can do neither it names itself failed too', async () => {
     await toggle(storage, 'Space', E());
     failRm = true; nextGeneration();
     await expect(wipePicks(storage, E())).rejects.toThrow();
@@ -158,24 +178,15 @@ describe('P4 accounts', () => {
     nextGeneration(); failWrites = true;
     await expect(wipePicks(storage, E())).rejects.toThrow();
   });
-  test('d2: with rm failing for good, the wipe fails by name (the file is emptied, never reported cleared)', async () => {
+  test('d2: a rm that fails once is retried after the emptying and the store succeeds; one that keeps failing names the store failed (account.ts keeps its marker and retries at the next launch)', async () => {
     await toggle(storage, 'Space', E());
+    failRmOnce = true; nextGeneration();
+    expect(await wipeAll(storage, undefined, WIPES.filter((w) => w.name === 'edition-picks'))).toEqual([]);
+    expect(files.has(PICKS_FILE)).toBe(false);
+    await toggle(storage, 'Chess', E());
     failRm = true; nextGeneration();
-    const failed = await wipeAll(storage, undefined, WIPES.filter((w) => w.name === 'edition-picks'));
-    expect(failed).toEqual(['edition-picks']);
-    failRm = false;
-  });
-  test('P6c a read that fails for another reason than absence fails closed: not loaded, no write over the real picks', async () => {
-    put(PICKS_FILE, '{"topics":["Space","Chess"]}');
-    const real = storage.fs.readFile; let broken = true;
-    (storage.fs as { readFile: unknown }).readFile = async (p: string) => { if (broken) throw new Error('EACCES'); return real(p); };
-    await expect(picksPage(storage, {}, E())).rejects.toThrow();
-    await expect(hear(storage, 'done', E())).rejects.toThrow();
-    expect(JSON.parse(new TextDecoder().decode(files.get(PICKS_FILE)!)).topics).toEqual(['Space', 'Chess']);
-    broken = false;
-    const page = await picksPage(storage, {}, E());
-    expect(page.loaded).toBe(true); expect(page.picks).toBe('Space\nChess');
-    (storage.fs as { readFile: unknown }).readFile = real;
+    expect(await wipeAll(storage, undefined, WIPES.filter((w) => w.name === 'edition-picks'))).toEqual(['edition-picks']);
+    expect((await picksText(storage, E())).picks).toBe('');       // emptied, even though it could not be removed
   });
   test('the wipe list covers the file (account.ts)', () => {
     expect(wipedPaths()).toContain(PICKS_FILE);
@@ -207,15 +218,13 @@ describe('P5 the native copy', () => {
   });
   test('a native call that never answers does not stop the next push; a write refused because the account moved is not pushed', async () => {
     phone.mirrorHangs = true;
-    const hung = toggle(storage, 'Space', { ...E(), mirrorDeadlineMs: 30 });
-    await hung;
+    await toggle(storage, 'Space', { ...E(), mirrorDeadlineMs: 1 });          // the push hangs; its deadline lets the chain go on
     phone.mirrorHangs = false;
-    await toggle(storage, 'Chess', { ...E(), mirrorDeadlineMs: 30 });
-    await new Promise((r) => setTimeout(r, 80));
+    await toggle(storage, 'Chess', { ...E(), mirrorDeadlineMs: 1 });
     expect(phone.mirrored.at(-1)).toEqual(['Space', 'Chess']);
     const g = accountGeneration();
-    const release = hold(); const p = toggle(storage, 'Film', E()); await new Promise((r) => setTimeout(r, 10));
-    nextGeneration(); release(); await p; await new Promise((r) => setTimeout(r, 20));
+    const release = hold(); const p = toggle(storage, 'Film', E()); await release.entered;
+    nextGeneration(); release(); await p;
     expect(accountGeneration()).toBeGreaterThan(g);
     expect(phone.mirrored.some((t) => t.includes('Film'))).toBe(false);
   });
@@ -233,10 +242,13 @@ describe('P6 the old Swift file is never read', () => {
     expect(ops.length).toBeGreaterThan(0);
     expect(ops.filter((o) => !ALLOWED.includes(o))).toEqual([]);
   });
-  test('an upgraded phone starts with no picks, whatever the old file or the notebook holds; nothing is seeded', async () => {
+  test('an upgraded phone starts with no picks, whatever an old Swift file holds (it is not even asked about); nothing is seeded', async () => {
+    const oldPath = 'Application Support/Autoradio/edition-topics.json';
+    put(oldPath, '{"topics":["Space","Chess"]}');               // the old build's file, on the same fake disk: this module has no way to reach it and never names it
     const page = await picksPage(storage, {}, E());
     expect(page.pickedCount).toBe(0); expect(page.picks).toBe(''); expect(stored()).toBeUndefined();
     expect(phone.mirrored.at(-1)).toEqual([]);             // read, nothing there: the list IS empty, and the native copy is told
+    expect(text(oldPath)).toBe('{"topics":["Space","Chess"]}');
   });
 });
 
@@ -272,7 +284,7 @@ describe('P7 speech', () => {
     const release = hold();
     phone.heard = [{ id: 'a', words: 'add space' }];
     const p = drainHeard(storage, E());
-    await new Promise((r) => setTimeout(r, 20));
+    await release.entered;
     nextGeneration(); await wipePicks(storage, E()).catch(() => undefined);
     release(); await p;
     expect(phone.said).toEqual([{ id: 'a', line: '', finish: false }]);

@@ -160,10 +160,7 @@ async function stampFact(storage: Storage, digest: string): Promise<StampFact> {
 async function leftovers(storage: Storage | undefined): Promise<string[]> {
   if (!storage) return [];
   const out: string[] = [];
-  for (const p of wipedPaths()) {
-    if (p === STAMP_FILE || p === PENDING_FILE || !(await exists(storage, p))) continue;
-    out.push(p.slice(p.lastIndexOf('/') + 1) || p);
-  }
+  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
   return out;
 }
 

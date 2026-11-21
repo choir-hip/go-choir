@@ -343,7 +343,7 @@ place paper 2500
 step "tap paper-section-mine"; view real-70-edition-mine 1500
 step "tap paper-choose-topics"; view real-71-topics-empty 1500
 # A tap needs its target in the viewport (the driver cannot tap what the bar or the fold covers): Science sits near the top; after Culture opens the list is dragged up before Film, the field and Done are tapped,
-# and dragged back up before Science is tapped again. The drive log shows each target was drawn somewhere in the dump (presence, not that it sat in the viewport at the tap); the drag distances are unproven until the drive has run.
+# and dragged back up before Science is tapped again. Each target is also asserted to appear in the drive's dumped trees below (presence in the log, not proof of the viewport at the tap: a tap that missed shows up as a pick that is not stored).
 step "tap ob-topic-Science"; wait_ 700
 step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 -300"; wait_ 500; step tree; step "tap ob-topic-Film"; wait_ 700
 step "tap edit-edition-scroll drag 0 -700"; wait_ 500

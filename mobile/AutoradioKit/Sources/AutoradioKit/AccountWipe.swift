@@ -67,7 +67,7 @@ public final class AccountWipe: @unchecked Sendable {
         register("turn-history") { turnHistory.clear() }
         register("notebook") {
             notebookCache.wipe()
-            if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file (nothing writes it now); never read, so a failed delete leaves a file nothing opens
+            if let f = legacyTopicsFile { try? FileManager.default.removeItem(at: f) }       // the old build's picks file: nothing writes or reads it now; this wipe is the only thing that removes it
             if let f = topicsMarker { try? FileManager.default.removeItem(at: f) }
             await MainActor.run { notebook.wipe() }
         }
