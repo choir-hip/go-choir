@@ -69,27 +69,79 @@ type SearchLeadStoryReader interface {
 	SearchLeadConversations(ctx context.Context, ownerID, computerID string, captureIDs []string) (map[string][]string, error)
 }
 
-// SearchLeadConversations asks corpusd, in one request, which conversations
-// (story documents, for a story's research) searched their way to each capture.
+// leadCapturesPerRequest is the most capture ids the route takes in one
+// request (platform searchLeadMaxURLs, which refuses more with a 400): a task
+// of more arrivals than that costs one request for each further 500, the only
+// reason a second request is made.
+const leadCapturesPerRequest = 500
+
+// SearchLeadConversations asks corpusd which conversations (story documents,
+// for a story's research) searched their way to each capture: one request, or
+// one for each leadCapturesPerRequest ids.
 func (c *CorpusdCaptureSink) SearchLeadConversations(ctx context.Context, ownerID, computerID string, captureIDs []string) (map[string][]string, error) {
 	if c == nil || c.BaseURL == "" {
 		return nil, fmt.Errorf("search leads: corpusd URL is not configured")
 	}
-	raw, err := json.Marshal(map[string]any{"owner_id": ownerID, "computer_id": computerID, "capture_ids": captureIDs})
+	all := map[string][]string{}
+	for lo := 0; lo < len(captureIDs) || lo == 0; lo += leadCapturesPerRequest {
+		raw, err := json.Marshal(map[string]any{"owner_id": ownerID, "computer_id": computerID, "capture_ids": captureIDs[lo:min(lo+leadCapturesPerRequest, len(captureIDs))]})
+		if err != nil {
+			return nil, err
+		}
+		body, err := c.do(ctx, http.MethodPost, c.BaseURL+"/internal/platform/search-leads/by-capture", raw, 4<<20)
+		if err != nil {
+			return nil, fmt.Errorf("search leads: %w", err)
+		}
+		var out struct {
+			Conversations map[string][]string `json:"conversations"`
+		}
+		if err := json.Unmarshal(body, &out); err != nil {
+			return nil, fmt.Errorf("search leads: decode: %w", err)
+		}
+		for id, convs := range out.Conversations {
+			all[id] = append(all[id], convs...)
+		}
+		if len(captureIDs) == 0 {
+			break
+		}
+	}
+	return all, nil
+}
+
+// LeadPage mirrors platform.LeadPage.
+type LeadPage struct {
+	CaptureID string `json:"capture_id"`
+	URL       string `json:"url"`
+	Title     string `json:"title,omitempty"`
+}
+
+// SearchLeadPageReader is a capture sink that lists the pages a conversation's
+// searches returned and a run read.
+type SearchLeadPageReader interface {
+	SearchLeadPages(ctx context.Context, ownerID, computerID, conversationID string, limit int) ([]LeadPage, error)
+}
+
+// SearchLeadPages asks corpusd, in one request, for the pages read from leads
+// the conversation's searches returned.
+func (c *CorpusdCaptureSink) SearchLeadPages(ctx context.Context, ownerID, computerID, conversationID string, limit int) ([]LeadPage, error) {
+	if c == nil || c.BaseURL == "" {
+		return nil, fmt.Errorf("search leads: corpusd URL is not configured")
+	}
+	raw, err := json.Marshal(map[string]any{"owner_id": ownerID, "computer_id": computerID, "conversation_id": conversationID, "limit": limit})
 	if err != nil {
 		return nil, err
 	}
-	body, err := c.do(ctx, http.MethodPost, c.BaseURL+"/internal/platform/search-leads/by-capture", raw, 4<<20)
+	body, err := c.do(ctx, http.MethodPost, c.BaseURL+"/internal/platform/search-leads/by-conversation", raw, 4<<20)
 	if err != nil {
 		return nil, fmt.Errorf("search leads: %w", err)
 	}
 	var out struct {
-		Conversations map[string][]string `json:"conversations"`
+		Pages []LeadPage `json:"pages"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("search leads: decode: %w", err)
 	}
-	return out.Conversations, nil
+	return out.Pages, nil
 }
 
 // MarkSearchLeadsTried tells corpusd a run read these URLs.

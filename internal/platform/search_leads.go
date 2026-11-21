@@ -18,8 +18,13 @@ package platform
 // it (one call per search) and a read of the URL marks it. Visibility
 // is the captures' rule, owner and computer, in the SQL of every statement.
 // A lead not returned for searchLeadRetention is deleted (PruneSearchLeads).
-// In L1 nothing returns a lead to a guest: ReadSearchLeads
-// is for tests.
+// In L1 nothing returned a lead to a guest. Two routes now return what a
+// lead's page became, never a lead's snippet: the conversations whose
+// searches returned the lead of a capture (by-capture, management's candidate
+// read), and the capture id, URL and provider title of the pages a
+// conversation's searches returned and a run read (by-conversation, a story's
+// research context). Both answer only the caller's own owner and computer.
+// ReadSearchLeads is for tests.
 //
 // The table has its own creation and readiness (ensureSearchLeads, run by
 // StartSearchLeads, never on a request's path) and needs no pgvector; until it
@@ -104,8 +109,17 @@ var searchLeadIndexes = []struct{ name, ddl string }{
 	{"idx_sl_tsv", `CREATE INDEX idx_sl_tsv ON search_leads USING GIN (tsv)`},
 	{"idx_sl_returned", `CREATE INDEX idx_sl_returned ON search_leads(last_returned_at)`},
 	{"idx_sl_scope_recent", `CREATE INDEX idx_sl_scope_recent ON search_leads(owner_id, computer_id, last_returned_at DESC)`},
-	// idx_sl_capture serves SearchLeadConversationsByCapture: the leads whose
-	// page became one of the named captures.
+	// idx_sl_capture serves SearchLeadConversationsByCapture and
+	// SearchLeadPagesOfConversation: the leads whose page became a capture. A
+	// plain CREATE INDEX on a live table takes a SHARE lock, so lead writes and
+	// the prune wait while it builds and the routes answer 503 until the table is
+	// ready again. Measured on the paper's corpusd (graph database, read only,
+	// 2026-11-21): 74,771 rows, 105 MB of heap, 5,513 with a capture; a scan of
+	// the heap with that filter takes 52 ms, so the build, which indexes only
+	// the 5,513, is about 0.1 s: under a second, so it is not built
+	// CONCURRENTLY (which would also leave an invalid index to drop after a
+	// failed build). The table grows about 190,000 rows a day against a 30-day
+	// retention; the build happens once, at first start after this lands.
 	{"idx_sl_capture", `CREATE INDEX idx_sl_capture ON search_leads(owner_id, computer_id, capture_id) WHERE capture_id IS NOT NULL`},
 }
 
@@ -275,6 +289,44 @@ func (s *Store) SearchLeadConversationsByCapture(ctx context.Context, ownerID, c
 				out[id] = append(out[id], c)
 			}
 		}
+	}
+	return out, rows.Err()
+}
+
+// LeadPage is a page a conversation's searches returned and a run then read:
+// the capture that read made, its URL and the title the provider gave it.
+type LeadPage struct {
+	CaptureID string `json:"capture_id"`
+	URL       string `json:"url"`
+	Title     string `json:"title,omitempty"`
+}
+
+// SearchLeadPagesOfConversation returns the pages read from leads that the
+// named conversation's searches returned (a story's research searches in its
+// story's conversation), newest return first, at most limit. A lead nobody
+// read has no capture and is not listed.
+func (s *Store) SearchLeadPagesOfConversation(ctx context.Context, ownerID, computerID, conversationID string, limit int) ([]LeadPage, error) {
+	if !s.searchLeadsReady() {
+		return nil, errSearchLeadsNotReady
+	}
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" || limit <= 0 {
+		return nil, nil
+	}
+	rows, err := s.corpus().QueryContext(ctx, `SELECT capture_id, url, title FROM search_leads
+		WHERE owner_id = ? AND computer_id = ? AND capture_id IS NOT NULL AND ?::text = ANY(conversation_ids)
+		ORDER BY last_returned_at DESC, url_key LIMIT ?`, ownerID, computerID, conversationID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LeadPage
+	for rows.Next() {
+		var p LeadPage
+		if err := rows.Scan(&p.CaptureID, &p.URL, &p.Title); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }

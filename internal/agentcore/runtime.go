@@ -179,6 +179,11 @@ type Runtime struct {
 	// *openingOffer): the page's size and the held stories offered, apart
 	// from the verb's count.
 	openingOffers sync.Map
+	// storyReads holds, for each story (owner, computer, doc), the captures its
+	// Texture has asked to read: a research Cast follows only reads of what was
+	// fed (story_research_context.go). A restart forgets them, which asks one
+	// re-read, never a missed one.
+	storyReads sync.Map
 	// pollSources serializes choir.PollSource per source within a run.
 	pollSources pollSourceLocks
 	// calibration caches each computer's calibration snapshot for the
@@ -4099,7 +4104,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// A return before the run memory takes the text writes the brief's line
 	// as dropped (a second call after commitAfter writes nothing).
 	defer brief.finish(false)
-	openingText := rec.Prompt + opening.openingText() + brief.openingText()
+	// A story's research run also gets what the story already holds and what
+	// its earlier runs read (story_research_context.go).
+	storyCtx := rt.storyResearchContextOpening(ctx, rec)
+	openingText := rec.Prompt + opening.openingText() + brief.openingText() + storyCtx.openingText()
 	userMsg, _ := json.Marshal(map[string]any{
 		"role": "user",
 		"content": []any{

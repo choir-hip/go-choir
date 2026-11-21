@@ -196,6 +196,14 @@ choir.Cast("texture:new", "Harbor reopens after the storm", map[string]interface
 	"captures":   ids,
 	"publish":    "auto",
 }, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
+	// The parent's open records a main point as a task's does (it is offered no
+	// candidates, so it answers none): without one it is refused and commits nothing.
+	if out := cell(open); !strings.Contains(out, "main point") || castReceiptRE.FindStringSubmatch(out) != nil {
+		t.Fatalf("a parent open with no main point was accepted: %s", out)
+	}
+	const withPoint = `"publish":    "auto",
+	"main_point": "Whether the harbor reopens after the storm and when",`
+	open = strings.Replace(open, `"publish":    "auto",`, withPoint, 1)
 	objectgraph.ResetWriterGateCounts()
 	out := cell(open)
 	if !strings.Contains(out, "1 captures rss:port capture-1") {
@@ -232,6 +240,7 @@ choir.Cast("texture:new", "Harbor reopens after the storm", map[string]interface
 	"hypotheses": []interface{}{map[string]interface{}{"statement": "the harbor reopens Monday", "probability": 0.7}},
 	"captures":   []string{"capture-1"},
 	"publish":    "auto",
+	"main_point": "Whether the harbor reopens after the storm and when",
 }, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`)
 	if m := castReceiptRE.FindStringSubmatch(retry); m != nil && m[1] != story {
 		t.Fatalf("a retried opening opened %s beside %s", m[1], story)

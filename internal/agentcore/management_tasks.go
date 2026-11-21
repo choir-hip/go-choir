@@ -66,7 +66,7 @@ var managementTaskCallTimeout = 3 * time.Minute
 // (docs/evidence/token-efficiency-2026-11-09/followup/system-prompt-review.md,
 // L5). What it says of the page is what buildOpeningPage builds: every story
 // of the window as headlines, a left_out count and a next cursor when the
-// bound cut it, and held_stories for the captures one may already cover.
+// bound cut it, and candidate_stories for the captures whose main point a held story may already hold.
 var managementTaskPrompt = fmt.Sprintf("Management delegated captures to you. Your records come with this message, as choir.Records() returns them, and so does the story library: every story updated in the last %d hours, as headlines only (inbox, headline, age since its last version, v the version number), newest first; left_out and next say when the bound cut the list and how to read the rest with choir.Stories(50, next), which returns ledes. Under it, candidate_stories lists, for a capture, the held stories of any age whose nearest captures or search leads met it, each with its main point; a note says so when a read or a section did not come. The Cast from management names your objective and the captures you lease (r.Cast.Captures); each captures record shows them (r.Captures.Items) with Jev's label (r.Labels). Feed every capture that serves a held story's main point, the one holding the most context; open only for new matter or a main beat that moved on, then end with choir.Done(note). A Cast to texture:new records main_point and answers each candidate offered for its captures: judgment, next or new, and succeeds with next.", openingWindowHours)
 
 // managementTaskOpeningSectionTokens bounds each handed section (the records,

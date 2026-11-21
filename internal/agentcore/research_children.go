@@ -147,6 +147,9 @@ type researchLineageKey struct{}
 // root of its tree: the owner's prompt identity and the model selection
 // children default to.
 type researchLineage struct {
+	// channelID is the story the research tree's root run serves; a child runs
+	// with no channel of its own, so its searches' leads are filed under this.
+	channelID string
 	ownerID   string
 	selection provideriface.LLMSelection
 	fallbacks []provideriface.LLMSelection
@@ -156,7 +159,7 @@ func researchLineageFrom(ctx context.Context, execCtx toolregistry.ExecutionCont
 	if lineage, ok := ctx.Value(researchLineageKey{}).(researchLineage); ok {
 		return lineage
 	}
-	lineage := researchLineage{ownerID: execCtx.OwnerID}
+	lineage := researchLineage{ownerID: execCtx.OwnerID, channelID: strings.TrimSpace(execCtx.ChannelID)}
 	if execCtx.RunRecord != nil {
 		lineage.selection = provideriface.ResolvedLLMConfigFromMetadata(execCtx.RunRecord.Metadata)
 		lineage.fallbacks = provideriface.FallbackLLMConfigsFromMetadata(execCtx.RunRecord.Metadata, lineage.selection)
@@ -313,7 +316,7 @@ func (rt *Runtime) runResearchChildWork(ctx context.Context, parent toolregistry
 	share := researchChildDeadline(ctx)
 	ctx, cancel := context.WithDeadline(ctx, share)
 	defer cancel()
-	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, selection: selection, fallbacks: fallbacks})
+	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, channelID: lineage.channelID, selection: selection, fallbacks: fallbacks})
 	childCtx = toolregistry.WithExecutionContext(childCtx, childExec)
 	// MA3.3: the child reads as the desk it runs as, not as its parent; the
 	// web child holds no lease, and the Texture child holds only its own.

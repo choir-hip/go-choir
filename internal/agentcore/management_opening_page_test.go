@@ -302,6 +302,9 @@ func TestOpenRefusalsNameTheShapeAndSendNothing(t *testing.T) {
 		{"unknown answer", judgmentPacketOf(`,` + goodPoint + `,"judgment":[{"story":"texture:docA","answer":"maybe","why":"w"}]`), "same, next, new"},
 		{"no reason", judgmentPacketOf(`,` + goodPoint + `,"judgment":[{"story":"texture:docA","answer":"new"},{"story":"texture:docB","answer":"new","why":"w"}]`), "why"},
 		{"foreign capture", `{"captures":["cap-9"],` + goodPoint + `}`, "cap-9"},
+		{"succeeds an invented story", judgmentPacketOf(`,` + goodPoint + `,"succeeds":"texture:docX","judgment":[{"story":"texture:docX","answer":"next","why":"w"},{"story":"texture:docA","answer":"new","why":"w"},{"story":"texture:docB","answer":"new","why":"w"}]`), "not a candidate story offered"},
+		{"one story answered twice", judgmentPacketOf(`,` + goodPoint + `,"succeeds":"texture:docA","judgment":[{"story":"texture:docA","answer":"next","why":"w"},{"story":"texture:docA","answer":"next","why":"w"},{"story":"texture:docB","answer":"new","why":"w"}]`), "twice"},
+		{"no captures named", `{"hypotheses":[],` + goodPoint + `}`, "names the captures"},
 	}
 	for _, c := range cases {
 		err := requireJudgment(offer, c.packet)
@@ -413,7 +416,7 @@ func TestStoryChoiceLineCarriesPageCandidatesAndTheJudgment(t *testing.T) {
 	if got != want {
 		t.Fatalf("L1: line = %q\nwant        %q", got, want)
 	}
-	if got := storyResearchLine("run-1", "doc-4", 2); got != "story research cast run=run-1 story=doc-4 round=2" {
+	if got := storyResearchLine("run-1", "doc-4", 2, true, "feed"); got != "story research cast run=run-1 story=doc-4 round=2 opened=true cause=feed" {
 		t.Fatalf("L1: research line = %q", got)
 	}
 }

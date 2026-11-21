@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"strings"
@@ -87,11 +88,16 @@ func TestStoriesCursorFitsTheBrokerBound(t *testing.T) {
 	}
 }
 
-// A Texture's Cast that opens a research round leaves one line naming the story
-// and the round; nothing else does (a feed to a story, a Cast that continues an
-// open round, another desk's Cast).
-func TestStoryResearchCastLineIsLoggedOncePerOpenedRound(t *testing.T) {
-	rt := &Runtime{}
+// Each Cast a story's Texture sends to its research desk leaves one line with
+// its cause decided at the source; nothing else does (another desk's Cast, a
+// Cast to another inbox). A successor is a first round of a story whose
+// trajectory names a succeeds ref.
+func TestStoryResearchCastLineCarriesItsCauseAtTheSource(t *testing.T) {
+	rt, s := testRuntime(t)
+	owner, computer := "owner-research-cause", rt.cfg.ComputerID
+	t0 := time.Now().UTC().Add(-time.Hour)
+	plain := openStoryOf(t, s, owner, computer, "cell-1:cast:c1", "Plain story", "Whether the plain thing happens at all", "", []string{"c1"}, t0)
+	succ := openStoryOf(t, s, owner, computer, "cell-2:cast:c1", "Next story", "What the plain thing led to afterwards", "texture:"+plain, []string{"c2"}, t0)
 	var out strings.Builder
 	prev := log.Writer()
 	log.SetOutput(&out)
@@ -99,11 +105,27 @@ func TestStoryResearchCastLineIsLoggedOncePerOpenedRound(t *testing.T) {
 	rec := func(inbox string, opened bool, round int) types.InboxRecordReceipt {
 		return types.InboxRecordReceipt{Inbox: inbox, OpenedRound: opened, Round: round}
 	}
-	rt.logStoryResearchCast("run-t", deskmanifest.DocumentCustodianName(), rec(deskmanifest.ResearchInbox("doc-1"), true, 2))
-	rt.logStoryResearchCast("run-t", deskmanifest.DocumentCustodianName(), rec(deskmanifest.ResearchInbox("doc-1"), false, 2))
-	rt.logStoryResearchCast("run-t", deskmanifest.DocumentCustodianName(), rec("management:o", true, 1))
-	rt.logStoryResearchCast("run-m", "management", rec(deskmanifest.ResearchInbox("doc-1"), true, 1))
-	if got := strings.TrimSpace(out.String()); !strings.HasSuffix(got, "story research cast run=run-t story=doc-1 round=2") || strings.Count(got, "story research cast") != 1 {
-		t.Fatalf("log = %q", got)
+	ctx := context.Background()
+	tex := deskmanifest.DocumentCustodianName()
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec(deskmanifest.ResearchInbox(plain), true, 1))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec(deskmanifest.ResearchInbox(succ), true, 1))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec(deskmanifest.ResearchInbox(plain), true, 3))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec(deskmanifest.ResearchInbox(plain), false, 3))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-t", tex, rec("management:o", true, 1))
+	rt.logStoryResearchCast(ctx, owner, computer, "run-m", "management", rec(deskmanifest.ResearchInbox(plain), true, 1))
+	lines := []string{}
+	for _, l := range strings.Split(out.String(), "\n") {
+		if i := strings.Index(l, "story research cast"); i >= 0 {
+			lines = append(lines, l[i:])
+		}
+	}
+	want := []string{
+		"story research cast run=run-t story=" + plain + " round=1 opened=true cause=open",
+		"story research cast run=run-t story=" + succ + " round=1 opened=true cause=successor",
+		"story research cast run=run-t story=" + plain + " round=3 opened=true cause=feed",
+		"story research cast run=run-t story=" + plain + " round=3 opened=false cause=continue",
+	}
+	if strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Fatalf("lines = %q\nwant   %q", lines, want)
 	}
 }

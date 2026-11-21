@@ -17,7 +17,9 @@ It reads two console lines, written by internal/agentcore management_story_choic
       candidates_shown= window= page_in_window= page_left_out= offered=(-|doc,doc)
       answers=(-|doc:(next|new|none),...) captures=<n> sources=near:<n>,lead:<n>
       main_point=<chars> succeeds=(-|doc)
-  story research cast run= story= round=      (a story's Texture opened a research round)
+  story research cast run= story= round= opened= cause=   (every Cast a story's Texture sends to research;
+      cause is open, successor, feed or continue, decided where the Cast commits)
+  story research refused run= story= unread=<n>   (its Cast was refused: n fed captures unread)
 and prints, per hour and for the window: decisions; captures judged; answers by kind (a
 feed is `same`; an open's first capture is `next` when it names a succeeds, else `new`, and
 its other captures are `same_as_batch`; a decline is `decline`); candidates offered by
@@ -26,6 +28,13 @@ fed; successor links written; the share of captures sent to an existing trajecto
 runs started by cause (a story's first round after an open, after a successor's open, or a
 later round after a feed); and how many captures each trajectory took. A line from before
 the judgment has no captures= and counts one capture.
+
+Reading the counts: research Casts are every Cast to research in the window, not runs confirmed started (each wakes
+the research reader; opened=true is a new round); a Cast is counted in the window of its own line, so a story's first
+round before the window is not seen as an open;  a commit the runtime replays writes its line again and is counted again
+(a replayed open or feed counts twice); candidates by source count each (capture, candidate) pair
+once for each source that found it, so a candidate found by both a nearest capture and a lead is
+counted in both columns, and one offered for two captures of a decision is counted twice.
 
 The console rotates at about 1 MB and keeps about 1.5 to 2.5 hours; a window before the oldest
 line is partial. Ids and counts only; the script prints no title and no query text.
@@ -59,6 +68,7 @@ def hour_label(t):
 
 
 RESEARCH_RE = re.compile(STAMP + r" story research cast (.*)$")
+REFUSED_RE = re.compile(STAMP + r" story research refused (.*)$")
 BUCKETS = ("1", "2", "3", "4-5", "6+")
 
 
@@ -82,15 +92,22 @@ def compute(text, since=None, until=None):
     main-point judgment have no captures= and count one capture each."""
     hours, total = {}, new_counts()
     story_captures, opened, succ, fed = {}, set(), set(), set()
-    research = []
+    research, refused = [], []
     for ln in text.splitlines():
         m = LINE_RE.search(ln)
         r = RESEARCH_RE.search(ln) if not m else None
+        x = REFUSED_RE.search(ln) if not m and not r else None
+        if x:
+            t = stamp_epoch(x.group(1))
+            if (since is None or t >= since) and (until is None or t < until):
+                kv = dict(KV_RE.findall(x.group(2)))
+                refused.append(int(kv.get("unread", "0") or 0))
+            continue
         if r:
             t = stamp_epoch(r.group(1))
             if (since is None or t >= since) and (until is None or t < until):
                 kv = dict(KV_RE.findall(r.group(2)))
-                research.append((t, kv.get("story", "-"), int(kv.get("round", "0") or 0)))
+                research.append((t, kv.get("story", "-"), kv.get("cause", "open" if kv.get("round") == "1" else "feed"), kv.get("opened", "true") == "true"))
             continue
         if not m:
             continue
@@ -152,10 +169,13 @@ def compute(text, since=None, until=None):
     judged = total["captures"]
     total["share_to_existing_trajectory"] = round(total["same"] / judged, 3) if judged else None
     total["share_to_existing_or_shared"] = round((total["same"] + total["same_as_batch"]) / judged, 3) if judged else None
-    cause = {"open": 0, "successor": 0, "feed": 0}
-    for _, story, rnd in research:
-        cause["successor" if story in succ and rnd == 1 else "open" if rnd == 1 else "feed"] += 1
+    cause = {"open": 0, "successor": 0, "feed": 0, "continue": 0}
+    for _, story, why, opened in research:
+        cause[why if why in cause else "feed"] += 1
     total["research_runs"] = len(research)
+    total["research_opened_rounds"] = sum(1 for r in research if r[3])
+    total["research_refused_unread"] = len(refused)
+    total["research_refused_captures"] = sum(refused)
     total["research_by_cause"] = cause
     dist = dict.fromkeys(BUCKETS, 0)
     for n in story_captures.values():
@@ -176,14 +196,17 @@ def render(res):
     share = t["share_to_existing_trajectory"]
     both = t["share_to_existing_or_shared"]
     out += ["",
+            "(counts: a replayed commit counts twice; candidates count once per (capture, candidate) pair for each source that found it)",
             "window: decisions %d, captures judged %d" % (t["decisions"], t["captures"]),
             "answers by kind: same %d, next %d, same_as_batch %d, new %d, decline %d" % (t["same"], t["next"], t["same_as_batch"], t["new"], t["decline"]),
             "candidates offered by source: vector %d, entity %d (not built: captures carry no entities), lead %d" % (t["cand_near"], t["cand_entity"], t["cand_lead"]),
             "stories opened %d, stories fed %d, successor links written %d" % (t["stories_opened"], t["stories_fed"], t["successor_links"]),
             "share of captures sent to an existing trajectory: %s (with captures sharing a new one: %s)" % (
                 "-" if share is None else "%.1f%%" % (100 * share), "-" if both is None else "%.1f%%" % (100 * both)),
-            "research runs started %d: by an open %d, by a successor %d, by a feed or later round %d" % (
-                t["research_runs"], t["research_by_cause"]["open"], t["research_by_cause"]["successor"], t["research_by_cause"]["feed"]),
+            "research Casts %d (%d opened a round), by cause as logged at the source: open %d, successor %d, feed or later round %d, continue (inside an open round) %d" % (
+                t["research_runs"], t["research_opened_rounds"], t["research_by_cause"]["open"], t["research_by_cause"]["successor"],
+                t["research_by_cause"]["feed"], t["research_by_cause"]["continue"]),
+            "research Casts refused because fed captures were unread: %d (%d captures owed a read)" % (t["research_refused_unread"], t["research_refused_captures"]),
             "captures per trajectory (stories opened or fed in the window): " + ", ".join("%s: %d" % (k, t["captures_per_trajectory"][k]) for k in BUCKETS)]
     return "\n".join(out)
 
@@ -193,7 +216,7 @@ dir=/var/lib/go-choir/vm-state/@VM@
 sudo -n true 2>/dev/null || echo "##NOSUDO"
 echo "##CONSOLE"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
-  grep -a -E 'management story choice run=|story research cast run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (management story choice|story research cast))/\1/'
+  grep -a -E 'management story choice run=|story research cast run=|story research refused run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (management story choice|story research cast|story research refused))/\1/'
 echo "##END"
 """.replace("@VM@", PAPER_VM)
 
