@@ -23,7 +23,7 @@ export function kindOf(address: string): string {
   switch (i < 0 ? address : address.slice(0, i)) {
     case 'radio': return 'radio'; case 'notebook': return 'notebook'; case 'paper': return 'paper'; case 'pub': case 'texture': return 'reader';
     case 'textures': return 'textures'; case 'file': return 'file'; case 'mail': return 'mail'; case 'mailbox': return 'mailbox'; case 'activity': return 'activity';
-    case 'settings': return 'settings'; case 'lab': return 'lab'; case 'books': return 'books'; case 'doc': return 'doc'; case 'conversation': return 'conversation';
+    case 'settings': return 'settings'; case 'lab': return 'lab'; case 'imported': return 'imported'; case 'doc': return 'doc'; case 'conversation': return 'conversation';
     case 'podcasts': case 'podcast': return 'podcast'; case 'onboarding': return 'onboarding'; default: return 'unknown';
   }
 }
@@ -33,7 +33,7 @@ export function defaultTitle(address: string): string {
     case 'radio:': return 'Autoradio'; case 'notebook:': return 'My notebook'; case 'paper:front': return 'Paper'; case 'textures:': return 'Textures'; case 'activity:': return 'Activity';
     case 'settings:': case 'settings:root': return 'Settings'; case 'lab:components': return 'Components'; case 'lab:trace': return 'Trace'; case 'conversation:': return 'Conversation';
     case 'onboarding:setup': return 'Make it yours'; case 'onboarding:edit': return 'My edition'; case 'mailbox:inbox': return 'Mail'; case 'podcasts:': return 'Podcasts';
-    case 'file:/': case 'file:': return 'Files'; case 'books:': return 'Reader';
+    case 'file:/': case 'file:': return 'Files'; case 'imported:': return 'Imported documents';
   }
   switch (kindOf(address)) {
     case 'paper': return 'Paper · ' + rest.replace('section/', '');

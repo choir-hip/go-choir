@@ -1,0 +1,112 @@
+// Members file (imported documents): the imported documents place and one document's page, as if written in the root. The data and the acts run in app.ts (imported.ts;
+// shapes in imported-types.contract): a document is a file on the person's computer, listed, opened and imported through the Files client. Two names are the Swift package's, because
+// they are audio (interface/imported.json): `importedFollow` (the block the radio is reading now) and `importedHand` (hands the words to the player; the audio is native).
+// Every name a child component injects is in the reader-documents band of the `provide` list in app.contract. Prefixes: lb = the place, ld = one document.
+use importedFollow, importedHand, ImportedFollow, ImportedHanded from "@choir/autoradio"
+use ImportedList, ImportedDocInfo, ImportedSection, ImportedFind, ImportedLocate, ImportedAck from "./imported-types.contract"
+
+members Autoradio
+  // ------------------------------------------------------------------ the imported documents place (imported:)
+  resource lbList = importedList(pg.top, acs.state) as shape ImportedList else empty()
+  mutation lbM as shape ImportedList refreshes lbList
+  derive lbNote = match lbM { case some(l) => l.message, case none => "" }
+  // The system file picker opens this input; its copy lands under app:/tmp/picked (as for Files) and is uploaded to the computer.
+  action lbImport
+    showPicker("lib-pick")
+  action lbPicked(ps: Picked[])
+    if ps.length > 0
+      send lbM = importedAdd((match ps.at(0) { case some(p) => p.path, case none => "" }), (match ps.at(0) { case some(p) => p.name, case none => "" }))
+
+  // ------------------------------------------------------------------ one document (doc:<id>)
+  // Asked for every page; the source answers an empty "loading" record for any address that is not a document.
+  resource ldInfo = importedDoc(pg.top, acs.state) as shape ImportedDocInfo else empty()
+  // The chapter or page on screen as blocks, and what the find box found: asked only once the document is known.
+  resource ldChap = importedSection(ldInfo.id != "" ? pg.top : "", ldSec, acs.state) as shape ImportedSection else empty()
+  resource ldFound = importedFind(ldInfo.id != "" ? pg.top : "", ldFind) as shape ImportedFind else empty()
+  // The block the radio is reading now (native: only the player knows), and the section it is in (shared: the document's own).
+  resource ldFollow = importedFollow() as shape ImportedFollow else empty()
+  resource ldFollowAt = importedLocate(ldFollow.address, ldFollow.block) as shape ImportedLocate else empty()
+  // The answer of a place, a read aloud or a queue: a read aloud or queue answers the words, and the player is handed them.
+  mutation ldAck as shape ImportedAck then ldAcked
+  mutation ldHanded as shape ImportedHanded
+  derive ldPlayOp = match ldAck { case some(a) => a.play.op, case none => "" }
+  derive ldPlayId = match ldAck { case some(a) => a.play.id, case none => "" }
+  derive ldPlayTitle = match ldAck { case some(a) => a.play.title, case none => "" }
+  derive ldPlayAt = match ldAck { case some(a) => a.play.at, case none => 0 }
+  derive ldPlayText = match ldAck { case some(a) => a.play.text, case none => "" }
+  action ldAcked
+    if ldPlayOp != "" and ldPlayText != ""
+      send ldHanded = importedHand(op=ldPlayOp, id=ldPlayId, title=ldPlayTitle, at=ldPlayAt, text=ldPlayText)
+
+  state ldSec = 0
+  // The block the listener chose (tap a paragraph); -1 for none. Reading aloud starts here.
+  state ldBlock = -1
+  // A PDF is shown as its pages by default; true shows its text as blocks instead (an e-book always shows text).
+  state ldText = false
+  state ldToc = false
+  state ldFindDraft = ""
+  state ldFind = ""
+  state ldSeen = ""
+  state ldFollowSeen = -1
+  // A block to bring into view once its chapter is on screen (a found passage, the place left off, the block being read); -1 for none.
+  state ldScrollTo = -1
+  derive ldShowPages = ldInfo.kind == "pdf" and ldText == false and ldInfo.src != ""
+
+  // A different document starts where the listener left it.
+  task ldSeenTask when ldInfo.address != ldSeen
+    after(10, ldReset)
+  action ldReset
+    ldSeen = ldInfo.address
+    ldSec = ldInfo.resumeSection
+    ldBlock = ldInfo.position > 0 ? ldInfo.position : -1
+    ldText = false
+    ldToc = false
+    ldFindDraft = ""
+    ldFind = ""
+    ldFollowSeen = -1
+    ldScrollTo = ldInfo.position > 0 ? ldInfo.position : -1
+  // The chapter or page follows the voice while the radio reads this document.
+  task ldFollowTask when ldFollow.address == pg.top and ldFollow.block != ldFollowSeen and ldFollowAt.address == ldFollow.address and ldFollowAt.block == ldFollow.block
+    after(10, ldFollowGo)
+  action ldFollowGo
+    ldFollowSeen = ldFollow.block
+    ldSec = ldFollowAt.section
+    ldScrollTo = ldFollow.block
+    // The place left off is where the voice is.
+    send ldAck = importedPlace(pg.top, ldFollowAt.section, ldFollow.block)
+  task ldScrollTask when ldScrollTo >= 0 and ldChap.status == "ready" and ldScrollTo >= ldChap.start and ldScrollTo < ldChap.start + ldChap.blocks.length
+    after(60, ldScrollGo)
+  action ldScrollGo
+    scrollIntoView(`doc-block-${ldScrollTo.toFixed(0)}`)
+    ldScrollTo = -1
+
+  action ldGo(n: number)
+    ldSec = max(0, min(n, max(0, ldInfo.sections.length - 1)))
+    ldToc = false
+    ldBlock = -1
+    send ldAck = importedPlace(pg.top, ldSec, -1)
+  action ldJump(section: number, block: number)
+    ldSec = section
+    ldBlock = block
+    ldScrollTo = block
+    ldToc = false
+    ldText = true
+    send ldAck = importedPlace(pg.top, section, block)
+  action ldPlace(n: number)
+    ldBlock = n
+    send ldAck = importedPlace(pg.top, ldSec, n)
+  action ldTocToggle
+    ldToc = not ldToc
+  action ldSetText(on: bool)
+    ldText = on
+  action ldEditFind(v: string)
+    ldFindDraft = v
+  action ldDoFind
+    ldFind = ldFindDraft.trim()
+  action ldClearFind
+    ldFindDraft = ""
+    ldFind = ""
+  action ldRead
+    send ldAck = importedReadAloud(pg.top, ldSec, ldBlock)
+  action ldQueue
+    send ldAck = importedQueue(pg.top, ldSec, ldBlock)

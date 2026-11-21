@@ -22,6 +22,7 @@ import type { Storage, Store } from './app.contract.d.ts';
 import * as podcast from './podcast.ts';
 import { wipeMail } from './mail.ts';
 import { wipeFiles } from './files.ts';
+import { wipeImported, PLACES_FILE as IMPORTED_PLACES } from './imported.ts';
 import { wipePaper, CACHE_FILE as PAPER_FRONT } from './paper.ts';
 import { wipeKept, KEPT_FILE } from './takes.ts';
 import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
@@ -54,6 +55,7 @@ export const WIPES: Wipe[] = [
   { name: 'podcasts', run: (s) => podcast.wipe(s) },
   { name: 'mail', run: (s) => wipeMail(s) },
   { name: 'files', run: (s) => wipeFiles(s) },
+  { name: 'imported-documents', run: (s) => wipeImported(s) },
   { name: 'paper-front', run: (s) => wipePaper(s) },
   { name: 'takes', run: (s) => wipeKept(s) },
   { name: 'notebook', run: (s) => wipeNotebook(s) },
@@ -71,7 +73,7 @@ export const WIPES: Wipe[] = [
 /** (A function, not a constant: api.ts imports app.ts, which imports this, so a constant read at load can meet a module not yet initialised.)
  * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
-  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, ONBOARDING_FILE,
+  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', IMPORTED_PLACES, PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, ONBOARDING_FILE,
   VECTORS_DIR, CONTENT_DB, PAGES_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
 ];
 

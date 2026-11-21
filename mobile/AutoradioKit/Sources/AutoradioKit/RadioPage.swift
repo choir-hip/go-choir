@@ -56,7 +56,7 @@ public enum RadioPage {
         if let r = e.paperRoute { return "pub:" + r }
         // A desk story (kind story) names the story it tells in `source` (the first pub: cite): its title opens that story.
         if let s = e.source?.ref, s.hasPrefix("pub:"), e.kind == .story { return "pub:" + (s.dropFirst(4).split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? "") }
-        if let b = e.book { return ShelfAddress.address(b.id) }
+        if let b = e.book { return "doc:" + b.id }
         return e.filesAddress ?? ""
     }
 

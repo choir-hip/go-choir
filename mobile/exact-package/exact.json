@@ -107,78 +107,6 @@
       "remoteTitle": "string",
       "remoteFraction": "number"
     },
-    "ShelfRow": {
-      "id": "string",
-      "address": "string",
-      "title": "string",
-      "author": "string",
-      "kindLabel": "string",
-      "detail": "string",
-      "progress": "number"
-    },
-    "ShelfListing": {
-      "status": "string",
-      "message": "string",
-      "count": "number",
-      "rows": "ShelfRow[]"
-    },
-    "ShelfSectionRef": {
-      "index": "number",
-      "title": "string"
-    },
-    "ShelfDocInfo": {
-      "address": "string",
-      "id": "string",
-      "title": "string",
-      "author": "string",
-      "kind": "string",
-      "kindLabel": "string",
-      "status": "string",
-      "message": "string",
-      "src": "string",
-      "shareSrc": "string",
-      "sections": "ShelfSectionRef[]",
-      "blockCount": "number",
-      "position": "number",
-      "resumeSection": "number",
-      "resumeBlock": "number"
-    },
-    "ShelfBlock": {
-      "n": "number",
-      "kind": "string",
-      "level": "number",
-      "text": "string",
-      "marker": "string"
-    },
-    "ShelfChapter": {
-      "index": "number",
-      "count": "number",
-      "title": "string",
-      "start": "number",
-      "status": "string",
-      "blocks": "ShelfBlock[]",
-      "page": "number"
-    },
-    "ShelfHit": {
-      "block": "number",
-      "section": "number",
-      "label": "string",
-      "snippet": "string"
-    },
-    "ShelfFind": {
-      "query": "string",
-      "hits": "ShelfHit[]",
-      "message": "string"
-    },
-    "ShelfFollowInfo": {
-      "address": "string",
-      "block": "number",
-      "section": "number"
-    },
-    "ShelfAck": {
-      "ok": "bool",
-      "message": "string"
-    },
     "LauncherPlace": {
       "slug": "string",
       "name": "string",
@@ -226,6 +154,14 @@
       "seq": "number",
       "acked": "number",
       "journal": "DeckEvent[]"
+    },
+    "ImportedFollow": {
+      "address": "string",
+      "block": "number"
+    },
+    "ImportedHanded": {
+      "ok": "bool",
+      "message": "string"
     },
     "HearItRow": {
       "clipID": "string",
@@ -926,140 +862,6 @@
       "answers": "RadioInfo"
     },
     {
-      "source": "shelfList",
-      "live": true,
-      "answers": "ShelfListing",
-      "options": {
-        "at": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "loading",
-          "message": "",
-          "count": 0,
-          "rows": []
-        }
-      }
-    },
-    {
-      "source": "shelfDoc",
-      "live": true,
-      "answers": "ShelfDocInfo",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "address": "",
-          "id": "",
-          "title": "",
-          "author": "",
-          "kind": "",
-          "kindLabel": "",
-          "status": "loading",
-          "message": "",
-          "src": "",
-          "shareSrc": "",
-          "sections": [],
-          "blockCount": 0,
-          "position": 0,
-          "resumeSection": 0,
-          "resumeBlock": -1
-        }
-      }
-    },
-    {
-      "source": "shelfChapter",
-      "live": true,
-      "answers": "ShelfChapter",
-      "options": {
-        "address": "string",
-        "index": "number"
-      },
-      "substitute": {
-        "default": {
-          "index": 0,
-          "count": 0,
-          "title": "",
-          "start": 0,
-          "status": "loading",
-          "blocks": [],
-          "page": 1
-        }
-      }
-    },
-    {
-      "source": "shelfFind",
-      "live": true,
-      "answers": "ShelfFind",
-      "options": {
-        "address": "string",
-        "query": "string"
-      },
-      "substitute": {
-        "default": {
-          "query": "",
-          "hits": [],
-          "message": ""
-        }
-      }
-    },
-    {
-      "source": "shelfFollow",
-      "live": true,
-      "answers": "ShelfFollowInfo",
-      "options": {},
-      "substitute": {
-        "default": {
-          "address": "",
-          "block": -1,
-          "section": 0
-        }
-      }
-    },
-    {
-      "send": "shelfImport",
-      "options": {
-        "from": "string",
-        "name": "string"
-      },
-      "answers": "ShelfListing"
-    },
-    {
-      "send": "shelfRemove",
-      "options": {
-        "id": "string"
-      },
-      "answers": "ShelfListing"
-    },
-    {
-      "send": "shelfPlace",
-      "options": {
-        "address": "string",
-        "section": "number",
-        "block": "number"
-      },
-      "answers": "ShelfAck"
-    },
-    {
-      "send": "shelfReadAloud",
-      "options": {
-        "address": "string",
-        "section": "number",
-        "block": "number"
-      },
-      "answers": "ShelfAck"
-    },
-    {
-      "send": "shelfEnqueue",
-      "options": {
-        "address": "string",
-        "section": "number",
-        "block": "number"
-      },
-      "answers": "ShelfAck"
-    },
-    {
       "source": "launcherData",
       "live": true,
       "answers": "LauncherData",
@@ -1155,6 +957,28 @@
         "through": "number"
       },
       "answers": "DeckState"
+    },
+    {
+      "source": "importedFollow",
+      "live": true,
+      "answers": "ImportedFollow",
+      "substitute": {
+        "default": {
+          "address": "",
+          "block": -1
+        }
+      }
+    },
+    {
+      "send": "importedHand",
+      "options": {
+        "op": "string",
+        "id": "string",
+        "title": "string",
+        "at": "number",
+        "text": "string"
+      },
+      "answers": "ImportedHanded"
     },
     {
       "send": "mailOpenReview",

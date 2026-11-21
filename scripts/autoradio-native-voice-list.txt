@@ -33,6 +33,7 @@ path mobile/AutoradioKit/Sources/AutoradioKit/TurnTimeline.swift the timing trac
 path mobile/AutoradioKit/Sources/AutoradioKit/MailReading.swift hands the text of a message to the radio's voice (speakText); the mail pages themselves are shared code
 path mobile/AutoradioKit/Sources/AutoradioKit/RetrievalFacts.swift the voice turn's one ask for passages: it raises the ask and waits for shared code's answer with a deadline (Exact has no call from native into shared code); decides nothing
 path mobile/AutoradioKit/Sources/AutoradioKit/EmbedDevice.swift the on-device embedding model, Wi-Fi, Low Power Mode, thermal state and what the radio holds the processor for: three answers to shared code
+path mobile/exact-package/apple/AutoradioModule+Imported.swift hands an imported document's words to the run sheet's player (importedHand) and says which block the player is reading (importedFollow): audio only; the pages, the list, the import and the search are shared code
 path mobile/AutoradioKit/Sources/AutoradioKit/KeptTurns.swift kept microphone turns
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurn.swift generated microphone-turn fixture for voice setup and the model proof
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurnAudio.swift the fixture utterance read by voice setup and the model proof
@@ -73,6 +74,8 @@ name voice* the voice cards and the speaker profile
 name choirTalkCancel cancels the open microphone turn
 name choirHandsFreeToggle opens and closes the microphone
 name choirListen starts a spoken turn
+name importedHand hands an imported document's words to the player: the audio is native
+name importedFollow the block the player is reading now: only the player knows
 name deck* the deck: play, hold, pause, seek, acknowledge, and the state and journal it keeps (the audio session and the lock screen are native)
 # --- the Keychain read behind the signed-in seam (AutoradioLab/api.ts); goes when sign-in moves to Exact's own secret store
 path mobile/AutoradioKit/Sources/AutoradioKit/Choir/CredentialReader.swift reads the Keychain item today's sign-in wrote, in place (Exact's secret store keeps items under another service), so the phone stays signed in

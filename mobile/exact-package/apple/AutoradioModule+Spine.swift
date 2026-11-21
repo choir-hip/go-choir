@@ -105,7 +105,6 @@ extension AutoradioModule {
                 let text = args["text"] as? String ?? ""
                 // A URL in the bar is not a question: it opens in place with Read aloud and Add to queue (lane autoradio-queue; the one early branch).
                 if let url = BarURL.detect(text) {
-                    if BarURL.isDocument(url), let importer = BarURL.importDocument { importer(url); return reply(self.json(self.runtime.snapshot())) }   // a .pdf or .epub: the Reader imports it
                     self.barWebURL = url.absoluteString; EmbeddedPage.shared.opened(url.absoluteString)
                     self.touch(["queueView"], now: true)
                     return reply(self.json(self.runtime.snapshot()))

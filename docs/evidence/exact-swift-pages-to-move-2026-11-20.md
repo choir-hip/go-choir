@@ -49,7 +49,7 @@ Model already shared. Left: wire `takesPage` and `takesAct` in `app.ts`, split t
 - Exact: `takes.ts` plus a session reducer (`take-session.ts`); contract `takesPage(recorder)` taking native recorder state, `takesAct` calling native `record`, `stop`, `preview`, `discard`, then publishing through `client`.
 - Tests: `takes.test.ts` (T1-T9) covered; port `TakesTests` (22), `TakeSessionTests` (23).
 
-## 7. Books shelf
+## 7. Books shelf (DONE 2026-11-21 as imported documents: `imported.ts`, `imported-model.ts`; the server extracts the text, so no zip, XML or PDF native call was needed; see current-architecture.md)
 EPUB and PDF books (list, import, remove), cut into sections and blocks, inverted-index search, reading position, follow cursor, `ShelfPlayback` hands blocks to the run sheet.
 - Native-only: PDF page view (file copy into `app:/cache/files`); read-aloud and enqueue (`RunSheetPlayer`, audio).
 - Exact: `shelf.ts`: EPUB reader (zip + XML, `xml.ts` exists), `DocExtract`; PDF text extraction is the hard part (native op or show PDFs by `src` only); storage `app:/data/books`; sources `shelfList`, `shelfDoc`, `shelfChapter`, `shelfFind`, `shelfFollow`; sends `shelfImport`, `shelfRemove`, `shelfPlace`, `shelfReadAloud`, `shelfEnqueue` (the last two keep calling native `runSheet` ops).

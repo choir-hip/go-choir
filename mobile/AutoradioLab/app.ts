@@ -24,6 +24,7 @@ import * as mail from './mail.ts';
 import { barInfo } from './bar.ts';
 import { radioPage } from './radio-page.ts';
 import { retrievalServe, paperSearch } from './retrieval-live.ts';
+import * as imported from './imported.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
 import * as picks from './edition-picks.ts';
 
@@ -70,6 +71,8 @@ fs.read app:/data/takes.json
 fs.write app:/data/takes.json
 fs.read app:/data/vectors
 fs.write app:/data/vectors
+fs.read app:/data/imported-places.json
+fs.write app:/data/imported-places.json
 fs.read app:/data/theme-choice.json
 fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
@@ -158,6 +161,16 @@ const sources: Sources = {
   editionToggle: ([label], _s, storage) => picks.toggle(storage, label),
   editionExpand: ([label], _s, storage) => picks.expand(storage, label),
   editionAdd: ([text], _s, storage) => picks.addTyped(storage, text),
+  // Imported documents (imported.ts): PDFs and e-books that are files on the listener's computer, read through the Files client. The audio is native (importedFollow, importedHand).
+  importedList: ([at, _acct], _s, storage) => imported.importedList(at, storage),
+  importedDoc: ([address, _acct], _s, storage) => imported.importedDoc(address, storage),
+  importedSection: ([address, index, _acct], _s, storage) => imported.importedSection(address, index, storage),
+  importedFind: ([address, query], _s, storage) => imported.importedFind(address, query, storage),
+  importedLocate: ([address, block], _s, storage) => imported.importedLocate(address, block, storage),
+  importedPlace: ([address, section, block], _s, storage) => imported.importedPlace({ address, section, block }, storage),
+  importedReadAloud: ([address, section, block], _s, storage) => imported.importedReadAloud({ address, section, block }, storage),
+  importedQueue: ([address, section, block], _s, storage) => imported.importedQueue({ address, section, block }, storage),
+  importedAdd: ([from, name], _s, storage) => imported.importedAdd({ from, name }, storage),
   paperFront: ([view, width, tick, focus, picks], _store, storage) => paperFront({ view, width, tick, focus, picks }, storage),
   // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
   mailBox: ([address, _acct], _store, storage) => mail.mailBox(address, { storage }),

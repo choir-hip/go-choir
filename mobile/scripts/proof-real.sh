@@ -200,6 +200,17 @@ cp "$TKS/takes-muted.json" "$SHOTS/takes-old-muted.json" 2>/dev/null
 tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
 tseg "$SHOTS/drive-takes.txt" real-46-takes-old-files > "$SHOTS/seg-takes.txt"
 
+# ---- 3a5. IMPORTED DOCUMENTS (the PDFs and e-books the person imports; files on their computer, AutoradioLab/imported.ts). Open the place from the launcher: the list comes from the computer (the Imported
+# documents folder, through the Files client), so on d@e it is empty or lists what is there; either way the page must draw its title and the import button, and say none of the old Reader's words.
+# NOT covered: the system file picker (the simulator's picker cannot be driven by the scripts) and reading aloud (no audio); imported.test.ts drives the import, the open, the search and the words handed to the player
+# against a fake computer, and the open of a real document is checked by hand on a phone.
+step "clock data"; wait_ 5000
+goto "imported:"
+view real-47-imported 2500
+step logs
+run_drive imported light "" --touch platform
+tseg "$SHOTS/drive-imported.txt" real-47-imported > "$SHOTS/seg-imported.txt"
+
 # Fail loudly rather than quietly tour nothing: no story card at all means the paper page did not draw, which the tour must not pass over.
 grep -q '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" || fail "survey" "no paper-story- line in the survey tree: the paper page showed no story card"
 # (Stories and the play button are NOT taken from the survey: it is minutes old by the time they are tapped. Each drive that taps paper content picks it fresh: fresh_paper.)
@@ -742,6 +753,12 @@ if [ -n "$THEME_DOC" ]; then
   chk "theme: the Texture's theme is listed" '\[settings-theme-depth-teal-test\]' "$TH"
   bad "theme: no problems reported" '\[settings-theme-problems\]' "$TH"
 fi
+# the imported documents drill
+chk "imported: the page is titled for what it holds" 'Imported documents' "$SHOTS/seg-imported.txt"
+chk "imported: the import control is there (an error or a skeleton has none)" '\[reader-import\]' "$SHOTS/seg-imported.txt"
+chk "imported: the list or the empty words drew" '\[reader-(empty|list)\]' "$SHOTS/seg-imported.txt"
+bad "imported: no word of the old Reader or its shelf" 'Remove from Reader|Your books|Add an EPUB or PDF|[Ss]helf' "$SHOTS/seg-imported.txt"
+bad "imported: no failure line" '\[reader-error\]' "$SHOTS/seg-imported.txt"
 # the takes drill (nothing is carried from the pre-release build; Record and Publish are not driven, see 3a4)
 chk "takes: the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes.txt"
 chk "takes: the record control is there" '\[takes-record\]' "$SHOTS/seg-takes.txt"

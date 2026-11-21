@@ -1,13 +1,13 @@
 // Lane members file (content row, owner 2026-11-16: "for reader and for the embedded web view, the content should get the full screen
 // except for the prompt bar area at the bottom"): the one compact control row above the bar's "On:" line, for a document in the
-// Reader and for an embedded web page. Collapsed it is one line; expanded it lists the actions as words. The row itself is
+// imported document and for an embedded web page. Collapsed it is one line; expanded it lists the actions as words. The row itself is
 // `ContentRow` in content.contract (drawn inside the bar's lens, bar.contract); the content above it never carries a header.
 //
 // What the row is shown for (`ctlMode`): a page typed into the bar (barweb), a source page opened over a story (web), or the
 // document in front when it is open and ready (doc). Everything else has no row and no clearance.
 // `ctlClear` is how far the content's frame stops above the bottom edge (the bar's lens plus this row): 124 with the bar idle
 // (8 + the "On:" line + the controls + the row), 168 while a line shows above the controls (now playing, heard, holding, error).
-use pageOpen, pageClose, queueAdd, queueAct, shelfPlace, shelfReadAloud, shelfEnqueue, readerOpenExternal, textureEditInfo, textureEdit, textureFlush from "@choir/autoradio"
+use pageOpen, pageClose, queueAdd, queueAct, readerOpenExternal, textureEditInfo, textureEdit, textureFlush from "@choir/autoradio"
 use TextureEditInfo from "@choir/autoradio"
 
 members Autoradio
@@ -51,11 +51,11 @@ members Autoradio
   action ctlRead
     ctlOpen = false
     ctlPanel = ""
-    send ldAck = shelfReadAloud(address=pg.top, section=ldSec, block=ldBlock)
+    send ldAck = importedReadAloud(pg.top, ldSec, ldBlock)
   action ctlQueueDoc
     ctlOpen = false
     ctlPanel = ""
-    send ldAck = shelfEnqueue(address=pg.top, section=ldSec, block=ldBlock)
+    send ldAck = importedQueue(pg.top, ldSec, ldBlock)
   // Share is the document's own file (a Files document keeps the file it came from): the system share sheet.
   action ctlShare
     ctlOpen = false
@@ -67,12 +67,12 @@ members Autoradio
     ldBlock = -1
     ctlOpen = false
     ctlPanel = ""
-    send ldAck = shelfPlace(address=pg.top, section=ldSec, block=-1)
+    send ldAck = importedPlace(pg.top, ldSec, -1)
   action ctlStep(n: number)
     ldSec = max(0, min(n, max(0, ldInfo.sections.length - 1)))
     ldToc = false
     ldBlock = -1
-    send ldAck = shelfPlace(address=pg.top, section=ldSec, block=-1)
+    send ldAck = importedPlace(pg.top, ldSec, -1)
   action ctlJump(section: number, block: number)
     ldSec = section
     ldBlock = block
@@ -81,7 +81,7 @@ members Autoradio
     ldText = true
     ctlOpen = false
     ctlPanel = ""
-    send ldAck = shelfPlace(address=pg.top, section=section, block=block)
+    send ldAck = importedPlace(pg.top, section, block)
   action ctlSetText(on: bool)
     ldText = on
     ctlOpen = false

@@ -164,7 +164,7 @@ extension PlaybackEngine {
         store.onChange = { [weak self] in self?.storeChanged() }
     }
 
-    /// Text for a book: the reader lane registers `{ id, position in blocks }`; blocks start at `position`.
+    /// Text for a book by `{ id, position in blocks }`, from `position` on: the seam a test fills (the app hands the words with the entry instead).
     public func registerTextSource(kind: String, _ source: @escaping @Sendable (String, Int) async -> [String]?) { textSources[kind] = source }
 
     /// Wait for the start in flight (tests, and the host that wants to know it began).
@@ -591,7 +591,13 @@ extension PlaybackEngine {
             }
         case .document:
             engine.stopRemote()
-            if let b = entry.book, let src = textSources["document"], let blocks = await src(b.id, b.at), !blocks.isEmpty, my == generation {
+            // An imported document's words are handed by the shared page (importedHand, AutoradioModule+Imported.swift) and held for the entry; a text source is the
+            // seam a test fills. After a relaunch a queued document has no words held and says so.
+            if let w = provided[entry.id], !w.paragraphs.isEmpty, my == generation {
+                let doc = "rs:" + entry.id
+                playingDocument = doc
+                ok = await engine.speak(documentID: doc, entry: entry, paragraphs: w.paragraphs)
+            } else if let b = entry.book, let src = textSources["document"], let blocks = await src(b.id, b.at), !blocks.isEmpty, my == generation {
                 let doc = "rs:" + entry.id
                 playingDocument = doc
                 ok = await engine.speak(documentID: doc, entry: entry, paragraphs: blocks)
