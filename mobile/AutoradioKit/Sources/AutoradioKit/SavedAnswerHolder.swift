@@ -1,7 +1,7 @@
 import Foundation
 
 // The phone's first answer, from what it already holds. While the desk's answer is on its way, this holder answers in two or three
-// sentences from the reader's saved stories (SavedCorpus) using the small on-device model that is already downloaded, and says which story
+// sentences from what the phone holds (shared code's retrieval, asked through RetrievalBridge) using the small on-device model that is already downloaded, and says which story
 // it spoke from. It never answers from the model's own knowledge: the model sees only the passages and is told to write NO_ANSWER when they
 // do not hold the answer; with no passage that clears the relevance floor the model is not asked at all and the holding line says what is
 // being looked up.
@@ -68,7 +68,8 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
             params: [.number("temperature", "Variety", 0.2, 0, 1.5)])
     }
     let temperature: Double
-    let corpus: SavedCorpus
+    /// What the phone holds for these words: shared code's answer (RetrievalBridge); tests pass their own.
+    let retrieval: @Sendable (String, String, String) async -> RetrievalContext?
     let modelSource: @Sendable () -> (any LocalLanguageModel)?
     private let lock = NSLock()
     private var task: Task<Void, Never>?
@@ -76,13 +77,13 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
     private var answering = false
     private var generation: GenerationReport?
 
-    public init(_ p: StageParams, corpus: SavedCorpus = .shared, model: @escaping @Sendable () -> (any LocalLanguageModel)? = { LocalLanguage.model }) {
-        temperature = p.double("temperature", 0.2); self.corpus = corpus; modelSource = model
+    public init(_ p: StageParams, retrieval: @escaping @Sendable (String, String, String) async -> RetrievalContext? = { await RetrievalBridge.shared.ask(words: $0, pageTitle: $1, pageAddress: $2) },
+                model: @escaping @Sendable () -> (any LocalLanguageModel)? = { LocalLanguage.model }) {
+        temperature = p.double("temperature", 0.2); self.retrieval = retrieval; modelSource = model
     }
 
     public func retrieve(words: String, pageTitle: String, pageAddress: String) async -> RetrievalContext? {
-        await corpus.prepare()
-        return corpus.retrieve(words, onAir: OnAir.title(pageAddress: pageAddress, pageTitle: pageTitle, hint: corpus.onAirHint), pageAddress: pageAddress)
+        await retrieval(words, pageTitle, pageAddress)
     }
     public var keepsSpeakingForDesk: Bool { lock.lock(); defer { lock.unlock() }; return answering }
     public func diagnostics() -> String { lock.lock(); defer { lock.unlock() }; return note }
@@ -94,16 +95,15 @@ public final class SavedAnswerHolder: Holder, @unchecked Sendable {
         let words = i.listenerWords.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else { say("no words, no call"); return AsyncStream { $0.finish() } }
         lock.lock(); answering = false; lock.unlock()
-        let model = modelSource(), temperature = temperature, corpus = corpus
+        let model = modelSource(), temperature = temperature, retrieval = retrieval
         return AsyncStream { c in
             let t = Task { [self] in
                 defer { c.finish() }
-                if let f = i.pageText { corpus.offer(address: i.pageAddress, title: i.pageTitle, text: await f()) }
                 if Task.isCancelled { say("cancelled"); return }
                 let ctx: RetrievalContext
                 if let given = i.retrieved { ctx = given } else {
-                    await corpus.prepare()
-                    ctx = corpus.retrieve(words, onAir: OnAir.title(pageAddress: i.pageAddress, pageTitle: i.pageTitle, hint: corpus.onAirHint), pageAddress: i.pageAddress)
+                    guard let asked = await retrieval(words, i.pageTitle, i.pageAddress) else { c.yield(SavedAnswerPrompt.holdingLine(words)); say("shared code did not answer in time; the model was not asked"); return }
+                    ctx = asked
                 }
                 let hits = ctx.items
                 if Task.isCancelled { say("cancelled"); return }

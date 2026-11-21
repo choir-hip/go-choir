@@ -309,6 +309,19 @@ step "tap settings-mode-dark"; view real-65-newsprint-dark 900
 step logs
 run_drive spine light "" --touch platform
 
+# ---- 3f2b. SEARCH drives (reads only: the launcher's paper-wide search, shared code (retrieval-run.ts `launcherSearch`, the resource `psr`) over the server's public route).
+# One query the paper answers ("the": a substring of nearly every story) and one nothing answers. Each starts a fresh app and types once, then waits past the pause in typing (350 ms) and the answer.
+step "clock data"; wait_ 4000
+step "tap bar-mark"; wait_ 900
+step "type launcher-search \"the\""; wait_ 4500; step tree; shot real-71-search-hits
+step logs
+run_drive search-hit light "" --touch platform
+step "clock data"; wait_ 4000
+step "tap bar-mark"; wait_ 900
+step "type launcher-search \"zzqxjvwk\""; wait_ 4500; step tree; shot real-72-search-none
+step logs
+run_drive search-none light "" --touch platform
+
 # ---- 3f3. BAR drive (reads only: it plays and pauses a real story): the bar's page model is shared code (bar.ts) over the native facts. On a page: the aim line names the page and the deck count; one story plays: the
 # bar says NOW PLAYING with the story's title and a progress rule; play pauses it (PAUSED, same title); play resumes it; the run sheet page (the radio) lists the entry on air.
 fresh_paper pick-bar
@@ -406,6 +419,8 @@ if [ -n "${REAL_PROMPT:-}" ]; then
   chk "typed ask: the engine took the typed words as the turn" 'top story on the front page' "$SHOTS/drive-ask.txt"
   bad "typed ask: no sign-in failure" 'Sign in to talk to your computer' "$SHOTS/drive-ask.txt"
   chk "conversation: the question is a row (shared code over the native entries)" '\[conversation-row-' "$SHOTS/drive-ask.txt"
+  chk "retrieval: shared code answered the turn's ask for passages (retrieval-run.ts through retrievalAnswer)" 'AUTORADIO retrieval ask answered' "$SHOTS/drive-ask.txt"
+  bad "retrieval: the ask did not time out (the source was never read, or the answer was lost)" 'AUTORADIO retrieval ask no-answer' "$SHOTS/drive-ask.txt"
 fi
 if [ -n "$THEME_DOC" ]; then
   TH="$SHOTS/drive-theme.txt"
@@ -451,6 +466,13 @@ if [ -n "$PLAY_BAR" ]; then
   bad "radio page: the status line is not an error" '\[radio-status\] "Can.t speak' "$BR"
   bad "bar: no error line held the bar" '\[bar-text\] "(Could not|Something went wrong|The voice stopped)' "$BR"
 fi
+# the search drives: the paper-wide rows land under the typed query, and a query nothing matches says so (the answer is for THIS query: a stale or never-merged answer shows neither)
+SH="$SHOTS/drive-search-hit.txt"; SN="$SHOTS/drive-search-none.txt"
+chk "search: a query the paper answers lists a story row (search-hit-pub:)" '\[search-hit-pub:' "$SH"
+bad "search: the answered query does not stay on Searching the paper" '\[launcher-search-note\] "Searching the paper' "$SH"
+bad "search: the answered query is not Nothing found" '\[launcher-(search-note|nohits)\] "(Nothing found|Could not search)' "$SH"
+chk "search: a query nothing matches says Nothing found in the paper" '\[launcher-search-note\] "Nothing found in the paper' "$SN"
+bad "search: the empty answer lists no story row" '\[search-hit-pub:' "$SN"
 # the spine drive
 SP="$SHOTS/drive-spine.txt"
 chk "bar: the field, the microphone and play" '\[bar-field\]' "$SP"

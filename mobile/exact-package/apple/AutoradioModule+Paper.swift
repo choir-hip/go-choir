@@ -9,7 +9,6 @@ extension AutoradioModule {
     func registerPaper() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let topicsFile = support.appendingPathComponent("edition-topics.json")
-        SavedCorpus.shared.setSource("edition-topics") { RetrievalSources.editionTopics(EditionSetupSession.load(topicsFile)?.topics ?? []) }
         handle("editionPicks") { _, reply in
             let picks = (EditionSetupSession.load(topicsFile)?.topics ?? []).joined(separator: "\n")
             DispatchQueue.main.async { reply(["picks": picks]) }

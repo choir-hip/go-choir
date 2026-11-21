@@ -66,6 +66,16 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        // Retrieval (AutoradioKit/RetrievalFacts.swift, EmbedDevice.swift): shared code's answer to the voice turn's ask, and the embedding model. Neither touches the module,
+        // and the model's work stays off the main thread.
+        if op == "retrievalAnswer" {
+            RetrievalBridge.shared.answer(id: request["id"] as? String ?? "", context: request["context"] as? [String: Any] ?? [:])
+            reply.send([:]); return
+        }
+        if let op = op, op.hasPrefix("embed") {
+            Task.detached { reply.send(await EmbedDevice.op(request)) }
+            return
+        }
         if let op = op, op.hasPrefix("take") {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return

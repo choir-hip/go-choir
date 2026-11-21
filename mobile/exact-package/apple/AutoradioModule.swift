@@ -142,14 +142,10 @@ public final class AutoradioModule: ExactPackage {
         ContentSync.enabled = true
         Task.detached(priority: .utility) {
             if ContentBoot.start() { ContentSync.shared.audioBusy = { await MainActor.run { RunSheetPlayer.shared.isRemote } } }
-            if ContentStore.shared.usable {                // vectors for the same items: BM25 alone until the model is there and the backlog embedded
-                Task { @MainActor in          // remote audio on air: the player is main-actor state, so its flag is copied across every two seconds
-                    while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
-                }
-                EmbeddingService.shared.attach(corpus: .shared, store: .shared)
+            // The embedding pass yields the processor to remote audio too: that player is main-actor state, so its flag is copied across every two seconds (EmbedDevice.state).
+            Task { @MainActor in
+                while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
             }
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
-            SavedCorpus.shared.refresh()          // the index warm-up, long after the front page has drawn
         }
         ReaderStore.shared.offline = { ContentStore.shared.readerDoc(address: $0) }
         PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
@@ -164,7 +160,6 @@ public final class AutoradioModule: ExactPackage {
             AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })
             AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
         }
-        SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         pageSources.register(NotYetPageSource())
         pageSources.register(PublicationTextSource())
@@ -186,6 +181,7 @@ public final class AutoradioModule: ExactPackage {
         registerNotebook()       // my notebook (station L6)
         registerBooks()   // lane autoradio-reader
         registerTalk()
+        registerRetrieval()     // the voice turn's ask for passages (shared code answers) and the embedding model's ops
         registerTextureEdit()   // your own Texture documents in rich text
         registerPodcasts()      // lane autoradio-podcasts
         registerJoins()         // lane autoradio-joins

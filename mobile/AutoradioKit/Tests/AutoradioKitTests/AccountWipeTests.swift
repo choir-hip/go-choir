@@ -135,7 +135,7 @@ final class AccountWipeTests: XCTestCase {
         }
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, topicsFile: topics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
                               takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
-                              texture: texture, environment: env, content: content, corpus: SavedCorpus(),
+                              texture: texture, environment: env, content: content,
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
                               deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
         XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")

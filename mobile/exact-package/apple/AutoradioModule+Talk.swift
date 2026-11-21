@@ -17,7 +17,6 @@ extension AutoradioModule {
         hooks.snapshot = { await MainActor.run { RunSheetPlayer.shared.turnQueueJSON() } }       // the wire's `queue`
         hooks.applyServerOps = { json in _ = await MainActor.run { RunSheetPlayer.shared.applyTurnOps(json) } }  // dedupe by turn, decoding, rebase: the sheet's
         QueueVoice.hooks = hooks
-        SavedCorpus.shared.installRunSheet()
 
         // The reader's voice (lane autoradio-talk): the Core ML model is fetched quietly (about 8 MB) and, once loaded, the gate listens.
         // Learned from what the reader says to the radio; stored on this phone only (SpeakerStore); never uploaded.

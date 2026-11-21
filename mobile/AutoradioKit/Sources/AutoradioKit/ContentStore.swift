@@ -2,7 +2,7 @@ import Foundation
 
 // THE LOCAL CONTENT STORE. Owner, 2026-11-16: "we should keep mail on the phone, and we should keep everything on the phone as much as we
 // can. It's mostly just text, so we want to basically have the full content on the phone." Every text the phone is shown or can fetch is kept
-// here in full and indexed from here: retrieval (SavedCorpus), offline pages (ReaderStore) and "play that" read the same rows.
+// here in full and read from here: offline pages (ReaderStore) and "play that" read the same rows.
 //
 // STORAGE: one file per item (`items/<kind>/<hash>.json`) plus `manifest.json` (metadata, sync checkpoints, last-synced times). Files, not
 // SQLite: the Kit has no SQLite today and a new binding is a new dependency (the system library would need a wrapper written and, in the Exact
@@ -292,23 +292,6 @@ public final class ContentStore: @unchecked Sendable {
         if let root { try? FileManager.default.removeItem(at: root); try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true); protect?(root) }
         log?("content: wiped")
         onChange?()
-    }
-
-    // MARK: the index reads from here
-
-    /// What the retrieval index has not read yet: new or changed items as documents, and the ids that left. The first call after launch reads every
-    /// body once (do it off the main thread: `SavedCorpus.refresh` at launch).
-    public func drain() -> (up: [SavedCorpus.Document], removed: [String]) {
-        lock.lock(); let ids = Array(up.keys); let gone = Array(removed); up = [:]; removed = []; lock.unlock()
-        var docs: [SavedCorpus.Document] = []
-        for id in ids { if let it = get(id) { docs.append(Self.document(it)) } }
-        return (docs, gone)
-    }
-    public static func document(_ it: StoredItem) -> SavedCorpus.Document {
-        let kind: String
-        switch it.kind { case .story: kind = "story"; case .mail: kind = "mail"; case .document: kind = "document"; case .file: kind = "file"
-                         case .podcast: kind = "podcast"; case .transcript: kind = "transcript"; case .runsheet: kind = "runsheet" }
-        return SavedCorpus.Document(id: "store:" + it.id, title: it.title, address: it.address, text: it.text, kind: kind, source: it.source.isEmpty ? it.kind.label : it.source, date: it.date)
     }
 
     // MARK: offline pages

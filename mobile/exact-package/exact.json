@@ -516,6 +516,14 @@
     "ReaderAck": {
       "ok": "bool"
     },
+    "RetrievalAsk": {
+      "id": "string",
+      "words": "string",
+      "pageTitle": "string",
+      "pageAddress": "string",
+      "now": "number",
+      "facts": "string"
+    },
     "ThemeCard": {
       "id": "string",
       "name": "string",
@@ -1656,6 +1664,21 @@
         "spoken": "string"
       },
       "answers": "ReaderFollowInfo"
+    },
+    {
+      "source": "retrievalAsk",
+      "live": true,
+      "answers": "RetrievalAsk",
+      "substitute": {
+        "default": {
+          "id": "",
+          "words": "",
+          "pageTitle": "",
+          "pageAddress": "",
+          "now": 0,
+          "facts": ""
+        }
+      }
     },
     {
       "source": "settingsComputer",

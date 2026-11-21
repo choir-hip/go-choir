@@ -188,10 +188,10 @@ public extension ContentSync {
         guard enabled, ContentStore.shared.usable else { return }
         kicked = Task.detached(priority: .utility) { await ContentSync.shared.syncAll() }
     }
-    /// What sign-out does: the store, the index and the kept answers go with the account.
-    static func wipeAccount(store: ContentStore = .shared, corpus: SavedCorpus = .shared) {
+    /// What sign-out does: the store and the kept answers go with the account.
+    static func wipeAccount(store: ContentStore = .shared) {
         kicked?.cancel(); kicked = nil
-        store.wipe(); corpus.reset()
+        store.wipe()
     }
 }
 
@@ -199,10 +199,9 @@ public enum ContentBoot {
     /// Opens the store and wires it to the index, off the main thread and after launch, so nothing the store does can hold up the front page.
     /// Prints one line to the console: `AUTORADIO store open ok items=<n>` or `AUTORADIO store open FAILED <reason>`; returns whether it opened.
     @discardableResult
-    public static func start(store: ContentStore = .shared, corpus: SavedCorpus = .shared, say: @Sendable (String) -> Void = { fputs($0 + "\n", stderr) }) -> Bool {
+    public static func start(store: ContentStore = .shared, say: @Sendable (String) -> Void = { fputs($0 + "\n", stderr) }) -> Bool {
         guard store.usable else { say("AUTORADIO store open FAILED \(store.openReason)"); return false }
         say("AUTORADIO store open ok items=\(store.summary().perKind.values.reduce(0) { $0 + $1.count })")
-        corpus.setDeltaSource("store") { store.drain() }      // the index reads it at the first question (or the warm-up the app schedules), never here
         return true
     }
 }

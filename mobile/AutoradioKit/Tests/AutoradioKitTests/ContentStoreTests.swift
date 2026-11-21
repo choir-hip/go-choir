@@ -60,24 +60,14 @@ final class ContentStoreTests: XCTestCase {
         s.put(item("a", .story, bytes: 2_000_000, clock: c)); s.put(item("b", .mail, bytes: 500_000, clock: c))
         XCTAssertTrue(s.summary().line.hasPrefix("3 MB of 400 MB"), s.summary().line)
     }
-    func testSignOutWipesTheFilesTheMemoryAndTheIndex() throws {
+    func testSignOutWipesTheFilesAndTheMemory() throws {
         let r = root(), c = Clock(); let s = ContentStore(root: r, clock: { c.now })
-        let corpus = SavedCorpus(readerStore: nil); corpus.setDeltaSource("store") { s.drain() }
         s.put(StoredItem(id: "mail:1", kind: .mail, title: "Tunnel referendum", text: "The referendum notes.", date: c.now, address: "mail:1", syncedAt: c.now)); s.flush()
-        XCTAssertEqual(corpus.retrieve("tunnel referendum").items.count, 1)
-        ContentSync.wipeAccount(store: s, corpus: corpus)
+        ContentSync.wipeAccount(store: s)
         XCTAssertEqual(s.summary().totalBytes, 0); XCTAssertNil(s.get("mail:1"))
-        XCTAssertTrue(corpus.retrieve("tunnel referendum").isEmpty, "the index forgot it")
         let left = (FileManager.default.enumerator(at: r, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? []).filter { !$0.hasDirectoryPath }
         XCTAssertTrue(left.isEmpty, "no file of the account remains: \(left.map(\.lastPathComponent))")
         XCTAssertTrue(ContentStore(root: r, clock: { c.now }).summary().totalBytes == 0, "and a restart finds nothing")
-    }
-    func testTheIndexReadsFromTheStoreAndFollowsChanges() {
-        let r = root(), c = Clock(); let s = ContentStore(root: r, clock: { c.now })
-        let corpus = SavedCorpus(readerStore: nil); corpus.setDeltaSource("store") { s.drain() }
-        s.put(StoredItem(id: "pub:/s", kind: .story, title: "Senate passes the water bill", text: "The Senate voted on Tuesday.", date: c.now, address: "pub:/s", source: "Autopaper", syncedAt: c.now))
-        XCTAssertEqual(corpus.retrieve("tell me about the Senate").items.map(\.address), ["pub:/s"])
-        s.remove("pub:/s"); XCTAssertTrue(corpus.retrieve("tell me about the Senate").isEmpty)
     }
     func testAPageHeldOnThePhoneRendersOfflineAndSaysWhenItWasSynced() {
         let r = root(), c = Clock(); let s = ContentStore(root: r, clock: { c.now })
@@ -112,7 +102,6 @@ final class ContentStoreTests: XCTestCase {
         XCTAssertEqual(s2.get("pub:story")?.text, "Story text."); XCTAssertEqual(s2.checkpoint("story.cursor"), "x"); XCTAssertNotNil(s2.lastSynced(.story))
         let mailDir = r.appendingPathComponent("items/mail")
         XCTAssertFalse(FileManager.default.fileExists(atPath: mailDir.path), "the mail files are gone")
-        let drained = s2.drain(); XCTAssertTrue(drained.removed.contains("mail:m1"), "the retrieval index is told the ids left")
         // Another open finds nothing to delete and writes nothing.
         XCTAssertEqual(ContentStore(root: r, clock: { c.now }).purgeMail(), 0)
     }
@@ -178,20 +167,17 @@ final class ContentStoreBootTests: XCTestCase {
         let s = ContentStore(root: root, log: { logs.value.append($0) })
         XCTAssertFalse(s.usable)
         s.put(StoredItem(id: "mail:1", kind: .mail, title: "SECRET-SUBJECT", text: "SECRET-BODY", address: "mail:1")); s.flush()
-        XCTAssertNil(s.get("mail:1")); XCTAssertEqual(s.summary().totalBytes, 0); XCTAssertTrue(s.drain().up.isEmpty)
+        XCTAssertNil(s.get("mail:1")); XCTAssertEqual(s.summary().totalBytes, 0)
         XCTAssertEqual(logs.value.count, 1); XCTAssertTrue(logs.value[0].hasPrefix("content: store open failed ("), logs.value[0])
         XCTAssertFalse(logs.value[0].contains("SECRET")); XCTAssertFalse(logs.value[0].contains("blocker"), "no path in the log")
         let said = ContentStoreTests.Box<[String]>([])
-        XCTAssertFalse(ContentBoot.start(store: s, corpus: SavedCorpus(readerStore: nil), say: { said.value.append($0) }))
+        XCTAssertFalse(ContentBoot.start(store: s, say: { said.value.append($0) }))
         XCTAssertTrue(said.value[0].hasPrefix("AUTORADIO store open FAILED "), said.value[0])
-        // The retrieval path still answers, from what else the phone holds.
-        let corpus = SavedCorpus(readerStore: nil); corpus.setSource("t") { [SavedCorpus.Document(id: "a", title: "Senate vote", address: "pub:a", text: "The Senate voted.")] }
-        XCTAssertEqual(corpus.retrieve("senate vote").items.count, 1)
     }
     func testAnEmptyStoreOpensAndSaysSo() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("boot-\(UUID().uuidString)"); defer { try? FileManager.default.removeItem(at: root) }
         let s = ContentStore(root: root); let said = ContentStoreTests.Box<[String]>([])
-        XCTAssertTrue(ContentBoot.start(store: s, corpus: SavedCorpus(readerStore: nil), say: { said.value.append($0) }))
+        XCTAssertTrue(ContentBoot.start(store: s, say: { said.value.append($0) }))
         XCTAssertEqual(said.value, ["AUTORADIO store open ok items=0"])
     }
     func testASlowOrBrokenStoreNeverHoldsUpTheReader() async {

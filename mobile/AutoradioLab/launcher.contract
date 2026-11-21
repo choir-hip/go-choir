@@ -5,7 +5,7 @@
 // The panel is placed by the bar (bar.contract); the scrim behind the page is the root's.
 // testIds: launcher-layer, launcher-search, launcher-open-<address>, launcher-close-<address>, search-hit-<address>,
 // place-<slug> (radio, notebook, paper, textures, files, mail, books, podcasts, settings as glyphs; activity, told, components in More), launcher-nohits.
-use Theme, PageList, LauncherData from "@choir/autoradio"
+use Theme, PageList, LauncherData, LauncherHit from "@choir/autoradio"
 use Layer, stackName, kindOf, kindWord, isFixed, pageName, SectionHeader, RowRule from "./ui.contract"
 
 component PlaceRow
@@ -110,6 +110,8 @@ component Launcher
     th: Theme
     pg: PageList
     lnc: LauncherData
+    shownHits: LauncherHit[]
+    shownNote: string
     lq: string
     stackAddrs: string[]
     editLq: action
@@ -124,7 +126,7 @@ component Launcher
               color=th.muted
           RowRule(indent=0)
           if lnc.hasQuery
-            for h in lnc.hits key=h.address
+            for h in shownHits key=h.address
               button press=openPage(h.address, pageName(h.title, h.address)) testId=`search-hit-${h.address}` appearance="none" width="100%"
                 row padding="8px 0" gap=8 align-items="center" width="100%"
                   column gap=2 align-items="flex-start" flex=1 min-width=0
@@ -133,9 +135,9 @@ component Launcher
                       text kindWord(kindOf(h.address), h.address) font-family=th.fontLabel font-size="-exact-footnote" color=th.muted
                       text h.detail font-family=th.fontLabel font-size="-exact-footnote" color=th.muted text-align="left" line-clamp=2
                   image "symbol:forward-chevron" color=th.muted
-            if lnc.searchNote != ""
-              text lnc.searchNote testId="launcher-search-note" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
-            if lnc.hits.length == 0 and lnc.searchNote == ""
+            if shownNote != ""
+              text shownNote testId="launcher-search-note" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
+            if shownHits.length == 0 and shownNote == ""
               text "Nothing found." testId="launcher-nohits" font-family=th.fontLabel font-size="-exact-subheadline" color=th.muted
           if lnc.hasQuery == false
             row flex-wrap="wrap" gap=0 width="100%" testId="launcher-key-pages"

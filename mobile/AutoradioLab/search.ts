@@ -457,7 +457,13 @@ export function fromHalf(h: number): number {
 
 /** The vector stores this session holds, so sign-out can empty them (the in-memory copy serves the old account otherwise). */
 const liveVectors = new Set<VectorStore>();
-export async function wipeLiveVectors(storage: Storage | undefined): Promise<void> { for (const v of [...liveVectors]) await wipeVectors(v, storage); }
+/** What else sign-out must reach in memory (the retrieval runtime's corpus and its running embedding pass, retrieval-run.ts). Run before the vectors go. */
+const liveResets = new Set<() => void>();
+export function onSignOut(f: () => void): () => void { liveResets.add(f); return () => { liveResets.delete(f); }; }
+export async function wipeLiveVectors(storage: Storage | undefined): Promise<void> {
+  for (const f of [...liveResets]) f();
+  for (const v of [...liveVectors]) await wipeVectors(v, storage);
+}
 
 export class VectorStore {
   private ids: string[] = [];
