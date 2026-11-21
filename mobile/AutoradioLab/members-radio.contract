@@ -16,6 +16,11 @@ members Autoradio
     send rwm = radioWrite(rpulse.tick)
   task writeKick when rpulse.write key=rpulse.tick
     after(1, writeNow)
+  mutation rhm as shape RadioTick
+  action holdNow
+    send rhm = radioHold(rpulse.tick)
+  task holdKick when rpulse.hold key=rpulse.tick
+    after(1, holdNow)
 
   // "All of it" opens Up next to the whole run sheet ahead, in place.
   state radioAll = false

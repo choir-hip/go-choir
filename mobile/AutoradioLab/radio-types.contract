@@ -30,6 +30,8 @@ shape RadioTick
   tick: number
   // The desk should be asked, or the sheet's ops posted: `radioWrite` (a mutation) does it, and stays until it is done.
   write: bool
+  // Starts or the held list wait for a pump: `radioHold`.
+  hold: bool
 
 shape RadioBuiltOn
   n: number

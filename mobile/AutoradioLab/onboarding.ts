@@ -98,7 +98,9 @@ export function nativeDevice(): Device | null {
 
 type Mem = { gen: number; loaded: boolean; p: Progress; step: string; askMobile: boolean; message: string; hearingOK: boolean; edition: Edition | null; status: string; writingLine: string; error: string; mirrored: boolean | null; picked: number };
 let mem: Mem | null = null;
-const blank = (): Mem => ({ gen: accountGeneration(), loaded: false, p: fresh(), step: 'welcome', askMobile: false, message: '', hearingOK: false, edition: null, status: '', writingLine: '', error: '', mirrored: null, picked: 0 });
+/** The account generation of the first memory this process made: the launch's. */
+let launchGen: number | undefined;
+const blank = (): Mem => ({ gen: launchGen === undefined ? (launchGen = accountGeneration()) : accountGeneration(), loaded: false, p: fresh(), step: 'welcome', askMobile: false, message: '', hearingOK: false, edition: null, status: '', writingLine: '', error: '', mirrored: null, picked: 0 });
 /** For tests: a new process. */
 export function forgetOnboarding(): void { mem = null; }
 
@@ -246,7 +248,7 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
     }
     case 'continueAnyway': await ready(env, m, generalEdition(), top === EDIT); break;
     case 'skip': await dev(env, 'obStop'); m.p.skipped = true; m.step = 'skipped'; await save(env, m); break;
-    case 'offer': await offer(env, m); break;
+    case 'offer': if (arg === 'signedOut' && m.gen !== launchGen) break; await offer(env, m); break;      // signed out, the first run is offered at launch only: after a sign-out it would be written again right after the wipe
     default: break;
   }
   const f = await facts(env);

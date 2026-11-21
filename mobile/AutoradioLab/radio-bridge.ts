@@ -206,7 +206,7 @@ export async function queueView(storage: Store | undefined, native: NativeReader
 }
 
 /** The pump: read the deck, apply what the voice handed over, keep the desk writing; answers a tick the screens ask again on. Called whenever the deck or the native side says something changed. */
-export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean }> {
+export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
   const r = await getRadio(storage, native);
   await r.rt.pump();
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
@@ -222,11 +222,11 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   // Whether the desk should be asked, or the sheet's pending ops posted, is said here; the ASK is `radioWrite`, a mutation (members-radio.contract): those are long fetches, and a fetch that goes on after the
   // answer that began it is gone (a newer pulse takes a pulse's place) is never run. A mutation stays until it is done.
   const posting = r.rt.store.pending.length > 0 && r.rt.store.flushTask === undefined;
-  return { tick: r.tick, write: r.writer.wouldAsk() || posting };
+  return { tick: r.tick, write: r.writer.wouldAsk() || posting, hold: r.rt.needsWork() };
 }
 
 /** The desk's ask and the sheet's post, in one answer that waits for both. */
-export async function radioWrite(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean }> {
+export async function radioWrite(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
   const r = await getRadio(storage, native);
   r.rt.store.flush();
   const asked = r.writer.checkAhead();
@@ -234,7 +234,14 @@ export async function radioWrite(storage: Store | undefined, native: NativeReade
   if (asked) waits.push(r.writer.settle());
   if (r.rt.store.flushTask) waits.push(r.rt.store.flushTask);
   await Promise.all(waits.map((t) => t.catch(() => undefined)));
-  return { tick: r.tick, write: false };
+  return { tick: r.tick, write: false, hold: false };
+}
+
+/** The starts and the held list: the pump, in an answer that is not let go when the next pulse is asked (a mutation of its own: the ask above must not be taken from its place). */
+export async function radioHold(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean; hold: boolean }> {
+  const r = await getRadio(storage, native);
+  await r.rt.pump();
+  return { tick: r.tick, write: false, hold: false };
 }
 
 /** One message from native (a verb from the voice turn or a handler that has not moved): `{verb, ...}` as text. */

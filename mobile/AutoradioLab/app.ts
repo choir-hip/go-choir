@@ -115,6 +115,7 @@ const sources: Sources = {
   // The radio (radio-bridge.ts over radio-runtime.ts): the run sheet, its writer and the deck's journal are shared code; the deck is native (the one `deck` op).
   radioPulse: ([_deck, _note, _tick], _s, storage, native) => radioBridge.radioPulse(storage as never, native as never),
   radioWrite: ([_tick], _s, storage, native) => radioBridge.radioWrite(storage as never, native as never),
+  radioHold: ([_tick], _s, storage, native) => radioBridge.radioHold(storage as never, native as never),
   queueView: ([_t], _s, storage, native) => radioBridge.queueView(storage as never, native as never),
   queueAdd: ([mode, kind, ref, title, local], _s, storage, native) => radioBridge.queueAdd(storage as never, native as never, mode, kind, ref, title, local),
   queueAct: ([op, arg], _s, storage, native) => radioBridge.queueAct(storage as never, native as never, op, arg),

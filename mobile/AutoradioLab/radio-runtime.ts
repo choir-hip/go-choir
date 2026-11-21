@@ -308,6 +308,13 @@ export class RadioRuntime {
     }
     return out;
   }
+  /** Is there pump work a pulse might be let go in the middle of: an entry to start, or a held list that is not the sheet's next entries? (A mutation then does it and stays until it is done.) */
+  needsWork(): boolean {
+    if (this.pendingStarts.length > 0) return true;
+    const wanted = this.director.wants || this.store.onAir() ? this.holdable() : [];
+    const held = this.deckState?.held ?? [];
+    return wanted.length !== held.length || wanted.some((w, i) => w.id !== held[i]);
+  }
   private async keepHeld(): Promise<void> {
     const epoch = this.epoch;
     const wanted = this.director.wants || this.store.onAir() ? this.holdable() : [];
