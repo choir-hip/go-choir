@@ -48,3 +48,11 @@ describe('settingsAccount', () => {
     expect(plainAccountError(new Error('x'))).toBe('Could not reach choir.news.');
   });
 });
+
+import { aboutPage } from './settings.ts';
+describe('aboutPage', () => {
+  test('the version is the platform fact, dev without one; the server is the one origin', () => {
+    expect(aboutPage({ appVersion: '1.4' }, true)).toEqual({ app: '1.4', base: ORIGIN, signedIn: true });
+    expect(aboutPage({ appVersion: '' }, false)).toEqual({ app: 'dev', base: ORIGIN, signedIn: false });
+  });
+});

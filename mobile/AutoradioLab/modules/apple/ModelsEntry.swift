@@ -70,6 +70,11 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        // First run's voice side (AutoradioModule+Onboarding.swift `onboardingOp`; each op's reason is in that file's header): the models' setup, the microphone check, the hearing sentence, the voice at the topic screen.
+        if let op = op, op.hasPrefix("ob") {
+            Task { @MainActor in reply.send(await AutoradioModule.current?.onboardingOp(request) ?? [:]) }
+            return
+        }
         if let op = op, op.hasPrefix("take") {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return

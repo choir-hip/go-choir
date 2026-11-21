@@ -15,3 +15,42 @@ shape SettingsAccount
 shape AboutBuild
   build: string
   server: string
+
+// The Computer page (computer.ts), Activity (activity.ts) and About (settings.ts `aboutPage`): shared code answers them; the native side gives only `SettingsFacts` (interface/settings.json).
+shape SettingsComputer
+  id: string
+  state: string
+  target: string
+  phase: string
+  updateAvailable: bool
+  message: string
+  epoch: number
+  checked: bool
+
+shape ActivityItem
+  id: string
+  kind: string
+  label: string
+  detail: string
+  group: string
+  ago: string
+  target: string
+  title: string
+  at: number
+  unseen: bool
+
+shape ActivityInfo
+  status: string
+  message: string
+  live: ActivityItem[]
+  computer: ActivityItem[]
+  desk: ActivityItem[]
+  paper: ActivityItem[]
+  radio: ActivityItem[]
+  unseen: number
+  blank: bool
+
+shape AboutInfo
+  app: string
+  base: string
+  signedIn: bool

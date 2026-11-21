@@ -1,26 +1,20 @@
-// Lane 8: first run. Voice setup (configuring the voice and audio models), the edition's topics and the edition. Owned by the onboarding lane. The topics
-// themselves (the tree, tap, type, say, the saved file) are shared code now (AutoradioLab/edition-picks.ts); here the voice at that screen is native
-// (EditionTalk, EditionSetup.swift) and the picks arrive as a pushed copy (EditionPicksMirror). The logic is in the kit (VoiceSetup.swift, EditionSetup.swift, with tests); this
-// file only holds the listener's progress, the platform calls (microphone, route, speech) and the sources
-// and sends the contract binds.
-//
-// What runs where:
-//   a phone                      : setup uses the ModelStore downloader and (when the models lane supplies them) the
-//                                  library fetch and on-device checkers; "Talk to it" runs on the engine: programme
-//                                  "edition-setup", desk "edition-setup-desk", open addressing, until the reader stops it.
-//                                  UNPROVEN on a device.
+// First run, native half: THE VOICE. The step machine, the page and what is kept are shared code (AutoradioLab/onboarding.ts); this file is only what the voice side can say and do,
+// and each line below has the reason only native code can meet it:
+//   facts   `voiceSetupFacts` (one source): the models' setup rows and progress (VoiceSetup.swift, ModelStore: the on-device models), whether the phone is on Wi-Fi, the microphone
+//           check's state and level, what it heard, the audio route, whether the voice is listening at the topic screen, how many times the voice cards reported a pick and how many
+//           times the voice said "continue" (counters, so shared code can tell a new one: Exact has no call from native code into shared code).
+//   calls   `later({op})` from onboarding.ts, answered by `onboardingOp` (ModelsEntry.swift routes the `ob*` ops here):
+//             obFacts, obSetupBegin, obSetupRetry, obSetupFallback   download and measure this phone's voice models (VoiceSetup)
+//             obMicStart, obMicStop                                  the microphone permission and the one live check
+//             obHearingPlay                                          the sentence at the hearing check, in the voice that was set up (the speaker route)
+//             obTalk                                                 the voice at the topic screen: the engine's stages (EditionSetupProgramme/Desk) and the open microphone
+//             obMirror                                               whether the first run is over: the station may then start by itself (Station.isReady)
+//             obNotebookTopics                                       the topics become the first lines of the notebook (NotebookStore: Notebook.swift)
+//             obPageOpen, obPageClose                                the iOS open-page list is still native
+//             obReset, obStop                                        sign-out; leaving the first run
+// Nothing is kept here: no file, no step. What a setup record and the responder choice need stays where the models are (voice-setup.json beside the models).
 import AVFoundation
 import Foundation
-
-private struct OnboardingProgress: Codable {
-    var offered = false
-    var skipped = false
-    var setupDone = false
-    var micRefused = false
-    var topicsStarted: Bool?
-    var editionDone = false
-    var step = "welcome"
-}
 
 final class OnboardingController: @unchecked Sendable {
     static var shared: OnboardingController?
@@ -29,70 +23,36 @@ final class OnboardingController: @unchecked Sendable {
     unowned let module: AutoradioModule
     let support: URL
     private let lock = NSLock()
-    private var progress = OnboardingProgress()
     private var setup: VoiceSetup?
-    private var step = "welcome"
-    /// Onboarding is over (the edition is made, or the reader skipped it): the station may start by itself (lane autoradio-queue).
-    var finished: Bool { step == "done" || step == "skipped" }
-    private var askMobile = false
-    private var message = ""
-    // microphone and hearing
+    /// The first run is over (done or skipped): the station may start by itself. Told by shared code (obMirror).
+    private var over = false
+    var finished: Bool { lock.lock(); defer { lock.unlock() }; return over }
     private var mic = "unasked"          // unasked | checking | heard | refused | silent
+    private var micActive = false
     private var level = 0.0
     private var heard = ""
     private var route = ""
-    private var hearingOK = false
-    // the voice at the topic screen
     private var talking = false
-    /// The edit page is open: Done rewrites the edition without touching the first-run step.
-    private var editing = false
-    /// The account generation the edit page was opened under: a Done that arrives after the account moved on is refused.
-    private var editGen: Int?
-    // edition
-    private var edition: Edition?
-    private var editionStatus = ""       // "" | writing | failed | ready
-    private var writingLine = ""
-    private var editionError = ""
-    private var writer: EditionWriter
+    private var picked = 0
+    private var finishAsked = 0
 
-    var progressFile: URL { support.appendingPathComponent("onboarding.json") }
     var recordFile: URL { support.appendingPathComponent("voice-setup.json") }
 
     init(module: AutoradioModule, support: URL) {
         self.module = module; self.support = support
-        writer = LocalEditionWriter()
-        if let d = try? Data(contentsOf: progressFile), let p = try? JSONDecoder().decode(OnboardingProgress.self, from: d) { progress = p }
-        // Coming back to the topics step shows what was saved (shared code reads it). The microphone never opens by itself (restart rule).
-        if progress.topicsStarted == true, !progress.editionDone, !progress.skipped { step = "topics" }
-        else if progress.editionDone { step = "done" }
-        else if progress.skipped { step = "skipped" }
-        else if progress.setupDone { step = "ready" }
-        EditionTalk.shared.onFinish = { [weak self] in self?.finishTopics() }
+        EditionTalk.shared.onFinish = { [weak self] in self?.set { self?.finishAsked += 1 } }
     }
 
-    func changed() { module.touch(["onboardingState"]) }
-
-    private func save() {
-        lock.lock(); let p = progress; lock.unlock()
-        try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
-        if let d = try? JSONEncoder().encode(p) { try? d.write(to: progressFile, options: .atomic) }
-    }
-
+    func changed() { module.touch(["voiceSetupFacts"]) }
     private func set(_ f: () -> Void) { lock.lock(); f(); lock.unlock(); changed() }
 
     // MARK: Voice setup
 
-    func begin(mobileOK: Bool) {
+    func begin() {
         lock.lock()
-        let doneBefore = progress.setupDone && setup == nil && step == "skipped"
+        if let s = setup, s.isStarted, !s.isFinished { lock.unlock(); return }
         lock.unlock()
-        // Skipped after a finished setup: nothing to download again; go on to the topics.
-        if doneBefore { set { step = "ready"; progress.skipped = false }; save(); return }
-        lock.lock()
-        if step == "setup", setup?.isStarted == true, setup?.isFinished == false { lock.unlock(); return }
-        lock.unlock()
-        // The one shared store, with the whole catalog in it from the start (the first phone walk's "model ... not registered"
-        // came from a store of its own that nothing had registered into).
+        // The one shared store, with the whole catalog in it from the start.
         let backend: SetupBackend = LiveSetupBackend(store: .shared)
         let profile = DeviceProfile.current()
         let stall = 20.0, patience = 45.0
@@ -100,13 +60,8 @@ final class OnboardingController: @unchecked Sendable {
         let configurator: ConfigBackend? = LiveConfigBackend()
         var s = VoiceSetup(backend: backend, profile: profile, smaller: false, stallSeconds: stall, patience: patience, configBackend: configurator)
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
-        if !profile.onWiFi && !mobileOK {
-            set { setup = s; step = "setup"; askMobile = true; message = "" }
-            return
-        }
         s.onChange = { [weak self] in self?.changed() }
-        set { setup = s; step = "setup"; askMobile = false; message = ""; progress.skipped = false }
-        let gen = AccountWipe.generation
+        set { setup = s }
         Task { [weak self, s] in
             await s.run()
             self?.setupFinished(s, gen: gen)
@@ -125,24 +80,19 @@ final class OnboardingController: @unchecked Sendable {
         }
         // The responder model setup chose is the one the phone talks with (read again at every start).
         if let r = s.record.items.first(where: { $0.stage == SetupStage.responder.rawValue }), KnownModels.isPinned(r.chosen) { ResponderChoice.current = r.chosen }
-        set { progress.setupDone = true; step = "mic" }
-        save()
+        changed()
     }
 
     func retry(_ stage: String) { if let st = SetupStage(rawValue: stage) { setup?.retry(st) } }
     func fallback(_ stage: String) { if let st = SetupStage(rawValue: stage) { setup?.useFallback(st) } }
 
-    // MARK: Microphone, in context, with one live check; then a hearing check
+    // MARK: Microphone, in context, with one live check
 
     func askMicrophone() {
-        set { mic = "checking"; message = "" }
+        set { mic = "checking"; micActive = true; level = 0; heard = "" }
         AVAudioApplication.requestRecordPermission { [weak self] granted in
             guard let self else { return }
-            if !granted {
-                self.set { self.mic = "refused"; self.progress.micRefused = true; self.message = "Talking to the radio needs the microphone. You can allow it in Settings; you can always tap instead." }
-                self.save(); return
-            }
-            self.set { self.progress.micRefused = false }
+            if !granted { self.set { self.mic = "refused"; self.micActive = false }; return }
             // One live check: start the engine, listen on this screen only (hands-free is off by default and the engine drops every frame
             // while it is off), feed the meter from the real input level, and pass on the first transcript or on a sustained level
             // (`MicCheck`). When it ends, hands-free goes back to the stored state. UNPROVEN on a device.
@@ -158,8 +108,8 @@ final class OnboardingController: @unchecked Sendable {
                 if !HandsFreeSwitch.shared.isOn { rt.setHandsFree(true, persist: false) }
                 defer { feeder.cancel(); rt.restoreHandsFree() }
                 while meter.verdict == .listening {
-                    self.lock.lock(); let here = self.step == "mic"; self.lock.unlock()
-                    if !here { return }                                                  // the listener left the step: end the check (defer restores)
+                    self.lock.lock(); let here = self.micActive; self.lock.unlock()
+                    if !here { return }                                                  // shared code left the step: end the check (defer restores)
                     try? await Task.sleep(nanoseconds: 100_000_000)
                     meter.tick(0.1)
                     meter.transcript(rt.snapshot().transcript)
@@ -169,20 +119,22 @@ final class OnboardingController: @unchecked Sendable {
                 if meter.verdict == .heard {
                     rt.cancelTalk()                                                      // a phrase spoken here must not become a turn to the desk
                     let t = rt.snapshot().transcript
-                    self.set { self.heard = (t.isEmpty || t == before) ? "Your microphone is working." : t; self.mic = "heard" }
+                    self.set { self.heard = (t.isEmpty || t == before) ? "" : t; self.mic = "heard"; self.micActive = false }
                 } else {
-                    self.set { self.mic = "silent"; self.message = "I could not hear anything. The paper keeps working, and you can tap your topics instead." }
+                    self.set { self.mic = "silent"; self.micActive = false }
                 }
             }
         }
     }
 
-    func microphoneNext() {
-        let r = currentRoute()
-        set { route = r; step = "hearing"; hearingOK = false; message = "" }
+    func stopMicrophone() { lock.lock(); micActive = false; lock.unlock() }
+
+    /// The hearing check: the route it plays on, and the sentence, in the voice that was just set up. The radio's engine is running after the microphone check; if it is not,
+    /// the phone's own voice says it (the check is about the speaker, and it must not stay silent).
+    func playHearing() {
+        stopMicrophone()
+        set { route = "Playing on " + Platform.outputName() }
         if !module.virtualEngine {
-            // In the voice that was just set up. The radio's engine is running after the microphone check; if it is not, the phone's
-            // own voice says it (the check is about the speaker, and it must not stay silent).
             if module.runtime.snapshot().running, let v = VoiceController.shared {
                 Task { await v.speak("Can you hear this?") }
             } else {
@@ -191,42 +143,21 @@ final class OnboardingController: @unchecked Sendable {
         }
     }
 
-    /// The voice step is done (the voice cards keep the choice): on to the interview's door.
-    func voiceNext() {
-        set { if step == "voice" { step = "ready" }; message = "" }
-        save()
-    }
+    /// The voice cards report a pick (the voice step is done): shared code sees the counter move.
+    func voiceNext() { set { picked += 1 } }
 
-    private func currentRoute() -> String {
-        return "Playing on " + Platform.outputName()
-    }
+    // MARK: The voice at the topic screen
 
-    func hearing(ok: Bool) {
-        if ok { set { hearingOK = true; step = "voice"; progress.setupDone = true; message = "" }; save() }
-        else {
-            microphoneNext()
-            set { message = "Try the volume, or another speaker or headphones, then play it again." }
-        }
-    }
-
-    // MARK: The edition's topics
-
-    /// The step: chips the reader taps, a field to type their own, and "Talk to it". Nothing here needs the microphone or the network.
-    func startTopics() {
-        set { step = "topics"; progress.topicsStarted = true; progress.skipped = false; message = "" }
-        save()
-    }
-
-    /// Say it instead of tapping: the engine listens until the reader stops it or taps Continue.
-    func toggleTalk() {
-        lock.lock(); let on = talking; lock.unlock()
-        if on { stopVoice(); return }
-        if progress.micRefused { set { message = "Talking to the radio needs the microphone. You can allow it in Settings, or tap topics instead." }; return }
+    /// Say it instead of tapping: the engine listens until shared code stops it. The words are heard by EditionTalk and applied by shared code (edition-picks.ts).
+    func talk(_ on: Bool) {
+        lock.lock(); let was = talking; lock.unlock()
+        if !on { if was { stopVoice() }; return }
+        if was { return }
         let rt = module.runtime!
         rt.setStage(.programme, id: EditionSetupProgramme.stageID)
         rt.setStage(.desk, id: EditionSetupDesk.stageID)
         rt.setAudioPolicy(.alwaysTalking)
-        set { talking = true; message = "" }
+        set { talking = true }
         Task { [weak self] in
             guard let self else { return }
             await rt.start(virtual: self.module.virtualEngine)
@@ -250,201 +181,75 @@ final class OnboardingController: @unchecked Sendable {
         changed()
     }
 
-    /// Continue: the selection is already saved (every change writes it); the edition is written from it.
-    func finishTopics(topics: [String]? = nil) {
-        lock.lock(); let on = step == "topics"; lock.unlock()
-        guard on else { return }
-        stopVoice()
-        writeEdition(topics: topics)
+    func stop() { stopVoice(); stopMicrophone() }
+
+    /// Sign-out: nothing of the voice side's first run reaches the next account.
+    func reset() {
+        stop()
+        set { setup = nil; mic = "unasked"; level = 0; heard = ""; route = ""; talking = false; over = false; picked = 0; finishAsked = 0 }
     }
 
-    // MARK: The edition
+    func mirror(finished f: Bool) { lock.lock(); over = f; lock.unlock() }
 
-    /// The edit page (`onboarding:edit`) opened: the saved picks are there, preselected, whether or not onboarding ever ran.
-    func prepareEdit() {
-        editGen = AccountWipe.generation
-        set { editing = true; message = "" }
-    }
+    // MARK: What shared code sees
 
-    /// Done on the edit page: the same completion path as onboarding's Continue (deadline, progress, Retry).
-    func finishEdit(topics: [String]? = nil) {
-        if let g = editGen, g != AccountWipe.generation { return }
-        stopVoice()
-        set { editing = true }  // also when the page's load never ran
-        writeEdition(topics: topics)
-    }
-
-    /// Leave the edit page without rewriting (after a failure): the picks stay saved, the edition stays as it was.
-    func leaveEdit() {
-        stopVoice()
-        set { editing = false; editionStatus = (edition != nil || progress.editionDone) ? "ready" : ""; editionError = "" }
-        module.pages.close("onboarding:edit")
-        module.touch(["openPages"])
-    }
-
-    /// The picks the edition is written from: the page's own list on the send (`topics`, from the shared code's page), else the pushed copy when shared code has pushed one.
-    /// Neither: nil, and nothing is written. An empty list that nobody chose is never the listener's choice.
-    private func picksFor(_ topics: [String]?) -> [String]? { topics ?? (EditionPicksMirror.shared.known ? EditionPicksMirror.shared.topics : nil) }
-
-    func writeEdition(topics given: [String]? = nil) {
-        lock.lock(); let busy = editionStatus == "writing"; lock.unlock()
-        guard !busy else { return }
-        guard let topics = picksFor(given) else { set { message = "Your topics are not loaded yet. Try again in a moment." }; return }
-        let gen = AccountWipe.generation                       // the notebook write below is refused if the account moves on before it
-        lock.lock(); let edit = editing; lock.unlock()
-        set { if !edit { step = "writing" }; editionStatus = "writing"; writingLine = "Writing your edition…"; editionError = "" }
-        let w = writer
-        Task { [weak self, w] in
-            guard let self else { return }
-            // Always ends: the edition, a failure, or the deadline (EditionCompletion). The topics were saved before this ran.
-            let outcome = await EditionCompletion.run(topics: topics, writer: w) { line in self.set { self.writingLine = line } }
-            guard gen == AccountWipe.generation else { return }         // another account now: nothing of this edition is theirs
-            switch outcome {
-            case .written(let e):
-                self.editionReady(e)
-                // The topics also become the first lines of the notebook; the local file stays as the cache. A failure here is quiet: the page retries.
-                Task { @MainActor in await NotebookStore.shared.writeTopics(topics, generation: gen) }
-            case .failed(let m): self.set { self.editionStatus = "failed"; self.editionError = m }
-            case .timedOut: self.set { self.editionStatus = "failed"; self.editionError = EditionCompletion.timedOutLine }
-            }
-        }
-    }
-
-    /// "Continue anyway": the general edition, from nothing but this phone. The saved topics stay in the file.
-    func continueAnyway() {
-        editionReady(EditionCompletion.general())
-    }
-
-    private func editionReady(_ e: Edition) {
-        lock.lock(); let edit = editing; lock.unlock()
-        if edit {
-            // Editing after the first run: the step stays as it was; the edit page closes and the reader is back where they came from.
-            set { edition = e; editionStatus = "ready"; progress.editionDone = true; editing = false }
-            save()
-            module.pages.close("onboarding:edit")
-            module.touch(["openPages"])
-            return
-        }
-        set { edition = e; editionStatus = "ready"; step = "done"; progress.editionDone = true }
-        save()
-        // The edition is a local page (onboarding:edit), not a server document: nothing is opened here, the done screen is shown.
-        module.touch(["openPages"])
-    }
-
-    /// The computer already holds the listener's edition: no card, no offer.
-    func markEditionFound() {
-        set { progress.editionDone = true; step = "done" }
-        save()
-    }
-
-    /// Sign-out: the controller's memory (progress, step, edition, status) is the account's; nothing of it reaches the next account.
-    func wipeAccount() {
-        stopVoice()
-        set { progress = OnboardingProgress(); step = "welcome"; setup = nil; edition = nil; editionStatus = ""; writingLine = ""; editionError = ""; mic = "unasked"; level = 0; heard = ""
-              route = ""; hearingOK = false; askMobile = false; message = ""; editing = false; talking = false }
-        try? FileManager.default.removeItem(at: progressFile)
-    }
-
-    func skip() {
-        stopVoice()
-        set { progress.skipped = true; step = "skipped" }
-        save()
-    }
-
-    // MARK: What the contract sees
-
-    func view() -> [String: Any] {
+    func facts() -> [String: Any] {
         lock.lock(); defer { lock.unlock() }
         let rows: [[String: Any]] = (setup?.rows ?? []).map { r in
             ["stage": r.stage, "name": r.name, "model": r.model, "sizeLabel": r.sizeLabel, "state": r.state, "progress": r.progress, "statusLine": r.statusLine,
              "isFallback": r.isFallback, "canRetry": r.canRetry, "canFallback": r.canFallback, "numbers": r.numbers]
         }
-        var card = "", cardBody = ""
-        // the prompt is gone once the edition is made or the reader has skipped it ("Not now": a saved skip), and starting setup again brings it back
-        if progress.editionDone || progress.skipped { card = "" }
-        else if progress.topicsStarted == true { card = "Choose your topics"; cardBody = "Pick up where you left off. What you chose is saved." }
-        else if setup?.isStarted == true && setup?.isFinished == false { card = "Finish voice setup"; cardBody = "Setting up the voice on this phone takes a few minutes." }
-        else { card = "Make your edition"; cardBody = "Pick the topics you care about, then your paper is yours." }
-        let titles: [String: String] = ["welcome": "Make it yours", "setup": "Set up your voice", "mic": "Can I hear you?", "hearing": "Can you hear me?", "voice": "Pick a voice", "ready": "Voice is ready",
-                                        "topics": "Your edition", "writing": "Writing your edition", "done": "Your edition", "skipped": "Make it yours"]
-        var d = [String: Any]()
-        d["step"] = step; d["title"] = titles[step] ?? "Make it yours"; d["message"] = message
-        d["totalLabel"] = setup?.totalLabel ?? SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(SetupCatalog.plan(for: .current())), onWiFi: true)
-        d["askMobile"] = askMobile; d["rows"] = rows; d["summary"] = setup?.summary ?? []
-        d["setupFinished"] = setup?.isFinished ?? false; d["setupStarted"] = setup?.isStarted ?? false
+        let profile = setup?.profile ?? DeviceProfile.current()
         var device = ""
         if let p = setup?.profile { device = p.chip + ", " + String(format: "%.0f", p.memoryGB) + " GB" }
-        d["device"] = device
-        d["mic"] = mic; d["level"] = level; d["heard"] = heard; d["route"] = route; d["hearingOK"] = hearingOK
-        d["talking"] = talking
-        d["editionStatus"] = editionStatus; d["writingLine"] = writingLine; d["editionError"] = editionError
-        d["editionTitle"] = edition?.title ?? "My edition"; d["editionIntro"] = edition?.intro ?? ""
-        d["editionLines"] = edition?.lines ?? []; d["editionAddress"] = PageAddress.edition
-        d["card"] = card; d["cardBody"] = cardBody; d["aim"] = progress.editionDone ? "" : "Make it yours"
-        d["skipped"] = progress.skipped; d["editionDone"] = progress.editionDone; d["editing"] = editing
-        return d
+        return ["rows": rows, "summary": setup?.summary ?? [],
+                "totalLabel": setup?.totalLabel ?? SetupCatalog.totalLabel(bytes: SetupCatalog.totalBytes(SetupCatalog.plan(for: profile)), onWiFi: profile.onWiFi),
+                "device": device, "onWiFi": profile.onWiFi, "setupStarted": setup?.isStarted ?? false, "setupFinished": setup?.isFinished ?? false,
+                "mic": mic, "level": level, "heard": heard, "route": route, "talking": talking, "voicePicked": picked, "finishAsked": finishAsked]
     }
 }
 
-/// `onboarding:*` pages: the first-run setup and the edition's edit page (`onboarding:edit`; the old `texture:my-edition` address
-/// is rewritten to it by `PageAddress.canonical`, because no server document of that name exists).
+/// `onboarding:*` pages: the first-run setup and the edition's edit page. The page itself is shared code (onboarding.contract); this only names it for the native page list.
 struct OnboardingPageSource: PageSource {
-    let controller: OnboardingController
-    func handles(_ address: String) -> Bool {
-        address.hasPrefix("onboarding:")
-    }
+    func handles(_ address: String) -> Bool { address.hasPrefix("onboarding:") }
     func load(_ address: String) async throws -> PageModel {
-        if address == "onboarding:edit" { controller.prepareEdit(); return PageModel(address: address, kind: "onboarding", title: "Edit my edition", status: "ready") }
-        return PageModel(address: address, kind: "onboarding", title: "Make it yours", status: "ready")
+        PageModel(address: address, kind: "onboarding", title: address == "onboarding:edit" ? "Edit my edition" : "Make it yours", status: "ready")
     }
 }
 
 extension AutoradioModule {
-    /// The picks the page sent (one per line); nil when the send carried none (a native caller).
-    static func topicsArg(_ args: [String: Any]) -> [String]? {
-        guard let s = args["topics"] as? String else { return nil }
-        return s.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-    }
-
     func registerOnboarding() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio")
         let c = OnboardingController(module: self, support: support)
         OnboardingController.shared = c
         StageRegistry.registerEditionSetupStages(runtime.registry)
-        pageSources.register(OnboardingPageSource(controller: c))
-        choir.accountWipe.register("onboarding") { [weak c] in c?.wipeAccount() }
-
-        handle("onboardingState") { args, reply in reply(c.view()) }
-        // Sends answer the same shape the page reads.
-        handle("onboardingBegin") { args, reply in c.begin(mobileOK: (args["mobile"] as? String) == "true"); reply(c.view()) }
-        handle("onboardingRetry") { args, reply in c.retry(args["stage"] as? String ?? ""); reply(c.view()) }
-        handle("onboardingFallback") { args, reply in c.fallback(args["stage"] as? String ?? ""); reply(c.view()) }
-        handle("onboardingMic") { args, reply in c.askMicrophone(); reply(c.view()) }
-        handle("onboardingMicNext") { args, reply in c.microphoneNext(); reply(c.view()) }
-        handle("onboardingHearing") { args, reply in c.hearing(ok: (args["ok"] as? String) == "true"); reply(c.view()) }
-        handle("onboardingTopics") { args, reply in c.startTopics(); reply(c.view()) }
-        handle("onboardingEditDone") { args, reply in c.finishEdit(topics: AutoradioModule.topicsArg(args)); reply(c.view()) }
-        handle("onboardingEditLeave") { args, reply in c.leaveEdit(); reply(c.view()) }
-        handle("onboardingTalk") { args, reply in c.toggleTalk(); reply(c.view()) }
-        handle("onboardingTopicsDone") { args, reply in c.finishTopics(topics: AutoradioModule.topicsArg(args)); reply(c.view()) }
-        handle("onboardingEditionRetry") { args, reply in c.writeEdition(topics: AutoradioModule.topicsArg(args)); reply(c.view()) }
-        handle("onboardingContinueAnyway") { args, reply in c.continueAnyway(); reply(c.view()) }
-        handle("onboardingSkip") { args, reply in c.skip(); reply(c.view()) }
-
-        // Fresh install, signed in: offer the path once as the open page (closing it is a choice that sticks).
-        // The computer is asked first (GET /api/texture/edition): a listener who already has an edition (a second phone, a reinstall) is
-        // not offered the topics step. No answer (offline, signed out, an older server) offers it as before.
-        Task { [weak c, pages] in
-            if let ed = await EditionLookup.fetch(), ed.found { c?.markEditionFound() } else if let pages { c?.offerOnce(pages: pages) }
-        }
+        pageSources.register(OnboardingPageSource())
+        choir.accountWipe.register("onboarding") { [weak c] in c?.reset() }
+        handle("voiceSetupFacts") { _, reply in reply(c.facts()) }
     }
-}
 
-extension OnboardingController {
-    func offerOnce(pages: OpenPages) {
-        lock.lock(); let go = !progress.offered && !progress.editionDone && !progress.skipped; if go { progress.offered = true }; lock.unlock()
-        guard go else { return }
-        save()
-        pages.open("onboarding:setup", title: "Make it yours")
+    /// The narrow calls shared code (onboarding.ts) makes; see the header of this file for each one's reason.
+    @MainActor func onboardingOp(_ r: [String: Any]) async -> [String: Any] {
+        guard let c = OnboardingController.shared else { return [:] }
+        switch r["op"] as? String ?? "" {
+        case "obFacts": return c.facts()
+        case "obSetupBegin": c.begin()
+        case "obSetupRetry": c.retry(r["stage"] as? String ?? "")
+        case "obSetupFallback": c.fallback(r["stage"] as? String ?? "")
+        case "obMicStart": c.askMicrophone()
+        case "obMicStop": c.stopMicrophone()
+        case "obHearingPlay": c.playHearing()
+        case "obTalk": c.talk((r["on"] as? Bool) ?? false)
+        case "obStop": c.stop()
+        case "obReset": c.reset()
+        case "obMirror": c.mirror(finished: (r["finished"] as? Bool) ?? false)
+        case "obNotebookTopics":
+            let gen = AccountWipe.generation
+            _ = await NotebookStore.shared.writeTopics((r["topics"] as? [String]) ?? [], generation: gen)       // a failure here is quiet: the page retries
+        case "obPageOpen": pages.open(r["address"] as? String ?? "", title: r["title"] as? String ?? ""); touch(["openPages"])
+        case "obPageClose": pages.close(r["address"] as? String ?? ""); touch(["openPages"])
+        default: break
+        }
+        return [:]
     }
 }

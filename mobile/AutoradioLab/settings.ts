@@ -54,3 +54,7 @@ export async function settingsAccount(args: AccountArgs): Promise<SettingsAccoun
     return { ...base, signedIn: true, status: 'failed', message: plainAccountError(e) };
   }
 }
+
+/** The About page's app and server rows: the app's version is a platform fact (the bundle), the server is this build's one origin. */
+export const aboutPage = (f: { appVersion: string }, signedIn: boolean): { app: string; base: string; signedIn: boolean } =>
+  ({ app: f.appVersion === '' ? 'dev' : f.appVersion, base: ORIGIN, signedIn });
