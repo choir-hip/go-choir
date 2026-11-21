@@ -321,7 +321,7 @@ type ShowRow = HomeView['shows'][number];
 type EpisodeRow = ShowView['episodes'][number];
 type Ack = Result<'podcastSubscribe'>;
 
-const NO_PLAY: Ack['play'] = { op: '', id: '', url: '', title: '', show: '', start: 0, clip: '', feed: '' };
+const NO_PLAY: Ack['play'] = { op: '', id: '', url: '', title: '', show: '', start: 0, clip: '', feed: '', record: '' };
 const ack = (status: string, message: string, extra: Partial<Ack> = {}): Ack => ({ status, message, play: NO_PLAY, open: '', openTitle: '', ...extra });
 
 const unplayedCount = (l: Library, f: Feed): number => f.episodes.filter((e) => e.playable && position(l, episodeKey(feedKey(f.show.feedURL), e.id)) === null).length;
@@ -553,14 +553,14 @@ export async function podcastPlay(address: string, mode: string, now_: Now, stor
   else if (mode.startsWith('at:')) { const at = parseFloat(mode.slice(3)); start = Number.isFinite(at) && at > 0 ? at : null; }
   else start = resumeSeconds(l, r.key);
   played.add(r.key);
-  return ack('ok', 'Playing.', { play: { op, id: r.key, url: r.url, title: r.title, show: r.show, start: start ?? 0, clip: '', feed: r.feed } });
+  return ack('ok', 'Playing.', { play: { op, id: r.key, url: r.url, title: r.title, show: r.show, start: start ?? 0, clip: '', feed: r.feed, record: '' } });
 }
 
 export async function podcastQueue(address: string, storage: Storage | undefined): Promise<Ack> {
   const r = await resolve(address, storage);
   if (!r) return ack('error', 'This episode has no audio to queue.');
   const l = await loadLibrary(storage);
-  return ack('ok', 'Added to the queue.', { play: { op: 'queue', id: r.key, url: r.url, title: r.title, show: r.show, start: resumeSeconds(l, r.key) ?? 0, clip: '', feed: r.feed } });
+  return ack('ok', 'Added to the queue.', { play: { op: 'queue', id: r.key, url: r.url, title: r.title, show: r.show, start: resumeSeconds(l, r.key) ?? 0, clip: '', feed: r.feed, record: '' } });
 }
 
 /** The playhead of what is playing, from the deck (an argument: shared code has no timer). Kept every 5 s of progress, and when it ends; the

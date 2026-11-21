@@ -25,6 +25,8 @@ export type Fingerprint = { version: number; head: string; tail: string; start: 
 export type Clip = {
   clipID: string; route: string; storyTitle: string; show: string; episodeTitle: string; episodeGUID: string; feedURL: string; audioURL: string;
   start: number; end: number; quote: string; fingerprint: Fingerprint | null;
+  /** The server's row as it came: handed whole to the native player, which finds the clip in the served file by its fingerprint. */
+  raw: Record<string, unknown>;
 };
 
 const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -55,7 +57,7 @@ export function parseClip(o: unknown): Clip | null {
     ? { version: num(f.version), head: f.head, tail: f.tail, start: num(f.start), end: num(f.end), bitrateKbps: num(f.bitrate_kbps), seekable: f.seekable_by_bitrate === true } : null;
   return {
     clipID: id, route: str(story.route).replace(/^\//, ''), storyTitle: str(story.title), show: str(o.show), episodeTitle: str(o.episode_title), episodeGUID: str(o.episode_guid),
-    feedURL: str(o.feed_url), audioURL: audio, start, end, quote: str(o.quote), fingerprint,
+    feedURL: str(o.feed_url), audioURL: audio, start, end, quote: str(o.quote), fingerprint, raw: o,
   };
 }
 
@@ -73,17 +75,30 @@ export function lengthLabel(c: Clip): string {
 type Rows = Result<'showClips'>;
 type Ack = Result<'clipAct'>;
 
+export const STORY_MAX = 3, SHOW_MAX = 10;
+
 const byID = new Map<string, Clip>();
 const askedFeeds = new Set<string>();
-let askedAll = false;
+let asked = false, asking: Promise<void> | null = null;
 let lastTick = 0;
 
 /** For the sign-out test: how many clips are held in memory. */
 export const remembered = (): number => byID.size;
 
-export function forget(): void { byID.clear(); askedFeeds.clear(); askedAll = false; lastTick = 0; }
+export function forget(): void { byID.clear(); askedFeeds.clear(); asked = false; asking = null; lastTick = 0; }
 
 function merge(clips: Clip[]): void { for (const c of clips) if (!byID.has(c.clipID)) byID.set(c.clipID, c); }
+
+/** A retry resets what was asked, so the next draw asks again. */
+function tickOver(tick: number): void { if (tick !== lastTick) { lastTick = tick; askedFeeds.clear(); asked = false; } }
+
+/** The whole set (`GET /api/platform/podcast-clips?limit=200`): one request for every page, never one per story. (A data source has no clock: a pull to refresh is what asks again.) */
+function ensureAll(): Promise<void> {
+  if (asked) return asking ?? Promise.resolve();
+  asked = true;                                                       // once a retry: a failure is asked again by the next one, never on every draw
+  asking = (async () => { try { merge(parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body)); } catch { /* the route is missing or down: nothing, silently */ } })();
+  return asking;
+}
 
 export function row(c: Clip): Rows['rows'][number] {
   return { clipID: c.clipID, show: c.show, episode: c.episodeTitle, length: lengthLabel(c), quote: c.quote, story: c.storyTitle, episodeOnly: !usable(c.fingerprint) };
@@ -92,7 +107,7 @@ export function row(c: Clip): Rows['rows'][number] {
 /** The clips found for a show (a podcast show page's address): its own fetch once per session or retry; none for any other address. */
 export async function showClips(address: string, tick: number): Promise<Rows> {
   const feed = parseShow(address) ?? '';
-  if (tick !== lastTick) { lastTick = tick; askedFeeds.clear(); askedAll = false; }
+  tickOver(tick);
   if (feed === '') return { rows: [] };
   const k = feedKey(feed);
   if (!askedFeeds.has(k)) {
@@ -100,18 +115,27 @@ export async function showClips(address: string, tick: number): Promise<Rows> {
     try { merge(parseClips((await getJSON(CLIPS_PATH, { feed, limit: 50 })).body)); } catch { /* the route is missing or down: nothing, silently */ }
   }
   const mine = [...byID.values()].filter((c) => c.feedURL !== '' && feedKey(c.feedURL) === k).sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
-  return { rows: mine.slice(0, 10).map(row) };
+  return { rows: mine.slice(0, SHOW_MAX).map(row) };
+}
+
+/** "Hear it": the clips cut for the story at a `pub:<route>[/vN]` address (a version has the story's clips), at most three; none for any other page. */
+export async function storyClips(address: string, tick: number): Promise<Rows> {
+  tickOver(tick);
+  if (!address.startsWith('pub:')) return { rows: [] };
+  const route = address.slice(4).replace(/^\//, '');
+  await ensureAll();
+  const all = [...byID.values()].sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
+  let found = all.filter((c) => c.route === route);
+  if (found.length === 0) { const bare = route.replace(/\/v[1-9][0-9]*$/, ''); found = all.filter((c) => c.route === bare); }
+  return { rows: found.slice(0, STORY_MAX).map(row) };
 }
 
 async function find(id: string): Promise<Clip | null> {
-  const have = byID.get(id);
-  if (have || askedAll) return have ?? null;
-  askedAll = true;
-  try { merge(parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body)); } catch { /* silent */ }
+  if (!byID.has(id)) await ensureAll();
   return byID.get(id) ?? null;
 }
 
-const NONE = { op: '', id: '', url: '', title: '', show: '', start: 0, clip: '', feed: '' };
+const NONE = { op: '', id: '', url: '', title: '', show: '', start: 0, clip: '', feed: '', record: '' };
 const ack = (message: string, extra: Partial<Ack> = {}): Ack => ({ status: 'ok', message, play: NONE, open: '', openTitle: '', ...extra });
 
 /** What a clip row's Play, Queue and Open episode do. Play and Queue answer `play.clip`: the page hands the clip's id to the native `clipPlay`,
@@ -120,8 +144,8 @@ export async function clipAct(op: string, id: string): Promise<Ack> {
   const c = await find(id);
   if (!c) return ack(GONE);
   switch (op) {
-    case 'play': return ack('', { play: { ...NONE, op: 'play', clip: c.clipID, feed: c.feedURL } });
-    case 'queue': return ack('Added to the queue.', { play: { ...NONE, op: 'queue', clip: c.clipID, feed: c.feedURL } });
+    case 'play': return ack('', { play: { ...NONE, op: 'play', clip: c.clipID, feed: c.feedURL, record: JSON.stringify(c.raw) } });
+    case 'queue': return ack('Added to the queue.', { play: { ...NONE, op: 'queue', clip: c.clipID, feed: c.feedURL, record: JSON.stringify(c.raw) } });
     case 'open': {
       if (c.feedURL === '') return ack('');
       const guid = c.episodeGUID !== '' ? c.episodeGUID : c.audioURL;           // no guid: the audio address is the id (the feed's own rule)

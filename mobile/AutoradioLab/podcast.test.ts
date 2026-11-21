@@ -262,7 +262,7 @@ describe('11 play and queue hand the deck data', () => {
     const a = M.episodeAddress(FEED_URL, 'guid-1');
     await P.podcastPlayhead({ id: M.episodeKey(FEED_URL, 'guid-1'), clip: false, elapsed: 100, duration: 3723 }, storage);
     const resume = await P.podcastPlay(a, 'resume', noNow, storage);
-    expect(resume.status).toBe('ok'); expect(resume.play).toEqual({ op: 'play', id: M.episodeKey(FEED_URL, 'guid-1'), url: 'https://cdn.example.com/one.mp3', title: 'Episode & One', show: 'Synthetic Hour', start: 100, clip: '', feed: FEED_URL });
+    expect(resume.status).toBe('ok'); expect(resume.play).toEqual({ op: 'play', id: M.episodeKey(FEED_URL, 'guid-1'), url: 'https://cdn.example.com/one.mp3', title: 'Episode & One', show: 'Synthetic Hour', start: 100, clip: '', feed: FEED_URL, record: '' });
     expect((await P.podcastPlay(a, 'start', noNow, storage)).play.start).toBe(0);
     expect((await P.podcastPlay(a, 'at:754', noNow, storage)).play.start).toBe(754);
     const q = await P.podcastQueue(a, storage);

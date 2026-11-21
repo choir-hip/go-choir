@@ -33,30 +33,8 @@ public enum PodcastBridge {
     }
 }
 
-/// "Hear it" on a story's page: one row per clip the bulk set holds for the route (show, episode, length, the short quote), with Play and
-/// Add to queue. The reader page's host gives the rows to the contract and calls `play` / `enqueue` from its buttons.
-public struct HearItRow: Codable, Sendable, Equatable {
-    public var clipID, show, episode, length, quote: String
-    /// The clip cannot be found in the file the host serves (an old record with no fingerprint, or the clip was not there): the row offers the episode only.
-    public var episodeOnly: Bool = false
-    /// The story the clip was cut for (a show page lists clips by the story they were found for).
-    public var story: String = ""
-}
+/// Play and Add to queue of a clip. The rows of "Hear it" and a show's "Clips" are shared code (AutoradioLab/clips.ts).
 public enum HearIt {
-    public static func rows(route: String, store: ClipStore = .shared) -> [HearItRow] {
-        store.clips(forRoute: route).map { row($0, store) }
-    }
-    static func row(_ c: PodcastClip, _ store: ClipStore) -> HearItRow {
-        HearItRow(clipID: c.clipID, show: c.show, episode: c.episodeTitle, length: c.lengthLabel, quote: c.quote, episodeOnly: !c.isRelocatable || store.isMismatch(c.clipID), story: c.storyTitle)
-    }
-    /// The clips of the story at a page address (`pub:<route>`, with or without a version); at most three; none for any other page.
-    public static func rows(address: String, store: ClipStore = .shared) -> [HearItRow] {
-        let t = TextureAddress.parse(address)
-        guard t.kind == .publication else { return [] }
-        var found = store.clips(forRoute: t.route)
-        if found.isEmpty { found = store.clips(forRoute: TextureAddress.splitRoute(t.route).bare) }
-        return found.prefix(3).map { row($0, store) }
-    }
     /// Play: the clip when it can be found in the served file (the player locates it); else the episode from its start (the row then says "Open episode").
     @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) async {
         guard let c = store.clip(clipID) else { return }
@@ -66,6 +44,3 @@ public enum HearIt {
         if let c = store.clip(clipID) { player.queue(c.isRelocatable && !store.isMismatch(clipID) ? c.clipEntry : c.episodeEntry) }
     }
 }
-
-/// The wire shapes of the clip rows (interface/joins.json).
-public struct ClipRowsView: Codable, Sendable, Equatable { public var rows: [HearItRow]; public init(rows: [HearItRow] = []) { self.rows = rows } }

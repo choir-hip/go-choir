@@ -76,7 +76,7 @@ describe('C3 and C4 a show\'s clips', () => {
 describe('C5 what a row does', () => {
   test('play and queue answer the clip for the native locator', async () => {
     const p = await C.clipAct('play', 'clip-000000000001');
-    expect(p.play).toEqual({ op: 'play', id: '', url: '', title: '', show: '', start: 0, clip: 'clip-000000000001', feed: FEED }); expect(p.message).toBe('');
+    expect({ ...p.play, record: '' }).toEqual({ op: 'play', id: '', url: '', title: '', show: '', start: 0, clip: 'clip-000000000001', feed: FEED, record: '' }); expect(p.message).toBe('');
     const q = await C.clipAct('queue', 'clip-000000000001');
     expect(q.play.op).toBe('queue'); expect(q.message).toBe('Added to the queue.');
   });
@@ -98,5 +98,78 @@ describe('C5 what a row does', () => {
     const noGuid = { ...body.clips[0], clip_id: 'clip-0000000000f2', episode_guid: '' };
     handler = () => new Response(JSON.stringify({ clips: [noGuid] }), { status: 200 }); C.forget();
     expect(parseEpisode((await C.clipAct('open', 'clip-0000000000f2')).open)!.id).toBe('https://cdn.example.com/one.mp3');
+  });
+});
+
+// Failure list for the story page's "Hear it" (carries the Swift JoinHearItTests J3, DJClipsTests C9 and J6's bulk-set rules; the Swift HearIt.rows,
+// ClipStore.shouldAsk and the native fetch are deleted):
+//  H1 a story page lists the clips cut for its story (a version of the story has the story's clips), at most three, with the story's title; another page lists none.
+//  H2 the whole set is asked for once a retry (one request, never one per story), again after a retry (a data source has no clock); a 404 or a failure is no rows, silently.
+//  H3 Play and Queue hand the native side the clip's own record (its audio and its fingerprint), so the native side never asks the server for a clip.
+describe('H1 hear it on a story page', () => {
+  test('the story\'s own clips and nothing else', async () => {
+    const r = await C.storyClips('pub:a', 0);
+    expect(r.rows.map((x) => x.clipID)).toEqual(['clip-000000000001', 'clip-000000000002', 'clip-000000000004']);
+    expect(r.rows[0].story).toBe('Story 1');
+    expect((await C.storyClips('pub:a/v3', 0)).rows.length).toBe(3);
+    expect((await C.storyClips('pub:b', 0)).rows.map((x) => x.clipID)).toEqual(['clip-000000000003']);
+    for (const a of ['pub:zzz', 'texture:doc1', 'doc:abc', 'podcast:show/x', '']) expect((await C.storyClips(a, 0)).rows).toEqual([]);
+  });
+  test('at most three', async () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ ...body.clips[0], clip_id: 'clip-' + (200 + i).toString(16).padStart(12, '0') }));
+    handler = () => new Response(JSON.stringify({ clips: many }), { status: 200 });
+    expect((await C.storyClips('pub:a', 0)).rows.length).toBe(3);
+  });
+});
+
+describe('H2 one bulk request', () => {
+  test('many stories, one request; the public route with a limit', async () => {
+    await C.storyClips('pub:a', 0); await C.storyClips('pub:b', 0); await C.storyClips('pub:a/v2', 0);
+    expect(calls.length).toBe(1); expect(calls[0]).toContain('/api/platform/podcast-clips?'); expect(calls[0]).toContain('limit=200'); expect(calls[0]).not.toContain('feed=');
+    await C.storyClips('pub:a', 1);
+    expect(calls.length).toBe(2);
+  });
+  test('a page that is not a story asks for nothing', async () => {
+    await C.storyClips('texture:doc1', 0); await C.storyClips('radio:', 0);
+    expect(calls.length).toBe(0);
+  });
+  test('a 404 and an offline phone are no rows, and a later success shows them', async () => {
+    handler = () => new Response('', { status: 404 });
+    expect((await C.storyClips('pub:a', 0)).rows).toEqual([]);
+    globalThis.fetch = (async () => { throw new Error('offline'); }) as typeof fetch;
+    expect((await C.storyClips('pub:a', 1)).rows).toEqual([]);
+    globalThis.fetch = (async (input: RequestInfo | URL) => { calls.push(String(input)); return new Response(JSON.stringify(body), { status: 200 }); }) as typeof fetch;
+    expect((await C.storyClips('pub:a', 2)).rows.length).toBe(3);
+  });
+  test('the clips of a story fetched here are found by Play without a second request', async () => {
+    await C.storyClips('pub:a', 0);
+    expect((await C.clipAct('play', 'clip-000000000001')).play.clip).toBe('clip-000000000001');
+    expect(calls.length).toBe(1);
+  });
+  test('forgetting the account\'s session drops the set', async () => {
+    await C.storyClips('pub:a', 0);
+    expect(C.remembered()).toBeGreaterThan(0);
+    C.forget();
+    expect(C.remembered()).toBe(0);
+    await C.storyClips('pub:a', 0);
+    expect(calls.length).toBe(2);
+  });
+});
+
+describe('H3 the native side is handed the clip, not asked to find it', () => {
+  test('play and queue carry the record the server sent, fingerprint included', async () => {
+    for (const op of ['play', 'queue']) {
+      const a = await C.clipAct(op, 'clip-000000000001');
+      const rec = JSON.parse(a.play.record) as Record<string, unknown>;
+      expect(rec.clip_id).toBe('clip-000000000001'); expect(rec.audio_url).toBe('https://cdn.example.com/one.mp3');
+      expect(rec.fingerprint).toEqual(body.clips[0].fingerprint);
+    }
+  });
+  test('a clip with no fingerprint is handed over without one (the native side plays its episode)', async () => {
+    const rec = JSON.parse((await C.clipAct('play', 'clip-000000000002')).play.record) as Record<string, unknown>;
+    expect(rec.fingerprint).toBeUndefined();
+  });
+  test('open episode hands nothing to the native side', async () => {
+    expect((await C.clipAct('open', 'clip-000000000001')).play.record).toBe('');
   });
 });

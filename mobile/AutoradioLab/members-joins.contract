@@ -7,6 +7,8 @@ use PodAck from "./podcast-types.contract"
 
 members Autoradio
   resource shClips = showClips(pg.top, podTick) as shape ClipRows else empty()
+  // "Hear it" on a story page: the clips cut for the story at the top page (one bulk request, shared with Play).
+  resource hearClips = storyClips(pg.top, podTick) as shape ClipRows else empty()
   mutation clipAck as shape PodAck then afterClip
   mutation clipHanded as shape PodDone
 
@@ -17,6 +19,7 @@ members Autoradio
   derive clipPlayOp = match clipAck { case some(a) => a.play.op, case none => "" }
   derive clipPlayId = match clipAck { case some(a) => a.play.clip, case none => "" }
   derive clipPlayFeed = match clipAck { case some(a) => a.play.feed, case none => "" }
+  derive clipPlayRecord = match clipAck { case some(a) => a.play.record, case none => "" }
   derive clipOpen = match clipAck { case some(a) => a.open, case none => "" }
   derive clipOpenTitle = match clipAck { case some(a) => a.openTitle, case none => "" }
 
@@ -25,6 +28,6 @@ members Autoradio
     send clipAck = clipAct(op, id)
   action afterClip
     if clipPlayId != ""
-      send clipHanded = clipPlay(op=clipPlayOp, id=clipPlayId, feed=clipPlayFeed)
+      send clipHanded = clipPlay(op=clipPlayOp, id=clipPlayId, record=clipPlayRecord)
     if clipOpen != ""
       openPage(clipOpen, clipOpenTitle)

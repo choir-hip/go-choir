@@ -498,7 +498,6 @@
       "plain": "string",
       "textBlocks": "number",
       "markdown": "string",
-      "hearIt": "HearItRow[]",
       "editable": "bool",
       "source": "string",
       "docId": "string"
@@ -1447,7 +1446,7 @@
       "options": {
         "op": "string",
         "id": "string",
-        "feed": "string"
+        "record": "string"
       },
       "answers": "PodDone"
     },
@@ -1572,7 +1571,6 @@
           "plain": "",
           "textBlocks": 0,
           "markdown": "",
-          "hearIt": [],
           "editable": false,
           "source": "",
           "docId": ""

@@ -1,7 +1,7 @@
 import type { Answer, Sources } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
-import { clipAct, showClips } from './clips.ts';
+import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { adoptNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
@@ -114,6 +114,7 @@ const sources: Sources = {
   podcastQueue: ([address], _store, storage) => podcastQueue(address, storage),
   podcastPlayhead: ([id, clip, elapsed, duration], _store, storage) => podcastPlayhead({ id, clip, elapsed, duration }, storage),
   showClips: ([address, tick]) => showClips(address, tick),
+  storyClips: ([address, tick]) => storyClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
   // Files (files.ts): the listener's computer's files. Positional arguments.
   fileList: ([path, mode, sort, desc, query, _acct], _s, storage) => fileList({ path, mode, sort, desc, query }, storage),

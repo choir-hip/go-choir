@@ -84,23 +84,14 @@ extension AutoradioModule {
         handle("readerDoc") { [unowned self] args, reply in
             let address = args["address"] as? String ?? ""
             guard TextureAddress.parse(address).kind != .none else {
-                var blank = json(ReaderDoc.loading(""))
-                blank["hearIt"] = []                       // every answer carries every field of the shape, or the request keeps its last value
-                return reply(blank)
+                return reply(json(ReaderDoc.loading("")))
             }
             Task { [weak self] in
                 // A document the desk is revising is read again each time it is asked for (and asked for again every few seconds).
                 let again = ReaderStore.shared.cached(address)?.revising ?? false
                 let d = await ReaderStore.shared.doc(address, force: again)
                 DispatchQueue.main.async {
-                    // lane autoradio-joins: "Hear it", the clips cut from this story (none: an empty list, nothing drawn). The clip set is
-                    // asked for once in a while; the page is read again when it arrives.
-                    var o = self?.json(d) ?? [:]
-                    o["hearIt"] = self?.json(ClipRowsView(rows: HearIt.rows(address: address)))["rows"] ?? []
-                    reply(o)
-                    if address.hasPrefix("pub:") {
-                        Task { [weak self] in if await PodcastClips.ensure(client: ChoirEnvironment.shared.client()) { self?.touch(["readerDoc"]) } }
-                    }
+                    reply(self?.json(d) ?? [:])      // "Hear it" is shared code now (clips.ts storyClips): the page asks for the clips itself
                     if d.revising { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self?.touch(["readerDoc"]) } }
                 }
             }

@@ -299,7 +299,7 @@ final class ClipPlayerTests: XCTestCase {
         let cs = ClipStore(); cs.replace([old])
         let seg = IncomingSegment(stretchID: "s", segmentID: "s/1", kind: "podcast_clip", title: "T", text: "Lead.", cites: [], blockCount: 1, clip: ProgrammeClipRef(clipID: old.clipID, storyRef: "pub:a@v1", seconds: 30))
         XCTAssertNil(ProgrammeRouteFeed.entry(from: seg, clips: cs), "dropped before the page, not a failed row")
-        XCTAssertTrue(HearIt.rows(route: "a", store: cs)[0].episodeOnly)
+        XCTAssertFalse(old.isRelocatable)
         let loc = FakeLocator(.refused("never called"))
         let (p, s, e, _) = make([old], loc)
         p.playNow(old.clipEntry); await p.settle()                                   // a stale entry that names it anyway

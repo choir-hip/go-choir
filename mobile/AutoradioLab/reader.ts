@@ -12,7 +12,7 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 const empty = (address: string, status: string, message = ''): ReaderDoc => ({
   address, status, message, title: '', kicker: '', dek: '', byline: '', meta: '', kind: 'story', disclosure: '', blocks: [], cites: [], sources: [], versions: [], related: [],
-  revision: 0, latest: 0, newer: false, historical: false, revising: false, revisingNote: '', trajectory: '', permalink: '', plain: '', textBlocks: 0, markdown: '', hearIt: [], editable: false, source: '', docId: '',
+  revision: 0, latest: 0, newer: false, historical: false, revising: false, revisingNote: '', trajectory: '', permalink: '', plain: '', textBlocks: 0, markdown: '', editable: false, source: '', docId: '',
 });
 
 const run = (id: string, text: string) => ({ id, text, kind: 'text', weight: 400, slant: '', anchor: '', label: '', sent: 0, href: '' });

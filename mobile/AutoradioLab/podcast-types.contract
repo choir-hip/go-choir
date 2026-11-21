@@ -96,6 +96,7 @@ shape PodPlay
   start: number
   clip: string
   feed: string
+  record: string
 
 shape PodAck
   status: string
