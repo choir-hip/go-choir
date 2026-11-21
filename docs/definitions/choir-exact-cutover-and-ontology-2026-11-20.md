@@ -266,10 +266,10 @@ decisions_for_the_owner:
     default: accept for now; Android is outside this mission
 now:
   status: working
-  as_of: 2026-11-20T23:05Z
-  slice: 'X2 landing (deb9c9ef0 pushed, CI running); X1 takes rebuilt (481850a2e) in review and proof, edition picks rebuilding; X3 slice 1 (bb751be97), X4 slice 1 (5c71c0839) in review and queued for proof, their builders on the next slices; X5 slice 1 (579d5d74e, dead code, yellow) ready to land; O0 written, unread by the owner; C1 proved; C1b building (lane dup-open-page); L2 (399f0268a) in re-review; P1 recorded'
-  source_ref: origin/main deb9c9ef0
-  deploy_identity: staging bfc1492c6 until the About row deploys; the owner's iPhone bfc1492c6
+  as_of: 2026-11-21T03:00Z
+  slice: 'X0 landed (ddadb1e6f: Exact at upstream f53347503; native build and proof-real passed first try), phone install running; X1 takes (5118bbe9e, review accepted), edition picks, X3 reader (slice 3 unreviewed), X4 bar (slice 2 and fixes unreviewed) rebasing onto the new pin; X5 two dead-sync deletions queued for proof then landing; C1b landed (d8367e2c8, red, repaired by 2b862a00e then e33533850) and deployed, the paper booted on it 02:46Z; L2 stopped after three send-backs; proof hardening landed (cd818de2a)'
+  source_ref: origin/main ddadb1e6f
+  deploy_identity: staging e33533850; the paper on e33533850 since 02:46Z; the owners iPhone deb9c9ef0 until the pin build installs
   candidate: none frozen
   conjecture:
     claim: 'most of the paper''s web searches are first runs of stories about happenings it already covers or already holds captures for; when a joining capture becomes a new version of the existing story and a run starts from the event''s state, first runs a day fall by at least 40% and web searches fall under 1,500 a day within two full UTC days of C2''s deploy, with distinct happenings published a day not lower than the week before'
@@ -282,15 +282,16 @@ now:
     status: untested
   believed_state: the app is two thirds Swift by the gate's measure and five moves are running under the no-carry-over rule; the semantic layer is built in pieces that do not join and its unified design is being written; the paper sends about 3,260 web searches a day
   main_uncertainty: whether the design's identity judgments are cheap and right enough at 5,000 captures a day inside one Jev call a flush; how much of the search volume duplicates really explain (C1 will say); whether the reader and run sheet move in days or weeks
-  next_observation: the design's opening page; C1's share of duplicate stories; the first slice of each of X3 to X5
+  next_observation: scripts/status-story-choice on the paper from 02:46Z (window=8h on every line, opens with verdicts, feed share against 51%); the duplicate rate a day later; each page lane's proof on the new pin
   blocker: none
-  next_action: 'watch CI and the deploy for deb9c9ef0, install on the phone, settle C184; read the four reviews (takes r5, reader r1, bar r1, L2 r2 in the session scratchpad) and the queued proofs; start X0 FIRST (the Exact pin to upstream); amend the design for the one-narrative ruling and put it to a panel; land X5 slice 1'
+  next_action: 'read the paper''s first story-choice lines and record them; land X5''s two deletions after their proof; proof and land takes, then one review each for edition picks, reader slice 3 and bar slice 2; amend the semantic-layer design for the owner''s main-point ruling with real pairs and put it to a panel (Q1 before any red O or C work); P1: the label carry (red) and the publish 502 (orange); a landing check for tests tied to non-Go files by path belongs in scripts/land'
 operating_notes:
   - 'Roles: the lead orchestrates; Sonnet subagents build in lanes (cd /Users/wiz/Dev/go-choir && git fetch && lane new <name> --base origin/main); Opus only for open design. Review seats are in CLAUDE.md: seat 1 Gemini 4 Hydrogen through the official agy CLI (a Sonnet subagent on a rate limit), seat 2 DeepSeek through the agentic-consensus runner on a frozen copy; orange one seat, red two. After two send-backs of one mechanism, change the mechanism, not the patch.'
   - 'Page moves: rewrite from what the page must do, then delete the Swift; nothing carried over; account ownership (accountGeneration, writeCurrent, the wipe list) from the first commit; tests red before code; slices that each lower the ceiling. The lead runs the one native build and the simulator proof through the queue and reads the screenshots.'
   - 'Go compiles and tests on the Node A build machines (ssh choir-runner; each builder its own directory), never the Mac; gate scripts on the Mac need GOFLAGS=-mod=mod. Before a landing run the tree-scanning checks too (the objectgraph registry test, the Nix vendor hash): docs/problems/train-landed-red-objectgraph-registry-and-vendor-hash-2026-11-20.md.'
-  - 'Production differs from tests in collation (en_US.UTF-8): no text range predicate on ids. A builder''s report is a claim: see the suite''s ok line and the screenshots yourself, and enter the calibration claim first (next free id C185).'
+  - 'Production differs from tests in collation (en_US.UTF-8): no text range predicate on ids. A builder''s report is a claim: see the suite''s ok line and the screenshots yourself, and enter the calibration claim first (next free id C186).'
   - 'Before any landing or review of a rebased lane: `git diff origin/main...HEAD --stat` (three dots) must list only the lane''s own files, and `git diff origin/main HEAD -- CLAUDE.md docs/definitions docs/calibration` must be empty apart from the lane''s own edits. A builder squashed with `git reset --soft origin/main` after a fetch and its commit reverted a day of main (caught by review, 2026-11-20). Builders squash by rebase or cherry-pick onto a fresh lane, never by soft reset.'
+  - 'Before a landing that touches a non-Go file (a prompt overlay, YAML, JSON, a contract): find every test that depends on it by any route (grep the basename over test files; for a prompt, the size and byte-stability tests in internal/agentcore and the role tests in internal/yaegikernel) and run those packages. d8367e2c8 and its first repair each landed red this way (2026-11-21).'
   - 'Waits use a file''s content or age, never pgrep -f (it matches its own command line). State times only after date -u.'
 receipts:
   - 'previous goal: docs/definitions/choir-exact-search-entities-2026-11-20.md (superseded by this file; its landed_this_thread list is the record of what landed on 2026-11-20)'
