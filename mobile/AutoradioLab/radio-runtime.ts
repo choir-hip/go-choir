@@ -305,6 +305,7 @@ export class RadioRuntime {
     this.director.stopAll(this.report());
     this.pendingStarts = []; this.known.clear();
     try { await this.deck.act('stop'); } catch { /* the deck is gone */ }
+    if (this.store.poster) await this.store.settlePending(1500);          // the `left` report reaches the computer while the old key is still held; what is not answered by then is dropped, never sent under a later account
     await this.store.wipe();
     this.facts = NO_FACTS; this.deckState = undefined;
     this.onChange?.();

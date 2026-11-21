@@ -8,6 +8,8 @@ import { nativeDeck } from './deck-native.ts';
 import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radio-runtime.ts';
 import { Writer, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
 import { applyTurnOps, turnQueueJSON } from './voice-queue.ts';
+import { routePoster, signedInRequester } from './runsheet-store.ts';
+import { authedJSON } from './api.ts';
 import { audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds } from './runsheet-entries.ts';
 import { loadReader } from './reader.ts';
 import { sentenceTexts } from './reader-parse.ts';
@@ -103,7 +105,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
   const state: Radio = { rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
-    deck: nativeDeck(), storage: runStorage(storage), generation: accountGeneration, resolvers: resolvers(storage),
+    deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
     onChange: () => { state.tick += 1; },
   });

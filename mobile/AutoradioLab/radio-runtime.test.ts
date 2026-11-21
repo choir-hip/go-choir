@@ -287,3 +287,57 @@ describe('restart and sign-out', () => {
     expect(rt.store.sheet.entries).toEqual([]); expect(rt.view().onAir).toBe(false);
   });
 });
+
+// RED: the posted operations (what the phone tells the computer about the run sheet). T14 to T17, written first.
+//  T14 a listener's placement and the phone's own `aired` reports are posted, in order, with op ids; the desk's entries are the desk's and are not posted back.
+//  T15 a route that is not there yet (404) or no network leaves the ops pending, in order; they go when it answers, once each.
+//  T16 an end is reported with where it ended (the deck's block and seconds), `heard` and `finished`; a failed start is `skipped` and `failed`, never a choice.
+//  T17 sign-out reports the entry on air as `left` while the old key is held, then forgets what was never answered: nothing is posted afterwards.
+import type { Poster, PostOutcome } from './runsheet-store.ts';
+describe('posted ops', () => {
+  let posts: Op[][], outcome: PostOutcome, prt: RadioRuntime;
+  const poster: Poster = { post: async (ops) => { posts.push(ops); return outcome; }, fetchSheet: async () => undefined };
+  const flat = () => posts.flat().map((o) => [o.op, o.id ?? o.entry?.id, o.state ?? o.at]);
+  beforeEach(() => {
+    posts = []; outcome = { kind: 'answered', results: [] }; deck = new FakeDeck(); files = new Map();
+    prt = new RadioRuntime({ deck, storage: storage(), poster, now: () => NOW, resolvers });
+  });
+  test('T14 the listener\'s placement and the phone\'s reports are posted; the desk\'s entries are not', async () => {
+    prt.play(story('a', { placed_by: 'listener' })); prt.director.applyFromDesk(placeOp(story('b')), 'extend');
+    await idle(); await prt.store.flushTask;
+    expect(flat()[0]).toEqual(['place', 'a', 'now']);
+    deck.end('finished', { block: 2, seconds: 9 }); await prt.pump(); await idle(); await prt.store.flushTask;
+    const ops = posts.flat();
+    expect(ops.some((o) => o.op === 'place' && o.entry?.id === 'b')).toBe(false);
+    const ended = ops.find((o) => o.op === 'aired' && o.id === 'a' && o.state === 'heard');
+    expect(ended?.ended).toMatchObject({ outcome: 'finished', last_block: 2 }); expect(ended?.position_seconds).toBe(9);
+    expect(ops.some((o) => o.op === 'aired' && o.id === 'b' && o.state === 'on_air')).toBe(true);
+    expect(new Set(ops.map((o) => o.op_id)).size).toBe(ops.length);
+  });
+  test('T15 a route that is not there leaves the ops pending, in order, and they go once when it answers', async () => {
+    outcome = { kind: 'notYet' };
+    prt.play(story('a', { placed_by: 'listener' })); await idle(); await prt.store.flushTask;
+    prt.skip(); await idle(); await prt.store.flushTask;
+    expect(prt.store.pending.map((o) => o.op)).toEqual(['place', 'skip']);
+    outcome = { kind: 'answered', results: [] }; posts = [];
+    prt.store.flush(); await prt.store.flushTask;
+    expect(posts.flat().map((o) => o.op)).toEqual(['place', 'skip']); expect(prt.store.pending).toEqual([]);
+    prt.store.flush(); await prt.store.flushTask; expect(posts.length).toBe(1);
+  });
+  test('T16 a failed start is skipped and failed, never a choice', async () => {
+    prt.play(story('a', { placed_by: 'listener' })); await idle();
+    deck.end('failed', { rendered: false }); await prt.pump(); await idle(); await prt.store.flushTask;
+    const o = posts.flat().find((x) => x.op === 'aired' && x.id === 'a' && x.state === 'skipped');
+    expect(o?.ended?.outcome).toBe('failed');
+  });
+  test('T17 sign-out reports left with the old key, then nothing more is posted', async () => {
+    prt.play(story('a', { placed_by: 'listener' })); await idle(); await prt.store.flushTask;
+    posts = [];
+    await prt.signOut(); await idle();
+    const left = posts.flat().find((o) => o.op === 'aired' && o.id === 'a');
+    expect(left).toMatchObject({ state: 'heard' }); expect(left?.ended?.outcome).toBe('left');
+    const n = posts.length;
+    prt.store.flush(); await prt.store.flushTask; expect(posts.length).toBe(n);
+    expect(prt.store.pending).toEqual([]); expect(prt.store.poster).toBeUndefined();
+  });
+});
