@@ -357,10 +357,10 @@ run_drive picks light "" --touch platform
 unset SEED_PICKS
 
 CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
-MIGRATED_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CHK"/Library/Application\ Support/exact/*/data/theme-choice.json 2>/dev/null | head -1)
-[ -n "$MIGRATED_FILE" ] && cp "$MIGRATED_FILE" "$SHOTS/migrated-theme-choice.json"
-ls "$CHK"/Library/Caches/exact/*/agent/*/data/themes/ "$CHK"/Library/Application\ Support/exact/*/data/themes/ 2>/dev/null > "$SHOTS/migrated-themes-dir.txt"
-legacy_clean
+PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/edition-topics.json 2>/dev/null | head -1)
+[ -n "$PICKS_FILE" ] && cp "$PICKS_FILE" "$SHOTS/picks-stored.json"
+OLD_FILE="$CHK/Library/Application Support/Autoradio/edition-topics.json"
+if [ -n "$CHK" ] && [ -f "$OLD_FILE" ]; then cp "$OLD_FILE" "$SHOTS/picks-old-file.json"; else rm -f "$SHOTS/picks-old-file.json"; fi
 
 # ---- 3d2. FIRST RUN, COMPUTER, ACTIVITY AND ABOUT: shared code over the native facts (onboarding.ts, computer.ts, activity.ts, settings.ts aboutPage). A fresh app; the Settings pages once each, then the edit page.
 step "clock data"; wait_ 6000
@@ -386,11 +386,6 @@ chk "settings activity (shared code, native facts): the radio's now line is list
 chk "settings activity: the Now section is there" '\[activity-section-now\]' "$FR"
 chk "settings about: the app's version is the bundle's (a native fact), not a dash" '\[settings-about-app\] "[^-"]' "$FR"
 chk "first run: the edit page lists the topic tree (onboarding.ts editing)" '\[ob-topic-Science\]' "$FR"
-CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
-PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/edition-topics.json 2>/dev/null | head -1)
-[ -n "$PICKS_FILE" ] && cp "$PICKS_FILE" "$SHOTS/picks-stored.json"
-OLD_FILE="$CHK/Library/Application Support/Autoradio/edition-topics.json"
-if [ -n "$CHK" ] && [ -f "$OLD_FILE" ]; then cp "$OLD_FILE" "$SHOTS/picks-old-file.json"; else rm -f "$SHOTS/picks-old-file.json"; fi
 
 # ---- 3f1. NOTEBOOK drive (lane exact-notebook-content): the notebook page and the scorecard from shared code under app:/data, a Refresh press that reads again, and the content sync that
 # starts at launch (shared code: content-run.ts logs one line per kind, counts only). Reads nothing it writes: no tap on a line, whose ids depend on the account's own notebook.
