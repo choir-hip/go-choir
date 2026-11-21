@@ -159,16 +159,18 @@ const READS = new Set(['readFile', 'stat', 'readdir', 'exists', 'readText', 'ope
  * is open is tracked, so the Clear can wait for it (`drainClosed`) and no write lands after the wipe. Reads of a world still open pass through. */
 export function bindStorage<S extends { fs: object }>(raw: S, w: World = world): S {
   if (!raw || !raw.fs) return raw;
-  const fs = new Proxy(raw.fs as Record<string, unknown>, { get(t, k) {
-    const v = t[k as string];
-    if (typeof v !== 'function') return v;
-    return (...a: unknown[]) => {
+  // A copy with every function wrapped (no Proxy: the host's `fs` may be frozen, and a Proxy may not return a different value for a frozen property).
+  const src = raw.fs as Record<string, unknown>; const fs: Record<string, unknown> = {};
+  const names = new Set<string>(); for (let o: object | null = src; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) for (const k of Object.getOwnPropertyNames(o)) if (k !== 'constructor') names.add(k);
+  for (const k of names) {
+    const v = src[k];
+    fs[k] = typeof v !== 'function' ? v : (...a: unknown[]) => {
       if (w.closed) return NEVER;
-      const p = Promise.resolve((v as (...x: unknown[]) => unknown).apply(t, a));
-      if (!READS.has(String(k))) { w.pending.add(p); void p.then(() => w.pending.delete(p), () => w.pending.delete(p)); }
+      const p = Promise.resolve((v as (...x: unknown[]) => unknown).apply(src, a));
+      if (!READS.has(k)) { w.pending.add(p); void p.then(() => w.pending.delete(p), () => w.pending.delete(p)); }
       return inert(w, p);
     };
-  } });
+  }
   return Object.create(raw, { fs: { value: fs, enumerable: true } }) as S;      // defineProperty, not assignment: the host's storage object has a read-only `fs`
 }
 /** Wait (up to `ms`) for every write that a closed world started to finish. True when none is left. */
