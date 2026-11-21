@@ -61,6 +61,7 @@ final class OnboardingController: @unchecked Sendable {
         if !s.fitsOnDisk { s = VoiceSetup(backend: backend, profile: profile, smaller: true, stallSeconds: stall, patience: patience, configBackend: configurator) }
         s.onChange = { [weak self] in self?.changed() }
         set { setup = s }
+        let gen = AccountWipe.generation
         Task { [weak self, s] in
             await s.run()
             self?.setupFinished(s, gen: gen)
