@@ -218,7 +218,7 @@ public final class NotebookCache: @unchecked Sendable {
         guard let ed = await lookupEdition(), gen == AccountWipe.generation else { return false }        // the server cannot say: try later, never create on a guess
         if ed.found {
             address = "texture:" + ed.docID
-            let d = await ReaderStore.shared.doc(address)
+            let d = await TextureText.fetch(address)
             guard d.status == "ready", gen == AccountWipe.generation else { return false }
             current = d.source
         } else {

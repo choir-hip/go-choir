@@ -199,16 +199,6 @@ final class SingleFlightTests: XCTestCase {
 final class SmallRepairTests: XCTestCase {
     // (The UTF-8 trim and the cut-text reads moved with the Files page: AutoradioLab/files.test.ts, F6.)
 
-    func testReaderVersionCountIsBounded() {
-        let o = (try! JSONSerialization.jsonObject(with: Data(#"""
-        {"publication":{"title":"T","kind":"story"},"route":{"bare":"t"},"version":{},"artifact":{"content":"# T\n\nBody."},
-         "nav":{"revision":3,"latest":2000000000},"payload":{}}
-        """#.utf8))) as! [String: Any]
-        let d = TextureDocParser.parseBundle(o, address: "pub:t")
-        XCTAssertLessThanOrEqual(d.versions.count, TextureDocParser.maxVersions)
-        XCTAssertLessThanOrEqual(d.latest, TextureDocParser.maxVersions)
-    }
-
     func testBadSampleRatesAreRefusedNotTrapped() {
         XCTAssertNil(monoBuffer([0.1, 0.2], rate: 0))
         XCTAssertNil(monoBuffer([0.1, 0.2], rate: -1))

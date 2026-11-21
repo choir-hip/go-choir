@@ -169,3 +169,7 @@ Seat 2's review of the retrieval package sent it back; the train fixed: the R7 w
 - `saveVectors` writes vectors then rows; a kill between them after a removal can pair ids with other items' vectors. The Swift store had the same order.
 - `QueryEmbedding` (`Embedder.swift`) has no caller but the loader's type and `LlamaEmbedder`; deleted with the on-device embedder's next change.
 - `RadioDemand`'s two-second main-actor loop runs on every host (it was gated on the content store).
+
+## Update 2026-11-21 (reader, the rest): the Swift document parser is deleted
+
+`TextureDoc.swift` (the model and `TextureDocParser`), `TextureMarkdown.swift` and `Citations.swift`, with `TextureDocTests`, `GoldenDocumentsTests`, `WebParityTests` and `proof-golden.sh`, are gone; `reader-parity.test.ts` carries the six web-parity rules and `reader-parse.test.ts` P13 the golden documents. `ReaderStore` became `TextureText`, a fetch of a document's Markdown with no parsing, for `Notebook.swift` (two calls) and `ContentSync.swift` (a document's text); `StoryBodies.plain` gives the sync a story's text from the bundle's Markdown. Left in Swift with reasons: `TextureAddress` (a 20-line address splitter: `TextureEditor`, `Learning.swift`, `StoryBodies`), `HeldPages` (the voice's page), `ListenText` (what the voice speaks for Listen), `Pages.swift`/`OpenPagesUI.swift` (the native open-page set the voice's front page, the cards and the other native page sources still use).
