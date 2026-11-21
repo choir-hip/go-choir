@@ -81,7 +81,7 @@ final class ContentFullScreenTests: XCTestCase {
                   "press=ctlWebRead(ctlKey, ctlTitle)", "press=ctlWebLater(ctlKey, ctlTitle)", "press=ctlSafari(ctlKey)"], "wiring")
         let m = code(try read("members-content.contract"))
         has(m, ["importedReadAloud(pg.top, ldSec, ldBlock)", "importedQueue(pg.top, ldSec, ldBlock)", "importedPlace(",
-                "queueAdd(mode=\"now\", kind=\"page\"", "queueAdd(mode=\"add\", kind=\"page\"", "readerOpenExternal(url=u)"], "actions")
+                "queueAdd(\"now\", \"page\"", "queueAdd(\"add\", \"page\"", "readerOpenExternal(url=u)"], "actions")
         // Pages and Text are shown for a PDF only; the contents list and the find hits are inside the expanded row
         let exp = code(try component("DocExpanded", in: "content.contract"))
         XCTAssertTrue(exp.contains("if pdf"))
@@ -124,7 +124,7 @@ final class ContentFullScreenTests: XCTestCase {
         let close = m.components(separatedBy: "action ctlCloseDoc").last?.components(separatedBy: "// ---- a web page").first ?? ""
         has(close, ["order = order.filter(a => a != gone)", "pagesOpen(nxt", "pagesClose(gone)"], "closing a document")
         XCTAssertTrue(m.contains("webUrl = \"\""), "closing a source page empties its address")
-        XCTAssertTrue(m.contains("queueAct(op=\"closeWeb\", arg=\"\")"), "closing a typed page")
+        XCTAssertTrue(m.contains("queueAct(\"closeWeb\", \"\")"), "closing a typed page")
     }
 
     // C7
