@@ -150,6 +150,31 @@ background; it never makes an answer wait for a wipe. Fifteen resources that arr
 together at launch therefore cost fifteen fact reads and one wipe, not fifteen waits.
 The generation check ends an answer that began before a wipe.
 
+**The mechanism: the world (2026-11-21, after five review rounds; replaces per-site guards).** Guarding each await
+did not converge: every review round found another one (a late read that sets a cache, a sync that starts a fresh
+send under the next key, a take-session load, a theme loader). So the guard is not at the await.
+*What Exact offers* (read at `mobile/.exact-src`, `docs/reference.md`): no call from app code reloads the data
+module or opens a fresh JavaScript context. Module reload exists only as a development client and over-the-air
+update (`reference.md:2289-2296`; "Files and databases survive module reload", `:2886`); `exactRestart` (`:4199`)
+keeps a child process alive, not the module; timers end with the answer that made them (EXACT.md, Timers). So
+option 1 (a fresh runtime when the boundary moves) is not available, and the choice is option 2.
+*What was chosen:* `api.ts` keeps one `World` per stretch of boundary with no account change in it. A sign-out,
+a Clear or an Adopt closes it and opens the next. Every I/O choke point is inert for a closed world: the storage
+the gate hands a source (`bindStorage`), `getJSON`, `authedJSON`/`authedBytes`/`authedToFile`, the podcast feed
+fetch, and a chain's timers. A chain that waits on I/O in a closed world never resumes (its promise never
+settles), so after the move nothing of it is inserted, written or sent, and no per-site guard is needed. The gate
+races each answer against its world and ends it refused. A request is signed only with the key of its world
+(`world.digest`, set by the gate from the facts); work held outside a chain, such as a queue of posts, carries
+`opts.world` and is refused once that world is closed. The Clear drains every write the closed world started
+before it wipes, and a Clear that times out is a failed Clear (the phone stays CLEARING, the card says to close
+and reopen the app); nothing is abandoned and there is never a second writer. A queued Adopt or Clear whose
+boundary moved before its turn is skipped; a queued sign-out refuses if the key it finds is not the one it saw at
+the tap. Texture themes (the one account-bearing store the exempt theme sources reach) are not shown while the
+new world is owed. *What it does not cover:* a chain resumed from a non-I/O await after the close (a microtask,
+a promise another chain resolves) that then starts new I/O begins it in the new world; the inventory test lists
+every module-level mutable name so a new lane cannot add one unseen, and keeps raw `fetch` and the Keychain read
+in their choke points.
+
 **The exempt list** is the sources that read no account store, make no signed-in
 request, and are handed no account data in their arguments: `accountState`,
 `accountSignOut`, `hostCaps`, `aboutBuild`, and the theme sources except
