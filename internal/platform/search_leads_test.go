@@ -46,6 +46,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -517,5 +518,64 @@ func TestMarkSearchLeadsTriedClipsALongCaptureIDAndAMegabyteURLStillKeysLikeTheW
 	var id string
 	if err := f.store.corpus().QueryRow(`SELECT capture_id FROM search_leads WHERE owner_id='o1'`).Scan(&id); err != nil || len(id) != searchLeadCaptureIDRunes {
 		t.Fatalf("stored capture id length %d (%v), want %d", len(id), err, searchLeadCaptureIDRunes)
+	}
+}
+
+// Landing A reads the stories whose research searches returned a capture's
+// page. Failure list, written before the code: a capture no lead made is
+// listed; another computer's or owner's conversations are returned; a lead
+// returned by several conversations names only one; the route answers a caller
+// bound to another computer; it returns a lead's text instead of conversation ids.
+func TestSearchLeadConversationsByCaptureAreScopedAndConversationsOnly(t *testing.T) {
+	f := leadFixture(t)
+	ctx := context.Background()
+	a, b := "https://example.com/read-a", "https://example.com/unread-b"
+	for _, conv := range []string{"doc-one", "doc-two"} {
+		if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c1", "q", conv, SearchLeadHit{URL: a, Title: "A", Snippet: "secret snippet"}, SearchLeadHit{URL: b, Title: "B"})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := f.store.WriteSearchLeads(ctx, leadWrite("o1", "c2", "q", "doc-other-computer", SearchLeadHit{URL: a, Title: "A"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.MarkSearchLeadsTried(ctx, "o1", "c1", []string{a}, "cap-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.MarkSearchLeadsTried(ctx, "o1", "c2", []string{a}, "cap-1"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.store.SearchLeadConversationsByCapture(ctx, "o1", "c1", []string{"cap-1", "cap-none", ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	convs := append([]string(nil), got["cap-1"]...)
+	sort.Strings(convs)
+	if len(got) != 1 || strings.Join(convs, ",") != "doc-one,doc-two" {
+		t.Fatalf("conversations = %v, want only cap-1: doc-one, doc-two (not the other computer's, not an unread lead)", got)
+	}
+	if got, err := f.store.SearchLeadConversationsByCapture(ctx, "o1", "c1", nil); err != nil || len(got) != 0 {
+		t.Fatalf("no captures: %v, %v", got, err)
+	}
+
+	og := f.og
+	h := NewObjectGraphHandler(objectgraph.NewService(objectgraph.Config{Durable: og}), og)
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": {Found: true, UserID: "o1", ComputerID: "c1"}}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureCaptureIndex(f.store)
+	post := func(from string, body any) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(body)
+		r := httptest.NewRequest(http.MethodPost, "/internal/platform/search-leads/by-capture", bytes.NewReader(raw))
+		r.RemoteAddr = from + ":40000"
+		rec := httptest.NewRecorder()
+		hostauth.Middleware(http.HandlerFunc(h.HandleSearchLeadsByCapture)).ServeHTTP(rec, r)
+		return rec
+	}
+	if rec := post("10.200.1.2", map[string]any{"owner_id": "o1", "computer_id": "c2", "capture_ids": []string{"cap-1"}}); rec.Code != http.StatusForbidden {
+		t.Fatalf("a bound guest read another computer's conversations: %d %s", rec.Code, rec.Body)
+	}
+	rec := post("10.200.1.2", map[string]any{"owner_id": "o1", "computer_id": "c1", "capture_ids": []string{"cap-1"}})
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "secret snippet") || !strings.Contains(rec.Body.String(), "doc-one") {
+		t.Fatalf("route answer: %d %s", rec.Code, rec.Body)
 	}
 }

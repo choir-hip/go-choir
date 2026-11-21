@@ -86,7 +86,7 @@ const openStoryTaskCell = `var ids []string
 for _, r := range choir.Records() { if r.Captures != nil { for _, c := range r.Captures.Items { ids = append(ids, c.CaptureID) } } }
 p, _ := choir.Stories(50, "")
 fmt.Println("stories", len(p.Stories))
-choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
+choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "main_point": "A sentence long enough to be the main point", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
 choir.Done("opened the strike story")`
 
 const delegateResidualsCell = `var ids []string
@@ -585,7 +585,7 @@ func TestFM11ATaintedManagementRunOpeningAStoryItselfAsksAtPublication(t *testin
 for _, r := range choir.Records() { if r.Captures != nil { for _, c := range r.Captures.Items { ids = append(ids, c.CaptureID) } } }
 p, _ := choir.Stories(50, "")
 fmt.Println("stories", len(p.Stories))
-choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
+choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto", "main_point": "A sentence long enough to be the main point", "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})`
 	f.model.mu.Unlock()
 	f.parentTurn()
 	inbox, cast := f.storyOpening("cap-fm11")

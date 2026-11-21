@@ -40,6 +40,12 @@ const (
 	// StoryRefPublish is CastPublishAuto when every committed revision
 	// publishes as its next version.
 	StoryRefPublish = "publish"
+	// StoryRefMainPoint is the story's main point: one sentence at the level
+	// of the beat, written once by management's opening Cast and never again.
+	StoryRefMainPoint = "main_point"
+	// StoryRefSucceeds is the document of the story this one succeeds, set
+	// when the main beat changed.
+	StoryRefSucceeds = "succeeds"
 )
 
 // StorySeedRole marks a story's seed revision: the empty revision the
@@ -232,6 +238,8 @@ type StoryIndexEntry struct {
 	RevisionID   string    `json:"revision_id,omitempty"`
 	Headline     string    `json:"headline,omitempty"`
 	Lede         string    `json:"lede,omitempty"`
+	MainPoint    string    `json:"main_point,omitempty"`
+	Succeeds     string    `json:"succeeds,omitempty"`
 	Version      int       `json:"version,omitempty"`
 	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 	// Archived marks a story the library no longer lists.

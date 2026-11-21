@@ -11,39 +11,45 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// The management task's story page and the held stories offered for an
-// arrival (docs/evidence/duplicate-stories-on-the-paper-2026-11-20.md,
-// options 1 and 2). Failure list, written before the code:
+// The management task's story page and the candidate stories offered for an
+// arrival (docs/design/semantic-layer-2026-11-20.md, landing A). Failure list,
+// written before the code:
 //
 //  P1  the page is not what the prompt promises: a story updated inside the
-//      window is missing (the old page held the newest 50, a median 27
-//      minutes back), or carries a lede (headlines only), or a story older
+//      window is missing, or carries a lede (headlines only), or a story older
 //      than the window is on it.
 //  P2  a full window does not fit the section bound by construction, or the
 //      bound is met by a silent fallback to the newest 50.
-//  P3  a bound that truncates does so quietly: the page does not say how many
-//      stories it left out, how old the oldest listed one is and how to read
-//      the rest, or the log line does not say so.
-//  P4  an empty window falls back to older stories instead of saying nothing
-//      was updated in it.
-//  H1  a held story of the last 72 hours that covers the arrival (the
-//      evidence file's labelled pairs, by title) is not offered with enough to
-//      judge it (headline, age, a line of lead), or a story with no words in
-//      common is offered, or more than the top few are.
-//  H2  a story older than 72 hours is offered.
-//  H3  a texture:new Cast that leaves an offered candidate without a verdict
-//      (same, follow_up or different), or with a verdict outside those three,
-//      is accepted; or an answer "same" is refused by rule (the decision stays
-//      the model's).
-//  H4  the log line of a decision leaves out the page's size, window and
-//      truncation, the candidates offered, or the verdicts.
+//  P3  a bound that truncates does so quietly.
+//  P4  an empty window falls back to older stories instead of saying so.
+//  C1  a story that holds one of the arrival's nearest captures, or whose
+//      research searches returned the arrival's page, is not offered; or a
+//      story with the same title words and no such link is offered (title
+//      words are gone); or a story is dropped for its age.
+//  C2  candidates are not ranked by nearest captures held, then by the
+//      context the trajectory holds (version), then newest; more than the
+//      bound are offered; a story with a main point offers its lede instead,
+//      or one without offers nothing to judge it by.
+//  C3  a failed or missing neighbours request refuses an open or hides the
+//      page, instead of a note beside the page.
+//  J1  an open with a missing or out-of-bound main point, an unanswered
+//      candidate, a "same" answer, a succeeds without a next, a next without a
+//      succeeds, two nexts, a malformed judgment or no reason is accepted; or
+//      a refusal does not name the shape.
+//  J2  on the 22 pairs of the design's section 9, the rule's answer does not
+//      fold unclear into a feed, or opens a story where the answer is same.
+//  J3  an open that answers next does not write main_point and succeeds into
+//      the story's trajectory, or StorySummary does not return them.
+//  J4  the judgment costs a model call: a task's calls change with candidates.
+//  L1  the log line leaves out the captures, the sources, the main point, the
+//      successor or the answers.
 //  T1  the prompt names a window, a key or a field the page does not carry.
 
-// evidencePairs are labelled pairs of
 // docs/evidence/duplicate-stories-on-the-paper-2026-11-20.md section 2.2:
 // the earlier story's headline and the later story's headline, as published.
 var evidencePairs = []struct{ kind, earlier, later string }{
@@ -183,155 +189,248 @@ func TestOpeningPageEmptyWindowSaysSo(t *testing.T) {
 
 // candidatePool is every earlier story of the pairs, the look-alike's earlier
 // stories and unrelated stories, held at 1 to 70 hours.
-func candidatePool(now time.Time) []store.StorySummary {
-	var pool []store.StorySummary
-	i := 0
-	add := func(h, lede string, age time.Duration) {
-		pool = append(pool, sumAt(i, h, lede, age, now))
-		i++
-	}
-	for k, p := range evidencePairs {
-		add(p.earlier, "The first paragraph of the earlier story, which says what happened in a sentence or two and then goes on at some length about the people involved and the places and the reasons behind it all.", time.Duration(2+k*3)*time.Hour)
-	}
-	for k, l := range evidenceLookAlikes {
-		add(l.earlier, "A lede.", time.Duration(5+k)*time.Hour)
-	}
-	for k, u := range unrelatedTitles {
-		add(u, "A lede.", time.Duration(1+k*6)*time.Hour)
-	}
-	add("A story held 80 hours ago: "+evidencePairs[2].earlier, "old", 80*time.Hour)
-	return pool
+
+func linksOf(near []string, leads ...string) arrivalLinks {
+	return arrivalLinks{Near: near, Leads: leads}
 }
 
-func TestHeldStoriesOfTheLabelledPairsAreOffered(t *testing.T) {
-	now := time.Date(2026, 11, 20, 22, 0, 0, 0, time.UTC)
-	pool := candidatePool(now)
-	idx := newHeldIndex(pool, now)
-	found := 0
-	for k, p := range evidencePairs {
-		cands := idx.find(p.later, heldPerCapture)
-		hit := false
-		for _, c := range cands {
-			if c.DocID == pool[k].DocID {
-				hit = true
-				if c.Headline != p.earlier || c.Age == "" || c.Lede == "" {
-					t.Errorf("H1: pair %d offered without enough to judge: %+v", k, c)
-				}
+func candidateWorld(now time.Time) (map[string]store.StorySummary, []types.CaptureArrival) {
+	by := map[string]store.StorySummary{}
+	add := func(doc, headline, lede, point string, v int, age time.Duration) {
+		by[doc] = store.StorySummary{DocID: doc, Headline: headline, Lede: lede, MainPoint: point, Version: v, UpdatedAt: now.Add(-age)}
+	}
+	add("docA", "Rotterdam port workers strike", "Dockers walked out.", "Whether the Rotterdam dock strike ends and on what terms", 4, 30*time.Hour)
+	add("docB", "Rotterdam port workers strike", "Dockers walked out.", "", 9, 2*time.Hour)
+	add("docC", "Antwerp strike", "A second port.", "Whether the Antwerp dock strike ends", 2, 10*24*time.Hour)
+	return by, []types.CaptureArrival{{CaptureID: "cap-1", Title: "Rotterdam port workers strike"}}
+}
+
+func TestCandidatesFoundByNeighboursAndLeadsNeverByTitleWords(t *testing.T) {
+	now := time.Date(2026, 11, 21, 6, 0, 0, 0, time.UTC)
+	by, arrivals := candidateWorld(now)
+	// C1: no link, no candidate, however alike the titles (docA and docB share the arrival's words).
+	if sec, offer, _, _ := buildCandidateSection(arrivals, map[string]arrivalLinks{}, by, now, 20000); sec != nil || len(offer.ByCapture) != 0 {
+		t.Fatalf("C1: a story with the same title words and no link was offered: %+v", sec)
+	}
+	// A neighbour's story, a lead-only story and a ten-day-old story are offered.
+	links := map[string]arrivalLinks{"cap-1": {Near: []string{"docA", "docC"}, Leads: []string{"docB"}}}
+	sec, offer, src, _ := buildCandidateSection(arrivals, links, by, now, 20000)
+	if sec == nil || len(sec.Captures) != 1 || len(sec.Captures[0].Candidates) != 3 {
+		t.Fatalf("C1: candidates = %+v", sec)
+	}
+	if got := offer.ByCapture["cap-1"]; len(got) != 3 {
+		t.Fatalf("C1: offer = %v", got)
+	}
+	if src.Near != 2 || src.Lead != 1 {
+		t.Fatalf("C1: sources = %+v, want near 2 lead 1", src)
+	}
+	by2 := map[string]string{}
+	for _, c := range sec.Captures[0].Candidates {
+		by2[c.DocID] = strings.Join(c.FoundBy, ",")
+	}
+	if by2["docA"] != "near:1" || by2["docB"] != "lead" || by2["docC"] != "near:1" {
+		t.Fatalf("C1: found_by = %v", by2)
+	}
+}
+
+func TestCandidatesRankByNeighboursHeldThenContextThenNewest(t *testing.T) {
+	now := time.Date(2026, 11, 21, 6, 0, 0, 0, time.UTC)
+	by, arrivals := candidateWorld(now)
+	// docC holds two of the arrival's neighbours: first. docA and docB hold one
+	// each: the one with more accumulated context (v 9) before the newer.
+	links := map[string]arrivalLinks{"cap-1": {Near: []string{"docA", "docC", "docB", "docC"}}}
+	sec, _, _, _ := buildCandidateSection(arrivals, links, by, now, 20000)
+	var order []string
+	for _, c := range sec.Captures[0].Candidates {
+		order = append(order, c.DocID)
+	}
+	if strings.Join(order, ",") != "docC,docB,docA" {
+		t.Fatalf("C2: order = %v, want docC (2 held), docB (v9), docA", order)
+	}
+	// A recorded point is shown as the point; a story without one shows its lede, said so.
+	for _, c := range sec.Captures[0].Candidates {
+		switch c.DocID {
+		case "docA":
+			if c.MainPoint != by["docA"].MainPoint || c.PointIsLede {
+				t.Errorf("C2: docA = %+v", c)
 			}
-			if strings.HasPrefix(c.Headline, "A story held 80 hours") {
-				t.Errorf("H2: pair %d was offered a story held 80 hours", k)
+		case "docB":
+			if c.MainPoint != "Dockers walked out." || !c.PointIsLede {
+				t.Errorf("C2: docB = %+v", c)
 			}
 		}
-		if len(cands) > heldPerCapture {
-			t.Errorf("H1: %d candidates for one arrival, the top %d only", len(cands), heldPerCapture)
-		}
-		if hit {
-			found++
-		} else {
-			t.Logf("pair %d (%s) not offered %q; got %d candidates", k, p.kind, p.later, len(cands))
-		}
 	}
-	t.Logf("held stories offered for %d of %d labelled pairs", found, len(evidencePairs))
-	if found < 12 {
-		t.Fatalf("H1: the earlier story was offered for %d of %d labelled pairs, want at least 12", found, len(evidencePairs))
+	// At most candidatesPerCapture.
+	many := map[string]store.StorySummary{}
+	var near []string
+	for i := 0; i < candidatesPerCapture+5; i++ {
+		doc := fmt.Sprintf("doc%02d", i)
+		many[doc] = store.StorySummary{DocID: doc, Headline: "h", UpdatedAt: now.Add(-time.Duration(i) * time.Hour), MainPoint: "A main point that is long enough"}
+		near = append(near, doc)
 	}
-	// Identical titles are the plainest cases and must always be offered first.
-	if c := idx.find(evidencePairs[0].later, heldPerCapture); len(c) == 0 || c[0].DocID != pool[0].DocID {
-		t.Fatalf("H1: the identical title is not the first candidate: %+v", c)
+	sec, _, _, _ = buildCandidateSection(arrivals, map[string]arrivalLinks{"cap-1": {Near: near}}, many, now, 200000)
+	if n := len(sec.Captures[0].Candidates); n != candidatesPerCapture {
+		t.Fatalf("C2: %d candidates, want %d", n, candidatesPerCapture)
 	}
-	// A story with no words in common offers nothing.
-	if c := idx.find("Seismologists record a magnitude 5 tremor under the Pacific seabed", heldPerCapture); len(c) != 0 {
-		t.Fatalf("H1: an unrelated arrival was offered %+v", c)
+	// The section bound leaves an arrival out and says so.
+	sec, _, _, unlisted := buildCandidateSection(arrivals, map[string]arrivalLinks{"cap-1": {Near: near}}, many, now, 100)
+	if unlisted != 1 || sec == nil || !strings.Contains(sec.Note, "not listed") {
+		t.Fatalf("C2: unlisted = %d, section = %+v", unlisted, sec)
 	}
 }
 
-// The three look-alikes the evidence file counted as distinct may be offered
-// (a word overlap cannot tell them apart); the model answers "different" and
-// the answer is accepted: no rule refuses an open.
-func TestLookAlikesMayBeOfferedAndAreAnsweredDifferent(t *testing.T) {
-	now := time.Date(2026, 11, 20, 22, 0, 0, 0, time.UTC)
-	pool := candidatePool(now)
-	idx := newHeldIndex(pool, now)
-	for k, l := range evidenceLookAlikes {
-		offered := idx.find(l.later, heldPerCapture)
-		var docs []string
-		answers := []string{}
-		for _, c := range offered {
-			docs = append(docs, c.DocID)
-			answers = append(answers, fmt.Sprintf(`{"story":"texture:%s","verdict":"different"}`, c.DocID))
+func judgmentPacketOf(fields string) string {
+	return `{"captures":["cap-1"],"hypotheses":[]` + fields + `}`
+}
+
+const goodPoint = `"main_point":"Whether the Rotterdam dock strike ends and on what terms"`
+
+func TestOpenRefusalsNameTheShapeAndSendNothing(t *testing.T) {
+	offer := &openingOffer{ByCapture: map[string][]string{"cap-1": {"docA", "docB"}}, Leased: []string{"cap-1", "cap-2"}}
+	long := strings.Repeat("x", mainPointMaxRunes+1)
+	cases := []struct{ name, packet, want string }{
+		{"no main point", judgmentPacketOf(`,"judgment":[]`), "main point"},
+		{"short main point", judgmentPacketOf(`,"main_point":"too short"`), "main point"},
+		{"long main point", judgmentPacketOf(`,"main_point":"` + long + `"`), "main point"},
+		{"unanswered candidate", judgmentPacketOf(`,` + goodPoint + `,"judgment":[{"story":"texture:docA","answer":"new","why":"different"}]`), "texture:docB"},
+		{"same on an open", judgmentPacketOf(`,` + goodPoint + `,"judgment":[{"story":"texture:docA","answer":"same","why":"w"},{"story":"texture:docB","answer":"new","why":"w"}]`), "choir.Feed"},
+		{"succeeds without next", judgmentPacketOf(`,` + goodPoint + `,"succeeds":"texture:docA","judgment":[{"story":"texture:docA","answer":"new","why":"w"},{"story":"texture:docB","answer":"new","why":"w"}]`), "needs a next answer"},
+		{"next without succeeds", judgmentPacketOf(`,` + goodPoint + `,"judgment":[{"story":"texture:docA","answer":"next","why":"w"},{"story":"texture:docB","answer":"new","why":"w"}]`), "succeeds"},
+		{"two nexts", judgmentPacketOf(`,` + goodPoint + `,"succeeds":"texture:docA","judgment":[{"story":"texture:docA","answer":"next","why":"w"},{"story":"texture:docB","answer":"next","why":"w"}]`), "two next"},
+		{"succeeds the wrong story", judgmentPacketOf(`,` + goodPoint + `,"succeeds":"texture:docB","judgment":[{"story":"texture:docA","answer":"next","why":"w"},{"story":"texture:docB","answer":"new","why":"w"}]`), "not the story you answered next"},
+		{"malformed judgment", judgmentPacketOf(`,` + goodPoint + `,"judgment":"same"`), "{story, answer, why}"},
+		{"unknown answer", judgmentPacketOf(`,` + goodPoint + `,"judgment":[{"story":"texture:docA","answer":"maybe","why":"w"}]`), "same, next, new"},
+		{"no reason", judgmentPacketOf(`,` + goodPoint + `,"judgment":[{"story":"texture:docA","answer":"new"},{"story":"texture:docB","answer":"new","why":"w"}]`), "why"},
+		{"foreign capture", `{"captures":["cap-9"],` + goodPoint + `}`, "cap-9"},
+	}
+	for _, c := range cases {
+		err := requireJudgment(offer, c.packet)
+		if err == nil || !strings.Contains(err.Error(), c.want) || !strings.Contains(err.Error(), "nothing was sent") {
+			t.Errorf("J1: %s: err = %v, want one naming %q and that nothing was sent", c.name, err, c.want)
 		}
-		offer := &openingOffer{ByCapture: map[string][]string{"cap-x": docs}}
-		packet := fmt.Sprintf(`{"captures":["cap-x"],"held_check":[%s]}`, strings.Join(answers, ","))
-		if err := requireHeldVerdicts(offer, packet); err != nil {
-			t.Errorf("H3: look-alike %d answered different was refused: %v", k, err)
-		}
-		t.Logf("look-alike %d offered %d candidate(s)", k, len(offered))
+	}
+	ok := judgmentPacketOf(`,` + goodPoint + `,"succeeds":"texture:docA","judgment":[{"story":"texture:docA","answer":"next","why":"the strike ended"},{"story":"texture:docB","answer":"new","why":"another port"}]`)
+	if err := requireJudgment(offer, ok); err != nil {
+		t.Errorf("J1: a complete successor open was refused: %v", err)
+	}
+	// Nothing offered: a main point alone opens. A nil offer (a resumed run) the same.
+	if err := requireJudgment(nil, `{"captures":["cap-1"],`+goodPoint+`}`); err != nil {
+		t.Errorf("J1: new matter with no candidate was refused: %v", err)
+	}
+	if err := requireJudgment(&openingOffer{ByCapture: map[string][]string{}}, `{"captures":["cap-1"]}`); err == nil {
+		t.Errorf("J1: an open with no main point was accepted when nothing was offered")
 	}
 }
 
-func TestHeldVerdictsAreRequiredForEveryOfferedCandidate(t *testing.T) {
-	offer := &openingOffer{ByCapture: map[string][]string{"cap-1": {"docA", "docB"}, "cap-2": {"docC"}}}
-	ok := func(packet string) error { return requireHeldVerdicts(offer, packet) }
-	if err := ok(`{"captures":["cap-1"],"held_check":[{"story":"texture:docA","verdict":"same"},{"story":"docB","verdict":"follow_up"}]}`); err != nil {
-		t.Fatalf("H3: a full answer (same, follow_up; bare doc id) was refused: %v", err)
+// The design's section 9: the 22 real pairs, as the rule answers them. An
+// unclear pair is folded into a feed (owner: "Lean to revising"), so what a
+// host sees of it is a feed, never an open. A same is a feed; a next is an open
+// with succeeds; new is an open. "How the host answers an open" is all this
+// table checks: the judgment itself is the model's.
+func TestSectionNinePairsRevisedSuccessorNewAndUnclearFoldsToFeed(t *testing.T) {
+	type pair struct {
+		row            int
+		earlier, later string
+		rule           string // same, next, new, unclear
 	}
-	if err := ok(`{"captures":["cap-1"],"held_check":[{"story":"texture:docA","verdict":"different"},{"story":"texture:docB","verdict":"different"}]}`); err != nil {
-		t.Fatalf("H3: a different-different answer was refused: %v", err)
+	pairs := []pair{
+		{1, "Six killed in Georgia gas explosion", "Six killed in Georgia gas explosion", "same"},
+		{2, "Pew: Islam largest religion by 2035", "Pew: Islam largest religion by 2035", "same"},
+		{3, "UK sanctions eight Israeli settlement firms", "UK sanctions eight Israeli settlement firms", "same"},
+		{4, "UK sanctions firms, Australia joins", "Australia sanctions settler leader Weiss", "same"},
+		{5, "Russia's mass missile strike on Ukraine", "Massive overnight attack on Ukraine", "same"},
+		{6, "Missiles and a drone land in Poland", "Polish PM calls it an intentional provocation", "unclear"},
+		{7, "Nikhil Gupta sentenced to 19 years 7 months", "Nikhil Gupta sentenced to 19 years 7 months", "same"},
+		{8, "ICJ to deliver verdict Thursday on Myanmar", "ICJ finds genocide", "next"},
+		{9, "First deep-sea mining lease auction off American Samoa", "US sells first leases for $6m", "same"},
+		{10, "US loses measles-free status", "US loses measles-free status, a German ex-minister warns", "same"},
+		{11, "Google adds an AI sidebar to search", "Google redesigns its search page", "same"},
+		{12, "Trump calls Miller the most powerful man in the world", "Trump's press conference after Asia hails Miller", "unclear"},
+		{13, "Kynev arrested", "Moscow extends Kynev's detention to December 24", "same"},
+		{14, "Eight killed in Brooklyn collapse", "New video of the Brooklyn collapse", "same"},
+		{15, "India and Japan set to review defence ties at 2+2", "India and Japan agree to expand cooperation", "next"},
+		{16, "Senate clears the way for the permitting bill", "Senate passes the permitting bill 62-33", "next"},
+		{17, "Kress passes first test as interim CEO, board keeps Huang out", "Nvidia confirms Huang resigned", "next"},
+		{18, "Nations League draw set for Friday", "England drawn against Norway", "next"},
+		{19, "French Senate delays police firearms vote", "Parliament approves police firearms law", "next"},
+		{20, "Bukele due to register for a third term", "Bukele registers", "unclear"},
+		{21, "Philippine charge against Thomas Markle", "US judge finds Markle fit for trial", "unclear"},
+		{22, "A third US carrier reaches the Middle East", "USS George Washington leaves", "new"},
 	}
-	err := ok(`{"captures":["cap-1"],"held_check":[{"story":"texture:docA","verdict":"different"}]}`)
-	if err == nil || !strings.Contains(err.Error(), "docB") || strings.Contains(err.Error(), "docC") || !strings.Contains(err.Error(), "held_check") {
-		t.Fatalf("H3: a missing verdict for docB was not refused naming it (and only it): %v", err)
+	now := time.Date(2026, 11, 21, 6, 0, 0, 0, time.UTC)
+	feeds, opens, successors := 0, 0, 0
+	for _, p := range pairs {
+		by := map[string]store.StorySummary{"docE": {DocID: "docE", Headline: p.earlier, MainPoint: "The main point of " + p.earlier, Version: 3, UpdatedAt: now.Add(-30 * time.Hour)}}
+		arrivals := []types.CaptureArrival{{CaptureID: "cap-1", Title: p.later}}
+		sec, offer, _, _ := buildCandidateSection(arrivals, map[string]arrivalLinks{"cap-1": {Near: []string{"docE"}}}, by, now, 20000)
+		if sec == nil || len(offer.ByCapture["cap-1"]) != 1 {
+			t.Fatalf("J2: row %d: the earlier story was not offered", p.row)
+		}
+		answer := p.rule
+		if answer == "unclear" {
+			answer = "same"
+		}
+		packet := judgmentPacketOf(`,"main_point":"The main point of ` + p.later + `, written once at open"`)
+		switch answer {
+		case "same":
+			// A same answer on an open is refused: the capture is fed.
+			err := requireJudgment(offer, packet[:len(packet)-1]+`,"judgment":[{"story":"texture:docE","answer":"same","why":"serves the point"}]}`)
+			if err == nil || !strings.Contains(err.Error(), "choir.Feed") {
+				t.Errorf("J2: row %d (%s): a same answer opened a story: %v", p.row, p.rule, err)
+			}
+			feeds++
+		case "next":
+			spec := packet[:len(packet)-1] + `,"succeeds":"texture:docE","judgment":[{"story":"texture:docE","answer":"next","why":"the main beat moved on"}]}`
+			if err := requireJudgment(offer, spec); err != nil {
+				t.Errorf("J2: row %d: a successor was refused: %v", p.row, err)
+			}
+			opens++
+			successors++
+		case "new":
+			spec := packet[:len(packet)-1] + `,"judgment":[{"story":"texture:docE","answer":"new","why":"a different point"}]}`
+			if err := requireJudgment(offer, spec); err != nil {
+				t.Errorf("J2: row %d: new matter was refused: %v", p.row, err)
+			}
+			opens++
+		}
 	}
-	if err := ok(`{"captures":["cap-1"]}`); err == nil {
-		t.Fatal("H3: an open with no held_check passed although two held stories were offered")
-	}
-	if err := ok(`{"captures":["cap-1"],"held_check":[{"story":"texture:docA","verdict":"maybe"},{"story":"texture:docB","verdict":"same"}]}`); err == nil || !strings.Contains(err.Error(), "maybe") {
-		t.Fatalf("H3: a verdict outside same, follow_up and different was accepted: %v", err)
-	}
-	// The captures the Cast names decide what is owed; with none named, every offer is.
-	if err := ok(`{"captures":["cap-2"],"held_check":[{"story":"texture:docC","verdict":"same"}]}`); err != nil {
-		t.Fatalf("H3: cap-2's answer was refused: %v", err)
-	}
-	if err := ok(`{"held_check":[{"story":"texture:docA","verdict":"same"}]}`); err == nil {
-		t.Fatal("H3: a Cast naming no captures owes every offer; it was accepted with docB and docC missing")
-	}
-	// Nothing offered, nothing owed; a nil offer (a resumed run) owes nothing.
-	if err := requireHeldVerdicts(&openingOffer{ByCapture: map[string][]string{}}, `{"captures":["cap-1"]}`); err != nil {
-		t.Fatalf("H3: nothing was offered, yet: %v", err)
-	}
-	if err := requireHeldVerdicts(nil, `{"captures":["cap-1"]}`); err != nil {
-		t.Fatalf("H3: a nil offer owes nothing: %v", err)
+	// The design's tally, with the four unclear folded: 15 feeds, 6 successors, 1 new.
+	if feeds != 15 || successors != 6 || opens != 7 {
+		t.Fatalf("J2: feeds %d successors %d opens %d, want 15, 6, 7", feeds, successors, opens)
 	}
 }
 
-func TestStoryChoiceLineCarriesPageAndCandidates(t *testing.T) {
-	d := choiceDetail{Window: openingWindow, InWindow: 312, LeftOut: 0, Offered: []string{"docA", "docB"}, Verdicts: map[string]string{"docA": "same"}}
-	got := managementStoryChoiceLine("run-9", "open", "", 312, 0, d)
-	want := "management story choice run=run-9 choice=open story=- opening_shown=312 verb_shown=0 candidates_shown=312 window=8h page_in_window=312 page_left_out=0 offered=docA,docB verdicts=docA:same,docB:none"
+func TestStoryChoiceLineCarriesPageCandidatesAndTheJudgment(t *testing.T) {
+	d := choiceDetail{Window: openingWindow, InWindow: 312, Offered: []string{"docA", "docB"}, Answers: map[string]string{"docA": "next"},
+		Sources: candidateSources{Near: 2, Lead: 1}, Captures: 3, MainPoint: 58, Succeeds: "docA"}
+	got := managementStoryChoiceLine("run-9", "open", "doc-7", 312, 0, d)
+	want := "management story choice run=run-9 choice=open story=doc-7 opening_shown=312 verb_shown=0 candidates_shown=312 window=8h page_in_window=312 page_left_out=0 offered=docA,docB answers=docA:next,docB:none captures=3 sources=near:2,lead:1 main_point=58 succeeds=docA"
 	if got != want {
-		t.Fatalf("H4: line = %q\nwant        %q", got, want)
+		t.Fatalf("L1: line = %q\nwant        %q", got, want)
 	}
-	got = managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{Window: openingWindow, InWindow: 400, LeftOut: 77})
-	want = "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=8h page_in_window=400 page_left_out=77 offered=- verdicts=-"
+	got = managementStoryChoiceLine("run-9", "feed", "doc-4", 50, 25, choiceDetail{Window: openingWindow, InWindow: 400, LeftOut: 77, Captures: 2})
+	want = "management story choice run=run-9 choice=feed story=doc-4 opening_shown=50 verb_shown=25 candidates_shown=75 window=8h page_in_window=400 page_left_out=77 offered=- answers=- captures=2 sources=near:0,lead:0 main_point=0 succeeds=-"
 	if got != want {
-		t.Fatalf("H4: line = %q\nwant        %q", got, want)
+		t.Fatalf("L1: line = %q\nwant        %q", got, want)
+	}
+	if got := storyResearchLine("run-1", "doc-4", 2); got != "story research cast run=run-1 story=doc-4 round=2" {
+		t.Fatalf("L1: research line = %q", got)
 	}
 }
 
 func TestPromptNamesWhatThePageHolds(t *testing.T) {
 	prompt := managementTaskPrompt
-	for _, want := range []string{"8 hours", "headlines", "left_out", "held_stories", "held_check", "same", "follow_up", "different"} {
+	for _, want := range []string{"8 hours", "headlines", "left_out", "candidate_stories", "main_point", "judgment", "next", "succeeds", "most context"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("T1: the prompt does not say %q: %s", want, prompt)
 		}
 	}
-	if strings.Contains(prompt, "newest page of the story library") || strings.Contains(prompt, `choir.Stories(50, "")`) {
-		t.Errorf("T1: the prompt still promises the newest 50: %s", prompt)
+	if strings.Contains(prompt, "held_stories") || strings.Contains(prompt, "held_check") || strings.Contains(prompt, "same words") {
+		t.Errorf("T1: the prompt still speaks of title-word held stories: %s", prompt)
 	}
-	// Every key the prompt and the overlay name is a key the page carries.
 	page := openingPage{Stories: []openingStory{{}}}
 	raw, _ := json.Marshal(page)
-	held, _ := json.Marshal(openingHeldSection{Captures: []openingHeldCapture{{HeldStories: []heldCandidate{{}}}}})
+	cand, _ := json.Marshal(openingCandidateSection{Captures: []openingCandidateCapture{{Candidates: []candidateStory{{}}}}})
 	body, err := os.ReadFile("../runtimeprompts/overlays/rlm_management_task_runtime.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -345,27 +444,188 @@ func TestPromptNamesWhatThePageHolds(t *testing.T) {
 			t.Errorf("T1: the overlay does not name the page's key %q", key)
 		}
 	}
-	for _, key := range []string{"held_stories", "capture_id", "lede"} {
-		if !strings.Contains(string(held), `"`+key+`"`) || !strings.Contains(overlay, key) {
-			t.Errorf("T1: held section / overlay disagree on %q: %s", key, held)
+	for _, key := range []string{"candidate_stories", "capture_id", "main_point", "point_is_lede", "held", "found_by"} {
+		if !strings.Contains(string(cand), `"`+key+`"`) && key != "point_is_lede" && key != "held" {
+			t.Errorf("T1: candidate section has no key %q: %s", key, cand)
+		}
+		if !strings.Contains(overlay, key) {
+			t.Errorf("T1: the overlay does not name %q", key)
 		}
 	}
-	for _, v := range []string{"held_check", "same", "follow_up", "different"} {
+	for _, v := range []string{"judgment", "next", "new", "succeeds", "main_point", "feed"} {
 		if !strings.Contains(overlay, v) {
 			t.Errorf("T1: the overlay does not state the answer shape (%s)", v)
+		}
+	}
+	if strings.Contains(overlay, "held_check") || strings.Contains(overlay, "follow_up") {
+		t.Errorf("T1: the overlay still teaches the title-word held check")
+	}
+}
+
+type leadSink struct {
+	neighbourSink
+	leads    map[string][]string
+	leadErr  error
+	leadReqs int
+}
+
+func (s *leadSink) SearchLeadConversations(ctx context.Context, owner, computer string, ids []string) (map[string][]string, error) {
+	s.leadReqs++
+	return s.leads, s.leadErr
+}
+
+// A task's whole decision over a real store: a capture whose neighbour belongs
+// to a held story is offered that story; an open that leaves it unanswered is
+// refused; a next opens a successor whose trajectory records the main point
+// and succeeds; the story library returns them; and the judgment added no model
+// call (J4). One task per step: a task disposes of a capture once.
+func TestTaskOpenAnswersCandidatesAndWritesMainPointAndSucceeds(t *testing.T) {
+	f := newDelegationFixtureWith(t, "owner-main-point", false)
+	ctx := context.Background()
+	sink := &leadSink{neighbourSink: neighbourSink{near: map[string][]string{}}}
+	f.rt.researchDeps = &researchtools.Dependencies{Captures: sink}
+	for i, title := range []string{"probe", "Rotterdam strike vote scheduled", "Rotterdam dockers vote to end the strike", "Rotterdam strike vote held"} {
+		seedArrival(t, f.s, f.owner, f.computer, fmt.Sprintf("rss:m%d", i), []types.CaptureArrival{{CaptureID: fmt.Sprintf("cap-m%d", i), Title: title, URL: fmt.Sprintf("https://m.example/%d", i)}})
+	}
+	f.parentTurn()
+	queued := f.tasks(types.ManagementTaskQueued)
+	if len(queued) != 4 {
+		t.Fatalf("queued = %+v", queued)
+	}
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	cast := func(fields string) string {
+		return "var ids []string\nfor _, r := range choir.Records() { if r.Captures != nil { for _, c := range r.Captures.Items { ids = append(ids, c.CaptureID) } } }\n" +
+			`choir.Cast("texture:new", "Rotterdam dock strike", map[string]any{"captures": ids, "publish": "auto"` + fields + `, "hypotheses": []any{map[string]any{"statement": "the strike ends", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
+choir.Done("opened")`
+	}
+	run := func(id, cell string) {
+		t.Helper()
+		var task types.ManagementTask
+		for _, q := range queued {
+			if d, _, _ := f.s.CaptureDispositionOf(ctx, f.owner, f.computer, id); d.LeaseTask == q.TaskID {
+				task = q
+			}
+		}
+		if task.TaskID == "" {
+			t.Fatalf("no task leases %s", id)
+		}
+		f.model.mu.Lock()
+		f.model.taskCell = cell
+		f.model.mu.Unlock()
+		rec, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, task.TaskInbox)
+		if err != nil || rec == nil {
+			t.Fatalf("start %s: %v, %v", task.TaskID, rec, err)
+		}
+		waitForStoredRunTerminalState(t, f.s, rec.RunID, 60*time.Second)
+		eventually(t, func() bool { return f.task(task.TaskID).State == types.ManagementTaskClosed })
+	}
+	disposed := func(id string) types.CaptureDisposition {
+		d, _, _ := f.s.CaptureDispositionOf(ctx, f.owner, f.computer, id)
+		return d
+	}
+	// Step 1: no main point is refused, nothing disposed; it fixes the calls of a refused task.
+	before := f.model.callCount()
+	run("cap-m0", cast(""))
+	if out := f.model.lastOutput(); !strings.Contains(out, "main point") || disposed("cap-m0").Kind != "" {
+		t.Fatalf("J1: an open with no main point was accepted or its capture disposed: %s", out)
+	}
+	callsRefused := f.model.callCount() - before
+	// Step 2: new matter, nothing offered: a main point alone opens a story.
+	before = f.model.callCount()
+	run("cap-m1", cast(`, `+goodPoint))
+	d1 := disposed("cap-m1")
+	if d1.Kind != types.DispositionOpen || !strings.HasPrefix(d1.Inbox, "texture:") {
+		t.Fatalf("the first story did not open: %+v (%s)", d1, f.model.lastOutput())
+	}
+	callsOpened := f.model.callCount() - before
+	storyDoc := strings.TrimPrefix(d1.Inbox, "texture:")
+	// Step 3: cap-m2's nearest capture is cap-m1 and a lead names the story: it is offered, and unanswered is refused.
+	sink.near["cap-m2"], sink.near["cap-m3"] = []string{"cap-m1"}, []string{"cap-m1"}
+	sink.leads = map[string][]string{"cap-m2": {storyDoc}, "cap-m3": {storyDoc}}
+	before = f.model.callCount()
+	run("cap-m2", cast(`, `+goodPoint))
+	if out := f.model.lastOutput(); !strings.Contains(out, "texture:"+storyDoc) || !strings.Contains(out, "judgment") || disposed("cap-m2").Kind != "" {
+		t.Fatalf("J1: an open leaving the offered story unanswered was not refused naming it: %s", out)
+	}
+	if got := f.model.callCount() - before; got != callsRefused {
+		t.Fatalf("J4: a refused task offered candidates made %d model calls, one with none offered made %d", got, callsRefused)
+	}
+	// Step 4: next opens the successor.
+	logs.Reset()
+	before = f.model.callCount()
+	run("cap-m3", cast(`, `+goodPoint+`, "succeeds": "texture:`+storyDoc+`", "judgment": []any{map[string]any{"story": "texture:`+storyDoc+`", "answer": "next", "why": "the vote is held: the strike is ending"}}`))
+	if got := f.model.callCount() - before; got != callsOpened {
+		t.Fatalf("J4: an open judged against a candidate made %d model calls, an open with none offered made %d", got, callsOpened)
+	}
+	d3 := disposed("cap-m3")
+	if d3.Kind != types.DispositionOpen {
+		t.Fatalf("J3: the successor did not open: %+v (%s)", d3, f.model.lastOutput())
+	}
+	successorDoc := strings.TrimPrefix(d3.Inbox, "texture:")
+	docs, err := f.s.ListStoryDocuments(ctx, f.owner, f.computer, time.Time{}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]store.StorySummary{}
+	for _, sum := range f.s.StorySummariesOf(ctx, docs) {
+		got[sum.DocID] = sum
+	}
+	if got[successorDoc].MainPoint == "" || got[successorDoc].Succeeds != storyDoc || got[storyDoc].MainPoint == "" || got[storyDoc].Succeeds != "" {
+		t.Fatalf("J3: summaries = %+v", got)
+	}
+	line := ""
+	for _, l := range strings.Split(logs.String(), "\n") {
+		if strings.Contains(l, "management story choice") && strings.Contains(l, "choice=open") {
+			line = l
+		}
+	}
+	for _, want := range []string{"story=" + successorDoc, "offered=" + storyDoc, "answers=" + storyDoc + ":next", "captures=1", "sources=near:1,lead:1", "succeeds=" + storyDoc} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("L1: the open's line lacks %q: %q", want, line)
+		}
+	}
+}
+
+func (m *delegationModel) callCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
+}
+
+// A neighbours request that fails, or a sink that does not answer one, leaves
+// the page and a note; it never refuses an open (C3).
+func TestCandidateReadFailureIsANoteNotARefusal(t *testing.T) {
+	f, _, rec := openingFixture(t, "owner-cand-fail", "Harbor strike begins at Rotterdam port")
+	for name, captures := range map[string]any{
+		"error":   &leadSink{neighbourSink: neighbourSink{err: fmt.Errorf("corpusd is down")}, leadErr: fmt.Errorf("leads down")},
+		"unavail": &neighbourSink{unavailable: "vectors are not ready"},
+		"no sink": nil,
+	} {
+		if captures == nil {
+			f.rt.researchDeps = nil
+		} else {
+			f.rt.researchDeps = &researchtools.Dependencies{Captures: captures.(researchtools.CaptureSink)}
+		}
+		o := f.rt.managementTaskOpening(context.Background(), rec)
+		if o == nil || !strings.Contains(o.text, openingStoriesHeading) || !strings.Contains(o.text, openingCandidateHeading) || !strings.Contains(o.text, `"note":`) {
+			t.Fatalf("C3: %s: the page or the note is missing: %v", name, o)
+		}
+		if err := requireJudgment(o.offer, `{"captures":["cap-o1"],`+goodPoint+`}`); err != nil {
+			t.Fatalf("C3: %s: the open was refused: %v", name, err)
 		}
 	}
 }
 
 // The whole opening, over a real store: every story of the window is on the
-// page, there is no newest-50 fallback, and the held section names the stories
-// that may cover a capture.
-func TestTaskOpeningHoldsTheWholeWindowAndOffersHeldStories(t *testing.T) {
+// page; a story with identical title words and no link is not offered.
+func TestTaskOpeningHoldsTheWholeWindowAndOffersNoTitleWordCandidates(t *testing.T) {
 	f, _, rec := openingFixture(t, "owner-open-window", "Harbor strike begins at Rotterdam port")
 	for i := 0; i < 260; i++ {
 		openTestStory(t, f.s, f.owner, f.computer, fmt.Sprintf("Unrelated story number %03d about a harbour of nothing", i))
 	}
-	covering := openTestStory(t, f.s, f.owner, f.computer, "Rotterdam port workers begin a harbor strike")
+	lookalike := openTestStory(t, f.s, f.owner, f.computer, "Harbor strike begins at Rotterdam port")
 	o := f.rt.managementTaskOpening(context.Background(), rec)
 	if o == nil {
 		t.Fatal("no opening built")
@@ -377,22 +637,18 @@ func TestTaskOpeningHoldsTheWholeWindowAndOffersHeldStories(t *testing.T) {
 	if page.Shown < 262 || page.LeftOut != 0 {
 		t.Fatalf("P1: the page holds %d stories (left out %d) for 262 updated in the window", page.Shown, page.LeftOut)
 	}
-	if !strings.Contains(o.text, "Held stories that may already cover") || !strings.Contains(o.text, covering) {
-		t.Fatalf("H1: the covering story %s is not offered: %.1200s", covering, o.text[strings.Index(o.text, "Held stories")-200:])
+	if len(o.offer.ByCapture["cap-o1"]) != 0 {
+		t.Fatalf("C1: a title-word look-alike %s was offered: %+v", lookalike, o.offer.ByCapture)
 	}
-	if o.offer == nil || len(o.offer.ByCapture["cap-o1"]) == 0 || o.offer.ByCapture["cap-o1"][0] != covering {
-		t.Fatalf("H1: offer = %+v", o.offer)
+	if o.offer.Shown != page.Shown {
+		t.Fatalf("the offer's page size = %d, want %d", o.offer.Shown, page.Shown)
 	}
-	// Building marks nothing; commit records the offer for the decision's line.
 	if f.rt.openingShownCount(rec.RunID) != 0 {
 		t.Fatal("building recorded the page")
 	}
 	o.commit()
 	if got := f.rt.openingShownCount(rec.RunID); got != page.Shown {
 		t.Fatalf("opening_shown = %d, want %d", got, page.Shown)
-	}
-	if offer := f.rt.openingOfferOf(rec.RunID); offer == nil || offer.ByCapture["cap-o1"][0] != covering {
-		t.Fatalf("the run's offer was not kept: %+v", offer)
 	}
 	f.rt.forgetStoriesShown(rec.RunID)
 	if f.rt.openingOfferOf(rec.RunID) != nil {
@@ -427,141 +683,6 @@ func TestTaskOpeningOversizeWindowIsTruncatedLoudly(t *testing.T) {
 // Through a task's own cell: an open that leaves an offered held story
 // unanswered is refused naming it, and the same open with a verdict commits.
 // The log line of the committed open names the page and the candidate.
-func TestTaskOpenNeedsAVerdictForEachOfferedHeldStory(t *testing.T) {
-	f := newDelegationFixture(t, "owner-held-verdict")
-	ctx := context.Background()
-	covering := openTestStory(t, f.s, f.owner, f.computer, "Rotterdam port workers begin a harbor strike")
-	seedArrival(t, f.s, f.owner, f.computer, "rss:h1", []types.CaptureArrival{{CaptureID: "cap-h1", Title: "Harbor strike begins at Rotterdam port", URL: "https://h.example/1"}})
-	seedArrival(t, f.s, f.owner, f.computer, "rss:h2", []types.CaptureArrival{{CaptureID: "cap-h2", Title: "Harbor strike begins at Rotterdam port", URL: "https://h.example/2"}})
-	f.parentTurn()
-	queued := f.tasks(types.ManagementTaskQueued)
-	if len(queued) != 2 {
-		t.Fatalf("queued = %+v", queued)
-	}
-	var logs bytes.Buffer
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
-	cell := func(check string) string {
-		return "var ids []string\nfor _, r := range choir.Records() { if r.Captures != nil { for _, c := range r.Captures.Items { ids = append(ids, c.CaptureID) } } }\n" +
-			`choir.Cast("texture:new", "Harbor strike begins", map[string]any{"captures": ids, "publish": "auto"` + check + `, "hypotheses": []any{map[string]any{"statement": "the strike lasts a week", "probability": 0.5}}}, map[string]any{"p_success": 0.8, "weight": 0.3, "settlement": "recipient"})
-choir.Done("opened")`
-	}
-	run := func(task types.ManagementTask, cell string) *types.RunRecord {
-		t.Helper()
-		f.model.mu.Lock()
-		f.model.taskCell = cell
-		f.model.mu.Unlock()
-		rec, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, task.TaskInbox)
-		if err != nil || rec == nil {
-			t.Fatalf("start %s: %v, %v", task.TaskID, rec, err)
-		}
-		waitForStoredRunTerminalState(t, f.s, rec.RunID, 60*time.Second)
-		eventually(t, func() bool { return f.task(task.TaskID).State == types.ManagementTaskClosed })
-		return rec
-	}
-	run(queued[0], cell(""))
-	if out := f.model.lastOutput(); !strings.Contains(out, "held_check") || !strings.Contains(out, covering) {
-		t.Fatalf("H3: an open with no verdict for the offered story was not refused naming it: %s", out)
-	}
-	for _, id := range []string{"cap-h1", "cap-h2"} {
-		if d, _, _ := f.s.CaptureDispositionOf(ctx, f.owner, f.computer, id); d.Kind != "" {
-			t.Fatalf("H3: the refused cell disposed of %s: %+v", id, d)
-		}
-	}
-	rec2 := run(queued[1], cell(`, "held_check": []any{map[string]any{"story": "texture:`+covering+`", "verdict": "different"}}`))
-	opened := 0
-	for _, id := range []string{"cap-h1", "cap-h2"} {
-		if d, _, _ := f.s.CaptureDispositionOf(ctx, f.owner, f.computer, id); d.Kind == types.DispositionOpen {
-			opened++
-		}
-	}
-	if opened != 1 {
-		t.Fatalf("H3: the open with a verdict did not commit (%d opened): %s", opened, f.model.lastOutput())
-	}
-	line := ""
-	for _, l := range strings.Split(logs.String(), "\n") {
-		if strings.Contains(l, "management story choice run="+rec2.RunID) && strings.Contains(l, "choice=open") {
-			line = l
-		}
-	}
-	if line == "" || strings.Contains(line, "story=- ") || !strings.Contains(line, "window=8h") || !strings.Contains(line, "offered="+covering) || !strings.Contains(line, "verdicts="+covering+":different") || !strings.Contains(line, "page_left_out=0") {
-		t.Fatalf("H4: the committed open's line = %q", line)
-	}
-}
-
-// Review round 1 (seat 2, b0296a55d). Failure list, written before the code:
-//  R1  the held section and the offer depend on the records section fitting:
-//      a task whose records are too large for the bound gets no offer, so its
-//      open is unchecked.
-//  R2  with an offer, a held_check that is present but not a list of
-//      {story, verdict}, or a Cast naming a capture the task does not lease,
-//      commits unchecked.
-//  R3  a headline in a script written without spaces is one token, so even an
-//      identical title cannot match.
-//  R7  one huge headline drops the whole page and the held section.
-func TestHeldOfferDoesNotDependOnTheRecordsFitting(t *testing.T) {
-	restore := managementTaskOpeningSectionTokens
-	t.Cleanup(func() { managementTaskOpeningSectionTokens = restore })
-	filler := strings.Repeat("zqx wvu tsr ", 600)
-	f, _, rec := openingFixture(t, "owner-open-norecords", "Harbor strike begins at Rotterdam port "+filler)
-	covering := openTestStory(t, f.s, f.owner, f.computer, "Rotterdam port workers begin a harbor strike")
-	managementTaskOpeningSectionTokens = 1500
-	o := f.rt.managementTaskOpening(context.Background(), rec)
-	if o == nil || strings.Contains(o.text, "Your records:") {
-		t.Fatalf("R1: the records were meant not to fit: %v", o)
-	}
-	if o.offer == nil || len(o.offer.ByCapture["cap-o1"]) == 0 || o.offer.ByCapture["cap-o1"][0] != covering || !strings.Contains(o.text, covering) {
-		t.Fatalf("R1: no offer when the records do not fit: %+v", o.offer)
-	}
-}
-
-func TestHeldCheckMalformedOrForeignCaptureIsRefused(t *testing.T) {
-	offer := &openingOffer{ByCapture: map[string][]string{"cap-1": {"docA"}}, Leased: []string{"cap-1", "cap-2"}}
-	for name, packet := range map[string]string{
-		"string":      `{"captures":["cap-1"],"held_check":"same"}`,
-		"object":      `{"captures":["cap-1"],"held_check":{"story":"docA","verdict":"same"}}`,
-		"bad entries": `{"captures":["cap-1"],"held_check":[1,2]}`,
-	} {
-		err := requireHeldVerdicts(offer, packet)
-		if err == nil || !strings.Contains(err.Error(), "cap-1") || !strings.Contains(err.Error(), "same|follow_up|different") {
-			t.Errorf("R2: %s held_check was accepted or the error does not name the captures and the shape: %v", name, err)
-		}
-	}
-	err := requireHeldVerdicts(offer, `{"captures":["cap-9"],"held_check":[{"story":"docA","verdict":"same"}]}`)
-	if err == nil || !strings.Contains(err.Error(), "cap-9") || !strings.Contains(err.Error(), "cap-2") {
-		t.Errorf("R2: a capture the task does not lease was accepted: %v", err)
-	}
-	// A leased capture with no candidate may be named; null or an empty list is no answer, not malformed.
-	if err := requireHeldVerdicts(offer, `{"captures":["cap-2"]}`); err != nil {
-		t.Errorf("R2: a capture with nothing offered was refused: %v", err)
-	}
-	// Nothing offered at all: a malformed field is not this check's business.
-	if err := requireHeldVerdicts(&openingOffer{ByCapture: map[string][]string{}, Leased: []string{"cap-1"}}, `{"captures":["cap-1"],"held_check":"x"}`); err != nil {
-		t.Errorf("R2: refused with nothing offered: %v", err)
-	}
-}
-
-func TestHeldStoriesMatchHeadlinesWrittenWithoutSpaces(t *testing.T) {
-	now := time.Date(2026, 11, 20, 22, 0, 0, 0, time.UTC)
-	pool := []store.StorySummary{
-		sumAt(0, "東京で大規模な地震が発生、津波警報を発令", "lede", 2*time.Hour, now),
-		sumAt(1, "นายกรัฐมนตรีประกาศยุบสภาผู้แทนราษฎร", "lede", 3*time.Hour, now),
-		sumAt(2, "新型コロナワクチンの追加接種を開始", "lede", 4*time.Hour, now),
-	}
-	idx := newHeldIndex(pool, now)
-	if c := idx.find("東京で大規模な地震が発生、津波警報を発令", 3); len(c) == 0 || c[0].DocID != pool[0].DocID {
-		t.Errorf("R3: an identical Japanese title was not offered first: %+v", c)
-	}
-	if c := idx.find("東京で大規模な地震が発生 津波警報", 3); len(c) == 0 || c[0].DocID != pool[0].DocID {
-		t.Errorf("R3: a near-identical Japanese title was not offered: %+v", c)
-	}
-	if c := idx.find("นายกรัฐมนตรีประกาศยุบสภาผู้แทนราษฎร", 3); len(c) == 0 || c[0].DocID != pool[1].DocID {
-		t.Errorf("R3: an identical Thai title was not offered: %+v", c)
-	}
-	if c := idx.find("今日の天気は晴れのち曇りでしょう", 3); len(c) != 0 {
-		t.Errorf("R3: an unrelated Japanese title was offered %+v", c)
-	}
-}
 
 func TestOneHugeHeadlineIsClippedNotDroppingThePage(t *testing.T) {
 	now := time.Date(2026, 11, 20, 22, 0, 0, 0, time.UTC)

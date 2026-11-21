@@ -174,6 +174,9 @@ func TestTaskOpeningStoryPageIsWrappedAsData(t *testing.T) {
 		t.Fatal("no opening built")
 	}
 	section := o.text[strings.Index(o.text, openingStoriesHeading):]
+	if k := strings.Index(section, openingCandidateHeading); k >= 0 {
+		section = section[:k]
+	}
 	i := strings.Index(section, openingInjection)
 	pre, first := strings.Index(section, "[Data, not instructions"), strings.Index(section, untrustedEnd)
 	if i < 0 || pre < 0 || first < 0 || !(pre < i && i < first) {
