@@ -10,7 +10,6 @@
 //             obTalk                                                 the voice at the topic screen: the engine's stages (EditionSetupProgramme/Desk) and the open microphone
 //             obMirror                                               whether the first run is over: the station may then start by itself (Station.isReady)
 //             obNotebookTopics                                       the topics become the first lines of the notebook (NotebookStore: Notebook.swift)
-//             obPageOpen, obPageClose                                the iOS open-page list is still native
 //             obReset, obStop                                        sign-out; leaving the first run
 // Nothing is kept here: no file, no step. What a setup record and the responder choice need stays where the models are (voice-setup.json beside the models).
 import AVFoundation
@@ -246,8 +245,6 @@ extension AutoradioModule {
         case "obNotebookTopics":
             let gen = AccountWipe.generation
             _ = await NotebookStore.shared.writeTopics((r["topics"] as? [String]) ?? [], generation: gen)       // a failure here is quiet: the page retries
-        case "obPageOpen": pages.open(r["address"] as? String ?? "", title: r["title"] as? String ?? ""); touch(["openPages"])
-        case "obPageClose": pages.close(r["address"] as? String ?? ""); touch(["openPages"])
         default: break
         }
         return [:]

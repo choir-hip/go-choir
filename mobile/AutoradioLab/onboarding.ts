@@ -195,7 +195,7 @@ async function ready(env: Env, m: Mem, e: Edition, edit: boolean): Promise<void>
   await save(env, m);
   if (edit) await closeEdit(env);                                                                                           // O10
 }
-async function closeEdit(env: Env): Promise<void> { await env.closePage?.(EDIT); await dev(env, 'obPageClose', { address: EDIT }); }
+async function closeEdit(env: Env): Promise<void> { await env.closePage?.(EDIT); }
 
 export type Op = 'begin' | 'retry' | 'fallback' | 'mic' | 'micNext' | 'hearing' | 'topics' | 'talk' | 'topicsDone' | 'editionRetry' | 'editDone' | 'editLeave' | 'continueAnyway' | 'skip' | 'offer' | 'finishAsked';
 
@@ -259,5 +259,4 @@ async function offer(env: Env, m: Mem): Promise<void> {
   if (ed?.found) { m.p.editionDone = true; m.step = 'done'; await save(env, m); return; }
   m.p.offered = true; await save(env, m);
   await env.openPage?.(SETUP, 'Make it yours');
-  await dev(env, 'obPageOpen', { address: SETUP, title: 'Make it yours' });
 }

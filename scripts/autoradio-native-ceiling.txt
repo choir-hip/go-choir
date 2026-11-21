@@ -1,11 +1,5 @@
 # The Autoradio native-boundary ceiling: non-voice native code that may exist. It only falls.
 # Lower it with `scripts/check-autoradio-native-boundary --update` in the change that deletes the code.
-<<<<<<< HEAD
-files 94
-lines 17251
-names 87
-=======
-files 90
-lines 16420
-names 82
->>>>>>> origin/lane/exact-imported-docs
+files 53
+lines 9617
+names 38

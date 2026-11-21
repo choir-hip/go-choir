@@ -88,8 +88,9 @@ public final class AutoradioModule: ExactPackage {
     var owner: PlatformSessionOwner!
     var choir: ChoirApp!
     /// The spine's shared kit objects: every lane reads these and none replaces them.
-    var pages: OpenPages!
     let pageSources = PageSources()
+    /// The last page a native module asked to open (see `requestPage`).
+    var pageRequestState: (id: Int, address: String, title: String) = (0, "", "")
     /// name -> handler. Looked up first in `later`; the integrator's switch below answers the rest.
     var handlers: [String: AutoradioHandler] = [:]
     private var dirty = Set<String>()
@@ -132,22 +133,20 @@ public final class AutoradioModule: ExactPackage {
         choir = ChoirApp(runtime: runtime, keys: appKeys, openURL: { url in Platform.open(url) })
         choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirStories", "choirAuth", "barFacts", "radioView"]) } }
         // The spine's objects.
-        pages = OpenPages(file: support.appendingPathComponent("open-pages.json"))
         // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
         Task { @MainActor in
             while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
         }
         // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store); the stores below live in this target.
-        // Kit methods called: OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
+        // Kit methods called: OpenPageFacts.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
         let filesCache = filesCacheDisk
         // The folder the old lookup fell back to: copies no page could read. Removed once; nothing writes there now.
         try? FileManager.default.removeItem(at: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Autoradio/files"))
-        choir.accountWipe.register("open-pages") { [pages] in pages?.wipe() }
+        choir.accountWipe.register("open-pages") { OpenPageFacts.shared.wipe() }
         choir.accountWipe.register("app-files") {
             AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })
             AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
         }
-        pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         pageSources.register(NotYetPageSource())
         // Registration: the spine, then one line per lane (each defined in that lane's own file).
         registerSpine()

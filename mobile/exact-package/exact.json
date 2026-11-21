@@ -589,6 +589,11 @@
     "SignalList": {
       "rows": "SignalRow[]"
     },
+    "PageRequest": {
+      "id": "number",
+      "address": "string",
+      "title": "string"
+    },
     "TakesRecorder": {
       "phase": "string",
       "elapsed": "number",
@@ -1168,20 +1173,6 @@
       }
     },
     {
-      "source": "openPages",
-      "live": true,
-      "answers": "PageList",
-      "substitute": {
-        "default": {
-          "rows": [],
-          "top": "",
-          "topKind": "",
-          "topTitle": "",
-          "count": 0
-        }
-      }
-    },
-    {
       "source": "pageModel",
       "live": true,
       "answers": "PageModel",
@@ -1200,37 +1191,16 @@
       }
     },
     {
-      "send": "pageOpen",
-      "options": {
-        "address": "string",
-        "title": "string"
-      },
-      "answers": "PageList"
-    },
-    {
-      "send": "pageClose",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PageList"
-    },
-    {
-      "send": "pageFocus",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PageList"
-    },
-    {
-      "send": "pagePin",
-      "options": {
-        "address": "string"
-      },
-      "answers": "PageList"
-    },
-    {
-      "send": "pageReopen",
-      "answers": "PageList"
+      "source": "pageRequest",
+      "live": true,
+      "answers": "PageRequest",
+      "substitute": {
+        "default": {
+          "id": 0,
+          "address": "",
+          "title": ""
+        }
+      }
     },
     {
       "source": "takesRecorder",

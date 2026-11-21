@@ -3,7 +3,7 @@
 // calls that onboarding.ts makes itself. The page reads `ob`; every button is one send (`onboardingAct`) that answers the same shape and asks `ob` again.
 use voiceSetupFacts from "@choir/autoradio"
 use VoiceSetupFacts from "@choir/autoradio"
-use pageOpen, pageClose, choirStartRadio from "@choir/autoradio"
+use choirStartRadio from "@choir/autoradio"
 use Onboarding from "@choir/autoradio"
 use EditionPage from "./edition-types.contract"
 
@@ -68,16 +68,13 @@ members Autoradio
     send obm = onboardingAct("continueAnyway", "", "", pg.top)
   action obSkip
     send obm = onboardingAct("skip", "", "", pg.top)
-    send pm = pageClose(address="onboarding:setup")
     send pms = pagesClose("onboarding:setup")
   // The edition is a Texture page: open it (the reader draws it).
   action obOpenEdition
-    send pm = pageOpen(address="onboarding:edit", title="My edition")
     send pms = pagesOpen("onboarding:edit", "My edition")
     layer = ""
   // Then the front page, and the first story playing.
   action obFinish
-    send pm = pageOpen(address="paper:front", title="Paper")
     send pms = pagesOpen("paper:front", "Paper")
     send acct = choirStartRadio()
     layer = ""

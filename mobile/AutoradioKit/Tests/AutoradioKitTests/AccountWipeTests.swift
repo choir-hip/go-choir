@@ -114,7 +114,7 @@ final class AccountWipeTests: XCTestCase {
         let reader = HeldPages(limit: 4); reader.hold(HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
         let kept = KeptTurnStore(root: root.appendingPathComponent("turns")); write("turns/t1/record.json", m)
         write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
-        let openPages = OpenPages(file: root.appendingPathComponent("open-pages.json")); openPages.open("mailbox:inbox", title: m)
+        let openPages = OpenPageFacts(); openPages.replace(gen: 1, [FrontPage(address: "mailbox:inbox", title: m, kind: "mailbox")])
         EditionPicksMirror.shared.set([m])        // the native copy of the picks (the file is shared code's)
         write("onboarding.json", m); write("books/b1/text.txt", m); write("cache/files/f1.txt", m)
 
@@ -144,7 +144,7 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned)
-        XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
+        XCTAssertTrue(openPages.list().isEmpty); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
 
         // (c) the next sign-in: the first request of each kind carries nothing of the old account.
         let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""

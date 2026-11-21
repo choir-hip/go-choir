@@ -4,20 +4,9 @@ import Foundation
 // Addresses (plan section 6, "The spine"):
 //   paper:front  paper:section/<id>  pub:<route>  texture:<doc>[@rev]  file:<path>  mail:<id>  mailbox:<folder>
 //   textures:  activity:  settings:<screen>  lab:components  lab:trace
-// The spine ships OpenPages (this file), PageSource (the model behind a page) and two trivial renderers in the
-// contract (plain text, "not yet"). A lane adds a page kind by registering a PageSource for its kinds from its own
+// The spine ships PageSource (the model behind a page) and two trivial renderers in the
+// contract (plain text, "not yet"). The open set is shared code's (AutoradioLab/pages.ts); the voice is handed the pages as facts (OpenPageFacts, LocalAck.swift). A lane adds a page kind by registering a PageSource for its kinds from its own
 // AutoradioModule+<Lane>.swift and a renderer in its own .contract file.
-
-public struct Page: Codable, Sendable, Equatable {
-    public var address: String
-    public var kind: String
-    public var title: String
-    public var opener: String = ""
-    public var pinned: Bool = false
-    public init(address: String, kind: String, title: String, opener: String = "", pinned: Bool = false) {
-        self.address = address; self.kind = kind; self.title = title; self.opener = opener; self.pinned = pinned
-    }
-}
 
 public enum PageAddress {
     /// The address the reader's edition opens at. The server holds no edition document that this app creates (the writer is local),
@@ -97,132 +86,6 @@ public enum PageAddress {
         }
     }
 
-    /// The places the launcher lists, in order (plan section 1): name, address.
-    public static let places: [(name: String, address: String)] = [
-        ("Paper", "paper:front"), ("Textures", "textures:"), ("Files", "file:/"),
-        ("Mail", "mailbox:inbox"), ("Podcasts", "podcasts:"), ("Activity", "activity:"), ("Settings", "settings:root"),
-    ]
-}
-
-/// The ordered set of open pages: open, close, focus, opener, pin, restored at launch from a list of addresses
-/// (never resumed work). Never empty: the Autoradio page is always open and cannot be closed.
-public final class OpenPages: @unchecked Sendable {
-    public static let limit = 30
-    private let lock = NSLock()
-    private var pages: [Page] = []          // open order
-    private var recency: [String] = []      // most recently focused first
-    private var lastClosedPage: Page?
-    private let file: URL?
-    public var onChange: (@Sendable () -> Void)?
-
-    /// `file` nil keeps the set in memory only (tests).
-    public init(file: URL?) {
-        self.file = file
-        load()
-        openLocked(Page(address: PageAddress.radio, kind: "radio", title: "Autoradio"), record: false)   // every launch lands on the radio
-    }
-
-    /// Sign-out: only the radio stays open; the persisted titles and addresses go.
-    public func wipe() {
-        lock.lock(); pages = []; recency = []; lastClosedPage = nil; lock.unlock()
-        if let file { try? FileManager.default.removeItem(at: file) }
-        lock.lock(); _ = openLocked(Page(address: PageAddress.radio, kind: "radio", title: "Autoradio"), record: false); lock.unlock()
-        onChange?()
-    }
-
-    // MARK: Reading
-
-    /// Most recent first: the order of the pile.
-    public func list() -> [Page] {
-        lock.lock(); defer { lock.unlock() }
-        return recency.compactMap { a in pages.first { $0.address == a } }
-    }
-    public var current: Page? { lock.lock(); defer { lock.unlock() }; return recency.first.flatMap { a in pages.first { $0.address == a } } }
-    public var count: Int { lock.lock(); defer { lock.unlock() }; return pages.count }
-    public var lastClosed: Page? { lock.lock(); defer { lock.unlock() }; return lastClosedPage }
-
-    // MARK: Changing
-
-    @discardableResult
-    public func open(_ address: String, title: String? = nil, opener: String? = nil) -> Page {
-        let address = PageAddress.canonical(address)
-        lock.lock()
-        let p = openLocked(Page(address: address, kind: PageAddress.kind(of: address),
-                                title: (title?.isEmpty == false ? title! : PageAddress.defaultTitle(address)),
-                                opener: opener ?? recency.first ?? ""), record: true)
-        lock.unlock(); changed(); return p
-    }
-
-    @discardableResult
-    private func openLocked(_ page: Page, record: Bool) -> Page {
-        if let i = pages.firstIndex(where: { $0.address == page.address }) {
-            if let t = Optional(page.title), !t.isEmpty, pages[i].title == PageAddress.defaultTitle(page.address) { pages[i].title = t }
-            focusLocked(page.address); return pages[i]
-        }
-        pages.append(page)
-        focusLocked(page.address)
-        // The pile keeps the 30 most recent unpinned pages.
-        while pages.filter({ !$0.pinned }).count > Self.limit,
-              let oldest = recency.reversed().first(where: { a in pages.first { $0.address == a }?.pinned == false }) {
-            pages.removeAll { $0.address == oldest }; recency.removeAll { $0 == oldest }
-        }
-        return page
-    }
-
-    private func focusLocked(_ address: String) {
-        recency.removeAll { $0 == address }
-        recency.insert(address, at: 0)
-    }
-
-    public func focus(_ address: String) {
-        lock.lock()
-        if pages.contains(where: { $0.address == address }) { focusLocked(address) }
-        lock.unlock(); changed()
-    }
-
-    /// Close a page. When it was in front, its opener (if still open) comes forward, else the next most recent.
-    public func close(_ address: String) {
-        lock.lock()
-        guard address != PageAddress.radio, let p = pages.first(where: { $0.address == address }) else { lock.unlock(); return }
-        let wasFront = recency.first == address
-        pages.removeAll { $0.address == address }
-        recency.removeAll { $0 == address }
-        lastClosedPage = p
-        if wasFront, !p.opener.isEmpty, pages.contains(where: { $0.address == p.opener }) { focusLocked(p.opener) }
-        lock.unlock()
-        changed()
-    }
-
-    public func reopenLastClosed() {
-        lock.lock(); let p = lastClosedPage; lastClosedPage = nil; lock.unlock()
-        if let p { open(p.address, title: p.title, opener: p.opener) }
-    }
-
-    public func togglePin(_ address: String) {
-        lock.lock()
-        if let i = pages.firstIndex(where: { $0.address == address }) { pages[i].pinned.toggle() }
-        lock.unlock(); changed()
-    }
-
-    // MARK: Persistence (addresses and titles only)
-
-    private struct Saved: Codable { var pages: [Page]; var recency: [String] }
-    private func changed() { save(); onChange?() }
-    private func save() {
-        guard let file else { return }
-        lock.lock(); let s = Saved(pages: pages, recency: recency); lock.unlock()
-        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let d = try? JSONEncoder().encode(s) { try? d.write(to: file, options: .atomic) }
-    }
-    private func load() {
-        guard let file, let d = try? Data(contentsOf: file), let s = try? JSONDecoder().decode(Saved.self, from: d) else { return }
-        var seen = Set<String>()
-        pages = s.pages.map { var p = $0; p.address = PageAddress.canonical(p.address); p.kind = PageAddress.kind(of: p.address); return p }
-            .filter { seen.insert($0.address).inserted }
-        var inRecency = Set<String>()
-        recency = s.recency.map { PageAddress.canonical($0) }.filter { a in pages.contains { $0.address == a } && inRecency.insert(a).inserted }
-        for p in pages where !recency.contains(p.address) { recency.append(p.address) }
-    }
 }
 
 // MARK: PageSource: an address to the model behind its page

@@ -152,7 +152,7 @@ describe('the edition', () => {
     const before = (await onboardingPage(v, 0, EDIT, env()));
     expect(before.editing).toBe(true); expect(before.step).toBe('mic');
     const done = await act('editDone', '', 'Space', EDIT); expect(done.step).toBe('mic'); expect(done.editionStatus).toBe('ready'); expect(done.editionDone).toBe(true);
-    expect(closed).toEqual([EDIT]); expect(calls.some((c) => c.op === 'obPageClose' && c.args?.address === EDIT)).toBe(true);
+    expect(closed).toEqual([EDIT]);
     closed = []; const left = await act('editLeave', '', '', EDIT); expect(left.editionStatus).toBe('ready'); expect(closed).toEqual([EDIT]);
     forgetOnboarding(); files.clear(); closed = [];
     expect((await act('editLeave', '', '', EDIT)).editionStatus).toBe('');

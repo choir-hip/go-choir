@@ -2,37 +2,15 @@ import XCTest
 @testable import AutoradioKit
 
 final class SpineTests: XCTestCase {
-    func testOpenPagesOpenCloseFocusAndNeverEmpty() {
-        let p = OpenPages(file: nil)
-        XCTAssertEqual(p.current?.address, "radio:", "the app opens on the Autoradio page")
-        p.open("pub:a", title: "A")
-        p.open("pub:b", title: "B")
-        XCTAssertEqual(p.count, 3)
-        XCTAssertEqual(p.list().map(\.address), ["pub:b", "pub:a", "radio:"])
-        p.focus("pub:a")
-        XCTAssertEqual(p.current?.address, "pub:a")
-        p.close("pub:a")
-        XCTAssertEqual(p.count, 2)
-        p.close("pub:b"); p.close("radio:")
-        XCTAssertEqual(p.current?.address, "radio:", "the Autoradio page cannot be closed")
-        XCTAssertEqual(p.count, 1)
-    }
-
-    func testClosingTheFrontPageReturnsToItsOpener() {
-        let p = OpenPages(file: nil)
-        p.open("pub:a", title: "A")             // opener: radio:
-        p.open("pub:b", title: "B", opener: "pub:a")
-        p.close("pub:b")
-        XCTAssertEqual(p.current?.address, "pub:a")
-    }
-
-    func testPersistenceRestoresAddresses() throws {
-        let f = FileManager.default.temporaryDirectory.appendingPathComponent("pages-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: f) }
-        let p = OpenPages(file: f); p.open("settings:root", title: "Settings")
-        let q = OpenPages(file: f)
-        XCTAssertEqual(q.current?.address, "radio:", "every launch lands on the Autoradio page")
-        XCTAssertEqual(q.count, 2)
+    // The open set is shared code's now (AutoradioLab/pages.test.ts P1 to P15 hold the open, close, focus, persistence and "never empty" assertions); native keeps the voice's facts.
+    func testOpenPageFactsRefuseAnOlderGenerationAndWipe() {
+        let f = OpenPageFacts()
+        XCTAssertTrue(f.replace(gen: 2, [FrontPage(address: "pub:a", title: "A", kind: "reader"), FrontPage(address: "radio:", title: "Autoradio", kind: "radio")]))
+        XCTAssertFalse(f.replace(gen: 1, [FrontPage(address: "pub:old", title: "Old", kind: "reader")]), "a push from an older account generation is refused")
+        XCTAssertEqual(f.front(nil)?.address, "pub:a"); XCTAssertEqual(f.front("radio:")?.title, "Autoradio"); XCTAssertEqual(f.front("nope")?.address, "pub:a")
+        f.wipe()
+        XCTAssertNil(f.front(nil)); XCTAssertFalse(f.replace(gen: 2, [FrontPage(address: "pub:b", title: "B", kind: "reader")]), "after the wipe a push of a generation already seen is refused")
+        XCTAssertTrue(f.replace(gen: 3, [FrontPage(address: "pub:b", title: "B", kind: "reader")]))
         XCTAssertEqual(PageAddress.kind(of: "radio:"), "radio"); XCTAssertEqual(PageAddress.defaultTitle("radio:"), "Autoradio")
     }
 
