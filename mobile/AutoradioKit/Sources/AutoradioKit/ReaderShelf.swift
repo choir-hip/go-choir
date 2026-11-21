@@ -20,6 +20,9 @@ import PDFKit
 //  8. A corrupt reader index or text file: the document is skipped (never a crash); the others still open.
 //  9. A huge file (over 100 MB): refused before it is read.
 
+/// The write options for every shelf file: encrypted at rest, readable after the first unlock. (Asserted by a test; the platform applies it.)
+public enum ShelfFiles { public static let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtectionUntilFirstUserAuthentication] }
+
 public enum ShelfError: Error, CustomStringConvertible, Equatable {
     case notSupported, noText, tooLarge, unreadable(String), protected, download
     public var description: String {
@@ -300,7 +303,7 @@ public final class ReaderShelf: @unchecked Sendable {
         docs = l.filter { FileManager.default.fileExists(atPath: dir($0.id).appendingPathComponent("text.json").path) }
     }
     private func saveIndexLocked() {
-        if let d = try? enc().encode(docs) { try? d.write(to: indexFile, options: ContentStore.writeOptions) }
+        if let d = try? enc().encode(docs) { try? d.write(to: indexFile, options: ShelfFiles.writeOptions) }
     }
 
     // MARK: reading
@@ -395,9 +398,9 @@ public final class ReaderShelf: @unchecked Sendable {
             let original = folder.appendingPathComponent("original." + kind)
             try FileManager.default.copyItem(at: url, to: original)
             Self.protect(original)
-            try JSONEncoder().encode(text).write(to: folder.appendingPathComponent("text.json"), options: ContentStore.writeOptions)
+            try JSONEncoder().encode(text).write(to: folder.appendingPathComponent("text.json"), options: ShelfFiles.writeOptions)
             let index = DocIndex.build(text.blocks)
-            try JSONEncoder().encode(index).write(to: folder.appendingPathComponent("index.json"), options: ContentStore.writeOptions)
+            try JSONEncoder().encode(index).write(to: folder.appendingPathComponent("index.json"), options: ShelfFiles.writeOptions)
             let d = ShelfDoc(id: id, title: title.trimmingCharacters(in: .whitespacesAndNewlines), author: author.trimmingCharacters(in: .whitespacesAndNewlines),
                                kind: kind, added: Date(), position: 0, length: text.blocks.count, sections: text.sections.count, fileName: fileName)
             lock.lock(); docs.append(d); remember(id, (text, index)); saveIndexLocked(); lock.unlock()

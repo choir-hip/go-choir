@@ -240,47 +240,6 @@
       "status": "string",
       "message": "string"
     },
-    "NotebookLineRow": {
-      "id": "string",
-      "text": "string",
-      "tag": "string",
-      "canWhy": "bool",
-      "selected": "bool"
-    },
-    "NotebookSectionRow": {
-      "key": "string",
-      "heading": "string",
-      "lines": "NotebookLineRow[]"
-    },
-    "NotebookPair": {
-      "label": "string",
-      "value": "string"
-    },
-    "NotebookEvidenceRow": {
-      "title": "string",
-      "outcome": "string",
-      "detail": "string"
-    },
-    "NotebookHeldRow": {
-      "what": "string",
-      "whereRead": "string"
-    },
-    "NotebookPageInfo": {
-      "docState": "string",
-      "docAddress": "string",
-      "docNotice": "string",
-      "sections": "NotebookSectionRow[]",
-      "scoreState": "string",
-      "scoreNotice": "string",
-      "score": "NotebookPair[]",
-      "byKind": "NotebookPair[]",
-      "noVerdict": "string",
-      "selectedText": "string",
-      "evidenceNote": "string",
-      "evidence": "NotebookEvidenceRow[]",
-      "held": "NotebookHeldRow[]",
-      "steerLine": "string"
-    },
     "SetupRowView": {
       "stage": "string",
       "name": "string",
@@ -1235,37 +1194,6 @@
         "question": "string"
       },
       "answers": "MailAck"
-    },
-    {
-      "source": "notebookPage",
-      "live": true,
-      "answers": "NotebookPageInfo",
-      "substitute": {
-        "default": {
-          "docState": "loading",
-          "docAddress": "",
-          "docNotice": "",
-          "sections": [],
-          "scoreState": "loading",
-          "scoreNotice": "",
-          "score": [],
-          "byKind": [],
-          "noVerdict": "",
-          "selectedText": "",
-          "evidenceNote": "",
-          "evidence": [],
-          "held": [],
-          "steerLine": ""
-        }
-      }
-    },
-    {
-      "send": "notebookAct",
-      "options": {
-        "op": "string",
-        "arg": "string"
-      },
-      "answers": "NotebookPageInfo"
     },
     {
       "source": "onboardingState",

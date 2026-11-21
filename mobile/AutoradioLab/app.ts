@@ -15,7 +15,8 @@ import { readerDocShared } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
-import { notebookPage, page as notebookIdlePage } from './notebook.ts';
+import { notebookShared } from './notebook-run.ts';
+import { syncContent } from './content-run.ts';
 import * as mail from './mail.ts';
 import { barInfo } from './bar.ts';
 import { radioPage } from './radio-page.ts';
@@ -65,7 +66,8 @@ fs.write app:/data/takes.json
 fs.read app:/data/theme-choice.json
 fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
-fs.write app:/data/themes`;
+fs.write app:/data/themes
+sqlite.open app:/data/content.db`;
 
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
 const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
@@ -95,7 +97,9 @@ const sources: Sources = {
   takesPage: ([rec, _tick], _s, storage) => takesPageFor(takesEnv(storage), takes(), rec),
   takesAct: ([op, arg], _s, storage) => takesAct(takesEnv(storage), takes(), op, arg),
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
-  notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
+  // My notebook (notebook-run.ts): the selected line, the Refresh count, whether the page is on top and the sign-out tick in; the page out. The content store's sync (content-run.ts) is started by a task.
+  notebookPageShared: ([selected, tick, active, signedOutTick, _signedIn], _store, storage) => notebookShared({ selected, tick, active, signedOutTick }, storage),
+  contentSync: ([key], _store, storage) => syncContent(key, storage),
   accountState: ([tick, top, host]) => accountState(tick, top, host),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),

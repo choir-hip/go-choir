@@ -54,7 +54,6 @@ public final class AccountWipe: @unchecked Sendable {
         clips: ClipLocator = .shared,
         texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
-        content: ContentStore = .shared,
         corpus: SavedCorpus = .shared,
         mailReading: MailReading = .shared,
         conversation: Conversation = .shared,
@@ -94,7 +93,8 @@ public final class AccountWipe: @unchecked Sendable {
         register("voice-profile") { voice.forget() }
         if let keptTurns { register("kept-turns") { keptTurns.wipe() } }
         register("held-rest") { heldRest.wipe() }
-        register("content") { ContentSync.wipeAccount(store: content, corpus: corpus) }
+        // "content": the phone's copy of the computer's text is shared code (AutoradioLab/content.ts); account.ts wipes it.
+        register("corpus") { corpus.reset() }
     }
 
     /// For the app target's stores that are files (one-line registrations in AutoradioModule): delete these paths.

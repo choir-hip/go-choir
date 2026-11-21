@@ -66,6 +66,11 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        // The notebook's and the content sync's native facts (AutoradioModule+Notebook.swift `notebookOp`, with the reason for each).
+        if let op = op, op.hasPrefix("notebook") || op == "contentBusy" {
+            Task { @MainActor in reply.send(await AutoradioModule.current?.notebookOp(request) ?? [:]) }
+            return
+        }
         if let op = op, op.hasPrefix("take") {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return

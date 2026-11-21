@@ -10,18 +10,19 @@ import XCTest
 
 final class TurnContextTests: XCTestCase {
     static let now = Date(timeIntervalSince1970: 1_794_700_000)
-    func fixtureStore() -> (ContentStore, SavedCorpus) {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("tc-\(UUID().uuidString)")
-        let s = ContentStore(root: root, clock: { Self.now }); let c = SavedCorpus(readerStore: nil)
-        c.setDeltaSource("store") { s.drain() }
+    func fixtureStore() -> (Int, SavedCorpus) {
+        let c = SavedCorpus(readerStore: nil)
         func day(_ n: Double) -> Date { Self.now.addingTimeInterval(-n * 86400) }
-        s.put(StoredItem(id: "pub:/p/water", kind: .story, title: "Senate passes the water bill", text: "The Senate voted 61 to 38 on Tuesday to pass the water bill after a long debate on drought funding.", date: day(1), address: "pub:/p/water", source: "Autopaper", syncedAt: Self.now))
-        s.put(StoredItem(id: "pub:/p/budget", kind: .story, title: "Senate committee delays budget hearing", text: "A Senate committee postponed its budget hearing until next week.", date: day(3), address: "pub:/p/budget", source: "Autopaper", syncedAt: Self.now))
-        s.put(StoredItem(id: "pub:/p/harbor", kind: .story, title: "Harbor strike ends", text: "Dock workers ended the strike on Tuesday.", date: day(2), address: "pub:/p/harbor", source: "Autopaper", syncedAt: Self.now))
-        s.put(StoredItem(id: "pc:ep1", kind: .podcast, title: "World News: The Senate week", text: "This episode covers the Senate and the budget.", date: day(1), address: "podcast:episode/x/ep1", source: "Podcasts", syncedAt: Self.now))
+        var list: [SavedCorpus.Document] = []     // what the content store held (shared code now): the same documents, handed to the index directly
+        list.append(SavedCorpus.Document(id: "pub:/p/water", title: "Senate passes the water bill", address: "pub:/p/water", text: "The Senate voted 61 to 38 on Tuesday to pass the water bill after a long debate on drought funding.", kind: "story", source: "Autopaper", date: day(1)))
+        list.append(SavedCorpus.Document(id: "pub:/p/budget", title: "Senate committee delays budget hearing", address: "pub:/p/budget", text: "A Senate committee postponed its budget hearing until next week.", kind: "story", source: "Autopaper", date: day(3)))
+        list.append(SavedCorpus.Document(id: "pub:/p/harbor", title: "Harbor strike ends", address: "pub:/p/harbor", text: "Dock workers ended the strike on Tuesday.", kind: "story", source: "Autopaper", date: day(2)))
+        list.append(SavedCorpus.Document(id: "pc:ep1", title: "World News: The Senate week", address: "podcast:episode/x/ep1", text: "This episode covers the Senate and the budget.", kind: "podcast", source: "Podcasts", date: day(1)))
+        let stored = list
+        c.setSource("store") { stored }
         c.setSource("library") { [SavedCorpus.Document(id: "book:b1", title: "The Keeper of Lamps", address: "doc:b1", text: "", kind: "book", source: "Reader", date: day(30),
                                                          parts: [.init(label: "chapter 1: The shore", text: "The keeper walked the shore at dusk and counted the boats coming in.", block: 3)])] }
-        return (s, c)
+        return (0, c)
     }
 
     func testThePromptTheOnDeviceModelIsShownForTheSenate() async {

@@ -137,22 +137,14 @@ public final class AutoradioModule: ExactPackage {
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
         pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
-        // The phone's own content store (Kit/ContentStore.swift): one source for the index, the offline pages and "play that".
-        // Nothing here touches the store on the launch path: it opens in a background task, and a store that cannot open leaves the app as it was.
-        ContentSync.enabled = true
+        // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
+        Task { @MainActor in
+            while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
+        }
         Task.detached(priority: .utility) {
-            if ContentBoot.start() { ContentSync.shared.audioBusy = { await MainActor.run { RunSheetPlayer.shared.isRemote } } }
-            if ContentStore.shared.usable {                // vectors for the same items: BM25 alone until the model is there and the backlog embedded
-                Task { @MainActor in          // remote audio on air: the player is main-actor state, so its flag is copied across every two seconds
-                    while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
-                }
-                EmbeddingService.shared.attach(corpus: .shared, store: .shared)
-            }
             try? await Task.sleep(nanoseconds: 30_000_000_000)
             SavedCorpus.shared.refresh()          // the index warm-up, long after the front page has drawn
         }
-        ReaderStore.shared.offline = { ContentStore.shared.readerDoc(address: $0) }
-        PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
         // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the stores below live in this target.
         // Kit methods called: Signals.wipe(), OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
         let filesCache = filesCacheDisk

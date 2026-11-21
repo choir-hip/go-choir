@@ -9,7 +9,7 @@ import XCTest
 //  F3  the programme request carries `edition_text`: the notebook text when held, else the topics as text, else nothing; inside the server's 32 KB
 //  F4  the notebook is read as lines: sections, `[L1 · heard 9 of 11]` tags, refs (`lesson:L1`, `try:T2`, `mine:<8 hex>`), the listener's untagged lines
 //  F5  the topics move in: a seed when there is no notebook; the topic lines join "What you asked for" once, the listener's lines and the other sections kept
-//  F6  the learning route: its fixture parses; an empty card and an older shape parse; 404/501 is "not yet", a dead network is "offline", no key is "signed out"
+//  F6 to F8 are bun tests now (notebook.test.ts N4 to N6). Their old text: F6 the learning route: its fixture parses; an empty card and an older shape parse; 404/501 is "not yet", a dead network is "offline", no key is "signed out"
 //  F7  the page shows what it has and invents nothing: no route is "not available yet" with no numbers; with the route, counts, rate and kinds; a line's
 //      tap lists the ledger rows whose cause is that line
 //  F8  rule 2: the held list names every kind of record held about the listener and where it is read
@@ -122,81 +122,7 @@ final class LearningLoopTests: XCTestCase {
         XCTAssertTrue(NotebookText.parse(noSection).sections.first { $0.key == "asked" }?.lines.map(\.text) == ["Art"], noSection)
         XCTAssertTrue(noSection.contains("[L2 · heard 1 of 1]"))
     }
-
-    // F6
-    func testF6TheLearningRouteParses() throws {
-        let r = try XCTUnwrap(LearningWire.parse(try fixture("learning.json")))
-        XCTAssertEqual(r.card.forecasts, 14); XCTAssertEqual(r.card.settled, 11); XCTAssertEqual(r.card.heardThrough, 8)
-        XCTAssertEqual(try XCTUnwrap(r.card.heardThroughRate), 0.7272727, accuracy: 0.0001)
-        XCTAssertEqual(r.card.byKind.map(\.label), ["story", "podcast_clip"]); XCTAssertEqual(r.card.byCause.map(\.label), ["lesson", "importance"])
-        XCTAssertEqual(r.card.noVerdict, 1); XCTAssertEqual(r.rows.count, 4)
-        XCTAssertEqual(r.rows[1].status, "settled"); XCTAssertEqual(r.rows[1].heardThrough, true); XCTAssertEqual(r.rows[1].op?.outcome, "finished")
-        XCTAssertEqual(r.rows[3].status, "no_verdict"); XCTAssertEqual(r.rows[3].noVerdictReason, "left"); XCTAssertNil(r.rows[3].heardThrough)
-        let e = try XCTUnwrap(LearningWire.parse(try fixture("learning-empty.json")))
-        XCTAssertEqual(e.card.settled, 0); XCTAssertNil(e.card.heardThroughRate); XCTAssertTrue(e.rows.isEmpty)
-        XCTAssertNotNil(LearningWire.parse(Data(#"{"scorecard":{"settled":3},"rows":[{"claim_id":"c"}]}"#.utf8)), "an older shape with fields missing still reads")
-        XCTAssertNil(LearningWire.parse(Data("[1,2]".utf8)))
-    }
-    func stub(_ h: @escaping (StubProtocol.Req) -> StubProtocol.Resp, key: Bool = true) -> ChoirClient {
-        let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubProtocol.self]
-        StubProtocol.seen = []; StubProtocol.handler = h
-        return ChoirClient(baseURL: "https://choir.test", keys: key ? InMemoryKeyStore([KeyAccount.apiKey: "k", KeyAccount.computerID: "c"]) : InMemoryKeyStore([:]), session: URLSession(configuration: cfg), log: nil)
-    }
-    func testF6AMissingRouteIsNotYetADeadNetworkIsOfflineNoKeyIsSignedOut() async throws {
-        let ok = await LearningClient(client: stub { _ in .init(raw: (try? String(contentsOf: Self.mobile.appendingPathComponent("fixtures/learning/learning.json"))) ?? "{}") }).read()
-        guard case .ready(let r) = ok else { return XCTFail("\(ok)") }
-        XCTAssertEqual(r.card.settled, 11); XCTAssertEqual(StubProtocol.seen.last?.path, "/api/autoradio/learning")
-        for status in [404, 501] { let l = await LearningClient(client: stub { _ in .init(status: status) }).read(); XCTAssertEqual(l, .notYet, "\(status)") }
-        let l5 = await LearningClient(client: stub { _ in .init(status: 503) }).read(); XCTAssertEqual(l5, .offline)
-        let l6 = await LearningClient(client: stub({ _ in .init() }, key: false)).read(); XCTAssertEqual(l6, .signedOut)
-        let l7 = await LearningClient(client: stub { _ in .init(raw: "not json") }).read(); XCTAssertEqual(l7, .notYet, "an answer in no shape we know is treated as not there yet")
-    }
-
-    // F7
-    func testF7WithoutTheRouteThePageSaysSoAndShowsNoNumbers() throws {
-        let nb = NotebookText.parse(try text("notebook.md"))
-        let p = NotebookPage.make(NotebookPageInput(doc: .found(address: "texture:nb1", notebook: nb), learning: .notYet))
-        XCTAssertEqual(p.scoreState, "notyet"); XCTAssertFalse(p.scoreNotice.isEmpty); XCTAssertTrue(p.score.isEmpty); XCTAssertTrue(p.byKind.isEmpty)
-        XCTAssertTrue(p.scoreNotice.contains("not available yet"))
-        XCTAssertEqual(p.docState, "ready"); XCTAssertEqual(p.docAddress, "texture:nb1"); XCTAssertEqual(p.sections.count, 4)
-        let none = NotebookPage.make(NotebookPageInput(doc: .none, learning: .offline))
-        XCTAssertEqual(none.docState, "none"); XCTAssertEqual(none.scoreState, "offline"); XCTAssertTrue(none.sections.isEmpty)
-        let down = NotebookPage.make(NotebookPageInput(doc: .unavailable, learning: .signedOut))
-        XCTAssertEqual(down.docState, "offline"); XCTAssertFalse(down.docNotice.isEmpty)
-    }
-    func testF7WithTheRouteItShowsCountsAndTheRowsBehindALine() throws {
-        let nb = NotebookText.parse(try text("notebook.md"))
-        let read = try XCTUnwrap(LearningWire.parse(try fixture("learning.json")))
-        var input = NotebookPageInput(doc: .found(address: "texture:nb1", notebook: nb), learning: .ready(read))
-        var p = NotebookPage.make(input)
-        XCTAssertEqual(p.scoreState, "ready")
-        XCTAssertEqual(p.score.map(\.label), ["Forecasts settled", "Heard through", "Still open"]); XCTAssertEqual(p.score.map(\.value), ["11", "8 of 11 (73%)", "2"])
-        XCTAssertEqual(p.byKind.map(\.label), ["Story", "Podcast clip"]); XCTAssertEqual(p.byKind.map(\.value), ["6 of 8 heard through", "2 of 3 heard through"])
-        XCTAssertEqual(p.noVerdict, "1 forecast with no verdict: you left, or the app could not play it.")
-        let lesson = try XCTUnwrap(p.sections[1].lines.first)
-        XCTAssertEqual(lesson.tag, "heard 9 of 11"); XCTAssertTrue(lesson.canWhy)
-        input.selected = lesson.id
-        p = NotebookPage.make(input)
-        XCTAssertEqual(p.selectedText, lesson.text); XCTAssertEqual(p.evidence.map(\.title), ["Council keeps libraries open late", "A regional grid adds its largest battery", "Harbor fees rise"])
-        XCTAssertEqual(p.evidence.map(\.outcome), ["Not yet heard", "Heard through", "Skipped"])
-        XCTAssertEqual(p.evidence[2].detail, "The desk forecast 80 in 100.")
-        let mine = try XCTUnwrap(p.sections[0].lines.first); input.selected = mine.id
-        p = NotebookPage.make(input)
-        XCTAssertTrue(p.evidence.isEmpty); XCTAssertFalse(p.evidenceNote.isEmpty, "a line with no forecasts says so; nothing is made up")
-    }
-
-    // F8
-    func testF8EverythingHeldAboutTheListenerIsListedWithWhereItIsRead() {
-        let held = NotebookPage.held
-        XCTAssertGreaterThanOrEqual(held.count, 12)
-        for h in held { XCTAssertFalse(h.what.isEmpty); XCTAssertFalse(h.whereRead.isEmpty, h.what) }
-        let all = held.map(\.what).joined(separator: "\n")
-        for kind in ["autoradio.turn", "autoradio.forecast", "autoradio.settlement", "autoradio.sheet_op", "autoradio.lesson", "autoradio.strike", "autoradio.note", "autoradio.take", "autoradio.no_verdict"] {
-            XCTAssertTrue(all.contains(kind), kind)
-        }
-        for local in ["More and less taps", "Topics", "Mail"] { XCTAssertTrue(all.contains(local), local) }
-        XCTAssertTrue(held.contains { $0.whereRead.contains("only on this phone") })
-    }
+    // F6, F7, F8 (the learning route, the page, the held list) moved to AutoradioLab/notebook.test.ts (N4 to N6); the code they tested is shared TypeScript now.
 
     // F9
     func testF9ATurnNamesTheEntryOnAirItsClaimAndItsStories() async throws {

@@ -67,7 +67,7 @@ public final class EmbeddingService: @unchecked Sendable {
         /// Loads the model (the models module sets `EmbeddingService.loader`; the kit has no llama.cpp).
         public var load: @Sendable () async throws -> any Embedder & QueryEmbedding = { try await EmbeddingService.loader() }
         public var say: @Sendable (String) -> Void = { fputs($0 + "\n", stderr) }
-        public var vectorsDirectory: @Sendable () -> URL? = { ContentStore.shared.root?.appendingPathComponent("vectors", isDirectory: true) }
+        public var vectorsDirectory: @Sendable () -> URL? = { nil }       // the vectors lived under the Swift content store; search is shared code (AutoradioLab/search.ts) and this service is the retrieval lane's to delete
         /// A wait before the first pass after `attach` (launch must not wait on this) and between passes (a sync puts many items).
         public var firstDelay: Duration = .seconds(15)
         public var settle: Duration = .seconds(3)
@@ -104,7 +104,7 @@ public final class EmbeddingService: @unchecked Sendable {
     public func flush() { lock.lock(); let v = vectors; lock.unlock(); try? v?.save() }
 
     /// Wire to the corpus (and, in the app, the store): retrieval is BM25 now and becomes fused once the vectors are there.
-    public func attach(corpus: SavedCorpus, store: ContentStore? = nil) {
+    public func attach(corpus: SavedCorpus) {
         guard let dir = env.vectorsDirectory() else { return }
         let v = VectorStore(directory: dir, engine: KnownModels.embeddingEngine, dimension: env.dimension)
         lock.lock(); self.corpus = corpus; vectors = v; lock.unlock()
@@ -116,10 +116,6 @@ public final class EmbeddingService: @unchecked Sendable {
         fused.say = env.say
         corpus.retriever = fused
         corpus.resetHooks.append { [weak self] in self?.wipe() }
-        if let store {
-            let prev = store.onChange
-            store.onChange = { [weak self] in prev?(); self?.kick() }
-        }
         WiFiMonitor.shared.onChange = { [weak self] in self?.kick() }
         lock.lock(); let first = !attachedOnce; attachedOnce = true; lock.unlock()
         kick(first: first)

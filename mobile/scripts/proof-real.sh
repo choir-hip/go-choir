@@ -289,6 +289,14 @@ step "tap mail-folder-quarantine"; view real-38-mail-quarantine 3000
 step logs
 run_drive tour light "" --touch platform
 
+# ---- 3f1. NOTEBOOK drive (lane exact-notebook-content): the notebook page and the scorecard from shared code under app:/data, a Refresh press that reads again, and the content sync that
+# starts at launch (shared code: content-run.ts logs one line per kind, counts only). Reads nothing it writes: no tap on a line, whose ids depend on the account's own notebook.
+step "clock data"; wait_ 6000
+place notebook 900; view real-47-notebook 5000
+step "tap notebook-refresh"; view real-48-notebook-refreshed 5000
+step logs
+run_drive notebook light "" --touch platform
+
 # ---- 3f2. SPINE drive (local UI only, nothing is written to the computer): the bar, the launcher and its deck, the default themes and the mode switch.
 # Ported from the demo-mode proofs (proof-sim, proof-lane1, proof-lane4, proof-lane7, proof-default-themes, proof-app), which are deleted with demo mode.
 fresh_paper pick-spine
@@ -466,6 +474,14 @@ chk "themes: Newsprint dark" 'Showing Newsprint in dark' "$SP"
 [ -n "$FILE1" ] && chk "files: a file opened" '\[(page-title|viewer-[a-z]+|csv-card|image-view)\]' "$SHOTS/drive-tour.txt"
 chk "podcasts: the place opened" '\[(podcasts-[a-z]+|podcast-row-[^]]*)\]' "$SHOTS/drive-tour.txt"
 chk "notebook: the page opened" '\[notebook-(page|title)\]' "$SHOTS/drive-tour.txt"
+NB="$SHOTS/drive-notebook.txt"
+chk "notebook: the page, from shared code" '\[notebook-page\]' "$NB"
+chk "notebook: the held list is complete (its last row, 13)" '\[notebook-held-13\]' "$NB"
+chk "notebook: the notebook was read (a section, or a plain notice that there is none or it is offline)" '\[notebook-(section-[a-z-]+|doc-notice)\]' "$NB"
+bad "notebook: the notebook is not stuck loading after the refresh" '\[notebook-loading\]' "$NB"
+bad "notebook: the scorecard is not stuck reading" '\[notebook-score-state\][^"]*"Reading the scorecard' "$NB"
+chk "content sync: the shared sync ran at launch (stories)" 'console: content sync story: fetched' "$NB"
+chk "content sync: documents" 'console: content sync document: fetched' "$NB"
 chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' "$SHOTS/drive-tour.txt"
 # the first shared answer after a launch must not run over the device's 100 ms turn (the app logs the failure that says so)
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
