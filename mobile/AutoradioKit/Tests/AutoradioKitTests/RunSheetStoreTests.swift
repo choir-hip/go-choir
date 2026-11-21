@@ -868,19 +868,7 @@ final class RunSheetStoreTests: XCTestCase {
         s.place(.paperStory(route: "m", title: "More"), at: .end); await s.flushTask?.value
         XCTAssertEqual(s.sheetEpoch, 7); XCTAssertNotNil(s.entry("srv1"))
     }
-
-    func test29_TheStreamRulesAreTheServers() {
-        XCTAssertEqual(RunSheetStreamPolicy.path(after: nil, epoch: 0), "/api/autoradio/sheet/stream")
-        XCTAssertEqual(RunSheetStreamPolicy.path(after: 12, epoch: 7), "/api/autoradio/sheet/stream?after=12&epoch=7", "the version and the epoch it holds")
-        XCTAssertEqual(RunSheetStreamPolicy.retry(status: 503, attempt: 1), .after(2)); XCTAssertEqual(RunSheetStreamPolicy.retry(status: 503, attempt: 9), .after(60))
-        XCTAssertEqual(RunSheetStreamPolicy.retry(status: 429, attempt: 2), .tooManyStreams(60)); XCTAssertEqual(RunSheetStreamPolicy.retry(status: 404, attempt: 0), .giveUp)
-        let (_, s, _) = make()
-        let full = #"{"version":9,"sheet_epoch":5,"entries":[{"id":"e1","kind":"story","placed_by":"desk","state":"ahead","title":"T","text":"x","est_seconds":3}]}"#
-        XCTAssertEqual(s.streamEvent(name: "sheet", data: Data(full.utf8)), .sheet)
-        XCTAssertEqual(s.sheetEpoch, 5); XCTAssertNotNil(s.entry("e1"))
-        XCTAssertEqual(s.streamEvent(name: "sheet_ops", data: Data(#"{"from_version":99,"to_version":100,"ops":[]}"#.utf8)), .resync(from: s.sheet.version))
-        XCTAssertEqual(s.streamEvent(name: "ping", data: Data()), .ignored)
-    }
+    // (the stream rules: runsheet-stream.test.ts)
 }
 
 // What the bar and the radio page say with nothing on air, and what the desk's notice and writing flags do to them.
