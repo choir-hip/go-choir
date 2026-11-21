@@ -9,7 +9,7 @@
 // Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
-import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration, scoped } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration, scoped, currentWorld } from './api.ts';
 import * as M from './files-model.ts';
 import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
 
@@ -18,8 +18,10 @@ export const CACHE_DIR = 'app:/cache/files';
 export const RECENT_LIMIT = 30;
 const SEARCH_FOLDERS = 80, SEARCH_DEPTH = 4, SEARCH_FOUND = 200, TEXTURE_CAP = 1_000_000;
 
-export type Net = { json: typeof authedJSON; bytes: typeof authedBytes; toFile: (path: string, dest: string, opts?: Parameters<typeof authedJSON>[1], storage?: Storage) => Promise<{ bytes: number; contentType: string }> };
-const realNet: Net = { json: authedJSON, bytes: authedBytes, toFile: (path, dest, opts, storage) => authedToFile(path, dest, storage, opts) };
+type Opts = Omit<Parameters<typeof authedJSON>[1], 'world'>;
+export type Net = { json: (path: string, opts?: Opts) => ReturnType<typeof authedJSON>; bytes: (path: string, opts?: Opts) => ReturnType<typeof authedBytes>; toFile: (path: string, dest: string, opts?: Opts, storage?: Storage) => Promise<{ bytes: number; contentType: string }> };
+// Every request states its world: the one current when it is made (a chain that captured account data first passes the world it began in).
+const realNet: Net = { json: (path, opts) => authedJSON(path, { ...opts, world: currentWorld() }), bytes: (path, opts) => authedBytes(path, { ...opts, world: currentWorld() }), toFile: (path, dest, opts, storage) => authedToFile(path, dest, storage, { ...opts, world: currentWorld() }) };
 
 /** What the page may say when a file cannot be had. */
 export class FilesError extends Error {

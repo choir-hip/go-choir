@@ -22,7 +22,7 @@
 //  F10 A chosen theme that has only one scheme meets a mode control that asks for the other: the control shows the one scheme and refuses the other; the "default" id clears the choice.
 //  F11 The lens is a style (A native glass, B no material with a wash, C ultra-thin) and a wash of the page colour: a theme without a "lens" key shows the native glass; an unknown style or a wash outside 0...1 is refused.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, HTTPError, SignedOutError, nativeLater, currentWorld, type Reply } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, nativeLater, currentWorld, type Reply, type World } from './api.ts';
 import { WORDS } from './words.ts';
 import { BUNDLED } from './themes-bundled.ts';
 
@@ -501,8 +501,8 @@ export const THEMES_DIR = 'app:/data/themes';
 const enc = (o: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(o));
 const fileName = (id: string): string => `texture-${id}.json`;
 
-type Seam = { net: (path: string, query: Record<string, string>) => Promise<Reply> };
-const realNet: Seam = { net: (path, query) => authedJSON(path, { query }) };
+type Seam = { net: (path: string, query: Record<string, string>, world?: World) => Promise<Reply> };
+const realNet: Seam = { net: (path, query, world) => authedJSON(path, { query, world: world ?? currentWorld() }) };
 
 let loading: Promise<ThemeStore> | null = null;
 let current: ThemeStore | null = null;
@@ -552,6 +552,7 @@ const HANDLE_WAIT_MS = 1500;     // as host.ts: a native module may bind after t
 async function migrate(storage: Storage | undefined, s: ThemeStore, fresh: () => boolean): Promise<boolean> {
   const later = nativeLater();
   if (!storage || !later) return false;
+  const w = currentWorld();                       // a Texture theme carries an account's document: none is written once the boundary has moved (this runs on the raw storage, outside the gate)
   let r: unknown;
   try { r = await Promise.race([later({ op: 'themeLegacy' }), new Promise<null>((res) => setTimeout(() => res(null), LEGACY_WAIT_MS))]); } catch { return false; }
   if (!isObj(r) || typeof r.found !== 'boolean') return false;
@@ -562,6 +563,7 @@ async function migrate(storage: Storage | undefined, s: ThemeStore, fresh: () =>
   try {
     if (files.length > 0) await ensureDir(storage);
     for (const [name, body] of files) {
+      if (name.startsWith('texture-') && (w.closed || w.owed || currentWorld() !== w)) { s.noteProblem(name, 'not carried over: the account changed while it was read'); continue; }
       // A file already in the new place is the newer one (a theme installed by this build, or an earlier try of this carry-over): it is kept, never written over.
       let there = true; try { await storage.fs.readFile(`${THEMES_DIR}/${name}`); } catch { there = false; }
       if (!there) { await storage.fs.atomicWriteFile(`${THEMES_DIR}/${name}`, new TextEncoder().encode(body)); s.add(body, name, name.startsWith('texture-') ? 'texture' : 'file'); }
@@ -670,9 +672,10 @@ export async function themeFromTexture(docId: string, storage: Storage | undefin
   const say = (ok: boolean, message: string): Ack => { status = message; return { ok, message }; };
   const doc = docId.trim();
   if (doc === '') return say(false, 'Enter the id of a theme Texture.');
+  const w = currentWorld();                                                // the document id and the request belong to the world this began in, however long the store takes to load
   try {
     const s = await themeStore(storage);
-    const body: unknown = (await seam.net('/api/texture/theme', { doc })).body;
+    const body: unknown = (await seam.net('/api/texture/theme', { doc }, w)).body;
     const t = parseTextureTheme(body);
     const checked = s.checkInstall(t.theme);                              // validated before anything is written (F7)
     if (storage) { await ensureDir(storage); await storage.fs.atomicWriteFile(`${THEMES_DIR}/${fileName(checked.id)}`, enc(t.theme)); }

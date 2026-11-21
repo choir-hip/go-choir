@@ -18,7 +18,7 @@
 
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
-import { authedJSON, HTTPError, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, writeCurrent, accountGeneration, currentWorld } from './api.ts';
 import { textureSource } from './content.ts';
 import { cut } from './takes.ts';
 
@@ -191,7 +191,7 @@ export function parseLearning(body: unknown): Read | null {
 }
 
 export type Get = (path: string, query?: Record<string, string | number>) => Promise<unknown>;
-export const seamGet: Get = async (path, query) => (await authedJSON(path, { query })).body;
+export const seamGet: Get = async (path, query) => (await authedJSON(path, { query, world: currentWorld() })).body;
 
 /** The scorecard: ready, "not yet" (404, 501, or a shape this phone does not know), offline, or signed out. Never throws. */
 export async function readLearning(get: Get, limit = 200): Promise<Load> {

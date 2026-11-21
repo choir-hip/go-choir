@@ -81,13 +81,16 @@ export type World = {
   keyDeleteFails: boolean;                     // the Keychain delete failed and the native side answers not done (ChoirSignIn.swift:128)
   sessionFails: boolean;                       // keystate says present, the session read finds nothing
   keystateHangs: boolean;
+  mirrors: string[];                            // every takeMirror request the voice was sent
+  legacy: Record<string, string> | null;        // what themeLegacy answers (the old build's theme files)
+  legacyGate: Promise<void> | null;             // themeLegacy answers only after this
   keystateGate: Promise<void> | null;          // keystate answers only after this (the facts read takes a while)
   release: (() => void) | null;                // lets a hung native call go on
   wipeFailed: string[];                        // what the native wipe reports as failed (landing 2)
   inflight: number; maxInflight: number;       // native sign-out and wipe calls running at once
 };
 export const newWorld = (key: World['key'] = 'present', value = KEY_A): World => ({
-  key, value, swift: true, log: [], gens: [], signOut: 'ok', wipe: 'ok', keyDeleteFails: false, sessionFails: false, keystateHangs: false, keystateGate: null, release: null, wipeFailed: [], inflight: 0, maxInflight: 0,
+  key, value, swift: true, log: [], gens: [], signOut: 'ok', wipe: 'ok', keyDeleteFails: false, sessionFails: false, keystateHangs: false, keystateGate: null, mirrors: [], legacy: null, legacyGate: null, release: null, wipeFailed: [], inflight: 0, maxInflight: 0,
 });
 
 /** The app module as the model of the phone. `w` is read at each call, so a test changes the world while the app runs. */
@@ -107,6 +110,8 @@ export function phone(w: () => World) {
         if (W.keystateGate) await W.keystateGate;
         return { state: W.key };
       }
+      if (r.op === 'takeMirror') { W.mirrors.push(JSON.stringify(r)); return { ok: true }; }
+      if (r.op === 'themeLegacy') { if (W.legacyGate) await W.legacyGate; return W.legacy ? { found: true, theme: '', mode: 'system', files: W.legacy } : { found: false }; }
       if (r.op === 'session') return W.key === 'present' && !W.sessionFails ? { found: true, value: W.value, computerId: '' } : { found: false };
       if (r.op === 'signOut') {
         W.log.push('signOut'); W.gens.push(r.generation); events.push('native:signOut'); W.inflight += 1; W.maxInflight = Math.max(W.maxInflight, W.inflight);

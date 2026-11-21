@@ -224,13 +224,13 @@ function report(l: Library, key: string, seconds: number, duration: number | nul
 
 async function pushShow(s: Show): Promise<boolean> {
   try {
-    await authedJSON('/api/podcast/subscriptions', { method: 'POST', body: { feed_url: s.feedURL, title: s.title, author: s.author, artwork_url: s.artworkURL } });
+    await authedJSON('/api/podcast/subscriptions', { world: currentWorld(), method: 'POST', body: { feed_url: s.feedURL, title: s.title, author: s.author, artwork_url: s.artworkURL } });
     return true;
   } catch { return false; }
 }
 
 async function reportFeeds(l: Library, nowPlaying: { feedURL: string; episodeGuid: string; audioURL: string } | null = null): Promise<void> {
-  try { await authedJSON('/api/platform/podcast-feeds', { method: 'POST', body: reportBody(l.subscriptions.map((s) => s.show), nowPlaying) }); } catch { /* 404, signed out or offline: silent */ }
+  try { await authedJSON('/api/platform/podcast-feeds', { world: currentWorld(), method: 'POST', body: reportBody(l.subscriptions.map((s) => s.show), nowPlaying) }); } catch { /* 404, signed out or offline: silent */ }
 }
 
 async function syncIfDue(storage: Storage | undefined, l: Library): Promise<void> {
@@ -239,7 +239,7 @@ async function syncIfDue(storage: Storage | undefined, l: Library): Promise<void
   if (S().syncAt >= 0 && t === 0) return;
   S().syncAt = t;
   let list: Show[];
-  try { list = decodeSubscriptions((await authedJSON('/api/podcast/subscriptions', { query: { limit: 200 } })).body); }
+  try { list = decodeSubscriptions((await authedJSON('/api/podcast/subscriptions', { world: currentWorld(), query: { limit: 200 } })).body); }
   catch (e) { S().syncNote = e instanceof SignedOutError ? '' : "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone."; return; }
   const removed = new Set(l.removed.map(feedKey));
   const added: Show[] = [];
@@ -450,7 +450,7 @@ export async function podcastEpisode(a: EpisodeArgs, storage: Storage | undefine
   if (!S().transcripts.has(key) && !S().transcriptAsked.has(key)) {
     S().transcriptAsked.add(key);
     try {
-      const t = decodeTranscript((await authedJSON('/api/platform/podcast-transcript', { query: { feed, guid: id } })).body);
+      const t = decodeTranscript((await authedJSON('/api/platform/podcast-transcript', { world: currentWorld(), query: { feed, guid: id } })).body);
       if (t) S().transcripts.set(key, t);
     } catch { /* 404, signed out or offline: none */ }
   }

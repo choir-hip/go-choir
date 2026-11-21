@@ -26,7 +26,7 @@
 //   T9  the page: the control offered matches the recorder's state; Publish only with a transcript; the sentence and the rights line on the review
 
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, authedBytes, authedJSON, HTTPError, writeCurrent } from './api.ts';
+import { accountGeneration, authedBytes, authedJSON, HTTPError, writeCurrent, currentWorld, type World } from './api.ts';
 
 export const BOUNDS = {
   minSeconds: 3, maxSeconds: 60,
@@ -285,21 +285,23 @@ export type Net = (method: 'GET' | 'POST' | 'DELETE', path: string, o?: { query?
 
 /** The production Net over the signed-in seam (api.ts): a refusal arrives as an HTTPError carrying its status and the server's short `error` string.
  * The seam passes a Uint8Array body through as it is (api.ts send), so the multipart upload goes with its own content type. */
-export const seamNet: Net = async (method, path, o = {}) => {
+export const seamNetIn = (world: World): Net => async (method, path, o = {}) => {
   try {
     if (o.body !== undefined || path.endsWith('/audio')) {
-      const r = await authedBytes(path, { method, query: o.query, body: o.body, headers: o.contentType ? { 'Content-Type': o.contentType } : undefined });
+      const r = await authedBytes(path, { world, method, query: o.query, body: o.body, headers: o.contentType ? { 'Content-Type': o.contentType } : undefined });
       let json: unknown = null;
       try { json = JSON.parse(new TextDecoder().decode(r.bytes)); } catch { /* audio is not JSON */ }
       return { status: 200, json, bytes: r.bytes };
     }
-    const r = await authedJSON(path, { method, query: o.query });
+    const r = await authedJSON(path, { world, method, query: o.query });
     return { status: 200, json: r.body, bytes: new Uint8Array() };
   } catch (e) {
     if (e instanceof HTTPError) return { status: e.status, json: { error: e.message.replace(/^(?:HTTP \d+|\d+: rate limited|\d+: the key lacks the scope for \S+|\d+)(?:: )?/, '') }, bytes: new Uint8Array() };
     throw e;
   }
 };
+/** The production Net of the world current NOW (a chain that holds the world it began in builds it with that world: `seamNetIn(world)`). */
+export const seamNet: Net = (method, path, o) => seamNetIn(currentWorld())(method, path, o);
 
 export class TakesUnavailable extends Error { constructor() { super('Takes are not available yet.'); } }
 export class TakesRefused extends Error {}
