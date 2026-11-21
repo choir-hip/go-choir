@@ -32,6 +32,7 @@ import { wipePages, PAGES_FILE } from './pages.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
 import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
 import { originalsLeft } from './mail-store.ts';
+import { wipeTextureThemes, textureThemesLeft } from './themes.ts';
 
 /** The record: the SHA-256 (64 lowercase hex) of the key of the account whose data the phone's stores hold. The boundary's own file: not in WIPES, removed last. */
 export const STAMP_FILE = 'app:/data/account-stamp';
@@ -61,6 +62,7 @@ export const WIPES: Wipe[] = [
   { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
   { name: 'pages', run: (s) => wipePages(s) },                                                                  // the deck's open set (pages.ts): only the radio stays
   { name: 'clips', run: async () => forgetClips() },                                                              // in memory only (public clips, but another account's page asked for them)
+  { name: 'texture-themes', run: (s) => wipeTextureThemes(s) },                                                    // themes installed from a Texture document: the old account's document's name and colours
   { name: 'demo-leftovers', run: (s) => rmAll(s, [DEMO_MARKER]) },                                                  // a marker, not data: it only lets the one-time pass run again
 ];
 
@@ -123,7 +125,10 @@ async function survivors(storage: Storage | undefined): Promise<string[]> {
   for (const p of wipedPaths()) {
     try { await storage.fs.stat(p); out.push(p.slice(p.lastIndexOf('/') + 1) || p); } catch (e) { if (codeOf(e) !== 'ENOENT') out.push(p.slice(p.lastIndexOf('/') + 1) || p); }
   }
-  out.push(...(await originalsLeft(storage)));
+  for (const p of [`${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]) {
+    try { await storage.fs.stat(p); out.push(p.slice(p.lastIndexOf('/') + 1)); } catch (e) { if (codeOf(e) !== 'ENOENT') out.push(p.slice(p.lastIndexOf('/') + 1)); }
+  }
+  out.push(...(await originalsLeft(storage)), ...(await textureThemesLeft(storage)));
   return out;
 }
 
@@ -157,20 +162,27 @@ let chain: Promise<unknown> = Promise.resolve();
 let clearing: Promise<void> | null = null;
 let wipes = 0;                                   // completed Clear attempts: the card's epoch moves with it
 let boundaryId = 0;                              // moved by resetBoundary: a job of an earlier process (a test) does not touch this one
+let clearPeeks = 0;                              // card reads while one Clear has been running: with no clock to read, this is how a stuck Clear is told from a slow one
 let lastFailed: string[] = [];                   // what the last Clear could not clear, for the card's words
+/** After this many card reads (3 s apart, bounded to five tries by the contract, then the person's Try again) find the same Clear still running, it is abandoned: the native call never returned and the timer
+ * that should have ended it ended with its answer (Exact). Wipes are idempotent; the abandoned job stops at its next check (the generation moved) and a late answer changes nothing. */
+const ABANDON_PEEKS = 5;
+function abandonClear(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; clearPeeks = 0; active = 0; console.log('account: a Clear that never ended was abandoned'); }
 /** Counts every completed Clear attempt (monotonic): the sources that keep state in memory are asked again when it changes. */
 export const wipeEpoch = (): number => wipes;
 export const lastFailure = (): string[] => lastFailed;
 
+let active = 0;                                  // jobs queued or running
 function job<T>(fn: () => Promise<T>): Promise<T> {
-  const p = chain.then(fn, fn);
+  active += 1;
+  const p = chain.then(fn, fn).finally(() => { active -= 1; });
   chain = p.then(() => undefined, () => undefined);
   return p;
 }
 /** Resolves when no job is queued or running (a Clear started by an answer is awaited here: tests, and nothing else). */
 export async function idle(): Promise<void> { for (;;) { const c = chain; await c; if (c === chain) return; } }
 /** For tests: a process that has just started. */
-export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; wipes = 0; lastFailed = []; timing.nativeMs = 30000; timing.recordMs = 5000; timing.sharedMs = 30000; }
+export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; clearPeeks = 0; active = 0; wipes = 0; lastFailed = []; timing.nativeMs = 30000; timing.recordMs = 5000; timing.sharedMs = 30000; }
 
 /** ADOPT: no record and a key. Write the key's digest; the state after is read again. A failed write leaves it closed. */
 async function adoptBody(storage: Storage | undefined): Promise<State> {
@@ -187,10 +199,12 @@ async function clearBody(storage: Storage | undefined, store: Store | undefined)
   if (stateOf(await readFacts(storage)) !== 'clearing' || !storage) return;       // a job that finds the state changed does nothing
   const g = nextGeneration(); resetSession();                                      // moved once per attempt, by nothing else
   const nativeOk = await nativeCall('wipe', g);                                    // a wipe, never a sign-out: it keeps whatever key is stored
+  if (id !== boundaryId || accountGeneration() !== g) return;                      // abandoned (or a newer attempt began): a stale job wipes nothing and removes no record
   // A shared half that outlives its deadline is a failed Clear: nothing is marked clean, the record stays, the next attempt runs every store again.
   const shared = await withDeadline<string[]>((async () => [...(await wipeAll(storage, store, WIPES)), ...(await survivors(storage))])(), ['shared (timed out)'], timing.sharedMs);
   const failed = [...shared];
   if (!nativeOk) failed.push('native');
+  if (id !== boundaryId || accountGeneration() !== g) return;
   let removed = false;
   if (failed.length === 0) { removed = await removeRecord(storage); if (!removed) failed.push('account-stamp'); }
   if (id !== boundaryId) return;
@@ -202,6 +216,7 @@ async function clearBody(storage: Storage | undefined, store: Store | undefined)
 /** Start a Clear unless one is queued or running. Never waited on by an answer. */
 function startClear(storage: Storage | undefined, store: Store | undefined): void {
   if (clearing) return;
+  clearPeeks = 0;
   const p: Promise<void> = job(() => clearBody(storage, store)).catch(() => undefined).finally(() => { if (clearing === p) clearing = null; });
   clearing = p;
 }
@@ -221,9 +236,10 @@ export type Peek = { state: State; epoch: string; failed: string[]; key: KeyFact
 export async function peek(storage: Storage | undefined, store: Store | undefined): Promise<Peek> {
   const f = await readFacts(storage);
   let state = stateOf(f);
-  if (state === 'adopt') state = await job(() => adoptBody(storage));
+  if (clearing && ++clearPeeks > ABANDON_PEEKS) abandonClear();
+  // The card never waits on a running job (a hung sign-out or Clear would leave the banner blank): while one runs, ADOPT is reported as the wipe it is part of; with none, the one write is awaited.
+  if (state === 'adopt') state = active > 0 ? 'clearing' : await job(() => adoptBody(storage));
   if (state === 'clearing') startClear(storage, store);
-  const refused = state === 'clearing' || state === 'locked' || state === 'adopt';
   return { state, epoch: `${state}|${wipes}`, failed: lastFailed, key: f.key };
 }
 

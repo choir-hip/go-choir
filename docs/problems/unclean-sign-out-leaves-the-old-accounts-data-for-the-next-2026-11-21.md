@@ -101,3 +101,9 @@ landing 3; a theme installed from account A's Texture document stays visible to 
 Fixed in landing 1 after the review: the proof's record checks are taken after their own drive; the epoch is
 `state|wipes` so sign-in re-asks the pages; a throwing key read is LOCKED with words and buttons; the shared half of a
 Clear has a deadline (`timing.sharedMs`) and counts as failed; the card's Adopt write is stated in the design.
+
+Fixed in landing 1 after seat 2's review (fe027e0fc): a late read no longer plants the old account's data in a module
+cache (`sameAccount()` in `api.ts`, one helper; files recents, podcast library and cached feeds, clips, mail folder,
+alias and saved drafts, demo leftovers' write); the proof's D3 plants in a file `reset_state` leaves; a Clear the card
+has seen running for six reads is abandoned on a fresh chain (no clock is read); `survivors` stats `content.db-wal`
+and `-shm`; Texture-installed themes are wiped; the card never waits on a running job; sign-out forgets a refused key.

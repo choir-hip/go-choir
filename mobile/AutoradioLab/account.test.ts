@@ -287,7 +287,7 @@ describe('F: faults', () => {
     const r = await signOut();
     expect(r.done).toBe(true); expect(dataLeft()).toEqual([]); expect(m.files.has(STAMP)).toBe(false);
   });
-  test('F3 the key delete fails: OPEN for A, no wipe at all (native or shared), sealing unblocked', async () => {
+  test('F3 (encodes LANDING 2 native: the shipped native still runs its own wipe after a failed key delete, ModelsEntry.swift) the key delete fails: OPEN for A, no wipe at all (native or shared), sealing unblocked', async () => {
     boot('A', 'A'); W.keyDeleteFails = true;
     const r = await signOut();
     expect(r.done).toBe(false); expect(W.log).toEqual(['signOut']); expect(dataLeft().length).toBe(DATA.length); expect(m.files.has(STAMP)).toBe(true);
@@ -392,6 +392,46 @@ describe('C: one writer', () => {
     expect((await probe()).threw).toBeNull();
     W.signOut = 'ok'; W.release?.(); const r = await out;
     expect(r.done).toBe(true); expect((await probe()).leaked).toBe(false);
+  });
+});
+
+describe('E2: survivors, a stuck Clear, and the card never waiting', () => {
+  test('a content.db-wal or -shm that survives its removal keeps the phone in CLEARING (the survivor check looks at both)', async () => {
+    for (const f of ['app:/data/content.db-wal', 'app:/data/content.db-shm']) {
+      boot('A', 'absent', { ...SEED_FILES, [f]: 'x' }); m.faults.rmSilently.add(f);
+      await probe(); await idle();
+      expect([f, m.files.has(STAMP), await stateNow()]).toEqual([f, true, 'clearing']);
+    }
+  });
+  test('a native wipe that never returns, with a timer that never fires, does not hold the one writer forever: the card\'s re-reads abandon it, and the next attempt runs on a fresh chain', async () => {
+    boot('A', 'absent'); W.wipe = 'hang';
+    const real = globalThis.setTimeout; globalThis.setTimeout = ((() => 0) as unknown) as typeof setTimeout;     // Exact timers end with the answer that made them
+    try {
+      expect((await probe()).threw).toBe('AccountClosedError');
+      for (let i = 0; i < 5; i++) await account.peek(m.storage, undefined);                           // the same Clear, still running, five card reads in a row
+      W.wipe = 'ok';
+      await account.peek(m.storage, undefined);                                                       // the sixth abandons it; the new attempt asks native again and it answers
+      const done = await Promise.race([idle().then(() => 'idle'), new Promise((r) => real(() => r('stuck'), 300))]);
+      expect(done).toBe('idle');
+    } finally { globalThis.setTimeout = real; }
+    expect(dataLeft()).toEqual([]); expect(await stateNow()).toBe('empty');
+    W.release?.();                                                                                    // the zombie's native call answers late: it changes nothing
+    await wait(20); expect(await stateNow()).toBe('empty');
+  });
+  test('the card does not wait on a running job in ADOPT (it answers while a sign-out hangs in native)', async () => {
+    boot('none', 'A'); W.signOut = 'hang';
+    const out = signOut(); await wait(15);
+    const c = await Promise.race([account.peek(m.storage, undefined).then((p) => p.state), wait(400).then(() => 'waited')]);
+    expect(c).not.toBe('waited');
+    W.signOut = 'ok'; W.release?.(); await out;
+  });
+  test('a sign-out clears the refused-key note (sign out, sign in with the same key: no "no longer accepted")', async () => {
+    boot('A', 'A');
+    globalThis.fetch = (async (u: string) => (String(u).endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 }) : new Response('{}', { status: 401 }))) as never;
+    await api.authedJSON('/api/x').catch(() => undefined);
+    expect(api.rejectedDigest()).toBe(dig(KEY_A));
+    await signOut();
+    expect(api.rejectedDigest()).toBe('');
   });
 });
 
@@ -500,10 +540,20 @@ describe('W: the wipes', () => {
     expect(account.WIPES.map((w) => w.name)).not.toContain('account-stamp');
     expect(account.wipedPaths()).not.toContain(STAMP);
   });
-  test('S19 the phone\'s theme survives a wipe', async () => {
+  test('S19 the phone\'s own themes survive a wipe; a theme installed from a Texture document does not (it carries account A\'s document: its name and colours)', async () => {
     const mm = memFs(['app:/data/theme-choice.json', 'app:/data/themes/texture-ember.json', 'app:/data/themes/mine.json', 'app:/data/recent-files.json']);
     expect(await account.wipeAll(mm.storage, undefined, account.WIPES)).toEqual([]);
-    expect([...mm.files.keys()].sort()).toEqual(['app:/data/theme-choice.json', 'app:/data/themes/mine.json', 'app:/data/themes/texture-ember.json']);
+    expect([...mm.files.keys()].sort()).toEqual(['app:/data/theme-choice.json', 'app:/data/themes/mine.json']);
+  });
+  test('S19b a Texture theme loaded in memory is not listed to the next account after a Clear, and a surviving texture file keeps the phone in CLEARING', async () => {
+    const T = await import('./themes.ts'); const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
+    boot('A', 'absent', { ...SEED_FILES, 'app:/data/themes/texture-ember.json': ember });
+    T.resetThemes();
+    expect(JSON.stringify(await T.themeListShared('light', false, m.storage))).toContain('ember');
+    m.faults.rmSilently.add('app:/data/themes/texture-ember.json');
+    await probe(); await idle(); expect(await stateNow()).toBe('clearing');
+    m.faults.rmSilently.clear(); await probe(); await idle(); expect(await stateNow()).toBe('empty');
+    expect(JSON.stringify(await T.themeListShared('light', false, m.storage))).not.toContain('ember');
   });
   test('S8 the real wipes leave an in-memory file system empty (seeded at every path the modules name, mail files included)', async () => {
     const seed = [...allPaths().filter((p) => p.split('/').length > 2 && p !== STAMP && !PHONE_KEPT.has(p)).flatMap((p) => (p.endsWith('/') ? [] : [p, `${p}/child.bin`])), 'app:/data/mail/msg-1.bin', 'app:/cache/mail-1.html'];

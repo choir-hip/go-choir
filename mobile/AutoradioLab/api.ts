@@ -123,6 +123,12 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
 let generation = 0;
 export const accountGeneration = (): number => generation;
 export function nextGeneration(): number { generation += 1; return generation; }
+/** THE GUARD for a module-level cache insert or a write that follows an await (docs/design/account-boundary-2026-11-21.md; seat 2's review of fe027e0fc). The gate drops the ANSWER of a source that began
+ * before a wipe; it cannot drop the source's own side effects, and a late read that sets a cache after the wipe plants the old account's data for the next one. Take the guard BEFORE the await, test it
+ * AFTER, and drop the insert, merge or write when it says false:
+ *     const same = sameAccount();  const x = await read();  if (same()) cache = x;
+ * A new shared store with a cache uses this one helper (or `writeCurrent` for a file). */
+export function sameAccount(): () => boolean { const g = generation; return () => g === generation; }
 
 // A SIGN-OUT UNDER WAY (review 2026-11-19, mail seat 1, finding 2). `beginSignOut` runs BEFORE the native sign-out: the generation moves at once (a store write
 // that began under the old one refuses itself, mail-store.ts), and sealing is off until a NEW session is established (a key whose digest is not the one that
@@ -130,7 +136,7 @@ export function nextGeneration(): number { generation += 1; return generation; }
 let blockedDigest: string | null = null;      // null: not signing out. '' or a digest: a sign-out began; sealing waits for a session whose key is another one.
 export const sealingBlocked = (): boolean => blockedDigest !== null;
 export async function beginSignOut(): Promise<void> {
-  nextGeneration(); resetSession();
+  nextGeneration(); resetSession(); rejected = '';          // a refused key is forgotten with the session (the same key signed in again is not 'no longer accepted' until the server says so)
   let d = '';
   try { const s = await withDeadline(keptSession().then((x) => x, () => null), null, keyTiming.ms); if (s) d = await digestOf(s.key); } catch { /* no key to name */ }      // a read that hangs names no digest: the block still stands
   blockedDigest = d;

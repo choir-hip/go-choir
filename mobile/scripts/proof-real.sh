@@ -408,7 +408,7 @@ D2_DATA=$(data_dir)
 D2_STAMP=$(record_now)
 D2_PAPER=$([ -n "$D2_DATA" ] && [ -e "$D2_DATA/paper-front.json" ] && echo kept || echo gone)
 
-# D3, an account change without a sign-out: data of the proof key's account is on the phone (a marked file is written into the app's data folder), then the Keychain item is REPLACED by another
+# D3, an account change without a sign-out: data of the proof key's account is on the phone (a marked recent-files.json is written into the app's data folder), then the Keychain item is REPLACED by another
 # string, and the app is relaunched. Before any page shows data the old data must be wiped (the marked file is gone), the record is the NEW key's digest, and the card offers Clear this phone, not Sign in
 # (the server refuses the fake key). A wrong catch: a build that kept the old record and read the old files for the new key; one that wrote the new digest first and wiped later (the marked file would
 # survive under the new label); one that offers Sign in over the refused key.
@@ -417,7 +417,10 @@ place paper 2500; place settings 900; step "tap settings-nav-account"; view real
 step logs
 run_drive seed light "" --touch platform
 D3_DATA=$(data_dir)
-[ -n "$D3_DATA" ] && printf '%s' '{"drill":"D3-OLD-ACCOUNT-DATA"}' > "$D3_DATA/takes.json"
+# The marker goes into app:/data/recent-files.json, a file reset_state leaves alone (it removes takes.json, the themes and the Swift copies: planting there would make the check pass whatever the app did),
+# and which the keychange drive does not write (it never opens a file). If the app wipes, the marker is gone; if it reads the old files for the new key, it stays.
+[ -n "$D3_DATA" ] && printf '%s' '[{"path":"/D3-OLD-ACCOUNT-DATA.txt","size":1,"modified":null,"openedAt":1}]' > "$D3_DATA/recent-files.json"
+D3_PLANTED=$([ -n "$D3_DATA" ] && grep -q D3-OLD-ACCOUNT-DATA "$D3_DATA/recent-files.json" 2>/dev/null && echo yes || echo no)
 FAKEKEY="choir_sk_-d3-drill-fake-key-not-real"; export FAKEKEY
 FAKEDIG=$(printf '%s' "$FAKEKEY" | shasum -a 256 | cut -d' ' -f1)
 step "clock data"; wait_ 6000; view real-d3-first 2500
@@ -611,6 +614,7 @@ else
   [ -z "$D2_DATA" ] || { [ -z "$D2_STAMP" ] && [ "$D2_PAPER" = gone ] && echo "ok: D2: the key went: the record and the paper's copy are gone from the files" || { echo "MISSING: D2: the key went but the record or the old data is on disk"; FAILS="$FAILS [D2 files]"; }; }
 fi
 # D3: the marked old file is gone, the record is the new digest, the banner offers Clear this phone and not Sign in
+[ "$D3_PLANTED" = yes ] && echo "ok: D3: the old account's marker was planted before the key change" || { echo "MISSING: D3: the marker could not be planted (the check below would pass for nothing)"; FAILS="$FAILS [D3 plant]"; }
 [ "$D3_LEFT" = 0 ] && echo "ok: D3: the old account's marked file is gone after the key changed" || { echo "MISSING: D3: the old account's data survived the key change ($D3_LEFT)"; FAILS="$FAILS [D3 data]"; }
 stamp_eq "D3: the record is the new key's digest" "$FAKEDIG" "$D3_STAMP"
 chk "D3: the card offers Clear this phone for the refused key" '\[signedout-clear\]' "$D3"
