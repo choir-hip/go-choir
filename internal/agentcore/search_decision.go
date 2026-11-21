@@ -64,7 +64,7 @@ func searchDecisionOf(payload json.RawMessage) map[string]any {
 }
 
 // logSearchFresh writes one console line per SearchFresh send with the reason
-// the run gave, so the proof script (scripts/status-search-reads) can count the
+// the run gave, so the proof script (the status-search-reads script) can count the
 // reasons by distinct text and boilerplate shows. The reason is the run's own
 // sentence, never the query.
 func logSearchFresh(runID string, decision map[string]any) {
