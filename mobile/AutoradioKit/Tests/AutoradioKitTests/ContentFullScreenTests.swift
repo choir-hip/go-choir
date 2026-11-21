@@ -122,7 +122,7 @@ final class ContentFullScreenTests: XCTestCase {
         has(collapsed, ["press=ctlToggle", "ctlTitle", "ctlPos", "ctlBusy"], "collapsed line shows the title, the place and Loading")
         let m = code(try read("members-content.contract"))
         let close = m.components(separatedBy: "action ctlCloseDoc").last?.components(separatedBy: "// ---- a web page").first ?? ""
-        has(close, ["order = order.filter(a => a != gone)", "pageOpen(address=nxt", "pageClose(address=gone)"], "closing a document")
+        has(close, ["order = order.filter(a => a != gone)", "pagesOpen(nxt", "pagesClose(gone)"], "closing a document")
         XCTAssertTrue(m.contains("webUrl = \"\""), "closing a source page empties its address")
         XCTAssertTrue(m.contains("queueAct(op=\"closeWeb\", arg=\"\")"), "closing a typed page")
     }
