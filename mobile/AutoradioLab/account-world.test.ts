@@ -48,12 +48,13 @@ describe('M1 a chain of a closed world does nothing more', () => {
     const cache = new Map<string, string>();
     const storage = api.bindStorage(m.storage);                                                        // what the gate hands a source
     let release: () => void = () => undefined; m.faults.hold.set('app:/data/a-private.json', new Promise<void>((r) => { release = r; }));
+    const wChain = api.currentWorld();
     const chain = (async () => {
       const bytes = await storage!.fs.readFile('app:/data/a-private.json');                            // I/O 1: held
       cache.set('after-read', new TextDecoder().decode(bytes));                                         // an insert
       await storage!.fs.atomicWriteFile('app:/data/planted-by-a.json', new TextEncoder().encode('A-SECRET'));      // a write
       cache.set('after-write', 'x');
-      await api.authedJSON('/api/platform/send', { method: 'POST', body: { secret: 'A-SECRET' } });   // a send
+      await api.authedJSON('/api/platform/send', { method: 'POST', body: { secret: 'A-SECRET' }, world: wChain });   // a send
       cache.set('after-send', 'x');
     })();
     void chain.catch(() => undefined);
@@ -99,10 +100,10 @@ describe('M2 a request is signed only with the key of its world', () => {
       sent.push(JSON.stringify(init?.headers ?? {})); return new Response('{}', { status: 200 });
     }) as never;
     await call('pagesView', [0]);                                                                      // the gate opens world A for key A
-    await api.authedJSON('/api/one');
+    await api.authedJSON('/api/one', { world: api.currentWorld() });
     expect(sent.length).toBe(1); expect(sent[0]).toContain(KEY_A);
     W.value = KEY_B;                                                                                    // the Keychain item is replaced: no gate has run yet
-    const r = await Promise.race([api.authedJSON('/api/two').then(() => 'sent', (e) => (e as Error).name), wait(50).then(() => 'refused-or-hung')]);
+    const r = await Promise.race([api.authedJSON('/api/two', { world: api.currentWorld() }).then(() => 'sent', (e) => (e as Error).name), wait(50).then(() => 'refused-or-hung')]);
     expect(r).not.toBe('sent'); expect(sent.length).toBe(1); expect(sent.join('')).not.toContain(KEY_B);
   });
 });
@@ -123,13 +124,13 @@ describe('M3 module state belongs to the world: no module-level mutable state ou
   const STATEFUL: Record<string, Record<string, string>> = {
     'account.ts': { chain: 'the boundary\'s own machinery: the one writer', clearing: 'the one writer', wipes: 'the one writer', boundaryId: 'the one writer', lastFailed: 'the one writer', adopting: 'the one writer', active: 'the one writer', timing: 'deadlines (tests shorten them)' },
     'api.ts': { reader: 'the seam: the native handle', nativeAnswered: 'the seam', lastNative: 'the seam (a log line)', lastFlags: 'the seam (a log line)', world: 'THE WORLD', closedWorlds: 'the worlds whose started writes a Clear waits for', blockedDigest: 'the seam: sealing block', discovered: 'digest-keyed computer id', discovering: 'digest-keyed computer id', rejected: 'the refused key digest (cleared at sign-out)', keyTiming: 'deadline (tests shorten it)', keyReads: 'a counter for the log' },
-    'deck-ops.ts': { posting: 'a re-entrancy flag, holds no data' }, 'demo-leftovers.ts': { attempt: 'keyed by world: an attempt of a closed world is replaced' },
+    'demo-leftovers.ts': { attempt: 'keyed by world: an attempt of a closed world is replaced' },
     'host.ts': { decided: 'the host fact (is there a native package): the device\'s', inflight: 'the host probe' }, 'mail-sanitize.ts': { lastTarget: 'the last link target the sanitizer allowed: not read across answers' },
     'mail-seal.ts': { sealable: 'whether the platform can seal: the device\'s' },
     'paper-model.ts': { KEYS: 'a memo of a pure function of its argument', PADDED: 'a memo of a pure function of its argument' },
     'podcast.ts': { search: 'a test knob (the pause before a search)' },
-    'runsheet-entries.ts': { longURLs: 'entry id to url: the train\'s lane moves it into the world' }, 'search.ts': { liveVectors: 'live stores wipe themselves (wipeLiveVectors)', embedPrompt: 'a function', f32: 'a function' },
-    'content.ts': { liveStores: 'live stores wipe themselves (wipeLiveContent)', running: 'a flag of the live sync (its own generation)' },
+    'search.ts': { liveVectors: 'live stores wipe themselves (wipeLiveVectors)', embedPrompt: 'a function', f32: 'a function' },
+    'content.ts': { liveStores: 'live stores wipe themselves (wipeLiveContent)' },
     'themes.ts': { loading: 'device settings: the phone\'s theme store, Texture themes hidden while the boundary is owed', current: 'device settings', status: 'device settings', saving: 'device settings', dirty: 'device settings', migrated: 'device settings', hadChoiceFile: 'device settings', choiceTouched: 'device settings', migrating: 'device settings', migrateTries: 'device settings', rev: 'device settings' },
   };
   // CONSTANTS: read-only tables and objects. The test checks that nothing in their own file changes them.
@@ -416,6 +417,55 @@ describe('C11 seat 2\'s third round', () => {
     boot({}); const e0 = (await account.peek(m.storage, undefined)).epoch;
     api.nextGeneration(); const e1 = (await account.peek(m.storage, undefined)).epoch;
     expect(e1).not.toBe(e0);
+  });
+});
+
+describe('C12 seat 1\'s residuals on 0ced3a4ee', () => {
+  test('C12.adopt-drain an Adopt write that timed out and lands after A signed out and B adopted does not wipe B: the Adopt waits for the closed world\'s writes, and does not stack a second', async () => {
+    boot({}, false); account.timing.recordMs = 40; account.timing.sharedMs = 60;
+    let release: () => void = () => undefined; m.faults.writeHold.set(STAMP, new Promise<void>((r) => { release = r; }));
+    expect(await call('pagesView', [0]).then(() => 'answered', (e) => (e as Error).name)).toBe('AccountClosedError');   // A's Adopt write is hung: refused
+    await call('pagesView', [0]).catch(() => undefined);                                                 // a retry in the same world
+    expect(events.filter((e) => e === 'writecall:' + STAMP).length).toBe(1);                             // it did not stack a second write
+    expect((await signOut()).done).toBe(true);                                                           // A signs out: record none, key absent (EMPTY), no Clear
+    W.key = 'present'; W.value = KEY_B;
+    expect(await call('pagesOpen', ['mail:b', 'B']).then(() => 'wrote', (e) => (e as Error).name)).toBe('AccountClosedError');   // B's Adopt waits: A's write may still land
+    m.faults.writeHold.clear(); release(); await wait(30);                                               // A's late write lands: the record names A, the key is B
+    let r = 'refused';
+    for (let i = 0; i < 12 && r !== 'wrote'; i++) { r = await call('pagesOpen', ['mail:b', 'B']).then(() => 'wrote', (e) => (e as Error).name); await wait(30); await idle(); }
+    expect(r).toBe('wrote'); await wait(100); await idle();
+    expect(m.text(STAMP)).toBe(dig(KEY_B)); expect(m.text(PAGES_FILE)).toContain('mail:b');             // B's data survives
+  });
+  test('C12.rm-tree every folder wipe works on a host that refuses to remove a non-empty folder', async () => {
+    boot({ 'app:/data/podcast-feeds/f1.json': 'x', 'app:/cache/files/h/a.bin': 'x', 'app:/tmp/picked/p.bin': 'x', 'app:/data/vectors/v1.bin': 'x', 'app:/data/mail/msg-1.bin': 'x', 'app:/cache/mail-1.html': 'x' });
+    W = newWorld('absent'); n = phone(() => W); api.bindNative(n as never); m.faults.strictDirs = true;
+    await call('pagesView', [0]).catch(() => undefined); await idle();
+    expect([...m.files.keys()].filter((k) => k !== STAMP)).toEqual([]); expect(m.files.has(STAMP)).toBe(false); expect((await account.peek(m.storage, undefined)).state).toBe('empty');
+  });
+  test('C12.theme-wedge a gated Texture install whose first theme-store load is cut by an Adopt (no wipe runs) does not wedge the device theme store', async () => {
+    const T = await import('./themes.ts'); boot({ 'app:/data/theme-choice.json': '{}' }, false); W = newWorld('absent'); n = phone(() => W); api.bindNative(n as never); T.resetThemes();
+    let release: () => void = () => undefined; m.faults.hold.set('app:/data/theme-choice.json', new Promise<void>((r) => { release = r; }));
+    void call('themeFromTexture', ['doc-1']).catch(() => undefined); await wait(20);                  // an EMPTY-world chain holds the first load
+    W.key = 'present'; W.value = KEY_A; await call('pagesView', [0]).catch(() => undefined);            // the Adopt ends that world; nothing is wiped
+    m.faults.hold.clear(); release(); await wait(20);
+    expect(await Promise.race([call('themeList', ['light', false, 'x']).then(() => 'answered', () => 'rejected'), wait(500).then(() => 'hung')])).not.toBe('hung');
+  });
+  test('C12.world-required a signed-in request that names no world is refused', async () => {
+    boot({});
+    await expect((api.authedJSON as unknown as (p: string) => Promise<unknown>)('/api/x')).rejects.toThrow(/world/);
+  });
+  test('C12.download-closed a download that ends after its world closed does not remove the file itself (the Clear removes the cache by path)', async () => {
+    boot({});
+    const dest = 'app:/cache/files/x/a.bin'; let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
+    globalThis.fetch = (async (u: string) => {
+      if (String(u).endsWith('/api/compute/status')) return new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 });
+      await gate; m.files.set(dest, new TextEncoder().encode('B-OWN'));
+      const r = new Response('', { status: 200 }); Object.defineProperty(r, 'exactBodyTo', { value: { path: dest, bytes: 5 } }); return r;
+    }) as never;
+    await call('pagesView', [0]);
+    void api.authedToFile('/api/files/a.bin', dest, api.bindStorage(m.storage), { world: api.currentWorld() }).catch(() => undefined); await wait(15);
+    api.nextGeneration(); release(); await wait(30);
+    expect(events.filter((e) => e === 'rm:' + dest)).toEqual([]);
   });
 });
 

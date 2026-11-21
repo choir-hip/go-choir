@@ -8,7 +8,10 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { accountState, WORDS } from './account-state.ts';
 import { memFs, type Mem } from './account-phone.ts';
 import { resetHost, hostMode } from './host.ts';
-import { adoptNative, resetSeam, authedJSON } from './api.ts';
+import { adoptNative, resetSeam } from './api.ts';
+// A signed-in request states its world (api.ts: a missing one throws): the tests state the one current when they ask.
+import * as apiReal from './api.ts';
+const authedJSON = (p: string, o: object = {}) => apiReal.authedJSON(p, { ...o, world: apiReal.currentWorld() } as never);
 import { resetBoundary, STAMP_FILE } from './account.ts';
 
 let reply: { state: string; found?: boolean; value?: string; throws?: boolean; throwsKey?: boolean } = { state: 'absent' };

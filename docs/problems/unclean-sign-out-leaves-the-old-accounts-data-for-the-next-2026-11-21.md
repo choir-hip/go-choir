@@ -127,3 +127,11 @@ their options (the type checker lists every caller); the takes session's request
 in, and the Texture theme install carries the world it began in. Every remaining raw native op is listed with its reason
 in the M3 test. Not verified: the real host's `fs.rm` on a non-empty folder (every Clear removes folders); a Clear would
 stay CLEARING if the device refuses it.
+
+Fifth round (seat 1's residuals on 0ced3a4ee): an Adopt waits for the writes a closed world started and is not stacked on
+a write of its own world that has not ended; every folder wipe goes through `rmTree`; the device theme store loads on
+the unbound storage; a signed-in request that names no world is refused (the tests state theirs); `content` running,
+`deck-ops` posting and `runsheet-entries` longURLs are world state; a download that ends after its world closed removes
+nothing itself. What remains, stated: the non-I/O-await gap (a chain resumed from a microtask or a promise another chain
+resolves, which then starts new I/O, begins it in the new world); M3 is regex-based and does not see state inside
+functions or classes, or `const x = makeThing()`; the native landings 2 and 3; the real device's behaviour (no device run).

@@ -30,7 +30,7 @@ import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
 import { wipePages, PAGES_FILE } from './pages.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { type World, nextGeneration, closeWorld, drainClosed, bindStorage, currentWorld, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
+import { type World, rmTree, nextGeneration, closeWorld, drainClosed, bindStorage, currentWorld, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
 import { originalsLeft } from './mail-store.ts';
 import { wipeTextureThemes, textureThemesLeft } from './themes.ts';
 
@@ -47,7 +47,7 @@ export type Wipe = { name: string; run(storage: Storage | undefined, store: Stor
 
 const rmAll = async (storage: Storage | undefined, paths: string[]): Promise<void> => {
   if (!storage) return;
-  for (const p of paths) { try { await storage.fs.rm(p); } catch { /* absent, or kept: the survivor check below looks */ } }
+  for (const p of paths) { try { await rmTree(storage, p); } catch { /* absent, or kept: the survivor check below looks */ } }
 };
 
 /** Every store the shared modules keep. A module that moves in adds one line here (and its path to wipedPaths). The record is NOT here. */
@@ -188,9 +188,12 @@ export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve
 /** ADOPT: no record and a key. Write the key's digest; the state after is read again. A failed write leaves it closed. */
 async function adoptBody(storage: Storage | undefined): Promise<State> {
   const f = await readFacts(storage);
+  // A write of a closed world that may still land (an Adopt that timed out, then A signed out) must land BEFORE this Adopt writes: a late record naming A over B's data would wipe B.
+  // (a write of THIS world that has not ended, such as a timed-out Adopt write, is not stacked on either.)
+  if (stateOf(f) === 'adopt' && (currentWorld().pending.size > 0 || !(await drainClosed(timing.sharedMs)))) return 'adopt';
   if (stateOf(f) === 'adopt' && storage && f.key.state === 'present') {
     // The record write is on the storage of the current world and under a deadline: a hung write leaves the state ADOPT (refusing); a late landing is waited for by the next boundary move (drain).
-    const wrote = await withDeadline<boolean>(bindStorage(storage, currentWorld()).fs.atomicWriteFile(STAMP_FILE, new TextEncoder().encode(f.key.digest)).then(() => true, () => false), false, timing.recordMs);
+    const wrote = await withDeadline<boolean>(bindStorage(storage, currentWorld()).fs.atomicWriteFile(STAMP_FILE, new TextEncoder().encode(f.key.digest)).then(() => true, () => false) as Promise<boolean>, false, timing.recordMs);
     if (wrote) closeWorld(); else console.log('account: could not record the account');      // the new account's world begins here (its requests are signed with this key only)
   }
   return stateOf(await readFacts(storage));

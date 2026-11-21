@@ -538,6 +538,8 @@ is the pattern for a *device* stream. A stream from our server is `fetch` with
 
 A storage refusal is an `Error` with a `code` that is the same on every host (`'ENOENT'`, `'EACCES'`, `'EBUSY'`, `'denied'`, `'full'`, `'failed'`: `reference.md`, "storage refusal"; Branch on the code, never the message). `account.ts` takes a file as ABSENT only when a read or stat rejects `ENOENT`; every other rejection, a read past a deadline, or no storage is UNREADABLE and refuses the page, never "nothing there". A removal counts only when the stat afterwards says `ENOENT`. No call from app code reloads the data module or opens a fresh context (module reload is the development client and over-the-air update: `reference.md:2289-2296`), so the account boundary ends work by closing a `World` object (`api.ts`), not by a reload. Timers (`setTimeout`) end with the answer that made them; a background job started by an answer (the Clear in `account.ts`) relies on its deadline anyway: unverified on a device.
 
+`fs.rm` of a folder (read 2026-11-21 at the pin, `mobile/.exact-src`): on the Apple and Unix host it removes the folder with its contents (`vendor/ibex/crates/ibex2/src/stdlib/app_fs_unix.rs:236-260`, called for `FsOp::Remove` at `:674` and `:970`: children first, then the folder). The reference states no rule for the other hosts (web, Android), so every folder wipe in `account.ts`, `podcast.ts` and `files.ts` goes through `rmTree` (`api.ts`: children first, then the folder), tested over a fake fs that refuses a non-empty folder.
+
 ## Sharp edges (file:line at `76cd50f9e`; unchecked at `de212e671`)
 
 - `AudioSession.swift:238-262`: first claim configures; later claims join

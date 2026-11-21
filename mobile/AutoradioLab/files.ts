@@ -9,7 +9,7 @@
 // Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
-import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration, scoped, currentWorld } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration, scoped, currentWorld, rmTree } from './api.ts';
 import * as M from './files-model.ts';
 import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
 
@@ -89,7 +89,7 @@ export function forget(): void { S.reset(); }
 export async function wipeFiles(storage: Storage | undefined): Promise<void> {
   forget();
   if (!storage) return;
-  for (const p of [RECENT_FILE, CACHE_DIR, 'app:/tmp/picked']) { try { await storage.fs.rm(p); } catch { /* absent */ } }
+  for (const p of [RECENT_FILE, CACHE_DIR, 'app:/tmp/picked']) { try { await rmTree(storage, p); } catch { /* absent */ } }
 }
 
 async function loadRecents(storage: Storage | undefined): Promise<Recent[]> {

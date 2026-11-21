@@ -20,6 +20,7 @@
 //  - a post that never ends: a refused or unknown op is acknowledged (resending cannot help) and counted.
 // Logs carry counts and ids, never the words of an entry or of a failure.
 
+import { scoped } from './api.ts';
 import { DECK_HELD_MAX, type DeckEvent, type DeckItem, type DeckPort } from './deck.ts';
 
 /** The server's body limit and batch limit (api_autoradio_sheet.go: sheetMaxBody, sheetMaxOps). */
@@ -187,7 +188,7 @@ export type PostReport = {
   anomalies: string[];
 };
 
-let posting = false;
+const P = scoped(() => ({ posting: false }));      // module state belongs to the world (api.ts `scoped`)
 
 /**
  * Post the deck's unacknowledged journal, oldest first, and acknowledge what the server answered. One at a time: a second call while one
@@ -195,8 +196,8 @@ let posting = false;
  */
 export async function postJournal(port: DeckPort, poster: Poster, opts: PostOptions = {}): Promise<PostReport> {
   const report: PostReport = { busy: false, posted: 0, acked: 0, pending: 0, dropped: {}, refused: 0, anomalies: [] };
-  if (posting) return { ...report, busy: true };
-  posting = true;
+  if (P().posting) return { ...report, busy: true };
+  P().posting = true;
   try {
     const log = opts.log ?? (() => {});
     const maxBytes = opts.maxBytes ?? BATCH_BYTES;
@@ -233,6 +234,6 @@ export async function postJournal(port: DeckPort, poster: Poster, opts: PostOpti
     log(`deck journal posted=${report.posted} acked=${report.acked} pending=${report.pending} refused=${report.refused} dropped=${dropped || 'none'} anomalies=${report.anomalies.join(',') || 'none'}`);
     return report;
   } finally {
-    posting = false;
+    P().posting = false;
   }
 }

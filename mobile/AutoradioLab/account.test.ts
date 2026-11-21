@@ -38,7 +38,8 @@ import { dig, events, KEY_A, KEY_B, memFs, newWorld, pagesFile, PAGES, phone, SE
 const resetBoundary = (): void => { const a = account as Record<string, unknown>; (a.resetBoundary as (() => void) | undefined)?.(); (a.resetSettled as (() => void) | undefined)?.(); };
 const idle = async (): Promise<void> => { await (account as Record<string, unknown> as { idle?: () => Promise<void> }).idle?.(); };
 
-const { authedJSON, bindNative, resetSeam, SignedOutError, accountGeneration } = api;
+const { bindNative, resetSeam, SignedOutError, accountGeneration } = api;
+const authedJSON = (p: string, o: object = {}) => api.authedJSON(p, { ...o, world: api.currentWorld() } as never);
 const SEED_FILES: Record<string, string> = { [PAGES]: pagesFile(), 'app:/data/takes.json': 'x', 'app:/data/podcasts-library.json': 'x', 'app:/data/mail/msg-1.bin': 'x' };
 const DATA = Object.keys(SEED_FILES);
 
@@ -413,7 +414,7 @@ describe('E2: survivors, a stuck Clear, and the card never waiting', () => {
   test('a sign-out clears the refused-key note (sign out, sign in with the same key: no "no longer accepted")', async () => {
     boot('A', 'A');
     globalThis.fetch = (async (u: string) => (String(u).endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 }) : new Response('{}', { status: 401 }))) as never;
-    await api.authedJSON('/api/x').catch(() => undefined);
+    await authedJSON('/api/x').catch(() => undefined);
     expect(api.rejectedDigest()).toBe(dig(KEY_A));
     await signOut();
     expect(api.rejectedDigest()).toBe('');

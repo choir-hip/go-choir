@@ -16,7 +16,13 @@
 //  A13 authedToFile: the body goes to the named app file by the host (`exactBodyTo`), the reply is never read, a path outside app:/cache is refused before the key is read,
 //      a refusal is an error with no file, a sign-out in flight removes the file and drops the reply, a host that wrote nothing is an error.
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { authedJSON, authedBytes, authedToFile, SignedOutError, HTTPError, bindNative, resetSession, resetSeam, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
+import { SignedOutError, HTTPError, bindNative, resetSession, resetSeam, nextGeneration, ORIGIN, authedURL, KEYCHAIN_ACCOUNTS } from './api.ts';
+// A signed-in request states its world (api.ts: a missing one throws): the tests state the one current when they ask.
+import * as apiReal from './api.ts';
+const authedJSON = (p: string, o: object = {}) => apiReal.authedJSON(p, { ...o, world: apiReal.currentWorld() } as never);
+const authedBytes = (p: string, o: object = {}) => apiReal.authedBytes(p, { ...o, world: apiReal.currentWorld() } as never);
+const authedToFile = (p: string, d: string, s: never, o: object = {}) => apiReal.authedToFile(p, d, s, { ...o, world: apiReal.currentWorld() } as never);
+
 
 const KEY = 'test-key-0001-not-real';
 const KEY2 = 'test-key-0002-not-real';
@@ -226,10 +232,10 @@ describe('A13 the signed-in download to a file', () => {
     await expect(authedToFile('/api/files/a', DEST, storage(removed))).rejects.toThrow(/did not write/);
     expect(removed).toContain(DEST);
   });
-  test('a sign-out while the file arrives: the file is removed and the reply is dropped', async () => {
+  test('a sign-out while the file arrives: the reply is dropped, and the file is left to the Clear (it removes the cache by path; a remove here could take the next account\'s file at the same path)', async () => {
     const removed: string[] = [];
     handler = () => { nextGeneration(); return wrote(10); };
     await Promise.race([authedToFile('/api/files/a', DEST, storage(removed)).then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 40))]);      // the reply never reaches the caller (the world is closed)
-    expect(removed).toContain(DEST);
+    expect(removed).not.toContain(DEST);
   });
 });

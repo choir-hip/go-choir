@@ -68,6 +68,8 @@ export class HTTPError extends Error {
 /** `world`: the world the request BELONGS to, REQUIRED so the type checker lists every caller: a chain that captured account data before an await passes the world it began in (`const w = currentWorld()` at its
  * start); a caller with nothing captured passes `currentWorld()`. A closed world's request is refused (a rejection the holder can drop the work on), and one of an open world is signed only with that world's key. */
 export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string>; world: World };
+/** A signed-in request names the world it belongs to (the type requires it; this is the same rule at run time): no default, because the world current when a request is MADE is not always the one its data was captured in. */
+const noWorld = (): Promise<never> => Promise.reject(new Error('a signed-in request must state its world (options.world: currentWorld(), or the world the work began in)'));
 const ended = (): Promise<never> => Promise.reject(new SignedOutError('the account this request belongs to has ended', 'none'));
 
 /** The three accounts today's sign-in keeps; the native reader answers no other name. */
@@ -192,6 +194,14 @@ export function bindStorage<S extends { fs: object }>(raw: S, w: World = world):
 export function nativeInert(): ((request: { op: string; account?: Account; b64?: string; aad?: string }) => Promise<unknown>) | null {
   const w = world;
   return reader && reader.available !== false ? (r) => inert(w, reader!.later(r)) : null;
+}
+/** Remove a file or a folder and everything under it, children first: a host that refuses to remove a non-empty folder (`ENOTEMPTY`) must not keep a Clear from finishing. (Exact's Apple and Unix host removes a folder
+ * with its contents itself, `app_fs_unix.rs:236-260`; the other hosts are not verified, so every folder wipe goes through this.) A missing path is fine; any other failure throws. */
+export async function rmTree(storage: Storage, path: string): Promise<void> {
+  let names: string[] = [];
+  try { names = await storage.fs.readdir(path); } catch { names = []; }                  // a file, or nothing there
+  for (const n of names) await rmTree(storage, `${path}/${n}`);
+  try { await storage.fs.rm(path); } catch (e) { if ((e as { code?: unknown } | null)?.code !== 'ENOENT') throw e; }
 }
 /** Wait (up to `ms`) for every write that a closed world started to finish. True when none is left. */
 export async function drainClosed(ms: number): Promise<boolean> {
@@ -335,7 +345,7 @@ async function check(r: Response, path: string, key: string): Promise<void> {
 }
 
 /** A signed-in JSON request to the listener's own computer. Throws SignedOutError when there is no session. */
-export function authedJSON(path: string, opts: Authed): Promise<Reply> { const o = opts ?? ({} as Authed); const w = o.world ?? world; return w.closed ? ended() : inert(w, authedJSONImpl(w, path, o)); }
+export function authedJSON(path: string, opts: Authed): Promise<Reply> { const o = opts ?? ({} as Authed); if (!o.world) return noWorld(); const w = o.world; return w.closed ? ended() : inert(w, authedJSONImpl(w, path, o)); }
 async function authedJSONImpl(w: World, path: string, opts: Authed): Promise<Reply> {
   const gen = world.id;
   const { r, key } = await send(w, path, opts, 'application/json');
@@ -350,7 +360,7 @@ async function authedJSONImpl(w: World, path: string, opts: Authed): Promise<Rep
 }
 
 /** The same, for bytes (a file, a PDF, audio). */
-export function authedBytes(path: string, opts: Authed): Promise<{ bytes: Uint8Array; contentType: string }> { const o = opts ?? ({} as Authed); const w = o.world ?? world; return w.closed ? ended() : inert(w, authedBytesImpl(w, path, o)); }
+export function authedBytes(path: string, opts: Authed): Promise<{ bytes: Uint8Array; contentType: string }> { const o = opts ?? ({} as Authed); if (!o.world) return noWorld(); const w = o.world; return w.closed ? ended() : inert(w, authedBytesImpl(w, path, o)); }
 async function authedBytesImpl(w: World, path: string, opts: Authed): Promise<{ bytes: Uint8Array; contentType: string }> {
   const gen = world.id;
   const { r, key } = await send(w, path, opts, '*/*');
@@ -365,7 +375,7 @@ async function authedBytesImpl(w: World, path: string, opts: Authed): Promise<{ 
  * target); a reply that is not 2xx writes nothing and is an error as in `authedBytes`. `dest` is under `app:/cache/`, plain. A sign-out in flight
  * removes the file and drops the reply; a host that wrote nothing (it read the body into memory) is an error and the file is removed. */
 export function authedToFile(path: string, dest: string, storage: Storage | undefined, opts: Authed): Promise<{ bytes: number; contentType: string }> {
-  const o = opts ?? ({} as Authed); const w = o.world ?? world;
+  const o = opts ?? ({} as Authed); if (!o.world) return noWorld(); const w = o.world;
   if (w.closed) return ended();
   // A download is written by the HOST, not through `storage`: the Clear must wait for it (and for its cleanup) like a write, or its bytes land after the wipe.
   const p = authedToFileImpl(w, path, dest, storage, o);
@@ -374,7 +384,8 @@ export function authedToFile(path: string, dest: string, storage: Storage | unde
 }
 async function authedToFileImpl(w: World, path: string, dest: string, storage: Storage | undefined, opts: Authed): Promise<{ bytes: number; contentType: string }> {
   if (!/^app:\/cache\/[^\s?#\\]+$/.test(dest) || dest.split('/').some((s) => s === '.' || s === '..')) throw new Error('refused: a download goes to a plain file under app:/cache/');
-  const drop = async () => { try { await unbound(storage)?.fs.rm(dest); } catch { /* absent */ } };
+  // Removed only while its world is open: once it is closed the file is the Clear's to remove (by path, with the whole cache), and a remove here could take a file the next account wrote at the same path.
+  const drop = async () => { if (w.closed) return; try { await unbound(storage)?.fs.rm(dest); } catch { /* absent */ } };
   const { r, key } = await send(w, path, opts, '*/*', { exactBodyTo: dest });
   try { await check(r, path, key); } catch (e) { await drop(); throw e; }
   const wrote = (r as unknown as { exactBodyTo?: { bytes?: unknown } | null }).exactBodyTo;
