@@ -75,6 +75,9 @@ boundaries:
     - docs/evidence/semantic-layer-prior-art-2026-11-20.md (failure modes only; its numbers are not facts)
     - docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md
   owner_rulings:
+    - '"raw duplicates may be only 17% but we can probably do more story clustering for where they overlap", and the lever chosen for the rest: fewer searches per run (2026-11-21): a research run sends one search and reads what it returned before another; clustering goes past exact duplicates to stories that overlap. Not chosen: waiting before a first search, researching fewer stories, relaxing the 1,000 target.'
+    - 'When it is unclear whether a new article has the same main point as a held story: "Lean to revising" (2026-11-21). The lead''s reading: an unclear case is folded into the existing story; a wrong merge must therefore be visible and undoable, which the design has to provide.'
+    - 'On staging the ontology over days: "no, it shouldnt take days or weeks to build. you can do this all overnight" (2026-11-21). The main-point judgment and the read before a search are built now, in parallel, on what exists; the wider query library follows them and does not gate them. Red changes still take their two reviews and their deployed proof.'
     - '"I asked for the whole app to be written in exact from the beginning. And then it got written in Swift. And then I keep asking for the cutover, and then it keeps not happening." (2026-11-20)'
     - '"I don''t need to save stuff from the last couple days of testing. The app is very new. We haven''t launched it yet. I don''t need to save anything." (2026-11-20): a moved page carries nothing over from the Swift build and never reads the old native file.'
     - '"Yes, I can pick my edition topics again. That''s fine." (2026-11-20)'
