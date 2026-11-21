@@ -502,6 +502,20 @@ let current: ThemeStore | null = null;
 let status = '';
 let saving: Promise<unknown> = Promise.resolve();
 let dirty = false;      // a save that did not land: the next tap on the same theme tries again
+/** A Clear (account.ts): the themes installed from a Texture document (`texture-<id>.json`) carry the old account's document (its name and colours), so they go with it, files and memory. The phone's own
+ * choice and its hand-installed themes stay (owner decision 4, narrowed by seat 2's review of fe027e0fc). Throws when a removal fails, so the Clear is not marked clean. */
+export async function wipeTextureThemes(storage: Storage | undefined): Promise<void> {
+  loading = null; current = null;                           // the store is read again from what is left
+  if (!storage) return;
+  let names: string[] = [];
+  try { names = await storage.fs.readdir(THEMES_DIR); } catch { return; }
+  for (const n of names) if (n.startsWith('texture-')) await storage.fs.rm(`${THEMES_DIR}/${n}`);
+}
+/** The texture theme files still there (names), for the survivor check; the folder itself when it cannot be read for a reason other than being absent. */
+export async function textureThemesLeft(storage: Storage | undefined): Promise<string[]> {
+  if (!storage) return [];
+  try { return (await storage.fs.readdir(THEMES_DIR)).filter((n) => n.startsWith('texture-')); } catch (e) { return (e as { code?: unknown } | null)?.code === 'ENOENT' ? [] : [THEMES_DIR]; }
+}
 /** Forget everything held (the tests; an account change does NOT call this: the theme is the phone's, not the account's). */
 export function resetThemes(): void { loading = null; current = null; status = ''; saving = Promise.resolve(); migrated = false; dirty = false; hadChoiceFile = false; choiceTouched = false; migrating = null; migrateTries = 0; rev = 0; }
 

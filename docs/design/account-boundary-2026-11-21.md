@@ -546,5 +546,7 @@ generation; a refusing state that does not heal once the fault is gone.
 3. **A crash before the native key delete leaves the person signed in.** Default:
    accept. Keeping the intent across a crash needs a durable marker again and a retry
    that may delete a key; key deletion stays the person's own tap.
-4. **Themes stay device settings**, outside the boundary, except a theme fetched from a
-   Texture document. Default: yes.
+4. **Themes stay device settings**, outside the boundary, except a theme installed from a
+   Texture document: its file `texture-<id>.json` and the copy in memory are removed by every Clear
+   (they carry account A's document's name and colours; landing 1, after seat 2's review). Bundled and
+   hand-installed themes and the choice stay. Default: yes.

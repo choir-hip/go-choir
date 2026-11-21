@@ -12,6 +12,7 @@
 import type { Storage } from './app.contract.d.ts';
 import { RECENT_FILE } from './files.ts';
 import { PAGES_FILE } from './pages.ts';
+import { accountGeneration, writeCurrent } from './api.ts';
 
 export const DEMO_MARKER = 'app:/data/demo-leftovers-cleared';
 
@@ -56,11 +57,12 @@ export function isDemoFile(path: string, size: number, modified: unknown): boole
 
 type Outcome = 'clean' | 'rewritten' | 'failed';
 async function rewrite(storage: Storage, file: string, change: (v: unknown) => unknown | undefined): Promise<Outcome> {
-  let raw: unknown;
+  let raw: unknown; const gen = accountGeneration();
   try { raw = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(file))); } catch { return 'clean'; }          // absent or unreadable: nothing was read, nothing is written
   const next = change(raw);
   if (next === undefined) return 'clean';
-  try { await storage.fs.atomicWriteFile(file, new TextEncoder().encode(JSON.stringify(next))); return 'rewritten'; } catch { return 'failed'; }
+  if (gen !== accountGeneration()) return 'clean';          // a wipe ran while the file was read: it is the old account's, written back nowhere
+  try { return (await writeCurrent(gen, storage, file, new TextEncoder().encode(JSON.stringify(next)))) ? 'rewritten' : 'clean'; } catch { return 'failed'; }
 }
 
 let attempt: Promise<void> | null = null;
