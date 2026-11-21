@@ -311,7 +311,7 @@ export async function storyMore(a: { address: string; surface: string; sheet: st
   let entry;
   try { entry = onAir(a.sheet ? decodeSheet(JSON.parse(a.sheet)) : undefined); } catch { entry = undefined; }
   const tap = tapOn(entry, 'more', a.address, a.now ?? 0);
-  if (tap) { await enqueue(storage, tap); void flush(storage); }
+  if (tap) { await enqueue(storage, tap); try { await flush(storage); } catch { /* kept queued: the next act sends it */ } }       // awaited: a fetch that goes on after its answer ended is never run
   return { message: note('more', f) };
 }
 

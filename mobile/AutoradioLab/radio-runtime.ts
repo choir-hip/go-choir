@@ -309,8 +309,11 @@ export class RadioRuntime {
     return out;
   }
   /** Is there pump work a pulse might be let go in the middle of: an entry to start, or a held list that is not the sheet's next entries? (A mutation then does it and stays until it is done.) */
+  /** One read of the deck and the native facts, no more (what the pulse does): the pump is `radioHold`'s. */
+  async peek(): Promise<void> { await this.refreshFacts(); try { this.deckState = await this.deck.state(); } catch { /* the next pulse reads again */ } }
   needsWork(): boolean {
     if (this.pendingStarts.length > 0) return true;
+    if (this.deckState?.journal.some((l) => l.seq > this.lastSeq)) return true;               // lines the deck wrote that the pump has not read
     const wanted = this.director.wants || this.store.onAir() ? this.holdable() : [];
     const held = this.deckState?.held ?? [];
     return wanted.length !== held.length || wanted.some((w, i) => w.id !== held[i]);

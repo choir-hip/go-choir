@@ -394,9 +394,9 @@ chk "first run: the edit page lists the topic tree (onboarding.ts editing)" '\[o
 # ---- 3f1. NOTEBOOK drive (lane exact-notebook-content): the notebook page and the scorecard from shared code under app:/data, a Refresh press that reads again, and the content sync that
 # starts at launch (shared code: content-run.ts logs one line per kind, counts only). Reads nothing it writes: no tap on a line, whose ids depend on the account's own notebook.
 step "clock data"; wait_ 6000
+step logs          # the console is a ring of the last 4096 lines: the launch's (the content sync's) is read before the page's own traffic pushes it out
 place notebook 900; view real-47-notebook 5000
 step "tap notebook-refresh"; view real-48-notebook-refreshed 5000
-step "clock data"; wait_ 8000          # the content sync (a long request) logs when it ends: given time to end before the console is read
 step logs
 run_drive notebook light "" --touch platform
 
@@ -539,6 +539,7 @@ STORY_SO=$F_STORY1
 step "clock data"; wait_ 6000
 # the account card is answered in REAL time (the key read, the host fact): give the first screen several settle steps before it is read
 wait_ 6000; wait_ 6000; wait_ 6000
+step logs          # the launch's console (the first run's offer, the account state) before the 4096-line ring pushes it out
 view real-50-so-first-screen 2500
 place paper 2500; view real-51-so-paper 3500
 # the end of the page clears the card: the last row is readable above it (read the screenshot)

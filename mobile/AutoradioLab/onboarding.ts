@@ -248,7 +248,7 @@ export async function onboardingAct(op: string, arg: string, topics: string, top
     }
     case 'continueAnyway': await ready(env, m, generalEdition(), top === EDIT); break;
     case 'skip': await dev(env, 'obStop'); m.p.skipped = true; m.step = 'skipped'; await save(env, m); break;
-    case 'offer': if (arg === 'signedOut' && m.gen !== launchGen) break; await offer(env, m); break;      // signed out, the first run is offered at launch only: after a sign-out it would be written again right after the wipe
+    case 'offer': if (arg === 'signedOut' && m.gen !== launchGen) { console.log('onboarding: no offer: signed out after the launch'); break; } await offer(env, m); break;      // signed out, the first run is offered at launch only: after a sign-out it would be written again right after the wipe
     default: break;
   }
   const f = await facts(env);
@@ -263,6 +263,8 @@ async function offer(env: Env, m: Mem): Promise<void> {
   const ed = await lookupEdition(env.get);
   if (m.gen !== accountGeneration()) return;
   if (ed?.found) { m.p.editionDone = true; m.step = 'done'; await save(env, m); return; }
+  await env.openPage?.(SETUP, 'Make it yours');                       // opened first, kept offered after: an offer that never opened must be made again
+  if (m.gen !== accountGeneration()) { console.log('onboarding: the offer was dropped, the account moved while the page opened'); return; }
   m.p.offered = true; await save(env, m);
-  await env.openPage?.(SETUP, 'Make it yours');
+  console.log('onboarding: the first run was offered as an open page');
 }

@@ -433,3 +433,25 @@ describe('sign-out when the route does not answer', () => {
     const n = posts; prt.store.flush(); expect(posts).toBe(n);
   });
 });
+
+describe('what the pulse says is due (the pump itself is a mutation: it is not let go with the pulse)', () => {
+  test('T14 the desk places entries: held list and starts are due until a pump, then nothing is', async () => {
+    rt.director.open({ ...story('p-open'), kind: 'opening', placed_by: 'phone', title: 'Opening' });
+    await idle(); await rt.pump(); await idle();
+    expect(rt.needsWork()).toBe(false);
+    rt.director.applyFromDesk(placeOp(story('d-1')), 'extend'); rt.director.applyFromDesk(placeOp(story('d-2')), 'extend');
+    await rt.peek();
+    expect(rt.needsWork()).toBe(true);                         // the deck holds neither: someone must enqueue them
+    await rt.pump(); await rt.peek();
+    expect(deck.held.map((h) => h.id)).toEqual(['d-1', 'd-2']);
+    expect(rt.needsWork()).toBe(false);
+  });
+  test('T14b a journal line the pump has not read is work', async () => {
+    rt.director.open({ ...story('p-open'), kind: 'opening', placed_by: 'phone', title: 'Opening' });
+    await idle(); await rt.pump(); await idle();
+    deck.end('finished'); await rt.peek();
+    expect(rt.needsWork()).toBe(true);
+    await rt.pump(); await rt.peek();
+    expect(rt.needsWork()).toBe(false);
+  });
+});

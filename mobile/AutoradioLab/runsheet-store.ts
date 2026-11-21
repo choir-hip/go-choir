@@ -126,6 +126,8 @@ export class RunSheetStore {
   retryAfterMs: number;
   /** Tests wait on this. */
   flushTask?: Promise<void>;
+  /** A post is in flight now. */
+  get isFlushing(): boolean { return this.flushing; }
   private storage?: Storage;
   private flushing = false;
   private retry?: ReturnType<typeof setTimeout>;
