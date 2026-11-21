@@ -1,19 +1,20 @@
 // The radio runtime: the store, the director and the deck driver, in shared code. It is what RunSheetPlayer.swift was: nothing else decides what is heard. The sound is the deck
 // (Deck.swift on iPhone, Kotlin on Android: docs/reference/exact/deck.md); this module hands it items and reads its journal.
 //
-// The loop. Shared code may be frozen while audio plays on a locked iPhone, so the deck HOLDS the next entries (up to three, only those whose sound needs no fetch) and plays on by
+// The loop. Shared code may be frozen while audio plays on a locked iPhone, so the deck HOLDS the next entries (every ready entry, up to the sheet bound of 100, only those whose sound needs no fetch) and plays on by
 // itself. Whenever shared code runs it `pump`s: it reads the deck's state, reads the journal lines it has not read (numbered, never reused), makes the director's calls for each in
 // order (an end is the entry's end; a `started` for an entry the deck played alone airs that entry on the sheet), starts what the director commands (resolving the words first: a
 // story to fetch, a page, a book, a take, a file), acknowledges the lines it read, and keeps the deck's held list equal to the sheet's next entries.
 //
 // What stays native, and why: the sound and the facts only the audio code knows (`NativeFacts`: a turn is open, what is left of the spoken entry, the audio being played and where).
 // Nothing here is stored but the sheet's own file (the store's `Storage`), which is the store's, under app:/data.
-import { Director, plan as planEntry, type Command, type Words } from './radio-director.ts';
+import { Director, previousRestartsCurrent, plan as planEntry, type Command, type Words } from './radio-director.ts';
 import { RunSheetStore, NO_REPORT, type AirReport, type Poster, type Storage } from './runsheet-store.ts';
 import { audioSpec, displayTitle, kindWord } from './runsheet-entries.ts';
 import { clockLabel } from './radio-model.ts';
 import { item as deckItem, DECK_HELD_MAX, type DeckEvent, type DeckItem, type DeckPort, type DeckState } from './deck.ts';
 import { syncHeld } from './deck-ops.ts';
+import { parseEpisodeKey } from './podcast-model.ts';
 import type { Entry } from './runsheet-model.ts';
 
 export type NativeFacts = {
@@ -126,6 +127,17 @@ export class RadioRuntime {
     if (how === 'seekStart') await this.deck.act('seekTo', 0);
     else if (how === 'restart' && air) { const it = this.known.get(air.id); if (it) await this.deck.play(it); }
   }
+  /** "Keep listening": the clip stops being a clip; the episode goes on from where it is, past the clip's end. */
+  async keepListening(): Promise<void> {
+    const air = this.store.onAir(), spec = air ? audioSpec(air) : undefined;
+    if (!air || !spec || !spec.is_clip || this.kept.has(air.id)) return;
+    const st = await this.deck.state(); this.deckState = st;
+    if (st.item !== air.id) return;
+    const it = deckItem({ id: air.id, kind: 'audio', title: spec.title, show: spec.show, url: spec.url, start: 0, end: 0, seconds: st.seconds });
+    this.kept.add(air.id); this.known.set(air.id, it);
+    await this.deck.play(it);
+    this.onChange?.();
+  }
   /** What the deck is speaking now: the programme's headline and, for a paper story, its route (what the Autoradio page names an untitled entry by). */
   programme(): { title: string; route: string } {
     const air = this.store.onAir(), it = air ? this.known.get(air.id) : undefined;
@@ -147,7 +159,7 @@ export class RadioRuntime {
     return {
       onAir: air !== undefined, current: air ? displayTitle(air) : '', currentKind: air ? kindWord(air) : '', audio: spec !== undefined,
       playing: air !== undefined && why === 'playing', paused: air !== undefined && (why === 'paused_listener' || why === 'paused_system'), waiting: why === 'held_session',
-      clip: spec?.is_clip ?? false, keepTitle: '', canOpenEpisode: spec?.episode_id !== undefined,
+      clip: (spec?.is_clip ?? false) && !(air && this.kept.has(air.id)), keepTitle: air && spec ? (spec.show === '' ? spec.title : `${spec.title} (${spec.show})`) : '', canOpenEpisode: spec?.episode_id !== undefined && parseEpisodeKey(spec.episode_id) !== null,
       elapsed, duration, elapsedLabel: air && spec ? clockLabel(elapsed) : '',
       remainingLabel: air && spec && duration > 0 ? '-' + clockLabel(Math.max(0, duration - elapsed)) : '', fraction: spec && duration > 0 ? Math.min(1, Math.max(0, elapsed / duration)) : 0,
       message: this.director.message, notice: this.desk.notice, writing: this.desk.writing, dry: this.desk.dry && !this.desk.writing,
@@ -178,7 +190,10 @@ export class RadioRuntime {
     this.deckState = st;
     this.inPump = true;
     const lines = st.journal.filter((l) => l.seq > this.lastSeq).sort((a, b) => a.seq - b.seq);
-    for (let i = 0; i < lines.length; i++) this.read(lines[i], lines.slice(i + 1));
+    // the last `started` line of each item: a line is "followed by a start of X" when that is later than it (one pass, no slicing per line)
+    const lastStart = new Map<string, number>();
+    lines.forEach((l, i) => { if (l.type === 'started') lastStart.set(l.item, i); });
+    for (let i = 0; i < lines.length; i++) this.read(lines[i], (id) => (lastStart.get(id) ?? -1) > i);
     if (lines.length > 0) {
       this.lastSeq = lines[lines.length - 1].seq;
       await this.deck.ack(this.lastSeq);
@@ -192,8 +207,8 @@ export class RadioRuntime {
     this.onChange?.();
   }
 
-  /** One journal line, in order. `after` are the lines that follow it in the same read: an entry the director is about to start that the deck already started is not started twice. */
-  private read(l: DeckEvent, after: DeckEvent[]): void {
+  /** One journal line, in order. `startsLater` says whether a later line of the same read started an item: an entry the director is about to start that the deck already started is not started twice. */
+  private read(l: DeckEvent, startsLater: (id: string) => boolean): void {
     const known = this.known.get(l.item);
     const air = this.store.onAir();
     switch (l.type) {
@@ -205,7 +220,7 @@ export class RadioRuntime {
       case 'sounding': if (known && this.director.playingId === l.item) this.director.started(l.item, known.document || undefined); break;
       case 'ended': {
         if (!known || this.director.playingId !== l.item) break;
-        const report: AirReport = { block: l.block, seconds: l.seconds };
+        const report: AirReport = { block: l.block, seconds: l.seconds, at: l.at };      // the deck's own time: after a freeze the end is not posted as heard at the pump's hour
         if (l.end === 'finished' && l.rendered) {
           if (this.director.playingDocument === undefined) this.director.started(l.item, known.document || undefined);
           if (known.kind === 'audio') this.director.remoteEnded(this.director.generation, report); else this.director.documentEnded(known.document, true, report);
@@ -217,18 +232,21 @@ export class RadioRuntime {
       default: break;
     }
     // an entry the director just commanded to start that the deck has already started (a later line says so) is not started again
-    this.pendingStarts = this.pendingStarts.filter((e) => !after.some((x) => x.type === 'started' && x.item === e.id));
+    this.pendingStarts = this.pendingStarts.filter((e) => !startsLater(e.id));
   }
 
+  /** A lock-screen or headset command. The deck acted on it at once (Deck.swift `remoteNext`, `remotePrevious`): the line says where the item was when it came, and this makes the sheet agree. */
   private remote(l: DeckEvent): void {
-    if (l.command === 'next') this.director.next(this.report());
+    const where: AirReport = { block: l.block, seconds: l.seconds, at: l.at };
+    if (l.command === 'next') this.director.next(where);                      // one skip, cut where it was; the next entry the deck played on to is found already playing
     else if (l.command === 'previous') {
-      const air = this.store.onAir(), st = this.deckState;
+      const air = this.store.onAir();
       if (!air) { this.director.previous({ block: 0, seconds: 0, isRemoteAudio: false }); return; }
       const remoteAudio = audioSpec(air) !== undefined;
-      const how = this.director.previous({ block: st?.block ?? 0, seconds: st?.seconds ?? 0, isRemoteAudio: remoteAudio });
-      if (how === 'seekStart') void this.deck.act('seekTo', 0);
-      else if (how === 'restart') { const it = this.known.get(air.id); if (it) void this.deck.play(it); }
+      // Audio and a spoken entry that has gone on were started again by the deck itself; only "the entry before this one" is left to do.
+      if (remoteAudio || previousRestartsCurrent(l.block, l.seconds)) { this.director.previous({ block: l.block, seconds: l.seconds, isRemoteAudio: remoteAudio }); return; }
+      const how = this.director.previous({ block: l.block, seconds: l.seconds, isRemoteAudio: false });
+      if (how === 'restart') { const it = this.known.get(air.id); if (it) void this.deck.play(it); }
     }
   }
 
@@ -241,6 +259,8 @@ export class RadioRuntime {
     if (!this.inPump) void this.pump();
   }
   private inPump = false;
+  /** Clips the listener kept listening to: the episode went on past the clip's end. */
+  private kept = new Set<string>();
 
   private async startEntry(e: Entry, st: DeckState): Promise<void> {
     if (st.item === e.id) return;                               // the deck is already playing it
@@ -297,7 +317,30 @@ export class RadioRuntime {
   // ---- restart and sign-out ----
 
   /** The sheet from the runtime's own file. Nothing plays. */
-  async restore(): Promise<void> { await this.store.restore(); }
+  async restore(): Promise<void> {
+    let st: DeckState | undefined;
+    try { st = await this.deck.state(); } catch { /* no deck yet: the entry on air is closed as interrupted */ }
+    await this.store.restore((store) => { if (st) this.recover(store, st); });
+    if (st && this.lastSeq > st.acked) { try { await this.deck.ack(this.lastSeq); } catch { /* acknowledged at the next pump */ } }
+  }
+
+  /** At launch: the deck's journal outlived the process, and it says what happened while shared code was not running. An entry the deck began and finished is aired and ended on the sheet
+   *  with the deck's own verdict and time before anything closes the on-air entry as interrupted; so a finished entry does not play again, and a verdict heard is kept. */
+  private recover(store: RunSheetStore, st: DeckState): void {
+    const lines = st.journal.filter((l) => l.seq > this.lastSeq).sort((a, b) => a.seq - b.seq);
+    for (const l of lines) {
+      if (l.type === 'started') {
+        if (!store.onAir() && store.ahead(1)[0]?.id === l.item) store.airedOnAir(l.item);
+      } else if (l.type === 'ended') {
+        const air = store.onAir();
+        if (!air || air.id !== l.item) continue;
+        const report: AirReport = { block: l.block, seconds: l.seconds, at: l.at };
+        if (l.end === 'finished' && l.rendered) store.airedEnded(l.item, 'heard', 'finished', report);
+        else if (l.end === 'failed' && l.reason !== 'interrupted by a restart') store.airedEnded(l.item, 'skipped', 'failed', NO_REPORT, l.reason);
+      }
+    }
+    if (lines.length > 0) this.lastSeq = lines[lines.length - 1].seq;
+  }
 
   /** Sign-out: what was on air stops, the deck forgets, the sheet and its file go. A line for the old account that arrives later does nothing. */
   async signOut(): Promise<void> {
@@ -305,7 +348,7 @@ export class RadioRuntime {
     this.director.stopAll(this.report());
     this.pendingStarts = []; this.known.clear();
     try { await this.deck.act('stop'); } catch { /* the deck is gone */ }
-    if (this.store.poster) await this.store.settlePending(1500);          // the `left` report reaches the computer while the old key is still held; what is not answered by then is dropped, never sent under a later account
+    if (this.store.poster) await this.store.settlePending(3000);          // the `left` report reaches the computer while the old key is still held; what is not answered by then is dropped, never sent under a later account
     await this.store.wipe();
     this.facts = NO_FACTS; this.deckState = undefined;
     this.onChange?.();

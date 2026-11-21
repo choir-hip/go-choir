@@ -76,6 +76,7 @@ describe('pending ops and posting', () => {
     const mem = memory();
     const s = new RunSheetStore({ storage: mem });
     const o = opened(s, ['d-1']);
+    await s.save();
     const s2 = new RunSheetStore({ storage: mem });
     await s2.restore();
     expect(s2.onAir()).toBeUndefined();
@@ -137,9 +138,10 @@ describe('pending ops and posting', () => {
 
 describe('the route poster', () => {
   const err = (status: number) => Object.assign(new Error(`x answered ${status}`), { status });
-  test('404, 501, 429 and 5xx are not yet; another 4xx is answered and not retried; a transport error is offline', async () => {
+  test('404, 501, 429, 5xx, 403, 408 and 409 are not yet; only 400, 413 and 422 are answered and not retried; a transport error is offline', async () => {
     for (const st of [404, 501, 429, 503, 500]) expect((await routePoster(async () => { throw err(st); }).post([], 0)).kind).toBe('notYet');
     expect((await routePoster(async () => { throw err(422); }).post([], 0)).kind).toBe('answered');
+    for (const st of [403, 408, 409, 401]) expect((await routePoster(async () => { throw err(st); }).post([], 0)).kind).toBe('notYet');
     expect((await routePoster(async () => { throw new Error('network'); }).post([], 0)).kind).toBe('offline');
   });
   test('an answer with a sheet_epoch is answeredEpoch; the epoch is sent only when held', async () => {
@@ -325,5 +327,88 @@ describe('the server\'s bounds', () => {
     const s = new RunSheetStore({ home: '/Users/someone/Library', tmp: '/private/var/tmp/x' });
     const e = paperStory('r', 'T'); e.source = { ref: 'file:///Users/someone/Library/a.mp3', label: 'x' };
     expect(s.place(e, 'end').dropped).toBe('local_path');
+  });
+});
+
+// The review's findings on the red poster (2026-11-21), each written to fail first.
+const op = (id: string): Op => ({ op_id: id, by: 'listener', op: 'remove', id: 'x', base_version: 0 });
+describe('what a refusal drops', () => {
+  const err = (status: number) => Object.assign(new Error(`x answered ${status}`), { status });
+  test('a 400 for a batch is sent again one op at a time: only the op the server refuses is dropped', async () => {
+    const seen: string[][] = [];
+    const p = routePoster(async (_path, o) => {
+      const ops = (o?.body as { ops: Op[] }).ops; seen.push(ops.map((x) => x.op_id));
+      if (ops.some((x) => x.op_id === 'bad')) throw err(400);
+      return { body: { results: ops.map((x) => ({ op_id: x.op_id, applied: true, version: 1 })) } };
+    });
+    const out = await p.post([op('a'), op('bad'), op('c')], 0);
+    expect(out.kind).toBe('answered');
+    const r = (out as { results: { op_id: string; applied: boolean }[] }).results;
+    expect(r.map((x) => [x.op_id, x.applied])).toEqual([['a', true], ['bad', false], ['c', true]]);
+    expect(seen).toEqual([['a', 'bad', 'c'], ['a'], ['bad'], ['c']]);
+  });
+  test('a 413 for one op drops that op; a route that goes quiet while isolating leaves the whole batch pending', async () => {
+    expect((await routePoster(async () => { throw err(413); }).post([op('a')], 0)).kind).toBe('answered');
+    let n = 0;
+    const p = routePoster(async (_p, o) => { const ops = (o?.body as { ops: Op[] }).ops; if (ops.length > 1) throw err(400); if (++n === 2) throw new Error('network'); return { body: { results: [{ op_id: ops[0].op_id, applied: true }] } }; });
+    expect((await p.post([op('a'), op('b')], 0)).kind).toBe('offline');
+  });
+  test('a batch made under an account that has moved on is never sent', async () => {
+    let called = 0, g = 2;
+    const p = routePoster(async () => { called++; return { body: {} }; }, () => g);
+    expect((await p.post([op('a')], 0, 1)).kind).toBe('offline'); expect(called).toBe(0);
+    g = 1; expect((await p.post([op('a')], 0, 1)).kind).toBe('answered'); expect(called).toBe(1);
+  });
+  test('the request carries the account generation it was made under', async () => {
+    let world: number | undefined;
+    await routePoster(async (_p, o) => { world = o?.world; return { body: {} }; }).post([op('a')], 0, 5);
+    expect(world).toBe(5);
+  });
+});
+
+describe('a sign-out while an answer is on its way', () => {
+  const gate = () => { let go!: () => void; const p = new Promise<void>((r) => { go = r; }); return { p, go }; };
+  test('a repaired sheet that arrives after the wipe is never written for the next account', async () => {
+    const mem = memory(), g = gate();
+    const theirs = { ...emptySheet(), sheet_epoch: 7, entries: [story('d-old')] };
+    const poster: Poster = { post: async () => ({ kind: 'answeredEpoch', results: [], epoch: 7 }), fetchSheet: async () => { await g.p; return theirs; } };
+    const s = new RunSheetStore({ storage: mem, poster });
+    s.place(story('l-1', { placed_by: 'listener' }), 'end');
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));       // the post answered; the repaired sheet is being fetched
+    await s.wipe();
+    g.go(); await s.flushTask;
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(s.sheet.entries).toEqual([]); expect(s.sheetEpoch).toBe(0); expect(mem.text).toBeUndefined();
+  });
+  test('a save that was in flight lands before the wipe removes the file, never after it', async () => {
+    const g = gate(); const mem = memory();
+    const slow: Storage & { text?: string } = { ...mem, write: async (t) => { await g.p; mem.text = t; slow.text = t; }, remove: async () => { mem.text = undefined; slow.text = undefined; } };
+    const s = new RunSheetStore({ storage: slow });
+    s.place(story('l-1', { placed_by: 'listener' }), 'end');        // a save is started and waits
+    const wiped = s.wipe();
+    g.go(); await wiped;
+    expect(mem.text).toBeUndefined();
+  });
+  test('an answer for a batch made under an older account generation changes nothing', async () => {
+    const g = gate(); let gen = 1;
+    const poster: Poster = { post: async () => { await g.p; return { kind: 'answered', results: [] }; }, fetchSheet: async () => undefined };
+    const s = new RunSheetStore({ poster, generation: () => gen });
+    s.place(story('l-1', { placed_by: 'listener' }), 'end');
+    gen = 2; g.go(); await s.flushTask;
+    expect(s.pending.length).toBe(1);                                  // not marked answered under the wrong account
+  });
+});
+
+describe('the deck\'s own time and ids', () => {
+  test('a verdict is stamped with the time the deck gave, not the clock of the pump', () => {
+    const s = new RunSheetStore({ now: () => new Date('2023-11-14T07:00:00Z') });
+    const id = opened(s, ['d-a']);
+    s.airedEnded(id, 'heard', 'finished', { block: 1, seconds: 4, at: '2023-11-14T03:00:00.250Z' });
+    expect(s.entry(id)?.ended?.at).toBe('2023-11-14T03:00:00Z');
+  });
+  test('a minted id carries at least 96 random bits and is valid', () => {
+    const s = new RunSheetStore();
+    const a = s.mintOpId(), b = s.mintOpId();
+    expect(a).not.toBe(b); expect(a.length).toBeGreaterThanOrEqual(2 + 24); expect(a).toMatch(/^p-[0-9a-f]{24}$/);
   });
 });

@@ -37,9 +37,11 @@ public struct PodcastClip: Sendable, Equatable {
     public var isRelocatable: Bool { fingerprint?.isUsable ?? false }
 
     public var seconds: Double { end - start }
+    /// The id the podcast lane keys the episode by (its feed and guid, or its audio address when it has none): what the queue's "Open episode" and the resume position read (shared code: podcast-model.ts `episodeKey`). nil without a feed.
+    public var episodeKey: String? { feedURL.map { PodcastKey.episode(feed: $0.absoluteString, id: episodeGUID.isEmpty ? PodcastKey.webURL(audioURL.absoluteString) : episodeGUID) } }
     /// The same episode from its start: no clip times (a file whose ads moved the range).
     public var episodeEntry: RunSheetEntry {
-        .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: nil, end: nil, episodeId: episodeGUID.isEmpty ? nil : episodeGUID))
+        .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: nil, end: nil, episodeId: episodeKey))
     }
     /// How far the file's length may differ from the transcribed file's before the range is distrusted.
     public static let durationTolerance = 3.0
@@ -65,7 +67,7 @@ public struct PodcastClip: Sendable, Equatable {
 
     /// What the run sheet plays: the episode from `start`, stopping at `end` (Keep listening clears the end).
     public var clipEntry: RunSheetEntry {
-        .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: start, end: end, episodeId: episodeGUID.isEmpty ? nil : episodeGUID), clipID: clipID)
+        .audio(RunSheetAudio(url: audioURL, title: episodeTitle.isEmpty ? show : episodeTitle, show: show, start: start, end: end, episodeId: episodeKey), clipID: clipID)
     }
 
     /// "56 s", "1 min 5 s": the length the reader is told.

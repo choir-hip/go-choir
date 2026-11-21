@@ -2,8 +2,8 @@ import XCTest
 @testable import AutoradioKit
 
 // Lane autoradio-joins. The seams the six lanes left open. Failure list (numbers are in the test names):
-// J1 a clip in the queue can open its episode: the page opens at the clip's start; an episode with no guid is found by its audio address;
-//    audio the phone cannot place (no feed known) offers nothing (no dead button); the queue says so (`canOpenEpisode`)
+// J1 a clip in the queue can open its episode (shared code: radio-bridge.ts `openEpisodeOf`): the entry carries the podcast lane's key (feed and guid, or the audio address when
+//    there is no guid); a clip with no feed carries none, so the queue offers no dead button (`canOpenEpisode`)
 // J2 a typed .pdf or .epub: the document is imported then its page opens; a failed import says why in plain words and opens nothing
 // J3 Hear it on the article page: rows for the story's clips and nothing when it has none
 // J4 Up next shows up to three of the DJ's coming segments after the queued items, marked as the programme's, not removable
@@ -18,56 +18,16 @@ private func clipRow(_ id: String, guid: String = "g", feed: String? = "https://
 }
 private func hex(_ n: Int) -> String { "clip-" + String(format: "%012x", n) }
 
-@MainActor
-final class JoinOpenEpisodeTests: XCTestCase {
-    func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
-    func audio(_ n: Int, ep: String?, start: Double? = 10, end: Double? = 70) -> RunSheetAudio {
-        RunSheetAudio(url: URL(string: "https://example.test/\(hex(n)).mp3")!, title: "Episode", show: "Show", start: start, end: end, episodeId: ep)
-    }
-
-    func testJ1_AClipOpensItsEpisodeAtItsStart() {
-        let s = store([clipRow(hex(1), guid: "g1")])
-        let t = PodcastBridge.target(of: audio(1, ep: "g1"), store: s)
-        XCTAssertEqual(t?.episodeId, "g1"); XCTAssertEqual(t?.feedURL.absoluteString, "https://example.test/feed.xml"); XCTAssertEqual(t?.at, 10)
-        XCTAssertEqual(t?.enclosureURL.lastPathComponent, hex(1) + ".mp3")
-    }
-    func testJ1_AClipWithNoGuidIsFoundByItsAudioAndKeysOnTheAudioAddress() {
-        let s = store([clipRow(hex(2), guid: "")])
-        let t = PodcastBridge.target(of: audio(2, ep: nil), store: s)
-        XCTAssertEqual(t?.episodeId, nil); XCTAssertEqual(t?.feedURL.absoluteString, "https://example.test/feed.xml")
-    }
-    func testJ1_APodcastLaneKeyNeedsNoStore() {
-        let key = PodcastKey.episode(feed: "https://f.test/rss", id: "guid-9")
-        let t = PodcastBridge.target(of: audio(3, ep: key, start: nil, end: nil), store: ClipStore())
-        XCTAssertEqual(t?.episodeId, "guid-9"); XCTAssertEqual(t?.feedURL.absoluteString, "https://f.test/rss"); XCTAssertEqual(t?.at, 0)
-    }
-    func testJ1_AudioThePhoneCannotPlaceOffersNothing() {
-        XCTAssertNil(PodcastBridge.target(of: audio(4, ep: "zz"), store: ClipStore()))
-        XCTAssertNil(PodcastBridge.target(of: nil, store: ClipStore()))
-        let noFeed = store([clipRow(hex(5), feed: nil)])
-        XCTAssertNil(PodcastBridge.target(of: audio(5, ep: "g"), store: noFeed))
-    }
-    func testJ1_OpenGoesToTheHookAndSaysWhetherItDid() {
-        let s = store([clipRow(hex(1), guid: "g1")])
-        var got: (String?, URL?, URL, Double)?
-        let saved = PodcastBridge.open
-        PodcastBridge.open = { got = ($0, $1, $2, $3) }
-        defer { PodcastBridge.open = saved }
-        XCTAssertTrue(PodcastBridge.openEpisode(of: audio(1, ep: "g1"), store: s))
-        XCTAssertEqual(got?.0, "g1"); XCTAssertEqual(got?.3, 10)
-        got = nil
-        XCTAssertFalse(PodcastBridge.openEpisode(of: audio(9, ep: "nope"), store: ClipStore()))
-        XCTAssertNil(got)
-        PodcastBridge.open = nil
-        XCTAssertFalse(PodcastBridge.openEpisode(of: audio(1, ep: "g1"), store: s), "with no hook there is no episode page to open")
-    }
-
-}
-
 // MARK: J3 Hear it on the article page, J6 Clips on a show page
 
 @MainActor
 final class JoinHearItTests: XCTestCase {
+    func testJ1_AClipEntryCarriesThePodcastLanesEpisodeKey() {
+        let withGuid = PodcastClip.parse(clipRow(hex(1), guid: "g1")), noGuid = PodcastClip.parse(clipRow(hex(2), guid: "")), noFeed = PodcastClip.parse(clipRow(hex(3), feed: nil))
+        XCTAssertEqual(withGuid?.clipEntry.audioSpec?.episodeId, PodcastKey.episode(feed: "https://example.test/feed.xml", id: "g1"))
+        XCTAssertEqual(noGuid?.episodeEntry.audioSpec?.episodeId, PodcastKey.episode(feed: "https://example.test/feed.xml", id: PodcastKey.webURL("https://example.test/\(hex(2)).mp3")))
+        XCTAssertNil(noFeed?.clipEntry.audioSpec?.episodeId)
+    }
     func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
 
 

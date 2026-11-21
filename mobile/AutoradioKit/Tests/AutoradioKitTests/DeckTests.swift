@@ -138,11 +138,14 @@ final class DeckTests: XCTestCase {
     }
 
     // 5
-    func test05_HeldItemsPlayOnAtMostThreeAndInOrder() async {
+    func test05_HeldItemsPlayOnUpToTheSheetsBoundAndInOrder() async {
         let (d, e) = makeDeck()
         _ = await d.play(speech("a"))
         d.enqueue(speech("b")); d.enqueue(speech("c")); d.enqueue(speech("d")); d.enqueue(speech("e"))
-        XCTAssertEqual(d.snapshot().held, ["b", "c", "d"], "a fourth is refused")
+        XCTAssertEqual(d.snapshot().held, ["b", "c", "d", "e"], "every ready entry is held")
+        for n in 0..<(Deck.heldMax + 5) { d.enqueue(speech("m\(n)")) }
+        XCTAssertEqual(d.snapshot().held.count, Deck.heldMax, "one past the sheet's bound is refused")
+        d.trim(keeping: 0); d.enqueue(speech("b")); d.enqueue(speech("c"))
         d.enqueue(speech("x"), at: 1)
         XCTAssertEqual(d.snapshot().held, ["b", "x"], "the held items from the place on are dropped first")
         d.enqueue(speech("b"))
@@ -151,6 +154,41 @@ final class DeckTests: XCTestCase {
         d.soundBegan(); d.documentEnded(id: "deck:a", anyPlayed: true); await settle()
         XCTAssertEqual(d.current?.id, "x"); XCTAssertEqual(e.speaks.last, "speak:x")
         XCTAssertEqual(ends(d), ["a:finished:true"])
+    }
+
+    // the lock screen acts on the deck at once; the journal says so first, with where the item was
+    func test23_TheLockScreensNextSkipsAndPlaysOnAtOnceAndIsJournalledFirstWithThePlace() async {
+        let (d, e) = makeDeck()
+        _ = await d.play(speech("a")); d.enqueue(speech("b")); d.enqueue(speech("c"))
+        e.report = (block: 3, final: 5, seconds: 11)
+        await d.remoteNext(); await settle()
+        XCTAssertEqual(d.current?.id, "b"); XCTAssertEqual(e.speaks.last, "speak:b"); XCTAssertEqual(d.snapshot().held, ["c"])
+        let l = d.journal.lines.filter { $0.type == "remote" || $0.type == "ended" }
+        XCTAssertEqual(l.first?.type, "remote"); XCTAssertEqual(l.first?.command, "next"); XCTAssertEqual(l.first?.item, "a")
+        XCTAssertEqual(l.first?.block, 3); XCTAssertEqual(l.first?.seconds, 11)
+        XCTAssertEqual(l.last?.end, "skipped")
+    }
+    func test24_TheLockScreensPreviousRestartsAudioAndAnEntryThatHasGoneOnAndLeavesAJustBegunOneToSharedCode() async {
+        let (d, e) = makeDeck()
+        var a = DeckItem(id: "au", kind: "audio"); a.url = "https://x/a.mp3"; a.start = 12
+        _ = await d.play(a); e.elapsed = 40
+        d.remotePrevious(); XCTAssertTrue(e.log.contains("seekTo:12.0"), "audio goes back to where it began")
+        _ = await d.play(speech("s")); e.report = (block: 2, final: 5, seconds: 9)
+        d.remotePrevious(); XCTAssertEqual(e.log.filter { $0 == "restart" }.count, 1)
+        _ = await d.play(speech("t")); e.report = (block: 0, final: 5, seconds: 1)
+        d.remotePrevious(); XCTAssertEqual(e.log.filter { $0 == "restart" }.count, 1, "an entry just begun: the entry before it is shared code's")
+        XCTAssertEqual(d.journal.lines.filter { $0.command == "previous" }.count, 3)
+    }
+    func test25_ARunDryListHasALineAndAudioAndHeardSpeechJournalSounding() async {
+        let (d, e) = makeDeck()
+        _ = await d.play(speech("a")); e.rendersSound = true
+        _ = d.snapshot(); _ = d.snapshot()
+        XCTAssertEqual(d.journal.lines.filter { $0.type == "sounding" }.count, 1, "written once, when the engine renders")
+        d.documentEnded(id: "deck:a", anyPlayed: true); await settle()
+        XCTAssertTrue(d.journal.lines.contains { $0.command == "held-dry" }, "nothing held to play on")
+        var au = DeckItem(id: "au", kind: "audio"); au.url = "https://x/a.mp3"
+        _ = await d.play(au)
+        XCTAssertEqual(d.journal.lines.filter { $0.type == "sounding" && $0.item == "au" }.count, 1)
     }
 
     // 6

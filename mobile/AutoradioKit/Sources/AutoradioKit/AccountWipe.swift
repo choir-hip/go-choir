@@ -3,8 +3,9 @@ import Foundation
 // One wipe for everything of the account that sits on the phone. Sign-out calls `run()` once; each store has a `wipe()` (memory and files) and is
 // registered here by name. The order of sign-out (ChoirApp.signOut):
 //  1. playback stops (shared code's run sheet reports the entry on air as `left`);
-//  2. the run sheet gets a moment to post its pending ops with the OLD key still held (radio-runtime.ts); whatever is not
-//     answered by then is DROPPED by the wipe, never sent later: pending ops are never posted under a later account;
+//  2. the run sheet (shared code's store and poster, radio-runtime.ts) posts its pending ops with the OLD key still held, up to three seconds, and tells native when it is done
+//     (`RadioBridge.waitSignedOut`, five seconds at most); whatever is not answered by then is DROPPED by the wipe, never sent later, and an answer that arrives after the wipe
+//     is the old account's and is thrown away: pending ops are never posted, and no sheet is written, under a later account;
 //  3. the local key goes, then this wipe runs (ChoirSignIn.signOut);
 //  4. the revoke is sent in the background with the old key held only for that one call.
 

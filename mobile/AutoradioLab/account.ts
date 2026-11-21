@@ -1,7 +1,7 @@
 // Sign-out, orchestrated from shared code. The Account screen's "Sign out" sends `accountSignOut` (app.ts), which:
 //   1. asks the native side to sign out: ONE native call, `{op: 'signOut'}` on the app module (modules/apple/ModelsEntry.swift). Only native
 //      code can meet it: the sign-in key is a Keychain item the Swift sign-in wrote, and the Swift stores (AccountWipe) still hold the voice's
-//      and the not-yet-moved pages' data. The native side stops playback, lets the Swift run sheet post what it holds with the OLD key,
+//      and the not-yet-moved pages' data. The native side stops playback, tells shared code's run sheet to post what it holds with the OLD key (and waits for its answer, five seconds at most),
 //      deletes the key, runs its own wipe, and answers `{done: true}` when it has finished.
 //   2. only then wipes every store the shared modules keep (WIPES below), each on its own: one that throws is named and does not stop the rest.
 // Why this order and this direction: Exact has no call from native code into `app.ts` (the only ways back are `context.changed`, which asks a

@@ -22,9 +22,9 @@ export function cutBytes(s: string, n: number): string {
 export const oneLine = (s: string): string => s.split(/\s+/).filter((x) => x !== '').join(' ');
 export const cleanTitle = (s: string): string => cutBytes(oneLine(s), Bounds.maxTitleBytes);
 
-/** `p-` (phone), `l-` (listener) or `d-` plus eight hex characters: placer-minted, never reused. */
+/** `p-` (phone), `l-` (listener) or `d-` plus twenty-four hex characters (96 bits): placer-minted, never reused. */
 export function mintId(prefix: string): string {
-  const b = new Uint8Array(4);
+  const b = new Uint8Array(12);
   crypto.getRandomValues(b);
   return prefix + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }

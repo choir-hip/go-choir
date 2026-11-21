@@ -13,6 +13,7 @@ public final class RadioBridge: @unchecked Sendable {
     private var queueJSON: Data?
     private var onAirJSON: Data?
     private var sheetJSON: Data?
+    private var signedOutAck = false
     /// Set by the app module: asks shared code to look again (touches `radioNote`).
     public var changed: @Sendable () -> Void = {}
 
@@ -20,7 +21,7 @@ public final class RadioBridge: @unchecked Sendable {
     public func send(_ verb: String, _ fields: [String: Any] = [:]) {
         var m = fields; m["verb"] = verb
         guard let d = try? JSONSerialization.data(withJSONObject: m), let s = String(data: d, encoding: .utf8) else { return }
-        lock.lock(); inbox.append(s); lock.unlock()
+        lock.lock(); if verb == "stopAll" { signedOutAck = false }; inbox.append(s); lock.unlock()
         changed()
     }
     /// Put an entry on the run sheet: `mode` is now, next or add. `words`: what a page's own text said, held for the entry (the entry itself is a pointer).
@@ -29,6 +30,18 @@ public final class RadioBridge: @unchecked Sendable {
         var f: [String: Any] = ["entry": e, "mode": mode]
         if let words { f["words"] = ["title": words.title, "paragraphs": words.paragraphs] }
         send("place", f)
+    }
+    /// Shared code says its sign-out is done: the `left` report went (or the deadline passed), the sheet and its file are gone (`radioSet` with `signedOut`).
+    public func markSignedOut() { lock.lock(); signedOutAck = true; lock.unlock() }
+    /// Sign-out waits here, with the old key still held, until shared code says it is done or `seconds` pass; whichever comes first. Returns whether shared code answered.
+    @discardableResult public func waitSignedOut(seconds: Double) async -> Bool {
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            lock.lock(); let done = signedOutAck; lock.unlock()
+            if done { return true }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        lock.lock(); defer { lock.unlock() }; return signedOutAck
     }
     /// What the pump takes: every message not yet read.
     public func drain() -> [String] { lock.lock(); defer { lock.unlock() }; let m = inbox; inbox = []; return m }

@@ -10,14 +10,16 @@ import { Writer, phoneOpening, PROGRAMME_PATH } from './radio-writer.ts';
 import { applyTurnOps, turnQueueJSON } from './voice-queue.ts';
 import { routePoster, signedInRequester } from './runsheet-store.ts';
 import { authedJSON } from './api.ts';
-import { audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory, forgetLongURLs } from './runsheet-entries.ts';
+import { audioSpec, audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory, forgetLongURLs } from './runsheet-entries.ts';
 import { offlineStories } from './content-run.ts';
 import { loadReader } from './reader.ts';
 import { sentenceTexts } from './reader-parse.ts';
-import { fileResolve } from './files.ts';
+import { fileOpen } from './files.ts';
 import { perform } from './radio-model.ts';
 import { htmlToText } from './mail-model.ts';
-import { parseList, FRONT_LIMIT } from './paper-model.ts';
+import { parseList, FRONT_LIMIT, type Story } from './paper-model.ts';
+import { listing } from './paper.ts';
+import { parseEpisodeKey, episodeAddress } from './podcast-model.ts';
 import { loadKept, takesOf, type Kept, type Take } from './takes.ts';
 import { seamNet } from './takes.ts';
 import { clock, now as clockNow } from './clock.ts';
@@ -32,7 +34,7 @@ const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+type Radio = { rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[] }; tick: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 let restored: Promise<void> | undefined;
 
@@ -93,14 +95,15 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
       try { await authedToFile(`/api/platform/takes/${encodeURIComponent(id)}/audio`, dest, storage as never); return { url: dest }; } catch { return undefined; }
     },
     file: async (address) => {
-      const r = await fileResolve({ address, title: '' }, storage as never);
-      return r.status === 'ready' && r.target.startsWith('app:/') ? { url: r.target } : undefined;
+      // Files audio is brought to the phone by the Files page's own open (the cache folder `app:/cache/files/<key>/<name>`); the deck turns that address into the file.
+      const info = await fileOpen({ address }, storage as never);
+      return info.status === 'ready' && info.local.startsWith('app:/cache/files/') ? { url: info.local } : undefined;
     },
   };
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
+  const state: Radio = { rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [] }, tick: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: nativeDeck(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage),
     native: { facts: () => readFacts(state) },
@@ -108,10 +111,18 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
   });
   state.rt = rt;
   const front = async (): Promise<unknown> => {
-    const body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body;
-    const stories = parseList(body), now = clock.ms;
+    let body: unknown, stories: Story[];
+    try { body = (await getJSON('/api/platform/publications/front', { limit: FRONT_LIMIT })).body; stories = parseList(body); }
+    catch (e) {
+      // Offline: the radio opens from the paper's last good front list (paper.ts keeps it for an offline start) and the desk is not asked; the error stands for the caller.
+      stories = (await listing('', storage as never)).stories;
+      if (stories.length === 0) throw e;
+      body = undefined;
+    }
+    const now = clock.ms;
     state.front = { at: now / 1000, published: {}, versions: {}, lines: stories.slice(0, 10).map((s) => ({ title: s.title, dek: s.dek })) };
     for (const s of stories) { if (s.updated !== null) state.front.published[s.route] = s.updated / 1000; state.front.versions[s.route] = s.versions; }
+    if (body === undefined) throw new Error('offline: the last front page');
     return body;
   };
   state.fetchFront = front;
@@ -125,6 +136,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
     takes: async () => {
       let takes: Take[] = []; let kept: Kept = await loadKept(storage as never);
       try { takes = takesOf((await seamNet('GET', '/api/platform/takes', { query: { limit: 50 } })).json); } catch { /* none offered */ }
+      state.takeList = takes;                                      // what the page shows of a take on air (its transcript and its record)
       return { takes, kept };
     },
     edition: async () => '',
@@ -147,10 +159,13 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
 /** The radio of this process: made once, its sheet restored from its own file (nothing plays). */
 export async function getRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
   if (!radio) radio = await makeRadio(storage, native);
-  await readFacts(radio);                                   // the device's time first: nothing below may run on a stale clock
-  if (!restored) { const r = radio; restored = r.rt.restore(); }
-  await restored;
-  return radio;
+  const r = radio;                                          // held locally: a sign-out (`wipeRadio`) clears the module's variable at any await below
+  await readFacts(r);                                       // the device's time first: nothing below may run on a stale clock
+  if (radio !== r) return getRadio(storage, native);       // signed out meanwhile: this radio is the old account's
+  if (!restored) restored = r.rt.restore();
+  const done = restored;
+  await done;
+  return radio === r ? r : getRadio(storage, native);
 }
 
 // ---- the entries the screens ask for ----
@@ -215,8 +230,13 @@ async function handle(r: Radio, text: string): Promise<void> {
   switch (m.verb) {
     case 'turnOps': applyTurnOps(r.rt, str(m.json)); break;
     case 'turnEnded': await r.rt.turnEnded(); break;
-    case 'level': if (m.value === 'pause') await r.rt.act('pause'); else if (m.value === 'play') await r.rt.act('resume'); break;
-    case 'stopAll': await r.rt.signOut(); break;
+    case 'level': break;      // the voice's yield acted on the deck natively at once (ChoirApp.swift `onLevel`); its lines are in the journal
+    case 'stopAll': {
+      await r.rt.signOut();
+      const later = nativeLater();                                            // native waits for this before the key goes (ChoirApp.signOut): the wait is for the answer, not a guess
+      if (later) { try { await later({ op: 'radioSet', signedOut: true }); } catch { /* native stops waiting at its deadline */ } }
+      break;
+    }
     case 'openWeb': r.web.url = str(m.url); break;
     case 'closeWeb': r.web.url = ''; break;
     case 'place': {
@@ -250,12 +270,23 @@ export async function queueAct(storage: Store | undefined, native: NativeReader 
     case 'playAt': { const i = Number(arg); if (Number.isInteger(i)) rt.playUpcoming(i); break; }
     case 'skip': rt.skip(); break;
     case 'clear': rt.clear(); break;
+    case 'keep': await rt.keepListening(); break;
+    case 'openEpisode': await openEpisodeOf(r); break;
     case 'openWeb': r.web.url = arg; break;
     case 'closeWeb': r.web.url = ''; break;
     default: break;
   }
   await rt.pump();
   return queueView(storage, native);
+}
+
+/** "Open episode": the page of the episode on air, at the clip's time. Opening a page is the shell's (native `openPage`); shared code names the address. */
+async function openEpisodeOf(r: Radio): Promise<void> {
+  const air = r.rt.store.onAir(), spec = air ? audioSpec(air) : undefined, k = spec?.episode_id ? parseEpisodeKey(spec.episode_id) : null;
+  const later = nativeLater();
+  if (!spec || !k || !later) return;
+  const address = episodeAddress(k.feed, k.id, { enclosure: spec.url, start: spec.start ?? null, title: spec.title, show: spec.show });
+  try { await later({ op: 'openPage', address, title: 'Episode' }); } catch { /* the page did not open */ }
 }
 
 async function radioPlayPauseOf(r: Radio): Promise<void> {
@@ -342,13 +373,15 @@ export async function radioPageFacts(storage: Store | undefined, native: NativeR
   if (later) { try { const o = obj(await later({ op: 'radioFacts', peek: true })); sentences = Array.isArray(o.sentences) ? o.sentences.filter((x): x is string => typeof x === 'string') : []; sentenceIndex = num(o.sentenceIndex); progress = num(o.progress); } catch { /* none */ } }
   const sheet = { ...r.rt.store.sheet, applied_ops: [] };
   const prog = r.rt.programme(), route = prog.route;
+  const airEntry = r.rt.store.onAir(), takeRef = airEntry?.kind === 'take' && airEntry.source?.ref.startsWith('take:') ? airEntry.source.ref.slice(5) : '';
+  const take = takeRef !== '' ? r.takeList.find((t) => t.takeID === takeRef) : undefined;
   const published = route !== '' ? r.front.published[route] ?? 0 : 0;
   const versions = Object.entries(r.front.versions);
   return {
     at: clock.ms / 1000, sheet: JSON.stringify(sheet), playing: v.playing, sentences, sentenceIndex, progress: v.audio ? v.fraction : progress,
     remoteAudio: v.audio, remoteElapsed: v.elapsed, remoteDuration: v.duration, wants: r.rt.director.wants, message: v.message, notice: v.notice, writing: v.writing, dry: v.dry,
     airTitle: prog.title, airRoute: route, publishedAt: published, versionRoutes: versions.map(([k]) => k), versionNumbers: versions.map(([, n]) => n),
-    stale: r.rt.store.ahead().filter((e) => r.rt.store.isStale(e)).map((e) => e.id), takeTranscript: '', takeRecord: '',
+    stale: r.rt.store.ahead().filter((e) => r.rt.store.isStale(e)).map((e) => e.id), takeTranscript: take?.transcript ?? '', takeRecord: take?.record?.summary ?? '',
   };
 }
 

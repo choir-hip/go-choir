@@ -457,6 +457,57 @@ view real-66-bar-on-page 600
 step logs
 run_drive bar light "" --touch platform
 
+# ---- 3f4. BACKGROUND drive (the deck plays on with the app not in front): the radio starts by itself (a signed-in computer, onboarding done), the app is sent to the background (the Home screen is launched over it) and
+# left for BG_SECONDS; the deck's own journal (the app's file `deck-journal.json`, written by native code whatever shared code is doing) is then read. Checks that can fail: at least five entries STARTED after the app left
+# the front, each begun after the one before ended `finished` with sound (the order of the sheet), all with the app not frontmost. What this cannot show: the simulator does not suspend a backgrounded app (Exact's own
+# contract says suspension is qualified on a real host, outside a drive: docs/contract-for-agents.md "frozen"), so a pass here does NOT show that shared code can be frozen and the radio still plays on; it shows the deck's
+# journal is written and ordered while backgrounded. A lock screen's next cannot be pressed from a script: the check below counts `remote next` lines and says "not driven" when there are none. Only the owner's locked phone
+# shows the radio playing five entries through with the screen off, and a real next from the lock screen. The drive refuses to pass when the app did not survive the drive (no new lines), instead of passing empty.
+BG_SECONDS="${BG_SECONDS:-240}"
+step "clock data"; wait_ 8000
+view real-71-radio-starts 8000
+step logs
+run_drive background light "" --touch platform
+BGCONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
+BGJ="$BGCONT/Library/Application Support/Autoradio/deck-journal.json"
+BGT0=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+SIM launch "$EXACT_SIM" com.apple.springboard >/dev/null 2>&1           # the Home screen over the app: it is not frontmost
+sleep "$BG_SECONDS"
+BGRES=$(python3 - "$BGJ" "$BGT0" <<'PYEOF'
+import json, sys
+path, t0 = sys.argv[1], sys.argv[2]
+try:
+    raw = json.load(open(path))
+except Exception as e:
+    print("unreadable", e); sys.exit(0)
+lines = []
+def walk(v):
+    if isinstance(v, dict):
+        if "seq" in v and "type" in v: lines.append(v)
+        else:
+            for x in v.values(): walk(x)
+    elif isinstance(v, list):
+        for x in v: walk(x)
+walk(raw)
+lines.sort(key=lambda l: l["seq"])
+after = [l for l in lines if l.get("at", "") >= t0]
+started = [l for l in after if l["type"] == "started"]
+order_ok = True; prev_end = None
+for l in after:
+    if l["type"] == "ended": prev_end = l
+    if l["type"] == "started" and prev_end is not None and not (prev_end.get("end") == "finished" and prev_end.get("rendered")): order_ok = False
+remote = [l for l in after if l["type"] == "remote" and l.get("command") == "next"]
+dry = [l for l in after if l.get("command") == "held-dry"]
+print("ok" if True else "", len(started), "order" if order_ok else "disorder", len(remote), len(dry))
+PYEOF
+)
+set -- $BGRES
+if [ "$1" = "unreadable" ]; then echo "MISSING: background: the deck's journal could not be read ($BGRES)"; FAILS="$FAILS [background journal]"
+elif [ "${2:-0}" -ge 5 ] && [ "$3" = "order" ]; then echo "ok: background: $2 entries started in order after the app left the front ($BG_SECONDS s); $5 held-dry lines"
+else echo "MISSING: background: needs at least 5 entries started in order after the app left the front; got $2 ($3). If 0: the app did not survive the drive."; FAILS="$FAILS [background entries]"; fi
+if [ "${4:-0}" -gt 0 ]; then echo "ok: background: a remote next acted ($4 lines)"; else echo "not driven: background: no remote next (a script cannot press the lock screen); only the owner's phone shows it"; fi
+SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
+
 # ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
 # Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the wipe marker and the stamp are gone from the app's files.
 step "clock data"; wait_ 5000

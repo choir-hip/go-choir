@@ -28,7 +28,7 @@ export const MAX_BATCH_OPS = 64;
 export const MAX_BATCH_BYTES = 256 * 1024;
 
 /** Where an entry was when it left the air: the server block being spoken (`last_block`) and the seconds into the entry. */
-export type AirReport = { block: number; seconds: number };
+export type AirReport = { block: number; seconds: number; /** When the deck wrote the line (RFC 3339): the verdict is stamped with the deck's time, never the pump's. */ at?: string };
 export const NO_REPORT: AirReport = { block: 0, seconds: 0 };
 
 export type PostOutcome =
@@ -38,7 +38,8 @@ export type PostOutcome =
   | { kind: 'offline' };                             // no network or the computer did not answer: the ops stay pending
 
 export interface Poster {
-  post(ops: Op[], epoch: number): Promise<PostOutcome>;
+  /** `world` is the account generation the batch was made under: a poster refuses (offline) when the account has moved on. */
+  post(ops: Op[], epoch: number, world?: number): Promise<PostOutcome>;
   /** GET /api/autoradio/sheet: the server's whole sheet, or undefined when it cannot be had. */
   fetchSheet(): Promise<Sheet | undefined>;
 }
@@ -46,7 +47,7 @@ export interface Poster {
 /** Where the store keeps itself between launches: a file's text, or nothing. */
 export interface Storage { read(): Promise<string | undefined>; write(text: string): Promise<void>; remove(): Promise<void>; }
 
-export type Requester = (path: string, opts?: { method?: 'GET' | 'POST'; body?: unknown }) => Promise<{ body: unknown }>;
+export type Requester = (path: string, opts?: { method?: 'GET' | 'POST'; body?: unknown; /** the account generation the request is for (api.ts `opts.world`) */ world?: number }) => Promise<{ body: unknown }>;
 const statusOf = (e: unknown): number | undefined => {
   const s = (e as { status?: unknown })?.status;
   if (typeof s === 'number') return s;
@@ -54,22 +55,40 @@ const statusOf = (e: unknown): number | undefined => {
   return m ? Number(m[1]) : undefined;
 };
 
-/** The run sheet route on the listener's computer (signed in: pass `authedJSON`). */
-export function routePoster(request: Requester): Poster {
+/** The run sheet route on the listener's computer (signed in: pass `authedJSON`). `generation` is the account generation now: a batch made under an older one is never sent.
+ *  What a status means: 404/501/503/429/5xx and 403/408/409 and every 4xx not named below are "not yet" (the ops stay pending and are sent again); only a body the server will
+ *  never take (400, 413, 422) drops ops, and for a batch of more than one the ops are sent one at a time first, so only the op the server refuses is dropped. */
+export function routePoster(request: Requester, generation?: () => number): Poster {
+  const send = async (ops: Op[], epoch: number, world?: number): Promise<PostOutcome | { kind: 'refused'; status: number }> => {
+    if (world !== undefined && generation && generation() !== world) return { kind: 'offline' };
+    try {
+      const r = await request('/api/autoradio/sheet/ops', { method: 'POST', body: epoch > 0 ? { ops, sheet_epoch: epoch } : { ops }, ...(world !== undefined ? { world } : {}) });
+      const b = (r.body ?? {}) as { results?: Result[]; sheet_epoch?: number };
+      const results = Array.isArray(b.results) ? b.results : [];
+      if (typeof b.sheet_epoch === 'number' && b.sheet_epoch > 0) return { kind: 'answeredEpoch', results, epoch: b.sheet_epoch };
+      return { kind: 'answered', results };
+    } catch (e) {
+      const st = statusOf(e);
+      if (st === 400 || st === 413 || st === 422) return { kind: 'refused', status: st };
+      if (st !== undefined) return { kind: 'notYet' };     // 404, 5xx, 429, 403, 408, 409 and the rest: the route may take it later
+      return { kind: 'offline' };
+    }
+  };
   return {
-    async post(ops, epoch) {
-      try {
-        const r = await request('/api/autoradio/sheet/ops', { method: 'POST', body: epoch > 0 ? { ops, sheet_epoch: epoch } : { ops } });
-        const b = (r.body ?? {}) as { results?: Result[]; sheet_epoch?: number };
-        const results = Array.isArray(b.results) ? b.results : [];
-        if (typeof b.sheet_epoch === 'number' && b.sheet_epoch > 0) return { kind: 'answeredEpoch', results, epoch: b.sheet_epoch };
-        return { kind: 'answered', results };
-      } catch (e) {
-        const st = statusOf(e);
-        if (st === 404 || st === 501 || st === 503 || st === 429 || (st !== undefined && st >= 500)) return { kind: 'notYet' };
-        if (st !== undefined && st >= 400 && st < 500) return { kind: 'answered', results: [] };   // a body the server refuses will never be accepted: not retried
-        return { kind: 'offline' };
+    async post(ops, epoch, world) {
+      const out = await send(ops, epoch, world);
+      if (out.kind !== 'refused') return out;
+      if (ops.length <= 1) return { kind: 'answered', results: ops.map((o) => ({ op_id: o.op_id, applied: false, dropped: 'refused_' + out.status, version: 0 })) };
+      // One at a time: the op the server refuses is dropped; the rest are taken (an op_id the server already has changes nothing). A route that does not answer leaves the whole batch pending.
+      const results: Result[] = []; let epochOut = 0;
+      for (const op of ops) {
+        const one = await send([op], epoch, world);
+        if (one.kind === 'refused') { results.push({ op_id: op.op_id, applied: false, dropped: 'refused_' + one.status, version: 0 }); continue; }
+        if (one.kind === 'notYet' || one.kind === 'offline') return one;
+        results.push(...one.results);
+        if (one.kind === 'answeredEpoch') epochOut = one.epoch;
       }
+      return epochOut > 0 ? { kind: 'answeredEpoch', results, epoch: epochOut } : { kind: 'answered', results };
     },
     async fetchSheet() {
       try { return decodeSheet((await request('/api/autoradio/sheet')).body); } catch { return undefined; }
@@ -112,6 +131,10 @@ export class RunSheetStore {
   private retry?: ReturnType<typeof setTimeout>;
   private home: string; private tmp: string;
   private generation: () => number;
+  /** Moves at every wipe: an answer that was awaited across a wipe belongs to the account that left and is dropped. */
+  private era = 0;
+  private saving: Promise<void> = Promise.resolve();
+  private writes = 0;
 
   constructor(o: StoreOptions = {}) {
     this.storage = o.storage; this.poster = o.poster; this.now = o.now ?? clockNow; this.retryAfterMs = o.retryAfterMs ?? 30000;
@@ -171,7 +194,8 @@ export class RunSheetStore {
   }
 
   mintOpId = (): string => mintId('p-');
-  private stamp = (): string => this.now().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  /** The deck's own time when it gave one (RFC 3339, the fraction cut), else the clock's. */
+  private stamp = (at?: string): string => (at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : this.now().toISOString()).replace(/\.\d{3}Z$/, 'Z');
 
   // ---- the ops the app makes (each is one op with a fresh op_id) ----
 
@@ -180,7 +204,7 @@ export class RunSheetStore {
     const by = o.by ?? e.placed_by;
     const op: Op = { op_id: this.mintOpId(), by, op: 'place', at, entry: e, base_version: 0 };
     if (o.after !== undefined) op.after = o.after;
-    if (o.cutting) { op.ended = { outcome: 'cut', at: this.stamp(), last_block: o.cutting.block }; op.position_seconds = o.cutting.seconds; }
+    if (o.cutting) { op.ended = { outcome: 'cut', at: this.stamp(o.cutting.at), last_block: o.cutting.block }; op.position_seconds = o.cutting.seconds; }
     const reason = by === 'desk' ? (o.reason ?? 'the desk wrote it') : o.reason;
     if (reason !== undefined) op.reason = reason;
     return this.apply(op);
@@ -196,7 +220,7 @@ export class RunSheetStore {
   skipOnAir(report: AirReport = NO_REPORT, by: By = 'listener'): Result | undefined {
     const e = this.onAir();
     if (!e) return undefined;
-    return this.apply({ op_id: this.mintOpId(), by, op: 'skip', id: e.id, base_version: 0, ended: { outcome: 'skipped', at: this.stamp(), last_block: report.block }, position_seconds: report.seconds });
+    return this.apply({ op_id: this.mintOpId(), by, op: 'skip', id: e.id, base_version: 0, ended: { outcome: 'skipped', at: this.stamp(report.at), last_block: report.block }, position_seconds: report.seconds });
   }
   previous(by: By = 'listener'): Result { return this.apply({ op_id: this.mintOpId(), by, op: 'previous', base_version: this.sheet.version }); }
   clearAhead(by: By = 'listener', reason?: string): Result {
@@ -209,7 +233,7 @@ export class RunSheetStore {
   /** The phone reports how the entry on air ended: heard (it finished, or was left or cut) or skipped. */
   airedEnded(id: string, state: State, outcome: Outcome, report: AirReport = NO_REPORT, reason?: string): Result {
     return this.apply({
-      op_id: this.mintOpId(), by: 'phone', op: 'aired', id, state, ended: { outcome, at: this.stamp(), last_block: report.block },
+      op_id: this.mintOpId(), by: 'phone', op: 'aired', id, state, ended: { outcome, at: this.stamp(report.at), last_block: report.block },
       position_seconds: report.seconds, base_version: 0, ...(reason !== undefined ? { reason } : {}),
     });
   }
@@ -226,7 +250,9 @@ export class RunSheetStore {
           const poster = this.poster;
           if (!poster || this.pending.length === 0) return;
           const batch = this.nextBatch();
-          const out = await poster.post(batch, this.sheetEpoch);
+          const era = this.era, world = this.generation();
+          const out = await poster.post(batch, this.sheetEpoch, world);
+          if (era !== this.era || this.poster !== poster || this.generation() !== world) return;   // signed out meanwhile: the answer is the old account's
           if (out.kind === 'answered') this.acknowledge(batch, out.results);
           else if (out.kind === 'answeredEpoch') {
             this.acknowledge(batch, out.results);
@@ -268,8 +294,9 @@ export class RunSheetStore {
   /** The server's sheet replaces the local one (its epoch is then the phone's); what the phone has done since and the server has not answered
    *  is applied on top again, in order. */
   async takeServerSheet(poster: Poster, epoch: number): Promise<void> {
+    const era = this.era;
     const theirs = await poster.fetchSheet();
-    if (!theirs) return;
+    if (!theirs || era !== this.era || this.poster !== poster) return;     // a wipe came while it was fetched: never written for the next account
     this.adopt(theirs, theirs.sheet_epoch > 0 ? theirs.sheet_epoch : epoch);
   }
   /** Replace the local sheet with `theirs` (a GET, or a full `sheet` stream event) and remember its epoch; pending ops are applied again on top. */
@@ -308,26 +335,36 @@ export class RunSheetStore {
   async wipe(): Promise<void> {
     if (this.retry) clearTimeout(this.retry);
     this.retry = undefined;
+    this.era += 1;
     this.sheet = emptySheet(); this.pending = []; this.sheetEpoch = 0; this.poster = undefined;
-    await this.storage?.remove();
+    const storage = this.storage;
+    if (storage) { this.writes += 1; const p = this.saving.then(() => storage.remove()).catch(() => undefined); this.saving = p.then(() => { this.writes -= 1; }); await this.saving; }   // a save already started lands first, then the file goes
     this.onChange?.();
   }
 
   // ---- saving ----
 
   save(): Promise<void> {
-    if (!this.storage) return Promise.resolve();
-    return this.storage.write(JSON.stringify({ sheet: this.sheet, pending: this.pending, epoch: this.sheetEpoch })).catch(() => undefined);
+    const storage = this.storage;
+    if (!storage) return Promise.resolve();
+    const text = JSON.stringify({ sheet: this.sheet, pending: this.pending, epoch: this.sheetEpoch });
+    // In order: a write starts at once when none is in flight, else after the one before it; a wipe's removal is queued behind every earlier write.
+    const run = (): Promise<void> => storage.write(text).catch(() => undefined);
+    this.writes += 1;
+    const p = this.writes === 1 ? run() : this.saving.then(run);
+    this.saving = p.then(() => { this.writes -= 1; });
+    return this.saving;
   }
 
   /** The sheet and the pending ops from the last launch. Nothing plays. An entry that was on air when the app died is closed as `failed`, by
    *  the phone, with the reason "interrupted by a restart": a crash is not the listener leaving (`left` is sign-out) and not a choice, so it
    *  settles nothing (the server records no verdict for `failed`). A crash restart never resumes work. */
-  async restore(): Promise<void> {
+  async restore(recover?: (store: RunSheetStore) => void): Promise<void> {
     const text = await this.storage?.read();
     if (!text) return;
     let saved: { sheet: unknown; pending: unknown[]; epoch?: number };
     try { saved = JSON.parse(text); this.sheet = decodeSheet(saved.sheet); this.pending = (saved.pending ?? []).map(decodeOp); this.sheetEpoch = saved.epoch ?? 0; } catch { return; }
+    recover?.(this);                      // what the deck journalled while shared code was not running (the runtime reads it): a verdict heard stays
     const e = onAirEntry(this.sheet);
     if (e) this.airedEnded(e.id, 'skipped', 'failed', NO_REPORT, 'interrupted by a restart'); else void this.save();
     this.onChange?.();
