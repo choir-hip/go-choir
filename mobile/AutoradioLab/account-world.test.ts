@@ -68,10 +68,10 @@ describe('M1 a chain of a closed world does nothing more', () => {
   });
   test('M1b a write already in flight when the world closes: the Clear waits for it, and its file does not survive the wipe', async () => {
     boot({});
-    const storage = api.bindStorage(m.storage);
     let finish: () => void = () => undefined; const gate = new Promise<void>((r) => { finish = r; });
     const real = (m.storage as unknown as { fs: { atomicWriteFile: (p: string, b: Uint8Array) => Promise<void> } }).fs;
     const w = real.atomicWriteFile; real.atomicWriteFile = async (p, b) => { await gate; return w(p, b); };
+    const storage = api.bindStorage(m.storage);                                                        // bound after the patch: the copy holds the functions it was made from
     void storage!.fs.atomicWriteFile('app:/data/podcasts-library.json', new TextEncoder().encode('A-LIB')).catch(() => undefined);
     await wait(5);
     const out = signOut(); await wait(40);
