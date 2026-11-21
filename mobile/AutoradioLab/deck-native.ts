@@ -36,8 +36,8 @@ export function readState(raw: unknown): DeckState {
 export function nativeDeck(later: () => Later | null = nativeLater as () => Later | null): DeckPort {
   const call = async (name: string, args: Record<string, unknown> = {}): Promise<DeckState> => {
     const l = later();
-    if (!l) return EMPTY_STATE;
-    try { return readState(await l({ op: 'deck', name, args })); } catch { return EMPTY_STATE; }
+    if (!l) { if (name === 'deckPlay') console.log('deck: play asked and the app module is not bound here: nothing plays'); return EMPTY_STATE; }
+    try { return readState(await l({ op: 'deck', name, args })); } catch (e) { console.log(`deck: ${name} failed: ${e instanceof Error ? e.message : String(e)}`); return EMPTY_STATE; }
   };
   const fields = (i: DeckItem): Record<string, unknown> => ({ ...i });
   return {

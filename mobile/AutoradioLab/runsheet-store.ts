@@ -184,7 +184,7 @@ export class RunSheetStore {
     if (!remote && namesDevicePath(op, this.home, this.tmp)) return { op_id: op.op_id, applied: false, dropped: 'local_path', version: this.sheet.version };
     if ((op.op === 'previous' || op.op === 'clear') && !remote) op = { ...op, base_version: this.sheet.version };
     const { sheet, result } = apply(this.sheet, op);
-    if (!result.applied) return result;
+    if (!result.applied) { console.log(`runsheet: ${op.op}${op.at ? ' ' + op.at : ''} refused: ${result.dropped ?? 'no reason given'}`); return result; }
     this.sheet = sheet;
     if (!remote) this.pending.push(op);
     void this.save();
