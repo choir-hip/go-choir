@@ -36,7 +36,9 @@ reset_state() {
   rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"
   mkdir -p "$CONT/Documents"
-  if [ -n "${NOKEY:-}" ]; then rm -f "$CONT/Documents/proof-key"      # a launch with no key at all (the sign-out drill before it emptied the Keychain)
+  if [ -n "${NOKEY:-}" ]; then rm -f "$CONT/Documents/proof-key"      # a launch with no key at all (the sign-out drill before it emptied the Keychain), or whatever the Keychain still holds (the crash drill)
+  elif [ -n "${FAKEKEY:-}" ]; then                                      # another account's key: any string the import takes (simulator builds only, ProofKey.swift); the server refuses it
+    printf '%s' "$FAKEKEY" > "$CONT/Documents/proof-key"; chmod 600 "$CONT/Documents/proof-key"
   else
     cp "$KEYFILE" "$CONT/Documents/proof-key" || fail "reset" "could not place the key file"
     chmod 600 "$CONT/Documents/proof-key"
@@ -59,6 +61,13 @@ reset_state() {
 legacy_clean() {
   for k in AutoradioThemeMode AutoradioThemeID; do SIM spawn "$EXACT_SIM" defaults delete $APP $k >/dev/null 2>&1; done
   CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null); [ -n "$CONT" ] && rm -rf "$CONT/Library/Application Support/Autoradio/themes"
+}
+
+# ---- the account boundary's checks on the app's files (docs/design/account-boundary-2026-11-21.md, section 8). The record is `app:/data/account-stamp`: where it is, is the app's data folder on this build.
+KEYDIG=$(tr -d '[:space:]' < "$KEYFILE" | shasum -a 256 | cut -d' ' -f1)       # what the app records for the proof key (ProofKey.swift trims it); never printed
+data_dir() { CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null); f=$(find "$CONT" -name account-stamp 2>/dev/null | head -1); [ -n "$f" ] && dirname "$f"; }
+stamp_is() { # name expected-digest: the record exists and holds exactly that digest (it fails when the account was never adopted, or the wrong digest was written)
+  d=$(data_dir); if [ -n "$d" ] && [ "$(cat "$d/account-stamp" 2>/dev/null)" = "$2" ]; then echo "ok: $1"; else echo "MISSING: $1"; FAILS="$FAILS [$1]"; fi
 }
 
 # ids found in a drive's tree dump: ids <file> <prefix>  -> every test id that starts with the prefix (one per line, in order)
@@ -320,9 +329,12 @@ view real-66-bar-on-page 600
 [ -n "$PLAY_BAR" ] && { to_top; step "tap \"$PLAY_BAR\""; wait_ 5000; view real-67-bar-playing 800; step "tap bar-play"; wait_ 1500; view real-68-bar-paused 800; step "tap bar-play"; wait_ 3000; view real-69-bar-resumed 800; step "tap bar-now"; view real-70-bar-run-sheet 1500; }
 step logs
 run_drive bar light "" --touch platform
+# D1 (before): the phone holds the proof key's record before the sign-out drill. A wrong catch: a build that never adopts, or records another digest, fails here and not only after the sign-out.
+stamp_is "D1: before the sign-out the record is the proof key's digest" "$KEYDIG"
 
 # ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
-# Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the wipe marker and the stamp are gone from the app's files.
+# Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the record (account-stamp) is gone from the app's files. No marker file exists any more: a build
+# that still writes `signout-pending` fails here.
 step "clock data"; wait_ 5000
 place paper 2000
 place files 900; view real-40-files-before 3000
@@ -336,7 +348,8 @@ run_drive drill light "" --touch platform
 DR="$SHOTS/drive-drill.txt"
 AFTER="$SHOTS/drill-after.txt"; awk '/\[settings-account-signed\][^"]*"No"/ { f = 1 } f' "$DR" > "$AFTER"
 CONT=$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)
-LEFT=$(find "$CONT" \( -name 'signout-pending' -o -name 'account-stamp' \) 2>/dev/null | wc -l | tr -d ' ')
+LEFT=$(find "$CONT" -name 'account-stamp' 2>/dev/null | wc -l | tr -d ' ')
+MARKER=$(find "$CONT" -name 'signout-pending' 2>/dev/null | wc -l | tr -d ' ')
 
 # ---- 3h. SIGNED-OUT TOUR (the drill above left the Keychain empty): launch with no key. The first screen (the radio) says what is true and offers the one way in; the paper lists the public stories and a
 # story reads; the radio offers to read the public paper; Settings > Account has a Sign in button. Nothing here needs the owner's computer.
@@ -362,6 +375,64 @@ unset NOKEY
 SO="$SHOTS/drive-signedout.txt"
 # the FIRST screen's dump only: the text of the drive up to the first screenshot step (real-50), not the whole drive
 SO1="$SHOTS/signedout-first.txt"; awk '{ print } /real-50-so-first-screen/ { exit }' "$SO" > "$SO1"
+
+# ---- 3i. ACCOUNT BOUNDARY DRILLS D2 to D4 (docs/design/account-boundary-2026-11-21.md, section 8). Each drive's steps are fixed before it runs; what each check would catch is written beside it.
+# D2, a crash: sign out, kill the app at once, relaunch with no key placed (the Keychain keeps what the crash left). The crash may land before the native key delete (still signed in, OPEN) or after
+# (key gone, a wipe owed): both are right. The wrong outcome is key gone and the old account still on screen or on disk, or still signed in with a record that is not the key's.
+# The window itself is not forced here (a script cannot); take-by-take it is X in account.test.ts. This proves a real kill of the real app is survived.
+unset NOKEY
+step "clock data"; wait_ 5000
+place paper 2500                                       # the paper's offline copy (app:/data/paper-front.json) is account data on the phone
+place settings 900; step "tap settings-nav-account"; wait_ 2500
+step "tap settings-signout"
+run_drive crash light "" --touch platform
+SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1; sleep 3     # the crash: the sign-out's native half may be midway
+NOKEY=1; export NOKEY
+step "clock data"; wait_ 3000; view real-d2-first 1500
+place files 900; view real-d2-files 3000
+place mail 900; view real-d2-mail 3000
+place settings 900; step "tap settings-nav-account"; view real-d2-account 3500
+step logs
+run_drive relaunch light "" --touch platform
+unset NOKEY
+D2="$SHOTS/drive-relaunch.txt"
+D2_DATA=$(data_dir)
+D2_PAPER=$([ -n "$D2_DATA" ] && [ -e "$D2_DATA/paper-front.json" ] && echo kept || echo gone)
+
+# D3, an account change without a sign-out: data of the proof key's account is on the phone (a marked file is written into the app's data folder), then the Keychain item is REPLACED by another
+# string, and the app is relaunched. Before any page shows data the old data must be wiped (the marked file is gone), the record is the NEW key's digest, and the card offers Clear this phone, not Sign in
+# (the server refuses the fake key). A wrong catch: a build that kept the old record and read the old files for the new key; one that wrote the new digest first and wiped later (the marked file would
+# survive under the new label); one that offers Sign in over the refused key.
+step "clock data"; wait_ 5000
+place paper 2500; place settings 900; step "tap settings-nav-account"; view real-d3-seed 3000
+step logs
+run_drive seed light "" --touch platform
+D3_DATA=$(data_dir)
+[ -n "$D3_DATA" ] && printf '%s' '{"drill":"D3-OLD-ACCOUNT-DATA"}' > "$D3_DATA/takes.json"
+FAKEKEY="choir_sk_-d3-drill-fake-key-not-real"; export FAKEKEY
+FAKEDIG=$(printf '%s' "$FAKEKEY" | shasum -a 256 | cut -d' ' -f1)
+step "clock data"; wait_ 6000; view real-d3-first 2500
+place mail 900; wait_ 6000; view real-d3-mail 3000                    # a signed-in request with the fake key: the server answers 401, the card says so
+place settings 900; step "tap settings-nav-account"; view real-d3-account 3500
+step logs
+run_drive keychange light "" --touch platform
+unset FAKEKEY
+D3="$SHOTS/drive-keychange.txt"
+D3_LEFT=$(grep -rl "D3-OLD-ACCOUNT-DATA" "$CONT" 2>/dev/null | wc -l | tr -d ' ')
+
+# D4, a refused key: the same phone (the fake key is still in the Keychain, NOKEY places none). The banner offers Clear this phone and not Sign in; tapping it signs out, and the page asks again and
+# says the signed-out words. A wrong catch: the old banner (Sign in over a refused key); a Clear this phone that does nothing; a page that stays blank after the clear (it was never asked again).
+NOKEY=1; export NOKEY
+step "clock data"; wait_ 6000
+place mail 900; wait_ 6000; view real-d4-refused 3000
+step "tap signedout-clear"; wait_ 6000; view real-d4-cleared 3000
+place files 900; view real-d4-files 3000
+step logs
+run_drive refused light "" --touch platform
+unset NOKEY
+D4="$SHOTS/drive-refused.txt"
+tseg "$D4" real-d4-refused > "$SHOTS/seg-d4-refused.txt"; tseg "$D4" real-d4-cleared > "$SHOTS/seg-d4-cleared.txt"
+D4_STAMP=$(data_dir)
 
 # ---- 4. assertions on real conditions
 if grep -lE "choir_sk_[A-Za-z0-9]" "$SHOTS"/*.txt "$OUT" >/dev/null 2>&1; then fail "key leak" "a key-shaped string is in the drive output"; fi
@@ -518,7 +589,29 @@ chk "drill: the account page says signed out after" '\[settings-account-signed\]
 bad "drill: no failure note on the account page" '\[settings-signout-message\]' "$AFTER"
 bad "drill: Files shows no rows after sign-out" '\[files-row-/' "$AFTER"
 bad "drill: Mail shows no rows after sign-out" '\[mail-row-' "$AFTER"
-[ "$LEFT" = 0 ] && echo "ok: drill: the wipe marker and the stamp are gone from the app's files" || { echo "MISSING: drill: marker or stamp left ($LEFT)"; FAILS="$FAILS [drill files]"; }
+[ "$LEFT" = 0 ] && echo "ok: D1: the record is gone from the app's files after the sign-out" || { echo "MISSING: D1: the record is left ($LEFT)"; FAILS="$FAILS [drill files]"; }
+[ "$MARKER" = 0 ] && echo "ok: D1: no signout-pending marker is written" || { echo "MISSING: D1: a signout-pending marker exists ($MARKER)"; FAILS="$FAILS [drill marker]"; }
+# D2: the relaunch after the kill. Signed in (the key survived the crash): the record must be the key's digest. Signed out (the key went): no old data on screen or in the files, and no record.
+if grep -qE '\[settings-account-signed\][^"]*"Yes"' "$D2"; then
+  stamp_is "D2: the kill came before the key delete: still signed in, the record is the key's digest" "$KEYDIG"
+else
+  chk "D2: the key went: the account page says signed out" '\[settings-account-signed\][^"]*"No"' "$D2"
+  bad "D2: the key went: no Files rows on screen" '\[files-row-/' "$D2"
+  bad "D2: the key went: no Mail rows on screen" '\[mail-row-' "$D2"
+  [ -z "$D2_DATA" ] || { [ ! -e "$D2_DATA/account-stamp" ] && [ "$D2_PAPER" = gone ] && echo "ok: D2: the key went: the record and the paper's copy are gone from the files" || { echo "MISSING: D2: the key went but the record or the old data is on disk"; FAILS="$FAILS [D2 files]"; }; }
+fi
+# D3: the marked old file is gone, the record is the new digest, the banner offers Clear this phone and not Sign in
+[ "$D3_LEFT" = 0 ] && echo "ok: D3: the old account's marked file is gone after the key changed" || { echo "MISSING: D3: the old account's data survived the key change ($D3_LEFT)"; FAILS="$FAILS [D3 data]"; }
+stamp_is "D3: the record is the new key's digest" "$FAKEDIG"
+chk "D3: the card offers Clear this phone for the refused key" '\[signedout-clear\]' "$D3"
+bad "D3: the card does not offer Sign in over the refused key" '\[signedout-signin\]' "$D3"
+# D4: before the tap, Clear this phone and no Sign in; after it, the signed-out words and Sign in, and no rows
+chk "D4: a refused key: the banner offers Clear this phone" '\[signedout-clear\]' "$SHOTS/seg-d4-refused.txt"
+bad "D4: a refused key: the banner does not offer Sign in" '\[signedout-signin\]' "$SHOTS/seg-d4-refused.txt"
+chk "D4: after Clear this phone the page is asked again and says the signed-out words" 'Sign in to read your mail' "$SHOTS/seg-d4-cleared.txt"
+chk "D4: after Clear this phone the banner offers Sign in" '\[signedout-signin\]' "$SHOTS/seg-d4-cleared.txt"
+bad "D4: after Clear this phone no Mail rows" '\[mail-row-' "$SHOTS/seg-d4-cleared.txt"
+[ -z "$(data_dir)" ] && echo "ok: D4: the record is gone after Clear this phone" || { echo "MISSING: D4: the record is still there after Clear this phone"; FAILS="$FAILS [D4 record]"; }
 n=$(ls "$SHOTS"/real-*.png 2>/dev/null | wc -l)
 [ "$n" -ge 18 ] || FAILS="$FAILS [screenshots: $n]"
 echo "ok: screenshots in $SHOTS ($n)"

@@ -534,6 +534,10 @@ bounded rate (once per second in the spike). The UI re-asks and redraws. This
 is the pattern for a *device* stream. A stream from our server is `fetch` with
 `exactStream` in `app.ts`, which both phones share.
 
+## Storage error codes: how we branch on them (2026-11-21)
+
+A storage refusal is an `Error` with a `code` that is the same on every host (`'ENOENT'`, `'EACCES'`, `'EBUSY'`, `'denied'`, `'full'`, `'failed'`: `reference.md`, "storage refusal"; Branch on the code, never the message). `account.ts` takes a file as ABSENT only when a read or stat rejects `ENOENT`; every other rejection, a read past a deadline, or no storage is UNREADABLE and refuses the page, never "nothing there". A removal counts only when the stat afterwards says `ENOENT`. Timers (`setTimeout`) end with the answer that made them; a background job started by an answer (the Clear in `account.ts`) relies on its deadline anyway: unverified on a device.
+
 ## Sharp edges (file:line at `76cd50f9e`; unchecked at `de212e671`)
 
 - `AudioSession.swift:238-262`: first claim configures; later claims join

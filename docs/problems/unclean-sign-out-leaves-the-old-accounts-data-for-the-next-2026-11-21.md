@@ -81,3 +81,15 @@ app has one user and is not launched.
 
 Next: a written design (the account boundary in shared code), reviewed
 before code, then tests from its table.
+
+## Landing 1 built, not landed (2026-11-21)
+
+Lane `account-boundary-l1`. Shared code and contracts only, from `docs/design/account-boundary-2026-11-21.md`:
+the gate in `app.ts` is default-refuse with a named exempt list; the boundary is derived from the key and the
+record before every gated answer (`account.ts`); one writer wipes, then removes the record; the marker file and
+the remembered settle answer are gone. Seen: the whole `bun test`, the contract build and `test web` pass in the
+lane. Not seen: the simulator drills D1 to D4 (written into `proof-real.sh`, not run), two review seats, a
+device (the Exact error code on a data-protected file before first unlock is unread: design section 10). The
+defect stays open for the native side until landings 2 and 3; Remaining error: a background Clear's deadline
+timer may be cut when the answer that started it ends (Exact timers end with the answer, EXACT.md); a Clear that
+hangs in native then holds the one writer until the host drops the call. Next: two seats, then the drills.
