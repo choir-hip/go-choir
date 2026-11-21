@@ -346,7 +346,8 @@ step "tap paper-choose-topics"; view real-71-topics-empty 1500
 # and dragged back up before Science is tapped again. Each target is also asserted to appear in the drive's dumped trees below (presence in the log, not proof of the viewport at the tap: a tap that missed shows up as a pick that is not stored).
 step "tap ob-topic-Science"; wait_ 700
 # `clock settle` after each drag: a real touch played while the list is still moving was lost ("no touch reached the app's window", the picks drive, tap Film); `layout` says where the target is if a tap is lost again.
-step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 -300"; wait_ 500; step "clock settle"; step tree; step "layout ob-topic-Film"; step "tap ob-topic-Film"; wait_ 700
+# (the layout the run printed: after Culture opens the page has already scrolled it to the top, and a drag of -300 put Film at screen y -11, under the status bar: the drag is +150 now, Film comes down into the middle.)
+step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 150"; wait_ 500; step "clock settle"; step tree; step "layout ob-topic-Film"; step "tap ob-topic-Film"; wait_ 700
 step "tap edit-edition-scroll drag 0 -700"; wait_ 500; step "clock settle"
 step "type ob-topic-input Zzdrillchess"; step "tap ob-topic-add"; view real-72-topics-picked 1200
 step "tap edit-edition-scroll drag 0 1500"; wait_ 500; step "clock settle"; step "tap ob-topic-Science"; view real-73-topics-one-off 1200
