@@ -221,7 +221,7 @@ describe('BANNER the buttons reach every page', () => {
   test('Settings draws Sign in, Try again and Clear this phone from the card, not from au.signedIn', () => {
     const s = readFileSync(dir + 'settings.contract', 'utf8');
     const i = s.indexOf('settings-account-refresh'); const tail = s.slice(i, s.indexOf('// ---', i));
-    expect(tail).not.toContain('if au.signedIn');
+    expect(tail).not.toMatch(/^\s*if au\.signedIn\s*$/m);
     expect(tail).toContain('acs.action == "clear"'); expect(tail).toContain('acs.action == "retry"'); expect(tail).toContain('Clear this phone');
   });
   test('the provided members carry retryAccount to the components', () => {

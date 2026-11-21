@@ -79,7 +79,8 @@ component Autoradio
     signOutNote
     acs
     hpg
-    signedOutTick
+    acctTick
+    retryAccount
     hc
     noNative
     refreshRadio

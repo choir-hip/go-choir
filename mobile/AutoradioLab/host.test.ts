@@ -76,7 +76,7 @@ describe('the twins are idle where there is a native package', () => {
   test('H5 with the flag false (iOS) neither the reader twin nor the notebook twin fetches', async () => {
     let fetches = 0; globalThis.fetch = (async () => { fetches++; return new Response('{}', { status: 200 }); }) as never;
     const { answer } = await import('./app.ts');
-    const storage = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => undefined } } as never;
+    const storage = { fs: { readFile: async () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); }, atomicWriteFile: async () => undefined } } as never;
     const r = await answer('readerDocShared' as never, ['pub:/pub/texture/x', false] as never, undefined as never, storage, undefined as never) as { status: string };
     const n = await answer('notebookPageShared' as never, ['', 0, false, ''] as never, undefined as never, storage, undefined as never) as { docState: string };
     expect(r.status).toBe('loading'); expect(n.docState).toBe('loading'); expect(fetches).toBe(0);

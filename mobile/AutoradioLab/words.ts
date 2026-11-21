@@ -5,5 +5,9 @@ export const WORDS = {
   noSignIn: 'This is the public paper. Signing in is not available on this device yet.',
   locked: 'Unlock your phone to continue.',
   unknown: 'Could not check your sign-in just now. Try again in a moment.',
-  rejected: "This phone's sign-in is no longer accepted. Sign in again.",
+  rejected: "This phone's sign-in is no longer accepted. Clear this phone to sign in again.",
+  clearing: "Clearing the previous account's data from this phone.",
+  adopt: 'This phone could not record the account.',
+  // After five tries a refusing state names what failed and the one way out that always exists (a reinstall removes the app's container; the Keychain survives it, so the phone comes back with empty stores and the same account).
+  stuck: 'If this does not clear, delete and reinstall the app. Nothing on your computer is affected.',
 };

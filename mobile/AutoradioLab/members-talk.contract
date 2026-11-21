@@ -8,7 +8,7 @@ use ConversationInfo from "./conversation-types.contract"
 members Autoradio
   // The entries are the voice turn engine's (native, read whole); the page's rows are shared code (conversation.ts), asked again whenever the entries change.
   resource cvraw = conversationEntries() as shape ConversationEntries else empty()
-  resource cv = conversationInfo(cvraw) as shape ConversationInfo else empty()
+  resource cv = conversationInfo(cvraw, acctTick) as shape ConversationInfo else empty()
   resource voicep = voiceProfile() as shape VoiceProfile else empty()
   mutation tk as shape SettingsAck
   // The answer card's buttons (bar.contract): ask the same words again, hide the card, stop the turn.

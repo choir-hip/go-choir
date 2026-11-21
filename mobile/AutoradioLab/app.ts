@@ -6,7 +6,8 @@ import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fil
 import { adoptNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { aboutBuild } from './about.ts';
-import { accountSignOut, settleAccount } from './account.ts';
+import { accountSignOut, enter, AccountClosedError } from './account.ts';
+import { accountGeneration } from './api.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
@@ -50,8 +51,6 @@ fs.read app:/data/mail
 fs.write app:/data/mail
 fs.read app:/cache
 fs.write app:/cache
-fs.read app:/data/signout-pending
-fs.write app:/data/signout-pending
 fs.read app:/data/account-stamp
 fs.write app:/data/account-stamp
 fs.read app:/data/open-pages-shared.json
@@ -69,7 +68,7 @@ fs.write app:/data/themes`;
 
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
 const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
-const sources: Sources = {
+export const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // The About page's build rows (about.ts): the app's baked-in commit and the server's, from /health.
   aboutBuild: ([tick]) => aboutBuild({ tick }),
@@ -95,15 +94,15 @@ const sources: Sources = {
   takesPage: ([rec, _tick], _s, storage) => takesPageFor(takesEnv(storage), takes(), rec),
   takesAct: ([op, arg], _s, storage) => takesAct(takesEnv(storage), takes(), op, arg),
   readerDocShared: ([address, active]) => (active ? readerDocShared(address) : readerDocShared('')),
-  notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
-  accountState: ([tick, top, host]) => accountState(tick, top, host),
+  notebookPageShared: ([selected, steerQueued, active, _signedIn, _acct], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
+  accountState: ([tick, top, host, tries], store, storage) => accountState(tick, top, host, tries, storage, store),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
   pagesOpen: ([address, title], _store, storage) => pages.pagesOpen(storage, address, title),
   pagesClose: ([address], _store, storage) => pages.pagesClose(storage, address),
   pagesPin: ([address], _store, storage) => pages.pagesPin(storage, address),
   pagesReopen: (_a, _store, storage) => pages.pagesReopen(storage),
-  accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
+  accountSignOut: (_a, store, storage) => accountSignOut(storage, store),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
   podcastShow: ([address, tick, nowId, rev], _store, storage) => podcastShow({ address, tick, nowId, rev }, storage),
   podcastEpisode: ([address, find, tick, nowId, nowClip, nowStart, nowElapsed, nowDuration, rev], _store, storage) =>
@@ -134,13 +133,37 @@ const sources: Sources = {
   mailApprovalEmail: ([address, draft]) => mail.mailApprovalEmail(address, draft),
   mailMarkUnread: ([address]) => mail.mailMarkUnread(address),
 };
+/** THE EXEMPT LIST: the only sources that may answer while the account boundary is closed (account.ts). Default-refuse: a source NOT named here is gated, so a new source is gated until
+ * someone writes its line here and says why it may answer. One line each: it reads no account store, makes no signed-in request, and is handed no account data in its arguments. */
+export const EXEMPT: Partial<Record<keyof Sources, string>> = {
+  accountState: 'the card: it asks the boundary for the state without waiting, and says why pages refuse',
+  accountSignOut: 'Sign out and Clear this phone: the way out of every refusing state, so it can never wait behind the gate',
+  hostCaps: 'a fact about this host (is there a native package), no account data',
+  aboutBuild: 'the app\'s baked-in commit and the server\'s public /health, no account data',
+  theme: 'device settings under app:/data/theme-choice.json, which a sign-out leaves alone (docs/design/account-boundary-2026-11-21.md, decision 4)',
+  themeList: 'the same device settings: the list of installed themes',
+  themeExtras: 'the same device settings: the theme\'s sizes',
+  themeCards: 'the same device settings: the theme cards',
+  themeMigrate: 'the same device settings: the one-time carry-over of the theme choice',
+  themeSet: 'the same device settings: choosing a theme',
+  schemeSet: 'the same device settings: light or dark',
+  themeRemove: 'the same device settings: removing an installed theme',
+};
+
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
+/** THE GATE. Every source not on the exempt list asks the boundary first (account.ts `enter`: two facts read again, never remembered) and throws AccountClosedError unless the account's
+ * data may be read: the page shows its existing failure state and the card says why. The generation is read after `enter` (a heal may have moved it), and an answer that began before a
+ * wipe ends refused: it may not hand back what it read. */
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
-  // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
-  if (source !== 'accountSignOut') await settleAccount(storage, store);
-  // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, finished before the first source runs, so the
-  // modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
-  if (source !== 'accountSignOut') await clearDemoLeftovers(storage);
-  return sources[source](args, store, storage, native);
+  if (Object.hasOwn(EXEMPT, source)) return sources[source](args, store, storage, native);
+  const b = await enter(storage, store);
+  if (!b.readable) throw new AccountClosedError(b.state);
+  const gen = accountGeneration();
+  // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, only behind an open boundary, finished before the first
+  // source runs, so the modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
+  await clearDemoLeftovers(storage);
+  const out = await sources[source](args, store, storage, native);
+  if (accountGeneration() !== gen) throw new AccountClosedError('changed');
+  return out;
 };

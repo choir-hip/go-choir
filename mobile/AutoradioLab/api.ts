@@ -132,7 +132,7 @@ export const sealingBlocked = (): boolean => blockedDigest !== null;
 export async function beginSignOut(): Promise<void> {
   nextGeneration(); resetSession();
   let d = '';
-  try { const s = await keptSession(); if (s) d = await digestOf(s.key); } catch { /* no key to name */ }
+  try { const s = await withDeadline(keptSession().then((x) => x, () => null), null, keyTiming.ms); if (s) d = await digestOf(s.key); } catch { /* no key to name */ }      // a read that hangs names no digest: the block still stands
   blockedDigest = d;
 }
 export function abortSignOut(): void { blockedDigest = null; }
@@ -295,25 +295,44 @@ export async function authedToFile(path: string, dest: string, storage: Storage 
 }
 
 export type KeyState = 'present' | 'absent' | 'unreadable';
-/** The stored sign-in key as THREE answers (review 2026-11-19, auth round 2): `present` (with the SHA-256 of the key), `absent` (the Keychain answered item-not-found) or
- * `unreadable` (locked before the first unlock, any other status, no native module, a bridge error). Read only. `unreadable` is never "signed out". */
+/** A deadline, not a limit, on one read of the Keychain through the bridge: a native call that never answers must not hold a page answer, a sign-out or the boundary. */
+export const keyTiming = { ms: 5000 };
+/** `p`, or `late` when it has not answered within `ms`. (The timer is cleared as soon as `p` answers; a source's own timers end with its answer.) */
+export async function withDeadline<T>(p: Promise<T>, late: T, ms: number): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([p, new Promise<T>((r) => { t = setTimeout(() => r(late), ms); })]); } finally { if (t !== undefined) clearTimeout(t); }
+}
+
+/** The stored sign-in key as the boundary needs it (docs/design/account-boundary-2026-11-21.md section 2): `absent` ONLY when the Keychain answered item-not-found; `present` with the SHA-256 once the
+ * key was read whole; `unreadable` when locked, on a bridge error, past the deadline, when `keystate` says present and the session read then finds nothing, or when a module that answered before is
+ * gone; `nomodule` when this host has no native module at all (Android, web: no key exists). An absent key leads to a wipe, so only the Keychain's own answer may say it. Read only. */
+export type KeyFact = { state: KeyState | 'nomodule'; digest: string; error?: boolean };
+let keyReads = 0;
+export async function keyFact(): Promise<KeyFact> {
+  keyReads += 1; if (keyReads % 100 === 0) console.log(`api: key reads ${keyReads}`);      // a count, so a spike is seen
+  if (!reader || reader.available === false) return nativeAnswered ? { state: 'unreadable', digest: '' } : { state: 'nomodule', digest: '' };
+  const read = async (): Promise<KeyFact> => {
+    try {
+      const r = (await reader!.later({ op: 'keystate' })) as { state?: unknown; found?: unknown } | null;
+      if (r && typeof r.state === 'string') nativeAnswered = true;
+      const st = r && (r.state === 'present' || r.state === 'absent' || r.state === 'unreadable') ? r.state : r && r.found === true ? 'present' : 'unreadable';
+      if (st !== 'present') return { state: st, digest: '' };
+      const sess = await keptSession();
+      return sess ? { state: 'present', digest: await digestOf(sess.key) } : { state: 'unreadable', digest: '' };
+    } catch { return { state: 'unreadable', digest: '', error: true }; }
+  };
+  return withDeadline(read(), { state: 'unreadable', digest: '' }, keyTiming.ms);
+}
+/** `keyFact` for the callers that have only three answers (no module reads as unreadable, as before). */
 export async function keyState(): Promise<{ state: KeyState; digest: string; error?: boolean }> {
-  const none = { state: 'unreadable' as KeyState, digest: '' };
-  if (!reader || reader.available === false) return none;
-  try {
-    const r = (await reader.later({ op: 'keystate' })) as { state?: unknown; found?: unknown } | null;
-    if (r && typeof r.state === 'string') nativeAnswered = true;
-    const st = r && (r.state === 'present' || r.state === 'absent' || r.state === 'unreadable') ? r.state : r && r.found === true ? 'present' : 'unreadable';
-    if (st !== 'present') return { state: st, digest: '' };
-    const sess = await keptSession();
-    return sess ? { state: 'present', digest: await digestOf(sess.key) } : none;
-  } catch { return { ...none, error: true }; }
+  const k = await keyFact();
+  return { ...k, state: k.state === 'nomodule' ? 'unreadable' : k.state };
 }
 
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: the generation and the rest as a fresh process has them. */
-export function resetSeam(): void { resetSession(); generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
+export function resetSeam(): void { resetSession(); keyTiming.ms = 5000; keyReads = 0; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

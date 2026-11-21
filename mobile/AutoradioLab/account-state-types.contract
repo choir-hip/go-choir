@@ -2,7 +2,12 @@
 shape AccountView
   state: string
   message: string
+  // "signIn", "clear" (Clear this phone: the sign-out), "retry" (Try again) or "": the one button the state names.
   action: string
+  // Also offer Clear this phone beside the action (a refusing state that did not heal after five tries).
+  alsoClear: bool
+  // The boundary's epoch (account-state.ts): moves when the boundary closes or a wipe completes. The one tick (acctTick) every gated resource takes.
+  epoch: string
 
 // The page's own facts the host gives (exactPage): the app coming back to the front (visible) is when the key is read again, so a phone that was locked and is unlocked now says so.
 shape HostPage

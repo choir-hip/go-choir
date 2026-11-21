@@ -148,6 +148,15 @@ export async function forgetOldCopy(storage: Storage | undefined, keep = ''): Pr
   return gone;
 }
 
+/** The "Show original" copies still in the cache (names), or the cache folder itself when it cannot be read for a reason other than being absent: what a wipe is checked against (account.ts). */
+export async function originalsLeft(storage: Storage | undefined): Promise<string[]> {
+  const fs = storage?.fs;
+  if (!fs) return [];
+  let names: string[];
+  try { names = await fs.readdir(CACHE); } catch (e) { return (e as { code?: unknown } | null)?.code === 'ENOENT' ? [] : [CACHE]; }
+  return names.filter((n) => n.startsWith('mail-') && n.endsWith('.html'));
+}
+
 /** Remove every file of the copy, every "Show original" document, and the key. Counts only. */
 export async function wipeFiles(env: Env): Promise<{ files: number; originals: number }> {
   let files = 0;
