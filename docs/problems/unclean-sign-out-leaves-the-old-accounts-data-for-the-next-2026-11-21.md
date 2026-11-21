@@ -112,3 +112,9 @@ Mechanism change after the second review round (2026-11-21): the per-site guards
 The boundary moving closes the account's world (`api.ts`); every I/O choke point is inert for a closed world; the
 Clear drains started writes before it wipes; a timed-out Clear stays CLEARING with the close-and-reopen words. See
 the design section "The mechanism: the world". Named regressions: `account-world.test.ts` (C8, C9, C9b, M1 to M4).
+
+Third round (seat 1 on c222cbf80): module-level single-flight and mutex state outlived its world (a save chain that never
+settles blocked every later page change). Module state now lives in the world (`scoped()`, `api.ts`); the gate takes the
+world `enter` confirmed; native calls of account chains are inert for a closed world. Residual: the exempt theme sources
+can show a Texture theme between a key swap and the card's next read (at most a few seconds); `opts.world` has no caller
+until the run sheet's poster uses it (the train).

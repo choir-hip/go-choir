@@ -606,7 +606,7 @@ bad "drill: Mail shows no rows after sign-out" '\[mail-row-' "$AFTER"
 [ "$MARKER" = 0 ] && echo "ok: D1: no signout-pending marker is written" || { echo "MISSING: D1: a signout-pending marker exists ($MARKER)"; FAILS="$FAILS [drill marker]"; }
 # D2: the relaunch after the kill. Signed in (the key survived the crash): the record must be the key's digest. Signed out (the key went): no old data on screen or in the files, and no record.
 if grep -qE '\[settings-account-signed\][^"]*"Yes"' "$D2"; then
-  stamp_eq "D2: the kill came before the key delete: still signed in, the record is the key's digest" "$KEYDIG" "$D2_STAMP"
+  stamp_eq "D2 (proves only that a kill is survived, not the crash window): the kill came before the key delete: still signed in, the record is the key's digest" "$KEYDIG" "$D2_STAMP"
 else
   chk "D2: the key went: the account page says signed out" '\[settings-account-signed\][^"]*"No"' "$D2"
   bad "D2: the key went: no Files rows on screen" '\[files-row-/' "$D2"

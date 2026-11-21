@@ -8,7 +8,7 @@
 // the account generation (api.ts): a sign-out forgets it, so one account's words never hold the next account's bar. Nothing is stored in a file.
 //
 // Ways this can fail (each is a test in bar.test.ts, B1 to B11): see the list at the top of that file.
-import { accountGeneration } from './api.ts';
+import { accountGeneration, scoped } from './api.ts';
 
 export const ERROR_WINDOW = 4;      // seconds an error holds the bar
 export const REVISED_WINDOW = 6;    // seconds a revision holds the bar
@@ -27,9 +27,9 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 const bool = (v: unknown): boolean => v === true;
 
 // The player's message, as first seen: its words, when, and under which account.
-let seen = { gen: -1, message: '', at: 0 };
+const S = scoped(() => ({ seen: { gen: -1, message: '', at: 0 } }));      // module state belongs to the world (api.ts `scoped`)
 /** Forget what the bar was holding (tests; a sign-out does it by moving the account generation). */
-export function forgetBar(): void { seen = { gen: -1, message: '', at: 0 }; }
+export function forgetBar(): void { S.reset(); }
 
 /** A plain line for an engine error, by the stage that failed. */
 function plain(stage: string, message: string): string {
@@ -56,13 +56,13 @@ export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): B
   // The player's message is new once (and again when it went and came back, or under another account).
   const gen = accountGeneration();
   const message = str(f.message);
-  if (seen.gen !== gen) seen = { gen, message: '', at: 0 };
-  if (message === '') seen.message = '';
-  else if (message !== seen.message && message !== PICK_A_STORY) seen = { gen, message, at: now };
+  if (S().seen.gen !== gen) S().seen = { gen, message: '', at: 0 };
+  if (message === '') S().seen.message = '';
+  else if (message !== S().seen.message && message !== PICK_A_STORY) S().seen = { gen, message, at: now };
   // The latest of the engine's error (or a line the app said) and the player's message holds the bar.
   let errorAt = num(f.errorAt) > 0 ? num(f.errorAt) : 0;
   let errorText = errorAt > 0 ? (str(f.errorStage) === '' ? str(f.errorMessage) : plain(str(f.errorStage), str(f.errorMessage))) : '';
-  if (seen.message !== '' && seen.at >= errorAt) { errorAt = seen.at; errorText = seen.message; }
+  if (S().seen.message !== '' && S().seen.at >= errorAt) { errorAt = S().seen.at; errorText = S().seen.message; }
   const revisedAt = num(f.revisedAt);
   const left = (since: number, window: number): number => (since > 0 ? window - (now - since) : 0);
   const ends = [left(errorAt, ERROR_WINDOW), left(revisedAt, REVISED_WINDOW)].filter((r) => r > 0);

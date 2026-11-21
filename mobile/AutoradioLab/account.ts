@@ -30,7 +30,7 @@ import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
 import { wipePages, PAGES_FILE } from './pages.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { nextGeneration, closeWorld, drainClosed, bindStorage, currentWorld, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
+import { type World, nextGeneration, closeWorld, drainClosed, bindStorage, currentWorld, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
 import { originalsLeft } from './mail-store.ts';
 import { wipeTextureThemes, textureThemesLeft } from './themes.ts';
 
@@ -225,16 +225,19 @@ function startClear(storage: Storage | undefined, store: Store | undefined): voi
 
 /** The gate's one question, asked before every page answer that touches account data. OPEN and EMPTY pass; ADOPT writes the record and waits for that one write; CLEARING refuses at once
  * and starts a wipe if none runs; LOCKED refuses. */
-export async function enter(storage: Storage | undefined, store: Store | undefined): Promise<{ readable: boolean; state: State; digest: string }> {
+export async function enter(storage: Storage | undefined, store: Store | undefined): Promise<{ readable: boolean; state: State; digest: string; world: World }> {
+  let w0 = currentWorld();                                  // the world these facts are read for: if the boundary moves while they are read, the answer is not given for another world
   const f0 = await readFacts(storage);
   let state = stateOf(f0);
   if (state === 'adopt') {
     // One Adopt at a time, awaited by every answer that finds it (a single write). Another job running (a hung sign-out) is never waited for: the page is refused and asked again.
     if (!adopting && active === 0) { const a: Promise<State | undefined> = job(() => adoptBody(storage), { skipIfMoved: true }).finally(() => { if (adopting === a) adopting = null; }); adopting = a; }
     state = adopting ? (await adopting) ?? 'adopt' : 'adopt';
+    if (state === 'open') w0 = currentWorld();               // the Adopt began the new account's world itself
   }
   if (state === 'clearing') startClear(storage, store);
-  return { readable: state === 'open' || state === 'empty', state, digest: f0.key.state === 'present' ? f0.key.digest : '' };
+  const moved = currentWorld() !== w0;
+  return { readable: !moved && (state === 'open' || state === 'empty'), state: moved ? 'locked' : state, digest: f0.key.state === 'present' ? f0.key.digest : '', world: w0 };
 }
 
 export type Peek = { state: State; epoch: string; failed: string[]; key: KeyFact };

@@ -13,7 +13,7 @@
 //  7. Open episode for a clip with no feed: nothing happens.     8. A show lists at most ten clips, ordered by clip id.
 
 import type { Result } from './app.contract.d.ts';
-import { getJSON } from './api.ts';
+import { getJSON, scoped } from './api.ts';
 import { episodeAddress, feedKey, parseShow } from './podcast-model.ts';
 
 export const CLIPS_PATH = '/api/platform/podcast-clips';
@@ -73,17 +73,14 @@ export function lengthLabel(c: Clip): string {
 type Rows = Result<'showClips'>;
 type Ack = Result<'clipAct'>;
 
-const byID = new Map<string, Clip>();
-const askedFeeds = new Set<string>();
-let askedAll = false;
-let lastTick = 0;
+const S = scoped(() => ({ byID: new Map<string, Clip>(), askedFeeds: new Set<string>(), askedAll: false, lastTick: 0 }));      // module state belongs to the world (api.ts `scoped`)
 
 /** For the sign-out test: how many clips are held in memory. */
-export const remembered = (): number => byID.size;
+export const remembered = (): number => S().byID.size;
 
-export function forget(): void { byID.clear(); askedFeeds.clear(); askedAll = false; lastTick = 0; }
+export function forget(): void { S.reset(); }
 
-function merge(clips: Clip[]): void { for (const c of clips) if (!byID.has(c.clipID)) byID.set(c.clipID, c); }
+function merge(clips: Clip[]): void { for (const c of clips) if (!S().byID.has(c.clipID)) S().byID.set(c.clipID, c); }
 
 export function row(c: Clip): Rows['rows'][number] {
   return { clipID: c.clipID, show: c.show, episode: c.episodeTitle, length: lengthLabel(c), quote: c.quote, story: c.storyTitle, episodeOnly: !usable(c.fingerprint) };
@@ -92,23 +89,23 @@ export function row(c: Clip): Rows['rows'][number] {
 /** The clips found for a show (a podcast show page's address): its own fetch once per session or retry; none for any other address. */
 export async function showClips(address: string, tick: number): Promise<Rows> {
   const feed = parseShow(address) ?? '';
-  if (tick !== lastTick) { lastTick = tick; askedFeeds.clear(); askedAll = false; }
+  if (tick !== S().lastTick) { S().lastTick = tick; S().askedFeeds.clear(); S().askedAll = false; }
   if (feed === '') return { rows: [] };
   const k = feedKey(feed);
-  if (!askedFeeds.has(k)) {
-    askedFeeds.add(k);
+  if (!S().askedFeeds.has(k)) {
+    S().askedFeeds.add(k);
     try { merge(parseClips((await getJSON(CLIPS_PATH, { feed, limit: 50 })).body)); } catch { /* the route is missing or down: nothing, silently */ }
   }
-  const mine = [...byID.values()].filter((c) => c.feedURL !== '' && feedKey(c.feedURL) === k).sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
+  const mine = [...S().byID.values()].filter((c) => c.feedURL !== '' && feedKey(c.feedURL) === k).sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
   return { rows: mine.slice(0, 10).map(row) };
 }
 
 async function find(id: string): Promise<Clip | null> {
-  const have = byID.get(id);
-  if (have || askedAll) return have ?? null;
-  askedAll = true;
+  const have = S().byID.get(id);
+  if (have || S().askedAll) return have ?? null;
+  S().askedAll = true;
   try { merge(parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body)); } catch { /* silent */ }
-  return byID.get(id) ?? null;
+  return S().byID.get(id) ?? null;
 }
 
 const NONE = { op: '', id: '', url: '', title: '', show: '', start: 0, clip: '', feed: '' };

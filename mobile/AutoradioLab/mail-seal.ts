@@ -7,7 +7,7 @@
 // No cipher, nothing written: when the native module is absent or refuses (no key could be made), `seal` answers null and mail-store writes no file.
 // Format: "MS3" | the native sealed box (12-byte nonce, ciphertext, 16-byte tag), the whole as AES-GCM's combined form.
 
-import { nativeLater, sealingBlocked, refreshSealBlock } from './api.ts';
+import { nativeInert, sealingBlocked, refreshSealBlock } from './api.ts';
 
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', data as unknown as BufferSource));
@@ -39,7 +39,7 @@ const bounded = <T>(p: Promise<T>): Promise<T> => Promise.race([p, new Promise<T
 export async function canSeal(): Promise<boolean> {
   await refreshSealBlock();
   if (sealingBlocked()) return false;
-  const later = nativeLater(); if (!later) return false;
+  const later = nativeInert(); if (!later) return false;
   if (sealable === null) {
     try { const r = (await bounded(later({ op: 'mailCan' }))) as { ok?: boolean } | null; sealable = !!r && r.ok === true; } catch { sealable = false; }
   }
@@ -51,7 +51,7 @@ export function forgetProbe(): void { sealable = null; }
 /** The sealed bytes, or null when there is no cipher or it refused. `aad` names the record (kind and id). */
 export async function seal(plain: Uint8Array, aad: string): Promise<Uint8Array | null> {
   if (sealingBlocked()) return null;
-  const later = nativeLater(); if (!later) return null;
+  const later = nativeInert(); if (!later) return null;
   try {
     const r = (await bounded(later({ op: 'mailSeal', b64: b64(plain), aad }))) as { ok?: boolean; b64?: unknown } | null;
     if (!r || r.ok !== true || typeof r.b64 !== 'string') return null;
@@ -65,7 +65,7 @@ export async function seal(plain: Uint8Array, aad: string): Promise<Uint8Array |
  * now (no native module, the Keychain locked, a bridge error): the file is KEPT. */
 export type Opened = { plain: Uint8Array } | { why: 'bad' | 'cannot' };
 export async function open(sealed: Uint8Array, aad: string): Promise<Opened> {
-  const later = nativeLater(); if (!later) return { why: 'cannot' };
+  const later = nativeInert(); if (!later) return { why: 'cannot' };
   if (sealed.length < MAGIC.length + 28) return { why: 'bad' };
   for (let i = 0; i < MAGIC.length; i++) if (sealed[i] !== MAGIC[i]) return { why: 'bad' };
   try {
@@ -77,7 +77,7 @@ export async function open(sealed: Uint8Array, aad: string): Promise<Opened> {
 
 /** Sign-out: forget the key natively (the files are then unreadable whatever happens to them). Never throws. */
 export async function forgetKey(): Promise<void> {
-  const later = nativeLater(); if (!later) return;
+  const later = nativeInert(); if (!later) return;
   forgetProbe();
   try { await later({ op: 'mailForget' }); } catch { /* nothing to forget */ }
 }

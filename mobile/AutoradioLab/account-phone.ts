@@ -24,6 +24,8 @@ export type Faults = {
   stat: Map<string, string>;             // stat rejects with this code
   hangRm: Set<string>;                   // rm does not answer until `releaseRm()` (a store the system will not release yet)
   releaseRm: () => void;
+  rmGate: Map<string, Promise<void>>;   // the first rm of this path waits for the promise (one-shot)
+  writeHold: Map<string, Promise<void>>; // atomicWriteFile of this path waits for the promise, then lands (a write in flight)
   hangRead: Set<string>;                 // readFile never answers
   hold: Map<string, Promise<void>>;      // readFile takes the bytes, THEN waits (a read that began before a wipe and ends after it)
   noStorage: boolean;
@@ -34,14 +36,14 @@ export function memFs(seed: Record<string, string> | string[] = []) {
   const files = new Map<string, Uint8Array>();
   const enc = new TextEncoder();
   if (Array.isArray(seed)) for (const p of seed) files.set(p, enc.encode('x')); else for (const [p, v] of Object.entries(seed)) files.set(p, enc.encode(v));
-  const faults: Faults = { rm: new Set(), rmSilently: new Set(), write: new Set(), read: new Map(), stat: new Map(), hangRm: new Set(), releaseRm: () => { for (const r of held.splice(0)) r(); }, hangRead: new Set(), hold: new Map(), noStorage: false };
+  const faults: Faults = { rm: new Set(), rmSilently: new Set(), write: new Set(), read: new Map(), stat: new Map(), hangRm: new Set(), rmGate: new Map(), writeHold: new Map(), releaseRm: () => { for (const r of held.splice(0)) r(); }, hangRead: new Set(), hold: new Map(), noStorage: false };
   const writes: string[] = [];
   const held: (() => void)[] = [];
   const spy = { stampOverwrites: 0 };
   const kids = (p: string) => [...files.keys()].filter((k) => k.startsWith(p + '/'));
   const fs = {
     directories: { data: 'app:/data', cache: 'app:/cache', temporary: 'app:/tmp' },
-    atomicWriteFile: async (p: string, b: Uint8Array) => { if (faults.write.has(p)) throw new FsError('full'); if (p === STAMP && files.has(p)) spy.stampOverwrites += 1; events.push('write:' + p); writes.push(p + '=' + new TextDecoder().decode(b)); files.set(p, b); },
+    atomicWriteFile: async (p: string, b: Uint8Array) => { { const h = faults.writeHold.get(p); if (h) await h; } if (faults.write.has(p)) throw new FsError('full'); if (p === STAMP && files.has(p)) spy.stampOverwrites += 1; events.push('write:' + p); writes.push(p + '=' + new TextDecoder().decode(b)); files.set(p, b); },
     readFile: async (p: string) => {
       if (faults.hangRead.has(p)) await new Promise(() => undefined);
       const c = faults.read.get(p); if (c) throw new FsError(c);
@@ -55,6 +57,7 @@ export function memFs(seed: Record<string, string> | string[] = []) {
     },
     rm: async (p: string) => {
       events.push('rm:' + p);
+      { const g = faults.rmGate.get(p); if (g) { faults.rmGate.delete(p); await g; } }
       if (faults.hangRm.has(p)) await new Promise<void>((r) => { held.push(r); });
       if (faults.rm.has(p)) throw new FsError('EACCES');
       if (faults.rmSilently.has(p)) return;
@@ -78,12 +81,13 @@ export type World = {
   keyDeleteFails: boolean;                     // the Keychain delete failed and the native side answers not done (ChoirSignIn.swift:128)
   sessionFails: boolean;                       // keystate says present, the session read finds nothing
   keystateHangs: boolean;
+  keystateGate: Promise<void> | null;          // keystate answers only after this (the facts read takes a while)
   release: (() => void) | null;                // lets a hung native call go on
   wipeFailed: string[];                        // what the native wipe reports as failed (landing 2)
   inflight: number; maxInflight: number;       // native sign-out and wipe calls running at once
 };
 export const newWorld = (key: World['key'] = 'present', value = KEY_A): World => ({
-  key, value, swift: true, log: [], gens: [], signOut: 'ok', wipe: 'ok', keyDeleteFails: false, sessionFails: false, keystateHangs: false, release: null, wipeFailed: [], inflight: 0, maxInflight: 0,
+  key, value, swift: true, log: [], gens: [], signOut: 'ok', wipe: 'ok', keyDeleteFails: false, sessionFails: false, keystateHangs: false, keystateGate: null, release: null, wipeFailed: [], inflight: 0, maxInflight: 0,
 });
 
 /** The app module as the model of the phone. `w` is read at each call, so a test changes the world while the app runs. */
@@ -100,6 +104,7 @@ export function phone(w: () => World) {
       const W = w();
       if (r.op === 'keystate') {
         if (W.keystateHangs) await new Promise(() => undefined);
+        if (W.keystateGate) await W.keystateGate;
         return { state: W.key };
       }
       if (r.op === 'session') return W.key === 'present' && !W.sessionFails ? { found: true, value: W.value, computerId: '' } : { found: false };
