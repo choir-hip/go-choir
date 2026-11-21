@@ -406,15 +406,21 @@ Built in lane `search-read-first`; the code wins where it differs.
   the top 5 pages new to the run of every earlier search are tried (fewer when
   fewer came back). It is stricter than 4.2, in the direction of the owner's
   ruling ("reading much more and searching less").
-- **No new event kinds.** `search.decision` and `search.result` are not new
-  `EventKind`s (each would need rows in the storage, durability and sealer
-  tables, which is its own red change). The decision is a desk egress event with
-  `verb: "search_decision"`, written before `client.Stream` opens
-  (`agentcore/search_decision.go`, called from the egress handler in
-  `tools_desk.go` just before `startSearch`); the result is the existing
-  `search_done` event with `pages_returned`. "Pages new to the corpus" and
-  "outlets new to the story" are not recorded: the leads are written after the
-  stream ends and the guest does not know the story's outlets.
+- **No new event kinds, and no standalone decision event.** `search.decision`
+  and `search.result` are not new `EventKind`s (each would need rows in the
+  storage, durability and sealer tables, which is its own red change), and a
+  standalone event before every stream would undo the journal cut R4 (one
+  durable record per cell; the test `TestDeskCellAndEgressRecordRunEvents`
+  holds it). The decision is `decision` on the `search_start` row of the cell's
+  `desk.cell` event, taken from the guest's payload before `client.Stream` opens
+  (`agentcore/search_decision.go`, `searchDecisionOf`, called in the egress
+  handler of `tools_desk.go` before `startSearch`); the result is the existing
+  standalone `search_done` event with `pages_returned`. The decision is the
+  counts at the moment of the send, so it cannot count its own results; it is
+  not written before the stream in time (a crash between the stream and the end
+  of the cell loses it with the row). "Pages new to the corpus" and "outlets new
+  to the story" are not recorded: the leads are written after the stream ends
+  and the guest does not know the story's outlets.
 - **The need state is the guest's own report**, in `SearchStartPayload`
   (`verb`, `earlier`, `returned`, `tried`, `read`, `outlets`, `held_brief`,
   `held_tried`, `fresh_why`). It is a record, not a gate: the gate is the guest's

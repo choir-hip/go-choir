@@ -2,13 +2,16 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/search"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -17,66 +20,82 @@ import (
 // (docs/design/semantic-layer-2026-11-20.md section 4.3). Failure list,
 // written before the code:
 //  1. The host learns nothing of what the run held and had tried when it asked:
-//     no search_decision event, or one that names the query, or one written
-//     after the stream opened (so a search could count its own results as held).
+//     no decision on the search's row, or one that names the query, or one that
+//     counts the search's own results as held. (Design 4.3 asked for a
+//     standalone search.decision event before the stream; the journal cut R4
+//     keeps one durable record per cell, so the decision rides the search_start
+//     row, taken from the payload before the stream opens.)
 //  2. A search's end carries no pages_returned.
 //  3. SearchFresh's reason is not on the tape with the decision.
 //  4. The pages the corpus brief delivered do not reach the run's cells: a first
 //     web search goes out with the held pages untried.
 //  5. A brief that delivered nothing hands the run a search zero.
 
-// logSearchClient wraps a client and notes, in one ordered log, when each
-// stream is opened.
-type logSearchClient struct {
-	inner search.Client
-	log   func(string)
-}
-
-func (c logSearchClient) Stream(ctx context.Context, query string, maxResults int) (*search.Stream, error) {
-	c.log("stream:" + query)
-	return c.inner.Stream(ctx, query, maxResults)
-}
-
-type orderedLog struct {
-	mu      sync.Mutex
-	entries []string
-	events  []map[string]any
-}
-
-func (l *orderedLog) add(s string) {
-	l.mu.Lock()
-	l.entries = append(l.entries, s)
-	l.mu.Unlock()
-}
-
-func (l *orderedLog) tap(kind types.EventKind, payload map[string]any) {
-	verb, _ := payload["verb"].(string)
-	if kind != types.EventDeskEgress || (verb != "search_decision" && verb != "search_done") {
-		return
+// decisionRig is a research desk tool over a real store, so the events a run
+// writes can be read back.
+func decisionRig(t *testing.T, client search.Client, configure func(rt *Runtime)) (toolregistry.Tool, context.Context, string, func() ([]map[string]any, []map[string]any)) {
+	t.Helper()
+	deskTestWorkerBin(t)
+	rt, s := testRuntime(t)
+	rt.researchDeps = &researchtools.Dependencies{Search: client}
+	if configure != nil {
+		configure(rt)
 	}
-	l.mu.Lock()
-	l.events = append(l.events, payload)
-	l.entries = append(l.entries, "event:"+verb)
-	l.mu.Unlock()
+	workers := newDeskSessionWorkers()
+	t.Cleanup(workers.closeAll)
+	tool := newDeskGoEvalTool(rt, workers, agentprofile.Research)
+	execCtx := deskEvalExecCtx(t)
+	execCtx.Profile = agentprofile.Research
+	execCtx.Role = agentprofile.Research
+	execCtx.RunID = "run-desk-eval"
+	execCtx.RunRecord = &types.RunRecord{RunID: execCtx.RunID, AgentID: "research:decision", OwnerID: execCtx.OwnerID, TrajectoryID: "traj-decision"}
+	ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
+	rows := func() (decisions, dones []map[string]any) {
+		evs, err := s.ListEvents(context.Background(), execCtx.RunID, 200)
+		if err != nil {
+			t.Fatalf("list events: %v", err)
+		}
+		for _, ev := range evs {
+			var p map[string]any
+			_ = json.Unmarshal(ev.Payload, &p)
+			switch ev.Kind {
+			case types.EventDeskCell:
+				cellRows, _ := p["egress"].([]any)
+				for _, r := range cellRows {
+					row, _ := r.(map[string]any)
+					if d, ok := row["decision"].(map[string]any); ok {
+						decisions = append(decisions, d)
+					}
+				}
+			case types.EventDeskEgress:
+				if p["verb"] == "search_done" {
+					dones = append(dones, p)
+				}
+			}
+		}
+		return decisions, dones
+	}
+	return tool, ctx, execCtx.RunID, rows
 }
 
-func (l *orderedLog) snapshot() ([]string, []map[string]any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]string(nil), l.entries...), append([]map[string]any(nil), l.events...)
+func num(m map[string]any, k string) int {
+	switch v := m[k].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	}
+	return -1
 }
 
-func TestSearchDecisionIsOnTheTapBeforeTheStreamAndTheResultAfter(t *testing.T) {
-	var lg orderedLog
-	client := logSearchClient{inner: manyPagesClient{pages: 6}, log: lg.add}
-	tool, ctx, _, _ := researchSearchToolWith(t, client, func(rt *Runtime) { rt.deskEventTap = lg.tap })
+func TestSearchDecisionRidesTheSearchRowAndNeverCountsItsOwnResults(t *testing.T) {
+	tool, ctx, _, rows := decisionRig(t, manyPagesClient{pages: 6}, nil)
 	out := evalDeskCell(t, tool, ctx, `import "time"
 s, _ := choir.Search("alpha query")
 for i := 0; i < 5 && i < len(s.Results); i++ { choir.Read(s.Results[i].URL) }
 t, _ := choir.Search("beta query")
 fmt.Println(s.ID, t.ID, len(s.Results), t.Refused == "")
-const why = "the first answer is about another harbor"
-u, _ := choir.SearchFresh("gamma query", why)
+u, _ := choir.SearchFresh("gamma query", "the first answer is about another harbor")
 fmt.Println(u.ID, u.Refused == "")
 time.Sleep(300 * time.Millisecond)`)
 	if out.Error != "" {
@@ -85,73 +104,31 @@ time.Sleep(300 * time.Millisecond)`)
 	if !strings.Contains(out.Stdout, "s1 s2 6 true") || !strings.Contains(out.Stdout, "s3 true") {
 		t.Fatalf("stdout:\n%s", out.Stdout)
 	}
-	entries, events := lg.snapshot()
-	pos := func(s string, from int) int {
-		for i := from; i < len(entries); i++ {
-			if entries[i] == s {
-				return i
-			}
-		}
-		return -1
-	}
-	d1 := pos("event:search_decision", 0)
-	s1 := pos("stream:alpha query", 0)
-	e1 := pos("event:search_done", 0)
-	if d1 < 0 || s1 < 0 || e1 < 0 || !(d1 < s1 && s1 < e1) {
-		t.Fatalf("the first decision must be written before its stream opens and its result after: %v", entries)
-	}
-	d2 := pos("event:search_decision", d1+1)
-	s2 := pos("stream:beta query", 0)
-	if d2 < 0 || s2 < 0 || !(d2 < s2) {
-		t.Fatalf("the second decision must be written before its stream opens: %v", entries)
-	}
-	var decisions []map[string]any
-	for _, ev := range events {
-		if ev["verb"] == "search_decision" {
-			decisions = append(decisions, ev)
-		}
-	}
+	decisions, dones := rows()
 	if len(decisions) != 3 {
-		t.Fatalf("%d decisions, want 3: %v", len(decisions), events)
+		t.Fatalf("%d decisions, want 3: %v", len(decisions), decisions)
 	}
-	num := func(m map[string]any, k string) int {
-		switch v := m[k].(type) {
-		case int:
-			return v
-		case float64:
-			return int(v)
-		}
-		return -1
-	}
-	// The first search asked with nothing held; the second with the first's
-	// 6 pages returned and the 5 read; a search never counts its own results.
+	// The first search asked with nothing held although it returned 6 pages: a
+	// search never counts its own results. The second asked with the first's 6
+	// pages returned and the 5 read.
 	if d := decisions[0]; num(d, "earlier_searches") != 0 || num(d, "pages_returned") != 0 || num(d, "pages_tried") != 0 || d["search_verb"] != "search" {
 		t.Fatalf("first decision counted something held: %v", d)
 	}
 	if d := decisions[1]; num(d, "earlier_searches") != 1 || num(d, "pages_returned") != 6 || num(d, "pages_tried") != 5 {
 		t.Fatalf("second decision: %v", d)
 	}
-	d3 := decisions[2]
-	if d3["fresh_why"] != "the first answer is about another harbor" || d3["search_verb"] != "search_fresh" {
-		t.Fatalf("SearchFresh's reason is not on the tape: %v", d3)
+	if d := decisions[2]; d["fresh_why"] != "the first answer is about another harbor" || d["search_verb"] != "search_fresh" {
+		t.Fatalf("SearchFresh's reason is not on the tape: %v", d)
 	}
 	for _, d := range decisions {
 		for k, v := range d {
-			if s, ok := v.(string); ok && strings.Contains(s, "alpha query") || k == "query" {
+			if sv, ok := v.(string); ok && strings.Contains(sv, "alpha query") || k == "query" {
 				t.Fatalf("a decision names the query: %v", d)
 			}
 		}
 	}
-	// The end of a search carries what it returned.
-	var done map[string]any
-	for _, ev := range events {
-		if ev["verb"] == "search_done" {
-			done = ev
-			break
-		}
-	}
-	if done == nil || num(done, "pages_returned") != 6 {
-		t.Fatalf("search_done lacks pages_returned: %v", done)
+	if len(dones) < 1 || num(dones[0], "pages_returned") != 6 {
+		t.Fatalf("search_done lacks pages_returned: %v", dones)
 	}
 }
 
@@ -160,12 +137,9 @@ func TestThePagesTheBriefDeliveredAreSearchZeroForTheRunsCells(t *testing.T) {
 	for i := 1; i <= 6; i++ {
 		held = append(held, yaegikernel.HeldPage{URL: fmt.Sprintf("https://held.example/p%d", i), CaptureID: fmt.Sprintf("cap-%d", i)})
 	}
-	var lg orderedLog
 	var rtp *Runtime
-	client := logSearchClient{inner: manyPagesClient{pages: 3}, log: lg.add}
-	tool, ctx, _, _ := researchSearchToolWith(t, client, func(rt *Runtime) {
+	tool, ctx, _, rows := decisionRig(t, manyPagesClient{pages: 3}, func(rt *Runtime) {
 		rtp = rt
-		rt.deskEventTap = lg.tap
 		rt.noteBriefHeld("run-desk-eval", held)
 	})
 	out := evalDeskCell(t, tool, ctx, `s, _ := choir.Search("alpha query")
@@ -177,8 +151,8 @@ for _, h := range s.Results { fmt.Println(h.URL) }`)
 	if !strings.Contains(out.Stdout, "true true 5") || !strings.Contains(out.Stdout, "https://held.example/p1") || strings.Contains(out.Stdout, "held.example/p6") {
 		t.Fatalf("a first search was not held back for the brief's top five pages:\n%s", out.Stdout)
 	}
-	if entries, _ := lg.snapshot(); len(entries) != 0 {
-		t.Fatalf("a refused search reached the host: %v", entries)
+	if decisions, _ := rows(); len(decisions) != 0 {
+		t.Fatalf("a refused search reached the host: %v", decisions)
 	}
 	if line, ok := rtp.takeRunSearchSummary("run-desk-eval"); !ok || !strings.Contains(line, "held_first=1") {
 		t.Fatalf("the run line does not count the refusal by its reason: %q", line)
@@ -190,15 +164,9 @@ fmt.Println(s.ID, s.Refused == "")`)
 		t.Fatalf("with the held pages tried the search must be sent:\n%s", out.Stdout)
 	}
 	time.Sleep(50 * time.Millisecond)
-	_, events := lg.snapshot()
-	for _, ev := range events {
-		if ev["verb"] == "search_decision" {
-			if h, _ := ev["held_brief"].(int); h != 6 {
-				if f, _ := ev["held_brief"].(float64); int(f) != 6 {
-					t.Fatalf("the decision does not report the 6 held pages: %v", ev)
-				}
-			}
-		}
+	decisions, _ := rows()
+	if len(decisions) != 1 || num(decisions[0], "held_brief") != 6 || num(decisions[0], "held_tried") != 5 {
+		t.Fatalf("the decision does not report the 6 held pages, 5 tried: %v", decisions)
 	}
 }
 

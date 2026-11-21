@@ -669,6 +669,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					requestID, pid := yaegikernel.EgressFrameFromContext(egrCtx)
 					var out json.RawMessage
 					var err error
+					var decision map[string]any
 					if action == yaegikernel.ActionSearchStart {
 						// An async search never reaches deskEgress, so its query is
 						// gated here, as an egress call is.
@@ -681,10 +682,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 						// stamp what it writes without world_untrusted (review
 						// r1, S1).
 						rt.taintRun(cellExec.RunID, worldReadLabels)
-						// What the run held and had read when it asked is written before
-						// the stream opens, so a search cannot count its own results as
-						// held (search_decision.go).
-						rt.recordSearchDecision(context.WithoutCancel(egrCtx), cellExec, payload, workers.sessionLabel(sessionKey), pid)
+						// What the run held and had read when it asked is taken from the
+						// payload before the stream opens, so a search cannot count its own
+						// results as held; it rides the search_start row (search_decision.go).
+						decision = searchDecisionOf(payload)
 						// An async search belongs to this desk session: its
 						// stream outlives the cell and ends with the session.
 						out, err = workers.startSearch(search.WithAttribution(egrCtx, search.Attribution{RunID: cellExec.RunID, Desk: deskRole, Conversation: cellExec.ChannelID}), sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {
@@ -722,6 +723,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					}
 					if err != nil {
 						ev["error"] = err.Error()
+					}
+					if decision != nil {
+						ev["decision"] = decision
 					}
 					// The row rides the cell's desk.cell event (journal cut
 					// R4); a row with no open cell is appended on its own.
@@ -1558,9 +1562,6 @@ func (rt *Runtime) recordDeskRefusal(ctx context.Context, fallback toolregistry.
 // not published on the live bus, and a failure to record never fails the
 // cell.
 func (rt *Runtime) recordDeskEvent(ctx context.Context, exec toolregistry.ExecutionContext, kind types.EventKind, payload map[string]any) {
-	if rt != nil && rt.deskEventTap != nil {
-		rt.deskEventTap(kind, payload)
-	}
 	if rt == nil || rt.store == nil {
 		return
 	}

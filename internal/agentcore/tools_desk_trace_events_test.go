@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 	"testing"
 
@@ -41,9 +42,9 @@ func TestDeskCellAndEgressRecordRunEvents(t *testing.T) {
 for _, q := range []string{"q1", "q2", "q3"} {
 	q := q
 	go func() {
-		s, err := choir.SearchStart(q, true) // fresh: three searches at once are the point of this test
-		if err == nil {
-			_, err = choir.SearchWait(s.ID, 5000)
+		s, err := choir.SearchFresh(q, "three searches at once are the point of this test") // over the running rule, with a reason
+		if err == nil && s.Refused != "" {
+			err = fmt.Errorf("refused: %s", s.Refused)
 		}
 		done <- err
 	}()

@@ -146,9 +146,6 @@ type Runtime struct {
 	// run's cells so it reads them before it searches the web
 	// (search_decision.go). Forgotten when the run ends.
 	briefHeld sync.Map
-	// deskEventTap, when set, sees every desk event before it is stored (a
-	// test seam: the ordering of a search's decision and result).
-	deskEventTap func(kind types.EventKind, payload map[string]any)
 	// calibrationRunReads holds each running run's calibration read state
 	// (run id -> *calibrationRunReads, calibration_reads.go).
 	calibrationRunReads sync.Map
