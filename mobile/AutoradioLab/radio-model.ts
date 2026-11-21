@@ -190,7 +190,7 @@ export function make(i: PageInput): PageInfo {
   const tail = i.sheet.entries.filter((e) => isTail(e) && e.kind !== 'transition');
   const playing = i.playing ?? false, notice = i.notice ?? '', writing = i.writing ?? false;
   const o: PageInfo = {
-    state: 'ready', statusLine: '', dim: false, playing: air !== undefined && playing, dateLine: dateLine(i.now, off), onAir: false, kindLabel: '', title: '',
+    state: 'ready', statusLine: '', dim: false, playing: air !== undefined && playing, dateLine: i.now > 0 ? dateLine(i.now, off) : '', onAir: false, kindLabel: '', title: '',
     source: '', published: '', sentence: '', sentenceNumber: 0, sentenceCount: 0, elapsed: '', remaining: '', fraction: 0, thenBack: '', openAddress: '',
     why: '', forecast: '', canWhy: false, cannotSpeak: '', action: '', heardWords: '', greeting: '', ahead: [], aheadMore: 0, writing, emptyNote: '', notice,
     heard: [], builtOn: [], canPlay: true, takePublisher: '', takeTranscript: '', takeRecord: '',
@@ -255,7 +255,7 @@ export function make(i: PageInput): PageInfo {
   // (the greeting is not offered while the radio cannot speak: it would say "Press play" over the reason)
   const listening = ['listening', 'talking', 'heard'].includes(i.barState ?? 'idle');
   const failure = playing ? '' : (i.message ?? '').trim();
-  if (!air && failure === '' && ahead.length > 0) o.greeting = greeting(ahead, i.now, off);
+  if (i.now > 0 && !air && failure === '' && ahead.length > 0) o.greeting = greeting(ahead, i.now, off);
   if (listening) {
     o.state = 'listening'; o.statusLine = 'Listening'; o.dim = true;
     const w = (i.heardWords ?? '').trim();

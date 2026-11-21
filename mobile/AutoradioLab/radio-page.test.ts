@@ -31,8 +31,21 @@ describe('the sheet', () => {
     for (const f of [undefined, null, 'x', {}, { sheet: '' }, { sheet: 'not json' }, { sheet: '[1]' }, { sheet: '{"entries":5}' }, { sheet: 4 }]) {
       const p = radioPage(f, bar(), none, 0);
       expect(p.state).toBe('ready'); expect(p.onAir).toBe(false); expect(p.ahead).toEqual([]); expect(p.canPlay).toBe(true);
+      expect(p.dateLine).toBe(''); expect(p.greeting).toBe(''); expect(p.published).toBe('');   // no clock is no date, never 1970
     }
     expect(radioPage(facts([air]), undefined, undefined, 0).onAir).toBe(true);
+  });
+});
+
+describe('no clock', () => {
+  test('R2b a non-positive `at` is no clock: no date, no greeting, no relative time, even with rows ahead and a published time', () => {
+    for (const at of [0, -5, NaN, undefined]) {
+      const p = radioPage({ ...facts([entry('a'), entry('b')], { publishedAt: 5000 }), at }, bar(), none, 0);
+      expect(p.dateLine).toBe(''); expect(p.greeting).toBe(''); expect(p.published).toBe('');
+      expect(p.ahead.length).toBe(2);
+    }
+    const onAir = radioPage({ ...facts([air], { publishedAt: 5000 }), at: 0 }, bar(), none, 0);
+    expect(onAir.published).toBe(''); expect(onAir.dateLine).toBe('');
   });
 });
 
@@ -73,26 +86,37 @@ describe('the bar', () => {
 describe('a story on air whose sheet entry carries no title', () => {
   // The simulator proof of 19c4c7b6b: the entry was placed by a play that dropped the title (native choirPlay passed only the route), so the sheet held title "" and label "".
   // The old page showed the headline only when the radio's own list happened to hold the story. The programme on air has the headline, so the page uses it.
-  const bare = (o: Partial<Entry> = {}) => entry('p', { kind: 'page', state: 'on_air', placed_by: 'listener', title: '', text: undefined, source: { ref: 'pub:/pub/texture/anthropic-prices-its-ipo-pub1', label: '' }, ...o } as Partial<Entry>);
+  const ROUTE = '/pub/texture/anthropic-prices-its-ipo-pub1';
+  const bare = (o: Partial<Entry> = {}) => entry('p', { kind: 'page', state: 'on_air', placed_by: 'listener', title: '', text: undefined, source: { ref: 'pub:' + ROUTE, label: '' }, ...o } as Partial<Entry>);
   const HEAD = 'Anthropic closes up 17% in volatile Nasdaq debut';
   test('R10 the headline of the programme on air is the title, the small line and the built-on label, never "Story" or a route', () => {
-    const p = radioPage(facts([bare()], { airTitle: HEAD, playing: true }), bar(), none, 0);
+    const p = radioPage(facts([bare()], { airTitle: HEAD, airRoute: ROUTE, playing: true }), bar(), none, 0);
     expect(p.title).toBe(HEAD); expect(p.source).toBe(HEAD);
     expect(p.builtOn.map((b) => b.title)).toEqual([HEAD]);
     expect(p.title).not.toBe('Story'); expect(p.builtOn[0].title.startsWith('/pub/')).toBe(false);
   });
   test('R10 an entry that carries its own title keeps it; the programme title does not replace it', () => {
-    const p = radioPage(facts([bare({ title: 'The entry title', source: { ref: 'pub:/pub/x-pub1', label: 'The entry label' } } as Partial<Entry>)], { airTitle: HEAD }), bar(), none, 0);
+    const p = radioPage(facts([bare({ title: 'The entry title', source: { ref: 'pub:/pub/x-pub1', label: 'The entry label' } } as Partial<Entry>)], { airTitle: HEAD, airRoute: ROUTE }), bar(), none, 0);
     expect(p.title).toBe('The entry title'); expect(p.source).toBe('The entry label'); expect(p.builtOn[0].title).toBe('The entry label');
   });
   test('R10 with no programme title the kind word stays (nothing is invented), and entries ahead are never retitled', () => {
-    expect(radioPage(facts([bare()], { airTitle: '' }), bar(), none, 0).title).toBe('Story');
+    expect(radioPage(facts([bare()], { airTitle: '', airRoute: ROUTE }), bar(), none, 0).title).toBe('Story');
     const ahead = entry('q', { kind: 'page', title: '', text: undefined, source: { ref: 'pub:/pub/y-pub2', label: '' } } as Partial<Entry>);
-    expect(radioPage(facts([air, ahead], { airTitle: HEAD }), bar(), none, 0).ahead[0].title).toBe('Story');
+    expect(radioPage(facts([air, ahead], { airTitle: HEAD, airRoute: ROUTE }), bar(), none, 0).ahead[0].title).toBe('Story');
   });
-  test('R10 remote audio and a take are not retitled by the programme', () => {
+  test('R10 a bare entry played while ANOTHER document is loaded is not named by that document\'s headline', () => {
+    const p = radioPage(facts([bare()], { airTitle: 'The previous story headline', airRoute: '/pub/texture/the-previous-story-pub9' }), bar(), none, 0);
+    expect(p.title).toBe('Story'); expect(p.builtOn[0].title).not.toBe('The previous story headline');
+    expect(radioPage(facts([bare()], { airTitle: 'A headline', airRoute: '' }), bar(), none, 0).title).toBe('Story');   // no route on air: not known to be this entry's
+  });
+  test('R10 a take on air is not retitled by the programme', () => {
+    const take = entry('t', { kind: 'take', state: 'on_air', title: '', text: undefined, source: { ref: 'take:abc', label: 'Ana' } } as Partial<Entry>);
+    const p = radioPage(facts([take], { airTitle: HEAD, airRoute: ROUTE }), bar(), none, 0);
+    expect(p.title).toBe('Ana'); expect(p.takePublisher).toBe('Ana');
+  });
+  test('R10 remote audio is not retitled by the programme', () => {
     const rem = entry('r', { kind: 'episode', state: 'on_air', title: '', text: undefined, source: { ref: 'https://x/a.mp3', label: 'Show' } } as Partial<Entry>);
-    expect(radioPage(facts([rem], { airTitle: HEAD, remoteAudio: true }), bar(), none, 0).title).toBe('Show');
+    expect(radioPage(facts([rem], { airTitle: HEAD, airRoute: ROUTE, remoteAudio: true }), bar(), none, 0).title).toBe('Show');
   });
 });
 

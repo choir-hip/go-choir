@@ -6,18 +6,19 @@
 // Nothing is kept here and nothing is stored: every call is from its facts.
 import { barInfo } from './bar.ts';
 import { clockLabel, make, type PageInfo } from './radio-model.ts';
+import { paperRoute } from './runsheet-entries.ts';
 import { decodeSheet, emptySheet, type Sheet } from './runsheet-model.ts';
 import { relative } from './paper-model.ts';
 
 export type RadioFacts = {
   at: number; sheet: string; playing: boolean; sentences: string[]; sentenceIndex: number; progress: number;
   remoteAudio: boolean; remoteElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
-  /** The title of the programme on air (the headline being read); "" when none. */
-  airTitle: string; publishedAt: number; versionRoutes: string[]; versionNumbers: number[]; stale: string[]; takeTranscript: string; takeRecord: string;
+  /** The title and route of the programme on air (the headline being read and the story it is); "" when none. */
+  airTitle: string; airRoute: string; publishedAt: number; versionRoutes: string[]; versionNumbers: number[]; stale: string[]; takeTranscript: string; takeRecord: string;
 };
 export const EMPTY_FACTS: RadioFacts = {
   at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, remoteAudio: false, remoteElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
-  airTitle: '', publishedAt: 0, versionRoutes: [], versionNumbers: [], stale: [], takeTranscript: '', takeRecord: '',
+  airTitle: '', airRoute: '', publishedAt: 0, versionRoutes: [], versionNumbers: [], stale: [], takeTranscript: '', takeRecord: '',
 };
 
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
@@ -32,12 +33,13 @@ function readSheet(text: string): Sheet {
 
 /** An entry placed by a play that carried no title (the native play took only the route) has an empty title and label; the programme on air has the headline. The on-air entry of a story or
  * a paper page takes it, for its title and its source label (the small line and the built-on row). Nothing else is renamed, and nothing is invented when there is no programme title. */
-function namedOnAir(sheet: Sheet, airTitle: string, remote: boolean): Sheet {
+function namedOnAir(sheet: Sheet, airTitle: string, airRoute: string, remote: boolean): Sheet {
   const t = airTitle.trim();
-  if (t === '' || remote) return sheet;
+  if (t === '' || airRoute === '' || remote) return sheet;
   const i = sheet.entries.findIndex((e) => e.state === 'on_air');
   const e = sheet.entries[i];
-  if (!e || (e.kind !== 'page' && e.kind !== 'story') || e.title.trim() !== '' || (e.source?.label ?? '') !== '' || e.source?.ref.startsWith('url:')) return sheet;
+  // only a paper page whose route IS the programme's: while another document is still loaded the headline on air is that one's, not this entry's
+  if (!e || e.kind !== 'page' || paperRoute(e) !== airRoute || e.title.trim() !== '' || (e.source?.label ?? '') !== '') return sheet;
   const named = { ...e, title: t, source: e.source ? { ...e.source, label: t } : e.source };
   return { ...sheet, entries: sheet.entries.map((x, k) => (k === i ? named : x)) };
 }
@@ -48,7 +50,7 @@ const zoneMinutes = (at: number): number => { try { return -new Date(at * 1000).
 /** The page for the native facts, the bar's facts and the conversation's entries. `offsetMinutes` overrides the zone (tests). */
 export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknown, offsetMinutes?: number): PageInfo {
   const f = obj(rawFacts);
-  const at = num(f.at);
+  const at = num(f.at) > 0 ? num(f.at) : 0;   // a non-positive time is no clock (a host with no native facts): no date, no greeting, no relative time
   const b = barInfo(rawBar, rawEntries);
   const versions: Record<string, number> = {};
   const routes = strs(f.versionRoutes), numbers = Array.isArray(f.versionNumbers) ? f.versionNumbers.map(num) : [];
@@ -57,15 +59,15 @@ export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknow
   const published = num(f.publishedAt);
   const takeTranscript = str(f.takeTranscript), takeRecord = str(f.takeRecord);
   return make({
-    sheet: namedOnAir(readSheet(str(f.sheet)), str(f.airTitle), remote),
+    sheet: namedOnAir(readSheet(str(f.sheet)), str(f.airTitle), str(f.airRoute), remote),
     barState: b.state, heardWords: b.text,
     playing: f.playing === true || b.state === 'playing',
     sentences: strs(f.sentences), sentenceIndex: Math.trunc(num(f.sentenceIndex)), progress: num(f.progress),
     remoteAudio: remote, elapsedLabel: remote ? clockLabel(elapsed) : '', remainingLabel: remote && duration > 0 ? '-' + clockLabel(Math.max(0, duration - elapsed)) : '',
     message: str(f.message), notice: str(f.notice), writing: f.writing === true, dry: f.dry === true, wants: f.wants === true,
-    published: published > 0 ? relative(published * 1000, at * 1000) : '',
+    published: at > 0 && published > 0 ? relative(published * 1000, at * 1000) : '',
     stale: strs(f.stale), versions,
     takeLookup: takeTranscript !== '' || takeRecord !== '' ? () => ({ transcript: takeTranscript, record_words: takeRecord }) : undefined,
-    now: at * 1000, utcOffsetMinutes: offsetMinutes ?? zoneMinutes(at),
+    now: at * 1000, utcOffsetMinutes: offsetMinutes ?? (at > 0 ? zoneMinutes(at) : 0),
   });
 }
