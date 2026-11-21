@@ -41,12 +41,7 @@ final class ClipCandidatesTests: XCTestCase {
         XCTAssertEqual(Set(j.keys), ["clip_id", "show", "episode_title", "published", "seconds", "quote"])
         XCTAssertEqual(j["seconds"] as? Double, 60)
     }
-    func testC9_HearItRowsAreTheStoryOwnClips() {
-        let s = store([clipRow(hex(1)), clipRow(hex(2), route: "/b")])
-        XCTAssertEqual(HearIt.rows(route: "a", store: s), [HearItRow(clipID: hex(1), show: "Show", episode: "Episode", length: "1 min", quote: "A quote.", story: "Story")])
-        XCTAssertEqual(HearIt.rows(route: "/b", store: s).count, 1)
-        XCTAssertTrue(HearIt.rows(route: "zzz", store: s).isEmpty)
-    }
+    // C9 (the story page's rows) is shared code now: clips.test.ts H1.
     func testC3_ABlockForTheClipFollowsTheLeadIn() throws {
         let seg = IncomingSegment(stretchID: "s", segmentID: "s/1", kind: "podcast_clip", title: "Show on it", text: "Here is how Show put it.", cites: [], blockCount: 1,
                                   clip: ProgrammeClipRef(clipID: hex(1), storyRef: "pub:a@v2", seconds: 60))

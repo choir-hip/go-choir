@@ -76,15 +76,7 @@ final class JoinOpenEpisodeTests: XCTestCase {
 final class JoinHearItTests: XCTestCase {
     func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
 
-    func testJ3_ThePageOfAStoryHasItsClipsAndNothingElse() {
-        let s = store([clipRow(hex(1), route: "/a"), clipRow(hex(2), route: "/b")])
-        XCTAssertEqual(HearIt.rows(address: "pub:a", store: s).map(\.clipID), [hex(1)])
-        XCTAssertEqual(HearIt.rows(address: "pub:a/v3", store: s).map(\.clipID), [hex(1)], "a version of the story has the story's clips")
-        XCTAssertEqual(HearIt.rows(address: "pub:a", store: s)[0].story, "Story")
-        XCTAssertTrue(HearIt.rows(address: "pub:zzz", store: s).isEmpty)
-        XCTAssertTrue(HearIt.rows(address: "texture:doc1", store: s).isEmpty, "only a published story has clips")
-        XCTAssertTrue(HearIt.rows(address: "doc:abc", store: s).isEmpty)
-    }
+    // J3's rows (a story's own clips, a version of it, no other page) are shared code now: clips.test.ts H1.
     func testJ3_QueueAddsTheClip() async {
         let s = store([clipRow(hex(1))]); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
         HearIt.enqueue(hex(1), store: s, player: q)
@@ -99,34 +91,19 @@ final class JoinHearItTests: XCTestCase {
     }
 }
 
-final class JoinShowClipsTests: XCTestCase {
-    func body(_ rows: [[String: Any]]) -> Data { try! JSONSerialization.data(withJSONObject: ["clips": rows]) }
+final class JoinClipRecordTests: XCTestCase {
+    // J6's feed matching, asking and bad bodies are shared code now (clips.test.ts C3, C4, H2); the native store holds what the page hands it.
+    func record(_ rows: [String: Any]) -> String { String(data: try! JSONSerialization.data(withJSONObject: rows), encoding: .utf8)! }
 
-    func testJ6_AShowListsItsOwnClipsMatchedByFeed() {
-        let s = ClipStore()
-        s.merge(PodcastClips.parse(body([clipRow(hex(1), feed: "https://example.test/feed.xml"), clipRow(hex(2), feed: "https://other.test/rss"), clipRow(hex(3), feed: "https://EXAMPLE.test/feed.xml/")])))
-        XCTAssertEqual(s.clips(forFeed: "https://example.test/feed.xml").map(\.clipID), [hex(1), hex(3)])
-        XCTAssertTrue(s.clips(forFeed: "https://none.test/x").isEmpty)
-        XCTAssertNotNil(s.clip(hex(2)), "a merged clip can be played by id")
-    }
-    func testJ6_MergeKeepsWhatTheBulkSetHeld() {
+    func testJ6_AClipHandedOverByThePageCanBePlayedByIdAndIsHeldOnce() {
         let s = ClipStore(); s.replace([clipRow(hex(1))].compactMap(PodcastClip.parse))
-        s.merge(PodcastClips.parse(body([clipRow(hex(2))])))
+        let two = PodcastClip.parse(record: record(clipRow(hex(2))))
+        XCTAssertNotNil(two)
+        s.merge([two!]); s.merge([two!])
         XCTAssertNotNil(s.clip(hex(1))); XCTAssertNotNil(s.clip(hex(2)))
-        s.merge(PodcastClips.parse(body([clipRow(hex(2))])))
-        XCTAssertEqual(s.all.count, 2, "a clip fetched twice is held once")
+        XCTAssertEqual(s.all.count, 2, "a clip handed twice is held once")
     }
-    func testJ6_ABadOrEmptyBodyIsSilentlyNothing() {
-        XCTAssertTrue(PodcastClips.parse(Data("not json".utf8)).isEmpty)
-        XCTAssertTrue(PodcastClips.parse(Data("{}".utf8)).isEmpty)
-        XCTAssertTrue(PodcastClips.parse(body([])).isEmpty)
-    }
-    // J6's rows (quote, story, length) are shared code now: clips.test.ts C3.
-    func testJ6_AFeedIsAskedForOnceAWhileNotOnEveryDraw() {
-        let s = ClipStore()
-        XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 0)))
-        s.didAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 0))
-        XCTAssertFalse(s.shouldAsk(feed: "https://example.test/feed.xml/", now: Date(timeIntervalSince1970: 60)))
-        XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 1000)))
+    func testJ6_ABadRecordIsNoClip() {
+        for r in ["not json", "{}", "[]", "", record(["clip_id": ""])] { XCTAssertNil(PodcastClip.parse(record: r)) }
     }
 }

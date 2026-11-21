@@ -42,6 +42,7 @@ component Autoradio
   provide
     // ---- lane autoradio-joins ----
     shClips
+    hearClips
     clipNote
     clipDo
     // ---- spine ----

@@ -707,6 +707,9 @@ bad "reader: no error message" '\[reader-message\] "(Could not|Sign in)' "$RD"
 chk "reader: body blocks" '\[reader-block-' "$RD"
 # "more on this" depends on the live stories (some have no related items: two runs lacked it with everything else fine), so it is told, not required
 if grep -qE '\[reader-related-pub:' "$RD"; then echo "ok: reader: more on this"; else echo "info: reader: neither story had a 'more on this' list (live content, not a defect)"; fi
+# "Hear it" depends on the live stories (a story has clips only when a podcast discussed it), so it is told, not required; but when the heading is drawn it must carry its rows
+# (the shared storyClips answers it, not the native reader), each with its Play, so a heading over nothing or rows that cannot play fail here.
+if grep -qE '\[reader-hear-it\]' "$RD"; then chk "reader: hear it has its clip rows" '\[clip-clip-[0-9a-f]+\]' "$RD"; chk "reader: hear it clips can be played" '\[clip-play-clip-[0-9a-f]+\]' "$RD"; else echo "info: reader: neither story had podcast clips (live content, not a defect)"; fi
 chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 [ -n "$DOC1" ] && chk "texture document: opened" '\[reader-block-' "$RD"
 if [ -n "$READER_STORY" ]; then

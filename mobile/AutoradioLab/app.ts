@@ -1,7 +1,7 @@
 import type { Answer, Sources } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
-import { clipAct, showClips } from './clips.ts';
+import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { adoptNative } from './api.ts';
 import { settingsAccount, aboutPage } from './settings.ts';
@@ -14,7 +14,7 @@ import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
-import { readerDocShared, readerHear, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
+import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
@@ -116,8 +116,7 @@ const sources: Sources = {
   takesPage: ([rec, _tick], _s, storage) => takesPageFor(takesEnv(storage), takes(), rec),
   takesAct: ([op, arg], _s, storage) => takesAct(takesEnv(storage), takes(), op, arg),
   // The reader (reader.ts): the story or document in front, and what its page does to it.
-  readerDocShared: ([address, acc, saved, _tick, heard]) => readerDocShared(address, acc, saved, undefined, heard ? 1 : 0),
-  readerHearShared: ([address]) => readerHear(address),
+  readerDocShared: ([address, acc, saved, _tick]) => readerDocShared(address, acc, saved),
   readerStopShared: ([address]) => readerStop(address),
   readerRestoreShared: ([address, version]) => readerRestore(address, version),
   readerReloadShared: ([address]) => readerReload(address),
@@ -143,6 +142,7 @@ const sources: Sources = {
   podcastQueue: ([address], _store, storage) => podcastQueue(address, storage),
   podcastPlayhead: ([id, clip, elapsed, duration], _store, storage) => podcastPlayhead({ id, clip, elapsed, duration }, storage),
   showClips: ([address, tick]) => showClips(address, tick),
+  storyClips: ([address, tick]) => storyClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
   // Files (files.ts): the listener's computer's files. Positional arguments.
   fileList: ([path, mode, sort, desc, query, _acct], _s, storage) => fileList({ path, mode, sort, desc, query }, storage),

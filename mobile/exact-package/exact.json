@@ -284,6 +284,22 @@
       "talking": "bool",
       "editing": "bool"
     },
+    "VoiceSetupFacts": {
+      "rows": "SetupRowView[]",
+      "summary": "string[]",
+      "totalLabel": "string",
+      "device": "string",
+      "onWiFi": "bool",
+      "setupStarted": "bool",
+      "setupFinished": "bool",
+      "mic": "string",
+      "level": "number",
+      "heard": "string",
+      "route": "string",
+      "talking": "bool",
+      "voicePicked": "number",
+      "finishAsked": "number"
+    },
     "PodNow": {
       "episodeId": "string",
       "clip": "bool",
@@ -457,6 +473,14 @@
     "ReaderAck": {
       "ok": "bool"
     },
+    "RetrievalAsk": {
+      "id": "string",
+      "words": "string",
+      "pageTitle": "string",
+      "pageAddress": "string",
+      "now": "number",
+      "facts": "string"
+    },
     "ThemeCard": {
       "id": "string",
       "name": "string",
@@ -512,16 +536,6 @@
       "ok": "bool",
       "message": "string"
     },
-    "SettingsComputer": {
-      "id": "string",
-      "state": "string",
-      "target": "string",
-      "phase": "string",
-      "updateAvailable": "bool",
-      "message": "string",
-      "epoch": "number",
-      "checked": "bool"
-    },
     "LearnedItem": {
       "line": "string",
       "kind": "string",
@@ -532,33 +546,22 @@
       "count": "number",
       "message": "string"
     },
-    "ActivityItem": {
+    "SettingsFacts": {
+      "now": "number",
+      "appVersion": "string",
+      "radio": "RadioFact",
+      "turns": "TurnFact[]"
+    },
+    "RadioFact": {
+      "known": "bool",
+      "running": "bool",
+      "phase": "string"
+    },
+    "TurnFact": {
       "id": "string",
-      "kind": "string",
-      "label": "string",
-      "detail": "string",
-      "group": "string",
-      "ago": "string",
-      "target": "string",
-      "title": "string",
-      "at": "number",
-      "unseen": "bool"
-    },
-    "ActivityInfo": {
-      "status": "string",
-      "message": "string",
-      "live": "ActivityItem[]",
-      "computer": "ActivityItem[]",
-      "desk": "ActivityItem[]",
-      "paper": "ActivityItem[]",
-      "radio": "ActivityItem[]",
-      "unseen": "number",
-      "blank": "bool"
-    },
-    "AboutInfo": {
-      "app": "string",
-      "base": "string",
-      "signedIn": "bool"
+      "outcome": "string",
+      "transcript": "string",
+      "configName": "string"
     },
     "Page": {
       "address": "string",
@@ -1178,119 +1181,27 @@
       "answers": "MailAck"
     },
     {
-      "source": "onboardingState",
+      "source": "voiceSetupFacts",
       "live": true,
-      "answers": "Onboarding",
+      "answers": "VoiceSetupFacts",
       "substitute": {
         "default": {
-          "step": "welcome",
-          "title": "Make it yours",
-          "message": "",
-          "totalLabel": "",
-          "device": "",
-          "mic": "unasked",
-          "heard": "",
-          "route": "",
-          "editionStatus": "",
-          "writingLine": "",
-          "editionError": "",
-          "editionTitle": "My edition",
-          "editionIntro": "",
-          "editionAddress": "onboarding:edit",
-          "card": "",
-          "cardBody": "",
-          "aim": "",
-          "askMobile": false,
-          "setupFinished": false,
-          "setupStarted": false,
-          "hearingOK": false,
-          "skipped": false,
-          "editionDone": false,
-          "level": 0,
           "rows": [],
           "summary": [],
-          "editionLines": [],
+          "totalLabel": "",
+          "device": "",
+          "onWiFi": true,
+          "setupStarted": false,
+          "setupFinished": false,
+          "mic": "unasked",
+          "level": 0,
+          "heard": "",
+          "route": "",
           "talking": false,
-          "editing": false
+          "voicePicked": 0,
+          "finishAsked": 0
         }
       }
-    },
-    {
-      "send": "onboardingBegin",
-      "options": {
-        "mobile": "string"
-      },
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingRetry",
-      "options": {
-        "stage": "string"
-      },
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingFallback",
-      "options": {
-        "stage": "string"
-      },
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingMic",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingMicNext",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingHearing",
-      "options": {
-        "ok": "string"
-      },
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingTopics",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingTalk",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingTopicsDone",
-      "answers": "Onboarding",
-      "options": {
-        "topics": "string"
-      }
-    },
-    {
-      "send": "onboardingEditionRetry",
-      "answers": "Onboarding",
-      "options": {
-        "topics": "string"
-      }
-    },
-    {
-      "send": "onboardingEditDone",
-      "answers": "Onboarding",
-      "options": {
-        "topics": "string"
-      }
-    },
-    {
-      "send": "onboardingEditLeave",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingContinueAnyway",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingSkip",
-      "answers": "Onboarding"
     },
     {
       "source": "podcastNow",
@@ -1323,7 +1234,7 @@
       "options": {
         "op": "string",
         "id": "string",
-        "feed": "string"
+        "record": "string"
       },
       "answers": "PodDone"
     },
@@ -1454,20 +1365,38 @@
       "answers": "ReaderAck"
     },
     {
-      "source": "settingsComputer",
+      "source": "retrievalAsk",
       "live": true,
-      "answers": "SettingsComputer",
+      "answers": "RetrievalAsk",
       "substitute": {
         "default": {
           "id": "",
-          "state": "",
-          "target": "",
-          "phase": "idle",
-          "updateAvailable": false,
-          "message": "",
-          "epoch": 0,
-          "checked": false
+          "words": "",
+          "pageTitle": "",
+          "pageAddress": "",
+          "now": 0,
+          "facts": ""
         }
+      }
+    },
+    {
+      "source": "settingsFacts",
+      "live": true,
+      "answers": "SettingsFacts",
+      "substitute": {
+        "default": {
+          "now": 0,
+          "appVersion": "",
+          "radio": {
+            "known": false,
+            "running": false,
+            "phase": ""
+          },
+          "turns": []
+        }
+      },
+      "options": {
+        "tick": "number"
       }
     },
     {
@@ -1483,53 +1412,7 @@
       }
     },
     {
-      "source": "activityInfo",
-      "live": true,
-      "answers": "ActivityInfo",
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "live": [],
-          "computer": [],
-          "desk": [],
-          "paper": [],
-          "radio": [],
-          "unseen": 0,
-          "blank": false
-        }
-      }
-    },
-    {
-      "source": "aboutInfo",
-      "live": true,
-      "answers": "AboutInfo",
-      "substitute": {
-        "default": {
-          "app": "",
-          "base": "",
-          "signedIn": false
-        }
-      }
-    },
-    {
-      "send": "computerRefresh",
-      "answers": "SettingsAck"
-    },
-    {
-      "send": "computerWake",
-      "answers": "SettingsAck"
-    },
-    {
-      "send": "computerUpdate",
-      "answers": "SettingsAck"
-    },
-    {
       "send": "learnedReset",
-      "answers": "SettingsAck"
-    },
-    {
-      "send": "activityRefresh",
       "answers": "SettingsAck"
     },
     {
