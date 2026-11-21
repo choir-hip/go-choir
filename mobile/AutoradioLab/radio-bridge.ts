@@ -331,7 +331,10 @@ export async function radioStart(storage: Store | undefined, native: NativeReade
 export async function radioPlayStory(storage: Store | undefined, native: NativeReader | undefined, route: string, title: string): Promise<Ack> {
   const r = await getRadio(storage, native);
   if (route !== '') r.rt.play(paperStory(route, title));
-  await r.rt.pump(); return ACK;
+  await r.rt.pump();
+  const air = r.rt.store.onAir();
+  console.log(`radio: play story ${route === '' ? '(no route)' : route.slice(0, 60)}: on air ${air ? air.id + ' ' + air.state : 'nothing'}, ahead ${r.rt.store.ahead().length}, director playing ${r.rt.director.playingId ?? 'none'}, message "${r.rt.director.message}"`);
+  return ACK;
 }
 export async function radioListen(storage: Store | undefined, native: NativeReader | undefined, address: string, title: string, text: string): Promise<Ack> {
   const r = await getRadio(storage, native);

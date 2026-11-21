@@ -168,6 +168,11 @@ export async function readerPrefetch(prev: string, next: string, net: Net = real
   current();
   const seen = new Set<string>();
   const todo = [prev, next].filter((a) => a !== '' && parseAddress(a).kind === 'pub' && !seen.has(a) && (seen.add(a), true) && held.get(a)?.status !== 'ready');
-  await Promise.all(todo.map((a) => ask(a, net)));
+  // One story at a time, a new turn between: two large stories decoded in one turn went over Exact's 100 ms of CPU per turn (the reply was refused: the proof's read drive, 961 KB for two stories).
+  for (const a of todo) {
+    await ask(a, net);
+    const sc = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+    if (sc?.yield) await sc.yield();
+  }
   return ack(true);
 }

@@ -201,6 +201,7 @@ export class RadioRuntime {
     if (epoch !== this.epoch) return;
     const starts = this.pendingStarts; this.pendingStarts = [];
     this.inPump = false;
+    if (starts.length > 0) console.log(`radio: pump starts ${starts.map((e) => e.id + (this.director.playingId === e.id ? '' : ' (not playing id ' + (this.director.playingId ?? 'none') + ')')).join(', ')}; deck item ${st.item || 'none'}`);
     for (const e of starts) if (this.director.playingId === e.id) await this.startEntry(e, st);
     if (epoch !== this.epoch) return;
     await this.keepHeld();
@@ -282,7 +283,7 @@ export class RadioRuntime {
     } catch { why = 'it could not be loaded'; }
     // cut, skipped or signed out while the words were being fetched: never played late
     if (epoch !== this.epoch || this.director.generation !== gen || this.director.playingId !== e.id) return;
-    if (!item) { this.director.failedToStart(e.id, why); return; }
+    if (!item) { console.log(`radio: ${e.id} did not start: ${why}`); this.director.failedToStart(e.id, why); return; }
     this.known.set(e.id, item);
     await this.deck.play(item);
     await this.keepHeld();
