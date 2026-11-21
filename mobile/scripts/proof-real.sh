@@ -396,6 +396,7 @@ chk "first run: the edit page lists the topic tree (onboarding.ts editing)" '\[o
 step "clock data"; wait_ 6000
 place notebook 900; view real-47-notebook 5000
 step "tap notebook-refresh"; view real-48-notebook-refreshed 5000
+step "clock data"; wait_ 8000          # the content sync (a long request) logs when it ends: given time to end before the console is read
 step logs
 run_drive notebook light "" --touch platform
 

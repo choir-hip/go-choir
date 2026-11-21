@@ -206,12 +206,10 @@ export async function queueView(storage: Store | undefined, native: NativeReader
 }
 
 /** The pump: read the deck, apply what the voice handed over, keep the desk writing; answers a tick the screens ask again on. Called whenever the deck or the native side says something changed. */
-export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number }> {
+export async function radioPulse(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean }> {
   const r = await getRadio(storage, native);
   await r.rt.pump();
   while (r.inbox.length > 0) await handle(r, r.inbox.shift() as string);
-  // The pulse that STARTS the desk's ask (or the sheet's post) waits for it, at the end: those are fetches, and a fetch that goes on after its answer ended is never run. The next pulses return at once, so the screens go on updating meanwhile.
-  const flushBefore = r.rt.store.flushTask, asked = r.writer.checkAhead();
   // The radio starts by itself when Autoradio opens (onboarding complete, no other audio on the phone), once a launch: it waits a moment for the front page it speaks from.
   if (!r.started && r.ready && !r.rt.store.onAir()) {
     if (r.readySince === 0) r.readySince = clock.ms;
@@ -221,11 +219,22 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   // the turn route's queue: pushed to native, which sends it with every turn
   const later = nativeLater();
   if (later) { try { await later({ op: 'radioSet', snapshot: turnQueueJSON(r.rt, 0), onAir: r.rt.store.onAir() ?? null, sheet: { ...r.rt.store.sheet, applied_ops: [] } }); } catch { /* the next pulse sets it */ } }
-  const waits: Promise<void>[] = [];
+  // Whether the desk should be asked, or the sheet's pending ops posted, is said here; the ASK is `radioWrite`, a mutation (members-radio.contract): those are long fetches, and a fetch that goes on after the
+  // answer that began it is gone (a newer pulse takes a pulse's place) is never run. A mutation stays until it is done.
+  const posting = r.rt.store.pending.length > 0 && r.rt.store.flushTask === undefined;
+  return { tick: r.tick, write: r.writer.wouldAsk() || posting };
+}
+
+/** The desk's ask and the sheet's post, in one answer that waits for both. */
+export async function radioWrite(storage: Store | undefined, native: NativeReader | undefined): Promise<{ tick: number; write: boolean }> {
+  const r = await getRadio(storage, native);
+  r.rt.store.flush();
+  const asked = r.writer.checkAhead();
+  const waits: Promise<unknown>[] = [];
   if (asked) waits.push(r.writer.settle());
-  if (r.rt.store.flushTask !== flushBefore && r.rt.store.flushTask) waits.push(r.rt.store.flushTask);
+  if (r.rt.store.flushTask) waits.push(r.rt.store.flushTask);
   await Promise.all(waits.map((t) => t.catch(() => undefined)));
-  return { tick: r.tick };
+  return { tick: r.tick, write: false };
 }
 
 /** One message from native (a verb from the voice turn or a handler that has not moved): `{verb, ...}` as text. */

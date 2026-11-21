@@ -28,6 +28,8 @@ shape RadioPageFacts
 // What the pump answers: a number the screens ask again on.
 shape RadioTick
   tick: number
+  // The desk should be asked, or the sheet's ops posted: `radioWrite` (a mutation) does it, and stays until it is done.
+  write: bool
 
 shape RadioBuiltOn
   n: number

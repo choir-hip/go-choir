@@ -6,7 +6,8 @@ use LauncherData, CardAck from "@choir/autoradio"
 members Autoradio
   state lq = ""
   resource lnc = launcherData(lq, pg.count, rpfacts.at) as shape LauncherData else empty()
-  mutation cm as shape CardAck
+  // `learnt` (Settings > What the paper has learned) is asked again after an act: a Settings page already in the deck had read it before the act.
+  mutation cm as shape CardAck refreshes learnt
   // The story the listener asked for more of (the button then says "Noted").
   state moreFor = ""
   action editLq(v: string)

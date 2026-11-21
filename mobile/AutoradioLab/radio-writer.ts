@@ -123,6 +123,13 @@ export class Writer {
     this.ask('extend');
     return true;
   }
+  /** Would an ask start now? (The pulse says so; a mutation then asks, and waits: a long fetch needs an answer that stays.) */
+  wouldAsk(): boolean {
+    if (!this.opened || this.inFlight) return false;
+    const store = this.d.rt.store;
+    if (this.quietOn !== undefined && this.quietOn === store.onAir()?.id) return false;
+    return shouldAskMore(store.ahead(), this.latency);
+  }
   stop(): void { this.stops += 1; this.inFlight = false; this.quietOn = undefined; this.publish(false); }
   private publish(writing: boolean): void { this.d.rt.setDesk({ notice: this.notice, writing, dry: this.dry }); }
 
