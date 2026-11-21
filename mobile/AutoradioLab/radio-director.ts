@@ -314,11 +314,11 @@ export class Director {
         source: { ref: old.source?.ref ?? 'episode:x', label: place.show, url, start: Math.max(place.start, place.elapsed) } };
     } else if (fromPhone && rest) {
       // A message, book or file: the rest of the passage is held here. The continuation names the same address with no words.
-      const id = 'c-' + mintId('').slice(0, 8);
+      const id = 'c-' + mintId('').slice(0, 24);
       this.remembered = { id, kind: old.kind === 'mail' ? 'mail' : 'page', placed_by: 'phone', state: 'ahead', title: old.title, est_seconds: estimateSeconds(rest), revision: 0, source: old.source };
       this.provided.set(id, { title: old.title, paragraphs: [rest] });
     } else if (rest) {
-      this.remembered = { id: 'c-' + mintId('').slice(0, 8), kind: 'story', placed_by: 'phone', state: 'ahead', title: old.title, text: rest, est_seconds: estimateSeconds(rest), revision: 0, source: old.source, cites: old.cites };
+      this.remembered = { id: 'c-' + mintId('').slice(0, 24), kind: 'story', placed_by: 'phone', state: 'ahead', title: old.title, text: rest, est_seconds: estimateSeconds(rest), revision: 0, source: old.source, cites: old.cites };
     }
   }
   /** The listener asked for something else: what was kept is not wanted back. */

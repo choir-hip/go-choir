@@ -68,7 +68,16 @@ class FakeDeck implements DeckPort {
     const next = this.held.shift();
     if (next) { this.current = next; this.item = next.id; this.why = 'playing'; this.line('started', next.id); }
   }
-  remote(command: DeckEvent['command']): void { this.line('remote', this.current?.id ?? '', { command }); }
+  remote(command: DeckEvent['command']): void { this.line('remote', this.current?.id ?? '', { command, block: this.block, seconds: this.seconds }); }
+  /** The lock screen's next as Deck.remoteNext does it: the line first, then the skip and the next held item plays on, with shared code not running. */
+  remoteNext(): void {
+    this.remote('next');
+    const c = this.current; if (!c) return;
+    this.line('ended', c.id, { end: 'skipped', block: this.block, seconds: this.seconds });
+    this.current = undefined; this.item = ''; this.why = 'empty';
+    const next = this.held.shift();
+    if (next) { this.current = next; this.item = next.id; this.why = 'playing'; this.line('started', next.id); }
+  }
 }
 
 let deck: FakeDeck, rt: RadioRuntime, files: Map<string, string>, facts: NativeFacts, fetched: string[];
@@ -151,13 +160,13 @@ describe('what the deck reports', () => {
 });
 
 describe('what the deck holds', () => {
-  test('T6 at most three, the next entries in order, only those that need no fetch', async () => {
+  test('T6 every ready entry ahead, in order, only those that need no fetch', async () => {
     rt.play(story('a', { placed_by: 'listener' }));
     for (const id of ['b', 'c', 'd', 'e']) rt.director.applyFromDesk(placeOp(story(id)), 'extend');
     await idle(); await rt.pump(); await idle();
-    expect(deck.held.map((h) => h.id)).toEqual(['b', 'c', 'd']);
+    expect(deck.held.map((h) => h.id)).toEqual(['b', 'c', 'd', 'e']);
     rt.store.move('e', 'next'); await rt.pump(); await idle();
-    expect(deck.held.map((h) => h.id)).toEqual(['e', 'b', 'c']);
+    expect(deck.held.map((h) => h.id)).toEqual(['e', 'b', 'c', 'd']);
   });
   test('T6 a story to fetch is not held; what follows it is not either (order is kept)', async () => {
     rt.play(story('a', { placed_by: 'listener' }));
@@ -170,6 +179,19 @@ describe('what the deck holds', () => {
     await idle(); await rt.pump(); await idle();
     expect(deck.held.map((h) => h.id)).toEqual(['t', 'b']);
     expect(deck.held[0].requiresPreviousHeard).toBe(true); expect(deck.held[1].requiresPreviousHeard).toBe(false);
+  });
+});
+
+describe('the deck plays on without shared code', () => {
+  test('T6b six ready entries are all held, so the radio plays through them while shared code is frozen', async () => {
+    rt.play(story('a', { placed_by: 'listener' }));
+    for (const id of ['b', 'c', 'd', 'e', 'f', 'g']) rt.director.applyFromDesk(placeOp(story(id)), 'extend');
+    await idle(); await rt.pump(); await idle();
+    expect(deck.held.map((h) => h.id)).toEqual(['b', 'c', 'd', 'e', 'f', 'g']);
+    for (let i = 0; i < 7; i++) deck.end('finished');
+    await rt.pump(); await idle();
+    expect(['a', 'b', 'c', 'd', 'e', 'f', 'g'].every((id) => rt.store.entry(id)?.state === 'heard')).toBe(true);
+    expect(playedIds()).toEqual(['a']);
   });
 });
 
@@ -228,13 +250,28 @@ describe('remote audio and the lock screen', () => {
     deck.remote('next'); await rt.pump(); await idle();
     expect(rt.store.entry('b')?.ended?.outcome).toBe('skipped'); expect(rt.store.onAir()).toBeUndefined();
   });
-  test('T9 previous restarts an entry that has gone on; audio seeks to its start', async () => {
+  test('T9 the lock screen\'s next, acted on by the deck while shared code was not running, is one skip cut where it was, and the next entry is not started twice', async () => {
+    rt.play(story('a', { placed_by: 'listener' })); rt.director.applyFromDesk(placeOp(story('b')), 'extend'); rt.director.applyFromDesk(placeOp(story('c')), 'extend');
+    await idle(); await rt.pump(); await idle();
+    deck.block = 3; deck.seconds = 11; deck.remoteNext(); deck.block = 0; deck.seconds = 0;
+    await rt.pump(); await idle();
+    expect(rt.store.entry('a')?.state).toBe('skipped'); expect(rt.store.entry('a')?.ended?.last_block).toBe(3); expect(rt.store.entry('a')?.ended?.outcome).toBe('skipped');
+    expect(rt.store.onAir()?.id).toBe('b'); expect(playedIds()).toEqual(['a']);             // b played on by the deck: shared code did not play it again
+    expect(deck.held.map((h) => h.id)).toEqual(['c']);
+  });
+  test('T9 previous on an entry that has gone on, or on audio, was done by the deck: shared code does not play it again', async () => {
     rt.play(story('a', { placed_by: 'listener' })); await idle();
     deck.block = 2; deck.seconds = 9; deck.remote('previous'); await rt.pump(); await idle();
-    expect(playedIds().filter((i) => i === 'a').length).toBe(2);       // the same entry again
+    expect(playedIds()).toEqual(['a']);
     rt.play(audio({ url: 'https://x/a.mp3', title: 'Ep', show: 'Show' })); await idle();
-    deck.seconds = 50; deck.remote('previous'); await rt.pump(); await idle();
-    expect(deck.ops).toContainEqual({ op: 'seekTo', value: 0 });
+    deck.block = 0; deck.seconds = 50; deck.remote('previous'); await rt.pump(); await idle();
+    expect(deck.ops.filter((o) => o.op === 'seekTo')).toEqual([]);
+  });
+  test('T9 previous on an entry just begun is the entry before it: shared code plays that', async () => {
+    rt.play(story('a', { placed_by: 'listener' })); rt.director.applyFromDesk(placeOp(story('b')), 'extend'); await idle(); await rt.pump(); await idle();
+    deck.end('finished'); await rt.pump(); await idle();            // b on air
+    deck.block = 0; deck.seconds = 1; deck.remote('previous'); await rt.pump(); await idle();
+    expect(rt.store.onAir()?.title).toBe('T a');
   });
 });
 
@@ -271,6 +308,27 @@ describe('the screens\' view', () => {
   });
 });
 
+describe('a launch after the deck played while shared code was gone', () => {
+  const line = (n: number, type: DeckEvent['type'], item: string, o: Partial<DeckEvent> = {}): DeckEvent =>
+    ({ seq: n, type, item, at: '2023-11-14T03:00:00Z', block: 0, seconds: 0, final: 0, rendered: false, end: '', command: '', reason: '', ...o });
+  test('T12b a finished end the deck journalled keeps its verdict and does not replay; the entry it began alone is aired and ended', async () => {
+    rt.play(story('a', { placed_by: 'listener' })); rt.director.applyFromDesk(placeOp(story('b')), 'extend'); rt.director.applyFromDesk(placeOp(story('c')), 'extend');
+    await idle(); await rt.pump(); await idle();
+    const lines = [line(2, 'ended', 'a', { end: 'finished', rendered: true, block: 1, seconds: 8 }), line(3, 'started', 'b'), line(4, 'ended', 'b', { end: 'finished', rendered: true, block: 2, seconds: 9, at: '2023-11-14T03:05:00Z' }), line(5, 'started', 'c')];
+    deck = new FakeDeck(); deck.journal = lines; deck.seq = 5;
+    const again = make(); await again.restore(); await idle();
+    expect(again.store.entry('a')?.ended).toMatchObject({ outcome: 'finished', last_block: 1 });
+    expect(again.store.entry('b')?.state).toBe('heard'); expect(again.store.entry('b')?.ended?.at).toBe('2023-11-14T03:05:00Z');
+    expect(again.store.entry('c')?.ended?.outcome).toBe('failed');       // c was sounding when the process died: interrupted, no verdict
+    expect(deck.played).toEqual([]); expect(deck.acks.at(-1)).toBe(5);
+  });
+  test('T12c with no journal an entry on air at the kill is closed failed, as before', async () => {
+    rt.play(story('a', { placed_by: 'listener' })); await idle();
+    deck = new FakeDeck(); const again = make(); await again.restore();
+    expect(again.store.entry('a')?.ended?.outcome).toBe('failed');
+  });
+});
+
 describe('restart and sign-out', () => {
   test('T12 a restart restores the sheet; what was on air is closed failed and nothing plays', async () => {
     rt.play(story('a', { placed_by: 'listener' })); rt.director.applyFromDesk(placeOp(story('b')), 'extend'); await idle();
@@ -294,6 +352,27 @@ describe('restart and sign-out', () => {
 //  T16 an end is reported with where it ended (the deck's block and seconds), `heard` and `finished`; a failed start is `skipped` and `failed`, never a choice.
 //  T17 sign-out reports the entry on air as `left` while the old key is held, then forgets what was never answered: nothing is posted afterwards.
 import type { Poster, PostOutcome } from './runsheet-store.ts';
+describe('the clip card', () => {
+  test('T18 keep listening plays the episode on past the clip from where it is; the card stops being a clip', async () => {
+    rt.play(audio({ url: 'https://x/a.mp3', title: 'Ep', show: 'Show', start: 10, end: 40, episode_id: 'pod:f/g' }, 'clip-1')); await idle();
+    expect(rt.view()).toMatchObject({ clip: true, keepTitle: 'Ep (Show)' });
+    deck.seconds = 25; await rt.keepListening(); await idle();
+    expect(deck.played.at(-1)).toMatchObject({ kind: 'audio', url: 'https://x/a.mp3', end: 0, seconds: 25 });
+    expect(rt.view().clip).toBe(false); expect(rt.store.onAir()?.id).toBe(deck.played[0].id);
+  });
+});
+
+describe('the deck\'s time', () => {
+  test('T19 an end is posted with the time the deck wrote it, not the pump\'s', async () => {
+    const posted: Op[] = [];
+    const prt = new RadioRuntime({ deck, storage: storage(), poster: { post: async (ops) => { posted.push(...ops); return { kind: 'answered', results: [] }; }, fetchSheet: async () => undefined }, now: () => new Date('2023-11-14T07:00:00Z'), resolvers });
+    prt.play(story('a', { placed_by: 'listener' })); await idle();
+    deck.end('finished', { block: 1, seconds: 3 }); deck.journal[deck.journal.length - 1].at = '2023-11-14T03:00:00Z';
+    await prt.pump(); await idle(); await prt.store.flushTask;
+    expect(posted.find((o) => o.op === 'aired' && o.id === 'a' && o.state === 'heard')?.ended?.at).toBe('2023-11-14T03:00:00Z');
+  });
+});
+
 describe('posted ops', () => {
   let posts: Op[][], outcome: PostOutcome, prt: RadioRuntime;
   const poster: Poster = { post: async (ops) => { posts.push(ops); return outcome; }, fetchSheet: async () => undefined };
@@ -339,5 +418,18 @@ describe('posted ops', () => {
     const n = posts.length;
     prt.store.flush(); await prt.store.flushTask; expect(posts.length).toBe(n);
     expect(prt.store.pending).toEqual([]); expect(prt.store.poster).toBeUndefined();
+  });
+});
+
+describe('sign-out when the route does not answer', () => {
+  test('T17b a poster that never answers does not hold the sign-out, and nothing is posted under the next account', async () => {
+    let posts = 0;
+    const silent: Poster = { post: () => { posts++; return new Promise(() => undefined); }, fetchSheet: async () => undefined };
+    const prt = new RadioRuntime({ deck, storage: storage(), poster: silent, now: () => NOW, resolvers });
+    prt.play(story('a', { placed_by: 'listener' })); await idle();
+    const t0 = Date.now(); await prt.signOut();
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(prt.store.pending).toEqual([]); expect(prt.store.poster).toBeUndefined(); expect(files.has('sheet')).toBe(false);
+    const n = posts; prt.store.flush(); expect(posts).toBe(n);
   });
 });

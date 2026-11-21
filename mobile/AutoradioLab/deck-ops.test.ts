@@ -146,10 +146,10 @@ describe('D6 heldPlan', () => {
     expect(heldPlan(['a', 'b'], [it('b'), it('a')])).toEqual({ keep: 0, enqueue: [{ at: 0, item: it('b') }, { at: 1, item: it('a') }] });
   });
   test('never more than the deck holds, and an id once', () => {
-    const many = ['a', 'b', 'c', 'd', 'e'].map(it);
-    const p = heldPlan([], [...many, it('a')]);
+    const many = Array.from({ length: DECK_HELD_MAX + 5 }, (_, i) => it('i' + i));
+    const p = heldPlan([], [...many, it('i0')]);
     expect(p.enqueue.length).toBe(DECK_HELD_MAX);
-    expect(p.enqueue.map((e) => e.item.id)).toEqual(['a', 'b', 'c']);
+    expect(p.enqueue.map((e) => e.item.id)).toEqual(many.slice(0, DECK_HELD_MAX).map((i) => i.id));
   });
   test('syncHeld trims then holds through the port', async () => {
     const calls: string[] = [];

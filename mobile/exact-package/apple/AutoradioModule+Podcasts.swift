@@ -18,16 +18,6 @@ struct PodcastPageSource: PageSource {
 extension AutoradioModule {
     func registerPodcasts() {
         pageSources.register(PodcastPageSource())
-        // "Open episode" from a clip or the playing bar opens that episode's page at the clip's time (the address carries the audio and the start).
-        Task { @MainActor in
-            PodcastBridge.open = { [weak self] episodeId, feedURL, enclosureURL, at in
-                guard let feedURL else { return }
-                let enclosure = PodcastKey.webURL(enclosureURL.absoluteString)
-                let address = PodcastKey.episodeAddress(feed: feedURL.absoluteString, id: episodeId ?? enclosure, enclosure: enclosure, at: at)   // no guid: the enclosure is the id (the feed's own rule)
-                DispatchQueue.main.async { self?.requestPage(address, title: "Episode") }
-            }
-        }
-
         handle("podcastNow") { [unowned self] _, reply in reply(self.json(self.podcastNowView())) }
         // While a podcast plays its playhead moves: the pages' playhead argument is asked again every second, only then.
         DispatchQueue.main.async { [weak self] in

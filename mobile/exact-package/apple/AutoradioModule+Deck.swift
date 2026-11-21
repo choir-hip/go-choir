@@ -9,10 +9,21 @@ extension AutoradioModule {
     private func deckItem(_ a: [String: Any]) -> DeckItem {
         var i = DeckItem(id: a["id"] as? String ?? "", kind: a["kind"] as? String == "audio" ? "audio" : "speech")
         i.title = a["title"] as? String ?? ""; i.show = a["show"] as? String ?? ""; i.document = a["document"] as? String ?? ""
-        i.paragraphs = a["paragraphs"] as? String ?? ""; i.url = a["url"] as? String ?? ""
+        i.paragraphs = a["paragraphs"] as? String ?? ""; i.url = playableAudioAddress(a["url"] as? String ?? "")
         i.start = num(a, "start"); i.end = num(a, "end"); i.block = Int(num(a, "block")); i.seconds = num(a, "seconds")
         i.requiresPreviousHeard = (a["requiresPreviousHeard"] as? Bool) ?? false; i.segment = a["segment"] as? String ?? ""
         return i
+    }
+
+    /// The sound of a take or a Files recording is a file the phone holds: shared code names it `app:/cache/files/<folder>/<name>` (the address its own pages read), which is not an address AVFoundation can open.
+    /// This turns exactly that shape (two plain parts, the file there) into the file's URL; any other address (https) goes through unchanged. Native because only native code knows where the folder is on disk.
+    func playableAudioAddress(_ address: String) -> String {
+        let prefix = "app:/cache/files/"
+        guard address.hasPrefix(prefix) else { return address }
+        let parts = address.dropFirst(prefix.count).split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2, !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else { return address }
+        let url = filesCacheDisk.appendingPathComponent(parts[0], isDirectory: true).appendingPathComponent(parts[1])
+        return FileManager.default.fileExists(atPath: url.path) ? url.absoluteString : address
     }
 
     /// The deck's five names for shared code, through the app module's one `deck` op (ModelsEntry.swift): `{op: "deck", name, args}` answers the deck's state. Native because only native code

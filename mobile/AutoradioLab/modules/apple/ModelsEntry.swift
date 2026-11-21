@@ -76,6 +76,11 @@ final class ModelsModule: ExactModule {
             Task { @MainActor in reply.send(await AutoradioModule.current?.deckCall(name: request["name"] as? String ?? "", args: request["args"] as? [String: Any] ?? [:]) ?? [:]) }
             return
         }
+        // Open a page by its address (the shell's: shared code names the address, only the shell shows a page): the clip's episode page from the queue's "Open episode".
+        if op == "openPage" {
+            Task { @MainActor in AutoradioModule.current?.requestPage(request["address"] as? String ?? "", title: request["title"] as? String ?? ""); reply.send([:]) }
+            return
+        }
         // The radio's mailbox (AutoradioModule+Queue.swift): `radioFacts` (what only the audio code knows, and the inbox of what native handed over), `radioSet` (the turn route's queue and the entry on air, pushed by shared
         // code). Native because the voice turn and the audio are; they decide nothing.
         if op == "radioFacts" || op == "radioSet" {

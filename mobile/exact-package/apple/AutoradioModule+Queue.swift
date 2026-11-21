@@ -7,12 +7,13 @@ import Foundation
 extension AutoradioModule {
     func registerQueue() {
         var tick = 0
-        RadioBridge.shared.changed = { [weak self] in DispatchQueue.main.async { self?.touch(["radioNote"]) } }
+        RadioBridge.shared.changed = { [weak self] in DispatchQueue.main.async { self?.touch(["radioNote"], now: true) } }    // at once: a verb from the voice turn is applied on the next pulse, not a second later
         handle("radioNote") { _, reply in tick += 1; reply(["tick": tick]) }
     }
 
     /// shared code -> native: the turn route's queue snapshot (the voice turn carries it) and the entry on air and the sheet as shared code last made them.
     public func radioSet(_ r: [String: Any]) -> [String: Any] {
+        if r["signedOut"] as? Bool == true { RadioBridge.shared.markSignedOut(); return ["ok": true] }
         let snap = (r["snapshot"] as? String)?.data(using: .utf8)
         let onAir = (r["onAir"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         let sheet = (r["sheet"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }

@@ -70,9 +70,9 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.player.onRanDry = { id, played in Task { @MainActor in Deck.shared.documentEnded(id: id, anyPlayed: played) } }
         runtime.player.onEngineLost = { _, _ in Task { @MainActor in Deck.shared.engineLost() } }
         runtime.coordinator.remoteAudioActive = { onMainThread { Deck.shared.current?.kind == "audio" && Deck.shared.why == .playing } }
-        // The lock screen's next and previous are the run sheet's, which is shared code's: the deck writes them in its journal (`remote`) and shared code skips or goes back. Always handled here.
-        runtime.player.onNextTrack = { Task { @MainActor in Deck.shared.note(remote: "next") }; return true }
-        runtime.player.onPreviousTrack = { Task { @MainActor in Deck.shared.note(remote: "previous") }; return true }
+        // The lock screen's next and previous act on the deck at once (the held list), so they work with shared code not running; the deck writes them in its journal (`remote`, with where the item was) and shared code reconciles the sheet when it runs. Always handled here.
+        runtime.player.onNextTrack = { Task { @MainActor in await Deck.shared.remoteNext() }; return true }
+        runtime.player.onPreviousTrack = { Task { @MainActor in Deck.shared.remotePrevious() }; return true }
         wireRunSheet()
         warmVoice()
         eventTask = Task { [weak self] in
@@ -113,7 +113,13 @@ public final class ChoirApp: @unchecked Sendable {
                 return true
             }
         }
-        runtime.player.onLevel = { l in RadioBridge.shared.send("level", ["value": l.rawValue]) }
+        // The voice's yield (a barge-in pauses the radio, the end of the turn plays it again) acts on the deck at once, here, and does not wait for shared code's pulse; the deck's journal tells shared code.
+        runtime.player.onLevel = { l in
+            Task { @MainActor in
+                switch l { case .pause: Deck.shared.listenerPaused(); case .play: await Deck.shared.resumed(); case .dip: break }
+            }
+            RadioBridge.shared.send("level", ["value": l.rawValue])
+        }
         BarTracker.shared.speedObservers.append { v in Task { @MainActor in Deck.shared.engine?.setRemoteRate(v) } }
     }
 
@@ -224,9 +230,10 @@ public final class ChoirApp: @unchecked Sendable {
         }
     }
 
-    /// Sign-out, in this order: playback stops (the player reports the entry on air as `left`); the run sheet gets three seconds to post its
-    /// pending ops with the old key still held, and what is not answered then is dropped, never sent under a later account; then the local key
-    /// goes and the account wipe runs (ChoirSignIn.signOut); the revoke follows in the background.
+    /// Sign-out, in this order: playback stops (shared code reports the entry on air as `left`); the run sheet gets up to five seconds to post its
+    /// pending ops with the old key still held, and it says when it is done (`RadioBridge.waitSignedOut`: shared code's `radioSet` with `signedOut`), so the wait is for the
+    /// answer and not a guess; what is not answered by then is dropped, never sent under a later account; then the local key goes and the account wipe runs (ChoirSignIn.signOut);
+    /// the revoke follows in the background.
     public func signOut() async {
         await MainActor.run { TakeSession.live?.discard() }      // a take in hand is the old account's: dropped first (its give-back is a queued task that may land after the pause; the queue is cleared, so it plays nothing)
         lock.lock(); loading = false; lock.unlock()
@@ -235,7 +242,7 @@ public final class ChoirApp: @unchecked Sendable {
         runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
         await MainActor.run { Deck.shared.engine?.stopSpoken(); Deck.shared.engine?.stopRemote() }
         RadioBridge.shared.send("stopAll")                      // shared code's run sheet leaves the air (`left`) and posts, then the account wipe runs
-        try? await Task.sleep(nanoseconds: 1_500_000_000)       // a moment for it, with the old key still held
+        await RadioBridge.shared.waitSignedOut(seconds: 5)      // until shared code says it is done (its own wait for the route is 3 s), with the old key still held
         await signIn.signOut()
         lock.lock(); stories = []; message = ""; lock.unlock()
         onChange?()
