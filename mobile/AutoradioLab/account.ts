@@ -72,8 +72,8 @@ export const wipedPaths = (): string[] => [
   VECTORS_DIR, CONTENT_DB, PAGES_FILE, DEMO_MARKER,
 ];
 
-/** Deadlines, not limits. `nativeMs`: one native sign-out or wipe. `recordMs`: one read of the record. (The key read's is api.ts `keyTiming`.) Tests shorten them. */
-export const timing = { nativeMs: 30000, recordMs: 5000 };
+/** Deadlines, not limits. `sharedMs`: the whole shared half of one Clear (a store that never lets go, or a live content sync that never ends, must not hold the one writer). `nativeMs`: one native sign-out or wipe. `recordMs`: one read of the record. (The key read's is api.ts `keyTiming`.) Tests shorten them. */
+export const timing = { nativeMs: 30000, recordMs: 5000, sharedMs: 30000 };
 
 /** Run each wipe on its own; the names of the ones that threw. Logs names, never content. It does not move the generation: a Clear attempt moves it once. */
 export async function wipeAll(storage: Storage | undefined, store: Store | undefined, wipes_: Wipe[] = WIPES): Promise<string[]> {
@@ -170,7 +170,7 @@ function job<T>(fn: () => Promise<T>): Promise<T> {
 /** Resolves when no job is queued or running (a Clear started by an answer is awaited here: tests, and nothing else). */
 export async function idle(): Promise<void> { for (;;) { const c = chain; await c; if (c === chain) return; } }
 /** For tests: a process that has just started. */
-export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; wipes = 0; lastFailed = []; timing.nativeMs = 30000; timing.recordMs = 5000; }
+export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; wipes = 0; lastFailed = []; timing.nativeMs = 30000; timing.recordMs = 5000; timing.sharedMs = 30000; }
 
 /** ADOPT: no record and a key. Write the key's digest; the state after is read again. A failed write leaves it closed. */
 async function adoptBody(storage: Storage | undefined): Promise<State> {
@@ -187,7 +187,9 @@ async function clearBody(storage: Storage | undefined, store: Store | undefined)
   if (stateOf(await readFacts(storage)) !== 'clearing' || !storage) return;       // a job that finds the state changed does nothing
   const g = nextGeneration(); resetSession();                                      // moved once per attempt, by nothing else
   const nativeOk = await nativeCall('wipe', g);                                    // a wipe, never a sign-out: it keeps whatever key is stored
-  const failed = [...(await wipeAll(storage, store, WIPES)), ...(await survivors(storage))];
+  // A shared half that outlives its deadline is a failed Clear: nothing is marked clean, the record stays, the next attempt runs every store again.
+  const shared = await withDeadline<string[]>((async () => [...(await wipeAll(storage, store, WIPES)), ...(await survivors(storage))])(), ['shared (timed out)'], timing.sharedMs);
+  const failed = [...shared];
   if (!nativeOk) failed.push('native');
   let removed = false;
   if (failed.length === 0) { removed = await removeRecord(storage); if (!removed) failed.push('account-stamp'); }
@@ -222,7 +224,7 @@ export async function peek(storage: Storage | undefined, store: Store | undefine
   if (state === 'adopt') state = await job(() => adoptBody(storage));
   if (state === 'clearing') startClear(storage, store);
   const refused = state === 'clearing' || state === 'locked' || state === 'adopt';
-  return { state, epoch: refused ? `!${state}` : `${wipes}`, failed: lastFailed, key: f.key };
+  return { state, epoch: `${state}|${wipes}`, failed: lastFailed, key: f.key };
 }
 
 // ---- sign-out

@@ -93,3 +93,11 @@ device (the Exact error code on a data-protected file before first unlock is unr
 defect stays open for the native side until landings 2 and 3; Remaining error: a background Clear's deadline
 timer may be cut when the answer that started it ends (Exact timers end with the answer, EXACT.md); a Clear that
 hangs in native then holds the one writer until the host drops the call. Next: two seats, then the drills.
+
+Recorded from seat 1's review of landing 1 (not fixed here; landings 2 and 3): native `wipe` answers `done:true`
+unconditionally and sends no `failed` and reads no generation (`ModelsEntry.swift`); native stores swallow removal
+errors; a launch-time wipe with key B also runs `MailSeal().forget()`; native read sources stay ungated until
+landing 3; a theme installed from account A's Texture document stays visible to B (owner decision 4).
+Fixed in landing 1 after the review: the proof's record checks are taken after their own drive; the epoch is
+`state|wipes` so sign-in re-asks the pages; a throwing key read is LOCKED with words and buttons; the shared half of a
+Clear has a deadline (`timing.sharedMs`) and counts as failed; the card's Adopt write is stated in the design.

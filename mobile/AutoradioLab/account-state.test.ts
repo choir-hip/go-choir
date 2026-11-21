@@ -57,7 +57,10 @@ describe('accountState', () => {
   });
   test('X4 a bridge error is not shown as signed out', async () => {
     reply = { state: 'present', throws: true }; const s = await card('');
-    expect(s.state).toBe('unknown'); expect(s.message).toBe(''); expect(s.action).toBe('');
+    // a keystate that throws is a key that cannot be read: LOCKED (the pages refuse, so the card must say so and offer the way out), never silence
+    expect(s.state).toBe('locked'); expect(s.message).toBe(WORDS.locked); expect(s.action).toBe('');
+    const stuck = await accountState('', '', 'native', 5, mem.storage);
+    expect(stuck).toMatchObject({ state: 'locked', action: 'retry', alsoClear: true }); expect(stuck.message).toContain('reinstall');
   });
   test('X7 on the radio page the sentence says what the radio does signed out', async () => {
     const r = await card('', 'radio:'); expect(r).toMatchObject({ state: 'signedOut', action: 'signIn', message: WORDS.radioSignedOut });
