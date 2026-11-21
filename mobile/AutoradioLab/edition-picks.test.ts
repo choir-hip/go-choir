@@ -235,7 +235,7 @@ describe('P6b loaded', () => {
   test('a page answered from this account\'s file says loaded; the done sends are gated on it', async () => {
     expect((await picksPage(storage, {}, E())).loaded).toBe(true);
     const c = readFileSync(new URL('./members-onboarding.contract', import.meta.url), 'utf8').split('\n');
-    for (const send of ['onboardingTopicsDone(topics=ep.picks)', 'onboardingEditDone(topics=ep.picks)', 'onboardingEditionRetry(topics=ep.picks)']) {
+    for (const send of ['onboardingAct("topicsDone"', 'onboardingAct("editDone"', 'onboardingAct("editionRetry"']) {
       const i = c.findIndex((l) => l.includes(send)); expect(i).toBeGreaterThan(0);
       const indent = (l: string): number => l.length - l.trimStart().length;
       let j = i - 1; while (j >= 0 && indent(c[j]) >= indent(c[i])) j--;       // the line that opens the block the send is in
