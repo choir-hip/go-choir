@@ -386,6 +386,10 @@ chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 [ -n "$DOC1" ] && chk "texture document: opened" '\[reader-block-' "$RD"
 if [ -n "$READER_STORY" ]; then
   R1="$SHOTS/drive-reader1.txt"; R2="$SHOTS/drive-reader2.txt"
+  # the console lines of THESE drives only (the earlier `read` drive writes the same lines to $OUT, so $OUT would pass without them)
+  chk "reader (shared code): the story was read by reader.ts in the reader drive" 'reader: story blocks=[1-9]' "$R1"
+  chk "reader (shared code): the page in front was handed to the native voice and native held it" 'reader: handed to the voice blocks=[1-9]' "$R1"
+  bad "reader: native did not refuse the hand-over" 'reader: the voice did not take the page' "$R1"
   chk "reader: the story has a title" '\[page-title\] "[^"]{3,}"' "$R1"
   bad "reader: no error message" '\[reader-message\] "(Could|Sign in)' "$R1"
   chk "reader: the text is there (paragraph blocks)" '\[reader-block-b[0-9]+\] "[^"]{20,}"' "$R1"
@@ -455,8 +459,6 @@ chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' 
 # the first shared answer after a launch must not run over the device's 100 ms turn (the app logs the failure that says so)
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"
 # the reader is shared code on both platforms: it logs a count line (never a title) each time it reads a story or a document
-chk "reader (shared code): the story was read by reader.ts" 'reader: story blocks=[1-9]' "$OUT"
-chk "reader (shared code): the page in front was handed to the native voice (the app module answered ok)" 'reader: handed to the voice blocks=[1-9]' "$OUT"
 # signed in: the sign-in card never shows on the signed-in drives
 bad "signed in: no sign-in card on the survey" '\[signedout-banner\]' "$SV"
 bad "signed in: no sign-in card on the read drive" '\[signedout-banner\]' "$RD"

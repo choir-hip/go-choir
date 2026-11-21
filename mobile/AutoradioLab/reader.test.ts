@@ -10,6 +10,7 @@
 //  R9 at most 40 held, the least recently used goes first.
 //  R10 reload forgets; restore posts the revision as latest and forgets, the head is already the latest; stop cancels the trajectory (a 409 or 404 is fine) and forgets; each says whether it worked.
 //  R13 the page in front is handed to the native voice (it holds the page text the turn reads): its blocks with sentences, once per ask, only a ready document, nothing when there is no native module, never from another account.
+//  R14 the hand-over carries the account generation it began under, and the log says "handed" only when native answered that it held the page; a refusal is logged.
 //  R11 "Hear it": the story's clips come with it; a failing clip route gives none and does not fail the story.   R12 a document the desk is revising says so.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import * as R from './reader.ts';
@@ -225,5 +226,19 @@ describe('the voice holds the page in front', () => {
     const flip: R.Net = { ...fake().net, pub: async (p) => (p.endsWith('/resolve') ? (nextGeneration(), reply(bundle('Old'))) : reply({})) };
     await R.readerDocShared('pub:pub/z', 'in', false, flip);
     expect(sent.length).toBe(0);
+  });
+  test('R14 the hand-over carries the generation; "handed" is logged only when native held it, a refusal is logged', async () => {
+    const lines: string[] = []; const real = console.log; console.log = (...a: unknown[]) => { lines.push(a.join(' ')); };
+    try {
+      const sent: { generation: number }[] = []; let answer: unknown = { ok: true };
+      R.setHandOverForTest(async (r) => { sent.push(r as { generation: number }); return answer; });
+      const g = (await import('./api.ts')).accountGeneration();
+      await R.readerDocShared('pub:pub/x', 'in', false, fake().net); await new Promise((r) => setTimeout(r, 5));
+      expect(sent[0].generation).toBe(g); expect(lines.some((l) => l.startsWith('reader: handed to the voice'))).toBe(true);
+      lines.length = 0; answer = { ok: false };
+      await R.readerDocShared('pub:pub/x', 'in', false, fake().net); await new Promise((r) => setTimeout(r, 5));
+      expect(lines.some((l) => l.startsWith('reader: handed to the voice'))).toBe(false);
+      expect(lines.some((l) => l.startsWith('reader: the voice did not take the page'))).toBe(true);
+    } finally { console.log = real; }
   });
 });

@@ -61,6 +61,23 @@ final class HeldPagesTests: XCTestCase {
         XCTAssertEqual(ReaderFollow.locate(spoken: "He said \"Stop.\"", in: d)?.sentence, 1)
         XCTAssertEqual(ReaderFollow.locate(spoken: "Then left. ", in: d)?.sentence, 2)
     }
+    func testH8_AHoldAnswersTrueOnlyWhenThePageWasHeld() {
+        let h = HeldPages()
+        XCTAssertTrue(h.hold(HeldPage(address: "pub:1"), generation: 5))
+        XCTAssertEqual(h.count, 1)
+        XCTAssertNil(HeldPage.parse(["address": ""]), "a hand-over naming no address is not a page, so nothing is held and the module answers false")
+    }
+    func testH9_AHandOverInFlightAcrossAnAccountChangeHoldsNothing() {
+        let h = HeldPages()
+        XCTAssertTrue(h.hold(HeldPage(address: "pub:old"), generation: 5))
+        h.wipe()                                                                  // sign-out: the shared generation moves on, the wipe runs
+        XCTAssertFalse(h.hold(HeldPage(address: "pub:late"), generation: 5), "the old account's hand-over, landing late, is refused")
+        XCTAssertFalse(h.hold(HeldPage(address: "pub:older"), generation: 3))
+        XCTAssertEqual(h.count, 0)
+        XCTAssertTrue(h.hold(HeldPage(address: "pub:new"), generation: 6), "the next account's own hand-over is held")
+        XCTAssertNotNil(h.page("pub:new"))
+        XCTAssertTrue(h.hold(HeldPage(address: "pub:unversioned")), "a caller with no generation is not refused")
+    }
     func testH7_TheCorpusBodyHasNoCodeOrEmbeds() {
         XCTAssertEqual(HeldPage.parse(request)?.body, "The first sentence is here. The second sentence follows it.\nA later paragraph about batteries.")
         let c = SavedCorpus(heldPages: { let h = HeldPages(); h.hold(HeldPage.parse(request)!); return h }())

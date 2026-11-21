@@ -67,8 +67,7 @@ final class ModelsModule: ExactModule {
         }
         if op == "pageText" {
             // The shared reader hands over the page in front (AutoradioLab/reader.ts `hand`); the voice turn reads it. Only native code can: the voice engine is native. Answers {ok}.
-            AutoradioModule.current?.holdPage(request)
-            reply.send(["ok": AutoradioModule.current != nil])
+            reply.send(["ok": AutoradioModule.current?.holdPage(request) ?? false])
             return
         }
         reply.send(call(request))

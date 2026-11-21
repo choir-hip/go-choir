@@ -81,12 +81,14 @@ extension AutoradioModule {
 
     /// The shared reader hands over the page in front (AutoradioModule's app-module op `pageText`, ModelsEntry.swift): held for the voice turn's page text, the corpus and the follow-along.
     /// The reason it is native: the voice engine is native and cannot ask the shared module for a page's text.
-    public func holdPage(_ request: [String: Any]) {
-        guard let p = HeldPage.parse(request) else { return }
-        HeldPages.shared.hold(p)
+    /// True only when the page was held (it names an address and is not from an account that has since gone).
+    @discardableResult
+    public func holdPage(_ request: [String: Any]) -> Bool {
+        guard let p = HeldPage.parse(request), HeldPages.shared.hold(p, generation: (request["generation"] as? NSNumber)?.intValue) else { return false }
         let text = p.lines.joined(separator: " ")
         if !text.isEmpty { runtime.pageTextReady(address: p.address, text: text) }   // the text may arrive after the page is in front
         DispatchQueue.main.async { [weak self] in self?.touch(["pageModel"]) }
+        return true
     }
 
     func registerReader() {
