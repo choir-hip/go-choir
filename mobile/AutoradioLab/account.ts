@@ -168,7 +168,8 @@ async function stampFact(storage: Storage, digest: string): Promise<StampFact> {
 async function leftovers(storage: Storage | undefined): Promise<string[]> {
   if (!storage) return [];
   const out: string[] = [];
-  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
+  // The paper's cache is the PUBLIC front page: a signed-out phone shows the paper and caches it again within seconds, so a copy that is back after the wipe is not the old account's (the drill showed "could not be cleared yet: paper-front.json").
+  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && p !== PAPER_FRONT && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
   return out;
 }
 

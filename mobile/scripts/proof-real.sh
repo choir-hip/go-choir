@@ -151,8 +151,9 @@ run_drive survey light "" --touch platform
 # read from exactViewport().prefersColorScheme in shared code (themes.ts). The appearance goes back to light when the drive ends or the script stops.
 trap 'SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; rm -rf "$SCRATCH"' EXIT
 SIM ui "$EXACT_SIM" appearance dark >/dev/null 2>&1; sleep 2
+echo "sysdark: the simulator's appearance is now: $(SIM ui "$EXACT_SIM" appearance 2>&1 | head -1)"
 step "clock data"; wait_ 4000
-place settings 900; view real-07c-system-dark 900
+place settings 900; view real-07c-system-dark 900; step logs
 run_drive sysdark light "" --touch platform
 SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1
 
@@ -350,7 +351,8 @@ step "tap ob-topic-Science"; wait_ 700
 step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 150"; wait_ 500; step "clock settle"; step tree; step "layout ob-topic-Film"; step "tap ob-topic-Film"; wait_ 700
 step "tap edit-edition-scroll drag 0 -700"; wait_ 500; step "clock settle"
 step "type ob-topic-input Zzdrillchess"; step "tap ob-topic-add"; view real-72-topics-picked 1200
-step "tap edit-edition-scroll drag 0 1500"; wait_ 500; step "clock settle"; step "tap ob-topic-Science"; view real-73-topics-one-off 1200
+# (the run: after the drag to the top Science sat under the bar's field, so the list is dragged back up 400 to put it clear of the bar.)
+step "tap edit-edition-scroll drag 0 1500"; wait_ 500; step "tap edit-edition-scroll drag 0 -400"; wait_ 500; step "clock settle"; step "layout ob-topic-Science"; step "tap ob-topic-Science"; view real-73-topics-one-off 1200
 step "tap edit-edition-scroll drag 0 -1500"; wait_ 500; step "clock settle"; step tree; step "tap edit-edition-done"; wait_ 2500
 place paper 2000
 step "tap paper-section-mine"; view real-74-edition-mine-after 2500
@@ -370,7 +372,7 @@ place settings 900
 step "tap settings-nav-computer"; view real-80-computer 4500
 step "tap settings-back"; wait_ 500
 step "tap settings-nav-activity"; view real-81-activity 3500
-step "tap settings-back"; wait_ 500
+place settings 900          # Activity is a page of its own (activity.contract has no back button): Settings is opened again from the launcher
 step "tap settings-nav-about"; view real-82-about 1500
 step "tap settings-back"; wait_ 500
 place paper 2500
@@ -440,7 +442,7 @@ if [ -n "$STORY_CARDS" ]; then
   to_top; step "tap \"$STORY_CARDS\""; wait_ 3500
   step "tap story-more"; wait_ 1500; step tree
   step "tap bar-mark"; wait_ 900; step "type launcher-search Paper"; view real-66-launcher-search 1200
-  step "tap \"launcher-open-paper:front\""; wait_ 600
+  step "tap \"search-hit-paper:front\""; wait_ 600       # a search shows hits (search-hit-<address>); launcher-open-<address> is the deck's row, not on screen while a query is typed
   place settings 900; step "tap settings-nav-learned"; view real-67-learned 1500
   step "tap settings-learned-reset"; view real-68-learned-reset 1200
   step logs

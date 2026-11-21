@@ -158,6 +158,7 @@ export class Writer {
         }
       } catch (err) {
         const k = (err as { kind?: string } | undefined)?.kind;
+        console.log(`writer: the desk's stretch failed (${cause}): ${k ?? 'other'}, status ${(err as { status?: number } | undefined)?.status ?? 'none'}, ${err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)}`);
         if (!failure) failure = { kind: k === 'signedOut' || k === 'transport' ? k : 'other' };
       }
       if (gen !== this.d.generation() || stops !== this.stops) return;                       // stop() already cleared the flags; a later ask owns them now
