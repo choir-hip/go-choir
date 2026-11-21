@@ -141,13 +141,6 @@
    "answers": "RadioInfo"
   },
   {
-   "send": "radioStory",
-   "options": {
-    "move": "string"
-   },
-   "answers": "RadioInfo"
-  },
-  {
    "source": "radioNote",
    "live": true,
    "answers": "RadioNote",

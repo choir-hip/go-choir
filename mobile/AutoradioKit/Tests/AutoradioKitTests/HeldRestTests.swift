@@ -3,12 +3,7 @@ import XCTest
 
 @MainActor
 final class HeldRestTests: XCTestCase {
-    final class Capture: RunSheetPoster, @unchecked Sendable {
-        let lock = NSLock(); private var _ops: [RunSheetOp] = []
-        var ops: [RunSheetOp] { lock.lock(); defer { lock.unlock() }; return _ops }
-        func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome { lock.lock(); _ops += ops; lock.unlock(); return .answered([]) }
-        func fetchSheet() async -> RunSheet? { nil }
-    }
+    
     func tmp() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("keep-\(UUID().uuidString).json") }
 
     func testTheCapDropsTheOldest() {

@@ -19,11 +19,7 @@ final class AccountWipeTests: XCTestCase {
     }
     override func tearDown() { try? FileManager.default.removeItem(at: root) }
 
-    final class OfflinePoster: RunSheetPoster, @unchecked Sendable {
-        let lock = NSLock(); private(set) var posted: [[RunSheetOp]] = []
-        var outcome: RunSheetPostOutcome = .notYet
-        func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome { lock.lock(); posted.append(ops); lock.unlock(); return outcome }
-    }
+    
     final class FakeAPI: TextureAPI {
         var posts: [String] = []
         var failure: Error? = URLError(.notConnectedToInternet)

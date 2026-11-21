@@ -79,19 +79,6 @@ extension AutoradioModule {
             reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")))
         }
 
-        // Next or previous (move "next" or "previous"): the run sheet's `skip(on air)`, and its `previous` (the start of this entry when it has
-        // gone on a little, else the entry before it). The paper's list is never asked.
-        handle("radioStory") { [unowned self] args, reply in
-            let move: ChoirApp.StoryMove = (args["move"] as? String) == "previous" ? .previous : .next
-            Task { [weak self] in
-                guard let self else { return }
-                await self.choir.moveStory(move)
-                self.touch(["radioView", "barFacts"])
-                let route = ChoirEnvironment.shared.playing(self.runtime.player.document.id)?.route ?? ""
-                DispatchQueue.main.async { reply(self.json(tracker.radioInfo(player: self.choir.playerView(), snapshot: self.runtime.snapshot(), document: self.runtime.player.document, route: route, nextTitle: ""))) }
-            }
-        }
-
         // Reading speed, 0.5 to 3 in steps of 0.05. The tracker clamps and snaps it, hands it to the player (time-pitch in the audio
         // engine, pitch kept, for every voice), and it is kept for the next launch. The saved speed is applied now.
         if let saved = SpeedStore.standard.load() { tracker.setSpeed(saved) }
