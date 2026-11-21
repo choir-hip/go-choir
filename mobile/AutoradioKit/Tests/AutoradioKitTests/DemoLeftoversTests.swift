@@ -185,18 +185,6 @@ final class DemoLeftoversTests: XCTestCase {
         XCTAssertEqual(d.string(forKey: "AutoradioThemeID"), "depth", "a chosen theme that is not the demo one stays")
     }
 
-    func testOwnTakesLoseOnlyTheDemoIdsAndHandle() throws {
-        let d = scratch(); let s = support()
-        put(s, "takes-own.json", #"{"handle":"voice-de0001","ids":["take-0000000000000d01","take-0000000000000d02","take-9f3a1c2b7e4d5a60"]}"#)
-        more(s, d)
-        let o = try JSONSerialization.jsonObject(with: Data(contentsOf: s.appendingPathComponent("takes-own.json"))) as! [String: Any]
-        XCTAssertEqual(o["ids"] as? [String], ["take-9f3a1c2b7e4d5a60"]); XCTAssertEqual(o["handle"] as? String, "")
-        let d2 = scratch(); let s2 = support()
-        put(s2, "takes-own.json", #"{"handle":"voice-3fa2c1","ids":["take-9f3a1c2b7e4d5a60"]}"#)
-        more(s2, d2)
-        XCTAssertEqual(try String(contentsOf: s2.appendingPathComponent("takes-own.json"), encoding: .utf8), #"{"handle":"voice-3fa2c1","ids":["take-9f3a1c2b7e4d5a60"]}"#, "a real handle: untouched")
-    }
-
     func testTheLaunchFlagsDemoUsedGo() {
         let d = scratch(); let s = support()
         for k in ["AutoradioDemo", "AutoradioDemoSheet", "AutoradioOpenOnboarding"] { d.set("x", forKey: k) }

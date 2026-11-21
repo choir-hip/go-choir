@@ -1,7 +1,7 @@
 // Takes, the phone's side, as shared code: the wire (publish, list, mine, delete, record, audio), what a take is, the candidates the programme
 // request offers, the muted voices and the listener's own ids, the Takes section's rows and words. It replaces the Swift Takes.swift (TakesClient,
 // Take, MyTake, TakeRecordSummary, TakeOwn, TakeMutes, TakeStore, TakeCandidates, Mp4Header, the multipart body) and TakesPage.swift.
-// What stays native is the RECORDER (TakeSession: the microphone, the recogniser, the preview player): it is the voice.
+// What stays native is the RECORDER (TakeSession.swift: the microphone, the recogniser, the preview player): it is the voice. The session over it is take-session.ts.
 //
 // THE WIRE (docs/reference/AUTORADIO-TAKES.md; every route is signed in through the listener's own computer):
 //   POST   /api/platform/takes                multipart/form-data: `audio` (take.m4a, audio/mp4; an MP4 whose `mvhd` is 3 to 60 s and within 2 s of the
@@ -26,7 +26,7 @@
 //   T9  the page: the control offered matches the recorder's state; Publish only with a transcript; the sentence and the rights line on the review
 
 import type { Storage } from './app.contract.d.ts';
-import { authedBytes, authedJSON, HTTPError } from './api.ts';
+import { accountGeneration, authedBytes, authedJSON, HTTPError, writeCurrent } from './api.ts';
 
 export const BOUNDS = {
   minSeconds: 3, maxSeconds: 60,
@@ -210,9 +210,10 @@ export async function loadKept(storage: Storage | undefined): Promise<Kept> {
       muted: Array.isArray(o.muted) ? o.muted.filter((x: unknown): x is string => typeof x === 'string' && validHandle(x)) : [] };
   } catch { return emptyKept(); }
 }
-export async function saveKept(storage: Storage | undefined, k: Kept): Promise<void> {
-  if (!storage) return;
-  try { await storage.fs.atomicWriteFile(KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: [...k.ids].sort(), handle: k.handle, muted: k.muted }))); } catch { /* a full disk loses only this convenience */ }
+/** True when the file is there. The write is held to the account generation like every moved store's (api.ts writeCurrent): `gen` is the generation the DATA belongs to (the overlay's), so a write
+ * begun for an account that has since been wiped is refused, and one that lands after the generation moved is removed again. */
+export async function saveKept(storage: Storage | undefined, k: Kept, gen: number = accountGeneration()): Promise<boolean> {
+  return writeCurrent(gen, storage, KEPT_FILE, new TextEncoder().encode(JSON.stringify({ ids: [...k.ids].sort(), handle: k.handle, muted: k.muted })));
 }
 /** Sign-out: the ids, the handle and the muted voices are the account's. */
 export async function wipeKept(storage: Storage | undefined): Promise<void> { if (!storage) return; try { await storage.fs.rm(KEPT_FILE); } catch { /* absent */ } }
@@ -254,7 +255,7 @@ export function merged(stories: Record<string, unknown>[], takes: Take[]): Recor
 
 // ---------------------------------------------------------------------------------------------------------------- the upload
 
-export type Upload = { audio: Uint8Array; transcript: string; duration: number; respondsTo: Responds | null };
+export type Upload = { audio: Uint8Array; /** The audio's SHA-256 when the caller has it already. */ sha256?: string; transcript: string; duration: number; respondsTo: Responds | null };
 export async function sha256Hex(d: Uint8Array): Promise<string> {
   const h = new Uint8Array(await crypto.subtle.digest('SHA-256', d as unknown as BufferSource));
   return [...h].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -266,7 +267,7 @@ export async function multipart(u: Upload, boundary: string): Promise<{ body: Ui
   const field = (name: string, value: string): void => { parts.push(enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)); };
   field('transcript', u.transcript);
   field('duration_seconds', u.duration.toFixed(2));
-  field('sha256', await sha256Hex(u.audio));
+  field('sha256', u.sha256 ?? (await sha256Hex(u.audio)));
   if (u.respondsTo) field('responds_to', JSON.stringify({ route: u.respondsTo.route, title: u.respondsTo.title }));
   parts.push(enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="take.m4a"\r\nContent-Type: audio/mp4\r\n\r\n`));
   parts.push(u.audio);
@@ -283,8 +284,7 @@ export async function multipart(u: Upload, boundary: string): Promise<{ body: Ui
 export type Net = (method: 'GET' | 'POST' | 'DELETE', path: string, o?: { query?: Record<string, string | number>; body?: Uint8Array; contentType?: string }) => Promise<{ status: number; json: unknown; bytes: Uint8Array }>;
 
 /** The production Net over the signed-in seam (api.ts): a refusal arrives as an HTTPError carrying its status and the server's short `error` string.
- * GAP, reported: the seam sends every `body` as JSON, so a multipart upload (bytes with their own content type) needs the seam to pass a Uint8Array
- * through as it is; the call below is written for that and does not work until it does. */
+ * The seam passes a Uint8Array body through as it is (api.ts send), so the multipart upload goes with its own content type. */
 export const seamNet: Net = async (method, path, o = {}) => {
   try {
     if (o.body !== undefined || path.endsWith('/audio')) {
@@ -296,7 +296,7 @@ export const seamNet: Net = async (method, path, o = {}) => {
     const r = await authedJSON(path, { method, query: o.query });
     return { status: 200, json: r.body, bytes: new Uint8Array() };
   } catch (e) {
-    if (e instanceof HTTPError) return { status: e.status, json: { error: e.message.replace(/^[^:]*: ?/, '') }, bytes: new Uint8Array() };
+    if (e instanceof HTTPError) return { status: e.status, json: { error: e.message.replace(/^(?:HTTP \d+|\d+: rate limited|\d+: the key lacks the scope for \S+|\d+)(?:: )?/, '') }, bytes: new Uint8Array() };
     throw e;
   }
 };
@@ -331,8 +331,15 @@ export function client(net: Net): Client {
       return t;
     },
     async list() { const r = await net('GET', '/api/platform/takes', { query: { limit: BOUNDS.listLimit } }); gone(r.status); return takesOf(r.json); },
-    async mine() { const r = await net('GET', '/api/platform/takes', { query: { mine: 1 } }); gone(r.status); return mineOf(r.json); },
-    async remove(id) { await net('DELETE', `/api/platform/takes/${encodeURIComponent(id)}`); }, // 404 and 409: it is already gone
+    async mine() {
+      const r = await net('GET', '/api/platform/takes', { query: { mine: 1 } }); gone(r.status);
+      if (!ok(r.status)) throw new TakesRefused(`The server could not list your takes (HTTP ${r.status}).`);
+      return mineOf(r.json);
+    },
+    async remove(id) {
+      const r = await net('DELETE', `/api/platform/takes/${encodeURIComponent(id)}`);
+      if (!ok(r.status) && r.status !== 404 && r.status !== 409) throw new TakesRefused(`The server refused the delete (HTTP ${r.status}).`);      // 404 and 409: it is already gone
+    },
     async record(publisher) {
       const r = await net('GET', '/api/platform/takes/record', { query: { publisher } });
       if (r.status === 404) return { ...NEW }; // an unknown handle, or no server yet: no outcomes

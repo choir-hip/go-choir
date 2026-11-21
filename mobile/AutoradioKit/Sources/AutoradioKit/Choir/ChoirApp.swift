@@ -493,6 +493,7 @@ public final class ChoirApp: @unchecked Sendable {
     /// pending ops with the old key still held, and what is not answered then is dropped, never sent under a later account; then the local key
     /// goes and the account wipe runs (ChoirSignIn.signOut); the revoke follows in the background.
     public func signOut() async {
+        await MainActor.run { TakeSession.live?.discard() }      // a take in hand is the old account's: dropped first (its give-back is a queued task that may land after the pause; the queue is cleared, so it plays nothing)
         lock.lock(); loading = false; lock.unlock()
         runtime.player.pause(reason: "sign out")
         runtime.player.clearQueue()

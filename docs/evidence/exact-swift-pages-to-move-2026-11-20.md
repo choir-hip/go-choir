@@ -42,7 +42,7 @@ Lists `/api/texture/documents?limit=100` as rows, pins the edition first (doc wi
 - Exact: `textures.ts` (`parse`, `applying`, `load`), a `texturesList(at)` source in `app.ts`; rows become `texture:<id>` pages; `reader.ts` must resolve `texture:`.
 - Tests: list parts of `TextureDocTests`, `RealShapeTests`.
 
-## 6. Takes
+## 6. Takes (moved 2026-11-20, lane exact-takes; see the problem record's last update)
 Model already shared. Left: wire `takesPage` and `takesAct` in `app.ts`, split the recorder state machine out of `TakeSession.swift`.
 - Native-only (voice, stays): microphone and the take gate (`TakeGate`), `AVTakeRecorder`, `FileTranscriber`, `AVTakePreview`; fetching another listener's take for the run sheet (writes a file the player deletes, `+Takes.swift` 53-60).
 - Exact: `takes.ts` plus a session reducer (`take-session.ts`); contract `takesPage(recorder)` taking native recorder state, `takesAct` calling native `record`, `stop`, `preview`, `discard`, then publishing through `client`.

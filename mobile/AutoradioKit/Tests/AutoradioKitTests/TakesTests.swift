@@ -1,17 +1,11 @@
 import XCTest
 @testable import AutoradioKit
 
-/// Takes, the pure and wire parts (failure list: Takes.swift, T1 to T7).
+/// Takes, what the programme still reads (failure list: Takes.swift; the page, the wire for publishing and the listener's own data are shared code, takes.test.ts and take-session.test.ts).
 final class TakesTests: XCTestCase {
     static let mobile = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     func fixture(_ n: String) throws -> Data { try Data(contentsOf: Self.mobile.appendingPathComponent("fixtures/takes/\(n)")) }
     func list() throws -> [Take] { TakesClient.takes(try JSONSerialization.jsonObject(with: fixture("list.json"))) }
-
-    func testT1BoundsAreTheSpecs() {
-        XCTAssertEqual(TakeBounds.minSeconds, 3); XCTAssertEqual(TakeBounds.maxSeconds, 60)
-        XCTAssertEqual(TakeBounds.maxBytes, 512 * 1024); XCTAssertEqual(TakeBounds.maxTranscriptBytes, 2000)
-        XCTAssertEqual(TakeBounds.sampleRate, 24_000); XCTAssertEqual(TakeBounds.bitRate, 32_000)
-    }
 
     func testT2ListKeepsLiveTakesWithAnIdAndAHandle() throws {
         let t = try list()
@@ -30,11 +24,11 @@ final class TakesTests: XCTestCase {
     }
 
     func testT3CandidatesAreNotMineNotMutedNewestFirst() throws {
-        let own = TakeOwn(); own.add(id: "x", handle: "voice-me0001")
-        let mutes = TakeMutes(); mutes.mute("voice-9b0e44")
+        let own = TakeOwn(); own.replace(ids: ["x"], handle: "voice-me0001")
+        let mutes = TakeMutes(); mutes.replace(["voice-9b0e44"])
         let c = TakeCandidates.select(try list(), own: own, mutes: mutes)
         XCTAssertEqual(c.map(\.takeID), ["take-00000000000000a1", "take-00000000000000a3"], "not the listener's own (by handle), not a muted publisher's, newest first")
-        let byID = TakeOwn(); byID.add(id: "take-00000000000000a1", handle: "")
+        let byID = TakeOwn(); byID.replace(ids: ["take-00000000000000a1"], handle: "")
         XCTAssertFalse(TakeCandidates.select(try list(), own: byID, mutes: TakeMutes()).contains { $0.takeID == "take-00000000000000a1" }, "the listener's own take by id")
     }
 
@@ -85,35 +79,30 @@ final class TakesTests: XCTestCase {
         XCTAssertEqual(back, e); XCTAssertEqual(back.kind, .take)
     }
 
-    func testT5MultipartCarriesAudioTranscriptAndHash() throws {
-        let audio = Data((0..<2000).map { UInt8($0 % 251) })
-        let u = TakesClient.Upload(audio: audio, transcript: "hello there", duration: 12.5, respondsTo: TakeResponds(route: "harbor-fees", title: "Harbor"))
-        let m = TakesClient.multipart(u, boundary: "B")
-        XCTAssertEqual(m.contentType, "multipart/form-data; boundary=B")
-        let s = String(decoding: m.body, as: UTF8.self)
-        XCTAssertTrue(s.contains("name=\"transcript\"\r\n\r\nhello there"))
-        XCTAssertTrue(s.contains("name=\"duration_seconds\"\r\n\r\n12.50"))
-        XCTAssertTrue(s.contains("name=\"sha256\"\r\n\r\n" + u.sha256))
-        XCTAssertTrue(s.contains("name=\"responds_to\"\r\n\r\n{\"route\":\"harbor-fees\",\"title\":\"Harbor\"}"))
-        XCTAssertTrue(s.contains("filename=\"take.m4a\"\r\nContent-Type: audio/mp4"))
-        XCTAssertNotNil(m.body.range(of: audio)); XCTAssertEqual(u.sha256.count, 64)
+    func testT6TheProgrammesCopyOfOwnIdsAndMutesIsWhatSharedCodePushedAndSurvivesARelaunch() throws {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("mirror-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: d) }
+        let fo = d.appendingPathComponent("takes-copy-own.json"), fm = d.appendingPathComponent("takes-copy-muted.json")
+        let own = TakeOwn(file: fo), mutes = TakeMutes(file: fm)
+        let t = try XCTUnwrap(Take.parse(["take_id": "take-1", "publisher": "voice-x", "state": "live"]))
+        own.replace(ids: ["take-2", "take-1"], handle: "voice-me0001"); mutes.replace(["voice-3fa2c1", "bad handle"])
+        XCTAssertTrue(TakeOwn(file: fo).owns(t)); XCTAssertEqual(TakeOwn(file: fo).handle, "voice-me0001")
+        XCTAssertEqual(TakeMutes(file: fm).all, ["voice-3fa2c1"], "a handle that is not one is not kept")
+        own.replace(ids: [], handle: ""); mutes.replace([])
+        XCTAssertEqual(TakeMutes(file: fm).all, []); XCTAssertFalse(TakeOwn(file: fo).owns(t))
+        XCTAssertEqual(TakeFiles.url("takes-copy-own.json")?.lastPathComponent, "takes-copy-own.json")
+        XCTAssertNotEqual(TakeFiles.url("takes-own.json"), TakeFiles.url("takes-copy-own.json"), "the programme's copy is not the old file: a push never recreates it")
     }
 
-    func testT6MutesAreKeptListedUndoneAndSurviveARelaunch() throws {
-        let f = FileManager.default.temporaryDirectory.appendingPathComponent("mutes-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: f) }
-        let m = TakeMutes(file: f)
-        XCTAssertTrue(m.mute("voice-3fa2c1")); XCTAssertFalse(m.mute("voice-3fa2c1"), "twice is one"); XCTAssertFalse(m.mute("bad handle"))
-        XCTAssertEqual(TakeMutes(file: f).all, ["voice-3fa2c1"])
-        XCTAssertTrue(m.unmute("voice-3fa2c1")); XCTAssertEqual(TakeMutes(file: f).all, [])
-        XCTAssertEqual(TakeMutes.notebookLine("voice-3fa2c1"), "Never play takes by voice-3fa2c1.")
-    }
-
-    func testT6OwnIdsAndHandleSurviveARelaunch() {
-        let f = FileManager.default.temporaryDirectory.appendingPathComponent("own-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: f) }
-        TakeOwn(file: f).add(id: "take-1", handle: "voice-me0001")
-        XCTAssertEqual(TakeOwn(file: f).handle, "voice-me0001")
+    /// The programme's copy takes a push only from the account generation that is current: an older one (in flight when the account changed) is refused, and so is any push of the generation the wipe found,
+    /// even one that lands after the wipe and before the new account's first push.
+    func testTheMirrorRefusesAStalePushAndAfterAWipeAnythingButANewerGeneration() {
+        TakeMirror.reset()
+        XCTAssertTrue(TakeMirror.accept(5)); XCTAssertTrue(TakeMirror.accept(5), "the same generation again is the same account"); XCTAssertFalse(TakeMirror.accept(4), "older: refused")
+        TakeMirror.invalidate()                                  // the account wipe
+        XCTAssertFalse(TakeMirror.accept(5), "the old account's push landing after the wipe")
+        XCTAssertFalse(TakeMirror.accept(4)); XCTAssertTrue(TakeMirror.accept(6), "the new account's first push")
+        XCTAssertTrue(TakeMirror.accept(6)); TakeMirror.reset()
     }
 
     func testRespondsToFromTheEntryOnAir() async {
@@ -139,69 +128,17 @@ final class TakesClientTests: XCTestCase {
     }
     func fx(_ n: String) throws -> Any { try JSONSerialization.jsonObject(with: Data(contentsOf: TakesTests.mobile.appendingPathComponent("fixtures/takes/\(n)"))) }
 
-    func testPublishPostsOneMultipartToThePlatformAndReturnsTheTake() async throws {
-        StubProtocol.handler = { _ in .init(status: 201, json: (try? self.fx("publish.json")) ?? [:]) }
-        let t = try await client.publish(.init(audio: Data(repeating: 7, count: 100), transcript: "hi", duration: 4, respondsTo: nil))
-        XCTAssertEqual(t.takeID, "take-00000000000000b6"); XCTAssertEqual(t.publisher, "voice-me0001")
-        let r = try XCTUnwrap(StubProtocol.seen.last)
-        XCTAssertEqual(r.method, "POST"); XCTAssertEqual(r.path, "/api/platform/takes"); XCTAssertEqual(StubProtocol.seen.count, 1, "one call: the audio rides in it")
-        XCTAssertTrue(r.headers["content-type"]?.hasPrefix("multipart/form-data; boundary=") ?? false)
-        XCTAssertEqual(r.headers["authorization"], "Bearer k")
-    }
-
-    func testPublishOverTheBoundIsRefusedBeforeTheNetwork() async {
-        do { _ = try await client.publish(.init(audio: Data(count: TakeBounds.maxBytes + 1), transcript: "hi", duration: 4, respondsTo: nil)); XCTFail() } catch {}
-        XCTAssertTrue(StubProtocol.seen.isEmpty)
-    }
-
-    func testPublishShowsTheServersRefusalPlainly() async throws {
-        StubProtocol.handler = { _ in .init(status: 429, json: (try? self.fx("refused-daily.json")) ?? [:]) }
-        do { _ = try await client.publish(.init(audio: Data(count: 10), transcript: "hi", duration: 4, respondsTo: nil)); XCTFail() }
-        catch let e as TakesRefused { XCTAssertEqual(e.description, "invalid take: 10 takes in the last 24 hours, the limit is 10") }
-    }
-
-    func testAServerWithoutTakesIsNotAvailableYet() async {
-        StubProtocol.handler = { _ in .init(status: 404) }
-        do { _ = try await client.publish(.init(audio: Data(count: 10), transcript: "hi", duration: 4, respondsTo: nil)); XCTFail() } catch { XCTAssertEqual(error as? TakesUnavailable, TakesUnavailable()) }
-        do { _ = try await client.list(); XCTFail() } catch { XCTAssertEqual(error as? TakesUnavailable, TakesUnavailable()) }
-        do { _ = try await client.mine(); XCTFail() } catch { XCTAssertEqual(error as? TakesUnavailable, TakesUnavailable()) }
-    }
-
-    func testListMineRecordDelete() async throws {
-        StubProtocol.handler = { r in
-            switch (r.method, r.path) {
-            case ("GET", "/api/platform/takes") where r.query["mine"] == "1": return .init(json: (try? self.fx("mine.json")) ?? [:])
-            case ("GET", "/api/platform/takes"): return .init(json: (try? self.fx("list.json")) ?? [:])
-            case ("GET", "/api/platform/takes/record"): return .init(json: (try? self.fx("record.json")) ?? [:])
-            default: return .init(status: 200, json: ["take_id": "take-00000000000000a5", "state": "deleted"])
-            }
-        }
+    func testTheListIsAskedWithItsLimitAndAServerWithoutTakesIsNotAvailableYet() async throws {
+        StubProtocol.handler = { _ in .init(json: (try? self.fx("list.json")) ?? [:]) }
         let all = try await client.list(); XCTAssertEqual(all.count, 4)
         XCTAssertEqual(StubProtocol.seen.last?.query["limit"], "50")
-        let mine = try await client.mine(); XCTAssertEqual(mine.map(\.published), [true]); XCTAssertEqual(mine.first?.publisher, "voice-me0001")
-        XCTAssertEqual(StubProtocol.seen.last?.query["mine"], "1")
-        let rec = try await client.record(publisher: "voice-me0001"); XCTAssertEqual(rec.words, "heard through by 7 of 11 listeners over 5 takes")
-        XCTAssertEqual(StubProtocol.seen.last?.query["publisher"], "voice-me0001")
-        try await client.delete(takeID: "take-00000000000000a5")
-        XCTAssertEqual(StubProtocol.seen.last.map { $0.method + " " + $0.path }, "DELETE /api/platform/takes/take-00000000000000a5")
+        StubProtocol.handler = { _ in .init(status: 404) }
+        do { _ = try await client.list(); XCTFail() } catch { XCTAssertEqual(error as? TakesUnavailable, TakesUnavailable()) }
     }
 
     func testTheRecordIsFlatWithItsSummaryLine() throws {
         let o = try JSONSerialization.jsonObject(with: Data(#"{"publisher":"voice-1","offered":11,"heard":7,"skipped":4,"listeners":5,"takes":3,"new":false,"summary":"heard through 7 of 11 times, by 5 distinct listeners, over 3 takes","drill":{"heard":0,"skipped":0,"drill_heard":0,"drill_skipped":0}}"#.utf8))
         XCTAssertEqual(TakeRecordSummary.parse(o)?.words, "heard through 7 of 11 times, by 5 distinct listeners, over 3 takes")
-    }
-
-    func testTheMp4HeaderGivesTheLengthTheServerReads() {
-        func box(_ t: String, _ b: [UInt8]) -> [UInt8] { let n = UInt32(8 + b.count); return [UInt8(n >> 24), UInt8(n >> 16 & 255), UInt8(n >> 8 & 255), UInt8(n & 255)] + Array(t.utf8) + b }
-        let mvhd = [UInt8](repeating: 0, count: 12) + [0, 0, 0x03, 0xE8] + [0, 0, 0x30, 0x39] + [UInt8](repeating: 0, count: 80)   // v0, timescale 1000, 12345
-        let f = Data(box("ftyp", Array("M4A ".utf8) + [0, 0, 0, 0]) + box("moov", box("mvhd", mvhd)))
-        XCTAssertEqual(Mp4Header.durationSeconds(f) ?? 0, 12.345, accuracy: 0.0001)
-        XCTAssertNil(Mp4Header.durationSeconds(Data("RIFFxxxxWAVEfmt ".utf8)), "a WAV is not an MP4")
-    }
-
-    func testT7AnUnknownPublisherReadsAsNew() async throws {
-        StubProtocol.handler = { _ in .init(status: 404) }
-        let rec = try await client.record(publisher: "voice-none"); XCTAssertEqual(rec.words, "new: no outcomes yet")
     }
 
     func testAudioIsFetchedFromTheListsPathWithTheKey() async throws {

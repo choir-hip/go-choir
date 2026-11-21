@@ -720,36 +720,17 @@
     "SignalList": {
       "rows": "SignalRow[]"
     },
-    "TakeMineRow": {
-      "id": "string",
-      "title": "string",
-      "length": "string",
-      "state": "string"
-    },
-    "TakeMutedRow": {
-      "handle": "string",
-      "line": "string"
-    },
-    "TakesPageInfo": {
-      "state": "string",
-      "elapsed": "string",
-      "limit": "string",
-      "fraction": "number",
-      "canRecord": "bool",
-      "canStop": "bool",
-      "canPublish": "bool",
-      "canDiscard": "bool",
-      "previewing": "bool",
+    "TakesRecorder": {
+      "phase": "string",
+      "elapsed": "number",
+      "seconds": "number",
       "transcript": "string",
-      "respondsTo": "string",
-      "publishLine": "string",
-      "rightsLine": "string",
-      "notice": "string",
-      "justPublished": "string",
-      "mine": "TakeMineRow[]",
-      "muted": "TakeMutedRow[]",
-      "record": "string",
-      "handle": "string"
+      "previewing": "bool",
+      "ended": "string",
+      "detail": "string",
+      "respondsTitle": "string",
+      "respondsRoute": "string",
+      "publishing": "bool"
     },
     "ConversationEntry": {
       "id": "string",
@@ -1840,40 +1821,23 @@
       "answers": "PageList"
     },
     {
-      "source": "takesPage",
+      "source": "takesRecorder",
       "live": true,
-      "answers": "TakesPageInfo",
+      "answers": "TakesRecorder",
       "substitute": {
         "default": {
-          "state": "idle",
-          "elapsed": "0:00",
-          "limit": "1:00",
-          "fraction": 0,
-          "canRecord": true,
-          "canStop": false,
-          "canPublish": false,
-          "canDiscard": false,
-          "previewing": false,
+          "phase": "idle",
+          "elapsed": 0,
+          "seconds": 0,
           "transcript": "",
-          "respondsTo": "",
-          "publishLine": "",
-          "rightsLine": "",
-          "notice": "",
-          "justPublished": "",
-          "mine": [],
-          "muted": [],
-          "record": "",
-          "handle": ""
+          "previewing": false,
+          "ended": "",
+          "detail": "",
+          "respondsTitle": "",
+          "respondsRoute": "",
+          "publishing": false
         }
       }
-    },
-    {
-      "send": "takesAct",
-      "options": {
-        "op": "string",
-        "arg": "string"
-      },
-      "answers": "TakesPageInfo"
     },
     {
       "source": "conversationEntries",
