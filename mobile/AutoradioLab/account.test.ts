@@ -163,7 +163,7 @@ describe('S9 sign out A, sign in B', () => {
 // ---------------------------------------------------------------------------------------------------------------------------------------- the table and the kills
 
 const dig = (k: string): string => createHash('sha256').update(k).digest('hex');
-type World = { key: 'present' | 'absent' | 'unreadable'; value: string; swift: boolean; native: string[]; killInNative: boolean; hang: boolean; lateRelease: (() => void) | null };
+type World = { key: 'present' | 'absent' | 'unreadable'; value: string; swift: boolean; native: string[]; killInNative: boolean; hang: boolean; lateRelease: (() => void) | null; wipeFails?: boolean };
 let W: World;
 const newWorld = (key: World['key'] = 'present', value = 'test-key-A-not-real'): World => ({ key, value, swift: true, native: [], killInNative: false, hang: false, lateRelease: null });
 /** The app module as the model of the phone: the Keychain item (3 answers), the Swift stores, and sign-out's two native steps (key delete, then Swift wipe). */
@@ -178,7 +178,7 @@ const phone = () => ({ available: true, later: async (r: { op: string }) => {
     W.swift = false;                                             // :129, AccountWipe
     return { done: true };
   }
-  if (r.op === 'wipe') { W.native.push('wipe'); W.swift = false; return { done: true }; }
+  if (r.op === 'wipe') { W.native.push('wipe'); if (W.wipeFails) return { done: false }; W.swift = false; return { done: true }; }
   return { ok: true };
 } });
 const SEED = ['app:/data/takes.json', 'app:/data/podcasts-library.json', 'app:/data/mail/msg-1.bin'];
@@ -258,13 +258,13 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
     W.native = []; await launch(m);
     expect(dataLeft(m).length).toBe(SEED.length); expect(W.native).toEqual([]); expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(true);
   });
-  test('a stamp is not advanced by a wipe that failed (finding 3): the old stamp stays and the next launch tries again', async () => {
+  test('a wipe that failed (finding 3, changed by the table design): the stamp is the new account\'s at once and LISTS what is left; the next launch wipes only that', async () => {
     W = newWorld('present', 'test-key-B-not-real'); const m = memFs(SEED);
     m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real')));
     const rm = m.storage.fs.rm; let broken = true;
     (m.storage as never as { fs: { rm: (p: string) => Promise<void> } }).fs.rm = async (p: string) => { if (broken && p === 'app:/data/takes.json') throw new Error('disk'); return rm(p); };
     const r = await launch(m);
-    expect(r.failed.length).toBeGreaterThan(0); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-A-not-real'));      // not relabelled as B's
+    expect(r.failed.length).toBeGreaterThan(0); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(`${dig('test-key-B-not-real')}\nrm:app:/data/takes.json`);      // B's, and the one survivor is listed (the wipe swallowed the error; the survivor check found it)
     broken = false; await launch(m);
     expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-B-not-real'));
   });
@@ -277,12 +277,12 @@ describe('S15 a kill at each step of a sign-out, then a relaunch', () => {
     expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]);                 // the shared stores are gone
     expect(m.files.has(PENDING_FILE)).toBe(true); expect(m.files.has(STAMP_FILE)).toBe(true);   // and the retry is kept
   });
-  test('round 3, 1b: the same for an account change whose native wipe fails: shared stores wiped, the old stamp stays', async () => {
+  test('round 3, 1b: the same for an account change whose native wipe fails: shared stores wiped, the stamp is B\'s and lists the native half', async () => {
     W = newWorld('present', 'test-key-B-not-real'); const m = memFs(SEED);
     m.files.set(STAMP_FILE, new TextEncoder().encode(dig('test-key-A-not-real')));
     resetSeam(); resetSettled(); bindNative({ ...phone(), later: async (r: { op: string }) => (r.op === 'wipe' ? { done: false } : phone().later(r)) } as never);
     const r = await settleAccount(m.storage, undefined);
-    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(dig('test-key-A-not-real'));
+    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]); expect(new TextDecoder().decode(m.files.get(STAMP_FILE))).toBe(`${dig('test-key-B-not-real')}\nnative`);
   });
   test('round 3, 2: a late native answer does not wipe a sign-in that completed inside the window (sign-out, and the launch\'s finish)', async () => {
     let release: () => void = () => undefined; const gate = new Promise<void>((r) => { release = r; });
@@ -441,5 +441,183 @@ describe('S18 the sign-out counter (round 6)', () => {
     const c = await Bun.file(new URL('./members-notebook.contract', import.meta.url)).text();
     expect(c).toContain('notebookPageShared("", 0, noNative, signedOutTick, au.signedIn)');
     expect(await Bun.file(new URL('./account-types.contract', import.meta.url)).text()).toContain('epoch: number');
+  });
+});
+
+
+// ---------------------------------------------------------------------------------------------------------------------------------------- S20 the table of docs/problems/unclean-sign-out-leaves-the-old-accounts-data-for-the-next-2026-11-21.md
+// The remembered settle answer is valid only for the state it was computed from, settle is idempotent, and a sign-out in flight is a state. Rows: every (key, stamp, marker, in flight), and the faults X1 to X9.
+describe('S20 the table: key x stamp x marker, settle twice, with a sign-out in flight', () => {
+  const KA = 'test-key-A-not-real', KB = 'test-key-B-not-real';
+  const text = (m: ReturnType<typeof memFs>, p: string): string => new TextDecoder().decode(m.files.get(p) ?? new Uint8Array());
+  const stampOf = (m: ReturnType<typeof memFs>): string => text(m, STAMP_FILE).split('\n')[0];
+  const put = (m: ReturnType<typeof memFs>, p: string, v: string): void => { m.files.set(p, new TextEncoder().encode(v)); };
+  type K = 'absent' | 'A' | 'B'; type St = 'none' | 'A' | 'B';
+  const digOf = (a: 'A' | 'B'): string => dig(a === 'A' ? KA : KB);
+  /** The rows, written out (not derived from decide): what one settle must leave, for a state with no sign-out in flight. */
+  const expected = (key: K, stamp: St, marker: 'present' | 'absent') => {
+    if (key === 'absent') {
+      if (stamp === 'none' && marker === 'absent') return { data: true, stamp: 'none', marker: false, native: [] as string[] };
+      return { data: false, stamp: 'none', marker: false, native: ['signOut'] };
+    }
+    if (stamp === 'none') return { data: true, stamp: digOf(key), marker: false, native: [] as string[] };
+    if (stamp === key) return { data: true, stamp: digOf(key), marker: false, native: [] as string[] };
+    return { data: false, stamp: digOf(key), marker: false, native: ['wipe'] };
+  };
+  const setup = (key: K, stamp: St, marker: 'present' | 'absent') => {
+    W = newWorld(key === 'absent' ? 'absent' : 'present', key === 'B' ? KB : KA); const m = memFs(SEED);
+    if (stamp !== 'none') put(m, STAMP_FILE, digOf(stamp));
+    if (marker === 'present') put(m, PENDING_FILE, '1');
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    return m;
+  };
+  const keys: K[] = ['absent', 'A', 'B']; const stamps: St[] = ['none', 'A', 'B']; const markers = ['present', 'absent'] as const;
+  for (const key of keys) for (const stamp of stamps) for (const marker of markers) {
+    test(`key ${key} / stamp ${stamp} / marker ${marker}: one settle leaves the row, a second settle changes nothing and keeps what the account wrote meanwhile`, async () => {
+      const m = setup(key, stamp, marker); const e = expected(key, stamp, marker);
+      await settleAccount(m.storage, undefined);
+      expect(dataLeft(m).length > 0).toBe(e.data); expect(W.native).toEqual(e.native); expect(m.files.has(PENDING_FILE)).toBe(e.marker);
+      if (e.stamp === 'none') expect(m.files.has(STAMP_FILE)).toBe(false); else expect(text(m, STAMP_FILE)).toBe(e.stamp);
+      put(m, 'app:/data/takes.json', 'written-after');                           // what the signed-in account writes after the settle
+      W.native = [];
+      resetSettled();                                                              // a fresh memo is not what keeps it safe: the second settle recomputes from the state
+      await settleAccount(m.storage, undefined);
+      expect(text(m, 'app:/data/takes.json')).toBe('written-after'); expect(W.native).toEqual([]);
+      if (e.stamp !== 'none') expect(text(m, STAMP_FILE)).toBe(e.stamp);
+    });
+  }
+  // the in-flight rows: a sign-out whose native half has not answered. Reachable with the marker present (the sign-out writes it first).
+  const answers = ['done false (the key stays)', 'done true (the key goes)'] as const;
+  for (const key of ['A', 'B'] as const) for (const stamp of stamps) for (const ans of answers) {
+    test(`in flight: key ${key} / stamp ${stamp} / native then answers ${ans}: settle waits, then acts on the state the sign-out left`, async () => {
+      W = newWorld('present', key === 'B' ? KB : KA); const m = memFs(SEED);
+      if (stamp !== 'none') put(m, STAMP_FILE, digOf(stamp));
+      resetSeam(); resetSettled(); bindNative(phone() as never);
+      let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+      const slow = { available: true, later: async (r: { op: string }) => { if (r.op !== 'signOut') return phone().later(r); await gate; if (ans.startsWith('done true')) { W.key = 'absent'; W.swift = false; return { done: true }; } return { done: false }; } };
+      const out = accountSignOut(m.storage, undefined, slow as never);
+      await new Promise((r) => setTimeout(r, 10));
+      let settledEarly = false;
+      const s = settleAccount(m.storage, undefined).then((v) => { settledEarly = true; return v; });
+      await new Promise((r) => setTimeout(r, 25));
+      expect(settledEarly).toBe(false);                                            // nothing answers while the sign-out is in flight
+      release(); await out; await s;
+      const after: K = W.key === 'absent' ? 'absent' : key;
+      const e = expected(after, stamp === 'none' && after === 'absent' ? 'none' : stamp, after === 'absent' ? 'absent' : 'absent');
+      if (after === 'absent') { expect(dataLeft(m)).toEqual([]); expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(false); }
+      else { expect(dataLeft(m).length > 0).toBe(e.data); }
+    });
+  }
+});
+
+describe('S20 faults X1 to X9', () => {
+  const KA = 'test-key-A-not-real', KB = 'test-key-B-not-real';
+  const text = (m: ReturnType<typeof memFs>, p: string): string => new TextDecoder().decode(m.files.get(p) ?? new Uint8Array());
+  const put = (m: ReturnType<typeof memFs>, p: string, v: string): void => { m.files.set(p, new TextEncoder().encode(v)); };
+  const signedInA = async () => { W = newWorld('present', KA); const m = memFs(SEED); await launch(m); return m; };
+  const signInB = () => { W.key = 'present'; W.value = KB; };
+  const hanging = () => ({ available: true, later: async (r: { op: string }) => {
+    if (r.op !== 'signOut') return phone().later(r);
+    W.native.push('signOut'); W.key = 'absent'; await new Promise<void>((res) => { W.lateRelease = res; }); W.swift = false; return { done: true };
+  } });
+  const expectB = async (m: ReturnType<typeof memFs>) => {
+    const r = await settleAccount(m.storage, undefined);
+    expect(r.failed).toEqual([]); expect(dataLeft(m)).toEqual([]); expect(text(m, STAMP_FILE)).toBe(dig(KB)); expect(m.files.has(PENDING_FILE)).toBe(false);
+  };
+  test('X1 a sign-out that timed out after the key delete, then B signs in', async () => {
+    const m = await signedInA();
+    const r = await accountSignOut(m.storage, undefined, hanging() as never, { deadlineMs: 30 });
+    expect(r.done).toBe(false); signInB(); await expectB(m);
+  });
+  test('X2 a native throw, and a native "not done", after the key delete', async () => {
+    for (const mode of ['throw', 'notdone']) {
+      const m = await signedInA();
+      const n = { available: true, later: async (r: { op: string }) => { if (r.op !== 'signOut') return phone().later(r); W.key = 'absent'; if (mode === 'throw') throw new Error('killed'); return { done: false }; } };
+      const r = await accountSignOut(m.storage, undefined, n as never);
+      expect(r.done).toBe(false); signInB(); await expectB(m);
+    }
+  });
+  test('X3 the late answer with B\'s key present wipes nothing of B\'s; the stamp decides', async () => {
+    const m = await signedInA();
+    await accountSignOut(m.storage, undefined, hanging() as never, { deadlineMs: 30 });
+    signInB(); await expectB(m);
+    put(m, 'app:/data/takes.json', 'B-data'); W.lateRelease?.(); await new Promise((r) => setTimeout(r, 20));
+    expect(text(m, 'app:/data/takes.json')).toBe('B-data'); expect(text(m, STAMP_FILE)).toBe(dig(KB));
+    await settleAccount(m.storage, undefined); expect(text(m, 'app:/data/takes.json')).toBe('B-data');
+  });
+  test('X3b the late answer with the key absent and a store that fails: the next settle finishes it', async () => {
+    const m = await signedInA();
+    const rm = m.storage.fs.rm; let broken = true;
+    (m.storage as never as { fs: { rm: (p: string) => Promise<void> } }).fs.rm = async (p: string) => { if (broken && p === 'app:/data/takes.json') throw new Error('disk'); return rm(p); };
+    await accountSignOut(m.storage, undefined, hanging() as never, { deadlineMs: 30 });
+    W.lateRelease?.(); await new Promise((r) => setTimeout(r, 30));
+    expect(m.files.has('app:/data/takes.json')).toBe(true);                     // it failed
+    signInB(); broken = false; await expectB(m);                                 // B's settle clears it: nothing of A left
+  });
+  test('X4 a native wipe that failed at the account change: B writes, the retry runs the native half only, B\'s data survives', async () => {
+    W = newWorld('present', KB); W.wipeFails = true; const m = memFs(SEED); put(m, STAMP_FILE, dig(KA));
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    const r = await settleAccount(m.storage, undefined);
+    expect(r.failed).toContain('native'); expect(dataLeft(m)).toEqual([]);
+    expect(text(m, STAMP_FILE).split('\n')[0]).toBe(dig(KB));                  // the stamp is already B's: what is left is listed
+    put(m, 'app:/data/takes.json', 'B-data'); put(m, 'app:/data/podcasts-library.json', 'B-pod');
+    W.wipeFails = false; W.native = [];
+    const again = await settleAccount(m.storage, undefined);
+    expect(again.failed).toEqual([]); expect(W.native).toEqual(['wipe']);        // the native half only
+    expect(text(m, 'app:/data/takes.json')).toBe('B-data'); expect(text(m, 'app:/data/podcasts-library.json')).toBe('B-pod');
+    expect(text(m, STAMP_FILE)).toBe(dig(KB));                                   // the list is empty: the plain stamp
+    W.native = []; await settleAccount(m.storage, undefined); expect(W.native).toEqual([]);
+  });
+  test('X4b a store that failed at the account change: the retry wipes only it', async () => {
+    W = newWorld('present', KB); const m = memFs(SEED); put(m, STAMP_FILE, dig(KA));
+    const rm = m.storage.fs.rm; let broken = true;
+    (m.storage as never as { fs: { rm: (p: string) => Promise<void> } }).fs.rm = async (p: string) => { if (broken && p === 'app:/data/podcasts-library.json') throw new Error('disk'); return rm(p); };
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    const r = await settleAccount(m.storage, undefined); expect(r.failed.length).toBeGreaterThan(0);
+    put(m, 'app:/data/takes.json', 'B-data'); broken = false;
+    const again = await settleAccount(m.storage, undefined);
+    expect(again.failed).toEqual([]); expect(m.files.has('app:/data/podcasts-library.json')).toBe(false); expect(text(m, 'app:/data/takes.json')).toBe('B-data'); expect(text(m, STAMP_FILE)).toBe(dig(KB));
+  });
+  test('X5 a clean sign-out whose stamp removal fails is not clean, and the next settle finishes it', async () => {
+    const m = await signedInA();
+    const rm = m.storage.fs.rm; let broken = true;
+    (m.storage as never as { fs: { rm: (p: string) => Promise<void> } }).fs.rm = async (p: string) => { if (broken && p === STAMP_FILE) throw new Error('disk'); return rm(p); };
+    const r = await accountSignOut(m.storage, undefined, phone() as never);
+    expect(r.done).toBe(true); expect(r.failed).not.toBe('');
+    signInB(); broken = false; await expectB(m);
+  });
+  test('X6 a settle that throws remembers nothing: the next answer settles again', async () => {
+    W = newWorld('present', KB); const m = memFs(SEED); put(m, STAMP_FILE, dig(KA));
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    const boom = { signOut: async () => true, wipe: () => { throw new Error('boom'); } };
+    await expect(settleAccount(m.storage, undefined, boom as never)).rejects.toThrow('boom');
+    const ok = await settleAccount(m.storage, undefined);
+    expect(ok.failed).toEqual([]); expect(dataLeft(m)).toEqual([]);
+  });
+  test('X7 a clean sign-out of A leaves no stamp, B is stamped at its first settle, so C\'s sign-in wipes B\'s data after an unclean sign-out of B', async () => {
+    const m = await signedInA();
+    expect((await accountSignOut(m.storage, undefined, phone() as never)).done).toBe(true);
+    signInB(); await settleAccount(m.storage, undefined);
+    expect(text(m, STAMP_FILE)).toBe(dig(KB));
+    put(m, 'app:/data/takes.json', 'B-data');
+    await accountSignOut(m.storage, undefined, hanging() as never, { deadlineMs: 30 });          // B signs out uncleanly
+    W.key = 'present'; W.value = 'test-key-C-not-real';
+    const r = await settleAccount(m.storage, undefined);
+    expect(r.failed).toEqual([]); expect(m.files.has('app:/data/takes.json')).toBe(false); expect(text(m, STAMP_FILE)).toBe(dig('test-key-C-not-real'));
+  });
+  test('X8 a settle asked while signed out is not the answer for a later sign-in', async () => {
+    W = newWorld('absent'); const m = memFs([]);
+    resetSeam(); resetSettled(); bindNative(phone() as never);
+    await settleAccount(m.storage, undefined);
+    W.key = 'present'; W.value = KB; await settleAccount(m.storage, undefined);
+    expect(text(m, STAMP_FILE)).toBe(dig(KB));
+  });
+  test('X9 two sign-outs overlapping run one after the other', async () => {
+    const m = await signedInA();
+    const order: string[] = [];
+    const n = (tag: string) => ({ available: true, later: async (r: { op: string }) => { if (r.op !== 'signOut') return phone().later(r); order.push(`${tag}:start`); await new Promise((res) => setTimeout(res, 20)); order.push(`${tag}:end`); return { done: false }; } });
+    const a = accountSignOut(m.storage, undefined, n('1') as never); const b = accountSignOut(m.storage, undefined, n('2') as never);
+    await Promise.all([a, b]);
+    expect(order).toEqual(['1:start', '1:end', '2:start', '2:end']);
   });
 });
