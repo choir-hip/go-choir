@@ -435,7 +435,7 @@ describe('the migration from the Swift storage (G1)', () => {
     expect(s.choice).toEqual({ theme: 'mine', mode: 'dark' }); expect(s.originOf('mine')).toBe('file'); expect(s.originOf('ember')).toBeUndefined();       // a Texture theme is account data: never carried over
     expect(s.problems.some((p) => p.startsWith('broken.json'))).toBe(true);                       // honest: the broken one is still reported
     expect(m.files.has(`${T.THEMES_DIR}/texture-ember.json`)).toBe(false); expect(m.files.has(`${T.TEXTURE_DIR}/texture-ember.json`)).toBe(false); expect(m.files.has(`${T.THEMES_DIR}/mine.json`)).toBe(true);
-    expect(s.problems.some((p) => p.startsWith('texture-ember.json'))).toBe(true);
+    expect(s.problems.some((p) => p.startsWith('a theme from a Texture'))).toBe(true);
     expect(kept(m)).toEqual({ theme: 'mine', mode: 'dark', migrated: true });
     expect(log).toEqual(['themeLegacy']);                                                          // the old copy is not removed (a reverted build still reads it)
     T.resetThemes(); log.length = 0;

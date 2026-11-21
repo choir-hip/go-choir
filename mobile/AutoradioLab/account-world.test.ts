@@ -120,10 +120,12 @@ describe('M3 module state belongs to the world: no module-level mutable state ou
     }
     return found;
   };
-  // STATEFUL: allowed, each with the reason it is not the world's. A module that keeps account-scoped state uses `scoped()` (api.ts) instead and shows up nowhere here.
+  // STATEFUL: allowed, each with the reason it is not the world's. Every reason answers: "can this variable ever hold a string, id or object derived from account data?" (checked again in round five: `themes.status`, which could, moved into the world).
+  // account.ts lastFailed holds fixed store names and the words "mail copies", never a name from the account.
+  // Not listed because not module state: the per-world state of every module that keeps any is declared with `scoped`. A module that keeps account-scoped state uses `scoped()` (api.ts) instead and shows up nowhere here.
   const STATEFUL: Record<string, Record<string, string>> = {
     'account.ts': { adoptedDigest: 'the one writer: the digest the last Adopt wrote', chain: 'the boundary\'s own machinery: the one writer', clearing: 'the one writer', wipes: 'the one writer', boundaryId: 'the one writer', lastFailed: 'the one writer', adopting: 'the one writer', active: 'the one writer', timing: 'deadlines (tests shorten them)' },
-    'api.ts': { reader: 'the seam: the native handle', nativeAnswered: 'the seam', lastNative: 'the seam (a log line)', lastFlags: 'the seam (a log line)', world: 'THE WORLD', closedWorlds: 'the worlds whose started writes a Clear waits for', blockedDigest: 'the seam: sealing block', discovered: 'digest-keyed computer id', discovering: 'digest-keyed computer id', rejected: 'the refused key digest (cleared at sign-out)', keyTiming: 'deadline (tests shorten it)', keyReads: 'a counter for the log' },
+    'api.ts': { reader: 'the seam: the native handle', nativeAnswered: 'the seam', lastNative: 'the seam (a log line)', lastFlags: 'the seam (a log line)', world: 'THE WORLD', closedWorlds: 'the worlds whose started writes a Clear waits for', blockedDigest: 'the seam: sealing block', discovered: 'a computer id of the account, returned only for the same key digest and dropped at every boundary move (resetSession)', discovering: 'the same, in flight', rejected: 'the refused key digest (cleared at sign-out)', keyTiming: 'deadline (tests shorten it)', keyReads: 'a counter for the log' },
     'demo-leftovers.ts': { attempt: 'keyed by world: an attempt of a closed world is replaced' },
     'host.ts': { decided: 'the host fact (is there a native package): the device\'s', inflight: 'the host probe' }, 'mail-sanitize.ts': { lastTarget: 'the last link target the sanitizer allowed: not read across answers' },
     'mail-seal.ts': { sealable: 'whether the platform can seal: the device\'s' },
@@ -131,7 +133,7 @@ describe('M3 module state belongs to the world: no module-level mutable state ou
     'podcast.ts': { search: 'a test knob (the pause before a search)' },
     'search.ts': { liveVectors: 'live stores wipe themselves (wipeLiveVectors)', embedPrompt: 'a function', f32: 'a function' },
     'content.ts': { liveStores: 'live stores wipe themselves (wipeLiveContent)' },
-    'themes.ts': { loading: 'device settings: the phone\'s theme store, Texture themes hidden while the boundary is owed', current: 'device settings', status: 'device settings', saving: 'device settings', dirty: 'device settings', migrated: 'device settings', hadChoiceFile: 'device settings', choiceTouched: 'device settings', migrating: 'device settings', migrateTries: 'device settings', rev: 'device settings' },
+    'themes.ts': { loading: 'the DEVICE theme store (bundled themes, the person\'s own theme files, the choice): it cannot hold a Texture theme (add refuses one, the loader skips texture- names); a choice that names one is cleared at the Clear (by its recorded origin)', current: 'the device theme store', saving: 'a write chain of the device choice file', dirty: 'a flag', migrated: 'a flag of the old-build carry-over', hadChoiceFile: 'a flag', choiceTouched: 'a flag', migrating: 'the old-build carry-over single-flight (raw storage, never inert)', migrateTries: 'a counter', rev: 'a counter' },
   };
   // CONSTANTS: read-only tables and objects. The test checks that nothing in their own file changes them.
   const CONSTANTS: Record<string, string[]> = {"account.ts": ["WIPES"], "activity.ts": ["LABELS", "MONTHS"], "api.ts": ["KEYCHAIN_ACCOUNTS", "NEVER", "READS"], "app.ts": ["sources", "EXEMPT"], "clips.ts": ["NONE"], "content.ts": ["KINDS", "KIND_LABEL", "STANDARD_BUDGET", "TEXT_EXTENSIONS"], "contract-rules.ts": ["roleFaces"], "deck.ts": ["DECK_NAMES", "EMPTY_ITEM"], "demo-leftovers.ts": ["STORIES", "TEXTURES", "MAILBOXES", "MESSAGES", "FILES"], "edition-model.ts": ["HOUSE", "TREE", "ALIASES", "TRIM", "FILLERS", "ADD_VERBS", "REMOVE_VERBS", "FINISH", "QUESTION_LEAD", "NOTHING", "NEGATIVE_LEAD"], "files-model.ts": ["IMAGE", "VIDEO", "AUDIO", "MARKDOWN", "TEXT", "CSV", "CODE", "LABELS", "SYMBOLS", "MIME", "MONTHS"], "files.ts": ["realNet"], "mail-model.ts": ["FOLDERS", "ENTITIES", "DROPPED", "BLOCK_END", "DAYS", "MONTHS", "OFFLINE"], "mail-sanitize.ts": ["ALLOWED_TAGS", "VOID_TAGS", "RAW_TEXT", "DROP_WITH_CONTENT", "GLOBAL_ATTRS", "NAMED"], "mail-seal.ts": ["MAGIC"], "notebook.ts": ["HELD"], "paper-layout.ts": ["FALLBACK_STEP"], "paper-model.ts": ["DAYS", "MONTHS", "HOUSE", "FINER", "ALIASES", "TERMS", "STOP"], "podcast-feed.ts": ["INLINE"], "podcast-model.ts": ["LINEBREAK", "MONTHS", "MONTH_NAMES", "ZONES"], "podcast.ts": ["enc", "NO_PLAY", "zone"], "programme-model.ts": ["SEGMENT_LABELS", "STRIPPED"], "radio-director.ts": ["SESSION_RETRY_DELAYS"], "radio-model.ts": ["SMALL", "TENS", "DAYS", "MONTHS"], "radio-page.ts": ["EMPTY_FACTS"], "runsheet-entries.ts": ["enc"], "runsheet-model.ts": ["KINDS", "BYS", "STATES", "OUTCOMES", "ROLES", "OPS", "ATS", "Dropped", "Bounds", "enc"], "runsheet-store.ts": ["NO_REPORT"], "search.ts": ["BUDGET", "STOP", "PRONOUNS", "JOB_BUDGET"], "take-session.ts": ["IDLE", "PHASES", "ENDED", "RECORDER_OPS"], "takes.ts": ["BOUNDS", "STRIPPED", "enc", "NEW"], "textures.ts": ["MONTHS", "real"], "themes-bundled.ts": ["BUNDLED"], "themes.ts": ["FACES", "GENERIC", "TYPE_SCALES", "UNSAFE", "RGB_COMMA", "RGB_SPACE", "MODES", "realNet"], "words.ts": ["WORDS"], "xml.ts": ["NAMED"]};
@@ -495,7 +497,7 @@ describe('C13 themes as two stores (seat 2, round four)', () => {
   });
   test('C13.choice a choice that named a Texture theme falls back to the default at the Clear (the file, and the device store in memory)', async () => {
     const T = await import('./themes.ts'); const ember = await emberText();
-    boot({ 'app:/data/theme-textures/texture-ember.json': ember, 'app:/data/theme-choice.json': JSON.stringify({ theme: 'ember', mode: 'dark' }) }); T.resetThemes();
+    boot({ 'app:/data/theme-textures/texture-ember.json': ember, 'app:/data/theme-choice.json': JSON.stringify({ theme: 'ember', mode: 'dark', origin: 'texture' }) }); T.resetThemes();
     expect(JSON.parse(JSON.stringify(await call('themeList', ['light', false, 'x']))).themeID).toBe('ember');
     expect((await signOut()).done).toBe(true);
     expect(JSON.parse(m.text('app:/data/theme-choice.json') ?? '{}').theme ?? null).toBeNull();
@@ -528,6 +530,52 @@ describe('C14 seat 2, round four: the Clear and the Adopt', () => {
     W.onKeystate = (count) => { if (count === 2) W.value = KEY_B; };                                    // the Keychain changes between the gate's read and the Adopt's
     const b = await account.enter(m.storage, undefined);
     expect(m.text(STAMP)).toBe(dig(KEY_B)); expect(b.digest).toBe(dig(KEY_B));
+  });
+});
+
+describe('C15 seat 1, round five: status, cache paths, late Remove, the choice by origin, rmTree retries', () => {
+  const emberText = async (): Promise<string> => { const T = await import('./themes.ts'); return JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme); };
+  test('C15.status A\'s "Added <theme> from the Texture" is not B\'s Settings status', async () => {
+    const T = await import('./themes.ts'); const ember = await emberText(); boot({}); T.resetThemes();
+    globalThis.fetch = (async (u: string) => (String(u).endsWith('/api/compute/status') ? new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 }) : new Response(JSON.stringify({ doc_id: 'd', theme: JSON.parse(ember) }), { status: 200 }))) as never;
+    await call('themeFromTexture', ['doc-1']);
+    expect(JSON.stringify(await call('themeCards', ['light', false, 'x']))).toContain('Added');
+    expect((await signOut()).done).toBe(true); W.key = 'present'; W.value = KEY_B; await call('pagesView', [0]);
+    const b = JSON.parse(JSON.stringify(await call('themeCards', ['light', false, 'x']))) as { status: string };
+    expect(b.status).toBe(''); expect(JSON.stringify(b)).not.toContain('Ember');
+  });
+  test('C15.cache-path the files cache path names the account: a download that outlives the Clear lands where B does not look', async () => {
+    const F2 = await import('./files.ts'); boot({}); const entry = { name: 'a.txt', path: '/a.txt', isDirectory: false, size: 7, modified: 5 };
+    await call('pagesView', [0]); const pathA = F2.cacheDest(entry);
+    expect(pathA).toContain(dig(KEY_A).slice(0, 16));
+    expect((await signOut()).done).toBe(true); W.key = 'present'; W.value = KEY_B; await call('pagesView', [0]);
+    const pathB = F2.cacheDest(entry);
+    expect(pathB).toContain(dig(KEY_B).slice(0, 16)); expect(pathB).not.toBe(pathA);
+    m.files.set(pathA, new TextEncoder().encode('A-BYTES'));                                              // A's download lands late, at A's path
+    await expect(m.storage.fs.stat(pathB)).rejects.toBeDefined();                                         // B's resolve does not find it
+  });
+  test('C15.late-remove A\'s Remove, resumed after the boundary moved, deletes neither a Texture nor a device theme of B\'s', async () => {
+    const T = await import('./themes.ts'); const ember = await emberText();
+    boot({ 'app:/data/theme-choice.json': '{}', 'app:/data/themes/mine.json': ember.replace(/ember/g, 'mine') }); T.resetThemes();
+    let release: () => void = () => undefined; m.faults.holdOnce.set('app:/data/theme-choice.json', new Promise<void>((r) => { release = r; }));      // the device store's first load: raw, it resumes after the boundary moved
+    void call('themeRemove', ['mine']).catch(() => undefined); await wait(20);
+    expect((await signOut()).done).toBe(true); W.key = 'present'; W.value = KEY_B; await call('pagesView', [0]);
+    release(); await wait(40);
+    expect(m.files.has('app:/data/themes/mine.json')).toBe(true);
+  });
+  test('C15.choice-origin a choice recorded as a Texture theme is cleared by the Clear even when its file is already gone, and a choice that cannot be cleared fails the Clear', async () => {
+    const T = await import('./themes.ts'); boot({ 'app:/data/theme-choice.json': JSON.stringify({ theme: 'ember', mode: 'dark', origin: 'texture' }) }); T.resetThemes();
+    expect((await signOut()).done).toBe(true);
+    expect(JSON.parse(m.text('app:/data/theme-choice.json') ?? '{}').theme ?? null).toBeNull();
+    boot({ 'app:/data/theme-choice.json': JSON.stringify({ theme: 'ember', mode: 'dark', origin: 'texture' }) }); T.resetThemes(); m.faults.write.add('app:/data/theme-choice.json');
+    const r = await signOut(); await idle();
+    expect(m.files.has(STAMP)).toBe(true);                                                               // the choice still names a Texture theme: the Clear is not clean
+    expect(r.done).toBe(true);
+  });
+  test('C15.rmtree-retry a child that appears while a folder is being removed does not leave the Clear stuck', async () => {
+    boot({ 'app:/data/podcast-feeds/f1.json': 'x' }); W = newWorld('absent'); n = phone(() => W); api.bindNative(n as never); m.faults.reappear.add('app:/data/podcast-feeds');
+    await call('pagesView', [0]).catch(() => undefined); await idle();
+    expect(m.files.has('app:/data/podcast-feeds/late.bin')).toBe(false); expect(m.files.has(STAMP)).toBe(false);
   });
 });
 

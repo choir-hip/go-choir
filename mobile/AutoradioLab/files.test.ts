@@ -167,7 +167,7 @@ describe('F10 opening what the phone shows', () => {
     const i = await open('file:/readings.csv');
     expect(i).toMatchObject({ status: 'ready', kind: 'csv', kindLabel: 'Table', mime: 'text/csv', name: 'readings.csv' });
     expect(i.rows.map((r) => r.cells)).toEqual([['day', 'mm'], ['Mon', '1,5'], ['Tue', 'say "hi"'], ['Wed']]);
-    expect(i.src).toBe(`${F.CACHE_DIR}/${M.hash(`/readings.csv|80|${Date.parse('2026-11-14T22:00:00Z')}`)}/readings.csv`);
+    expect(i.src).toBe(`${F.CACHE_DIR}/nokey/${M.hash(`/readings.csv|80|${Date.parse('2026-11-14T22:00:00Z')}`)}/readings.csv`);
     expect(files.get(i.src)!.length).toBe(blobs['/readings.csv'].length);
   });
   test('an image is brought and measured; a second open fetches nothing', async () => {
@@ -217,7 +217,7 @@ describe('F18 to F20 large files go to disk and stay out of JavaScript', () => {
     big('talk.mp4', 60_000_000);
     toFileFail = new Error('network'); const bad = await open('file:/talk.mp4'); expect(bad.status).toBe('error'); expect(sizes.size).toBe(0); expect(files.size).toBe(0);
     toFileFail = null;
-    const dest = `${F.CACHE_DIR}/${M.hash(`/talk.mp4|60000000|${Date.parse('2026-11-18T08:00:00Z')}`)}/talk.mp4`;
+    const dest = `${F.CACHE_DIR}/nokey/${M.hash(`/talk.mp4|60000000|${Date.parse('2026-11-18T08:00:00Z')}`)}/talk.mp4`;
     sizes.set(dest, 1_000_000);                                      // a stray short file at the place (a host that died mid-way)
     const ok = await open('file:/talk.mp4'); expect(ok.status).toBe('ready'); expect(sizes.get(dest)).toBe(60_000_000); expect(calls.filter((c) => c.query).length).toBe(2);
   });
