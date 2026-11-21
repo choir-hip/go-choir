@@ -47,6 +47,7 @@ public final class AccountWipe: @unchecked Sendable {
         takeOwn: TakeOwn = .shared,
         takeMutes: TakeMutes = .shared,
         takeStore: TakeStore = .shared,
+        legacyTakeFiles: [URL?] = TakeFiles.legacy,
         tempDirectory: URL = FileManager.default.temporaryDirectory,
         runSheet: RunSheetStore = .shared,
         openingCache: OpeningCache? = nil,
@@ -74,7 +75,9 @@ public final class AccountWipe: @unchecked Sendable {
         }
         register("steer") { steer.wipe() }
         register("takes") {
-            takeOwn.wipe(); takeMutes.wipe(); takeStore.wipe()
+            await MainActor.run { TakeSession.live?.discard() }      // the account CHANGED path has no signOut() above it
+            TakeMirror.invalidate(); takeOwn.wipe(); takeMutes.wipe(); takeStore.wipe()      // first: a push of the old account landing from here on is refused
+            for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the pre-release build's files (never read by this build) go with the account that is leaving
             Self.removeTakeScratch(in: tempDirectory)
         }
         register("run-sheet") { await MainActor.run { runSheet.wipe() } }

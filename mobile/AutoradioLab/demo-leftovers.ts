@@ -1,6 +1,6 @@
 // What demo mode left in the SHARED files of a phone that was in it. Demo mode was deleted on 2026-11-20; this runs once per phone, on the first answer after a launch
 // (app.ts), and removes only what demo mode demonstrably wrote: positive trace only, never a real item. The native half (open-pages.json, signals, the told-the-paper acts,
-// the demo theme, own takes, launch flags) is AutoradioKit's Demo.clearMoreLeftovers. Two files hold demo's trace here:
+// the demo theme, launch flags) is AutoradioKit's Demo.clearMoreLeftovers. Two files hold demo's trace here:
 //   recent-files.json   an entry is demo's only when its path, its byte size AND its modified time are the demo tree's: the demo backend stamped every node with a time fixed
 //                       from the clock 1_700_000_000_000 (Nov 2023) minus a set number of days, which a real file does not share together with the path and size
 //   open-pages-shared.json   an address is demo's only when it is one of the ids demo mode served (the five stories, five Texture documents, four mailbox states, the demo

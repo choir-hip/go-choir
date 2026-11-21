@@ -1,12 +1,11 @@
-// Takes (station L7; design 11): the Takes section of the Autoradio page. One source, `takesPage`, and one send, `takesAct`, declared in
-// interface/takes.json. The state machine is the Kit's (TakeSession.swift); this file holds what only the app can do: take the microphone from
-// the radio (the one voice), record to a file, read it with the recogniser, and fetch another listener's take for the run sheet.
-//   takesAct op  record | stop | preview | rerecord | discard | publish | delete(arg id) | mute(arg handle) | unmute(arg handle) | refresh
+// The take RECORDER's native side (the voice): the radio's gate, the microphone, the file, the recogniser, the preview. The Takes section is shared code (AutoradioLab/take-session.ts); this file hands it
+// one snapshot (source `takesRecorder`, interface/takes.json) and answers its ops (`takeOp`, public: ModelsEntry.swift calls it) and fetches another listener's take for the run sheet.
+//   ops: takeState | takeStart(min/maxSeconds, maxBytes) | takeStop | takePreview(mode) | takePublishing(on) | takeDiscard | takeDone | takeAudio | takeSteerMute (the steer queue is native)
+//        takeMirror (the Swift programme still filters takes by the listener's own ids and muted voices; shared code owns them and pushes a copy, with its account generation: a push older than one already taken was in flight when the account changed and is dropped). The pre-release build's old files are never read.
 import AVFoundation
 import Foundation
 
-/// The radio gives the microphone to a take: the radio is paused (the same pause a turn makes), hands-free is off for the while, and the
-/// session is the capture one. When the take is over everything goes back as it was; a listener's own pause stays a pause.
+/// The radio gives the microphone to a take: paused (as a turn does), hands-free off, the capture session; when the take is over everything goes back (a listener's own pause stays a pause).
 @MainActor final class TakeGate: TakeRadioGate {
     unowned let module: AutoradioModule
     private var handsFree = false
@@ -40,12 +39,12 @@ import Foundation
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("takes", isDirectory: true)
         let make: @Sendable () -> Transcriber = { SFSpeechTranscriber(StageParams([:])) }
         session = TakeSession(recorder: AVTakeRecorder(), transcriber: FileTranscriber(make: make), gate: TakeGate(module), preview: preview,
-                              client: { [weak module] in module == nil ? nil : TakesClient(client: ChoirEnvironment.shared.client()) },
                               micAllowed: { LiveAudio.micPermissionGranted() ? true : await LiveAudio.requestMicPermission() },
-                              responds: { TakeResponds.from(entry: RunSheetPlayer.shared.store.onAir()) }, own: .shared, dir: dir)
+                              responds: { TakeResponds.from(entry: RunSheetPlayer.shared.store.onAir()) }, dir: dir)
+        TakeSession.live = session
         preview.onEnd = { [weak self] in self?.session.previewEnded() }
         session.onChange = { [weak self, weak module] in
-            module?.touch(["takesPage", "radioPage"], now: true)
+            module?.touch(["takesRecorder", "radioPage"], now: true)
             self?.keepTicking()
         }
     }
@@ -54,7 +53,7 @@ import Foundation
         ticker = Task { @MainActor [weak self] in
             while let s = self?.session, s.state == .recording {
                 await s.tick()
-                self?.session.onChangeTick()
+                self?.session.onChange?()
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
             self?.ticker = nil
@@ -62,17 +61,13 @@ import Foundation
     }
 }
 
-extension TakeSession { func onChangeTick() { onChange?() } }
-
 extension AutoradioModule {
-    func takesPageInfo() -> TakesPageInfo {
-        onMainThread { TakesPage.make(session: TakesHost.shared!.session, mutes: TakeMutes.shared.all, own: .shared) }
-    }
+    func takesSnapshot() -> [String: Any] { onMainThread { TakesHost.shared?.session.snapshot ?? [:] } }
 
     func registerTakes() {
         onMainThread {
             TakesHost.shared = TakesHost(module: self)
-            // Another listener's take is fetched like a clip: the publisher's bytes, signed in, into a file the player deletes when the entry ends.
+            // Another listener's take is fetched like a clip: the publisher's bytes, signed in, into a file the player deletes when the entry ends. Native because the run sheet player is.
             RunSheetPlayer.shared.takeAudio = { id in
                 let path = TakeStore.shared.take(id)?.audioPath ?? Take.audioPath(id)
                 guard let data = try? await TakesClient(client: ChoirEnvironment.shared.client()).audio(path: path) else { return nil }
@@ -81,29 +76,28 @@ extension AutoradioModule {
                 return f
             }
         }
-        handle("takesPage") { [unowned self] _, reply in reply(json(takesPageInfo())) }
-        handle("takesAct") { [unowned self] args, reply in
-            let op = args["op"] as? String ?? "", arg = args["arg"] as? String ?? ""
-            Task { @MainActor [weak self] in
-                guard let self, let host = TakesHost.shared else { return }
-                let s = host.session
-                switch op {
-                case "record", "rerecord": await s.start()
-                case "stop": await s.stop()
-                case "preview": s.togglePreview()
-                case "discard": s.discard()
-                case "publish": await s.publish()
-                case "delete": await s.delete(arg)
-                case "mute":
-                    if TakeMutes.shared.mute(arg) { SteerQueue.shared.enqueue(.mute(handle: arg)); await SteerQueue.shared.flush() }
-                case "unmute": TakeMutes.shared.unmute(arg)
-                case "refresh": await s.refresh()
-                default: break
-                }
-                self.touch(["takesPage", "radioPage"], now: true)
-                reply(self.json(self.takesPageInfo()))
-            }
+        handle("takesRecorder") { [unowned self] _, reply in reply(takesSnapshot()) }
+    }
+
+    /// The shared code's calls on the recorder (take-session.ts `nativeDevice`). Each answers the snapshot, except the ones that answer their own thing.
+    @MainActor public func takeOp(_ r: [String: Any]) async -> [String: Any] {
+        switch r["op"] as? String ?? "" {      // the ops that need no recorder never depend on it being up
+        case "takeSteerMute": if let h = r["handle"] as? String, !h.isEmpty { SteerQueue.shared.enqueue(.mute(handle: h)); await SteerQueue.shared.flush() }; return [:]
+        case "takeMirror": if TakeMirror.accept((r["gen"] as? NSNumber)?.intValue ?? 0) { TakeOwn.shared.replace(ids: r["ids"] as? [String] ?? [], handle: r["handle"] as? String ?? ""); TakeMutes.shared.replace(r["muted"] as? [String] ?? []) }; return [:]
+        default: break
         }
-        Task { @MainActor in await TakesHost.shared?.session.refresh() }
+        guard let s = TakesHost.shared?.session else { return (r["op"] as? String) == "takeStart" ? ["ended": "open"] : [:] }
+        func num(_ k: String, _ d: Double) -> Double { (r[k] as? NSNumber)?.doubleValue ?? d }
+        switch r["op"] as? String ?? "" {
+        case "takeStart": await s.start(TakeLimits(minSeconds: num("minSeconds", 3), maxSeconds: num("maxSeconds", 59.5), maxBytes: Int(num("maxBytes", 512 * 1024))))
+        case "takeStop": await s.stop()
+        case "takePreview": if let m = r["mode"] as? String, m != "toggle" { s.setPreview(m == "on") } else { s.togglePreview() }
+        case "takePublishing": s.setPublishing((r["on"] as? Bool) ?? false)
+        case "takeDiscard": s.discard()
+        case "takeDone": s.done()
+        case "takeAudio": return s.audio.map { ["b64": $0.base64EncodedString() as Any] } ?? [:]
+        default: break
+        }
+        return s.snapshot
     }
 }

@@ -1,0 +1,33 @@
+// The shapes of the Takes section. Declared here and answered by `app.ts` (take-session.ts: `takesPage`); they were the Swift package's (interface/takes.json) before the page moved to shared
+// code. The native side hands over only the recorder's snapshot (`TakesRecorder`, interface/takes.json): the microphone and the radio's gate are the voice.
+
+shape TakeMineRow
+  id: string
+  title: string
+  length: string
+  state: string
+
+shape TakeMutedRow
+  handle: string
+  line: string
+
+shape TakesPageInfo
+  state: string
+  elapsed: string
+  limit: string
+  fraction: number
+  canRecord: bool
+  canStop: bool
+  canPublish: bool
+  canDiscard: bool
+  previewing: bool
+  transcript: string
+  respondsTo: string
+  publishLine: string
+  rightsLine: string
+  notice: string
+  justPublished: string
+  mine: TakeMineRow[]
+  muted: TakeMutedRow[]
+  record: string
+  handle: string

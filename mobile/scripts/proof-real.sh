@@ -30,6 +30,8 @@ reset_state() {
   S="$CONT/Library/Application Support/Autoradio"
   rm -f "$S/open-pages.json" "$S/onboarding.json" "$S/edition-topics.json" "$S/voice-setup.json" "$S/signals.jsonl" "$S/recent-files.json"
   rm -rf "$S/themes" "$CONT/Library/Caches/Autoradio/files"
+  # The takes' data: the shared file (app:/data/takes.json, take-session.ts) and the Swift programme's copies (takes-own.json, takes-muted.json). Every drive starts without them; the takes drive seeds the old two below.
+  rm -f "$S/takes-own.json" "$S/takes-muted.json" "$S/takes-copy-own.json" "$S/takes-copy-muted.json" "$CONT"/Library/Application\ Support/exact/*/data/takes.json "$CONT"/Library/Caches/exact/*/agent/*/data/takes.json
   rm -rf "$CONT"/Library/Application\ Support/exact/*/data/theme-choice.json "$CONT"/Library/Application\ Support/exact/*/data/themes   # app:/data on a device build
   rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"
@@ -41,6 +43,13 @@ reset_state() {
   fi
   # The carry-over drill (SEED_LEGACY=1) seeds what an old build left, in THIS simulator's app container only: two preference keys (AutoradioThemeID=depth, AutoradioThemeMode=dark)
   # and one file, Application Support/Autoradio/themes/drill-user.json (a valid theme with the id drill-user). Nothing else; legacy_clean removes all three.
+  # The takes drills (SEED_TAKES=1) seed what the old build kept, in THIS simulator's app container only: Application Support/Autoradio/takes-own.json (a handle and the own ids in TAKES_SEED_IDS, a
+  # comma-separated list of quoted ids) and takes-muted.json (two muted voices). Whether shared code adopts them is its decision, made with the server's proof (take-session.ts refresh); the drills check both answers.
+  if [ -n "${SEED_TAKES:-}" ]; then
+    mkdir -p "$S"
+    printf '{"handle":"voice-drill0001","ids":[%s]}' "$TAKES_SEED_IDS" > "$S/takes-own.json"
+    printf '%s' '["voice-drillm1","voice-drillm2"]' > "$S/takes-muted.json"
+  fi
   if [ -n "${SEED_LEGACY:-}" ]; then
     SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeID depth; SIM spawn "$EXACT_SIM" defaults write $APP AutoradioThemeMode dark
     mkdir -p "$S/themes"
@@ -157,6 +166,34 @@ MIGRATED_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/theme-choice.json 
 [ -n "$MIGRATED_FILE" ] && cp "$MIGRATED_FILE" "$SHOTS/migrated-theme-choice.json"
 ls "$CHK"/Library/Caches/exact/*/agent/*/data/themes/ "$CHK"/Library/Application\ Support/exact/*/data/themes/ 2>/dev/null > "$SHOTS/migrated-themes-dir.txt"
 legacy_clean
+
+# ---- 3a4. TAKES drill. Nothing is carried from the pre-release build (owner's ruling, 2026-11-20): its two files (takes-own.json with a handle and own ids, takes-muted.json with two muted voices) are SEEDED by
+# reset_state (SEED_TAKES, TAKES_SEED_IDS) in the drive that is the first signed-in launch to see them, and the build must neither read, adopt from nor delete them: no muted voice is listed, nothing of them is
+# in the kept file (app:/data/takes.json, which exists only when the server's `mine` gave this account a live take) or in the programme's copy (pushed by shared code, so it exists after the first refresh), and both
+# old files are still there with their contents. The account wipe (the sign-out drill below) is what removes them.
+# NOT covered: Record, Stop, Preview, Publish. The simulator has no microphone input the scripts can drive (the agent's microphone track is unused: testing-and-debugging.md, "Voice flows for agent tests"), and
+# Publish would write a take to d@e. Those are in take-session.test.ts (S1 to S8, U3, B1) against a fake recorder, and on a phone by hand. The account-change case cannot be driven with one key.
+SEED_TAKES=1; export SEED_TAKES
+TAKES_SEED_IDS='"take-drilla","take-drillb"'; export TAKES_SEED_IDS
+step "clock data"; wait_ 5000
+place radio 1500
+wait_ 9000                                            # the refresh runs apart from the first paint (a task, then the signed-in request)
+for i in 1 2 3; do step "tap radio-scroll drag 0 -1500"; wait_ 300; done
+view real-46-takes-old-files 900
+step logs
+run_drive takes light "" --touch platform
+unset SEED_TAKES TAKES_SEED_IDS
+CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
+TKS="$CHK/Library/Application Support/Autoradio"
+TK_FILE=$(ls -t "$CHK"/Library/Caches/exact/*/agent/*/data/takes.json "$CHK"/Library/Application\ Support/exact/*/data/takes.json 2>/dev/null | head -1)
+rm -f "$SHOTS/takes-data.json" "$SHOTS/takes-copy-own.json" "$SHOTS/takes-copy-muted.json" "$SHOTS/takes-old-own.json" "$SHOTS/takes-old-muted.json"
+[ -n "$TK_FILE" ] && cp "$TK_FILE" "$SHOTS/takes-data.json"
+cp "$TKS/takes-copy-own.json" "$SHOTS/takes-copy-own.json" 2>/dev/null
+cp "$TKS/takes-copy-muted.json" "$SHOTS/takes-copy-muted.json" 2>/dev/null
+cp "$TKS/takes-own.json" "$SHOTS/takes-old-own.json" 2>/dev/null
+cp "$TKS/takes-muted.json" "$SHOTS/takes-old-muted.json" 2>/dev/null
+tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
+tseg "$SHOTS/drive-takes.txt" real-46-takes-old-files > "$SHOTS/seg-takes.txt"
 
 # Fail loudly rather than quietly tour nothing: no story card at all means the paper page did not draw, which the tour must not pass over.
 grep -q '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" || fail "survey" "no paper-story- line in the survey tree: the paper page showed no story card"
@@ -375,6 +412,16 @@ if [ -n "$THEME_DOC" ]; then
   chk "theme: the Texture's theme is listed" '\[settings-theme-depth-teal-test\]' "$TH"
   bad "theme: no problems reported" '\[settings-theme-problems\]' "$TH"
 fi
+# the takes drill (nothing is carried from the pre-release build; Record and Publish are not driven, see 3a4)
+chk "takes: the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes.txt"
+chk "takes: the record control is there" '\[takes-record\]' "$SHOTS/seg-takes.txt"
+bad "takes: no old muted voice is listed" 'Never play takes by voice-drillm' "$SHOTS/seg-takes.txt"
+if [ -f "$SHOTS/takes-data.json" ]; then bad "takes: nothing of the old files is in the kept file" 'take-drill|voice-drill' "$SHOTS/takes-data.json"; else echo "info: takes: no kept file (d@e has no live take), nothing to check in it"; fi
+chk "takes: the programme's copy was pushed by shared code (the file exists)" '"ids"' "$SHOTS/takes-copy-own.json"
+bad "takes: nothing of the old files is in the programme's copy" 'take-drill|voice-drill' "$SHOTS/takes-copy-own.json"
+chk "takes: the programme's muted copy is empty" '^\[\]$' "$SHOTS/takes-copy-muted.json"
+chk "takes: the old own-ids file is still there, unread" 'take-drilla' "$SHOTS/takes-old-own.json"
+chk "takes: the old muted file is still there, unread" 'voice-drillm1' "$SHOTS/takes-old-muted.json"
 # the tour
 chk "settings: About names the app" '\[settings-about-app\]' "$SHOTS/drive-tour.txt"
 # About's Build row is the commit the app was built from (build-info.gen.ts, written at build time) and it is the commit under test; the server row reads /health
