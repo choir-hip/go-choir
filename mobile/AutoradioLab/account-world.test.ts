@@ -122,7 +122,7 @@ describe('M3 module state belongs to the world: no module-level mutable state ou
   };
   // STATEFUL: allowed, each with the reason it is not the world's. A module that keeps account-scoped state uses `scoped()` (api.ts) instead and shows up nowhere here.
   const STATEFUL: Record<string, Record<string, string>> = {
-    'account.ts': { chain: 'the boundary\'s own machinery: the one writer', clearing: 'the one writer', wipes: 'the one writer', boundaryId: 'the one writer', lastFailed: 'the one writer', adopting: 'the one writer', active: 'the one writer', timing: 'deadlines (tests shorten them)' },
+    'account.ts': { adoptedDigest: 'the one writer: the digest the last Adopt wrote', chain: 'the boundary\'s own machinery: the one writer', clearing: 'the one writer', wipes: 'the one writer', boundaryId: 'the one writer', lastFailed: 'the one writer', adopting: 'the one writer', active: 'the one writer', timing: 'deadlines (tests shorten them)' },
     'api.ts': { reader: 'the seam: the native handle', nativeAnswered: 'the seam', lastNative: 'the seam (a log line)', lastFlags: 'the seam (a log line)', world: 'THE WORLD', closedWorlds: 'the worlds whose started writes a Clear waits for', blockedDigest: 'the seam: sealing block', discovered: 'digest-keyed computer id', discovering: 'digest-keyed computer id', rejected: 'the refused key digest (cleared at sign-out)', keyTiming: 'deadline (tests shorten it)', keyReads: 'a counter for the log' },
     'demo-leftovers.ts': { attempt: 'keyed by world: an attempt of a closed world is replaced' },
     'host.ts': { decided: 'the host fact (is there a native package): the device\'s', inflight: 'the host probe' }, 'mail-sanitize.ts': { lastTarget: 'the last link target the sanitizer allowed: not read across answers' },
@@ -278,12 +278,12 @@ describe('C9b seat 2\'s second round, under the world mechanism', () => {
   test('C9.texture-theme A\'s Texture theme is not shown while the boundary is owed, and a load held across the Clear does not bring it back', async () => {
     const T = await import('./themes.ts');
     const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
-    boot({ 'app:/data/themes/texture-ember.json': ember }); T.resetThemes();
+    boot({ 'app:/data/theme-textures/texture-ember.json': ember }); T.resetThemes();
     expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).toContain('ember');          // an open boundary shows it
     T.resetThemes();
-    let release: () => void = () => undefined; m.faults.hold.set('app:/data/themes/texture-ember.json', new Promise<void>((r) => { release = r; }));
+    let release: () => void = () => undefined; m.faults.hold.set('app:/data/theme-textures/texture-ember.json', new Promise<void>((r) => { release = r; }));
     const held = call('themeList', ['light', false, 'x']).catch(() => undefined); await wait(15);       // a load in flight
-    m.faults.hangRm.add('app:/data/themes/texture-ember.json');                                          // the Clear cannot remove it yet: the phone stays CLEARING
+    m.faults.hangRm.add('app:/data/theme-textures/texture-ember.json');                                          // the Clear cannot remove it yet: the phone stays CLEARING
     const out = signOut(); await wait(30);
     m.faults.hold.clear(); release(); await held; await wait(20);
     expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).not.toContain('ember');      // not shown while owed
@@ -292,7 +292,7 @@ describe('C9b seat 2\'s second round, under the world mechanism', () => {
   test('C9.texture-theme-loaded A\'s Texture theme already in memory is not shown the moment a sign-out begins (before any wipe step runs)', async () => {
     const T = await import('./themes.ts');
     const ember = JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme);
-    boot({ 'app:/data/themes/texture-ember.json': ember }); T.resetThemes();
+    boot({ 'app:/data/theme-textures/texture-ember.json': ember }); T.resetThemes();
     expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).toContain('ember');
     W.signOut = 'hang'; const out = signOut(); await wait(20);                                           // the world is closed and owed; native has not answered; no wipe has run
     expect(JSON.stringify(await call('themeList', ['light', false, 'x']))).not.toContain('ember');
@@ -382,7 +382,7 @@ describe('C11 seat 2\'s third round', () => {
     const held = call('themeMigrate', ['native', 0]).catch(() => undefined); await wait(20);
     expect((await signOut()).done).toBe(true);
     go(); await held; await wait(30);
-    expect(m.files.has('app:/data/themes/texture-ember.json')).toBe(false);
+    expect(m.files.has('app:/data/theme-textures/texture-ember.json')).toBe(false); expect(m.files.has('app:/data/themes/texture-ember.json')).toBe(false);       // a Texture theme is account data: the carry-over writes none, in either folder
   });
   test('C11.download a download in flight when the world closes: the Clear waits for it and the file does not stay (a host download is not a storage write)', async () => {
     boot({}); account.timing.sharedMs = 2000;
@@ -466,6 +466,68 @@ describe('C12 seat 1\'s residuals on 0ced3a4ee', () => {
     void api.authedToFile('/api/files/a.bin', dest, api.bindStorage(m.storage), { world: api.currentWorld() }).catch(() => undefined); await wait(15);
     api.nextGeneration(); release(); await wait(30);
     expect(events.filter((e) => e === 'rm:' + dest)).toEqual([]);
+  });
+});
+
+describe('C13 themes as two stores (seat 2, round four)', () => {
+  const emberText = async (): Promise<string> => { const T = await import('./themes.ts'); return JSON.stringify(T.parseTextureTheme(JSON.parse(readFileSync(new URL('./fixtures/texture/theme-ember.json', import.meta.url), 'utf8'))).theme); };
+  test('C13.b1 A\'s Texture theme, mid-load across the Clear, is never in B\'s list', async () => {
+    const T = await import('./themes.ts'); const ember = await emberText(); const lantern = ember.replace(/ember/g, 'lantern2');
+    boot({ 'app:/data/theme-textures/texture-aa.json': lantern, 'app:/data/theme-textures/texture-ember.json': ember }); T.resetThemes();
+    let release: () => void = () => undefined; m.faults.hold.set('app:/data/theme-textures/texture-ember.json', new Promise<void>((r) => { release = r; }));
+    const held = call('themeList', ['light', false, 'x']).catch(() => undefined); await wait(20);        // the load has the first file and waits on the second
+    expect((await signOut()).done).toBe(true);
+    W.key = 'present'; W.value = KEY_B; await call('pagesView', [0]);                                    // B adopts
+    m.faults.hold.clear(); release(); await held; await wait(30);
+    const b = JSON.stringify(await call('themeList', ['light', false, 'x']));
+    expect(b).not.toContain('ember'); expect(b).not.toContain('lantern2');
+  });
+  test('C13.h1 A\'s Remove, resumed after the Clear and B\'s install, cannot delete B\'s file', async () => {
+    const T = await import('./themes.ts'); const ember = await emberText();
+    boot({ 'app:/data/theme-textures/texture-ember.json': ember }); T.resetThemes();
+    let release: () => void = () => undefined; m.faults.hold.set('app:/data/theme-textures/texture-ember.json', new Promise<void>((r) => { release = r; }));
+    void call('themeRemove', ['ember']).catch(() => undefined); await wait(20);                          // A's Remove waits on the Texture store
+    expect((await signOut()).done).toBe(true);
+    W.key = 'present'; W.value = KEY_B; await call('pagesView', [0]);
+    m.faults.hold.clear(); m.files.set('app:/data/theme-textures/texture-ember.json', new TextEncoder().encode(ember));   // B installs its own theme with the same id
+    release(); await wait(40);
+    expect(m.files.has('app:/data/theme-textures/texture-ember.json')).toBe(true);
+  });
+  test('C13.choice a choice that named a Texture theme falls back to the default at the Clear (the file, and the device store in memory)', async () => {
+    const T = await import('./themes.ts'); const ember = await emberText();
+    boot({ 'app:/data/theme-textures/texture-ember.json': ember, 'app:/data/theme-choice.json': JSON.stringify({ theme: 'ember', mode: 'dark' }) }); T.resetThemes();
+    expect(JSON.parse(JSON.stringify(await call('themeList', ['light', false, 'x']))).themeID).toBe('ember');
+    expect((await signOut()).done).toBe(true);
+    expect(JSON.parse(m.text('app:/data/theme-choice.json') ?? '{}').theme ?? null).toBeNull();
+    W.key = 'present'; W.value = KEY_B; await call('pagesView', [0]);
+    expect(JSON.parse(JSON.stringify(await call('themeList', ['light', false, 'x']))).themeID).not.toBe('ember');
+  });
+  test('C13.device the device store can never hold a Texture theme', async () => {
+    const T = await import('./themes.ts'); const ember = await emberText();
+    boot({ 'app:/data/themes/texture-ember.json': ember, 'app:/data/themes/mine.json': ember.replace(/ember/g, 'mine') }); T.resetThemes();
+    const dev = await T.themeStore(m.storage);
+    expect(dev.originOf('ember')).toBeUndefined(); expect(dev.add(ember, 'x.json', 'texture')).toBeNull();
+  });
+});
+
+describe('C14 seat 2, round four: the Clear and the Adopt', () => {
+  test('C14.download-hung a download the host never ends does not hold the Clear for ever: the Clear goes on, and the cache goes by path', async () => {
+    boot({ 'app:/cache/files/x/old.bin': 'x' }); account.timing.sharedMs = 60;
+    globalThis.fetch = (async (u: string) => {
+      if (String(u).endsWith('/api/compute/status')) return new Response(JSON.stringify({ computers: [{ computer_id: 'c', current: true }] }), { status: 200 });
+      await new Promise(() => undefined); return new Response('');
+    }) as never;
+    await call('pagesView', [0]);
+    void api.authedToFile('/api/files/a.bin', 'app:/cache/files/x/a.bin', api.bindStorage(m.storage), { world: api.currentWorld() }).catch(() => undefined); await wait(15);
+    const r = await Promise.race([signOut(), wait(1500).then(() => 'hung')]);
+    expect(r).not.toBe('hung'); expect((r as { done: boolean }).done).toBe(true); await idle();
+    expect(m.files.has(STAMP)).toBe(false); expect(m.files.has('app:/cache/files/x/old.bin')).toBe(false);
+  });
+  test('C14.adopt-digest the world is stamped with the digest of the key the Adopt wrote, not the one the gate first read', async () => {
+    boot({}, false); W = newWorld('present', KEY_A); n = phone(() => W); api.bindNative(n as never);
+    W.onKeystate = (count) => { if (count === 2) W.value = KEY_B; };                                    // the Keychain changes between the gate's read and the Adopt's
+    const b = await account.enter(m.storage, undefined);
+    expect(m.text(STAMP)).toBe(dig(KEY_B)); expect(b.digest).toBe(dig(KEY_B));
   });
 });
 

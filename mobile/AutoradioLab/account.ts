@@ -32,7 +32,7 @@ import { wipePages, PAGES_FILE } from './pages.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
 import { type World, rmTree, nextGeneration, closeWorld, drainClosed, bindStorage, currentWorld, resetSession, beginSignOut, abortSignOut, keyFact, nativeLater, withDeadline, accountGeneration, type KeyFact } from './api.ts';
 import { originalsLeft } from './mail-store.ts';
-import { wipeTextureThemes, textureThemesLeft } from './themes.ts';
+import { wipeTextureThemes, TEXTURE_DIR } from './themes.ts';
 
 /** The record: the SHA-256 (64 lowercase hex) of the key of the account whose data the phone's stores hold. The boundary's own file: not in WIPES, removed last. */
 export const STAMP_FILE = 'app:/data/account-stamp';
@@ -71,7 +71,7 @@ export const WIPES: Wipe[] = [
  * `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
   podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE,
-  VECTORS_DIR, CONTENT_DB, PAGES_FILE, DEMO_MARKER,
+  VECTORS_DIR, CONTENT_DB, PAGES_FILE, DEMO_MARKER, TEXTURE_DIR,
 ];
 
 /** Deadlines, not limits. `sharedMs`: the whole shared half of one Clear (a store that never lets go, or a live content sync that never ends, must not hold the one writer). `nativeMs`: one native sign-out or wipe. `recordMs`: one read of the record. (The key read's is api.ts `keyTiming`.) Tests shorten them. */
@@ -128,7 +128,7 @@ async function survivors(storage: Storage | undefined): Promise<string[]> {
   for (const p of [`${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]) {
     try { await storage.fs.stat(p); out.push(p.slice(p.lastIndexOf('/') + 1)); } catch (e) { if (codeOf(e) !== 'ENOENT') out.push(p.slice(p.lastIndexOf('/') + 1)); }
   }
-  out.push(...(await originalsLeft(storage)), ...(await textureThemesLeft(storage)));
+  out.push(...(await originalsLeft(storage)));
   return out;
 }
 
@@ -186,6 +186,7 @@ export async function idle(): Promise<void> { for (;;) { const c = chain; await 
 export function resetBoundary(): void { boundaryId += 1; chain = Promise.resolve(); clearing = null; adopting = null; active = 0; wipes = 0; lastFailed = []; timing.nativeMs = 30000; timing.recordMs = 5000; timing.sharedMs = 30000; }
 
 /** ADOPT: no record and a key. Write the key's digest; the state after is read again. A failed write leaves it closed. */
+let adoptedDigest = '';                                 // the digest the last Adopt wrote: the new world is stamped with it
 async function adoptBody(storage: Storage | undefined): Promise<State> {
   const f = await readFacts(storage);
   // A write of a closed world that may still land (an Adopt that timed out, then A signed out) must land BEFORE this Adopt writes: a late record naming A over B's data would wipe B.
@@ -194,7 +195,7 @@ async function adoptBody(storage: Storage | undefined): Promise<State> {
   if (stateOf(f) === 'adopt' && storage && f.key.state === 'present') {
     // The record write is on the storage of the current world and under a deadline: a hung write leaves the state ADOPT (refusing); a late landing is waited for by the next boundary move (drain).
     const wrote = await withDeadline<boolean>(bindStorage(storage, currentWorld()).fs.atomicWriteFile(STAMP_FILE, new TextEncoder().encode(f.key.digest)).then(() => true, () => false) as Promise<boolean>, false, timing.recordMs);
-    if (wrote) closeWorld(); else console.log('account: could not record the account');      // the new account's world begins here (its requests are signed with this key only)
+    if (wrote) { adoptedDigest = f.key.digest; closeWorld(); } else console.log('account: could not record the account');      // the new account's world begins here (its requests are signed with this key only)
   }
   return stateOf(await readFacts(storage));
 }
@@ -234,16 +235,16 @@ function startClear(storage: Storage | undefined, store: Store | undefined): voi
 export async function enter(storage: Storage | undefined, store: Store | undefined): Promise<{ readable: boolean; state: State; digest: string; world: World }> {
   let w0 = currentWorld();                                  // the world these facts are read for: if the boundary moves while they are read, the answer is not given for another world
   const f0 = await readFacts(storage);
-  let state = stateOf(f0);
+  let state = stateOf(f0); let adoptedNow = false;
   if (state === 'adopt') {
     // One Adopt at a time, awaited by every answer that finds it (a single write). Another job running (a hung sign-out) is never waited for: the page is refused and asked again.
     if (!adopting && active === 0) { const a: Promise<State | undefined> = job(() => adoptBody(storage), { skipIfMoved: true }).finally(() => { if (adopting === a) adopting = null; }); adopting = a; }
     state = adopting ? (await adopting) ?? 'adopt' : 'adopt';
-    if (state === 'open') w0 = currentWorld();               // the Adopt began the new account's world itself
+    if (state === 'open') { w0 = currentWorld(); adoptedNow = true; }      // the Adopt began the new account's world itself, for the key it wrote
   }
   if (state === 'clearing') startClear(storage, store);
   const moved = currentWorld() !== w0;
-  return { readable: !moved && (state === 'open' || state === 'empty'), state: moved ? 'locked' : state, digest: f0.key.state === 'present' ? f0.key.digest : '', world: w0 };
+  return { readable: !moved && (state === 'open' || state === 'empty'), state: moved ? 'locked' : state, digest: adoptedNow ? adoptedDigest : f0.key.state === 'present' ? f0.key.digest : '', world: w0 };
 }
 
 export type Peek = { state: State; epoch: string; failed: string[]; key: KeyFact };

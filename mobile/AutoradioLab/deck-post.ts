@@ -7,7 +7,7 @@ import { outcomeFromHTTP, type PostOutcome, type Poster } from './deck-ops.ts';
 export const OPS_PATH = '/api/autoradio/sheet/ops';
 
 /** The poster over the signed-in seam. A batch captured in one world posts for THAT world: pass it (the run sheet's poster passes the world of the batch it holds); without one the requests belong to the world current at each post. */
-export function routePoster(request: (path: string, opts?: Authed) => Promise<Reply> = (path, opts) => authedJSON(path, { ...opts, world: currentWorld() })): Poster {
+export function routePoster(request: (path: string, opts?: Omit<Authed, 'world'>) => Promise<Reply> = (path, opts) => authedJSON(path, { ...opts, world: currentWorld() })): Poster {
   return {
     async post(ops, epoch): Promise<PostOutcome> {
       try {

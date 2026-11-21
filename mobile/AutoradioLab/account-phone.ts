@@ -83,6 +83,8 @@ export type World = {
   keyDeleteFails: boolean;                     // the Keychain delete failed and the native side answers not done (ChoirSignIn.swift:128)
   sessionFails: boolean;                       // keystate says present, the session read finds nothing
   keystateHangs: boolean;
+  onKeystate: ((count: number) => void) | null;  // called at every keystate read (a test changes the Keychain between two reads)
+  keystateCount: number;
   mirrors: string[];                            // every takeMirror request the voice was sent
   legacy: Record<string, string> | null;        // what themeLegacy answers (the old build's theme files)
   legacyGate: Promise<void> | null;             // themeLegacy answers only after this
@@ -92,7 +94,7 @@ export type World = {
   inflight: number; maxInflight: number;       // native sign-out and wipe calls running at once
 };
 export const newWorld = (key: World['key'] = 'present', value = KEY_A): World => ({
-  key, value, swift: true, log: [], gens: [], signOut: 'ok', wipe: 'ok', keyDeleteFails: false, sessionFails: false, keystateHangs: false, keystateGate: null, mirrors: [], legacy: null, legacyGate: null, release: null, wipeFailed: [], inflight: 0, maxInflight: 0,
+  key, value, swift: true, log: [], gens: [], signOut: 'ok', wipe: 'ok', keyDeleteFails: false, sessionFails: false, keystateHangs: false, keystateGate: null, onKeystate: null, keystateCount: 0, mirrors: [], legacy: null, legacyGate: null, release: null, wipeFailed: [], inflight: 0, maxInflight: 0,
 });
 
 /** The app module as the model of the phone. `w` is read at each call, so a test changes the world while the app runs. */
@@ -108,6 +110,7 @@ export function phone(w: () => World) {
     later: async (r: { op: string; generation?: number }): Promise<unknown> => {
       const W = w();
       if (r.op === 'keystate') {
+        W.keystateCount += 1; W.onKeystate?.(W.keystateCount);
         if (W.keystateHangs) await new Promise(() => undefined);
         if (W.keystateGate) await W.keystateGate;
         return { state: W.key };
