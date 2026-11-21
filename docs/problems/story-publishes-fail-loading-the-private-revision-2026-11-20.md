@@ -154,3 +154,69 @@ refusal of any other kind appears in 1273 lines.
 - Enter the claim in `docs/calibration/claude-ledger.md` before the fix lands:
   "after the fix the 30 s timeouts on fetch revision fall under 2 per hour";
   outcome is the proxy journal count per hour.
+
+## Re-read on 2026-11-21 (05:52Z by `date -u`), before the fix
+
+Read only against Node B (proxy journal, the paper's guest console files).
+The cause still holds, and it is still happening.
+
+- Proxy journal, 2026-11-21 00:00Z to 05:52Z: 190 `platform publish fetch
+  revision` lines by hour (00 to 05): 34, 27, 34, 31, 39, 25. Every one is
+  `context deadline exceeded (Client.Timeout exceeded while awaiting
+  headers)`; none of any other kind. The 3 hours to 05:52Z: 96.
+- Guest console (rotated; 04:09:14Z to 05:52:32Z survives, four boots' worth
+  of runtime hashes): 52 story publish outcomes "failed and stays a gap" (35
+  distinct documents) and 56 "published vN": 48 percent failed. By hour: 29 in
+  04h, 23 in 05h (to 05:52).
+- All 52 failures have, at their second, a guest line `texture api: list
+  source graph objects for revision <that revision>`: 42 `objectgraph sql:
+  scan object: context canceled`, 10 `query texture source refs for
+  revisions: ... begin key index tx: context canceled`. 52 of 52. The scan is
+  the whole-scope entity read of `listTextureSourceEntitiesForRevision`.
+- What is not known, and not knowable from the evidence that exists: how long
+  a load takes when it succeeds (the guest logs no duration; the failures are
+  all the proxy's 30 s cut, so a failure's duration is 30 s by
+  construction), and whether the failing documents share a size of scope or a
+  number of sources (the console names the document and revision, not the
+  scope's entity count or the revision's source count). Both are what the new
+  timing line (`texture api: revision load`) records, with ids and counts
+  only.
+- The proxy does not read the graph attachments at all:
+  `autoputerTextureRevision` (`internal/proxy/platform_publish.go:46`) has no
+  `source_entity_objects` or `source_refs` field, so for the publish path the
+  whole-scope scan is work whose result is discarded. Other readers of
+  `GET /api/texture/revisions/{id}` (the web client) do use them.
+- Belief unchanged at about 85 percent (the 15 percent: the scan may not be
+  the only slow part; the 10 failures in the refs read say the guest is also
+  slow elsewhere, so the timing line decides after the change).
+
+## Fix (orange; rollback: revert)
+
+1. Store: `listTextureSourceEntitiesForRevision` reads the entities the
+   revision's source refs pin by their object ids (a primary-key read of
+   `choir.source_entity`, the id built the way the writer builds it:
+   `lifecycleSourceGraphCanonicalID`) instead of listing the scope's entities.
+   A pinned entity that is not found by its id falls back to the old scope
+   read (the timing line says `fallback=1`), so a pinned entity is never lost.
+   For EVERY revision, not only one with no refs, the entities the revision
+   wrote but did not cite are no longer returned by the revision read (they
+   used to be); no reader depends on that: the observation reader joins
+   entities to refs, and the revision JSON carries the inline
+   `source_entities`. `ListTextureSourceGraphForRevisionsByScope` (the list
+   route) still returns them, so the two endpoints now differ on that set.
+   Recorded here as a behaviour change.
+2. Guest: `attachTextureSourceGraphObjects` logs one line per load with the
+   revision id, the counts of refs and entities, and the milliseconds. The
+   refs are read once, not twice.
+3. Caller: `publishStoryVersion` (`internal/agentcore/story_entities_source.go`)
+   retries a publish whose failure is a timeout or a 502/503/504 up to 3
+   attempts with 5 s then 15 s backoff, each with its own deadline; its final
+   failure is the same log line as before ("failed and stays a gap"), now
+   with the attempt count (the job is bounded at about 6 min 20 s). That line is where a failed publish is recorded
+   today; there is no other record, and none is added.
+
+Added after the second review (2026-11-21): the entity export after a
+recovered publish runs on its own context (`story_entities_source.go`, the
+lines after the retry), so a publish that succeeded on a retry still exports
+its entities; and `scripts/proofs/publish-load-deployed.sh` is the read-only
+deployed proof (ledger claim C186).

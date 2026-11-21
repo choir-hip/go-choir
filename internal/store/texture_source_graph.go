@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -127,6 +128,91 @@ func (s *Store) listTextureSourceEntitiesForRevision(ctx context.Context, ownerI
 	if err != nil {
 		return nil, err
 	}
+	entities, _, err := s.ListTextureSourceEntitiesForRefsByScope(ctx, ownerID, computerID, docID, revisionID, refs)
+	return entities, err
+}
+
+// ListTextureSourceEntitiesForRefsByScope returns the source entity versions
+// the given refs of one revision pin, each read by its own object id: a
+// primary-key read, not a read of the scope's entities. A revision's refs
+// say what it needs. When a pinned version is not found by its id (an
+// entity written under another id form, or a ref that names another scope),
+// the scope read answers as it always did and scanned is true, so the
+// caller's timing line can tell the slow path from a slow keyed read.
+//
+// Behaviour change, for every revision (not only one with no refs): the
+// entities a revision wrote but did not cite are no longer returned, because
+// nothing pins them by id. No reader needs them: the observation reader joins
+// entities to refs, and the revision JSON carries its inline source_entities.
+// ListTextureSourceGraphForRevisionsByScope (the list route) still returns
+// them, so the two revision endpoints differ on that set.
+func (s *Store) ListTextureSourceEntitiesForRefsByScope(ctx context.Context, ownerID, computerID, docID, revisionID string, refs []TextureSourceRefGraphRecord) (entities []TextureSourceEntityGraphRecord, scanned bool, err error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	out := make([]TextureSourceEntityGraphRecord, 0, len(refs))
+	seen := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		key := entityVersionKey(ref.SourceEntityCanonicalID, ref.SourceEntityVersionID)
+		if seen[key] {
+			continue
+		}
+		rec, ok, err := s.getTextureSourceEntityVersionByID(ctx, ownerID, computerID, ref.SourceEntityCanonicalID, ref.SourceEntityVersionID)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			scan, err := s.listTextureSourceEntitiesForRevisionByScan(ctx, ownerID, computerID, docID, revisionID, refs)
+			return scan, true, err
+		}
+		seen[key] = true
+		out = append(out, rec)
+	}
+	return out, false, nil
+}
+
+// getTextureSourceEntityVersionByID reads one entity version by the object id
+// its writer gave it. The lifecycle writer scopes the identity key with the
+// computer id; the legacy writer of an owner-level entity (no computer) used
+// the bare key, so both are tried for an owner-level read.
+func (s *Store) getTextureSourceEntityVersionByID(ctx context.Context, ownerID, computerID, canonicalID, versionID string) (TextureSourceEntityGraphRecord, bool, error) {
+	graph := s.lifecycleGraph()
+	if graph == nil {
+		return TextureSourceEntityGraphRecord{}, false, fmt.Errorf("store: object graph not initialized")
+	}
+	identity := canonicalID + "\x00" + versionID
+	ids := make([]string, 0, 2)
+	scoped, err := lifecycleSourceGraphCanonicalID(TextureSourceEntityObjectKind, ownerID, computerID, identity)
+	if err != nil {
+		return TextureSourceEntityGraphRecord{}, false, err
+	}
+	ids = append(ids, scoped)
+	if computerID == "" {
+		bare, err := objectgraph.BuildCanonicalID(TextureSourceEntityObjectKind, ownerID, objectgraph.StableSuffixFromKey(identity))
+		if err != nil {
+			return TextureSourceEntityGraphRecord{}, false, err
+		}
+		ids = append(ids, bare)
+	}
+	for _, id := range ids {
+		obj, err := graph.GetObject(ctx, id)
+		if errors.Is(err, objectgraph.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return TextureSourceEntityGraphRecord{}, false, err
+		}
+		var rec TextureSourceEntityGraphRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return TextureSourceEntityGraphRecord{}, false, err
+		}
+		if rec.OwnerID != ownerID || strings.TrimSpace(rec.ComputerID) != computerID || rec.CanonicalID != canonicalID || rec.VersionID != versionID {
+			continue
+		}
+		return rec, true, nil
+	}
+	return TextureSourceEntityGraphRecord{}, false, nil
+}
+
+func (s *Store) listTextureSourceEntitiesForRevisionByScan(ctx context.Context, ownerID, computerID, docID, revisionID string, refs []TextureSourceRefGraphRecord) ([]TextureSourceEntityGraphRecord, error) {
 	pinned := make(map[string]bool, len(refs))
 	for _, ref := range refs {
 		pinned[entityVersionKey(ref.SourceEntityCanonicalID, ref.SourceEntityVersionID)] = true

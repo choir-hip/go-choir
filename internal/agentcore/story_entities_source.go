@@ -3,9 +3,12 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/entitytext"
@@ -172,17 +175,69 @@ func (b analysisBasis) buildReview(recordID string, counts types.StoryEntityCoun
 	return review
 }
 
+// storyPublishBackoff is the wait before each retry of a publish that failed
+// for a reason that passes: one entry per retry, so the publish is tried
+// len+1 times. It is a variable for tests only.
+var storyPublishBackoff = []time.Duration{5 * time.Second, 15 * time.Second}
+
+// storyPublishSleep waits out a backoff; a variable for tests only.
+var storyPublishSleep = time.Sleep
+
+// storyPublishRetryable reports whether err is the platform or the path to it
+// failing for a time (no answer, a timeout, a 502, 503 or 504), as the guest's
+// revision read does when it outlasts the proxy's deadline. A refusal (4xx),
+// a version mismatch or anything else is not retried: the same request would
+// get the same answer.
+func storyPublishRetryable(err error) bool {
+	var status *platformStatusError
+	if errors.As(err, &status) {
+		return status.Status == http.StatusBadGateway || status.Status == http.StatusServiceUnavailable || status.Status == http.StatusGatewayTimeout
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr interface{ Timeout() bool }
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+// publishVersionWithRetry publishes v, retrying a failure that passes with the
+// backoff above. Each retry has its own deadline: the job's deadline covers
+// the first attempt, and a publish whose first attempt timed out has none left.
+// It returns the attempts made and the last error.
+func publishVersionWithRetry(ctx context.Context, publisher StoryPublisher, v StoryVersion) (int, error) {
+	attempts := 0
+	for {
+		attempts++
+		attemptCtx, cancel := ctx, context.CancelFunc(func() {})
+		if attempts > 1 {
+			attemptCtx, cancel = context.WithTimeout(context.WithoutCancel(ctx), storyPublishTimeout)
+		}
+		err := publisher.PublishVersion(attemptCtx, v)
+		cancel()
+		if err == nil || attempts > len(storyPublishBackoff) || !storyPublishRetryable(err) {
+			return attempts, err
+		}
+		wait := storyPublishBackoff[attempts-1]
+		log.Printf("story publish: %s v%d (revision %s) attempt %d failed, retrying in %s: %v", v.DocID, v.Revision, v.RevisionID, attempts, wait, err)
+		storyPublishSleep(wait)
+	}
+}
+
 // publishStoryVersion publishes a story version and, when it publishes,
 // exports the story's entities the tape holds (slice c, F6): the export of a
 // story recorded before it published follows the publish.
 func (rt *Runtime) publishStoryVersion(ctx context.Context, publisher StoryPublisher, v StoryVersion) {
-	if err := publisher.PublishVersion(ctx, v); err != nil {
-		log.Printf("story publish: %s v%d (revision %s) failed and stays a gap: %v", v.DocID, v.Revision, v.RevisionID, err)
+	if attempts, err := publishVersionWithRetry(ctx, publisher, v); err != nil {
+		log.Printf("story publish: %s v%d (revision %s) failed and stays a gap after %d attempt(s): %v", v.DocID, v.Revision, v.RevisionID, attempts, err)
 		return
 	}
 	log.Printf("story publish: %s published v%d (revision %s)", v.DocID, v.Revision, v.RevisionID)
 	if entities, ok := publisher.(StoryEntityPublisher); ok {
-		rt.exportStoryEntities(ctx, entities, v.OwnerID, v.ComputerID, v.DocID)
+		// The export has its own deadline: a publish a retry recovered ran on a
+		// fresh context, and the job's may be spent.
+		exportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), storyRelationExportTimeout)
+		defer cancel()
+		rt.exportStoryEntities(exportCtx, entities, v.OwnerID, v.ComputerID, v.DocID)
 	}
 }
 

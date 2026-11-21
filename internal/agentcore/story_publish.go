@@ -30,7 +30,9 @@ import (
 // next version (version = Texture revision number) right after its commit,
 // off the commit's path, through the owner's publish path run for this
 // computer. No human step. A publish that fails leaves a gap the reader's
-// nav skips; it is logged and never retried, and nothing renumbers.
+// nav skips; a publish that failed for a reason that passes (a timeout, a 502, 503
+// or 504) is retried twice with a backoff; a final failure is logged and
+// nothing renumbers.
 //
 // The queue lives in this process only. A crash takes it down with the
 // process and no boot step refills it: a revision committed before a crash
@@ -69,8 +71,12 @@ type StoryRelationPublisher interface {
 	PublishRelations(ctx context.Context, req types.StoryRelationsRequest) error
 }
 
-// storyPublishTimeout bounds one publish; a publish that runs out is a
-// gap like any other failure.
+// storyPublishTimeout bounds one publish attempt; an attempt that runs out is
+// retried (storyPublishBackoff), and a publish that runs out of attempts is a
+// gap like any other failure. One job is bounded by its first attempt's
+// deadline plus two retries with their own, plus the backoffs: at most
+// 3 x 2 min + 20 s, about 6 min 20 s, during which the same story's next
+// version waits in its queue.
 const storyPublishTimeout = 2 * time.Minute
 
 // storyPublishing orders publishes per key (one story's versions, one

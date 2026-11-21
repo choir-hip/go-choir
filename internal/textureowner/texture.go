@@ -1275,24 +1275,28 @@ func (h *Handler) attachTextureSourceGraphObjects(ctx context.Context, rev types
 	if h == nil || h.Store == nil || resp == nil {
 		return
 	}
+	// One read of the revision's refs, then the entities those refs pin by
+	// their object ids: the load reads what this revision needs, not the
+	// scope. The line carries ids and counts only, so a slow load is seen.
+	started := time.Now()
+	computerID := strings.TrimSpace(rev.ComputerID)
+	refs, err := h.Store.ListTextureSourceRefsForRevisionByScope(ctx, rev.OwnerID, computerID, rev.DocID, rev.RevisionID)
+	refsMS := time.Since(started).Milliseconds()
 	var entities []store.TextureSourceEntityGraphRecord
-	var refs []store.TextureSourceRefGraphRecord
-	var err error
-	if computerID := strings.TrimSpace(rev.ComputerID); computerID != "" {
-		entities, err = h.Store.ListTextureSourceEntitiesForRevisionByScope(ctx, rev.OwnerID, computerID, rev.DocID, rev.RevisionID)
-		if err == nil {
-			refs, err = h.Store.ListTextureSourceRefsForRevisionByScope(ctx, rev.OwnerID, computerID, rev.DocID, rev.RevisionID)
-		}
-	} else {
-		entities, err = h.Store.ListTextureSourceEntitiesForRevision(ctx, rev.OwnerID, rev.DocID, rev.RevisionID)
-		if err == nil {
-			refs, err = h.Store.ListTextureSourceRefsForRevision(ctx, rev.OwnerID, rev.DocID, rev.RevisionID)
-		}
+	scanned := false
+	if err == nil {
+		entities, scanned, err = h.Store.ListTextureSourceEntitiesForRefsByScope(ctx, rev.OwnerID, computerID, rev.DocID, rev.RevisionID, refs)
 	}
+	totalMS := time.Since(started).Milliseconds()
 	if err != nil {
-		log.Printf("texture api: list source graph objects for revision %s: %v", rev.RevisionID, err)
+		log.Printf("texture api: list source graph objects for revision %s: %v (after %d ms)", rev.RevisionID, err, totalMS)
 		return
 	}
+	fallback := 0
+	if scanned {
+		fallback = 1
+	}
+	log.Printf("texture api: revision load revision=%s refs=%d entities=%d fallback=%d refs_ms=%d total_ms=%d", rev.RevisionID, len(refs), len(entities), fallback, refsMS, totalMS)
 	attachTextureSourceGraphObjectRecords(resp, entities, refs)
 }
 

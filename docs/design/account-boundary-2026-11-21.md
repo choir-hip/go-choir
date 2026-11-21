@@ -548,3 +548,739 @@ generation; a refusing state that does not heal once the fault is gone.
    that may delete a key; key deletion stays the person's own tap.
 4. **Themes stay device settings**, outside the boundary, except a theme fetched from a
    Texture document. Default: yes.
+
+## Accounts are partitions (2026-11-21)
+
+An amendment, not code. Nothing here is built. It replaces sections 1 to 8 as the
+plan for landing; sections 1 to 8 stay as the record of what was tried. Every station
+below is red (auth and session).
+
+### What the owner asked, and the reading
+
+Verbatim, 2026-11-21:
+
+1. "hmm, is maybe the design a problem? should we really be going through the account
+   gate so much?"
+2. "we should allow users to be signed in to multiple accounts, as we do on choir.news.
+   but that is a separate thing from signing in and out without disrupting service"
+3. "i never asked for signout without disrupting service"
+
+The reading. The design is the problem. Seven review rounds on lane
+`account-boundary-l1` each found a narrower case of one kind: work or state of account A
+lands where account B reads it. That is what a shared store must suffer when one
+account's data and the next account's data live at the same paths, in the same module
+state, in the same process. The gate was asked to hold back every late write, every
+late read and every exempt source. It cannot be made tight one site at a time.
+
+Two things were asked for, and they are separate. Several accounts signed in at once
+is a feature. Keeping the app running through a sign-out was never asked for (quote 3).
+The lead built for it unasked, and most of the machinery exists to serve it: Clear,
+Adopt, the drains, the CLEARING and ADOPT states, and the world that opens a new
+account in the same process. So a sign-out may stop playback and end the session. The
+simplest sign-out that is certainly safe wins, and machinery is deleted rather than
+kept alive. Only adding an account and switching between signed-in accounts still need
+care inside the process.
+
+### What choir.news does
+
+From the code (confirmed in code, not taken from `docs/design/account-switcher-2026-11-09.md`):
+
+- **The session.** The browser holds one access and refresh cookie pair, for the
+  current account only (`internal/auth/handlers.go:30-33, 408-424`). A third cookie,
+  `choir_accounts`, names a server-side set of accounts. Only its SHA-256 is stored
+  (`internal/auth/accounts.go:21, 37-47, 82-93`). Each member is a row of (set, user,
+  refresh session), and the set records the active user
+  (`internal/auth/account_set_store.go:20-35`). Sign-in adds the account to the set and
+  makes it active (`handlers.go:466-474`; `accounts.go:122-153`). A refresh token of a
+  member that is not active is refused as `account_switched` (`accounts.go:197-221`).
+- **List and switch.** `GET /auth/accounts` lists the set (`accounts.go:257-282`), and
+  the Launcher shows it (`frontend/src/packages/launcher/Launcher.surface.svelte:22-34`).
+  A switch (`frontend/src/lib/accounts.js:170-176`) flushes the desktop state, closes
+  the live channel, posts the switch, tells the other tabs and then calls
+  `window.location.reload()`. The comment at `accounts.js:164-169` gives the reason: the
+  reload is "the simplest reset of every per-user cache, socket and store".
+- **Computer.** The proxy routes by the user id in the access token, to that user's
+  primary computer (`internal/proxy/handlers.go:1244, 1396-1408`). One account has one
+  routable computer. A switch replaces the token and reloads, so the page then talks to
+  the new account's computer.
+- **Per account and per browser.** Browser keys are scoped as `<base>:<lastUserId>`
+  (`frontend/src/lib/user-scope.js:4-32`). That covers the theme boot cache, reader
+  preferences, Autopaper visits and a few more. Texture drafts are keyed by user id.
+  Nothing deletes A's scoped keys at a switch or a sign-out (`accounts.js:178-204`). A's
+  keys stay readable in the same origin, and only the key name picks which account the
+  page reads. There is no IndexedDB and no service worker.
+- **Sign-out.** Signing out of one account (`POST /auth/accounts/signout`,
+  `accounts.go:417-455`) deletes that member and its refresh session. If it was the
+  active account, the page switches to the next one and reloads (`accounts.js:178-196`).
+  If not, only the list changes. Signing out of all (`accounts.go:459-499`) deletes the
+  set and every cookie, then reloads. Browser storage is never cleared.
+- **In flight.** Nothing is cancelled one by one. The reload ends it all
+  (`frontend/src/lib/Desktop.svelte:1843-1847`).
+- **Limit.** None on the number of accounts. Only per-IP rate limits apply
+  (`internal/auth/rate_limit.go:24-43`).
+
+**What the phone takes from it.**
+
+- An account is the user, and its computer follows from it.
+- The list of accounts belongs to the device.
+- Storage is partitioned by account, and nothing is wiped at a switch.
+- A switch is a reset of the process, not a careful handover inside it. On the web that
+  reset is `location.reload()`.
+
+**Where the phone differs.** The phone holds long-lived bearer keys, one per account,
+not a cookie set; the server knows nothing of a set. The phone also has no reload:
+nothing app code can call reloads the data module or opens a fresh JavaScript context
+(Exact `docs/reference.md:2289-2296`; section 3 above). The phone must partition harder
+than the web does. The web scopes its keys and leaves A's data in place. The phone puts
+A's data under A's root, where B's handle cannot name it, and deletes the root at A's
+sign-out.
+
+### Two findings that shape the plan
+
+Both were found while checking the lead's proposed direction. Neither appears in the
+seven review rounds.
+
+**Native code signs with one Keychain item.** `ChoirClient` reads the bearer key from
+the one native item (`exact-package/apple/Kit/ChoirClient.swift:79, 268, 324`). That is
+service `news.choir.autoradio.choir`, account `api-key`. Every native page source that
+calls the server goes through it: the notebook, learning, the radio programme, podcast
+clips, the Texture reader, the run sheet store, takes, the activity feed, corpus search,
+story bodies and more (`exact-package/apple/Kit/*.swift`). The native mail seal makes a
+key only while that item exists (`MailSeal.swift:18`). About nineteen native stores hold
+account data and are wiped together, not partitioned (`AccountWipe.swift:69-97`). They
+find their own folders, about fourteen sites, with no common base.
+
+So an in-process switch to an account whose key is not in that item leaks. Native pages
+keep showing A's stores and keep signing with A's key while B is current. No shared-code
+design reaches that. Native needs one gate (station 2), and those pages read as signed
+out for any other account until they move to Exact.
+
+**Exact keeps resource answers across launches.** A native host shows a resource's last
+answer at the next launch, before the data module is ready. That holds for a resource
+whose source read device state (a file, a database, a secret), when it is asked with the
+same identifying arguments, up to 256 KiB each and 512 KiB in all
+(Exact `docs/contract-for-agents.md:767-787`). A resource ending in `transient` is never
+kept (`:788-791`).
+
+Our account resources take `acctTick` as an argument, and its value (for example
+`open|0|1|c`) can be the same at two launches. So after a sign-out, a relaunch and
+another account's sign-in, the first frame can show A's kept mail list or file list.
+That holds on main, and on the lane too, because no wipe touches Exact's launch cache. A
+partition alone does not fix it. The account must be one of the resource's identifying
+arguments (invariant I7). I found no call app code can make to forget kept answers, so
+it is an open question below.
+
+### Recommendation
+
+Partition on disk now, with one account per process. A sign-out ends the session behind
+a full-screen card, and a switch, when it comes, is a restart the person makes by
+closing and reopening the app, as choir.news's switch is a reload.
+
+A seamless switch inside the process is a later, separate landing. It is taken only if
+the owner wants it after using the restart (decision D2), and it needs two things first:
+the world passed explicitly to every account read, and the native gate.
+
+### The model
+
+**An account** is one bearer key. It belongs to one user and, through the user, one
+computer. Two keys for the same user are one account: the second is revoked at once
+(Add, below).
+
+**Where keys live.**
+
+- *The native slot.* The one item native sign-in writes today, service
+  `news.choir.autoradio.choir`, accounts `api-key`, `key-id` and `computer-id`. It holds
+  at most one account. It is never written, moved or re-keyed by this design (the
+  owner's credential). Shared code reads it as it does today (`api.ts` `keptSession`,
+  `keyFact`). Only the person's sign-out of that account deletes it, through the
+  existing native `signOut` op.
+- *The account secret.* Every account added from station 3 on is kept in Exact's own
+  secret store, under one grant: `secret.keep accounts`. Its value is a JSON list of
+  `{digest, key, keyId, computerId, userId, email}`. One name, because grants are static
+  and a name the grants do not keep "reads and writes as `denied: secret.keep`" (Exact
+  `docs/reference.md:6418-6437`). Exact keeps it in the Keychain on Apple and in
+  Keystore-wrapped files on Android (same lines). So Android gets accounts too, and no
+  native code is written for it. A second grant, `secret.keep canary`, holds a constant.
+  When it reads back, the secret store answered, so an absent account is truly absent
+  (Launch, below).
+
+**The root.** Each account's files live under three folders:
+
+```
+app:/data/accounts/<d>/    kept data: takes.json, mail/, content.db, vectors/,
+                           theme-textures/, podcasts-library.json, podcast-feeds/,
+                           recent-files.json, notebook-cache.md, open-pages-shared.json
+app:/cache/accounts/<d>/   refetchable: files/, mail-*.html
+app:/tmp/accounts/<d>/     scratch
+```
+
+`<d>` is the SHA-256, in 64 lowercase hex characters, of the bearer key string as
+stored (UTF-8). It is the same digest the record of section 2 holds, so a reviewer
+compares the same string everywhere. Why the key's digest:
+
+- It names the thing every request is signed with. A root and the key that signs its
+  requests cannot disagree.
+- It is known offline, at launch, the instant the key exists. A digest of a server user
+  id would need a request before the first file is written.
+- When the key is deleted, the root is provably an orphan. No other fact has to agree.
+- A digest, not the key: paths appear in logs and listings, and a key must never.
+- A new key for the same user is a new account on the phone with a fresh root. That is
+  right, because a new key comes only from a new sign-in.
+
+A process that is signed out uses one more root, `app:/data/accounts/anonymous/` and
+its cache twin. It holds public data only (the paper front read signed out). It is never
+swept, and every sign-out of the last account deletes it.
+
+**The account storage.** A world's storage is `bindStorage` (it exists, `api.ts`) with
+one change: it re-roots paths. `app:/data/<rest>` becomes `app:/data/accounts/<d>/<rest>`,
+and the same holds for `app:/cache` and `app:/tmp`. It refuses `..`, any path already
+under `accounts/`, and the device paths. Modules keep writing `app:/data/takes.json`,
+and the handle puts it in the root. A module cannot name another account's root,
+because whatever it names gets the prefix.
+
+The same rule covers `storage.sqlite` open paths (the content database). It also covers
+the `dest` of `authedToFile` (`exactBodyTo`), because the host writes there and not
+through `storage`. One exception: the picker's documents under `app:/tmp/picked` are the
+host's input. They pass read-only, unprefixed, and are removed after the upload.
+
+**Device data** is outside every root:
+
+- `app:/data/theme-choice.json`
+- `app:/data/themes/` (the person's own theme files; bundled themes are in the binary)
+- `app:/data/current-account` (from station 3: the digest of the current account)
+- onboarding and device facts, which are native today.
+
+Sources that draw before sign-in (the theme sources, `hostCaps`, `aboutBuild`, the card)
+get `deviceStorage` (it exists, `api.ts`). It reaches the device paths and nothing else.
+The theme sources also read Texture themes from the open account world's storage,
+read-only, and only while that world is open.
+
+**Worlds.** The `World` of `api.ts` stays: an id, a closed flag, a bag for module state
+(`scoped`), and inert I/O once closed. From station 1, a process opens **at most one
+account world**. It may first open the anonymous world, which is public data and no
+key, and then exactly one account world. After a sign-out (and, from station 3, a
+switch) the process opens no world again until it is relaunched. A late chain of A can
+then reach only A's bag, A's root and A's key. No B exists in the process to reach.
+
+**The current account** is the account of the one open world. From station 3 it is
+chosen at launch from `app:/data/current-account`. If that names no live key, the first
+live key is used. If there is none, the process is signed out. Nothing else changes it.
+
+**What "signed in to several" means for each part**, from station 3:
+
+- **Radio and the programme.** The current account's. A signed-out process reads the
+  public front.
+- **Run sheet.** The current account's. Pending posts of A stay in A's root and are
+  posted, signed with A's key, when A is current again. Today a sign-out drops them. A's
+  sign-out still deletes them.
+- **Mail.** The current account's. The native seal key is one device key
+  (`MailSeal.swift:15`). Its guard changes from "the native slot exists" to "shared code
+  named an account" (station 2). Each record's `aad` gains the account digest, so a copy
+  sealed for A does not open as B's. The key is forgotten only when the last account
+  signs out.
+- **Files.** The current account's root, and the computer's files. Nothing on the
+  computer is ever deleted by a sign-out or a switch, so uploaded files stay in the
+  cloud. A switch is refused while an upload is in flight (decision D6).
+- **Takes.** The kept list is in the root. The recorder is voice (native). A switch is
+  refused while recording.
+- **The notebook and podcasts.** The current account's. Subscriptions are account data.
+  Feed caches stay in the root, which is simpler than splitting public from private.
+- **Themes.** The device's: bundled themes, own themes and the choice. Texture themes
+  are account data in the root. A choice that names a Texture theme the current root
+  does not hold resolves to the default. The choice itself is kept, never cleared.
+- **Voice.** Native, and it follows the current account. A live conversation is not
+  carried across a switch: the switch is refused while a voice turn is live. The voice
+  profile and kept turns are account data (decision D9).
+
+**Audio playing from A when the person switches to B.** Recommended: it stops.
+
+- The lock screen's now-playing card would show A's title while B is current. Native
+  `LiveAudio` and `RemoteAudioPlayer` set it.
+- A's playhead writes would land in A's root after A's world closed, which is harmless,
+  but the person would be listening to an account the app no longer shows.
+- choir.news's reload stops everything.
+- A switch is a restart (below), and a restart ends playback anyway. Stopping first
+  makes it deliberate and clears the now-playing card.
+
+Decision D3 lets the owner choose otherwise.
+
+### Sign-out ends the session
+
+**What the person sees.** After the tap, the whole app becomes one full-screen card:
+"Signed out of <email>. Close Autoradio and open it again." (from station 3: "...to
+continue as <next email>.") It has no other controls. Playback has stopped. The root
+contract shows it with one `if` over the card's state. Every gated page refuses
+underneath, and nothing else is drawn.
+
+**Why a card and not the app ending itself.** Exact gives app code no call that ends or
+relaunches the process. Its only `exit(0)` calls are in the smoke run and the agent
+drive (`host/apple/Sources/ExactIOS/main.swift:189`;
+`host/apple/Sources/ExactKit/Agent.swift:199-200`, at pin `f53347503`). A native
+`exit(0)` would be a new native call. Apple's guidance is not to quit an iOS app in code:
+there is no API for a graceful exit, and the person sees an exit as a crash (Technical
+Q&A QA1561 and the Human Interface Guidelines, read from memory, not re-read in this
+session). So the app does not end itself. The person closes it, as after any other
+finished task, and the next launch is a fresh process.
+
+**Why this is certainly safe.** After the tap the process opens no world again. Every
+chain of A is inert at its next I/O, and if one runs on from a microtask it finds only
+A's bag and A's root. Those are being deleted, and nothing will read them. The
+non-I/O-await gap that rounds five to seven left open (the problem record, fifth round)
+has nothing to cross into.
+
+### Switch: restart or seamless
+
+| | Restart (close and reopen) | Seamless (in the process) |
+| --- | --- | --- |
+| Size | station 3 only: the pointer, the card, the list | station 3 plus about 30 files: `scoped(w)` everywhere, no ambient `currentWorld()` outside the gate, a native stop op used mid-process |
+| Risk | the one-world rule holds; nothing new to review | the ambient-world gap returns unless every read carries its world; native pages need the station 2 gate in-process |
+
+On what the person sees: with the restart they close and reopen the app, and the first
+frame is fast because kept answers are keyed by account. Seamless is one tap. On the
+model: the restart matches choir.news, whose switch is a reset. Seamless matches the
+web's tabs, not its switch.
+
+Recommended: the restart. It is what choir.news does in the only form iOS allows, and it
+adds nothing to the one rule that makes a sign-out safe. Seamless is station 4, built
+only on the owner's word.
+
+### Each operation: what is written, in what order, and what a kill leaves
+
+Durable facts: the native slot, the account secret, the roots, `current-account`, and
+(station 2) native's served-account file. Every step is idempotent. Launch repairs every
+state a kill can leave, and no kill leaves a state where one account reads another's
+root.
+
+**Add an account** (station 3; before station 3, the native device flow, offered only
+while signed out):
+
+1. Run the device flow in shared code. The key is held only in that job's memory.
+2. Take its digest. If the digest is already in the set, drop the key.
+3. Call `GET /auth/whoami` with the new key (`settings.ts:20`). If the user is already
+   in the set, revoke the new key (`DELETE /auth/api-keys/{id}`, the route the Swift
+   sign-out uses, `ChoirSignIn.swift:138`) and say "already signed in".
+4. Write the account secret with the new entry, and write the canary if it is absent.
+5. If the process is signed out (the anonymous world), close it and open the new
+   account's world. That is the one allowed move. If an account world is open, ask
+   "Switch to <email> now?" (Switch, below).
+
+What a kill leaves:
+
+- Before step 4: nothing on the phone. The server holds an unused key, which shows in
+  the account's key list. That is accepted and named.
+- After step 4: the next launch lists the new account. The current account is whatever
+  the pointer names.
+
+**Switch to B** (station 3):
+
+1. Refuse if a recording, a voice turn or an upload is live, and say which.
+2. Native `{op: 'account', digest: ''}`: stop playback, end the voice session, clear
+   now-playing, touch no account store.
+3. Close the world. The process is now ended, and the card shows the switch words.
+4. Write `current-account` = B.
+
+What a kill leaves: before step 4, A is still current at relaunch. After step 4, B is.
+Both are valid accounts. Native stores still hold A's data, and native's served file
+says A. B's launch finds the mismatch and native wipes before it reads (station 2).
+
+**Sign out of one account X:**
+
+1. If X is current: native `{op: 'account', digest: ''}`, then close the world. The
+   process is ended.
+2. Revoke X's key on the server, with X's key, under a deadline, best effort.
+3. Delete X's key. For the native slot, that is native `{op: 'signOut'}`, which exists
+   today: it deletes the item and runs the native wipe. For the account secret, rewrite
+   the list without X.
+4. Delete X's three root folders with `rmTree`, on the raw storage, from `account.ts`
+   only.
+5. If X was current: set `current-account` to the next account, or remove it. If X was
+   not current, the list on Settings shrinks, and the open world, which is not X's, goes
+   on.
+
+The result follows from the facts afterwards. Is X's key gone? If it is still present
+(the native delete failed), the card says "Sign-out did not finish. Close Autoradio, open
+it again and try again." The process stays ended, and the relaunch is still signed in
+as X. No `abortSignOut`, no sealing block.
+
+What a kill leaves, step by step:
+
+- After step 1: nothing durable changed. X is still signed in at relaunch.
+- After step 2: X's key is revoked but still on the phone. The relaunch opens X, gets a
+  401, and the card offers Sign out.
+- After step 3: the key is gone and the root is an orphan. Launch deletes it.
+- During step 4: the same.
+- After step 4: the pointer may name X. Launch finds no key for X and picks the next
+  account or signed out.
+
+**Sign out of all.** Native `{op: 'account', digest: ''}` and close the world. Revoke
+each key. Delete the account secret and the native slot (native `signOut`). `rmTree`
+the three folders `app:/data/accounts`, `app:/cache/accounts` and `app:/tmp/accounts`,
+which removes orphans and the anonymous root too. Remove `current-account`. Device
+settings stay (decision D5). A kill at any point leaves keys that are still listed, or
+roots that are orphans, and launch handles both.
+
+**Launch:**
+
+1. Read the key sources: native `keystate` (absent, present or unreadable, as today) and
+   the account secret plus the canary.
+2. If either source is unreadable, the state is LOCKED. Nothing is swept and nothing is
+   opened, and the card says "Unlock your phone to continue". The secret store counts as
+   answered only when the canary reads back, or when there are no roots at all.
+3. Sweep. Delete every root whose digest is not a live key's, except `anonymous`. Delete
+   the leftover paths (the old wipe list, below). Neither is ever read.
+4. Choose the current account (The model, above).
+5. Native `{op: 'account', digest}` before native touches an account store (station 2).
+6. The first gated answer opens the world: the account's, or the anonymous one.
+
+A key with no root is normal. The root is made by the first write, and the data comes
+back from the computer. A root with no key is deleted at step 3, and only when both key
+sources answered. Before first unlock nothing is deleted, which matters because Exact
+reads secrets "into a snapshot before boot" (Exact `docs/reference.md:6432`). Whether
+that snapshot is empty or refused before first unlock is unrun on a device. A kill
+during launch leaves nothing that the next launch does not redo.
+
+**A refused key** (a 401) offers "Sign out", which is the sign-out above. Sign-in is not
+offered over a refused key.
+
+### Invariants a reviewer can check mechanically
+
+- **I1. No account path is reachable except through the open world's account storage.**
+  `storage.fs` and `storage.sqlite` raw handles are used only in `api.ts` (the two
+  handle builders) and `account.ts` (the sweep and the root deletion). Enforced by the
+  existing module scan (`account-world.test.ts` M3 and `account.test.ts` S4), extended
+  to list raw-storage users. A test proves the re-rooting: every path maps under
+  `accounts/<d>/`, and `..`, `accounts/` and device paths are refused. A test proves
+  `sqlite.open` and `authedToFile` dest are re-rooted too.
+- **I2. No request is signed except with its world's key.** Raw `fetch` and the
+  `Authorization` header appear only in `api.ts` `send`. `send` reads the key of
+  `w.account` from its source (the native slot or the secret) and refuses when its
+  digest is not the world's. Enforced by M2 (it exists) and the choke-point scan.
+- **I3. No module-level mutable state outside a world's bag.** Enforced by the M3 scan
+  (it exists). Its blind spots are stated in the problem record (fifth round): state
+  inside functions or classes, and `const x = makeThing()`.
+- **I4. Sources that draw before sign-in get a device-only handle.** Enforced by a test
+  that calls every device source with a storage holding a root, and checks it reads
+  nothing under `accounts/` and sends no signed request (the G2 shape).
+- **I5. At most one account world per process.** `new World(` appears only in `api.ts`.
+  Enforced by a test: after a sign-out or a switch, no answer opens a world, and the
+  anonymous world moves to an account world at most once.
+- **I6. Every root is named by a live key, or it is deleted at launch, and never when a
+  key source is unreadable.** Enforced by launch tests: an orphan root; an orphan root
+  with an unreadable `keystate`; an orphan root with the canary missing.
+- **I7. Every resource that reads account data takes the account handle (the first 16
+  hex of `<d>`) as an identifying argument, or is `transient`.** Enforced by a contract
+  test that lists the gated sources and checks the resource lines, the same shape as
+  section 3's `acctTick` test. The handle replaces `acctTick`.
+- **I8. The key never appears in a path or a log.** Enforced by a test that every root
+  name is 64 hex characters, and by the existing scrub tests.
+- **I9 (station 2). Native signs requests and touches account stores only for the
+  account shared code named.** Enforced by Swift package tests (N1 to N4, below).
+
+### What of the built lane survives, what is deleted, what is new
+
+**It survives** (from `.lane/trees/account-boundary-l1/mobile/AutoradioLab`):
+
+- `api.ts`: `World` (id, closed, bag, `whenClosed`), `inert`, `inertTimeout`,
+  `scoped`, `bindStorage` (it gains the re-rooting), `deviceStorage` (it loses
+  `accountDirs` and gains the open world's read-only Texture themes), `withDeadline`,
+  `rmTree`, `keyFact` and `keyState`, `send` with its world-digest check, and
+  `authedJSON`, `authedBytes` and `authedToFile` with their required `world`.
+  `digestOf`, `check` and `nativeInert` also stay. `computerId` and its cache move into
+  the world's bag.
+- `app.ts`: the gate's shape and `guarded`. The exempt list becomes the device-source
+  list, with the same reasons.
+- `account.ts`: `AccountClosedError`, the one job chain (sign-out, add and switch
+  serialise on it), and `readFacts` for the key half.
+- `themes.ts`: the split into a device store and a Texture store.
+- `account-state.ts` and `words.ts`: the card, with fewer states.
+- Tests: M1 (a closed world writes and sends nothing), M2, M3 and its scanner,
+  C9.podcast-send and C9.take-session (each restated as "after sign-out"), and the
+  device-source half of C9.texture-theme.
+
+**It is deleted:**
+
+- From `account.ts`: `STAMP_FILE` (the record), `wipeAll`, `survivors`,
+  `removeRecord`, `nativeCall('wipe')`, `clearBody`, `adoptBody`, `startClear`,
+  `enter`'s ADOPT and CLEARING branches, `peek`'s ADOPT and CLEARING branches, the
+  five-state table and `stateOf`, `wipeEpoch` and `lastFailure`.
+- From `api.ts`: `closedWorlds`, `drainClosed`, `World.pending`, `World.downloads`,
+  `owed`, `confirmed`, `nextGeneration`, `beginSignOut`, `abortSignOut`,
+  `refreshSealBlock`, `blockedDigest`, `sealingBlocked` and `writeCurrent`.
+- Every module's wipe function: `podcast.wipe`, `wipeMail`, `wipeFiles`, `wipePaper`,
+  `wipeKept`, `wipeNotebook`, `wipeLiveVectors`, `wipeLiveContent`, `wipePages`,
+  `wipeTextureThemes` and clips' `forget`. Deleting the root replaces them all.
+- The theme choice's cleared-by-origin logic in `themes.ts`, and `files.ts`
+  `cacheDest`'s digest folder, which the root replaces.
+- `demo-leftovers.ts`: its marker joins the leftover list.
+- The CLEARING, ADOPT and "after five tries" cards, the 3 s re-read of those states, and
+  "Clear this phone" as a separate action. Sign out is the one way out.
+- Tests M4, C9b.queued-signout, C9b.gate-adopt, C9b.stale-wipe, and every Clear and
+  Adopt case of section 7.
+
+**What remains of the wipe list.** `wipedPaths()` becomes `LEFTOVERS`: the old
+top-level paths (`app:/data/takes.json`, `app:/data/mail` and the rest, plus
+`account-stamp`, `signout-pending` and the demo marker). Launch removes them and never
+reads them. That is the owner's ruling that nothing is carried over from earlier builds.
+On the owner's phone this drops the shared stores once (the podcast subscriptions among
+them) and they come back from the computer where the computer holds them. Sign-out no
+longer uses a wipe list at all; it deletes one root.
+
+**What is new:**
+
+- The re-rooting in `bindStorage`, including the `sqlite` and `exactBodyTo` paths.
+- The launch sweep and the one-world rule in `account.ts`.
+- The ended card in the root contract, `account.contract` and `signedout.contract`.
+- `current-account` and the accounts list in Settings (station 3).
+- `keys.ts` (station 3): the two key sources behind one reader.
+- `signin.ts` (station 3): the device flow moved out of `ChoirSignIn.swift`, which the
+  owner's rule wants anyway.
+- The native `account` op (station 2).
+
+**Size, estimated by reading, not measured.**
+
+- Station 1: about 25 files touched (11 modules each lose a wipe, plus `api.ts`,
+  `account.ts`, `app.ts`, `account-state.ts`, `words.ts`, `themes.ts`, `files.ts`,
+  three contracts, three test files and `proof-real.sh`). Against the lane it is a net
+  deletion of several hundred lines. Against main it is a net addition of the `World`
+  pieces.
+- Station 2: about 6 Swift files.
+- Station 3: about 12 files, of which `signin.ts` (about 250 lines) and `keys.ts` are new.
+- Station 4: about 30 files, mostly mechanical.
+
+### Native code
+
+Native code is unavoidable in three places. Each has a reason only native code can meet.
+
+1. **The native slot.** Shared code cannot read another service's Keychain item through
+   Exact's store (`api.ts:44-49`, `CredentialReader.swift:4-5`). It goes on being read
+   through the existing `get`, `session` and `keystate` ops and deleted through
+   `signOut`. These are not new.
+2. **The `account` op** (station 2, new): `{op: 'account', digest}`, with `''` for "none
+   now". Reason: native stores and the native client are native, and shared code cannot
+   reach them. What native does on it:
+   - It touches no account store and signs nothing until the op has answered once in
+     this process. This is old landing 3's read gate, in one place.
+   - With `''`, it stops playback, ends the voice session, clears now-playing and drops
+     on-device model context.
+   - With a digest that is not the one in its served file, it runs `AccountWipe.run()`.
+     It writes the served file only after every registered wipe reported success, and it
+     answers `failed` otherwise.
+   - `ChoirClient`'s key read refuses unless the native slot's digest is the named
+     digest. `MailSeal`'s guard becomes "an account is named".
+3. **Several Keychain items need no native code.** New accounts go to Exact's secret
+   store under `secret.keep accounts`. Putting them in native items, one per digest,
+   would be a new native call with no reason only native can meet.
+
+**The three planned native landings of the old design:**
+
+- Landing 2 (the shared generation to native, floors in `HeldPages` and `TakeMirror`,
+  `failed` reporting) is replaced. There is no generation. The served-file check does
+  the job of the floors. `failed` reporting stays, inside the `account` op.
+- Landing 3 (the native read gate) is folded into the same op.
+- The native wipe at sign-out stays as it is.
+
+The two landings become one, station 2. Until the native pages move to Exact, a switch
+costs A's native caches, which come back from the computer. Voice stores (turn history,
+the voice profile, kept turns, take recordings) are wiped with them at a switch, unless
+station 5 roots them under the account. Station 5 is native and legitimately so, because
+voice stays native.
+
+### How the earlier rounds' findings fare
+
+- **Late awaits** (a late read that fills a cache; a sync that sends under the next key).
+  Gone. A's chain can reach only A's root, A's bag and A's key, and from station 1 no
+  other account's world exists in that process.
+- **Module single-flights and mutexes that outlive their world.** Gone. They are in A's
+  bag, and no later world in the process joins them.
+- **Exempt sources.** Changed. They become device sources with a handle that reaches
+  device paths only. Texture themes are read only from the open world, which is the
+  process's only account. The residual of the seventh round (a frame of A's colours
+  after an account change) cannot happen without a relaunch.
+- **Late downloads.** Gone. The host writes into A's root path. If the bytes land after
+  A's root was deleted, they recreate a folder under A's digest. No key names it, so
+  launch deletes it, and no account reads it meanwhile.
+- **Themes from Textures.** Gone. They are account data in the root.
+- **The choice file.** Changed. It is device data, never cleared. A choice that names a
+  Texture theme the current root lacks resolves to the default.
+- **Cold launch with a changed key.** Gone. A changed key is a new digest, so it gets a
+  new empty root, and the old root is swept.
+- **A failing Clear.** Gone, because there is no Clear. A root the system refuses to
+  delete is disk space, not a leak: the key is gone, no account can name the root, and
+  the next launch tries again.
+- **Native stores and native signing.** Still present until station 2. It is the same
+  gap old landings 2 and 3 named, now closed by one op.
+- **The non-I/O-await gap.** Gone in stations 1 to 3, because there is no second world
+  to cross into. It returns in station 4 unless every account read takes its world
+  explicitly.
+- **Kept answers** (new, above). Still present on main and the lane, and closed by I7.
+
+### What partition does not solve
+
+- **Exact's kept answers.** A's kept answers stay in Exact's launch cache after A signs
+  out. They are keyed by A's handle, so they are never shown again, and they are bounded
+  to 512 KiB, but they are at rest on the phone. Recommendation: I7 for all account
+  resources, and `transient` on mail (the box and the message). Open: an Exact call to
+  forget kept answers, if one exists.
+- **Shared device caches.** I did not find whether Exact's `fetch` on Apple keeps an
+  HTTP cache for authorised responses. Recommendation: verify in station 1. If it does,
+  `send` sets no-store on every signed request, a one-line change.
+- **The on-device search index and vectors.** Shared code's index is in the root
+  (`search.ts` `VECTORS_DIR`), and the in-memory store is in the world's bag. Native
+  corpus search and the content store (`CorpusSearch.swift`, `ContentStore.swift`) are
+  covered by station 2's wipe on mismatch.
+- **On-device models.** The weights are device data and public. Any conversation context
+  a native model session holds is dropped by the `account` op with `''`.
+- **Notifications.** None exist in the app today (no `UNUserNotificationCenter` or
+  push grant found). The rule for when they come: each carries the account handle, and a
+  sign-out removes that account's delivered notifications.
+- **The native audio session and now-playing.** Stopped and cleared by the `account` op
+  at a switch and a sign-out. Background audio keeps the page live on iOS
+  (`docs/reference/EXACT.md` decision table, `page.frozen`), which is why playback must
+  stop before the world closes, not after.
+- **Anything keyed by URL rather than account.** Feed caches, file caches and mail
+  originals are inside the root. Clips are in the bag. Exact's kept answers are covered
+  by I7. The native Texture reader and the opening cache are covered by station 2.
+- **The server.** An unused key from a sign-in killed before step 4 stays on the
+  account. Revocation at sign-out is best effort, as today.
+
+### Alternatives considered
+
+1. **Keep wipe-on-change and finish patching.** Seven rounds have not converged. Each
+   round narrowed the leak and added machinery (drains, deadlines, detached halves, an
+   inventory scan). The owner's question 1 names the cause. CLAUDE.md rule 7 says to
+   stop patching after three rounds. Rejected.
+2. **Partition, and keep every signed-in account's world open in the process** (the
+   lead's direction as written). It buys one thing: A's in-flight work finishes while B
+   is current. The cost:
+   - several live worlds;
+   - background work for accounts nobody is looking at;
+   - the ambient-world gap, unless every read is threaded;
+   - native code that must know several accounts are live.
+
+   Native pages would still sign with the native slot's key. Rejected. If seamless
+   switching comes, A's world is closed at the switch (station 4).
+3. **Partition with one account per process; a switch and a sign-out both end the
+   session.** This is the smallest safe design, and it is recommended. It matches
+   choir.news's reset-at-switch. Its cost is that the person closes and reopens the app
+   to finish a switch or a sign-out.
+4. **One account per process without partition** (wipe at sign-out, the session ends).
+   It is smaller still, and it is safe for sign-out. It cannot hold several accounts,
+   because a switch would have to wipe A, and A's local-only data would go. It is a
+   fallback if station 1 stalls.
+5. **A native `exit(0)` at switch or sign-out.** Rejected: Apple's guidance, and a new
+   native call.
+
+### Landing plan
+
+All stations are red, with two seats each (seat 1 Gemini 4 Hydrogen through `agy`, a
+Sonnet subagent on a rate limit; seat 2 DeepSeek v4.1 flash). Each seat is given the code
+and this section, not the author's conclusion. Each station precommits its drill claim
+in `docs/calibration/claude-ledger.md` and carries
+`Ring-Expedite: a sign-out that does not finish cleanly leaves the old account's data for the next account`.
+Each is built in a new lane from `origin/main` that takes the `World` pieces from
+`account-boundary-l1`. The lane itself does not land.
+
+**Station 0** (green): this section, the problem record pointing here, and
+`docs/current-architecture.md` unchanged until station 1 lands.
+
+**Station 1: partition and the ending sign-out.** The re-rooting, the device handle, the
+one-world rule, the launch sweep, the leftovers, the ended card, and I7's account handle
+on every gated resource. Every deletion listed above.
+
+- Protected surfaces: the session seam (`api.ts` `send`) and the sign-out.
+- Evidence class: bun tests plus a simulator drill.
+- Rollback: revert. Main's code reads the leftover paths, which this station removed.
+  Main then starts with empty stores and the same key, so nothing crosses accounts.
+- Heresy delta: none. It deletes the "no disruption" machinery the owner did not ask
+  for.
+- Proof: the whole `bun test`, `contract build` and `test web` in the lane, then on the
+  lead's build (`mobile/scripts/proof-real.sh`):
+  - **sign out of one**: data on the pages, sign out, the ended card, the root gone, the
+    relaunch signed out;
+  - **kill mid sign-out**: kill after the key delete and before the root delete, then
+    relaunch; the orphan is gone before any page draws;
+  - **launch with an orphan root**: a planted `accounts/<other digest>/takes.json` is
+    gone after launch and was never read;
+  - **changed key** (old D3): a new root, and the old one swept;
+  - **refused key** (old D4);
+  - **first frame**: after sign-out, relaunch and the proof key, no kept answer of the
+    old handle shows.
+
+**Station 2: the native `account` op** (old landings 2 and 3 in one).
+
+- Protected surfaces: the native client's key read and native stores.
+- Rollback: revert. Station 1 does not depend on it.
+- Proof: Swift package tests through the lock:
+  - N1: no store is read before the op;
+  - N2: on mismatch, wipe, then the served file;
+  - N3: a failed wipe leaves the served file unwritten and answers `failed`;
+  - N4: `ChoirClient` refuses a key whose digest is not the named one.
+
+  The station 1 drills again, plus a voice turn at a changed-key launch that reads no
+  old store.
+
+**Station 3: several accounts, switch by restart.** `keys.ts`, `signin.ts`, the accounts
+list in Settings, `current-account`, the switch card and the refusals.
+
+- Protected surfaces: the key stores and sign-in.
+- Rollback: revert. A revert leaves the account secret unread, and launch then sees only
+  the native slot. Added accounts' roots become orphans and are swept. Accepted, because
+  there is one user.
+- Proof:
+  - **two accounts signed in**: add the second, both listed, each one's Files showing
+    only its own;
+  - **switch during a download**: refused, or, when it is a page cache download, the
+    bytes land under the old root and are never shown;
+  - **switch during playback**: playback stops, now-playing is cleared, the card shows;
+  - **sign out of one** that is not current: the list shrinks and the open account goes
+    on;
+  - **kill mid sign-out** and **orphan root** again with two accounts;
+  - Android: sign-in works with no native module.
+
+**Station 4** (only on the owner's word, decision D2): the seamless switch.
+`scoped(w)`, the world passed explicitly from the gate, a scan that forbids
+`currentWorld()` outside `app.ts` and `account.ts`, and the `account` op used
+mid-process. Proof: the station 3 drills without a relaunch.
+
+**Station 5** (native, voice): voice stores take their folder under the account root
+from the `account` op, so a switch no longer wipes them.
+
+### Decisions for the owner, each with the default the build proceeds on
+
+- **D1. Sign-out ends the session behind a full-screen card; the app does not end
+  itself.** Why it matters: it is what makes sign-out certainly safe and deletes most of
+  the lane. Options: the card; a native `exit(0)`; staying alive in the process (the old
+  design). Default: the card.
+- **D2. A switch is a restart (close and reopen), not seamless.** Why it matters:
+  seamless is about 30 more files and brings back the class of leak this amendment
+  removes. Options: restart; seamless (station 4). Default: restart. Seamless is built
+  only if the owner asks after using it.
+- **D3. Audio stops at a switch.** Why it matters: the lock screen would show A's title
+  under B. Options: stop; keep playing until the relaunch. Default: stop.
+- **D4. No limit on accounts.** choir.news has none. Default: none.
+- **D5. Sign-out of the last account keeps device settings** (themes, the choice,
+  onboarding facts). Why it matters: the next person on the phone sees the previous
+  person's theme. Options: keep; delete. Default: keep. A Texture theme is account data
+  and goes with the root.
+- **D6. A switch is refused while a recording, a live voice turn or an upload is in
+  flight.** Why it matters: these are local work that would otherwise be cut off.
+  Options: refuse; cut off. Default: refuse, with words saying which.
+- **D7. Until native pages move to Exact, a switch drops A's native caches, which come
+  back from the computer, and native pages read as signed out for an account not in the
+  native slot.** Options: accept; partition native stores in Swift, which the Exact rule
+  forbids outside voice. Default: accept.
+- **D8. Mail resources are `transient`.** Why it matters: no fast first frame for mail,
+  but no mail at rest in Exact's launch cache. Default: transient for mail; every other
+  account resource is keyed by account (I7).
+- **D9. The voice profile is per account.** Options: per account; per phone. Default:
+  per account, which is the private choice.
+
+### What I am unsure of
+
+- What Exact's secret snapshot answers before first unlock (empty or refused). I6 and
+  the canary are built for either, but a device run decides.
+- Whether `GET /auth/whoami` and `DELETE /auth/api-keys/{id}` accept the phone's bearer
+  key for an account added in shared code. The Swift sign-out uses the second today.
+- Whether Exact's Apple `fetch` caches authorised responses.
+- How large the native served-file change is in `AccountWipe.swift` and
+  `AutoradioModule.swift` (its launch syncs, `:192`).
