@@ -25,13 +25,15 @@ const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 let held = new Map<string, ReaderDoc>();
+/** The clips found for a story, by address, for this account generation. */
+let clipRows = new Map<string, ReaderDoc['hearIt']>();
 let inflight = new Map<string, Promise<ReaderDoc>>();
 let heldGen = -1;
-export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); heldGen = -1; }
+export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); clipRows = new Map(); heldGen = -1; }
 export const heldCount = (): number => held.size;
 function current(): number {
   const g = accountGeneration();
-  if (g !== heldGen) { held = new Map(); inflight = new Map(); heldGen = g; }
+  if (g !== heldGen) { held = new Map(); inflight = new Map(); clipRows = new Map(); heldGen = g; }
   return g;
 }
 function put(d: ReaderDoc): void {
@@ -57,11 +59,10 @@ async function fetchDoc(address: string, net: Net): Promise<ReaderDoc> {
   if (a.kind === 'pub') {
     const bare = splitRoute(a.route).bare;
     const related = net.pub('/api/platform/publications/related', { route: bare, limit: 5 }).then((r) => parseRelated(r.body), () => []);       // a route that is not there: the story still opens
-    const hear = net.clips(address).catch(() => [] as ReaderDoc['hearIt']);
     const body = (await net.pub('/api/platform/publications/resolve', { route: a.route })).body;
     if (!obj(body)) throw new Error('the computer sent a story that is not a story');
     const d = parseBundle(body, address);
-    d.related = await related; d.hearIt = await hear;
+    d.related = await related;                                  // "Hear it" is not waited for: readerHear fills it in when the clips arrive (a slow clip route must not hold the story)
     console.log(`reader: story blocks=${d.blocks.length} cites=${d.cites.length} related=${d.related.length}`);
     return d;
   }
@@ -131,14 +132,28 @@ function hand(d: ReaderDoc, gen: number): void {
 }
 
 /** The source behind the reader page. `accState` and `saved` are only there to ask again: a sign-in from the banner, and the editor's save. */
-export async function readerDocShared(address: string, _accState: string, _saved: boolean, net: Net = real): Promise<ReaderDoc> {
+export async function readerDocShared(address: string, _accState: string, _saved: boolean, net: Net = real, _heard = 0): Promise<ReaderDoc> {
   const gen = accountGeneration();
-  const d = await ask(address, net);
+  let d = await ask(address, net);
+  const rows = clipRows.get(address);
+  if (rows && d.status === 'ready' && d.hearIt !== rows) d = { ...d, hearIt: rows };
   hand(d, gen);
   return d;
 }
 
 const ack = (ok: boolean): Ack => ({ ok });
+
+/** "Hear it" for the story in front: the clips cut for it, asked for apart from the story (the first ask is the session's bulk clip set, up to the 15 s deadline). The page asks the story again when this
+ * answers true, and then shows them. A story with none, another page, or a failing clip route answers false. */
+export async function readerHear(address: string, net: Net = real): Promise<Ack> {
+  const gen = current();
+  if (parseAddress(address).kind !== 'pub') return ack(false);
+  let rows: ReaderDoc['hearIt'] = [];
+  try { rows = await net.clips(address); } catch { rows = []; }
+  if (gen !== accountGeneration() || rows.length === 0) return ack(false);
+  clipRows.set(address, rows);
+  return ack(true);
+}
 
 /** Forget a document: the next ask reads it again (the page menu's Reload). */
 export async function readerReload(address: string): Promise<Ack> { current(); held.delete(address); return ack(true); }

@@ -53,6 +53,14 @@ final class HeldPagesTests: XCTestCase {
         XCTAssertEqual(ReaderFollow().set(address: "pub:a/x", spoken: "later paragraph about", held: h).blockId, "b3")
         XCTAssertEqual(ReaderFollow().set(address: "pub:other", spoken: "later paragraph about", held: h).blockId, "", "a page that was not handed over highlights nothing")
     }
+    func testH6b_TheSentenceIsTheOneTheSharedSplitterMade() {
+        // The sentences are the shared splitter's (reader-parse.ts): "Dr." and "3.5" do not end one. Native only finds the words inside them; it never splits.
+        let d = HeldPage(address: "pub:t", blocks: [HeldBlock(id: "b1", kind: "p", text: "Dr. Smith paid $3.5 million. He said \"Stop.\" Then left.",
+                                                              sentences: ["Dr. Smith paid $3.5 million.", "He said \"Stop.\"", "Then left."])])
+        XCTAssertEqual(ReaderFollow.locate(spoken: "Smith paid $3.5 million.", in: d)?.sentence, 0)
+        XCTAssertEqual(ReaderFollow.locate(spoken: "He said \"Stop.\"", in: d)?.sentence, 1)
+        XCTAssertEqual(ReaderFollow.locate(spoken: "Then left. ", in: d)?.sentence, 2)
+    }
     func testH7_TheCorpusBodyHasNoCodeOrEmbeds() {
         XCTAssertEqual(HeldPage.parse(request)?.body, "The first sentence is here. The second sentence follows it.\nA later paragraph about batteries.")
         let c = SavedCorpus(heldPages: { let h = HeldPages(); h.hold(HeldPage.parse(request)!); return h }())

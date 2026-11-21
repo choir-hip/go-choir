@@ -11,7 +11,7 @@ import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
-import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
+import { readerDocShared, readerHear, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
@@ -89,7 +89,8 @@ const sources: Sources = {
   themeFromTexture: ([doc], _s, storage) => themes.themeFromTexture(doc, storage),
   themeRemove: ([id], _s, storage) => themes.themeRemove(id, storage),
   // The reader (reader.ts): the story or document in front, and what its page does to it.
-  readerDocShared: ([address, acc, saved]) => readerDocShared(address, acc, saved),
+  readerDocShared: ([address, acc, saved, _tick, heard]) => readerDocShared(address, acc, saved, undefined, heard ? 1 : 0),
+  readerHearShared: ([address]) => readerHear(address),
   readerStopShared: ([address]) => readerStop(address),
   readerRestoreShared: ([address, version]) => readerRestore(address, version),
   readerReloadShared: ([address]) => readerReload(address),

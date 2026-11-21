@@ -245,9 +245,9 @@ export function assignSentences(runs: Run[], plain: string): number {
 }
 /** The text of each sentence of a block (what the radio's words are matched against). */
 export function sentenceTexts(b: Block): string[] {
-  const by = new Map<number, string>();
-  for (const r of b.runs) if (r.kind !== 'cite' && r.kind !== 'ref') by.set(r.sent, (by.get(r.sent) ?? '') + (r.kind === 'br' ? '\n' : r.text));
-  return [...by.keys()].sort((a, b2) => a - b2).map((k) => trim(by.get(k)!));
+  const out: string[] = [];
+  for (const r of b.runs) if (r.kind !== 'cite' && r.kind !== 'ref') { while (out.length <= r.sent) out.push(''); out[r.sent] += r.kind === 'br' ? '\n' : r.text; }
+  return out.map(trim);      // index i is the sentence the runs numbered i say: the one splitter's numbering, which native matches against and hands back
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------

@@ -6,6 +6,7 @@
 //  P5 a Texture transclusion is a "ref" run with a texture: target.   P6 sentences numbered from plain text; a cite belongs to the sentence it closes; run ids unique.
 //  P7 Markdown tables and unmatched markers stay literal.   P8 versions from nav, clamped; newer only when latest > revision.   P9 addresses.   P10 hosts, check labels, quote context.
 //  P11 a private document: revision rows newest first, revising, trajectory.   P12 3000 blocks stay fast.   P13 golden documents equal their committed projections.
+//  P16 ONE splitter decides the sentences: sentenceTexts(b)[i] is exactly what the runs numbered sent=i say (a sentence made only of a citation keeps its place, never shifting the next), on a paragraph with abbreviations, decimals and quotes where a plain split on full stops would differ.
 //  P14 tables, embeds (caption, title, alt, kind), legacy ** bold, adjacent published citations of one source collapse.   P15 related reads `links`.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -158,6 +159,19 @@ describe('reader document model', () => {
   test('P15 related reads links, then the older guesses; a story with no route or title is dropped', () => {
     expect(parseRelated({ links: [{ title: 'A', route: '/pub/a', dek: 'd' }, { title: '', route: 'x' }, { title: 'C', route: { bare: 'pub/c' } }, { title: 'D' }] })).toEqual([{ address: 'pub:pub/a', title: 'A', dek: 'd' }, { address: 'pub:pub/c', title: 'C', dek: '' }]);
     expect(parseRelated({ related: [{ title: 'Z', route: 'z' }] }).length).toBe(1); expect(parseRelated({})).toEqual([]);
+  });
+});
+
+describe('one splitter', () => {
+  test('P16 sentence i of the block is what the runs numbered i say; abbreviations, decimals and quotes do not split; a cite-only sentence keeps its index', () => {
+    const t = 'Dr. Smith paid $3.5 million for the U.S. rights. He said \u201CStop.\u201D Then he left. ';
+    const body = bodyDoc(`{"type":"paragraph","content":[{"type":"text","text":${JSON.stringify(t)}},{"type":"source_ref","attrs":{"id":"a","source_entity_id":"e"}},{"type":"text","text":"? Last one."}]}`);
+    const d = parseBundle(bundle({ body, entities: '[{"source_entity_id":"e","entity":{"target":{"kind":"web_url","uri":"https://e.example.com"},"display":{"title":"E"}}}]' }), 'pub:x');
+    const b = d.blocks[0];
+    const s = sentenceTexts(b);
+    expect(s.slice(0, 3)).toEqual(['Dr. Smith paid $3.5 million for the U.S. rights.', 'He said \u201CStop.\u201D', 'Then he left.']);
+    s.forEach((text, i) => expect(b.runs.filter((r) => r.sent === i && r.kind !== 'cite' && r.kind !== 'ref').map((r) => r.text).join('').trim()).toBe(text));
+    expect(s.length).toBe(b.sentences);
   });
 });
 

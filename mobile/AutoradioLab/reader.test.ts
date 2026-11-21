@@ -120,6 +120,17 @@ describe('held documents', () => {
     const again = fake(); await R.readerDocShared('pub:pub/slow', 'in', false, again.net);
     expect(again.count('/publications/resolve')).toBe(1);
   });
+  test('R7 a held private revision is not shown to the next account either', async () => {
+    const f = fake();
+    expect((await R.readerDocShared('texture:d1@r1', 'in', false, f.net)).status).toBe('ready');
+    await R.readerDocShared('texture:d1@r1', 'in', false, f.net);
+    expect(f.count('/api/texture/revisions/r1')).toBe(1);                      // held for the account that read it
+    nextGeneration();
+    const other = fake({ authed: (p) => (p.startsWith('/api/texture/revisions/') ? { revision_id: 'r1', content: 'The new account\u2019s own text.' } : p.endsWith('/revisions') ? { revisions: [] } : { doc_id: 'd1', title: 'Theirs', current_revision_id: 'r1' }) });
+    const d = await R.readerDocShared('texture:d1@r1', 'in', false, other.net);
+    expect(other.count('/api/texture/revisions/r1')).toBe(1);                  // asked again with the new account's key
+    expect(JSON.stringify(d)).not.toContain('Some text.'); expect(d.title).toBe('Theirs');
+  });
   test('R9 at most 40 are held, the least recently used goes first', async () => {
     const f = fake();
     for (let i = 0; i < 41; i++) await R.readerDocShared(`pub:pub/s${i}`, 'in', false, f.net);
@@ -167,14 +178,21 @@ describe('actions', () => {
     await R.readerDocShared('texture:d1', 'in', false, done.net);
     expect((await R.readerStop('texture:d1', done.net)).ok).toBe(true);
   });
-  test('R11 Hear it comes with the story; a failing clip route gives none', async () => {
+  test('R11 Hear it: the story is shown at once; the clips fill in when they arrive; a failing clip route gives none', async () => {
     const row = { clipID: 'c1', show: 'S', episode: 'E', length: '56 s', quote: 'q', story: 'T', episodeOnly: false };
-    const f = fake({ clips: () => [row] });
-    expect((await R.loadReader('pub:pub/x', f.net)).hearIt).toEqual([row]);
-    expect((await R.loadReader('texture:d1', f.net)).hearIt).toEqual([]);
+    let release: (v: unknown[]) => void = () => undefined;
+    const slow = fake({ clips: () => new Promise<unknown[]>((r) => { release = r; }) as never });
+    const first = await Promise.race([R.readerDocShared('pub:pub/x', 'in', false, slow.net, 0), new Promise<string>((r) => setTimeout(() => r('waited'), 200))]);
+    expect(typeof first).toBe('object'); expect((first as { status: string }).status).toBe('ready'); expect((first as { hearIt: unknown[] }).hearIt).toEqual([]);   // not held up by the clips
+    const heard = R.readerHear('pub:pub/x', slow.net);
+    release([row]);
+    expect((await heard).ok).toBe(true);
+    expect((await R.readerDocShared('pub:pub/x', 'in', false, slow.net, 1)).hearIt).toEqual([row]);
+    expect((await R.readerDocShared('texture:d1', 'in', false, fake().net, 1)).hearIt).toEqual([]);
+    expect((await R.readerHear('texture:d1', slow.net)).ok).toBe(false);
     const g = fake(); g.net.clips = async () => { throw new Error('down'); };
-    const d = await R.loadReader('pub:pub/x', g.net);
-    expect([d.status, d.hearIt]).toEqual(['ready', []]);
+    expect((await R.readerHear('pub:pub/y', g.net)).ok).toBe(false);
+    expect((await R.readerDocShared('pub:pub/y', 'in', false, g.net, 1)).hearIt).toEqual([]);
   });
 });
 
@@ -189,6 +207,10 @@ describe('the voice holds the page in front', () => {
     expect(sent[0]).toMatchObject({ op: 'pageText', address: 'pub:pub/x', title: 'Harbor', dek: 'A dek.', kind: 'story' });
     expect(sent[0].blocks[0]).toMatchObject({ kind: 'p', text: 'First sentence here. Second one follows.', sentences: ['First sentence here.', 'Second one follows.'] });
     expect(sent[0].blocks.map((b) => b.kind)).toContain('code');
+    const tricky = fake({ pub: (p) => (p.endsWith('/resolve') ? { publication: { title: 'T', kind: 'story' }, artifact: { content: 'Dr. Smith paid $3.5 million. He said \u201CStop.\u201D Then left.' }, nav: {} } : {}) });
+    await R.readerDocShared('pub:pub/tricky', 'in', false, tricky.net);
+    expect(sent[sent.length - 1].blocks[0].sentences).toEqual(['Dr. Smith paid $3.5 million.', 'He said \u201CStop.\u201D', 'Then left.']);    // the one splitter's sentences are what native matches against
+    sent.pop();
     await R.readerDocShared('pub:pub/x', 'in', false, f.net);               // held: handed again (the voice may have dropped it)
     expect(sent.length).toBe(2);
     await R.readerDocShared('paper:front', 'in', false, f.net); await R.readerDocShared('pub:pub/gone', 'in', false, fake({ pub: () => new Error('down') }).net);
