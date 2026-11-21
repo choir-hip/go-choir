@@ -12,19 +12,6 @@ import XCTest
 final class RealShapeTests: XCTestCase {
     func json(_ s: String) -> [String: Any] { (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:] }
 
-    func testRelatedReadsLinks() {
-        let o = json("""
-        {"route":"/pub/texture/a-b-pub1","revision":5,"basis":{"captures":5,"events":0,"mode":"captures+relations+entities+floor"},"partial":false,
-         "links":[{"publication_id":"pub-2","title":"Harbor tolls rise","dek":"A short line.","route":{"bare":"/pub/texture/harbor-tolls-rise-pub2","permalink":"/pub/texture/harbor-tolls-rise-pub2/v4"},
-                   "section":"world","words":170,"reason":"entity","shared":{"events":0,"sources":0}},
-                  {"publication_id":"pub-3","title":"","route":{"bare":"/pub/texture/x"}}]}
-        """)
-        let r = ReaderStore.parseRelated(o)
-        XCTAssertEqual(r.count, 1)
-        XCTAssertEqual(r.first?.address, "pub:pub/texture/harbor-tolls-rise-pub2")
-        XCTAssertEqual(r.first?.title, "Harbor tolls rise")
-    }
-
     func testFrontListRealShape() {
         let o = json("""
         {"stories":[{"publication_id":"pub-1","title":"A tide barrier is approved","dek":"Council votes.","updated_at":"2026-11-11T06:25:41.153634413Z",

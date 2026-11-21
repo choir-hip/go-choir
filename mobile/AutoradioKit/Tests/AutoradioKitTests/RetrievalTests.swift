@@ -151,7 +151,7 @@ final class RetrievalTimingTests: XCTestCase {
 final class RetrievalHolderTests: XCTestCase {
     func testTheModelIsShownRetrievedItemsWithDatesAndIdsAndTheTurnRecordsThem() async {
         RetrievalLog.shared.clear()
-        let c = SavedCorpus(readerStore: nil)
+        let c = SavedCorpus(heldPages: nil)
         c.setSource("t") { [
             SavedCorpus.Document(id: "front:a", title: "Senate passes the water bill", address: "pub:a", text: "The Senate voted on Tuesday to pass the water bill.", kind: "story", source: "Autopaper", date: Date(timeIntervalSince1970: 1_794_000_000)),
             SavedCorpus.Document(id: "front:b", title: "Harbor strike ends", address: "pub:b", text: "Dock workers ended the strike.", kind: "story", source: "Autopaper", date: Date(timeIntervalSince1970: 1_794_500_000))] }
@@ -193,7 +193,7 @@ final class RetrievalMoreSourcesTests: XCTestCase {
         XCTAssertEqual(r.docs.map(\.source), ["On air", "Up next"])
     }
     func testHeldGroupsAreSearchedReplacedAndBounded() {
-        let c = SavedCorpus(readerStore: nil)
+        let c = SavedCorpus(heldPages: nil)
         let zep = SavedCorpus.Document(id: "z:1", title: "zeppelin-plans", address: "texture:z", text: "Zeppelin plans.", kind: "document", source: "Texture", date: nil)
         c.hold(group: "g", [zep])
         XCTAssertEqual(c.retrieve("zeppelin plans").items.first?.address, "texture:z")
@@ -211,7 +211,7 @@ final class RetrievalMoreSourcesTests: XCTestCase {
             func idf(_ t: String) -> Double { inner.idf(t) }
         }
         let i = RetrievalIndex(); i.upsert(RetrievalDoc(id: "a", kind: "story", title: "Senate", text: "The senate met.", source: "Autopaper"))
-        let c = SavedCorpus(readerStore: nil); c.setSource("t") { [] }; c.retriever = Doubled(inner: i)
+        let c = SavedCorpus(heldPages: nil); c.setSource("t") { [] }; c.retriever = Doubled(inner: i)
         XCTAssertEqual(c.retrieve("senate").items.first?.id, "a")
     }
 }

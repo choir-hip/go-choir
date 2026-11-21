@@ -151,8 +151,6 @@ public final class AutoradioModule: ExactPackage {
             try? await Task.sleep(nanoseconds: 30_000_000_000)
             SavedCorpus.shared.refresh()          // the index warm-up, long after the front page has drawn
         }
-        ReaderStore.shared.offline = { ContentStore.shared.readerDoc(address: $0) }
-        PublicationTextSource.offline = { ContentStore.shared.readerDoc(address: $0) }
         // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the stores below live in this target.
         // Kit methods called: Signals.wipe(), OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
         let filesCache = filesCacheDisk
@@ -167,7 +165,6 @@ public final class AutoradioModule: ExactPackage {
         SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         pageSources.register(NotYetPageSource())
-        pageSources.register(PublicationTextSource())
         // Registration: the spine, then one line per lane (each defined in that lane's own file).
         registerSpine()
         registerBar()

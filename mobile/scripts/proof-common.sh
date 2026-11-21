@@ -25,6 +25,32 @@ place() { step "clock settle"; step "tap bar-mark"; wait_ 600; step "clock settl
 ensure_light() { place settings 900; step "tap settings-theme-default"; wait_ 500; step "tap settings-mode-light"; wait_ 700; }
 goto() { step "clock settle"; step "tap bar-mark"; wait_ 600; step "clock settle"; step "tap \"launcher-open-$1\""; wait_ 900; }
 
+# layout_scroll <drive-log> <testId> [mid_y]: how many points to wheel the page's scroller so the node's middle sits at mid_y (default 320, clear of the bar), read from the `layout <testId>` step's output in
+# the drive log: the viewport's height (its first line) and the node's own "space viewport X,Y WxH". Prints a whole number (0 when the node is already at or above mid_y). Prints nothing and returns 1 when the log
+# has no such node block, or it has no viewport space, or the middle is farther than 30000 points below the first screen (a bound, not a guess): the caller says so and fails.
+layout_scroll() {
+  awk -v id="$2" -v want="${3:-320}" '
+    /^viewport [0-9]+/ { split($2, v, "×"); vh = v[2] + 0 }
+    /^node #/ { on = (index($0, "[" id "]") > 0); next }
+    on && /^  space viewport / { split($3, p, ","); split($4, d, "×"); mid = p[2] + d[2] / 2; found = 1; on = 0 }
+    END { if (!found || vh == 0 || mid > 30000) exit 1; n = int(mid - want + 0.5); print (n > 0 ? n : 0) }
+  ' "$1"
+}
+
+# blocks_have_text <tree-file> [n]: the reader's text is really on the page. For each of the first n (default 2) `reader-block-b<N>` lines of a tree dump, the block must carry a text of 20 or more characters: on its own line
+# (`[reader-block-b2] "..."`, the old shape) or in a child line, deeper than the block and before the next line at its depth or less (`Text#859 "..."`, one per sentence run). A block with no such text fails, so an
+# empty block cannot pass; fewer than n blocks fails too. Prints the failing block's id and returns 1.
+blocks_have_text() {
+  awk -v n="${2:-2}" '
+    function indent(l) { match(l, /^ */); return RLENGTH }
+    function close_block() { if (cur != "" && seen <= n && !ok) { print "no text in " cur; bad = 1 } cur = "" }
+    match($0, /\[reader-block-b[0-9]+\]/) { close_block(); seen++; cur = substr($0, RSTART + 1, RLENGTH - 2); ind = indent($0); ok = ($0 ~ /\] "[^"]{20,}/); next }
+    cur != "" && indent($0) <= ind { close_block() }
+    cur != "" && $0 ~ /Text#[0-9]+ "[^"]{20,}/ { ok = 1 }
+    END { close_block(); if (seen < n) { print "only " seen " blocks"; bad = 1 } exit bad }
+  ' "$1"
+}
+
 # run_drive <name> <mode> <onboarding?> <agent flags...>: reset, run the collected steps, retry a refused launch up to 3 times.
 run_drive() {
   name="$1"; mode="$2"; ob="$3"; shift 3

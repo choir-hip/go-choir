@@ -81,7 +81,7 @@ let lastTick = 0;
 /** For the sign-out test: how many clips are held in memory. */
 export const remembered = (): number => byID.size;
 
-export function forget(): void { byID.clear(); askedFeeds.clear(); askedAll = false; lastTick = 0; }
+export function forget(): void { byID.clear(); askedFeeds.clear(); askedAll = false; allAsk = null; lastTick = 0; }
 
 function merge(clips: Clip[]): void { for (const c of clips) if (!byID.has(c.clipID)) byID.set(c.clipID, c); }
 
@@ -92,7 +92,7 @@ export function row(c: Clip): Rows['rows'][number] {
 /** The clips found for a show (a podcast show page's address): its own fetch once per session or retry; none for any other address. */
 export async function showClips(address: string, tick: number): Promise<Rows> {
   const feed = parseShow(address) ?? '';
-  if (tick !== lastTick) { lastTick = tick; askedFeeds.clear(); askedAll = false; }
+  if (tick !== lastTick) { lastTick = tick; askedFeeds.clear(); askedAll = false; allAsk = null; }
   if (feed === '') return { rows: [] };
   const k = feedKey(feed);
   if (!askedFeeds.has(k)) {
@@ -103,12 +103,31 @@ export async function showClips(address: string, tick: number): Promise<Rows> {
   return { rows: mine.slice(0, 10).map(row) };
 }
 
+let allAsk: Promise<void> | null = null;
+/** The server's bulk clip set, asked for once per session or retry; a caller that arrives while it is on its way waits for it. */
+function ensureAll(): Promise<void> {
+  if (allAsk && askedAll) return allAsk;
+  askedAll = true;
+  allAsk = (async () => { try { merge(parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body)); } catch { /* silent */ } })();
+  return allAsk;
+}
+
 async function find(id: string): Promise<Clip | null> {
   const have = byID.get(id);
-  if (have || askedAll) return have ?? null;
-  askedAll = true;
-  try { merge(parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body)); } catch { /* silent */ }
+  if (have) return have;
+  await ensureAll();
   return byID.get(id) ?? null;
+}
+
+/** "Hear it" on a story's page: the clips cut for the story at a `pub:` address (its route, else the route without its version), at most three; none for any other page. */
+export async function storyClips(address: string): Promise<Rows['rows']> {
+  if (!address.startsWith('pub:')) return [];
+  await ensureAll();
+  const route = address.slice(4).replace(/^\//, ''), bare = route.replace(/\/v\d+$/, '');
+  const all = [...byID.values()];
+  let mine = all.filter((c) => c.route === route);
+  if (mine.length === 0) mine = all.filter((c) => c.route === bare);
+  return mine.slice(0, 3).map(row);
 }
 
 const NONE = { op: '', id: '', url: '', title: '', show: '', start: 0, clip: '', feed: '' };

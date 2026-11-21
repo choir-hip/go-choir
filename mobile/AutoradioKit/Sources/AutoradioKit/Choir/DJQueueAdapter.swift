@@ -49,14 +49,6 @@ public enum HearIt {
     static func row(_ c: PodcastClip, _ store: ClipStore) -> HearItRow {
         HearItRow(clipID: c.clipID, show: c.show, episode: c.episodeTitle, length: c.lengthLabel, quote: c.quote, episodeOnly: !c.isRelocatable || store.isMismatch(c.clipID), story: c.storyTitle)
     }
-    /// The clips of the story at a page address (`pub:<route>`, with or without a version); at most three; none for any other page.
-    public static func rows(address: String, store: ClipStore = .shared) -> [HearItRow] {
-        let t = TextureAddress.parse(address)
-        guard t.kind == .publication else { return [] }
-        var found = store.clips(forRoute: t.route)
-        if found.isEmpty { found = store.clips(forRoute: TextureAddress.splitRoute(t.route).bare) }
-        return found.prefix(3).map { row($0, store) }
-    }
     /// Play: the clip when it can be found in the served file (the player locates it); else the episode from its start (the row then says "Open episode").
     @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) async {
         guard let c = store.clip(clipID) else { return }
@@ -67,5 +59,3 @@ public enum HearIt {
     }
 }
 
-/// The wire shapes of the clip rows (interface/joins.json).
-public struct ClipRowsView: Codable, Sendable, Equatable { public var rows: [HearItRow]; public init(rows: [HearItRow] = []) { self.rows = rows } }

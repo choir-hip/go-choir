@@ -1,6 +1,6 @@
 import Foundation
 
-// What the phone already holds, as one searchable body: the stories it has fetched (ReaderStore), the front list's headlines, the page in
+// What the phone already holds, as one searchable body: the stories and documents the reader has shown (HeldPages), the front list's headlines, the page in
 // front, and library passages when the reader lane has them. The first answer to a question comes from here (SavedAnswerHolder).
 //
 // WAYS THIS CAN FAIL (written before the code; each has a test in SavedCorpusTests):
@@ -59,13 +59,12 @@ public final class SavedCorpus: @unchecked Sendable {
     /// Called by `reset()` (sign-out): other holders of derived data (the vector store) clear themselves.
     public var resetHooks: [@Sendable () -> Void] = []
 
-    public init(readerStore: ReaderStore? = .shared) {
+    public init(heldPages: HeldPages? = .shared) {
         setSource("held") { [unowned self] in lock.lock(); defer { lock.unlock() }; return held.values.flatMap { $0 } }
-        if let store = readerStore {
+        if let heldPages {
             setSource("reader") {
-                store.readyDocuments().map { d in
-                    let body = d.blocks.filter { !["code", "rule", "embed"].contains($0.kind) }.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n")
-                    return Document(id: d.address, title: d.title, address: d.address, text: ([d.dek, body].filter { !$0.isEmpty }).joined(separator: "\n"), kind: d.kind == "document" ? "document" : "story", source: d.kind == "document" ? "Texture" : "Autopaper", date: StoryDates.shared.date(d.address))
+                heldPages.all().map { d in
+                    return Document(id: d.address, title: d.title, address: d.address, text: ([d.dek, d.body].filter { !$0.isEmpty }).joined(separator: "\n"), kind: d.kind == "document" ? "document" : "story", source: d.kind == "document" ? "Texture" : "Autopaper", date: StoryDates.shared.date(d.address))
                 }
             }
         }

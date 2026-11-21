@@ -86,7 +86,7 @@ final class JoinLibraryTests: XCTestCase {
         let src = LibraryCorpusSource(docs: { [self.doc("a", "The Keeper", added: 2)] }, text: { _ in self.text([self.sentence, self.sentence + " Again."]) })
         let d = src.documents()
         XCTAssertEqual(d.count, 1); XCTAssertEqual(d[0].title, "The Keeper"); XCTAssertEqual(d[0].address, "doc:a"); XCTAssertTrue(d[0].id.hasPrefix("book:"))
-        let c = SavedCorpus(readerStore: nil); c.setSource("library") { src.documents() }; c.refresh()
+        let c = SavedCorpus(heldPages: nil); c.setSource("library") { src.documents() }; c.refresh()
         let hits = c.retrieve("who climbed the lighthouse stair to trim the lamp").items
         XCTAssertEqual(hits.first?.title, "The Keeper")
         XCTAssertEqual(SavedAnswerPrompt.source(hits[0]), "From your book The Keeper")
@@ -99,7 +99,7 @@ final class JoinLibraryTests: XCTestCase {
         XCTAssertEqual(out.first?.title, "New Book", "the most recent document comes first")
         XCTAssertEqual(out.count, 2, "both books are kept: the budget is thousands of passages, not 200")
         XCTAssertFalse(out[0].parts.isEmpty); XCTAssertTrue(out[0].parts[0].label.hasPrefix("chapter 1"))
-        let c = SavedCorpus(readerStore: nil); c.setSource("library") { out }; c.refresh()
+        let c = SavedCorpus(heldPages: nil); c.setSource("library") { out }; c.refresh()
         XCTAssertGreaterThan(c.retrieval.count, 100, "the retrieval index sees all of it")
     }
     func testJ5_AnUnreadableOrEmptyDocumentIsSkippedAndNothingThrows() {
@@ -121,15 +121,6 @@ final class JoinLibraryTests: XCTestCase {
 final class JoinHearItTests: XCTestCase {
     func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
 
-    func testJ3_ThePageOfAStoryHasItsClipsAndNothingElse() {
-        let s = store([clipRow(hex(1), route: "/a"), clipRow(hex(2), route: "/b")])
-        XCTAssertEqual(HearIt.rows(address: "pub:a", store: s).map(\.clipID), [hex(1)])
-        XCTAssertEqual(HearIt.rows(address: "pub:a/v3", store: s).map(\.clipID), [hex(1)], "a version of the story has the story's clips")
-        XCTAssertEqual(HearIt.rows(address: "pub:a", store: s)[0].story, "Story")
-        XCTAssertTrue(HearIt.rows(address: "pub:zzz", store: s).isEmpty)
-        XCTAssertTrue(HearIt.rows(address: "texture:doc1", store: s).isEmpty, "only a published story has clips")
-        XCTAssertTrue(HearIt.rows(address: "doc:abc", store: s).isEmpty)
-    }
     func testJ3_QueueAddsTheClip() async {
         let s = store([clipRow(hex(1))]); let q = RunSheetPlayer(store: RunSheetStore()); q.engine = FakeEngine()
         HearIt.enqueue(hex(1), store: s, player: q)

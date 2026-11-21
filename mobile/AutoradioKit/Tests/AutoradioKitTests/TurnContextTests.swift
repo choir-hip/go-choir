@@ -12,7 +12,7 @@ final class TurnContextTests: XCTestCase {
     static let now = Date(timeIntervalSince1970: 1_794_700_000)
     func fixtureStore() -> (ContentStore, SavedCorpus) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("tc-\(UUID().uuidString)")
-        let s = ContentStore(root: root, clock: { Self.now }); let c = SavedCorpus(readerStore: nil)
+        let s = ContentStore(root: root, clock: { Self.now }); let c = SavedCorpus(heldPages: nil)
         c.setDeltaSource("store") { s.drain() }
         func day(_ n: Double) -> Date { Self.now.addingTimeInterval(-n * 86400) }
         s.put(StoredItem(id: "pub:/p/water", kind: .story, title: "Senate passes the water bill", text: "The Senate voted 61 to 38 on Tuesday to pass the water bill after a long debate on drought funding.", date: day(1), address: "pub:/p/water", source: "Autopaper", syncedAt: Self.now))
@@ -74,7 +74,7 @@ extension SavedAnswerTests {
 
 final class MailTurnTests: XCTestCase {
     func ctx(_ docs: [SavedCorpus.Document], _ q: String) -> RetrievalContext {
-        let c = SavedCorpus(readerStore: nil); c.setSource("t") { docs }; return c.retrieve(q)
+        let c = SavedCorpus(heldPages: nil); c.setSource("t") { docs }; return c.retrieve(q)
     }
     let story = SavedCorpus.Document(id: "pub:s", title: "Tunnel referendum result", address: "pub:/s", text: "The tunnel referendum passed.", kind: "story", source: "Autopaper", date: Date(timeIntervalSince1970: 1_794_000_000))
     let mail = SavedCorpus.Document(id: "mail:m", title: "Tunnel referendum notes", address: "mail:m", text: "From Ana. The tunnel referendum notes and the private plan for the tunnel.", kind: "mail", source: "Mail", date: Date(timeIntervalSince1970: 1_794_100_000))
@@ -99,7 +99,7 @@ final class MailTurnTests: XCTestCase {
 
 extension SavedAnswerTests {
     func privateCorpus() -> SavedCorpus {
-        let c = SavedCorpus(readerStore: nil)
+        let c = SavedCorpus(heldPages: nil)
         c.setSource("t") { [SavedCorpus.Document(id: "mail:m", title: "Tunnel referendum notes", address: "mail:m", text: "From Ana. The tunnel referendum notes and the plan for the tunnel.", kind: "mail", source: "Mail", date: Date())] }
         return c
     }
@@ -126,7 +126,7 @@ extension SavedAnswerTests {
 final class OnePathTests: XCTestCase {
     static let now = Date(timeIntervalSince1970: 1_794_700_000)
     func store() -> SavedCorpus {
-        let c = SavedCorpus(readerStore: nil)
+        let c = SavedCorpus(heldPages: nil)
         func d(_ n: Double) -> Date { Self.now.addingTimeInterval(-n * 86400) }
         c.setSource("t") { [
             SavedCorpus.Document(id: "pub:a", title: "Senate passes the water bill", address: "pub:/a", text: "The Senate voted on Tuesday to pass the water bill.", kind: "story", source: "Autopaper", date: d(1)),

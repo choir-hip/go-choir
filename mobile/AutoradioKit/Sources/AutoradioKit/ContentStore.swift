@@ -2,7 +2,7 @@ import Foundation
 
 // THE LOCAL CONTENT STORE. Owner, 2026-11-16: "we should keep mail on the phone, and we should keep everything on the phone as much as we
 // can. It's mostly just text, so we want to basically have the full content on the phone." Every text the phone is shown or can fetch is kept
-// here in full and indexed from here: retrieval (SavedCorpus), offline pages (ReaderStore) and "play that" read the same rows.
+// here in full and indexed from here: retrieval (SavedCorpus) and "play that" read the same rows.
 //
 // STORAGE: one file per item (`items/<kind>/<hash>.json`) plus `manifest.json` (metadata, sync checkpoints, last-synced times). Files, not
 // SQLite: the Kit has no SQLite today and a new binding is a new dependency (the system library would need a wrapper written and, in the Exact
@@ -319,16 +319,5 @@ public final class ContentStore: @unchecked Sendable {
         let s = clock().timeIntervalSince(d)
         let when = s < 90 ? "just now" : s < 5400 ? "\(Int(s / 60)) minutes ago" : s < 129_600 ? "\(Int((s / 3600).rounded())) hours ago" : "\(Int((s / 86400).rounded())) days ago"
         return "last synced \(when)"
-    }
-
-    /// A story or document as a reader page, from the store, with no network. Nil when it is not held.
-    public func readerDoc(address: String) -> ReaderDoc? {
-        guard let it = item(address: address), it.kind == .story || it.kind == .document else { return nil }
-        let paras = it.text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        let blocks = paras.enumerated().map { i, p in ReaderBlock(id: "s\(i)", kind: "p", runs: [ReaderRun(id: "s\(i)r", text: p)], text: p, ordinal: i, sentences: 1) }
-        let note = "Saved on this phone" + (syncedWords(it.kind).map { ", " + $0 } ?? "")
-        var d = ReaderDoc(address: address, status: "ready", title: it.title, meta: note, kind: it.kind == .story ? "story" : "document", blocks: blocks, plain: it.text, textBlocks: blocks.count)
-        d.source = it.kind == .document ? it.text : ""
-        return d
     }
 }

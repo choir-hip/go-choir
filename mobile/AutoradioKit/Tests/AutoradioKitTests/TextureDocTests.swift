@@ -202,18 +202,6 @@ final class TextureDocTests: XCTestCase {
         XCTAssertEqual(old.revision, 1); XCTAssertTrue(old.newer); XCTAssertTrue(old.historical)
     }
 
-    // 6 (source): read-along locates by text, not by the radio's chunking
-    func testFollowLocatesByText() {
-        let body = bodyDoc(#"{"type":"paragraph","content":[{"type":"text","text":"The first sentence is here. The second sentence follows it."}]},{"type":"paragraph","content":[{"type":"text","text":"A later paragraph about batteries."}]}"#)
-        let d = TextureDocParser.parseBundle(bundle(body: body), address: "pub:x")
-        let hit = ReaderFollow.locate(spoken: "The second sentence follows it.", in: d)
-        XCTAssertEqual(hit?.block, d.blocks[0].id); XCTAssertEqual(hit?.sentence, 1)
-        XCTAssertEqual(ReaderFollow.locate(spoken: "later paragraph about", in: d)?.block, d.blocks[1].id)
-        XCTAssertNil(ReaderFollow.locate(spoken: "nothing like this anywhere", in: d))
-        XCTAssertNil(ReaderFollow.locate(spoken: "", in: d))
-        XCTAssertNil(ReaderFollow.locate(spoken: "The", in: nil))
-    }
-
     // 8: a very long document stays linear
     func testLongDocumentIsFast() {
         var paras: [String] = []
