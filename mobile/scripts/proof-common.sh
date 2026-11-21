@@ -51,6 +51,7 @@ blocks_have_text() {
   ' "$1"
 }
 
+DRIVES_FAILED=""
 # run_drive <name> <mode> <onboarding?> <agent flags...>: reset, run the collected steps, retry a refused launch up to 3 times.
 run_drive() {
   name="$1"; mode="$2"; ob="$3"; shift 3
@@ -81,7 +82,12 @@ run_drive() {
   : > "$STEPS"
   cat "$SCRATCH/$name.txt" >> "$OUT"
   cp "$SCRATCH/$name.txt" "$SHOTS/drive-$name.txt" 2>/dev/null
-  [ $rc -eq 0 ] || { grep -v "^warning" "$SCRATCH/$name.txt" | tail -15; fail "drive $name (exit $rc)"; }
+  if [ $rc -ne 0 ]; then
+    grep -v "^warning" "$SCRATCH/$name.txt" | tail -15
+    # PROOF_KEEP_GOING=1: every drive starts a fresh app, so a failed drive is recorded and the next one runs; the end prints every name. Without it the first failure stops the proof.
+    [ "${PROOF_KEEP_GOING:-}" = 1 ] || fail "drive $name (exit $rc)"
+    DRIVES_FAILED="$DRIVES_FAILED $name"; echo "drive $name FAILED (exit $rc)"; return 0
+  fi
   echo "drive $name ok"
 }
 

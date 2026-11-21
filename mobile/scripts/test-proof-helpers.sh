@@ -79,4 +79,6 @@ run() { # <FAILN>
 }
 out=$(run 1); echo "$out" | grep -q '^retry: d drive' && echo "$out" | grep -q 'drive d ok' && [ "$(wc -l < "$T/shots/retries.txt")" -eq 1 ] && ok "one timeout: the drive is run again, logged, and passes" || no "one timeout: $out"
 out=$(run 2); echo "$out" | grep -q 'FAILED drive d' && ok "two timeouts: the drive fails" || no "two timeouts: $out"
+# PROOF_KEEP_GOING=1: a failed drive is recorded and the next one runs; without it the proof stops at the first
+out=$(PROOF_KEEP_GOING=1 run 2); echo "$out" | grep -q 'drive d FAILED' && ! echo "$out" | grep -q '^FAILED' && ok "keep going: a failed drive is named and the proof goes on" || no "keep going: $out"
 [ "$fails" -eq 0 ] && echo "all ok" || { echo "$fails failed"; exit 1; }
