@@ -47,3 +47,24 @@ cheap to run before a landing.
   remember them. Not done in this session.
 - I have not listed the other tree-scanning tests; there may be more than the
   three named here.
+
+## A second red landing of the same kind (2026-11-21T02:02Z)
+
+`d8367e2c8` (the open decision's page) landed red at 01:39Z and was repaired
+by `2b862a00e` at 02:01Z; nothing deployed from the red commit (the deploy
+job was skipped). `internal/yaegikernel`'s
+`TestManagementTaskPromptTeachesOnlyTaskVerbs` reads the task prompt overlay
+from disk and requires it to name `choir.Records`; the change's rewrite of
+that paragraph dropped the name. The builder ran the whole suites of
+`internal/agentcore` and `internal/runtimeprompts` and their importers, as
+the contract asks. `yaegikernel` imports neither: it reads the file by path.
+Two review rounds did not run that package either.
+
+Belief. This is the first record's cause again: a test tied to a file by
+path, not by import, is outside "every touched package and its importers".
+The first record's remedy named two checks; it should have named the class.
+
+Remedy taken now: before a landing, `grep -rl <basename>` over `*_test.go`
+for every non-Go file the diff touches (prompt overlays, YAML, JSON, scripts),
+and run the packages found. Remaining error: this is a habit, not a gate;
+`scripts/land` should do it.
