@@ -258,6 +258,9 @@ func (s *ChoirScope) BindCell() CellHooks {
 			}
 			// The pages the paper held for the run are its search zero.
 			s.searches.seedHeld(frame.RunID, frame.Held)
+			if frame.RunID != "" {
+				s.searches.setTree(frame.Tree)
+			}
 			s.tray.Store(&Tray{})
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc

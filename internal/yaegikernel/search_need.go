@@ -49,6 +49,18 @@ type allCounts struct {
 	calls, offered, sent, freshSent, untagged, running int
 }
 
+// TreeState is the host's view of a research tree's reading (SessionFrame.Tree):
+// Tried is the PageKey of every page any session of the tree has tried to read
+// (attempted, whether or not it loaded); Window is the first pages new to the
+// tree that each search of the tree returned, in order.
+type TreeState struct {
+	Tried  []string   `json:"tried,omitempty"`
+	Window []HeldPage `json:"window,omitempty"`
+}
+
+// PageKey is the key two URLs of one page share (the host's tree state uses it).
+func PageKey(raw string) string { return searchHitKey(raw) }
+
 // HeldPage is a page the paper already held for the run when it began: a
 // capture of the corpus brief. The host hands them over with the run's cells
 // (SessionFrame.Held); they are search zero.
@@ -172,7 +184,45 @@ func (st *SearchStore) windowLocked(read map[string]bool) []windowHit {
 			out = append(out, windowHit{h, false})
 		}
 	}
+	// The pages other sessions of the research tree were returned.
+	for _, p := range st.tree.Window {
+		out = append(out, windowHit{SearchHit{Title: p.Title, URL: p.URL}, false})
+	}
 	return out
+}
+
+// setTree installs the host's view of the research tree for this cell.
+func (st *SearchStore) setTree(t *TreeState) {
+	if st == nil {
+		return
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.tree = TreeState{}
+	st.treeTried = nil
+	if t == nil {
+		return
+	}
+	st.tree = *t
+	st.treeTried = make(map[string]bool, len(t.Tried))
+	for _, k := range t.Tried {
+		st.treeTried[k] = true
+	}
+}
+
+// triedAll is the pages this session tried and the pages any session of the
+// research tree tried. The caller holds st.mu.
+func (st *SearchStore) triedAll() map[string]bool {
+	tried := map[string]bool{}
+	if st.triedKeys != nil {
+		for k := range st.triedKeys() {
+			tried[k] = true
+		}
+	}
+	for k := range st.treeTried {
+		tried[k] = true
+	}
+	return tried
 }
 
 // readNeed is what the run holds and has not tried: the first readFirstPages
@@ -190,10 +240,7 @@ func (st *SearchStore) readNeed() readNeed {
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	var tried map[string]bool
-	if st.triedKeys != nil {
-		tried = st.triedKeys()
-	}
+	tried := st.triedAll()
 	seen := map[string]bool{}
 	var zero, rest []SearchHit
 	for _, w := range st.windowLocked(st.readSet()) {
@@ -223,10 +270,7 @@ func (st *SearchStore) untriedOfOutlet(match func(pageURL string) bool) []Search
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	var tried map[string]bool
-	if st.triedKeys != nil {
-		tried = st.triedKeys()
-	}
+	tried := st.triedAll()
 	seen := map[string]bool{}
 	var out []SearchHit
 	for _, w := range st.windowLocked(st.readSet()) {
@@ -284,10 +328,7 @@ func (st *SearchStore) needState() needState {
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	var tried map[string]bool
-	if st.triedKeys != nil {
-		tried = st.triedKeys()
-	}
+	tried := st.triedAll()
 	read := st.readSet()
 	outlets := map[string]bool{}
 	for key := range read {

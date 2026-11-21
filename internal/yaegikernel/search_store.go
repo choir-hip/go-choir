@@ -262,6 +262,10 @@ type SearchStore struct {
 	// heldRun is, per run, the pages the paper held for it when it began: search
 	// zero (seedHeld).
 	heldRun map[string][]HeldPage
+	// tree and treeTried are the host's view of the research tree this cell
+	// belongs to (setTree).
+	tree      TreeState
+	treeTried map[string]bool
 }
 
 func newSearchStore() *SearchStore {
@@ -504,7 +508,8 @@ func copySearch(s *Search) Search {
 }
 
 // searchHitKey is the URL two providers' hits share when they point at the
-// same page: no fragment, a lower-case host, no trailing slash.
+// same page: no fragment, a lower-case host without www., https for http, no
+// trailing slash.
 func searchHitKey(raw string) string {
 	raw = strings.TrimSpace(raw)
 	u, err := url.Parse(raw)
@@ -512,7 +517,12 @@ func searchHitKey(raw string) string {
 		return strings.TrimSuffix(raw, "/")
 	}
 	u.Fragment = ""
-	u.Host = strings.ToLower(u.Host)
+	// One page whatever the scheme or a leading www.: http and https, www. and
+	// the bare host are the same page for the read-first rule.
+	if u.Scheme == "http" {
+		u.Scheme = "https"
+	}
+	u.Host = strings.TrimPrefix(strings.ToLower(u.Host), "www.")
 	return strings.TrimSuffix(u.String(), "/")
 }
 

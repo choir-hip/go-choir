@@ -40,10 +40,11 @@ import time
 PAPER_VM = "vm-1669020adcece51c2f5ff9b6df399ef5"
 NODE = "node-b"
 STAMP = r"(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)"
-GW_RE = re.compile("^" + STAMP + r" gateway: search request from autoputer \S+ \(.*?run=(\S+) desk=research ")
+# desk=research and desk=research_web (a choir.Research child's searches carry the latter)
+GW_RE = re.compile("^" + STAMP + r" gateway: search request from autoputer (\S+) \(.*?run=(\S+) desk=research(?:_web)? ")
 FRESH_RE = re.compile(STAMP + r' runtime: search fresh run=(\S+) why=("(?:[^"\\]|\\.)*")')
 READ_RE = re.compile(STAMP + r" corpus read run=(\S+) ")
-SUM_RE = re.compile(STAMP + r" runtime: search run=(\S+) desk=research (.*)$")
+SUM_RE = re.compile(STAMP + r" runtime: search run=(\S+) desk=research(?:_web)? (.*)$")
 KV_RE = re.compile(r"(\w+)=(\d+)")
 REASONS_RE = re.compile(r"not_sent=\d+ \(([^)]*)\)")
 
@@ -67,10 +68,12 @@ def compute(text, since, until):
             continue
         if sec == "##GW":
             m = GW_RE.search(ln)
-            if m:
+            # only the paper's own computer (other computers' searches are not the
+            # paper's), and a search with no run (run=-) belongs to no run
+            if m and m.group(2) == PAPER_VM and m.group(3) != "-":
                 t = epoch(m.group(1))
                 if t >= since and t < until:
-                    gw.append((t, m.group(2)))
+                    gw.append((t, m.group(3)))
         elif sec == "##READS":
             m = READ_RE.search(ln)
             if m:
@@ -169,21 +172,19 @@ def render(r):
     return "\n".join(o)
 
 
+# One read-only pass over the console files and the gateway journal, through pipes
+# only: nothing is written on Node B. Each kept line leaves with a one-letter tag
+# (R read, S run summary, F SearchFresh reason, G gateway request) that fetch()
+# turns into the sections compute() reads.
 REMOTE = r"""
 dir=/var/lib/go-choir/vm-state/@VM@
 sudo -n true 2>/dev/null || echo "##NOSUDO"
-echo "##READS"
 sudo -n sh -c "cd $dir && for f in console.log.4 console.log.3 console.log.2 console.log.1 console.log; do [ -f \$f ] && cat \$f; done" 2>/dev/null |
-  grep -a -E 'corpus read run=|runtime: search run=|runtime: search fresh run=' | sed -E 's/^.*([0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9:]{8} (corpus read run=[^ ]*|runtime: search run=.*))$/\1/; s/^([0-9\/]+ [0-9:]+ corpus read run=[^ ]*) .*$/\1 /' > /tmp/.ssr.$$
-grep -a ' corpus read run=' /tmp/.ssr.$$
-echo "##SUM"
-grep -a ' runtime: search run=' /tmp/.ssr.$$
-echo "##FRESH"
-grep -a ' runtime: search fresh run=' /tmp/.ssr.$$
-rm -f /tmp/.ssr.$$
-echo "##GW"
+  awk '/ corpus read run=/ {print "R|" $0; next}
+       / runtime: search run=/ {print "S|" $0; next}
+       / runtime: search fresh run=/ {print "F|" $0; next}'
 sudo -n journalctl --no-pager -o cat --utc --since "@DAY@ 00:00:00 UTC" -u go-choir-gateway 2>/dev/null |
-  grep -a 'gateway: search request from autoputer' | sed -E 's/query="([^"\\]|\\.)*"//'
+  grep -a 'gateway: search request from autoputer' | sed -E 's/query="([^"\\]|\\.)*"//; s/^/G|/'
 echo "##END"
 """.replace("@VM@", PAPER_VM)
 
@@ -196,7 +197,11 @@ def fetch(node, since):
         raise RuntimeError("ssh %s failed or replied incompletely (rc=%d)" % (node, p.returncode))
     if "##NOSUDO" in p.stdout:
         raise RuntimeError("sudo -n is not allowed on %s" % node)
-    return "\n".join(ln for ln in p.stdout.splitlines() if ln != "##END" and ln != "##NOSUDO")
+    secs = {"R": [], "S": [], "F": [], "G": []}
+    for ln in p.stdout.splitlines():
+        if len(ln) > 2 and ln[1] == "|" and ln[0] in secs:
+            secs[ln[0]].append(ln[2:])
+    return "\n".join(["##READS"] + secs["R"] + ["##SUM"] + secs["S"] + ["##FRESH"] + secs["F"] + ["##GW"] + secs["G"])
 
 
 def main(argv):

@@ -125,10 +125,7 @@ func (st *SearchStore) mostlySeen(query, qk string, now time.Time) (pages []Sear
 			return nil, false
 		}
 	}
-	var tried map[string]bool
-	if st.triedKeys != nil {
-		tried = st.triedKeys()
-	}
+	tried := st.triedAll()
 	read := st.readSet()
 	var group []int
 	var anchor []string

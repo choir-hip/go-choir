@@ -464,6 +464,21 @@ Built in lane `search-read-first`; the code wins where it differs.
   the proof script counts reasons by distinct text. `choirFunctionDocs` Args keep
   `fresh` because the signature keeps the variadic argument (it is refused with a
   pointer, and the surface test requires docs to equal the source).
+- **The gate is per research tree, not per session (seat 2, H1).** Each
+  `choir.Research` child is a session with its own guest store, but it shares
+  the root's run id. The host (`agentcore/search_decision.go`, `treeRead`) sees
+  every read (before it is served: `Read`, `ReadAll`, `ReadCapture` of a held
+  page by id) and every finished search of the tree, and hands each cell's frame
+  `SessionFrame.Tree`: the pages any session tried, and the first five new pages
+  each search returned. The guest counts a page tried by anyone in the tree as
+  tried, and the pages other sessions were returned are in its window. The
+  brief's pages are seeded once per tree (the brief is the root's). A search of
+  the tree sent while a sibling was mid-cell is judged by the state the cell
+  started with. The run summary line is already per root run (children carry the
+  root's run id). A page is one page whatever its scheme or `www.`.
+- **The decision's `earlier_pages_new`** (renamed from `pages_returned`, which
+  meant the earlier searches' new pages) is not `search_done`'s `pages_returned`
+  (this search's own results).
 - **Deployed proof:** `scripts/status-search-reads --since T`.
 
 ---

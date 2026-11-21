@@ -35,6 +35,12 @@ type SessionFrame struct {
 	// brief's captures): the run's search zero, read before it searches the web
 	// (search_need.go).
 	Held []HeldPage `json:"held,omitempty"`
+	// Tree is what the whole research tree (the root run and every
+	// choir.Research child, which share the run id) has tried and been returned,
+	// kept by the host: a page any session of the tree tried is tried for this
+	// one, and the pages another session's searches returned are in this one's
+	// window (search_need.go).
+	Tree *TreeState `json:"tree,omitempty"`
 
 	// Doc carries the cell-start document snapshot for a texture desk cell
 	// (R3d): the bound doc's current revision id + content, so the cell

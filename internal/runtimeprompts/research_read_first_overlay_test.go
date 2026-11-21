@@ -34,6 +34,13 @@ func TestResearchOverlayHasTheStopRuleAndTheOneWordingWorkedCell(t *testing.T) {
 			t.Errorf("research overlay still says %q", absent)
 		}
 	}
+	// The worked cell reads the first five results as listed and counts outlets by
+	// registrable domain, not by hostname.
+	for _, want := range []string{"s.Results[:min(5, len(s.Results))]", "outlets[outletOf(p.URL)] = true"} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("the worked cell lacks %q", want)
+		}
+	}
 	// The worked cell sends one wording to SearchAll.
 	if n := strings.Count(overlay, "choir.SearchAll("); n != 1 || !strings.Contains(overlay, `[]string{"ministry cabinet changes"})`) {
 		t.Errorf("the worked cell must send one wording to one SearchAll call (found %d calls)", n)

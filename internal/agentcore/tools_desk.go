@@ -696,6 +696,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 								"answered": done.answered, "arrived": done.arrived, "total": done.total,
 								"pages_returned": done.pagesReturned(),
 							}
+							rt.noteTreeSearch(cellExec.RunID, done.urls)
 							if len(done.pending) > 0 {
 								ev["pending"] = done.pending
 							}
@@ -714,6 +715,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 							rt.noteEgressRead(egrCtx, cellExec, action, payload, out)
 						}
 					} else {
+						// A read is an attempt for the whole research tree, recorded
+						// before it is served (search_decision.go).
+						rt.noteTreeRead(cellExec.RunID, action, payload)
 						out, err = rt.deskEgress(egrCtx, deskRole, cellExec, action, payload)
 					}
 					ev := map[string]any{
@@ -801,7 +805,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
-				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration, Held: rt.briefHeldFor(execCtx.RunID),
+				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration, Held: rt.briefHeldFor(execCtx.RunID), Tree: rt.treeStateFor(execCtx.RunID),
 				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining, updatesTooLarge)})
 			// The host consumes only the updates the cell was shown whole.
 			// A cell that failed consumes nothing.

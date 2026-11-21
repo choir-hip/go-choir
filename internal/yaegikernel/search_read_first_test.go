@@ -405,3 +405,58 @@ func TestAFinishedRunsBriefPagesAreNotKept(t *testing.T) {
 		t.Fatalf("heldRun = %v: run-1's pages must be dropped when run-2 begins", st.heldRun)
 	}
 }
+
+// The research tree (seat 2, H1): each choir.Research child is a session of its
+// own, with its own store, so the parent's untried pages and reads were invisible
+// to it. The host hands each cell the tree's state (SessionFrame.Tree).
+func TestAChildIsRefusedForTheParentsUntriedPagesAndASiblingsReadReleasesThem(t *testing.T) {
+	parent := newResearchFixture(t)
+	parent.urlsFor = map[string][]string{"one": pagesN("a", 1, 40)}
+	pcell, _ := searchCell(t, parent)
+	pcell(`choir.Search("one")`)
+	var window []HeldPage
+	for i := 1; i <= 5; i++ {
+		window = append(window, HeldPage{URL: fmt.Sprintf("https://a.example/p%d", i)})
+	}
+	sent := parent.searchCalls.Load()
+	for c := 1; c <= 4; c++ {
+		child := newResearchFixture(t)
+		cc, hooks := child.session(t)
+		hooks.Begin(SessionFrame{RunID: "run-1", Tree: &TreeState{Window: window}})
+		out := cc(`s, _ := choir.Search("child question")
+fmt.Println(s.ID == "", len(s.Results))`)
+		if child.searchCalls.Load() != 0 || !strings.Contains(out.Stdout, "true 5") {
+			t.Fatalf("child %d sent a search with the parent's top pages untried:\n%s", c, out.Stdout)
+		}
+	}
+	if total := sent; total != 1 {
+		t.Fatalf("parent plus four children sent %d searches with nothing read, want 1", total)
+	}
+	// A sibling read them: the host's tried set releases the next cell.
+	var tried []string
+	for _, w := range window {
+		tried = append(tried, PageKey(w.URL))
+	}
+	child := newResearchFixture(t)
+	cc, hooks := child.session(t)
+	hooks.Begin(SessionFrame{RunID: "run-1", Tree: &TreeState{Window: window, Tried: tried}})
+	cc(`choir.Search("child question")`)
+	if child.searchCalls.Load() != 1 {
+		t.Fatalf("pages a sibling tried must release the child's search")
+	}
+}
+
+func TestOnePageWhateverTheSchemeOrWWW(t *testing.T) {
+	if a, b := searchHitKey("http://www.A.example/x/#f"), searchHitKey("https://a.example/x"); a != b {
+		t.Fatalf("keys differ: %q %q", a, b)
+	}
+	f := newResearchFixture(t)
+	f.urlsFor = map[string][]string{"one": {"https://www.a.example/1", "http://a.example/2"}, "two": pagesN("b", 1, 2)}
+	cell, _ := searchCell(t, f)
+	cell(`choir.Search("one")`)
+	cell(`choir.Read("https://a.example/1"); choir.Read("https://www.a.example/2")`)
+	cell(`choir.Search("two")`)
+	if f.searchCalls.Load() != 2 {
+		t.Fatalf("a page read under another scheme or www form must count as tried")
+	}
+}

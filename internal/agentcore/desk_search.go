@@ -103,6 +103,8 @@ type searchDone struct {
 	err      string
 	// providers is each provider that arrived: answered and results returned.
 	providers []types.SearchServedUsage
+	// urls are the pages the search returned, each once, in arrival order.
+	urls []string
 }
 
 // pagesReturned is the results the providers returned, summed (a page two
@@ -214,6 +216,9 @@ func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, s
 			arrival.Results = append(arrival.Results, yaegikernel.SearchHit{Title: r.Title, URL: r.URL, Snippet: strings.TrimSpace(r.Snippet), PublishedAt: r.PublishedAt, Score: r.Score, Provider: r.Provider})
 		}
 		batch.add(a.Results)
+		for _, r := range a.Results {
+			done.urls = append(done.urls, r.URL)
+		}
 		done.arrived++
 		done.providers = append(done.providers, types.SearchServedUsage{Provider: a.Provider, Calls: 1, Answered: boolInt(arrival.Answered()), Results: len(a.Results)})
 		if arrival.Answered() {

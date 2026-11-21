@@ -146,6 +146,9 @@ type Runtime struct {
 	// run's cells so it reads them before it searches the web
 	// (search_decision.go). Forgotten when the run ends.
 	briefHeld sync.Map
+	// treeRead holds each running research tree's reading (run id -> *treeRead,
+	// search_decision.go).
+	treeRead sync.Map
 	// calibrationRunReads holds each running run's calibration read state
 	// (run id -> *calibrationRunReads, calibration_reads.go).
 	calibrationRunReads sync.Map
@@ -771,6 +774,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 			rt.endRunLeases(context.Background(), runID, lease.ReasonRunEnded)
 			rt.logRunSearchSummary(runID)
 			rt.briefHeld.Delete(runID)
+			rt.treeRead.Delete(runID)
 			rt.forgetStoriesShown(runID)
 		})
 		// A closed round with a scorable desk-to-desk Cast is judged

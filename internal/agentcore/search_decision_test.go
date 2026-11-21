@@ -116,10 +116,10 @@ time.Sleep(300 * time.Millisecond)`)
 	// The first search asked with nothing held although it returned 6 pages: a
 	// search never counts its own results. The second asked with the first's 6
 	// pages returned and the 5 read.
-	if d := decisions[0]; decNum(d, "earlier_searches") != 0 || decNum(d, "pages_returned") != 0 || decNum(d, "pages_tried") != 0 || d["search_verb"] != "search" {
+	if d := decisions[0]; decNum(d, "earlier_searches") != 0 || decNum(d, "earlier_pages_new") != 0 || decNum(d, "pages_tried") != 0 || d["search_verb"] != "search" {
 		t.Fatalf("first decision counted something held: %v", d)
 	}
-	if d := decisions[1]; decNum(d, "earlier_searches") != 1 || decNum(d, "pages_returned") != 6 || decNum(d, "pages_tried") != 5 {
+	if d := decisions[1]; decNum(d, "earlier_searches") != 1 || decNum(d, "earlier_pages_new") != 6 || decNum(d, "pages_tried") != 5 {
 		t.Fatalf("second decision: %v", d)
 	}
 	if d := decisions[2]; d["fresh_why"] != "the first answer is about another harbor" || d["search_verb"] != "search_fresh" {
@@ -190,5 +190,41 @@ func TestARunWhoseBriefDeliveredNothingHasNoSearchZero(t *testing.T) {
 	}
 	if rt.briefHeldFor("run-2") != nil || rt.briefHeldFor("") != nil {
 		t.Fatal("another run, or none, got the pages")
+	}
+}
+
+func TestTheTreeKeepsWhatAnySessionTriedAndWasReturned(t *testing.T) {
+	rt := &Runtime{}
+	if rt.treeStateFor("run-1") != nil {
+		t.Fatal("an untouched tree has a state")
+	}
+	var urls []string
+	for i := 1; i <= 8; i++ {
+		urls = append(urls, fmt.Sprintf("https://a.example/p%d", i))
+	}
+	rt.noteTreeSearch("run-1", urls)
+	// A second search of another session returns 3 old and 7 new pages: the
+	// window takes the first five new to the tree.
+	var more []string
+	for i := 6; i <= 15; i++ {
+		more = append(more, fmt.Sprintf("https://a.example/p%d", i))
+	}
+	rt.noteTreeSearch("run-1", more)
+	st := rt.treeStateFor("run-1")
+	if st == nil || len(st.Window) != 10 || st.Window[0].URL != "https://a.example/p1" || st.Window[5].URL != "https://a.example/p9" {
+		t.Fatalf("window = %+v", st)
+	}
+	// Reads of any session: a Read by url, a ReadCapture of a held page by id.
+	rt.noteBriefHeld("run-1", []yaegikernel.HeldPage{{URL: "https://h.example/x", CaptureID: "cap-9"}})
+	rt.noteTreeRead("run-1", yaegikernel.ActionRead, json.RawMessage(`{"url":"http://www.a.example/p1/"}`))
+	rt.noteTreeRead("run-1", yaegikernel.ActionReadCapture, json.RawMessage(`{"capture_id":"cap-9"}`))
+	rt.noteTreeRead("run-1", yaegikernel.ActionReadCapture, json.RawMessage(`{"capture_id":"cap-unknown"}`))
+	st = rt.treeStateFor("run-1")
+	got := strings.Join(st.Tried, " ")
+	if got != "https://a.example/p1 https://h.example/x" {
+		t.Fatalf("tried = %q", got)
+	}
+	if rt.treeStateFor("run-2") != nil || rt.treeStateFor("") != nil {
+		t.Fatal("another run, or none, got the state")
 	}
 }

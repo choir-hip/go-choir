@@ -110,10 +110,10 @@ func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 // again"). Failure list: the prompt does not send the desk to the corpus first
 // and to write each thread as held, stale or missing; still tells it to run
 // searches at once or to cover every open thread in each round with several
-// searches; or does not say that SearchAll sends the next wording only while
-// the question lacks pages to read, nor that a wording left out can be sent
-// alone with fresh (v18: nor that Search and SearchStart pass the same test and
-// return the held pages when they refuse).
+// searches; or does not say that SearchAll sends the first wording and names
+// the rest, that no web search is sent while the top pages of earlier searches
+// and the brief's held pages are untried, or that SearchFresh(query, why) is the
+// one way past (v19, 2026-11-21: this replaced the 15-unread line and `fresh`).
 func TestResearchPromptSearchesForWhatTheRunLacks(t *testing.T) {
 	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
 	if err != nil {

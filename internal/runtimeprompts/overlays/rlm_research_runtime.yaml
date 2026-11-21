@@ -25,20 +25,24 @@ body: |
 
   Worked cell (one wording, read its top five pages as listed, interim packet, stop test; quotes are blocks copied by code):
   ```go
-  hostOf := func(u string) string { return strings.Split(strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://"), "/")[0] }
+  outletOf := func(u string) string { // the registrable domain: www.bbc.com and news.bbc.com are one outlet
+  	parts := strings.Split(strings.Split(strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://"), "/")[0], ".")
+  	if len(parts) > 2 {
+  		parts = parts[len(parts)-2:]
+  	}
+  	return strings.Join(parts, ".")
+  }
   urls := []string{}
   s, err := choir.SearchAll("cabinet changes", []string{"ministry cabinet changes"})
   fmt.Println(s, err)
-  for _, h := range s.Results {
-  	if len(urls) < 5 {
-  		urls = append(urls, h.URL)
-  	}
+  for _, h := range s.Results[:min(5, len(s.Results))] {
+  	urls = append(urls, h.URL)
   }
   sources, outlets := []map[string]any{}, map[string]bool{}
   for i, p := range choir.ReadAll(urls) {
   	fmt.Println(p)
   	if p.Err == "" {
-  		outlets[hostOf(p.URL)] = true
+  		outlets[outletOf(p.URL)] = true
   	}
   	for _, b := range p.Blocks {
   		if p.Err == "" && len(b.Text) > 80 {
