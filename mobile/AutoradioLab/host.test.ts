@@ -34,7 +34,7 @@ describe('hostMode', () => {
   test('H4 the contracts read only "none" as no native (unknown is native)', async () => {
     const spine = await Bun.file(new URL('./spine.contract', import.meta.url)).text();
     expect(spine).toContain('derive noNative = hc.mode == "none"');
-    for (const f of ['members-notebook.contract']) expect(await Bun.file(new URL(`./${f}`, import.meta.url)).text()).toContain('noNative');
+    for (const f of ['radio.contract']) expect(await Bun.file(new URL(`./${f}`, import.meta.url)).text()).toContain('noNative');
     expect(spine).not.toContain('derive pg = pgn.top');          // the SET is never chosen by the native set's content; the native set's top page only tells the host fact that the package answered (hostCaps(pgn.top != ""))
   });
 });
@@ -72,8 +72,8 @@ describe('round 7', () => {
   });
 });
 
-describe('the twins are idle where there is a native package', () => {
-  test('H5 with the flag false (iOS) the notebook twin does not fetch', async () => {
+describe('the notebook page is idle when it is not on top', () => {
+  test('H5 with the page not on top (active false) the notebook source does not fetch', async () => {
     let fetches = 0; globalThis.fetch = (async () => { fetches++; return new Response('{}', { status: 200 }); }) as never;
     const { answer } = await import('./app.ts');
     const storage = { fs: { readFile: async () => { throw new Error('ENOENT'); }, atomicWriteFile: async () => undefined } } as never;

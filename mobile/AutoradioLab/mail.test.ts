@@ -14,7 +14,7 @@ process.env.TZ = 'UTC';   // dates are the listener's wall clock; the tests fix 
 //  C1  reply addressing (Reply-To, outbound, "Re: " once), a refused draft makes no request, the request body, no alias, the approval link, 403 words, send is never called (10, 11).
 //  P1  the phone's copy: sealed files only, no plain word on disk, no key means no file, a bad file is ignored and removed, the oldest go past the limit.
 //  P2  the catch-up: fetches missing bodies, skips held ones, resumes from its cursor, stops at the budget, counts only.   P3  search over the copy.
-//  W1  the old copy: leftover `app:/cache/mail-*.html` are removed at first use; `wipeMail` removes every file and the key; the old Swift store is deleted by ContentStore.swift (its own test).
+//  W1  the old copy: leftover `app:/cache/mail-*.html` are removed at first use; `wipeMail` removes every file and the key; the old Swift store's folder is removed by the native sign-out wipe (AutoradioModule.swift "app-files").
 //  L1  logs carry counts and ids only (14).   A1  the grants match the paths the modules use.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';

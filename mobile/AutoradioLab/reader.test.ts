@@ -179,22 +179,6 @@ describe('actions', () => {
     await R.readerDocShared('texture:d1', 'in', false, done.net);
     expect((await R.readerStop('texture:d1', done.net)).ok).toBe(true);
   });
-  test('R11 Hear it: the story is shown at once; the clips fill in when they arrive; a failing clip route gives none', async () => {
-    const row = { clipID: 'c1', show: 'S', episode: 'E', length: '56 s', quote: 'q', story: 'T', episodeOnly: false };
-    let release: (v: unknown[]) => void = () => undefined;
-    const slow = fake({ clips: () => new Promise<unknown[]>((r) => { release = r; }) as never });
-    const first = await Promise.race([R.readerDocShared('pub:pub/x', 'in', false, slow.net, 0), new Promise<string>((r) => setTimeout(() => r('waited'), 200))]);
-    expect(typeof first).toBe('object'); expect((first as { status: string }).status).toBe('ready'); expect((first as { hearIt: unknown[] }).hearIt).toEqual([]);   // not held up by the clips
-    const heard = R.readerHear('pub:pub/x', slow.net);
-    release([row]);
-    expect((await heard).ok).toBe(true);
-    expect((await R.readerDocShared('pub:pub/x', 'in', false, slow.net, 1)).hearIt).toEqual([row]);
-    expect((await R.readerDocShared('texture:d1', 'in', false, fake().net, 1)).hearIt).toEqual([]);
-    expect((await R.readerHear('texture:d1', slow.net)).ok).toBe(false);
-    const g = fake(); g.net.clips = async () => { throw new Error('down'); };
-    expect((await R.readerHear('pub:pub/y', g.net)).ok).toBe(false);
-    expect((await R.readerDocShared('pub:pub/y', 'in', false, g.net, 1)).hearIt).toEqual([]);
-  });
 });
 
 describe('the voice holds the page in front', () => {

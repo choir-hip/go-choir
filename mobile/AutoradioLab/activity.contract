@@ -2,7 +2,8 @@
 // the desk's decisions, the paper using your work), the radio's own turns, and a "now" line for the radio and the computer. It is
 // GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
 // as a page. testIds: activity-refresh, activity-section-<name>, activity-row-<id>, activity-status, activity-empty.
-use Theme, ThemeExtras, ActivityInfo, ActivityItem from "@choir/autoradio"
+use Theme, ThemeExtras from "@choir/autoradio"
+use ActivityInfo, ActivityItem from "./settings-types.contract"
 use ToolScroll, Card, Btn, PlainList, dyn from "./ui.contract"
 use SectionLabel, Hairline, ScreenTitle from "./settings.contract"
 

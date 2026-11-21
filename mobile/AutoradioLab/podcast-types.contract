@@ -2,7 +2,7 @@
 // app.ts answers them (podcast.ts, clips.ts) and the generated app.contract.d.ts gives those modules their types from these lines. Before the
 // podcasts moved to shared logic they came from the Swift package's interface (interface/podcasts.json and joins.json).
 
-use HearItRow from "@choir/autoradio"   // the reader page carries the same row (interface/reader.json), so the shape stays the package's
+use HearItRow from "@choir/autoradio"   // the row is the one shape both clip pages draw (a show's Clips, a story's Hear it, clips.contract); it is declared in interface/joins.json, not by the reader page
 
 shape PodShowRow
   feedURL: string
@@ -96,6 +96,7 @@ shape PodPlay
   start: number
   clip: string
   feed: string
+  record: string
 
 shape PodAck
   status: string

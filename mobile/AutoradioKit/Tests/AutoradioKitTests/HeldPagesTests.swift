@@ -69,8 +69,5 @@ final class HeldPagesTests: XCTestCase {
     }
     func testH7_TheCorpusBodyHasNoCodeOrEmbeds() {
         XCTAssertEqual(HeldPage.parse(request)?.body, "The first sentence is here. The second sentence follows it.\nA later paragraph about batteries.")
-        let c = SavedCorpus(heldPages: { let h = HeldPages(); h.hold(HeldPage.parse(request)!); return h }())
-        c.refresh()
-        XCTAssertFalse(c.retrieve("batteries").isEmpty)
     }
 }

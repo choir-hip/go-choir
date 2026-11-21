@@ -138,21 +138,11 @@ public final class AutoradioModule: ExactPackage {
         // The spine's objects.
         signals = FileSignals(file: support.appendingPathComponent("signals.jsonl"))
         pages = OpenPages(file: support.appendingPathComponent("open-pages.json"), signals: signals)
-        // The phone's own content store (Kit/ContentStore.swift): one source for the index, the offline pages and "play that".
-        // Nothing here touches the store on the launch path: it opens in a background task, and a store that cannot open leaves the app as it was.
-        ContentSync.enabled = true
-        Task.detached(priority: .utility) {
-            if ContentBoot.start() { ContentSync.shared.audioBusy = { await MainActor.run { Deck.shared.current?.kind == "audio" } } }
-            if ContentStore.shared.usable {                // vectors for the same items: BM25 alone until the model is there and the backlog embedded
-                Task { @MainActor in          // remote audio on air: the player is main-actor state, so its flag is copied across every two seconds
-                    while true { RadioDemand.shared.setRemotePlaying(Deck.shared.current?.kind == "audio" && Deck.shared.why == .playing); try? await Task.sleep(nanoseconds: 2_000_000_000) }
-                }
-                EmbeddingService.shared.attach(corpus: .shared, store: .shared)
-            }
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
-            SavedCorpus.shared.refresh()          // the index warm-up, long after the front page has drawn
+        // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
+        Task { @MainActor in
+            while true { RadioDemand.shared.setRemotePlaying(Deck.shared.current?.kind == "audio" && Deck.shared.why == .playing); try? await Task.sleep(nanoseconds: 2_000_000_000) }
         }
-        // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store, ContentSync.wipeAccount among them); the stores below live in this target.
+        // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store); the stores below live in this target.
         // Kit methods called: Signals.wipe(), OpenPages.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
         let filesCache = filesCacheDisk
         // The folder the old lookup fell back to: copies no page could read. Removed once; nothing writes there now.
@@ -162,14 +152,13 @@ public final class AutoradioModule: ExactPackage {
         choir.accountWipe.register("app-files") {
             AccountWipe.removeFiles(["onboarding.json", "voice-setup.json", "recent-files.json"].map { support.appendingPathComponent($0) })
             AccountWipe.removeContents(of: support.appendingPathComponent("books")); AccountWipe.removeContents(of: filesCache)
+            AccountWipe.removeContents(of: support.appendingPathComponent("content"))      // the pre-release content store's folder (the phone's copy is shared code's app:/data/content.db now): never read, only removed
         }
-        SavedCorpus.shared.setSource("open-pages") { [pages] in RetrievalSources.openPages(pages?.list() ?? []) }
         pages.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["openPages"]) } }
         pageSources.register(NotYetPageSource())
         // Registration: the spine, then one line per lane (each defined in that lane's own file).
         registerSpine()
         registerBar()
-        registerPaper()
         registerReader()
         registerCards()
         registerMail()
@@ -182,8 +171,9 @@ public final class AutoradioModule: ExactPackage {
         registerRadioPage()      // the Autoradio page
         registerTakes()          // takes: record, review, publish (station L7)
         registerNotebook()       // my notebook (station L6)
-        registerBooks()   // lane autoradio-reader
+        registerImported()
         registerTalk()
+        registerRetrieval()     // the voice turn's ask for passages (shared code answers) and the embedding model's ops
         registerTextureEdit()   // your own Texture documents in rich text
         registerPodcasts()      // lane autoradio-podcasts
         registerJoins()         // lane autoradio-joins

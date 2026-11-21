@@ -78,7 +78,76 @@ final class AccountWipeTests: XCTestCase {
         TakeSession.live = nil
     }
 
+    func testEverythingOfTheAccountGoesAndTheNextSignInSendsNone() async throws {
+        let m = Self.marker
+        // The stores, each in its own place under the temporary root.
+        let turns = TurnHistory(); turns.add(listener: m, radio: [m])
+        let cache = NotebookCache(file: root.appendingPathComponent("notebook-cache.md")); cache.set(m)
+        let legacyTopics = root.appendingPathComponent("edition-topics.json"), topicsMarker = root.appendingPathComponent("notebook-topics-written")
+        write("edition-topics.json", "{\"topics\":[\"\(m)\"]}"); write("notebook-topics-written", m)
+        let notebook = NotebookStore()
+        let steerSent = Recorder()
+        let steer = SteerQueue(file: root.appendingPathComponent("steer-queue.json"), send: { _ in .offline })
+        steer.enqueue(SteerTap(id: "s-1", entryID: "e1", direction: "more", stories: [m], title: m, handle: nil, at: "2026-11-18T00:00:00Z"))
+        let own = TakeOwn(file: root.appendingPathComponent("takes-own.json")); own.replace(ids: [m], handle: m)
+        let mutes = TakeMutes(file: root.appendingPathComponent("takes-muted.json")); mutes.replace([m])
+        let takes = TakeStore(); takes.replace([Take.parse(["take_id": m, "publisher": "pub", "state": "live", "transcript": m])!])
+        let tmp = root.appendingPathComponent("tmp"); write("tmp/takes/rec.m4a", m); write("tmp/take-play-\(m).m4a", m)
+        let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
+        let api = FakeAPI()
+        let texture = TextureEditor(api: api, storage: root.appendingPathComponent("texture-pending.json")); texture.retryAfter = 3600
+        await texture.edit(address: "texture:d1", markdown: m); await texture.flush(address: "texture:d1")
+        XCTAssertEqual(texture.pending["d1"], m)
+        let env = ChoirEnvironment(); env.setPlaying(PlayingProgramme(programmeID: "p1", title: m, route: m, publicationVersionID: "v", manifestHash: "h", blocks: [m]))
 
+        // What the second review found: the spoken words and the files of the app target.
+        let mailReading = MailReading(); mailReading.request(address: m, text: m)
+        let conversation = Conversation(); conversation.begin(id: "q1", question: m)
+        let acks = AckHistory(); acks.add(m, page: m)
+        let reader = HeldPages(limit: 4); reader.hold(HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
+        let kept = KeptTurnStore(root: root.appendingPathComponent("turns")); write("turns/t1/record.json", m)
+        write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
+        let signals = FileSignals(file: root.appendingPathComponent("signals.jsonl")); signals.record(SignalEvent(kind: "ask", subject: m, detail: m))
+        let openPages = OpenPages(file: root.appendingPathComponent("open-pages.json")); openPages.open("mailbox:inbox", title: m)
+        EditionPicksMirror.shared.set([m])        // the native copy of the picks (the file is shared code's)
+        write("onboarding.json", m); write("books/b1/text.txt", m); write("cache/files/f1.txt", m)
+
+        let wipe = AccountWipe()
+        wipe.register("signals") { signals.wipe() }
+        wipe.register("open-pages") { openPages.wipe() }
+        let rootRef = root!
+        wipe.register("app-files") {          // as AutoradioModule registers them
+            AccountWipe.removeFiles([rootRef.appendingPathComponent("onboarding.json")])
+            AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
+        }
+        wipe.registerStandard(turnHistory: turns, notebookCache: cache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook, steer: steer,
+                              takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, clips: clips,
+                              texture: texture, environment: env,
+                              mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
+                              deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
+        XCTAssertFalse(markerInFiles().isEmpty, "the test filled the files")
+
+        await wipe.run()
+
+        // (a) no file holds the marker
+        XCTAssertEqual(markerInFiles(), [], "files still holding the account's words")
+        // (b) every in-memory store answers empty
+        XCTAssertTrue(turns.snapshot().isEmpty); XCTAssertNil(cache.text)
+        XCTAssertTrue(steer.taps.isEmpty); XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty); XCTAssertNil(takes.take(m))
+        XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
+        XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
+        XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned); XCTAssertTrue(signals.recent(limit: 10).isEmpty)
+        XCTAssertFalse(openPages.list().contains { $0.title == m }); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertFalse(EditionPicksMirror.shared.known, "and it is forgotten"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
+
+        // (c) the next sign-in: the first request of each kind carries nothing of the old account.
+        let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        XCTAssertFalse(body.contains(m), "turn")
+        XCTAssertNil(EditionText.make(notebook: cache.text, topics: EditionPicksMirror.shared.topics), "programme: edition_text")
+        let sent = steerSent
+        steer.setSender { t in sent.add(t.title); return .sent }
+        await steer.flush(); XCTAssertEqual(sent.all, [], "steer flush")
+        await texture.retryPending(); XCTAssertTrue(api.posts.isEmpty, "texture retry")
+    }
 }
 
 

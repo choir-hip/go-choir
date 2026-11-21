@@ -158,9 +158,6 @@ public struct TextureEditInfo: Codable, Sendable, Equatable {
             guard gen == generation else { s.saving = false; return }          // signed out meanwhile: nothing of it is kept
             s.base = TextureHead(content: draft, body: merged.body, revisionId: r.revisionId, version: r.version)
             pending[doc] = nil; savePending()
-            let heading = draft.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "# ").union(.whitespaces)) }.first { !$0.isEmpty } ?? "Document"
-            ContentStore.shared.put(StoredItem(id: "texture:" + doc, kind: .document, title: String(heading.prefix(120)), text: draft, date: Date(), address: "texture:" + doc,
-                                               source: "Texture", version: "saved-\(r.version)", pinned: true, syncedAt: Date()))      // what the owner wrote is kept and searchable at once
             s.info.status = "saved"; s.info.label = r.version > 0 ? "Saved · version \(r.version)" : "Saved"
         } catch {
             guard gen == generation else { s.saving = false; return }

@@ -9,9 +9,7 @@ use TextureList from "./textures-types.contract"
 members Autoradio
   // The story or document in front, read by shared code on both platforms (reader.ts, reader-parse.ts; any other address answers "loading"). It is asked again when the account state changes (a sign-in from
   // the banner), when the editor saves (the Texture editor says "saved"), after a stop, a restore or a reload (`rack` refreshes it) and every few seconds while the desk is revising it (`rtick`).
-  resource rdoc = readerDocShared(pg.top, acs.state, edInfo.status == "saved", rtick, rhear.ok) as shape ReaderDoc else empty()
-  // "Hear it" is asked for apart from the story (the story shows at once); when the clips arrive this turns true and the story is asked again with them.
-  resource rhear = readerHearShared(pg.top) as shape ReaderAck else empty()
+  resource rdoc = readerDocShared(pg.top, acs.state, edInfo.status == "saved", rtick) as shape ReaderDoc else empty()
   state rtick = 0
   action rbump
     rtick = rtick + 1

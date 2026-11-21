@@ -4,8 +4,8 @@
 // no network. Every file is sealed (mail-seal.ts, the platform's AES-GCM through one native pair; the key is native and never seen here); with no cipher nothing is written, and the mailbox works from memory.
 //
 // Where it lives: app:/data/mail/ (kept by the app, not a cache the system may drop), files `rows-<folder>.bin`, `msg-<hash of the id>.bin`,
-// `state.bin`. The Swift store's own folder (Application Support/Autoradio/content/items/mail) is not reachable from here; ContentStore.swift deletes
-// it at open (the one-time loss the cutover file's D3 accepts: mail is fetched again). Leftovers this module can reach, the old
+// `state.bin`. The Swift store's own folder (Application Support/Autoradio/content/items/mail) is not reachable from here; the native wipe (AutoradioModule.swift,
+// "app-files") removes the whole `content` folder at sign-out (the one-time loss the cutover file's D3 accepts: mail is fetched again). Leftovers this module can reach, the old
 // `app:/cache/mail-*.html` originals, are removed by `forgetOldCopy`.
 //
 // Ways this can fail (tests in mail.test.ts):

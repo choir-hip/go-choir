@@ -64,51 +64,6 @@ final class JoinOpenEpisodeTests: XCTestCase {
 
 }
 
-// MARK: J5 first answers from the Reader's books
-
-final class JoinLibraryTests: XCTestCase {
-    func doc(_ id: String, _ title: String, added: Double) -> ShelfDoc {
-        ShelfDoc(id: id, title: title, author: "", kind: "epub", added: Date(timeIntervalSince1970: added), position: 0, length: 0, sections: 1, fileName: "\(id).epub")
-    }
-    func text(_ paragraphs: [String]) -> DocText {
-        DocText(sections: [DocSection(title: "One", start: 0, count: paragraphs.count)],
-                blocks: paragraphs.map { DocBlock(kind: "paragraph", level: 0, text: $0, marker: "", section: 0) })
-    }
-    let sentence = "The lighthouse keeper climbed the spiral stair every evening to trim the lamp before the fog rolled in from the sea."
-
-    func testJ5_ADocumentBecomesPassagesNamedForTheBook() {
-        let src = LibraryCorpusSource(docs: { [self.doc("a", "The Keeper", added: 2)] }, text: { _ in self.text([self.sentence, self.sentence + " Again."]) })
-        let d = src.documents()
-        XCTAssertEqual(d.count, 1); XCTAssertEqual(d[0].title, "The Keeper"); XCTAssertEqual(d[0].address, "doc:a"); XCTAssertTrue(d[0].id.hasPrefix("book:"))
-        let c = SavedCorpus(heldPages: nil); c.setSource("library") { src.documents() }; c.refresh()
-        let hits = c.retrieve("who climbed the lighthouse stair to trim the lamp").items
-        XCTAssertEqual(hits.first?.title, "The Keeper")
-        XCTAssertEqual(SavedAnswerPrompt.source(hits[0]), "From your book The Keeper")
-    }
-    func testJ5_ABookIsKeptWholeByChapterForRetrievalAndTheOldIndexIsBounded() {
-        let many = (0..<300).map { "Paragraph number \($0) about harbour tides and the long grey winter, told at some length so that it stands alone as a passage of its own in the book. \(String(repeating: "tide ", count: 20))" }
-        let docs = [doc("old", "Old Book", added: 1), doc("new", "New Book", added: 9)]
-        let src = LibraryCorpusSource(docs: { docs }, text: { _ in self.text(many) })
-        let out = src.documents()
-        XCTAssertEqual(out.first?.title, "New Book", "the most recent document comes first")
-        XCTAssertEqual(out.count, 2, "both books are kept: the budget is thousands of passages, not 200")
-        XCTAssertFalse(out[0].parts.isEmpty); XCTAssertTrue(out[0].parts[0].label.hasPrefix("chapter 1"))
-        let c = SavedCorpus(heldPages: nil); c.setSource("library") { out }; c.refresh()
-        XCTAssertGreaterThan(c.retrieval.count, 100, "the retrieval index sees all of it")
-    }
-    func testJ5_AnUnreadableOrEmptyDocumentIsSkippedAndNothingThrows() {
-        let src = LibraryCorpusSource(docs: { [self.doc("a", "A", added: 1), self.doc("b", "B", added: 2)] }, text: { $0 == "a" ? nil : self.text([]) })
-        XCTAssertTrue(src.documents().isEmpty)
-        XCTAssertTrue(LibraryCorpusSource(docs: { [] }, text: { _ in nil }).documents().isEmpty)
-    }
-    func testJ5_TheSameLibraryIsNotReadAgainForEverySearch() {
-        var reads = 0
-        let src = LibraryCorpusSource(docs: { [self.doc("a", "A", added: 1)] }, text: { _ in reads += 1; return self.text([self.sentence]) })
-        _ = src.documents(); _ = src.documents(); _ = src.documents()
-        XCTAssertEqual(reads, 1)
-    }
-}
-
 // MARK: J3 Hear it on the article page, J6 Clips on a show page
 
 @MainActor
@@ -120,34 +75,30 @@ final class JoinHearItTests: XCTestCase {
 
 }
 
-final class JoinShowClipsTests: XCTestCase {
-    func body(_ rows: [[String: Any]]) -> Data { try! JSONSerialization.data(withJSONObject: ["clips": rows]) }
+final class JoinClipRecordTests: XCTestCase {
+    // J6's feed matching, asking and bad bodies are shared code now (clips.test.ts C3, C4, H2); the native store holds what the page hands it.
+    func record(_ rows: [String: Any]) -> String { String(data: try! JSONSerialization.data(withJSONObject: rows), encoding: .utf8)! }
 
-    func testJ6_AShowListsItsOwnClipsMatchedByFeed() {
-        let s = ClipStore()
-        s.merge(PodcastClips.parse(body([clipRow(hex(1), feed: "https://example.test/feed.xml"), clipRow(hex(2), feed: "https://other.test/rss"), clipRow(hex(3), feed: "https://EXAMPLE.test/feed.xml/")])))
-        XCTAssertEqual(s.clips(forFeed: "https://example.test/feed.xml").map(\.clipID), [hex(1), hex(3)])
-        XCTAssertTrue(s.clips(forFeed: "https://none.test/x").isEmpty)
-        XCTAssertNotNil(s.clip(hex(2)), "a merged clip can be played by id")
-    }
-    func testJ6_MergeKeepsWhatTheBulkSetHeld() {
+    func testJ6_AClipHandedOverByThePageCanBePlayedByIdAndIsHeldOnce() {
         let s = ClipStore(); s.replace([clipRow(hex(1))].compactMap(PodcastClip.parse))
-        s.merge(PodcastClips.parse(body([clipRow(hex(2))])))
+        let two = PodcastClip.parse(record: record(clipRow(hex(2))))
+        XCTAssertNotNil(two)
+        s.merge([two!]); s.merge([two!])
         XCTAssertNotNil(s.clip(hex(1))); XCTAssertNotNil(s.clip(hex(2)))
-        s.merge(PodcastClips.parse(body([clipRow(hex(2))])))
-        XCTAssertEqual(s.all.count, 2, "a clip fetched twice is held once")
+        XCTAssertEqual(s.all.count, 2, "a clip handed twice is held once")
     }
-    func testJ6_ABadOrEmptyBodyIsSilentlyNothing() {
-        XCTAssertTrue(PodcastClips.parse(Data("not json".utf8)).isEmpty)
-        XCTAssertTrue(PodcastClips.parse(Data("{}".utf8)).isEmpty)
-        XCTAssertTrue(PodcastClips.parse(body([])).isEmpty)
+    func testJ6_AClipHandedOverReplacesTheRowHeldForItsId() {
+        let old = clipRow(hex(1))                                   // no fingerprint: held as the episode
+        var withPrint = clipRow(hex(1)); withPrint["fingerprint"] = testFingerprintJSON()
+        let s = ClipStore(); s.replace([old].compactMap(PodcastClip.parse))
+        XCTAssertEqual(s.clip(hex(1))?.isRelocatable, false, "held without a usable fingerprint")
+        let fresh = PodcastClip.parse(record: record(withPrint))
+        XCTAssertNotNil(fresh); XCTAssertEqual(fresh?.isRelocatable, true)
+        s.put(fresh!); s.put(fresh!)
+        XCTAssertEqual(s.clip(hex(1))?.isRelocatable, true, "the page's record replaced the stale one")
+        XCTAssertEqual(s.all.count, 1); XCTAssertEqual(s.clips(forRoute: fresh!.route).count, 1)
     }
-    // J6's rows (quote, story, length) are shared code now: clips.test.ts C3.
-    func testJ6_AFeedIsAskedForOnceAWhileNotOnEveryDraw() {
-        let s = ClipStore()
-        XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 0)))
-        s.didAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 0))
-        XCTAssertFalse(s.shouldAsk(feed: "https://example.test/feed.xml/", now: Date(timeIntervalSince1970: 60)))
-        XCTAssertTrue(s.shouldAsk(feed: "https://example.test/feed.xml", now: Date(timeIntervalSince1970: 1000)))
+    func testJ6_ABadRecordIsNoClip() {
+        for r in ["not json", "{}", "[]", "", record(["clip_id": ""])] { XCTAssertNil(PodcastClip.parse(record: r)) }
     }
 }

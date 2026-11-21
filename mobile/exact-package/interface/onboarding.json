@@ -43,123 +43,47 @@
    "editionLines": "string[]",
    "talking": "bool",
    "editing": "bool"
+  },
+  "VoiceSetupFacts": {
+   "rows": "SetupRowView[]",
+   "summary": "string[]",
+   "totalLabel": "string",
+   "device": "string",
+   "onWiFi": "bool",
+   "setupStarted": "bool",
+   "setupFinished": "bool",
+   "mic": "string",
+   "level": "number",
+   "heard": "string",
+   "route": "string",
+   "talking": "bool",
+   "voicePicked": "number",
+   "finishAsked": "number"
   }
  },
  "names": [
   {
-   "source": "onboardingState",
+   "source": "voiceSetupFacts",
    "live": true,
-   "answers": "Onboarding",
+   "answers": "VoiceSetupFacts",
    "substitute": {
     "default": {
-     "step": "welcome",
-     "title": "Make it yours",
-     "message": "",
-     "totalLabel": "",
-     "device": "",
-     "mic": "unasked",
-     "heard": "",
-     "route": "",
-     "editionStatus": "",
-     "writingLine": "",
-     "editionError": "",
-     "editionTitle": "My edition",
-     "editionIntro": "",
-     "editionAddress": "onboarding:edit",
-     "card": "",
-     "cardBody": "",
-     "aim": "",
-     "askMobile": false,
-     "setupFinished": false,
-     "setupStarted": false,
-     "hearingOK": false,
-     "skipped": false,
-     "editionDone": false,
-     "level": 0,
      "rows": [],
      "summary": [],
-     "editionLines": [],
+     "totalLabel": "",
+     "device": "",
+     "onWiFi": true,
+     "setupStarted": false,
+     "setupFinished": false,
+     "mic": "unasked",
+     "level": 0,
+     "heard": "",
+     "route": "",
      "talking": false,
-     "editing": false
+     "voicePicked": 0,
+     "finishAsked": 0
     }
    }
-  },
-  {
-   "send": "onboardingBegin",
-   "options": {
-    "mobile": "string"
-   },
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingRetry",
-   "options": {
-    "stage": "string"
-   },
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingFallback",
-   "options": {
-    "stage": "string"
-   },
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingMic",
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingMicNext",
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingHearing",
-   "options": {
-    "ok": "string"
-   },
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingTopics",
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingTalk",
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingTopicsDone",
-   "answers": "Onboarding",
-   "options": {
-    "topics": "string"
-   }
-  },
-  {
-   "send": "onboardingEditionRetry",
-   "answers": "Onboarding",
-   "options": {
-    "topics": "string"
-   }
-  },
-  {
-   "send": "onboardingEditDone",
-   "answers": "Onboarding",
-   "options": {
-    "topics": "string"
-   }
-  },
-  {
-   "send": "onboardingEditLeave",
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingContinueAnyway",
-   "answers": "Onboarding"
-  },
-  {
-   "send": "onboardingSkip",
-   "answers": "Onboarding"
   }
  ]
 }

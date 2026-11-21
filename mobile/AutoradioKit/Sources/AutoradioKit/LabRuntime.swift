@@ -107,7 +107,7 @@ public final class LabRuntime: @unchecked Sendable {
         snap.configName = cfg.name
         // Model loads show in the trace; the one store is shared with voice setup.
         Task { await ModelStore.shared.attach(log: log) }
-        // What the vector job waits for (EmbeddingService): speech on air, a voice line, or speech being made. Speech always wins the processor.
+        // What the vector job waits for (EmbedDevice.state, read by shared code): speech on air, a voice line, or speech being made. Speech always wins the processor.
         RadioDemand.shared.add { [audio, player] in audio.voiceIsSpeaking || audio.programmeAudible || player.synthesisBusy }
         player.onChange = { [weak self] in self?.refresh() }
         // Play asks for the session first when the engine is down or the claim is doubted (after the background, an interruption).
@@ -367,7 +367,7 @@ public final class LabRuntime: @unchecked Sendable {
         let snapAudio = recorder.snapshot(from: t0, to: t1)
         lock.lock(); records[rec.id] = rec; lastID = rec.id; lock.unlock()
         let pos = ProgramPosition(programmeID: player.document.id, blockIndex: player.blockIndex, context: "")
-        let ctx = TurnContextFile(position: pos, configuration: rec.configuration, retrieval: RetrievalLog.shared.last)
+        let ctx = TurnContextFile(position: pos, configuration: rec.configuration, retrieval: RetrievalBridge.shared.lastRecord)
         _ = try? store.save(record: rec, mic: snapAudio.mic, reference: snapAudio.reference, context: ctx)
         refresh()
     }

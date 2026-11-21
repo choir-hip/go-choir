@@ -27,6 +27,11 @@ public struct PodcastClip: Sendable, Equatable {
     /// The audio signature the phone finds the clip by (docs/reference/PODCAST-CLIP-FINGERPRINT.md); nil on an old record.
     public var fingerprint: ClipFingerprintRecord? = nil
 
+    /// The clip a shared page handed over: the server's row as JSON. nil when it is not one.
+    public static func parse(record: String) -> PodcastClip? {
+        (try? JSONSerialization.jsonObject(with: Data(record.utf8))).flatMap { $0 as? [String: Any] }.flatMap { parse($0) }
+    }
+
     /// The phone can find this clip in a served file: it has both fingerprints and the file is seekable by bitrate. A clip that is not
     /// relocatable is never played as a clip (its row offers the episode).
     public var isRelocatable: Bool { fingerprint?.isUsable ?? false }
@@ -135,19 +140,13 @@ public final class ClipStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         for c in clips where byID[c.clipID] == nil { byID[c.clipID] = c; byRoute[c.route, default: []].append(c) }
     }
-    /// The clips cut from this show's episodes (the feed address compared without case or a trailing slash).
-    public func clips(forFeed feed: String) -> [PodcastClip] {
-        let k = PodcastKey.feed(feed)
+    /// The page handed this clip's own record (the newest the phone has of it): it REPLACES the row held for the id, so a record the radio's fetch kept without a usable fingerprint
+    /// plays as the clip the row offered, and one held once stays held once.
+    public func put(_ clip: PodcastClip) {
         lock.lock(); defer { lock.unlock() }
-        return byID.values.filter { $0.feedURL.map { PodcastKey.feed($0.absoluteString) == k } ?? false }.sorted { $0.clipID < $1.clipID }
+        if let old = byID[clip.clipID] { byRoute[old.route]?.removeAll { $0.clipID == clip.clipID } }
+        byID[clip.clipID] = clip; byRoute[clip.route, default: []].append(clip)
     }
-    private var asked: [String: Date] = [:]
-    /// A show's clips are asked for at most every `every` seconds (and not again at once after a failure).
-    public func shouldAsk(feed: String, now: Date = Date(), every: TimeInterval = 900) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        return asked[PodcastKey.feed(feed)].map { now.timeIntervalSince($0) >= every } ?? true
-    }
-    public func didAsk(feed: String, now: Date = Date()) { lock.lock(); asked[PodcastKey.feed(feed)] = now; lock.unlock() }
     public var all: [PodcastClip] { lock.lock(); defer { lock.unlock() }; return byID.values.sorted { $0.clipID < $1.clipID } }
     /// The front was refreshed: the next stretch asks again.
     public func markStale() { lock.lock(); stale = true; lock.unlock() }
@@ -211,24 +210,6 @@ public enum PodcastClips {
             let o = try r.object()
             return (((o["clips"] as? [[String: Any]]) ?? []).compactMap(PodcastClip.parse), false)
         } catch { return ([], true) }
-    }
-
-    /// The clips of a response body (the same rows the bulk request returns). A bad body is nothing.
-    public static func parse(_ data: Data) -> [PodcastClip] {
-        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [] }
-        return ((o["clips"] as? [[String: Any]]) ?? []).compactMap(PodcastClip.parse)
-    }
-
-    /// One show's clips (`?feed=`): merged into the store; true when the store changed. A 404 (the route is not there yet), a failure or an
-    /// empty answer changes nothing and says nothing.
-    @discardableResult
-    public static func ensure(client: ChoirClient, feed: String, store: ClipStore = .shared, force: Bool = false) async -> Bool {
-        guard force || store.shouldAsk(feed: feed) else { return false }
-        store.didAsk(feed: feed)
-        guard let r = try? await client.send("GET", path, query: ["feed": feed, "limit": "50"], authenticated: false, route: path) else { return false }
-        let before = store.clips(forFeed: feed).count
-        store.merge(parse(r.data))
-        return store.clips(forFeed: feed).count != before
     }
 
     /// One request per front refresh: skipped while the set is fresh.

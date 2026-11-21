@@ -1,7 +1,10 @@
-// My notebook (station L6; docs/design/autoradio-learned-document-2026-11-17.md section 7). One source, `notebookPage`, and one send, `notebookAct`,
-// declared in interface/notebook.json. The model is the Kit's (Notebook.swift); this file registers the page and carries the gestures.
-//   notebookAct op  refresh | select (arg: a line id; the same again clears it)
-// The document itself is a Texture: "Edit" opens it in the Texture reader, which edits it (the page only reads it).
+// My notebook (station L6). The page, the scorecard and the learning route are shared code (AutoradioLab/notebook.ts, notebook-run.ts); no source or send of this package remains.
+// What is left is registration and one narrow call from shared code, `notebookOp`, reached through the app module (AutoradioLab/modules/apple/ModelsEntry.swift):
+//   notebookState  -> {steerQueued}   REASON: the more / less taps are queued by the Swift cards and sent by the Swift steer queue; also writes the listener's topics into the notebook
+//                                     (a Texture canonical write through the Swift TextureEditor: red, native until that editor moves).
+//   notebookText   (text)             REASON: the DJ's request is built natively (RadioProgramme.swift) and cannot read the shared `app:/data`; the notebook text just read is kept for it.
+//   contentBusy    -> {busy}          REASON: remote audio on air is player state; the content sync (AutoradioLab/content-run.ts) does not take the network from it.
+// The document itself is a Texture: "Edit" opens it in the Texture reader, which edits it.
 import Foundation
 
 struct NotebookPageSource: PageSource {
@@ -13,23 +16,22 @@ extension AutoradioModule {
     func registerNotebook() {
         pageSources.register(NotebookPageSource())
         SteerQueue.shared.setSender { tap in await SteerClient(client: ChoirEnvironment.shared.client()).send(tap) }
-        SteerQueue.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["notebookPage"], now: true) } }
-        Task { @MainActor [weak self] in
-            NotebookStore.shared.onChange = { self?.touch(["notebookPage"], now: true) }
-            await SteerQueue.shared.flush()                    // the taps an earlier launch kept
-        }
-        handle("notebookPage") { [unowned self] _, reply in reply(json(onMainThread { NotebookStore.shared.refreshIfStale(); return NotebookStore.shared.info() })) }
-        handle("notebookAct") { [unowned self] args, reply in
-            let op = args["op"] as? String ?? "", arg = args["arg"] as? String ?? ""
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                switch op {
-                case "refresh": await NotebookStore.shared.refresh()
-                case "select": NotebookStore.shared.select(arg)
-                default: break
-                }
-                reply(self.json(NotebookStore.shared.info()))
-            }
+        Task { @MainActor in await SteerQueue.shared.flush() }                    // the taps an earlier launch kept
+    }
+
+    @MainActor public func notebookOp(_ r: [String: Any]) async -> [String: Any] {
+        switch r["op"] as? String ?? "" {
+        case "notebookState":
+            await NotebookStore.shared.writePendingTopics()
+            await SteerQueue.shared.flush()
+            return ["steerQueued": SteerQueue.shared.taps.count]
+        case "notebookText":
+            if let t = r["text"] as? String { NotebookCache.shared.set(t) }
+            return [:]
+        case "contentBusy":
+            return ["busy": await MainActor.run { Deck.shared.current?.kind == "audio" }]
+        default:
+            return [:]
         }
     }
 }

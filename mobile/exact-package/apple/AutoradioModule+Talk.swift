@@ -17,7 +17,6 @@ extension AutoradioModule {
         hooks.snapshot = { RadioBridge.shared.snapshot }                                                                   // the wire's `queue`, as shared code last made it (voice-queue.ts)
         hooks.applyServerOps = { json in RadioBridge.shared.send("turnOps", ["json": String(data: json, encoding: .utf8) ?? ""]) }   // the `queue_ops` event, whole, to shared code: it applies it (dedupe by turn, the sheet's rules)
         QueueVoice.hooks = hooks
-        SavedCorpus.shared.installRunSheet()
 
         // The reader's voice (lane autoradio-talk): the Core ML model is fetched quietly (about 8 MB) and, once loaded, the gate listens.
         // Learned from what the reader says to the radio; stored on this phone only (SpeakerStore); never uploaded.

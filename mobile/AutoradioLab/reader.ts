@@ -6,7 +6,6 @@
 // document and an answer that began under an older generation is never held. A story and a revision never change, so they are held; a document's head changes (an edit, the desk's revision),
 // so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
 import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
-import { storyClips } from './clips.ts';
 import { blankDoc, parseAddress, parseBundle, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
 
@@ -15,9 +14,8 @@ export type Ack = { ok: boolean };
 export type Net = {
   pub(path: string, query?: Query): Promise<Reply>;
   authed(path: string, opts?: Authed): Promise<Reply>;
-  clips(address: string): Promise<ReaderDoc['hearIt']>;
 };
-const real: Net = { pub: (p, q) => getJSON(p, q), authed: (p, o) => authedJSON(p, o), clips: (a) => storyClips(a) };
+const real: Net = { pub: (p, q) => getJSON(p, q), authed: (p, o) => authedJSON(p, o) };
 
 /** How many documents the session holds; the least recently used goes first. A story is a few tens of kilobytes decoded. */
 export const HELD_LIMIT = 40;
@@ -25,15 +23,13 @@ const obj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 let held = new Map<string, ReaderDoc>();
-/** The clips found for a story, by address, for this account generation. */
-let clipRows = new Map<string, ReaderDoc['hearIt']>();
 let inflight = new Map<string, Promise<ReaderDoc>>();
 let heldGen = -1;
-export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); clipRows = new Map(); heldGen = -1; }
+export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); heldGen = -1; }
 export const heldCount = (): number => held.size;
 function current(): number {
   const g = accountGeneration();
-  if (g !== heldGen) { held = new Map(); inflight = new Map(); clipRows = new Map(); heldGen = g; }
+  if (g !== heldGen) { held = new Map(); inflight = new Map(); heldGen = g; }
   return g;
 }
 function put(d: ReaderDoc): void {
@@ -62,7 +58,7 @@ async function fetchDoc(address: string, net: Net): Promise<ReaderDoc> {
     const body = (await net.pub('/api/platform/publications/resolve', { route: a.route })).body;
     if (!obj(body)) throw new Error('the computer sent a story that is not a story');
     const d = parseBundle(body, address);
-    d.related = await related;                                  // "Hear it" is not waited for: readerHear fills it in when the clips arrive (a slow clip route must not hold the story)
+    d.related = await related;                                  // "Hear it" is the page's own source (clips.ts storyClips): a slow clip route does not hold the story
     console.log(`reader: story blocks=${d.blocks.length} cites=${d.cites.length} related=${d.related.length}`);
     return d;
   }
@@ -132,28 +128,14 @@ function hand(d: ReaderDoc, gen: number): void {
 }
 
 /** The source behind the reader page. `accState` and `saved` are only there to ask again: a sign-in from the banner, and the editor's save. */
-export async function readerDocShared(address: string, _accState: string, _saved: boolean, net: Net = real, _heard = 0): Promise<ReaderDoc> {
+export async function readerDocShared(address: string, _accState: string, _saved: boolean, net: Net = real): Promise<ReaderDoc> {
   const gen = accountGeneration();
-  let d = await ask(address, net);
-  const rows = clipRows.get(address);
-  if (rows && d.status === 'ready' && d.hearIt !== rows) d = { ...d, hearIt: rows };
+  const d = await ask(address, net);
   hand(d, gen);
   return d;
 }
 
 const ack = (ok: boolean): Ack => ({ ok });
-
-/** "Hear it" for the story in front: the clips cut for it, asked for apart from the story (the first ask is the session's bulk clip set, up to the 15 s deadline). The page asks the story again when this
- * answers true, and then shows them. A story with none, another page, or a failing clip route answers false. */
-export async function readerHear(address: string, net: Net = real): Promise<Ack> {
-  const gen = current();
-  if (parseAddress(address).kind !== 'pub') return ack(false);
-  let rows: ReaderDoc['hearIt'] = [];
-  try { rows = await net.clips(address); } catch { rows = []; }
-  if (gen !== accountGeneration() || rows.length === 0) return ack(false);
-  clipRows.set(address, rows);
-  return ack(true);
-}
 
 /** Forget a document: the next ask reads it again (the page menu's Reload). */
 export async function readerReload(address: string): Promise<Ack> { current(); held.delete(address); return ack(true); }

@@ -1,16 +1,17 @@
-// Lane members file (onboarding): first run. Owned by the onboarding lane. The state is the controller's in the module
-// (AutoradioModule+Onboarding.swift): setup rows, microphone and hearing checks, the edition topics, the edition. The page reads
-// it as one resource, `ob`; every button is a send that answers the same shape.
-use onboardingState, onboardingBegin, onboardingRetry, onboardingFallback, onboardingMic, onboardingMicNext, onboardingHearing from "@choir/autoradio"
-use onboardingTopics, onboardingTalk, onboardingTopicsDone from "@choir/autoradio"
-use onboardingEditionRetry, onboardingEditDone, onboardingEditLeave, onboardingContinueAnyway, onboardingSkip from "@choir/autoradio"
+// Lane members file (onboarding): first run. The step machine and the page's model are shared code (onboarding.ts); what only native code can say (the voice models and their
+// download, the microphone and its live check, the sentence at the hearing check, the voice at the topic screen) is one native source, `voiceSetupFacts`, and a few narrow native
+// calls that onboarding.ts makes itself. The page reads `ob`; every button is one send (`onboardingAct`) that answers the same shape and asks `ob` again.
+use voiceSetupFacts from "@choir/autoradio"
+use VoiceSetupFacts from "@choir/autoradio"
 use pageOpen, pageClose from "@choir/autoradio"
 use Onboarding from "@choir/autoradio"
 use EditionPage from "./edition-types.contract"
 
 members Autoradio
-  resource ob = onboardingState() as shape Onboarding else empty()
-  mutation obm as shape Onboarding
+  // The native facts (their change asks `ob` again) and the page. The edit page (`onboarding:edit`) being on top is what makes the page "editing".
+  resource ovoice = voiceSetupFacts() as shape VoiceSetupFacts else empty()
+  resource ob = onboardingPage(ovoice, 0, pg.top) as shape Onboarding else empty()
+  mutation obm as shape Onboarding refreshes ob
   // The edition picks and the topic tree are shared code (edition-picks.ts), the one reader and writer of the saved topics. Every pick send repaints the tree and the paper's picks.
   // While the voice listens at this screen (and the page is on top) the page asks again twice a second: that ask takes the words the voice heard, applies them and answers the voice (edition-picks.ts drainHeard).
   state epTick = 0
@@ -24,23 +25,23 @@ members Autoradio
   state obTopicText = ""
 
   action obBegin
-    send obm = onboardingBegin(mobile="false")
+    send obm = onboardingAct("begin", "false", "", pg.top)
   action obBeginMobile
-    send obm = onboardingBegin(mobile="true")
+    send obm = onboardingAct("begin", "true", "", pg.top)
   action obRetry(stage: string)
-    send obm = onboardingRetry(stage=stage)
+    send obm = onboardingAct("retry", stage, "", pg.top)
   action obFallback(stage: string)
-    send obm = onboardingFallback(stage=stage)
+    send obm = onboardingAct("fallback", stage, "", pg.top)
   action obMic
-    send obm = onboardingMic()
+    send obm = onboardingAct("mic", "", "", pg.top)
   action obMicNext
-    send obm = onboardingMicNext()
+    send obm = onboardingAct("micNext", "", "", pg.top)
   action obHearingYes
-    send obm = onboardingHearing(ok="true")
+    send obm = onboardingAct("hearing", "true", "", pg.top)
   action obHearingNo
-    send obm = onboardingHearing(ok="false")
+    send obm = onboardingAct("hearing", "false", "", pg.top)
   action obTopics
-    send obm = onboardingTopics()
+    send obm = onboardingAct("topics", "", "", pg.top)
   action obToggleTopic(label: string)
     send epm = editionToggle(label)
   action obExpandTopic(label: string)
@@ -51,22 +52,22 @@ members Autoradio
     send epm = editionAdd(obTopicText)
     obTopicText = ""
   action obTalk
-    send obm = onboardingTalk()
+    send obm = onboardingAct("talk", "", "", pg.top)
   action obTopicsDone
     if ep.loaded
-      send obm = onboardingTopicsDone(topics=ep.picks)
+      send obm = onboardingAct("topicsDone", "", ep.picks, pg.top)
   action obEditionRetry
     if ep.loaded
-      send obm = onboardingEditionRetry(topics=ep.picks)
+      send obm = onboardingAct("editionRetry", "", ep.picks, pg.top)
   action obEditDone
     if ep.loaded
-      send obm = onboardingEditDone(topics=ep.picks)
+      send obm = onboardingAct("editDone", "", ep.picks, pg.top)
   action obEditLeave
-    send obm = onboardingEditLeave()
+    send obm = onboardingAct("editLeave", "", "", pg.top)
   action obContinueAnyway
-    send obm = onboardingContinueAnyway()
+    send obm = onboardingAct("continueAnyway", "", "", pg.top)
   action obSkip
-    send obm = onboardingSkip()
+    send obm = onboardingAct("skip", "", "", pg.top)
     send pm = pageClose(address="onboarding:setup")
     send pms = pagesClose("onboarding:setup")
   // The edition is a Texture page: open it (the reader draws it).
@@ -80,3 +81,14 @@ members Autoradio
     send pms = pagesOpen("paper:front", "Paper")
     send racct = radioStart()
     layer = ""
+
+  // A fresh install, signed in: the computer is asked whether the listener already has an edition; if not, the first run is offered once as the open page.
+  action obOffer
+    send obm = onboardingAct("offer", "", "", pg.top)
+  task obOfferTask when au.signedIn key=au.signedIn
+    after(10, obOffer)
+  // The voice said "continue" or "done" at the topic screen (a native fact that counts): the same as the Continue button.
+  action obFinishAsked
+    send obm = onboardingAct("finishAsked", "", ep.picks, pg.top)
+  task obFinishTask when ovoice.finishAsked > 0 and pg.top.startsWith("onboarding:") key=ovoice.finishAsked
+    after(1, obFinishAsked)

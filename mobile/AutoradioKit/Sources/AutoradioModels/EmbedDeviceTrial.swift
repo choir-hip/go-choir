@@ -110,63 +110,21 @@ public enum EmbedDeviceTrial {
         a.smokePass = a.dimension == 768 && abs(dot(v[0], v[0]) - 1) < 1e-3 && a.cosParaphrase > a.cosUnrelated
         a.rawNormMin = Double(e.rawNormRange.min); a.rawNormMax = Double(e.rawNormRange.max)
         log("smoke dim \(a.dimension), paraphrase \(String(format: "%.3f", a.cosParaphrase)) vs unrelated \(String(format: "%.3f", a.cosUnrelated)) \(a.smokePass ? "PASS" : "FAIL")")
-        // batch: the fixture stories, through the same job the app runs (one passage at a time, as the app's embedder is called)
+        // batch: the fixture stories, one passage at a time, as the app's embedder is called. (Retrieval quality and the vector scan are measured in
+        // AutoradioLab/retrieval-run.test.ts and search.test.ts now: the index, the vectors and the job are shared code.)
         let rows = EmbedTrialFixture.rows
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("embed-trial-\(UUID().uuidString)")
-        let store = VectorStore(directory: dir, engine: e.engine, dimension: 768)
-        let s256 = VectorStore(directory: dir.appendingPathComponent("256"), engine: e.engine, dimension: 256)      // the Matryoshka copy
         var tokens = 0
         let b0 = nowMs()
-        for r in rows {
-            let r1 = try e.embedOne(EmbedPrompt.document(title: r.title, text: r.body))
-            tokens += r1.tokens; store.upsert(id: r.id, key: r.id, vector: r1.vec); s256.upsert(id: r.id, key: r.id, vector: r1.vec)
-        }
+        for r in rows { tokens += try e.embedOne(EmbedPrompt.document(title: r.title, text: r.body)).tokens }
         let batchMs = nowMs() - b0
         a.passages = rows.count; a.tokens = tokens
         a.passagesPerSecond = Double(rows.count) / (batchMs / 1000); a.tokensPerSecond = Double(tokens) / (batchMs / 1000)
         a.availableMBAfterBatch = availableMB(); a.peakFootprintMB = footprint().peak
-        // queries: latency and retrieval, BM25 alone vs vectors vs fusion over these stories
-        let index = RetrievalIndex()
-        index.upsertAll(rows.map { RetrievalDoc(id: $0.id, kind: "story", title: $0.title, text: $0.body) })
         var qms: [Double] = []
-        var rec = ["bm25": 0.0, "vector768": 0.0, "vector256": 0.0, "fused768": 0.0], mrr = rec
-        func score(_ name: String, _ ranked: [String], _ want: String) {
-            if let i = ranked.firstIndex(of: want) { mrr[name]! += 1 / Double(i + 1); if i < 5 { rec[name]! += 1 } }
-        }
-        for r in rows {
-            let t = nowMs(); let q = try e.embedOne(EmbedPrompt.query(r.question)).vec; qms.append(nowMs() - t)
-            let bm = index.bm25Ranking(r.question, limit: 50).map(\.id)
-            let v768 = store.search(q, k: 50).map(\.id), v256 = s256.search(q, k: 50).map(\.id)
-            score("bm25", bm, r.id); score("vector768", v768, r.id); score("vector256", v256, r.id); score("fused768", RankFusion.rrf([bm, v768]), r.id)
-        }
+        for r in rows { let t = nowMs(); _ = try e.embedOne(EmbedPrompt.query(r.question)); qms.append(nowMs() - t) }
         a.questions = rows.count
-        let n = Double(rows.count)
-        a.recallAt5 = rec.mapValues { $0 / n }; a.mrr = mrr.mapValues { $0 / n }
         a.queryMsP50 = pct(qms, 0.5); a.queryMsP95 = pct(qms, 0.95)
-        log("batch \(rows.count) passages, \(String(format: "%.1f", a.passagesPerSecond))/s, \(Int(a.tokensPerSecond)) tokens/s; query p50 \(Int(a.queryMsP50)) ms; recall@5 bm25 \(a.recallAt5["bm25"]!) vector \(a.recallAt5["vector768"]!) fused \(a.recallAt5["fused768"]!)")
-        // the vector scan at 50,000 random vectors
-        for dim in [768, 256] {
-            let big = VectorStore(directory: dir.appendingPathComponent("big\(dim)"), engine: "random", dimension: dim)
-            for i in 0..<50_000 { big.upsert(id: "r\(i)", key: "", vector: (0..<dim).map { _ in Float.random(in: -1...1) }) }
-            var ts: [Double] = []
-            let q = (0..<dim).map { _ in Float.random(in: -1...1) }
-            _ = big.search(q, k: 50)
-            for _ in 0..<20 { let t = nowMs(); _ = big.search(q, k: 50); ts.append(nowMs() - t) }
-            if dim == 768 { a.scan50kMsP50_768 = pct(ts, 0.5); a.scan50kMsP95_768 = pct(ts, 0.95) } else { a.scan50kMsP50_256 = pct(ts, 0.5) }
-        }
-        log("scan 50k vectors p50 \(String(format: "%.1f", a.scan50kMsP50_768)) ms at 768d, \(String(format: "%.1f", a.scan50kMsP50_256)) ms at 256d")
-        // the job: stop it half way, open the store again, finish
-        let items = rows.map { EmbeddingJob.Item(id: "j-" + $0.id, key: "1", title: $0.title, text: $0.body) }
-        let jdir = dir.appendingPathComponent("job")
-        var budget = EmbeddingJob.Budget(); budget.passagesPerSlice = 2
-        let job = EmbeddingJob(store: VectorStore(directory: jdir, engine: e.engine, dimension: 768), embedder: e, busy: { false }, budget: budget)
-        let t = Task { await job.run(items) }
-        while VectorStore(directory: jdir, engine: e.engine, dimension: 768).count < 6 { try await Task.sleep(for: .milliseconds(100)) }
-        t.cancel(); let first = await t.value
-        let resumed = await EmbeddingJob(store: VectorStore(directory: jdir, engine: e.engine, dimension: 768), embedder: e, busy: { false }).run(items)
-        a.jobResume = "stopped after \(first.embedded), resumed and embedded \(resumed.embedded), skipped \(resumed.skipped), finished \(resumed.finished)"
-        log("job: \(a.jobResume)")
-        try? FileManager.default.removeItem(at: dir)
+        log("batch \(rows.count) passages, \(String(format: "%.1f", a.passagesPerSecond))/s, \(Int(a.tokensPerSecond)) tokens/s; query p50 \(Int(a.queryMsP50)) ms")
         return a
     }
     #endif

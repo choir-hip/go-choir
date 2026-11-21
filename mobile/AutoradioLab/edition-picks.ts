@@ -86,12 +86,17 @@ async function ensure(storage: Storage | undefined, m: Mem): Promise<void> {
     m.loaded = (async () => {
       if (!storage) return;
       let t: string | undefined;
-      try { t = new TextDecoder().decode(await storage.fs.readFile(PICKS_FILE)); } catch { /* none: no picks yet */ }
+      try { t = new TextDecoder().decode(await storage.fs.readFile(PICKS_FILE)); }
+      catch {
+        // Absent is "no picks yet". A file that is THERE but cannot be read is not: fail closed (loaded stays false, nothing is written over it, the next ask reads again).
+        let there = true; try { await storage.fs.stat(PICKS_FILE); } catch { there = false; }
+        if (there) throw new Error('the edition picks could not be read');
+      }
       m.sel = new Selection(parseStored(t));
       m.own = m.sel.topics.filter((x) => !suggestions().some((s) => key(s) === key(x)));
     })();
   }
-  await m.loaded;
+  try { await m.loaded; } catch (e) { m.loaded = null; throw e; }
 }
 
 const run = <T,>(fn: () => Promise<T>): Promise<T> => { const r = tail.then(fn, fn); tail = r.catch(() => undefined); return r; };
@@ -154,7 +159,8 @@ export async function picksText(storage: Storage | undefined, env: Env = liveEnv
 export async function picksPage(storage: Storage | undefined, a: { talking?: boolean } = {}, env: Env = liveEnv(storage)): Promise<PicksPage> {
   if (a.talking) await drainHeard(storage, env);
   const m = await opened(storage, env);
-  m.live = await env.live().catch(() => []);
+  const live = await env.live().catch(() => []);
+  if (m.gen === accountGeneration()) m.live = live;
   return build(m);
 }
 const pageNow = (storage: Storage | undefined, env: Env): Promise<PicksPage> => picksPage(storage, {}, env);
@@ -179,13 +185,9 @@ export async function addTyped(storage: Storage | undefined, text: string, env: 
   });
   return pageNow(storage, env);
 }
-export async function clearPicks(storage: Storage | undefined, env: Env = liveEnv(storage)): Promise<PicksPage> {
-  await mutate(storage, env, (m) => { m.message = ''; m.sel = new Selection(); m.own = []; });
-  return pageNow(storage, env);
-}
 /** What the reader said: the one line to say back and whether they are finished; undefined when the account moved on. */
 export async function hear(storage: Storage | undefined, words: string, env: Env = liveEnv(storage)): Promise<{ line: string; finish: boolean } | undefined> {
-  const r = await mutate(storage, env, (m) => { m.message = ''; const o = m.sel.apply(words, suggestions(m.live)); o.added.forEach((t) => noteOwn(m, t)); return { line: o.reply, finish: o.finish }; });
+  const r = await mutate(storage, env, (m) => { m.message = ''; const o = m.sel.apply(words, suggestions(m.live)); o.added.forEach((t) => noteOwn(m, t)); return { line: o.reply, finish: o.finish }; }).catch(() => undefined);
   return r?.value;
 }
 
@@ -203,15 +205,20 @@ export async function drainHeard(storage: Storage | undefined, env: Env = liveEn
 
 // ---- the sign-out
 
-/** Forget the memory and remove the file; when it cannot be removed, empty it; when it cannot be emptied, say so (account.ts names the store and tries again at the next launch). */
+/** Forget the memory and remove the file; when it cannot be removed, empty it and remove it again; when it still stays, say so (account.ts names the store and tries again at the next launch). */
 export async function wipePicks(storage: Storage | undefined, env: Env = liveEnv(storage)): Promise<void> {
   mem = null;
   const fs = storage?.fs;
   let failed = false;
   if (fs) {
+    const there = async (): Promise<boolean> => { try { await fs.stat(PICKS_FILE); return true; } catch { return false; } };
     try { await fs.rm(PICKS_FILE); } catch { /* checked below */ }
-    let there = true; try { await fs.stat(PICKS_FILE); } catch { there = false; }
-    if (there) { try { await fs.atomicWriteFile(PICKS_FILE, new TextEncoder().encode('{"topics":[]}')); } catch { failed = true; } }
+    if (await there()) {
+      // rm failed: empty it so the next account cannot read the picks, then remove it again; if it still stays, the store is named failed (account.ts keeps its marker and retries)
+      try { await fs.atomicWriteFile(PICKS_FILE, new TextEncoder().encode('{"topics":[]}')); } catch { /* still failed below */ }
+      try { await fs.rm(PICKS_FILE); } catch { /* checked below */ }
+      failed = await there();
+    }
   }
   await pushMirror(env, 0, null, true);          // the native wipe is the other path
   if (failed) throw new Error('the edition picks could not be cleared');

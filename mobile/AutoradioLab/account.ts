@@ -22,19 +22,22 @@ import type { Storage, Store } from './app.contract.d.ts';
 import * as podcast from './podcast.ts';
 import { wipeMail } from './mail.ts';
 import { wipeFiles } from './files.ts';
+import { wipeImported, PLACES_FILE as IMPORTED_PLACES } from './imported.ts';
 import { wipePaper, CACHE_FILE as PAPER_FRONT } from './paper.ts';
 import { wipeKept, KEPT_FILE } from './takes.ts';
 import { wipeNotebook, CACHE_FILE as NOTEBOOK_CACHE } from './notebook.ts';
 import { VECTORS_DIR, wipeLiveVectors } from './search.ts';
 import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
+import { forgetNotebook } from './notebook-run.ts';
 import { resetReaderForTest as forgetReader } from './reader.ts';
 import { wipePages, PAGES_FILE } from './pages.ts';
 import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
 import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
-import { wipePicks, parseStored, PICKS_FILE } from './edition-picks.ts';
+import { wipePicks, PICKS_FILE } from './edition-picks.ts';
+import { wipeOnboarding, PROGRESS_FILE as ONBOARDING_FILE } from './onboarding.ts';
 
 /** Written (a one-word file) BEFORE the native sign-out and removed only after every wipe succeeded. A kill in between leaves it, and the next
  * launch (`settleAccount`) finishes the wipe before any source answers. (Review 2026-11-19, finding 2.) */
@@ -54,10 +57,13 @@ export const WIPES: Wipe[] = [
   { name: 'podcasts', run: (s) => podcast.wipe(s) },
   { name: 'mail', run: (s) => wipeMail(s) },
   { name: 'files', run: (s) => wipeFiles(s) },
+  { name: 'imported-documents', run: (s) => wipeImported(s) },
   { name: 'paper-front', run: (s) => wipePaper(s) },
   { name: 'takes', run: (s) => wipeKept(s) },
   { name: 'notebook', run: (s) => wipeNotebook(s) },
+  { name: 'notebook-page', run: async () => forgetNotebook() },                                                       // the page's memo and the pushed text, in memory only
   { name: 'edition-picks', run: (s) => wipePicks(s) },                                                            // the listener's topics (edition-picks.ts): memory, the file, and the native copy
+  { name: 'onboarding', run: (s) => wipeOnboarding(s) },                                                           // the first run's progress (onboarding.ts): memory, the file, and the voice side
   { name: 'vectors', run: async (s) => { await wipeLiveVectors(s); await rmAll(s, [VECTORS_DIR]); } },       // the live in-memory store first, then the files
   { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
   { name: 'radio', run: (s) => wipeRadio(s as never) },                                                        // the run sheet and the deck (radio-bridge.ts): the sheet's file, its pending ops, what was on air
@@ -71,8 +77,8 @@ export const WIPES: Wipe[] = [
 /** (A function, not a constant: api.ts imports app.ts, which imports this, so a constant read at load can meet a module not yet initialised.)
  * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
-  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE,
-  VECTORS_DIR, CONTENT_DB, PAGES_FILE, SHEET_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
+  podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', IMPORTED_PLACES, PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE, SHEET_FILE, ONBOARDING_FILE,
+  VECTORS_DIR, CONTENT_DB, PAGES_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
 ];
 
 /** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply
@@ -153,14 +159,10 @@ async function stampFact(storage: Storage, digest: string): Promise<StampFact> {
 }
 
 /** Most wipes swallow "absent", so a wipe that did nothing looks like one that worked. After the wipes, every path they cover is looked at: a survivor is a failure. */
-export async function leftovers(storage: Storage | undefined): Promise<string[]> {
+async function leftovers(storage: Storage | undefined): Promise<string[]> {
   if (!storage) return [];
   const out: string[] = [];
-  for (const p of wipedPaths()) {
-    if (p === STAMP_FILE || p === PENDING_FILE || !(await exists(storage, p))) continue;
-    if (p === PICKS_FILE && parseStored((await readText(storage, p)) ?? '').length === 0) continue;       // rm failed and the file was emptied (wipePicks): cleared, not left over
-    out.push(p.slice(p.lastIndexOf('/') + 1) || p);
-  }
+  for (const p of wipedPaths()) if (p !== STAMP_FILE && p !== PENDING_FILE && (await exists(storage, p))) out.push(p.slice(p.lastIndexOf('/') + 1) || p);
   return out;
 }
 

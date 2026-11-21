@@ -200,6 +200,17 @@ cp "$TKS/takes-muted.json" "$SHOTS/takes-old-muted.json" 2>/dev/null
 tseg() { awk -v m="$2" '/^screenshot /{ if (index($0, m)) { printf "%s", buf; exit } buf=""; next } { buf = buf $0 "\n" }' "$1"; }
 tseg "$SHOTS/drive-takes.txt" real-46-takes-old-files > "$SHOTS/seg-takes.txt"
 
+# ---- 3a5. IMPORTED DOCUMENTS (the PDFs and e-books the person imports; files on their computer, AutoradioLab/imported.ts). Open the place from the launcher: the list comes from the computer (the Imported
+# documents folder, through the Files client), so on d@e it is empty or lists what is there; either way the page must draw its title and the import button, and say none of the old Reader's words.
+# NOT covered: the system file picker (the simulator's picker cannot be driven by the scripts) and reading aloud (no audio); imported.test.ts drives the import, the open, the search and the words handed to the player
+# against a fake computer, and the open of a real document is checked by hand on a phone.
+step "clock data"; wait_ 5000
+goto "imported:"
+view real-47-imported 2500
+step logs
+run_drive imported light "" --touch platform
+tseg "$SHOTS/drive-imported.txt" real-47-imported > "$SHOTS/seg-imported.txt"
+
 # Fail loudly rather than quietly tour nothing: no story card at all means the paper page did not draw, which the tour must not pass over.
 grep -q '\[paper-story-/pub/' "$SHOTS/drive-survey.txt" || fail "survey" "no paper-story- line in the survey tree: the paper page showed no story card"
 # (Stories and the play button are NOT taken from the survey: it is minutes old by the time they are tapped. Each drive that taps paper content picks it fresh: fresh_paper.)
@@ -332,7 +343,7 @@ place paper 2500
 step "tap paper-section-mine"; view real-70-edition-mine 1500
 step "tap paper-choose-topics"; view real-71-topics-empty 1500
 # A tap needs its target in the viewport (the driver cannot tap what the bar or the fold covers): Science sits near the top; after Culture opens the list is dragged up before Film, the field and Done are tapped,
-# and dragged back up before Science is tapped again. Each target is also asserted to be in the dumped tree below, so a row that was off screen fails there, not silently.
+# and dragged back up before Science is tapped again. Each target is also asserted to appear in the drive's dumped trees below (presence in the log, not proof of the viewport at the tap: a tap that missed shows up as a pick that is not stored).
 step "tap ob-topic-Science"; wait_ 700
 step "tap ob-topic-open-Culture"; wait_ 700; step "tap edit-edition-scroll drag 0 -300"; wait_ 500; step tree; step "tap ob-topic-Film"; wait_ 700
 step "tap edit-edition-scroll drag 0 -700"; wait_ 500
@@ -344,11 +355,45 @@ step "tap paper-section-mine"; view real-74-edition-mine-after 2500
 step logs
 run_drive picks light "" --touch platform
 unset SEED_PICKS
+
 CHK="$(SIM get_app_container "$EXACT_SIM" $APP data 2>/dev/null)"
 PICKS_FILE=$(ls "$CHK"/Library/Caches/exact/*/agent/*/data/edition-topics.json "$CHK"/Library/Application\ Support/exact/*/data/edition-topics.json 2>/dev/null | head -1)
 [ -n "$PICKS_FILE" ] && cp "$PICKS_FILE" "$SHOTS/picks-stored.json"
 OLD_FILE="$CHK/Library/Application Support/Autoradio/edition-topics.json"
 if [ -n "$CHK" ] && [ -f "$OLD_FILE" ]; then cp "$OLD_FILE" "$SHOTS/picks-old-file.json"; else rm -f "$SHOTS/picks-old-file.json"; fi
+
+# ---- 3d2. FIRST RUN, COMPUTER, ACTIVITY AND ABOUT: shared code over the native facts (onboarding.ts, computer.ts, activity.ts, settings.ts aboutPage). A fresh app; the Settings pages once each, then the edit page.
+step "clock data"; wait_ 6000
+place settings 900
+step "tap settings-nav-computer"; view real-80-computer 4500
+step "tap settings-back"; wait_ 500
+step "tap settings-nav-activity"; view real-81-activity 3500
+step "tap settings-back"; wait_ 500
+step "tap settings-nav-about"; view real-82-about 1500
+step "tap settings-back"; wait_ 500
+place paper 2500
+step "tap paper-section-mine"; wait_ 1500
+step "tap paper-choose-topics"; view real-83-edit-page 1500
+step "tap ob-topic-Science"; wait_ 700
+step "tap edit-edition-done"; wait_ 2500
+step logs
+run_drive firstrun light "" --touch platform
+FR="$SHOTS/drive-firstrun.txt"
+chk "settings computer (shared code): the computer's id is shown" '\[settings-computer-id\] "[^-"]' "$FR"
+bad "settings computer: the state is not still checking" '\[settings-computer-state\] "Checking' "$FR"
+bad "settings computer: no failure message" '\[settings-computer-message\] "(Could|Not signed|This phone|Your account)' "$FR"
+chk "settings activity (shared code, native facts): the radio's now line is listed" '\[activity-row-now-radio\]' "$FR"
+chk "settings activity: the Now section is there" '\[activity-section-now\]' "$FR"
+chk "settings about: the app's version is the bundle's (a native fact), not a dash" '\[settings-about-app\] "[^-"]' "$FR"
+chk "first run: the edit page lists the topic tree (onboarding.ts editing)" '\[ob-topic-Science\]' "$FR"
+
+# ---- 3f1. NOTEBOOK drive (lane exact-notebook-content): the notebook page and the scorecard from shared code under app:/data, a Refresh press that reads again, and the content sync that
+# starts at launch (shared code: content-run.ts logs one line per kind, counts only). Reads nothing it writes: no tap on a line, whose ids depend on the account's own notebook.
+step "clock data"; wait_ 6000
+place notebook 900; view real-47-notebook 5000
+step "tap notebook-refresh"; view real-48-notebook-refreshed 5000
+step logs
+run_drive notebook light "" --touch platform
 
 # ---- 3f2. SPINE drive (local UI only, nothing is written to the computer): the bar, the launcher and its deck, the default themes and the mode switch.
 # Ported from the demo-mode proofs (proof-sim, proof-lane1, proof-lane4, proof-lane7, proof-default-themes, proof-app), which are deleted with demo mode.
@@ -369,6 +414,19 @@ step "tap settings-theme-newsprint"; view real-64-newsprint-light 900
 step "tap settings-mode-dark"; view real-65-newsprint-dark 900
 step logs
 run_drive spine light "" --touch platform
+
+# ---- 3f2b. SEARCH drives (reads only: the launcher's paper-wide search, shared code (retrieval-run.ts `launcherSearch`, the resource `psr`) over the server's public route).
+# One query the paper answers ("the": a substring of nearly every story) and one nothing answers. Each starts a fresh app and types once, then waits past the pause in typing (350 ms) and the answer.
+step "clock data"; wait_ 4000
+step "tap bar-mark"; wait_ 900
+step "type launcher-search \"the\""; wait_ 4500; step tree; shot real-71-search-hits
+step logs
+run_drive search-hit light "" --touch platform
+step "clock data"; wait_ 4000
+step "tap bar-mark"; wait_ 900
+step "type launcher-search \"zzqxjvwk\""; wait_ 4500; step tree; shot real-72-search-none
+step logs
+run_drive search-none light "" --touch platform
 
 # ---- 3f3. BAR drive (reads only: it plays and pauses a real story): the bar's page model is shared code (bar.ts) over the native facts. On a page: the aim line names the page and the deck count; one story plays: the
 # bar says NOW PLAYING with the story's title and a progress rule; play pauses it (PAUSED, same title); play resumes it; the run sheet page (the radio) lists the entry on air.
@@ -482,6 +540,14 @@ bad "reader: no error message" '\[reader-message\] "(Could not|Sign in)' "$RD"
 chk "reader: body blocks" '\[reader-block-' "$RD"
 # "more on this" depends on the live stories (some have no related items: two runs lacked it with everything else fine), so it is told, not required
 if grep -qE '\[reader-related-pub:' "$RD"; then echo "ok: reader: more on this"; else echo "info: reader: neither story had a 'more on this' list (live content, not a defect)"; fi
+# "Hear it" depends on the live stories (a story has clips only when a podcast discussed it), so it is told, not required; but when the heading is drawn it must carry its rows
+# (the shared storyClips answers it, not the native reader), each with its Play button, so a heading over nothing fails here.
+# The public clip set says whether the story the drive opened (STORY1) has clips: when it does the heading is REQUIRED (a broken hearClips wiring or a refused row fails here, not skipped); when it does not, or the route is
+# unreachable, it is told. The rows each draw a Play button (the tap itself is a drive of its own: it needs a podcast clip with audio, which only some stories have).
+HEAR_ROUTE=${STORY1#paper-story-}
+if [ -n "$STORY1" ] && curl -s --max-time 15 "https://choir.news/api/platform/podcast-clips?limit=200" | tr -d '\n ' | grep -qE "\"route\":\"/?${HEAR_ROUTE#/}\""; then
+  chk "reader: hear it is drawn for a story the server has clips for" '\[reader-hear-it\]' "$RD"; chk "reader: hear it has its clip rows" '\[clip-clip-[0-9a-f]+\]' "$RD"; chk "reader: hear it rows draw a Play button" '\[clip-play-clip-[0-9a-f]+\]' "$RD"
+elif grep -qE '\[reader-hear-it\]' "$RD"; then chk "reader: hear it has its clip rows" '\[clip-clip-[0-9a-f]+\]' "$RD"; chk "reader: hear it rows draw a Play button" '\[clip-play-clip-[0-9a-f]+\]' "$RD"; else echo "info: reader: the story has no podcast clips on the server (live content, not a defect)"; fi
 chk "radio: playing a real story" 'NOW PLAYING|Now playing,' "$RD"
 [ -n "$DOC1" ] && chk "texture document: opened" '\[reader-block-' "$RD"
 if [ -n "$READER_STORY" ]; then
@@ -506,12 +572,20 @@ if [ -n "${REAL_PROMPT:-}" ]; then
   chk "typed ask: the engine took the typed words as the turn" 'top story on the front page' "$SHOTS/drive-ask.txt"
   bad "typed ask: no sign-in failure" 'Sign in to talk to your computer' "$SHOTS/drive-ask.txt"
   chk "conversation: the question is a row (shared code over the native entries)" '\[conversation-row-' "$SHOTS/drive-ask.txt"
+  chk "retrieval: shared code answered the turn's ask for passages (retrieval-run.ts through retrievalAnswer)" 'AUTORADIO retrieval ask answered' "$SHOTS/drive-ask.txt"
+  bad "retrieval: the ask did not time out (the source was never read, or the answer was lost)" 'AUTORADIO retrieval ask no-answer' "$SHOTS/drive-ask.txt"
 fi
 if [ -n "$THEME_DOC" ]; then
   TH="$SHOTS/drive-theme.txt"
   chk "theme: the Texture's theme is listed" '\[settings-theme-depth-teal-test\]' "$TH"
   bad "theme: no problems reported" '\[settings-theme-problems\]' "$TH"
 fi
+# the imported documents drill
+chk "imported: the page is titled for what it holds" 'Imported documents' "$SHOTS/seg-imported.txt"
+chk "imported: the import control is there (an error or a skeleton has none)" '\[reader-import\]' "$SHOTS/seg-imported.txt"
+chk "imported: the list or the empty words drew" '\[reader-(empty|list)\]' "$SHOTS/seg-imported.txt"
+bad "imported: no word of the old Reader or its shelf" 'Remove from Reader|Your books|Add an EPUB or PDF|[Ss]helf' "$SHOTS/seg-imported.txt"
+bad "imported: no failure line" '\[reader-error\]' "$SHOTS/seg-imported.txt"
 # the takes drill (nothing is carried from the pre-release build; Record and Publish are not driven, see 3a4)
 chk "takes: the Takes section drew" '\[radio-takes\]' "$SHOTS/seg-takes.txt"
 chk "takes: the record control is there" '\[takes-record\]' "$SHOTS/seg-takes.txt"
@@ -551,6 +625,15 @@ if [ -n "$PLAY_BAR" ]; then
   bad "radio page: the status line is not an error" '\[radio-status\] "Can.t speak' "$BR"
   bad "bar: no error line held the bar" '\[bar-text\] "(Could not|Something went wrong|The voice stopped)' "$BR"
 fi
+# the search drives: the paper-wide rows land under the typed query, and a query nothing matches says so (the answer is for THIS query: a stale or never-merged answer shows neither)
+SH="$SHOTS/drive-search-hit.txt"; SN="$SHOTS/drive-search-none.txt"
+chk "search: a query the paper answers lists a story row (search-hit-pub:)" '\[search-hit-pub:' "$SH"
+chk "search: the paper itself answered and added rows beyond the local ones (the log line of shared code, not the local rows)" 'search: paper done found=[1-9][0-9]* extra=[1-9]' "$SH"
+bad "search: the answered query does not stay on Searching the paper" '\[launcher-search-note\] "Searching the paper' "$SH"
+bad "search: the answered query is not Nothing found" '\[launcher-(search-note|nohits)\] "(Nothing found|Could not search)' "$SH"
+chk "search: a query nothing matches says Nothing found in the paper" '\[launcher-search-note\] "Nothing found in the paper' "$SN"
+bad "search: the empty answer lists no story row" '\[search-hit-pub:' "$SN"
+chk "search: the paper answered the nonsense query with nothing (done, found=0)" 'search: paper done found=0 extra=0' "$SN"
 # the spine drive
 SP="$SHOTS/drive-spine.txt"
 chk "bar: the field, the microphone and play" '\[bar-field\]' "$SP"
@@ -566,6 +649,15 @@ chk "themes: Newsprint dark" 'Showing Newsprint in dark' "$SP"
 [ -n "$FILE1" ] && chk "files: a file opened" '\[(page-title|viewer-[a-z]+|csv-card|image-view)\]' "$SHOTS/drive-tour.txt"
 chk "podcasts: the place opened" '\[(podcasts-[a-z]+|podcast-row-[^]]*)\]' "$SHOTS/drive-tour.txt"
 chk "notebook: the page opened" '\[notebook-(page|title)\]' "$SHOTS/drive-tour.txt"
+NB="$SHOTS/drive-notebook.txt"
+chk "notebook: the page, from shared code" '\[notebook-page\]' "$NB"
+chk "notebook: the held list is complete (its last row, 13)" '\[notebook-held-13\]' "$NB"
+chk "notebook: the notebook was read (a section, or a plain notice that there is none or it is offline)" '\[notebook-(section-[a-z-]+|doc-notice)\]' "$NB"
+# (Two "not stuck loading" checks were deleted: the only `loading` the page draws is its idle answer, so they could not catch a stuck read; the positive checks above are the proof of the read.)
+chk "content sync: the shared sync ran at launch (stories: count and bytes logged)" 'console: content sync story: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$NB"
+chk "content sync: documents ran too" 'console: content sync document: fetched [0-9]+, held [0-9]+, failed [0-9]+, [0-9]+ bytes' "$NB"
+bad "content sync: stories did not stop on an error" 'content sync story: .*stopped: error' "$NB"
+bad "content sync: the file walk is not a launch job" 'content sync file:' "$NB"
 chk "settings account again: signed in" '\[settings-account-signed\][^"]*"Yes"' "$SHOTS/drive-tour.txt"
 # the first shared answer after a launch must not run over the device's 100 ms turn (the app logs the failure that says so)
 bad "no resource over the 100 ms turn" 'over the 100 ms' "$OUT"

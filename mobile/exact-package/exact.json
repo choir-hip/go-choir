@@ -104,78 +104,6 @@
     "RadioNote": {
       "tick": "number"
     },
-    "ShelfRow": {
-      "id": "string",
-      "address": "string",
-      "title": "string",
-      "author": "string",
-      "kindLabel": "string",
-      "detail": "string",
-      "progress": "number"
-    },
-    "ShelfListing": {
-      "status": "string",
-      "message": "string",
-      "count": "number",
-      "rows": "ShelfRow[]"
-    },
-    "ShelfSectionRef": {
-      "index": "number",
-      "title": "string"
-    },
-    "ShelfDocInfo": {
-      "address": "string",
-      "id": "string",
-      "title": "string",
-      "author": "string",
-      "kind": "string",
-      "kindLabel": "string",
-      "status": "string",
-      "message": "string",
-      "src": "string",
-      "shareSrc": "string",
-      "sections": "ShelfSectionRef[]",
-      "blockCount": "number",
-      "position": "number",
-      "resumeSection": "number",
-      "resumeBlock": "number"
-    },
-    "ShelfBlock": {
-      "n": "number",
-      "kind": "string",
-      "level": "number",
-      "text": "string",
-      "marker": "string"
-    },
-    "ShelfChapter": {
-      "index": "number",
-      "count": "number",
-      "title": "string",
-      "start": "number",
-      "status": "string",
-      "blocks": "ShelfBlock[]",
-      "page": "number"
-    },
-    "ShelfHit": {
-      "block": "number",
-      "section": "number",
-      "label": "string",
-      "snippet": "string"
-    },
-    "ShelfFind": {
-      "query": "string",
-      "hits": "ShelfHit[]",
-      "message": "string"
-    },
-    "ShelfFollowInfo": {
-      "address": "string",
-      "block": "number",
-      "section": "number"
-    },
-    "ShelfAck": {
-      "ok": "bool",
-      "message": "string"
-    },
     "LauncherPlace": {
       "slug": "string",
       "name": "string",
@@ -224,6 +152,14 @@
       "acked": "number",
       "journal": "DeckEvent[]"
     },
+    "ImportedFollow": {
+      "address": "string",
+      "block": "number"
+    },
+    "ImportedHanded": {
+      "ok": "bool",
+      "message": "string"
+    },
     "HearItRow": {
       "clipID": "string",
       "show": "string",
@@ -236,47 +172,6 @@
     "MailAck": {
       "status": "string",
       "message": "string"
-    },
-    "NotebookLineRow": {
-      "id": "string",
-      "text": "string",
-      "tag": "string",
-      "canWhy": "bool",
-      "selected": "bool"
-    },
-    "NotebookSectionRow": {
-      "key": "string",
-      "heading": "string",
-      "lines": "NotebookLineRow[]"
-    },
-    "NotebookPair": {
-      "label": "string",
-      "value": "string"
-    },
-    "NotebookEvidenceRow": {
-      "title": "string",
-      "outcome": "string",
-      "detail": "string"
-    },
-    "NotebookHeldRow": {
-      "what": "string",
-      "whereRead": "string"
-    },
-    "NotebookPageInfo": {
-      "docState": "string",
-      "docAddress": "string",
-      "docNotice": "string",
-      "sections": "NotebookSectionRow[]",
-      "scoreState": "string",
-      "scoreNotice": "string",
-      "score": "NotebookPair[]",
-      "byKind": "NotebookPair[]",
-      "noVerdict": "string",
-      "selectedText": "string",
-      "evidenceNote": "string",
-      "evidence": "NotebookEvidenceRow[]",
-      "held": "NotebookHeldRow[]",
-      "steerLine": "string"
     },
     "SetupRowView": {
       "stage": "string",
@@ -321,6 +216,22 @@
       "editionLines": "string[]",
       "talking": "bool",
       "editing": "bool"
+    },
+    "VoiceSetupFacts": {
+      "rows": "SetupRowView[]",
+      "summary": "string[]",
+      "totalLabel": "string",
+      "device": "string",
+      "onWiFi": "bool",
+      "setupStarted": "bool",
+      "setupFinished": "bool",
+      "mic": "string",
+      "level": "number",
+      "heard": "string",
+      "route": "string",
+      "talking": "bool",
+      "voicePicked": "number",
+      "finishAsked": "number"
     },
     "PodNow": {
       "episodeId": "string",
@@ -433,7 +344,6 @@
       "plain": "string",
       "textBlocks": "number",
       "markdown": "string",
-      "hearIt": "HearItRow[]",
       "editable": "bool",
       "source": "string",
       "docId": "string"
@@ -450,6 +360,14 @@
     },
     "ReaderAck": {
       "ok": "bool"
+    },
+    "RetrievalAsk": {
+      "id": "string",
+      "words": "string",
+      "pageTitle": "string",
+      "pageAddress": "string",
+      "now": "number",
+      "facts": "string"
     },
     "ThemeCard": {
       "id": "string",
@@ -506,16 +424,6 @@
       "ok": "bool",
       "message": "string"
     },
-    "SettingsComputer": {
-      "id": "string",
-      "state": "string",
-      "target": "string",
-      "phase": "string",
-      "updateAvailable": "bool",
-      "message": "string",
-      "epoch": "number",
-      "checked": "bool"
-    },
     "LearnedItem": {
       "line": "string",
       "kind": "string",
@@ -526,33 +434,22 @@
       "count": "number",
       "message": "string"
     },
-    "ActivityItem": {
+    "SettingsFacts": {
+      "now": "number",
+      "appVersion": "string",
+      "radio": "RadioFact",
+      "turns": "TurnFact[]"
+    },
+    "RadioFact": {
+      "known": "bool",
+      "running": "bool",
+      "phase": "string"
+    },
+    "TurnFact": {
       "id": "string",
-      "kind": "string",
-      "label": "string",
-      "detail": "string",
-      "group": "string",
-      "ago": "string",
-      "target": "string",
-      "title": "string",
-      "at": "number",
-      "unseen": "bool"
-    },
-    "ActivityInfo": {
-      "status": "string",
-      "message": "string",
-      "live": "ActivityItem[]",
-      "computer": "ActivityItem[]",
-      "desk": "ActivityItem[]",
-      "paper": "ActivityItem[]",
-      "radio": "ActivityItem[]",
-      "unseen": "number",
-      "blank": "bool"
-    },
-    "AboutInfo": {
-      "app": "string",
-      "base": "string",
-      "signedIn": "bool"
+      "outcome": "string",
+      "transcript": "string",
+      "configName": "string"
     },
     "Page": {
       "address": "string",
@@ -890,140 +787,6 @@
       }
     },
     {
-      "source": "shelfList",
-      "live": true,
-      "answers": "ShelfListing",
-      "options": {
-        "at": "string"
-      },
-      "substitute": {
-        "default": {
-          "status": "loading",
-          "message": "",
-          "count": 0,
-          "rows": []
-        }
-      }
-    },
-    {
-      "source": "shelfDoc",
-      "live": true,
-      "answers": "ShelfDocInfo",
-      "options": {
-        "address": "string"
-      },
-      "substitute": {
-        "default": {
-          "address": "",
-          "id": "",
-          "title": "",
-          "author": "",
-          "kind": "",
-          "kindLabel": "",
-          "status": "loading",
-          "message": "",
-          "src": "",
-          "shareSrc": "",
-          "sections": [],
-          "blockCount": 0,
-          "position": 0,
-          "resumeSection": 0,
-          "resumeBlock": -1
-        }
-      }
-    },
-    {
-      "source": "shelfChapter",
-      "live": true,
-      "answers": "ShelfChapter",
-      "options": {
-        "address": "string",
-        "index": "number"
-      },
-      "substitute": {
-        "default": {
-          "index": 0,
-          "count": 0,
-          "title": "",
-          "start": 0,
-          "status": "loading",
-          "blocks": [],
-          "page": 1
-        }
-      }
-    },
-    {
-      "source": "shelfFind",
-      "live": true,
-      "answers": "ShelfFind",
-      "options": {
-        "address": "string",
-        "query": "string"
-      },
-      "substitute": {
-        "default": {
-          "query": "",
-          "hits": [],
-          "message": ""
-        }
-      }
-    },
-    {
-      "source": "shelfFollow",
-      "live": true,
-      "answers": "ShelfFollowInfo",
-      "options": {},
-      "substitute": {
-        "default": {
-          "address": "",
-          "block": -1,
-          "section": 0
-        }
-      }
-    },
-    {
-      "send": "shelfImport",
-      "options": {
-        "from": "string",
-        "name": "string"
-      },
-      "answers": "ShelfListing"
-    },
-    {
-      "send": "shelfRemove",
-      "options": {
-        "id": "string"
-      },
-      "answers": "ShelfListing"
-    },
-    {
-      "send": "shelfPlace",
-      "options": {
-        "address": "string",
-        "section": "number",
-        "block": "number"
-      },
-      "answers": "ShelfAck"
-    },
-    {
-      "send": "shelfReadAloud",
-      "options": {
-        "address": "string",
-        "section": "number",
-        "block": "number"
-      },
-      "answers": "ShelfAck"
-    },
-    {
-      "send": "shelfEnqueue",
-      "options": {
-        "address": "string",
-        "section": "number",
-        "block": "number"
-      },
-      "answers": "ShelfAck"
-    },
-    {
       "source": "launcherData",
       "live": true,
       "answers": "LauncherData",
@@ -1123,6 +886,28 @@
       "answers": "DeckState"
     },
     {
+      "source": "importedFollow",
+      "live": true,
+      "answers": "ImportedFollow",
+      "substitute": {
+        "default": {
+          "address": "",
+          "block": -1
+        }
+      }
+    },
+    {
+      "send": "importedHand",
+      "options": {
+        "op": "string",
+        "id": "string",
+        "title": "string",
+        "at": "number",
+        "text": "string"
+      },
+      "answers": "ImportedHanded"
+    },
+    {
       "send": "mailOpenReview",
       "options": {
         "url": "string"
@@ -1146,150 +931,27 @@
       "answers": "MailAck"
     },
     {
-      "source": "notebookPage",
+      "source": "voiceSetupFacts",
       "live": true,
-      "answers": "NotebookPageInfo",
+      "answers": "VoiceSetupFacts",
       "substitute": {
         "default": {
-          "docState": "loading",
-          "docAddress": "",
-          "docNotice": "",
-          "sections": [],
-          "scoreState": "loading",
-          "scoreNotice": "",
-          "score": [],
-          "byKind": [],
-          "noVerdict": "",
-          "selectedText": "",
-          "evidenceNote": "",
-          "evidence": [],
-          "held": [],
-          "steerLine": ""
-        }
-      }
-    },
-    {
-      "send": "notebookAct",
-      "options": {
-        "op": "string",
-        "arg": "string"
-      },
-      "answers": "NotebookPageInfo"
-    },
-    {
-      "source": "onboardingState",
-      "live": true,
-      "answers": "Onboarding",
-      "substitute": {
-        "default": {
-          "step": "welcome",
-          "title": "Make it yours",
-          "message": "",
-          "totalLabel": "",
-          "device": "",
-          "mic": "unasked",
-          "heard": "",
-          "route": "",
-          "editionStatus": "",
-          "writingLine": "",
-          "editionError": "",
-          "editionTitle": "My edition",
-          "editionIntro": "",
-          "editionAddress": "onboarding:edit",
-          "card": "",
-          "cardBody": "",
-          "aim": "",
-          "askMobile": false,
-          "setupFinished": false,
-          "setupStarted": false,
-          "hearingOK": false,
-          "skipped": false,
-          "editionDone": false,
-          "level": 0,
           "rows": [],
           "summary": [],
-          "editionLines": [],
+          "totalLabel": "",
+          "device": "",
+          "onWiFi": true,
+          "setupStarted": false,
+          "setupFinished": false,
+          "mic": "unasked",
+          "level": 0,
+          "heard": "",
+          "route": "",
           "talking": false,
-          "editing": false
+          "voicePicked": 0,
+          "finishAsked": 0
         }
       }
-    },
-    {
-      "send": "onboardingBegin",
-      "options": {
-        "mobile": "string"
-      },
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingRetry",
-      "options": {
-        "stage": "string"
-      },
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingFallback",
-      "options": {
-        "stage": "string"
-      },
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingMic",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingMicNext",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingHearing",
-      "options": {
-        "ok": "string"
-      },
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingTopics",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingTalk",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingTopicsDone",
-      "answers": "Onboarding",
-      "options": {
-        "topics": "string"
-      }
-    },
-    {
-      "send": "onboardingEditionRetry",
-      "answers": "Onboarding",
-      "options": {
-        "topics": "string"
-      }
-    },
-    {
-      "send": "onboardingEditDone",
-      "answers": "Onboarding",
-      "options": {
-        "topics": "string"
-      }
-    },
-    {
-      "send": "onboardingEditLeave",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingContinueAnyway",
-      "answers": "Onboarding"
-    },
-    {
-      "send": "onboardingSkip",
-      "answers": "Onboarding"
     },
     {
       "source": "podcastNow",
@@ -1322,7 +984,7 @@
       "options": {
         "op": "string",
         "id": "string",
-        "feed": "string"
+        "record": "string"
       },
       "answers": "PodDone"
     },
@@ -1367,20 +1029,38 @@
       "answers": "ReaderAck"
     },
     {
-      "source": "settingsComputer",
+      "source": "retrievalAsk",
       "live": true,
-      "answers": "SettingsComputer",
+      "answers": "RetrievalAsk",
       "substitute": {
         "default": {
           "id": "",
-          "state": "",
-          "target": "",
-          "phase": "idle",
-          "updateAvailable": false,
-          "message": "",
-          "epoch": 0,
-          "checked": false
+          "words": "",
+          "pageTitle": "",
+          "pageAddress": "",
+          "now": 0,
+          "facts": ""
         }
+      }
+    },
+    {
+      "source": "settingsFacts",
+      "live": true,
+      "answers": "SettingsFacts",
+      "substitute": {
+        "default": {
+          "now": 0,
+          "appVersion": "",
+          "radio": {
+            "known": false,
+            "running": false,
+            "phase": ""
+          },
+          "turns": []
+        }
+      },
+      "options": {
+        "tick": "number"
       }
     },
     {
@@ -1396,53 +1076,7 @@
       }
     },
     {
-      "source": "activityInfo",
-      "live": true,
-      "answers": "ActivityInfo",
-      "substitute": {
-        "default": {
-          "status": "",
-          "message": "",
-          "live": [],
-          "computer": [],
-          "desk": [],
-          "paper": [],
-          "radio": [],
-          "unseen": 0,
-          "blank": false
-        }
-      }
-    },
-    {
-      "source": "aboutInfo",
-      "live": true,
-      "answers": "AboutInfo",
-      "substitute": {
-        "default": {
-          "app": "",
-          "base": "",
-          "signedIn": false
-        }
-      }
-    },
-    {
-      "send": "computerRefresh",
-      "answers": "SettingsAck"
-    },
-    {
-      "send": "computerWake",
-      "answers": "SettingsAck"
-    },
-    {
-      "send": "computerUpdate",
-      "answers": "SettingsAck"
-    },
-    {
       "send": "learnedReset",
-      "answers": "SettingsAck"
-    },
-    {
-      "send": "activityRefresh",
       "answers": "SettingsAck"
     },
     {

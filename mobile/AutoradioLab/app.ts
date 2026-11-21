@@ -1,25 +1,31 @@
 import type { Answer, Sources } from './app.contract.d.ts';
 import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
-import { clipAct, showClips } from './clips.ts';
+import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
 import { adoptNative } from './api.ts';
-import { settingsAccount } from './settings.ts';
+import { settingsAccount, aboutPage } from './settings.ts';
+import { settingsComputer, computerAct } from './computer.ts';
+import { activityPage } from './activity.ts';
+import { onboardingPage, onboardingAct, liveEnv as onboardingEnv } from './onboarding.ts';
 import { aboutBuild } from './about.ts';
 import { accountSignOut, settleAccount } from './account.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
 import { accountState } from './account-state.ts';
-import { readerDocShared, readerHear, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
+import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
 import { texturesListShared } from './textures.ts';
 import * as themes from './themes.ts';
-import { notebookPage, page as notebookIdlePage } from './notebook.ts';
+import { notebookShared } from './notebook-run.ts';
+import { syncContent } from './content-run.ts';
 import * as mail from './mail.ts';
 import { barInfo } from './bar.ts';
 import * as radioBridge from './radio-bridge.ts';
 import { radioPage } from './radio-page.ts';
+import { retrievalServe, paperSearch } from './retrieval-live.ts';
+import * as imported from './imported.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
 import * as picks from './edition-picks.ts';
 
@@ -66,12 +72,19 @@ fs.read app:/data/takes.json
 fs.write app:/data/takes.json
 fs.read app:/data/runsheet.json
 fs.write app:/data/runsheet.json
+fs.read app:/data/vectors
+fs.write app:/data/vectors
+fs.read app:/data/imported-places.json
+fs.write app:/data/imported-places.json
 fs.read app:/data/theme-choice.json
 fs.write app:/data/theme-choice.json
 fs.read app:/data/themes
 fs.write app:/data/themes
 fs.read app:/data/edition-topics.json
-fs.write app:/data/edition-topics.json`;
+fs.write app:/data/edition-topics.json
+fs.read app:/data/onboarding.json
+fs.write app:/data/onboarding.json
+sqlite.open app:/data/content.db`;
 
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
 const takes = (): ReturnType<typeof newTakes> => (takesOverlay ??= newTakes());      // lazily: app.ts and take-session.ts import each other through api.ts, and a module-level call would run before take-session.ts is evaluated
@@ -79,6 +92,14 @@ const sources: Sources = {
   settingsAccount: ([signedIn, tick]) => settingsAccount({ signedIn, tick }),
   // The About page's build rows (about.ts): the app's baked-in commit and the server's, from /health.
   aboutBuild: ([tick]) => aboutBuild({ tick }),
+  // Settings: the Computer page (computer.ts), Activity (activity.ts) and About's app rows over the native facts (`settingsFacts`).
+  settingsComputer: ([signedIn, tick]) => settingsComputer({ signedIn, tick }),
+  computerAct: ([op, signedIn]) => computerAct(op, signedIn),
+  activityPage: ([facts, signedIn, tick, state, updateAvailable, checked]) => activityPage(facts, signedIn, tick, state, updateAvailable, checked),
+  aboutPage: ([facts, signedIn]) => aboutPage(facts, signedIn),
+  // First run (onboarding.ts): the step machine over the voice side's facts (`voiceSetupFacts`); one send per button.
+  onboardingPage: ([voice, tick, top], _s, storage) => onboardingPage(voice, tick, top, onboardingEnv(storage)),
+  onboardingAct: ([op, arg, topics, top], _s, storage) => onboardingAct(op, arg, topics, top, onboardingEnv(storage)),
   // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([raw]) => conversationInfo(raw),
@@ -114,13 +135,14 @@ const sources: Sources = {
   takesPage: ([rec, _tick], _s, storage) => takesPageFor(takesEnv(storage), takes(), rec),
   takesAct: ([op, arg], _s, storage) => takesAct(takesEnv(storage), takes(), op, arg),
   // The reader (reader.ts): the story or document in front, and what its page does to it.
-  readerDocShared: ([address, acc, saved, _tick, heard]) => readerDocShared(address, acc, saved, undefined, heard ? 1 : 0),
-  readerHearShared: ([address]) => readerHear(address),
+  readerDocShared: ([address, acc, saved, _tick]) => readerDocShared(address, acc, saved),
   readerStopShared: ([address]) => readerStop(address),
   readerRestoreShared: ([address, version]) => readerRestore(address, version),
   readerReloadShared: ([address]) => readerReload(address),
   readerPrefetchShared: ([prev, next]) => readerPrefetch(prev, next),
-  notebookPageShared: ([selected, steerQueued, active, _tick, _signedIn], _store, storage) => (active ? notebookPage({ selected, steerQueued }, storage) : notebookIdlePage({ doc: null, learning: null, selected: '', steerQueued: 0 })),
+  // My notebook (notebook-run.ts): the selected line, the Refresh count, whether the page is on top and the sign-out tick in; the page out. The content store's sync (content-run.ts) is started by a task.
+  notebookPageShared: ([selected, tick, active, signedOutTick, _signedIn], _store, storage) => notebookShared({ selected, tick, active, signedOutTick }, storage),
+  contentSync: ([key], _store, storage) => syncContent(key, storage),
   accountState: ([tick, top, host]) => accountState(tick, top, host),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
   pagesView: ([_tick], _store, storage) => pages.pagesView(storage),
@@ -139,6 +161,7 @@ const sources: Sources = {
   podcastQueue: ([address], _store, storage) => podcastQueue(address, storage),
   podcastPlayhead: ([id, clip, elapsed, duration], _store, storage) => podcastPlayhead({ id, clip, elapsed, duration }, storage),
   showClips: ([address, tick]) => showClips(address, tick),
+  storyClips: ([address, tick]) => storyClips(address, tick),
   clipAct: ([op, id]) => clipAct(op, id),
   // Files (files.ts): the listener's computer's files. Positional arguments.
   fileList: ([path, mode, sort, desc, query, _acct], _s, storage) => fileList({ path, mode, sort, desc, query }, storage),
@@ -154,6 +177,16 @@ const sources: Sources = {
   editionToggle: ([label], _s, storage) => picks.toggle(storage, label),
   editionExpand: ([label], _s, storage) => picks.expand(storage, label),
   editionAdd: ([text], _s, storage) => picks.addTyped(storage, text),
+  // Imported documents (imported.ts): PDFs and e-books that are files on the listener's computer, read through the Files client. The audio is native (importedFollow, importedHand).
+  importedList: ([at, _acct], _s, storage) => imported.importedList(at, storage),
+  importedDoc: ([address, _acct], _s, storage) => imported.importedDoc(address, storage),
+  importedSection: ([address, index, _acct], _s, storage) => imported.importedSection(address, index, storage),
+  importedFind: ([address, query], _s, storage) => imported.importedFind(address, query, storage),
+  importedLocate: ([address, block], _s, storage) => imported.importedLocate(address, block, storage),
+  importedPlace: ([address, section, block], _s, storage) => imported.importedPlace({ address, section, block }, storage),
+  importedReadAloud: ([address, section, block], _s, storage) => imported.importedReadAloud({ address, section, block }, storage),
+  importedQueue: ([address, section, block], _s, storage) => imported.importedQueue({ address, section, block }, storage),
+  importedAdd: ([from, name], _s, storage) => imported.importedAdd({ from, name }, storage),
   paperFront: ([view, width, tick, focus, picks], _store, storage) => paperFront({ view, width, tick, focus, picks }, storage),
   // Mail (mail.ts): the phone's copy is sealed under app:/data/mail by the platform cipher (the native pair mailSeal/mailOpen, mail-seal.ts); "Show original" is written under app:/cache/mail-*.html.
   mailBox: ([address, _acct], _store, storage) => mail.mailBox(address, { storage }),
@@ -164,6 +197,9 @@ const sources: Sources = {
   mailSaveDraft: ([address, to, subject, body]) => mail.mailSaveDraft(address, to, subject, body),
   mailApprovalEmail: ([address, draft]) => mail.mailApprovalEmail(address, draft),
   mailMarkUnread: ([address]) => mail.mailMarkUnread(address),
+  // Retrieval (retrieval-live.ts): the voice turn's ask (native raises it, the answer goes back through one native op) and the launcher's paper-wide search.
+  retrievalServe: ([id, words, pageTitle, pageAddress, now, facts], _s, storage) => retrievalServe({ id, words, pageTitle, pageAddress, now, facts }, storage),
+  paperSearch: ([q, local]) => paperSearch(q, local),
 };
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
 export const answer: Answer = async (source, args, store, storage, native) => {

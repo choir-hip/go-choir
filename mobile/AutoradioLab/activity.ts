@@ -79,3 +79,36 @@ export async function activityInfo(a: { now: number; signedIn: boolean; radio: I
   try { return view(items(await get('/api/changelog', { limit: 50, minor: 1 }), a.now), 'ok', '', a.radio, a.live); }
   catch (e) { return view([], 'failed', plain(e), a.radio, a.live); }
 }
+
+// ---- the rows the radio's engine and the computer give (native facts in, rows out): the Swift AutoradioModule+Settings `radioTurns` and `nowLines` ----
+
+/** What the native side reports for this page: the clock, the engine's phase and its kept turns (the voice: only native code holds them). */
+export type Facts = { now: number; appVersion: string; radio: { known: boolean; running: boolean; phase: string }; turns: { id: string; outcome: string; transcript: string; configName: string }[] };
+export const noFacts = (): Facts => ({ now: 0, appVersion: '', radio: { known: false, running: false, phase: '' }, turns: [] });
+
+const blank = (): Item => ({ id: '', kind: '', label: '', detail: '', group: '', ago: '', target: '', title: '', at: 0, unseen: false });
+
+/** The radio's turns, as given (newest first as the engine keeps them): the label is the outcome, the detail what was heard. */
+export function radioItems(f: Facts): Item[] {
+  return f.turns.map((t) => ({ ...blank(), id: `turn-${t.id}`, kind: 'turn', group: 'radio', label: t.outcome === '' ? 'A turn' : t.outcome.charAt(0).toUpperCase() + t.outcome.slice(1),
+    detail: t.transcript === '' ? '(no words heard)' : `“${t.transcript}”`, title: t.configName }));
+}
+
+/** The "now" lines: the radio's phase, and the computer's state when it is known (computer.ts). */
+export function liveItems(f: Facts, computer: { state: string; updateAvailable: boolean } | null): Item[] {
+  const out: Item[] = [];
+  if (f.radio.known) {
+    out.push({ ...blank(), id: 'now-radio', kind: 'radio', group: 'now', label: 'The radio',
+      detail: !f.radio.running ? 'The radio is stopped.' : f.radio.phase === 'playing' ? 'The radio is playing.' : `The radio is in a turn (${f.radio.phase}).` });
+  }
+  if (computer) {
+    out.push({ ...blank(), id: 'now-computer', kind: 'computer', group: 'now', label: 'Your computer',
+      detail: (computer.state === '' ? 'Status is not known yet.' : `Your computer is ${computer.state}.`) + (computer.updateAvailable ? ' An update is waiting.' : '') });
+  }
+  return out;
+}
+
+/** The source the page binds: the native facts, the signed-in flag and the Refresh tick. */
+export async function activityPage(f: Facts, signedIn: boolean, _tick: number, state: string, updateAvailable: boolean, checked: boolean): Promise<View> {
+  return activityInfo({ now: f.now, signedIn, radio: radioItems(f), live: liveItems(f, checked || state !== '' ? { state, updateAvailable } : null) });
+}

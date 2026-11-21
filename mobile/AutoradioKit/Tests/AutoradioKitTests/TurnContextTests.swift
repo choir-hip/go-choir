@@ -10,31 +10,28 @@ import XCTest
 
 final class TurnContextTests: XCTestCase {
     static let now = Date(timeIntervalSince1970: 1_794_700_000)
-    func fixtureStore() -> (ContentStore, SavedCorpus) {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("tc-\(UUID().uuidString)")
-        let s = ContentStore(root: root, clock: { Self.now }); let c = SavedCorpus(heldPages: nil)
-        c.setDeltaSource("store") { s.drain() }
-        func day(_ n: Double) -> Date { Self.now.addingTimeInterval(-n * 86400) }
-        s.put(StoredItem(id: "pub:/p/water", kind: .story, title: "Senate passes the water bill", text: "The Senate voted 61 to 38 on Tuesday to pass the water bill after a long debate on drought funding.", date: day(1), address: "pub:/p/water", source: "Autopaper", syncedAt: Self.now))
-        s.put(StoredItem(id: "pub:/p/budget", kind: .story, title: "Senate committee delays budget hearing", text: "A Senate committee postponed its budget hearing until next week.", date: day(3), address: "pub:/p/budget", source: "Autopaper", syncedAt: Self.now))
-        s.put(StoredItem(id: "pub:/p/harbor", kind: .story, title: "Harbor strike ends", text: "Dock workers ended the strike on Tuesday.", date: day(2), address: "pub:/p/harbor", source: "Autopaper", syncedAt: Self.now))
-        s.put(StoredItem(id: "pc:ep1", kind: .podcast, title: "World News: The Senate week", text: "This episode covers the Senate and the budget.", date: day(1), address: "podcast:episode/x/ep1", source: "Podcasts", syncedAt: Self.now))
-        c.setSource("library") { [SavedCorpus.Document(id: "book:b1", title: "The Keeper of Lamps", address: "doc:b1", text: "", kind: "book", source: "Reader", date: day(30),
-                                                         parts: [.init(label: "chapter 1: The shore", text: "The keeper walked the shore at dusk and counted the boats coming in.", block: 3)])] }
-        return (s, c)
+    static func day(_ n: Double) -> Date { now.addingTimeInterval(-n * 86400) }
+    func fixture() -> [FakeDoc] {
+        func day(_ n: Double) -> Date { Self.day(n) }
+        return [
+            FakeDoc(id: "pub:/p/water", title: "Senate passes the water bill", address: "pub:/p/water", text: "The Senate voted 61 to 38 on Tuesday to pass the water bill after a long debate on drought funding.", date: day(1)),
+            FakeDoc(id: "pub:/p/budget", title: "Senate committee delays budget hearing", address: "pub:/p/budget", text: "A Senate committee postponed its budget hearing until next week.", date: day(3)),
+            FakeDoc(id: "pub:/p/harbor", title: "Harbor strike ends", address: "pub:/p/harbor", text: "Dock workers ended the strike on Tuesday.", date: day(2)),
+            FakeDoc(id: "pc:ep1", title: "World News: The Senate week", address: "podcast:episode/x/ep1", text: "This episode covers the Senate and the budget.", kind: "podcast", source: "Podcasts", date: day(1)),
+            FakeDoc(id: "book:b1", title: "The Keeper of Lamps", address: "doc:b1", text: "The keeper walked the shore at dusk and counted the boats coming in.", kind: "book", source: "Reader", date: day(30))]
     }
 
     func testThePromptTheOnDeviceModelIsShownForTheSenate() async {
-        let (_, c) = fixtureStore()
         let m = FakeLocalModel(pieces: ["The Senate passed the water bill. "])
-        let h = SavedAnswerHolder(StageParams(), corpus: c, model: { m })
+        let h = SavedAnswerHolder(StageParams(), retrieval: FakeRetrieval.provider(fixture()), model: { m })
         for await _ in h.lines(for: HolderInput(listenerWords: "tell me about the Senate", answers: [], pageTitle: "Autoradio", pageAddress: "autoradio:home")) {}
         let prefix = m.asked.first?.prefix ?? "", suffix = m.asked.first?.suffix ?? ""
-        print("---- PROMPT (system) ----\n\(m.asked.first?.system ?? "")\n---- PROMPT (context) ----\n\(prefix)---- PROMPT (question) ----\n\(suffix)")
         XCTAssertTrue(prefix.contains("Senate passes the water bill") && prefix.contains("Senate committee delays"), "the Senate stories are in the context")
         XCTAssertTrue(prefix.contains("World News: The Senate week"), "and the podcast episode")
         XCTAssertFalse(prefix.contains("Harbor strike"), "and nothing unrelated")
-        XCTAssertLessThan(prefix.range(of: "water bill")!.lowerBound, prefix.range(of: "budget hearing")!.lowerBound, "newest first")
+        // The order the holder is shown is the retriever's (the fake sorts newest first, as search.test.ts S1 and S5 prove for the real one): the day-old story comes before the three-day-old one.
+        if let w = prefix.range(of: "Senate passes the water bill"), let b = prefix.range(of: "Senate committee delays") { XCTAssertTrue(w.lowerBound < b.lowerBound, "newest first") } else { XCTFail("both stories are in the prefix") }
+        XCTAssertTrue(suffix.contains("tell me about the Senate"))
     }
     func testOnAirIsTheContentPageOrWhatTheRunSheetHasOnAir() {
         XCTAssertEqual(OnAir.title(pageAddress: "pub:/p/x", pageTitle: "Water bill", hint: "Harbor"), "Water bill")
@@ -42,8 +39,7 @@ final class TurnContextTests: XCTestCase {
         XCTAssertEqual(OnAir.title(pageAddress: "autoradio:home", pageTitle: "Autoradio", hint: ""), "", "never the Autoradio page's own name")
     }
     func testTheDeskIsNeverSentAnEmptyPage() {
-        let (_, c) = fixtureStore()
-        let ctx = c.retrieve("tell me about the Senate")
+        let ctx = FakeRetrieval.context(fixture(), "tell me about the Senate")
         let auto = DeskContext.page(front: FrontPage(address: "autoradio:home", title: "Autoradio", kind: "autoradio"), pageText: "", brief: "On air now: Harbor strike ends. Up next: Water.", retrieved: ctx)!
         XCTAssertTrue(auto.text.hasPrefix("On air now: Harbor strike ends."), auto.text); XCTAssertTrue(auto.text.contains("Senate passes the water bill")); XCTAssertEqual(auto.address, "autoradio:home")
         let story = DeskContext.page(front: FrontPage(address: "pub:/p/x", title: "X", kind: "story"), pageText: "Own words of the page.", brief: "On air now: Y.", retrieved: ctx)!
@@ -52,8 +48,7 @@ final class TurnContextTests: XCTestCase {
         XCTAssertEqual(DeskContext.page(front: FrontPage(address: "autoradio:home", title: "A"), pageText: "", brief: "", retrieved: nil)?.text, "", "nothing to add: unchanged")
     }
     func testTheTurnLineHoldsCountsAndKindsOnly() {
-        let (_, c) = fixtureStore()
-        let line = DeskContext.turnLine(desk: "server", retrieved: c.retrieve("tell me about the Senate"))
+        let line = DeskContext.turnLine(desk: "server", retrieved: FakeRetrieval.context(fixture(), "tell me about the Senate"))
         XCTAssertTrue(line.hasPrefix("AUTORADIO turn desk=server retrieved=3 sources=podcast,story context_chars="), line)
         XCTAssertFalse(line.contains("Senate"))
         XCTAssertEqual(DeskContext.turnLine(desk: "local", retrieved: nil), "AUTORADIO turn desk=local retrieved=0 sources=- context_chars=0")
@@ -73,14 +68,12 @@ extension SavedAnswerTests {
 }
 
 final class MailTurnTests: XCTestCase {
-    func ctx(_ docs: [SavedCorpus.Document], _ q: String) -> RetrievalContext {
-        let c = SavedCorpus(heldPages: nil); c.setSource("t") { docs }; return c.retrieve(q)
-    }
-    let story = SavedCorpus.Document(id: "pub:s", title: "Tunnel referendum result", address: "pub:/s", text: "The tunnel referendum passed.", kind: "story", source: "Autopaper", date: Date(timeIntervalSince1970: 1_794_000_000))
-    let mail = SavedCorpus.Document(id: "mail:m", title: "Tunnel referendum notes", address: "mail:m", text: "From Ana. The tunnel referendum notes and the private plan for the tunnel.", kind: "mail", source: "Mail", date: Date(timeIntervalSince1970: 1_794_100_000))
+    func ctx(_ docs: [FakeDoc], _ q: String) -> RetrievalContext { FakeRetrieval.context(docs, q) }
+    let story = FakeDoc(id: "pub:s", title: "Tunnel referendum result", address: "pub:/s", text: "The tunnel referendum passed.", date: Date(timeIntervalSince1970: 1_794_000_000))
+    let mail = FakeDoc(id: "mail:m", title: "Tunnel referendum notes", address: "mail:m", text: "From Ana. The tunnel referendum notes and the private plan for the tunnel.", kind: "mail", source: "Mail", date: Date(timeIntervalSince1970: 1_794_100_000))
 
     func testMailAndFilePassagesAreInWhatTheDeskIsSent() {
-        let c = ctx([story, mail, SavedCorpus.Document(id: "f", title: "Tunnel diary", address: "file:/d", text: "tunnel referendum diary", kind: "file", source: "Local files", date: nil)], "tunnel referendum")
+        let c = ctx([story, mail, FakeDoc(id: "f", title: "Tunnel diary", address: "file:/d", text: "tunnel referendum diary", kind: "file", source: "Local files")], "tunnel referendum")
         XCTAssertEqual(c.items.count, 3)
         let page = DeskContext.page(front: FrontPage(address: "autoradio:home", title: "Autoradio"), pageText: "", brief: "", retrieved: c)!
         XCTAssertTrue(page.text.contains("Tunnel referendum result")); XCTAssertTrue(page.text.contains("private plan")); XCTAssertTrue(page.text.contains("Tunnel diary"))
@@ -98,10 +91,8 @@ final class MailTurnTests: XCTestCase {
 }
 
 extension SavedAnswerTests {
-    func privateCorpus() -> SavedCorpus {
-        let c = SavedCorpus(heldPages: nil)
-        c.setSource("t") { [SavedCorpus.Document(id: "mail:m", title: "Tunnel referendum notes", address: "mail:m", text: "From Ana. The tunnel referendum notes and the plan for the tunnel.", kind: "mail", source: "Mail", date: Date())] }
-        return c
+    func privateCorpus() -> [FakeDoc] {
+        [FakeDoc(id: "mail:m", title: "Tunnel referendum notes", address: "mail:m", text: "From Ana. The tunnel referendum notes and the plan for the tunnel.", kind: "mail", source: "Mail", date: Date())]
     }
     func testAMailQuestionIsAskedOfTheDeskWithTheMailAndItsRevisionReplacesTheLocalAnswer() async throws {
         ScriptedStreamingDesk.requests = []; ScriptedStreamingDesk.sentences = ["The server's answer."]; ScriptedStreamingDesk.hang = false
@@ -125,23 +116,18 @@ extension SavedAnswerTests {
 
 final class OnePathTests: XCTestCase {
     static let now = Date(timeIntervalSince1970: 1_794_700_000)
-    func store() -> SavedCorpus {
-        let c = SavedCorpus(heldPages: nil)
-        func d(_ n: Double) -> Date { Self.now.addingTimeInterval(-n * 86400) }
-        c.setSource("t") { [
-            SavedCorpus.Document(id: "pub:a", title: "Senate passes the water bill", address: "pub:/a", text: "The Senate voted on Tuesday to pass the water bill.", kind: "story", source: "Autopaper", date: d(1)),
-            SavedCorpus.Document(id: "pub:b", title: "Senate committee delays budget hearing", address: "pub:/b", text: "A Senate committee postponed its budget hearing.", kind: "story", source: "Autopaper", date: d(3)),
-            SavedCorpus.Document(id: "pub:c", title: "Harbor strike ends after nine days", address: "pub:/c", text: "Dock workers voted to end the strike over pay.", kind: "story", source: "Autopaper", date: d(2))] }
-        c.onAirHint = "Harbor strike ends after nine days"
-        c.onAirBrief = "On air now: Harbor strike ends after nine days. Up next: Water."
-        return c
-    }
+    func d(_ n: Double) -> Date { Self.now.addingTimeInterval(-n * 86400) }
+    var docs: [FakeDoc] { [
+        FakeDoc(id: "pub:a", title: "Senate passes the water bill", address: "pub:/a", text: "The Senate voted on Tuesday to pass the water bill.", date: d(1)),
+        FakeDoc(id: "pub:b", title: "Senate committee delays budget hearing", address: "pub:/b", text: "A Senate committee postponed its budget hearing.", date: d(3)),
+        FakeDoc(id: "pub:c", title: "Harbor strike ends after nine days", address: "pub:/c", text: "Dock workers voted to end the strike over pay.", date: d(2))] }
+    let hint = "Harbor strike ends after nine days"
+    let brief = "On air now: Harbor strike ends after nine days. Up next: Water."
     func testTheSenateReachesBothDesksNewestFirstWithNothingSpecial() async {
-        let c = store()
-        let ctx = c.retrieve("tell me about the Senate", onAir: "Harbor strike ends after nine days", now: Self.now)
+        let ctx = FakeRetrieval.context(docs, "tell me about the Senate", onAir: hint, brief: brief, now: Self.now)
         XCTAssertEqual(ctx.items.map(\.address), ["pub:/a", "pub:/b"], "newest first, no harbor story")
         let m = FakeLocalModel(pieces: ["The Senate passed it. "])
-        for await _ in SavedAnswerHolder(StageParams(), corpus: c, model: { m }).lines(for: HolderInput(listenerWords: "tell me about the Senate", answers: [], retrieved: ctx)) {}
+        for await _ in SavedAnswerHolder(StageParams(), retrieval: { _, _, _ in ctx }, model: { m }).lines(for: HolderInput(listenerWords: "tell me about the Senate", answers: [], retrieved: ctx)) {}
         let local = m.asked.first?.prefix ?? ""
         let server = DeskContext.page(front: FrontPage(address: "autoradio:home", title: "Autoradio"), pageText: "", brief: ctx.brief, retrieved: ctx)!.text
         for seen in [local, server] {
@@ -151,8 +137,7 @@ final class OnePathTests: XCTestCase {
         }
     }
     func testAPlainFollowUpOnWhatIsOnAirGoesThroughTheSamePath() async {
-        let c = store()
-        let ctx = c.retrieve("more on this", onAir: OnAir.title(pageAddress: "autoradio:home", pageTitle: "Autoradio", hint: c.onAirHint), now: Self.now)
+        let ctx = FakeRetrieval.context(docs, "more on this", onAir: OnAir.title(pageAddress: "autoradio:home", pageTitle: "Autoradio", hint: hint), brief: brief, now: Self.now)
         XCTAssertEqual(ctx.items.first?.address, "pub:/c"); XCTAssertTrue(ctx.record.usedOnAir)
         let server = DeskContext.page(front: FrontPage(address: "autoradio:home", title: "Autoradio"), pageText: "", brief: ctx.brief, retrieved: ctx)!.text
         XCTAssertTrue(server.hasPrefix("On air now: Harbor strike ends after nine days.")); XCTAssertTrue(server.contains("Dock workers voted"))

@@ -1,0 +1,13 @@
+// The shapes of the retrieval runtime's two sources, answered by app.ts (retrieval-live.ts). The ask is native's (interface/retrieval.json).
+use LauncherHit from "@choir/autoradio"
+
+shape RetrievalServed
+  id: string
+  ok: bool
+
+// The launcher's paper-wide search: the rows (the local rows first, then the stories the server found), the note under them, and the query
+// the answer is for (the launcher shows the local rows until an answer for the current query lands).
+shape PaperSearch
+  query: string
+  hits: LauncherHit[]
+  note: string

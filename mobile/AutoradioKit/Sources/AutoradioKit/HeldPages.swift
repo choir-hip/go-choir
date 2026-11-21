@@ -61,6 +61,17 @@ public final class HeldPages: @unchecked Sendable {
     }
     public func all() -> [HeldPage] { lock.lock(); defer { lock.unlock() }; return Array(pages.values) }
     public var count: Int { lock.lock(); defer { lock.unlock() }; return pages.count }
+    /// Lower-cased, curly quotes and dashes straightened, runs of white space collapsed: what the follow-along compares spoken words and the page's text through.
+    static func normalised(_ s: String) -> String {
+        var out = "", lastSpace = true
+        for ch in s {
+            var c = ch
+            switch c { case "\u{2018}", "\u{2019}": c = "'"; case "\u{201C}", "\u{201D}": c = "\""; case "\u{2013}", "\u{2014}": c = "-"; default: break }
+            if c.isWhitespace || c == "\u{00A0}" { if !lastSpace { out.append(" "); lastSpace = true } } else { out += String(c).lowercased(); lastSpace = false }
+        }
+        while out.hasSuffix(" ") { out.removeLast() }
+        return out
+    }
     /// Sign-out: every page held (the previous account's).
     public func wipe() { lock.lock(); pages = [:]; recency = []; lock.unlock() }
 }

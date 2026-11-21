@@ -466,3 +466,39 @@ describe('S15 files, topics and open pages', () => {
     expect(c.retrieve({ words: 'tomatoes basil', now: NOW }).items.length).toBe(0);
   });
 });
+
+// S16 ported from TalkTests.RetrievalIndexPortedTests (the old PassageIndexTests, on the one index)
+describe('S16 the passage index tests of the talk lane', () => {
+  const idx = (): Index => {
+    const i = new Index();
+    i.upsert({ id: 'a', kind: 'story', title: 'Harbor strike ends after nine days', text: 'Dock workers at the harbor voted on Tuesday to end a nine day strike over pay and shift lengths.\nThe union said talks with the port authority resume Monday.', date: null, source: '', address: 'pub:a' });
+    i.upsert({ id: 'b', kind: 'story', title: 'Central bank holds interest rates', text: 'The central bank left interest rates unchanged on Wednesday, citing steady inflation and a cooling labour market.', date: null, source: '', address: 'pub:b' });
+    return i;
+  };
+  const find = (i: Index, w: string, page: string | null = null) => retrieve(bm25Retriever(i), q(w, '', page)).items;
+  test('finds the right story; plural and singular match; unanswerable questions return nothing; one shared common word is not relevance', () => {
+    expect(find(idx(), 'what happened with the harbor strike')[0].id).toBe('a');
+    expect(find(idx(), 'what did the bank do about interest rate')[0].id).toBe('b');
+    expect(find(idx(), 'what is the weather on Mars today')).toEqual([]);
+    expect(find(idx(), 'who won the football match')).toEqual([]);
+    expect(find(idx(), 'lightning strike survivors in Peru')).toEqual([]);
+  });
+  test('stop words only, empty, and an empty index return nothing; indexing again replaces', () => {
+    expect(find(idx(), 'what about it')).toEqual([]); expect(find(idx(), '')).toEqual([]); expect(find(new Index(), 'harbor strike')).toEqual([]);
+    const i = idx(); const n = i.count;
+    i.upsert({ id: 'a', kind: 'story', title: 'Harbor strike ends after nine days', text: 'Dock workers ended the harbor strike on Tuesday after nine days of talks and pay.', date: null, source: '', address: 'pub:a' });
+    expect(i.count).toBeLessThanOrEqual(n); expect(find(i, 'harbor strike').filter((x) => x.id === 'a').length).toBe(1);
+  });
+  test('a huge line is cut into bounded passages; non-ASCII text is indexed; the page in front is preferred', () => {
+    const parts = passages(Array.from({ length: 400 }, (_, n) => `word${n} harbor`).join(' '));
+    expect(parts.length).toBeGreaterThan(1); expect(parts.every((p) => p.length <= 2000)).toBe(true);
+    const i = new Index();
+    i.upsert({ id: 'c', kind: 'story', title: 'Café reopens', text: 'The café on rue Saint-Honoré reopens after the renovation, with a new espresso menu.', date: null, source: '', address: 'pub:c' });
+    expect(find(i, 'café renovation reopens')[0].id).toBe('c');
+    const j = new Index();
+    const body = 'Interest rates stayed unchanged at the central bank this week.';
+    j.upsert({ id: 'x', kind: 'story', title: 'Rates', text: body, date: null, source: '', address: 'pub:x' });
+    j.upsert({ id: 'page:y', kind: 'page', title: 'Rates', text: body, date: null, source: '', address: 'pub:y' });
+    expect(find(j, 'central bank interest rates', 'page:y')[0].id).toBe('page:y');
+  });
+});
