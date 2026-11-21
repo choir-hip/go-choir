@@ -241,7 +241,7 @@ place paper 2500
 goto "paper:front"; wait_ 1200
 [ -n "$STORY2" ] && { to_top; step "tap paper-scroll drag 0 -350"; wait_ 1800; step "tap \"$STORY2\""; view real-14-story-2 4000; step "tap reader-scroll drag 0 -2500"; view real-15-story-2-end 900; }
 goto "paper:front"; wait_ 1200
-[ -n "$PLAY1" ] && { to_top; step "tap \"$PLAY1\""; wait_ 5000; step tree; shot real-16-playing; step "tap bar-now"; view real-17-radio-page 1200; }
+[ -n "$PLAY1" ] && { to_top; step "tap \"$PLAY1\""; wait_ 5000; step tree; shot real-16-playing; step logs; step "tap bar-now"; view real-17-radio-page 1200; }
 place textures 900; wait_ 2500
 [ -n "$DOC1" ] && { step "tap \"$DOC1\""; view real-18-texture-document 4000; }
 place files 900; wait_ 2500
