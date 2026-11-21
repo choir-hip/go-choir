@@ -1,13 +1,12 @@
-// Edition setup under bun test. Ported from EditionSetupTests.swift (E1 to E9, T1 to T3, C1 to C4 and the spoken forms).
+// Edition setup under bun test. Ported from EditionSetupTests.swift (E1 to E5, E8, T1 to T3 and the spoken forms; E6, E7, E9 are edition-picks.test.ts). The edition writer's tests (C1 to C4) stay with the Swift writer.
 import { describe, expect, test } from 'bun:test';
 import {
-  suggestions, TREE, key, parentsOf, Selection, parseSpoken, isEmptyEdit, labelForSectionID, treeRows, Session, EXPLAINER, VOICE_HINT, EMPTY_LINE, SPOKEN_OPEN, selectionLine,
-  MAX_TOPIC_LENGTH, localEdition, editionLines, complete, localWriter, generalEdition, FAILED_LINE, type TextFile, type Writer,
+  suggestions, TREE, key, parentsOf, Selection, parseSpoken, isEmptyEdit, labelForSectionID, treeRows, EXPLAINER, VOICE_HINT, EMPTY_LINE, SPOKEN_OPEN, selectionLine,
+  MAX_TOPIC_LENGTH,
 } from './edition-model.ts';
 
 const sug = suggestions();
 const rows = (exp: string[], sel: string[], live: string[] = []) => treeRows({ liveSections: live, expanded: new Set(exp.map(key)), selection: new Selection(sel), own: [] });
-const memory = (): TextFile & { text?: string } => { const m: TextFile & { text?: string } = { read: async () => m.text, write: async (t) => { m.text = t; }, remove: async () => { m.text = undefined; } }; return m; };
 
 describe('what is offered', () => {
   test('suggestions are generous and start with the house sections', () => {
@@ -59,13 +58,6 @@ describe('the tree', () => {
     expect(rows(['Culture'], ['Culture']).filter((x) => x.kind === 'sub').every((x) => !x.selected)).toBe(true);
     expect(rows(['Sports'], []).length).toBe(10); expect(rows(['Culture'], []).length).toBe(17); expect(rows([], []).find((x) => x.label === 'Sports')?.expandable).toBe(false);
   });
-  test('the session expands and takes live sections', () => {
-    const s = new Session(suggestions());
-    s.toggleExpanded('Business'); expect(s.treeRows().length).toBe(17);
-    s.toggleExpanded('business'); expect(s.treeRows().length).toBe(10);
-    s.setLiveSections(['housing_market', 'world']);
-    expect(s.treeRows().at(-1)?.label).toBe('Housing market'); expect(s.treeRows().length).toBe(11);
-  });
 });
 
 describe('picking and saying', () => {
@@ -115,76 +107,10 @@ describe('picking and saying', () => {
     expect(s.addTyped('a\u0007b', sug)).toEqual(['Ab']);
   });
   test('E4: no minimum and no maximum', () => {
-    expect(localEdition([]).sections[0].lines).toEqual(['The whole paper, until I say otherwise.']);
     expect(selectionLine([])).toContain('general edition');
     const s = new Selection();
     for (const t of sug) s.toggle(t, sug);
-    expect(s.topics.length).toBe(sug.length); expect(localEdition(s.topics).sections[0].lines.length).toBe(sug.length);
+    expect(s.topics.length).toBe(sug.length);
     expect(selectionLine(['Space'])).toContain('Space'); expect(selectionLine(['Space', 'Chess', 'Film'])).toContain('3 topics');
-  });
-});
-
-describe('the session', () => {
-  test('E6, E7: saved locally and shown again', async () => {
-    const f = memory();
-    const a = await Session.open(sug, f);
-    expect(a.hasSaved).toBe(false);
-    await a.toggle('Space'); await a.addTyped('Chess'); await a.hear('add film');
-    expect(a.hasSaved).toBe(true);
-    const b = await Session.open(sug, f);            // coming back to the step
-    expect(b.topics).toEqual(['Space', 'Chess', 'Film']);
-    const r = b.treeRows();
-    expect(r.find((x) => x.kind === 'yours')?.label).toBe('Chess'); expect(r.find((x) => x.label === 'Science')?.partial).toBe(true); expect(r.find((x) => x.label === 'World')?.selected).toBe(false);
-  });
-  test('E7: a corrupt or empty file starts empty', async () => {
-    const f = memory(); f.text = '{not json';
-    expect((await Session.open(sug, f)).topics).toEqual([]);
-    f.text = '';
-    expect((await Session.open(sug, f)).topics).toEqual([]);
-  });
-  test('E6: a failed write loses nothing in memory', async () => {
-    const f: TextFile = { read: async () => undefined, write: async () => { throw new Error('disk full'); }, remove: async () => undefined };
-    const s = await Session.open(sug, f);
-    await s.toggle('Space');
-    expect(s.topics).toEqual(['Space']);
-  });
-  test('E9: a deselected own topic stays as a chip', async () => {
-    const s = new Session(sug);
-    await s.addTyped('Chess'); await s.toggle('Chess');
-    expect(s.topics).toEqual([]);
-    const c = s.treeRows().find((x) => x.label === 'Chess');
-    expect(c).toBeDefined(); expect(c?.selected).toBe(false); expect(c?.kind).toBe('yours');
-  });
-  test('finish by voice calls back; sign-out wipes', async () => {
-    const f = memory();
-    const s = await Session.open(sug, f);
-    let done = false; s.onFinish = () => { done = true; };
-    expect(await s.hear('continue')).toBe('Okay.'); expect(done).toBe(true);
-    await s.toggle('Space'); await s.wipe();
-    expect(s.topics).toEqual([]); expect(f.text).toBeUndefined();
-  });
-});
-
-describe('finishing always ends (C1 to C4)', () => {
-  test('C1: success', async () => {
-    const o = await complete(['Space'], localWriter);
-    expect(o.kind).toBe('written');
-    expect(o.kind === 'written' && editionLines(o.edition)).toEqual(['What I follow', 'Space']);
-  });
-  test('C2: failure says so plainly', async () => {
-    const o = await complete(['Space'], async () => { throw new Error('no'); });
-    expect(o).toEqual({ kind: 'failed', line: FAILED_LINE }); expect(FAILED_LINE).toContain('topics are saved');
-  });
-  test('C3: a writer that never returns times out at the deadline and is aborted', async () => {
-    let aborted = false;
-    const never: Writer = (_t, _p, signal) => new Promise((_res, rej) => { signal.addEventListener('abort', () => { aborted = true; rej(new Error('aborted')); }); });
-    const t0 = Date.now();
-    const o = await complete([], never, undefined, 0.2);
-    expect(o).toEqual({ kind: 'timedOut' }); expect(Date.now() - t0).toBeLessThan(5000); expect(aborted).toBe(true);
-  });
-  test('"Continue anyway" is the general edition', () => expect(editionLines(generalEdition())).toEqual(['What I follow', 'The whole paper, until I say otherwise.']));
-  test('the edition is written without a network from the choices', async () => {
-    const e = await localWriter(['Space', 'Chess'], () => undefined, new AbortController().signal);
-    expect(e.title).toBe('My edition'); expect(editionLines(e)).toEqual(['What I follow', 'Space', 'Chess']);
   });
 });

@@ -5,7 +5,7 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 const CONTROL = /\p{Cc}/u;
 // Edition setup: the reader picks the topics of their edition on a screen of chips, or says them. Ported from EditionSetup.swift (the logic;
 // the screen is onboarding's). Pure data: the selection, the topic tree, how a spoken sentence becomes edits, what is said back, and how finishing
-// always ends. Saving is a `Storage`-shaped text file the caller passes; nothing here needs the network (E6).
+// always ends. Saving is edition-picks.ts's; nothing here needs the network (E6). The edition writer (the local edition and its deadline) stays native: see EditionSetup.swift.
 //
 // WAYS THIS CAN FAIL (each has a test in edition.test.ts):
 //  E1 The same topic twice: by tap, by typing, by speech, in another case, with a plural, or as a synonym ("tech"): one entry.
@@ -21,7 +21,6 @@ const CONTROL = /\p{Cc}/u;
 //  T3 Picking a category does not pick its subtopics, and picking a subtopic does not pick its category; a category with only some
 //     subtopics picked is "partial". Picking changes no row, only expanding does.
 //  E9 Chips of the reader's own topics stay on screen after they are deselected until the step is left, so a mis-tap is undone.
-//  C1 to C4 finishing always ends: the edition, a failure, or the deadline; the reader's topics are untouched.
 
 export const MAX_TOPIC_LENGTH = 60;
 
@@ -278,103 +277,3 @@ export function treeRows(o: { liveSections?: string[]; expanded: Set<string>; se
   }
   return out;
 }
-
-// ---- the session: one selection, saved after every change ----
-
-export interface TextFile { read(): Promise<string | undefined>; write(text: string): Promise<void>; remove(): Promise<void>; }
-
-export class Session {
-  selection: Selection;
-  onChange?: () => void;
-  /** Called when the reader says "continue" or "done". */
-  onFinish?: () => void;
-  private suggestionList: string[];
-  /** The reader's own topics seen this visit, kept as chips after a deselect (E9). */
-  private ownSeen: string[] = [];
-  private live: string[];
-  private expanded = new Set<string>();
-  private saved = false;
-  constructor(sugg: string[], private file?: TextFile, liveSections: string[] = [], initial?: Selection) {
-    this.suggestionList = sugg; this.live = liveSections; this.selection = initial ?? new Selection();
-    this.ownSeen = this.selection.topics.filter((t) => !sugg.some((s) => key(s) === key(t)));
-  }
-  /** The saved selection, or undefined when there is none or the file is unreadable (E7). */
-  static async load(file: TextFile | undefined): Promise<Selection | undefined> {
-    const text = await file?.read().catch(() => undefined);
-    if (!text) return undefined;
-    try {
-      const v = JSON.parse(text) as { topics?: unknown };
-      if (!Array.isArray(v.topics)) return undefined;
-      return new Selection(v.topics.filter((t): t is string => typeof t === 'string').map(tidy).filter((t): t is string => t !== undefined));
-    } catch { return undefined; }
-  }
-  static async open(sugg: string[], file?: TextFile, liveSections: string[] = []): Promise<Session> {
-    const s = await Session.load(file);
-    const session = new Session(sugg, file, liveSections, s);
-    session.saved = s !== undefined;
-    return session;
-  }
-  get topics(): string[] { return [...this.selection.topics]; }
-  get hasSaved(): boolean { return this.saved; }
-  private async save(): Promise<void> {
-    if (!this.file) return;
-    try { await this.file.write(JSON.stringify({ topics: this.selection.topics })); this.saved = true; } catch { /* a failed write loses nothing in memory (E6) */ }
-  }
-  /** Sign-out: the selection, the topics seen and the saved file. */
-  async wipe(): Promise<void> { this.selection = new Selection(); this.ownSeen = []; this.saved = false; await this.file?.remove().catch(() => undefined); }
-  setLiveSections(live: string[]): void { this.live = live; this.suggestionList = suggestions(live); this.onChange?.(); }
-  /** Open or close a category (the disclosure control). Not a selection. */
-  toggleExpanded(label: string): void { const k = key(label); if (this.expanded.has(k)) this.expanded.delete(k); else this.expanded.add(k); this.onChange?.(); }
-  private noteOwn(t: string): void {
-    if (!this.suggestionList.some((s) => key(s) === key(t)) && !this.ownSeen.some((s) => key(s) === key(t))) this.ownSeen.push(t);
-  }
-  treeRows(): TopicRow[] { return treeRows({ liveSections: this.live, expanded: this.expanded, selection: this.selection, own: this.ownSeen }); }
-  async toggle(label: string): Promise<void> {
-    this.selection.toggle(label, this.suggestionList);
-    if (this.selection.contains(label)) this.noteOwn(resolve(label, this.suggestionList) ?? label);
-    await this.save(); this.onChange?.();
-  }
-  /** Typed topics. Returns what was added. */
-  async addTyped(text: string): Promise<string[]> {
-    const a = this.selection.addTyped(text, this.suggestionList); a.forEach((t) => this.noteOwn(t));
-    await this.save(); this.onChange?.(); return a;
-  }
-  /** The reader spoke. Returns the one line to say back (undefined when there is nothing to say). */
-  async hear(words: string): Promise<string | undefined> {
-    const o = this.selection.apply(words, this.suggestionList); o.added.forEach((t) => this.noteOwn(t));
-    await this.save(); this.onChange?.();
-    if (o.finish) this.onFinish?.();
-    return o.reply === '' ? undefined : o.reply;
-  }
-  async clear(): Promise<void> { this.selection = new Selection(); this.ownSeen = []; await this.save(); this.onChange?.(); }
-}
-
-// ---- the edition, written from the choices ----
-
-export type Edition = { title: string; intro: string; writingLines: string[]; sections: { heading: string; lines: string[] }[]; failFirst?: boolean };
-export const editionLines = (e: Edition): string[] => e.sections.flatMap((s) => [s.heading, ...s.lines]);
-/** The edition on this phone, from the choices alone: deterministic, no network (E6). The computer's desk is not asked. */
-export function localEdition(topics: string[]): Edition {
-  return { title: 'My edition', intro: 'This is your edition. Change anything by asking.', writingLines: ['Putting your edition together'], sections: [{ heading: 'What I follow', lines: topics.length === 0 ? ['The whole paper, until I say otherwise.'] : topics }] };
-}
-export type Writer = (topics: string[], progress: (line: string) => void, signal: AbortSignal) => Promise<Edition>;
-export const localWriter: Writer = async (topics, progress) => { progress('Putting your edition together'); return localEdition(topics); };
-
-export type Outcome = { kind: 'written'; edition: Edition } | { kind: 'failed'; line: string } | { kind: 'timedOut' };
-export const DEADLINE_SECONDS = 20;
-export const FAILED_LINE = "I couldn't write your edition just now. Your topics are saved.";
-export const TIMED_OUT_LINE = 'Writing your edition is taking too long. Your topics are saved.';
-
-/** Finishing always ends: the edition, a failure, or the deadline (the writer's signal is aborted). */
-export async function complete(topics: string[], writer: Writer, progress: (line: string) => void = () => undefined, deadlineSeconds = DEADLINE_SECONDS): Promise<Outcome> {
-  const ac = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<Outcome>((res) => { timer = setTimeout(() => res({ kind: 'timedOut' }), Math.max(deadlineSeconds, 0) * 1000); });
-  const run = writer(topics, progress, ac.signal).then<Outcome, Outcome>((edition) => ({ kind: 'written', edition }), (e) => (ac.signal.aborted ? { kind: 'timedOut' } : { kind: 'failed', line: FAILED_LINE }));
-  const first = await Promise.race([run, timeout]);
-  if (timer) clearTimeout(timer);
-  ac.abort();
-  return first;
-}
-/** The general edition: what "Continue anyway" writes. It needs nothing from the network and cannot fail. */
-export const generalEdition = (): Edition => localEdition([]);

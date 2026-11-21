@@ -3,7 +3,7 @@
 // on top and an open article keeps the list of the view it came from), the width the
 // page reports, `paperTick` (a pull to refresh: asks the server again) and `paperFocus` (paper, article or away: coming back to the paper from another
 // page, the topic screen above all, asks again so My edition is built from the picks as they are now; paper.ts answers from its kept lists).
-use editionPicks, EditionPicks from "@choir/autoradio"
+use EditionPicks from "./edition-types.contract"
 use PaperFront from "./paper-types.contract"
 
 members Autoradio
@@ -11,8 +11,8 @@ members Autoradio
   state paperView = "front"
   state paperTick = 0
   derive paperFocus = pg.top.startsWith("paper:") ? "paper" : (pg.top.startsWith("pub:") ? "article" : "away")
-  // The reader's saved picks (a topic per line), from the Swift side until the edition setup moves; asked again when the reader comes back to the paper.
-  resource epicks = editionPicks(focus=paperFocus) as shape EditionPicks else empty()
+  // The reader's saved picks (a topic per line), shared code (edition-picks.ts); asked again when the reader comes back to the paper and when the account changes.
+  resource epicks = editionPicks(paperFocus, signedOutTick, epTick) as shape EditionPicks else empty()
   // Arguments are positional (named ones belong to a package's sources): view, width, tick, focus, picks.
   // `paperFront` is not a package name: it is answered by app.ts (paper.ts). The page reads the list from the server, keeps the last good one for an offline start,
   // and composes the bands for the width the page reports.

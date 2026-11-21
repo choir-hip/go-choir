@@ -14,6 +14,8 @@ import Security
 //
 // The mail cipher (Choir/MailSeal.swift): `mailSeal`, `mailOpen`, `mailForget`, a platform cipher shared code has none of; the key never leaves the Keychain.
 //
+// The edition picks' calls (`editionLegacy`, `editionLegacyDrop`, `editionMirror`, `editionMirrorReset`, `editionHeard`, `editionSaid`): the old Swift file (Application Support, which shared code cannot see), the voice's in-memory copy of the picks, and the words the voice heard at the setup screen (docs/reference/AUTORADIO-EDITION-PICKS.md).
+//
 // The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
 // by shared code (AutoradioLab/account.ts); the reason it is native is that the key is a Keychain item the Swift sign-in wrote and the Swift stores
 // (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift. It goes with them when sign-in itself moves.
@@ -66,6 +68,8 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        // The edition picks' native calls (EditionSetup.swift `EditionNative`), each with the reason only native code can meet: the old file in Application Support, the voice's copy of the picks, the words the voice heard.
+        if let op = op, op.hasPrefix("edition") { reply.send(EditionNative.op(request)); return }
         if let op = op, op.hasPrefix("take") {
             Task { @MainActor in reply.send(await AutoradioModule.current?.takeOp(request) ?? [:]) }
             return
