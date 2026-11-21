@@ -105,6 +105,16 @@ type searchDone struct {
 	providers []types.SearchServedUsage
 }
 
+// pagesReturned is the results the providers returned, summed (a page two
+// providers returned counts twice).
+func (d searchDone) pagesReturned() int {
+	n := 0
+	for _, p := range d.providers {
+		n += p.Results
+	}
+	return n
+}
+
 // startSearch serves choir.SearchStart for the session key's worker. It
 // returns once the gateway has named the providers it started; record is
 // called when the stream ends, before the worker hears of it. leads, when set,

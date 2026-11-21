@@ -310,6 +310,9 @@ type researchBriefResult struct {
 	// read; unread counts the unread records the run's inbox held.
 	from   string
 	unread int
+	// held are the delivered brief's captures, in the brief's order: the run's
+	// search zero, read before it searches the web (yaegikernel.HeldPage).
+	held []yaegikernel.HeldPage
 }
 
 type briefBlock struct {
@@ -585,6 +588,11 @@ collect:
 		return res
 	}
 	res.outcome = briefDelivered
+	for _, c := range caps {
+		if strings.TrimSpace(c.URL) != "" {
+			res.held = append(res.held, yaegikernel.HeldPage{URL: c.URL, Title: c.Title, CaptureID: c.CaptureID})
+		}
+	}
 	delivered, _ := json.Marshal(map[string]any{"captures": nonNilCaptures(caps), "published": stories})
 	got, _ := egressReadLabels(yaegikernel.ActionSearchWireCorpus, nil, delivered)
 	res.labels = res.labels.Union(got)
@@ -865,6 +873,9 @@ func (rt *Runtime) researchBriefOpening(ctx context.Context, rec *types.RunRecor
 	ctx = researchtools.WithCorpusCaller(ctx, researchtools.CorpusCallerBrief)
 	b.res = buildResearchBrief(ctx, plan, rt.researchBriefSearcher())
 	b.res.from, b.res.unread = plan.from, len(recs)
+	if b.res.outcome == briefDelivered {
+		rt.noteBriefHeld(rec.RunID, b.res.held)
+	}
 	if b.res.panicked > 0 {
 		// Once per brief, with the run and no query text.
 		log.Printf("runtime: research brief run=%s: a corpus search panicked (%d of %d threads); the run starts without those threads", rec.RunID, b.res.panicked, len(plan.threads))

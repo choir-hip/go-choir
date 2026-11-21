@@ -681,6 +681,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 						// stamp what it writes without world_untrusted (review
 						// r1, S1).
 						rt.taintRun(cellExec.RunID, worldReadLabels)
+						// What the run held and had read when it asked is written before
+						// the stream opens, so a search cannot count its own results as
+						// held (search_decision.go).
+						rt.recordSearchDecision(context.WithoutCancel(egrCtx), cellExec, payload, workers.sessionLabel(sessionKey), pid)
 						// An async search belongs to this desk session: its
 						// stream outlives the cell and ends with the session.
 						out, err = workers.startSearch(search.WithAttribution(egrCtx, search.Attribution{RunID: cellExec.RunID, Desk: deskRole, Conversation: cellExec.ChannelID}), sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {
@@ -688,6 +692,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 								"verb": "search_done", "search_id": done.id, "desk_session": workers.sessionLabel(sessionKey), "worker_pid": pid,
 								"run_id": cellExec.RunID, "started_at": done.started.UTC(), "finished_at": time.Now().UTC(),
 								"answered": done.answered, "arrived": done.arrived, "total": done.total,
+								"pages_returned": done.pagesReturned(),
 							}
 							if len(done.pending) > 0 {
 								ev["pending"] = done.pending
@@ -791,7 +796,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			rt.seedRunLabels(execCtx.RunID, workers.sessionLabels(lease))
 			shownCalibration, delivery := rt.calibrationReadableForRun(ctx, execCtx.RunRecord)
 			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, RunID: execCtx.RunID, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
-				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration,
+				Updates: updates, Records: reduction.records.view, RecordsAfter: reduction.records.after, Analysis: analysis, Calibration: shownCalibration, Held: rt.briefHeldFor(execCtx.RunID),
 				Backlog: frameBacklog(reduction.records.remaining, updatesRemaining, updatesTooLarge)})
 			// The host consumes only the updates the cell was shown whole.
 			// A cell that failed consumes nothing.
@@ -1553,6 +1558,9 @@ func (rt *Runtime) recordDeskRefusal(ctx context.Context, fallback toolregistry.
 // not published on the live bus, and a failure to record never fails the
 // cell.
 func (rt *Runtime) recordDeskEvent(ctx context.Context, exec toolregistry.ExecutionContext, kind types.EventKind, payload map[string]any) {
+	if rt != nil && rt.deskEventTap != nil {
+		rt.deskEventTap(kind, payload)
+	}
 	if rt == nil || rt.store == nil {
 		return
 	}

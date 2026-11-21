@@ -307,6 +307,13 @@ func TestOverlayWorkedCellSearchesReadsAndSendsTheInterimInOneCell(t *testing.T)
 	if got := f.reads.Load(); got != 4 {
 		t.Errorf("the cell read %d pages, want 4: one per host of 4 hosts", got)
 	}
+	// One wording, one search; the stop test says to report, not to search again.
+	if got := f.searchCalls.Load(); got != 1 {
+		t.Errorf("the worked cell sent %d searches, want 1", got)
+	}
+	if !strings.Contains(out.Stdout, "a second outlet is read: report now, do not search again") {
+		t.Errorf("the worked cell did not print its stop test:\n%s", out.Stdout)
+	}
 	for _, l := range out.Searches {
 		if strings.Contains(l, "interim packet") {
 			t.Errorf("a cell that read and sent in one cell was nudged to send: %s", l)

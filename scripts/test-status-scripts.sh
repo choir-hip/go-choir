@@ -706,8 +706,8 @@ check "R17 the measurement fields are summed over the lines that carry them (2 o
 check "R17 the reuse decline reasons are summed by token and the outlets are shown" 'grep -q "reuse declined a prior identical search, by reason: earlier_run=1, out_of_window=2" "$root/out" && grep -q "largest 7" "$root/out"'
 check "R17 the new fields are not listed as unknown numeric fields, and the older lines still count" '! grep -q "other numeric fields" "$root/out" && grep -q "summary lines): 3" "$root/out"'
 runcorpus --fixture "$root/cr_e.log"
-check "R16 6 searches refused by the need test, 4 sent: 60.0% of attempts" 'grep -q "refused by the need test (holds_unread, every verb) 6; web searches sent 4; refused share of attempts 60.0%" "$root/out"'
-check "R16 fresh_over_unread is read, summed and printed" 'grep -q "fresh_over_unread 1, untagged 0" "$root/out"'
+check "R16 6 searches refused by the need test, 4 sent: 60.0% of attempts" 'grep -q "refused by the need test (holds_unread, read_first, held_first, site_held; every verb) 6; web searches sent 4; refused share of attempts 60.0%" "$root/out"'
+check "R16 fresh_over_unread is read, summed and printed" 'grep -q "fresh_over_unread+fresh_sent 1, untagged 0" "$root/out"'
 # R10
 mkpaper 'many(90, 100, PAPER, "devin", "swe-2-flash")'; mkstore 77926 '78 + 0.5 * h' 3
 env -u BASH_ENV python3 "$hourly" --paper-fixture "$root/paper.json" --storage-fixture "$root/store.json" --corpus-fixture "$root/missing.log" --corpus-append "$root/h.tsv" >"$root/out" 2>&1; rc=$?
@@ -942,6 +942,44 @@ check "C2 21h: 4 decisions, 3 opens, 1 feed; the weird line is not counted" 'pyt
 check "C3 two opens had an offer; the feed with an offer does not count" 'python3 -c "import json,sys; r=json.load(open(sys.argv[1]))[0]; assert r[\"opens_offered\"]==2, r" "$root/out"'
 check "C4 verdicts same 1, different 1, none 1" 'python3 -c "import json,sys; r=json.load(open(sys.argv[1]))[0]; assert (r[\"same\"],r[\"different\"],r[\"none\"],r[\"follow_up\"])==(1,1,1,0), r" "$root/out"'
 check "C5 one page cut; median of 300,310,320,330 is 315; the old line reads opening_shown 50" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[0][\"left_out\"]==1 and d[0][\"median_page\"]==315 and d[1][\"median_page\"]==50, d" "$root/out"'
+
+
+# status-search-reads (the deployed proof of the read-first rule). Failure list,
+# written before the code:
+#  W1  runs, searches or the mean per run are wrong, or a desk other than research is counted
+#  W2  the 1/2/3/4+ distribution or the 7-or-more tail is wrong
+#  W3  a later search sent with a read since the previous one is counted as zero-read, or one with none is not
+#  W4  refusals by reason (read_first, held_first, site_held, holds_unread) are not summed from the run lines
+#  W5  fresh_sent is not summed, or pages returned and read are not
+#  W6  a search before --since is counted
+searchreads="$here/status-search-reads"
+python3 - "$root" <<'PY'
+import sys
+root = sys.argv[1]
+G = lambda ts, run, desk="research": f"{ts} gateway: search request from autoputer vm-x ( max_results=40 run={run} desk={desk} conv=c-{run})\n"
+R = lambda ts, run: f"[ 1.0] runtime[1]: {ts} corpus read run={run} desk=research conv=c capture=obj:x held=false via=read\n"
+S = lambda ts, run, extra: f"[ 1.0] runtime[1]: {ts} runtime: search run={run} desk=research {extra}\n"
+out = ["##READS\n", R("2026/11/21 04:59:00", "other"), R("2026/11/21 05:00:30", "r1"),
+       "##SUM\n",
+       S("2026/11/21 05:05:00", "r1", "started=3 from_held=0 not_sent=3 (read_first=2 held_first=1) search_all_calls=1 wordings_offered=1 wordings_sent=1 fresh_sent=1 untagged=0 wordings_running=0 pages_returned=100 pages_new=90 pages_read=12"),
+       S("2026/11/21 05:06:00", "r2", "started=1 from_held=0 not_sent=1 (holds_unread=1 site_held=2) fresh_sent=0 pages_returned=40 pages_new=40 pages_read=8"),
+       "##GW\n",
+       G("2026/11/21 04:00:00", "early"),
+       G("2026/11/21 05:00:00", "r1"), G("2026/11/21 05:01:00", "r1"), G("2026/11/21 05:02:00", "r1"),
+       G("2026/11/21 05:03:00", "r2"),
+       G("2026/11/21 05:04:00", "r2", "management")]
+for i in range(7):
+    out.append(G("2026/11/21 05:%02d:00" % (10 + i), "r3"))
+open(root + "/sr.txt", "w").write("".join(out))
+PY
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T05:00Z --json >"$root/out" 2>&1
+check "W1 3 runs, 11 searches (the management line and the 04:00 search are out), mean 3.67" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"runs\"],d[\"searches\"],d[\"mean_per_run\"])==(3,11,3.67), d" "$root/out"'
+check "W2 runs by searches 1:1 2:0 3:1 4+:1; one run of 7 with 7 searches" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"runs_by_searches\"]=={\"1\":1,\"2\":0,\"3\":1,\"4+\":1} and (d[\"runs_7plus\"],d[\"searches_from_7plus\"])==(1,7), d" "$root/out"'
+check "W3 8 later searches in the console span, 7 with no read since the previous one (r1 read once, between its first two)" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"later_searches\"],d[\"later_zero_reads\"])==(8,7), d" "$root/out"'
+check "W4 refusals by reason are summed from the run lines" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d[\"refusals\"]=={\"read_first\":2,\"held_first\":1,\"holds_unread\":1,\"site_held\":2} and d[\"refused\"]==6, d" "$root/out"'
+check "W5 fresh_sent 1; pages returned 140, read 20" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert (d[\"search_fresh\"],d[\"pages_returned\"],d[\"pages_read\"])==(1,140,20), d" "$root/out"'
+env -u BASH_ENV python3 "$searchreads" --fixture "$root/sr.txt" --since 2026-11-21T04:00Z >"$root/out" 2>&1
+check "W6 the text report prints the runs line and the SearchFresh count" 'grep -q "^runs 4  searches 12  mean per run 3.0" "$root/out" && grep -q "SearchFresh sends (ended runs): 1" "$root/out"'
 
 echo "status-scripts: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

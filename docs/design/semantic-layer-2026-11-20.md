@@ -397,6 +397,54 @@ published not more than 10% lower. p 0.20. C-B3: after B, under 10% of later
 searches are sent with no page read since the previous one (from 44%). p 0.70.
 Settle each by its deploy plus 2 days.
 
+### 4.6 As built, 2026-11-21: where the code differs from 4.2 to 4.5
+
+Built in lane `search-read-first`; the code wins where it differs.
+
+- **Rule 1 has no "or an outlet new to the story".** The guest does not know the
+  story's outlets, so the alternative cannot be tested there. The rule is only:
+  the top 5 pages new to the run of every earlier search are tried (fewer when
+  fewer came back). It is stricter than 4.2, in the direction of the owner's
+  ruling ("reading much more and searching less").
+- **No new event kinds.** `search.decision` and `search.result` are not new
+  `EventKind`s (each would need rows in the storage, durability and sealer
+  tables, which is its own red change). The decision is a desk egress event with
+  `verb: "search_decision"`, written before `client.Stream` opens
+  (`agentcore/search_decision.go`, called from the egress handler in
+  `tools_desk.go` just before `startSearch`); the result is the existing
+  `search_done` event with `pages_returned`. "Pages new to the corpus" and
+  "outlets new to the story" are not recorded: the leads are written after the
+  stream ends and the guest does not know the story's outlets.
+- **The need state is the guest's own report**, in `SearchStartPayload`
+  (`verb`, `earlier`, `returned`, `tried`, `read`, `outlets`, `held_brief`,
+  `held_tried`, `fresh_why`). It is a record, not a gate: the gate is the guest's
+  refusal.
+- **`SearchAll` sends one wording per call as a consequence, not a special case**:
+  after the first wording is sent its top pages are untried, so the next wording
+  of the same call is refused (`read_first`, one count for the call).
+- **Search zero** is the brief's captures in the brief's own order (top 5), handed
+  to the run's cells in `SessionFrame.Held` from the brief result
+  (`researchBriefResult.held`), kept per run in `Runtime.briefHeld` and
+  forgotten when the run ends.
+- **`SearchFresh(query, why)`** needs a reason of at least 20 characters and
+  overrides every refusal, including the running rule. `Search(q, true)` and
+  `SearchStart(q, true)` keep their signature so an old cell gets the message
+  instead of a compile error. The refusal reasons counted on the run line are
+  `read_first`, `held_first`, `site_held`, `fresh_arg`, `fresh_why`; `fresh_sent`
+  replaces `fresh_over_unread`. `refuseForUnread`, `searchEnoughUnread` and
+  `unreadRefusal` are deleted; `mostly_seen` is kept (it holds a wording once the
+  web has shown what it has).
+- **The 7-or-more tail.** The rule makes a run's 7th search cost the reading of
+  the top 5 pages of each of the six before it (30 pages), and the stop rule in
+  the prompt says to report once a second independent outlet is read. Nothing
+  forces a stop, by design (no quota): a run that reads and still lacks something
+  sends the search, and one that disagrees with the held pages says so in a
+  recorded `SearchFresh` reason. If the tail persists with reasons, the prompt's
+  stop test is not enough (section 7); `scripts/status-search-reads` prints the
+  tail (runs with 7 or more, their share of searches) and the `SearchFresh`
+  count.
+- **Deployed proof:** `scripts/status-search-reads --since T`.
+
 ---
 
 ## 5. After A and B: over-merges and the clustering measure
