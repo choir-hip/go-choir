@@ -26,7 +26,7 @@ final class JoinHearItTests: XCTestCase {
         let withGuid = PodcastClip.parse(clipRow(hex(1), guid: "g1")), noGuid = PodcastClip.parse(clipRow(hex(2), guid: "")), noFeed = PodcastClip.parse(clipRow(hex(3), feed: nil))
         XCTAssertEqual(withGuid?.episodeEntry.audioSpec?.episodeId, PodcastKey.episode(feed: "https://example.test/feed.xml", id: "g1"))
         XCTAssertEqual(noGuid?.episodeEntry.audioSpec?.episodeId, PodcastKey.episode(feed: "https://example.test/feed.xml", id: PodcastKey.webURL("https://example.test/\(hex(2)).mp3")))
-        XCTAssertNil(noFeed?.episodeEntry.audioSpec?.episodeId)
+        XCTAssertNil(PodcastKey.parseEpisode(noFeed?.episodeEntry.audioSpec?.episodeId ?? "")), "no feed: no podcast key, so no Open episode")
     }
     func store(_ rows: [[String: Any]]) -> ClipStore { let s = ClipStore(); s.replace(rows.compactMap(PodcastClip.parse)); return s }
 
