@@ -1,0 +1,21 @@
+// The queue's shape, answered by shared code (radio-bridge.ts `queueView`); it was the Swift package's (interface/queue.json) before the run sheet and its player moved.
+
+shape QueueInfo
+  current: string
+  currentKind: string
+  audio: bool
+  playing: bool
+  clip: bool
+  keepTitle: string
+  canOpenEpisode: bool
+  elapsed: number
+  duration: number
+  elapsedLabel: string
+  remainingLabel: string
+  fraction: number
+  message: string
+  notice: string
+  writing: bool
+  dry: bool
+  webUrl: string
+  webHost: string

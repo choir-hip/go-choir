@@ -4,7 +4,7 @@
 use onboardingState, onboardingBegin, onboardingRetry, onboardingFallback, onboardingMic, onboardingMicNext, onboardingHearing from "@choir/autoradio"
 use onboardingTopics, onboardingTalk, onboardingTopicsDone from "@choir/autoradio"
 use onboardingEditionRetry, onboardingEditDone, onboardingEditLeave, onboardingContinueAnyway, onboardingSkip from "@choir/autoradio"
-use pageOpen, pageClose, choirStartRadio from "@choir/autoradio"
+use pageOpen, pageClose from "@choir/autoradio"
 use Onboarding from "@choir/autoradio"
 use EditionPage from "./edition-types.contract"
 
@@ -78,5 +78,5 @@ members Autoradio
   action obFinish
     send pm = pageOpen(address="paper:front", title="Paper")
     send pms = pagesOpen("paper:front", "Paper")
-    send acct = choirStartRadio()
+    send acct = radioStart()
     layer = ""

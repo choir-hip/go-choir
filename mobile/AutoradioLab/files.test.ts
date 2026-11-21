@@ -232,10 +232,9 @@ describe('F22 audio from Files reaches the run sheet', () => {
     const v = readFileSync(new URL('./viewers.contract', import.meta.url), 'utf8');
     expect(v).toContain('queueFilePlay("now", fvInfo.address, fvInfo.local, fvInfo.name)');
     expect(v).toContain('queueFilePlay("add", fvInfo.address, fvInfo.local, fvInfo.name)');
-    const q = JSON.parse(readFileSync(new URL('../exact-package/interface/queue.json', import.meta.url), 'utf8'));
-    expect(q.names.find((n: { send?: string }) => n.send === 'queueAdd')?.options).toEqual({ mode: 'string', kind: 'string', ref: 'string', title: 'string', local: 'string' });
     const m = readFileSync(new URL('./members-queue.contract', import.meta.url), 'utf8');
-    expect(m).toContain('queueAdd(mode=mode, kind="file", ref=address, title=title, local=local)');
+    expect(m).toContain('queueAdd(mode, "file", address, title, local)');
+    expect(readFileSync(new URL('./app.ts', import.meta.url), 'utf8')).toContain('queueAdd: ([mode, kind, ref, title, local]');
   });
 });
 

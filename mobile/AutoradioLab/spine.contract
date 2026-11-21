@@ -1,10 +1,11 @@
 // The spine's members of the root: the layer in front, the theme, the bar's state. Owned by the spine (round 3: SHELL);
 // a lane does not edit this file (its own members go in members-<lane>.contract). The page stack (open, close, jump, the
 // pager) is in members-stack.contract.
-use openPages, pageModel, barFacts from "@choir/autoradio"
+use openPages, pageModel, barFacts, deckState, radioNote from "@choir/autoradio"
 use pageOpen, pageClose, pageFocus, pagePin, pageReopen, signalRecord from "@choir/autoradio"
-use PageList, PageModel, Theme, ThemeList, SettingsAck, BarFacts from "@choir/autoradio"
-use BarInfo from "./bar-types.contract"
+use PageList, PageModel, Theme, ThemeList, SettingsAck, BarFacts, DeckState, RadioNote from "@choir/autoradio"
+use RadioTick from "./radio-types.contract"
+use BarInfo, BarRun from "./bar-types.contract"
 use HostCaps from "./host-types.contract"
 use ThemeRev from "./themes-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
@@ -41,7 +42,18 @@ members Autoradio
     barTick = barTick + 1
   task barTimed when bi.until > 0 key=barTick
     after(250, barBump)
-  resource bi = barInfo(bf, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
+  // The radio (radio-bridge.ts): the pump reads the deck's journal and what native handed over, applies them, keeps the desk writing, and answers a number the screens ask again on. It runs when the deck changes
+  // (`ds.seq`), when native says something did (`rnote`), and every second (the position labels, the writer's clock).
+  state radioTick = 0
+  action radioBump
+    radioTick = radioTick + 1
+  resource ds = deckState() as shape DeckState else empty()
+  resource rnote = radioNote() as shape RadioNote else empty()
+  resource rpulse = radioPulse(ds.seq, rnote.tick, radioTick) as shape RadioTick else empty()
+  task radioClock when rpulse.tick >= 0 key=radioTick
+    after(1000, radioBump)
+  resource brun = barRun(rpulse.tick) as shape BarRun else empty()
+  resource bi = barInfo(bf, brun, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
   mutation pm as shape PageList
   // A second handle, for an action that opens one page and closes another in the same step.
   mutation pc as shape PageList

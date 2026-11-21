@@ -268,6 +268,16 @@ export async function authedJSON(path: string, opts: Authed = {}): Promise<Reply
   return { body, serverTime: Number.isFinite(parsed) ? parsed : null, raw };
 }
 
+/** The whole answer as text, whatever its type (the programme route's event stream, read when it has ended: Exact's `exactStream` is not shown to take a POST, docs/reference/exact/gaps.md 36). */
+export async function authedText(path: string, opts: Authed = {}, accept = 'text/event-stream'): Promise<string> {
+  const gen = generation;
+  const { r, key } = await send(path, opts, accept);
+  await check(r, path, key);
+  const raw = await r.text();
+  if (gen !== generation) throw new SignedOutError('signed out while the request was in flight');
+  return raw;
+}
+
 /** The same, for bytes (a file, a PDF, audio). */
 export async function authedBytes(path: string, opts: Authed = {}): Promise<{ bytes: Uint8Array; contentType: string }> {
   const gen = generation;

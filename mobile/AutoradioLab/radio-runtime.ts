@@ -116,6 +116,21 @@ export class RadioRuntime {
     this.director.advanceIfIdle();
     return this.store.onAir() ? 'started' : 'nothing';
   }
+  /** The listener's pause or the voice's yield: the deck's transport. */
+  async act(op: 'pause' | 'resume' | 'stop'): Promise<void> { await this.deck.act(op); }
+  /** Back: the start of this entry when it has gone on a little (or it is audio), else the entry before it. */
+  async previous(): Promise<void> {
+    const st = await this.deck.state(); this.deckState = st;
+    const air = this.store.onAir();
+    const how = this.director.previous({ block: st.block, seconds: st.seconds, isRemoteAudio: air !== undefined && audioSpec(air) !== undefined });
+    if (how === 'seekStart') await this.deck.act('seekTo', 0);
+    else if (how === 'restart' && air) { const it = this.known.get(air.id); if (it) await this.deck.play(it); }
+  }
+  /** What the deck is speaking now: the programme's headline and, for a paper story, its route (what the Autoradio page names an untitled entry by). */
+  programme(): { title: string; route: string } {
+    const air = this.store.onAir(), it = air ? this.known.get(air.id) : undefined;
+    return { title: it?.title ?? '', route: it?.document.startsWith('pub:') ? it.document.slice(4) : '' };
+  }
   async seekBy(seconds: number): Promise<void> { await this.deck.act('seekBy', seconds); }
   async seekTo(seconds: number): Promise<void> { await this.deck.act('seekTo', seconds); }
   setDesk(d: DeskState): void { this.desk = d; this.onChange?.(); }

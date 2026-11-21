@@ -30,6 +30,7 @@ import { CONTENT_DB, wipeLiveContent } from './content.ts';
 import { forget as forgetClips } from './clips.ts';
 import { resetReaderForTest as forgetReader } from './reader.ts';
 import { wipePages, PAGES_FILE } from './pages.ts';
+import { wipeRadio, SHEET_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
 import { nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
@@ -59,6 +60,7 @@ export const WIPES: Wipe[] = [
   { name: 'edition-picks', run: (s) => wipePicks(s) },                                                            // the listener's topics (edition-picks.ts): memory, the file, and the native copy
   { name: 'vectors', run: async (s) => { await wipeLiveVectors(s); await rmAll(s, [VECTORS_DIR]); } },       // the live in-memory store first, then the files
   { name: 'content', run: async (s) => { await wipeLiveContent(); await rmAll(s, [CONTENT_DB, `${CONTENT_DB}-wal`, `${CONTENT_DB}-shm`]); } },  // stops a running sync (generation), empties the open db
+  { name: 'radio', run: (s) => wipeRadio(s as never) },                                                        // the run sheet and the deck (radio-bridge.ts): the sheet's file, its pending ops, what was on air
   { name: 'pages', run: (s) => wipePages(s) },                                                                  // the deck's open set (pages.ts): only the radio stays
   { name: 'clips', run: async () => forgetClips() },                                                              // in memory only (public clips, but another account's page asked for them)
   { name: 'reader', run: async () => forgetReader() },                                                              // the held stories and documents, in memory only (also dropped by the account generation)
@@ -70,7 +72,7 @@ export const WIPES: Wipe[] = [
  * The paths the wipes above cover (account.test.ts S4 compares them with every `app:/` literal in the shared modules). `app:/tmp/picked` is files'. */
 export const wipedPaths = (): string[] => [
   podcast.LIBRARY_FILE, podcast.FEED_DIR, 'app:/data/mail', 'app:/data/recent-files.json', 'app:/cache/files', 'app:/tmp/picked', PAPER_FRONT, KEPT_FILE, NOTEBOOK_CACHE, PICKS_FILE,
-  VECTORS_DIR, CONTENT_DB, PAGES_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
+  VECTORS_DIR, CONTENT_DB, PAGES_FILE, SHEET_FILE, DEMO_MARKER, PENDING_FILE, STAMP_FILE,
 ];
 
 /** Run each wipe; the names of the ones that threw. Logs ids, never content. The signed-in seam is reset first: a new account generation (a reply

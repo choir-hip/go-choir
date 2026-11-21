@@ -1,7 +1,7 @@
 // The integrator's members of the root: the Choir sign-in and the player (the voice lab page, its stages, parameters, trace and
 // audio switch are gone: owner, 2026-11-19, "get rid of lab pages").
 use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
-use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirPlay, choirListen from "@choir/autoradio"
+use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
 use LabState from "@choir/autoradio"
 use SignOutResult from "./account-types.contract"
@@ -73,10 +73,10 @@ members Autoradio
   action refreshRadio
     send acct = choirRefresh()
   action radioPlay
-    send acct = choirPlayPause()
+    send acct = radioPlayPause()
   // The page that names the story passes its title with the route: a story that is not in the radio's list still has a name on the lock screen.
   action playStory(route: string, title: string)
-    send acct = choirPlay(route=route, title=title)
+    send acct = radioPlayStory(route, title)
   // Listen: the radio reads this text now, headline first (the page's own text; the module cleans it).
   action listen(address: string, title: string, text: string)
-    send ctl = choirListen(address=address, title=title, text=text)
+    send ctl = radioListen(address, title, text)

@@ -16,6 +16,7 @@
 //  5. A post answers 404 or fails: the ops stay pending, in order, and are sent again; none is lost or sent twice after an answer.
 //  6. A batch is over 64 ops or 256 KB: it is sent in several posts.
 //  7. A transition whose neighbours changed is hidden or removed by the phone: it is shown stale (`isStale`), never changed by the phone.
+import { now as clockNow } from './clock.ts';
 import { boundedOp, mintId, refTooLong } from './runsheet-entries.ts';
 import {
   apply, decodeOp, decodeSheet, emptySheet, onAirEntry, ahead as aheadOf, heard as heardOf, entryById,
@@ -113,7 +114,7 @@ export class RunSheetStore {
   private generation: () => number;
 
   constructor(o: StoreOptions = {}) {
-    this.storage = o.storage; this.poster = o.poster; this.now = o.now ?? (() => new Date()); this.retryAfterMs = o.retryAfterMs ?? 30000;
+    this.storage = o.storage; this.poster = o.poster; this.now = o.now ?? clockNow; this.retryAfterMs = o.retryAfterMs ?? 30000;
     this.home = o.home ?? ''; this.tmp = o.tmp ?? ''; this.generation = o.generation ?? (() => 0);
   }
 
@@ -300,8 +301,7 @@ export class RunSheetStore {
    *  the old key is still held. What is not answered by then is dropped by `wipe()`: pending ops are never sent under a later account. */
   async settlePending(timeoutMs: number): Promise<void> {
     this.flush();
-    const end = Date.now() + timeoutMs;
-    while (this.pending.length > 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+    for (let waited = 0; this.pending.length > 0 && waited < timeoutMs; waited += 50) await new Promise((r) => setTimeout(r, 50));
   }
   /** Sign-out: the sheet, its heard tail, the pending ops and the epoch go, in memory and on disk; the poster goes too, so nothing of this
    *  account is posted afterwards. */
