@@ -1,13 +1,14 @@
 // Lane members file (bar): the radio view, the focus of the bar's field, the player's pull-down and jumps.
 // Owned by the bar lane. Source and send names live in exact-package/interface/bar.json.
-use radioView, radioJump, radioSpeed, radioStory from "@choir/autoradio"
-use RadioInfo from "@choir/autoradio"
+use radioView, radioJump, radioSpeed from "@choir/autoradio"
+use RadioInfo, SettingsAck from "@choir/autoradio"
 use StackVp from "./ui.contract"
 
 members Autoradio
   // The radio view: what plays, the block's sentences, the programme's items, the yield level, the talk mode.
   resource ri = radioView() as shape RadioInfo else empty()
   mutation rm as shape RadioInfo
+  mutation rm2 as shape SettingsAck
 
   // The bar's field has the keyboard: the bar grows, the pages button gives way and Send replaces the voice button.
   state barFocused = false
@@ -26,9 +27,9 @@ members Autoradio
   // Next and previous STORY (the module answers with the new RadioInfo): the next in the list the story came from, the previous within its
   // first 3 seconds and otherwise the start of this one; in a programme the next and previous segment.
   action nextStory
-    send rm = radioStory(move="next")
+    send rm2 = radioMove("next")
   action previousStory
-    send rm = radioStory(move="previous")
+    send rm2 = radioMove("previous")
 
   // The speed slider, 0.5 to 3. `speedLive` is what the finger (or a step) last chose, 0 until it is touched; until then the speed is the
   // radio's own (the saved one). The finger's move is relative: a drag across the track's width is the whole range. Sent when it lifts.

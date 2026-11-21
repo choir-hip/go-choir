@@ -21,9 +21,7 @@ final class ImportedFollow: @unchecked Sendable {
 
 extension AutoradioModule {
     func registerImported() {
-        RunSheetPlayer.shared.onDocumentPosition = { [weak self] id, block in
-            if ImportedFollow.shared.set(id: id, block: block) { DispatchQueue.main.async { self?.touch(["importedFollow"]) } }
-        }
+        // (The block being read is not reported while an imported document is read aloud: the player that reported it is shared code's now, a residual of the move.)
         handle("importedFollow") { _, reply in
             let c = ImportedFollow.shared.current
             reply(["address": c.map { "doc:" + $0.id } ?? "", "block": c?.block ?? -1])
@@ -36,11 +34,11 @@ extension AutoradioModule {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let entry = RunSheetEntry.book(id: id, title: title, at: at)
-                if op == "queue" { RunSheetPlayer.shared.queue(entry, words: (title, words)); return reply(["ok": true, "message": "Added to the queue."]) }
+                if op == "queue" { RadioBridge.shared.place(entry, mode: "add", words: (title, words)); return reply(["ok": true, "message": "Added to the queue."]) }
                 _ = ImportedFollow.shared.set(id: id, block: at)
                 // As the queue's own add does: the engine is started first when it is not running.
                 if !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
-                RunSheetPlayer.shared.playNow(entry, words: (title, words))
+                RadioBridge.shared.place(entry, mode: "now", words: (title, words))
                 self.touch(["importedFollow"])
                 reply(["ok": true, "message": ""])
             }

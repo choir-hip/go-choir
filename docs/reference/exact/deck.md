@@ -3,8 +3,7 @@
 Station X4 of the Exact cutover. Read this before changing `mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift`,
 `mobile/AutoradioLab/deck*.ts`, `mobile/exact-package/interface/deck.json` or the Kotlin deck. Design:
 [autoradio-in-exact-2026-11-18.md](../../design/autoradio-in-exact-2026-11-18.md), "The deck applies named rules" and "The journal
-is the evidence". Status of what exists: the Swift deck and its journal run under the Swift run sheet player; nothing in shared code
-commands the deck yet (that is station X5); the Kotlin deck does not exist.
+is the evidence". Status of what exists (2026-11-21): shared code commands the deck. `mobile/AutoradioLab/deck-native.ts` is the real `DeckPort`: the five names over the app module's one `deck` op (`modules/apple/ModelsEntry.swift` -> `AutoradioModule+Deck.swift` `deckCall`), because only a contract can call a package's names and shared code has to; `radio-runtime.ts` hands it items and reads its journal (the Swift run sheet player is deleted). The Kotlin deck does not exist.
 
 ## What it is
 

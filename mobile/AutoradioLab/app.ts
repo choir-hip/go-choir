@@ -23,6 +23,7 @@ import { notebookShared } from './notebook-run.ts';
 import { syncContent } from './content-run.ts';
 import * as mail from './mail.ts';
 import { barInfo } from './bar.ts';
+import * as radioBridge from './radio-bridge.ts';
 import { radioPage } from './radio-page.ts';
 import { retrievalServe, paperSearch } from './retrieval-live.ts';
 import * as imported from './imported.ts';
@@ -76,6 +77,8 @@ fs.read app:/data/notebook-cache.md
 fs.write app:/data/notebook-cache.md
 fs.read app:/data/takes.json
 fs.write app:/data/takes.json
+fs.read app:/data/runsheet.json
+fs.write app:/data/runsheet.json
 fs.read app:/data/vectors
 fs.write app:/data/vectors
 fs.read app:/data/imported-places.json
@@ -108,7 +111,20 @@ const sources: Sources = {
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([raw]) => conversationInfo(raw),
   // The bar (bar.ts): the native facts and the conversation's entries in, the bar's state out; the tick (a timed state's end, a sign-out) asks again.
-  barInfo: ([facts, entries, _tick]) => barInfo(facts, entries),
+  barInfo: ([facts, run, entries, _tick]) => barInfo({ ...(facts as object), ...(run as object) }, entries),
+  // The radio (radio-bridge.ts over radio-runtime.ts): the run sheet, its writer and the deck's journal are shared code; the deck is native (the one `deck` op).
+  radioPulse: ([_deck, _note, _tick], _s, storage, native) => radioBridge.radioPulse(storage as never, native as never),
+  queueView: ([_t], _s, storage, native) => radioBridge.queueView(storage as never, native as never),
+  queueAdd: ([mode, kind, ref, title, local], _s, storage, native) => radioBridge.queueAdd(storage as never, native as never, mode, kind, ref, title, local),
+  queueAct: ([op, arg], _s, storage, native) => radioBridge.queueAct(storage as never, native as never, op, arg),
+  barRun: ([_t], _s, storage, native) => radioBridge.barRun(storage as never, native as never) as never,
+  radioPageFacts: ([_t], _s, storage, native) => radioBridge.radioPageFacts(storage as never, native as never) as never,
+  radioPageAct: ([op, arg, to], _s, storage, native) => radioBridge.radioPageAct(storage as never, native as never, op, arg, to),
+  radioPlayPause: (_a, _s, storage, native) => radioBridge.radioPlayPause(storage as never, native as never),
+  radioStart: (_a, _s, storage, native) => radioBridge.radioStart(storage as never, native as never),
+  radioPlayStory: ([route, title], _s, storage, native) => radioBridge.radioPlayStory(storage as never, native as never, route, title),
+  radioListen: ([address, title, text], _s, storage, native) => radioBridge.radioListen(storage as never, native as never, address, title, text),
+  radioMove: ([move], _s, storage, native) => radioBridge.radioMove(storage as never, native as never, move),
   // The Autoradio page (radio-page.ts): the native facts, the bar's facts and the entries in; the page out.
   radioPage: ([facts, bar, entries]) => radioPage(facts, bar, entries),
   texturesList: ([at]) => texturesListShared(at),

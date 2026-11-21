@@ -97,7 +97,8 @@ public final class AutoradioModule: ExactPackage {
     private var scheduled = false
     private var turnArg: [String: Any] = [:]
     /// The page the bar opened in place (a URL typed in the bar); lane autoradio-queue.
-    var barWebURL = ""
+    /// The page the bar opened (a link in a message, a URL typed in the bar): shared code holds it (radio-bridge.ts); native only says it opened.
+    var barWebURL: String { get { "" } set { RadioBridge.shared.send(newValue.isEmpty ? "closeWeb" : "openWeb", ["url": newValue]) } }
 
     /// The one handle the app module (modules/apple/ModelsEntry.swift) uses to run the native half of sign-out, which shared code leads
     /// (AutoradioLab/account.ts). Weak: the module owns its life; this is set at init and read on the main thread.
@@ -135,7 +136,7 @@ public final class AutoradioModule: ExactPackage {
         // The spine's objects.
         // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
         Task { @MainActor in
-            while true { RadioDemand.shared.setRemotePlaying(RunSheetPlayer.shared.isRemote && !RunSheetPlayer.shared.paused); try? await Task.sleep(nanoseconds: 2_000_000_000) }
+            while true { RadioDemand.shared.setRemotePlaying(Deck.shared.current?.kind == "audio" && Deck.shared.why == .playing); try? await Task.sleep(nanoseconds: 2_000_000_000) }
         }
         // Sign-out wipes through the Kit's AccountWipe (ChoirApp registers every Kit store); the stores below live in this target.
         // Kit methods called: OpenPageFacts.wipe(), AccountWipe.removeFiles(_:), AccountWipe.removeContents(of:), AccountWipe.register(_:_:).
@@ -181,8 +182,9 @@ public final class AutoradioModule: ExactPackage {
         // `dirty` is only touched on the main thread: a background caller (found by a real-data run: readServerBuild called this from a
         // cooperative thread and crashed in Set.insert, EXC_BAD_ACCESS) is moved over first.
         if !Thread.isMainThread { DispatchQueue.main.async { [weak self] in self?.touch(names, now: now) }; return }
-        dirty.formUnion(names.map { $0 == "radioPage" ? "radioPageFacts" : $0 })   // (the takes lane still names the page by its old source)
-        if names.contains(where: { $0 == "radioView" || $0 == "queueView" || $0 == "barFacts" }) { dirty.insert("radioPageFacts") }   // the Autoradio page reads all three
+        // The queue and the Autoradio page are shared code's now: what the screens used to ask of the queue, the page and the bar's run sheet facts is `radioNote` (the pump looks again). Old names still work.
+        dirty.formUnion(names.map { ["queueView": "radioNote", "radioPage": "radioNote", "radioPageFacts": "radioNote"][$0] ?? $0 })
+        if names.contains(where: { $0 == "radioView" || $0 == "barFacts" }) { dirty.insert("radioNote") }
         if now {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -223,9 +225,7 @@ public final class AutoradioModule: ExactPackage {
             if let u = URL(string: choir.authView().verificationURL) { Platform.open(u) }
             reply(state())
         case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
-        case "choirPlayPause": Task { [choir] in await choir?.playPause() }; reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
-        case "choirPlay": let r = args["route"] as? String ?? "", t = args["title"] as? String ?? ""; Task { [choir] in await choir?.play(route: r, title: t) }; reply(state())
         default: reply(["error": "NotSupportedError"])
         }
     }

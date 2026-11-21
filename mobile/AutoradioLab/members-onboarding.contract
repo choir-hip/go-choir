@@ -3,7 +3,6 @@
 // calls that onboarding.ts makes itself. The page reads `ob`; every button is one send (`onboardingAct`) that answers the same shape and asks `ob` again.
 use voiceSetupFacts from "@choir/autoradio"
 use VoiceSetupFacts from "@choir/autoradio"
-use choirStartRadio from "@choir/autoradio"
 use Onboarding from "@choir/autoradio"
 use EditionPage from "./edition-types.contract"
 
@@ -76,7 +75,7 @@ members Autoradio
   // Then the front page, and the first story playing.
   action obFinish
     send pms = pagesOpen("paper:front", "Paper")
-    send acct = choirStartRadio()
+    send racct = radioStart()
     layer = ""
 
   // A fresh install, signed in: the computer is asked whether the listener already has an edition; if not, the first run is offered once as the open page.

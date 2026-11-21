@@ -153,20 +153,7 @@ final class PlayerAppTests: XCTestCase {
         func speak(_ text: AsyncStream<String>) -> AsyncThrowingStream<AudioFrame, Error> { AsyncThrowingStream { $0.finish() } }
     }
 
-    func makeApp(voice: String = "stub-voice") async -> (ChoirApp, LabRuntime) {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pc-\(UUID().uuidString)")
-        let rt = LabRuntime(supportDir: dir, session: NullSessionOwner())
-        rt.registry.register(.voice, StubVoice.self) { StubVoice($0) }
-        rt.registry.register(.voice, LongVoice.self) { LongVoice($0) }
-        rt.registry.register(.voice, EmptyVoice.self) { EmptyVoice($0) }
-        rt.setStage(.voice, id: voice)
-        await rt.start(virtual: true)
-        rt.player.pause()
-        let app = ChoirApp(runtime: rt, keys: InMemoryKeyStore([KeyAccount.apiKey: secretKey, KeyAccount.computerID: "comp-1"]), openURL: nil)
-        app.stretchSource = { NoStretch() }          // these tests are about the paper's list: the programme route has nothing to say
-        await app.loadStories()
-        return (app, rt)
-    }
+
     func resolved() -> [String] { StubProtocol.seen.filter { $0.path == "/api/platform/publications/resolve" }.compactMap { $0.query["route"] } }
 }
 

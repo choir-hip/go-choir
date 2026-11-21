@@ -26,7 +26,7 @@ extension AutoradioModule {
             if let t = r["text"] as? String { NotebookCache.shared.set(t) }
             return [:]
         case "contentBusy":
-            return ["busy": RunSheetPlayer.shared.isRemote]
+            return ["busy": await MainActor.run { Deck.shared.current?.kind == "audio" }]
         default:
             return [:]
         }

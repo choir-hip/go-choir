@@ -70,6 +70,21 @@ final class ModelsModule: ExactModule {
             }
             return
         }
+        // The deck (shared code's radio runtime commands it): one op, `{op: "deck", name: deckState|deckPlay|deckEnqueue|deckAct|deckAck, args}`, answering the deck's state. Native because the deck is
+        // the audio: the session, the engine and the journal that survives a kill (AutoradioModule+Deck.swift `deckCall`). It decides nothing.
+        if op == "deck" {
+            Task { @MainActor in reply.send(await AutoradioModule.current?.deckCall(name: request["name"] as? String ?? "", args: request["args"] as? [String: Any] ?? [:]) ?? [:]) }
+            return
+        }
+        // The radio's mailbox (AutoradioModule+Queue.swift): `radioFacts` (what only the audio code knows, and the inbox of what native handed over), `radioSet` (the turn route's queue and the entry on air, pushed by shared
+        // code) and `bookText` (the shelf is native until it moves). Native because the voice turn and the audio are; they decide nothing.
+        if op == "radioFacts" || op == "radioSet" || op == "bookText" {
+            Task { @MainActor in
+                guard let m = AutoradioModule.current else { reply.send([:]); return }
+                switch op { case "radioFacts": reply.send(m.radioFacts(peek: (request["peek"] as? Bool) ?? false)); case "radioSet": reply.send(m.radioSet(request)); default: reply.send(m.bookText(request)) }
+            }
+            return
+        }
         // First run's voice side (AutoradioModule+Onboarding.swift `onboardingOp`; each op's reason is in that file's header): the models' setup, the microphone check, the hearing sentence, the voice at the topic screen.
         if let op = op, op.hasPrefix("ob") {
             Task { @MainActor in reply.send(await AutoradioModule.current?.onboardingOp(request) ?? [:]) }

@@ -27,6 +27,61 @@ import Foundation
 //  - two flags that disagree about why it is silent: one state, set only by the methods below.
 //  - a late end from an item that was replaced closes the new one: an end names the item it is for and is ignored when it is not the current one.
 
+/// What plays the sound. Spoken things go through the programme player; remote audio through AVPlayer.
+@MainActor public protocol PlaybackEngine: AnyObject {
+    /// Speak `paragraphs` as the document `documentID` (one segment named by what it is: `kind` is opening, transition, answer, result, mail; "" a story), replacing what is playing. False: nothing started.
+    func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool
+    /// The spoken entry from the block that did not play (the engine was lost mid-entry and is back).
+    func resumeSpoken()
+    /// The spoken entry from its start.
+    func restartSpoken()
+    /// Where the spoken entry is: the server block being spoken, the last server block it has, and the seconds into it.
+    func spokenReport() -> (block: Int, final: Int, seconds: Double)
+    /// The block of the spoken entry and the seconds into it.
+    func spokenPosition() -> (block: Int, seconds: Double)
+    /// Silence the spoken entry (something else is starting, or it was skipped).
+    func stopSpoken()
+    /// Why the last spoken block could not be made (nil: it was).
+    func speakFailure() -> String?
+    /// What of the spoken entry is still to be said, from the start of the sentence it is in; nil when unknown.
+    func spokenRemainder() -> String?
+    /// The spoken entry says no more than the block it is on (the rest is replaced): whole sentences, no word cut.
+    func endSpokenAfterCurrentBlock()
+    /// Play remote audio from `start` (seconds) and stop at `end` when there is one.
+    func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool
+    func pauseRemote()
+    func resumeRemote()
+    /// Silence remote audio.
+    func stopRemote()
+    func seekRemote(by seconds: Double)
+    func seekRemote(to seconds: Double)
+    /// The playing clip no longer ends: the episode carries on from where it is, with no gap or restart.
+    func clearRemoteEnd()
+    func remotePosition() -> (elapsed: Double, duration: Double?)?
+    func setRemoteRate(_ r: Double)
+    func setRemoteLevel(_ l: PlayLevel)
+    /// The length of the audio at `url`, read without playing it; nil when unknown within `deadline` seconds.
+    func remoteDuration(url: URL, deadline: TimeInterval) async -> Double?
+    /// Pause the spoken entry (the listener's pause, or the system's).
+    func pauseSpoken()
+    /// Sound is reaching the output for what is playing now (spoken: rendered seconds past zero; remote: the position is moving). The deck's
+    /// evidence that an item was heard; a deck that cannot tell says false and nothing is ever journalled as rendered by it.
+    func rendering() -> Bool
+}
+extension PlaybackEngine {
+    public func pauseSpoken() {}
+    public func rendering() -> Bool { false }
+    public func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { nil }
+    public func restartSpoken() {}
+    public func resumeSpoken() {}
+    public func spokenReport() -> (block: Int, final: Int, seconds: Double) { (0, 0, 0) }
+    public func spokenPosition() -> (block: Int, seconds: Double) { (0, 0) }
+    public func stopSpoken() {}
+    public func endSpokenAfterCurrentBlock() {}
+}
+
+public extension PlaybackEngine { func speakFailure() -> String? { nil }; func spokenRemainder() -> String? { nil } }
+
 public enum DeckWhy: String, Codable, Sendable {
     case playing, pausedListener = "paused_listener", pausedSystem = "paused_system", heldSession = "held_session", heldEngine = "held_engine", stopped, empty
 }
@@ -42,6 +97,8 @@ public struct DeckItem: Equatable, Sendable {
     public var block = 0
     public var seconds = 0.0
     public var requiresPreviousHeard = false
+    /// What a speech item is for the voice's segment naming: opening, transition, answer, result, mail; "" is a story.
+    public var segment = ""
     public init(id: String, kind: String) { self.id = id; self.kind = kind }
     var paragraphList: [String] { paragraphs.components(separatedBy: "\n\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } }
     var documentID: String { document.isEmpty ? "deck:" + id : document }
@@ -463,9 +520,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
         if item.kind == "audio", let url = URL(string: item.url) {
             ok = await engine.playRemote(url: url, title: item.title, show: item.show, start: item.seconds > 0 ? item.seconds : (item.start > 0 ? item.start : nil), end: item.end > 0 ? item.end : nil)
         } else if item.kind == "speech" {
-            var e = RunSheetEntry(id: item.id, kind: .story, placedBy: .phone, title: item.title, text: item.paragraphs)
-            e.estSeconds = RunSheetEntry.estimateSeconds(words: item.paragraphs)
-            ok = await engine.speak(documentID: item.documentID, entry: e, paragraphs: item.paragraphList)
+            ok = await engine.speak(documentID: item.documentID, entryID: item.id, title: item.title, kind: item.segment, paragraphs: item.paragraphList)
         }
         guard my == generation, current?.id == item.id else { if ok, current == nil { stopEngine() }; return ok }       // wiped while it started: no sound for the next account
         if !ok {

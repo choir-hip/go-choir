@@ -116,14 +116,13 @@ public final class SessionWatcher: @unchecked Sendable {
 /// foreground and a press of Play do to all three. The decisions are in `InterruptionMemory` and the coordinator; this is the wiring.
 @MainActor public final class PlaybackContinuity {
     private let runtime: LabRuntime
-    private let queue: RunSheetPlayer
     private var memory = InterruptionMemory()
     #if os(iOS)
     private var watcher: SessionWatcher?
     #endif
 
-    public init(runtime: LabRuntime, queue: RunSheetPlayer? = nil) {
-        self.runtime = runtime; self.queue = queue ?? RunSheetPlayer.shared
+    public init(runtime: LabRuntime) {
+        self.runtime = runtime
         let coordinator = runtime.coordinator
         coordinator.onInterruption = { [weak self] began, go in Task { @MainActor in self?.interruption(began: began, shouldResume: go) } }
         #if os(iOS)
@@ -138,12 +137,13 @@ public final class SessionWatcher: @unchecked Sendable {
     }
 
     var programmePlaying: Bool { !runtime.player.userPaused }
-    var remotePlaying: Bool { queue.isRemote && !queue.paused }
+    /// Audio of its own (a clip, an episode, a take) is what the deck is playing and nothing holds it.
+    var remotePlaying: Bool { Deck.shared.current?.kind == "audio" && Deck.shared.why == .playing }
 
     /// The remote player says the system paused it.
     public func remoteSystemPaused() {
         memory.remoteSystemPaused()
-        queue.pause()
+        Deck.shared.systemPaused()
     }
 
     /// The reader's own tap on Play or Pause: what was remembered no longer says what they want.
@@ -153,15 +153,15 @@ public final class SessionWatcher: @unchecked Sendable {
         if began {
             memory.began(programmePlaying: programmePlaying, remotePlaying: remotePlaying)
             if programmePlaying { runtime.player.pause(reason: "system interruption") }                       // B1: the state says what is true
-            if remotePlaying { queue.pause() }
+            if remotePlaying { Deck.shared.systemPaused() }
             runtime.log.emit(.audioNotice(kind: "interruption", detail: "began; will resume programme=\(memory.programme) remote=\(memory.remote)"))
             return
         }
-        if shouldResume { Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() } }      // without the recommendation the listener's Play asks
+        if shouldResume { Task { @MainActor in await Deck.shared.systemMayResume() } }      // without the recommendation the listener's Play asks
         let again = memory.ended(shouldResume: shouldResume)
         runtime.log.emit(.audioNotice(kind: "interruption", detail: "ended; shouldResume=\(shouldResume) programme=\(again.programme) remote=\(again.remote)"))
         if again.programme { runtime.player.play() }
-        if again.remote { queue.resume() }
+        if again.remote { Task { @MainActor in await Deck.shared.resumed() } }
     }
 
     func routeLost() {
@@ -174,7 +174,7 @@ public final class SessionWatcher: @unchecked Sendable {
         memory.forget()
         runtime.log.emit(.audioNotice(kind: "route-lost", detail: "pausing (programme playing \(programmePlaying), remote playing \(remotePlaying))"))
         if programmePlaying { runtime.player.pause(reason: "route lost") }        // the listener's Play ends this one, as the system's recommendation never comes
-        if remotePlaying { queue.pause() }
+        if remotePlaying { Deck.shared.systemPaused() }
     }
 
     func lifecycle(_ name: String) {
@@ -196,7 +196,7 @@ public final class SessionWatcher: @unchecked Sendable {
     func returnedToForeground() {
         let rt = runtime
         guard programmePlaying else { return }                  // a paused programme (the listener's, or an interruption that gave no go-ahead) is not revived by opening the app
-        Task { @MainActor in RunSheetPlayer.shared.sessionMayBeBack() }
+        Task { @MainActor in await Deck.shared.systemMayResume() }
         if !rt.audio.needsRecovery { if rt.audio.programmeAudible { rt.coordinator.confirmHealthy() }; return }
         Task { @MainActor in
             let ok = await rt.ensureSessionReady(reason: "foreground")

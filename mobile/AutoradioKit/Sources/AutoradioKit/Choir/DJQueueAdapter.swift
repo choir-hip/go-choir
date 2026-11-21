@@ -1,7 +1,7 @@
 import Foundation
 
 // The desk and the other lanes: the seam to the podcast lane, and the "Hear it" rows on a story's page.
-// Plays go onto the run sheet (`RunSheetPlayer`): Play is `place now`, Add to queue is `place queued`.
+// Plays go onto the run sheet (shared code: RadioBridge.place): Play is `place now`, Add to queue is `place queued`.
 
 /// The podcast lane's `PodcastEpisodes.open(episodeId:feedURL:enclosureURL:at:title:show:)`: set by the host (`AutoradioModule+Podcasts.swift`). "Open episode".
 public enum PodcastBridge {
@@ -36,11 +36,11 @@ public enum PodcastBridge {
 /// Play and Add to queue of a clip. The rows of "Hear it" and a show's "Clips" are shared code (AutoradioLab/clips.ts).
 public enum HearIt {
     /// Play: the clip when it can be found in the served file (the player locates it); else the episode from its start. (The shared row offers Play only for a usable fingerprint; the phone no longer marks a mismatch from any live path.)
-    @MainActor public static func play(_ clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) async {
+    @MainActor public static func play(_ clipID: String, store: ClipStore = .shared) async {
         guard let c = store.clip(clipID) else { return }
-        player.playNow(c.isRelocatable && !store.isMismatch(clipID) ? c.clipEntry : c.episodeEntry)
+        RadioBridge.shared.place(c.isRelocatable && !store.isMismatch(clipID) ? c.clipEntry : c.episodeEntry, mode: "now")
     }
-    @MainActor public static func enqueue(_ clipID: String, store: ClipStore = .shared, player: RunSheetPlayer = .shared) {
-        if let c = store.clip(clipID) { player.queue(c.isRelocatable && !store.isMismatch(clipID) ? c.clipEntry : c.episodeEntry) }
+    @MainActor public static func enqueue(_ clipID: String, store: ClipStore = .shared) {
+        if let c = store.clip(clipID) { RadioBridge.shared.place(c.isRelocatable && !store.isMismatch(clipID) ? c.clipEntry : c.episodeEntry, mode: "add") }
     }
 }

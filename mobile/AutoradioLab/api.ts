@@ -71,7 +71,7 @@ export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
 type Account = (typeof KEYCHAIN_ACCOUNTS)[number];
 
 /** The data module's one native module, as far as this file uses it. */
-export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string }): Promise<unknown> };
+export type NativeReader = { available?: boolean; later(request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }): Promise<unknown> };
 /** app.ts hands over the module's native handle at every answer (adoptNative). */
 let reader: NativeReader | undefined;
 /** True once ANY app-module op has answered (a key read, a key state): the native module is there, and the host decision (host.ts) can no longer say "no native". */
@@ -89,7 +89,7 @@ export function adoptNative(native: NativeReader | null | undefined, source = ''
 }
 
 /** The app module's `later`, for the native pair that seals mail (mail-seal.ts); null when there is no module. */
-export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string }) => Promise<unknown>) | null {
+export function nativeLater(): ((request: { op: string; account?: Account; b64?: string; aad?: string; [key: string]: unknown }) => Promise<unknown>) | null {
   return reader && reader.available !== false ? (r) => reader!.later(r) : null;
 }
 
@@ -266,6 +266,16 @@ export async function authedJSON(path: string, opts: Authed = {}): Promise<Reply
   const date = r.headers.get('date');
   const parsed = date ? Date.parse(date) : NaN;
   return { body, serverTime: Number.isFinite(parsed) ? parsed : null, raw };
+}
+
+/** The whole answer as text, whatever its type (the programme route's event stream, read when it has ended: Exact's `exactStream` is not shown to take a POST, docs/reference/exact/gaps.md 36). */
+export async function authedText(path: string, opts: Authed = {}, accept = 'text/event-stream'): Promise<string> {
+  const gen = generation;
+  const { r, key } = await send(path, opts, accept);
+  await check(r, path, key);
+  const raw = await r.text();
+  if (gen !== generation) throw new SignedOutError('signed out while the request was in flight');
+  return raw;
 }
 
 /** The same, for bytes (a file, a PDF, audio). */

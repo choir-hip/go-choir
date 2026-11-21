@@ -1,9 +1,9 @@
 // The integrator's members of the root: the Choir sign-in and the player (the voice lab page, its stages, parameters, trace and
 // audio switch are gone: owner, 2026-11-19, "get rid of lab pages").
-use choirAuth, choirPlayer from "@choir/autoradio"
-use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh, choirPlayPause, choirPlay, choirListen from "@choir/autoradio"
-use ChoirAuth, ChoirPlayer from "@choir/autoradio"
-use LabState from "@choir/autoradio"
+use choirAuth, choirPlayer, choirStories from "@choir/autoradio"
+use choirSignIn, choirOpenApproval, choirCancelSignIn, choirRefresh from "@choir/autoradio"
+use ChoirAuth, ChoirPlayer, StoryList from "@choir/autoradio"
+use LabState, SettingsAck from "@choir/autoradio"
 use SignOutResult from "./account-types.contract"
 use AccountView, HostPage from "./account-state-types.contract"
 
@@ -46,6 +46,7 @@ members Autoradio
   derive bannerOn = acs.message != "" and au.status != "pending" and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
   resource acs = accountState(`${au.signedIn}|${au.status}|${au.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}`, pg.top, hc.mode) as shape AccountView else empty()
   mutation acct as shape LabState
+  mutation racct as shape SettingsAck
   // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
   mutation so as shape SignOutResult
   derive signOutNote = match so { case some(a) => a.message, case none => "" }
@@ -72,10 +73,10 @@ members Autoradio
   action refreshRadio
     send acct = choirRefresh()
   action radioPlay
-    send acct = choirPlayPause()
+    send racct = radioPlayPause()
   // The page that names the story passes its title with the route: a story that is not in the radio's list still has a name on the lock screen.
   action playStory(route: string, title: string)
-    send acct = choirPlay(route=route, title=title)
+    send racct = radioPlayStory(route, title)
   // Listen: the radio reads this text now, headline first (the page's own text; the module cleans it).
   action listen(address: string, title: string, text: string)
-    send ctl = choirListen(address=address, title=title, text=text)
+    send racct = radioListen(address, title, text)

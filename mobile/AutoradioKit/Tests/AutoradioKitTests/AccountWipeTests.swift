@@ -19,11 +19,7 @@ final class AccountWipeTests: XCTestCase {
     }
     override func tearDown() { try? FileManager.default.removeItem(at: root) }
 
-    final class OfflinePoster: RunSheetPoster, @unchecked Sendable {
-        let lock = NSLock(); private(set) var posted: [[RunSheetOp]] = []
-        var outcome: RunSheetPostOutcome = .notYet
-        func post(ops: [RunSheetOp]) async -> RunSheetPostOutcome { lock.lock(); posted.append(ops); lock.unlock(); return outcome }
-    }
+    
     final class FakeAPI: TextureAPI {
         var posts: [String] = []
         var failure: Error? = URLError(.notConnectedToInternet)
@@ -94,12 +90,6 @@ final class AccountWipeTests: XCTestCase {
         let mutes = TakeMutes(file: root.appendingPathComponent("takes-muted.json")); mutes.replace([m])
         let takes = TakeStore(); takes.replace([Take.parse(["take_id": m, "publisher": "pub", "state": "live", "transcript": m])!])
         let tmp = root.appendingPathComponent("tmp"); write("tmp/takes/rec.m4a", m); write("tmp/take-play-\(m).m4a", m)
-        let sheet = RunSheetStore(storage: root.appendingPathComponent("runsheet.json")); sheet.retryAfter = 3600
-        let poster = OfflinePoster(); sheet.poster = poster
-        sheet.place(.paperStory(route: m, title: m), at: .queued); await sheet.flushTask?.value
-        XCTAssertFalse(sheet.pending.isEmpty, "the route said not yet: the op is pending")
-        let opening = OpeningCache(dir: root.appendingPathComponent("opening"))
-        opening.put(.opening, entry: .paperStory(route: m, title: m), titles: [m], audio: [PreparedAudio(text: m, samples: [0.1, 0.2], rate: 24000)], voice: "v")
         let clips = ClipLocator(directory: root.appendingPathComponent("clips")); write("clips/window-1.mp3", m)
         let api = FakeAPI()
         let texture = TextureEditor(api: api, storage: root.appendingPathComponent("texture-pending.json")); texture.retryAfter = 3600
@@ -126,7 +116,7 @@ final class AccountWipeTests: XCTestCase {
             AccountWipe.removeContents(of: rootRef.appendingPathComponent("books")); AccountWipe.removeContents(of: rootRef.appendingPathComponent("cache/files"))
         }
         wipe.registerStandard(turnHistory: turns, notebookCache: cache, legacyTopicsFile: legacyTopics, topicsMarker: topicsMarker, notebook: notebook,
-                              takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, runSheet: sheet, openingCache: opening, clips: clips,
+                              takeOwn: own, takeMutes: mutes, takeStore: takes, legacyTakeFiles: [], tempDirectory: tmp, clips: clips,
                               texture: texture, environment: env,
                               mailReading: mailReading, conversation: conversation, acks: acks, reader: reader, keptTurns: kept, voice: voice,
                               deck: Deck(journal: DeckJournal(storage: root.appendingPathComponent("deck-journal.json"))))
@@ -139,8 +129,6 @@ final class AccountWipeTests: XCTestCase {
         // (b) every in-memory store answers empty
         XCTAssertTrue(turns.snapshot().isEmpty); XCTAssertNil(cache.text)
         XCTAssertEqual(own.handle, ""); XCTAssertTrue(mutes.all.isEmpty); XCTAssertNil(takes.take(m))
-        XCTAssertTrue(sheet.sheet.entries.isEmpty); XCTAssertTrue(sheet.pending.isEmpty); XCTAssertNil(sheet.poster, "the poster is rebuilt at the next sign-in")
-        XCTAssertNil(opening.opening(voice: "v"))
         XCTAssertTrue(texture.pending.isEmpty); XCTAssertNil(env.playing("p1"))
         XCTAssertNil(mailReading.last); XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned)
@@ -150,11 +138,7 @@ final class AccountWipeTests: XCTestCase {
         let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""
         XCTAssertFalse(body.contains(m), "turn")
         XCTAssertNil(EditionText.make(notebook: cache.text, topics: EditionPicksMirror.shared.topics), "programme: edition_text")
-        let newPoster = OfflinePoster(); newPoster.outcome = .answered([]); sheet.poster = newPoster
-        sheet.flush(); await sheet.flushTask?.value
-        XCTAssertTrue(newPoster.posted.isEmpty, "sheet ops: the old account's pending ops were dropped, not posted under the new key")
         await texture.retryPending(); XCTAssertTrue(api.posts.isEmpty, "texture retry")
-        XCTAssertEqual(poster.posted.count, 1, "the old poster was not used again after the first post")
     }
 }
 
@@ -185,66 +169,13 @@ final class AccountWipeInFlightTests: XCTestCase {
         return hits
     }
 
-    func testDeskStreamAppliesNothingAfterTheWipe() async {
-        let m = Self.marker
-        final class Feed: RunSheetFeed, @unchecked Sendable {
-            let entered: Latch, release: Latch, entry: RunSheetEntry
-            init(_ e: Latch, _ r: Latch, _ entry: RunSheetEntry) { entered = e; release = r; self.entry = entry }
-            func ask(_ a: RunSheetAsk) async throws -> AsyncThrowingStream<RunSheetFeedEvent, Error> {
-                await entered.release(); await release.wait()
-                let op = ProgrammeRouteFeed.placeOp(entry, cause: "open")
-                return AsyncThrowingStream { c in c.yield(.ops([op])); c.yield(.done); c.finish() }
-            }
-        }
-        let entered = Latch(), release = Latch()
-        let store = RunSheetStore(storage: root.appendingPathComponent("runsheet.json"))
-        let feed = Feed(entered, release, RunSheetEntry.paperStory(route: m, title: m, by: .desk))
-        let w = RunSheetWriter(store: store) { feed }
-        w.open()
-        await waitFor(entered)
-        let wipe = AccountWipe()
-        wipe.register("run-sheet") { await MainActor.run { w.stop(); store.wipe() } }
-        await wipe.run()
-        await release.release(); await w.settle()
-        XCTAssertTrue(store.sheet.entries.isEmpty, "the desk's entries of the old account were applied after the wipe")
-        XCTAssertTrue(store.pending.isEmpty); XCTAssertEqual(filesHoldingMarker(), []); XCTAssertFalse(w.inFlight)
-    }
 
-    func testStaleDeskOpIsRefusedEvenWithoutStop() async {
-        let store = RunSheetStore()
-        let gen = AccountWipe.generation
-        await AccountWipe().run()
-        let op = ProgrammeRouteFeed.placeOp(RunSheetEntry.paperStory(route: "a", title: "A", by: .desk), cause: "open")
-        XCTAssertFalse(store.applyFromDesk(op, generation: gen).applied)
-        XCTAssertTrue(store.applyFromDesk(op, generation: AccountWipe.generation).applied)
-    }
+
+
 
     // testFeedLoadAfterTheWipeIsNotKept moved to AutoradioLab/podcast.test.ts ("a feed that finishes loading after the wipe is not kept").
 
-    func testOpeningWriteAheadDoesNotRePutTheOldOpening() async {
-        let m = Self.marker
-        final class Feed: RunSheetFeed, @unchecked Sendable {
-            let entered: Latch, release: Latch, entry: RunSheetEntry
-            init(_ e: Latch, _ r: Latch, _ entry: RunSheetEntry) { entered = e; release = r; self.entry = entry }
-            func ask(_ a: RunSheetAsk) async throws -> AsyncThrowingStream<RunSheetFeedEvent, Error> {
-                await entered.release(); await release.wait()
-                let op = ProgrammeRouteFeed.placeOp(entry, cause: "open")
-                return AsyncThrowingStream { c in c.yield(.ops([op])); c.finish() }
-            }
-        }
-        let entered = Latch(), release = Latch()
-        let cache = OpeningCache(dir: root.appendingPathComponent("opening"))
-        let store = RunSheetStore()
-        let opening = RunSheetEntry(id: "o1", kind: .opening, placedBy: .desk, title: "Opening", text: "Good morning \(m).", estSeconds: 3)
-        let feed = Feed(entered, release, opening)
-        let wa = OpeningWriteAhead(cache: cache, store: store, feed: { feed }, voice: { "v" }, synth: { PreparedAudio(text: $0, samples: [0.1], rate: 24000) })
-        let run = Task { @MainActor in await wa.refresh(reason: "launch") }
-        await waitFor(entered)
-        let wipe = AccountWipe(); wipe.register("opening") { cache.wipe() }
-        await wipe.run()
-        await release.release(); await run.value
-        XCTAssertNil(cache.opening(voice: "v")); XCTAssertEqual(filesHoldingMarker(), [])
-    }
+
 
     func testNotebookWriteAfterTheWipeKeepsNothing() async {
         let m = Self.marker

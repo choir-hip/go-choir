@@ -17,3 +17,12 @@ shape BarInfo
   answerNote: string
   canRetry: bool
   until: number
+
+// What the run sheet says to the bar (radio-bridge.ts `barRun`): something on air, held for the audio session, audio of its own (a clip, an episode) and where it is.
+shape BarRun
+  onAir: bool
+  waiting: bool
+  remote: bool
+  remotePlaying: bool
+  remoteTitle: string
+  remoteFraction: number

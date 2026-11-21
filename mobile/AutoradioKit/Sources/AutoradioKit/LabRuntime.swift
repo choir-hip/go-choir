@@ -134,7 +134,7 @@ public final class LabRuntime: @unchecked Sendable {
                 let paras = ChoirText.paragraphs(text, maxChars: ChoirText.speechChars)
                 guard !paras.isEmpty else { return }
                 let title = paras[0].split(separator: " ").prefix(6).joined(separator: " ")
-                RunSheetPlayer.shared.playNow(.readAloud(address: address, title: title), words: (title, paras))
+                RadioBridge.shared.place(.readAloud(address: address, title: title), mode: "now", words: (title, paras))
             }
         }
         coord.onChange = { [weak self] in self?.refresh() }

@@ -89,13 +89,10 @@
       "revisedAt": "number",
       "errorAt": "number",
       "errorStage": "string",
-      "errorMessage": "string",
-      "onAir": "bool",
-      "waiting": "bool",
-      "remote": "bool",
-      "remotePlaying": "bool",
-      "remoteTitle": "string",
-      "remoteFraction": "number"
+      "errorMessage": "string"
+    },
+    "RadioNote": {
+      "tick": "number"
     },
     "LauncherPlace": {
       "slug": "string",
@@ -236,50 +233,6 @@
     "PodDone": {
       "status": "string",
       "message": "string"
-    },
-    "QueueInfo": {
-      "current": "string",
-      "currentKind": "string",
-      "audio": "bool",
-      "playing": "bool",
-      "clip": "bool",
-      "keepTitle": "string",
-      "canOpenEpisode": "bool",
-      "elapsed": "number",
-      "duration": "number",
-      "elapsedLabel": "string",
-      "remainingLabel": "string",
-      "fraction": "number",
-      "message": "string",
-      "notice": "string",
-      "writing": "bool",
-      "dry": "bool",
-      "webUrl": "string",
-      "webHost": "string"
-    },
-    "RadioPageFacts": {
-      "at": "number",
-      "sheet": "string",
-      "playing": "bool",
-      "sentences": "string[]",
-      "sentenceIndex": "number",
-      "progress": "number",
-      "remoteAudio": "bool",
-      "remoteElapsed": "number",
-      "remoteDuration": "number",
-      "wants": "bool",
-      "message": "string",
-      "notice": "string",
-      "writing": "bool",
-      "dry": "bool",
-      "airTitle": "string",
-      "airRoute": "string",
-      "publishedAt": "number",
-      "versionRoutes": "string[]",
-      "versionNumbers": "number[]",
-      "stale": "string[]",
-      "takeTranscript": "string",
-      "takeRecord": "string"
     },
     "ReaderRun": {
       "id": "string",
@@ -711,14 +664,6 @@
       "answers": "LabState"
     },
     {
-      "send": "choirPlayPause",
-      "answers": "LabState"
-    },
-    {
-      "send": "choirStartRadio",
-      "answers": "LabState"
-    },
-    {
       "send": "choirTalkCancel",
       "answers": "LabState"
     },
@@ -727,27 +672,10 @@
       "answers": "LabState"
     },
     {
-      "send": "choirPlay",
-      "options": {
-        "route": "string",
-        "title": "string"
-      },
-      "answers": "LabState"
-    },
-    {
       "send": "choirAsk",
       "options": {
         "text": "string",
         "aim": "string"
-      },
-      "answers": "LabState"
-    },
-    {
-      "send": "choirListen",
-      "options": {
-        "address": "string",
-        "title": "string",
-        "text": "string"
       },
       "answers": "LabState"
     },
@@ -773,13 +701,7 @@
           "revisedAt": 0,
           "errorAt": 0,
           "errorStage": "",
-          "errorMessage": "",
-          "onAir": false,
-          "waiting": false,
-          "remote": false,
-          "remotePlaying": false,
-          "remoteTitle": "",
-          "remoteFraction": 0
+          "errorMessage": ""
         }
       },
       "options": {
@@ -840,11 +762,14 @@
       "answers": "RadioInfo"
     },
     {
-      "send": "radioStory",
-      "options": {
-        "move": "string"
-      },
-      "answers": "RadioInfo"
+      "source": "radioNote",
+      "live": true,
+      "answers": "RadioNote",
+      "substitute": {
+        "default": {
+          "tick": 0
+        }
+      }
     },
     {
       "source": "deckState",
@@ -878,7 +803,8 @@
         "end": "number",
         "block": "number",
         "seconds": "number",
-        "requiresPreviousHeard": "bool"
+        "requiresPreviousHeard": "bool",
+        "segment": "string"
       },
       "answers": "DeckState"
     },
@@ -897,6 +823,7 @@
         "block": "number",
         "seconds": "number",
         "requiresPreviousHeard": "bool",
+        "segment": "string",
         "at": "number"
       },
       "answers": "DeckState"
@@ -1010,92 +937,6 @@
         "record": "string"
       },
       "answers": "PodDone"
-    },
-    {
-      "source": "queueView",
-      "live": true,
-      "answers": "QueueInfo",
-      "substitute": {
-        "default": {
-          "current": "",
-          "currentKind": "",
-          "audio": false,
-          "playing": false,
-          "clip": false,
-          "keepTitle": "",
-          "canOpenEpisode": false,
-          "elapsed": 0,
-          "duration": 0,
-          "elapsedLabel": "",
-          "remainingLabel": "",
-          "fraction": 0,
-          "message": "",
-          "notice": "",
-          "writing": false,
-          "dry": false,
-          "webUrl": "",
-          "webHost": ""
-        }
-      }
-    },
-    {
-      "send": "queueAdd",
-      "options": {
-        "mode": "string",
-        "kind": "string",
-        "ref": "string",
-        "title": "string",
-        "local": "string"
-      },
-      "answers": "QueueInfo"
-    },
-    {
-      "send": "queueAct",
-      "options": {
-        "op": "string",
-        "arg": "string"
-      },
-      "answers": "QueueInfo"
-    },
-    {
-      "source": "radioPageFacts",
-      "live": true,
-      "answers": "RadioPageFacts",
-      "substitute": {
-        "default": {
-          "at": 0,
-          "sheet": "",
-          "playing": false,
-          "sentences": [],
-          "sentenceIndex": 0,
-          "progress": 0,
-          "remoteAudio": false,
-          "remoteElapsed": 0,
-          "remoteDuration": 0,
-          "wants": false,
-          "message": "",
-          "notice": "",
-          "writing": false,
-          "dry": false,
-          "airTitle": "",
-          "airRoute": "",
-          "publishedAt": 0,
-          "versionRoutes": [],
-          "versionNumbers": [],
-          "stale": [],
-          "takeTranscript": "",
-          "takeRecord": ""
-        }
-      }
-    },
-    {
-      "send": "radioPageAct",
-      "options": {
-        "op": "string",
-        "arg": "string",
-        "to": "string"
-      },
-      "answers": "SettingsAck"
     },
     {
       "source": "readerFollow",

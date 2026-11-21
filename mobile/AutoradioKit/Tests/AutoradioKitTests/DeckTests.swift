@@ -1,6 +1,45 @@
 import XCTest
 @testable import AutoradioKit
 
+/// The engine the deck tests play through: it plays nothing, it records what it was asked.
+@MainActor
+final class FakeEngine: PlaybackEngine {
+    var log: [String] = []
+    var failSpeak: Set<String> = []
+    var duration: Double?
+    var elapsed = 0.0
+    var position: (block: Int, seconds: Double) = (0, 0)
+    var holdSpeak: (() async -> Void)?
+    func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool { await holdSpeak?(); log.append("speak:\(entryID)"); return !failSpeak.contains(entryID) }
+    var report: (block: Int, final: Int, seconds: Double) = (0, 0, 0)
+    func spokenReport() -> (block: Int, final: Int, seconds: Double) { report }
+    func restartSpoken() { log.append("restart") }
+    func resumeSpoken() { log.append("resumeSpoken") }
+    var remainder: String?
+    var rendersSound = false
+    func rendering() -> Bool { rendersSound }
+    func pauseSpoken() { log.append("pauseSpoken") }
+    func spokenRemainder() -> String? { remainder }
+    func spokenPosition() -> (block: Int, seconds: Double) { position }
+    func stopSpoken() { log.append("stopSpoken") }
+    func endSpokenAfterCurrentBlock() { log.append("endAfterBlock") }
+    func playRemote(url: URL, title: String, show: String, start: Double?, end: Double?) async -> Bool {
+        log.append("remote:\(url.lastPathComponent):\(start ?? -1):\(end ?? -1)"); return true
+    }
+    func pauseRemote() { log.append("pauseRemote") }
+    func resumeRemote() { log.append("resumeRemote") }
+    func stopRemote() { log.append("stopRemote") }
+    func seekRemote(by s: Double) { log.append("seekBy:\(s)") }
+    func seekRemote(to s: Double) { log.append("seekTo:\(s)") }
+    func clearRemoteEnd() { log.append("clearEnd") }
+    func remotePosition() -> (elapsed: Double, duration: Double?)? { (elapsed, 600) }
+    func setRemoteRate(_ r: Double) {}
+    func setRemoteLevel(_ l: PlayLevel) {}
+    func remoteDuration(url: URL, deadline: TimeInterval) async -> Double? { log.append("duration"); return duration }
+    var speaks: [String] { log.filter { $0.hasPrefix("speak:") } }
+}
+
+
 // The deck (station X4). No audio is played: the engine is the run sheet tests' FakeEngine, and nothing here reaches a device.
 // Failure list, written before the code (each is a test below):
 //  1  the journal's numbers never fall or repeat, across a relaunch and an acknowledgement; acknowledged lines leave
@@ -22,6 +61,7 @@ final class DeckTests: XCTestCase {
         let d = Deck(journal: journal ?? DeckJournal()); let e = FakeEngine(); d.engine = e; d.retryDelays = [0.01]
         return (d, e)
     }
+
     func speech(_ id: String, requires: Bool = false) -> DeckItem {
         var i = DeckItem(id: id, kind: "speech"); i.paragraphs = "One.\n\nTwo."; i.requiresPreviousHeard = requires; return i
     }
@@ -165,43 +205,8 @@ final class DeckTests: XCTestCase {
     }
 
     // 10
-    func test10_ThePlayerJournalsWhatItStartsAndHowItEnds() async {
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e; p.deck.engine = e
-        let a = RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "A", text: "Words.", estSeconds: 5)
-        let b = RunSheetEntry(id: "b", kind: .story, placedBy: .desk, title: "B", text: "Words.", estSeconds: 5)
-        s.applyFromDesk(ProgrammeRouteFeed.placeOp(a, cause: "open")); s.applyFromDesk(ProgrammeRouteFeed.placeOp(b, cause: "open"))
-        p.wants = true; p.advanceIfIdle(); await p.settle()
-        XCTAssertEqual(p.deck.journal.lines.map { "\($0.type):\($0.item)" }, ["started:a"])
-        e.rendersSound = true; p.checkSound(); p.checkSound()
-        p.documentEnded(id: "rs:a", anyPlayed: true); await p.settle()
-        XCTAssertEqual(p.deck.journal.lines.map { "\($0.type):\($0.item):\($0.end)" }, ["started:b:"], "an ended entry's lines are acknowledged once the store holds the op")
-        XCTAssertEqual(s.entry("a")?.state, .heard)
-        p.next(); await p.settle()
-        XCTAssertEqual(s.entry("b")?.state, .skipped)
-        XCTAssertEqual(p.deck.journal.seq, 5); XCTAssertTrue(p.deck.journal.lines.isEmpty)
-    }
-    func test10_AnEndWrittenBeforeTheAppDiedIsReadBeforeTheRunSheetIsRestored() async {
-        let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
-        let s = RunSheetStore(storage: f); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        let a = RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "A", text: "Words.", estSeconds: 5)
-        s.applyFromDesk(ProgrammeRouteFeed.placeOp(a, cause: "open")); p.wants = true; p.advanceIfIdle(); await p.settle()
-        XCTAssertEqual(s.onAir()?.id, "a")
-        // the deck wrote the end (heard, with sound) and the app died before the store applied it
-        let j = DeckJournal()
-        j.append("started", item: "a"); j.append("ended", item: "a", block: 1, seconds: 9, final: 1, rendered: true, end: "finished")
-        let f3 = tmp(); defer { try? FileManager.default.removeItem(at: f3) }
-        try? FileManager.default.copyItem(at: f, to: f3)
-        let at = j.lines.last?.at
-        let s2 = RunSheetStore(storage: f)
-        s2.restore(journal: j)
-        XCTAssertEqual(s2.entry("a")?.state, .heard); XCTAssertEqual(s2.entry("a")?.ended?.outcome, .finished)
-        XCTAssertEqual(s2.entry("a")?.ended?.at, at)
-        XCTAssertTrue(j.lines.isEmpty)
-        // with no end in the journal it is as before: failed, never heard
-        let s4 = RunSheetStore(storage: f3)
-        s4.restore(journal: DeckJournal())
-        XCTAssertEqual(s4.entry("a")?.ended?.outcome, .failed)
-    }
+
+
 
     // 11
     func test11_TheJournalIsWipedAtSignOut() async {
@@ -334,17 +339,5 @@ final class DeckTests: XCTestCase {
         XCTAssertNil(d.current); XCTAssertTrue(e.log.contains("stopSpoken"), "the engine is stopped again when the start resolves after the wipe")
         XCTAssertTrue(d.journal.lines.isEmpty)
     }
-    func test16_AnEndedLineOfAnEarlierAiringIsNotThisAiringsEnd() async {
-        let f = tmp(); defer { try? FileManager.default.removeItem(at: f) }
-        let s = RunSheetStore(storage: f); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        let a = RunSheetEntry(id: "a", kind: .story, placedBy: .desk, title: "A", text: "Words.", estSeconds: 5)
-        s.applyFromDesk(ProgrammeRouteFeed.placeOp(a, cause: "open")); p.wants = true; p.advanceIfIdle(); await p.settle()
-        XCTAssertEqual(s.onAir()?.id, "a")
-        // the journal holds an end of an earlier airing of "a", and then the start of this airing, which the kill cut off
-        let j = DeckJournal()
-        j.append("started", item: "a"); j.append("ended", item: "a", block: 1, seconds: 9, final: 1, rendered: true, end: "finished")
-        j.append("started", item: "a")
-        let s2 = RunSheetStore(storage: f); s2.restore(journal: j)
-        XCTAssertEqual(s2.entry("a")?.ended?.outcome, .failed, "the earlier end must not decide this airing")
-    }
+
 }

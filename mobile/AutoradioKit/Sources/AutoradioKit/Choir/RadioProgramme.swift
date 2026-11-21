@@ -455,7 +455,6 @@ public struct RouteStretchSource: StretchSource {
     func candidates(client: ChoirClient, skipping: Set<String>, onlyRoutes: [String]? = nil, clips: ClipStore = .shared) async throws -> [[String: Any]] {
         let r = try await client.send("GET", "/api/platform/publications/front", query: ["limit": "60"], authenticated: false)
         let front = try r.object()
-        PublishedTimes.shared.record(PaperStory.parseList(front))      // the Autoradio page says when the story on air was published
         var items = StretchCandidates.fromFront(front, skipping: skipping, onlyRoutes: onlyRoutes)
         // The list handed over is told out (or none of it is in the front): the radio goes on with the front, it does not stop.
         if items.isEmpty, onlyRoutes != nil { items = StretchCandidates.fromFront(front, skipping: skipping) }

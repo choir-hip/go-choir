@@ -16,7 +16,7 @@ extension AutoradioModule {
         RetrievalBridge.shared.raise = { [weak self] in self?.touch(["retrievalAsk"], now: true) }
         RetrievalBridge.shared.facts = { [weak self] address in
             guard let self else { return "{}" }
-            let sheet = await MainActor.run { RunSheetStore.shared.sheet }
+            let sheet = RadioBridge.shared.sheet() ?? RunSheet()
             let entries: [[String: Any]] = sheet.entries.compactMap { e in
                 guard e.state == .onAir || e.state == .ahead else { return nil }
                 return ["id": e.id, "title": e.title, "text": e.text ?? "", "state": e.state == .onAir ? "on_air" : "ahead", "ref": e.source?.ref ?? ""]

@@ -63,21 +63,6 @@ extension AutoradioModule {
             guard let self else { return }
             await self.runtime.start(virtual: self.virtualEngine)
         }
-        for name in ["choirPlayPause", "choirStartRadio", "choirPlay"] {
-            handle(name) { [unowned self] args, reply in
-                Task { [weak self] in
-                    guard let self else { return }
-                    if !self.runtime.snapshot().running { await self.runtime.start(virtual: self.virtualEngine) }
-                    switch name {
-                    case "choirPlayPause": await self.choir.playPause()
-                    case "choirStartRadio": await self.choir.startRadio()
-                    default: await self.choir.play(route: args["route"] as? String ?? "", title: args["title"] as? String ?? "")   // the title goes with the route: without it the entry was placed with none
-                    }
-                    DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
-                }
-            }
-        }
-
         // The bar's microphone: hands-free on or off, one state, off at every launch. Turning it on starts the engine if it is not running;
         // turning it off drops an open turn at once and the engine hears nothing more.
         handle("choirHandsFreeToggle") { [unowned self] _, reply in
@@ -90,24 +75,6 @@ extension AutoradioModule {
             }
         }
 
-        // "Listen": the radio reads what is in front of the listener, as a run sheet entry placed now (RunSheetPlayer.playNow), with the
-        // player's own controls. The headline is read first. It replaces what is on air; what was ahead stays ahead.
-        // Text with nothing to say starts nothing.
-        handle("choirListen") { [unowned self] args, reply in
-            let address = args["address"] as? String ?? ""
-            let title = (args["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let text = ListenText.compose(title: title, body: args["text"] as? String ?? "")
-            guard !address.isEmpty, !text.isEmpty else { return reply(self.json(self.runtime.snapshot())) }
-            Task { [weak self] in
-                guard let self else { return }
-                let paras = ChoirText.paragraphs(text, maxChars: ChoirText.speechChars)
-                let name = title.isEmpty ? paras.first.map { $0.split(separator: " ").prefix(6).joined(separator: " ") } ?? "" : title
-                // Listen is a play: `place now` of the page in front, with the words the page held. What was ahead stays ahead.
-                await MainActor.run { RunSheetPlayer.shared.playNow(.readAloud(address: address, title: name), words: (name, paras)) }
-                DispatchQueue.main.async { reply(self.json(self.runtime.snapshot())) }
-            }
-        }
-
         // The bar's typed question: one turn, like a spoken one (the engine starts virtually under the agent, as for the buttons above).
         // `aim` carries the address of the page in front when the bar sent (absent before lane SHELL's interface lands: the page in front now).
         for name in ["choirAsk"] {
@@ -116,7 +83,6 @@ extension AutoradioModule {
                 // A URL in the bar is not a question: it opens in place with Read aloud and Add to queue (lane autoradio-queue; the one early branch).
                 if let url = BarURL.detect(text) {
                     self.barWebURL = url.absoluteString; EmbeddedPage.shared.opened(url.absoluteString)
-                    self.touch(["queueView"], now: true)
                     return reply(self.json(self.runtime.snapshot()))
                 }
                 // `aim` (lane SHELL) is the front page's address; `address` is the older name. Either may be absent.

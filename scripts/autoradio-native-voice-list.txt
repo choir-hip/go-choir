@@ -83,7 +83,6 @@ name retrievalAsk the voice turn's ask for passages, raised by the native turn e
 name voice* the voice cards and the speaker profile
 name choirTalkCancel cancels the open microphone turn
 name choirHandsFreeToggle opens and closes the microphone
-name choirListen starts a spoken turn
 name importedHand hands an imported document's words to the player: the audio is native
 name importedFollow the block the player is reading now: only the player knows
 name deck* the deck: play, hold, pause, seek, acknowledge, and the state and journal it keeps (the audio session and the lock screen are native)

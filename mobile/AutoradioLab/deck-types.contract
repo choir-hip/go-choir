@@ -23,6 +23,7 @@ shape DeckItem
   block: number
   seconds: number
   requiresPreviousHeard: bool
+  segment: string
 
 // One line of the journal. `type`: "started" (the item began; `rendered` is false until sound reaches the output, so a
 // "started" line is written again as "sounding" with rendered true), "sounding", "ended" (`end` says how), "remote" (the lock

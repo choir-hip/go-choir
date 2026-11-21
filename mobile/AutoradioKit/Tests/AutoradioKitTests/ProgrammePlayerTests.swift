@@ -230,21 +230,7 @@ final class SegmentedDocumentTests: XCTestCase {
         XCTAssertNil(d.segmentIndex(containingBlock: 6)); XCTAssertNil(d.segmentIndex(containingBlock: -1))
     }
 
-    func testF12_RevisionKeepsRangesRight() {
-        let d = segmentedDocument(["One.\n\nTwo.", "Three.", "Four."])      // blocks 0,1 | 2 | 3
-        // an insertion between segments shifts the later ones
-        let ins = d.applying(Revision(id: "r", fromBlock: 2, blocks: [.speech(text: "Aside.")], keepRest: true))
-        XCTAssertEqual(ins.segments.map(\.firstBlock), [0, 3, 4]); XCTAssertEqual(ins.blocks.count, 5)
-        // an insertion inside a segment cuts it: that segment is dropped, later ones shift
-        let mid = d.applying(Revision(id: "r", fromBlock: 1, blocks: [.speech(text: "Aside.")], keepRest: true))
-        XCTAssertEqual(mid.segments.map(\.id), ["st1/1", "st1/2"]); XCTAssertEqual(mid.segments.map(\.firstBlock), [3, 4])
-        // a replacement of the rest drops every segment that reaches into it
-        let rep = d.applying(Revision(id: "r", fromBlock: 2, blocks: [.speech(text: "New.")], keepRest: false))
-        XCTAssertEqual(rep.segments.map(\.id), ["st1/0"]); XCTAssertEqual(rep.blocks.count, 3)
-        let none = d.applying(Revision(id: "r", fromBlock: 1, blocks: [], keepRest: false))
-        XCTAssertEqual(none.segments, [])
-        for x in [ins, mid, rep, none] { for s in x.segments { XCTAssertLessThanOrEqual(s.firstBlock + s.blockCount, x.blocks.count) } }
-    }
+
 
     func testNowPlayingNamesTheSegment() {
         var d = segmentedDocument(["One.\n\nTwo.", "Three."], kinds: ["story", "headlines"])

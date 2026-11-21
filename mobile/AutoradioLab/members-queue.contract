@@ -1,31 +1,32 @@
 // Lane members file (queue): the one playback queue as the screens read it. Owned by lane autoradio-queue.
-// Source and sends are declared in exact-package/interface/queue.json. Every screen's Play and Add to queue go through queueAdd.
-use queueView, queueAdd, queueAct, choirPlay from "@choir/autoradio"
-use QueueInfo from "@choir/autoradio"
+// The queue is shared code (radio-bridge.ts over radio-runtime.ts). Every screen's Play and Add to queue go through queueAdd.
+use SettingsAck from "@choir/autoradio"
+use QueueInfo from "./queue-types.contract"
 use StackVp from "./ui.contract"
 
 members Autoradio
-  resource qv = queueView() as shape QueueInfo else empty()
-  mutation qm as shape QueueInfo
+  // asked again when the pump says something changed (`rpulse`, spine.contract)
+  resource qv = queueView(rpulse.tick) as shape QueueInfo else empty()
+  mutation qm as shape QueueInfo refreshes qv
   resource qVp = exactViewport() as shape StackVp
 
   // Play now, or add to the end: kind "story" (ref a route or a pub: address) or "page" (ref a web address).
   action queuePlay(kind: string, ref: string, title: string)
-    send qm = queueAdd(mode="now", kind=kind, ref=ref, title=title, local="")
+    send qm = queueAdd("now", kind, ref, title, "")
   action queueLater(kind: string, ref: string, title: string)
-    send qm = queueAdd(mode="add", kind=kind, ref=ref, title=title, local="")
+    send qm = queueAdd("add", kind, ref, title, "")
   // An audio file from Files: the page has brought it to an app file (`local`, under app:/cache/files); the run sheet's player plays it from there.
   action queueFilePlay(mode: string, address: string, local: string, title: string)
-    send qm = queueAdd(mode=mode, kind="file", ref=address, title=title, local=local)
+    send qm = queueAdd(mode, "file", address, title, local)
   // Signed out the radio reads the PUBLIC paper: the first story now (the native player), the second queued after it. The rows of the radio page play or queue their own.
   action playPublic(first: string, firstTitle: string, second: string, secondTitle: string)
     if first != ""
-      send acct = choirPlay(route=first, title=firstTitle)
+      send racct = radioPlayStory(first, firstTitle)
     if second != ""
-      send qm = queueAdd(mode="add", kind="story", ref=second, title=secondTitle, local="")
+      send qm = queueAdd("add", "story", second, secondTitle, "")
   // toggle | back15 | fwd15 | keep | remove | playAt | skip | clear | openWeb | closeWeb
   action queueDo(op: string, arg: string)
-    send qm = queueAct(op=op, arg=arg)
+    send qm = queueAct(op, arg)
 
   // The scrubber for remote audio, dragged like the speed slider: the move is relative, the position is sent when the finger lifts.
   state scrubLive = -1
@@ -35,7 +36,7 @@ members Autoradio
     scrubLive = min(max(scrubShown + dx / max(qVp.width - 120, 1), 0), 1)
   action scrubEnd(vx: number, vy: number)
     if scrubLive >= 0
-      send qm = queueAct(op="seek", arg=`${scrubLive}`)
+      send qm = queueAct("seek", `${scrubLive}`)
       scrubLive = -1
   action closeBarWeb
-    send qm = queueAct(op="closeWeb", arg="")
+    send qm = queueAct("closeWeb", "")

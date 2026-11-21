@@ -139,26 +139,7 @@ struct FakeTranscriber: TakeTranscribing { var words = "A neighbour speaking."; 
         RunSheetEntry.take(Take(takeID: "take-00000000000000a1", publisher: "voice-3fa2c1", publishedAt: nil, duration: 14, transcript: "Words.", respondsTo: nil, record: nil, audioPath: "", state: "live"),
                            leadIn: "A neighbour.", id: "d-t1", forecast: RunSheetForecast(pHeard: 0.6, causedBy: "c", claimId: "k"))
     }
-    func testALeadInThenTheFetchedAudioAndAFinishedOutcome() async {
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        let f = FileManager.default.temporaryDirectory.appendingPathComponent("take-play-\(UUID().uuidString).m4a"); try? Data([1]).write(to: f)
-        p.takeAudio = { id in id == "take-00000000000000a1" ? f : nil }
-        p.playNow(entry())
-        _ = await poll { e.log.contains("speak:d-t1") }
-        XCTAssertTrue(e.log.contains("speak:d-t1"), "the lead-in is spoken first")
-        p.documentEnded(id: "rs:d-t1", anyPlayed: true)
-        _ = await poll { e.log.contains { $0.hasPrefix("remote:") } }
-        XCTAssertTrue(e.log.contains { $0.hasPrefix("remote:take-play-") }, "then the publisher's audio plays")
-        p.remoteEnded(generation: p.generation)
-        XCTAssertEqual(s.sheet.entries.first { $0.id == "d-t1" }?.ended?.outcome, .finished)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: f.path), "the fetched file is deleted when the entry ends")
-    }
-    func testATakeThatCannotBeFetchedFailsOnceAndTheRadioGoesOn() async {
-        let s = RunSheetStore(); let p = RunSheetPlayer(store: s); let e = FakeEngine(); p.engine = e
-        p.takeAudio = { _ in nil }
-        p.playNow(entry())
-        _ = await poll { s.sheet.entries.first { $0.id == "d-t1" }?.ended != nil }
-        XCTAssertEqual(s.sheet.entries.first { $0.id == "d-t1" }?.ended?.outcome, .failed)
-    }
+
+
     // (the page of a take on air: radio-page.test.ts R8)
 }

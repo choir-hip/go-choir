@@ -1,21 +1,7 @@
 import Foundation
 
-// The run sheet (slice A of the Autoradio desk): one ordered list of everything the listener hears, and the one reducer that applies ops
-// to it. The Go twin is internal/runsheet; both read the fixtures in mobile/fixtures/runsheet and must agree on every one. The wire
-// format is JSON with snake_case keys. Unknown fields are ignored; an unknown kind, state, op or other vocabulary word is a decode
-// error. The reducer holds mechanical invariants only; nothing in it interprets meaning.
-//
-// Interpretations of the frozen interface (the same list is in internal/runsheet/apply.go):
-//  - duplicate detection needs memory, so RunSheet carries `applied_ops` (the last 512 applied op_ids); a dropped op is not remembered;
-//  - dropped reasons: duplicate, not_ahead, not_on_air, not_phone, bad_transition, other_on_air (no longer produced: a takeover), unknown_id, stale_version,
-//    no_previous, duplicate_id, reason_required, invalid;
-//  - the reducer reads no clock: ended.at is whatever the op carried ("" when nothing); skip and `now` take at and last_block from op.ended;
-//  - skip, previous and aired never promote an entry to on_air: only an `aired` op from the phone does;
-//  - previous returns the entry on air and the latest heard or skipped entry to ahead, in place;
-//  - an entry that goes on air moves to the head of the ahead entries (order: tail, on_air, ahead);
-//  - heard or skipped entries beyond the most recent 50 are trimmed; the ahead list is not capped here;
-//  - place needs state "ahead", a fresh id and the text its kind requires;
-//  - check order: op shape, duplicate, aired's authority, reason, then the op's own rules.
+// The run sheet's wire types (data only). The sheet, its reducer and its decisions are shared code (AutoradioLab/runsheet-model.ts, radio-runtime.ts); the Go twin is internal/runsheet. JSON with snake_case keys;
+// native code only decodes what shared code hands over (RadioBridge) and encodes entries it builds for it.
 
 public enum RunSheetKind: String, Codable, Equatable, Sendable {
     case opening, transition, story, clip, take, episode, page, document, mail, result, answer
@@ -280,25 +266,6 @@ public struct RunSheetOp: Codable, Equatable, Sendable {
 }
 
 /// What the reducer says about one op. `dropped` is nil when the op applied; `version` is the sheet's version after the op.
-public struct RunSheetResult: Codable, Equatable, Sendable {
-    public var opId: String
-    public var applied: Bool
-    public var dropped: String?
-    public var version: Int64
-    public init(opId: String, applied: Bool, dropped: String? = nil, version: Int64) {
-        self.opId = opId; self.applied = applied; self.dropped = dropped; self.version = version
-    }
-    enum CodingKeys: String, CodingKey { case opId = "op_id", applied, dropped, version }
-}
-
-/// The dropped reasons.
-public enum RunSheetDropped {
-    public static let duplicate = "duplicate", notAhead = "not_ahead", notOnAir = "not_on_air", notPhone = "not_phone"
-    public static let badTransition = "bad_transition", otherOnAir = "other_on_air", unknownId = "unknown_id", staleVersion = "stale_version"
-    public static let noPrevious = "no_previous", duplicateId = "duplicate_id", reasonRequired = "reason_required", invalid = "invalid"
-    public static let aheadFull = "ahead_full"
-}
-
 public enum RunSheetBounds {
     public static let maxTitleBytes = 300, maxTextBytes = 8 * 1024, maxReasonBytes = 160, maxTail = 50, maxAppliedOps = 512
     /// The server's field bounds (internal/runsheet/runsheet.go): an op that breaks one is dropped there as invalid, so the phone builds none.
@@ -307,99 +274,16 @@ public enum RunSheetBounds {
 }
 
 extension RunSheet {
-    /// [A-Za-z0-9][A-Za-z0-9_.-]{0,63}
+    /// An entry id: [A-Za-z0-9][A-Za-z0-9_.-]{0,63}.
     public static func validId(_ s: String) -> Bool {
         let b = Array(s.utf8)
-        if b.isEmpty || b.count > 64 { return false }
-        for (i, c) in b.enumerated() {
-            let alnum = (c >= 0x61 && c <= 0x7a) || (c >= 0x41 && c <= 0x5a) || (c >= 0x30 && c <= 0x39)
-            if alnum || (i > 0 && (c == 0x5f || c == 0x2e || c == 0x2d)) { continue }
-            return false
-        }
-        return true
+        guard !b.isEmpty, b.count <= 64 else { return false }
+        func alnum(_ c: UInt8) -> Bool { (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) }
+        return alnum(b[0]) && b.dropFirst().allSatisfy { alnum($0) || $0 == 95 || $0 == 46 || $0 == 45 }
     }
+}
 
-    /// Applies `op` and returns the new sheet and what happened. A dropped op returns the sheet unchanged.
-    public func applying(_ op: RunSheetOp) -> (sheet: RunSheet, result: RunSheetResult) {
-        func drop(_ why: String) -> (RunSheet, RunSheetResult) { (self, RunSheetResult(opId: op.opId, applied: false, dropped: why, version: version)) }
-        if !Self.validId(op.opId) { return drop(RunSheetDropped.invalid) }
-        if appliedOps.contains(op.opId) { return drop(RunSheetDropped.duplicate) }
-        if op.op == .aired && op.by != .phone { return drop(RunSheetDropped.notPhone) }
-        let reason = op.reason ?? ""
-        if reason.utf8.count > RunSheetBounds.maxReasonBytes || (op.id ?? "").utf8.count > RunSheetBounds.maxIDBytes || (op.after ?? "").utf8.count > RunSheetBounds.maxIDBytes
-            || (op.origin ?? "").utf8.count > RunSheetBounds.maxShortBytes || (op.ended.map { !Self.validEnded($0) } ?? false)
-            || (op.positionSeconds.map { $0 < 0 || $0 > RunSheetBounds.maxEstSeconds } ?? false)
-            || (op.entry != nil && op.op != .place) || (op.text != nil && op.op != .rewrite) { return drop(RunSheetDropped.invalid) }     // an op carries nothing it does not use
-        if op.by == .desk && reason.isEmpty { return drop(RunSheetDropped.reasonRequired) }
-        var out = self
-        if let why = out.perform(op) { return drop(why) }
-        out.trimTail()
-        out.version = version + 1
-        out.appliedOps.append(op.opId)
-        if out.appliedOps.count > RunSheetBounds.maxAppliedOps { out.appliedOps.removeFirst(out.appliedOps.count - RunSheetBounds.maxAppliedOps) }
-        return (out, RunSheetResult(opId: op.opId, applied: true, dropped: nil, version: out.version))
-    }
-
-    // MARK: the rules
-
-    private var firstAhead: Int {
-        if let oi = entries.firstIndex(where: { $0.state == .onAir }) { return oi + 1 }
-        return entries.filter { $0.state.isTail }.count
-    }
-
-    private func slot(_ at: RunSheetAt, after: String?) -> Int {
-        let first = firstAhead
-        switch at {
-        case .next, .now: return first
-        case .end: return entries.count
-        case .queued:
-            var last = -1
-            if first < entries.count { for i in first..<entries.count where entries[i].state == .ahead && entries[i].placedBy == .listener { last = i } }
-            return last < 0 ? first : last + 1
-        case .after:
-            if let a = after, let i = entries.firstIndex(where: { $0.id == a }), entries[i].state == .ahead || entries[i].state == .onAir { return i + 1 }
-            return first
-        }
-    }
-
-    private static func endedFor(_ op: RunSheetOp, _ outcome: RunSheetOutcome) -> RunSheetEnded {
-        RunSheetEnded(outcome: outcome, at: op.ended?.at ?? "", lastBlock: op.ended?.lastBlock ?? 0)
-    }
-
-    private mutating func putAhead(_ entry: RunSheetEntry, at: RunSheetAt, after: String?, op: RunSheetOp) {
-        var e = entry
-        if at != .now { entries.insert(e, at: slot(at, after: after)); return }
-        if let oi = entries.firstIndex(where: { $0.state == .onAir }) {
-            entries[oi].state = .skipped
-            entries[oi].ended = Self.endedFor(op, .cut)
-        }
-        e.state = .onAir
-        e.ended = nil
-        entries.insert(e, at: firstAhead)
-        onAir = e.id
-        positionSeconds = 0
-    }
-
-    static func validEnded(_ e: RunSheetEnded) -> Bool { e.at.utf8.count <= RunSheetBounds.maxTimeBytes && e.lastBlock >= 0 }
-
-    /// Every string, list and number of an entry is bounded (internal/runsheet validEntry); the server drops an entry that breaks one.
-    static func validEntry(_ e: RunSheetEntry) -> Bool {
-        let B = RunSheetBounds.self
-        if !validId(e.id) || e.title.utf8.count > B.maxTitleBytes || (e.text?.utf8.count ?? 0) > B.maxTextBytes { return false }
-        if e.kind.textRequired && (e.text ?? "").isEmpty { return false }
-        if let en = e.ended, !validEnded(en) { return false }
-        if !(e.estSeconds >= 0 && e.estSeconds <= B.maxEstSeconds) || e.revision < 0 || (e.airAt?.utf8.count ?? 0) > B.maxTimeBytes || (e.origin?.utf8.count ?? 0) > B.maxShortBytes { return false }
-        if let s = e.source {
-            if s.ref.utf8.count > B.maxURLBytes || s.label.utf8.count > B.maxRefBytes || (s.url?.utf8.count ?? 0) > B.maxURLBytes || (s.clipId?.utf8.count ?? 0) > B.maxRefBytes { return false }
-            if (s.start ?? 0) < 0 || (s.end ?? 0) < 0 { return false }
-        }
-        if (e.cites?.count ?? 0) > B.maxCites { return false }
-        for c in e.cites ?? [] where c.ref.utf8.count > B.maxURLBytes || c.label.utf8.count > B.maxRefBytes { return false }
-        if let b = e.between, b.after.utf8.count > B.maxIDBytes || b.before.utf8.count > B.maxIDBytes { return false }
-        if let f = e.forecast, !((f.pHeard ?? 0) >= 0 && (f.pHeard ?? 0) <= 1) || f.causedBy.utf8.count > B.maxShortBytes || f.claimId.utf8.count > B.maxShortBytes { return false }
-        return entryJSONSize(e) <= B.maxEntryJSON
-    }
-
+extension RunSheet {
     /// The entry's size as a record carries it (the server's bound, fixture 33): the entry as compact JSON, marshalled as a JSON string (as a
     /// record body is), minus the two quotes. A plain byte costs 1; `<` `>` `&` 6; a quote or a backslash 2 more than the plain byte it
     /// escapes (a quote or backslash in the text is `\"` inside the entry and so 4 in all); a control character 7; U+2028 and U+2029 7.
@@ -418,133 +302,5 @@ extension RunSheet {
             }
         }
         return n
-    }
-
-    /// An answer the phone already said: the one place that may arrive in a state other than ahead.
-    private static func isHeardAnswer(_ op: RunSheetOp) -> Bool {
-        guard let e = op.entry else { return false }
-        return e.kind == .answer && e.placedBy == .phone && e.state == .heard
-    }
-
-    /// Desk-placed ahead entries farthest from the air are dropped until at most `maxAhead` are ahead (never the ones `keep` names, never a
-    /// listener's or the phone's); false when that cannot be done.
-    private mutating func trimAhead(keeping keep: Set<String>) -> Bool {
-        while true {
-            var n = 0, far = -1
-            for (i, e) in entries.enumerated() where e.state == .ahead {
-                n += 1
-                if e.placedBy == .desk && !keep.contains(e.id) { far = i }
-            }
-            if n <= RunSheetBounds.maxAhead { return true }
-            if far < 0 { return false }
-            entries.remove(at: far)
-        }
-    }
-
-    /// Performs `op` on this private copy; returns the dropped reason, or nil when it applied.
-    private mutating func perform(_ op: RunSheetOp) -> String? {
-        switch op.op {
-        case .place:
-            if Self.isHeardAnswer(op) {
-                guard op.by == .phone, let e = op.entry, Self.validEntry(e) else { return RunSheetDropped.invalid }
-                if entries.contains(where: { $0.id == e.id }) { return RunSheetDropped.duplicateId }
-                var h = e
-                if h.ended == nil { h.ended = RunSheetEnded(outcome: .finished) }
-                entries.insert(h, at: entries.filter { $0.state.isTail }.count)         // after the last heard or skipped entry; never on air
-                return nil
-            }
-            guard let e = op.entry, Self.validEntry(e), e.state == .ahead, let at = op.at, !(at == .after && (op.after ?? "").isEmpty) else { return RunSheetDropped.invalid }
-            if entries.contains(where: { $0.id == e.id }) { return RunSheetDropped.duplicateId }
-            putAhead(e, at: at, after: op.after, op: op)
-        case .move:
-            guard let id = op.id, !id.isEmpty, let at = op.at, !(at == .after && (op.after ?? "").isEmpty) else { return RunSheetDropped.invalid }
-            guard let i = entries.firstIndex(where: { $0.id == id }), entries[i].state == .ahead else { return RunSheetDropped.notAhead }
-            let e = entries.remove(at: i)
-            putAhead(e, at: at, after: op.after, op: op)
-        case .remove:
-            guard let id = op.id, !id.isEmpty else { return RunSheetDropped.invalid }
-            guard let i = entries.firstIndex(where: { $0.id == id }), entries[i].state == .ahead else { return RunSheetDropped.notAhead }
-            entries.remove(at: i)
-        case .rewrite:
-            guard let id = op.id, !id.isEmpty, let text = op.text, !text.isEmpty, text.utf8.count <= RunSheetBounds.maxTextBytes else { return RunSheetDropped.invalid }
-            guard let i = entries.firstIndex(where: { $0.id == id }), entries[i].state == .ahead else { return RunSheetDropped.notAhead }
-            var changed = entries[i]; changed.text = text
-            if Self.entryJSONSize(changed) > RunSheetBounds.maxEntryJSON { return RunSheetDropped.invalid }          // after every rewrite the entry is within its bound
-            entries[i].text = text
-        case .skip:
-            guard let id = op.id, !id.isEmpty else { return RunSheetDropped.invalid }
-            guard let i = entries.firstIndex(where: { $0.id == id }), entries[i].state == .onAir else { return RunSheetDropped.notOnAir }
-            entries[i].state = .skipped
-            entries[i].ended = Self.endedFor(op, .skipped)
-            onAir = nil
-            positionSeconds = 0
-        case .previous:
-            if op.baseVersion != version { return RunSheetDropped.staleVersion }
-            guard let last = entries.lastIndex(where: { $0.state.isTail }) else { return RunSheetDropped.noPrevious }
-            var restored = Set<String>()
-            for i in entries.indices where i == last || entries[i].state == .onAir {
-                entries[i].state = .ahead
-                entries[i].ended = nil
-                restored.insert(entries[i].id)
-            }
-            onAir = nil
-            positionSeconds = 0
-            if !trimAhead(keeping: restored) { return RunSheetDropped.aheadFull }
-        case .clear:
-            if op.baseVersion != version { return RunSheetDropped.staleVersion }
-            entries.removeAll { $0.state == .ahead }
-        case .aired:
-            return performAired(op)
-        }
-        return nil
-    }
-
-    private mutating func performAired(_ op: RunSheetOp) -> String? {
-        guard let id = op.id, !id.isEmpty, let to = op.state, to != .ahead else { return RunSheetDropped.invalid }
-        guard let i = entries.firstIndex(where: { $0.id == id }) else { return RunSheetDropped.unknownId }
-        let cur = entries[i].state
-        if cur == .ahead && to == .onAir {
-            // Takeover (twin of internal/runsheet aired): the entry on air lost its end op; close it as heard, outcome left, no time, no block.
-            if let oi = entries.firstIndex(where: { $0.state == .onAir }) {
-                entries[oi].state = .heard
-                entries[oi].ended = RunSheetEnded(outcome: .left)
-                onAir = nil
-            }
-            var e = entries.remove(at: i)
-            e.state = .onAir
-            e.ended = nil
-            entries.insert(e, at: firstAhead)
-            onAir = e.id
-            positionSeconds = op.positionSeconds ?? 0
-        } else if cur == .onAir && (to == .heard || to == .skipped) {
-            entries[i].state = to
-            entries[i].ended = op.ended ?? RunSheetEnded(outcome: to == .heard ? .finished : .skipped)
-            onAir = nil
-            positionSeconds = 0
-        } else {
-            return RunSheetDropped.badTransition
-        }
-        return nil
-    }
-
-    private mutating func trimTail() {
-        var drop = entries.filter { $0.state.isTail }.count - RunSheetBounds.maxTail
-        if drop <= 0 { return }
-        entries.removeAll { e in
-            if drop > 0 && e.state.isTail { drop -= 1; return true }
-            return false
-        }
-    }
-}
-
-public enum RunSheetReducer {
-    /// The reducer as a function: `Apply(sheet, op) -> (sheet, Result)`.
-    public static func apply(_ sheet: RunSheet, _ op: RunSheetOp) -> (sheet: RunSheet, result: RunSheetResult) { sheet.applying(op) }
-
-    public static func applyAll(_ sheet: RunSheet, _ ops: [RunSheetOp]) -> (sheet: RunSheet, results: [RunSheetResult]) {
-        var s = sheet
-        var rs: [RunSheetResult] = []
-        for op in ops { let (n, r) = s.applying(op); s = n; rs.append(r) }
-        return (s, rs)
     }
 }

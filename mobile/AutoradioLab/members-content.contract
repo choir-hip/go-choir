@@ -127,7 +127,7 @@ members Autoradio
     edUrl = edCurLink
     focus("texture-link-url")
   action edOpenCurLink
-    send qm = queueAct(op="openWeb", arg=edCurLink)
+    send qm = queueAct("openWeb", edCurLink)
   action edUrlChanged(value: string)
     edUrl = value
   action edApplyLink
@@ -138,10 +138,10 @@ members Autoradio
   // ---- a web page
   action ctlWebRead(u: string, h: string)
     ctlOpen = false
-    send qm = queueAdd(mode="now", kind="page", ref=u, title=h, local="")
+    send qm = queueAdd("now", "page", u, h, "")
   action ctlWebLater(u: string, h: string)
     ctlOpen = false
-    send qm = queueAdd(mode="add", kind="page", ref=u, title=h, local="")
+    send qm = queueAdd("add", "page", u, h, "")
   action ctlSafari(u: string)
     ctlOpen = false
     send rext = readerOpenExternal(url=u)
@@ -151,4 +151,4 @@ members Autoradio
     webBusy = false
   action ctlCloseBarWeb
     ctlOpen = false
-    send qm = queueAct(op="closeWeb", arg="")
+    send qm = queueAct("closeWeb", "")

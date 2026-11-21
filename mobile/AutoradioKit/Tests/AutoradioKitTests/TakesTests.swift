@@ -49,22 +49,7 @@ final class TakesTests: XCTestCase {
         XCTAssertLessThanOrEqual((j["title"] as! String).utf8.count, 120)
     }
 
-    func testT4ATakeLineBecomesAnEntryWithItsCites() throws {
-        let store = TakeStore(); store.replace(try list())
-        var d = StretchDecoder()
-        let evs = d.feed(String(decoding: try fixture("segment-take.sse"), as: UTF8.self)) + d.finish()
-        guard case .segment(let seg)? = evs.first else { return XCTFail("no segment: \(evs)") }
-        XCTAssertEqual(seg.kind, "take"); XCTAssertEqual(seg.takeID, "take-00000000000000a1"); XCTAssertEqual(seg.forecast?.pHeard, 0.6)
-        let e = try XCTUnwrap(ProgrammeRouteFeed.entry(from: seg, clips: ClipStore(), takes: store))
-        XCTAssertEqual(e.kind, .take); XCTAssertEqual(e.takeID, "take-00000000000000a1")
-        XCTAssertEqual(e.source?.label, "voice-3fa2c1"); XCTAssertEqual(e.forecast?.pHeard, 0.6)
-        XCTAssertEqual(e.text, "Here is a neighbour on the harbor fee.")
-        XCTAssertEqual(e.cites?.map(\.ref), ["pub:harbor-fees"], "the story it answered is a Built on row")
-        let rows = RadioPage.builtOn(e)
-        XCTAssertEqual(rows.map(\.address), ["pub:harbor-fees"])
-        XCTAssertEqual(RunSheetEntry.estimateSeconds(words: e.text!) + 14.2, e.estSeconds, accuracy: 0.01)
-        XCTAssertNil(ProgrammeRouteFeed.entry(from: seg, clips: ClipStore(), takes: TakeStore()), "a take the phone does not hold is not played")
-    }
+
 
     func testT4ATakeLineWithoutAForecastOrATakeIsDropped() {
         var d = StretchDecoder()

@@ -2,12 +2,11 @@ import Foundation
 
 // One wipe for everything of the account that sits on the phone. Sign-out calls `run()` once; each store has a `wipe()` (memory and files) and is
 // registered here by name. The order of sign-out (ChoirApp.signOut):
-//  1. playback stops; the player reports the entry on air as `left` (a pending op);
-//  2. the run sheet gets up to three seconds to post its pending ops with the OLD key still held (RunSheetStore.settlePending); whatever is not
+//  1. playback stops (shared code's run sheet reports the entry on air as `left`);
+//  2. the run sheet gets a moment to post its pending ops with the OLD key still held (radio-runtime.ts); whatever is not
 //     answered by then is DROPPED by the wipe, never sent later: pending ops are never posted under a later account;
 //  3. the local key goes, then this wipe runs (ChoirSignIn.signOut);
 //  4. the revoke is sent in the background with the old key held only for that one call.
-// The run sheet poster is dropped by the wipe and rebuilt at the next sign-in (ChoirApp).
 
 public final class AccountWipe: @unchecked Sendable {
     private let lock = NSLock()
@@ -48,8 +47,6 @@ public final class AccountWipe: @unchecked Sendable {
         takeStore: TakeStore = .shared,
         legacyTakeFiles: [URL?] = TakeFiles.legacy,
         tempDirectory: URL = FileManager.default.temporaryDirectory,
-        runSheet: RunSheetStore = .shared,
-        openingCache: OpeningCache? = nil,
         clips: ClipLocator = .shared,
         texture: TextureEditor = .shared,
         environment: ChoirEnvironment = .shared,
@@ -76,9 +73,8 @@ public final class AccountWipe: @unchecked Sendable {
             for u in legacyTakeFiles { if let u { try? FileManager.default.removeItem(at: u) } }      // the pre-release build's files (never read by this build) go with the account that is leaving
             Self.removeTakeScratch(in: tempDirectory)
         }
-        register("run-sheet") { await MainActor.run { runSheet.wipe() } }
+        register("radio-bridge") { RadioBridge.shared.wipe() }       // the run sheet itself is shared code's (radio-bridge.ts wipeRadio, registered in account.ts)
         register("deck") { await MainActor.run { deck.wipe() } }       // the item on air, the held items and the reason too, not only the journal
-        if let openingCache { register("opening") { openingCache.wipe() } }
         register("clips") { clips.wipe() }
         // "podcasts": the library and cached feeds are files of shared code now; podcast.ts `wipe(storage)` is what sign-out must call (left to the lead).
         register("texture") { await MainActor.run { texture.wipe() } }
