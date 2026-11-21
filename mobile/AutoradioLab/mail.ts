@@ -12,7 +12,7 @@
 // Logs carry ids and counts only: never a sender, a subject, an address or a word of a message.
 
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, accountGeneration, SignedOutError, sameAccount } from './api.ts';
+import { authedJSON, accountGeneration, SignedOutError } from './api.ts';
 import * as M from './mail-model.ts';
 import { sanitized } from './mail-sanitize.ts';
 import * as C from './mail-store.ts';
@@ -113,9 +113,8 @@ export function frame(address: string): BoxView {
 async function ensureKept(env: C.Env, folder: string): Promise<Held | null> {
   const k = kept.get(folder);
   if (k) return k;
-  const same = sameAccount();
   const c = await C.loadFolder(env, folder);
-  if (!c || !same()) return null;                             // a wipe ran while the saved folder was read: it is the old account's
+  if (!c) return null;
   const h: Held = { rows: c.rows, total: c.total, unread: c.unread, next: '' };
   kept.set(folder, h);
   return h;
@@ -293,11 +292,9 @@ const emptyCompose = (): ComposeView => ({ status: '', forAddress: '', sendAs: '
 
 async function aliasAddress(): Promise<string> {
   if (alias) return alias;
-  const same = sameAccount();
   const o = (await call('/api/email/aliases', {})) as { aliases?: { address?: unknown }[] } | null;
   const a = o?.aliases?.[0]?.address;
   if (typeof a !== 'string' || a === '') throw new StatusError(409, 'You have no sending address yet.');
-  if (!same()) throw new SignedOutError('signed out while the sending address was asked');
   alias = a;
   return a;
 }
@@ -341,12 +338,10 @@ export async function mailSaveDraft(address: string, to: string, subject: string
   if (already !== undefined) { v.status = 'saved'; v.draftId = already; v.note = 'Saved as a draft. It has not been sent.'; return v; }   // the server has no update route, so the same text is not saved twice
   try {
     const from = await aliasAddress();
-    const sameDraft = sameAccount();
     v.sendAs = from;
     const req: Record<string, unknown> = { from_address: from, subject, text_body: body, to_addresses: M.recipients(to) };
     if (v.replyTo !== '') { req.reply_to_message_id = v.replyTo; req.source_kind = 'mail'; req.source_ref = v.replyTo; }
     const d = M.parseDraft(await call('/api/email/drafts', { method: 'POST', body: req }));
-    if (!sameDraft()) throw new SignedOutError('signed out while the draft was saved');
     v.status = 'saved'; v.draftId = d.id; savedDrafts.set(same, d.id);
     v.note = 'Saved as a draft. It has not been sent.';
     console.log('mail: draft saved');

@@ -9,7 +9,7 @@
 // Logs carry counts and kinds, never a file name. No source throws for a failure the page has words for: it answers its own status and message.
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
-import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration, sameAccount } from './api.ts';
+import { authedJSON, authedBytes, authedToFile, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
 import * as M from './files-model.ts';
 import type { Entry, FileInfo, FileListing, FileResolved } from './files-model.ts';
 
@@ -95,14 +95,12 @@ export async function wipeFiles(storage: Storage | undefined): Promise<void> {
 async function loadRecents(storage: Storage | undefined): Promise<Recent[]> {
   if (recents) return recents;
   recents = [];
-  const mine = recents; const same = sameAccount();
   if (!storage) return recents;
   try {
     const v = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(RECENT_FILE)));
-    if (!same()) return [];                                  // a wipe ran while the file was read: it is the old account's, kept nowhere
     if (Array.isArray(v)) recents = v.filter((r) => r && typeof r.path === 'string' && typeof r.openedAt === 'number').slice(0, RECENT_LIMIT);
   } catch { /* none kept yet */ }
-  return same() ? (recents ?? mine) : [];
+  return recents;
 }
 async function saveRecents(storage: Storage | undefined, gen: number = accountGeneration()): Promise<void> {
   if (!recents) return;

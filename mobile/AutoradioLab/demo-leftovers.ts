@@ -12,7 +12,7 @@
 import type { Storage } from './app.contract.d.ts';
 import { RECENT_FILE } from './files.ts';
 import { PAGES_FILE } from './pages.ts';
-import { accountGeneration, writeCurrent } from './api.ts';
+import { currentWorld } from './api.ts';
 
 export const DEMO_MARKER = 'app:/data/demo-leftovers-cleared';
 
@@ -57,19 +57,19 @@ export function isDemoFile(path: string, size: number, modified: unknown): boole
 
 type Outcome = 'clean' | 'rewritten' | 'failed';
 async function rewrite(storage: Storage, file: string, change: (v: unknown) => unknown | undefined): Promise<Outcome> {
-  let raw: unknown; const gen = accountGeneration();
+  let raw: unknown;
   try { raw = JSON.parse(new TextDecoder().decode(await storage.fs.readFile(file))); } catch { return 'clean'; }          // absent or unreadable: nothing was read, nothing is written
   const next = change(raw);
   if (next === undefined) return 'clean';
-  if (gen !== accountGeneration()) return 'clean';          // a wipe ran while the file was read: it is the old account's, written back nowhere
-  try { return (await writeCurrent(gen, storage, file, new TextEncoder().encode(JSON.stringify(next)))) ? 'rewritten' : 'clean'; } catch { return 'failed'; }
+  try { await storage.fs.atomicWriteFile(file, new TextEncoder().encode(JSON.stringify(next))); return 'rewritten'; } catch { return 'failed'; }
 }
 
-let attempt: Promise<void> | null = null;
+let attempt: { w: unknown; p: Promise<void>; done: boolean } | null = null;
 /** One attempt per process: every caller gets the same promise. (For tests: `resetDemoLeftovers`.) */
-export function clearDemoLeftovers(storage: Storage | undefined): Promise<void> {
-  if (!attempt) attempt = run(storage);
-  return attempt;
+export function clearDemoLeftovers(storage: Storage | undefined, w: unknown = currentWorld()): Promise<void> {
+  // Once per process; but an attempt whose world closed before it finished never ends (api.ts, the world), so the next world's runs it again.
+  if (!attempt || (attempt.w !== w && !attempt.done)) { const a = { w, p: run(storage).then(() => { a.done = true; }), done: false }; attempt = a; }
+  return attempt.p;
 }
 export function resetDemoLeftovers(): void { attempt = null; }
 

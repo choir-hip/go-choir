@@ -7,7 +7,7 @@ import { adoptNative } from './api.ts';
 import { settingsAccount } from './settings.ts';
 import { aboutBuild } from './about.ts';
 import { accountSignOut, enter, AccountClosedError } from './account.ts';
-import { accountGeneration } from './api.ts';
+import { currentWorld, bindStorage, type World } from './api.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
@@ -151,19 +151,21 @@ export const EXEMPT: Partial<Record<keyof Sources, string>> = {
 };
 
 // `bindNative` hands the signed-in seam (api.ts) the one native reader of the stored key; it reads nothing here.
-/** THE GATE. Every source not on the exempt list asks the boundary first (account.ts `enter`: two facts read again, never remembered) and throws AccountClosedError unless the account's
- * data may be read: the page shows its existing failure state and the card says why. The generation is read after `enter` (a heal may have moved it), and an answer that began before a
- * wipe ends refused: it may not hand back what it read. */
+/** Run `p`, but end it (refused) the moment the world it began in closes: its own chain stays pending forever (api.ts, the world), and the page is told and asks again. */
+const guarded = <T,>(w: World, p: Promise<T> | T): Promise<T> => new Promise<T>((res, rej) => { Promise.resolve(p).then(res, rej); void w.whenClosed.then(() => rej(new AccountClosedError('changed'))); });
+/** THE GATE. Every source not on the exempt list asks the boundary first (account.ts `enter`: two facts read again, never remembered) and throws AccountClosedError unless the account's data may be read:
+ * the page shows its existing failure state and the card says why. An open boundary hands the source the storage of ITS WORLD (api.ts `bindStorage`): if the boundary moves while the answer runs, nothing the
+ * answer's chain waits on ever arrives, so it inserts, writes and sends nothing more, and the answer itself ends refused. The card and the sign-out are the boundary's own machinery and use the raw storage. */
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
-  if (Object.hasOwn(EXEMPT, source)) return sources[source](args, store, storage, native);
+  if (source === 'accountState' || source === 'accountSignOut') return sources[source](args, store, storage, native);
+  if (Object.hasOwn(EXEMPT, source)) return guarded(currentWorld(), sources[source](args, store, storage, native));      // the phone's own facts, on the raw storage; a public fetch of a closed world never arrives, so the answer ends refused and the resource is asked again (acctTick)
   const b = await enter(storage, store);
   if (!b.readable) throw new AccountClosedError(b.state);
-  const gen = accountGeneration();
-  // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, only behind an open boundary, finished before the first
-  // source runs, so the modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
-  await clearDemoLeftovers(storage);
-  const out = await sources[source](args, store, storage, native);
-  if (accountGeneration() !== gen) throw new AccountClosedError('changed');
-  return out;
+  const w = currentWorld(); w.digest ??= b.digest; w.owed = false;                                               // requests of this world are signed with this key only
+  const bound = bindStorage(storage, w);
+  // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): once per world, only behind an open boundary, finished before the first source runs, so the
+  // modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
+  await guarded(w, clearDemoLeftovers(bound, w));
+  return guarded(w, sources[source](args, store, bound, native));
 };

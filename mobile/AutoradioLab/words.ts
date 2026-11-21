@@ -9,5 +9,5 @@ export const WORDS = {
   clearing: "Clearing the previous account's data from this phone.",
   adopt: 'This phone could not record the account.',
   // After five tries a refusing state names what failed and the one way out that always exists (a reinstall removes the app's container; the Keychain survives it, so the phone comes back with empty stores and the same account).
-  stuck: 'If this does not clear, delete and reinstall the app. Nothing on your computer is affected.',
+  stuck: 'If this does not clear, close and reopen the app. If it still does not, delete and reinstall it. Nothing on your computer is affected.',
 };

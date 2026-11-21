@@ -26,7 +26,7 @@
 // 10. Time is never read (`Date.now()` is refused): "now" is the Date header of the last answer any server gave, kept in the library file.
 
 import type { Result, Storage } from './app.contract.d.ts';
-import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration, sameAccount } from './api.ts';
+import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration, inert, inertTimeout, currentWorld } from './api.ts';
 import { NotAFeed, parseFeed } from './podcast-feed.ts';
 import {
   HOME, TOP_URL, clock, decodeChartNews, decodePopular, decodeSearch, decodeSubscriptions, decodeTranscript, durationLabel, durationsAgree, episodeAddress,
@@ -107,12 +107,11 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 let libGen = 0;       // the seam's account generation the library in memory was loaded under: its file writes refuse after a sign-out began (writeCurrent)
 async function loadLibrary(storage: Storage | undefined): Promise<Library> {
   if (lib) return lib;
-  const g = accountGeneration(); const same = sameAccount();
+  const g = accountGeneration();
   let l = emptyLibrary();
   if (storage) {
     try {
       const o = JSON.parse(dec.decode(await storage.fs.readFile(LIBRARY_FILE))) as Partial<Library>;
-      if (!same()) return emptyLibrary();                    // a wipe ran while the file was read: the old account's library is kept nowhere
       if (o && Array.isArray(o.subscriptions)) {
         l = { ...emptyLibrary(), ...o, subscriptions: o.subscriptions.filter((s) => s && s.show && typeof s.show.feedURL === 'string'), positions: o.positions && typeof o.positions === 'object' ? o.positions : {} };
         if (!Array.isArray(l.removed)) l.removed = [];
@@ -120,7 +119,6 @@ async function loadLibrary(storage: Storage | undefined): Promise<Library> {
       }
     } catch { /* missing or damaged: an empty library */ }
   }
-  if (!same()) return emptyLibrary();
   lib = l; libGen = g;
   for (const s of l.subscriptions) known.set(feedKey(s.show.feedURL), s.show);
   return l;
@@ -146,10 +144,8 @@ export async function cachedFeed(feedURL: string, storage: Storage | undefined):
   const have = feeds.get(n);
   if (have) return have;
   if (!storage) return null;
-  const same = sameAccount();
   try {
     const f = JSON.parse(dec.decode(await storage.fs.readFile(feedFile(n)))) as Feed;
-    if (!same()) return null;                                 // a wipe ran while the file was read
     if (f && f.show && Array.isArray(f.episodes)) { feeds.set(n, f); return f; }
   } catch { /* none */ }
   return null;
@@ -157,7 +153,9 @@ export async function cachedFeed(feedURL: string, storage: Storage | undefined):
 
 // ---- the network
 
-async function fetchBody(url: string, accept: string): Promise<{ text: string; date: number | null }> {
+/** The feed fetch is an I/O choke point of the world (api.ts): for a closed world it never answers, so a chain waiting on it stops. */
+const fetchBody = (url: string, accept: string): Promise<{ text: string; date: number | null }> => inert(currentWorld(), fetchBodyImpl(url, accept));
+async function fetchBodyImpl(url: string, accept: string): Promise<{ text: string; date: number | null }> {
   const response = await fetch(url, { method: 'GET', headers: { accept, 'user-agent': 'Autoradio' }, exactTimeout: TIMEOUT_MS } as RequestInit);
   if (!response.ok) throw new Error(`${response.status}`);
   const len = Number(response.headers.get('content-length') ?? '0');
@@ -303,7 +301,7 @@ async function loadSuggestions(): Promise<void> {
 
 async function runSearch(q: string): Promise<void> {
   if (searches.has(q)) return;
-  if (search.pause > 0) await new Promise<void>((r) => setTimeout(r, search.pause));
+  if (search.pause > 0) await inertTimeout(search.pause);                    // a timer a chain waits on ends with its world
   if (q !== latestQuery) return;                                            // a newer query was typed while this one waited: dropped
   try {
     const shows = decodeSearch(await fetchJSON(searchURL(q)));

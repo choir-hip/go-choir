@@ -7,6 +7,8 @@
 //   content: every put goes through `put()` in syncAll, which checks `c.live()` (the store's generation, bumped by `wipe`) immediately before the write (content.ts `const put`).
 //   mail: mail-store.ts `write` (tests R3 and R9 in mail.test.ts).   vectors: search.ts persist runs from the live store that sign-out empties first (account.ts wipes `vectors`).
 import { beforeEach, describe, expect, test } from 'bun:test';
+// The world mechanism (api.ts): work of a closed world never settles, so a test waits a moment for it instead of awaiting it.
+const settle = (p: Promise<unknown>): Promise<unknown> => Promise.race([p.then(() => undefined, () => undefined), new Promise((r) => setTimeout(r, 40))]);
 import { accountGeneration, bindNative, nextGeneration, resetSeam, writeCurrent } from './api.ts';
 import * as paper from './paper.ts';
 import * as F from './files.ts';
@@ -49,7 +51,7 @@ describe('W6 podcasts', () => {
     const rss = '<?xml version="1.0"?><rss><channel><title>Show</title><item><title>E</title><guid>g</guid><enclosure url="https://cdn.example.com/e.mp3" type="audio/mpeg"/></item></channel></rss>';
     globalThis.fetch = (async () => { await gated(); return new Response(rss, { status: 200, headers: { 'content-type': 'application/rss+xml' } }); }) as never;
     const p = P.podcastShow({ address: PM.showAddress('https://feeds.example.com/s.xml'), tick: 0, nowId: '', rev: 0 }, storage);
-    await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await p; await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await settle(p); await new Promise((r) => setTimeout(r, 30));
     expect([...written.keys()].filter((k) => k.startsWith('app:/data/podcast-feeds') || k.includes('feed'))).toEqual([]);
   });
 });
@@ -61,7 +63,7 @@ describe('W7 podcasts: the library file', () => {
     const slow = { fs: { atomicWriteFile: async (p: string, d: Uint8Array) => { await g; written.set(p, d); }, readFile: async () => { throw new Error('ENOENT'); }, rm: async (p: string) => { written.delete(p); }, mkdir: async () => undefined } } as never;
     globalThis.fetch = (async () => new Response('{}', { status: 404 })) as never;
     const p = P.podcastSubscribe('https://feeds.example.com/s.xml', slow);
-    await new Promise((r) => setTimeout(r, 15)); nextGeneration(); release(); await p; await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 15)); nextGeneration(); release(); await settle(p); await new Promise((r) => setTimeout(r, 30));
     expect(written.has(P.LIBRARY_FILE)).toBe(false);
   });
 });
@@ -70,7 +72,7 @@ describe('W2 to W5 the stores', () => {
   test('W2 paper: a front list that arrives after the sign-out is not cached', async () => {
     const release = hold();
     globalThis.fetch = (async () => { await gated(); return new Response(JSON.stringify({ stories: [{ route: { bare: 'a' }, title: 'A', updated_at: '2026-11-19T00:00:00Z' }] }), { status: 200 }); }) as never;
-    const p = paper.listing('', storage); nextGeneration(); release(); await p;
+    const p = paper.listing('', storage); nextGeneration(); release(); await settle(p);
     expect(written.has(paper.CACHE_FILE)).toBe(false);
   });
   test('W3 notebook: a text read after the sign-out is not cached', async () => {
@@ -80,7 +82,7 @@ describe('W2 to W5 the stores', () => {
       if (path === '/api/texture/documents/nb1') return { document: { current_revision_id: 'r1' } };
       await gated(); return { revision: { content: '# My notebook\n' } };
     };
-    const p = loadDoc(get, storage); await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await p;
+    const p = loadDoc(get, storage); await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await settle(p);
     expect(written.has(NB_CACHE)).toBe(false);
   });
   test('W4 files: a file opened across the sign-out is not put in the recent list, in memory or on disk', async () => {
@@ -90,7 +92,7 @@ describe('W2 to W5 the stores', () => {
       bytes: (async () => ({ bytes: new Uint8Array(), contentType: '' })) as never,
       toFile: async () => ({ bytes: 3, contentType: '' }),
     };
-    const p = F.fileResolve({ address: 'file:/a.txt', title: '' }, storage, net); await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await p;
+    const p = F.fileResolve({ address: 'file:/a.txt', title: '' }, storage, net); await new Promise((r) => setTimeout(r, 10)); nextGeneration(); release(); await settle(p);
     expect(written.has(F.RECENT_FILE)).toBe(false);
     const list = await F.fileList({ path: '/', mode: 'recent', sort: 'name', desc: false, query: '' }, storage, net);
     expect(list.rows.length).toBe(0);
@@ -102,7 +104,7 @@ describe('W2 to W5 the stores', () => {
     const reader = { available: true, later: async (r: { op: string }) => (r.op === 'session' ? { found: true, value: 'k-not-real-0001', computerId: 'c' } : { ok: true }) };
     bindNative(reader as never);
     globalThis.fetch = (async () => { nextGeneration(); const r = new Response('', { status: 200 }); Object.defineProperty(r, 'exactBodyTo', { value: { path: 'app:/cache/files/h/a.mp3', bytes: 5 } }); return r; }) as never;
-    await expect(api.authedToFile('/api/files/a.mp3', 'app:/cache/files/h/a.mp3', { fs: { rm: async (p: string) => { rmd.push(p); } } } as never)).rejects.toBeInstanceOf(api.SignedOutError);
+    await settle(api.authedToFile('/api/files/a.mp3', 'app:/cache/files/h/a.mp3', { fs: { rm: async (p: string) => { rmd.push(p); } } } as never));      // the reply never reaches the caller; the file is removed
     expect(rmd).toEqual(['app:/cache/files/h/a.mp3']);
   });
 });

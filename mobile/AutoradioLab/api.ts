@@ -26,7 +26,8 @@ export function url(path: string, query: Query = {}): string {
 export type Reply = { body: unknown; serverTime: number | null; raw: string };
 
 /** GET a public route. Throws on a transport error, a status outside 200 to 299 or a body that is not JSON. */
-export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
+export function getJSON(path: string, query: Query = {}): Promise<Reply> { return inert(world, getJSONImpl(path, query)); }
+async function getJSONImpl(path: string, query: Query): Promise<Reply> {
   const response = await fetch(url(path, query), { method: 'GET', headers: { accept: 'application/json' }, exactTimeout: TIMEOUT_MS } as RequestInit);
   if (!response.ok) throw new Error(`${path} answered ${response.status}`);
   const raw = await response.text();
@@ -64,7 +65,10 @@ export class HTTPError extends Error {
   constructor(status: number, message: string, retryAfter: number | null = null) { super(message); this.name = 'HTTPError'; this.status = status; this.retryAfter = retryAfter; }
 }
 
-export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string> };
+/** `world`: the world the request BELONGS to, for work held outside a chain (a queue of batches to post, a retry): captured with `currentWorld()` when the work was made. A closed world's request is refused (a rejection
+ * the holder can drop the work on), and one of an open world is signed only with that world's key. Without it the request belongs to the world that is current when it is made. */
+export type Authed = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; query?: Query; body?: unknown; headers?: Record<string, string>; world?: World };
+const ended = (): Promise<never> => Promise.reject(new SignedOutError('the account this request belongs to has ended', 'none'));
 
 /** The three accounts today's sign-in keeps; the native reader answers no other name. */
 export const KEYCHAIN_ACCOUNTS = ['api-key', 'key-id', 'computer-id'] as const;
@@ -118,17 +122,62 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
 }
 
 
-// ACCOUNT GENERATION (finding 5). Bumped by sign-out before the wipes. A reply that started under an older generation is dropped as signed out,
-// so a request in flight at sign-out can never write the old account's data back into a store the wipe just emptied.
-let generation = 0;
-export const accountGeneration = (): number => generation;
-export function nextGeneration(): number { generation += 1; return generation; }
-/** THE GUARD for a module-level cache insert or a write that follows an await (docs/design/account-boundary-2026-11-21.md; seat 2's review of fe027e0fc). The gate drops the ANSWER of a source that began
- * before a wipe; it cannot drop the source's own side effects, and a late read that sets a cache after the wipe plants the old account's data for the next one. Take the guard BEFORE the await, test it
- * AFTER, and drop the insert, merge or write when it says false:
- *     const same = sameAccount();  const x = await read();  if (same()) cache = x;
- * A new shared store with a cache uses this one helper (or `writeCurrent` for a file). */
-export function sameAccount(): () => boolean { const g = generation; return () => g === generation; }
+// THE WORLD (docs/design/account-boundary-2026-11-21.md, section 3). One World per stretch of the boundary with no account change in it. The boundary moving (a sign-out beginning, a Clear beginning, an Adopt)
+// CLOSES it and opens the next; the generation is its number. Every I/O choke point is INERT for a closed world: a chain of work that began in world A and waits on I/O never resumes once A is closed
+// (its promise never settles), so after the move nothing of A's is inserted, written or sent, whatever it would have done next. Guarding awaits one by one did not converge (five review rounds).
+// The choke points: the storage the gate hands a source (`bindStorage`), `getJSON`, `authedJSON`/`authedBytes`/`authedToFile`, the podcast feed fetch, and a chain's own timers (`inertTimeout`).
+// A request is signed only with the key of the world that began the chain (`world.digest`, set by the gate from the facts). The Clear drains A's STARTED writes (`drainClosed`) before it wipes.
+// Not covered, said plainly: a chain resumed from a non-I/O await after the close (a microtask, a shared promise another chain resolves) that then starts NEW I/O begins it in the new world.
+export class World {
+  id: number; closed = false;
+  /** The SHA-256 of the key of the account this world is for ('' for none); undefined where no gate set it (tests). A request signed with another key is refused. */
+  digest: string | undefined = undefined;
+  /** The boundary moved and no gate has confirmed it open for this world yet: what belongs to an account (a Texture theme) is not shown. */
+  owed = false;
+  pending = new Set<Promise<unknown>>();
+  whenClosed: Promise<void>; private resolveClosed: () => void = () => undefined;
+  constructor(id: number) { this.id = id; this.whenClosed = new Promise<void>((r) => { this.resolveClosed = r; }); }
+  close(): void { this.closed = true; this.resolveClosed(); }
+}
+let world = new World(0);
+const closedWorlds: World[] = [];
+export const currentWorld = (): World => world;
+export const accountGeneration = (): number => world.id;
+/** The boundary moved: the world ends, the next begins. Returns the one that ended. */
+export function closeWorld(owed = false): World { const old = world; old.close(); world = new World(old.id + 1); world.owed = owed; closedWorlds.push(old); return old; }
+/** A sign-out or a Clear begins: the world ends and the next is OWED until a gate confirms the boundary open. */
+export function nextGeneration(): number { closeWorld(true); return world.id; }
+const NEVER = new Promise<never>(() => undefined);
+/** `p` for a world that is still open when it answers; for a closed one, a promise that never settles (the chain waiting on it stops). */
+export function inert<T>(w: World, p: Promise<T>): Promise<T> {
+  return p.then((v) => (w.closed ? NEVER : v), (e) => (w.closed ? NEVER : Promise.reject(e)));
+}
+/** A chain's own timer: it fires for an open world only. */
+export function inertTimeout(ms: number, w: World = world): Promise<void> { return inert(w, new Promise<void>((r) => { setTimeout(r, ms); })); }
+const READS = new Set(['readFile', 'stat', 'readdir', 'exists', 'readText', 'open']);
+/** The storage a source is handed: every call is inert for a closed world (not even started; an answer that comes after the close never arrives), and a write, a removal or a folder started while the world
+ * is open is tracked, so the Clear can wait for it (`drainClosed`) and no write lands after the wipe. Reads of a world still open pass through. */
+export function bindStorage<S extends { fs: object }>(raw: S, w: World = world): S {
+  if (!raw || !raw.fs) return raw;
+  const fs = new Proxy(raw.fs as Record<string, unknown>, { get(t, k) {
+    const v = t[k as string];
+    if (typeof v !== 'function') return v;
+    return (...a: unknown[]) => {
+      if (w.closed) return NEVER;
+      const p = Promise.resolve((v as (...x: unknown[]) => unknown).apply(t, a));
+      if (!READS.has(String(k))) { w.pending.add(p); void p.then(() => w.pending.delete(p), () => w.pending.delete(p)); }
+      return inert(w, p);
+    };
+  } });
+  return Object.assign(Object.create(raw), { fs }) as S;
+}
+/** Wait (up to `ms`) for every write that a closed world started to finish. True when none is left. */
+export async function drainClosed(ms: number): Promise<boolean> {
+  const all = closedWorlds.flatMap((w) => [...w.pending]);
+  const ok = all.length === 0 || (await withDeadline(Promise.allSettled(all).then(() => true), false, ms));
+  if (ok) closedWorlds.length = 0;
+  return ok;
+}
 
 // A SIGN-OUT UNDER WAY (review 2026-11-19, mail seat 1, finding 2). `beginSignOut` runs BEFORE the native sign-out: the generation moves at once (a store write
 // that began under the old one refuses itself, mail-store.ts), and sealing is off until a NEW session is established (a key whose digest is not the one that
@@ -151,9 +200,9 @@ export async function refreshSealBlock(): Promise<void> {
 /** ONE rule for every moved store's file write (review 2026-11-19): `gen` is the account generation the SOURCE started under (`accountGeneration()` before its request). The write is
  * refused if a sign-out has moved the generation, and a file that lands after the generation moved is removed again. True when the file is there. */
 export async function writeCurrent(gen: number, storage: Storage | undefined, path: string, bytes: Uint8Array): Promise<boolean> {
-  if (!storage || gen !== generation) return false;
+  if (!storage || gen !== world.id) return false;
   try { await storage.fs.atomicWriteFile(path, bytes); } catch { return false; }
-  if (gen !== generation) { try { await storage.fs.rm(path); } catch { /* the wipe will */ } return false; }
+  if (gen !== world.id) { try { await storage.fs.rm(path); } catch { /* the wipe will */ } return false; }
   return true;
 }
 
@@ -191,11 +240,13 @@ async function digestOf(key: string): Promise<string> {
 
 function scrub(text: string, key: string): string { return key ? text.split(key).join('[key]') : text; }
 
-async function send(path: string, opts: Authed, accept: string, extra: Record<string, unknown> = {}): Promise<{ r: Response; key: string }> {
+async function send(w: World, path: string, opts: Authed, accept: string, extra: Record<string, unknown> = {}): Promise<{ r: Response; key: string }> {
   if (!plainPath(path)) throw new Error('refused: a signed-in path is a plain absolute path on the server');
   const sess = await keptSession();
+  if (w.closed) await NEVER;                                 // the boundary moved while the key was read: this chain is over, nothing is signed
   if (!sess) throw new SignedOutError('not signed in', await noSessionReason());
   const key = sess.key;
+  if (w.digest !== undefined && (await digestOf(key)) !== w.digest) throw new SignedOutError('the stored key is not the key of the account this request belongs to');       // a request is signed only with the key of its world
   if (blockedDigest !== null && (await digestOf(key)) !== blockedDigest) blockedDigest = null;      // another account signed in: a new session
   const headers: Record<string, string> = { ...(opts.headers ?? {}), Accept: accept, Authorization: `Bearer ${key}` };
   const method = opts.method ?? 'GET';
@@ -205,8 +256,9 @@ async function send(path: string, opts: Authed, accept: string, extra: Record<st
     body = opts.body as unknown as string; headers['Content-Type'] = headers['content-type'] ?? headers['Content-Type'] ?? 'application/octet-stream'; delete headers['content-type'];
   } else if (opts.body !== undefined) { body = JSON.stringify(opts.body); headers['Content-Type'] = 'application/json'; }
   if (!path.startsWith('/auth/') && path !== STATUS_PATH) {
-    try { headers['X-Choir-Computer'] = await computerId(key, sess.computerId); } catch (e) { console.log(`api: computer id failed: ${e instanceof Error ? e.name : 'error'}`); throw e; }
+    try { headers['X-Choir-Computer'] = await computerId(key, sess.computerId, w); } catch (e) { console.log(`api: computer id failed: ${e instanceof Error ? e.name : 'error'}`); throw e; }
   }
+  if (w.closed) await NEVER;
   try {
     return { r: await fetch(authedURL(path, opts.query), { method, headers, body, exactTimeout: AUTHED_TIMEOUT_MS, redirect: 'manual', ...extra } as RequestInit), key };
   } catch (e) {
@@ -215,17 +267,17 @@ async function send(path: string, opts: Authed, accept: string, extra: Record<st
   }
 }
 
-async function computerId(key: string, kept: string): Promise<string> {
+async function computerId(key: string, kept: string, w: World): Promise<string> {
   if (kept) return kept;
   const digest = await digestOf(key);
   if (discovered && discovered.digest === digest) return discovered.id;
   if (discovering && discovering.digest !== digest) discovering = null;
   if (!discovering) {
-    const gen = generation;
+    const gen = world.id;
     let mine!: Promise<string>;
     mine = (async () => {
       try {
-        const { r, key: used } = await send(STATUS_PATH, {}, 'application/json');
+        const { r, key: used } = await send(w, STATUS_PATH, {}, 'application/json');
         if (used !== key) throw new SignedOutError();       // the account changed while this was asked
         await check(r, STATUS_PATH, key);
         const o = (await r.json()) as { computers?: { computer_id?: string; kind?: string; current?: boolean }[]; warnings?: string[] };
@@ -235,7 +287,7 @@ async function computerId(key: string, kept: string): Promise<string> {
           const warn = (o.warnings ?? [])[0] ?? '';
           throw new Error('the account has no computer yet' + (warn ? ` (${warn.slice(0, 120)})` : '') + '; try again in a moment');
         }
-        if (gen !== generation) throw new SignedOutError();
+        if (gen !== world.id) throw new SignedOutError();
         discovered = { digest, id: pick.computer_id };
         return pick.computer_id;
       } finally { const cur = discovering as { p: Promise<string> } | null; if (cur && cur.p === mine) discovering = null; }
@@ -261,12 +313,13 @@ async function check(r: Response, path: string, key: string): Promise<void> {
 }
 
 /** A signed-in JSON request to the listener's own computer. Throws SignedOutError when there is no session. */
-export async function authedJSON(path: string, opts: Authed = {}): Promise<Reply> {
-  const gen = generation;
-  const { r, key } = await send(path, opts, 'application/json');
+export function authedJSON(path: string, opts: Authed = {}): Promise<Reply> { const w = opts.world ?? world; return w.closed ? ended() : inert(w, authedJSONImpl(w, path, opts)); }
+async function authedJSONImpl(w: World, path: string, opts: Authed): Promise<Reply> {
+  const gen = world.id;
+  const { r, key } = await send(w, path, opts, 'application/json');
   await check(r, path, key);
   const raw = await r.text();
-  if (gen !== generation) throw new SignedOutError('signed out while the request was in flight');
+  if (gen !== world.id) throw new SignedOutError('signed out while the request was in flight');
   let body: unknown = null;
   if (raw !== '') { try { body = JSON.parse(raw); } catch { throw new Error(`${path} answered a body that is not JSON`); } }
   const date = r.headers.get('date');
@@ -275,12 +328,13 @@ export async function authedJSON(path: string, opts: Authed = {}): Promise<Reply
 }
 
 /** The same, for bytes (a file, a PDF, audio). */
-export async function authedBytes(path: string, opts: Authed = {}): Promise<{ bytes: Uint8Array; contentType: string }> {
-  const gen = generation;
-  const { r, key } = await send(path, opts, '*/*');
+export function authedBytes(path: string, opts: Authed = {}): Promise<{ bytes: Uint8Array; contentType: string }> { const w = opts.world ?? world; return w.closed ? ended() : inert(w, authedBytesImpl(w, path, opts)); }
+async function authedBytesImpl(w: World, path: string, opts: Authed): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const gen = world.id;
+  const { r, key } = await send(w, path, opts, '*/*');
   await check(r, path, key);
   const bytes = new Uint8Array(await r.arrayBuffer());
-  if (gen !== generation) throw new SignedOutError('signed out while the request was in flight');
+  if (gen !== world.id) throw new SignedOutError('signed out while the request was in flight');
   return { bytes, contentType: r.headers.get('content-type') ?? '' };
 }
 
@@ -288,14 +342,15 @@ export async function authedBytes(path: string, opts: Authed = {}): Promise<{ by
  * a 300 MB recording costs neither the engine's 64 MiB heap nor the turn's 100 ms. The file appears whole or not at all (the host stages it beside the
  * target); a reply that is not 2xx writes nothing and is an error as in `authedBytes`. `dest` is under `app:/cache/`, plain. A sign-out in flight
  * removes the file and drops the reply; a host that wrote nothing (it read the body into memory) is an error and the file is removed. */
-export async function authedToFile(path: string, dest: string, storage: Storage | undefined, opts: Authed = {}): Promise<{ bytes: number; contentType: string }> {
+export function authedToFile(path: string, dest: string, storage: Storage | undefined, opts: Authed = {}): Promise<{ bytes: number; contentType: string }> { const w = opts.world ?? world; return w.closed ? ended() : inert(w, authedToFileImpl(w, path, dest, storage, opts)); }
+async function authedToFileImpl(w: World, path: string, dest: string, storage: Storage | undefined, opts: Authed): Promise<{ bytes: number; contentType: string }> {
   if (!/^app:\/cache\/[^\s?#\\]+$/.test(dest) || dest.split('/').some((s) => s === '.' || s === '..')) throw new Error('refused: a download goes to a plain file under app:/cache/');
-  const gen = generation;
+  const gen = world.id;
   const drop = async () => { try { await storage?.fs.rm(dest); } catch { /* absent */ } };
-  const { r, key } = await send(path, opts, '*/*', { exactBodyTo: dest });
+  const { r, key } = await send(w, path, opts, '*/*', { exactBodyTo: dest });
   try { await check(r, path, key); } catch (e) { await drop(); throw e; }
   const wrote = (r as unknown as { exactBodyTo?: { bytes?: unknown } | null }).exactBodyTo;
-  if (gen !== generation) { await drop(); throw new SignedOutError('signed out while the request was in flight'); }
+  if (gen !== world.id) { await drop(); throw new SignedOutError('signed out while the request was in flight'); }
   if (!wrote || typeof wrote.bytes !== 'number') { await drop(); throw new Error('the host did not write the file'); }
   return { bytes: wrote.bytes, contentType: r.headers.get('content-type') ?? '' };
 }
@@ -338,7 +393,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: the generation and the rest as a fresh process has them. */
-export function resetSeam(): void { resetSession(); keyTiming.ms = 5000; keyReads = 0; generation = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
+export function resetSeam(): void { resetSession(); keyTiming.ms = 5000; keyReads = 0; world.close(); world = new World(0); closedWorlds.length = 0; reader = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

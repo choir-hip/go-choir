@@ -13,7 +13,7 @@
 //  7. Open episode for a clip with no feed: nothing happens.     8. A show lists at most ten clips, ordered by clip id.
 
 import type { Result } from './app.contract.d.ts';
-import { getJSON, sameAccount } from './api.ts';
+import { getJSON } from './api.ts';
 import { episodeAddress, feedKey, parseShow } from './podcast-model.ts';
 
 export const CLIPS_PATH = '/api/platform/podcast-clips';
@@ -97,8 +97,7 @@ export async function showClips(address: string, tick: number): Promise<Rows> {
   const k = feedKey(feed);
   if (!askedFeeds.has(k)) {
     askedFeeds.add(k);
-    const same = sameAccount();
-    try { const c = parseClips((await getJSON(CLIPS_PATH, { feed, limit: 50 })).body); if (same()) merge(c); } catch { /* the route is missing or down: nothing, silently */ }
+    try { merge(parseClips((await getJSON(CLIPS_PATH, { feed, limit: 50 })).body)); } catch { /* the route is missing or down: nothing, silently */ }
   }
   const mine = [...byID.values()].filter((c) => c.feedURL !== '' && feedKey(c.feedURL) === k).sort((a, b) => (a.clipID < b.clipID ? -1 : a.clipID > b.clipID ? 1 : 0));
   return { rows: mine.slice(0, 10).map(row) };
@@ -108,8 +107,7 @@ async function find(id: string): Promise<Clip | null> {
   const have = byID.get(id);
   if (have || askedAll) return have ?? null;
   askedAll = true;
-  const same = sameAccount();
-  try { const c = parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body); if (same()) merge(c); } catch { /* silent */ }
+  try { merge(parseClips((await getJSON(CLIPS_PATH, { limit: 200 })).body)); } catch { /* silent */ }
   return byID.get(id) ?? null;
 }
 
