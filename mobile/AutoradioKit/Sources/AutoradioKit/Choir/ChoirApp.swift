@@ -261,8 +261,6 @@ public final class ChoirApp: @unchecked Sendable {
             let list = try await ChoirFront.stories(client: ChoirEnvironment.shared.client(baseURL: base), limit: 30)
             lock.lock(); stories = list; lock.unlock()
             saveFrontCache(list)
-            // The headlines and deks the phone now holds are part of what it can answer from first.
-            for s in list { StoryDates.shared.note("pub:" + s.route, PaperStory.date(s.updated)) }
             ClipStore.shared.markStale()                          // the front is fresh: the next write asks for the clips again, once
             if list.isEmpty { say("The front page is empty right now.") }
         } catch { say(Self.plain(stage: "programme", message: "\(error)")) }
