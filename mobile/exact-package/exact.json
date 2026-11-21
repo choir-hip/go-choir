@@ -455,7 +455,6 @@
       "plain": "string",
       "textBlocks": "number",
       "markdown": "string",
-      "hearIt": "HearItRow[]",
       "editable": "bool",
       "source": "string",
       "docId": "string"
